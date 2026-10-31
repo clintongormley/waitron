@@ -1,5 +1,33 @@
 # A798-B slice 9b — the box sets its own clock, and watches its time service (BUILD PLAN)
 
+> **Revision 4 (2026-10-31, the owner's answer of 07:00 and 07:05).** The owner did not pick
+> either option of the question this plan asked; he gave a new rule instead (`questions.md`,
+> "OWNER ANSWER 2026-10-31 ~07:00" and "~07:05", `~/waitron-campaign-b/questions.md:823-836`):
+> "If we can't check the time on the internet, then use a till to choose the likely time, but ask
+> for confirmation from a human before continuing with startup." Then: any staff member signed in
+> on site may confirm; a clock problem found while the box is already running "gets an alert to an
+> admin"; and every confirmation is recorded, alerted and emailed like the other clock changes. That
+> replaces his 24 October 04:24 rule ("two tills may set it, no admin needed"), which revisions 1–3
+> built. What changed:
+> - **Two agreeing devices no longer set the clock.** The tax agency's (AEAT's) time still sets it
+>   with nobody asked. The administrator's "Use your device's time?" stays, at any time.
+> - **New: a till proposes the likely time and a staff member confirms it, on the till**, only
+>   during a stop the box found when it started (decision 14 says what "found when it started"
+>   means in code, and decision 15 is the till's check). New tasks 11b, 12a and 13a.
+> - **While the box is running, a clock stop alerts the administrators**: the existing
+>   `clock.behind_chain` and `clock.unusable` alert and email now say that an administrator can set
+>   the clock from their own phone or computer (new task 13b).
+> - **A staff member's confirmation is stored with no migration**, as `source = 'admin'` with
+>   their person id and a `proof.staff` entry naming the till (decision 16, with the run that shows
+>   the shipped CHECK accepts it); every reader that words "who confirmed" learns to tell the two
+>   apart (new task 8a).
+> - Tasks 8, 10, 11, 11a, 12, 13, 16–19 rewritten to match; the "owner question" section becomes a
+>   record of the answer; FYI 2–4 rewritten and FYI 8–14 added, with a block for `questions.md`;
+>   9c's outline updated in the same commit (decision 14 says how start-up splits between 9b and
+>   9c), and a dated pointer added to design §4.9 c–d.
+> Tasks 1–7 are built and unchanged: nothing in the owner's answer touches the host service, its
+> install, the client, time health or `clock.sync_off`.
+>
 > **Revision 3 (2026-10-31, after Task 1's two runs):** M5 printed its failing case — systemd will
 > not start a socket whose numeric group names no host group — and M5b took the fallback M9
 > names: a host group `waitron-box` of gid 10001, which install creates (decision 1, Tasks 2, 3
@@ -31,13 +59,17 @@
 > run-it reviews side by side, the second told to set the checklist aside (Review notes, below).
 > **The finished pull request is parked `needs-owner-review`; the lane never lands it.**
 
-**Goal.** When AEAT's time, two tills or handhelds that agree with each other (from two addresses,
-none on the box), or an administrator's own device say the box's clock is wrong, the box sets its
-clock (and its battery clock) to that time, records who or what did it with both readings, alerts
-and emails the managers, and judges the stop again. The box reads whether its time service runs and
-is synchronised; the bell warns when it does not. It opens no new stop: it sets the clock only
-inside a stop it already has — slice 8's clock behind the latest record, and the clock before
-28-10-2024 (`clock.unusable`). Slice 9c adds the checks at start and after a change.
+**Goal.** The box sets its own clock (and its battery clock) when one of three sources says it is
+wrong: AEAT's time, by itself, with nobody asked; a till's time, which the till proposes and any
+staff member signed in on it confirms, only during a stop the box found when it started; or an
+administrator's own device, on their Confirm, at any time. It records who or what did it, which till
+proposed it, both readings and the step, alerts and emails the managers, and judges the stop again.
+While the box is running, a clock stop alerts the administrators, whose own device is then the way
+to set it. The box reads whether its time service runs and is synchronised; the bell warns when it
+does not. It opens no new stop: it sets the clock only inside a stop it already has — slice 8's
+clock behind the latest record, and the clock before 28-10-2024 (`clock.unusable`). Slice 9c adds
+the checks at start and after a change, and makes the till's confirmation the gate every start
+waits on (decision 14).
 
 ## The pull request, task by task
 
@@ -59,16 +91,27 @@ Run in this order. A STOP stops the build there and the lead reports to the coor
 8. **The seat records a step of the clock, and the bell words it** —
    `packages/fiscal-verifactu/src/clock-step.ts`, `clock-stop-incidents.ts`, `alert-messages.ts`.
    STOP if the fiscal core would have to change.
+8a. **Slice 9's confirmation takes a staff member, and every reader tells a staff member from an
+    administrator** — `packages/fiscal/src/backend.ts`, `clock-confirmation.ts`, `clock-checks.ts`,
+    `clock-misdated.ts`, `box-health.ts`, `misdated-sales-csv.ts`, the words files.
 9. **`clock.corrected`'s email, never lost to a later step** — `box-alert-email.ts`,
    `i18n/box-emails.ts`.
 10. **Setting the clock: the order, one at a time, verified** —
     `apps/server/src/clock-correction.ts`.
-11. **The watch as an anchor, and the store's settable readings** — `clock-watch.ts`,
+11. **The watch as an anchor, and the store's settable AEAT readings** — `clock-watch.ts`,
     `clock-witnesses.ts`, `boot.ts`.
-11a. **The watch sets it during a stop, with a backoff** — `clock-watch.ts`.
+11a. **The watch sets it from AEAT during a stop, with a backoff** — `clock-watch.ts`.
+11b. **The start-up window, and the till's notice** — `apps/server/src/clock-start-up.ts`,
+    `clock-watch.ts`, `box-staff-notices.ts`, `boot.ts`.
 12. **An administrator's "Use your device's time?"** — `box-health-api.ts`
     (`POST /api/box/clock-set`).
+12a. **The till's check: a staff member confirms the till's time** —
+    `apps/server/src/till-box-clock-api.ts` (`POST /api/box-clock/challenge`, `/confirm`).
 13. **The dashboard's dialog and refusals** — `box-status-screen.ts`, `api/client.ts`, `i18n/*`.
+13a. **The till's "Check the time" and its dialog** — `apps/till/src/widgets/notice-strip.ts`,
+    `box-time-dialog.ts`, `till-app.ts`, `api/client.ts`, `i18n/*`.
+13b. **A running stop's alert and email lead an administrator to set the clock** —
+    `apps/dashboard/src/i18n/alert-messages.ts`, `apps/server/src/i18n/box-emails.ts`.
 14. **Backups pruned safely across a step** — `backup-sweep.ts`.
 15. **The other wall-clock jobs, and the audit table** — `supervisor.ts`, `management-session.ts`,
     `passkey.ts`. STOP if a job that deletes data, keeps a credential alive, cuts tills off or
@@ -78,8 +121,9 @@ Run in this order. A STOP stops the build there and the lead reports to the coor
     edited.
 15b. **The till reads the same state** — `apps/server/src/till-clock-state.ts`,
     `attendance-discovery.ts`. STOP if a till-clock or attendance suite must be edited.
-16. **Guides, English and Spanish** — `apps/server/src/guide/{en,es}/box-status.md`.
-17. **LOOK, without the dev stack** — browser-test screenshots.
+16. **Guides, English and Spanish** — `apps/server/src/guide/{en,es}/box-status.md` and
+    `till-notices.md`.
+17. **LOOK, without the dev stack** — browser-test screenshots of the dashboard and the till.
 18. **Developer docs, the asesor question, the deploy README, B3's contract** —
     `conventions-data.md`, `asesor-questions.md`, `deploy/README.md`, `CLAUDE.md`,
     `docs/superpowers/plans/2026-10-26-b3-usb-installer.md`.
@@ -98,28 +142,34 @@ files, each check's state) into the ledger before going on.
 1. **The host service is the first request of B3's planned `waitron-box` service**, installed by
    `waitron.sh install`; the app's container gets no clock capability. *(Names follow B3's plan of
    2026-10-26 where it names them; see "Where the outline was wrong", item 3.)*
-2. **While the time service reports itself synchronised, the box never sets its clock from AEAT,
-   devices or an administrator** — they can only agree with it. An internet time server is a
-   better source than two tablets, and the two would undo each other. *(The outline said "devices
-   or an administrator"; design §4.9 h.1 says AEAT cannot set it then either, and the plan follows
-   the design.)*
+2. **While the time service reports itself synchronised, the box never sets its clock from AEAT, a
+   till or an administrator** — they can only agree with it, and a till or an administrator whose
+   time agrees may still confirm it. An internet time server is a better source than a tablet, and
+   the two would undo each other. *(The outline said "devices or an administrator"; design §4.9
+   h.1 says AEAT cannot set it then either, and the plan follows the design. Revision 4: "devices"
+   becomes "a till", the only device that may still propose a time.)*
 3. **Every clock change the box makes raises a bell alert and an email to managers**: the source,
-   the person for an administrator, the reading before and after, and the step (round 1, I3).
-   Recorded as `clock.corrected` (warning, area `box`, `system.manage`). A second change while the
-   first's alert is open marks the first handled by the system and records its own, so each
-   change has its own alert; each has its own email too, because the correction hands every
+   the person who confirmed (an administrator, or a staff member on a till), which till proposed
+   the time, the reading before and after, and the step (round 1, I3; the owner, 2026-10-31 07:05,
+   point 3). Recorded as `clock.corrected` (warning, area `box`, `system.manage`). A second change
+   while the first's alert is open marks the first handled by the system and records its own, so
+   each change has its own alert; each has its own email too, because the correction hands every
    `clock.corrected` to the email duty directly and the duty keeps it until sent, whether or not
    the alert is still open (decision 9 — reading only open alerts once a minute would lose the
-   first of two steps within a minute).
-4. **A device's or administrator's time is self-reported** (slice 9's FYI 12): from this slice it
-   can SET the clock. A scripted request from two enrolled devices at two addresses, or from a
-   signed-in administrator off the box, can set any time between 2024-10-28 and 2100. "Only inside
-   a stop the box already has" stops being a limit once slice 9c lands: unplugging the box's
-   internet and restarting it opens a start check at will, with the time service unsynchronised, so
-   two devices can then set the clock with no person involved (round 3, M1). What limits it:
-   enrolment and sign-in, two addresses, never while synchronised, the alert and email on every
-   change, the append-only record with its proof, and the wrongly dated list. The asesor question
-   (Task 18) names this window.
+   first of two steps within a minute). A staff member's confirmation that moves nothing (decision
+   15) is recorded and alerted as slice 9's administrator's confirmation is, by
+   `clock.behind_chain_restarted`, now naming the staff member and the till.
+4. **Rewritten in revision 4. A till's time, and an administrator's, is whatever its browser
+   sends** (slice 9's FYI 12). From this slice it can SET the clock. A scripted request from any
+   staff member signed in on an enrolled till, during a stop the box found when it started, or from
+   a signed-in administrator off the box at any time, can set any time between 2024-10-28 and 2100.
+   Once slice 9c lands, every start is such a stop, so unplugging the box's internet and
+   restarting it lets anyone who can sign in on a till set the clock — which is what the owner's
+   rule allows, with a person always named. What limits it: a staff member's own sign-in on an
+   enrolled device, never from the box's own screen, only while the start-up stop lasts, never
+   while synchronised, the alert and email on every change naming the person and the till, the
+   append-only record with its proof, and the wrongly dated list. Two devices with nobody present
+   can no longer set it at all. The asesor question (Task 18) names this.
 5. **`clock.sync_off` is a warning in the bell only, no email.** A production box whose host service
    does not answer raises it too (`unreachable`); elsewhere (a laptop, a preproduction box) it stays
    silent, as today. **Its `unreachable` words give no install instruction** — a deliberate
@@ -141,52 +191,132 @@ files, each check's state) into the ledger before going on.
    packages/identity/src --include='*.ts' | /usr/bin/grep -v '\.test\.ts'` printed
    `IDLE_TIMEOUT_MS` and `CHALLENGE_TTL_MS`, a passkey challenge's, plus stored `expires_at`
    columns of one-off links, enrolments and sign-in states — none a staff session's). The lead's
-   ruling (d).
+   ruling (d). So the staff member who confirms a till's time stays signed in on that till.
 7. **New, for the plan review:** after a backward step, a person who clocked out at one location
    and then clocks in at ANOTHER location within the step's window reads as clocked out on the
    till until real time passes their earlier clock-out (Task 15a, "Accepted residual"). What they
    clocked is recorded correctly; only the state the till shows is wrong, and a manager can retime
    the entry. It needs two locations on one box. The lead's ruling (e).
+8. **New in revision 4: "start-up" is this server's start, a restart included.** A stop counts as
+   found at start-up when it holds from the moment the server process starts and at every look of
+   the clock watch since; the first look that finds no stop ends start-up for that run, and any
+   later stop is a running one (decision 14). A restart of the server — after a power cut, an
+   update, or by hand — is a start, so a stop that began while the box was running and still holds
+   after a restart becomes a start-up stop, and a till may then propose a time. Cost: a running
+   stop that would otherwise wait for an administrator can be handed to staff by restarting the
+   box. The narrower choice (only a machine boot counts, read from the boot id) would leave a box
+   whose server restarted, with its clock still wrong, waiting for an administrator.
+9. **New in revision 4: the till is offered only once the box has tried the tax agency's time and
+   had no answer** — or at once where the box cannot ask: a clock before 28-10-2024 (AEAT's
+   certificate cannot then be checked) or a box that files nothing. The clock watch's first look
+   comes 15 seconds after start (`CLOCK_WATCH_MS`, `apps/server/src/clock-watch.ts:16`, its first
+   check one interval after start, `:33-34`) and AEAT's read gives up after 5 seconds
+   (`AUTHORITY_TIME_DEADLINE_MS`, `packages/fiscal-verifactu/src/authority-time.ts:7`), so a till
+   is offered about 15 to 20 seconds after start, depending on how fast the first ask fails. If AEAT answers later, the offer
+   ends and the box acts on AEAT's time itself. Cost: those seconds; the owner's "if we can't
+   check the time on the internet" is honoured literally.
+10. **New in revision 4: a till that agrees with the box can be confirmed too, and that moves
+    nothing.** When the till's time is within a minute of the box's, the staff member's
+    confirmation lifts the stop exactly as slice 9's administrator's confirmation of an agreeing
+    clock does (payments restart on the box's own clock, earlier than the last sale). Cost: at
+    start-up, one till and any staff member can lift a clock-behind stop, where slice 9 needs two
+    agreeing devices or an administrator. Without it, a box whose clock is right but whose last sale
+    was dated ahead would wait for AEAT, two devices or an administrator after every start.
+11. **New in revision 4: the running-time "alert to an admin" is the alert the stop already
+    raises.** No new alert: `clock.behind_chain` and `clock.unusable` are already a bell alert and an
+    email to everyone holding `system.manage`
+    (`packages/fiscal-verifactu/src/clock-behind-alerts.ts:8-10`),
+    which every administrator holds (`packages/identity/src/permissions.ts:84`, `admin: ALL`).
+    Task 13b rewrites their words to say that an administrator can set the clock from their own
+    phone or computer on the Box status page (and, while the box has just started, any staff member
+    from a till). Cost: managers keep receiving it although only an administrator can then act;
+    narrowing it to administrators would hide a payments stop from managers.
+12. **New in revision 4: slice 9's two agreeing devices still lift a clock-behind stop with nobody
+    asked, in 9b.** Slice 9 (landed, #2025) lifts the stop when two devices from two addresses
+    agree with the box's clock (`clock-confirmation.ts:79-81`, `:184-185`); that moves no clock, so
+    it does not "choose the time", and 9b leaves it alone. The tension: at a start-up stop with no
+    internet, two tills agreeing with the box restart payments with no person confirming, which the
+    owner's 07:00 words ("ask for confirmation from a human before continuing with startup") may
+    rule out. Cost of keeping it: that case. Cost of changing it (the watch skips a devices-only
+    lift while start-up lasts — a few lines and a test): such a box waits for a staff member. 9c's
+    start check does not close on devices alone either way (its outline, decision 5).
+13. **New in revision 4: "Check the time" is offered only to a signed-in person, on the till's red
+    line; no dialog opens by itself.** The line is not drawn on the till's sign-in page
+    (`apps/server/src/guide/en/till-notices.md:5`); a person signs in with their PIN there, as for
+    any work, and the line then carries the button. Any device whose profile admits the person
+    offers it; confirming the time needs no profile action and no permission. Cost: someone at the
+    sign-in page sees nothing about the clock until they sign in; a dialog opening by itself on
+    every till at once would be the alternative.
+14. **New in revision 4: other devices that disagree with the till do not block a staff member's
+    confirmation.** The owner said one till is enough with a person; the other devices' readings at
+    that moment are kept in the record's proof and named in the email. Cost: a till whose own clock
+    is wrong, confirmed by someone who did not look, sets a wrong time — alerted, emailed and listed,
+    and put right by the next confirmation.
+15. **New in revision 4: a staff member's confirmation is stored with no migration.** Slice 9's
+    table lets a confirmation carry a person only when its source is `admin` (its CHECK,
+    `packages/fiscal-verifactu/drizzle/0011_clock_checks_and_confirmations.sql:32`), and a new
+    source value would rebuild an append-only table. So it is stored as `source = 'admin'` with the
+    staff member's id, and `proof.staff` names the till (decision 16). Every screen, email and file
+    words it as "a staff member". Cost: anyone reading the table by `source` alone counts staff
+    confirmations as administrators'.
 
-## Owner question — text for questions.md
+### For `questions.md` (the coordinator pastes this)
 
-The lead appends this to `~/waitron-campaign-b/questions.md` when the plan review is folded, and the
-build goes on with the owner's standing answer (2026-10-24 04:24, "two tills … no admin needed")
-built as the default. The narrower rule is one constant and one test expectation (Task 10,
-`DEVICES_MAY_SET_BACK_PAST_LAST_SALE`), so either answer is a few lines. Re-read against
-revision 2: the question and its example still hold. Its "every change is alerted, emailed and
-kept with its proof" now rests on decision 9 (each change's email kept until sent, even after a
-later change), whose one limit — a restart before the email goes out — the guide states; the
-backoff and the `stale` refusal change how often the box tries, not what two tills may set.
+> **FYI — A798-B slice 9b, revision 4 (lane B, 2026-10-31): your 07:00 and 07:05 answers are in the
+> plan; the defaults below are being built unless you say otherwise.** No answer needed.
+>
+> Built as you said: the tax agency's time sets the box's clock by itself; without it, a till
+> proposes its time and any signed-in staff member confirms it on the till before payments start
+> again; while the box is running, a clock problem alerts the administrators, who can set the clock
+> from their own phone or computer; every change is recorded, alerted and emailed with who
+> confirmed, which till, the times before and after, and the step. Two tills can no longer set the
+> clock with nobody present.
+>
+> Defaults on points you did not settle (each overridable in one line):
+> 1. **"Start-up" includes a restart of the box's software**, not only a power-on. A clock stop
+>    still there after a restart can then be confirmed from a till. *Cost:* restarting the box
+>    hands a running stop to staff. *Override:* "only a power-on counts".
+> 2. **The till is offered only after the box has tried the tax agency's time and had no answer**
+>    (15 to 20 seconds after start), or at once when the box's clock reads before 28 October 2024.
+>    *Override:* "offer the till at once".
+> 3. **A till whose time agrees with the box's can be confirmed too**, which restarts payments
+>    without moving the clock (as an administrator can today). *Cost:* one till and any staff
+>    member can restart payments after a start. *Override:* "only when the till's time differs".
+> 4. **The "alert to an admin" while running is the payments-stopped alert and email that already
+>    exist**, reworded to say an administrator can set the clock from their own device; managers
+>    keep receiving it. *Override:* "administrators only".
+> 5. **Two tills that agree with the box's clock still restart payments with nobody asked**
+>    (built last week, slice 9; it does not move the clock). After a start with no internet that
+>    skips your "ask a human". *Override:* "during start-up, wait for a person even then".
+> 6. **"Check the time" appears on the till's red line once someone is signed in**; no window pops
+>    up by itself. *Override:* "open it by itself".
+> 7. **Other tills that disagree with the confirmed till do not block it**; their times are kept in
+>    the record and the email. *Override:* "refuse when another till disagrees".
+> 8. **Stored with no database change**: a staff member's confirmation sits in the same column as an
+>    administrator's, told apart by a note in its record; every screen and email says "a staff
+>    member". *Override:* none sensible before go-live without rebuilding a protected table.
 
-> **A798-B slice 9b — may two tills set the box's clock back to before the last sale, or only an
-> administrator?** (1 of 1)
->
-> From slice 9b, when the box's clock is wrong it can set its own clock: from the tax agency's
-> time, from two tills or handhelds that agree with each other, or from an administrator's phone.
-> On 24 October (04:24) you said two tills may do it with no administrator needed, and that is what
-> is being built.
->
-> There is one narrower version to choose instead: **two tills alone may not set the clock back to
-> a time before the last sale; an administrator may.** Example: the box's clock reads 24 Oct 21:00
-> because someone set it a day ahead by mistake; the last sale reads 24 Oct 20:55; two tills say 23
-> Oct 21:00.
-> - As built now: the tills set the box's clock to 23 Oct 21:00 and selling goes on.
-> - Narrower: the tills do not; an administrator confirming their phone's time does.
->
-> Why ask: a till's time is whatever its browser sends, so a scripted request from two enrolled
-> tills could move the clock back past the last sale with nobody present, and the box would then
-> date new sales before older ones. Every change is alerted, emailed and kept with its proof either
-> way. The cost of the narrower rule: once slice 9c stops selling while a check waits, a box whose
-> two tills would have set its clock back stays stopped until an administrator confirms — with no
-> administrator there, payments stay stopped, where under your 04:24 answer the tills would have set
-> the clock and selling would have gone on (round 4, M11). Until slice 9c lands, the example only
-> arises during a stop the box already has.
->
-> - **Keep the 04:24 answer** (recommended: it is what you chose, and nothing is lost that the
->   alert and the list do not show)
-> - **The narrower rule**: tills may set the clock forward, never back past the last sale
-> - Stop here — I'll write
+## The owner's answer (2026-10-31) — what replaced the question
+
+Revision 3 asked whether two tills may set the box's clock back past the last sale, or only an
+administrator (posted 06:23, `~/waitron-campaign-b/questions.md:777-808`). The owner chose neither
+(`:823-836`, relayed by the watcher):
+- **07:00:** "If we can't check the time on the internet, then use a till to choose the likely time,
+  but ask for confirmation from a human before continuing with startup." Read by the watcher, and
+  accepted by the owner's follow-up: AEAT's time stays first and needs no confirmation; without it
+  ONE till supplies the likely time; the box does not take it by itself; a person confirms it on
+  screen before the box carries on starting, so before selling; forward and backward alike. This
+  replaces the 24 October 04:24 rule ("two tills … no admin needed").
+- **07:05:** (1) any staff member signed in on site may confirm, no administrator needed; (2) a clock
+  problem found while the box is already running "gets an alert to an admin" — the confirmation step
+  is for start-up; (3) the confirmation is recorded, alerted and emailed like the other clock
+  changes.
+
+What that removes from revision 3: `DEVICES_MAY_SET_BACK_PAST_LAST_SALE` and `devicesMaySet` (Task
+10), the watch setting the clock from two agreeing devices and setting `clock.unusable` from them
+(Task 11a), and the devices half of the administrator's `witnessed` refusal (decision 10). What it
+adds: decisions 14–17 and Tasks 8a, 11b, 12a, 13a and 13b. The finished pull request still parks
+`needs-owner-review`; the lane never lands it.
 
 ## What it rests on
 
@@ -258,6 +388,18 @@ Litestream, logs, sessions and every `new Date()` outside the clock seat keep th
   The new alert is an `incidents` row, whose `code` is free text with only a non-empty CHECK
   (`packages/db/src/schema/incidents.ts:78`). Nothing in this plan changes a table, so
   `git diff main --name-only -- '*/drizzle/*' packages/migrations` must print nothing at the end.
+- **A staff member's confirmation fits the shipped table** (revision 4). The person CHECK is
+  `(source = 'admin') = (person_id is not null)`, with only a non-empty test on the id
+  (`packages/fiscal-verifactu/drizzle/0011_clock_checks_and_confirmations.sql:32`; the schema's
+  own comment, `schema/clock-confirmations.ts:39-40`: no foreign key, "Nothing checks that it
+  names a person"), and `source` allows only `authority`, `devices`, `admin`, `elapsed` (`:30`).
+  Run 2026-10-31 with the system `sqlite3` 3.51.0 (not the app's `node:sqlite`) on the migration's
+  own `CREATE TABLE`: a row `source 'admin'`, a staff member's id, `step_ms -3600000`, `proof
+  {"person":{"kind":"staff"}}` inserted; the same with `source 'devices'` was refused
+  `CHECK constraint failed: clock_confirmations_person_ck`; with `source 'staff'`, refused
+  `clock_confirmations_source_ck`. So a staff member's id can be stored only under `admin`, and a
+  `staff` value would need a new CHECK — a rebuild of an append-only table, which this plan does not
+  do (decision 16).
 - **The cover reads `confirmed_at` as the time adopted**: `accepted = record_at − confirmed_at`,
   and a later reading is covered while `latest − reading ≤ accepted + 60 000`
   (`packages/fiscal-verifactu/src/clock-behind.ts:133-137`). So a step's row must store the reading
@@ -540,28 +682,35 @@ Filled from the job's log by the lead; each row gives the run's URL and the prin
    `unsynchronised`, `unreachable`) is an ongoing alert source over the same cached status;
    `unreachable` only when `config.environment === "production"`. Its `unreachable` words follow
    decision 13.
-6. **When the box sets its clock** (`apps/server/src/clock-correction.ts`, called by the watch and
-   by the administrator's route), during a stop the box already has:
-   - the clock behind the latest record (the stop proper, `clockBehindChain` non-null): AEAT
-     disagreeing (`contrary.authority`) → AEAT's time; else a group of devices from two addresses,
-     none on the box, disagreeing (`contrary.devices`) → their mean;
-   - the clock before 28-10-2024 (`clock.unusable`): a group of devices disagreeing → their mean
-     (AEAT cannot be reached then: its certificate cannot be checked; the production QR host's
-     certificate starts 2025-11-17, claim check T27);
-   - either stop, with no AEAT witness and no group of devices taken during it: an administrator's
-     device that differs by more than a minute, on their Confirm ("Use your device's time?").
-   Never while `clockStatus()` says synchronised; never when the host service is unavailable.
+6. **When the box sets its clock** (`apps/server/src/clock-correction.ts`, called by the watch, by
+   the administrator's route and by the till's route), during a stop the box already has
+   (revision 4, the owner's 2026-10-31 rule):
+   - the clock behind the latest record (the stop proper, `clockBehindChain` non-null), AEAT
+     disagreeing (`contrary.authority`) → AEAT's time, by the watch, with nobody asked;
+   - either stop — the stop proper, or the clock before 28-10-2024 (`clock.unusable`) — found at
+     start-up (decision 14), once the box has tried AEAT and had no answer or cannot ask it (AEAT
+     cannot be reached during `clock.unusable`: its certificate cannot be checked; the production QR
+     host's certificate starts 2025-11-17, claim check T27): a till's time that differs by more than
+     a minute, on the Confirm of a staff member signed in on that till (decision 15);
+   - either stop, at any time, with no AEAT witness taken during it: an administrator's device that
+     differs by more than a minute, on their Confirm ("Use your device's time?").
+   **Devices never set the clock by themselves any more**: a group of devices from two addresses
+   disagreeing is kept in the proof and shown on Box status, and sets nothing (revision 4; the
+   owner's 07:00 rule replaces his 24 October 04:24 one). Never while `clockStatus()` says
+   synchronised; never when the host service is unavailable.
    **Each set carries where its offset was measured** (round 2, C1): `measuredAt: { wallMs,
-   monoMs }`, the box's wall and steady clocks when the witness's reading arrived (the store's
-   `BoxClockReading`; the store gains `forSetting()`, handing out each settable reading WITH its
-   `at`, AEAT's kept disagreements now stored with theirs), and `stepsSeen`, the correction's step
+   monoMs }`, the box's wall and steady clocks when the witness's reading arrived (for AEAT, the
+   store's `BoxClockReading`: the store gains `forSetting()`, handing out each AEAT reading WITH its
+   `at`, AEAT's kept disagreements now stored with theirs; for a till or an administrator, the
+   readings the route takes at its round trip's midpoint), and `stepsSeen`, the correction's step
    counter when the caller measured. The counter rises once for every `clock.set` sent to the host,
    whatever its answer. The target is the wall clock now plus the offset — valid only while no
    step has happened since `measuredAt`.
    **Order (round 1, M7; round 2, C1, I2), each step tested in order:** take the one-at-a-time
-   turn — the same turn the watch's two confirmation writers (`confirm` and `closeWaiting`) and
-   `POST /api/box/clock-confirm` now take, so no confirmation lifts or closes the stop between the
-   judging below and the row. **The turn is always taken before the write lock, never inside it**
+   turn — the same turn the watch's two confirmation writers (`confirm` and `closeWaiting`),
+   `POST /api/box/clock-confirm` and the till's agreeing confirmation (decision 15) now take, so no
+   confirmation lifts or closes the stop between the judging below and the row. **The turn is
+   always taken before the write lock, never inside it**
    (claim check, 2026-10-31): `withTransaction` is a `db.withWriteLock` turn
    (`packages/db/src/tenancy.ts:30-39`), so a caller that waited for the turn inside a
    transaction would hold the lock while the set, holding the turn, waits for the lock in its
@@ -572,7 +721,9 @@ Filled from the job's log by the lead; each row gives the run's URL and the prin
    when `stepsSeen` is not the counter now, or when the wall clock has moved against the steady
    clock by more than a second since `measuredAt` (a step by the time service or by hand); judge
    the stop again in a write-lock turn with no drain (the stop proper or `clock.unusable` at a
-   fresh reading, else `not_stopped`; for `admin`, also `witnessed`); read `clockStatus()` fresh;
+   fresh reading, else `not_stopped`; for `admin` and `staff`, also `witnessed`; for `staff`, also
+   the start-up window's `not_start_up` and `authority_pending`, decision 15); read `clockStatus()`
+   fresh;
    tell every registered anchor that a set is coming (the clock watch's `stepComing` first records
    every AEAT reading not yet taken as it would at the end of a look — `takeNewAuthority`, then its
    pending disproofs in their own transaction — so no reading measured on the old clock is left to
@@ -589,16 +740,20 @@ Filled from the job's log by the lead; each row gives the run's URL and the prin
    duty (decision 9).
    **Backoff** (round 2, I3): after a set that the host refused (`set_failed`, `busy`), that timed
    out or that did not verify, the watch asks for no automatic set in the same stop (the open
-   check's id; for `clock.unusable`, the boot id) for 10 minutes by the steady clock, doubling
-   after each further failure up to 4 hours; a new stop starts again at none. Refusals that ask
-   nothing of the host (`synchronised`, `host_unavailable`, `stale`, `not_stopped`) are not backed
-   off: they toggle nothing. An administrator's set is never held back by it.
+   check's id) for 10 minutes by the steady clock, doubling after each further failure up to 4
+   hours; a new stop starts again at none. Refusals that ask nothing of the host (`synchronised`,
+   `host_unavailable`, `stale`, `not_stopped`) are not backed off: they toggle nothing. A person's
+   set — an administrator's or a staff member's — is never held back by it. (Revision 4: the watch
+   sets only from AEAT, so only during the stop proper; `clock.unusable` has no automatic set.)
 7. **The row** (seat method `confirmClockStep`, Task 8): one `clock_confirmations` row,
    `box_clock_at` the reading before, `confirmed_at` the reading after, `step_ms` the measured step
-   (`(wallAfter − wallBefore) − (bootAfter − bootBefore)`, rounded), `source` the witness's
-   (`authority`, `devices`, `admin`), `person_id` for `admin`, `proof` the witnesses that set it
-   plus `step: { beforeAt, afterAt, stepMs, targetAt }` and, for a stop, `heads` and `closing` as
-   slice 9 writes them. For the clock-behind stop: it closes the open check (opening one at the
+   (`(wallAfter − wallBefore) − (bootAfter − bootBefore)`, rounded), `source` `authority` or
+   `admin` — `admin` for both an administrator and a staff member, the only value whose CHECK lets
+   the row carry a person (decision 16) — `person_id` the administrator or staff member, `proof` the
+   witnesses that set it (`authority`, or `admin` for an administrator's device, or `staff` for the
+   till's reading, with the other witnesses noted then kept beside it) plus `step: { beforeAt,
+   afterAt, stepMs, targetAt }` and, for a stop, `heads` and `closing` as slice 9 writes them. For
+   the clock-behind stop: it closes the open check (opening one at the
    before reading first if none is open, as `confirmClockStop` does,
    `clock-confirmation.ts:193-203`); if the after reading is still more than a minute behind the
    latest record it names that record (a lift, `clock.behind_chain_restarted`), otherwise it names
@@ -618,8 +773,13 @@ Filled from the job's log by the lead; each row gives the run's URL and the prin
    (`clock-watch.ts:79-117`), and only after that look's first `recordPending()` has succeeded, so
    a disproof measured on the old clock is always written before the step's row; a restart loses
    it, and the host's journal line remains. Logged `clock_correction.row_pending` once.
-9. **`clock.corrected`** params `{ confirmationId | null, source, person | null, before,
-   beforeOffsetMinutes, after, afterOffsetMinutes, stepMs, verified }`, severity warning, no sale.
+9. **`clock.corrected`** params `{ confirmationId | null, source, person | null, deviceId | null,
+   device | null, before, beforeOffsetMinutes, after, afterOffsetMinutes, stepMs, verified }`,
+   `source` `"authority" | "admin" | "staff"` (here, unlike the row's column, a staff member is
+   `staff`: incident params have no CHECK), `person` the administrator's or staff member's name
+   (`person` is on `PERSONAL_LOG_KEYS`, `apps/server/src/log-personal-data.ts:38`, so the logger
+   masks it), `deviceId` and `device` the proposing till's id and its label for `staff` (the owner's
+   "which till proposed"), severity warning, no sale.
    Recording it first marks any open `clock.corrected` handled by the system
    (`markIncidentHandled`, person null). Claimed by the Veri\*Factu module
    (`{ prefix: "clock.corrected", area: "box", permission: "system.manage" }` beside its two clock
@@ -642,12 +802,14 @@ Filled from the job's log by the lead; each row gives the run's URL and the prin
     same challenge (`clock-challenges.ts`) and the same on-the-box refusal. Refusals are
     `clock.set_refused { reason }` (409), judged in this order so that each says what is true
     (round 2, I4): `same_machine`; `not_stopped` (no stop proper and no `clock.unusable`);
-    `host_unavailable`; `synchronised`; `witnessed` (AEAT or a group of devices has spoken during
-    the stop, and the box can set its clock: it sets or confirms from them itself); `agrees` (the
+    `host_unavailable`; `synchronised`; `witnessed` (AEAT has spoken during the stop, and the box
+    can set its clock: it sets or confirms from AEAT itself — revision 4: devices no longer count
+    here, since they no longer set the clock); `agrees` (the
     device is within a minute: confirm instead); `stale` (the clock stepped while the request was
     in flight: read the time again). `clock.check_expired` (400) as today; a failed or unverified
     set is `clock.set_failed { reason: "refused" | "unverified" }` (502). No transaction is held
-    while the host sets.
+    while the host sets. It is open at any time, start-up or running: it is how an administrator
+    answers the running-time alert (decision 17).
 11. **Every job that reads the wall clock** is made safe for a step of days, or accepted with a
     reason (round 1, I5), in Tasks 14, 15, 15a and 15b: backups pruned by the age in their names;
     the stream's generation pruning; management sessions (the lead's ruling (d)) and passkey
@@ -656,8 +818,10 @@ Filled from the job's log by the lead; each row gives the run's URL and the prin
     keeps a credential alive past its limit, cuts tills off, or blocks a legal record (round 2, I7).
 12. **What 9c inherits:** the anchor registration of decision 6 (9c's change guard registers
     beside the watch); `confirmClockStep` taking any open check's reason (9c's `start`, `change`,
-    `disagrees`); `clock.sync_off`'s `unreachable` (9c's alert-not-stop case, design §4.9 h.2).
-    9b opens no check of its own and adds no stop.
+    `disagrees`); `clock.sync_off`'s `unreachable` (9c's alert-not-stop case, design §4.9 h.2);
+    and, from revision 4, the till's check (decision 15) with its `staff` source (decision 16) and
+    the start-up window (decision 14), which 9c widens so that the till is offered while its `start`
+    check is open. 9b opens no check of its own and adds no stop.
 13. **A deliberate deviation from design §4.9 h.2: no install instruction** (the lead's ruling (b);
     round 2, I8). The design says "`clock.sync_off` says to re-run the install"
     (`docs/superpowers/specs/2026-10-19-a798-degraded-trading-design.md:1227-1229`), and 9c's
@@ -672,6 +836,107 @@ Filled from the job's log by the lead; each row gives the run's URL and the prin
     right by itself. An administrator can still confirm the clock when it is right." (Spanish to
     match, Tasks 7 and 13.) `deploy/README.md`, read by whoever installs, keeps the install line
     (Task 18). This plan's commit updates 9c's outline to match.
+14. **Start-up, in code, and how it splits between 9b and 9c** (revision 4; the owner's "before
+    continuing with startup"). A new `apps/server/src/clock-start-up.ts` holds, for this server
+    process, a start-up window and what AEAT has said during it:
+    - **Opens** when `bootServer` creates it, before the clock watch and the routes. **Closes for
+      good** at the first clock-watch look that finds no stop holding: either the branch where the
+      look already ends the stop for the witness store (`stop === null` and the reading recordable,
+      `apps/server/src/clock-watch.ts:255-259`), or a stop state whose `proof` is `confirmed` — a
+      covering confirmation has lifted it, and the seat still answers a state then
+      (`packages/fiscal-verifactu/src/clock-confirmation.ts:76-77`, `:125`), so the look takes the
+      `stop !== null` branch (`clock-watch.ts:268`). A reading before 28-10-2024 is not
+      recordable, so `clock.unusable` keeps it open. A stop that holds from the start and at every look since is a
+      **start-up stop**; any stop after the window closed is a **running stop**. The watch looks only
+      on the primary (`clock-watch.ts:214-217`), which is the node a till follows.
+    - **What AEAT said**: `not_asked`, `unanswered` or `answered`. The watch's `askAuthority`
+      (`clock-watch.ts:172-179`) reports `answered` on a sample and `unanswered` on null; an AEAT time
+      noted from a filing reply (`boot.ts:1633`, `createAuthorityClockStatus({ onSample })`) reports
+      `answered`. `answered` stays for the rest of the window.
+    - **`tillMayOffer(reading)`**: the window is open, a stop holds at the reading (the stop proper
+      with no covering confirmation, or `clock.unusable`), and AEAT cannot help: the reading is
+      before 28-10-2024, or the box cannot ask (`filesRecords()` false, or no `readAuthorityTime`
+      on the seat, `clock-watch.ts:173`), or AEAT is `unanswered`. FYI 9 gives the timing.
+    - "Start" is the server process's start, a restart included (FYI 8). The boot reader's boot id
+      (`apps/server/src/boot-reader.ts:45-51`) could tell a machine boot from a restart; it is not
+      used for this.
+    **Why the gate is 9c's, not 9b's.** 9b opens no new stop ("Global constraints"); a stop at
+    every start that refuses every record is 9c's whole risk, with its own test fallout (9c outline,
+    "Tests that boot a whole server"). So **9b builds the till's proposal and the staff member's
+    confirmation for the stops the box already has at start (the stop proper and `clock.unusable`),
+    and 9c makes them the gate** by opening a `start` check at every start, during which the till is
+    offered too. Cost until 9c lands: a clock wrong FORWARD at start, or wrong backward by less than
+    the gap to the last sale, raises no stop, so nobody is asked and sales are dated on it, as today.
+    9c's outline is updated in this commit.
+15. **The till's check** (revision 4; the owner's 07:00 rule and 07:05 point 1).
+    - **Offered** by a new staff notice from the box's own source (`boxStaffNoticeSource`,
+      `apps/server/src/box-staff-notices.ts:45-53`): `clock.check_time`, severity `error`, no params,
+      sent while `tillMayOffer(reading)` holds. The till's red line draws it with a "Check the time"
+      button (FYI 13); the `clock.behind_chain` / `clock.unusable` lines stay as they are.
+    - **Two routes on the till API**, `POST /api/box-clock/challenge` and `POST /api/box-clock/confirm`
+      (not under `/api/clock/`, which is attendance clocking, `apps/server/src/till-clock-api.ts:87`,
+      `:106`). Both refuse `clock.set_refused { reason: "same_machine" }` when the request comes from
+      the box (`requestFromBox`, `apps/server/src/request-from-box.ts:40-42`) outside development —
+      slice 9's rule that the box's own screen is never a witness; take `requireSession(deps, c)`
+      (`apps/server/src/till-session.ts:93-143`) with the device profile admitting the person
+      (`canUseDeviceProfile`, as `till-clock-api.ts:82` does), and no permission and no profile action
+      (any staff member, FYI 13); and use their own `clockChallenges` instance keyed by the till
+      session's id (`apps/server/src/clock-challenges.ts:23-58`; a challenge lives 5 s, `:3`).
+    - **challenge** checks `not_stopped`, `not_start_up` and `authority_pending` first, so the dialog
+      shows a refusal at once, and answers `{ challengeId, boxAt }`.
+    - **confirm** takes `{ challengeId, deviceAt }` — the till's own clock, never a typed time —
+      parsed as `confirmBody` does (`apps/server/src/box-health-api.ts:87-102`); takes the challenge
+      (`clock.check_expired` when gone); computes the box's time at the round trip's midpoint and its
+      uncertainty as the administrator's confirmation does (`box-health-api.ts:278-294`), keeping the
+      wall and steady readings there as `measuredAt` and `correction.steps()` as `stepsSeen`. Then,
+      first `target_invalid` (the till's time before 2024-10-28 or from 2100 on), before any turn;
+      then one of two branches, each judged inside the correction's turn:
+      - **the till agrees** (within a minute, uncertainty included — slice 9's `adminAgrees`,
+        `packages/fiscal-verifactu/src/clock-confirmation.ts:133-138`): in `correction.inTurn`, one
+        transaction that answers `stale` when the correction's step counter is no longer
+        `stepsSeen` (a set landed after the reading, so the comparison is void), then
+        `not_stopped`, then the window's `not_start_up` or
+        `authority_pending`, then runs slice 9's `confirmClockStop` with the staff member as its
+        `admin` input marked `staff` (Task 8a) — refused `clock.confirm_refused { reason:
+        "contrary_proof" }` when AEAT or a group of devices disagrees during the stop, as for an
+        administrator; it lifts the stop with no step, and `clock.behind_chain_restarted` names the
+        staff member and the till (FYI 10). A `clock.unusable` stop cannot reach this branch: an
+        agreeing till would read before 2024-10-28 too, which `target_invalid` has refused;
+      - **the till differs**: `correction.set` with `source: "staff"`, the till's offset and the
+        window's check as `admit`, which judges in Task 12's order — `stale`, `not_stopped`, then
+        `admit` (`not_start_up`, `authority_pending`), `host_unavailable`, `synchronised` (FYI 2),
+        `witnessed` (AEAT has spoken during the stop and the box can set its clock).
+      It answers `{ confirmationId, stepMs, confirmedAt }`; a failed or unverified set is
+      `clock.set_failed` (502). The host's requester is `{ source: "staff", person: <uuid>, device:
+      <uuid> }`, ids only.
+    - **Not changed:** the till's payment refusal words (`apps/till/src/widgets/pay-refusal.ts`) and
+      the strip's `clock.*` lines; the "Check the time" line is the way in.
+16. **A staff member's row** (revision 4; FYI 15). Column `source = 'admin'`, `person_id` the staff
+    member, `proof.admin` null and `proof.staff = { deviceId, address, boxAt, witnessAt,
+    uncertaintyMs }`. `proof.staff` present means a staff member on a till; absent means an
+    administrator — every row slice 9 wrote lacks the key, since it writes `storedWitnesses`' three
+    keys only (`packages/fiscal-verifactu/src/clock-checks.ts:122-144`). The run in "What slice 9
+    left" shows the shipped CHECK accepts it and refuses the alternatives. **Every reader that
+    words who confirmed** learns `staff` (Task 8a); traced 2026-10-31 with `/usr/bin/grep -rn
+    'clockConfirmations\.\(source\|personId\)' apps packages --include='*.ts'`, tests left out, which
+    printed only `clock-confirmation.ts:94-95` and `clock-misdated.ts:56-57`, and followed from
+    there: `coveringConfirmation` → `ClockStopState.confirmation` → `apps/server/src/box-health.ts:180-182`
+    → the dashboard's `confirmedBy` (`apps/dashboard/src/screens/box-status-rows.ts:387-396`);
+    `clock-misdated.ts` → `apps/server/src/misdated-sales-csv.ts:56-60`; and the
+    `clock.behind_chain_restarted` params (`clock-confirmation.ts:236-246`) → the bell's
+    `clock_confirmed_by` words (`apps/dashboard/src/i18n/alert-messages.ts:507-516`) and the email's
+    `CLOCK_CONFIRMED_BY_WORDS` (`apps/server/src/i18n/box-emails.ts:45-58`, read at
+    `apps/server/src/box-alert-email.ts:97-108`). The seat answers `staff: true` on a confirmation
+    whose proof has `staff` and leaves the key out otherwise, so every existing `toEqual` of a
+    slice-9 confirmation still passes. No migration.
+17. **A running stop alerts the administrators** (revision 4; the owner's 07:05 point 2). During a
+    running stop the till offers nothing (no `clock.check_time`; a till's confirm answers
+    `not_start_up`), AEAT still sets the clock by itself, and the alert is the one the stop already
+    raises: `clock.behind_chain` / `clock.unusable`, in the bell and by email to everyone holding
+    `system.manage`, administrators included (FYI 11). Its bell entry already opens Box status
+    (`screen: "box-status"`, `packages/fiscal-verifactu/src/clock-behind-alerts.ts:20`, `:33`),
+    where the administrator's "Use your device's time?" is (decision 10). Task 13b rewrites the
+    words; no new code.
 
 ## Changed test checks
 
@@ -687,6 +952,15 @@ EDITED to pass and is not on this list is a STOP, unless the spec changes what i
    `{ synced: false, source: "unavailable", warn: false }` — with the stub swapped from a runner to
    a client answering `clockStatus()`. `CommandRunner` and the `execFile` default go
    (`time-health.ts:13-34`). Task 6.
+9. *(Revision 4.)* `apps/server/src/box-alert-email.test.ts:76-82` ("writes both times, each in its
+   own offset, in English", the `clock.behind_chain` email's exact text): its "What to do" sentence
+   changes with decision 17 — no "call whoever installed it", no "two tills switched on, the box
+   does it by itself"; an administrator's own device and, after a start, a staff member on a till
+   instead. The case keeps both times and the subject; only the expected text changes. The Spanish
+   case (`:84-94`) builds its expectation from the words file and passes unedited. Task 13b.
+   (`/usr/bin/grep -rln 'whoever installed\|two tills switched on' apps packages --include='*.test.ts'`,
+   run 2026-10-31, printed this file and `recovery-surface.test.ts`, whose lines are about a
+   different page and are not touched.)
 
 **Whole-shape lists gaining entries** (the owner's standing exception of 2026-09-27):
 2. `packages/fiscal-verifactu/src/alerts.test.ts:10-11` (`FISCAL_ALERTS` `toEqual`) gains the
@@ -700,6 +974,13 @@ EDITED to pass and is not on this list is a STOP, unless the spec changes what i
 5. Any whole-list assertion of `INCIDENT_EMAIL_CODES` gains `clock.corrected` (expected: none —
    `/usr/bin/grep -rn 'INCIDENT_EMAIL_CODES' apps/server/src --include='*.test.ts'` printed nothing
    on `65bc0441a`; re-run in Task 9 and list any it finds). Task 9.
+10. *(Revision 4.)* `apps/dashboard/src/i18n/alerts.test.ts:509-519` ("words each way the clock can
+    be confirmed", a `toEqual` of the `clock_confirmed_by` words) gains `staff: { en: "a staff
+    member", es: expect.any(String) }`; its three entries and `otherwise` are unchanged. Task 8a.
+11. *(Revision 4.)* The route map comment of `apps/server/src/till-api.profile-actions.test.ts`
+    (`:39-…`) gains a row for `POST /api/box-clock/challenge, /confirm` — "admitted session; no
+    profile action" — naming its refusing and allowed cases (CLAUDE.md §3). A comment, not an
+    assertion; listed so the review checks the row. Task 12a.
 
 **Fixtures only, no assertion changed:**
 6. `apps/server/src/box-status.route.test.ts:120` and
@@ -713,12 +994,19 @@ EDITED to pass and is not on this list is a STOP, unless the spec changes what i
 8. `apps/server/src/clock-witnesses.test.ts` and `clock-watch.test.ts`: none of their assertions
    changes; the store's new `forSetting()` and the kept disagreements' new `at` are covered by new
    cases (Task 11). Listed so the review checks it.
+12. *(Revision 4.)* `clock-watch.test.ts`'s harness passes no `startUp` dep either, which the watch
+    reads as "nothing to tell" (Task 11b). Listed so the review checks that no existing case changed.
 
 **Must pass unedited:** `packages/fiscal-verifactu/src/write-path.e2e.test.ts` (the golden huella),
 `inmutabilidad.test.ts`, `apps/server/src/boot.box-health.test.ts:209-224` ("caches the clock check
 and the disk walk for a minute…", which mocks `checkTimeHealth` by name: the name stays), every
 `clock-confirmation*`, `clock-checks*`, `clock-behind*`, `clock-misdated*` and `clock-confirm.route`
-test, `apps/server/src/box-alert-email*.test.ts` (every other code keeps today's episode rule),
+test (Task 8a's `staff` is a new optional input and an answer key left out unless set, decision 16),
+`packages/fiscal-verifactu/src/clock-stop-incidents.test.ts` (its `confirmedBy` cases keep their
+values), `apps/till/src/widgets/notice-strip*.test.ts` and `apps/till/src/i18n/staff-notices.test.ts`
+(Task 13a adds a code and a button; no existing line's words change),
+`apps/server/src/box-alert-email*.test.ts` except changed test check 9 (every other code keeps
+today's episode rule and words),
 every suite under `packages/workforce/src` and `packages/workforce/test` (Task 15a), every
 `apps/server/src/till-clock*`, `attendance-discovery*` and `boot.till-clock` suite (Task 15b), and
 every other test on `main`.
@@ -1045,15 +1333,21 @@ guard's list → the guard stays green (it hand-lists files): this is the guard'
 
 ### Task 8: The seat records a step of the clock, and the bell words it
 
-**Goal.** Decisions 7 and 9, in the Veri\*Factu module, without touching the fiscal core; and the
-bell's words for `clock.corrected` in the same task, since `scripts/alert-codes.test.ts`'s "every
+**Goal.** Decisions 7, 9 and 16 (revision 4: a step confirmed by a staff member on a till is
+stored under `admin` with `proof.staff`), in the Veri\*Factu module, without touching the fiscal
+core; and the bell's words for `clock.corrected` in the same task, since `scripts/alert-codes.test.ts`'s "every
 recorded code, and alert.source_unavailable, has English and Spanish wording" (`:128`, reading
 `ALERT_MESSAGES` at `:19`) is red from the moment the code is recorded until the words exist
 (round 2, minor 3).
 
 **Files.** Create `packages/fiscal-verifactu/src/clock-step.ts` and `clock-step.test.ts`; modify
 `packages/fiscal/src/backend.ts` (`ClockStepRequest`, optional `confirmClockStep?(tx, input):
-Promise<{ confirmation: ClockConfirmation | null }>` beside `confirmClockStop` at `:367-374`),
+Promise<{ confirmation: ClockConfirmation | null }>` beside `confirmClockStop` at `:367-374`;
+`ClockAdminConfirm`, `:230-234`, gains `staff?: { deviceId: string; deviceLabel: string | null;
+address: string | null }`, present when the person is a staff member confirming a till's time),
+`packages/fiscal-verifactu/src/clock-checks.ts` (`storedWitnesses`, `:122-144`, writes a fourth key
+`staff`, null unless the confirmation is a staff member's — so every row written from here on
+has it, and a reader treats a missing key as null),
 `packages/fiscal-verifactu/src/clock-stop-incidents.ts` (`recordCorrected`, already a listed
 incident source in `scripts/alert-codes.test.ts:24-43`), `packages/fiscal-verifactu/src/alerts.ts`
 (the claim), `packages/fiscal-verifactu/src/errors.ts` (`"clock.corrected"` params, beside
@@ -1061,8 +1355,9 @@ incident source in `scripts/alert-codes.test.ts:24-43`), `packages/fiscal-verifa
 module), `packages/fiscal-none/src/backend.test.ts`,
 `packages/fiscal/src/testing/fake-backend.test.ts`
 (changed test checks 2 and 4), and `apps/dashboard/src/i18n/alert-messages.ts` with its test
-(English and Spanish, one sentence per source, naming the person for `admin`, before and after in
-the venue's offset, and the step in words — "moved forward 2 days 3 hours" / "adelantado 2 días y
+(English and Spanish, one sentence per source, naming the person for `admin` and the person and
+the till for `staff` — "set from till Barra 1, confirmed by Ana" / "puesta con la caja Barra 1,
+confirmada por Ana" — before and after in the venue's offset, and the step in words — "moved forward 2 days 3 hours" / "adelantado 2 días y
 3 horas"; a `verified: false` variant saying the box asked for the change and could not confirm
 it took).
 
@@ -1076,8 +1371,9 @@ export interface ClockStepRequest {
   stepMs: number;
   verified: boolean;
   reason: "behind_chain" | "unusable";
-  source: "authority" | "devices" | "admin";
+  source: "authority" | "admin" | "staff";
   witnesses: readonly ClockWitness[];
+  /** For `admin` and `staff`; for `staff`, with its `staff` entry set. */
   admin?: ClockAdminConfirm;
   nodeId: string;
 }
@@ -1089,10 +1385,14 @@ export interface ClockStepRequest {
   `confirmed_at` the after, `step_ms` the step, `source: "authority"`, `check_id` the open check,
   `registro_id` null; `clockBehindChain` at the after reading answers null; one `clock.corrected`
   with exact params; no `clock.behind_chain_restarted`.
-- Two devices set it to a time still behind the latest record: `registro_id` the latest record, a
-  lift that covers the after reading and readings up to a minute further back
+- A staff member's till sets it to a time still behind the latest record: `registro_id` the
+  latest record, a lift that covers the after reading and readings up to a minute further back
   (`clockBehindChain` null at `after`, non-null at `after − 61 s`, `clock-behind.ts:133-137`);
-  `clock.behind_chain_restarted` recorded.
+  `clock.behind_chain_restarted` recorded with `confirmedBy: "staff"`, the person and the till.
+- `staff` source (decision 16): the column `source` is `admin`, `person_id` the staff member,
+  `proof.admin` null, `proof.staff` the till's id, address and reading; `clock.corrected` has
+  `source: "staff"`, `person`, `deviceId` and `device`. Control: `source: "staff"` with no `admin`
+  input → refused before any write (a programming error, thrown), zero rows.
 - The list: a record written before the check opened and stamped more than a minute after the
   corrected start is listed; `proof.closing.correctedStart` equals `after − (bootAfter −
   check.bootMs)`.
@@ -1117,7 +1417,8 @@ export interface ClockStepRequest {
 **Deletion controls.** Store the before reading as `confirmed_at` → the lift-cover case fails;
 drop the `markIncidentHandled` → the second-step case fails; drop the `unusable` branch's skip of
 `recordMisdated` → the unusable case fails; use `openClockCheck(…)!` as `confirmClockStop` does →
-the no-stop case throws.
+the no-stop case throws; write a staff step's reading under `proof.admin` instead of `proof.staff` → the
+`staff` case fails.
 
 **Focused commands.**
 `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/clock-step.test.ts
@@ -1128,6 +1429,64 @@ src/testing/fake-backend.test.ts`; `pnpm exec vitest run scripts/alert-codes.tes
 scripts/errors-reachable.test.ts scripts/no-till-as-issuer.test.ts`; `pnpm --filter
 @waitron/dashboard exec vitest run src/i18n/alerts.test.ts src/widgets/alerts-bell.test.ts
 src/screens/alerts-screen.test.ts`.
+
+### Task 8a: Slice 9's confirmation takes a staff member, and every reader tells them apart
+
+**Goal.** Decision 16's readers, and decision 15's agreeing branch: slice 9's `confirmClockStop`
+accepts the staff member through its existing `admin` input marked `staff`, and every place that
+words "who confirmed" says "a staff member" (with the till) rather than "an administrator" for
+such a row. No behaviour of slice 9 changes for an input without `staff`.
+
+**Files.** Modify `packages/fiscal-verifactu/src/clock-confirmation.ts` (`confirmClockStop`,
+`:177-264`: with `admin.staff` set, `proof.admin` null and `proof.staff` the reading with the
+till's id and address, and `recordRestarted`'s `confirmedBy: "staff"` with `person` and a new
+`device` param; `closeWaitingAsAdmin`, `:143-164`, refuses an input with `staff` as `not_stopped`
+— a staff member never closes a waiting check, decision 15; `coveringConfirmation`, `:87-103`,
+reads `proof` and adds `staff: true` only when `proof.staff` is set), `packages/fiscal-verifactu/src/clock-misdated.ts`
+(the closing it reads, `:42-73`, `:163`, gains `staff: true` the same way),
+`packages/fiscal-verifactu/src/errors.ts` (`clock.behind_chain_restarted`'s `confirmedBy`, `:380`,
+gains `"staff"`, and a `device: string | null` param), `packages/fiscal/src/backend.ts`
+(`ClockStopState.confirmation`, `:198-203`, and the misdated closing type gain `staff?: true`),
+`apps/server/src/box-health.ts` (`:180-182` passes `staff` through),
+`apps/server/src/misdated-sales-csv.ts` (`:26-31`, `:56-60`: "a staff member (Ana)" for a `staff`
+closing), `apps/server/src/i18n/box-emails.ts` (`CLOCK_CONFIRMED_BY_WORDS`, `:45-58`, gains `staff`:
+"a staff member on a till" / "un empleado en una caja"), `apps/dashboard/src/api/client.ts` (the
+local copy of the confirmation, `:1888-1893`, gains `staff?: true`),
+`apps/dashboard/src/screens/box-status-rows.ts` (`confirmedBy`, `:387-396`, reads `staff`),
+`apps/dashboard/src/i18n/alert-messages.ts` (`clock_confirmed_by`, `:507-516`, gains `staff`), and
+the tests named below.
+
+**Failing tests first.**
+- `clock-confirmation.test.ts` (new cases only): a stop proper, a staff member's `admin` input with
+  `staff` and a reading that agrees → one row, column `source` `admin`, `person_id` the staff
+  member, `proof.admin` null, `proof.staff` with the device id; `clock.behind_chain_restarted`
+  params `confirmedBy: "staff"`, `person`, `device`; `clockStopState` at the next reading answers a
+  confirmation with `staff: true`. Control: the same input without `staff` → `proof.staff` null,
+  `confirmedBy: "admin"`, and the answer has no `staff` key (`toEqual` against the slice-9 shape).
+  A waiting check and a `staff` input → `clock.confirm_refused { reason: "not_stopped" }`, zero rows;
+  control, the same without `staff` → closes it, as today.
+- `clock-misdated.test.ts`: a list closed by a staff member's confirmation reads `staff: true`.
+- `misdated-sales-csv.test.ts`: a `staff` closing's header names "a staff member (Ana)" in English
+  and the Spanish word; an `admin` closing still names an administrator (`:238`, unedited).
+- `box-alert-email.test.ts`: `clock.behind_chain_restarted` with `confirmedBy: "staff"` words "a
+  staff member on a till" in both languages (a new case after the `it.each` at `:118-121`, which is
+  left unedited).
+- `box-status-rows.test.ts`: a covering confirmation with `staff: true` reads "a staff member";
+  without, "an administrator", as today. `alerts.test.ts`: changed test check 10.
+
+**Deletion controls.** Drop the `staff` branch in `confirmClockStop` → the staff case stores
+`proof.admin` and `confirmedBy: "admin"`; drop the `not_stopped` refusal for a `staff` input on a
+waiting check → that case writes a row; read `source` alone in `confirmedBy` → the staff row reads
+"an administrator".
+
+**Focused commands.** `pnpm --filter @waitron/fiscal-verifactu exec vitest run
+src/clock-confirmation.test.ts src/clock-misdated.test.ts src/clock-stop-incidents.test.ts`;
+`pnpm --filter @waitron/fiscal-verifactu exec vitest run inmutabilidad src/write-path.e2e.test.ts`;
+`pnpm --filter @waitron/server exec vitest run src/misdated-sales-csv.test.ts
+src/box-alert-email.test.ts src/clock-confirm.route.test.ts src/box-health.test.ts`;
+`memory_pressure | grep free`, then `pnpm --filter @waitron/dashboard exec vitest run
+src/screens/box-status-rows.test.ts src/i18n/alerts.test.ts`; `pnpm exec vitest run
+scripts/alert-codes.test.ts scripts/personal-log-params.test.ts`.
 
 ### Task 9: `clock.corrected`'s email, never lost to a later step
 
@@ -1141,7 +1500,8 @@ src/screens/alerts-screen.test.ts`.
 `apps/server/src/boot.ts` (the duty's `remember` handed to the correction as `onCorrected`).
 
 **Failing tests first.** The email: each source's exact English text with both times in their
-offsets; Spanish read from `box-emails.ts`; a step of exactly one day and one of 400 days worded;
+offsets — `authority`, `admin` naming the person, `staff` naming the person and the till (the
+owner's 07:05 point 3); Spanish read from `box-emails.ts`; a step of exactly one day and one of 400 days worded;
 no `{` left in any text. The duty (`box-alert-email.duty.test.ts`'s pattern, fake timer and fake
 reads):
 - a `clock.corrected` open on one check is emailed once;
@@ -1166,17 +1526,17 @@ src/box-alert-email.duty.test.ts`.
 
 ### Task 10: Setting the clock — the order, one at a time, verified
 
-**Goal.** Decisions 6–8, and the owner question's switch. The turn's other users (the watch's
-confirmation, the confirm route) join it in Tasks 11 and 12.
+**Goal.** Decisions 6–8 for the three sources revision 4 keeps — AEAT, an administrator, a staff
+member (`source: "authority" | "admin" | "staff"`). The turn's other users (the watch's
+confirmation, the confirm route, the till's agreeing confirmation) join it in Tasks 11, 12 and 12a.
+Revision 3's `DEVICES_MAY_SET_BACK_PAST_LAST_SALE` and `devicesMaySet` are not built: devices no
+longer set the clock.
 
 **Files.** Create `apps/server/src/clock-correction.ts`, `clock-correction.test.ts`; modify
 `apps/server/src/errors.ts` (`clock.set_refused`, `clock.set_failed`).
 
 **Interface.**
 ```ts
-export const DEVICES_MAY_SET_BACK_PAST_LAST_SALE = true; // owner, 2026-10-24 04:24
-export function devicesMaySet(input: { targetMs: number; stepMs: number;
-  latestRecordAt: number | null; rule: boolean }): boolean;
 /** Both may write (the watch records its pending disproofs). A throw from `stepComing` refuses
  * the set; a throw from `reanchor` keeps the step's row pending (decision 8). */
 export interface ClockAnchor { stepComing(): Promise<void>; reanchor(): Promise<void> }
@@ -1197,9 +1557,14 @@ export function clockCorrection(deps: {
   /** The one-at-a-time turn, which the watch's `confirm` and `closeWaiting` and the confirm
    * route also take. Taken before any transaction, never inside one (decision 6). */
   inTurn<T>(fn: () => Promise<T>): Promise<T>;
-  set(input: { reason: "behind_chain" | "unusable"; source: "authority" | "devices" | "admin";
+  set(input: { reason: "behind_chain" | "unusable"; source: "authority" | "admin" | "staff";
     offsetMs: number; measuredAt: { wallMs: number; monoMs: number }; stepsSeen: number;
-    witnesses: readonly ClockWitness[]; admin?: ClockAdminConfirm;
+    witnesses: readonly ClockWitness[];
+    /** For `admin` and `staff`; for `staff`, with its `staff` entry set (Task 8). */
+    admin?: ClockAdminConfirm;
+    /** Asked inside the turn, after the stop is judged again: the till's route passes the
+     * start-up window's check (Task 11b), answering `not_start_up` or `authority_pending`. */
+    admit?: () => "not_start_up" | "authority_pending" | null;
     latestRecordAt: number | null; requester: Record<string, string | null> }):
     Promise<{ set: true; confirmationId: string | null; stepMs: number }
       | { set: false; reason: string }>;
@@ -1220,7 +1585,7 @@ export function clockCorrection(deps: {
 - **Stale** (round 2, C1): `stepsSeen` one below `steps()` → `stale`, no host call; `measuredAt`
   from before a +5-second move of the fake wall clock with no steady-clock move → `stale`; the
   control, nothing moved → set.
-- A target before 2024-10-28 or after 2100 → refused before the host is asked.
+- A target before 2024-10-28 or from 2100 on → `target_invalid`, before the host is asked.
 - Verification: the host moves the wall clock by the step → `verified: true`; by the step + 2 001
   ms → `verified: false`, no row asked for but `confirmClockStep` called with `verified: false`
   (the alert); the host answering `set_failed` with the clock unmoved → no seat call, `{ set:
@@ -1236,34 +1601,42 @@ export function clockCorrection(deps: {
   `not_stopped`, since the first lifted the stop in the stub).
 - A seat transaction that throws a full-disk error → the step kept; `writePending()` on the next
   call writes it once; a second `writePending()` writes nothing.
-- `devicesMaySet` with `rule: true` → true for a backward target before the latest record; with
-  `rule: false` → false for that case and true for a forward one; the `set` path refuses a
-  devices source with `devices_back_past_last_sale` only when the constant is false (test passes
-  the rule through a test seam, not by editing the constant).
-- The requester holds ids only: `{ source, check }` for automatic sets, `{ source: "admin", person:
-  <uuid> }` for an administrator; a test asserts no `personName` reaches the host.
+- **`staff`** (revision 4): `admit` answering `not_start_up` → `{ set: false, reason:
+  "not_start_up" }`, no anchor told, no host call; `authority_pending` the same; control, `admit`
+  answering null → set, and `confirmClockStep` called with `source: "staff"` and the `admin` input
+  carrying `staff`. `admit` is called after the stop is judged (the order list shows it), so a stop
+  that ended answers `not_stopped`, not `not_start_up`.
+- **`witnessed`** for `admin` and `staff`: an AEAT disagreement taken during the stop, the host
+  available and unsynchronised → `witnessed`, no host call; control: a group of devices from two
+  addresses disagreeing and no AEAT → not `witnessed` (devices set nothing now), the set goes on.
+- The requester holds ids only: `{ source: "authority", check }` for AEAT, `{ source: "admin",
+  person: <uuid> }` for an administrator, `{ source: "staff", person: <uuid>, device: <uuid> }` for
+  a staff member; a test asserts no `personName` and no device label reaches the host.
 
 **Deletion controls.** Skip `reanchor` → the order case fails; drop the verification → the +2 001
 case fails; drop the turn → the together case sees two sets; drop the step-counter check (keep
 the turn) → the together case sees two sets (the host still unsynchronised); drop the stop
-re-judging → the `not_stopped` case calls the host.
+re-judging → the `not_stopped` case calls the host; skip `admit` → the `not_start_up` case calls
+the host; count devices in `witnessed` → the devices control answers `witnessed`.
 
 **Focused command.** `pnpm --filter @waitron/server exec vitest run src/clock-correction.test.ts`.
 
-### Task 11: The watch as an anchor, and the store's settable readings
+### Task 11: The watch as an anchor, and the store's settable AEAT readings
 
 **Goal.** Decision 6's anchor half (round 2, C1, I2, minor 1); no set is asked for yet.
 
 **Files.** Modify `apps/server/src/clock-witnesses.ts` (AEAT's kept disagreements stored with
-their `BoxClockReading`; `forSetting()` hands out every reading `witnesses()` would, each with its
-`at`, and only those with no step since — a kept disagreement included only while `fresh` holds
-for it; `witnesses()` and its doc unchanged), `apps/server/src/clock-watch.ts` (the watch
+their `BoxClockReading`; `forSetting()` hands out every AEAT reading `witnesses()` would, each
+with its `at`, and only those with no step since — a kept disagreement included only while `fresh`
+holds for it; revision 4: no device reading, since devices no longer set the clock; `witnesses()`
+and its doc unchanged), `apps/server/src/clock-watch.ts` (the watch
 implements `ClockAnchor`; when a `correction` dep is passed, BOTH its confirmation writers take
 `correction.inTurn` around their whole `deps.transaction` — `confirm` (`clock-watch.ts:150-170`)
 and `closeWaiting`'s `closeClockCheckByItself` (`:185-208`), which also closes a check and so
 must not land between a set's judging and its row; `closeWaiting`'s `askAuthority()` stays outside
 the turn; `recordPending` runs one call at a time), `apps/server/src/boot.ts` (create the
-correction before `startClockWatch` at `:2437`, pass it, `correction.addAnchor(clockWatch)`).
+correction before `startClockWatch` at `:2441` (moved from `:2437` by Tasks 6–7), pass it,
+`correction.addAnchor(clockWatch)`).
 
 **The anchor.** `stepComing()` sets a hold that skips the jump comparison on EVERY look until
 `reanchor()` clears it — not only the next look, which a set still in flight would use up (round
@@ -1317,9 +1690,10 @@ harness) and in `apps/server/src/clock-witnesses.test.ts` (new cases only):
   (`Promise.race` with a timer that fails the case), so a deadlock fails rather than hangs; the
   same with `closeWaiting`. Control: the turn moved inside the transaction (the deletion below)
   → the deadline fires.
-- The store: a disagreement noted, then the wall clock stepped by 5 s against the steady clock →
-  `witnesses()` still hands it out (unchanged), `forSetting()` does not; with no step, both do and
-  `forSetting()` carries the `at` it was noted with.
+- The store: an AEAT disagreement noted, then the wall clock stepped by 5 s against the steady
+  clock → `witnesses()` still hands it out (unchanged), `forSetting()` does not; with no step, both
+  do and `forSetting()` carries the `at` it was noted with. A device reading noted beside it →
+  `witnesses()` hands it out, `forSetting()` never does.
 - A confirmation that the watch writes, from `confirm` and from `closeWaiting`, waits for a set
   in flight in the same turn (a fake correction whose `inTurn` records order).
 
@@ -1336,27 +1710,26 @@ fails.
 src/clock-witnesses.test.ts src/clock-watch.test.ts src/clock-watch.elapsed.test.ts
 src/clock-watch.restart.test.ts`.
 
-### Task 11a: The watch sets the clock during a stop, with a backoff
+### Task 11a: The watch sets the clock from AEAT during a stop, with a backoff
 
-**Goal.** Decision 6's automatic half and its backoff (round 2, I3).
+**Goal.** Decision 6's automatic half — AEAT only, revision 4 — and its backoff (round 2, I3).
 
 **Files.** Modify `apps/server/src/clock-watch.ts` (on `stop.proof === "contrary"` after
-`openCheck`, call `correction.set` with AEAT's offset when `stop.contrary.authority` is set, else
-the devices' mean, each with the chosen readings' `measuredAt` from `forSetting()` and
-`stepsSeen: correction.steps()` read when the witnesses are read; when `stop === null` and the
-reading is not recordable, judge `forSetting()` with `judgeClockWitnesses` and set from a
-disagreeing group of devices; `writePending()` on each look straight after its first
-`recordPending()` succeeds (`clock-watch.ts:228`), never before it or when it failed, so a disproof
-measured on the old clock is written before the step's row (decision 8); the backoff of
-decision 6, kept in memory by stop key; log a refusal once per change of reason, not every 15 s).
+`openCheck`, call `correction.set` with AEAT's offset when `stop.contrary.authority` is set, with
+that reading's `measuredAt` from `forSetting()` and `stepsSeen: correction.steps()` read when the
+witnesses are read, and nothing when only devices disagree; nothing during `clock.unusable`, where
+AEAT cannot be asked; `writePending()` on each look straight after its first `recordPending()`
+succeeds (`clock-watch.ts:228`), never before it or when it failed, so a disproof measured on the
+old clock is written before the step's row (decision 8); the backoff of decision 6, kept in memory
+by stop key; log a refusal once per change of reason, not every 15 s).
 
 **Failing tests first** in a new `apps/server/src/clock-watch.correction.test.ts` (the existing
 harness, a fake correction recording calls):
 - A stop with AEAT disagreeing by +2 days → one `set` with `source: "authority"` and AEAT's offset;
-  devices disagreeing too → still AEAT's.
-- A stop with two devices from two addresses disagreeing, no AEAT → `source: "devices"`, the mean.
-- A stop with one device disagreeing → no set.
-- `clock.unusable` (a reading in 2001) with two devices disagreeing → `reason: "unusable"`.
+  devices disagreeing too → still AEAT's, once.
+- **Revision 4 controls:** a stop with two devices from two addresses disagreeing and no AEAT → no
+  `set` (today's slice-9 behaviour: nothing); `clock.unusable` (a reading in 2001) with two devices
+  disagreeing → no `set`. Each with the AEAT case beside it so the harness is shown able to set.
 - A correction answering `synchronised` on three looks logs `clock_watch.cannot_set` once.
 - A disproof pending in the watch and a step row pending in the correction → the look writes the
   disproof, then calls `writePending()`; with the disproof's write failing → `writePending()` is
@@ -1366,25 +1739,95 @@ harness, a fake correction recording calls):
   minutes, the third 20 minutes after that; an answer `synchronised` on every look → asked every
   look (nothing toggled, no backoff); a new open check id → asked at once; a fake correction
   recording `clock.corrected` per unverified answer → at most one per backoff step.
-- One boot-level case in `boot.clock-watch.test.ts`'s style, for the wiring: `seams.boxHost` a
-  fake host, a venue whose latest sale is a day ahead of the box, two equipment reads from two LAN
-  addresses (`requestFromBox` false) reporting a day ahead → within one look the fake host was
-  asked `clock.set` with a target about a day ahead and an ids-only requester. A real server's
-  clock is `systemClock()` (`boot.ts:1816`), which no seam moves (`seams.testClock`, `:843`, is the
-  module operations' hour clock, `module-operation-host.ts:31`), so the fake host cannot move it:
-  the case asserts the honest outcome — no `clock_confirmations` row, no `clock.corrected` (the
-  clock did not move, decision 7's last sentence) and one `clock_correction.unverified` log line;
-  and the next look within 10 minutes does not ask the host again (the backoff, wired).
+- One boot-level case in `boot.clock-watch.test.ts`, beside "shares one boot reader between the
+  watch and the administrator's confirm route" (`:132-143`) and in its style: the watch is handed
+  the correction boot made, and that correction has the watch as its one anchor. A booted server
+  cannot be made to hear AEAT (`readAuthorityTime` has no seam on `startServer`), and its clock is
+  `systemClock()`, which no seam moves (`seams.testClock`, `boot.ts:843`, is the module operations'
+  hour clock, `module-operation-host.ts:31`), so the AEAT path through a real server is not run
+  here; the till route's boot-level case (Task 12a) runs the correction through a booted server.
   The success path through the row and the lift is Tasks 8, 10 and 12's, on clocks the test
   controls.
 
-**Deletion controls.** Drop the `contrary` branch → the AEAT case fails; drop the backoff → the
+**Deletion controls.** Drop the `contrary` branch → the AEAT case fails; let the devices' mean set
+the clock again (revision 3's branch) → the revision 4 control calls `set`; drop the backoff → the
 backoff case sees a call every look.
 
 **Focused commands.**
 `pnpm --filter @waitron/server exec vitest run src/clock-watch.correction.test.ts
 src/clock-watch.test.ts src/clock-watch.elapsed.test.ts src/clock-watch.restart.test.ts
 src/boot.clock-watch.test.ts`.
+
+### Task 11b: The start-up window, and the till's notice
+
+**Goal.** Decision 14's window and decision 15's offer: what the server knows about start-up, and
+the staff notice that puts "Check the time" on a till.
+
+**Files.** Create `apps/server/src/clock-start-up.ts` and `clock-start-up.test.ts`; modify
+`apps/server/src/clock-watch.ts` (an optional `startUp` dep: `noStop()` from the branch that calls
+`deps.store.endStop()`, `:259`, under the same condition, and on a look whose stop state's `proof` is
+`confirmed` (decision 14); `authorityAsked(answered)` after each
+`askAuthority` sample, `:176-178`), `apps/server/src/box-staff-notices.ts` (`boxStaffNoticeSource`
+gains a `clockCheck?: (tx, reading) => Promise<boolean>` input and sends `{ key:
+"clock.check_time", code: "clock.check_time", severity: "error", params: {} }` while it answers
+true — the literal sits in this file, which `scripts/staff-notice-codes.test.ts:15` already reads),
+`apps/server/src/boot.ts` (create the window before `startClockWatch`; pass it to the watch; wrap
+`createAuthorityClockStatus`'s `onSample` at `:1633` so a filing reply's AEAT time also reports
+`answered`; hand a `clockCheck` built from `startUp.tillMayOffer`, the seat's
+`assertRecordableAt` and `clockStopState` to the DEVICES' notice sources only —
+`deviceNoticeSources` is called twice, for the tills' equipment read (`boot.ts:2011`) and for
+the Box status page (`:2551`); the page's call gets none, so the dashboard and the managers' email
+duty, which reads the page's notices and emails only listed codes (`box-alert-email.ts:343-347`),
+never see `clock.check_time`), `apps/till/src/i18n/staff-notices.ts` and
+`strings.ts` (the words, so the guard passes in this task: main "Payments stopped: the box's clock
+needs checking" / "No se puede cobrar: hay que comprobar la hora del equipo"; Task 13a adds the
+button), `apps/server/src/errors.ts` if the guard asks for a registry entry.
+
+```ts
+export interface ClockStartUp {
+  /** True until a look of the clock watch finds no stop; never true again in this process. */
+  open(): boolean;
+  noStop(): void;
+  authorityAsked(answered: boolean): void;
+  /** Decision 14's rule. `canAskAuthority`: the box files records and the seat reads AEAT's time. */
+  tillMayOffer(input: { stopped: boolean; unusable: boolean; canAskAuthority: boolean }): boolean;
+  /** For the till's route: null when a till may confirm now. */
+  admit(input: { unusable: boolean; canAskAuthority: boolean }):
+    "not_start_up" | "authority_pending" | null;
+}
+export function clockStartUp(): ClockStartUp;
+```
+
+**Failing tests first.**
+- `clock-start-up.test.ts`: new → `open()`; `tillMayOffer` with a stop and `canAskAuthority` true
+  → false (`not_asked`), and `admit` → `authority_pending`; after `authorityAsked(false)` → true and
+  null; after `authorityAsked(true)` then `authorityAsked(false)` → false (`answered` stays);
+  `unusable: true` → true before any ask; `canAskAuthority: false` → true before any ask; after
+  `noStop()` → false and `admit` → `not_start_up`, whatever follows; `stopped: false` → false.
+- `clock-watch.test.ts`-harness cases in a new `apps/server/src/clock-watch.start-up.test.ts`: a
+  look with no stop at a recordable reading calls `noStop()` once; a look whose stop state is
+  `confirmed` (a lift covers the reading) calls it; a look at a 2001 reading (no stop, not
+  recordable) does not; a look during the stop proper does not; an AEAT ask answering
+  null calls `authorityAsked(false)`, one answering a sample `authorityAsked(true)`; no `startUp` dep
+  → every existing case unchanged (changed test check 12).
+- `box-staff-notices.test.ts` (new cases): `clockCheck` answering true → one `clock.check_time`
+  notice; false or absent → none; disk-full and space-low notices unchanged beside it.
+- A boot-level case (in `boot.clock-watch.test.ts`'s style): the devices' source is built with a
+  `clockCheck` and the page's without (each call's input recorded through the module mock the
+  file already uses for the watch).
+- `boot.clock-watch.test.ts` style, one case: a booted server's filing-reply `onSample` reaches the
+  window (the window's `authorityAsked(true)` is called when the authority clock's sample is
+  delivered).
+
+**Deletion controls.** Close the window on a `clock.unusable` look too → the 2001 case calls
+`noStop()`; drop the `confirmed` condition → the lifted case leaves the window open; let a later `false` overwrite `answered` → that case offers; drop the `noStop()` call →
+the no-stop look leaves the window open.
+
+**Focused commands.** `pnpm --filter @waitron/server exec vitest run src/clock-start-up.test.ts
+src/clock-watch.start-up.test.ts src/clock-watch.test.ts src/box-staff-notices.test.ts
+src/boot.clock-watch.test.ts`; `pnpm exec vitest run scripts/staff-notice-codes.test.ts`;
+`memory_pressure | grep free`, then `pnpm --filter @waitron/till exec vitest run
+src/i18n/staff-notices.test.ts`.
 
 ### Task 12: An administrator's "Use your device's time?"
 
@@ -1394,7 +1837,8 @@ src/boot.clock-watch.test.ts`.
 mount `POST /api/box/clock-set` when `confirmClockStep` exists; `POST /api/box/clock-confirm`'s
 WHOLE `withTransaction` (`:269`) runs inside `correction.inTurn` when a correction is passed —
 the turn before the lock, never inside it, decision 6; round 2 C1); create
-`apps/server/src/clock-set.route.test.ts`; modify `apps/server/src/boot.ts` (`:2594-2605`).
+`apps/server/src/clock-set.route.test.ts`; modify `apps/server/src/boot.ts` (the `clockConfirm`
+deps at `:2615`, moved from `:2594-2605` by Tasks 6–7).
 
 **The route**, in order: refuse on the box (`same_machine`, as `:247-250`);
 `requireManagementSession`; authorize `person.admin` in one transaction; parse
@@ -1404,8 +1848,10 @@ round trip's midpoint as `:281-295` does, keeping the wall and steady readings t
 `measuredAt` and `correction.steps()` as `stepsSeen`; then `correction.set` with
 `source: "admin"` and the device's offset, outside any transaction. The correction judges, inside
 its turn and in decision 10's order, `stale`, `not_stopped`, `host_unavailable`, `synchronised`,
-`witnessed` (AEAT or a group of devices has spoken during the stop) and `agrees` (the device
-within a minute) — so `witnessed` is only ever said where the box can set its clock (round 2, I4).
+`witnessed` (AEAT has spoken during the stop — revision 4: devices no longer count, since they no
+longer set the clock) and `agrees` (the device within a minute) — so `witnessed` is only ever said
+where the box can set its clock (round 2, I4). The route is open at start-up and while running
+(decision 17): it passes no `admit`.
 Map each to `clock.set_refused { reason }` and a failed or unverified set to `clock.set_failed`;
 answer `{ confirmationId, stepMs, confirmedAt }`.
 
@@ -1413,7 +1859,8 @@ answer `{ confirmationId, stepMs, confirmedAt }`.
 correction built on the test's own `clock` and `wall`, so the fake host can move them): a manager
 → 403 `{ permission: "person.admin" }`; no session → 401; on the
 box → 409 `same_machine` with the fake host never asked; no stop → `not_stopped`; AEAT disagreeing
-during the stop → `witnessed`; two devices during the stop → `witnessed`; the device 30 s off →
+during the stop → `witnessed`; two devices disagreeing during the stop, no AEAT → NOT
+`witnessed`: 200, the clock set from the administrator's device (revision 4); the device 30 s off →
 `agrees`; synchronised → `synchronised`; no host → `host_unavailable`; **AEAT disagreeing during
 the stop AND the host synchronised → `synchronised`, and AEAT disagreeing with no host →
 `host_unavailable`, never `witnessed`** (round 2, I4); a step made between the challenge and the
@@ -1431,7 +1878,8 @@ held at the fake host's `clockStatus` (after its `read`, so it holds the turn) u
 `POST /api/box/clock-confirm` has started, then released → both finish within a 5-second
 deadline on real timers (`Promise.race` with a timer that fails the case).
 
-**Deletion controls.** Drop the `witnessed` check → its two cases fail; judge `witnessed` before
+**Deletion controls.** Drop the `witnessed` check → its AEAT case fails; count devices in it
+again → the two-devices case answers `witnessed`; judge `witnessed` before
 the host's status → the two I4 cases answer `witnessed`; drop the on-the-box check →
 `same_machine` fails; drop the permission → the manager case fails; take the confirm route out of
 the turn → the order case fails; take the turn inside its `withTransaction` → the deadlock case
@@ -1439,6 +1887,92 @@ hits its deadline.
 
 **Focused commands.** `pnpm --filter @waitron/server exec vitest run src/clock-set.route.test.ts
 src/clock-confirm.route.test.ts src/box-health-api.test.ts`.
+
+### Task 12a: The till's check — a staff member confirms the till's time
+
+**Goal.** Decision 15's two routes on the server: the owner's 07:00 rule and 07:05 points 1 and 3.
+
+**Files.** Create `apps/server/src/till-box-clock-api.ts` (`mountTillBoxClockApi(app, deps, log)`,
+mounted from `mountTillApi` beside `mountTillClockApi`, `apps/server/src/till-api.ts:1281-1286`,
+whenever the seat has `confirmClockStop` and a correction is passed — not gated on the workforce
+module), `apps/server/src/till-box-clock-api.test.ts`; modify `apps/server/src/till-api.ts`
+(`TillApiDeps` gains an optional `boxClock` with the correction, the window, the seat, the witness
+store's `witnesses` and `clear`, the clock, `readBoot`, `steady`, `requestFromBox`, `devMode`),
+`apps/server/src/boot.ts` (pass it), `apps/server/src/errors.ts` (`clock.set_refused`'s reasons
+gain `not_start_up`, `authority_pending`, `target_invalid`), `apps/server/src/till-api.profile-actions.test.ts`
+(the map row, changed test check 11, and its refusing cases).
+
+**The routes**, as decision 15 says. Their `STATUS` map: `session.required` 401,
+`device.unauthorized` 403, `clock.set_refused` 409, `clock.confirm_refused` 409,
+`clock.check_expired` 400, `clock.set_failed` 502, `management.request_invalid` 400 (the body's
+field, as `confirmBody` throws it). The person is the session's (`requireSession(deps, c)`,
+`till-session.ts:93`); its name, read with `displayNameOf` (`apps/server/src/box-health.ts:133`),
+goes to the seat for the alert, never to the host. The device is the session's `deviceId`; its
+label is read from `devices` for `clock.corrected`'s `device` param.
+
+**Failing tests first** (`useVenueDb`, a till enrolled with `enrolDeviceForTest`, a staff member
+with a PIN session on it, a sale recorded a day ahead of the test's clock so the stop proper holds,
+a correction built on the test's own `clock` and `wall` with a fake host that moves them, and a
+real `clockStartUp()` the test drives):
+- **Differs, the control:** the window open, AEAT `unanswered`, the till a day ahead → 200; one
+  `clock.set` on the fake host with requester `{ source: "staff", person, device }` and nothing
+  else; one row, column `source` `admin`, `person_id` the staff member, `proof.staff.deviceId` the
+  till; `clock.corrected` with `source: "staff"`, the person and the till's label; the stop lifted
+  at the next read (`clockStopState` null or `confirmed`).
+- **Agrees:** the till 20 s from the box → 200 with `stepMs: 0`, no host call, one row with
+  `proof.staff`, `clock.behind_chain_restarted` naming the staff member and the till (Task 8a).
+  Agreeing, with the correction's counter raised between the challenge and the confirm → `stale`,
+  zero rows.
+- **`clock.unusable`:** the test's clock in 2001, the till a day ahead of real time → 200, row
+  `reason: "unusable"`; the window open and AEAT `not_asked` (the box cannot ask it then).
+- Refusals, each with zero rows, zero host sets and zero incidents, counted, and each with the
+  differ control above as the case that goes through: the request from the box (`requestFromBox`
+  answering true, `devMode` false) → 409 `same_machine` on both routes; the same with `devMode`
+  true → served (slice 9's development exception); no session → 401 `session.required`; a profile
+  that no longer admits the person → refused as `till-clock-api.ts:82` refuses; no stop → 
+  `not_stopped`; the window closed (`noStop()` called) with the stop back → `not_start_up`; AEAT
+  `not_asked` with the box able to ask → `authority_pending` (and the challenge route answers it
+  too, before any challenge is issued); AEAT `answered` and disagreeing during the stop with the host
+  able to set → `witnessed`; the till's time in 2001 → `target_invalid`; the till a day ahead with
+  the host synchronised → `synchronised`, and with the host missing → `host_unavailable`; the till
+  agreeing while AEAT disagrees → `clock.confirm_refused { reason: "contrary_proof" }`; an old
+  challenge → 400 `clock.check_expired`; a challenge issued to another till's session → 400
+  `clock.check_expired`; a step between challenge and confirm (the correction's counter raised) →
+  `stale`; the fake host moving the clock 3 s short → 502 `clock.set_failed { reason: "unverified" }`.
+- **Two tills at once:** two staff members on two tills confirm differing times together → the
+  host sees exactly one `clock.set`; the other answers `stale` or `not_stopped` (whichever the
+  turn makes true), never a second row.
+- **The agreeing confirmation takes the turn:** a till's agreeing confirmation started while a set
+  holds the turn writes its row only after the set's (order recorded through the stub seat), and the
+  deadlock case on the real database, as Task 12's: a held `correction.set` and a till's agreeing
+  confirm both finish within a 5-second deadline on real timers.
+- **Profile actions** (CLAUDE.md §3): both routes in the map as "admitted session; no profile
+  action"; refusing cases "requires an open session on POST /api/box-clock/challenge and /confirm"
+  and the changed-admission case; allowed: "serves a staff member whose profile has no selling
+  action" (a profile with only `clock-in`, or with none of `PROFILE_ACTIONS`). These routes are not
+  bounded by service zones, so `till-api.profile-zones.test.ts`'s `ROUTES` (`:514`, routes refused
+  by zone access) gains no row; the task re-reads that file's header and says so in the pull
+  request.
+- **One boot-level case**, for the wiring (`boot.clock-watch.test.ts`'s environment): a booted
+  server with `seams.boxHost` a fake host answering unsynchronised, `seams.requestFromBox` answering
+  false, a venue whose latest sale is a day ahead of the real clock, a box that files nothing (so
+  the window offers at once), a till session; `POST /api/box-clock/challenge` then `/confirm` with
+  `deviceAt` a day ahead → the fake host was asked `clock.set` with a target about a day ahead and
+  `{ source: "staff", person, device }`. A booted server's clock is `systemClock()`, which the fake
+  host cannot move, so the honest answer is 502 `clock.set_failed { reason: "unverified" }` with no
+  `clock_confirmations` row (decision 7's last sentence); a `clock.corrected` only if the measured
+  step exceeds a second, which it does not here.
+
+**Deletion controls.** Drop the on-the-box refusal → `same_machine` fails; skip `admit` → the
+`not_start_up` and `authority_pending` cases call the host; send the person's name in the
+requester → the requester case fails; let the agreeing branch skip `contrary_proof` → that case
+writes a row; take the agreeing confirmation out of the turn → its order case fails; move the turn
+inside its transaction → the deadlock case hits its deadline.
+
+**Focused commands.** `pnpm --filter @waitron/server exec vitest run src/till-box-clock-api.test.ts
+src/till-api.profile-actions.test.ts src/till-api.profile-zones.test.ts src/clock-correction.test.ts
+src/boot.clock-watch.test.ts`; `pnpm exec vitest run scripts/errors-reachable.test.ts
+scripts/personal-log-params.test.ts scripts/no-till-as-issuer.test.ts`.
 
 ### Task 13: The dashboard's dialog, refusals and row
 
@@ -1459,8 +1993,9 @@ time"; on Confirm a fresh challenge and `clockSet`. `#offersClockCheck`
 **Words** (concise; CLAUDE.md §3's refusal rule — what happened and what each choice does, never
 "ask someone"): `synchronised` — "The box keeps its clock in time over the internet and says it is
 right, so it does not take a time from a device. If your device's time is right, check the box's
-internet connection." `witnessed` — "The tax agency's time or two tills already disagree with
-the box's clock, so the box sets its clock from them by itself; your device's time was not used."
+internet connection." `witnessed` — "The tax agency's time already disagrees with the box's
+clock, so the box sets its clock from it by itself; your device's time was not used." (Revision 4:
+"or two tills" goes — devices no longer set the clock.)
 (Said only where the box can set, decision 10, so "by itself" is true; no "within a minute": the
 backoff can hold an automatic set longer.) `stale` — "The box's clock changed while this was being
 checked. Read the time again." `agrees` — the existing agree path. `host_unavailable` — decision
@@ -1483,6 +2018,128 @@ follow `#offersClockCheck` → the waiting-check case draws "Use this time".
 **Focused commands.** `memory_pressure | grep free`, then
 `pnpm --filter @waitron/dashboard exec vitest run src/screens/box-status-screen.test.ts
 src/screens/box-status-screen.a11y.test.ts src/api/client.test.ts src/i18n/codes.test.ts`.
+
+### Task 13a: The till's "Check the time" and its dialog
+
+**Goal.** Decision 15 on the till: the red line's button and the dialog that shows the box's time
+beside the till's, asks the signed-in staff member to confirm, and words every refusal as
+CLAUDE.md §3 asks — what happened and what each choice does, never "ask someone".
+
+**Files.** Modify `apps/till/src/widgets/notice-strip.ts` (a `clock.check_time` notice draws a
+`wt-button` "Check the time" as its hint, in the first line and in the opened list; a press
+dispatches `till-check-time`, `bubbles: true, composed: true`, an app-owned event name; the class
+comment's "it emits no events" becomes "its one event is `till-check-time`"), create
+`apps/till/src/widgets/box-time-dialog.ts` (`till-box-time-dialog`, a `wt-dialog`), modify
+`apps/till/src/till-app.ts` (opens the dialog on `till-check-time`; after a success, reads the
+equipment again at once through `#readDeviceEquipment`, `till-app.ts:9801`, so the line clears),
+`apps/till/src/api/client.ts` (`boxClockChallenge()`, `boxClockConfirm({ challengeId, deviceAt })`),
+`apps/till/src/i18n/t.ts` (`clockDateTime(at)` beside `clockTime`, `:160`, date and time in the
+till's language: the two clocks can be days or years apart), `apps/till/src/i18n/strings.ts` (English
+and the Spanish block), `apps/till/src/i18n/codes.ts` (`clock.set_refused`, `clock.set_failed`,
+`clock.check_expired`, `clock.confirm_refused`, worded by reason), `apps/till/src/i18n/staff-notices.ts`
+(the hint for `clock.check_time`, "Check the time" / "Comprobar la hora").
+
+**The dialog.** On open it asks for a challenge. The till never asks anyone to type a time; it
+sends its own `Date.now()`.
+- **The till differs by more than a minute:** "The box's clock says {box}. This till says {till}."
+  then "Use this till's time? The box's clock is set to it and payments start again. Every manager
+  is told it was you, from this till." Under it, the self-service step for a wrong till: "If this
+  till's time is wrong too, correct it in the till's own settings first." Buttons: "Not now"
+  (closes; nothing changes, payments stay stopped) and the primary "Use this till's time".
+- **The till agrees:** "The box's clock says {box}, and this till agrees. If that is the right time,
+  confirm it: payments start again. Every manager is told it was you." Buttons: "Not now" and the
+  primary "The time is right".
+- On the primary: a FRESH challenge (a challenge lives 5 s), then the confirm with `deviceAt`; the
+  primary is disabled while it is sent (CLAUDE.md §3's action states). Success: "The box's clock
+  is set to {after}." or "The box's time is confirmed.", with Close.
+- **Refusals**, each under the buttons on its own line, with the choices it leaves:
+  `not_stopped` "The box's clock no longer needs checking." (Close); `not_start_up` "The box has
+  been running since its clock was last right, so its clock is no longer checked from a till. The
+  administrators have been told." (Close); `authority_pending` "The box is still trying the tax
+  agency's time over the internet. Check again in a minute." (Check again, Close); `witnessed` "The
+  box has the tax agency's time and puts its clock right by itself." (Close); `target_invalid`
+  "This till's clock reads {till}, which cannot be right. Correct this till's date and time in its
+  settings, then check again." (Check again, Close); `synchronised` "The box keeps its clock in
+  time over the internet, so it does not take a time from a till. Check this till's own clock."
+  (Close); `host_unavailable` decision 13's first two sentences, then "If this till's time agrees
+  with the box's, you can still confirm it." (Close); `stale` "The box's clock changed while this
+  was being checked." and `clock.check_expired` "This took too long." (Check again, Close);
+  `same_machine` "This screen is the box itself, so its clock is the box's own. Check from a till
+  or handheld instead." (Close); `contrary_proof` "The tax agency's time or two other tills disagree
+  with the box's clock, so it cannot be confirmed from this till." (Close); `clock.set_failed`
+  `refused` "The box could not set its clock. Nothing was changed." and `unverified` "The box asked
+  for its clock to be set but could not confirm it took." (Check again, Close). Spanish to match;
+  words as short as the meaning allows.
+
+**Failing tests first** (browser; `memory_pressure | grep free` first):
+- `notice-strip.test.ts` (new cases): a `clock.check_time` notice draws "Check the time"; a press
+  dispatches `till-check-time` once, bubbling out of the shadow root; the same notice as the second
+  of two draws the button in the opened list; control, a `clock.behind_chain` notice alone draws no
+  button. The existing cases pass unedited.
+- `box-time-dialog.test.ts` (fake api, `Date.now` stubbed): differs → both times and "Use this
+  till's time"; the primary takes a second challenge and sends the confirm with the stubbed
+  `Date.now()` as `deviceAt`; agrees → "The time is right"; "Not now" sends no confirm (calls
+  counted); each refusal above → its words and its buttons; "Check again" asks for a new challenge.
+- `t.test.ts`: `clockDateTime` in English and Spanish, a date in 2001 and one in 2026.
+- `till-app.box-time.test.ts`: `till-check-time` opens the dialog; after a success the equipment is
+  read again at once (the fake's call count).
+- `box-time-dialog.a11y.test.ts`: the differs, agrees, refusal and success states, in both themes.
+- `i18n/codes.test.ts` and `strings.test.ts`: each new key in both languages.
+
+**Deletion controls.** Draw the button for every red notice → the `clock.behind_chain` control
+fails; reuse the first challenge for the confirm → the second-challenge case fails; drop "Not now"'s
+early return → it sends a confirm.
+
+**Focused commands.** `memory_pressure | grep free`, then `pnpm --filter @waitron/till exec vitest
+run src/widgets/notice-strip.test.ts src/widgets/notice-strip.a11y.test.ts
+src/widgets/box-time-dialog.test.ts src/widgets/box-time-dialog.a11y.test.ts
+src/till-app.box-time.test.ts src/i18n/t.test.ts src/i18n/codes.test.ts src/i18n/strings.test.ts
+src/i18n/staff-notices.test.ts src/api/client.test.ts`; `pnpm exec vitest run
+scripts/staff-notice-codes.test.ts scripts/native-form-fields.test.ts scripts/style-token-names.test.ts
+scripts/english-only.test.ts`.
+
+### Task 13b: A running stop's alert and email lead an administrator to set the clock
+
+**Goal.** Decision 17: the words of the alert and email the stop already raises point to the
+administrator's "Use your device's time?", and stop sending the reader to whoever installed the box
+(CLAUDE.md §3's refusal rule) — the box can now set its own clock.
+
+**Files.** `apps/server/src/i18n/box-emails.ts` (`clock.unusable`, `:22-31`; `clock.behind_chain`,
+`:32-41`), `apps/dashboard/src/i18n/alert-messages.ts` (`clock.unusable`, `:200-203`; the bell's
+`clock.behind_chain`, `:167-170`, already ends "Sort it out on the Box status page" and is left as
+it is), `apps/server/src/box-alert-email.test.ts` (changed test check 9),
+`apps/dashboard/src/i18n/alerts.test.ts` (new cases).
+
+**Words (English; Spanish to match).**
+- `clock.unusable`, bell: "The box's clock reads {clockAt:minute}, before 28 October 2024, so no sale
+  can be recorded for the tax agency. With the internet the box puts it right by itself; otherwise
+  an administrator can set it on the Box status page."
+- `clock.unusable`, email: "The box at {venue} has its clock set before 28 October 2024, so no sale
+  can be recorded for the tax agency until the clock is right. With the internet the box puts it
+  right by itself. Otherwise an administrator can set it from their own phone or computer on the Box
+  status page (in the dashboard, Settings → Box status); if the box has just started, any staff
+  member can do it from a till with «Check the time»."
+- `clock.behind_chain`, email, its "What to do": "• If the box's clock is wrong (usual after a power
+  cut): with the internet the box puts it right by itself; otherwise an administrator can set it
+  from their own phone or computer on the Box status page (in the dashboard, Settings → Box
+  status), and if the box has just started any staff member can do it from a till with «Check the
+  time». • If you think the box's clock is right: an administrator can confirm it on the same page;
+  with the internet or two tills switched on, the box does it by itself." (The last clause stays
+  true: slice 9's lift on AEAT or two agreeing devices, FYI 12.)
+
+**Failing tests first.** `alerts.test.ts`: `clock.unusable` in both languages names the Box status
+page (`t("nav.box_status", …)`) and contains neither "installed" nor "instaló". The email: changed
+test check 9's new exact English text; the `clock.unusable` email in both languages contains
+neither "installed" nor "instaló" and names the till's button as it is written there — the
+literals "Check the time" and "Comprobar la hora", which Task 13a's strings test pins too, since the
+server does not import the till's strings.
+
+**Deletion control.** Put "ask whoever installed it" back in either text → its new case fails.
+
+**Focused commands.** `pnpm --filter @waitron/server exec vitest run src/box-alert-email.test.ts
+src/box-alert-email.duty.test.ts`; `memory_pressure | grep free`, then `pnpm --filter
+@waitron/dashboard exec vitest run src/i18n/alerts.test.ts`; `pnpm exec vitest run
+scripts/alert-codes.test.ts`.
 
 ### Task 14: Backups pruned safely across a step
 
@@ -1750,14 +2407,25 @@ src/attendance-discovery.test.ts src/boot.till-clock.test.ts`.
 
 **Files.** `apps/server/src/guide/en/box-status.md` and `apps/server/src/guide/es/box-status.md`:
 "When payments stop because of the clock" (`{#clock-behind}`) says the box sets its own clock from
-the tax agency's time or two tills, or from an administrator's device on "Use your device's time?",
-never while it keeps time over the internet; a new section `{#clock-service}` on the time service,
+the tax agency's time by itself; after a start with no internet, from a till's time once a staff
+member signed in on it confirms it ("Check the time"); and at any time from an administrator's
+device on "Use your device's time?" — never while it keeps time over the internet, and never from
+two tills on their own (two tills that agree with the box can still restart payments, slice 9);
+that while the box is running a clock stop alerts the administrators; a new section `{#clock-service}` on the time service,
 `clock.sync_off`'s reasons and decision 13's words for `unreachable` (no install instruction);
 "Emails about the box" (`{#emails}`) gains the clock-change email and its limit (a restart before
 it is sent loses it for a change already handled); the sign-in note of FYI 6 (only a dashboard
 session; a step of more than half an hour either way ends it, and a smaller forward step shortens
 its idle time by the step; tills stay signed in); and the backup hold's limit (Task 14: only
-steps the box made). `deploy/README.md` gains the host service (Task 18).
+steps the box made). `apps/server/src/guide/{en,es}/till-notices.md`: the `{#notices}` section
+gains "Payments stopped: the box's clock needs checking · Check the time" — what it means (the box
+started with its clock in doubt and could not reach the tax agency's time), what the dialog shows,
+what each button does, that nobody types a time, that the till's own time is what is sent so a
+wrong till must be corrected in its settings first, and that every manager is told who confirmed
+and from which till; its paragraph on fixing the clock (`till-notices.md:58-60`, "tax agency or two
+tills or handhelds confirm the clock, or an administrator confirms it") is re-read and kept true
+(the two tills there confirm a right clock; they never set it). `deploy/README.md` gains the host
+service (Task 18).
 
 **Focused commands.** `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts`;
 `pnpm exec vitest run scripts/guide-links.test.ts`.
@@ -1767,10 +2435,17 @@ steps the box made). `deploy/README.md` gains the host service (Task 18).
 The dev stack (`wa-wt demo`) needs Docker, which is not answering on this Mac, so the LOOK uses the
 browser test runner: a throwaway case (not committed) in `apps/dashboard` renders the Box status
 screen with (a) the set question open, (b) each set refusal under the buttons, (c) the Clock row
-with "Not kept in time over the internet", (d) the bell with `clock.corrected` and each
-`clock.sync_off` reason, and saves `page.screenshot` at 1280 and 390 wide, light and dark, English
-and Spanish, into `~/waitron-campaign-b/a798-9b-shots/`. The email's text is written to a file and
-read. The lead opens every image and notes what it saw in the ledger; a defect goes back to its
+with "Not kept in time over the internet", (d) the bell with `clock.corrected` for each source —
+AEAT, an administrator, a staff member with the till's name — and each `clock.sync_off` reason,
+and the reworded `clock.unusable`; and a throwaway case in `apps/till` renders (e) the red line
+with "Check the time", alone and as the second of two notices with the list open, and (f) the
+dialog in each state — differs, agrees, sending, success, and every refusal — with times days and
+years apart. Each is saved with `page.screenshot` at 1280 and 390 wide (the till also at 1024, a
+till tablet's width), light and dark, English and Spanish, into
+`~/waitron-campaign-b/a798-9b-shots/`. The two emails' texts (`clock.corrected` for a staff member,
+and the reworded `clock.unusable` and `clock.behind_chain`) are written to a file and read. The
+lead opens every image and notes what it saw in the ledger — in particular that the dialog's two
+times and its buttons fit a 390-wide phone in Spanish without clipping; a defect goes back to its
 task.
 
 ### Task 18: Developer docs, CLAUDE.md, the deploy README, the asesor question and B3's contract
@@ -1779,14 +2454,21 @@ task.
   confirmation of the clock lifts the stop for one step back" (`:3969`): the host service and its
   two requests, the order, the step counter and `stale`, what a step's row stores, the alert and
   its email, the backoff, the pruning holds and their limit, Task 15's audit table, Tasks 15a
-  and 15b's rule, the turn taken before the write lock, and the measurements with their run URLs.
+  and 15b's rule, the turn taken before the write lock, the measurements with their run URLs, and
+  (revision 4) the start-up window, the till's check and its refusals, and why a staff member's row
+  is stored under `source = 'admin'` with `proof.staff` (decision 16, with the `sqlite3` run).
   Update "A jump" (`:4163`) for `stepComing`'s and `reanchor`'s take-and-record and the hold until
   `reanchor`.
-- `CLAUDE.md` §5's clock bullet gains one clause: "the box sets its clock only through the host
-  service, never while it keeps time over the internet, and every step it makes is alerted and
-  emailed", naming its guards (`clock-correction.test.ts`, `clock-set.route.test.ts`,
+- `CLAUDE.md` §5's clock bullet, whose list of confirmation sources today reads "AEAT, two agreeing
+  devices at different addresses or an administrator's own device, never a box device outside
+  development", gains the staff member: "or, during a stop found at start-up and once AEAT has not
+  answered, a till's time confirmed by a staff member signed in on it (owner, 2026-10-31)"; and one
+  clause: "the box sets its clock only through the host service, from AEAT, a staff member's till
+  at start-up or an administrator's device — never from devices alone and never while it keeps time
+  over the internet — and every step it makes is alerted and emailed", naming its guards
+  (`clock-correction.test.ts`, `clock-set.route.test.ts`, `till-box-clock-api.test.ts`,
   `scripts/waitron-box-sh.test.mjs`) and saying they are weaker than the rule where they are (the
-  handler's suite runs stubs, not systemd). Run
+  handler's suite runs stubs, not systemd; the route suites cover the named routes only). Run
   `pnpm exec vitest run scripts/claude-md-pointers.test.ts`.
 - `deploy/README.md` (read by whoever installs, who has a terminal): the host service, what
   install writes and with which modes, how to see its journal (`journalctl -t waitron-box`), that
@@ -1797,12 +2479,17 @@ task.
 - `docs/compliance/asesor-questions.md`: **Q61** (the next free number on `65bc0441a` — the
   headings run to Q60 at `:3814`; re-check with `/usr/bin/grep -nE '^### Q[0-9]+'
   docs/compliance/asesor-questions.md | tail -3` at build time and take the next free one):
-  "A system that corrects its own clock from a device's clock when it has no internet (added
-  <date>)" — whether a SIF may correct its own clock from devices' clocks or an administrator's
-  device when it has no internet, and what it should record; its text names FYI 4's residual risk
-  (a scripted request from two enrolled devices can set any time between 2024-10-28 and 2100, and
-  after slice 9c can do so with nobody present). Plain English with a Spanish quotation block, as
-  Q60 has; a dated note at the top beside the 2026-10-24 one; none in the shortened list.
+  "A system that corrects its own clock from a till's clock when it has no internet (added
+  <date>)" — whether a SIF may correct its own clock, when it cannot reach AEAT's time, from the
+  clock of one of its own tills once a staff member present confirms that time on the till, or
+  from an administrator's own device; what it should record (today: who confirmed, which till, the
+  readings before and after, the step, kept in an append-only table, alerted and emailed to the
+  managers); and whether records dated by the clock before such a correction need any treatment
+  beyond the list the box already gives the owner. Its text names FYI 4's residual risk: a scripted
+  request from any staff member signed in on an enrolled till, during a stop found at start-up —
+  after slice 9c, at every start without internet — can set any time between 2024-10-28 and 2100,
+  with that person named. Plain English with a Spanish quotation block, as Q60 has; a dated note at
+  the top beside the 2026-10-24 one; none in the shortened list.
 - **B3's plan** (`docs/superpowers/plans/2026-10-26-b3-usb-installer.md`, Task 3.1, after its
   **Interfaces** paragraph at `:158`; the lead's ruling (a)): a paragraph "The clock requests
   slice 9b shipped" stating the server↔host contract B3 must keep or migrate: the socket
@@ -1812,7 +2499,9 @@ task.
   name; the server's client `apps/server/src/box-host-client.ts`, which B3's plan lists as a NEW
   file (its Task 3 row, `:51`) but 9b creates first, so B3 changes or replaces 9b's client rather
   than creating it; one text line in, one JSON line out; `clock.status` and `clock.set
-  <epochMs> <requester>` with decision 2's and decision 3's replies; and that the requester is
+  <epochMs> <requester>` with decision 2's and decision 3's replies; the three requesters 9b sends
+  (`{ source: "authority", check }`, `{ source: "admin", person }`, `{ source: "staff", person,
+  device }`, ids only); and that the requester is
   SELF-REPORTED JSON the host only logs — weaker than B3's `VerifiedHostActor`, which "caller
   JSON … cannot mint" (`:70`), since the server alone authorizes a set. B3 either keeps the two
   requests on this wire or moves them under its own protocol and actor, in the same change that
@@ -1825,15 +2514,20 @@ task.
    to 10 landed; slice 9b built and parked for the owner (#<pr>); slice 9c outlined".
    `docs/backlog/box.md`: the A798-B entry (`:1534-1546`) names 9b's pull request and Q61; "A
    device's or an administrator's time is self-reported" (`:1448-1457`) says slice 9b added the
-   alert and email and that the time can now set the clock; "The clock watch's suspend-aware clock
-   has not been run on Linux" (`docs/backlog.md:5106`) is narrowed to what M3 measured
+   alert and email, that a till's time (confirmed by a staff member at start-up) and an
+   administrator's can now set the clock, and that two devices alone no longer can; "The clock
+   watch's suspend-aware clock has not been run on Linux" (`docs/backlog.md:5106`) is narrowed to what M3 measured
    (a setting of the wall clock), leaving a real suspend unmeasured.
 2. New entries: B3 keeps or migrates 9b's clock requests and requester (the lead's ruling (a),
    pointing at the B3 paragraph Task 18 writes); the box's certificate issued under a clock wrongly
    ahead (Task 15); the hours read, the end-of-day pass and the correction check after a
    backward step, and the accepted cross-chain case (Task 15a, ruling (e)); the stream's
    pruning measured by the bucket's own times (Task 15); anything else Task 15 accepted
-   that a later slice must revisit.
+   that a later slice must revisit; and, from revision 4: a clock wrong forward at start (or wrong
+   backward by less than the gap to the last sale) asks nobody until slice 9c's start check
+   (decision 14); slice 9's two-agreeing-devices lift during a start-up stop, kept as owner FYI 12,
+   to be revisited if the owner overrides it or in 9c; the till's payment refusal words still say
+   «Avisa al encargado» while "Check the time" is offered (decision 15, "Not changed").
 3. This plan's status line: built, parked, the pull request's number. (The measurement workflow
    was deleted in Task 4; `git log --diff-filter=D --oneline --
    .github/workflows/host-clock-measure.yml`
@@ -1844,23 +2538,33 @@ task.
 **Per-task review** after each task, at `high` effort, on that task's diff, stating the experiment
 it ran.
 
-**Codex seat 1 (with this checklist).** On `clock-correction.ts`, the watch and the
-administrator's route with clocks the test controls (a server booted with `seams.boxHost` cannot
+**Codex seat 1 (with this checklist).** On `clock-correction.ts`, the watch, the
+administrator's route and the till's route with clocks the test controls (a server booted with `seams.boxHost` cannot
 have its clock moved by the fake host, so there it checks only that the host is asked): a venue a
 day ahead of the box; AEAT disagreeing by a day → within one look one `set`, one row
 `source: "authority"`, `clock.corrected` open; two devices
-from two addresses disagreeing, no AEAT → their mean; one device → nothing; the host answering
+from two addresses disagreeing, no AEAT → nothing set (revision 4); during a start-up stop with AEAT
+unanswered, a staff member's till a day ahead → one set, the row under `admin` with `proof.staff`,
+`clock.corrected` naming the person and the till; the same after the window has closed →
+`not_start_up`, nothing set; a till agreeing → the stop lifted with no step; the host answering
 synchronised → nothing set, `clock.sync_off` absent (it is on) and the Clock row unchanged; the
 host missing on a production box → `clock.sync_off` `unreachable`, with no install instruction in
 its words; an administrator's `POST /api/box/clock-set` refusals each with zero rows; two steps
 within a minute → two emails; a host that refuses every set → at most one set per backoff step; a
 +400-day and a −400-day step against `pruneBackend`. Delete, one at a time: the synchronised
 refusal in the handler and in the server, the verification, the step counter, `stepComing`'s hold,
-the `witnessed` check, the `held` window, the backoff; name the failing test.
+the `witnessed` check, the `held` window, the backoff, the till route's `admit` and its
+on-the-box refusal; name the failing test.
 
 **Codex seat 2 (checklist set aside)** — make the box set a wrong time, or lose data:
-- forged matching headers from two device cookies at two addresses (expected: the clock is set,
-  with an alert and an email — FYI 4; check both are recorded with the proof);
+- forged matching headers from two device cookies at two addresses (expected, revision 4: the
+  clock is NOT set; if they agree with the box during a stop, slice 9's lift, nothing more);
+- a staff member's till session sending a forged `deviceAt` by `curl` during a start-up stop
+  (expected: set, with the person and the till named in the row, the alert and the email — FYI 4);
+  the same from the box's own address (expected: `same_machine`); the same with the window closed
+  by a look that found no stop, then the stop brought back (expected: `not_start_up`);
+- a restart of the server during a running stop (expected: the stop is a start-up stop for the new
+  process, FYI 8; the till is offered once AEAT has had no answer);
 - an administrator's `deviceAt` sent by `curl` (expected: set, the person named);
 - a set racing the clock watch (an admin's set and an automatic one together, the host still
   unsynchronised after the first: exactly one host set and one row, the other answering `stale`;
@@ -1895,3 +2599,6 @@ follows the ruling.
    across a person's chains survives a step (Task 15a, "Accepted residual"), and the case needs two
    locations on one node plus a move inside the step's window; nothing recorded is wrong, only
    the state the till shows until real time passes the earlier entry.
+
+Revision 4 changes none of these rulings. It carries out the owner's answer of 2026-10-31 07:00 and
+07:05; where the owner left a point open, the default is an owner FYI (8–15), not a lead's ruling.
