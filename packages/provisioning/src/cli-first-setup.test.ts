@@ -130,7 +130,7 @@ async function fixture(answer = "yes") {
     },
     env: { WAITRON_ADMIN_PIN: request.admin.pin, WAITRON_ADMIN_PASSWORD: PASSWORD },
     openVenue: vi.fn(
-      async () => ({ venue: venue.db, node: venue.db, close: async () => {} }) as VenueDatabase,
+      async () => ({ venue: venue.db, node: venue.node, close: async () => {} }) as VenueDatabase,
     ),
     applyVenue,
     modules: ALL_MODULES,

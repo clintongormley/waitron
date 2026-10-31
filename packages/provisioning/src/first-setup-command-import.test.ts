@@ -387,7 +387,7 @@ it("the actual relocated command resumes a retained import and publishes it once
   const files = (await target.db.execute<{ name: string; file: string }>("pragma database_list"))
     .rows;
   const databaseDir = dirname(files.find((row) => row.name === "main")!.file);
-  for (const name of ["venue.db", "venue.db-wal"])
+  for (const name of ["venue.db", "venue.db-wal", "node.db", "node.db-wal"])
     await copyFile(join(databaseDir, name), join(venueDir, name));
   const binary = join(f.root, "provision.js");
   const environment = { ...process.env };
