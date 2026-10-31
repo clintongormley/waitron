@@ -1387,7 +1387,11 @@ export class SetupApp extends LitElement {
     const current = () => this.isConnected && generation === this.#firstGeneration;
     this.firstOwnerBusy = true;
     this.firstWipeError = undefined;
+    // Check again keeps the unread details and their buttons drawn, disabled, until the box answers.
+    const unread = this.firstWipeUnread;
     this.#closeWipe();
+    this.firstWipeUnread = unread;
+    let failed = false;
     try {
       const inspection = await this.api.inspectFirstSetupResolution();
       if (!current()) return;
@@ -1414,6 +1418,7 @@ export class SetupApp extends LitElement {
       void this.#focusAfterUpdate("retire-confirmed");
     } catch (error) {
       if (!current()) return;
+      failed = true;
       this.#closeWipe();
       const refusal = wipeRefusal(error);
       if (refusal !== undefined) {
@@ -1427,7 +1432,10 @@ export class SetupApp extends LitElement {
           : () => initialOwnerStrings[setupLocale()].recoveryDetailsUnread;
       } else this.firstWipeError = this.#describeRepairError(error);
     } finally {
-      if (current()) this.firstOwnerBusy = false;
+      if (current()) {
+        if (!failed) this.firstWipeUnread = false;
+        this.firstOwnerBusy = false;
+      }
     }
   }
   /**
