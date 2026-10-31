@@ -18,6 +18,7 @@ import {
 import { countText, currentLocale, t } from "../i18n/t.js";
 import { type HelpKey, helpBadgeLabel, helpText } from "../i18n/help-strings.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
+import { HelpIdleController } from "../state/help-idle.js";
 import type { FormFactor } from "../layout.js";
 import {
   builtInScreensFor,
@@ -89,6 +90,14 @@ export class TillShell extends LitElement {
     super();
     new LocaleChangeController(this);
     new ThemeChoiceController(this);
+    // A kitchen screen is never locked, so help and a guide left open go after two idle minutes.
+    new HelpIdleController(this, {
+      applies: () => this.kiosk || this.formFactor === "kds",
+      onIdle: () => {
+        this.guideHref = "";
+        this.#guideBadge = undefined;
+      },
+    });
     // A handheld refits with no step back, since its bar draws the logo only while no step is
     // taken; a counter measures its room again. An error is heard here because a box failing a
     // logo already reported failed changes no state that would refit.
@@ -1394,7 +1403,9 @@ export class TillShell extends LitElement {
         ${
           this.kiosk || this.formFactor === "kds"
             ? this.loadLocales !== undefined
-              ? html`<div class="language-corner">${themeChooser()}${this.#chooser()}</div>`
+              ? html`<div class="language-corner">
+                  ${this.#helpSwitch()}${themeChooser()}${this.#chooser()}
+                </div>`
               : nothing
             : html`
                 <header class=${this.phone ? "head phone" : "head"}>

@@ -168,16 +168,6 @@ describe("till-shell's Help switch", () => {
     await vi.waitFor(() => expect(buttonOf(el).getAttribute("aria-pressed")).toBe("false"));
   });
 
-  it.each([
-    ["a kitchen display", { formFactor: "kds" }],
-    ["kiosk mode", { formFactor: "phone-portrait", kiosk: true }],
-  ] as const)("a kitchen display and kiosk mode draw no switch: %s", async (_name, props) => {
-    await page.viewport(1280, 844);
-    const { el } = await mountWidget<TillShell>("till-shell", { ...till, ...props });
-    await settle(el);
-    expect(el.shadowRoot!.querySelector("wt-help-switch")).toBeNull();
-  });
-
   it("the badge size inside the shell is 32px with a 24px circle", async () => {
     await page.viewport(1280, 844);
     const { el } = await mountWidget<TillShell>("till-shell", till);
