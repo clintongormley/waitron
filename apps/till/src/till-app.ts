@@ -647,6 +647,10 @@ const TABLE_REFUSALS = new Set([
   "menu_period.ended",
 ]);
 
+/** A draft save naming a bill that has left its party's open bills: merged away (`tab.not_open`) or
+ * moved to another table (`bill.other_party`). */
+const BILL_LEFT_REFUSALS: ReadonlySet<string> = new Set(["tab.not_open", "bill.other_party"]);
+
 /** Refusals about the money already on a bill: after one, the party's bills and the shown bill's
  * payments are read again, so the screen shows what the bill now holds. */
 const BILL_MONEY_REFUSALS = new Set([
@@ -11579,10 +11583,25 @@ export class TillApp extends LitElement {
   #scheduleBillDraftRefresh(): void {
     clearTimeout(this.#billDraftTimer);
     this.#billDraftTimer = setTimeout(() => {
-      void this.#refreshBillDraft().finally(() => {
+      void Promise.all([this.#refreshBillDraft(), this.#rereadBillsOnTimer()]).finally(() => {
         if (this.isConnected && this.#draftSync !== undefined) this.#scheduleBillDraftRefresh();
       });
     }, 15_000);
+  }
+
+  /** The till has no push from the server, so another till merging or moving the bill on screen away
+   * (D11 rule 3) is seen only by a bills read; the draft's timer makes one. */
+  async #rereadBillsOnTimer(): Promise<void> {
+    const sync = this.#draftSync;
+    if (
+      sync === undefined ||
+      sync.partyId !== this.orderParty?.id ||
+      !this.#tableCatalogueActive() ||
+      this.operatorName === "" ||
+      document.hidden
+    )
+      return;
+    await this.#loadPartyBills();
   }
 
   async #refreshBillDraft(): Promise<void> {
@@ -11681,10 +11700,31 @@ export class TillApp extends LitElement {
       return;
     }
     if (sync !== this.#draftSync || refusal.refused === "session.required") return;
+    if (this.#billLeft(sync, refusal)) {
+      void this.#followLeftBill(sync, refusal);
+      return;
+    }
     this.errorKey = draftRefusalError(refusal);
     const zoneId = this.#tableZoneId;
     if (refusal.refused === "product.not_sold_separately" && zoneId !== undefined)
       void this.#reloadTableOffers(zoneId);
+  }
+
+  #billLeft(sync: DraftSync, { refused }: DraftRefused): boolean {
+    return (
+      BILL_LEFT_REFUSALS.has(refused) &&
+      sync.billId === this.activeTabId &&
+      sync.partyId === this.orderParty?.id
+    );
+  }
+
+  /** The refusal may be the first sign that another till merged or moved the bill on screen: the
+   * bills read lets {@link #followBillsRead} move the screen and keep the unsaved lines for review.
+   * A read that still shows the bill says the refusal instead. */
+  async #followLeftBill(sync: DraftSync, refusal: DraftRefused): Promise<void> {
+    await this.#loadPartyBills();
+    if (sync === this.#draftSync && sync.billId === this.activeTabId)
+      this.errorKey = draftRefusalError(refusal);
   }
 
   #otherDrafts(shown: WorkingOrderStore | null): readonly OtherDraft[] {
@@ -12436,6 +12476,7 @@ export class TillApp extends LitElement {
           (await this.#recoverDraftTargets(sync, live))
         )
           return;
+        if (saved !== "failed" && BILL_LEFT_REFUSALS.has(saved.refused)) return;
         this.errorKey = saved === "failed" ? "table.error" : draftRefusalError(saved);
         return;
       }

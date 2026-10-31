@@ -4389,6 +4389,223 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
     expect(tableOrder(el)!.retainedDraft?.lines.map((line) => line.product.name)).toEqual(["Flan"]);
   });
 
+  describe("LOOK F1: nothing but the server tells this till the bill on screen was merged away", () => {
+    const abandoned = { ...checkBill, status: "abandoned" as const, outstanding: "0.00" };
+
+    /** Bill 2 on screen; once `merge()` runs, the bills read answers it abandoned and a draft save
+     * naming it is refused as the real route refuses it (`PUT /api/parties/:id/drafts`: 409
+     * `tab.not_open`). No other read or refusal changes. */
+    async function onBillTwoMergedLater(
+      refused = "tab.not_open",
+      after: PartyBill[] = [tabBill, abandoned],
+    ) {
+      let merged = false;
+      const bills = vi.fn().mockResolvedValue([tabBill, checkBill]);
+      const el = await onBillTwo(bills, {
+        saveDraft: vi.fn(async (...args: Parameters<DraftServer["saveDraft"]>) => {
+          if (merged && args[1].billId === "wo-check")
+            throw refused === "tab.not_open"
+              ? { code: refused, status: 409, tabId: "wo-check" }
+              : { code: refused, status: 409, workingOrderId: "wo-check" };
+          return drafts.saveDraft(...args);
+        }),
+      });
+      const merge = () => {
+        merged = true;
+        bills.mockResolvedValue(after);
+      };
+      return { el, merge };
+    }
+
+    const candidatePanel = (el: TillApp) =>
+      tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-draft-candidate]");
+
+    function expectSwitchedKeepingFlan(el: TillApp, savesBefore: number): void {
+      expect(tableOrder(el)!.orderId).toBe("wo-4");
+      expect(gone(el)!.textContent!.trim()).toBe(
+        "Bill 2 is no longer at this table. Now showing Bill 1.",
+      );
+      expect(tableOrder(el)!.retainedDraft?.lines.map((line) => line.product.name)).toEqual([
+        "Flan",
+      ]);
+      expect(candidatePanel(el)!.textContent).toContain(t("unsaved.message"));
+      const toBillOne = vi
+        .mocked(api.saveDraft)
+        .mock.calls.slice(savesBefore)
+        .filter(([, save]) => save.billId === "wo-4");
+      expect(toBillOne.flatMap(([, save]) => save.lines)).toEqual([]);
+      expect(api.submitDraft).not.toHaveBeenCalled();
+      expect(banner(el)?.textContent ?? "").not.toContain(t("table.error"));
+    }
+
+    it.each([
+      { change: "merged away", refused: "tab.not_open", after: [tabBill, abandoned] },
+      { change: "moved to another table", refused: "bill.other_party", after: [tabBill] },
+    ])(
+      "a dish rung after the bill was $change: its save is refused $refused, so the till reads the bills, shows Bill 1, says so, and offers the dish for review",
+      async ({ refused, after }) => {
+        const { el, merge } = await onBillTwoMergedLater(refused, after);
+        merge();
+        const before = vi.mocked(api.saveDraft).mock.calls.length;
+
+        partyDraft(tableOrder(el)!).addProduct(dish, "1");
+        await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+        await flush(el, 6);
+
+        expectSwitchedKeepingFlan(el, before);
+        candidatePanel(el)!.querySelector<HTMLElement>("[data-candidate-apply]")!.click();
+        await flush(el, 6);
+        expect(candidatePanel(el)).toBeNull();
+        expect(partyDraft(tableOrder(el)!).lines.map((line) => line.product.name)).toEqual([
+          "Flan",
+        ]);
+        partyDraft(tableOrder(el)!).addProduct(dish, "1");
+        await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+        await flush(el);
+        const last = vi.mocked(api.saveDraft).mock.calls.at(-1)![1];
+        expect([last.billId, last.lines.map((line) => [line.menuItemId, line.quantity])]).toEqual([
+          "wo-4",
+          [["flan", "2"]],
+        ]);
+      },
+    );
+
+    it("a refused save whose bills read cannot be had keeps the dish on screen and says the save was refused", async () => {
+      const { el, merge } = await onBillTwoMergedLater();
+      merge();
+      vi.mocked(api.getPartyBills).mockRejectedValue(new TypeError("Failed to fetch"));
+
+      partyDraft(tableOrder(el)!).addProduct(dish, "1");
+      await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+      await flush(el, 6);
+
+      expect(tableOrder(el)!.orderId).toBe("wo-check");
+      expect(partyDraft(tableOrder(el)!).lines.map((line) => line.product.name)).toEqual(["Flan"]);
+      expect(banner(el)!.textContent).toContain(t("table.error"));
+    });
+
+    it("Send all before the save went out: the refused save moves the screen to Bill 1 and keeps the dish for review, with nothing sent", async () => {
+      const { el, merge } = await onBillTwoMergedLater();
+      merge();
+      const before = vi.mocked(api.saveDraft).mock.calls.length;
+      const store = partyDraft(tableOrder(el)!);
+      store.addProduct(dish, "1");
+      await flush(el);
+
+      emit(tableOrder(el)!, "submit-draft", {
+        lines: [{ menuItemId: "flan", quantity: "1" }],
+        groups: [{ release: "fire", lineIndexes: [0] }],
+        store,
+        sent: store.lines.slice(0, 1),
+      });
+      await flush(el, 6);
+
+      expectSwitchedKeepingFlan(el, before);
+    });
+
+    it.each([
+      { change: "merged away", refused: "tab.not_open", after: [tabBill, abandoned] },
+      { change: "moved to another table", refused: "bill.other_party", after: [tabBill] },
+    ])(
+      "with nothing rung, the till's own 15-second re-read of the table finds the bill $change, shows Bill 1 and says so",
+      async ({ refused, after }) => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        try {
+          const { el, merge } = await onBillTwoMergedLater(refused, after);
+          merge();
+
+          await vi.advanceTimersByTimeAsync(15_000);
+          await flush(el, 6);
+
+          expect(tableOrder(el)!.orderId).toBe("wo-4");
+          expect(gone(el)!.textContent!.trim()).toBe(
+            "Bill 2 is no longer at this table. Now showing Bill 1.",
+          );
+        } finally {
+          vi.useRealTimers();
+        }
+      },
+    );
+
+    it("the 15-second re-read reads no bills while the page is hidden, and finds the bill gone once it is shown again", async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        const { el, merge } = await onBillTwoMergedLater();
+        merge();
+        const reads = vi.mocked(api.getPartyBills).mock.calls.length;
+        Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
+
+        await vi.advanceTimersByTimeAsync(15_000);
+        await flush(el, 6);
+
+        expect(vi.mocked(api.getPartyBills).mock.calls.length).toBe(reads);
+        expect(tableOrder(el)!.orderId).toBe("wo-check");
+        expect(gone(el)).toBeNull();
+
+        delete (document as { hidden?: boolean }).hidden;
+        await vi.advanceTimersByTimeAsync(15_000);
+        await flush(el, 6);
+
+        expect(tableOrder(el)!.orderId).toBe("wo-4");
+        expect(gone(el)).not.toBeNull();
+      } finally {
+        delete (document as { hidden?: boolean }).hidden;
+        vi.useRealTimers();
+      }
+    });
+
+    it("on a handheld, the 15-second re-read reads no bills while the floor tab is in front", async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        const bills = vi.fn().mockResolvedValue([tabBill, checkBill]);
+        const { el } = await mountApp({
+          getPartyBills: bills,
+          getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phone }),
+          getDeviceIdentity: vi
+            .fn()
+            .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
+        });
+        await flush(el);
+        emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+        await flush(el);
+        emit(shell(el), "open-table", { tableId: "t4", seated: true });
+        await flush(el);
+        emit(tableOrder(el)!, "take-payment", { workingOrderId: "wo-check" });
+        await flush(el);
+        expect(tableOrder(el)!.orderId).toBe("wo-check");
+        emit(shell(el), "screen-select", { screen: "floor" });
+        await flush(el);
+        bills.mockResolvedValue([tabBill, abandoned]);
+        const reads = bills.mock.calls.length;
+
+        await vi.advanceTimersByTimeAsync(15_000);
+        await flush(el, 6);
+
+        expect(bills.mock.calls.length).toBe(reads);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("after sign-out the 15-second re-read reads no bills", async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        const { el, merge } = await onBillTwoMergedLater();
+        merge();
+        emit(tableOrder(el)!, "logout");
+        await flush(el, 6);
+        const reads = vi.mocked(api.getPartyBills).mock.calls.length;
+
+        await vi.advanceTimersByTimeAsync(30_000);
+        await flush(el, 6);
+
+        expect(vi.mocked(api.getPartyBills).mock.calls.length).toBe(reads);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   it("a stale opening bill: the screen corrects to Bill 1 and says so, and no write names the stale bill", async () => {
     const { el } = await mountApp({
       getTablesState: vi
