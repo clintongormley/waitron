@@ -2372,9 +2372,9 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
   }
 
   const venuePrinters = [
-    printer("pr1", "Barra", { hasCashDrawer: true }),
-    printer("pr2", "Cocina"),
-    printer("pr3", "Terraza"),
+    printer("pr1", "Counter", { hasCashDrawer: true }),
+    printer("pr2", "Kitchen"),
+    printer("pr3", "Terrace"),
   ];
 
   const readers = [
@@ -2450,8 +2450,8 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
     expect(receipt.value).toBe("pr1");
     expect(receipt.options).toEqual([
       { value: "", label: t("device_profiles.default_none") },
-      { value: "pr2", label: "Cocina" },
-      { value: "pr1", label: "Barra" },
+      { value: "pr2", label: "Kitchen" },
+      { value: "pr1", label: "Counter" },
     ]);
     expect(field(el, "payment-slip-printers-default").value).toBe("");
   });
@@ -2502,8 +2502,8 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
       ),
     ];
     expect(drawers.map((s) => [s.dataset.printerId, s.label, s.checked])).toEqual([
-      ["pr2", `Cocina (${t("device_profiles.no_drawer_attached")})`, true],
-      ["pr1", "Barra", false],
+      ["pr2", `Kitchen (${t("device_profiles.no_drawer_attached")})`, true],
+      ["pr1", "Counter", false],
     ]);
   });
 
@@ -2591,9 +2591,9 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
         ]),
       ).toEqual([
         ["pg3", "Recepción · A4", true, "invoicePrinterIds"],
-        ["pr2", "Cocina", true, "invoicePrinterIds"],
-        ["pr1", "Barra", false, "invoicePrinterIds"],
-        ["pr3", "Terraza", false, "invoicePrinterIds"],
+        ["pr2", "Kitchen", true, "invoicePrinterIds"],
+        ["pr1", "Counter", false, "invoicePrinterIds"],
+        ["pr3", "Terrace", false, "invoicePrinterIds"],
         ["pg1", "Oficina · A4", false, "invoicePrinterIds"],
       ]);
       expect(el.shadowRoot!.querySelector("#invoice-printers-heading")?.textContent?.trim()).toBe(
@@ -2606,7 +2606,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
       expect(fallback.options).toEqual([
         { value: "", label: t("device_profiles.default_none") },
         { value: "pg3", label: "Recepción · A4" },
-        { value: "pr2", label: "Cocina" },
+        { value: "pr2", label: "Kitchen" },
       ]);
     });
 
