@@ -4434,3 +4434,43 @@ describe("the workflows' artifact uploads", () => {
     expect(found.filter((attempt) => !attempt.bounded)).toEqual([]);
   });
 });
+
+// Weaker than its name: reads literal steps, not hosted execution, YAML validity or duplicate ids.
+describe("the workflows' Node setups", () => {
+  const sites = workflowFiles.flatMap((name) =>
+    jobBlocks(readFileSync(join(workflowsDir, name), "utf8")).flatMap(({ id, lines }) => {
+      const steps = workflowSteps(lines.join("\n"));
+      return steps.some((step) => step.uses?.startsWith("actions/setup-node@"))
+        ? [{ name, id, steps }]
+        : [];
+    }),
+  );
+
+  it("finds Node setup sites to check", () => {
+    expect(sites.length).toBeGreaterThan(0);
+  });
+
+  it.each(sites)(
+    "bounds both attempts and retries only a failed first: $name / $id",
+    ({ steps }) => {
+      for (let at = 0; at < steps.length; at += 1) {
+        const first = steps[at];
+        if (!first.uses?.startsWith("actions/setup-node@")) continue;
+        expect(first.id ?? "").toMatch(/^[A-Za-z_][A-Za-z0-9_-]*$/);
+        expect(first.if).toBeUndefined();
+        expect(first.continueOnError).toBe("true");
+        const second = steps[at + 1];
+        expect(second?.uses).toBe(first.uses);
+        expect(second.if).toBe(`steps.${first.id}.outcome == 'failure'`);
+        expect(second.continueOnError ?? "false").toBe("false");
+        expect(second.with).toEqual(first.with);
+        expect(second.env).toEqual(first.env);
+        for (const attempt of [first, second]) {
+          expect(attempt.timeoutMinutes).toMatch(/^[1-9]\d*$/);
+          expect(Number(attempt.timeoutMinutes)).toBeLessThanOrEqual(2);
+        }
+        at += 1;
+      }
+    },
+  );
+});

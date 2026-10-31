@@ -647,12 +647,14 @@ is fixed at the root, never re-run to green).
 
 2026-10-25 (A1100): artifact uploads now have
 [two bounded attempts](../developers/ci-and-gates.md#every-artifact-upload-is-bounded).
-The setup-node, cache, Docker and CodeQL steps below still wait on their job limits.
+2026-10-31 (A1254): Node setup now has
+[two bounded attempts](../developers/ci-and-gates.md#every-node-setup-is-bounded).
+The remaining cache, Docker and CodeQL steps still wait on their job limits.
 
 List them with
 
 ```sh
-grep -n -E '^\s*-?\s*uses: (actions/(setup-node|cache)|docker/|github/codeql-action)' .github/workflows/*.yml
+grep -n -E '^\s*-?\s*uses: (actions/cache|docker/|github/codeql-action)' .github/workflows/*.yml
 ```
 
 On 2026-10-20 none of the `setup-node`, `cache`, `upload-artifact`,
