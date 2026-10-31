@@ -1907,7 +1907,7 @@ describe("A803 portions: approval differences no single line can show", () => {
         const expectedEdits = [];
         for (const id of [bill.billId, other.billId].sort())
           expectedEdits.push(await readBillEditState(tx, id));
-        await mergeCheckedBills(tx, venue.cfg, bill.partyId, bill.billId, other.billId, {
+        await mergeCheckedBills(tx, venue.cfg, bill.billId, other.billId, {
           operatorId: venue.managerId,
           expectedEdits,
         });

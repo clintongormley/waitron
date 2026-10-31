@@ -1649,17 +1649,16 @@ describe("department transfer tab lifecycle", () => {
     const f = await ready();
     const table = await v.table(randomUUID(), f.az);
     const target = await ready();
-    const party = await withTransaction(suite.db, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const party = await openParty(tx, { tableId: table, guestCount: null, operatorId: personId });
       await takeIntoParty(tx, v.cfg, f.tab, party.partyId, f.az);
       await numberBill(tx, f.tab, party.partyId);
       await takeIntoParty(tx, v.cfg, target.tab, party.partyId, f.az);
       await numberBill(tx, target.tab, party.partyId);
-      return party.partyId;
     });
     const id = await pendingPartyFixture(f);
     await withTransaction(suite.db, (tx) =>
-      mergeCheckedBills(tx, v.cfg, party, target.tab, f.tab, { operatorId: personId }),
+      mergeCheckedBills(tx, v.cfg, target.tab, f.tab, { operatorId: personId }),
     );
     expect((await state(f.tab)).tab!.status).toBe("abandoned");
     await withdrawn(f, id);

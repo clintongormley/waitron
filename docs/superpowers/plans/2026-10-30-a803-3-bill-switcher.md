@@ -688,6 +688,13 @@ task's red run; a red assertion not on this list that is not kind B/R/W/S/F unde
 | `apps/server/src/current-orders.test.ts:1279` ("…across a paid bill, a split one and a later one": its mains, sent with no bill after the first bill was paid, landed on the split bill, so the case read two bills, not three) | S | the setup makes the later bill with `insertPartyBill` and sends the mains to it (the file's `group()` helper gains an optional `billId`); every `expect` byte-identical | D1, I5; Task 6a review I1 | 6a |
 | The seven `expect((await partyRow(…)).mainBillId).toBe(<the bill the helper made>)` assertions that rest on Task 6a's kept `setMainBill`: `parties.test.ts:662`, `:767`; `party-move-bill.test.ts:774`, `:1218`; `party-table-actions.test.ts:682` (two cases), `:1181` | B | decided at Task 6c (the review offers, as an example: the order's bill is the party's, open, and numbered next after the party's existing bills, read with `numbersOf`) | §3.4; Task 6a review M3 | 6c |
 | `apps/server/src/party-bill-actions.test.ts:690`, `:736` (merge keeps/moves the main bill) | B | the explicit merge's surviving bill keeps its number; no main bill | §3.4 | 6b |
+| `party-bill-actions.test.ts:739` (was `:736`, "makes the bill merged into the main bill when the main bill is merged away") | B (Task 6b's red run) | `mainBillId` `toBe(second)` → `toBeNull()`, plus `numbersOf` `[[main, 1, null], [second, 2, null]]` and `second`'s status `open`; retitled "keeps the bill merged into as Bill 2, naming no main bill, when Bill 1 is merged away"; the abandoned and lines checks unchanged. `:690` stayed green (seating's main bill is not the one merged away) and is unchanged | §3.4; D12 | 6b |
+| `party-move-bill.test.ts:822` (was `:827`, a bill moved to a free table is the new party's main bill) | B (Task 6b's red run) | `mainBillId: second` → `mainBillId: null` in the same `toEqual`, plus `numbersOf(new party)` `[[second, 1, null]]` and `second`'s status `open`; retitled "… with the bill as its Bill 1 …"; every other check unchanged | §3.4 | 6b |
+| `party-move-bill.test.ts:943` (was `:941`, a counter order seated at a free table is the new party's main bill) | B (Task 6b's red run) | `mainBillId` `toBe(orderId)` → `toBeNull()`, plus `numbersOf` `[[orderId, 1, null]]` and its status `open`; retitled "… as a new party's Bill 1"; every other check unchanged | §3.4 | 6b |
+| `party-table-actions.test.ts:643` (was `:641`, "makes the incoming main bill main when the receiving one is presented") | B (Task 6b's red run) | `mainBillId` `toBe(ana.tabId)` → `toBeNull()`, plus `numbersOf(luis)` `[[luis.tabId, 1, null], [ana.tabId, 2, null]]`; retitled "keeps the incoming open bill as the receiving party's Bill 2, naming no main bill, when the receiving one is presented"; the answer and both bills' status/party checks unchanged | §3.4 | 6b |
+| `party-table-actions.test.ts:1125` (was `:1121`, split: "the chosen bill as its main") | B (Task 6b's red run) | `mainBillId: b2` → `mainBillId: null` in the same `toMatchObject` (its `numbersOf` `[[b2, 1, null]]` and status checks were already there); retitled "… as its Bill 1"; the staying party's `mainBillId: ana.tabId` unchanged | §3.4; master plan "any eligible bill" | 6b |
+| `party-table-actions.test.ts:1149` (was `:1145`, split with no bill: "a new, empty main bill") | B (Task 6b's red run) | `mainBillId` `toBe(main.id)` → `toBeNull()`, plus `numbersOf` `[[main.id, 1, null]]`; retitled "… a new, empty Bill 1 …"; every other check unchanged | §3.4; D1 | 6b |
+| `department-transfer-api.test.ts:1661`, `order-portions.lifecycle.test.ts:261`, `order-portions.adjustments.test.ts:1910` (calls of `mergeCheckedBills`, directly or through `testing/bill-action-fixture.ts`) | F (Task 6b) | the `partyId` argument goes with the parameter, which only the main-bill bookkeeping read; `department-transfer-api`'s setup stops keeping the party id it no longer passes; no `expect` changes | D12 | 6b |
 | `apps/server/src/parties.test.ts`, `till-api.parties.test.ts:807-821`, and any `TableParty`/floor whole-shape pin | W | `mainBillId` → `openingBillId` | D7 | 6c |
 | `scripts/behavioural-triggers.test.ts` `EXPECTED_TRIGGERS` (`:158-159`) and `describe("working_orders_release_main_bill")` (`:1544-1590`) | **W, B, Q5 item 3** | the two names leave the list; the describe becomes "the main bill is gone": `parties` has no `main_bill_id` column (`pragma_table_info`) and no trigger's SQL names `main_bill` (`sqlite_master`) | §3.4 | 7 |
 | `scripts/migration-upgrade.test.ts` `RESETS` | **W, Q5 item 4** | gains the new core rebuild step, `refused: ["DROP TABLE \`parties\`", "FOREIGN KEY constraint failed"]` (as `:437-439`; the exact text from the run's own output) | finding 9 | 7 |
@@ -1259,21 +1266,45 @@ assertions that pin these writers — `party-table-actions.test.ts`, `party-move
 `floor-today-flatten.test.ts` — each re-pointed to the bills themselves (their party, status and
 number), as their rows say.
 
-- [ ] New case `A803 no main bill (writers):` in `party-bill-actions.test.ts`: "Merge bills, Move
+- [x] New case `A803 no main bill (writers):` in `party-bill-actions.test.ts`: "Merge bills, Move
       this bill, Join and Split a table never SET a party's `main_bill_id`": the new party of a
       split, and a party that receives a bill or guests, keep the value they had or null — the only
       change allowed is the existing triggers clearing it (read the column before and after; it
       still exists until Task 7). Expected red on the writers still naming one after Task 4a —
       `mergeCheckedBills` (`bill-actions.ts:280`) and `moveBillOnce` (`move-bill.ts:286`, `:319`)
       by reading; record which go red, and if a writer's sub-case is already green say so in the
-      ledger (the case still guards it).
-- [ ] RED: `pnpm --filter @waitron/server exec vitest run src/party-bill-actions.test.ts -t 'A803 no main bill'`.
-- [ ] Implement; run the files above plus the trace's
+      ledger (the case still guards it). (Built as a `describe` of 8 cases, one per writer: Merge
+      bills of the main bill; Move this bill to a free table; Move this bill onto a party whose
+      main bill was cleared; Join a seated table by a party whose main bill was cleared; Join a free
+      table by a party with no bill (D1's inserted bill); Split a table taking an open bill; Split
+      with no bill; Split taking the staying party's only bill (both inserted bills).)
+- [x] RED: `pnpm --filter @waitron/server exec vitest run src/party-bill-actions.test.ts -t 'A803 no main bill'`.
+      (Run: 8 failed, 58 skipped, each on its `mainOf(...)` `toBeNull()` receiving a bill id; none
+      already green. Beyond the two writers named by reading, `combineParties` (`setMainBill` of
+      `from`'s main), `splitTable` (the new party's chosen bill) and Task 4a's `insertMainBill`
+      (split with no bill, `ensureShownBill`) also still wrote one.)
+- [x] Implement; run the files above plus the trace's
       `rg -l 'mainBillId|main_bill' apps/server/src -g '*.test.ts'`. A red assertion in a file that
       Task 6c owns (it pins seating or `partyMainBill`) must not appear here; if one does, stop and
       move the writer change, not the test.
-- [ ] GREEN: those files; F; H2; Filing; server typecheck.
-- [ ] Commit: "Table actions no longer read or write a main bill".
+      (Done: `combineParties` reads only guest counts; `splitTable` and `ensureShownBill` call
+      `insertPartyBill`, and `insertMainBill` goes; `moveBillOnce` and `mergeCheckedBills` write and
+      read no main bill, and `mergeCheckedBills` loses its `known.mainBillId` and its `partyId`
+      parameter, which only that bookkeeping read (three test call sites, kind F row).
+      `SourceParty.mainBillId` had already gone. First run of the 19 files (the trace's 16 plus
+      `party-move-bill`, `party-bill-actions` (also in it), `floor-today-flatten`, `till-api.table-actions`,
+      `till-api.today-joins`, `table-actions.refund-pending` and the three `mergeCheckedBills`
+      callers): 6 failed, 1311 passed — exactly the six B rows marked "Task 6b's red run" above,
+      none in a file Task 6c owns. `party-bill-actions.test.ts:690` stayed green.)
+- [x] GREEN: those files; F; H2; Filing; server typecheck. (Run: the 19 files 1317 passed, exit 0;
+      every other test file calling a table action, a bill move or a merge
+      (`rg -l 'moveBill\(|joinTables\(|moveGuests\(|splitTable\(|combineParties\(|mergeBills|mergeCheckedBills|/move|/join|/split-table|/merge' apps/server/src -g '*.test.ts'`,
+      102 files beyond those 19) in three chunks: 1971, 1047 and 1578 passed, each exit 0. F 267
+      passed; Filing 67 passed, both files unchanged from HEAD; H2 20 passed; server typecheck
+      clean; prettier and eslint clean on the 10 changed files; the F/H2 diff from `a90f4f87b`
+      is 0 bytes. Deletion control: `moveBillOnce`'s `setMainBill` for a free table put back →
+      "Move this bill to a free table names no main bill on the new party" fails, 7 pass; restored.)
+- [x] Commit: "Table actions no longer read or write a main bill".
 
 ## Task 6c: seating names no main bill; the floor names the bill a table opens on (≈65 calls)
 

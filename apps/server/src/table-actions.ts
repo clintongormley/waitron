@@ -14,7 +14,6 @@ import {
   readTargetTable,
   refuseUnseatable,
   takeIntoParty,
-  type BillState,
   type OtherPartyRead,
 } from "./move-bill.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -36,7 +35,6 @@ import {
   insertPartyBill,
   openParty,
   partyZone,
-  setMainBill,
 } from "./parties.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
 import type { OrderAttendance } from "./working-order.js";
@@ -205,8 +203,7 @@ function combinedGuests(from: number | null, into: number | null): number | null
 /**
  * Party `from` becomes part of `into` and closes, recorded as merged into it. Its groups and drafts
  * move, and its open and presented bills move across whole (P13); its paid and abandoned bills stay
- * on it and count through the family. No bill merges (spec §3.4): `into`'s main bill stays, or,
- * when it has none, `from`'s becomes main if it is open. `from`'s tables are left
+ * on it and count through the family. No bill merges (spec §3.4). `from`'s tables are left
  * for clearing, or join `into`. The caller has checked and moved on both parties' revisions, and
  * tells the kitchen.
  */
@@ -224,13 +221,11 @@ export async function combineParties(
   },
 ): Promise<void> {
   const { from, into } = args;
-  const mains = await tx
-    .select({ id: parties.id, mainBillId: parties.mainBillId, guestCount: parties.guestCount })
+  const guests = await tx
+    .select({ id: parties.id, guestCount: parties.guestCount })
     .from(parties)
     .where(inArray(parties.id, [from, into]));
-  const partyOf = (partyId: string) => mains.find((party) => party.id === partyId)!;
-  const fromMain = partyOf(from).mainBillId;
-  const intoMain = partyOf(into).mainBillId;
+  const partyOf = (partyId: string) => guests.find((party) => party.id === partyId)!;
   await requireRelocatableBillEditors(
     tx,
     await readPartyBillIds(tx, [from, into]),
@@ -241,14 +236,11 @@ export async function combineParties(
   await inheritKitchenNote(tx, cfg, { partyId: from }, { partyId: into }, "combine");
   await VENUE_SERVICE.mergePartyAllergies(tx, from, into, args.operatorId);
   await moveGroupsToParty(tx, from, into);
-  let fromMainState: BillState | undefined;
   const movingBills = await billsTaking(tx, from, ["open", "placed"]);
   for (const billId of movingBills) {
     // Whole groups travel with the party, so no bill leaves its group here.
-    const state = await takeIntoParty(tx, cfg, billId, into, zoneId);
-    if (billId === fromMain) fromMainState = state;
+    await takeIntoParty(tx, cfg, billId, into, zoneId);
   }
-  if (intoMain === null && fromMainState?.status === "open") await setMainBill(tx, into, fromMain!);
 
   await VENUE_SERVICE.rescopeBillNumbers(tx, from, into);
   await moveDraftsToParty(
@@ -342,10 +334,10 @@ export async function splitTable(
     await VENUE_SERVICE.splitPartyAllergies(tx, partyId, newParty, billId, options.operatorId);
     let taken: string;
     if (billId === null) {
-      taken = await insertMainBill(tx, cfg, newParty);
+      taken = await insertPartyBill(tx, cfg, newParty);
     } else {
       taken = billId;
-      const { status } = await takeIntoParty(tx, cfg, billId, newParty, table!.zoneId);
+      await takeIntoParty(tx, cfg, billId, newParty, table!.zoneId);
       await VENUE_SERVICE.allocateBillNumber(tx, billId, newParty);
       await moveBillDraftsToParty(tx, billId, newParty, options.expectedEdits[0]!);
       const { held } = await groupArrivingDishes(
@@ -363,7 +355,6 @@ export async function splitTable(
             },
       );
       await printHoldTickets(tx, cfg, held);
-      if (status === "open") await setMainBill(tx, newParty, billId);
       // The staying party is given an empty bill when this was its last (D1).
       await ensureShownBill(tx, cfg, partyId);
     }
@@ -401,7 +392,7 @@ async function ensureShownBill(tx: Transaction, cfg: OriginConfig, partyId: stri
     .from(workingOrders)
     .where(and(eq(workingOrders.partyId, partyId), ne(workingOrders.status, "abandoned")))
     .limit(1);
-  if (row === undefined) await insertMainBill(tx, cfg, partyId);
+  if (row === undefined) await insertPartyBill(tx, cfg, partyId);
 }
 
 /** The party's bills that are not abandoned, in number order (unnumbered last, then by id). */
@@ -418,17 +409,6 @@ async function partyBillIds(tx: Transaction, partyId: string): Promise<string[]>
   return rows
     .map((row) => row.id)
     .sort((a, b) => numberOf(a) - numberOf(b) || (a < b ? -1 : a > b ? 1 : 0));
-}
-
-/** {@link insertPartyBill}, recorded as the party's main bill until A803 slice 3 Task 6b. */
-async function insertMainBill(
-  tx: Transaction,
-  cfg: OriginConfig,
-  partyId: string,
-): Promise<string> {
-  const billId = await insertPartyBill(tx, cfg, partyId);
-  await setMainBill(tx, partyId, billId);
-  return billId;
 }
 
 async function addTable(tx: Transaction, partyId: string, tableId: string): Promise<void> {

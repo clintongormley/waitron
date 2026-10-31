@@ -258,7 +258,7 @@ describe("A803 portion lifecycle: moves", () => {
     const p = await fixture();
     const expectedEdits = await bothEdits(p);
     await inTx(venue, (tx) =>
-      mergeCheckedBills(tx, venue.cfg, p.partyId, p.otherId, p.billId, {
+      mergeCheckedBills(tx, venue.cfg, p.otherId, p.billId, {
         operatorId: venue.adminId,
         expectedEdits,
       }),

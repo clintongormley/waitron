@@ -819,7 +819,7 @@ describe("kitchen groups when a bill leaves its party", () => {
 });
 
 describe("move a bill to a free table (A81, from a party)", () => {
-  it("opens a new unnamed party there, with the bill as its main bill in that table's zone", async () => {
+  it("opens a new unnamed party there, with the bill as its Bill 1 in that table's zone", async () => {
     const mesa = await v.table("Mesa libre A");
     const terraza = await v.table("Terraza libre", terrazaZone);
     const ana = await seat(v, mesa);
@@ -835,8 +835,10 @@ describe("move a bill to a free table (A81, from a party)", () => {
     expect({ name: made.name, state: made.state, mainBillId: made.mainBillId }).toEqual({
       name: null,
       state: "open",
-      mainBillId: second,
+      mainBillId: null,
     });
+    expect(await numbersOf(v, result.partyId!)).toEqual([[second, 1, null]]);
+    expect((await billRow(v, second)).status).toBe("open");
     expect(await activeTablesOf(v, result.partyId!)).toEqual([terraza]);
     expect(await partyAt(v, terraza)).toBe(result.partyId);
     expect((await billRow(v, second)).partyId).toBe(result.partyId);
@@ -938,7 +940,7 @@ describe("move a counter order into a party", () => {
     expect(await zoneOf(v, orderId)).toBe(v.tables.zoneId);
   });
 
-  it("seats a counter order at a free table as a new party's main bill", async () => {
+  it("seats a counter order at a free table as a new party's Bill 1", async () => {
     const mesa = await v.table("Mesa D3");
     const orderId = await counterOrder(v, "Tarta");
 
@@ -956,7 +958,9 @@ describe("move a counter order into a party", () => {
     expect(result.billId).toBe(orderId);
     expect(Object.keys(result).sort()).toEqual(["billId", "partyId"]);
     expect(await partyAt(v, mesa)).toBe(result.partyId);
-    expect((await partyRow(v, result.partyId!)).mainBillId).toBe(orderId);
+    expect((await partyRow(v, result.partyId!)).mainBillId).toBeNull();
+    expect(await numbersOf(v, result.partyId!)).toEqual([[orderId, 1, null]]);
+    expect((await billRow(v, orderId)).status).toBe("open");
     expect((await billRow(v, orderId)).partyId).toBe(result.partyId);
     expect(await zoneOf(v, orderId)).toBe(v.tables.zoneId);
   });

@@ -17,13 +17,7 @@ import type { BillEditExpected, BillEditState } from "./order-drafts.js";
 import { isRecalledDish } from "./draft-source.js";
 import { moveDraftsToBill } from "./order-drafts.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
-import {
-  guardParty,
-  readMainBill,
-  refuseMovedParty,
-  requireBillOfParty,
-  setMainBill,
-} from "./parties.js";
+import { guardParty, refuseMovedParty, requireBillOfParty } from "./parties.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
 import {
   assertDistinctTransferLines,
@@ -206,7 +200,7 @@ export async function splitBill(
 
 /**
  * Move every line of `fromBillId` onto `intoBillId` and abandon it, which files nothing. Both must be
- * untouched bills of one party. The surviving bill becomes the main bill when the other was.
+ * untouched bills of one party.
  */
 export async function mergeBills(
   tx: Transaction,
@@ -218,9 +212,9 @@ export async function mergeBills(
 ): Promise<void> {
   if (intoBillId === fromBillId) throw new AppError("tab.merge_self", { tabId: intoBillId });
   const path = await guardPathParty(tx, intoBillId, command);
-  const partyId = await requireUntouchedPair(tx, intoBillId, path, fromBillId);
+  await requireUntouchedPair(tx, intoBillId, path, fromBillId);
   await assertServiceModesMatch(tx, cfg, fromBillId, intoBillId);
-  await mergeCheckedBills(tx, cfg, partyId, intoBillId, fromBillId, {
+  await mergeCheckedBills(tx, cfg, intoBillId, fromBillId, {
     operatorId: command.operatorId,
     expectedEdits: command.expectedEdits,
     ...(attendance === undefined
@@ -236,27 +230,23 @@ export async function mergeBills(
 
 /**
  * {@link mergeBills} after its checks, for a caller that has made them itself: both bills are
- * untouched bills of `partyId`, in one service mode. `known.mainBillId` is the party's main bill as
- * the caller has just read it. `known.kitchenTold` is set by a caller that tells the kitchen of
- * `fromBillId`'s sent dishes itself, from what it read before `fromBillId` joined the party.
+ * untouched bills of one party, in one service mode. `known.kitchenTold` is set by a caller that
+ * tells the kitchen of `fromBillId`'s sent dishes itself, from what it read before `fromBillId`
+ * joined the party.
  */
 export async function mergeCheckedBills(
   tx: Transaction,
   cfg: TradingContext,
-  partyId: string,
   intoBillId: string,
   fromBillId: string,
   known: {
     operatorId: string;
     expectedEdits: BillEditExpected[];
-    mainBillId?: string | null;
     kitchenTold?: boolean;
     attendance?: { recorder: AttendanceRecorder; at: string };
   },
 ): Promise<void> {
   await requireBillEditors(tx, [fromBillId, intoBillId], known.operatorId, known.expectedEdits);
-  const mainBillId =
-    known.mainBillId !== undefined ? known.mainBillId : await readMainBill(tx, partyId);
   const before = known.kitchenTold === true ? null : await readSentWork(tx, fromBillId);
   await moveOrderLines(tx, cfg, fromBillId, intoBillId, undefined, {
     actorId: known.operatorId,
@@ -277,7 +267,6 @@ export async function mergeCheckedBills(
     .set({ status: "abandoned" })
     .where(eq(workingOrders.id, fromBillId));
   await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [fromBillId]);
-  if (mainBillId === fromBillId) await setMainBill(tx, partyId, intoBillId);
   if (before !== null) await enqueueMovedSlips(tx, cfg, before, intoBillId);
 }
 

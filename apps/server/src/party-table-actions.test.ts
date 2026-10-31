@@ -640,7 +640,7 @@ describe("the floor reads the bills of the party holding the table", () => {
 });
 
 describe("the main bill when parties combine", () => {
-  it("makes the incoming main bill main when the receiving one is presented", async () => {
+  it("keeps the incoming open bill as the receiving party's Bill 2, naming no main bill, when the receiving one is presented", async () => {
     const [m4, m7] = await tables("Principal", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
@@ -652,7 +652,11 @@ describe("the main bill when parties combine", () => {
     const result = await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m7, moving));
 
     expect(result).toEqual({ partyId: luis.partyId, billIds: [luis.tabId, ana.tabId] });
-    expect((await partyRow(v, luis.partyId)).mainBillId).toBe(ana.tabId);
+    expect((await partyRow(v, luis.partyId)).mainBillId).toBeNull();
+    expect(await numbersOf(v, luis.partyId)).toEqual([
+      [luis.tabId, 1, null],
+      [ana.tabId, 2, null],
+    ]);
     expect(await billRow(v, ana.tabId)).toMatchObject({ status: "open", partyId: luis.partyId });
     expect(await billRow(v, luis.tabId)).toMatchObject({ status: "placed", partyId: luis.partyId });
   });
@@ -1118,7 +1122,7 @@ describe("split a table", () => {
     return { ana, m4, m5, b2 };
   }
 
-  it("starts a new unnamed party on the table with the chosen bill as its main", async () => {
+  it("starts a new unnamed party on the table with the chosen bill as its Bill 1", async () => {
     const { ana, m4, m5, b2 } = await anaAtTwo("Separa");
 
     const splitting = await cmd(ana.partyId);
@@ -1130,7 +1134,7 @@ describe("split a table", () => {
     expect(await partyRow(v, result.partyId)).toMatchObject({
       name: null,
       state: "open",
-      mainBillId: b2,
+      mainBillId: null,
     });
     expect(await activeTablesOf(v, result.partyId)).toEqual([m5]);
     expect(await billRow(v, b2)).toMatchObject({ partyId: result.partyId, status: "open" });
@@ -1142,7 +1146,7 @@ describe("split a table", () => {
     expect(await zoneOf(v, b2)).toBe(v.tables.zoneId);
   });
 
-  it("gives the new party a new, empty main bill at once when no bill is chosen", async () => {
+  it("gives the new party a new, empty Bill 1 at once when no bill is chosen", async () => {
     const { ana, m5 } = await anaAtTwo("Vacia");
 
     const splitting = await cmd(ana.partyId);
@@ -1152,7 +1156,8 @@ describe("split a table", () => {
     const main = await billRow(v, result.billId);
     expect(main).toMatchObject({ partyId: result.partyId, status: "open" });
     expect(await linesOf(v, main.id)).toEqual([]);
-    expect((await partyRow(v, result.partyId)).mainBillId).toBe(main.id);
+    expect((await partyRow(v, result.partyId)).mainBillId).toBeNull();
+    expect(await numbersOf(v, result.partyId)).toEqual([[main.id, 1, null]]);
     expect(await zoneOf(v, main.id)).toBe(v.tables.zoneId);
   });
 

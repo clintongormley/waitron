@@ -36,10 +36,8 @@ import {
   holderOf,
   openParty,
   partyZone,
-  readMainBill,
   refuseMovedParty,
   runServiceCommand,
-  setMainBill,
 } from "./parties.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
 import {
@@ -182,7 +180,6 @@ async function moveBillOnce(
     ...(destination.kind === "party" ? await readPartyBillIds(tx, [destination.partyId]) : []),
   ];
   await requireRelocatableBillEditors(tx, affected, options.operatorId, options.expectedEdits);
-  const main = destination.kind === "party" ? await readMainBill(tx, destination.partyId) : null;
   const zoneId =
     destination.kind === "party" ? await partyZone(tx, cfg, destination.partyId) : null;
   const expectedEdit = options.expectedEdits.find((e) => e.billId === billId)!;
@@ -260,7 +257,6 @@ async function moveBillOnce(
       firers,
       activity,
     ));
-    if (open) await setMainBill(tx, partyId, billId);
     result = { partyId, billId };
   } else {
     const partyId = destination.partyId;
@@ -279,7 +275,6 @@ async function moveBillOnce(
     ));
     await VENUE_SERVICE.allocateBillNumber(tx, billId, partyId);
     await moveBillDraftsToParty(tx, billId, partyId, expectedEdit);
-    if (main === null && open) await setMainBill(tx, partyId, billId);
     result = { partyId, billId };
   }
 
