@@ -677,18 +677,18 @@ describe("routing cells in a staged import", () => {
       const cfg = { locationId: locationId(venueResult.locationId) };
       const variant = await withTransaction(source.db, async (tx) => {
         const department = await createDepartment(tx, cfg, {
-          name: "Comedor",
+          name: "Dining room",
           orderStart: "table",
         });
         const zone = await createServiceZone(tx, cfg, {
-          name: "Terraza",
+          name: "Terrace",
           departmentId: department.id,
         });
         const [station] = await tx
           .insert(kitchenStations)
-          .values({ locationId: cfg.locationId, name: "Barra" })
+          .values({ locationId: cfg.locationId, name: "Bar" })
           .returning();
-        const category = await createCategory(tx, { name: "Bebidas" });
+        const category = await createCategory(tx, { name: "Drinks" });
         const menu = await createCatalogue(tx, {
           name: `Configuration import menu ${cfg.locationId}`,
         });
@@ -702,7 +702,7 @@ describe("routing cells in a staged import", () => {
         });
         const [large] = await tx
           .insert(products)
-          .values({ catalogueId: menu.id, parentId: product.id, name: "Grande", categoryId: null })
+          .values({ catalogueId: menu.id, parentId: product.id, name: "Large", categoryId: null })
           .returning();
         await setRoutingCell(
           tx,
@@ -838,7 +838,7 @@ describe("routing cells in a staged import", () => {
 
   it("refuses a deleted department before its routing cell, and writes nothing", async () => {
     const { bundle, versions } = await exported();
-    const diningRoom = bundle.tables.departments!.find((row) => row.name === "Comedor")!;
+    const diningRoom = bundle.tables.departments!.find((row) => row.name === "Dining room")!;
     expect(diningRoom.active).toBe(1);
     const switchedOff: ConfigurationBundle = {
       ...bundle,
@@ -881,9 +881,9 @@ describe("routing cells in a staged import", () => {
 
   it("refuses a deleted department without routing cells, and deleted zones too, and writes nothing", async () => {
     const { bundle, versions } = await exported();
-    const diningRoom = bundle.tables.departments!.find((row) => row.name === "Comedor")!;
+    const diningRoom = bundle.tables.departments!.find((row) => row.name === "Dining room")!;
     expect(diningRoom.active).toBe(1);
-    const terrace = bundle.tables.floor_zones!.find((row) => row.name === "Terraza")!;
+    const terrace = bundle.tables.floor_zones!.find((row) => row.name === "Terrace")!;
     const withoutCell: ConfigurationBundle = {
       ...bundle,
       tables: {

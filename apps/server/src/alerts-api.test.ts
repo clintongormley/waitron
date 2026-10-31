@@ -95,14 +95,14 @@ async function seedVenue(): Promise<Venue> {
   const [location] = await db
     .insert(locations)
     .values({
-      name: "Sala",
+      name: "Dining room",
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
     })
     .returning({ id: locations.id });
   const { deviceId } = await seedDevice(db, {
     locationId: brandLocationId(location!.id),
-    label: "Caja 1",
+    label: "Till 1",
   });
   const cookie = (role: PersonRoleValue, name: string) =>
     withTransaction(db, async (tx) => {
@@ -199,7 +199,7 @@ describe("alert routes", () => {
     expect(byCode.get("payment.offline_forward_declined")).toMatchObject({
       source: "device",
       deviceId: v.deviceId,
-      deviceName: "Caja 1",
+      deviceName: "Till 1",
     });
     expect(byCode.get("fiscal.registro_rechazado")).toMatchObject({
       source: "fiscal_filing",
@@ -215,7 +215,7 @@ describe("alert routes", () => {
     const body = (await (await get(appFor(), "/management-api/alerts", v.manager)).json()) as {
       alerts: { deviceName?: string }[];
     };
-    expect(body.alerts.map((a) => a.deviceName)).toEqual(["Caja 1"]);
+    expect(body.alerts.map((a) => a.deviceName)).toEqual(["Till 1"]);
   });
 
   it("answers not visible and empty to a session holding no alert permission", async () => {
@@ -724,7 +724,7 @@ function ongoingRegistry(opts: { backupDisabled?: boolean; awaitingCert?: boolea
   });
 }
 
-async function seedLowReader(name = "Datafono"): Promise<void> {
+async function seedLowReader(name = "Card reader"): Promise<void> {
   await db
     .insert(cardReaders)
     .values({ provider: "stub", providerRef: `ref-${name}`, name, active: true });
@@ -734,13 +734,13 @@ async function seedLowReader(name = "Datafono"): Promise<void> {
 async function seedStuckPrintJob(): Promise<void> {
   const [loc] = await db
     .insert(locations)
-    .values({ name: "Barra", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
+    .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
     .returning({ id: locations.id });
   const [printer] = await db
     .insert(printers)
     .values({
       locationId: loc!.id,
-      name: "Barra",
+      name: "Bar",
       transport: "network_tcp",
       host: "10.0.0.1",
       active: true,
@@ -885,7 +885,7 @@ describe("ongoing alert sources through the route", () => {
       expect(body.alerts).toContainEqual(
         expect.objectContaining({
           code: "reader.battery_low",
-          params: { reader: "Datafono", percent: 5 },
+          params: { reader: "Card reader", percent: 5 },
         }),
       );
     } finally {

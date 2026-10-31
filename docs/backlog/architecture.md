@@ -558,6 +558,14 @@ until A977).
   creates, and the course and kitchen-delete suites only the Spanish names their shared party venue
   creates. The device-delete history suite (`apps/server/src/device-delete.history.test.ts`) still
   labels its open order "Mesa 1" and names its sale line "Café".
+  The error, alert, clearing, configuration-import and print-agent suites
+  (`apps/server/src/errors.test.ts`, `apps/server/src/alerts-api.test.ts`,
+  `apps/server/src/leave-for-clearing.test.ts`, `apps/server/src/configuration-import.test.ts` and
+  `apps/server/src/print-agent-e2e.test.ts`) give English names to what they create. They keep
+  their es-ES locales, the alert and print-agent suites' operation description "Venta en
+  establecimiento", the configuration-import suite's legal name and Madrid street addresses, the
+  errors suite's guest surname "Soler", and the Spanish names the clearing suite's shared party
+  venue creates.
   The venue-service menu-timetable suite (`packages/venue-service/src/menu-timetable.test.ts`)
   still keys and names its menus in Spanish (Desayunos, Almuerzo, Cena, Bebidas, Café, Cócteles,
   Copas, "Deli para llevar") and uses "Sala" and "Terraza".
@@ -960,6 +968,14 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   creates, and the course and kitchen-delete suites only the Spanish names their shared party venue
   creates. The device-delete history suite (`apps/server/src/device-delete.history.test.ts`) still
   labels its open order "Mesa 1" and names its sale line "Café".
+  The error, alert, clearing, configuration-import and print-agent suites
+  (`apps/server/src/errors.test.ts`, `apps/server/src/alerts-api.test.ts`,
+  `apps/server/src/leave-for-clearing.test.ts`, `apps/server/src/configuration-import.test.ts` and
+  `apps/server/src/print-agent-e2e.test.ts`) give English names to what they create. They keep
+  their es-ES locales, the alert and print-agent suites' operation description "Venta en
+  establecimiento", the configuration-import suite's legal name and Madrid street addresses, the
+  errors suite's guest surname "Soler", and the Spanish names the clearing suite's shared party
+  venue creates.
   The venue-service menu-timetable suite (`packages/venue-service/src/menu-timetable.test.ts`)
   still keys and names its menus in Spanish (Desayunos, Almuerzo, Cena, Bebidas, Café, Cócteles,
   Copas, "Deli para llevar") and uses "Sala" and "Terraza".

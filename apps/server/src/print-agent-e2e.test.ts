@@ -70,7 +70,7 @@ const suite = useVenueDb({
     const [loc] = await db
       .insert(locations)
       .values({
-        name: "Barra",
+        name: "Bar",
         invoiceLocales: ["es-ES"],
         operationDescription: "Venta en establecimiento",
       })
@@ -347,7 +347,7 @@ describe("print-agent end to end", () => {
     const printerRes = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
       body: {
-        name: "Cocina",
+        name: "Kitchen",
         transport: "network_tcp",
         host: loopback.host,
         port: loopback.port,
@@ -358,7 +358,7 @@ describe("print-agent end to end", () => {
 
     const usbPrinterRes = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
-      body: { name: "Barra USB", transport: "usb", localKey: USB_SERIAL },
+      body: { name: "Bar USB", transport: "usb", localKey: USB_SERIAL },
     });
     expect(usbPrinterRes.status).toBe(201);
     const usbPrinterId = ((await usbPrinterRes.json()) as { id: string }).id;
@@ -366,8 +366,8 @@ describe("print-agent end to end", () => {
     await agent.runOnce();
     expect(agent.status.phase).toBe("running");
 
-    const networkPayload = esc(WIDE).line("Mesa 4").cut().bytes();
-    const usbPayload = esc(WIDE).line("Barra 2").cut().bytes();
+    const networkPayload = esc(WIDE).line("Table 4").cut().bytes();
+    const usbPayload = esc(WIDE).line("Bar 2").cut().bytes();
     const { jobId } = await withTransaction(suite.db, async (tx) => {
       return enqueuePrintJob(tx, { locationId }, printerId, networkPayload);
     });
@@ -477,7 +477,7 @@ describe("print-agent end to end", () => {
       ).toBe(204);
       const created = await send(app, "POST", "/management-api/printers", {
         cookie: managerCookie,
-        body: { name: "Barra Bluetooth impresora", transport: "bluetooth", localKey: MAC },
+        body: { name: "Bar Bluetooth printer", transport: "bluetooth", localKey: MAC },
       });
       expect(created.status).toBe(201);
       const printerId = ((await created.json()) as { id: string }).id;
@@ -580,7 +580,7 @@ describe("print-agent end to end", () => {
       ).toBe(204);
       const created = await send(app, "POST", "/management-api/printers", {
         cookie: managerCookie,
-        body: { name: "Barra Bluetooth", transport: "bluetooth", localKey: MAC },
+        body: { name: "Bar Bluetooth", transport: "bluetooth", localKey: MAC },
       });
       expect(created.status).toBe(201);
       const printerId = ((await created.json()) as { id: string }).id;
