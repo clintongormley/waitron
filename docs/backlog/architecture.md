@@ -561,11 +561,12 @@ until A977).
   The error, alert, clearing, configuration-import and print-agent suites
   (`apps/server/src/errors.test.ts`, `apps/server/src/alerts-api.test.ts`,
   `apps/server/src/leave-for-clearing.test.ts`, `apps/server/src/configuration-import.test.ts` and
-  `apps/server/src/print-agent-e2e.test.ts`) give English names to what they create. They keep
-  their es-ES locales, the alert and print-agent suites' operation description "Venta en
-  establecimiento", the configuration-import suite's legal name and Madrid street addresses, the
-  errors suite's guest surname "Soler", and the Spanish names the clearing suite's shared party
-  venue creates.
+  `apps/server/src/print-agent-e2e.test.ts`) give English names to what they create. The alert,
+  configuration-import and print-agent suites keep their es-ES locales; the alert and print-agent
+  suites keep the operation description "Venta en establecimiento", the alert suite its staff first
+  names, the configuration-import suite its legal name, Madrid street addresses and the drink
+  "Mojito", the errors suite its guest surname "Soler", and the clearing suite the Spanish names its
+  shared party venue (`apps/server/src/testing/party-venue.ts`) creates.
   The venue-service menu-timetable suite (`packages/venue-service/src/menu-timetable.test.ts`)
   still keys and names its menus in Spanish (Desayunos, Almuerzo, Cena, Bebidas, Café, Cócteles,
   Copas, "Deli para llevar") and uses "Sala" and "Terraza".
@@ -971,11 +972,12 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   The error, alert, clearing, configuration-import and print-agent suites
   (`apps/server/src/errors.test.ts`, `apps/server/src/alerts-api.test.ts`,
   `apps/server/src/leave-for-clearing.test.ts`, `apps/server/src/configuration-import.test.ts` and
-  `apps/server/src/print-agent-e2e.test.ts`) give English names to what they create. They keep
-  their es-ES locales, the alert and print-agent suites' operation description "Venta en
-  establecimiento", the configuration-import suite's legal name and Madrid street addresses, the
-  errors suite's guest surname "Soler", and the Spanish names the clearing suite's shared party
-  venue creates.
+  `apps/server/src/print-agent-e2e.test.ts`) give English names to what they create. The alert,
+  configuration-import and print-agent suites keep their es-ES locales; the alert and print-agent
+  suites keep the operation description "Venta en establecimiento", the alert suite its staff first
+  names, the configuration-import suite its legal name, Madrid street addresses and the drink
+  "Mojito", the errors suite its guest surname "Soler", and the clearing suite the Spanish names its
+  shared party venue (`apps/server/src/testing/party-venue.ts`) creates.
   The venue-service menu-timetable suite (`packages/venue-service/src/menu-timetable.test.ts`)
   still keys and names its menus in Spanish (Desayunos, Almuerzo, Cena, Bebidas, Café, Cócteles,
   Copas, "Deli para llevar") and uses "Sala" and "Terraza".
