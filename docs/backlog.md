@@ -1991,7 +1991,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   ticket/receipt grouping, has landed. What it leaves open is A1191–A1202, A1217 and the store limit under
   _Modules, data and code health_. Slice 2, named bills that keep their number at the table, has
   landed; it leaves open A1235–A1238. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
-  main bill, has landed (#PR); it leaves open A1256, A1258, A1261 and A1263–A1267. Remaining slices: one
+  main bill, has landed (#PR); it leaves open A1256, A1258, A1261, A1263–A1267 and A1269. Remaining slices: one
   picker for Move dishes and Split a table, including waiting courses; pre-bills after asesor S2
   (A446). One payment pays one bill. Station modes, pass naming and grouped cross-bill
   firing wait for pending A773-2, independently of S2. New Spanish wording requires approval
@@ -2094,10 +2094,20 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   off such a bill and offers its unsaved lines for review on the bill it now shows
   (`#followBillsRead` and `#carryCandidate` in `apps/till/src/till-app.ts`). With no bill left, or
   when the bill now shown already holds lines kept for review, the lines stay under the gone bill,
-  which no screen shows. Since the LOOK fix review 2, Send all and a refused save say "Could not
-  update the table, try again" then; when the 15-second check finds the bill gone before any save
-  is refused, only "Bill 2 is no longer at this table." is said (by reading, not run). Decide
-  where those lines go.
+  which no screen shows. Since the LOOK fix reviews 2 and 3, the save's refusal is said then, also
+  when it came during this till's own Move this bill: `tab.not_open` (merged away) says "Could not
+  update the table, try again" and `bill.other_party` (moved away) says "That bill belongs to other
+  guests" (`draftRefusalError`; the tests pin `tab.not_open`). When the 15-second check finds the
+  bill gone before any save is refused, only "Bill 2 is no longer at this table." is said (by
+  reading, not run). Decide where those lines go.
+
+- **A1269. A dead-end question that replaces another keeps the first one's picks (found in A803
+  slice 3's LOOK fix review 3; predates it, `c8487cba5`).** `till-dead-ends-dialog`
+  (`apps/till/src/widgets/dead-ends-dialog.ts`) keeps the picked stations (`choices`) and removed
+  lines (`removed`) as its own state, and the same element is reused when `#openDeadEnds`
+  (`apps/till/src/till-app.ts`) replaces a waiting question. So what the waiter picked or removed
+  on the first question is shown on the second and sent with it, to `setMakeAt` and to the
+  counter's `removeLine`. By reading, not run. Clear both when the question changes.
 
 - **A1193. Choosing which portions of a grouped row an action takes, and Fire now on a grouped
   row (left open by A803 slice 1, D14 and D31).** Actions on a row take a count, never chosen

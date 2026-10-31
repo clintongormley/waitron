@@ -11792,11 +11792,14 @@ export class TillApp extends LitElement {
   #followWaitingLeftBill(): void {
     const waiting = this.#leftBillWaiting;
     this.#leftBillWaiting = undefined;
-    if (
-      waiting !== undefined &&
-      waiting.sync === this.#draftSync &&
-      this.#billLeft(waiting.sync, waiting.refusal)
-    )
+    if (waiting === undefined) return;
+    if (waiting.sync !== this.#draftSync) {
+      // As when the own change's refusal handling read the bills itself and dropped this draft.
+      if (this.#leftBillDrafts.get(waiting.sync) === false)
+        this.errorKey = draftRefusalError(waiting.refusal);
+      return;
+    }
+    if (this.#billLeft(waiting.sync, waiting.refusal))
       void this.#followLeftBill(waiting.sync, waiting.refusal);
   }
 

@@ -5150,6 +5150,78 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
         expect(banner(el)!.textContent).toContain(t("table.error"));
       });
     });
+
+    describe("LOOK fix review 3: a dish refused during this till's own Move this bill", () => {
+      /** Move this bill out; another till merges Bill 2 away; Flan is rung and its save refused
+       * `tab.not_open`; the move is then refused `party.out_of_date`, so the move's own refusal
+       * handling reads the bills itself. */
+      async function moveRefusedAfterMerge(after: PartyBill[]) {
+        let refuseMove: ((error: unknown) => void) | undefined;
+        const moveBill = vi.fn(() => new Promise((_, reject) => (refuseMove = reject)));
+        const { el, merge } = await onBillTwoMergedLater(undefined, after, { moveBill });
+        emit(tableOrder(el)!, "move-bill", { to: { counter: true } });
+        await flush(el, 6);
+        expect(refuseMove).toBeDefined();
+        merge();
+
+        partyDraft(tableOrder(el)!).addProduct(dish, "1");
+        await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
+        await flush(el, 6);
+        expect(tableOrder(el)!.orderId).toBe("wo-check");
+
+        refuseMove!({ code: "party.out_of_date", status: 409 });
+        await vi.advanceTimersByTimeAsync(1_000);
+        await flush(el, 6);
+        return el;
+      }
+
+      it("I1: with no bill left to show, the move's own read ends on no bill and the dish's refusal is said", async () => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        try {
+          const el = await moveRefusedAfterMerge([]);
+
+          expect(tableOrder(el)!.orderId).toBeUndefined();
+          expect(gone(el)!.textContent!.trim()).toBe("Bill 2 is no longer at this table.");
+          expect(tableOrder(el)!.retainedDraft ?? null).toBeNull();
+          expect(banner(el)?.textContent ?? "").toContain(t("table.error"));
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("I1: with a bill left to show, the move's own read keeps the dish for review and says nothing", async () => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        try {
+          const el = await moveRefusedAfterMerge([tabBill, abandoned]);
+
+          expect(tableOrder(el)!.orderId).toBe("wo-4");
+          expect(gone(el)!.textContent!.trim()).toBe(
+            "Bill 2 is no longer at this table. Now showing Bill 1.",
+          );
+          expect(tableOrder(el)!.retainedDraft?.lines.map((line) => line.product.name)).toEqual([
+            "Flan",
+          ]);
+          expect((banner(el)?.textContent ?? "").trim()).toBe("");
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+    });
+
+    it("m1: a dish rung after the bill was moved to another table: once the till follows, no banner shows at all", async () => {
+      const { el, merge } = await onBillTwoMergedLater("bill.other_party", [tabBill]);
+      merge();
+
+      partyDraft(tableOrder(el)!).addProduct(dish, "1");
+      await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+      await flush(el, 6);
+
+      expect(tableOrder(el)!.orderId).toBe("wo-4");
+      expect(tableOrder(el)!.retainedDraft?.lines.map((line) => line.product.name)).toEqual([
+        "Flan",
+      ]);
+      expect((banner(el)?.textContent ?? "").trim()).toBe("");
+    });
   });
 
   it("a stale opening bill: the screen corrects to Bill 1 and says so, and no write names the stale bill", async () => {
