@@ -1105,7 +1105,7 @@ export class SetupApp extends LitElement {
   @state() private firstRestarting = false;
   /** What Start again's confirmation shows; the send stops if the box's summary differs from it. */
   @state() private firstWipeSummary?: StartAgainSummary;
-  /** Which button opened the confirmation; both send the same request. */
+  /** Which button the person last pressed: it picks the words drawn; both send the same request. */
   @state() private firstWipeKind: "start-again" | "recover" = "start-again";
   /** Start again's reads failed beside a stopped recovery: the page offers Check again. */
   @state() private firstWipeUnread = false;

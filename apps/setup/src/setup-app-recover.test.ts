@@ -49,8 +49,7 @@ const tick = (app: SetupApp) => q<HTMLInputElement>(app, "retire-confirmed")!;
 const tickLabel = (app: SetupApp) => tick(app).closest("label")!.textContent!.trim();
 const paragraph = (app: SetupApp) => q(app, "recover-deletes")!.textContent!.trim();
 
-// Recover is drawn beside a stopped recovery only from Task 2a on, so that row is not here.
-for (const c of cases.filter((c) => c.activity === null))
+for (const c of cases)
   it(`${c.name}: Recover sends exactly what Start again sends, with no password and no owner header, and never opens the old recovery`, async () => {
     const { app, requests } = await wipeFixture({
       inspection: c.inspection,
@@ -113,6 +112,11 @@ it("with the setup database missing, Recover's confirmation leaves out the no-in
   expect(tick(app).name).toBe("missing-database-confirmed");
   expect(q(app, "missing-reached")).not.toBeNull();
   expect(text(app)).not.toContain(t.missingBackup);
+  expect(
+    [...q(app, "missing-actions")!.querySelectorAll("[data-test]")].map((e) =>
+      e.getAttribute("data-test"),
+    ),
+  ).toEqual([]);
 });
 
 it("a setup database the box cannot read all of: Recover's confirmation draws setupDatabaseUnreadable and leaves out the no-invoice sentence", async () => {
@@ -184,14 +188,13 @@ it.each([
   ["uncheckable", { password: "uncheckable", revision: null, ownerGeneration: null }],
   ["repairable", { pair: "repairable" }],
 ] as const)(
-  "where the wipe is not offered (%s), Recover from backup is drawn disabled like Start again, and nothing is read",
+  "where the wipe is not offered (%s), Recover from backup is drawn disabled like Start again",
   async (name, inspection) => {
-    const { app, requests } = await wipeFixture({ inspection });
+    const { app } = await wipeFixture({ inspection });
     expect(q<WtButton>(app, "start-again")!.disabled).toBe(true);
     expect(q<WtButton>(app, "recover-backup")!.disabled).toBe(true);
     expect(q(app, "start-again-refused")!.textContent).toBe(t.wipeUnavailable);
     if (name === "uncheckable") expect(text(app)).toContain(t.uncheckable);
-    expect(summaryReads(requests)).toEqual([]);
     expect(oldRecoveryMounted(app)).toBe(false);
   },
 );
@@ -334,4 +337,23 @@ it("a Recover send refused kept-records closes the confirmation, says the setup 
   expect(formErrors(app)).toContain(t.heldChanged);
   expect(q<WtButton>(app, "recover-backup")!.disabled).toBe(false);
   await expect.poll(() => app.shadowRoot!.activeElement).toBe(q(app, "recover-backup"));
+});
+
+it("Cancel after Recover beside a stopped recovery draws the on-load line again, and Start again then draws its own words", async () => {
+  const { app } = await wipeFixture({
+    activity: stoppedActivity,
+    summary: () => Response.json(stoppedSummary),
+  });
+  await click(app, "recover-backup");
+  await expect.poll(() => q(app, "recover-deletes")).not.toBeNull();
+  await click(app, "cancel-start-again");
+  await expect.poll(() => q(app, "recover-deletes")).toBeNull();
+  await settled(app);
+  expect(stoppedLines(app)[0]).toBe(t.recoveryStopped.replace("{started}", shownTimes.en.started));
+  expect(q<WtButton>(app, "recover-backup")!.disabled).toBe(false);
+  expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
+  await click(app, "start-again");
+  await expect.poll(() => q(app, "start-again-deletes")).not.toBeNull();
+  expect(q(app, "recover-deletes")).toBeNull();
+  expect(stoppedLines(app)[0]).toBe(t.recoveryStopped.replace("{started}", shownTimes.en.started));
 });
