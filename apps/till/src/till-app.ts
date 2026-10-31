@@ -14764,9 +14764,8 @@ export class TillApp extends LitElement {
   }
 
   async #onMoveGuests(event: Event): Promise<void> {
-    const { toTableId, bills, prompt } = (
-      event as CustomEvent<{ toTableId: string; bills?: "merge" | "separate"; prompt?: object }>
-    ).detail;
+    const { toTableId, prompt } = (event as CustomEvent<{ toTableId: string; prompt?: object }>)
+      .detail;
     const party = this.orderParty;
     if (party === null) return;
     const sent = this.#sentNow();
@@ -14789,7 +14788,7 @@ export class TillApp extends LitElement {
       !this.#hasLeftParty(asked.source.partyId, asked.source.sent);
     let result: TableActionResult;
     try {
-      result = await asked.source.api.moveGuests(party.id, toTableId, bills, revisions);
+      result = await asked.source.api.moveGuests(party.id, toTableId, revisions);
     } catch (error) {
       if (!live()) return;
       await this.#onRelocationRefusal(error, live);
@@ -14822,7 +14821,7 @@ export class TillApp extends LitElement {
   }
 
   async #onMoveBill(event: Event): Promise<void> {
-    const { to, bills, prompt } = (event as CustomEvent<MoveBillDetail>).detail;
+    const { to, prompt } = (event as CustomEvent<MoveBillDetail>).detail;
     const billId = this.activeTabId;
     const party = this.orderParty;
     if (billId === undefined || party === null) return;
@@ -14863,7 +14862,6 @@ export class TillApp extends LitElement {
           toTable
             ? { tableId: to.tableId }
             : { counter: { zoneId: this.counterServiceZoneId || null } },
-          bills,
           revisions,
         );
         break;
@@ -14968,10 +14966,7 @@ export class TillApp extends LitElement {
     ></till-party-allergy-dialog>`;
   }
 
-  async #moveCounterWithAllergy(
-    asked: CounterRelocation,
-    bills: "merge" | "separate",
-  ): Promise<boolean> {
+  async #moveCounterWithAllergy(asked: CounterRelocation): Promise<boolean> {
     if (this.#moveAllergyOpening || this.allergyDialog) return false;
     const opening = { asked, controller: new AbortController() };
     this.#moveAllergyOpening = opening;
@@ -14984,13 +14979,9 @@ export class TillApp extends LitElement {
     const read = async () => {
       const view = await this.#allergyRequest(
         (signal) =>
-          asked.api.previewBillMoveAllergy(
-            asked.orderId,
-            { tableId: asked.tableId },
-            bills,
-            revisions(),
-            { signal },
-          ),
+          asked.api.previewBillMoveAllergy(asked.orderId, { tableId: asked.tableId }, revisions(), {
+            signal,
+          }),
         opening.controller.signal,
       );
       if (
@@ -15058,14 +15049,9 @@ export class TillApp extends LitElement {
             (signal) =>
               this.#resend(
                 (attempt) =>
-                  asked.api.moveBill(
-                    asked.orderId,
-                    { tableId: asked.tableId },
-                    bills,
-                    observed,
-                    packet,
-                    { signal: attempt },
-                  ),
+                  asked.api.moveBill(asked.orderId, { tableId: asked.tableId }, observed, packet, {
+                    signal: attempt,
+                  }),
                 signal,
                 current,
               ),
@@ -15232,8 +15218,7 @@ export class TillApp extends LitElement {
     retried = false,
     original?: CounterRelocation,
   ): Promise<void> {
-    const { orderId, tableId, seated, bills, prompt } = (event as CustomEvent<MoveHeldOrderDetail>)
-      .detail;
+    const { orderId, tableId, seated, prompt } = (event as CustomEvent<MoveHeldOrderDetail>).detail;
     const asked =
       original ??
       (await (prompt === undefined
@@ -15260,7 +15245,7 @@ export class TillApp extends LitElement {
       )
         return;
       if (!live()) return;
-      if (!(await this.#moveCounterWithAllergy(asked, bills))) return;
+      if (!(await this.#moveCounterWithAllergy(asked))) return;
       if (!live()) return;
     } catch (error) {
       if (!live()) return;
@@ -15284,9 +15269,7 @@ export class TillApp extends LitElement {
   }
 
   async #onJoinTables(event: Event): Promise<void> {
-    const { tableId, bills, prompt } = (
-      event as CustomEvent<{ tableId: string; bills?: "merge" | "separate"; prompt?: object }>
-    ).detail;
+    const { tableId, prompt } = (event as CustomEvent<{ tableId: string; prompt?: object }>).detail;
     const party = this.orderParty;
     if (party === null) return;
     const sent = this.#sentNow();
@@ -15309,7 +15292,7 @@ export class TillApp extends LitElement {
       !this.#hasLeftParty(asked.source.partyId, asked.source.sent);
     let result: TableActionResult;
     try {
-      result = await asked.source.api.joinTables(party.id, tableId, bills, revisions);
+      result = await asked.source.api.joinTables(party.id, tableId, revisions);
     } catch (error) {
       if (!live()) return;
       await this.#onRelocationRefusal(error, live);

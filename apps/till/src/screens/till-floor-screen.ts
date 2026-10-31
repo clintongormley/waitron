@@ -50,7 +50,6 @@ import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import "../widgets/seat-dialog.js";
 import "../widgets/today-seats-dialog.js";
-import "../widgets/bill-choice-dialog.js";
 import "../widgets/join-with-dialog.js";
 import "../widgets/split-joined-dialog.js";
 import type { SplitJoinedDetail, TillSplitJoinedDialog } from "../widgets/split-joined-dialog.js";
@@ -64,8 +63,7 @@ import type {
   TodayNameRefusal,
 } from "../widgets/today-name-dialog.js";
 import type { JoinWithPickDetail } from "../widgets/join-with-dialog.js";
-import type { BillChoiceDetail } from "../widgets/bill-choice-dialog.js";
-import { otherPartyRead, partyScope } from "../widgets/table-targets.js";
+import { otherPartyRead } from "../widgets/table-targets.js";
 import type { TodaySeatsDetail } from "../widgets/today-seats-dialog.js";
 import { codeMessage } from "../i18n/codes.js";
 import {
@@ -975,8 +973,6 @@ export class TillFloorScreen extends LitElement {
    * closes it. */
   @state() private resettingTable: ResettingTable | null = null;
   @state() private renaming: Renaming | null = null;
-  /** A drop joining two seated parties, waiting for which bills to keep. */
-  @state() private askingBills: FloorJoin | null = null;
   #joinWork: FloorJoin | null = null;
   #connection = 0;
 
@@ -1045,12 +1041,7 @@ export class TillFloorScreen extends LitElement {
     if (changed.has("api") || changed.has("operatorSession") || changed.has("selectedZoneId"))
       this.#clearJoin();
     if (changed.has("selectedZoneId")) this.activeZone = this.selectedZoneId;
-    if (
-      changed.has("tables") &&
-      this.askingSeats === null &&
-      this.askingBills === null &&
-      this.#joinWork === null
-    )
+    if (changed.has("tables") && this.askingSeats === null && this.#joinWork === null)
       this.#pending = null;
     if (
       this.seating !== null &&
@@ -1590,7 +1581,6 @@ export class TillFloorScreen extends LitElement {
     if (this.#joinWork === null) return;
     this.#joinWork.read.abort();
     this.#joinWork = null;
-    this.askingBills = null;
     this.askingSeats = null;
     this.#setPending(null);
   }
@@ -1639,8 +1629,7 @@ export class TillFloorScreen extends LitElement {
         new Set(asked.expectedEdits.map((edit) => edit.billId)).size !== asked.expectedEdits.length
       )
         throw { code: "draft.out_of_date" };
-      if (action.other === null) await this.#join(asked, "merge");
-      else this.askingBills = asked;
+      await this.#join(asked);
     } catch (cause) {
       if (!this.#joinCurrent(asked)) return;
       const code = (cause as { code?: string } | undefined)?.code;
@@ -1655,7 +1644,7 @@ export class TillFloorScreen extends LitElement {
     }
   }
 
-  async #join(asked: FloorJoin, bills: BillChoiceDetail["bills"], seats?: number): Promise<void> {
+  async #join(asked: FloorJoin, seats?: number): Promise<void> {
     if (!this.#joinCurrent(asked)) return;
     const { api, action, room, expectedEdits } = asked;
     const { party, tableId, merge, other } = action;
@@ -1669,9 +1658,9 @@ export class TillFloorScreen extends LitElement {
     };
     const call =
       merge === null
-        ? api.joinTables(party.id, tableId, bills, revisions).then(() => null)
+        ? api.joinTables(party.id, tableId, revisions).then(() => null)
         : this.#send(room.revision, async (zoneRevision) => {
-            const answer = await api.joinTables(party.id, tableId, bills, revisions, {
+            const answer = await api.joinTables(party.id, tableId, revisions, {
               ...merge,
               ...(seats === undefined ? {} : { seats }),
               zoneRevision,
@@ -1688,7 +1677,7 @@ export class TillFloorScreen extends LitElement {
           heading: action.heading,
           seats: this.#joinSeats(merge.moving, merge.target),
           action: "join",
-          resend: (chosen) => void this.#join(asked, bills, chosen),
+          resend: (chosen) => void this.#join(asked, chosen),
         };
         return true;
       },
@@ -2188,29 +2177,6 @@ export class TillFloorScreen extends LitElement {
     this.#requestFloorRefresh();
   }
 
-  #billChoice(): TemplateResult | typeof nothing {
-    const asking = this.askingBills;
-    if (asking === null) return nothing;
-    const { action } = asking;
-    const scope = t("table.combine_scope")
-      .replace("{from}", () => partyScope(action.other!, this.tables))
-      .replace("{into}", () => partyScope(action.party, this.tables));
-    return html`<till-bill-choice-dialog
-      .scope=${scope}
-      @bill-choice-confirm=${(event: Event) => {
-        event.stopPropagation();
-        if (this.askingBills !== asking || !this.#joinCurrent(asking)) return;
-        this.askingBills = null;
-        void this.#join(asking, (event as CustomEvent<BillChoiceDetail>).detail.bills);
-      }}
-      @bill-choice-cancel=${(event: Event) => {
-        event.stopPropagation();
-        if (this.askingBills !== asking || !this.#joinCurrent(asking)) return;
-        this.#clearJoin();
-      }}
-    ></till-bill-choice-dialog>`;
-  }
-
   /**
    * Every action is a write through a `take-orders` route, so the menu needs `canChangeToday`. A zone
    * whose department has a set and no tables is offered it too, since only a reset brings in tables its
@@ -2522,7 +2488,7 @@ export class TillFloorScreen extends LitElement {
         }
         ${this.#seatDialog()} ${this.#waitingDialog("clear")} ${this.#waitingDialog("move")}
         ${this.#detailsSheet()} ${this.#seatsPrompt()} ${this.#splitJoined()} ${this.#resetTable()}
-        ${this.#renameWindow()} ${this.#billChoice()} ${this.#joinWith()} ${this.#readyBar()}
+        ${this.#renameWindow()} ${this.#joinWith()} ${this.#readyBar()}
       </section>
     `;
   }

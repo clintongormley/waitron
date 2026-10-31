@@ -4416,14 +4416,13 @@ export class TillApi {
 
   /**
    * The party moves off all its tables to `toTableId` → `POST /api/parties/:id/move`. At a table
-   * another party holds the two become one, keeping every bill. `bills` is not sent. Rejects,
+   * another party holds the two become one, keeping every bill. Rejects,
    * among others, `table.needs_clearing`, `table.already_in_party`, `table.inactive`,
    * `service_zone.mode_incompatible`, `party.not_open` and `party.out_of_date`.
    */
   moveGuests(
     partyId: string,
     toTableId: string,
-    _bills: "merge" | "separate" | undefined,
     revisions: TableActionRevisions,
   ): Promise<TableActionResult> {
     return this.#request(`/api/parties/${partyId}/move`, "POST", { toTableId, ...revisions });
@@ -4431,13 +4430,12 @@ export class TillApi {
 
   /**
    * Move a whole bill to a table or the counter → `POST /api/bills/:id/move`; it arrives as a bill
-   * of its own. `bills` is not sent. Rejects, among others, `bill.paid`, `group.held_leaves_party`,
+   * of its own. Rejects, among others, `bill.paid`, `group.held_leaves_party`,
    * `table.needs_clearing`, `table.already_in_party` and `party.out_of_date`.
    */
   moveBill(
     billId: string,
     to: MoveBillTarget,
-    _bills: "merge" | "separate" | undefined,
     revisions: MoveBillRevisions,
     command?: { submissionId: string; allergy: AllergyPatch },
     options: ReadOptions = {},
@@ -4453,7 +4451,6 @@ export class TillApi {
   previewBillMoveAllergy(
     billId: string,
     to: MoveBillTarget,
-    _bills: "merge" | "separate" | undefined,
     revisions: MoveBillRevisions,
     options: ReadOptions = {},
   ): Promise<AllergyMoveRead> {
@@ -4473,7 +4470,6 @@ export class TillApi {
   joinTables(
     partyId: string,
     tableId: string,
-    _bills: "merge" | "separate" | undefined,
     revisions: TableActionRevisions,
     merge?: JoinMerge & { zoneRevision: number },
   ): Promise<TableActionResult> {

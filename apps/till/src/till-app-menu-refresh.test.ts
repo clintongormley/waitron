@@ -2083,7 +2083,7 @@ describe("a round that got no answer while its tab moved to another table", () =
       { ...seated, party: spread },
       { ...seated, id: "t4", label: "4", shortName: "4", party: spread },
     ]);
-    emit(tableScreen(el), "move-guests", { toTableId: "t4", bills: "merge" });
+    emit(tableScreen(el), "move-guests", { toTableId: "t4" });
     await flush(el);
     expect(api.moveGuests).toHaveBeenCalledOnce();
 

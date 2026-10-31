@@ -110,7 +110,6 @@ import "../widgets/party-name-dialog.js";
 import "../widgets/party-guests-dialog.js";
 import "../widgets/split-guests-dialog.js";
 import "../widgets/table-status.js";
-import type { BillChoiceDetail } from "../widgets/bill-choice-dialog.js";
 import type { PartyNameDetail } from "../widgets/party-name-dialog.js";
 import "../widgets/bill-name-dialog.js";
 import type { BillNameDetail } from "../widgets/bill-name-dialog.js";
@@ -239,7 +238,6 @@ interface ActionDraft {
 /** Move this bill's choice: to a table, with who the picker showed seated there, or to the counter. */
 export interface MoveBillDetail {
   to: { tableId: string; seated: SeatedRead } | { counter: true };
-  bills?: BillChoiceDetail["bills"];
   prompt?: object;
 }
 

@@ -2602,7 +2602,7 @@ describe("TillApi", () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
 
     await expect(
-      new TillApi("", fetchStub).moveGuests("v1", "tbl-7", "merge", {
+      new TillApi("", fetchStub).moveGuests("v1", "tbl-7", {
         expectedPartyRevision: 3,
         otherPartyId: "v7",
         expectedOtherPartyRevision: 9,
@@ -2638,15 +2638,19 @@ describe("TillApi", () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
 
     await expect(
-      new TillApi("", fetchStub).moveBill("wo-check", { tableId: "tbl-7" }, "separate", {
-        expectedPartyRevision: 3,
-        partyId: "v1",
-        otherPartyId: "v7",
-        expectedOtherPartyRevision: 9,
-        expectedEdits: [
-          { billId: "wo-check", editorVersion: 4, draftId: null, draftRevision: null },
-        ],
-      }),
+      new TillApi("", fetchStub).moveBill(
+        "wo-check",
+        { tableId: "tbl-7" },
+        {
+          expectedPartyRevision: 3,
+          partyId: "v1",
+          otherPartyId: "v7",
+          expectedOtherPartyRevision: 9,
+          expectedEdits: [
+            { billId: "wo-check", editorVersion: 4, draftId: null, draftRevision: null },
+          ],
+        },
+      ),
     ).resolves.toEqual(answer);
 
     expect(fetchStub).toHaveBeenCalledWith(
@@ -2674,11 +2678,15 @@ describe("TillApi", () => {
       .fn()
       .mockResolvedValue(jsonResponse({ partyId: "v-new", billId: "wo-12" }));
 
-    await new TillApi("", fetchStub).moveBill("wo-12", { tableId: "tbl-9" }, "merge", {
-      partyId: null,
-      otherPartyId: null,
-      expectedEdits: [{ billId: "wo-12", editorVersion: 8, draftId: null, draftRevision: null }],
-    });
+    await new TillApi("", fetchStub).moveBill(
+      "wo-12",
+      { tableId: "tbl-9" },
+      {
+        partyId: null,
+        otherPartyId: null,
+        expectedEdits: [{ billId: "wo-12", editorVersion: 8, draftId: null, draftRevision: null }],
+      },
+    );
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/bills/wo-12/move",
@@ -2699,16 +2707,24 @@ describe("TillApi", () => {
     const fetchStub = vi.fn(async () => jsonResponse({ partyId: null, billId: "wo-4" }));
     const api = new TillApi("", fetchStub);
 
-    await api.moveBill("wo-4", { counter: { zoneId: "z-bar" } }, "merge", {
-      expectedPartyRevision: 3,
-      partyId: "v1",
-      expectedEdits: [{ billId: "wo-4", editorVersion: 6, draftId: null, draftRevision: null }],
-    });
-    await api.moveBill("wo-4", { counter: { zoneId: null } }, "merge", {
-      expectedPartyRevision: 3,
-      partyId: "v1",
-      expectedEdits: [{ billId: "wo-4", editorVersion: 6, draftId: null, draftRevision: null }],
-    });
+    await api.moveBill(
+      "wo-4",
+      { counter: { zoneId: "z-bar" } },
+      {
+        expectedPartyRevision: 3,
+        partyId: "v1",
+        expectedEdits: [{ billId: "wo-4", editorVersion: 6, draftId: null, draftRevision: null }],
+      },
+    );
+    await api.moveBill(
+      "wo-4",
+      { counter: { zoneId: null } },
+      {
+        expectedPartyRevision: 3,
+        partyId: "v1",
+        expectedEdits: [{ billId: "wo-4", editorVersion: 6, draftId: null, draftRevision: null }],
+      },
+    );
 
     const bodies = fetchStub.mock.calls.map((call) =>
       JSON.parse((call as unknown as [string, RequestInit])[1].body as string),
@@ -2735,11 +2751,15 @@ describe("TillApi", () => {
       );
 
     await expect(
-      new TillApi("", fetchStub).moveBill("wo-4", { counter: { zoneId: null } }, "merge", {
-        expectedPartyRevision: 3,
-        partyId: "v1",
-        expectedEdits: [{ billId: "wo-4", editorVersion: 6, draftId: null, draftRevision: null }],
-      }),
+      new TillApi("", fetchStub).moveBill(
+        "wo-4",
+        { counter: { zoneId: null } },
+        {
+          expectedPartyRevision: 3,
+          partyId: "v1",
+          expectedEdits: [{ billId: "wo-4", editorVersion: 6, draftId: null, draftRevision: null }],
+        },
+      ),
     ).rejects.toEqual({ code: "party.main_bill_stays", partyId: "v1", status: 409 });
   });
 
@@ -2748,7 +2768,7 @@ describe("TillApi", () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
 
     await expect(
-      new TillApi("", fetchStub).joinTables("v1", "tbl-9", "separate", {
+      new TillApi("", fetchStub).joinTables("v1", "tbl-9", {
         expectedPartyRevision: 3,
         otherPartyId: null,
         expectedEdits: [{ billId: "wo-4", editorVersion: 2, draftId: null, draftRevision: null }],
@@ -2782,7 +2802,7 @@ describe("TillApi", () => {
     };
 
     await expect(
-      api.joinTables("v1", "tbl-9", "merge", revisions, {
+      api.joinTables("v1", "tbl-9", revisions, {
         moving: "tbl-9",
         target: "tbl-1",
         side: "left",
@@ -2790,13 +2810,13 @@ describe("TillApi", () => {
         zoneRevision: 4,
       }),
     ).resolves.toEqual(answer);
-    await api.joinTables("v1", "tbl-9", "merge", revisions, {
+    await api.joinTables("v1", "tbl-9", revisions, {
       moving: "tbl-1",
       target: "tbl-9",
       side: "top",
       zoneRevision: 5,
     });
-    await api.joinTables("v1", "tbl-9", "separate", revisions);
+    await api.joinTables("v1", "tbl-9", revisions);
 
     const bodies = fetchStub.mock.calls.map(
       (call) => JSON.parse(String((call as unknown as [string, RequestInit])[1].body)) as unknown,
@@ -2993,7 +3013,6 @@ describe("TillApi", () => {
       api.joinTables(
         "v1",
         "tbl-9",
-        "merge",
         {
           expectedPartyRevision: 3,
           otherPartyId: null,
@@ -4490,7 +4509,7 @@ describe("TillApi: a seated party", () => {
     [
       "moveGuests",
       (api: TillApi) =>
-        api.moveGuests("v1", "tbl-9", "merge", {
+        api.moveGuests("v1", "tbl-9", {
           expectedPartyRevision: 3,
           expectedEdits: [{ billId: "wo-1", editorVersion: 2, draftId: null, draftRevision: null }],
         }),
@@ -4504,7 +4523,7 @@ describe("TillApi: a seated party", () => {
     [
       "joinTables",
       (api: TillApi) =>
-        api.joinTables("v1", "tbl-9", "merge", {
+        api.joinTables("v1", "tbl-9", {
           expectedPartyRevision: 3,
           expectedEdits: [{ billId: "wo-1", editorVersion: 2, draftId: null, draftRevision: null }],
         }),
@@ -5807,12 +5826,12 @@ describe("A803 action results", () => {
   const bodyOf = (fetchStub: ReturnType<typeof vi.fn>, call = 0): unknown =>
     JSON.parse(String((fetchStub.mock.calls[call] as unknown as [string, RequestInit])[1].body));
 
-  it("moveGuests sends no bills key even when a caller passes one, and answers the party's bill ids", async () => {
+  it("moveGuests sends no bills key, and answers the party's bill ids", async () => {
     const answer = { partyId: "v7", billIds: ["wo-7", "wo-1"] };
     const fetchStub = vi.fn(async () => jsonResponse(answer));
 
     await expect(
-      new TillApi("", fetchStub).moveGuests("v1", "tbl-7", "merge", {
+      new TillApi("", fetchStub).moveGuests("v1", "tbl-7", {
         expectedPartyRevision: 3,
         otherPartyId: "v7",
         expectedOtherPartyRevision: 9,
@@ -5835,8 +5854,8 @@ describe("A803 action results", () => {
     const api = new TillApi("", fetchStub);
     const revisions = { expectedPartyRevision: 3, otherPartyId: null, expectedEdits: edits };
 
-    await expect(api.joinTables("v1", "tbl-9", "separate", revisions)).resolves.toEqual(answer);
-    await api.joinTables("v1", "tbl-9", undefined, revisions, {
+    await expect(api.joinTables("v1", "tbl-9", revisions)).resolves.toEqual(answer);
+    await api.joinTables("v1", "tbl-9", revisions, {
       moving: "tbl-9",
       target: "tbl-1",
       side: "left",
@@ -5866,10 +5885,10 @@ describe("A803 action results", () => {
       expectedEdits: edits,
     };
 
-    await expect(
-      api.moveBill("wo-check", { tableId: "tbl-7" }, "separate", revisions),
-    ).resolves.toEqual(answer);
-    await api.previewBillMoveAllergy("wo-check", { tableId: "tbl-7" }, "merge", revisions);
+    await expect(api.moveBill("wo-check", { tableId: "tbl-7" }, revisions)).resolves.toEqual(
+      answer,
+    );
+    await api.previewBillMoveAllergy("wo-check", { tableId: "tbl-7" }, revisions);
 
     expect(bodyOf(fetchStub, 0)).toEqual({ to: { tableId: "tbl-7" }, ...revisions });
     expect(bodyOf(fetchStub, 1)).toEqual({ to: { tableId: "tbl-7" }, ...revisions });

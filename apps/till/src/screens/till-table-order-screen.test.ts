@@ -4719,7 +4719,9 @@ describe("till-table-order-screen", () => {
     const target = (el: TillTableOrderScreen, id: string) =>
       el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(`[data-target="${id}"]`);
     const billChoice = (el: TillTableOrderScreen) =>
-      el.shadowRoot!.querySelector<HTMLElement & { scope: string }>("till-bill-choice-dialog");
+      [...el.shadowRoot!.querySelectorAll("*")].find((node) =>
+        /^till-.+-dialog$/.test(node.localName),
+      ) ?? null;
     function heard(el: TillTableOrderScreen, type: string): unknown[] {
       const details: unknown[] = [];
       el.addEventListener(type, (event) => {
@@ -4731,7 +4733,7 @@ describe("till-table-order-screen", () => {
 
     describe("A803 no merge question", () => {
       const anyDialog = (el: TillTableOrderScreen) =>
-        el.shadowRoot!.querySelector("till-bill-choice-dialog, wt-dialog[open], dialog[open]");
+        billChoice(el) ?? el.shadowRoot!.querySelector("wt-dialog[open], dialog[open]");
 
       it("Move guests onto a seated table dispatches at once, with no bills and no dialog", async () => {
         const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables(true) });

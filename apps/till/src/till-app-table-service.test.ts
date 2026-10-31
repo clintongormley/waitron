@@ -1142,8 +1142,8 @@ describe("till-app table ordering: a handheld's order screen with no table opene
       { lineNo: 1, lineName: "Café", patch: { note: "sin sal" }, revision: 0 },
       "updateOrderLine",
     ],
-    ["move-guests", { toTableId: "t9", bills: "merge" }, "moveGuests"],
-    ["join-tables", { tableId: "t9", bills: "merge" }, "joinTables"],
+    ["move-guests", { toTableId: "t9" }, "moveGuests"],
+    ["join-tables", { tableId: "t9" }, "joinTables"],
     ["split-table", { tableId: "t9", billId: null }, "splitTable"],
     ["name-party", { name: "Ana" }, "setPartyName"],
     ["guests-party", { guestCount: 4 }, "setPartyGuests"],
@@ -1226,7 +1226,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
   });
 
   it.each([
-    ["join-tables", { tableId: "t9", bills: "merge" }, "joinTables"],
+    ["join-tables", { tableId: "t9" }, "joinTables"],
     ["merge-bills", { fromBillId: "wo-9" }, "mergeBills"],
     ["transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] }, "transferItems"],
   ] as const)(
@@ -1250,8 +1250,8 @@ describe("till-app table ordering: refused and failed table actions", () => {
   );
 
   it.each([
-    ["join-tables", "storage.disk_full", 507, { tableId: "t9", bills: "merge" }, "joinTables"],
-    ["join-tables", "server.internal", 500, { tableId: "t9", bills: "merge" }, "joinTables"],
+    ["join-tables", "storage.disk_full", 507, { tableId: "t9" }, "joinTables"],
+    ["join-tables", "server.internal", 500, { tableId: "t9" }, "joinTables"],
     [
       "change-line",
       "storage.disk_full",
@@ -1286,7 +1286,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
 
   for (const locale of ["en-GB", "es-ES"])
     it.each([
-      ["join-tables", { tableId: "t9", bills: "merge" }, "joinTables"],
+      ["join-tables", { tableId: "t9" }, "joinTables"],
       [
         "change-line",
         { lineNo: 1, lineName: "Coffee", patch: { note: "no sugar" }, revision: 0 },
@@ -1422,10 +1422,10 @@ describe("till-app table ordering: refused and failed table actions", () => {
     const screen = await toTableOrder(el);
     expect(screen.tables).toEqual([openTable]);
 
-    emit(screen, "move-guests", { toTableId: "t9", bills: "merge" });
+    emit(screen, "move-guests", { toTableId: "t9" });
     await flush(el);
 
-    expect(api.moveGuests).toHaveBeenCalledWith("v-2", "t9", "merge", {
+    expect(api.moveGuests).toHaveBeenCalledWith("v-2", "t9", {
       expectedPartyRevision: 3,
       otherPartyId: null,
       expectedEdits: [{ billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null }],

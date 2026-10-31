@@ -166,21 +166,25 @@ describe.each(["light", "dark"] as const)("till-held-orders a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 
-  it("the bill choice for an order moving to a seated table has no violations", async () => {
+  it("has no violations once an order is moved to a seated table, which draws no bill choice", async () => {
     const { el, host } = await mountWidget<TillHeldOrders>(
       "till-held-orders",
       { orders, tables },
       theme,
     );
+    let sent = 0;
+    el.addEventListener("move-held-order", () => sent++);
     el.shadowRoot!.querySelector<HTMLElement>("wt-button.move")!.click();
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>('[data-target="t7"]')!.click();
     await el.updateComplete;
-    const dialog = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
-      "till-bill-choice-dialog",
-    );
-    if (dialog === null) throw new Error("the scan must include the bill choice");
-    await dialog.updateComplete;
+    if (sent !== 1) throw new Error("picking the seated table must send at once");
+    if (
+      [...el.shadowRoot!.querySelectorAll("*")].some((node) =>
+        /^till-.+-dialog$/.test(node.localName),
+      )
+    )
+      throw new Error("no bill choice may be drawn");
     await expectNoA11yViolations(host);
   });
 });

@@ -1509,7 +1509,7 @@ describe("till-app: an order that moves to another party", () => {
       table7,
     ]);
 
-    emit(tableOrder(el)!, "move-guests", { toTableId: "t7", bills: "merge" });
+    emit(tableOrder(el)!, "move-guests", { toTableId: "t7" });
     await flush(el, 6);
 
     expect(server.drafts.map((each) => [each.partyId, each.lines.length])).toEqual([["v9", 1]]);
@@ -4033,7 +4033,7 @@ describe("till-app: an order that moves to a party whose groups answer late", ()
       table7,
     ]);
 
-    emit(tableOrder(el)!, "move-guests", { toTableId: "t7", bills: "merge" });
+    emit(tableOrder(el)!, "move-guests", { toTableId: "t7" });
     await flush(el, 6);
     answerGroups();
     await flush(el, 6);

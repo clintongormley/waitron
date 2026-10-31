@@ -1385,7 +1385,7 @@ describe("A768 the left draft saves in the background", () => {
     await tap(el, "Beer");
     const release = holdNextSave();
     await moveToTable7(el);
-    emit(tableOrder(el)!, "move-guests", { toTableId: "t4", bills: "merge" });
+    emit(tableOrder(el)!, "move-guests", { toTableId: "t4" });
     await flush(el, 6);
     await back(el);
     await reopen(el, "t9");
@@ -1415,7 +1415,7 @@ describe("A768 the left draft saves in the background", () => {
       table9,
     ]);
     const reads = api.listDrafts.mock.calls.length;
-    emit(tableOrder(el)!, "move-guests", { toTableId: "t4", bills: "merge" });
+    emit(tableOrder(el)!, "move-guests", { toTableId: "t4" });
     await flush(el, 6);
     expect(api.moveGuests).not.toHaveBeenCalled();
     expect(tableOrder(el)!.party?.id).toBe("v7");

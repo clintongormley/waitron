@@ -1249,10 +1249,6 @@ export const en = {
   "table.join_heading": "Join a table to {party}:",
   "table.held_by": "Seated: {party}",
   "table.this_party": "These guests",
-  "table.combine_scope": "{from} joins {into}",
-  "table.bills_question": "Merge their main bills into one, or keep them as separate bills?",
-  "table.bills_merge": "Merge the bills",
-  "table.bills_separate": "Keep separate bills",
   "table.bills_served_differently":
     "These bills are served in different ways, so items cannot move between them",
   "table.split_table_heading": "Split a table off {party}:",
@@ -1494,9 +1490,6 @@ export const en = {
   "table.cancel_bill_request": "Cancel the bill request for {party}",
   "table.action_move_bill": "Move this bill",
   "table.move_bill_heading": "Move {bill} to:",
-  "table.move_bill_scope": "{bill} to {into}",
-  "table.bill_move_question":
-    "Merge this bill into their main bill, or keep it as a separate bill?",
   "table.to_counter": "The counter",
   "held.move_to_table": "Move to table",
   "held.no_tables": "The floor lists no tables to move it to",
@@ -3026,10 +3019,6 @@ export const es: Record<StringKey, string> = {
   "table.join_heading": "Unir una mesa a {party}:",
   "table.held_by": "Ocupada: {party}",
   "table.this_party": "Estos clientes",
-  "table.combine_scope": "{from} se une a {into}",
-  "table.bills_question": "¿Juntar sus cuentas principales en una o mantenerlas separadas?",
-  "table.bills_merge": "Juntar las cuentas",
-  "table.bills_separate": "Mantener cuentas separadas",
   "table.bills_served_differently":
     "Estas cuentas se sirven de forma distinta, así que los artículos no pueden pasar de una a otra",
   "table.split_table_heading": "Separar una mesa de {party}:",
@@ -3265,9 +3254,6 @@ export const es: Record<StringKey, string> = {
   "table.cancel_bill_request": "Anular la petición de cuenta de {party}",
   "table.action_move_bill": "Mover esta cuenta",
   "table.move_bill_heading": "Mover {bill} a:",
-  "table.move_bill_scope": "{bill} a {into}",
-  "table.bill_move_question":
-    "¿Juntar esta cuenta con su cuenta principal o mantenerla como una cuenta aparte?",
   "table.to_counter": "El mostrador",
   "held.move_to_table": "Pasar a mesa",
   "held.no_tables": "El plano no tiene mesas a las que pasarlo",

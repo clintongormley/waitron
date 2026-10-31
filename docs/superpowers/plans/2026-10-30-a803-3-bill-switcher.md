@@ -753,6 +753,20 @@ task's red run; a red assertion not on this list that is not kind B/R/W/S/F unde
 | `till-table-order-screen.a11y.test.ts:900`, `:921` (axe over the bill choice) | B | axe over the screen after picking the seated table, which must have sent once and drawn no bill choice; both themes as before | §3.4 bullet 2 | 8a |
 | merge-question tests in the floor screen and parked orders, and every other `bills: "merge"` event detail or client argument in till tests | B / F | no question, no `bills` | §3.4 bullet 2, §6 | 8b |
 | `apps/till/src/widgets/bill-choice-dialog.test.ts`, `bill-choice-dialog.a11y.test.ts` | **B, Q5 item 6b** (deleted with the widget) | deleted; replaced by the "no question" cases of Tasks 8a/8b, which fail if a question is drawn or `bills` is sent | §3.4 bullet 2 ("The … question goes") | 8b |
+| As built at Task 8b (lines at the Task 8b commit): the mechanical `bills` sweep — every `bills: "merge"`/`"separate"` event-detail field and every positional `"merge"`/`"separate"`/`undefined` argument to, or expected argument of, `moveGuests`, `moveBill`, `previewBillMoveAllergy` and `joinTables` in `till-app-parties.test.ts` (103 sites, `:3964` among them), `till-app.test.ts` (35), `till-floor-screen.today-joins.test.ts` (18), `api/client.test.ts` (17, and `:5838`'s `undefined`), `till-app-table-service.test.ts` (8), `held-orders.test.ts` (5), `till-app-allergy.move.test.ts` (3), `party-allergy-client.test.ts` (3), `till-app-drafts.test.ts` (2), `till-app-open-table.test.ts` (2), `till-app-menu-refresh.test.ts` (1); `till-app.test.ts:17317` `counterMovePreview` loses its `_bills` parameter; argument positions after the dropped slot move down one — `till-app-allergy.move.test.ts` `mock.calls[n]![3]` → `[2]` (2), `![4]` → `![3]` (10), `.slice(0, 5)` → `.slice(0, 4)` (4), `till-floor-screen.today-joins.test.ts:401` `toHaveLength(4)` → `3`, `:792` and `:812` `[3]` → `[2]` | F | the field or argument goes; every other value of the same call or detail unchanged | §3.4 bullet 2, §6, D13 | 8b |
+| Task 8b: `till-app-parties.test.ts:2191`, `:4135` (the two `it.each` pairs "… with the event's bills value merge/separate") | B | each pair folds into one case sending no `bills`; the same `toHaveBeenCalledOnce` and no-banner checks | §3.4 bullet 2 | 8b |
+| Task 8b: `client.test.ts:5829` title "… even when a caller passes one" | B (title) | "moveGuests sends no bills key, and answers …": no caller can pass one now; the body pin unchanged | D13 | 8b |
+| Task 8b: checks that no `till-bill-choice-dialog` is drawn — `till-floor-screen.today-joins.test.ts` (10 sites: `:195`, `:281`, `:395`, `:428`, `:744`, `:836`, `:853`, `:874`, `:925`, `:961`, now `expect(dialogs(el)).toEqual([])`, a new helper listing every `till-*-dialog` the screen draws), `till-table-order-screen.test.ts:4721` `billChoice` and `:4735` `anyDialog`, `till-table-order-screen.a11y.test.ts:900`, `:925`, `till-app-parties.test.ts:10978` `relocationPrompt` | B | the widget is deleted, so a check naming its tag could no longer fail; each now checks that no `till-*-dialog` element of any kind is drawn, which also catches the old one | §3.4 bullet 2 | 8b |
+| Task 8b: floor `:338` (a seated table dropped on a merge of two) | B | "no bill choice" → the only dialog drawn is `till-today-seats-dialog`; the seats checks unchanged | §3.4 bullet 2 | 8b |
+| Task 8b: floor `:269` ("two seated tables ask which bills to keep, then join", base `:264`) | B | no question: retitled "join at once, the dragged table staying where it was dropped until answered"; the join is held unanswered, the table stays drawn at 18 through a re-read and nothing refreshes, then the answer gives one refresh; the `joinTables` arguments as before minus `bills`. The scope check ("Ana (1) joins 2") goes with the question | §3.4 bullet 2 | 8b |
+| Task 8b: floor `:309` ("… after the bill choice keeps that choice"), `:449` ("a re-read while the bills are asked …"), `:475` ("… while the bills are asked still sends the join"), `:590` ("two seated tables still ask which bills to keep", prepay zone), `:628` ("… through the bill choice and the seats window"), `:738` ("reads both parties before the bill question …"), `:858` ("… and its question"), `:945` ("… without reopening its old question"), `:971` ("… retires the original confirmation"), `:930`, `:1008`, `:1038`, and the `finish` helper | B | the confirmation step goes; titles name the join or the seats instead of the question; `:475` takes its re-read after the first send, while the seats are asked; `:590` checks `joinTables` called once instead of the question drawn; `:738` waits for the join instead of the question; every `joinTables` argument check as before minus `bills` | §3.4 bullet 2 | 8b |
+| Task 8b: floor `:909` ("switching the active zone closes the original bill question", base `:953`) | B | the drop's reads are held, the zone tab is clicked, the reads answer: no join and no dialog | §3.4 bullet 2 | 8b |
+| Task 8b: floor "cancelling the bill choice puts the table back and sends nothing" (base `:357`), "a replaced API cannot send an already-open bill confirmation" (base `:912`), `it.each` "an old bill-choice-confirm / bill-choice-cancel cannot close the replacement question" (base `:1081`, 2 rows) | **R, deleted (Q5 item 6b's reach, see the record)** | each tested a control of the question itself (its Cancel, a confirmation kept open across an API change, a stale confirmation), which no longer exists; the replaced-API fence is still checked by `:858`'s `api` row and the stale-prompt fence by `:1038` | §3.4 bullet 2 | 8b |
+| Task 8b: `held-orders.test.ts:723` ("qualifies the bill choice before opening …"), `:779` ("asks about the bills first at a seated table …"), `:794` ("sends the party the bill choice names …"), `:831` ("goes back to the tables when the bill choice is cancelled, and Cancel there sends nothing") | B | `:723` checks nothing is sent before `ready` and after a cancelled `ready`, then the move with its `prompt` and no `bills`; `:779` and `:794` the move sent at once with the seated read, no `bills`; `:831` keeps its second half (Cancel in the tables list sends nothing). The question's scope and wording checks (`table.move_bill_scope`, `table.bill_move_question`) go with the question | §3.4 bullet 2 | 8b |
+| Task 8b: `held-orders.test.ts:825` ("names a seated party with no name by the tables the floor lists for it") | R | the same value, `Mesa 7`, read from `partyScope` (`widgets/table-targets.ts`), which made the question's "into" name and still names parties on the table screen | §3.4 bullet 2 | 8b |
+| Task 8b: `held-orders.a11y.test.ts:169` (axe over the bill choice) | B | axe after picking the seated table, which must have sent once and drawn no `till-*-dialog`; both themes as before | §3.4 bullet 2 | 8b |
+| Task 8b: `till-app.test.ts:17429` ("counter relocation keeps the destination observations shown before native confirmation") | B | no confirmation: "… sends at once the destination observations read when the table is picked"; the same `listDrafts("v7")` and `moveBill` argument checks minus `bills`; the change of the drafts read while the choice was open goes with the choice | §3.4 bullet 2 | 8b |
+| Task 8b: `bill-choice-dialog.test.ts` (6 cases) and `bill-choice-dialog.a11y.test.ts` (2 cases × 2 themes) | R, Q5 item 6b | deleted with the widget (the row above) | §3.4 bullet 2 | 8b |
 | 73 till files' `mainBillId:` lines (fixtures, helpers, three app reads) | F | renamed `openingBillId:` with the same value, mechanically; no assertion changes | D7 | 8c |
 | `till-table-order-screen.test.ts:713` ("Table actions" trigger inside the drawer), `:4231` (verb buttons in the menu), `:6704` (Back in the panel) | R | the ⋮ holds the same items; Back returns to `closed` (no `menu` step) | amendment 3 | 10 |
 | `till-table-order-screen.parties.test.ts:128-239` (bills list rows, Take payment), `:184-197` (no New orders tag) | R, B | rows → switcher rows; Receipt copy and Cancel and credit → ⋮ bill section for the bill on screen; Take payment → switching; the no-tag checks stay (the switcher draws no tag) | spec §3.5, amendment 2 | 9 (rows), 11a (re-point) |
@@ -1620,17 +1634,59 @@ caller `:15260` (review-1 minor 3), and every remaining `bills` argument or even
 `widgets/held-orders.test.ts`, `held-orders.a11y.test.ts`, `till-app-parties.test.ts:3964` (kind F)
 and every till test that emits or passes a `bills` value.
 
-- [ ] Cases `A803 no merge question`: the floor's drop of a table onto a seated table calls
+- [x] Cases `A803 no merge question`: the floor's drop of a table onto a seated table calls
       `joinTables` once with no `bills` and draws no dialog; moving a parked order to a seated table
       calls `moveBill` with no `bills` and draws no dialog; moving a counter order with an allergy
       answer to a seated table asks the allergy question only, not a merge question.
-- [ ] RED: `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen.today-joins.test.ts src/widgets/held-orders.test.ts src/till-app-allergy.move.test.ts -t 'A803'`.
-- [ ] Implement.
-- [ ] GREEN: those files, `held-orders.a11y.test.ts` and every till test file this task edited,
+      (Built, one each: floor `till-floor-screen.today-joins.test.ts:1063` (two seated tables:
+      `joinTables` called once at once with no `bills` slot, no `till-*-dialog`); parked orders
+      `held-orders.test.ts:846` (the widget's `move-held-order` detail, which the app turns into
+      `moveBill`, is sent at once with no `bills` key and no `till-*-dialog`); app
+      `till-app-allergy.move.test.ts:584` (the allergy dialog opens; `previewBillMoveAllergy` and
+      `moveBill` carry no `bills` slot).)
+- [x] RED: `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen.today-joins.test.ts src/widgets/held-orders.test.ts src/till-app-allergy.move.test.ts -t 'A803'`.
+      (Run: 3 files failed, 3 tests failed, 4 passed, 124 skipped. Floor: `expected [ 'till-bill-choice-dialog' ]
+      to deeply equal []`; parked orders: `expected [] to deeply equal [ { orderId: 'wo-1', …(2) } ]`
+      (nothing sent, the question drawn); app: the preview call carried `undefined` in the
+      `bills` slot.)
+- [x] Implement.
+      (Built: the floor joins as soon as both parties are read and draws no dialog (`askingBills`,
+      `#billChoice` go); parked orders send at once (`choosing`, `#billChoice` go);
+      `#moveCounterWithAllergy(asked)`; the four client methods lose `bills`; the event details
+      lose it; `widgets/bill-choice-dialog.ts` and its two test files deleted. Strings retired whose
+      last user went here: `table.bills_question`, `table.bills_merge`, `table.bills_separate`,
+      `table.bill_move_question` (D10), and `table.move_bill_scope`, `table.combine_scope` with
+      `moveBillScope` (`widgets/table-targets.ts`), which only the question used (D10 does not name
+      these two; the "last user goes" rule does). Changed checks: the "As built at Task 8b" and
+      "Task 8b" rows; no money, VAT, permission or filing check among them.)
+- [x] GREEN: those files, `held-orders.a11y.test.ts` and every till test file this task edited,
       unfiltered; till typecheck clean;
       `rg -n '"merge" \| "separate"|bills: "(merge|separate)"|bill-choice|BillChoiceDetail|bills_question|bills_merge|bills_separate|bills_kept_separate|bill_move_question' apps/till`
       prints nothing.
-- [ ] Commit: "Retire the merge question everywhere in the till".
+      (Run, each set in one foreground run: the 8 screen, widget, client and allergy files —
+      `src/screens/till-floor-screen.today-joins.test.ts`, `src/widgets/held-orders.test.ts`,
+      `src/widgets/held-orders.a11y.test.ts`, `src/till-app-allergy.move.test.ts`,
+      `src/api/client.test.ts`, `src/api/party-allergy-client.test.ts`,
+      `src/screens/till-table-order-screen.test.ts`, `src/screens/till-table-order-screen.a11y.test.ts`
+      — 859 passed, exit 0; the 6 till-app files — `src/till-app-parties.test.ts`,
+      `src/till-app.test.ts`, `src/till-app-table-service.test.ts`, `src/till-app-drafts.test.ts`,
+      `src/till-app-open-table.test.ts`, `src/till-app-menu-refresh.test.ts` — 2436 passed, exit 0;
+      `src/i18n/strings.test.ts` and `t.test.ts` 75 passed. `pnpm --filter @waitron/till typecheck`
+      clean; prettier `--check` and eslint clean on the 21 changed files. **The `rg` line prints
+      three lines, all the unrelated `.bill-choices` class** (`till-table-order-screen.ts:616`,
+      `:4136`, `till-table-order-screen.bill-payments.test.ts:140`: the Full invoice and receipt
+      language buttons, from `86782eacf`), which the pattern `bill-choice` also matches; left
+      alone, as renaming it is outside this task. `rg -n --pcre2 'bill-choice(?!s)' apps/till`
+      prints nothing. Controls, each restored from a copy: the floor holding back the join when
+      the target is seated → the floor case fails (`joinTables` not called with the expected
+      arguments); parked orders not sending a seated table → the parked-orders case fails
+      (`expected [] to deeply equal …`); the app's allergy preview passing a `"separate"` slot →
+      the app case fails.)
+- [x] Commit: "Retire the merge question everywhere in the till".
+      (Deleted checks beyond the dialog files: four floor cases (row "R, deleted"), each about a
+      control of the question itself. They are deletions the owner's rule asks about; listed for
+      Task 16's PR and questions. `docs/backlog.md` A1238 still names `table.combine_scope`, now
+      deleted: left for Task 16's backlog pass.)
 
 ## Task 8c: rename the floor's `mainBillId` to `openingBillId` in the till (mechanical, ≈35 calls)
 

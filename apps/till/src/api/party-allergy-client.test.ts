@@ -35,7 +35,7 @@ describe("A669 allergy client", () => {
     const abort = new AbortController();
     const revisions = { partyId: null, otherPartyId: null, expectedEdits: [expectedEdit] };
     expect(
-      await api.previewBillMoveAllergy("bill-1", { tableId: "table-1" }, "separate", revisions, {
+      await api.previewBillMoveAllergy("bill-1", { tableId: "table-1" }, revisions, {
         signal: abort.signal,
       }),
     ).toEqual(result);
@@ -72,12 +72,12 @@ describe("A669 allergy client", () => {
     };
     const abort = new AbortController();
     expect(
-      await api.moveBill("bill-1", { tableId: "table-1" }, "merge", revisions, packet, {
+      await api.moveBill("bill-1", { tableId: "table-1" }, revisions, packet, {
         signal: abort.signal,
       }),
     ).toEqual(result);
     expect(fetcher.mock.calls[0]![1].signal).toBe(abort.signal);
-    await api.moveBill("bill-1", { tableId: "table-1" }, "merge", revisions, packet);
+    await api.moveBill("bill-1", { tableId: "table-1" }, revisions, packet);
     const expected = {
       to: { tableId: "table-1" },
       partyId: null,

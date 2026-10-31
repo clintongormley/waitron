@@ -904,7 +904,11 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       el.shadowRoot!.querySelector<HTMLElement>('[data-target="t7"]')!.click();
       await el.updateComplete;
       if (sent !== 1) throw new Error("picking the seated table must send at once");
-      if (el.shadowRoot!.querySelector("till-bill-choice-dialog") !== null)
+      if (
+        [...el.shadowRoot!.querySelectorAll("*")].some((node) =>
+          /^till-.+-dialog$/.test(node.localName),
+        )
+      )
         throw new Error("no bill choice may be drawn");
       await expectNoA11yViolations(host);
     });
@@ -925,7 +929,11 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       el.shadowRoot!.querySelector<HTMLElement>('[data-target="t7"]')!.click();
       await el.updateComplete;
       if (sent !== 1) throw new Error("picking the seated table must send at once");
-      if (el.shadowRoot!.querySelector("till-bill-choice-dialog") !== null)
+      if (
+        [...el.shadowRoot!.querySelectorAll("*")].some((node) =>
+          /^till-.+-dialog$/.test(node.localName),
+        )
+      )
         throw new Error("no bill choice may be drawn");
       await expectNoA11yViolations(host);
     });

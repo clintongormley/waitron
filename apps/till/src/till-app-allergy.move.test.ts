@@ -112,7 +112,6 @@ async function counter(
       orderId: "counter-bill",
       tableId: "destination",
       seated: destination.party,
-      bills: "separate",
     });
   return { ...mounted, screen, move };
 }
@@ -177,8 +176,8 @@ describe("A669 counter move refusal recovery", () => {
     await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
     await vi.waitFor(() => expect(dialog(el)).toBeNull(), { timeout: 5000 });
     expect(write).toHaveBeenCalledTimes(2);
-    expect(write.mock.calls[1]![4].submissionId).not.toBe(write.mock.calls[0]![4].submissionId);
-    expect(write.mock.calls[1]![4].allergy).toEqual({
+    expect(write.mock.calls[1]![3].submissionId).not.toBe(write.mock.calls[0]![3].submissionId);
+    expect(write.mock.calls[1]![3].allergy).toEqual({
       party: {
         answer: "allergies",
         guests: [{ id: "guest", who: "Corrected guest", allergens: { milk: {} }, note: "Severe" }],
@@ -276,7 +275,6 @@ describe("A669 counter-to-table allergy confirmation", () => {
     expect(api.previewBillMoveAllergy).toHaveBeenCalledWith(
       "counter-bill",
       { tableId: "destination" },
-      "separate",
       {
         partyId: null,
         otherPartyId: null,
@@ -288,10 +286,9 @@ describe("A669 counter-to-table allergy confirmation", () => {
     );
     await userEvent.click(dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-none]")!);
     await vi.waitFor(() => expect(api.moveBill).toHaveBeenCalledOnce());
-    expect(api.moveBill!.mock.calls[0]!.slice(0, 5)).toEqual([
+    expect(api.moveBill!.mock.calls[0]!.slice(0, 4)).toEqual([
       "counter-bill",
       { tableId: "destination" },
-      "separate",
       {
         partyId: null,
         otherPartyId: null,
@@ -329,7 +326,7 @@ describe("A669 counter-to-table allergy confirmation", () => {
     await userEvent.click(form.shadowRoot!.querySelector<HTMLInputElement>("[data-tick]")!);
     await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
     await vi.waitFor(() => expect(api.moveBill).toHaveBeenCalledOnce());
-    expect(api.moveBill!.mock.calls[0]![4]).toEqual({
+    expect(api.moveBill!.mock.calls[0]![3]).toEqual({
       submissionId: expect.any(String),
       allergy: {
         ticks: [{ line: { kind: "working", id: "arriving-line" }, guestIndex: 0 }],
@@ -347,13 +344,13 @@ describe("A669 counter-to-table allergy confirmation", () => {
     await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
     await vi.waitFor(() => expect(form.refusal).not.toBe(""), { timeout: 5000 });
     expect(write).toHaveBeenCalledTimes(3);
-    const original = structuredClone(write.mock.calls[0]!.slice(0, 5));
-    expect(write.mock.calls.slice(1).map((call) => call.slice(0, 5))).toEqual([original, original]);
+    const original = structuredClone(write.mock.calls[0]!.slice(0, 4));
+    expect(write.mock.calls.slice(1).map((call) => call.slice(0, 4))).toEqual([original, original]);
     expect(form.shadowRoot!.querySelector<HTMLInputElement>("[data-tick]")!.disabled).toBe(true);
     write.mockResolvedValue({ partyId: "v1", billId: "counter-bill" });
     await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
     await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(4));
-    expect(write.mock.calls[3]!.slice(0, 5)).toEqual(original);
+    expect(write.mock.calls[3]!.slice(0, 4)).toEqual(original);
     await vi.waitFor(() => expect(dialog(el)).toBeNull());
   });
 
@@ -376,11 +373,11 @@ describe("A669 counter-to-table allergy confirmation", () => {
     await userEvent.click(form.shadowRoot!.querySelector<HTMLInputElement>("[data-tick]")!);
     await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
     await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(2));
-    expect(write.mock.calls[1]![3]).toMatchObject({
+    expect(write.mock.calls[1]![2]).toMatchObject({
       otherPartyId: "v1",
       expectedOtherPartyRevision: 3,
     });
-    expect(write.mock.calls[1]![4].submissionId).not.toBe(write.mock.calls[0]![4].submissionId);
+    expect(write.mock.calls[1]![3].submissionId).not.toBe(write.mock.calls[0]![3].submissionId);
   });
 
   it("a changed destination during the preview is reread before a separate answer", async () => {
@@ -405,7 +402,7 @@ describe("A669 counter-to-table allergy confirmation", () => {
     move();
     await vi.waitFor(() => expect(api.moveBill).toHaveBeenCalledOnce());
     expect(dialog(el)).toBeNull();
-    expect(api.moveBill!.mock.calls[0]![4]).toEqual({
+    expect(api.moveBill!.mock.calls[0]![3]).toEqual({
       submissionId: expect.any(String),
       allergy: { ticks: [] },
     });
@@ -474,7 +471,7 @@ describe("A669 counter-to-table allergy confirmation", () => {
       expect(form.shadowRoot!.querySelector<HTMLInputElement>("[data-tick]")!.checked).toBe(true);
       await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
       await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(2));
-      expect(write.mock.calls[1]![3]).toEqual({
+      expect(write.mock.calls[1]![2]).toEqual({
         partyId: null,
         otherPartyId: "v1",
         expectedOtherPartyRevision: 4,
@@ -482,10 +479,10 @@ describe("A669 counter-to-table allergy confirmation", () => {
           { billId: "counter-bill", editorVersion: 9, draftId: null, draftRevision: null },
         ],
       });
-      expect(write.mock.calls[1]![4].allergy).toEqual({
+      expect(write.mock.calls[1]![3].allergy).toEqual({
         ticks: [{ line: { kind: "working", id: "arriving-line" }, guestIndex: 0 }],
       });
-      expect(write.mock.calls[1]![4].submissionId).not.toBe(write.mock.calls[0]![4].submissionId);
+      expect(write.mock.calls[1]![3].submissionId).not.toBe(write.mock.calls[0]![3].submissionId);
     },
   );
 
@@ -583,3 +580,38 @@ for (const language of ["en", "es"] as const)
         await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
         await vi.waitFor(() => expect(dialog(el)).toBeNull());
       });
+
+describe("A803 no merge question", () => {
+  it("moving a counter order to a seated table asks the allergy question only, and sends no bills", async () => {
+    const { el } = await counter({}, "allergies");
+    emit(el.shadowRoot!.querySelector("till-counter-screen")!, "move-held-order", {
+      orderId: "counter-bill",
+      tableId: "destination",
+      seated: party(),
+    });
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    const observed = {
+      partyId: null,
+      otherPartyId: "v1",
+      expectedOtherPartyRevision: 3,
+      expectedEdits: [
+        { billId: "counter-bill", editorVersion: 8, draftId: null, draftRevision: null },
+      ],
+    };
+    expect(api.previewBillMoveAllergy).toHaveBeenCalledExactlyOnceWith(
+      "counter-bill",
+      { tableId: "destination" },
+      observed,
+      { signal: expect.any(AbortSignal) },
+    );
+    expect(api.moveBill).not.toHaveBeenCalled();
+    await userEvent.click(dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+    await vi.waitFor(() => expect(api.moveBill).toHaveBeenCalledOnce());
+    expect(api.moveBill!.mock.calls[0]!.slice(0, 3)).toEqual([
+      "counter-bill",
+      { tableId: "destination" },
+      observed,
+    ]);
+    expect(api.moveBill!.mock.calls[0]![3]).toMatchObject({ submissionId: expect.any(String) });
+  });
+});

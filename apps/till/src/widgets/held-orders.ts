@@ -6,22 +6,13 @@ import { baseStyles, inNumberOrder, renderFloorChips } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import { trackDialog } from "./track-dialog.js";
-import {
-  moveBillScope,
-  partyScope,
-  seatedRead,
-  tableTarget,
-  tableTargetStyles,
-  type SeatedRead,
-} from "./table-targets.js";
+import { seatedRead, tableTarget, tableTargetStyles, type SeatedRead } from "./table-targets.js";
 import { billName, paidInPart } from "../state/bill-state.js";
 import { outOfServiceJoined, seatsGuests, shownName } from "../state/floor-today.js";
 import { signalChipStyles, signalChips } from "./signal-chips.js";
-import "./bill-choice-dialog.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
 import { orderCountStyles, orderCounts } from "./order-counts.js";
 import { helpAnchorStyles, helpBadge } from "./help-badge.js";
-import type { BillChoiceDetail } from "./bill-choice-dialog.js";
 import type { FloorZone, HeldOrderSummary, TableState } from "../api/client.js";
 
 export interface MoveHeldOrderDetail {
@@ -29,7 +20,6 @@ export interface MoveHeldOrderDetail {
   tableId: string;
   /** Who the picker showed at the table, which the move sends as read there. */
   seated: SeatedRead;
-  bills: BillChoiceDetail["bills"];
   prompt?: object;
 }
 
@@ -143,8 +133,6 @@ export class TillHeldOrders extends LitElement {
   @property({ attribute: false }) zones: FloorZone[] = [];
 
   @state() private moving: HeldOrderSummary | null = null;
-  /** A table another party holds, waiting for the bill choice. */
-  @state() private choosing: TableState | null = null;
 
   focusMove(orderId: string): void {
     const button = [...this.renderRoot.querySelectorAll<HTMLElement>(".move")].find(
@@ -184,14 +172,12 @@ export class TillHeldOrders extends LitElement {
   #openPicker(order: HeldOrderSummary): void {
     this.#relocationPrompt = null;
     this.moving = order;
-    this.choosing = null;
     this.#emit("move-held-order-open", undefined);
   }
 
   #closePicker(): void {
     this.#relocationPrompt = null;
     this.moving = null;
-    this.choosing = null;
   }
 
   #pick(table: TableState): void {
@@ -201,8 +187,7 @@ export class TillHeldOrders extends LitElement {
     this.#relocationPrompt = prompt;
     const ready = () => {
       if (!this.isConnected || this.moving !== order || this.#relocationPrompt !== prompt) return;
-      if (table.party !== null) this.choosing = table;
-      else this.#send(table, "merge");
+      this.#send(table);
     };
     const event = new CustomEvent<HeldRelocationOpenDetail>("held-relocation-open", {
       detail: { orderId: order.id, table, prompt, ready },
@@ -212,12 +197,11 @@ export class TillHeldOrders extends LitElement {
     });
     if (this.dispatchEvent(event)) {
       this.#relocationPrompt = null;
-      if (table.party !== null) this.choosing = table;
-      else this.#send(table, "merge");
+      this.#send(table);
     }
   }
 
-  #send(table: TableState, bills: BillChoiceDetail["bills"]): void {
+  #send(table: TableState): void {
     const order = this.moving;
     if (order === null) return;
     const prompt = this.#relocationPrompt;
@@ -226,7 +210,6 @@ export class TillHeldOrders extends LitElement {
       orderId: order.id,
       tableId: table.id,
       seated: seatedRead(table),
-      bills,
       ...(prompt === null ? {} : { prompt }),
     } satisfies MoveHeldOrderDetail);
   }
@@ -345,22 +328,6 @@ export class TillHeldOrders extends LitElement {
     </wt-dialog>`;
   }
 
-  #billChoice(order: HeldOrderSummary, table: TableState): TemplateResult {
-    return html`<till-bill-choice-dialog
-      .scope=${moveBillScope(this.#scope(order), partyScope(table.party!, this.tables))}
-      .question=${t("table.bill_move_question")}
-      @bill-choice-confirm=${(event: CustomEvent<BillChoiceDetail>) => {
-        event.stopPropagation();
-        this.#send(table, event.detail.bills);
-      }}
-      @bill-choice-cancel=${(event: Event) => {
-        event.stopPropagation();
-        this.choosing = null;
-        this.#relocationPrompt = null;
-      }}
-    ></till-bill-choice-dialog>`;
-  }
-
   override render() {
     const moving = this.moving;
     return html`
@@ -373,13 +340,7 @@ export class TillHeldOrders extends LitElement {
           ? html`<p class="empty">${t("held.empty")}</p>`
           : this.orders.map((order) => this.#row(order))
       }
-      ${
-        moving === null
-          ? nothing
-          : this.choosing === null
-            ? this.#picker(moving)
-            : this.#billChoice(moving, this.choosing)
-      }
+      ${moving === null ? nothing : this.#picker(moving)}
     `;
   }
 }
