@@ -513,7 +513,7 @@ const seatedAt = (tables: TableState[], ...ids: string[]) =>
             state: "open" as const,
             name: null,
             displayName: "Bar+Counter 3",
-            mainBillId: null,
+            openingBillId: null,
             outstanding: "0.00",
             billCount: 1,
             tableIds: ids,

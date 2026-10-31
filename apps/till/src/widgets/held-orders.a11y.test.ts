@@ -131,7 +131,7 @@ describe.each(["light", "dark"] as const)("till-held-orders a11y (%s theme)", (t
         state: "open",
         name: "Luis",
         displayName: "Luis",
-        mainBillId: "wo-7",
+        openingBillId: "wo-7",
         outstanding: "12.00",
         billCount: 1,
         tableIds: ["t7"],

@@ -87,7 +87,7 @@ const openTable: TableState = {
     state: "open",
     name: null,
     displayName: "2",
-    mainBillId: "wo-7",
+    openingBillId: "wo-7",
     outstanding: "12.00",
     billCount: 1,
     tableIds: ["t2"],
@@ -527,13 +527,13 @@ describe("till-app table ordering: the table's menus", () => {
       ...openTable,
       id: "table-a",
       zoneId: "zone-a",
-      party: { ...openTable.party!, id: "party-a", mainBillId: "order-a" },
+      party: { ...openTable.party!, id: "party-a", openingBillId: "order-a" },
     };
     const tableB = {
       ...openTable,
       id: "table-b",
       zoneId: "zone-b",
-      party: { ...openTable.party!, id: "party-b", mainBillId: "order-b" },
+      party: { ...openTable.party!, id: "party-b", openingBillId: "order-b" },
     };
     let rejectA!: (reason: unknown) => void;
     const listZoneOffers = vi.fn((zoneId: string) =>
@@ -707,7 +707,7 @@ describe("opening a table station move while its station list is pending", () =>
           ownerRevision: openTable.party!.revision,
         },
         id: "v-3",
-        mainBillId: "wo-8",
+        openingBillId: "wo-8",
         tableIds: ["t3"],
       },
     };
@@ -1775,7 +1775,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     await flush(el);
     await flush(el);
 
-    expect(tableOrder(el)!.orderId).toBe(openTable.party!.mainBillId);
+    expect(tableOrder(el)!.orderId).toBe(openTable.party!.openingBillId);
     expect(cancelDialog(el)).toBeNull();
   });
 
@@ -1796,7 +1796,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
           ownerRevision: openTable.party!.revision,
         },
         id: "v-3",
-        mainBillId: "wo-8",
+        openingBillId: "wo-8",
         tableIds: ["t3"],
       },
     };
@@ -2309,7 +2309,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
           ownerRevision: openTable.party!.revision,
         },
         id: "v-3",
-        mainBillId: "wo-8",
+        openingBillId: "wo-8",
         tableIds: ["t3"],
       },
     };
@@ -2507,7 +2507,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
           ownerRevision: openTable.party!.revision,
         },
         id: "v-3",
-        mainBillId: "wo-8",
+        openingBillId: "wo-8",
         tableIds: ["t3"],
       },
     };
@@ -2566,7 +2566,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
           ownerRevision: openTable.party!.revision,
         },
         id: "v-3",
-        mainBillId: "wo-8",
+        openingBillId: "wo-8",
         tableIds: ["t3"],
       },
     };
@@ -2616,7 +2616,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
           ownerRevision: openTable.party!.revision,
         },
         id: "v-3",
-        mainBillId: "wo-8",
+        openingBillId: "wo-8",
         tableIds: ["t3"],
       },
     };
@@ -3230,10 +3230,10 @@ describe("A803 action results: the bill on screen after a table action", () => {
     const { el } = await mountApp({
       getTablesState: vi.fn(async () =>
         floorAfter
-          ? [seated(t9, { id: "v-9", revision: 5, mainBillId: null, tableIds: ["t9"] })]
+          ? [seated(t9, { id: "v-9", revision: 5, openingBillId: null, tableIds: ["t9"] })]
           : [
               openTable,
-              seated(t9, { id: "v-9", revision: 4, mainBillId: "wo-8", tableIds: ["t9"] }),
+              seated(t9, { id: "v-9", revision: 4, openingBillId: "wo-8", tableIds: ["t9"] }),
             ],
       ),
       getPartyBills: vi.fn(async (partyId: string) =>
@@ -3267,12 +3267,12 @@ describe("A803 action results: the bill on screen after a table action", () => {
       getTablesState: vi.fn(async () =>
         floorAfter
           ? [
-              seated(openTable, { revision: 4, mainBillId: null, tableIds: ["t2", "t9"] }),
-              seated(t9, { revision: 4, mainBillId: null, tableIds: ["t2", "t9"] }),
+              seated(openTable, { revision: 4, openingBillId: null, tableIds: ["t2", "t9"] }),
+              seated(t9, { revision: 4, openingBillId: null, tableIds: ["t2", "t9"] }),
             ]
           : [
               openTable,
-              seated(t9, { id: "v-9", revision: 4, mainBillId: "wo-8", tableIds: ["t9"] }),
+              seated(t9, { id: "v-9", revision: 4, openingBillId: "wo-8", tableIds: ["t9"] }),
             ],
       ),
       getPartyBills: vi.fn(async () =>
@@ -3301,13 +3301,13 @@ describe("A803 action results: the bill on screen after a table action", () => {
   it("Split a table giving away the bill on screen shows the staying party's lowest-numbered owing bill, and the next draft names it", async () => {
     let floorAfter = false;
     const t3 = { id: "t3", label: "3" };
-    const before = { revision: 3, mainBillId: "wo-8", tableIds: ["t2", "t3"] };
+    const before = { revision: 3, openingBillId: "wo-8", tableIds: ["t2", "t3"] };
     const { el } = await mountApp({
       getTablesState: vi.fn(async () =>
         floorAfter
           ? [
-              seated(openTable, { revision: 4, mainBillId: null, tableIds: ["t2"] }),
-              seated(t3, { id: "v-new", revision: 0, mainBillId: null, tableIds: ["t3"] }),
+              seated(openTable, { revision: 4, openingBillId: null, tableIds: ["t2"] }),
+              seated(t3, { id: "v-new", revision: 0, openingBillId: null, tableIds: ["t3"] }),
             ]
           : [seated(openTable, before), seated(t3, before)],
       ),

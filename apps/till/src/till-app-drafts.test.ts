@@ -156,7 +156,7 @@ function party(over: Partial<TableParty> = {}): TableParty {
     state: "open",
     name: null,
     displayName: "4",
-    mainBillId: "wo-4",
+    openingBillId: "wo-4",
     outstanding: "0.00",
     billCount: 1,
     tableIds: ["t4"],
@@ -190,7 +190,7 @@ const table4 = table("t4", "4", party());
 const table7 = table(
   "t7",
   "7",
-  party({ id: "v7", revision: 9, mainBillId: "wo-7", tableIds: ["t7"] }),
+  party({ id: "v7", revision: 9, openingBillId: "wo-7", tableIds: ["t7"] }),
 );
 
 const drillFormFactor: FormFactor = "till";
@@ -465,7 +465,7 @@ describe("W69 unassigned table draft", () => {
       seatTable: vi.fn(async () => {
         api.getTablesState.mockResolvedValue([
           table4,
-          table("t9", "9", party({ id: "v-new", mainBillId: "wo-new", tableIds: ["t9"] })),
+          table("t9", "9", party({ id: "v-new", openingBillId: "wo-new", tableIds: ["t9"] })),
         ]);
         return { partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 };
       }),
@@ -503,7 +503,7 @@ describe("W69 unassigned table draft", () => {
           table(
             "t9",
             "9",
-            party({ id: "v-new", mainBillId: "wo-new", revision: 0, tableIds: ["t9"] }),
+            party({ id: "v-new", openingBillId: "wo-new", revision: 0, tableIds: ["t9"] }),
           ),
         ]);
         return { partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 };
@@ -9725,7 +9725,7 @@ describe("A773 retained bill candidates in the app", () => {
     emit(tableOrder(el)!, "logout");
     await flush(el, 6);
     api.getTablesState.mockResolvedValue([
-      table("t4", "4", party({ id: "joined", mainBillId: "wo-4" })),
+      table("t4", "4", party({ id: "joined", openingBillId: "wo-4" })),
       table7,
     ]);
     await reopen(el, "p1", "Ana");

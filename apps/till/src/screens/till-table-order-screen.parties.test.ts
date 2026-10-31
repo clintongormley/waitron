@@ -17,7 +17,7 @@ const party: TableParty = {
   state: "open",
   name: "Ana",
   displayName: "Ana",
-  mainBillId: "wo-check",
+  openingBillId: "wo-check",
   outstanding: "30.00",
   billCount: 2,
   tableIds: ["t4"],
@@ -191,7 +191,7 @@ describe("till-table-order-screen: the party's bills", () => {
   });
 
   it("marks no bill when the party has no main bill until its next order", async () => {
-    const el = await mountScreen({ party: { ...party, mainBillId: null } });
+    const el = await mountScreen({ party: { ...party, openingBillId: null } });
 
     expect(bills(el).querySelector("[data-bill-main]")).toBeNull();
   });

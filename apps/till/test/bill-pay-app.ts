@@ -79,7 +79,7 @@ export function partyOf(over: Partial<TableParty> = {}): TableParty {
     state: "open",
     name: null,
     displayName: "4",
-    mainBillId: "wo-4",
+    openingBillId: "wo-4",
     outstanding: "120.00",
     billCount: 1,
     tableIds: ["t4"],

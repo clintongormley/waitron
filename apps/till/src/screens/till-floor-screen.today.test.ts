@@ -572,7 +572,7 @@ describe("till-floor-screen: today's names", () => {
     state: "open",
     name: null,
     displayName,
-    mainBillId: null,
+    openingBillId: null,
     outstanding: "10.00",
     billCount: 1,
     tableIds,

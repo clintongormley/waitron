@@ -453,7 +453,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
     state: "open",
     name: "Luis",
     displayName: "Luis",
-    mainBillId: "wo-7",
+    openingBillId: "wo-7",
     outstanding: "12.00",
     billCount: 1,
     tableIds: ["t7"],

@@ -125,7 +125,7 @@ it.each(["fired", "served"] as const)(
         state: "open",
         name: null,
         displayName: "4",
-        mainBillId: "wo-4",
+        openingBillId: "wo-4",
         outstanding: "8.00",
         billCount: 1,
         tableIds: ["t4"],

@@ -57,7 +57,7 @@ function party(id: string, tableIds: string[]): TableParty {
     state: "open",
     name: null,
     displayName: tableIds.join("+"),
-    mainBillId: null,
+    openingBillId: null,
     outstanding: "0.00",
     billCount: 1,
     tableIds,

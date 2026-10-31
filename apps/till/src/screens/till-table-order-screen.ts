@@ -4974,7 +4974,7 @@ export class TillTableOrderScreen extends LitElement {
     const party = this.party;
     if (party === null) return [];
     return this.#shownBills().flatMap((bill) =>
-      bill.partyId === party.id && bill.workingOrderId !== party.mainBillId && owing(bill)
+      bill.partyId === party.id && bill.workingOrderId !== party.openingBillId && owing(bill)
         ? [{ bill, name: this.#billName(bill) }]
         : [],
     );

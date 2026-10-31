@@ -157,7 +157,7 @@ function party(over: Partial<TableParty> = {}): TableParty {
     state: "open",
     name: null,
     displayName: "4",
-    mainBillId: "wo-4",
+    openingBillId: "wo-4",
     outstanding: "0.00",
     billCount: 1,
     tableIds: ["t4"],
@@ -191,11 +191,11 @@ const table4 = table("t4", "4", party());
 const table7 = table(
   "t7",
   "7",
-  party({ id: "v7", revision: 9, mainBillId: "wo-7", tableIds: ["t7"] }),
+  party({ id: "v7", revision: 9, openingBillId: "wo-7", tableIds: ["t7"] }),
 );
 
 const table9 = {
-  ...table("t9", "9", party({ id: "v9", mainBillId: "wo-9", tableIds: ["t9"] })),
+  ...table("t9", "9", party({ id: "v9", openingBillId: "wo-9", tableIds: ["t9"] })),
   zoneId: "z2",
 };
 
@@ -1216,7 +1216,7 @@ describe("A768 the left draft saves in the background", () => {
     const { el } = await mountApp({
       getTablesState: vi
         .fn()
-        .mockResolvedValue([table("t4", "4", party({ mainBillId: null })), table7, table9]),
+        .mockResolvedValue([table("t4", "4", party({ openingBillId: null })), table7, table9]),
       getPartyBills: vi.fn().mockResolvedValue(bills),
       saveDraft: vi.fn(async (...args: Parameters<DraftServer["saveDraft"]>) => {
         savedBy.push(server.personId);
@@ -1277,7 +1277,7 @@ describe("A768 the left draft saves in the background", () => {
     const seated = table(
       "t9",
       "9",
-      party({ id: "v-new", revision: 0, mainBillId: "wo-new", tableIds: ["t9"] }),
+      party({ id: "v-new", revision: 0, openingBillId: "wo-new", tableIds: ["t9"] }),
     );
     let answer!: () => void;
     const held = new Promise<void>((resolve) => (answer = resolve));
@@ -1881,7 +1881,7 @@ describe("A768 the order screen shows at once", () => {
     const seated = table(
       "t9",
       "9",
-      party({ id: "v-new", revision: 0, mainBillId: "wo-new", tableIds: ["t9"] }),
+      party({ id: "v-new", revision: 0, openingBillId: "wo-new", tableIds: ["t9"] }),
     );
     const seat = deferred<void>();
     const { el } = await mountApp({
@@ -1917,7 +1917,7 @@ describe("A768 the order screen shows at once", () => {
     const seated = table(
       "t9",
       "9",
-      party({ id: "v-new", revision: 0, mainBillId: "wo-new", tableIds: ["t9"] }),
+      party({ id: "v-new", revision: 0, openingBillId: "wo-new", tableIds: ["t9"] }),
     );
     const { el } = await mountApp({
       getTablesState: vi.fn().mockResolvedValue([table4, table7, free]),
@@ -1950,7 +1950,7 @@ describe("A768 the order screen shows at once", () => {
     const seated = table(
       "t9",
       "9",
-      party({ id: "v-new", revision: 0, mainBillId: "wo-new", tableIds: ["t9"] }),
+      party({ id: "v-new", revision: 0, openingBillId: "wo-new", tableIds: ["t9"] }),
     );
     const { el } = await mountApp({
       getTablesState: vi.fn().mockResolvedValue([table4, table7, free]),

@@ -995,7 +995,7 @@ const party = {
   revision: 1,
   guestCount: 2,
   state: "open" as const,
-  mainBillId: "wo-7",
+  openingBillId: "wo-7",
   outstanding: "3.00",
   billCount: 1,
   tableIds: ["t2"],
@@ -1566,7 +1566,7 @@ const tableB = {
       ownerRevision: party.revision,
     },
     id: "party-c",
-    mainBillId: "wo-8",
+    openingBillId: "wo-8",
     tableIds: ["t3"],
   },
 };
@@ -1872,7 +1872,7 @@ describe("a round that got no answer while the party moved on to its next tab", 
     );
     await toTable(el);
     api.getTablesState.mockResolvedValue([
-      { ...seated, party: { ...party, revision: 2, mainBillId: "wo-next" } },
+      { ...seated, party: { ...party, revision: 2, openingBillId: "wo-next" } },
     ]);
     const round = roundStore(el);
     await sendLemonadeRound(el);
@@ -1902,7 +1902,7 @@ describe("a round that got no answer while the party moved on to its next tab", 
     await toTable(el);
     // Another till settled and cleared the party, and seated a new one at the same table.
     api.getTablesState.mockResolvedValue([
-      { ...seated, party: { ...party, id: "party-b", mainBillId: "wo-other" } },
+      { ...seated, party: { ...party, id: "party-b", openingBillId: "wo-other" } },
     ]);
     await sendLemonadeRound(el);
     // Two pauses between the three tries run on real time; wait for the message they end in.
@@ -1934,7 +1934,7 @@ describe("a round that got no answer while the party moved on to its next tab", 
     emit(tableScreen(el), "merge-bills", { fromBillId: "wo-9" });
     await flush(el);
     api.getTablesState.mockResolvedValue([
-      { ...seated, party: { ...party, id: "party-b", mainBillId: "wo-other" } },
+      { ...seated, party: { ...party, id: "party-b", openingBillId: "wo-other" } },
     ]);
     const floorReads = api.getTablesState.mock.calls.length;
     await sendLemonadeRound(el);
@@ -1968,7 +1968,7 @@ describe("a round that got no answer while the party moved on to its next tab", 
     expect(shownTab(el)).toBe("wo-8");
 
     api.getTablesState.mockResolvedValue([
-      { ...seated, party: { ...party, revision: 2, mainBillId: "wo-next" } },
+      { ...seated, party: { ...party, revision: 2, openingBillId: "wo-next" } },
       tableB,
     ]);
     fail(new TypeError("offline"));
@@ -2076,7 +2076,7 @@ describe("a round that got no answer while its tab moved to another table", () =
       ...party,
       kitchenNote: { scope: { partyId: party.id }, note: null, revision: 0, ownerRevision: 2 },
       revision: 2,
-      mainBillId: "wo-other",
+      openingBillId: "wo-other",
       tableIds: ["t2", "t4"],
     };
     api.getTablesState.mockResolvedValue([

@@ -130,7 +130,7 @@ export function party(over: Partial<TableParty> = {}): TableParty {
     state: "open",
     name: null,
     displayName: "4",
-    mainBillId: "wo-4",
+    openingBillId: "wo-4",
     outstanding: "0.00",
     billCount: 1,
     tableIds: ["t4"],
@@ -164,7 +164,7 @@ export const table4 = table("t4", "4", party());
 export const table7 = table(
   "t7",
   "7",
-  party({ id: "v7", revision: 9, mainBillId: "wo-7", tableIds: ["t7"] }),
+  party({ id: "v7", revision: 9, openingBillId: "wo-7", tableIds: ["t7"] }),
 );
 
 export const drillFormFactor: FormFactor = "till";

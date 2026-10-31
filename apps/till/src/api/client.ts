@@ -2106,8 +2106,11 @@ export interface TableParty {
   name: string | null;
   /** `name`, or else the party's tables' shown names. */
   displayName: string;
-  /** The bill an order that names none goes on; null until the party's next order makes one. */
-  mainBillId: string | null;
+  /**
+   * The bill a table opens on: the lowest-numbered bill still owing, else the highest-numbered shown
+   * bill, else null. A read for opening the screen only.
+   */
+  openingBillId: string | null;
   outstanding: string;
   billCount: number;
   tableIds: string[];

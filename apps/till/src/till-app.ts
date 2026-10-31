@@ -10999,7 +10999,7 @@ export class TillApp extends LitElement {
       this.reprintSent = [];
       if (guestCount === undefined) {
         this.orderParty = table?.party ?? null;
-        const main = this.orderParty?.mainBillId ?? null;
+        const main = this.orderParty?.openingBillId ?? null;
         const billsRead = main === null && this.orderParty !== null;
         this.activeTabId = main ?? undefined;
         if (billsRead) {
@@ -11042,7 +11042,7 @@ export class TillApp extends LitElement {
             state: "open",
             name: null,
             displayName: table === undefined ? "" : shownUnder(table),
-            mainBillId: tabId,
+            openingBillId: tabId,
             outstanding: "0.00",
             billCount: 1,
             tableIds: seatedTables(this.tables, [tableId, ...(withTableIds ?? [])]),
@@ -12079,7 +12079,7 @@ export class TillApp extends LitElement {
       await this.#retakePartyFromFloor();
       if (!live()) return;
       const now = this.tables.find((row) => row.id === tableId)?.party;
-      const landed = billId ?? now?.mainBillId ?? null;
+      const landed = billId ?? now?.openingBillId ?? null;
       if (landed !== null && now?.id === partyId && onSentTable()) this.#followDraft(tabId, landed);
     } else if (typeof followUp === "object" && this.activeTabId === tabId) {
       await this.#reloadTables();
@@ -14895,7 +14895,7 @@ export class TillApp extends LitElement {
    * its bills, else {@link billToOpen}'s; none when the party has no bill left, or its bills could
    * not be read and it has no other main bill. */
   #billAfterMove(moved: string, read: PartyBill[] | null): string | undefined {
-    const main = this.orderParty?.mainBillId ?? undefined;
+    const main = this.orderParty?.openingBillId ?? undefined;
     if (read === null) return main === moved ? undefined : main;
     const left = read.filter((bill) => bill.workingOrderId !== moved);
     if (left.some((bill) => bill.workingOrderId === main)) return main;

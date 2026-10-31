@@ -134,7 +134,7 @@ function party(over: Partial<TableParty> = {}): TableParty {
     state: "open",
     name: null,
     displayName: "T4",
-    mainBillId: "wo-4",
+    openingBillId: "wo-4",
     outstanding: "0.00",
     billCount: 1,
     tableIds: ["t4"],
@@ -184,7 +184,7 @@ const table4 = table("t4", "T4", party());
 const table9 = table(
   "t9",
   "T9",
-  party({ id: "v9", revision: 9, displayName: "T9", mainBillId: "wo-9", tableIds: ["t9"] }),
+  party({ id: "v9", revision: 9, displayName: "T9", openingBillId: "wo-9", tableIds: ["t9"] }),
 );
 /** The floor read with a New order of `ownerId`'s saved on T4's bill. */
 const table4With = (ownerId: string) =>
@@ -196,7 +196,7 @@ const table9WithAnas = table(
     id: "v9",
     revision: 9,
     displayName: "T9",
-    mainBillId: "wo-9",
+    openingBillId: "wo-9",
     tableIds: ["t9"],
     unsentDrafts: [unsent("wo-9", "p1")],
   }),
@@ -702,7 +702,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     await openTable(el);
     const since = party({
       id: "v-new",
-      mainBillId: "wo-new",
+      openingBillId: "wo-new",
       unsentDrafts: [unsent("wo-new", "p1")],
     });
     api.getTablesState!.mockResolvedValue([table("t4", "T4", since)]);
@@ -716,7 +716,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     await openTable(el);
     const since = party({
       id: "v-new",
-      mainBillId: "wo-new",
+      openingBillId: "wo-new",
       unsentDrafts: [unsent("wo-new", "p1")],
     });
     api.getTablesState!.mockResolvedValue([table("t4", "T4", since)]);
@@ -734,7 +734,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     await openTable(el);
     await tap(el, "Beer");
     expect(bar(el)).toEqual(["Floor", "[✎ T4]"]);
-    const since = party({ id: "v-new", mainBillId: "wo-new", unsentDrafts: [] });
+    const since = party({ id: "v-new", openingBillId: "wo-new", unsentDrafts: [] });
     api.getTablesState!.mockResolvedValue([table("t4", "T4", since)]);
     await toFloor(el);
     expect(floor(el)?.tables[0]?.party?.id).toBe("v-new");

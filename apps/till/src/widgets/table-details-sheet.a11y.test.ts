@@ -53,7 +53,7 @@ const everything = table({
     state: "open",
     name: "Ana",
     displayName: "Ana",
-    mainBillId: null,
+    openingBillId: null,
     outstanding: "47.50",
     billCount: 2,
     tableIds: ["t1"],

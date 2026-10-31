@@ -98,7 +98,7 @@ function party(over: Partial<TableParty> = {}): TableParty {
     state: "open",
     name: null,
     displayName: "4",
-    mainBillId: "wo-4",
+    openingBillId: "wo-4",
     outstanding: "44.00",
     billCount: 1,
     tableIds: ["t4"],
@@ -123,7 +123,7 @@ function seated(over: Partial<TableState> = {}, partyOver: Partial<TableParty> =
 const table4 = seated();
 const table7 = seated(
   { id: "t7", label: "7" },
-  { id: "v7", revision: 9, mainBillId: "wo-7", tableIds: ["t7"] },
+  { id: "v7", revision: 9, openingBillId: "wo-7", tableIds: ["t7"] },
 );
 const table9 = table({ id: "t9", label: "9" });
 
@@ -520,7 +520,7 @@ describe("till-app: seating a party", () => {
   it("taps a free table, takes a guest count of 3 and opens the new party's tab", async () => {
     const seatedMesa9 = seated(
       { id: "t9", label: "9", tabLineCount: 0, tabTotal: "0.00" },
-      { id: "v-new", revision: 0, mainBillId: "wo-new", outstanding: "0.00", tableIds: ["t9"] },
+      { id: "v-new", revision: 0, openingBillId: "wo-new", outstanding: "0.00", tableIds: ["t9"] },
     );
     const getTablesState = vi
       .fn()
@@ -1739,7 +1739,7 @@ describe("till-app: the party on a handheld", () => {
       const { call, answer } = held();
       const table9Seated = seated(
         { id: "t9", label: "9" },
-        { id: "v9", revision: 1, mainBillId: "wo-9", tableIds: ["t9"] },
+        { id: "v9", revision: 1, openingBillId: "wo-9", tableIds: ["t9"] },
       );
       let moved = false;
       const { el } = await mountApp({
@@ -1771,7 +1771,7 @@ describe("till-app: the party on a handheld", () => {
       const { call, answer } = held();
       const table9Seated = seated(
         { id: "t9", label: "9" },
-        { id: "v9", revision: 1, mainBillId: "wo-9", tableIds: ["t9"] },
+        { id: "v9", revision: 1, openingBillId: "wo-9", tableIds: ["t9"] },
       );
       const joinedAtFour = seated({}, { revision: 4, tableIds: ["t4", "t9"] });
       const joinedAtNine = seated(
@@ -1827,7 +1827,7 @@ describe("till-app: the party on a handheld", () => {
         ...onPhone(),
         getTablesState: vi.fn(async () =>
           split
-            ? [seated({}, { revision: 4, mainBillId: null, tableIds: ["t4"] }), table7]
+            ? [seated({}, { revision: 4, openingBillId: null, tableIds: ["t4"] }), table7]
             : [atTwo, table5, table7],
         ),
         getPartyBills: vi.fn(() => {
@@ -2119,7 +2119,7 @@ describe("till-app: table actions on the party", () => {
   it("sends the other party's id and revision when the guests move to a seated table, follows them into it, and keeps the bill on screen", async () => {
     const combined = seated(
       { id: "t7", label: "7" },
-      { id: "v7", revision: 10, mainBillId: "wo-7", tableIds: ["t7"] },
+      { id: "v7", revision: 10, openingBillId: "wo-7", tableIds: ["t7"] },
     );
     const reads = floorThat([table4, table7, table9], [table(), combined, table9]);
     const { el } = await mountApp({
@@ -2154,7 +2154,7 @@ describe("till-app: table actions on the party", () => {
   it("opens the lowest-numbered unpaid bill of the party the guests moved into, past its paid Bill 1, when its answer no longer lists the bill on screen", async () => {
     const combined = seated(
       { id: "t7", label: "7" },
-      { id: "v7", revision: 10, mainBillId: null, tableIds: ["t7"] },
+      { id: "v7", revision: 10, openingBillId: null, tableIds: ["t7"] },
     );
     const reads = floorThat([table4, table7, table9], [table(), combined, table9]);
     const luisBill: PartyBill = { ...checkBill, workingOrderId: "wo-luis", partyId: "v7" };
@@ -3306,7 +3306,7 @@ describe("till-app: the party's guest count", () => {
 describe("till-app: a table action's answer once the waiter has opened another party", () => {
   const table9Seated = seated(
     { id: "t9", label: "9" },
-    { id: "v9", revision: 1, mainBillId: "wo-9", tableIds: ["t9"] },
+    { id: "v9", revision: 1, openingBillId: "wo-9", tableIds: ["t9"] },
   );
   const bill7: PartyBill = { ...tabBill, workingOrderId: "wo-7", partyId: "v7" };
 
@@ -3606,7 +3606,7 @@ describe("till-app: a table action's answer once the waiter has opened another p
 
   const table9SeatedNew = seated(
     { id: "t9", label: "9" },
-    { id: "v-new", revision: 0, mainBillId: "wo-new", tableIds: ["t9"], displayName: "9" },
+    { id: "v-new", revision: 0, openingBillId: "wo-new", tableIds: ["t9"], displayName: "9" },
   );
 
   async function signOutAndInAgain(el: TillApp): Promise<void> {
@@ -3728,7 +3728,7 @@ describe("till-app: a table action's answer once the waiter has opened another p
     const { el } = await mountApp({
       getTablesState: vi.fn(async () =>
         split
-          ? [seated({}, { revision: 4, mainBillId: null, tableIds: ["t4"] }), table7]
+          ? [seated({}, { revision: 4, openingBillId: null, tableIds: ["t4"] }), table7]
           : [atTwo, table5, table7],
       ),
       getPartyBills: vi.fn((partyId: string) => {
@@ -4075,7 +4075,7 @@ describe("till-app: moving a bill", () => {
   it("sends the party the waiter picked, though the floor read since seats another there", async () => {
     const pedro = seated(
       { id: "t7", label: "7" },
-      { id: "v8", revision: 2, mainBillId: "wo-8", tableIds: ["t7"] },
+      { id: "v8", revision: 2, openingBillId: "wo-8", tableIds: ["t7"] },
     );
     const { el } = await mountApp({
       getTablesState: vi.fn().mockResolvedValue([table4, pedro, table9]),
@@ -4442,7 +4442,9 @@ describe("till-app: paying a bill by its state", () => {
 describe("till-app: opening a seated table", () => {
   it("opens the party's main bill", async () => {
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([seated({}, { mainBillId: "wo-check" }), table9]),
+      getTablesState: vi
+        .fn()
+        .mockResolvedValue([seated({}, { openingBillId: "wo-check" }), table9]),
     });
 
     const order = await openMesa(el);
@@ -4458,7 +4460,7 @@ describe("till-app: opening a seated table", () => {
       outstanding: "0.00",
     };
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([seated({}, { mainBillId: null }), table9]),
+      getTablesState: vi.fn().mockResolvedValue([seated({}, { openingBillId: null }), table9]),
       getPartyBills: vi.fn().mockResolvedValue([paid, checkBill]),
     });
 
@@ -4483,7 +4485,7 @@ describe("till-app: opening a seated table", () => {
       outstanding: "0.00",
     };
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([seated({}, { mainBillId: null }), table9]),
+      getTablesState: vi.fn().mockResolvedValue([seated({}, { openingBillId: null }), table9]),
       getPartyBills: vi.fn().mockResolvedValue([first, last]),
     });
 
@@ -4805,7 +4807,7 @@ describe("till-app: every table move sends the party revision it last read", () 
     drafts.bills.add("wo-paid");
     const paid = seated(
       { hasOpenTab: false, tabLineCount: undefined, tabTotal: undefined },
-      { outstanding: "0.00", mainBillId: null },
+      { outstanding: "0.00", openingBillId: null },
     );
     const { el } = await mountApp({
       getTablesState: vi.fn().mockResolvedValue([paid, table9]),
@@ -5319,7 +5321,7 @@ describe("till-app: another device changed the table first", () => {
         table4,
         seated(
           { id: "t7", label: "7" },
-          { id: "v7", revision: 10, mainBillId: "wo-7", tableIds: ["t7"] },
+          { id: "v7", revision: 10, openingBillId: "wo-7", tableIds: ["t7"] },
         ),
       ],
     );
@@ -7363,7 +7365,7 @@ describe("till-app: submitting the draft", () => {
     const partyOnNextBill = () =>
       vi
         .mocked(api.getTablesState)
-        .mockResolvedValue([seated({}, { revision: 4, mainBillId: "wo-next" }), table7, table9]);
+        .mockResolvedValue([seated({}, { revision: 4, openingBillId: "wo-next" }), table7, table9]);
     const courseOf = async (order: TillTableOrderScreen, index: number) => {
       const form = await openDraftLine(order, index);
       const value = form.shadowRoot!.querySelector<WtCombobox>('[name="course"]')!.value;

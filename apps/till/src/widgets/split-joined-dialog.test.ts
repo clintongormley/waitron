@@ -56,7 +56,7 @@ const party: TableParty = {
   state: "open",
   name: null,
   displayName: "Long table",
-  mainBillId: null,
+  openingBillId: null,
   outstanding: "0.00",
   billCount: 1,
   tableIds: ["long"],

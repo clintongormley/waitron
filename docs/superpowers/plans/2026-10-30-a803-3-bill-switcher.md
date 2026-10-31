@@ -767,7 +767,7 @@ task's red run; a red assertion not on this list that is not kind B/R/W/S/F unde
 | Task 8b: `held-orders.a11y.test.ts:169` (axe over the bill choice) | B | axe after picking the seated table, which must have sent once and drawn no `till-*-dialog`; both themes as before | §3.4 bullet 2 | 8b |
 | Task 8b: `till-app.test.ts:17429` ("counter relocation keeps the destination observations shown before native confirmation") | B | no confirmation: "… sends at once the destination observations read when the table is picked"; the same `listDrafts("v7")` and `moveBill` argument checks minus `bills`; the change of the drafts read while the choice was open goes with the choice | §3.4 bullet 2 | 8b |
 | Task 8b: `bill-choice-dialog.test.ts` (6 cases) and `bill-choice-dialog.a11y.test.ts` (2 cases × 2 themes) | R, Q5 item 6b | deleted with the widget (the row above) | §3.4 bullet 2 | 8b |
-| 73 till files' `mainBillId:` lines (fixtures, helpers, three app reads) | F | renamed `openingBillId:` with the same value, mechanically; no assertion changes | D7 | 8c |
+| As built at Task 8c (base `2e285151d`): every `mainBillId` in `apps/till` — 163 lines in 72 files (`rg -c mainBillId apps/till` before), 66 of them test files: fixture and helper keys `mainBillId:`, and the reads `party.mainBillId` in `till-app-kitchen-note.test.ts:933-934`, `till-app-device-zones.test.ts` (12 sites, `:1419`-`:2199`) and `till-app-table-service.test.ts:1778` (an `expect(...).toBe(openTable.party!.mainBillId)`, whose expected value is the same field of the same fixture) | F | `\bmainBillId\b` → `openingBillId` by one `perl -pi` over `rg -l mainBillId apps/till`, same values; no assertion's matcher or expected value changed. Prettier re-wrapped two lines the longer name pushed past the width: `till-app-device-zones.test.ts:1524` (`draftServer(() => ({ tabId: … }))` now on five lines, `:1524-1528`) and `till-app-parties.test.ts:4444` (`getTablesState: vi.fn().mockResolvedValue([...])` now on three lines, `:4445-4447`) | D7 | 8c |
 | `till-table-order-screen.test.ts:713` ("Table actions" trigger inside the drawer), `:4231` (verb buttons in the menu), `:6704` (Back in the panel) | R | the ⋮ holds the same items; Back returns to `closed` (no `menu` step) | amendment 3 | 10 |
 | `till-table-order-screen.parties.test.ts:128-239` (bills list rows, Take payment), `:184-197` (no New orders tag) | R, B | rows → switcher rows; Receipt copy and Cancel and credit → ⋮ bill section for the bill on screen; Take payment → switching; the no-tag checks stay (the switcher draws no tag) | spec §3.5, amendment 2 | 9 (rows), 11a (re-point) |
 | Every `data-open-drawer` site (105 in 37 files) | R | opens the ⋮ or the switcher, or reads the foot, whichever now holds what the case checks; a11y cases run axe on the ⋮ and switcher open instead of the drawer | spec §3.5 "The Tab button and its side panel go" | 11a (screen files), 11b (app files, helpers), 11c (sites that read the still-to-pay row, the finish refusal or the badge) |
@@ -1698,13 +1698,24 @@ helper with `mainBillId:` (`test/bill-pay-app.ts:82`, `test/allergy-app-fixture.
 renamed by a script: `mainBillId:` → `openingBillId:` with the same value; no other change.
 Behaviour is unchanged in this task; Task 8d changes what the app does with the field (review-1 I6).
 
-- [ ] Before: `rg -c mainBillId apps/till` (record the count).
-- [ ] Rename (type, three reads, then the script over `rg -l mainBillId apps/till`).
-- [ ] GREEN: till typecheck clean; `git diff --name-only HEAD -- apps/till | /usr/bin/grep '\.test\.ts$' | sed 's#apps/till/##' | xargs pnpm --filter @waitron/till exec vitest run`
+- [x] Before: `rg -c mainBillId apps/till` (record the count). As built: 163 lines in 72 files.
+- [x] Rename (type, three reads, then the script over `rg -l mainBillId apps/till`). As built: the
+      type and its doc comment by hand; then one script, `\bmainBillId\b` → `openingBillId`, over
+      every file `rg` listed, which also took the four app sites (`till-app.ts:11002`, `:11045`,
+      `:12082`, `:14898`), the screen's `till-table-order-screen.ts:4977` and the tests' `.mainBillId`
+      reads, not only `mainBillId:` keys (the typecheck needs every read renamed).
+- [x] GREEN: till typecheck clean; `git diff --name-only HEAD -- apps/till | /usr/bin/grep '\.test\.ts$' | sed 's#apps/till/##' | xargs pnpm --filter @waitron/till exec vitest run`
       green; `rg -n mainBillId apps/till` prints nothing; `git diff HEAD -- apps/till | /usr/bin/grep '^[-+]' | /usr/bin/grep -v -e mainBillId -e openingBillId -e '^+++' -e '^---'`
       prints nothing (a rename only), apart from lines `pnpm exec prettier --write` re-wrapped
       because the new name is two characters longer — list those in the ledger.
-- [ ] Commit: "Till: the floor names the bill a table opens on".
+      As built: typecheck exit 0; the 66 changed test files ran together, `Tests  1 failed | 5094
+      passed (5095)`, the one failure `till-app-drafts.test.ts:8408` ("keeps the source and pending
+      edit when the save before a split fails": `locator.click` timed out, the split button
+      "detached from the DOM, retrying"), a case that names no `openingBillId`; that file alone then
+      ran `Tests  432 passed (432)`. `rg -n mainBillId apps/till` printed nothing; the diff filter
+      printed only the type's doc comment and the two re-wraps in the Changed test checks row for 8c;
+      `prettier --check` and `eslint` on the changed files exit 0.
+- [x] Commit: "Till: the floor names the bill a table opens on".
 
 ## Task 8d: the till opens and follows bills without a main bill, and never shows a vanished bill (≈65 calls)
 

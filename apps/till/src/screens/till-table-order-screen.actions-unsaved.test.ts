@@ -15,7 +15,7 @@ const party: TableParty = {
   state: "open",
   name: "Ana",
   displayName: "Ana",
-  mainBillId: "main",
+  openingBillId: "main",
   outstanding: "12.00",
   billCount: 2,
   tableIds: ["t1", "t2"],

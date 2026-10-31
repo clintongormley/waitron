@@ -595,7 +595,7 @@ describe("live device zones", () => {
         revision: 1,
         guestCount: 2,
         state: "open",
-        mainBillId: "bill",
+        openingBillId: "bill",
         outstanding: "0.00",
         billCount: 1,
         tableIds: ["table"],
@@ -1183,7 +1183,7 @@ describe("a handheld's zones", () => {
       revision: 1,
       guestCount: 2,
       state: "open",
-      mainBillId: `bill-${id}`,
+      openingBillId: `bill-${id}`,
       outstanding: "0.00",
       billCount: 1,
       tableIds: [id],
@@ -1416,17 +1416,17 @@ describe("a handheld's zones", () => {
   ) {
     const table = tableIn(`table-${zoneId}`, zoneId);
     const drafts = draftServer(() => ({
-      tabId: table.party.mainBillId,
+      tabId: table.party.openingBillId,
       revision: 1,
       groups: [],
     }));
-    drafts.bills.add(table.party.mainBillId);
+    drafts.bills.add(table.party.openingBillId);
     if (seeded === "unavailable") drafts.unavailable.add("coffee-offer");
     if (seeded)
       drafts.drafts.push({
         id: "draft-ana",
         partyId: table.party.id,
-        billId: table.party.mainBillId,
+        billId: table.party.openingBillId,
         ownerId: "person",
         ownerName: "Ana",
         revision: 1,
@@ -1521,8 +1521,12 @@ describe("a handheld's zones", () => {
 
   it("a till whose zone choice could not be read takes no dishes", async () => {
     const table = tableIn("table-room", "room");
-    const drafts = draftServer(() => ({ tabId: table.party.mainBillId, revision: 1, groups: [] }));
-    drafts.bills.add(table.party.mainBillId);
+    const drafts = draftServer(() => ({
+      tabId: table.party.openingBillId,
+      revision: 1,
+      groups: [],
+    }));
+    drafts.bills.add(table.party.openingBillId);
     const { el } = await mount(selection(["room"], "room"), {
       getDeviceZones: vi.fn().mockRejectedValue({ code: "server.internal" }),
       getTablesState: vi.fn().mockResolvedValue([table]),
@@ -1562,7 +1566,7 @@ describe("a handheld's zones", () => {
           ...table.party,
           unsentDrafts: [
             {
-              billId: table.party.mainBillId,
+              billId: table.party.openingBillId,
               billNumber: 1,
               ownerId: "person",
               ownerName: "Ana",
@@ -1580,11 +1584,11 @@ describe("a handheld's zones", () => {
     ) {
       const garden = gardenTable();
       const drafts = draftServer(() => ({
-        tabId: garden.party.mainBillId,
+        tabId: garden.party.openingBillId,
         revision: 1,
         groups: [],
       }));
-      drafts.bills.add(garden.party.mainBillId);
+      drafts.bills.add(garden.party.openingBillId);
       const mounted = await mountHandheld(chosen, formFactor, {
         getTablesState: vi.fn().mockResolvedValue([tableIn("table-room", "room"), garden]),
         getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
@@ -1669,7 +1673,7 @@ describe("a handheld's zones", () => {
     it("opens as before when the Floor does not show that zone", async () => {
       const garden = gardenTable();
       const row = billRow({
-        workingOrderId: garden.party.mainBillId,
+        workingOrderId: garden.party.openingBillId,
         partyId: garden.party.id,
         zoneId: "garden",
       });
@@ -2192,11 +2196,11 @@ describe("a handheld's zones", () => {
     it("a hidden zone's table that holds nothing back stays blocked while the counter basket holds the narrowing", async () => {
       const table = tableIn("table-room", "room");
       const drafts = draftServer(() => ({
-        tabId: table.party.mainBillId,
+        tabId: table.party.openingBillId,
         revision: 1,
         groups: [],
       }));
-      drafts.bills.add(table.party.mainBillId);
+      drafts.bills.add(table.party.openingBillId);
       const { el } = await mount(selection(["bar", "room", "garden"], "bar"), {
         listZones: vi.fn().mockResolvedValue(orderedFloorZones),
         getTablesState: vi.fn().mockResolvedValue([table]),

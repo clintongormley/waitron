@@ -53,7 +53,7 @@ function party(id: string): TableParty {
     state: "open",
     name: null,
     displayName: id,
-    mainBillId: null,
+    openingBillId: null,
     outstanding: "0.00",
     billCount: 1,
     tableIds: [],

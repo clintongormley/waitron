@@ -352,7 +352,7 @@ const anaParty: TableParty = {
   state: "open",
   name: "Ana",
   displayName: "Ana",
-  mainBillId: "wo-4",
+  openingBillId: "wo-4",
   outstanding: "44.00",
   billCount: 5,
   tableIds: ["t4"],
@@ -3988,7 +3988,7 @@ describe("till-table-order-screen", () => {
     it("does not fall back to the main bill for an addition on a split bill", async () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-check", courses });
       await ringCafe(el);
-      el.party = { ...anaParty, mainBillId: "wo-part" };
+      el.party = { ...anaParty, openingBillId: "wo-part" };
       await el.updateComplete;
       await assertOwnSend(el, grid(el).store);
       expect(el.orderId).toBe("wo-check");
@@ -4021,7 +4021,7 @@ describe("till-table-order-screen", () => {
 
     it("does not invent a new bill when the party has no main bill", async () => {
       const { el } = await mount({
-        party: { ...anaParty, mainBillId: null },
+        party: { ...anaParty, openingBillId: null },
         bills: [{ ...paidBill, billNumber: 1 }, checkBill],
         orderId: "wo-check",
         courses,
@@ -4085,7 +4085,7 @@ describe("till-table-order-screen", () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-4", courses });
       await ringCafe(el);
       const own = grid(el).store;
-      el.party = { ...anaParty, mainBillId: "wo-check" };
+      el.party = { ...anaParty, openingBillId: "wo-check" };
       el.bills = [tabBill, checkBill, partlyPaidBill];
       await el.updateComplete;
       await assertOwnSend(el, own);
@@ -4103,7 +4103,7 @@ describe("till-table-order-screen", () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-4", courses });
       await ringCafe(el);
       const own = grid(el).store;
-      el.party = { ...anaParty, mainBillId: "wo-check" };
+      el.party = { ...anaParty, openingBillId: "wo-check" };
       await el.updateComplete;
       await assertOwnSend(el, own);
       expect(el.orderId).toBe("wo-4");
@@ -4111,14 +4111,14 @@ describe("till-table-order-screen", () => {
 
     it("does not switch stores when another device creates the party's main bill", async () => {
       const { el } = await mount({
-        party: { ...anaParty, mainBillId: null },
+        party: { ...anaParty, openingBillId: null },
         bills: [{ ...paidBill, billNumber: 1 }, checkBill],
         orderId: "wo-check",
         courses,
       });
       await ringCafe(el);
       const own = grid(el).store;
-      el.party = { ...anaParty, mainBillId: "wo-4" };
+      el.party = { ...anaParty, openingBillId: "wo-4" };
       el.bills = [{ ...paidBill, billNumber: 1 }, checkBill, { ...tabBill, billNumber: 3 }];
       await el.updateComplete;
       await assertOwnSend(el, own);
@@ -4700,7 +4700,7 @@ describe("till-table-order-screen", () => {
         revision: 9,
         name: "Luis",
         displayName: "Luis",
-        mainBillId: "wo-7",
+        openingBillId: "wo-7",
         tableIds: ["t7"],
       };
       const held = (id: string, label: string, party: TableParty) =>

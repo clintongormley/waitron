@@ -192,7 +192,7 @@ const openTable: TableState = {
     state: "open",
     name: null,
     displayName: "2",
-    mainBillId: "wo-7",
+    openingBillId: "wo-7",
     outstanding: "12.00",
     billCount: 1,
     tableIds: ["t2"],
@@ -9296,13 +9296,13 @@ describe("till-app", () => {
           ...openTable,
           id: "table-a",
           zoneId: "zone-a",
-          party: { ...openTable.party!, id: "party-a", mainBillId: "order-a" },
+          party: { ...openTable.party!, id: "party-a", openingBillId: "order-a" },
         };
         const tableB = {
           ...openTable,
           id: "table-b",
           zoneId: "zone-b",
-          party: { ...openTable.party!, id: "party-b", mainBillId: "order-b" },
+          party: { ...openTable.party!, id: "party-b", openingBillId: "order-b" },
         };
         const offersA = fixtureOffers({
           menus: [{ id: "menu-a", name: "Menu A", isDefault: true }],
@@ -17355,7 +17355,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     state: "open" as const,
     name: "Luis",
     displayName: "Luis",
-    mainBillId: "wo-7",
+    openingBillId: "wo-7",
     outstanding: "12.00",
     billCount: 1,
     tableIds: ["t7"],
