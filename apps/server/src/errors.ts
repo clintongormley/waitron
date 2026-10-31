@@ -1422,11 +1422,11 @@ declare module "@waitron/shared" {
     /** The box did not set or confirm its clock from an administrator's device or a till, and
      * asked its host to set nothing: the request came from the box itself, no stop holds, the host
      * service did not answer, the time service says the clock is synchronised, AEAT has spoken
-     * during the stop, the device is within a minute of the box, the device's time was measured
-     * before a step of the box's clock, the time would be before 28-10-2024 or from 2100 on
-     * (`target_invalid`), the readings taken before an earlier step are not yet recorded
-     * (`pending_disproofs`), or, for a staff member on a till, the box's start-up is over
-     * (`not_start_up`) or AEAT has not yet been asked (`authority_pending`). */
+     * during the stop, an administrator's device asked to set it is within a minute of the box,
+     * the device's time was measured before a step of the box's clock, the time would be before
+     * 28-10-2024 or from 2100 on (`target_invalid`), the readings taken before an earlier step are
+     * not yet recorded (`pending_disproofs`), or, for a staff member on a till, the box's start-up
+     * is over (`not_start_up`) or AEAT has not yet been asked (`authority_pending`). */
     "clock.set_refused": {
       reason:
         | "same_machine"

@@ -3398,3 +3398,42 @@ Revision 4 changes none of these rulings. It carries out the owner's answer of 2
   different moments is refused `stale` (its control fails that case).
 - **Not changed (review M4):** the order case's 200 ms race and the deadlock case's 100 ms wait
   decide only whether the broken versions are caught; with the turn in place neither can fail.
+
+### Task 12a's departures and per-task review, folded (2026-10-31)
+
+- **The challenge takes an `override` too, and checks only that one is there.** A staff member
+  refused `not_start_up` asks again with an administrator's PIN; the challenge then skips the
+  window's checks, and the confirm checks the PIN and, when the confirm carries no override, the
+  window again (a case pins that a made-up override at the challenge still meets `authority_pending`
+  and `not_start_up` at the confirm, on both branches). A challenge grants nothing by itself.
+- **The confirm checks the person's admission before it takes the challenge** as well as inside the
+  turn, so a till whose profile no longer admits the person is told so rather than that its check
+  expired.
+- **The seat, the clock and development mode come from `TillApiDeps`** (`backend`, `clock`,
+  `devMode`); `boxClock` carries the correction, the window, the witness store's `witnesses` and
+  `clear`, `readBoot`, `steady`, `requestFromBox` and `filesRecords` (the box can ask AEAT only when
+  it files records).
+- **Every refusal of the agreeing branch but `contrary_proof` is `clock.set_refused`**
+  (`stale`, `not_stopped`, `not_start_up`, `authority_pending`); Task 13a's words cover both codes.
+- **An administrator on a till is refused `not_stopped`** where no stop holds, rather than closing a
+  check that waits: that stays the dashboard's (decision 10's route).
+- **The till is stored under the proof's `device` key** beside `admin`, as Task 8 built
+  `confirmClockStop` (ruling R3), not under `till`.
+- **A staff member's set hands the correction no witnesses**, as Task 12's review decided for the
+  administrator's; `witnessed` is still judged from the correction's own store.
+- **The agreeing branch also refuses `stale` when the wall clock moved against the steady clock by
+  more than a second** while the confirm waited for its turn (review I1): a step the correction did
+  not make, such as the time service's, voids the comparison as one it made does. The plan asked
+  only for the step counter.
+- **Deletion controls.** The plan's "key the challenges by device" is caught by a case where the
+  next person signed in on the same till answers the first one's challenge; keying by person is
+  caught by the same person on two tills. Added controls, each failing a named case: the confirm's
+  own window checks, the override's PIN derived outside the write lock (`watchDerivationsAndLock`),
+  the witness store emptied after an agreeing confirmation, the wall-clock drift, and an override
+  that is not an object answered `management.request_invalid { field: "override" }` (the till's
+  `parseOverrideField`, reused).
+- **Review, folded:** the `clock.set_refused` and `clock.confirm_refused` comments name the till and
+  staff member; a person's name is read with `requiredNameOf`, which throws, as the administrator's
+  routes read it.
+- **Not changed:** `till-api.profile-zones.test.ts`'s `ROUTES` lists routes bounded by service zones;
+  these two are bounded by none, so it gains no row.
