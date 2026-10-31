@@ -46,6 +46,7 @@ import {
   openStagedCopy,
   readArtifactNode,
   resolveArtifactNode,
+  writeStagedNodeCopy,
   writeValidated,
   restoreFromArtifact,
 } from "./restore.js";
@@ -132,6 +133,8 @@ async function fingerprint(selected: Selected): Promise<string> {
   for await (const bytes of createReadStream(join(dirname(selected.copy.databasePath), NODE_FILE)))
     hash.update(bytes);
   hash.update(JSON.stringify([selected.sourceId, selected.copy.sourceId, selected.copy.manifest]));
+  hash.update(JSON.stringify(["node.dump", selected.copy.nodeDump.byteLength]));
+  hash.update(selected.copy.nodeDump);
   for (const entry of selected.copy.secretEntries) {
     hash.update(JSON.stringify([entry.name, entry.bytes.byteLength]));
     hash.update(entry.bytes);
@@ -1084,6 +1087,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
               stagingDir: join(scratch, "staging"),
             },
           );
+          await writeStagedNodeCopy(selected.copy.databasePath, selected.copy.nodeDump);
           const node = await readArtifactNode(selected.copy);
           const assertCommitted = options.modules.find(
             (module) => module.name === before.record.binding.module,
@@ -1127,7 +1131,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             !isDeepStrictEqual(proved.taxpayer, selected.preview.taxpayer)
           )
             conflict();
-          const database = await openVenueDatabase(scratch);
+          const database = await openStagedCopy(scratch);
           try {
             await withTransaction(database.venue, (tx) =>
               assertCommitted(tx, node, before.record.binding),
