@@ -2674,10 +2674,11 @@ is kept and takes no kept slot; the caps apply to the others as today. With no r
 nothing changes, except that an archive stamped more than a minute after now ranks after every
 other (so it is the first deleted by count, never kept in place of a correctly dated one) — a
 rule kept permanently, not only after a step (the lead's ruling (c)). **Its limit, stated in the
-code, the guide and `conventions-data.md`** (round 2, minor 7): the hold covers only steps the
-BOX made, which are the only ones with a `clock_confirmations` row; a step by the time service
-itself, or by hand on the host, holds nothing, and its archives are pruned by today's rule plus
-the future-stamped ranking.
+code, the guide and `conventions-data.md`** (round 2, minor 7; narrowed by Task 14's per-task
+review, I3): the hold covers only steps the BOX made, each of which records `clock.corrected`
+whether or not it was verified; a step by the time service itself, or by hand on the host, holds
+nothing, and its archives are pruned by today's rule plus the future-stamped ranking. A step whose
+row waits in the correction's queue (`writePending`) holds nothing until it is written.
 
 **Files.** `apps/server/src/backup-sweep.ts`, `backup-sweep.test.ts`;
 `packages/fiscal/src/backend.ts` and `packages/fiscal-verifactu/src/clock-step.ts`
@@ -2698,6 +2699,32 @@ set never grows. "prunes by count AND age" passes unedited.
 
 **Focused command.** `pnpm --filter @waitron/server exec vitest run src/backup-sweep.test.ts
 src/backup-sweep-file.test.ts src/backup-sweep-staging.test.ts src/backup-sweep-stopped.test.ts`.
+
+### Task 14a: Making room honours the same hold
+
+**Goal.** Task 14's per-task review, I5: `listDeletableArchives` (`apps/server/src/backup-room.ts:32-46`)
+offers archives oldest first by stamp and never the newest by stamp. After a −400-day step it
+offers every correctly dated archive, the newest real one included, before the ones stamped ahead,
+and protects the one stamped furthest ahead as "the newest" (the reviewer's E4, run on a real
+folder). It serves the backup run's room step (`backup-sweep.ts`), the free-space watch
+(`low-space-backups.ts`) and the start on a full disk (`start-backup-room.ts`). The code predates
+this branch (#2215, #2221, #2225).
+
+**The rule.** `listDeletableArchives` gains `held?: ClockStepHold | "everything"`, the same hold
+`pruneBackend` takes. A held archive (stamped before the step's `confirmedAt`, or more than a
+minute ahead of now) is offered only after every archive that is not held, and "never the newest"
+means the newest archive that is not held (the newest held one when every archive is held).
+`"everything"` (the step cannot be read) offers nothing, as an unknown installation start does.
+The backup run passes the hold it already read; the free-space watch reads the step through the
+same seat (a write-lock turn, as boot's read). The start on a full disk has no database; it takes
+the step from `backup-room-note.json` if the note's writer can carry it within this task,
+otherwise that path gets a backlog line in `docs/backlog/box.md` and this task says so.
+
+**Failing tests first.** E4's folder: after a −400-day step, every archive stamped ahead is offered
+after every correctly dated one, and the newest correctly dated one is never offered; with no step
+the order is today's; `"everything"` offers nothing; the free-space watch passes the step it read.
+
+**Deletion control.** Drop the held ranking → the −400 folder case offers `after0` first and fails.
 
 ### Task 15: The other wall-clock jobs, and the audit table
 
@@ -3586,3 +3613,31 @@ Revision 4 changes none of these rulings. It carries out the owner's answer of 2
 - **The till app's wiring was written before `till-app.box-time.test.ts`**; each of its three
   cases is proved by deletion instead (removing the flag, the dialog's opening, or the read after
   a success each fails a named case), with the plan's five controls and four more.
+
+### Task 14's per-task review, folded (2026-10-31)
+
+- **The seat reads `clock.corrected`, not the rows** (I3). A step the box could not verify writes
+  no `clock_confirmations` row but still records `clock.corrected` (`clock-step.ts`), so an
+  unverified +400-day step held nothing. `latestClockStep` now answers the latest
+  `clock.corrected` whose `stepMs` is not 0, by `rowid` (as `listFilingCases` orders), from its
+  `after` and `stepMs`. A verified step records both in one transaction, so the alert alone
+  answers every step the box made. The "moved nothing" case now writes a zero-step alert.
+- **A step dated more than a minute ahead of now holds nothing** (I1): otherwise a clock put back
+  after it, which writes nothing, held every archive until the clock caught up with that date.
+- **The held set is bounded** (I2): the `retain` newest held archives by stamp are kept and the
+  rest deleted, so a destination holds at most twice `retain`. Two branch-new cases changed with
+  the rule: the +400 case keeps the two newest of its five held archives, and the run-level case
+  takes `retain: 2` for its two held archives. The sixty-run "small step every six days" case is
+  new.
+- **A step that cannot be read stores the archive and deletes nothing** (M1), logged
+  `backup.clock_step_unreadable` with its code, as `backup.installation_start_unreadable` is.
+- **Boot's read is tested against a real step** (I4): `boot.clock-wiring.test.ts` writes a handled
+  `clock.corrected` before the server starts and expects the read to answer it; a boot that answers
+  null fails it.
+- **The hold's exact edges are pinned** (M2): an archive stamped exactly at the step, or exactly a
+  minute ahead, ranks as any other.
+- **Not changed** (M3): the read has no node filter. A venue has one node today; a node holding
+  another node's copy of `venue.db` would read the other's steps.
+- **Making room ignores the hold** (I5): Task 14a, above.
+- Controls: `~/waitron-campaign-b/a798-9b/t14-fold/mutate.py` → `mutate.out`, each fails a named
+  case; the seat's filter and order, and boot's read, by hand.

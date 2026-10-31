@@ -187,7 +187,7 @@ export async function runOnce(
   const reportDeleted = (deleted: readonly DeletableArchive[]) =>
     reportArchivesDeleted(deps.onArchivesDeleted, deleted, now(), deps.log);
   try {
-    const held = clockStepHold((await deps.latestClockStep?.()) ?? null, nowMs, deps.retainDays);
+    const held = await runHold(deps.latestClockStep, nowMs, deps.retainDays, deps.log);
     // Collected before the copy, so a broken state folder fails the tick without copying the
     // whole database.
     const [manifest, parts] = await Promise.all([
@@ -332,17 +332,40 @@ const AHEAD_TOLERANCE_MS = 60_000;
 
 /** The stamps a recent step makes untrustworthy: those before the step's `confirmedAt`, written by
  * the clock it corrected, and those more than a minute ahead of now. Held while the step is less
- * than `retainDays` old by the clock now. Only a step the box made has a row to read, so a step by
- * the time service, or by hand on the host, holds nothing. */
+ * than `retainDays` old by the clock now; a step dated more than a minute ahead of now holds
+ * nothing, or a clock put back after it would hold every archive until it caught up. Only steps the
+ * box made are recorded, so a step by the time service, or by hand on the host, holds nothing. */
 export function clockStepHold(
   step: ClockStep | null,
   nowMs: number,
   retainDays: number,
-): { fromMs: number; toMs: number } | undefined {
+): ClockStepHold | undefined {
   if (step === null) return undefined;
   const fromMs = Date.parse(step.confirmedAt);
-  if (nowMs - fromMs >= retainDays * DAY_MS) return undefined;
+  if (fromMs > nowMs + AHEAD_TOLERANCE_MS || nowMs - fromMs >= retainDays * DAY_MS)
+    return undefined;
   return { fromMs, toMs: nowMs + AHEAD_TOLERANCE_MS };
+}
+
+/** A run's hold: everything when the step cannot be read (logged `backup.clock_step_unreadable`),
+ * as an installation start that cannot be read deletes nothing. */
+async function runHold(
+  read: (() => Promise<ClockStep | null>) | undefined,
+  nowMs: number,
+  retainDays: number,
+  log: Logger,
+): Promise<ClockStepHold | "everything" | undefined> {
+  try {
+    return clockStepHold((await read?.()) ?? null, nowMs, retainDays);
+  } catch (err) {
+    log("warn", "backup.clock_step_unreadable", { errorCode: codeOf(err), errno: errnoOf(err) });
+    return "everything";
+  }
+}
+
+export interface ClockStepHold {
+  fromMs: number;
+  toMs: number;
 }
 
 /** Deletes an archive past EITHER cap: beyond the `retain` newest, or older than `retainDays`, both
@@ -350,7 +373,9 @@ export function clockStepHold(
  * is an archive; any other name is left where it is and does not take a kept slot. `justStored`,
  * the archive this run put, ranks first among archives sharing its stamp and is never deleted. An
  * archive stamped more than a minute ahead of `nowMs` ranks after every other. One stamped outside
- * `held` (see {@link clockStepHold}) is kept and takes no kept slot. */
+ * `held` (see {@link clockStepHold}) takes no kept slot; the `retain` newest of those by stamp are
+ * kept and the rest deleted, so a destination holds at most twice `retain`. `"everything"` deletes
+ * nothing. */
 export async function pruneBackend(
   backend: StorageBackend,
   retain: number,
@@ -358,29 +383,34 @@ export async function pruneBackend(
   nowMs: number,
   call: StorageCall,
   justStored?: string,
-  held?: { fromMs: number; toMs: number },
+  held?: ClockStepHold | "everything",
 ): Promise<void> {
+  if (held === "everything") return;
+  const heldArchives: Array<{ key: string; ms: number }> = [];
   const archives = (await backend.list(BACKUP_KEY_PREFIX, call)).flatMap(({ key }) => {
     const parsed = parseBackupArchiveKey(key);
     if (parsed === null) return [];
     const ms = parsed.timestamp.getTime();
-    if (held !== undefined && (ms < held.fromMs || ms > held.toMs)) return [];
+    if (held !== undefined && (ms < held.fromMs || ms > held.toMs)) {
+      heldArchives.push({ key, ms });
+      return [];
+    }
     return [{ key, ms, ahead: ms > nowMs + AHEAD_TOLERANCE_MS ? 1 : 0 }];
   });
+  const byKeyDesc = (a: { key: string }, b: { key: string }) =>
+    a.key < b.key ? 1 : a.key > b.key ? -1 : 0;
   const rank = (key: string) => (key === justStored ? 1 : 0);
   archives.sort(
-    (a, b) =>
-      a.ahead - b.ahead ||
-      b.ms - a.ms ||
-      rank(b.key) - rank(a.key) ||
-      (a.key < b.key ? 1 : a.key > b.key ? -1 : 0),
+    (a, b) => a.ahead - b.ahead || b.ms - a.ms || rank(b.key) - rank(a.key) || byKeyDesc(a, b),
   );
+  heldArchives.sort((a, b) => b.ms - a.ms || byKeyDesc(a, b));
   const maxAgeMs = retainDays * DAY_MS;
-  const toDelete = archives
-    .filter(
+  const toDelete = [
+    ...archives.filter(
       (archive, i) => archive.key !== justStored && (i >= retain || nowMs - archive.ms > maxAgeMs),
-    )
-    .map((archive) => archive.key);
+    ),
+    ...heldArchives.slice(retain),
+  ].map((archive) => archive.key);
   for (let i = 0; i < toDelete.length; i += DELETE_BATCH)
     await backend.deleteMany(toDelete.slice(i, i + DELETE_BATCH), call);
 }

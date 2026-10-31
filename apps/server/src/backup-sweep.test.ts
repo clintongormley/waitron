@@ -168,12 +168,31 @@ describe("runOnce (fan-out)", () => {
       stepMs: 400 * day,
     }));
 
-    await runOnce({ ...deps([a]), retain: 1, retainDays: 7, latestClockStep });
+    await runOnce({ ...deps([a]), retain: 2, retainDays: 7, latestClockStep });
 
     expect(latestClockStep).toHaveBeenCalledOnce();
     expect(a.objects.size).toBe(3);
     expect(a.objects.has(behind)).toBe(true);
     expect(a.objects.has(ahead)).toBe(true);
+  });
+
+  it("stores the archive and deletes nothing when the step cannot be read, and logs why", async () => {
+    const old = backupArchiveKey(new Date("2026-09-01T00:00:00Z"));
+    const a = new FakeBackend("a");
+    a.objects.set(old, Buffer.from("old"));
+    const log = vi.fn();
+    const latestClockStep = async () => {
+      throw Object.assign(new Error("disk I/O error"), { code: "EIO" });
+    };
+
+    await runOnce({ ...deps([a], log), retain: 1, latestClockStep });
+
+    expect(a.objects.size).toBe(2);
+    expect(a.objects.has(old)).toBe(true);
+    expect(log).toHaveBeenCalledWith("warn", "backup.clock_step_unreadable", {
+      errorCode: "unknown",
+      errno: "EIO",
+    });
   });
 
   it("encrypts the archive once and fans the SAME ciphertext to every backend", async () => {
@@ -1052,13 +1071,13 @@ describe("pruneBackend across a step the box made to its clock", () => {
   const hold = (stepMs: number, at = nowMs, retainDays = 7) =>
     clockStepHold({ confirmedAt: new Date(stepAt).toISOString(), stepMs }, at, retainDays);
 
-  it("keeps every archive stamped before a +400-day step, and applies both caps to the others", async () => {
+  it("keeps the newest archives stamped before a +400-day step, up to the count, and applies both caps to the others", async () => {
     const behind = [0, 1, 2, 3, 4].map((d) => stepAt - 400 * day - d * day);
     const { backend, keys } = holding([...behind, stepAt + 60_000, nowMs - 60_000, nowMs]);
 
     await pruneBackend(backend, 2, 7, nowMs, call(), undefined, hold(400 * day));
 
-    expect(kept(backend)).toEqual([...keys.slice(0, 5), keys[6]!, keys[7]!].sort());
+    expect(kept(backend)).toEqual([keys[0]!, keys[1]!, keys[6]!, keys[7]!].sort());
   });
 
   it("keeps the archives stamped ahead before a -400-day step, and each new one up to the count", async () => {
@@ -1090,6 +1109,54 @@ describe("pruneBackend across a step the box made to its clock", () => {
     const ahead = holding([stepAt + 400 * day, later - day, later]);
     await pruneBackend(ahead.backend, 2, 7, later, call(), undefined, hold(-400 * day, later));
     expect(kept(ahead.backend)).toEqual([ahead.keys[1]!, ahead.keys[2]!].sort());
+  });
+
+  it("holds nothing for a step dated more than a minute ahead of now", () => {
+    const ahead = (ms: number) =>
+      clockStepHold({ confirmedAt: new Date(ms).toISOString(), stepMs: 400 * day }, nowMs, 7);
+    expect(ahead(nowMs + 60_000 + 1)).toBeUndefined();
+    expect(ahead(nowMs + 400 * day)).toBeUndefined();
+    expect(ahead(nowMs + 60_000)).toEqual({ fromMs: nowMs + 60_000, toMs: nowMs + 60_000 });
+  });
+
+  it("prunes to the count over thirty daily runs after a step dated ahead, which the time service then undid", async () => {
+    const retain = 3;
+    const confirmedAt = new Date(stepAt + 400 * day).toISOString();
+    const backend = new FakeBackend("ahead-step");
+    for (let i = 0; i < 30; i++) {
+      const at = stepAt + i * day;
+      const stored = key(at);
+      backend.objects.set(stored, Buffer.from(stored));
+      const held = clockStepHold({ confirmedAt, stepMs: 400 * day }, at, 7);
+      await pruneBackend(backend, retain, 7, at, call(), stored, held);
+      expect(backend.objects.size).toBeLessThanOrEqual(retain);
+    }
+  });
+
+  it("never keeps more than twice the count over sixty daily runs with a small step every six days", async () => {
+    const retain = 3;
+    const backend = new FakeBackend("small-steps");
+    const start = stepAt - 60 * day;
+    for (let i = 0; i < 60; i++) {
+      const at = start + i * day;
+      const stored = key(at);
+      backend.objects.set(stored, Buffer.from(stored));
+      const confirmedAt = new Date(start + Math.floor(i / 6) * 6 * day).toISOString();
+      const held = clockStepHold({ confirmedAt, stepMs: 5_000 }, at, 7);
+      await pruneBackend(backend, retain, 7, at, call(), stored, held);
+      expect(backend.objects.size).toBeLessThanOrEqual(2 * retain);
+      expect(backend.objects.has(stored)).toBe(true);
+    }
+  });
+
+  it("ranks an archive stamped exactly at the step, or exactly a minute ahead, as any other", async () => {
+    const atStep = holding([stepAt, nowMs]);
+    await pruneBackend(atStep.backend, 1, 7, nowMs, call(), undefined, hold(400 * day));
+    expect(kept(atStep.backend)).toEqual([atStep.keys[1]!]);
+
+    const atTolerance = holding([nowMs + 60_000, nowMs - 60_000]);
+    await pruneBackend(atTolerance.backend, 1, 7, nowMs, call(), undefined, hold(400 * day));
+    expect(kept(atTolerance.backend)).toEqual([atTolerance.keys[0]!]);
   });
 
   it("with no step, ranks an archive stamped more than a minute ahead after every other", async () => {

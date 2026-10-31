@@ -415,9 +415,9 @@ export interface FiscalBackend {
    * more than a second, answering both. Absent when the regime never stops a clock. */
   confirmClockStep?(tx: Transaction, input: ClockStepRequest): Promise<ClockStepRecorded>;
 
-  /** The latest step `confirmClockStep` recorded that moved the clock, by the order rows were
-   * written, never by their dates; null when none has. A step the time service or a person on the
-   * host made has no row, so it is never answered here. */
+  /** The latest step `confirmClockStep` recorded that moved the clock, verified or not, by the
+   * order they were written, never by their dates; null when none has. Only steps the box made are
+   * recorded: one by the time service, or by a person on the host, is never answered here. */
   latestClockStep?(tx: Transaction): Promise<ClockStep | null>;
 
   /** Records when a stop began: opens a check while the stop holds and none is open, and answers

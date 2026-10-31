@@ -1,5 +1,6 @@
 import "./errors.js";
-import { desc, ne } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
+import { incidents } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { ClockStep, ClockStepRecorded, ClockStepRequest } from "@waitron/fiscal";
 import type { ErrorParams, NodeId } from "@waitron/shared";
@@ -175,16 +176,23 @@ export async function confirmClockStep(
   };
 }
 
-/** The latest confirmation that moved the clock, by `seq`: the clock is what is in doubt, so
- * `confirmed_at` cannot order them. */
+/** The latest step the box made to its clock, from the `clock.corrected` that every step over a
+ * second records in its own transaction, verified or not (only a verified one writes a row). By
+ * `rowid`, the order they were written, as `listFilingCases` orders: the clock is what is in doubt,
+ * so no date can order them. */
 export async function latestClockStep(tx: Transaction): Promise<ClockStep | null> {
   const [row] = await tx
-    .select({ confirmedAt: clockConfirmations.confirmedAt, stepMs: clockConfirmations.stepMs })
-    .from(clockConfirmations)
-    .where(ne(clockConfirmations.stepMs, 0))
-    .orderBy(desc(clockConfirmations.seq))
+    .select({ params: incidents.params })
+    .from(incidents)
+    .where(
+      and(
+        eq(incidents.code, "clock.corrected"),
+        sql`json_extract(${incidents.params}, '$.stepMs') <> 0`,
+      ),
+    )
+    .orderBy(sql`${incidents}.rowid desc`)
     .limit(1);
-  return row === undefined
-    ? null
-    : { confirmedAt: row.confirmedAt.toISOString(), stepMs: row.stepMs };
+  if (row === undefined) return null;
+  const { after, stepMs } = row.params as ErrorParams["clock.corrected"];
+  return { confirmedAt: after, stepMs };
 }

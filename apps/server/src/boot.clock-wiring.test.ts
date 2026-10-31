@@ -14,7 +14,7 @@ import type {
   TranslationCell,
   TranslationItemPage,
 } from "@waitron/catalogue/src/content-translation-types.js";
-import { AppError } from "@waitron/shared";
+import { AppError, jobOrigin } from "@waitron/shared";
 import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { type BackupSupervisorDeps } from "./backup-supervisor.js";
@@ -148,6 +148,15 @@ describe("boot's authority clock wiring", () => {
   it("raises the drift alert from a sample the fiscal drain observes, and runs the Translate all loop until close", async () => {
     beforeServerStarts();
     const venue = await setupVenue(suite.db);
+    // A step the box made to its clock, already handled, so it raises no alert or email here.
+    await suite.db.insert(incidents).values({
+      source: jobOrigin("dashboard").source,
+      code: "clock.corrected",
+      params: { after: "2026-10-12T08:00:00.000Z", stepMs: -90_000 },
+      severity: "warning",
+      detectedAt: "2026-10-12T08:00:00.000Z",
+      acknowledgedAt: "2026-10-12T09:00:00.000Z",
+    });
     const [port] = await freePorts(1);
     let scratch: string | undefined;
     let server: StartedServer | undefined;
@@ -254,8 +263,10 @@ describe("boot's authority clock wiring", () => {
       expect(clocks.archive!.readInstallationStart).toBe(hooks.readInstallationStart);
       expect(clocks.archive!.recordArchivesDeleted).toBe(hooks.recordArchivesDeleted);
       expect(clocks.archive!.statfs).toBeUndefined();
-      // The box has not stepped its clock, so the read answers, and answers none.
-      await expect(clocks.archive!.latestClockStep!()).resolves.toBeNull();
+      await expect(clocks.archive!.latestClockStep!()).resolves.toEqual({
+        confirmedAt: "2026-10-12T08:00:00.000Z",
+        stepMs: -90_000,
+      });
       // Before the first backup run, which could raise the same alert for its own deletions.
       expect(recordStartDeletions).toHaveBeenCalledOnce();
       expect(vi.mocked(recordStartDeletions).mock.calls[0]![0]).toMatchObject({

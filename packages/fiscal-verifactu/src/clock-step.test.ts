@@ -9,7 +9,7 @@ import type {
   ClockWitness,
   TrustedClock,
 } from "@waitron/fiscal";
-import type { NodeId, SeriesId } from "@waitron/shared";
+import type { ErrorParams, NodeId, SeriesId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
@@ -17,6 +17,7 @@ import { VerifactuBackend } from "./backend.js";
 import { clockBehindChain } from "./clock-behind.js";
 import { nextCheckSeq, openCheck as openCheckOf } from "./clock-checks.js";
 import { confirmClockStep } from "./clock-step.js";
+import { recordCorrected } from "./clock-stop-incidents.js";
 import { clockChecks } from "./schema/clock-checks.js";
 import { clockConfirmations } from "./schema/clock-confirmations.js";
 
@@ -634,6 +635,18 @@ describe("latestClockStep", () => {
     await expect(latest()).resolves.toEqual({ confirmedAt: iso(back), stepMs: back - R });
   });
 
+  it("answers a step it could not verify, which writes no row, and one written after a verified step", async () => {
+    await sale(T);
+    const A = T + 400 * 24 * H;
+    await step(request(A, { verified: false }));
+    await expect(latest()).resolves.toEqual({ confirmedAt: iso(A), stepMs: A - R - 2 * S });
+
+    const back = R - 2 * H;
+    await step(request(back, { source: "admin", admin: LUIS, witnesses: [], stepMs: back - R }));
+    await step(request(R + H, { verified: false }));
+    await expect(latest()).resolves.toEqual({ confirmedAt: iso(R + H), stepMs: R + H - R - 2 * S });
+  });
+
   it("passes over a confirmation that moved nothing", async () => {
     await sale(R - 5 * M);
     await step(request(R + H));
@@ -650,6 +663,15 @@ describe("latestClockStep", () => {
         source: "authority",
         reason: "behind_chain",
         proof: {},
+      });
+      const { params } = incidentsOf("clock.corrected")[0]!;
+      await recordCorrected(tx, {
+        detectedAt: new Date(R + 2 * H),
+        params: {
+          ...(params as ErrorParams["clock.corrected"]),
+          after: iso(R + 2 * H),
+          stepMs: 0,
+        },
       });
     });
 
