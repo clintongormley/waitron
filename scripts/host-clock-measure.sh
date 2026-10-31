@@ -104,7 +104,7 @@ if [ "${1:-}" = --shipped ]; then
   say M9′ "systemd-analyze verify rc=$rc output: ${out:-<none>}"
   props=$($T systemctl show -p StandardError -p RuntimeMaxUSec -p CollectMode waitron-box@measure.service | tr '\n' ' ')
   say M9′ "waitron-box@measure.service: $props"
-  if [ "$rc" -eq 0 ] && echo "$props" | grep -q 'StandardError=journal' && echo "$props" | grep -q 'RuntimeMaxUSec=15s' \
+  if [ "$rc" -eq 0 ] && ! echo "$out" | grep -qi 'unknown' && echo "$props" | grep -q 'StandardError=journal' && echo "$props" | grep -q 'RuntimeMaxUSec=15s' \
     && echo "$props" | grep -q 'CollectMode=inactive-or-failed'; then
     verdict M9′ yes "the shipped units verify, and an instance sends errors to the journal, ends at 15 s and is collected"
   else
