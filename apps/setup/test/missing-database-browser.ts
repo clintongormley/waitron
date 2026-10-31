@@ -8,7 +8,6 @@ import type {
   BackupRepairActivity,
   BackupRepairStatus,
   FirstSetupInspection,
-  FirstSetupState,
   StartAgainRecoveryShown,
   StartAgainSummary,
 } from "../src/api/first-setup-types.js";
@@ -55,7 +54,6 @@ export const stoppedSummary: StartAgainSummary = { ...namedSummary, recovery: st
 export async function missingDatabaseFixture(
   options: {
     intercept?: NonNullable<Parameters<typeof wizardApi>[0]>["intercept"];
-    recoveredStatus?: FirstSetupState["status"];
     summary?: StartAgainSummary;
     backupPhase?: BackupRepairStatus["phase"];
     /** What `/backup/activity` answers, read again on every request; `null` by default. */
@@ -67,7 +65,6 @@ export async function missingDatabaseFixture(
     locale?: "en-GB" | "es-ES";
   } = {},
 ) {
-  let recovered = false;
   const fixture = wizardApi({
     claimed: true,
     intercept(path, body, headers) {
@@ -76,32 +73,16 @@ export async function missingDatabaseFixture(
       if (path.endsWith("/resolution"))
         return Response.json({
           version: 2,
-          inspectionId: (recovered ? "b" : "a").repeat(64),
+          inspectionId: "a".repeat(64),
           pair: "valid",
           database: "missing",
           emptyDatabase: false,
           password: "checkable",
-          revision: recovered ? 2 : 1,
-          ownerGeneration: recovered ? 2 : 1,
+          revision: 1,
+          ownerGeneration: 1,
           repairEligible: false,
           artifacts: [],
         } satisfies FirstSetupInspection);
-      if (path.endsWith("/resolution/recover")) {
-        recovered = true;
-        return Response.json({
-          state: {
-            ...initial,
-            revision: 2,
-            ownerGeneration: 2,
-            status: options.recoveredStatus ?? "claimed",
-            consumptionIntent: !["claimed", "abandoned"].includes(
-              options.recoveredStatus ?? "claimed",
-            ),
-          },
-          capability: "B".repeat(43),
-          ownerGeneration: 2,
-        });
-      }
       if (path.endsWith("/start-again/summary"))
         return Response.json(options.summary ?? namedSummary);
       if (path.endsWith("/backup/status"))

@@ -1310,6 +1310,11 @@ export class SetupApp extends LitElement {
         const inspection = await this.api.inspectFirstSetupResolution();
         if (!current()) return;
         this.firstInspection = inspection;
+        // A tab that signed in before draws Continue without knowing the database is missing.
+        if (inspection.database === "missing") {
+          this.screen = "first-owner";
+          return;
+        }
       }
       if (
         !session.state ||
@@ -1389,8 +1394,10 @@ export class SetupApp extends LitElement {
     this.firstWipeError = undefined;
     // Check again keeps the unread details and their buttons drawn, disabled, until the box answers.
     const unread = this.firstWipeUnread;
+    const unsettled = this.firstRecoveryUnsettled;
     this.#closeWipe();
     this.firstWipeUnread = unread;
+    this.firstRecoveryUnsettled = unsettled;
     let failed = false;
     try {
       const inspection = await this.api.inspectFirstSetupResolution();
@@ -1419,6 +1426,7 @@ export class SetupApp extends LitElement {
     } catch (error) {
       if (!current()) return;
       failed = true;
+      const unsettledNow = this.firstRecoveryUnsettled;
       this.#closeWipe();
       const refusal = wipeRefusal(error);
       if (refusal !== undefined) {
@@ -1427,6 +1435,7 @@ export class SetupApp extends LitElement {
       } else if (this.firstActivity?.state === "stopped") {
         const key = repairErrorKey(error);
         this.firstWipeUnread = true;
+        this.firstRecoveryUnsettled = unsettledNow;
         this.firstWipeError = key
           ? say(key)
           : () => initialOwnerStrings[setupLocale()].recoveryDetailsUnread;
@@ -2523,7 +2532,11 @@ export class SetupApp extends LitElement {
       ${
         inspection && !this.firstRestarting && !offersNothing
           ? this.firstWipeUnread
-            ? html`${stoppedHere ? stoppedBlock(stoppedHere) : nothing}
+            ? html`${stoppedHere ? stoppedBlock(stoppedHere) : nothing}${
+                  unsettled
+                    ? html`<p data-test="recovery-unreadable">${t.recoveryUnreadable}</p>`
+                    : nothing
+                }
                 <wt-form-actions .error=${this.firstWipeError?.() ?? ""}>
                   ${cancelStartAgain}
                   <wt-button

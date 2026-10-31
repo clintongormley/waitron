@@ -26,12 +26,13 @@ for (const locale of ["en-GB", "es-ES"] as const)
   for (const theme of ["light", "dark"] as const)
     for (const width of [390, 1280])
       for (const state of [
-        "password",
-        "recovered",
+        "offered",
+        "ask",
         "finished",
         "confirmation",
         "damaged",
         "refusal",
+        "setup-finished",
       ] as const)
         it(`${locale} ${theme} ${width} ${state}: accessible missing-database repair`, async () => {
           const previous = [innerWidth, innerHeight];
@@ -41,10 +42,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
               locale,
               theme,
               ...(state === "finished"
-                ? {
-                    recoveredStatus: "committed",
-                    summary: { reached: "fiscal-finished" },
-                  }
+                ? { summary: { reached: "fiscal-finished" } }
                 : state === "damaged"
                   ? { summary: damagedSummary }
                   : {}),
@@ -54,17 +52,26 @@ for (const locale of ["en-GB", "es-ES"] as const)
                     { error: { code: "setup.attempt_conflict", params: {} } },
                     { status: 409 },
                   );
+                if (state === "setup-finished" && path.endsWith("/start-again/summary"))
+                  return Response.json(
+                    {
+                      error: {
+                        code: "setup.start_again_refused",
+                        params: { cause: "setup-finished" },
+                      },
+                    },
+                    { status: 409 },
+                  );
               },
             });
-            if (state !== "password") await openMissing(app);
-            if (state === "confirmation" || state === "damaged" || state === "refusal") {
-              await click(app, "start-again");
+            if (state !== "offered") await openMissing(app);
+            if (state === "confirmation" || state === "damaged" || state === "refusal")
               await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
-            }
             if (state === "refusal") {
               await click(app, "confirm-start-again");
-              await expect.poll(() => q(app, "resume-password")).not.toBeNull();
+              await expect.poll(() => q(app, "start-again")).not.toBeNull();
             }
+            if (state === "setup-finished") expect(q(app, "start-again-refused")).not.toBeNull();
             await app.updateComplete;
             if (state === "damaged") expect(q(app, "recovery-record-damaged")).not.toBeNull();
             await expectNoA11yViolations(host);
@@ -76,9 +83,11 @@ for (const locale of ["en-GB", "es-ES"] as const)
               app,
               state === "confirmation" || state === "damaged"
                 ? "confirm-start-again"
-                : state === "recovered" || state === "finished"
-                  ? "start-again"
-                  : "resume",
+                : state === "ask" || state === "finished"
+                  ? "cancel-start-again"
+                  : state === "setup-finished"
+                    ? "reconnect-first"
+                    : "start-again",
             )!;
             const native = button.shadowRoot!.querySelector("button")!;
             native.focus();
@@ -127,7 +136,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
             expect(section.getBoundingClientRect().right).toBeLessThanOrEqual(width);
             const button = q<WtButton>(
               app,
-              state === "running" ? "reconnect-first" : "start-again",
+              state === "running" ? "reconnect-first" : "cancel-start-again",
             )!;
             const native = button.shadowRoot!.querySelector("button")!;
             native.focus();
