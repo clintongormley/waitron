@@ -178,6 +178,8 @@ interface FakeHost {
   missByMs: number;
   sets: { targetMs: number; requester: Record<string, string | null> }[];
   statusAsks: number;
+  /** Holds each status read, after the set has judged the stop, until it settles. */
+  statusGate: Promise<void> | null;
 }
 
 interface Box {
@@ -226,11 +228,18 @@ async function stoppedBox(
     ...base,
     now: () => ({ ...base.now(), instant: new Date(boxMs), offsetMinutes: 60 }),
   };
-  const host: FakeHost = { status: UNSYNCHRONISED, missByMs: 0, sets: [], statusAsks: 0 };
+  const host: FakeHost = {
+    status: UNSYNCHRONISED,
+    missByMs: 0,
+    sets: [],
+    statusAsks: 0,
+    statusGate: null,
+  };
   const correction = clockCorrection({
     host: {
       clockStatus: async () => {
         host.statusAsks += 1;
+        await host.statusGate;
         return host.status;
       },
       setClock: async (input) => {
@@ -1008,4 +1017,97 @@ it("refuses an override that is not an object as the request's field", async () 
     code: "management.request_invalid",
     params: { field: "override" },
   });
+});
+
+it("sets the clock once when two tills confirm differing times together", async () => {
+  // Two days behind and each till a day ahead, so the stop still holds after the first set.
+  const box = await stoppedBox(2 * DAY);
+  const before = written(box);
+  const cookies = [staffCookie, otherTillCookie];
+  const asked = await Promise.all(cookies.map((cookie) => ask(box, cookie)));
+  const turn = box.holdTurn();
+  const sent = cookies.map((cookie, index) =>
+    confirmWith(box, cookie, {
+      challengeId: asked[index]!.json.challengeId,
+      deviceAt: boxTime(box) + DAY,
+    }),
+  );
+  await sleep(200);
+  await turn.release();
+  const answers = await Promise.all(sent);
+  expect(box.host.sets).toHaveLength(1);
+  expect(written(box)).toMatchObject({ rows: before.rows + 1, hostSets: 1 });
+  expect(answers.map((answer) => answer.status).sort()).toEqual([200, 409]);
+  // Without the step counter the turn's own judgement refuses it `not_stopped`: the first set's
+  // row confirms the stop.
+  expect(answers.find((answer) => answer.status === 409)!.json).toEqual(setRefused("stale"));
+});
+
+/** A differing till's set held at the host's status read, so holding the turn, and an agreeing
+ * till's confirmation sent meanwhile. */
+async function agreeingWhileSetHolds(box: Box) {
+  let release: () => void = () => {};
+  box.host.statusGate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const forSet = await ask(box, staffCookie);
+  const forConfirm = await ask(box, otherTillCookie);
+  const set = confirmWith(box, staffCookie, {
+    challengeId: forSet.json.challengeId,
+    deviceAt: boxTime(box) + 10 * MINUTE,
+  });
+  await vi.waitFor(() => expect(box.host.statusAsks).toBe(1));
+  const confirmed = confirmWith(box, otherTillCookie, {
+    challengeId: forConfirm.json.challengeId,
+    deviceAt: boxTime(box),
+  });
+  await sleep(100);
+  release();
+  return { set, confirmed };
+}
+
+it("writes an agreeing till's confirmation only after a set holding the turn", async () => {
+  const order: string[] = [];
+  const backend = Object.create(venue.backend, {
+    confirmClockStep: {
+      value: (
+        tx: Transaction,
+        input: Parameters<NonNullable<FiscalBackend["confirmClockStep"]>>[1],
+      ) => {
+        order.push("step");
+        return venue.backend.confirmClockStep!(tx, input);
+      },
+    },
+    confirmClockStop: {
+      value: (
+        tx: Transaction,
+        input: Parameters<NonNullable<FiscalBackend["confirmClockStop"]>>[1],
+      ) => {
+        order.push("stop");
+        return venue.backend.confirmClockStop!(tx, input);
+      },
+    },
+  }) as FiscalBackend;
+  const box = await stoppedBox(10 * MINUTE, { backend });
+  const { set, confirmed } = await agreeingWhileSetHolds(box);
+  expect((await set).status).toBe(200);
+  // The set moved the clock after the till's reading, so the comparison is void.
+  expect((await confirmed).json).toEqual(setRefused("stale"));
+  expect(order).toEqual(["step"]);
+});
+
+it("finishes a set held in the turn and an agreeing till's confirmation, on the real database", async () => {
+  const box = await stoppedBox(10 * MINUTE);
+  const { set, confirmed } = await agreeingWhileSetHolds(box);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error("the set and the confirmation never finished")),
+      5_000,
+    );
+  });
+  const [setAnswer, confirmAnswer] = await Promise.race([Promise.all([set, confirmed]), deadline]);
+  clearTimeout(timer);
+  expect(setAnswer.status).toBe(200);
+  expect(confirmAnswer.status).toBe(409);
 });

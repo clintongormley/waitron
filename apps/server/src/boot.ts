@@ -1828,6 +1828,21 @@ async function bootServer(
     incidents: recordIncidentOnce,
   });
   const tillClock = systemClock();
+  const boxHost = seams.boxHost ?? boxHostClient();
+  // Before the tills' routes, which set the clock through it.
+  const correction = clockCorrection({
+    host: boxHost,
+    backend: nodeBackend,
+    store: clockWitnesses,
+    clock: tillClock,
+    boot: boxBoot,
+    read: (fn) => db.withWriteLock(() => fn(db)),
+    transaction: (fn) => withTransaction(db, fn),
+    // Called only once a set has run, after the email duty below has started.
+    onCorrected: (incident) => boxEmails.remember(incident),
+    nodeId: tradingContext.nodeId,
+    log,
+  });
   const tableRemovals = enabledTableRemovals(
     ALL_MODULES.filter((module) => (appliedModuleVersions[module.name] ?? 0) > 0),
   );
@@ -1859,6 +1874,16 @@ async function bootServer(
       workforceEnabled,
       attendanceResponsesEnabled: isSingletonPrimary,
       attendance: attendanceRecorder,
+      boxClock: {
+        correction,
+        startUp: clockStart,
+        witnesses: () => clockWitnesses.witnesses(),
+        clearWitnesses: () => clockWitnesses.clear(),
+        readBoot: boxBoot.readBoot,
+        steady: () => performance.now(),
+        requestFromBox: seams.requestFromBox,
+        filesRecords,
+      },
     },
     log,
   );
@@ -2460,7 +2485,6 @@ async function bootServer(
     log,
   });
   undoOnFailure.push(() => boxEmails.stop());
-  const boxHost = seams.boxHost ?? boxHostClient();
   // One read of the host's clock service a minute, shared by every reader of it.
   const clockServiceCache = createTtlCache<ClockServiceStatus>({ ttlMs: 60_000, now });
   const readClockService = () => clockServiceCache.get("status", () => boxHost.clockStatus());
@@ -2471,18 +2495,6 @@ async function bootServer(
         status: readClockService,
       }),
     );
-  const correction = clockCorrection({
-    host: boxHost,
-    backend: nodeBackend,
-    store: clockWitnesses,
-    clock: tillClock,
-    boot: boxBoot,
-    read: (fn) => db.withWriteLock(() => fn(db)),
-    transaction: (fn) => withTransaction(db, fn),
-    onCorrected: boxEmails.remember,
-    nodeId: tradingContext.nodeId,
-    log,
-  });
   // A reading of the time service taken before a set is not served after it.
   correction.addAnchor({
     stepComing: async () => {},
