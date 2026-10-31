@@ -46,7 +46,7 @@ export async function recordCorrected(
 ): Promise<void> {
   const origin = jobOrigin("dashboard");
   const open = await tx
-    .select({ id: incidents.id })
+    .select({ id: incidents.id, detectedAt: incidents.detectedAt })
     .from(incidents)
     .where(
       and(
@@ -56,8 +56,13 @@ export async function recordCorrected(
         isNull(incidents.acknowledgedAt),
       ),
     );
-  for (const { id } of open)
-    await markIncidentHandled(tx, { id, personId: null, handledAt: input.detectedAt });
+  // A step back would otherwise mark the earlier alert handled before it was detected.
+  for (const { id, detectedAt } of open)
+    await markIncidentHandled(tx, {
+      id,
+      personId: null,
+      handledAt: new Date(Math.max(Date.parse(detectedAt), input.detectedAt.getTime())),
+    });
   await recordIncident(tx, {
     origin,
     error: new AppError("clock.corrected", input.params),

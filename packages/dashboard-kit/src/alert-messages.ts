@@ -11,7 +11,7 @@ export { formatBytes };
  * bytes as gigabytes or megabytes, the way the alert's language writes them; `{name:minute}` writes
  * an instant in `toISOString`'s shape as `YYYY-MM-DD HH:MM` in the browser's zone, in either
  * language; `{name:duration}` writes a number of milliseconds, either sign, as its two largest
- * whole units from days to seconds (tenths of a second below one), in the alert's language;
+ * non-zero whole units from days to seconds (tenths of a second below one), in the alert's language;
  * `{name:list}` writes the words a registered word list gives the param's value.
  * A variant is chosen by its param being `true`: a `replace` variant's words stand instead of the
  * message, and otherwise each `append` variant's words follow it. `one` words stand instead of the

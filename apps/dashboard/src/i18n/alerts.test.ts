@@ -544,15 +544,15 @@ describe("the box's clock was stepped", () => {
     );
   });
 
-  it("says a change it could not confirm was asked for, whoever asked", () => {
+  it("says a change it could not confirm was tried, and only what the clock read, whoever asked", () => {
     for (const who of [{}, { source: "staff", person: "Ana", device: "Barra 1", byStaff: true }]) {
       const params = { ...base, ...who, confirmationId: null, verified: false, unverified: true };
       const { english, spanish } = both(params);
       expect(english).toBe(
-        `The box asked to move its clock from ${from} to ${to} (moved forward 2 days and 3 hours), but could not confirm the change took. Check the box's clock on the Box status page.`,
+        `The box tried to set its clock but could not confirm the change took. Its clock read ${from} before and ${to} after (moved forward 2 days and 3 hours). Check the box's clock on the Box status page.`,
       );
       expect(spanish).toBe(
-        `El equipo pidió mover su reloj de ${from} a ${to} (adelantado 2 días y 3 horas), pero no ha podido confirmar que el cambio se aplicara. Comprueba la hora del equipo en Estado del equipo.`,
+        `El equipo intentó poner su reloj, pero no ha podido confirmar que el cambio se aplicara. Su reloj marcaba ${from} antes y ${to} después (adelantado 2 días y 3 horas). Comprueba la hora del equipo en Estado del equipo.`,
       );
     }
   });

@@ -3107,7 +3107,7 @@ Revision 4 changes none of these rulings. It carries out the owner's answer of 2
   `admin.till` or `proof.till` reads `admin.device` and `proof.device`. Code outside the fiscal
   packages may still say till.
 - **The step in words** is a new formatter kind, `{stepMs:duration}`
-  (`packages/dashboard-kit/src/alert-messages.ts`): the two largest whole units from days to
+  (`packages/dashboard-kit/src/alert-messages.ts`): the two largest non-zero whole units from days to
   seconds, worded by the browser's own `Intl.NumberFormat` units joined by `Intl.ListFormat`
   ("2 days and 3 hours" / "2 días y 3 horas"), so no Spanish enters the kit (its source is scanned
   by `scripts/english-only.test.ts`). The direction is a `direction` param, `"forward"` or
@@ -3124,3 +3124,24 @@ Revision 4 changes none of these rulings. It carries out the owner's answer of 2
   `byStaff` keys as naming no one.
 - **No stop, but a check open**: the step closes that check (decision 7), and names the latest
   record when the after reading is still more than a minute behind it, as during a stop.
+
+### Task 8's per-task review, folded (2026-10-31)
+
+- **The unverified step's words** no longer say the box "asked to move its clock from {before} to
+  {after}": `after` is the reading taken after the attempt, not the time asked for (`targetAt`,
+  which the alert does not carry). They now say the box tried to set its clock and could not
+  confirm it took, and what the clock read before and after. Task 9's email follows the same rule.
+- **An earlier `clock.corrected` is marked handled at the later of its own detection and the new
+  step's after reading**, so a second step that goes back never makes it handled before it was
+  detected (`clock-stop-incidents.ts`, `recordCorrected`).
+- Two cases added for rules the review's mutations showed untested: a step with no stop but a
+  check open names the latest record when it lands more than a minute behind it, and an after
+  reading exactly a minute behind names none.
+- **Task 8's database-constraint case moved, it was not dropped**: `confirmClockStep` refuses an
+  `admin` source with no person before any write, so the case cannot reach the database; Task
+  8-0's `clock-confirmations.test.ts` tests the constraint directly.
+- Not changed: the row's `step_ms` is `Math.round(stepMs)` while `proof.step.stepMs` and the alert
+  keep the measured value, a difference under a millisecond. A till's label is `devices.label`,
+  NOT NULL in the schema, so `deviceLabel` is null only when the device row is not found; Task 12a
+  builds the staff input from the signed-in device's own row, and the bell then writes the kit's
+  "—" for a missing value.
