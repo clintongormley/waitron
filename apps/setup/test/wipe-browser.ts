@@ -67,6 +67,8 @@ export async function wipeFixture(
     backupPhase?: BackupRepairStatus["phase"];
     /** Answers `/first-setup/status` before the fixture's own answer, when it returns a response. */
     status?: (path: string, headers: Headers) => Response | undefined;
+    locale?: "en-GB" | "es-ES";
+    theme?: "light" | "dark";
   } = {},
 ) {
   let inspections = 0;
@@ -110,13 +112,14 @@ export async function wipeFixture(
         } satisfies FirstSetupInspection);
     },
   });
-  const { el: app } = await mountWidget<SetupApp>("setup-app", {
-    api: fixture.api,
-    browserLanguages: ["en-GB"],
-  });
+  const { el: app, host } = await mountWidget<SetupApp>(
+    "setup-app",
+    { api: fixture.api, browserLanguages: [options.locale ?? "en-GB"] },
+    options.theme,
+  );
   await expect.poll(() => q(app, "start-again")).not.toBeNull();
   await settled(app);
-  return { app, ...fixture };
+  return { app, host, ...fixture };
 }
 export type Sent = { path: string; body: unknown; headers: Headers };
 export const summaryReads = (requests: Sent[]) =>
