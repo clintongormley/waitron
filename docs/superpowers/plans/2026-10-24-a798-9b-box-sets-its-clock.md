@@ -3123,6 +3123,21 @@ from "Task 15c fixes it" to "fixed (test: …)" in this task's commit.
 **Focused commands.** Each site's own suite; `pnpm --filter @waitron/fiscal-verifactu exec vitest
 run src/write-path.e2e.test.ts inmutabilidad`.
 
+**Built in four parts** *(the lead, 2026-11-01, after reading the drain: its stored times are compared
+in about eight SQL statements, so the task is split to keep each sitting bounded; each part is its own
+commit, per-task review and push)*:
+- **15c-1, AEAT filing** — `packages/fiscal-verifactu/src/drain.ts` alone, every comparison of
+  `proximo_envio_en`, `proximo_intento_en` and `enviado_en` (`workIsDue`, `countDue`,
+  `nextClaimOpportunity`, the claim's candidates and its earlier-record hold, `recoverStaleClaims`,
+  the probes, the gate). The golden huella test and `inmutabilidad` run unedited.
+- **15c-2, sign-in limits** — account-action links, Google sign-in state, authenticator enrolment,
+  the PIN and password throttles, the device-join and account-action limiters, the reset and
+  invitation cooldown.
+- **15c-3, the server's own jobs** — join requests, card-refund resend, the pairing window, cloud
+  snapshots, content suggestion jobs, invoice deliveries.
+- **15c-4, schedulers and leases** — the payments reconcile scheduler, the print-job lease, the
+  backup schedule (and its two comments), then the `nowIso()` / `Date.now` grep.
+
 ### Task 15's departures and notes (2026-10-31)
 
 - **Stream generations: no hold; the prune reads the bucket's clock** (Task 15's review, I2). The
