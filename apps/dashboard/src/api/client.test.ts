@@ -3,6 +3,7 @@ import type { FetchLike } from "@waitron/dashboard-kit";
 import {
   DashboardApi,
   type ClockConfirmView,
+  type ClockSetView,
   type ClockMisdatedHandledView,
   type ClockMisdatedView,
 } from "./client.js";
@@ -3380,6 +3381,38 @@ it("asks the box for a clock challenge and answers it with this device's time", 
     ["/api/box/clock-challenge", "POST", "{}"],
     ["/api/box/clock-confirm", "POST", '{"challengeId":"ch-1","deviceAt":1761156601000}'],
   ]);
+});
+
+it("asks the box to set its clock to this device's time and answers the step", async () => {
+  const set = {
+    confirmationId: "c-2",
+    stepMs: 86_400_000,
+    confirmedAt: "2026-10-23T18:10:02.000Z",
+  } satisfies ClockSetView;
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(set));
+  const api = new DashboardApi("", fetchImpl);
+  expect(await api.clockSet({ challengeId: "ch-1", deviceAt: 1_761_156_601_000 })).toEqual(set);
+  const calls = fetchImpl.mock.calls as [string, RequestInit][];
+  expect(calls.map(([url, init]) => [url, init.method, init.body])).toEqual([
+    ["/api/box/clock-set", "POST", '{"challengeId":"ch-1","deviceAt":1761156601000}'],
+  ]);
+});
+
+it("rejects a refused clock set with its code and reason", async () => {
+  const fetchImpl = vi
+    .fn()
+    .mockResolvedValue(
+      jsonResponse(
+        { error: { code: "clock.set_refused", params: { reason: "synchronised" } } },
+        false,
+        409,
+      ),
+    );
+  const api = new DashboardApi("", fetchImpl);
+  await expect(api.clockSet({ challengeId: "ch-1", deviceAt: 1 })).rejects.toMatchObject({
+    code: "clock.set_refused",
+    params: { reason: "synchronised" },
+  });
 });
 
 it("rejects a refused clock confirmation with its code and reason", async () => {

@@ -45,6 +45,22 @@ const CONFIRM_REFUSALS = {
   not_stopped: "box_status.clock.admin.refused.not_stopped",
 } as const satisfies Record<string, StringKey>;
 
+/** The reasons a refused set names that have their own sentence; `agrees` turns to Confirm. */
+const SET_REFUSALS = {
+  same_machine: "box_status.clock.admin.refused.same_machine",
+  not_stopped: "box_status.clock.admin.refused.not_stopped",
+  synchronised: "box_status.clock.admin.set.refused.synchronised",
+  witnessed: "box_status.clock.admin.set.refused.witnessed",
+  stale: "box_status.clock.admin.set.refused.stale",
+  host_unavailable: "box_status.clock.admin.set.refused.host_unavailable",
+  target_invalid: "box_status.clock.admin.set.refused.target_invalid",
+  pending_disproofs: "box_status.clock.admin.set.refused.pending_disproofs",
+} as const satisfies Record<string, StringKey>;
+
+/** LOCAL copy of `IDLE_TIMEOUT_MS` (`packages/identity/src/management-session.ts:13`): a step
+ * past it either way ends the dashboard session that asked for it. */
+const SESSION_IDLE_MS = 30 * 60_000;
+
 interface ClockReading {
   boxAt: number;
   deviceAt: number;
@@ -259,6 +275,8 @@ export class BoxStatusScreen extends LitElement {
   /** The times the open check compares; null while it is asked for, or when it was refused. */
   @state() private clockReading: ClockReading | null = null;
   @state() private confirmingClock = false;
+  /** Set once the box has set its clock from this device's; null otherwise. */
+  @state() private clockSetDone: { signInAgain: boolean } | null = null;
   /** The check's refusal, shown above the dialog's buttons. */
   @state() private clockCheckError = "";
   /** Bumped at every opening, so an answer for a closed check is dropped. */
@@ -408,10 +426,18 @@ export class BoxStatusScreen extends LitElement {
   }
 
   #offersClockCheck(health: BoxHealth): boolean {
+    return this.canConfirmClock && (stopShowing(health) || health.clockCheckWaiting !== null);
+  }
+
+  /** Whether the box's set route would take this device's time: it runs a time service it can
+   * set and is not in time by it, and a stop holds. A waiting check alone is not a stop. */
+  #canSetClock(health: BoxHealth | null): boolean {
     return (
+      health !== null &&
       this.canConfirmClock &&
-      ((health.clockStop !== null && health.clockStop.proof !== "confirmed") ||
-        health.clockCheckWaiting !== null)
+      health.clock.sync.source === "timedatectl" &&
+      !health.clock.sync.synced &&
+      stopShowing(health)
     );
   }
 
@@ -437,6 +463,7 @@ export class BoxStatusScreen extends LitElement {
     const run = ++this.#clockCheckRun;
     this.clockReading = null;
     this.clockCheckError = "";
+    this.clockSetDone = null;
     this.clockCheckOpen = true;
     try {
       const { reading } = await this.#readBoxTime();
@@ -473,9 +500,38 @@ export class BoxStatusScreen extends LitElement {
     }
   }
 
+  async #setClock(): Promise<void> {
+    if (this.confirmingClock) return;
+    this.confirmingClock = true;
+    this.clockCheckError = "";
+    let fresh: ClockReading | null = null;
+    try {
+      const { challengeId, reading } = await this.#readBoxTime();
+      fresh = reading;
+      const { stepMs } = await this.api.clockSet({ challengeId, deviceAt: Date.now() });
+      const signInAgain = Math.abs(stepMs) > SESSION_IDLE_MS;
+      this.clockSetDone = { signInAgain };
+      // A read now would meet the ended session before the sentence asking to sign in is read.
+      if (!signInAgain) this.api.liveData.refresh();
+    } catch (error) {
+      const reason = setRefusalReason(error);
+      if (fresh !== null && reason === "agrees") {
+        this.clockReading = { ...fresh, agrees: true };
+        this.api.liveData.refresh();
+      } else {
+        if (reason === "not_stopped") this.clockReading = null;
+        this.clockCheckError = setRefusal(error);
+        this.api.liveData.refresh();
+      }
+    } finally {
+      this.confirmingClock = false;
+    }
+  }
+
   #closeClockCheck(): void {
     this.#clockCheckRun += 1;
     this.clockCheckOpen = false;
+    if (this.clockSetDone?.signInAgain === true) this.api.liveData.refresh();
   }
 
   #clockCheckButton(): TemplateResult {
@@ -498,7 +554,18 @@ export class BoxStatusScreen extends LitElement {
   #renderClockCheckDialog(): TemplateResult | typeof nothing {
     if (!this.canConfirmClock) return nothing;
     const reading = this.clockReading;
-    const asking = reading?.agrees === true;
+    const done = this.clockSetDone;
+    const asking = done === null && reading?.agrees === true;
+    const offeringSet =
+      done === null && reading !== null && !reading.agrees && this.#canSetClock(this.health);
+    const cancel = html`<wt-button
+      slot="cancel"
+      variant="secondary"
+      data-test="clock-check-cancel"
+      ?disabled=${this.confirmingClock}
+      @click=${() => this.#closeClockCheck()}
+      >${t("action.cancel")}</wt-button
+    >`;
     return html`<wt-dialog
       class="clock-check"
       data-test="clock-check-dialog"
@@ -511,46 +578,64 @@ export class BoxStatusScreen extends LitElement {
       }}
     >
       ${
-        reading === null
-          ? nothing
-          : html`<p data-test="clock-check-times">
-                ${wholeTimes(
-                  fill("box_status.clock.admin.times", {
-                    box: atSeconds(reading.boxAt),
-                    device: atSeconds(reading.deviceAt),
-                  }),
-                )}
-              </p>
-              <p data-test="clock-check-verdict">
-                ${t(asking ? "box_status.clock.admin.agree" : "box_status.clock.admin.differ")}
-              </p>`
+        done !== null
+          ? html`<p data-test="clock-set-done">
+              ${t("box_status.clock.admin.set.done")}${
+                done.signInAgain ? ` ${t("box_status.clock.admin.set.sign_in_again")}` : nothing
+              }
+            </p>`
+          : reading === null
+            ? nothing
+            : offeringSet
+              ? html`<p data-test="clock-set-question">
+                  ${wholeTimes(
+                    fill("box_status.clock.admin.set.question", {
+                      box: atSeconds(reading.boxAt),
+                      device: atSeconds(reading.deviceAt),
+                    }),
+                  )}
+                </p>`
+              : html`<p data-test="clock-check-times">
+                    ${wholeTimes(
+                      fill("box_status.clock.admin.times", {
+                        box: atSeconds(reading.boxAt),
+                        device: atSeconds(reading.deviceAt),
+                      }),
+                    )}
+                  </p>
+                  <p data-test="clock-check-verdict">
+                    ${t(asking ? "box_status.clock.admin.agree" : "box_status.clock.admin.differ")}
+                  </p>`
       }
       <wt-form-actions slot="footer" .error=${this.clockCheckError}>
         ${
-          asking
-            ? html`<wt-button
-                  slot="cancel"
-                  variant="secondary"
-                  data-test="clock-check-cancel"
-                  ?disabled=${this.confirmingClock}
-                  @click=${() => this.#closeClockCheck()}
-                  >${t("action.cancel")}</wt-button
-                >
+          offeringSet
+            ? html`${cancel}
                 <wt-button
                   variant="primary"
-                  data-test="clock-check-confirm"
+                  data-test="clock-set-confirm"
                   ?disabled=${this.confirmingClock}
                   ?loading=${this.confirmingClock}
-                  @click=${() => void this.#confirmClock()}
-                  >${t("action.confirm")}</wt-button
+                  @click=${() => void this.#setClock()}
+                  >${t("box_status.clock.admin.set.confirm")}</wt-button
                 >`
-            : html`<wt-button
-                slot="cancel"
-                variant="secondary"
-                data-test="clock-check-close"
-                @click=${() => this.#closeClockCheck()}
-                >${t("action.close")}</wt-button
-              >`
+            : asking
+              ? html`${cancel}
+                  <wt-button
+                    variant="primary"
+                    data-test="clock-check-confirm"
+                    ?disabled=${this.confirmingClock}
+                    ?loading=${this.confirmingClock}
+                    @click=${() => void this.#confirmClock()}
+                    >${t("action.confirm")}</wt-button
+                  >`
+              : html`<wt-button
+                  slot="cancel"
+                  variant="secondary"
+                  data-test="clock-check-close"
+                  @click=${() => this.#closeClockCheck()}
+                  >${t("action.close")}</wt-button
+                >`
         }
       </wt-form-actions>
     </wt-dialog>`;
@@ -1086,10 +1171,33 @@ function atSeconds(ms: number): string {
   return `${formatIsoMinute(at.toISOString())}:${String(at.getSeconds()).padStart(2, "0")}`;
 }
 
-function refusalReason(error: unknown): string | null {
-  if (codeOf(error) !== "clock.confirm_refused") return null;
+/** A stop the box's set route takes: one not yet confirmed, or a clock before 28-10-2024. */
+function stopShowing(health: BoxHealth): boolean {
+  return (
+    (health.clockStop !== null && health.clockStop.proof !== "confirmed") ||
+    health.notices.some((notice) => notice.code === "clock.unusable")
+  );
+}
+
+function reasonOf(error: unknown, code: string): string | null {
+  if (codeOf(error) !== code) return null;
   const reason = (error as { params?: { reason?: unknown } } | null)?.params?.reason;
   return typeof reason === "string" ? reason : null;
+}
+
+function refusalReason(error: unknown): string | null {
+  return reasonOf(error, "clock.confirm_refused");
+}
+
+function setRefusalReason(error: unknown): string | null {
+  return reasonOf(error, "clock.set_refused");
+}
+
+function setRefusal(error: unknown): string {
+  const reason = setRefusalReason(error);
+  return reason !== null && Object.hasOwn(SET_REFUSALS, reason)
+    ? t(SET_REFUSALS[reason as keyof typeof SET_REFUSALS])
+    : codeMessage(codeOf(error));
 }
 
 function clockRefusal(error: unknown): string {

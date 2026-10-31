@@ -817,3 +817,12 @@ it("has English and Spanish copy for a recovery pack request the box could not r
   expect(codeMessage(code, "es")).not.toBe(codeMessage("test.unmapped_code", "es"));
   expect(codeMessage(code, "es")).not.toBe(codeMessage(code, "en"));
 });
+
+it("has a sentence in both languages for the box's refused or failed clock set", () => {
+  const GENERIC_ES = "Algo salió mal, inténtalo de nuevo";
+  const GENERIC_EN = "Something went wrong, try again";
+  for (const code of ["clock.set_refused", "clock.set_failed"]) {
+    expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
+    expect(codeMessage(code, "en")).not.toBe(GENERIC_EN);
+  }
+});
