@@ -1,7 +1,17 @@
 import { createHash } from "node:crypto";
 import { lstat, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
+import type { DatabaseSync } from "node:sqlite";
+import { getTableName } from "drizzle-orm";
 import { lockVenueDatabase } from "@waitron/db";
+import {
+  NODE_MIGRATIONS,
+  nodeMirrorLink,
+  nodeMode,
+  nodePrimaryKey,
+  nodeRecoveryKey,
+  nodeSigningKey,
+} from "@waitron/node-db";
 import { AppError, isUuid } from "@waitron/shared";
 import { deleteBackupRoomNote } from "./backup-room-note-file.js";
 import { readDurableHostJsonWithBytes, writeDurableHostJson } from "./durable-host-json.js";
@@ -14,6 +24,7 @@ import {
 import { isEmptiedTombstone } from "./first-setup-backup-discard.js";
 import { removeAndSync } from "./folder-sync.js";
 import { openImmutableWhenWalEmpty } from "./read-only-database.js";
+import { quoteIdent } from "./identifiers.js";
 import { BACKUP_ROOM_NOTE_FILE } from "./spare-space-name.js";
 import "./errors.js";
 
@@ -433,6 +444,42 @@ export async function clearStartAgainMarker(venueDir: string): Promise<void> {
   }
 }
 
+/**
+ * The most rows a first setup attempt may leave in each node.db table: its recovery-key check
+ * (`installStagedNodeKey`) and its sealed signing key. The signing key is allowed before first
+ * setup writes it there, so that move does not make every held box refuse Start again.
+ */
+export const NODE_ROWS_A_FIRST_SETUP_WRITES: Readonly<Record<string, number>> = {
+  [getTableName(nodeMode)]: 0,
+  [getTableName(nodeMirrorLink)]: 0,
+  [getTableName(nodePrimaryKey)]: 0,
+  [getTableName(nodeRecoveryKey)]: 1,
+  [getTableName(nodeSigningKey)]: 1,
+};
+
+/**
+ * Why Start again may not delete this node.db, or null: it holds nothing, or exactly the node
+ * migration set's tables and journal with no more rows than a first setup attempt writes.
+ */
+function nodeRefusal(connection: DatabaseSync): string | null {
+  const objects = connection
+    .prepare("select type, name from sqlite_schema where name not like 'sqlite\\_%' escape '\\'")
+    .all() as { type: string; name: string }[];
+  if (objects.length === 0) return null;
+  const expected = [
+    NODE_MIGRATIONS.migrationsTable,
+    ...Object.keys(NODE_ROWS_A_FIRST_SETUP_WRITES),
+  ];
+  const table = (name: string) =>
+    objects.some((found) => found.type === "table" && found.name === name);
+  if (objects.length !== expected.length || !expected.every(table)) return "node.db holds a table";
+  for (const [name, most] of Object.entries(NODE_ROWS_A_FIRST_SETUP_WRITES)) {
+    const counted = connection.prepare(`select count(*) as rows from ${quoteIdent(name)}`).get();
+    if ((counted as { rows: number }).rows > most) return "node.db holds a row";
+  }
+  return null;
+}
+
 /** D3's refusals that the folders alone can answer; returns the canonical folders. */
 export async function assertStartAgainAllowedOnDisk(
   roots: Roots,
@@ -485,17 +532,15 @@ export async function assertStartAgainAllowedOnDisk(
           ? `check failed: ${codeOf(opened.error)} ${node}-wal`
           : "node.db unreadable",
       );
-    let tables: unknown[];
+    let refusal: string | null;
     try {
-      tables = opened.connection
-        .prepare("select name from sqlite_schema where name not like 'sqlite\\_%' escape '\\'")
-        .all();
+      refusal = nodeRefusal(opened.connection);
     } catch {
       throw notReady("node.db unreadable");
     } finally {
       opened.connection.close();
     }
-    if (tables.length !== 0) throw notReady("node.db holds a table");
+    if (refusal !== null) throw notReady(refusal);
   }
   return canonical;
 }

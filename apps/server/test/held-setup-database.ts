@@ -85,7 +85,8 @@ export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSet
   const held = await openVenueDatabase(f.roots.venueDir);
   let open = true;
   try {
-    for (const set of TEST_MIGRATIONS) await applyMigrationSet(held.venue, set);
+    for (const set of TEST_MIGRATIONS)
+      await applyMigrationSet(set.database === "node" ? held.node : held.venue, set);
     // A synthetic certificate stands in for the AEAT one, as `first-fiscal-interruption.test.ts` does.
     const modules = ALL_MODULES.map((module) =>
       module.name !== MODULE

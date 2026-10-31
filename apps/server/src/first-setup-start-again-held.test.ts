@@ -83,6 +83,54 @@ it("a held summary the disk check refuses is refused before what the setup datab
   expect(holdingsRead.calls).toBe(0);
 });
 
+/** node.db's tables, and the rows each holds. */
+function nodeHoldings(f: Pick<Held, "roots">) {
+  const node = new DatabaseSync(join(f.roots.venueDir, "node.db"), { readOnly: true });
+  try {
+    const names = node
+      .prepare(
+        "select name from sqlite_schema where name not like 'sqlite\\_%' escape '\\' order by name",
+      )
+      .all()
+      .map((row) => (row as { name: string }).name);
+    return Object.fromEntries(
+      names.map((name) => [
+        name,
+        (node.prepare(`select count(*) as n from "${name}"`).get() as { n: number }).n,
+      ]),
+    );
+  } finally {
+    node.close();
+  }
+}
+
+it("in the held state, Start again deletes a node.db holding the node set's tables and the attempt's recovery-key check", async () => {
+  const f = await heldSetup({ recovery: false });
+  expect(nodeHoldings(f)).toEqual({
+    __drizzle_migrations_node: 1,
+    node_mirror_link: 0,
+    node_mode: 0,
+    node_primary_key: 0,
+    node_recovery_key: 1,
+    node_signing_key: 0,
+  });
+  const { ids, actions } = await withoutSignIn(f);
+  await expect(actions.startAgainFirstSetup(ids)).resolves.toBeUndefined();
+  await expectStartAgainDeleted(f.roots);
+});
+
+it("in the held state, a node.db holding a mirror link refuses Start again setup.not_ready, and nothing changes", async () => {
+  const f = await heldSetup();
+  const node = new DatabaseSync(join(f.roots.venueDir, "node.db"));
+  node.exec(
+    `insert into node_mirror_link values ('${crypto.randomUUID()}', 'https://relay.test', 'box', 'pem', '${crypto.randomUUID()}', '2026-10-31T00:00:00.000Z')`,
+  );
+  node.close();
+  holdingsRead.calls = 0;
+  await expectRefused(f, { code: "setup.not_ready", reason: "node.db holds a row" });
+  expect(holdingsRead.calls).toBe(0);
+});
+
 it.each([
   ["saved trading settings", "trading-settings", { recovery: false, tradingSettings: true }, true],
   ["a complete attempt", "setup-finished", { recovery: false, status: "complete" }, false],

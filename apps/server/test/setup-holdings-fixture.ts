@@ -27,7 +27,7 @@ const ADJUSTMENT_REFUND = `insert into adjustment_refunds
           '00000000-0000-4000-8000-000000000003', 1, '2026-10-28T00:00:00.000Z')`;
 
 // The rows a real activation stopped at `committed` leaves with the helper's module set.
-const ACTIVATION_ROWS = 106;
+const ACTIVATION_ROWS = 105;
 
 type Held = Pick<Awaited<ReturnType<typeof heldSetup>>, "roots" | "host">;
 
