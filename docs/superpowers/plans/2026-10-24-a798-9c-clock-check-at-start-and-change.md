@@ -8,12 +8,26 @@
 > branch: `python3 ~/workspace/tools/worktree.py new waitron feat/a798-9c-clock-check --headless`.
 > **Parked for the owner** (it stops every record while a check waits). Review path: FULL, two
 > Codex run-it reviews side by side.
+>
+> **Changed 2026-10-31 by the owner's answer to slice 9b's question** (`~/waitron-campaign-b/questions.md`,
+> "OWNER ANSWER 2026-10-31 ~07:00" and "~07:05"; folded into 9b's plan as its revision 4,
+> [plan](2026-10-24-a798-9b-box-sets-its-clock.md), decisions 14–17). "If we can't check the time on
+> the internet, then use a till to choose the likely time, but ask for confirmation from a human
+> before continuing with startup"; any staff member signed in on site may confirm; a clock problem
+> found while the box is running "gets an alert to an admin". For this slice that means: the
+> `start` check is the gate the owner describes, and it closes on AEAT's time, on a till's time
+> confirmed by a staff member signed in on it, or on an administrator's device — never on two
+> agreeing devices alone; 9b builds the till's check, its `staff` record and an in-memory start-up
+> window, and 9c widens the window to "while a `start` check is open". The Goal, FYI 6, decision 5,
+> "Open for the full plan" and the review notes below are updated to match; the rest is as written.
 
 **Goal.** The box checks its clock at every start and whenever its clock changes by more than a
 minute in either direction; while a check waits, everything slice 8's stop refuses is refused, staff
-see the red strip, managers the bell and (after five minutes) an email; AEAT's time, two agreeing
-tills or handhelds, or an administrator's own device confirm it (and, by slice 9b, correct the
-clock); a confirmation lists the records the wrong clock may have dated. **No check may stop selling
+see the red strip, managers the bell and (after five minutes) an email; a `start` check is
+confirmed by AEAT's time, or else by a till's time that a staff member signed in on it confirms, or
+by an administrator's own device (each of which, by slice 9b, also corrects the clock); a check
+opened while running alerts the administrators, whose own device confirms it (2026-10-31, above);
+a confirmation lists the records the wrong clock may have dated. **No check may stop selling
 where nothing on the venue's network could lift it** (design §4.9 h).
 
 ## Owner FYI defaults for 9c
@@ -34,8 +48,9 @@ where nothing on the venue's network could lift it** (design §4.9 h).
    can reach the internet, its own time service may still put the clock right; the install line
    lives in `deploy/README.md` only. 9c's full plan inherits 9b's words.)*
 6. **When AEAT disagrees and the box cannot set its clock** (synchronised, or no host service), an
-   administrator's confirmation still closes a 9c check; AEAT's disagreement is kept in the proof
-   and raises `clock.disagrees` (round 1, I4.1).
+   administrator's confirmation still closes a 9c check — and, for a `start` check, a staff
+   member's confirmation of a till whose time agrees with the box's (9b's decision 15, 2026-10-31);
+   AEAT's disagreement is kept in the proof and raises `clock.disagrees` (round 1, I4.1).
 7. **Development** (`WAITRON_ENV=dev`, round 1, I7): no start or change checks at all. That covers
    a developer's laptop and the `wa-wt demo` and `wa-wt onboarding` stacks, which run `pnpm dev`
    with `WAITRON_ENV` `"dev"` in the checkout's `apps/server/.env` (`apps/server/scripts/dev-setup.ts:145`,
@@ -110,7 +125,15 @@ where nothing on the venue's network could lift it** (design §4.9 h).
    nothing loops; compare `fullDiskFailure` and `start-full-disk.e2e.test.ts`.
 5. **What closes a check**: slice 9's confirmations with "the stop" widened to "a stop or an open
    check"; a witness counts only if noted after the check opened (the witness store is cleared when
-   one opens).
+   one opens). *(Changed 2026-10-31, above.)* A `start` check closes on AEAT, on 9b's till check (a
+   staff member's confirmation, offered once AEAT has had no answer), or on an administrator; two
+   agreeing devices alone do NOT close it — the owner's "ask for confirmation from a human before
+   continuing with startup". 9b's start-up window (its decision 14) gives way to the open `start`
+   check: the till is offered while the check is open. For a `change` or `disagrees` check, opened
+   while running, the till is not offered; the administrators are alerted, and AEAT or an
+   administrator closes it. Whether slice 9's two-agreeing-devices lift still closes a `change` or
+   `disagrees` check is for the full plan (9b's owner FYI 12 left that lift alone for the stop
+   proper).
 6. **Wrongly dated after a change** (round 1, I8, the runner's ruling): with e₀ the clock's error
    before the change, Δ the change and s the step the confirmation applies, e₀ = −(Δ + s) and the
    clock after the change was off by −s. List the records written since the previous confirmation
@@ -129,6 +152,14 @@ where nothing on the venue's network could lift it** (design §4.9 h).
 
 ## Open for the full plan
 
+- **Does a check opened while running stop selling, or only alert?** (2026-10-31.) The owner's
+  07:05 words for a clock problem found while running are "gets an alert to an admin", with "the
+  confirmation step is for start-up". This outline's decision 2 stops selling during a `change` or
+  `disagrees` check; the words can also be read as "an alert instead of a stop". Default for the
+  full plan to put to the owner with a worked example: the `start` check stops selling (the owner's
+  "before continuing with startup"); a `change` or `disagrees` check alerts the administrators and
+  stops selling only if the owner confirms that reading.
+
 - **A time service synchronised to a wrong local time server, with no internet** (round 3, M7;
   design §4.9 h case 5): devices and the administrator disagree, and 9b never sets the clock while
   it reports itself synchronised. The full plan decides it — for example, a check is an alert only
@@ -138,6 +169,8 @@ where nothing on the venue's network could lift it** (design §4.9 h).
 ## Review notes for the full plan
 
 Codex seat 1: boot with no AEAT and no devices → stopped; an administrator off the box confirms →
-selling; the clock moved +2 h by hand → stopped again with `reason: "unconfirmed"`; the mid-payment
+selling; boot with no AEAT → stopped, a staff member confirms a till's time → selling, the clock set
+and the person and till named; two tills agreeing with the box and nobody confirming → still
+stopped; the clock moved +2 h by hand → stopped again with `reason: "unconfirmed"`; the mid-payment
 case through a real route. Seat 2: a check that can never be closed (host service gone, AEAT
 disagreeing, the time service synchronised) — expected: never a stop with no way out.
