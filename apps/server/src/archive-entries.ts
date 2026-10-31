@@ -47,11 +47,12 @@ export async function collectStateParts(
     }),
     collectOptionalStateFiles(deps.stateDir, OPTIONAL_BACKUP_STATE, budget),
   ]);
+  // The state reads report before the node copy: a missing recovery file names what to put back.
   const parts: StateParts = {
-    nodeDump: valueOf(node),
     secrets: valueOf(secrets),
     nonDbState: valueOf(nonDbState),
     optionalState: valueOf(optionalState),
+    nodeDump: valueOf(node),
   };
   budget?.addEntry("node.dump", parts.nodeDump.length);
   return parts;

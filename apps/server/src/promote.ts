@@ -6,6 +6,7 @@ import {
   nodes,
   readNodeMembership,
   readStandardSeriesId,
+  requireStamp,
   withNodeTransaction,
   withTransaction,
   writeNodeMembershipTx,
@@ -132,6 +133,7 @@ export async function promoteLocalSecondaryToPrimary(
 
   // venue.db is saved first and node.db follows, as two transactions: the role lives in its own file.
   await withTransaction(deps.db, async (tx) => {
+    await requireStamp(tx);
     await writeNodeMembershipTx(tx, document);
   });
   await writePrimaryRole(deps);
@@ -182,9 +184,9 @@ export async function commitMirrorPromotionTx(
 
 /**
  * The module activation, trading-series checks and membership document share one venue
- * transaction; the role in node.db follows it. The caller restarts only on
- * `{ alreadyPrimary: false }`, and still does when the role write fails: the start that follows
- * finishes the role.
+ * transaction, which first refuses an unstamped venue.db; the role in node.db follows it. The
+ * caller restarts only on `{ alreadyPrimary: false }`, and still does when the role write fails,
+ * leaving node.db's role as it was.
  */
 export async function promoteMirrorToPrimary(
   deps: MirrorPromoteDeps,
@@ -220,6 +222,7 @@ export async function promoteMirrorToPrimary(
   );
 
   const run = async (tx: Transaction, suppliedOperations = supplied): Promise<string> => {
+    await requireStamp(tx);
     const operations = snapshotModuleOperations(suppliedOperations);
     for (const m of deps.modules ?? []) {
       const activate = m.provisioning?.standby?.activate;
@@ -254,7 +257,11 @@ export async function promoteMirrorToPrimary(
     () => true,
     () => false,
   );
-  await refreshDeploymentHolders(deps.node, deps.nodeId, deps.holders);
-  if (roleWritten) deps.log("info", "promotion.completed", { target: "mirror" });
+  // After a failed write the holders keep the mirror pair read above, and no node.db read may stand
+  // between the committed venue save and the restart.
+  if (roleWritten) {
+    await refreshDeploymentHolders(deps.node, deps.nodeId, deps.holders);
+    deps.log("info", "promotion.completed", { target: "mirror" });
+  }
   return { alreadyPrimary: false, seriesId };
 }

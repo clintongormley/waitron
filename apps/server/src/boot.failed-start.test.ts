@@ -33,6 +33,7 @@ import { startMdnsResponder } from "./mdns.js";
 import { startMenuActivation } from "./menu-activation.js";
 import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
 import { runPendingCardLoop } from "./pending-card-recovery.js";
+import { createSealedStateRefresher } from "./sealed-state.js";
 import { freePorts } from "./testing/free-ports.js";
 
 /**
@@ -98,6 +99,11 @@ vi.mock("./box-alert-email.js", async (importOriginal) => {
 vi.mock("./tender-refund-recovery.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./tender-refund-recovery.js")>();
   return { ...actual, runTenderRefundRecoveryLoop: vi.fn(actual.runTenderRefundRecoveryLoop) };
+});
+
+vi.mock("./sealed-state.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./sealed-state.js")>();
+  return { ...actual, createSealedStateRefresher: vi.fn(actual.createSealedStateRefresher) };
 });
 
 vi.mock("./pending-card-recovery.js", async (importOriginal) => {
@@ -722,6 +728,59 @@ describe("a start that fails after the venue folder is opened gives the folder b
     } finally {
       liveEventsClose.mockRestore();
     }
+  }, 60_000);
+
+  it("in trading mode, when a step after the listener is started throws, waiting for a sealed-state refresh before closing the store", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir(undefined, { leaf: true });
+    const env = await tradingEnv(venueDir, state, { landing: true });
+    const failure = new Error("interfaces unreadable");
+    failLandingAfterMdns(failure);
+    const { createSealedStateRefresher: realCreate } =
+      await vi.importActual<typeof import("./sealed-state.js")>("./sealed-state.js");
+    // Stands in for a refresh a node.db save started just before the failure.
+    let finishRefresh!: () => void;
+    const refreshFinished = new Promise<void>((resolve) => (finishRefresh = resolve));
+    const order: string[] = [];
+    const settled = vi.fn(() => {
+      order.push("settled");
+      return refreshFinished;
+    });
+    vi.mocked(createSealedStateRefresher).mockImplementationOnce((deps) => {
+      const node = deps.node;
+      const onCommit = node.onCommit.bind(node);
+      node.onCommit = (listener) => {
+        const off = onCommit(listener);
+        return () => {
+          order.push("unsubscribe");
+          off();
+        };
+      };
+      return { ...realCreate(deps), settled };
+    });
+
+    let rejected = false;
+    const outcome = startServer(env).then(
+      () => "started",
+      (error: unknown) => {
+        rejected = true;
+        return error;
+      },
+    );
+    try {
+      await vi.waitFor(() => expect(rejected || settled.mock.calls.length > 0).toBe(true), {
+        timeout: 30_000,
+      });
+      expect(settled).toHaveBeenCalledOnce();
+      await delay(100);
+      expect(rejected).toBe(false);
+      expect(readVenueHolder(venueDir)).not.toBeNull();
+    } finally {
+      finishRefresh();
+    }
+    expect(await outcome).toBe(failure);
+    expect(order).toEqual(["unsubscribe", "settled"]);
+    expect(readVenueHolder(venueDir)).toBeNull();
   }, 60_000);
 
   it("while an adoption is pending, when a step after the listener is started throws", async () => {

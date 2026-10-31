@@ -2406,6 +2406,9 @@ async function bootServer(
   await sealedState.refresh();
   // The refresher writes only venue.db, so its own commit cannot call it again.
   const stopSealingNodeCommits = store.node.onCommit(() => void sealedState.refresh());
+  // Undone newest first: the unsubscribe runs, then a refresh already started finishes before the
+  // store closes.
+  undoOnFailure.push(() => sealedState.settled());
   undoOnFailure.push(async () => stopSealingNodeCommits());
   // The live copy of venue.db to the owner's bucket, primary only. `start()` returns without
   // waiting for the bucket, so a bucket that never answers cannot hold boot or a sale.

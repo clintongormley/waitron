@@ -4,6 +4,7 @@ import { isAppError, locationId as brandLocationId } from "@waitron/shared";
 import {
   captureError,
   CORE_MIGRATIONS,
+  deployment,
   locations,
   nodes,
   stampDeployment,
@@ -63,9 +64,12 @@ function recordingLog(): { log: PromoteDeps["log"]; entries: LogEntry[] } {
   };
 }
 
-// The node handle whose next write lock refuses before its body runs, as a full or failing node.db
-// would; reads still go through.
-function nodeFailingNextWrite(node: NodeDatabase): NodeDatabase {
+// The node handle that refuses its next write lock without running the write, so nothing is
+// written. Reads before that go through; with `readsFailAfter`, every call after it throws.
+function nodeFailingNextWrite(
+  node: NodeDatabase,
+  { readsFailAfter = false }: { readsFailAfter?: boolean } = {},
+): NodeDatabase {
   let failed = false;
   return new Proxy(node, {
     get(target, property, receiver) {
@@ -76,7 +80,13 @@ function nodeFailingNextWrite(node: NodeDatabase): NodeDatabase {
         };
       }
       const value: unknown = Reflect.get(target, property, receiver);
-      return typeof value === "function" ? value.bind(target) : value;
+      if (typeof value !== "function") return value;
+      if (failed && readsFailAfter) {
+        return () => {
+          throw new Error("node.db read refused");
+        };
+      }
+      return value.bind(target);
     },
   });
 }
@@ -327,7 +337,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
 
     expect((error as Error).message).toBe("node.db write refused");
     expect(entries.filter((entry) => entry.event === "promotion.role_write_failed")).toEqual([
-      { level: "warn", event: "promotion.role_write_failed", detail: expect.anything() },
+      { level: "warn", event: "promotion.role_write_failed", detail: { errorCode: "unknown" } },
     ]);
     expect(entries.map((entry) => entry.event)).not.toContain("promotion.completed");
     expect(await readNodeMode(suite.node, nodeId)).toEqual({
@@ -335,6 +345,23 @@ describe("promoteLocalSecondaryToPrimary", () => {
       singletonRole: "secondary",
     });
     expect((await readNodeMembership(db))?.body.term).toBe(4);
+  });
+
+  it("refuses an unstamped venue.db with deployment.not_stamped, saving nothing in either file", async () => {
+    const { db, deps, nodeId } = await localSecondary();
+    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-node-1"));
+    await db.delete(deployment);
+
+    const error = await captureError(() =>
+      promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
+    );
+
+    expect(isAppError(error) && error.code).toBe("deployment.not_stamped");
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+    expect(await readNodeMode(suite.node, nodeId)).toEqual({
+      mode: "primary",
+      singletonRole: "secondary",
+    });
   });
 
   it("refuses a mirror with promotion.not_a_local_secondary before any write", async () => {
@@ -689,9 +716,45 @@ describe("promoteMirrorToPrimary", () => {
 
     expect(result).toEqual({ alreadyPrimary: false, seriesId: standardSeriesId });
     expect(entries.filter((entry) => entry.event === "promotion.role_write_failed")).toEqual([
-      { level: "warn", event: "promotion.role_write_failed", detail: expect.anything() },
+      { level: "warn", event: "promotion.role_write_failed", detail: { errorCode: "unknown" } },
     ]);
+    expect(entries.map((entry) => entry.event)).not.toContain("promotion.completed");
     expect((await readNodeMembership(db))?.body.term).toBe(4);
+    expect(await readNodeMode(suite.node, nodeId)).toEqual({
+      mode: "mirror",
+      singletonRole: "secondary",
+    });
+  });
+
+  it("still asks for a restart when node.db can be neither written nor read after the venue save", async () => {
+    const { db, deps, nodeId, standardSeriesId } = await mirror();
+    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary"));
+    const promoteDeps = {
+      ...deps(noopLog),
+      node: nodeFailingNextWrite(suite.node, { readsFailAfter: true }),
+    };
+
+    const result = await promoteMirrorToPrimary(promoteDeps, { oldNodeNeutralised: true });
+
+    expect(result).toEqual({ alreadyPrimary: false, seriesId: standardSeriesId });
+    expect((await readNodeMembership(db))?.body.term).toBe(4);
+    expect(promoteDeps.holders.mode.current).toBe("mirror");
+    expect(promoteDeps.holders.singletonRole.current).toBe("secondary");
+  });
+
+  it("refuses an unstamped venue.db with deployment.not_stamped before activating or persisting anything", async () => {
+    const { db, deps, nodeId } = await mirror();
+    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary"));
+    await db.delete(deployment);
+    const persist = vi.fn(async () => {});
+
+    const error = await captureError(() =>
+      promoteMirrorToPrimary(deps(noopLog, persist), { oldNodeNeutralised: true }),
+    );
+
+    expect(isAppError(error) && error.code).toBe("deployment.not_stamped");
+    expect(persist).not.toHaveBeenCalled();
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
     expect(await readNodeMode(suite.node, nodeId)).toEqual({
       mode: "mirror",
       singletonRole: "secondary",

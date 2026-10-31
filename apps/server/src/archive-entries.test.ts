@@ -85,18 +85,37 @@ it("a failing state read waits for the node copy to finish before it rejects", a
   await expect(collecting).rejects.toMatchObject({ code: "recovery.state_incomplete" });
 });
 
-it("rejects with the node copy's failure when it and a state read both fail, whichever fails first", async () => {
+it("rejects naming the missing recovery file when it and the node copy both fail", async () => {
+  // No recovery files: the secrets read refuses at once, and the node copy fails after it.
   const stateDir = await mkdtemp(join(tmpdir(), "archive-entries-"));
   dirs.push(stateDir);
-  const copyFailure = new Error("node copy failed");
   const collecting = collectStateParts({
     stateDir,
     modules: [],
     resolvers: {},
     snapshotNode: async () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
-      throw copyFailure;
+      throw new Error("node copy failed");
     },
   });
-  await expect(collecting).rejects.toBe(copyFailure);
+  await expect(collecting).rejects.toMatchObject({
+    code: "recovery.state_incomplete",
+    params: { missing: RECOVERY_FILES[0] },
+  });
+});
+
+it("rejects naming the missing recovery file when the node copy fails first", async () => {
+  // The recovery file is missing only once the node copy has already failed.
+  const stateDir = await mkdtemp(join(tmpdir(), "archive-entries-"));
+  dirs.push(stateDir);
+  const collecting = collectStateParts({
+    stateDir,
+    modules: [],
+    resolvers: {},
+    snapshotNode: () => Promise.reject(new Error("node copy failed")),
+  });
+  await expect(collecting).rejects.toMatchObject({
+    code: "recovery.state_incomplete",
+    params: { missing: RECOVERY_FILES[0] },
+  });
 });
