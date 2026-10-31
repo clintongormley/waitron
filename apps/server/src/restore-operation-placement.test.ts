@@ -164,6 +164,7 @@ it("admits an existing resumed database and preserves its rows instead of replac
   });
   await mkdir(f.deps.venueDir);
   await copyFile(f.validated.databasePath, join(f.deps.venueDir, "venue.db"));
+  await writeFile(join(f.deps.venueDir, "node.db"), f.validated.nodeDump);
   const placed = await openVenueDatabase(f.deps.venueDir);
   try {
     await placed.venue.update(locations).set({ name: "Already placed" });
@@ -272,8 +273,8 @@ it("refuses a wrong node key before hooks or restored identity are published", a
 
 it("identifies the chosen backup's paper key before authentication can refuse it", async () => {
   const f = await fixture(regime(async () => ({ report: "restored" })));
-  const archivedName = await suite.db.execute<Record<string, unknown>>(
-    sql`select * from node_roles where node_id = ${NODE}`,
+  const archivedName = await suite.node.execute<Record<string, unknown>>(
+    sql`select * from node_recovery_key where node_id = ${NODE}`,
   );
   await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
   const entries: { code: string; params: Record<string, unknown> | undefined }[] = [];
@@ -289,7 +290,7 @@ it("identifies the chosen backup's paper key before authentication can refuse it
   });
   expect(entries).toContainEqual({
     code: "restore.recovery_key_selected",
-    params: { name: archivedName.rows[0]!.break_glass_key_name },
+    params: { name: archivedName.rows[0]!.key_name },
   });
   expect(JSON.stringify(entries)).not.toContain(nodeKey);
 });

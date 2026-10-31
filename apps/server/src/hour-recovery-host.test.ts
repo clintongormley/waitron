@@ -19,11 +19,11 @@ import { describe, expect, it, vi } from "vitest";
 import {
   incidents,
   invoiceSeries,
-  readBreakGlassVerifier,
-  setBreakGlassVerifierTx,
   stampDeployment,
+  withNodeTransaction,
   withTransaction,
 } from "@waitron/db";
+import { readRecoveryKeyVerifier, setRecoveryKeyTx } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
 import { createFirstSetupCoordinator, readModulePreparationHistory } from "@waitron/provisioning";
@@ -40,7 +40,7 @@ import { buildManifest } from "./backup-manifest.js";
 import { packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { previewRecoveryArchive } from "./recovery-backup-preview.js";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { recordSale } from "@waitron/core";
 import { seriesId } from "@waitron/shared";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu/src/backend.js";
@@ -487,9 +487,9 @@ describe("the database supplied by the placement runner", () => {
     const selected = (await f.selectPastWaits()) as { input: unknown };
     await seedTenants(placed.db);
     await stampDeployment(placed.db, "preproduction");
-    const verifier = await readBreakGlassVerifier(suite.db, node.nodeId);
-    await withTransaction(placed.db, (tx) =>
-      setBreakGlassVerifierTx(tx, node.nodeId, verifier!, "different-copy-key"),
+    const verifier = await readRecoveryKeyVerifier(suite.node, node.nodeId);
+    await withNodeTransaction(placed.node, (tx) =>
+      setRecoveryKeyTx(tx, node.nodeId, verifier!, "different-copy-key"),
     );
     await expect(
       runRestoreHooks({
@@ -539,10 +539,7 @@ it("refuses a selected module that has no configured recovery contribution", asy
 
 it("refuses an unnamed recovery verifier even when its secret matches", async () => {
   const f = await host();
-  const verifier = await readBreakGlassVerifier(suite.db, node.nodeId);
-  await withTransaction(suite.db, (tx) =>
-    setBreakGlassVerifierTx(tx, node.nodeId, verifier!, null),
-  );
+  suite.node.run(sql`update node_recovery_key set key_name = '' where node_id = ${node.nodeId}`);
   const service = createSelectedRecoveryPreparation({
     ...f.options,
     selected: { ...f.selected, nodeRecoveryKeyName: null },

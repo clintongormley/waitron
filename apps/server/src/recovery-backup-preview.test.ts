@@ -12,13 +12,14 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   openVenueDatabase,
-  readBreakGlassKeyName,
+  setBreakGlassVerifierTx,
+  withTransaction,
   nodes,
   locations,
   tenants,
   stampDeployment,
 } from "@waitron/db";
-import { NODE_MIGRATIONS } from "@waitron/node-db";
+import { NODE_MIGRATIONS, readRecoveryKeyName } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { encryptArtifact } from "./artifact-cipher.js";
@@ -84,10 +85,15 @@ beforeEach(async () => {
   });
   await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Old node" });
   await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
-  oldName = await readBreakGlassKeyName(suite.db, NODE);
+  oldName = await readRecoveryKeyName(suite.node, NODE);
+  artifact = await packSelected();
+});
+
+async function packSelected(): Promise<Uint8Array> {
   const database = join(scratch, "selected.db");
+  await rm(database, { force: true });
   await suite.db.archiveTo(database);
-  artifact = encryptArtifact(
+  return encryptArtifact(
     packArchive([
       {
         name: "manifest.json",
@@ -115,7 +121,7 @@ beforeEach(async () => {
     ]),
     "archive-key-separate",
   );
-});
+}
 afterEach(async () => {
   await Promise.all(
     occupied.splice(0).map(
@@ -142,7 +148,7 @@ function args(key = "archive-key-separate") {
 
 it("reads the selected copy's node-key name after the live box has replaced its key", async () => {
   await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
-  expect(await readBreakGlassKeyName(suite.db, NODE)).not.toBe(oldName);
+  expect(await readRecoveryKeyName(suite.node, NODE)).not.toBe(oldName);
   expect(await previewRecoveryArchive(args())).toEqual({
     sourceId: createHash("sha256").update(artifact).digest("hex"),
     createdAt: "2026-10-01T08:00:00.000Z",
@@ -153,6 +159,15 @@ it("reads the selected copy's node-key name after the live box has replaced its 
     locationName: "Old location",
   });
   expect(await readdir(scratch)).toEqual(["selected.db"]);
+});
+
+it("names the key a backup's node copy holds, not one its venue copy could hold", async () => {
+  await withTransaction(suite.db, (tx) =>
+    setBreakGlassVerifierTx(tx, NODE, "venue-held verifier", "Venue-held name"),
+  );
+  artifact = await packSelected();
+  expect(oldName).not.toBeNull();
+  expect(await previewRecoveryArchive(args())).toMatchObject({ nodeRecoveryKeyName: oldName });
 });
 
 it("a validated archive's staged folder holds its node copy beside its venue copy", async () => {
@@ -274,7 +289,7 @@ it("reviews the downloaded bucket key before explicitly staging its selected byt
   const database = join(scratch, "bucket-copy.db");
   await suite.db.archiveTo(database);
   await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
-  const liveName = await readBreakGlassKeyName(suite.db, NODE);
+  const liveName = await readRecoveryKeyName(suite.node, NODE);
   const stateDir = join(scratch, "bucket-preview");
   const preview = (
     previewModule as unknown as { previewRecoveryStream: (deps: unknown) => Promise<unknown> }
@@ -330,7 +345,7 @@ it("reviews the downloaded bucket key before explicitly staging its selected byt
     nodeRecoveryKeyName: oldName,
     taxpayer: { legalName: "Old venue", taxId: "89890001K" },
   });
-  expect(await readBreakGlassKeyName(suite.db, NODE)).toBe(liveName);
+  expect(await readRecoveryKeyName(suite.node, NODE)).toBe(liveName);
   expect(await readdir(stateDir)).toEqual([]);
   const recoveryOperation = {
     binding: {

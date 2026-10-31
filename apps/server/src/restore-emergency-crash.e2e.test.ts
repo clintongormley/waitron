@@ -141,6 +141,7 @@ it.each(["archive", "stream"] as const)(
   async (kind) => {
     const f = await stage(kind);
     await cp(f.databasePath, join(f.venueDir, "venue.db"));
+    await suite.node.archiveTo(join(f.venueDir, "node.db"));
     await markPlaced(f.stateDir);
     const original = await f.snapshot();
     await expect(f.run()).rejects.toMatchObject({

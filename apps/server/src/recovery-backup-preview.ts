@@ -1,6 +1,7 @@
 import { dirname } from "node:path";
 import { eq } from "drizzle-orm";
-import { locations, openVenueDatabase, readTenant, readBreakGlassKeyName } from "@waitron/db";
+import { locations, openVenueDatabase, readTenant } from "@waitron/db";
+import { readRecoveryKeyName } from "@waitron/node-db";
 import { AppError } from "@waitron/shared";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets } from "@waitron/module";
@@ -88,7 +89,7 @@ export async function readRecoveryCopyPreview(
       createdAt: copy.manifest.createdAt,
       environment: copy.manifest.environment,
       nodeId: node.nodeId,
-      nodeRecoveryKeyName: await readBreakGlassKeyName(store.venue, node.nodeId),
+      nodeRecoveryKeyName: await readRecoveryKeyName(store.node, node.nodeId),
       taxpayer: { legalName: tenant.legalName, taxId: tenant.taxId },
       locationName: location.name,
     };

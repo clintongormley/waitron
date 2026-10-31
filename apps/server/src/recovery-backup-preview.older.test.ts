@@ -59,7 +59,7 @@ const suite = useVenueDb({
 });
 afterAll(() => rmSync(prefix, { recursive: true, force: true }));
 
-it("previews a backup predating named keys by migrating only its private scratch copy", async () => {
+it("previews a backup with an older venue schema by migrating only its private scratch copy", async () => {
   const nodeId = "d0000000-0000-4000-8000-000000000001";
   const locationId = "d0000000-0000-4000-8000-000000000002";
   await stampDeployment(suite.db, "preproduction");
@@ -128,13 +128,14 @@ it("previews a backup predating named keys by migrating only its private scratch
         .all<{ name: string }>(sql`pragma table_info(node_roles)`)
         .map((column) => column.name),
     ).not.toContain("break_glass_key_name");
+    expect(suite.node.all(sql`pragma table_info(node_recovery_key)`)).toEqual([]);
     expect(await readdir(scratch)).toEqual(["source.db"]);
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }
 });
 
-it("binds an older bucket copy before private preview migrations change its bytes", async () => {
+it("binds a bucket copy with an older venue schema before private preview migrations change its bytes", async () => {
   const nodeId = "d0000000-0000-4000-8000-000000000001";
   const locationId = "d0000000-0000-4000-8000-000000000002";
   await stampDeployment(suite.db, "preproduction");
@@ -238,6 +239,7 @@ it("binds an older bucket copy before private preview migrations change its byte
         .all<{ name: string }>(sql`pragma table_info(node_roles)`)
         .map((column) => column.name),
     ).not.toContain("break_glass_key_name");
+    expect(suite.node.all(sql`pragma table_info(node_recovery_key)`)).toEqual([]);
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }

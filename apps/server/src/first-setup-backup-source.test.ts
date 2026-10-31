@@ -1,10 +1,11 @@
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { createHash } from "node:crypto";
-import { copyFile, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { DatabaseSync } from "node:sqlite";
+import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, locations, nodes, stampDeployment, tenants } from "@waitron/db";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -388,6 +389,7 @@ it("authenticates the selected backup before revealing its private preview, reta
 
 it("the proof preview's folder holds the backup's node copy, not an empty node.db", async () => {
   const marker = join(scratch, "marker-node.db");
+  await writeFile(marker, entries.find((entry) => entry.name === "node.dump")!.bytes);
   const source = new DatabaseSync(marker);
   source.exec("create table backup_marker (v text); insert into backup_marker values ('backup')");
   source.close();
@@ -470,13 +472,13 @@ it("does not accept an archive encryption key as the selected node's proof", asy
 });
 
 it("does not disclose a private preview when the selected database's node key has no name", async () => {
-  const { setBreakGlassVerifierTx, readBreakGlassVerifier, withTransaction } =
-    await import("@waitron/db");
-  const verifier = await readBreakGlassVerifier(suite.db, NODE);
-  await withTransaction(suite.db, (tx) => setBreakGlassVerifierTx(tx, NODE, verifier!, null));
-  await suite.db.archiveTo(database);
+  suite.node.run(sql`update node_recovery_key set key_name = '' where node_id = ${NODE}`);
   const bytes = encryptArtifact(
-    packArchive([...entries, { name: "db.dump", bytes: await readFile(database) }]),
+    packArchive([
+      ...entries.filter((entry) => entry.name !== "node.dump"),
+      await nodeDumpEntry(suite.node, scratch),
+      { name: "db.dump", bytes: await readFile(database) },
+    ]),
     "archive-key",
   );
   const selected = await adapter.openFirstSetupBackupSource(

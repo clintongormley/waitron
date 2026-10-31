@@ -26,7 +26,6 @@ import {
 import {
   insertNodeSeriesTx,
   readLiveSeriesIdTx,
-  readBreakGlassKeyName,
   lockVenueDatabase,
   nodes,
   openVenueDatabase,
@@ -39,6 +38,7 @@ import {
   type VenueDatabase,
   type VenueLock,
 } from "@waitron/db";
+import { readRecoveryKeyName } from "@waitron/node-db";
 import { applyMigrations, expectedSchemaVersion, migrationOptionsFor } from "@waitron/migrations";
 import { NODE_FILE, openBackupQuery, SIDE_FILE_SUFFIXES, VENUE_FILE } from "@waitron/store";
 import { litestreamMetaDir } from "@waitron/stream/litestream.js";
@@ -396,7 +396,7 @@ async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps)
   const opened = await (deps.openDb ?? openVenue)(deps.venueDir);
   try {
     const node = await resolveArtifactNode(opened.db, validated.secretEntries);
-    const name = await readBreakGlassKeyName(opened.db, node.nodeId);
+    const name = await readRecoveryKeyName(opened.node, node.nodeId);
     if (name !== null) log("info", "restore.recovery_key_selected", { name });
     await runRestoreHooks({
       db: opened.db,

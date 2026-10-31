@@ -274,6 +274,7 @@ export async function stagedHourCrash(
     };
     const seedDestination = async () => {
       await db.archiveTo(join(roots.venueDir, "venue.db"));
+      await nodeDb.archiveTo(join(roots.venueDir, "node.db"));
       const copy = await openVenueDatabase(roots.venueDir);
       try {
         await copy.venue.update(invoiceSeries).set({ nextNumber: 777 });

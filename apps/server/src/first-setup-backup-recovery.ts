@@ -7,13 +7,12 @@ import { dirname, join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import {
   openVenueDatabase,
-  readBreakGlassVerifier,
-  readBreakGlassKeyName,
   withTransaction,
   lockVenueDatabase,
   type Database,
   type NodeDatabase,
 } from "@waitron/db";
+import { readRecoveryKeyName, readRecoveryKeyVerifier } from "@waitron/node-db";
 import type { OperationBinding, OperationClient, WaitronModule } from "@waitron/module";
 import {
   assertNoStartAgainDeletion,
@@ -146,7 +145,7 @@ async function verifier(selected: Selected): Promise<string | null> {
   const node = await readArtifactNode(selected.copy);
   const db = await openStagedCopy(dirname(selected.copy.databasePath));
   try {
-    return await readBreakGlassVerifier(db.venue, node.nodeId);
+    return await readRecoveryKeyVerifier(db.node, node.nodeId);
   } finally {
     await db.close();
   }
@@ -1170,7 +1169,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             await existingTarget(before.record);
             const target = await openVenueDatabase(before.record.target.target.venueDir);
             try {
-              if ((await readBreakGlassVerifier(target.venue, node.nodeId)) !== provedVerifier)
+              if ((await readRecoveryKeyVerifier(target.node, node.nodeId)) !== provedVerifier)
                 conflict();
               await withTransaction(target.venue, (tx) =>
                 assertCommitted(tx, node, before.record.binding),
@@ -1356,11 +1355,11 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             const current = await openVenueDatabase(target.venueDir);
             try {
               if (
-                (await readBreakGlassVerifier(
-                  current.venue,
+                (await readRecoveryKeyVerifier(
+                  current.node,
                   entry.session.binding.targetNodeId,
                 )) !== entry.provedVerifier ||
-                (await readBreakGlassKeyName(current.venue, entry.session.binding.targetNodeId)) !==
+                (await readRecoveryKeyName(current.node, entry.session.binding.targetNodeId)) !==
                   entry.session.preview.nodeRecoveryKeyName
               )
                 conflict();

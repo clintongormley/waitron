@@ -1,10 +1,10 @@
 import {
   lockVenueDatabase,
   openVenueDatabase,
-  readBreakGlassKeyName,
   type Database,
   type NodeDatabase,
 } from "@waitron/db";
+import { readRecoveryKeyName } from "@waitron/node-db";
 import {
   configureModuleOperations,
   type ModuleOperationHost,
@@ -140,7 +140,8 @@ export function createSelectedRecoveryPreparation(options: Options): {
     checkSelection();
     if (!isDeepStrictEqual(held, binding)) refuse();
     const db = database();
-    if ((await readBreakGlassKeyName(db, node.nodeId)) !== selected.nodeRecoveryKeyName) refuse();
+    if ((await readRecoveryKeyName(nodeDatabase(), node.nodeId)) !== selected.nodeRecoveryKeyName)
+      refuse();
     await withRecoveryKeyAuthority(
       { db, node: nodeDatabase(), nodeId: node.nodeId },
       binding,

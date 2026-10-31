@@ -3,13 +3,12 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { isDeepStrictEqual as equal } from "node:util";
 import {
   lockVenueDatabase,
-  readBreakGlassVerifier,
-  readBreakGlassKeyName,
   type Database,
   type NodeDatabase,
   type Transaction,
   withTransaction,
 } from "@waitron/db";
+import { readRecoveryKeyName, readRecoveryKeyVerifier } from "@waitron/node-db";
 import type { TotpKeyRing } from "@waitron/identity";
 import {
   configureModuleOperations,
@@ -74,7 +73,7 @@ export function createNodeOperationPreparation(options: {
       return invalid(binding);
     if (
       scope.verifier !== undefined &&
-      (await readBreakGlassVerifier(options.db, node.nodeId)) !== scope.verifier
+      (await readRecoveryKeyVerifier(options.nodeDb, node.nodeId)) !== scope.verifier
     )
       throw new AppError("promotion.break_glass_invalid", {});
   };
@@ -108,7 +107,7 @@ export function createNodeOperationPreparation(options: {
           current.taxId,
           current.environment,
           current.bases,
-          await readBreakGlassKeyName(options.db, node.nodeId),
+          await readRecoveryKeyName(options.nodeDb, node.nodeId),
         ]),
       };
     },
@@ -138,7 +137,7 @@ export function createNodeOperationPreparation(options: {
       typeof heldCredentials === "object" &&
       heldCredentials !== null &&
       "breakGlass" in heldCredentials;
-    const verifier = key ? await readBreakGlassVerifier(options.db, node.nodeId) : undefined;
+    const verifier = key ? await readRecoveryKeyVerifier(options.nodeDb, node.nodeId) : undefined;
     const authenticated = async (authority: OperationAuthority, commit: Commit) => {
       return scopes.run({ binding, authority, verifier }, () => run(authority, commit));
     };

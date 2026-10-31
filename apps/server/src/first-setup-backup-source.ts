@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { openVenueDatabase, readBreakGlassKeyName } from "@waitron/db";
+import { openVenueDatabase } from "@waitron/db";
+import { readRecoveryKeyName } from "@waitron/node-db";
 import type { OperationBinding } from "@waitron/module";
 import { readRecoveryCopyPreview, type RecoveryBackupPreview } from "./recovery-backup-preview.js";
 import { withRecoveryKeyAuthority } from "./operation-authentication.js";
@@ -100,7 +101,7 @@ export async function authenticatedFirstSetupBackupPreview(
   try {
     const database = await openVenueDatabase(dirname(await copyStagedCopy(copy, directory)));
     try {
-      if (!(await readBreakGlassKeyName(database.venue, node.nodeId))?.trim()) refuse();
+      if ((await readRecoveryKeyName(database.node, node.nodeId)) === null) refuse();
       await withRecoveryKeyAuthority(
         { db: database.venue, node: database.node, nodeId: node.nodeId },
         held,

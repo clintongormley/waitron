@@ -1,7 +1,7 @@
 import { AsyncResource } from "node:async_hooks";
 import { eq, sql } from "drizzle-orm";
 import { vi } from "vitest";
-import type { Database, Transaction } from "@waitron/db";
+import type { Database, NodeDatabase, NodeTransaction, Transaction } from "@waitron/db";
 
 // A suite's `vi.mock("node:crypto", …)` factory loads this module, so nothing it imports at top
 // level may import `node:crypto`: `@waitron/db` and `@waitron/identity` are imported where used.
@@ -209,16 +209,35 @@ export async function whileChangingOnLockRequest<T>(
   request: () => Promise<T>,
 ): Promise<T> {
   const { withTransaction } = await import("@waitron/db");
+  return changingOnLockRequest(db, (body) => withTransaction(db, body), change, request);
+}
+
+/** `whileChangingOnLockRequest` on `node.db`'s write lock. */
+export async function whileChangingNodeOnLockRequest<T>(
+  node: NodeDatabase,
+  change: (tx: NodeTransaction) => Promise<void>,
+  request: () => Promise<T>,
+): Promise<T> {
+  const { withNodeTransaction } = await import("@waitron/db");
+  return changingOnLockRequest(node, (body) => withNodeTransaction(node, body), change, request);
+}
+
+async function changingOnLockRequest<D extends Database, X, T>(
+  db: D,
+  transaction: (body: (tx: X) => Promise<void>) => Promise<void>,
+  change: (tx: X) => Promise<void>,
+  request: () => Promise<T>,
+): Promise<T> {
   let lockRequested!: () => void;
   const requested = new Promise<void>((resolve) => {
     lockRequested = resolve;
   });
-  const held = withTransaction(db, async (tx) => {
+  const held = transaction(async (tx) => {
     await requested;
     await change(tx);
   });
   const original = db.withWriteLock;
-  const spy = vi.spyOn(db, "withWriteLock").mockImplementation((body) => {
+  const spy = vi.spyOn(db as Database, "withWriteLock").mockImplementation((body) => {
     const queued = original(body);
     lockRequested();
     return queued;

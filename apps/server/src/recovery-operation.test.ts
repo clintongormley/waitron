@@ -1,11 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  readBreakGlassVerifier,
-  setBreakGlassVerifierTx,
-  stampDeployment,
-} from "@waitron/db";
-import { NODE_MIGRATIONS } from "@waitron/node-db";
+import { CORE_MIGRATIONS, stampDeployment } from "@waitron/db";
+import { NODE_MIGRATIONS, readRecoveryKeyVerifier, setRecoveryKeyTx } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashSecret, IDENTITY_MIGRATIONS, managementSessions, persons } from "@waitron/identity";
 import {
@@ -15,7 +10,11 @@ import {
 } from "@waitron/module";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import * as operations from "./operation-authentication.js";
-import { whileChangingOnLockRequest, writerBesideRequest } from "./testing/watched-scrypt.js";
+import {
+  whileChangingNodeOnLockRequest,
+  whileChangingOnLockRequest,
+  writerBesideRequest,
+} from "./testing/watched-scrypt.js";
 
 vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
@@ -58,7 +57,7 @@ describe("scoped recovery-key authority", () => {
     async (action) => {
       const scope = { ...binding, action };
       let held: unknown;
-      const verifier = await readBreakGlassVerifier(suite.db, NODE);
+      const verifier = await readRecoveryKeyVerifier(suite.node, NODE);
       const result = await perform(
         async (authority) => {
           held = authority;
@@ -74,7 +73,7 @@ describe("scoped recovery-key authority", () => {
       );
       expect(result).toBe("committed");
       expect(readOperationAuthority(held, scope)).toBeUndefined();
-      expect(await readBreakGlassVerifier(suite.db, NODE)).toBe(verifier);
+      expect(await readRecoveryKeyVerifier(suite.node, NODE)).toBe(verifier);
     },
   );
 
@@ -117,10 +116,10 @@ describe("scoped recovery-key authority", () => {
   it("refuses a key replaced while authentication waits for the write lock", async () => {
     let entered = false;
     await expect(
-      whileChangingOnLockRequest(
-        suite.db,
+      whileChangingNodeOnLockRequest(
+        suite.node,
         async (tx) => {
-          await setBreakGlassVerifierTx(tx, NODE, hashSecret("replacement"));
+          await setRecoveryKeyTx(tx, NODE, hashSecret("replacement"), "Replacement");
         },
         () =>
           perform(async () => {
@@ -132,16 +131,16 @@ describe("scoped recovery-key authority", () => {
   });
 
   it("derives outside the write lock and rolls back a refused operation", async () => {
-    const original = await readBreakGlassVerifier(suite.db, NODE);
+    const original = await readRecoveryKeyVerifier(suite.node, NODE);
     let held: unknown;
     const observed = await writerBesideRequest(suite.db, () =>
       operations.withRecoveryKeyOperation(
         { db: suite.db, node: suite.node, nodeId: NODE },
         binding,
         key,
-        async (tx, authority) => {
+        async (_tx, authority) => {
           held = authority;
-          expect(await readBreakGlassVerifier(tx, NODE)).toBe(original);
+          expect(await readRecoveryKeyVerifier(suite.node, NODE)).toBe(original);
           return "committed";
         },
       ),
