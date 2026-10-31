@@ -219,8 +219,8 @@ export async function runOnce(
           venueDir: deps.venueDir,
           modules: deps.modules,
           resolvers: deps.resolvers,
-          // Outside staging: a few KB that staging's space accounting gains nothing from, and nothing
-          // under staging may be removed while a transfer still reads it.
+          // Outside staging: tens of KB that staging's space accounting gains nothing from, and
+          // nothing under staging may be removed while a transfer still reads it.
           snapshotNode: snapshotNodeDatabase(deps.node, tmpdir()),
         },
         budget,

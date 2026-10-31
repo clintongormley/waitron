@@ -149,6 +149,7 @@ async function run(beforeOverride?: BackupQuery) {
   const handle = await openBackupQuery(path);
   const snapshot = () => suite.db.all(sql`select name, sql from sqlite_schema order by name`);
   const original = snapshot();
+  const scratch = await mkdtemp(join(tmpdir(), "a947-compatibility-scratch-"));
   try {
     return await check({
       manifest,
@@ -157,8 +158,10 @@ async function run(beforeOverride?: BackupQuery) {
       before: beforeOverride ?? handle.query,
       entries,
       migrationsRoot: root!,
+      scratchDir: scratch,
     });
   } finally {
+    await rm(scratch, { recursive: true, force: true });
     await handle.close();
     expect(verify).not.toHaveBeenCalled();
     expect(snapshot()).toEqual(original);

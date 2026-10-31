@@ -1,6 +1,5 @@
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join, posix } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { backupVerificationInventory } from "@waitron/composition";
@@ -119,7 +118,7 @@ export async function checkBackupVerificationCompatibility(input: {
   entries: readonly ArchiveEntry[];
   migrationsRoot?: string | null;
   /** Where the node copy is opened from; the verifier may write only under its own scratch. */
-  scratchDir?: string;
+  scratchDir: string;
 }): Promise<Verdict> {
   try {
     return await reconcile(input);
@@ -221,7 +220,7 @@ async function reconcile(
   const nodeDump = entries.get("node.dump");
   if (nodeDump === undefined)
     return await reconcileModules(input, actual, inventory, entries, tables, before, null);
-  const scratch = await mkdtemp(join(input.scratchDir ?? tmpdir(), "waitron-node-copy-"));
+  const scratch = await mkdtemp(join(input.scratchDir, "waitron-node-copy-"));
   try {
     const path = join(scratch, "node.db");
     await writeFile(path, nodeDump.bytes, { mode: 0o600 });
