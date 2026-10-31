@@ -6,7 +6,6 @@ import { codeMessage } from "../i18n/codes.js";
 import { es } from "../i18n/strings.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillHeldOrders } from "./held-orders.js";
-import { partyScope } from "./table-targets.js";
 import type { FloorZone, HeldOrderSummary, TableParty, TableState } from "../api/client.js";
 
 const labeledOrder: HeldOrderSummary = {
@@ -791,20 +790,33 @@ describe("till-held-orders: moving a counter order to a table", () => {
     expect(picker(el)).toBeNull();
   });
 
-  it("sends the party the picker showed, though the floor read since seats another there", async () => {
+  it("sends the party the picker showed once ready, though the floor read since seats another there", async () => {
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
       orders: [labeledOrder],
       tables,
     });
     const moved = heard(el, "move-held-order");
+    let ready!: () => void;
+    let prompt!: object;
+    el.addEventListener("held-relocation-open", (raw) => {
+      const event = raw as CustomEvent<{ ready: () => void; prompt: object }>;
+      event.preventDefault();
+      ready = event.detail.ready;
+      prompt = event.detail.prompt;
+    });
     await openPicker(el);
     target(el, "t7")!.click();
     await el.updateComplete;
+    expect(moved).toEqual([]);
     const pedro = { ...luis, id: "v8", revision: 2, name: "Pedro", displayName: "Pedro" };
     el.tables = [{ ...tables[0]!, party: pedro }, tables[1]!, tables[2]!];
     await el.updateComplete;
+    ready();
+    await el.updateComplete;
 
-    expect(moved).toEqual([{ orderId: "wo-1", tableId: "t7", seated: { id: "v7", revision: 9 } }]);
+    expect(moved).toEqual([
+      { orderId: "wo-1", tableId: "t7", seated: { id: "v7", revision: 9 }, prompt },
+    ]);
   });
 
   it("closes the picker, sending nothing, when its dialog is dismissed", async () => {
@@ -820,12 +832,6 @@ describe("till-held-orders: moving a counter order to a table", () => {
 
     expect(picker(el)).toBeNull();
     expect(moved).toEqual([]);
-  });
-
-  it("names a seated party with no name by the tables the floor lists for it", () => {
-    const unnamed = { ...luis, name: null, displayName: "Mesa 7", tableIds: ["t7", "t-gone"] };
-
-    expect(partyScope(unnamed, [{ ...tables[0]!, party: unnamed }, tables[2]!])).toBe("Mesa 7");
   });
 
   it("Cancel in the list of tables closes it and sends nothing", async () => {

@@ -174,6 +174,20 @@ function dialogs(el: TillFloorScreen): string[] {
     .filter((name) => /^till-.+-dialog$/.test(name));
 }
 
+/** Holds the drop's first draft read until `release` is called, so a test can re-read the floor
+ * while the drop is still reading the parties' bills. */
+function holdFirstDraftRead(api: Stub): { release: () => void } {
+  const read = api.listDrafts.getMockImplementation()!;
+  let release!: () => void;
+  api.listDrafts.mockImplementationOnce(
+    (partyId, options) =>
+      new Promise((resolve) => {
+        release = () => resolve(read(partyId, options));
+      }),
+  );
+  return { release: () => release() };
+}
+
 const P = party("P", 3, ["t1"], "Ana");
 const Q = party("Q", 7, ["t2"]);
 const seatsRefusal = { code: "merge.seats_required", status: 400 };
@@ -446,14 +460,18 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
     expect(el.shadowRoot!.querySelector("till-seat-dialog")!.tableLabel).toBe("6");
   });
 
-  it("a re-read after the drop still joins the party the drop named", async () => {
+  it("a re-read while the drop reads the bills still joins the party the drop named", async () => {
     const api = stubApi();
+    const held = holdFirstDraftRead(api);
     const el = await mount([planned("t1", 2, {}, "1", P), planned("t2", 20, {}, "2", Q)], api);
     await drop(el, { tableId: "t1", x: 17, y: 3, targetId: "t2" });
+    expect(api.listDrafts).toHaveBeenCalledTimes(1);
+    expect(api.joinTables).not.toHaveBeenCalled();
 
     const R = party("R", 11, ["t1"]);
     el.tables = [planned("t1", 2, {}, "1", R), planned("t2", 20, {}, "2", Q)];
     await el.updateComplete;
+    held.release();
     await settle(el);
 
     expect(api.joinTables).toHaveBeenCalledExactlyOnceWith(
@@ -625,9 +643,10 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
 });
 
 describe("till-floor-screen: joins and the room's revision", () => {
-  it("a join sends the revision read at the drop, through the seats window", async () => {
+  it("a join sends the revision read at the drop, through the bill reads and the seats window", async () => {
     const api = stubApi();
     api.joinTables.mockRejectedValueOnce(seatsRefusal);
+    const held = holdFirstDraftRead(api);
     const el = await mount(
       [
         planned("t1", 2, { zoneRevision: 7 }, "1", P),
@@ -636,6 +655,7 @@ describe("till-floor-screen: joins and the room's revision", () => {
       api,
     );
     await drop(el, { tableId: "t1", x: 17, y: 3, targetId: "t2" });
+    expect(api.joinTables).not.toHaveBeenCalled();
 
     const at8 = () => [
       planned("t1", 2, { zoneRevision: 8 }, "1", P),
@@ -644,6 +664,7 @@ describe("till-floor-screen: joins and the room's revision", () => {
     el.tablesReadAt = nextFloorMoment();
     el.tables = at8();
     await el.updateComplete;
+    held.release();
     await settle(el);
     expect(api.joinTables).toHaveBeenLastCalledWith(
       "Q",
