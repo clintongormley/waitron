@@ -14,7 +14,6 @@ import { AppError, isAppError, sqliteFailureOf } from "@waitron/shared";
 import { initialSetupFor } from "@waitron/module";
 import {
   isCanonicalInstant,
-  type StartAgainHeld,
   type StartAgainRecoveryShown,
   type StartAgainSummary,
   type VenueRequest,
@@ -35,7 +34,6 @@ const boundary = createErrorBoundary(
     "setup.not_ready": 503,
     "setup.certificate_refused": 422,
     "setup.owner_required": 403,
-    "setup.start_again_password_required": 403,
     "password.throttled": 429,
     "setup.attempt_conflict": 409,
     "setup.attempt_invalid": 409,
@@ -87,39 +85,31 @@ function recoveryDiscardConfirmation(value: unknown) {
   if (shown.recovery === undefined) invalid();
   return { shown };
 }
+function unreadableDatabaseConfirmation(value: unknown) {
+  const shown = shownSummary(exact(value, ["shown"]).shown);
+  if (shown.databaseUnreadable !== true) invalid();
+  return { shown };
+}
 function shownSummary(value: unknown): StartAgainSummary {
-  const shown = exact(value, ["reached"], ["recoveryRecordDamaged", "recovery", "held"]);
+  const shown = exact(
+    value,
+    ["reached"],
+    ["recoveryRecordDamaged", "databaseUnreadable", "recovery"],
+  );
   const damaged = Object.hasOwn(shown, "recoveryRecordDamaged");
+  const unreadable = Object.hasOwn(shown, "databaseUnreadable");
   const recovery = Object.hasOwn(shown, "recovery") ? shownRecovery(shown.recovery) : undefined;
-  const held = Object.hasOwn(shown, "held") ? shownHeld(shown.held) : undefined;
   if (
     (damaged && shown.recoveryRecordDamaged !== true) ||
+    (unreadable && shown.databaseUnreadable !== true) ||
     !["claimed", "named", "fiscal-started", "fiscal-finished"].includes(shown.reached as string)
   )
     invalid();
   return {
     reached: shown.reached as StartAgainSummary["reached"],
     ...(damaged && { recoveryRecordDamaged: true as const }),
+    ...(unreadable && { databaseUnreadable: true as const }),
     ...(recovery !== undefined && { recovery }),
-    ...(held !== undefined && { held }),
-  };
-}
-// The same bounds the confirmation record's reader holds, so a confirmation the route accepts
-// can always be written.
-function shownHeld(value: unknown): StartAgainHeld {
-  const held = exact(value, ["rows", "kept", "records", "accepted"]);
-  const counts = [held.rows, held.kept, held.records, held.accepted];
-  if (
-    !counts.every((count) => Number.isSafeInteger(count) && (count as number) >= 0) ||
-    (held.accepted as number) > (held.records as number) ||
-    (held.kept as number) > (held.rows as number)
-  )
-    invalid();
-  return {
-    rows: held.rows as number,
-    kept: held.kept as number,
-    records: held.records as number,
-    accepted: held.accepted as number,
   };
 }
 function shownRecovery(value: unknown): StartAgainRecoveryShown {
@@ -1001,17 +991,22 @@ export function mountFirstSetupResolutionApi(
           )
         )
           invalid();
-        const owner = firstFiscalOwner(c);
-        return c.json(
-          await diskFullOr(() =>
-            options.summary!({
-              inspectionId: text(body.inspectionId),
-              revision: body.revision as number,
-              ownerGeneration: body.ownerGeneration as number,
-              owner,
-            }),
-          ),
-        );
+        try {
+          return c.json(
+            await diskFullOr(() =>
+              options.summary!({
+                inspectionId: text(body.inspectionId),
+                revision: body.revision as number,
+                ownerGeneration: body.ownerGeneration as number,
+              }),
+            ),
+          );
+        } catch (error) {
+          // The next start tries to finish what an earlier Start again left.
+          if (error instanceof AppError && error.code === "setup.start_again_incomplete")
+            setTimeout(() => options.requestRestart?.(), 0);
+          throw error;
+        }
       }),
     );
   if (options.startAgain !== undefined)
@@ -1027,6 +1022,9 @@ export function mountFirstSetupResolutionApi(
           ...(Object.hasOwn(rawBody, "register") ? ["register"] : []),
           ...(Object.hasOwn(rawBody, "confirmMissingDatabase") ? ["confirmMissingDatabase"] : []),
           ...(Object.hasOwn(rawBody, "confirmRecoveryDiscard") ? ["confirmRecoveryDiscard"] : []),
+          ...(Object.hasOwn(rawBody, "confirmUnreadableDatabase")
+            ? ["confirmUnreadableDatabase"]
+            : []),
           ...(Object.hasOwn(rawBody, "recoveryRecordDamagedShown")
             ? ["recoveryRecordDamagedShown"]
             : []),
@@ -1051,6 +1049,9 @@ export function mountFirstSetupResolutionApi(
         const confirmRecoveryDiscard = Object.hasOwn(body, "confirmRecoveryDiscard")
           ? recoveryDiscardConfirmation(body.confirmRecoveryDiscard)
           : undefined;
+        const confirmUnreadableDatabase = Object.hasOwn(body, "confirmUnreadableDatabase")
+          ? unreadableDatabaseConfirmation(body.confirmUnreadableDatabase)
+          : undefined;
         try {
           await diskFullOr(() =>
             options.startAgain!({
@@ -1060,12 +1061,10 @@ export function mountFirstSetupResolutionApi(
               register,
               ...(confirmMissingDatabase === undefined ? {} : { confirmMissingDatabase }),
               ...(confirmRecoveryDiscard === undefined ? {} : { confirmRecoveryDiscard }),
+              ...(confirmUnreadableDatabase === undefined ? {} : { confirmUnreadableDatabase }),
               ...(Object.hasOwn(body, "recoveryRecordDamagedShown")
                 ? { recoveryRecordDamagedShown: true as const }
                 : {}),
-              ...(c.req.header("X-Waitron-Setup-Owner") === undefined
-                ? {}
-                : { owner: firstFiscalOwner(c) }),
             }),
           );
         } catch (error) {

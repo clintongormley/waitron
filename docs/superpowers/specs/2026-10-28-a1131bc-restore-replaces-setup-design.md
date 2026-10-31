@@ -1,4 +1,10 @@
 > 2026-10-29, A1206: the start-again (never-reuse) note is retired, so the wipe adds nothing to a note.
+>
+> 2026-10-30, slice 2 revision 6: no margin (A1206); a damaged setup database is deleted whatever the
+> damage (owner, 2026-10-29 ~11:00), except the limits the slice 2 plan's N1 lists; §2's
+> `module-evidence/` check is moot; §9d's sentence is replaced by the owner's "The previous setup
+> process was unsuccessful." (OQ-B, 2026-10-30); §9b's help line ("This box will not use this setup's
+> invoice series names again.") has nothing behind it since A1206 and is for slice 3 to drop.
 
 # A1131b and A1131c: Recover from backup first deletes the failed setup, then restores into the box's usual folders
 

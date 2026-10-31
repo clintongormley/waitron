@@ -200,7 +200,7 @@ it("lifetime: that setup's own Start again leaves the moved files", async () => 
   const { roots, before } = await movedBox();
   const host = await claimed(roots);
   const inspected = await host.resolution.inspectFirstSetupResolution();
-  const recovered = await host.owner.recoverFirstSetupOwner({
+  await host.owner.recoverFirstSetupOwner({
     inspectionId: inspected.inspectionId,
     revision: inspected.revision!,
     ownerGeneration: inspected.ownerGeneration!,
@@ -213,17 +213,10 @@ it("lifetime: that setup's own Start again leaves the moved files", async () => 
     revision: current.revision!,
     ownerGeneration: current.ownerGeneration!,
   };
-  const owner = {
-    attemptId: recovered.state.attemptId,
-    revision: recovered.state.revision,
-    ownerGeneration: recovered.state.ownerGeneration,
-    capability: recovered.capability,
-  };
   const actions = createFirstSetupResolutionActions({ ...roots, host });
-  const shown = await actions.startAgainSummary({ ...ids, owner });
+  const shown = await actions.startAgainSummary({ ...ids });
   await actions.startAgainFirstSetup({
     ...ids,
-    owner,
     confirmMissingDatabase: { nothingFiledOrSold: true, shown },
   });
   await expect(lstat(join(roots.stateDir, "first-setup.json"))).rejects.toMatchObject({

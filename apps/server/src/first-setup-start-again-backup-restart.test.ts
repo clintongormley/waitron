@@ -212,7 +212,7 @@ async function startAgainOver(
 ) {
   const { owner, ids } = await signedIn(f.host, recovered);
   const actions = createFirstSetupResolutionActions({ ...f.roots, host: f.host, backupRecovery });
-  const shown = await actions.startAgainSummary({ ...ids, owner });
+  const shown = await actions.startAgainSummary({ ...ids });
   return {
     shown,
     owner,
@@ -221,7 +221,6 @@ async function startAgainOver(
     run: (confirmed: StartAgainSummary = shown) =>
       actions.startAgainFirstSetup({
         ...ids,
-        owner,
         confirmMissingDatabase: { nothingFiledOrSold: true, shown: confirmed },
       }),
   };
@@ -267,7 +266,7 @@ it("after Start again discards a recovery, the backup entry answers absent and t
 it("an open started while Start again runs its checks refuses it setup.recovery_in_progress before anything is written, and the open resumes the recovery", async () => {
   // Signed in before the recovery opened, so the recovery's own resume stays valid.
   const f = await repairFixture();
-  const { owner } = await signedIn(f.host);
+  await signedIn(f.host);
   const inspected = await f.host.resolution.inspectFirstSetupResolution();
   const request = {
     ...f.request,
@@ -314,13 +313,12 @@ it("an open started while Start again runs its checks refuses it setup.recovery_
     ...f.roots,
     host: f.host,
     backupRecovery: service,
-  }).startAgainSummary({ ...ids, owner });
+  }).startAgainSummary({ ...ids });
   expect(shown.recovery).toBeDefined();
   const last = (await f.workspace.readChain()).at(-1)!;
   await expect(
     actions.startAgainFirstSetup({
       ...ids,
-      owner,
       confirmMissingDatabase: { nothingFiledOrSold: true, shown },
     }),
   ).rejects.toMatchObject({ code: "setup.recovery_in_progress" });
@@ -335,7 +333,7 @@ it("an open started while Start again runs its checks refuses it setup.recovery_
 
 it("an open started while Start again writes its confirmation record refuses it setup.recovery_in_progress before the seal, and the recovery is neither sealed nor abandoned", async () => {
   const f = await repairFixture();
-  const { owner } = await signedIn(f.host);
+  await signedIn(f.host);
   const inspected = await f.host.resolution.inspectFirstSetupResolution();
   const request = {
     ...f.request,
@@ -365,7 +363,7 @@ it("an open started while Start again writes its confirmation record refuses it 
     host: f.host,
     backupRecovery: service,
   });
-  const shown = await actions.startAgainSummary({ ...ids, owner });
+  const shown = await actions.startAgainSummary({ ...ids });
   expect(shown.recovery).toBeDefined();
   const last = (await f.workspace.readChain()).at(-1)!;
   const sealed = vi.spyOn(service, "sealLapsed");
@@ -384,7 +382,6 @@ it("an open started while Start again writes its confirmation record refuses it 
   await expect(
     actions.startAgainFirstSetup({
       ...ids,
-      owner,
       confirmMissingDatabase: { nothingFiledOrSold: true, shown },
     }),
   ).rejects.toMatchObject({ code: "setup.recovery_in_progress" });
@@ -493,7 +490,7 @@ it("a power cut after the abandon and before the emptying: the start empties the
 it("a power cut during the attempt's deletion: the start finishes it beside the emptied recovery", async () => {
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);
-  const { owner, ids } = await signedIn(f.host);
+  const { ids } = await signedIn(f.host);
   let removed = 0;
   const actions = createFirstSetupResolutionActions({
     ...f.roots,
@@ -504,11 +501,10 @@ it("a power cut during the attempt's deletion: the start finishes it beside the 
       await (kind === "file" ? unlink(path) : rmdir(path));
     },
   });
-  const shown = await actions.startAgainSummary({ ...ids, owner });
+  const shown = await actions.startAgainSummary({ ...ids });
   await expect(
     actions.startAgainFirstSetup({
       ...ids,
-      owner,
       confirmMissingDatabase: { nothingFiledOrSold: true, shown },
     }),
   ).rejects.toMatchObject({ code: "setup.start_again_incomplete" });
@@ -639,8 +635,8 @@ it("a disk that fills after the abandon, before the target's lock: Start again a
     (_level, event, fields) => lines.push({ event, fields }),
     { startAgain: actions.startAgainFirstSetup, requestRestart: restarts },
   );
-  const { owner, ids } = await signedIn(f.host);
-  const shown = await actions.startAgainSummary({ ...ids, owner });
+  const { ids } = await signedIn(f.host);
+  const shown = await actions.startAgainSummary({ ...ids });
   expect(shown.recovery).toBeDefined();
   const response = await app.request(
     "https://box.test/setup-api/first-setup/resolution/start-again",
@@ -648,10 +644,6 @@ it("a disk that fills after the abandon, before the target's lock: Start again a
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Waitron-Setup-Owner": owner.capability,
-        "X-Waitron-Setup-Attempt": owner.attemptId,
-        "X-Waitron-Setup-Revision": String(owner.revision),
-        "X-Waitron-Setup-Generation": String(owner.ownerGeneration),
       },
       body: JSON.stringify({
         ...ids,

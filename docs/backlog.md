@@ -505,17 +505,18 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A1158: a damaged setup record or claim marker still dead-ends Start again.** Left open by A1099.
   [Audit](backlog/self-service-refusals.md#a1158-a-damaged-setup-record-or-claim-marker-still-dead-ends-start-again).
 
-- **A1159: a venue database that is present but cannot be read refuses setup.not_ready.** It could
-  count as missing. Left open by A1099.
-  [Audit](backlog/self-service-refusals.md#a1159-a-venue-database-that-is-present-but-cannot-be-read-refuses-setupnot_ready).
+- **A1159: some setup databases the box cannot read still refuse Start again.** A damaged one is
+  deleted since A1131bc slice 2; one it may not open, one beside a journal, and a damaged `node.db`
+  still refuse. Left open by A1099.
+  [Audit](backlog/self-service-refusals.md#a1159-some-setup-databases-the-box-cannot-read-still-refuse-start-again).
 
 - **A1161: with the database present, a public record or documents file still dead-ends Start
   again**, damaged or intact, and since A1206 so does the summary beside a stopped recovery. Left
   open by A1099; needs an owner decision.
   [Audit](backlog/self-service-refusals.md#a1161-with-the-database-present-a-public-record-or-documents-file-still-dead-ends-start-again).
 
-- **The Start again summary's `setup.not_ready` carries no cause.**
-  Wanted: a cause of its own from the server and words for it. Left open by A1206.
+- **The Start again summary's `setup.not_ready` carries no cause.** The page says only that
+  deleting is not safe. Wanted: words for each cause a person could act on. Left open by A1206.
   [Detail](backlog/setup.md#the-start-again-summarys-setupnot_ready-carries-no-cause).
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
@@ -595,10 +596,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   #2101).
   [Detail](backlog/setup.md#a1147-start-agains-finisher-removes-an-empty-folder-the-box-did-not-create)
 
-- **A1148: a stray `venue.db-journal` beside an unchanged marked `venue.db` stays beside the next
-  setup's database.** It is neither a finding nor deleted. Predates A1098 (A1042, #2101).
-  [Detail](backlog/setup.md#a1148-a-stray-venuedb-journal-beside-an-unchanged-marked-venuedb-stays-beside-the-next-setups-database)
-
 - **A1149: a failed restart after Retry or a Move exits the process, and a page that fails to draw
   after a recorded choice answers a bare 500.** Both recovery-page routes. Left open by A1098.
   [Detail](backlog/setup.md#a1149-a-failed-restart-after-retry-or-a-move-exits-the-process-and-a-page-that-fails-to-draw-after-a-recorded-choice-answers-a-bare-500)
@@ -623,17 +620,25 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   [Detail](backlog/setup.md#a-waitron-cloud-recovery-whose-download-takes-more-than-30-seconds-may-be-refused-its-series-name)
 
 - **A1131c: Recover from backup first wipes the failed setup, and Start again's page drops the item counts**
-  Slices 2 to 4 are still to come.
+  Slice 2 (one wipe, no password) landed; slices 3 and 4 are still to come.
   [Detail](backlog/setup.md#a1131c-recover-from-backup-first-wipes-the-failed-setup-and-start-agains-page-drops-the-item-counts).
 
 - **A1131: Start again beside a recovery record that cannot be read, with the setup database missing.**
   Only Reconnect is enabled today.
   [Detail](backlog/setup.md#a1131-start-again-beside-a-recovery-record-that-cannot-be-read-with-the-setup-database-missing).
 
-- **On a full disk, the repair page's password step needs room for a whole copy of the setup
-  database.** The box's 8 MiB spare covered a 3.6 MB one; a larger one is believed to be refused.
-  Left open by A1131.
-  [Detail](backlog/setup.md#on-a-full-disk-the-repair-pages-password-step-needs-room-for-a-whole-copy-of-the-setup-database)
+- **On a full disk, Start again's summary may need room for a copy of the setup database.** Beside
+  a held setup database with no recovery the box keeps its spare, so Start again answers that the
+  disk is full. Left open by A1131 and A1131bc slice 2.
+  [Detail](backlog/setup.md#on-a-full-disk-start-agains-summary-may-need-room-for-a-copy-of-the-setup-database)
+
+- **Start again over plain HTTP says only that deleting is not safe.** Wanted: words saying a
+  secure connection is needed. Left open by A1131bc slice 2.
+  [Detail](backlog/setup.md#start-again-over-plain-http-says-only-that-deleting-is-not-safe)
+
+- **A developer note still counts four requests in the Start-again flow.** Left open by A1131bc
+  slice 2.
+  [Detail](backlog/setup.md#a-developer-note-still-counts-four-requests-in-the-start-again-flow)
 
 - **Bound certificate password-derivation work before opening a file.** PKCS#12 files choose their
   own derivation cost; setup and certificate renewal currently pass it to the synchronous opener.

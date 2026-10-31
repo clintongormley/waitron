@@ -25,19 +25,28 @@ recuperación cuenta como en curso mientras alguno de sus pasos está en marcha 
 minutos siguientes a su última actividad. Esos cinco minutos terminan antes si la recuperación falla
 o el equipo se reinicia.
 
-Si una recuperación desde una copia empezó y no terminó, la página de reparación lo indica, y
-**Empezar de nuevo** la borra junto con la configuración interrumpida. Junto a ella, la página no
-ofrece **Recuperar desde una copia**. Si la página dice que falta la base de datos de configuración,
-muestra la recuperación detenida después de que introduzcas la contraseña de administrador que
-elegiste al configurar, y Empezar de nuevo la borra cuando marcas «No se envió nada a la AEAT ni se
-vendió nada.» y vuelves a elegir **Empezar de nuevo**. Si no, la página muestra **Empezar de nuevo**
-junto a la recuperación detenida. Empezar de nuevo pide entonces la contraseña de administrador y
-vuelve a mostrar la recuperación, con «Empezar de nuevo borra lo que se introdujo en la
-configuración que se detuvo a medias. No se envió ninguna factura a la AEAT.» Lo borra todo cuando
-marcas «Borrar el intento anterior y empezar de nuevo.» y vuelves a elegir **Empezar de nuevo**.
-Empezar de nuevo no se ofrece si la configuración ya guardó los ajustes con los que vende el equipo.
-Si la base de datos tiene una factura u otro elemento que Waitron nunca borra, la página lo indica
-después de que introduzcas la contraseña, y Empezar de nuevo no se lleva a cabo.
+Si una recuperación desde una copia empezó y no terminó, **Empezar de nuevo** la borra junto con la
+configuración interrumpida. Empezar de nuevo no pide contraseña: cualquiera que pueda abrir la
+página de reparación puede usarlo, y puede ver lo que la página muestra al pulsarlo. Cuando eliges
+**Empezar de nuevo**, el equipo comprueba lo que borraría y la página lo muestra, con la
+recuperación detenida si la hay. Cuando la página muestra una recuperación detenida, no ofrece
+**Recuperar desde una copia** junto a ella.
+
+Si la página dice que falta la base de datos de configuración, Empezar de nuevo muestra hasta dónde
+llegó la configuración según su propio registro, y lo borra todo cuando marcas «No se envió nada a
+la AEAT ni se vendió nada.» y vuelves a elegir **Empezar de nuevo**. Si no, muestra «Empezar de
+nuevo borra lo que se introdujo en la configuración que se detuvo a medias. No se envió ninguna
+factura a la AEAT.», y lo borra todo cuando marcas «Borrar el intento anterior y empezar de nuevo.»
+y vuelves a elegir **Empezar de nuevo**. Si parte de la base de datos de configuración no se puede
+leer, la página dice «El proceso de configuración anterior no tuvo éxito.» y no dice «No se envió
+ninguna factura a la AEAT.», porque puede que el equipo no haya podido comprobar si esa base de
+datos tiene facturas. Empezar de nuevo la borra igualmente.
+
+Empezar de nuevo no se ofrece, y la página dice por qué, si la configuración ya guardó los ajustes
+con los que vende el equipo (continúa con tu contraseña de configuración para terminarla), si la
+configuración ya terminó, o si la base de datos de configuración tiene una factura u otro registro
+que Waitron nunca borra. Si el equipo no puede confirmar que borrar la configuración sea seguro, la
+página lo indica y no lo ofrece.
 
 Si esa recuperación usaba una copia de Cloud, su aprobación en Waitron Cloud se cierra sola en menos
 de una hora desde que se dio. Hasta entonces, Waitron Cloud no puede aprobar otra recuperación para

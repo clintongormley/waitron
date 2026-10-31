@@ -90,7 +90,7 @@ export type {
   FirstSetupInspection,
 } from "./first-setup-resolution-inspection.js";
 export { firstSetupDatabaseIsEmpty } from "./first-setup-empty-database.js";
-export { executeTarget, openImmutableWhenWalEmpty } from "./read-only-database.js";
+export { executeTarget, openImmutable, openImmutableWhenWalEmpty } from "./read-only-database.js";
 export type { ImmutableOpen } from "./read-only-database.js";
 export { createSetupOperationStore } from "./setup-operation.js";
 export type {
@@ -181,7 +181,6 @@ export {
   type StartAgainConfirmation,
   type StartAgainSummary,
   type StartAgainRecoveryShown,
-  type StartAgainHeld,
 } from "./first-setup-start-again-confirmation.js";
 export {
   START_AGAIN_MARKER_FILE,

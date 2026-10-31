@@ -19,10 +19,16 @@ import {
   createFirstSetupStore,
   type StartAgainSummary,
 } from "@waitron/provisioning";
+import type { WaitronModule } from "@waitron/module";
 import { createFirstSetupOwner } from "./first-setup-owner.js";
+import { ALL_MODULES } from "./modules.js";
 import { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
 import { request, PASSWORD } from "../test/first-fiscal.js";
-import { expectStartAgainDeleted, startAgainUnchanged } from "../test/start-again-deleted.js";
+import {
+  diskSnapshot,
+  expectStartAgainDeleted,
+  startAgainUnchanged,
+} from "../test/start-again-deleted.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const dirs: string[] = [];
 afterEach(async () => {
@@ -82,7 +88,8 @@ async function fixture(phase: "claim" | "abandon" | "active" = "claim") {
     service,
   };
 }
-async function actionsFixture() {
+/** `modules`: the box's modules, which a read of the setup database needs. */
+async function actionsFixture({ modules }: { modules?: readonly WaitronModule[] } = {}) {
   const f = await fixture("active");
   const { createFirstSetupResolutionActions } = await import("./first-setup-resolution.js");
   const service = createFirstSetupResolutionActions({
@@ -94,6 +101,7 @@ async function actionsFixture() {
       coordinator: f.coordinator,
       evidence: { invalidate: () => {} },
       delivery: { invalidate: () => {} },
+      ...(modules !== undefined && { modules }),
     },
   });
   const request = async () => {
@@ -114,6 +122,55 @@ it("Start again deletes a qualified unused attempt without a password, and first
   const { assertVenueFirstSetupAllowed } = await import("@waitron/provisioning");
   await expect(assertVenueFirstSetupAllowed(f.venueDir)).resolves.toBeUndefined();
 });
+it("with an empty unused setup, the summary answers, and Start again deletes it with no owner", async () => {
+  const f = await actionsFixture();
+  const { register, ...ids } = await f.startRequest();
+  await expect(f.actions.startAgainSummary(ids)).resolves.toEqual({ reached: "claimed" });
+  await f.actions.startAgainFirstSetup({ ...ids, register });
+  await expectStartAgainDeleted(f);
+});
+it.each<[string, (f: Awaited<ReturnType<typeof actionsFixture>>) => Promise<void>, string]>([
+  [
+    "an empty database past claimed",
+    async (f) => {
+      await f.store.update(f.claim.state.attemptId, 1, { kind: "consumption-intent" });
+      await f.store.update(f.claim.state.attemptId, 2, { kind: "activation-started" });
+    },
+    "setup.not_ready",
+  ],
+  [
+    "a restore request in the state folder",
+    (f) => writeFile(join(f.stateDir, "restore-request.json"), "{}"),
+    "setup.not_ready",
+  ],
+  [
+    "an unexpected folder among the first-setup recovery records",
+    async (f) => {
+      await mkdir(join(f.stateDir, "first-setup-resolutions", "unexpected"), { recursive: true });
+    },
+    "setup.not_ready",
+  ],
+  [
+    "a first-setup-workspaces folder in the state folder",
+    (f) => mkdir(join(f.stateDir, "first-setup-workspaces")),
+    "setup.workspace_unsupported",
+  ],
+])(
+  "%s: the summary and Start again are refused, and nothing changes",
+  async (_label, arrange, code) => {
+    const f = await actionsFixture();
+    await arrange(f);
+    const { register, ...ids } = await f.startRequest();
+    const before = await diskSnapshot(f);
+    await expect(f.actions.startAgainSummary(ids)).rejects.toMatchObject({ code });
+    await expect(f.actions.startAgainFirstSetup({ ...ids, register })).rejects.toMatchObject({
+      code,
+    });
+    await expect(f.actions.startAgainFirstSetup(ids)).rejects.toMatchObject({ code });
+    expect(await diskSnapshot(f)).toEqual(before);
+    expect(before.state["first-setup-start-again-confirmations/"]).toBeUndefined();
+  },
+);
 it.each(["module-operation-public.json", "first-setup-node-key.json", "modules.json"])(
   "absence of a paper signer does not make %s history eligible for password-free reset",
   async (name) => {
@@ -175,23 +232,17 @@ it.each(["file", "directory"] as const)(
     await unchanged();
   },
 );
-it("an authenticated missing-database Start again, once confirmed, deletes first-setup.json and its documents", async () => {
+it("a missing-database Start again, once confirmed, deletes first-setup.json and its documents", async () => {
   const f = await actionsFixture();
   await f.store.update(f.claim.state.attemptId, 1, { kind: "consumption-intent" });
   const inspection = await f.service.inspectFirstSetupResolution();
-  const recovered = await f.recovering.recoverFirstSetupOwner({
+  await f.recovering.recoverFirstSetupOwner({
     inspectionId: inspection.inspectionId,
     revision: inspection.revision!,
     ownerGeneration: inspection.ownerGeneration!,
     clientClaimNonce: randomBytes(32).toString("base64url"),
     password: PASSWORD,
   });
-  const owner = {
-    attemptId: recovered.state.attemptId,
-    revision: recovered.state.revision,
-    ownerGeneration: recovered.ownerGeneration,
-    capability: recovered.capability,
-  };
   await rm(join(f.venueDir, "venue.db"));
   await mkdir(join(f.stateDir, "first-fiscal-documents"));
   await writeFile(
@@ -205,7 +256,6 @@ it("an authenticated missing-database Start again, once confirmed, deletes first
   }) =>
     f.actions.startAgainFirstSetup({
       ...(await f.startRequest()),
-      owner,
       register: {
         kind: "current-master",
         status: "Unknown",
@@ -225,7 +275,6 @@ it("an authenticated missing-database Start again, once confirmed, deletes first
     inspectionId,
     revision,
     ownerGeneration,
-    owner,
   });
   expect(shown).toEqual({ reached: "named" });
   await startAgain({ nothingFiledOrSold: true, shown });
@@ -292,21 +341,31 @@ it("retirement snapshots retain configured public files, receipt directories and
   );
 });
 
-it.each(["missing", "corrupt", "partial"] as const)(
-  "password-free Start again refuses a %s database",
-  async (kind) => {
-    const f = await actionsFixture();
-    const unchanged = await startAgainUnchanged(f);
-    const path = join(f.venueDir, "venue.db");
-    await rm(path);
-    if (kind === "corrupt") await writeFile(path, "not a database");
-    if (kind === "partial") await writeFile(path, Buffer.alloc(0));
-    await expect(f.actions.startAgainFirstSetup(await f.startRequest())).rejects.toMatchObject({
-      code: "setup.not_ready",
-    });
-    await unchanged();
-  },
-);
+it.each([
+  ["missing", "setup.not_ready"],
+  ["corrupt", "setup.attempt_conflict"],
+  ["partial", "setup.attempt_conflict"],
+] as const)("password-free Start again refuses a %s database %s", async (kind, code) => {
+  const f = await actionsFixture({ modules: ALL_MODULES });
+  const unchanged = await startAgainUnchanged(f);
+  const path = join(f.venueDir, "venue.db");
+  await rm(path);
+  if (kind === "corrupt") await writeFile(path, "not a database");
+  if (kind === "partial") await writeFile(path, Buffer.alloc(0));
+  await expect(f.actions.startAgainFirstSetup(await f.startRequest())).rejects.toMatchObject({
+    code,
+  });
+  await unchanged();
+});
+it("password-free Start again, with the confirmation, deletes a 0-byte database", async () => {
+  const f = await actionsFixture({ modules: ALL_MODULES });
+  await writeFile(join(f.venueDir, "venue.db"), Buffer.alloc(0));
+  const { register, ...ids } = await f.startRequest();
+  const shown = await f.actions.startAgainSummary(ids);
+  expect(shown).toEqual({ reached: "claimed", databaseUnreadable: true });
+  await f.actions.startAgainFirstSetup({ ...ids, register, confirmUnreadableDatabase: { shown } });
+  await expectStartAgainDeleted(f);
+});
 it("Start again from two browsers deletes the attempt once and refuses the second with setup.attempt_conflict", async () => {
   const f = await actionsFixture(),
     request = await f.startRequest();

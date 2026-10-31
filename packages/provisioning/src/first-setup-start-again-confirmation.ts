@@ -12,16 +12,9 @@ const REACHED = ["claimed", "named", "fiscal-started", "fiscal-finished"] as con
 export type StartAgainSummary = {
   readonly reached: (typeof REACHED)[number];
   readonly recoveryRecordDamaged?: true;
+  /** The setup database is present and some of it could not be read. */
+  readonly databaseUnreadable?: true;
   readonly recovery?: StartAgainRecoveryShown;
-  readonly held?: StartAgainHeld;
-};
-
-/** What the setup database held when Start again would discard a stopped recovery beside it. */
-export type StartAgainHeld = {
-  readonly rows: number;
-  readonly kept: number;
-  readonly records: number;
-  readonly accepted: number;
 };
 
 /** A stopped backup recovery that Start again would discard, as the summary showed it. */
@@ -33,15 +26,22 @@ export type StartAgainRecoveryShown = {
   readonly cloud: boolean;
 };
 
+/** Written on the repair page, where nobody signs in: the administrator is the setup's own. */
 export interface StartAgainConfirmation {
-  version: 1;
+  version: 2;
   at: string;
   attemptId: string;
-  database: "missing" | "present";
-  administrator: { displayName: string; email: string };
+  database: "missing" | "present" | "unreadable";
+  setupAdministrator: { displayName: string; email: string };
+  confirmedOn: "repair-page";
+  signedIn: false;
   ownerGeneration: number;
   shown: StartAgainSummary;
 }
+type StartAgainConfirmationInput = Omit<
+  StartAgainConfirmation,
+  "version" | "confirmedOn" | "signedIn"
+>;
 
 const FINISHED = new Set(["committed", "publication", "complete"]);
 const STARTED = new Set(["activation-started", "uncertain"]);
@@ -91,31 +91,8 @@ function recoveryShown(value: unknown): StartAgainRecoveryShown {
   };
 }
 
-const HELD_KEYS = ["rows", "kept", "records", "accepted"] as const;
-const count = (value: unknown): value is number =>
-  Number.isSafeInteger(value) && (value as number) >= 0;
-
-// Not `records <= kept`: a module that wrongly lists its invoice table as deletable must still be
-// recorded as it was shown.
-function heldShown(value: unknown): StartAgainHeld {
-  if (
-    !object(value) ||
-    Object.keys(value).some((key) => !(HELD_KEYS as readonly string[]).includes(key)) ||
-    !HELD_KEYS.every((key) => count(value[key])) ||
-    (value.accepted as number) > (value.records as number) ||
-    (value.kept as number) > (value.rows as number)
-  )
-    throw invalid();
-  return {
-    rows: value.rows as number,
-    kept: value.kept as number,
-    records: value.records as number,
-    accepted: value.accepted as number,
-  };
-}
-
-function confirmation(value: Omit<StartAgainConfirmation, "version">): StartAgainConfirmation {
-  const { at, attemptId, database, administrator, ownerGeneration, shown } = value as Record<
+function confirmation(value: StartAgainConfirmationInput): StartAgainConfirmation {
+  const { at, attemptId, database, setupAdministrator, ownerGeneration, shown } = value as Record<
     string,
     unknown
   >;
@@ -123,31 +100,39 @@ function confirmation(value: Omit<StartAgainConfirmation, "version">): StartAgai
     !isCanonicalInstant(at) ||
     typeof attemptId !== "string" ||
     !isUuid(attemptId) ||
-    (database !== "missing" && database !== "present") ||
-    !object(administrator) ||
-    !text(administrator.displayName) ||
-    !text(administrator.email) ||
+    (database !== "missing" && database !== "present" && database !== "unreadable") ||
+    !object(setupAdministrator) ||
+    !text(setupAdministrator.displayName) ||
+    !text(setupAdministrator.email) ||
     !Number.isSafeInteger(ownerGeneration) ||
     (ownerGeneration as number) < 0 ||
     !object(shown) ||
     !(REACHED as readonly unknown[]).includes(shown.reached) ||
     (Object.hasOwn(shown, "recoveryRecordDamaged") && shown.recoveryRecordDamaged !== true) ||
-    // With the database present, a Start again writes a record only when it discards a recovery.
+    // Only a present, damaged database is shown as one that cannot be read.
+    (database === "unreadable") !== (shown.databaseUnreadable === true) ||
+    (Object.hasOwn(shown, "databaseUnreadable") && shown.databaseUnreadable !== true) ||
+    // A record with database "present" is written only when Start again discards a recovery.
     (database === "present" && !Object.hasOwn(shown, "recovery"))
   )
     throw invalid();
   return {
-    version: 1,
+    version: 2,
     at,
     attemptId,
     database: database as StartAgainConfirmation["database"],
-    administrator: { displayName: administrator.displayName, email: administrator.email },
+    setupAdministrator: {
+      displayName: setupAdministrator.displayName,
+      email: setupAdministrator.email,
+    },
+    confirmedOn: "repair-page",
+    signedIn: false,
     ownerGeneration: ownerGeneration as number,
     shown: {
       reached: shown.reached as StartAgainSummary["reached"],
       ...(shown.recoveryRecordDamaged === true && { recoveryRecordDamaged: true as const }),
+      ...(shown.databaseUnreadable === true && { databaseUnreadable: true as const }),
       ...(Object.hasOwn(shown, "recovery") && { recovery: recoveryShown(shown.recovery) }),
-      ...(Object.hasOwn(shown, "held") && { held: heldShown(shown.held) }),
     },
   };
 }
@@ -155,7 +140,7 @@ function confirmation(value: Omit<StartAgainConfirmation, "version">): StartAgai
 /** Each confirmation is a new file; an existing one is never replaced. This module exports no delete. */
 export async function writeStartAgainConfirmation(
   stateDir: string,
-  record: Omit<StartAgainConfirmation, "version">,
+  record: StartAgainConfirmationInput,
 ): Promise<string> {
   const value = confirmation(record);
   const name = `${Date.parse(value.at)}-${value.attemptId}.json`;

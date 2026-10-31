@@ -111,7 +111,7 @@ async function confirmedStartAgain(
   backupRecovery: Service,
 ) {
   const inspected = await f.host.resolution.inspectFirstSetupResolution();
-  const recovered = await f.host.owner.recoverFirstSetupOwner({
+  await f.host.owner.recoverFirstSetupOwner({
     inspectionId: inspected.inspectionId,
     revision: inspected.revision!,
     ownerGeneration: inspected.ownerGeneration!,
@@ -119,25 +119,18 @@ async function confirmedStartAgain(
     password: PASSWORD,
   });
   const current = await f.host.resolution.inspectFirstSetupResolution();
-  const owner = {
-    attemptId: recovered.state.attemptId,
-    revision: recovered.state.revision,
-    ownerGeneration: recovered.state.ownerGeneration,
-    capability: recovered.capability,
-  };
   const ids = {
     inspectionId: current.inspectionId,
     revision: current.revision!,
     ownerGeneration: current.ownerGeneration!,
   };
   const actions = createFirstSetupResolutionActions({ ...f.roots, host: f.host, backupRecovery });
-  const shown = await actions.startAgainSummary({ ...ids, owner });
+  const shown = await actions.startAgainSummary({ ...ids });
   return {
     shown,
     run: () =>
       actions.startAgainFirstSetup({
         ...ids,
-        owner,
         confirmMissingDatabase: { nothingFiledOrSold: true, shown },
       }),
   };
@@ -338,8 +331,8 @@ it("once A's lease lapsed, B's password step seals A: A's renewal and step are r
   expect(f.service.runningInMemory()).toBe(false);
   const stopped = await f.service.liveness();
   expect(stopped).toMatchObject({ state: "stopped", phase: "prepared" });
-  const { owner, ids } = await signedIn(f.host, recovered);
-  expect((await actions.startAgainSummary({ ...ids, owner })).recovery).toEqual({
+  const { ids } = await signedIn(f.host, recovered);
+  expect((await actions.startAgainSummary({ ...ids })).recovery).toEqual({
     startedAt: stopped!.startedAt,
     lastActiveAt: stopped!.lastActiveAt,
     lastActiveSource: "memory",
@@ -350,7 +343,7 @@ it("once A's lease lapsed, B's password step seals A: A's renewal and step are r
 
 it("B gets no summary and no Start again while A's lease is fresh, and nothing is written", async () => {
   const f = await selectedRepair();
-  const { owner, ids } = await signedIn(f.host);
+  const { ids } = await signedIn(f.host);
   const actions = createFirstSetupResolutionActions({
     ...f.roots,
     host: f.host,
@@ -359,13 +352,12 @@ it("B gets no summary and no Start again while A's lease is fresh, and nothing i
   const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
   const activity = (await f.service.liveness())!;
   expect(activity.state).toBe("running");
-  await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toEqual(
+  await expect(actions.startAgainSummary({ ...ids })).rejects.toEqual(
     expect.objectContaining(inProgress(activity).error),
   );
   await expect(
     actions.startAgainFirstSetup({
       ...ids,
-      owner,
       confirmMissingDatabase: {
         nothingFiledOrSold: true,
         shown: { reached: "claimed" },
@@ -427,17 +419,20 @@ it("the fence lets the backup routes and every read through while A's recovery r
   expect(await renewed.json()).toEqual({ renewed: true });
 });
 
-it("a stopped recovery is named in the summary", async () => {
+it("a stopped recovery is named in the summary, which the box without the recovery service refuses", async () => {
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);
-  const { owner, ids } = await signedIn(f.host);
+  const { ids } = await signedIn(f.host);
   const { actions } = repairApp(f);
   const attemptOnly = createFirstSetupResolutionActions({ ...f.roots, host: f.host });
   const stopped = (await f.service.liveness())!;
   expect(stopped.state).toBe("stopped");
-  const plain = await attemptOnly.startAgainSummary({ ...ids, owner });
-  expect(await actions.startAgainSummary({ ...ids, owner })).toEqual({
-    ...plain,
+  await expect(attemptOnly.startAgainSummary({ ...ids })).rejects.toMatchObject({
+    code: "setup.not_ready",
+    reason: "refused artifact: venue/first-setup-resolutions",
+  });
+  expect(await actions.startAgainSummary({ ...ids })).toEqual({
+    reached: "claimed",
     recovery: {
       startedAt: stopped.startedAt,
       lastActiveAt: stopped.lastActiveAt,
@@ -454,9 +449,9 @@ it("a recovery that failed at placement-started is named as failed at once", asy
   await expect(f.service.commit(f.session.sessionId, f.selected.input, client)).rejects.toThrow(
     "placement interrupted",
   );
-  const { owner, ids } = await signedIn(f.host);
+  const { ids } = await signedIn(f.host);
   const { actions } = repairApp(f);
-  expect((await actions.startAgainSummary({ ...ids, owner })).recovery).toEqual({
+  expect((await actions.startAgainSummary({ ...ids })).recovery).toEqual({
     startedAt: expect.any(String),
     lastActiveAt: expect.any(String),
     lastActiveSource: "memory",
@@ -535,9 +530,9 @@ it.each<[string, string, unknown, ((binding: unknown) => string) | null]>([
       );
     const stopped = (await f.service.liveness())!;
     expect(stopped.state).toBe("stopped");
-    const { owner, ids } = await signedIn(f.host);
+    const { ids } = await signedIn(f.host);
     const { actions } = repairApp(f);
-    expect((await actions.startAgainSummary({ ...ids, owner })).recovery).toEqual({
+    expect((await actions.startAgainSummary({ ...ids })).recovery).toEqual({
       startedAt: stopped.startedAt,
       lastActiveAt: stopped.lastActiveAt,
       lastActiveSource: "memory",
@@ -553,13 +548,13 @@ it("after a restart, a stopped recovery is named with its saved steps' times", a
   await f.service.dispose();
   const restarted = recovery(f.options);
   const records = await f.workspace.read();
-  const { owner, ids } = await signedIn(f.host);
+  const { ids } = await signedIn(f.host);
   const actions = createFirstSetupResolutionActions({
     ...f.roots,
     host: f.host,
     backupRecovery: restarted,
   });
-  expect((await actions.startAgainSummary({ ...ids, owner })).recovery).toEqual({
+  expect((await actions.startAgainSummary({ ...ids })).recovery).toEqual({
     startedAt: records[0]!.recordedAt,
     lastActiveAt: records.at(-1)!.recordedAt,
     lastActiveSource: "saved-step",
@@ -575,9 +570,9 @@ it("a recovery that failed after it was restored is named as failed", async () =
     "selection interrupted",
   );
   expect((await f.workspace.read()).at(-1)!.phase).toBe("restored");
-  const { owner, ids } = await signedIn(f.host);
+  const { ids } = await signedIn(f.host);
   const { actions } = repairApp(f);
-  expect((await actions.startAgainSummary({ ...ids, owner })).recovery).toEqual({
+  expect((await actions.startAgainSummary({ ...ids })).recovery).toEqual({
     startedAt: expect.any(String),
     lastActiveAt: expect.any(String),
     lastActiveSource: "memory",
@@ -589,7 +584,7 @@ it("a recovery that failed after it was restored is named as failed", async () =
 it("a stopped recovery that is not the journal's latest refuses the summary setup.not_ready", async () => {
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);
-  const { owner, ids } = await signedIn(f.host);
+  const { ids } = await signedIn(f.host);
   const actions = createFirstSetupResolutionActions({
     ...f.roots,
     host: f.host,
@@ -598,7 +593,7 @@ it("a stopped recovery that is not the journal's latest refuses the summary setu
       liveness: async () => ({ ...(await f.service.liveness())!, recoveryId: "another" }),
     },
   });
-  await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toMatchObject({
+  await expect(actions.startAgainSummary({ ...ids })).rejects.toMatchObject({
     code: "setup.not_ready",
   });
 });
@@ -606,7 +601,7 @@ it("a stopped recovery that is not the journal's latest refuses the summary setu
 it("a stopped recovery on a host that lists no modules refuses the summary setup.not_ready", async () => {
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);
-  const { owner, ids } = await signedIn(f.host);
+  const { ids } = await signedIn(f.host);
   const { modules, ...host } = f.host;
   expect(modules.length).toBeGreaterThan(0);
   const actions = createFirstSetupResolutionActions({
@@ -614,7 +609,7 @@ it("a stopped recovery on a host that lists no modules refuses the summary setup
     host,
     backupRecovery: f.service,
   });
-  await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toMatchObject({
+  await expect(actions.startAgainSummary({ ...ids })).rejects.toMatchObject({
     code: "setup.not_ready",
   });
 });

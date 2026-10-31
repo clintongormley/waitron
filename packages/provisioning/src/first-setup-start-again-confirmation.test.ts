@@ -69,11 +69,38 @@ const record = {
   at: "2026-10-24T13:50:12.000Z",
   attemptId: "6f0c9a3e-1b2d-4c5e-8f70-123456789abc",
   database: "missing" as const,
-  administrator: { displayName: "Elena Garcia", email: "elena@example.com" },
+  setupAdministrator: { displayName: "Elena Garcia", email: "elena@example.com" },
   ownerGeneration: 3,
   shown: { reached: "fiscal-finished" as const },
 };
 const name = `${Date.parse(record.at)}-${record.attemptId}.json`;
+const V2 = { version: 2, confirmedOn: "repair-page", signedIn: false } as const;
+
+it("a record is version 2, names whose setup it was, and says it was confirmed on the repair page with nobody signed in", async () => {
+  const dir = await stateDir();
+  await writeStartAgainConfirmation(dir, record);
+  const stored = JSON.parse(
+    await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8"),
+  ) as Record<string, unknown>;
+  expect(Object.keys(stored)).toEqual([
+    "version",
+    "at",
+    "attemptId",
+    "database",
+    "setupAdministrator",
+    "confirmedOn",
+    "signedIn",
+    "ownerGeneration",
+    "shown",
+  ]);
+  expect(stored).toMatchObject({
+    version: 2,
+    setupAdministrator: { displayName: "Elena Garcia", email: "elena@example.com" },
+    confirmedOn: "repair-page",
+    signedIn: false,
+  });
+  expect(stored).not.toHaveProperty("administrator");
+});
 
 it("a confirmation record round-trips with exactly D3a's keys", async () => {
   const dir = await stateDir();
@@ -85,12 +112,14 @@ it("a confirmation record round-trips with exactly D3a's keys", async () => {
     "at",
     "attemptId",
     "database",
-    "administrator",
+    "setupAdministrator",
+    "confirmedOn",
+    "signedIn",
     "ownerGeneration",
     "shown",
   ]);
-  expect(stored).toEqual({ version: 1, ...record });
-  expect(Object.keys(stored.administrator as object)).toEqual(["displayName", "email"]);
+  expect(stored).toEqual({ ...V2, ...record });
+  expect(Object.keys(stored.setupAdministrator as object)).toEqual(["displayName", "email"]);
   expect(Object.keys(stored.shown as object)).toEqual(["reached"]);
   expect(START_AGAIN_CONFIRMATIONS_DIR).toBe("first-setup-start-again-confirmations");
 });
@@ -99,14 +128,14 @@ it("keeps only D3a's keys when handed extra ones", async () => {
   const dir = await stateDir();
   await writeStartAgainConfirmation(dir, {
     ...record,
-    administrator: { ...record.administrator, passwordHash: "x" },
+    setupAdministrator: { ...record.setupAdministrator, passwordHash: "x" },
     shown: { ...record.shown, extra: 1 },
     extra: true,
   } as typeof record);
   const stored = JSON.parse(
     await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8"),
   ) as unknown;
-  expect(stored).toEqual({ version: 1, ...record });
+  expect(stored).toEqual({ ...V2, ...record });
 });
 
 it("two confirmations for one attempt are two files", async () => {
@@ -123,7 +152,7 @@ it("two confirmations for one attempt are two files", async () => {
   );
   expect(
     JSON.parse(await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, first), "utf8")),
-  ).toEqual({ version: 1, ...record });
+  ).toEqual({ ...V2, ...record });
 });
 
 it("an existing file of the same name is refused, not overwritten", async () => {
@@ -145,7 +174,7 @@ it("a second write of the same record is refused and the first kept", async () =
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   expect(
     JSON.parse(await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8")),
-  ).toEqual({ version: 1, ...record });
+  ).toEqual({ ...V2, ...record });
 });
 
 it("a record over 16 KiB is refused setup.attempt_invalid and writes nothing", async () => {
@@ -153,7 +182,7 @@ it("a record over 16 KiB is refused setup.attempt_invalid and writes nothing", a
   await expect(
     writeStartAgainConfirmation(dir, {
       ...record,
-      administrator: { displayName: "x".repeat(16 * 1024), email: "elena@example.com" },
+      setupAdministrator: { displayName: "x".repeat(16 * 1024), email: "elena@example.com" },
     }),
   ).rejects.toMatchObject({ code: "setup.attempt_invalid", params: {} });
   expect(await readdir(join(dir, START_AGAIN_CONFIRMATIONS_DIR)).catch(() => [])).toEqual([]);
@@ -163,13 +192,13 @@ it.each([
   ["an unparseable time", { at: "yesterday" }],
   ["a time not in canonical form", { at: "2026-10-24T13:50:12Z" }],
   ["an attempt id that is not a UUID", { attemptId: "../escape" }],
-  ["a database other than missing or present", { database: "gone" }],
+  ["a database other than missing, present or unreadable", { database: "gone" }],
   ["a negative owner generation", { ownerGeneration: -1 }],
   ["a fractional owner generation", { ownerGeneration: 1.5 }],
   ["an unknown reached", { shown: { reached: "sold" } }],
-  ["an empty display name", { administrator: { displayName: "", email: "e@x" } }],
-  ["a missing email", { administrator: { displayName: "Elena" } }],
-  ["a missing administrator", { administrator: null }],
+  ["an empty display name", { setupAdministrator: { displayName: "", email: "e@x" } }],
+  ["a missing email", { setupAdministrator: { displayName: "Elena" } }],
+  ["a missing administrator", { setupAdministrator: null }],
   ["a missing shown", { shown: undefined }],
 ])("refuses %s and writes nothing", async (_label, change) => {
   const dir = await stateDir();
@@ -197,7 +226,7 @@ it("a confirmation that showed a damaged recovery record keeps that in the recor
   const stored = JSON.parse(
     await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8"),
   ) as Record<string, unknown>;
-  expect(stored).toEqual({ version: 1, ...damaged });
+  expect(stored).toEqual({ ...V2, ...damaged });
   expect(Object.keys(stored.shown as object)).toEqual(["reached", "recoveryRecordDamaged"]);
 });
 
@@ -233,7 +262,7 @@ it("a confirmation that showed a stopped backup recovery keeps it, and only its 
   const stored = JSON.parse(
     await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8"),
   ) as { shown: { recovery: object } };
-  expect(stored).toEqual({ version: 1, ...record, shown });
+  expect(stored).toEqual({ ...V2, ...record, shown });
   expect(Object.keys(stored.shown.recovery)).toEqual([
     "startedAt",
     "lastActiveAt",
@@ -270,7 +299,7 @@ it("a record with the database present is written when it showed a stopped backu
   await writeStartAgainConfirmation(dir, present as typeof record);
   expect(
     JSON.parse(await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8")),
-  ).toEqual({ version: 1, ...present });
+  ).toEqual({ ...V2, ...present });
 });
 
 it("a record with the database present that showed no backup recovery is refused setup.attempt_invalid and writes nothing", async () => {
@@ -284,56 +313,66 @@ it("a record with the database present that showed no backup recovery is refused
   expect(await readdir(join(dir, START_AGAIN_CONFIRMATIONS_DIR)).catch(() => [])).toEqual([]);
 });
 
-const held = { rows: 105, kept: 1, records: 1, accepted: 0 };
-
-it("a confirmation that discards a stopped recovery beside a held database keeps what it held", async () => {
+it("a shown.held key is not stored in the record", async () => {
   const dir = await stateDir();
-  const present = {
-    ...record,
-    database: "present" as const,
-    shown: { ...record.shown, recovery, held },
-  };
-  await writeStartAgainConfirmation(dir, present);
-  const stored = JSON.parse(
-    await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8"),
-  ) as { shown: { held: object } };
-  expect(stored).toEqual({ version: 1, ...present });
-  expect(Object.keys(stored.shown.held)).toEqual(["rows", "kept", "records", "accepted"]);
-});
-
-it("a held database with an invoice record its module lists as deletable is kept as shown", async () => {
-  const dir = await stateDir();
-  const present = {
-    ...record,
-    database: "present" as const,
-    shown: { ...record.shown, recovery, held: { rows: 2, kept: 0, records: 1, accepted: 1 } },
-  };
-  await writeStartAgainConfirmation(dir, present);
+  const present = { ...record, database: "present" as const, shown: { ...record.shown, recovery } };
+  await writeStartAgainConfirmation(dir, {
+    ...present,
+    shown: { ...present.shown, held: { rows: 105, kept: 1, records: 1, accepted: 0 } },
+  } as typeof present);
   expect(
     JSON.parse(await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8")),
-  ).toEqual({ version: 1, ...present });
+  ).toEqual({ ...V2, ...present });
 });
 
 it.each([
-  ["not an object", null],
-  ["a list", [105, 0, 0, 0]],
-  ["an extra key", { ...held, extra: 1 }],
-  ["a missing count", { rows: 105, kept: 0, records: 0 }],
-  ["a negative count", { ...held, rows: -1 }],
-  ["a fractional count", { ...held, kept: 0.5 }],
-  ["a text count", { ...held, records: "1" }],
-  ["an unsafe integer", { ...held, rows: 2 ** 53 }],
-  ["more accepted than records", { ...held, records: 1, accepted: 2 }],
-  ["more kept than rows", { ...held, rows: 1, kept: 2 }],
+  ["with no recovery", {}],
+  ["beside a stopped recovery", { recovery }],
 ])(
-  "a shown held database with %s is refused setup.attempt_invalid and writes nothing",
-  async (_label, value) => {
+  "a record with the database unreadable keeps what the page showed, %s",
+  async (_label, extra) => {
+    const dir = await stateDir();
+    const unreadable = {
+      ...record,
+      database: "unreadable" as const,
+      shown: { ...record.shown, databaseUnreadable: true as const, ...extra },
+    };
+    await writeStartAgainConfirmation(dir, unreadable);
+    const stored = JSON.parse(
+      await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8"),
+    ) as { shown: object };
+    expect(stored).toEqual({ ...V2, ...unreadable });
+    expect(Object.keys(stored.shown)).toEqual([
+      "reached",
+      "databaseUnreadable",
+      ...Object.keys(extra),
+    ]);
+  },
+);
+
+it.each([
+  ["unreadable without databaseUnreadable", "unreadable", {}],
+  [
+    "unreadable with a databaseUnreadable other than true",
+    "unreadable",
+    { databaseUnreadable: "yes" },
+  ],
+  ["present with databaseUnreadable", "present", { databaseUnreadable: true, recovery }],
+  [
+    "present with a databaseUnreadable other than true",
+    "present",
+    { databaseUnreadable: false, recovery },
+  ],
+  ["missing with databaseUnreadable", "missing", { databaseUnreadable: true }],
+])(
+  "a record with the database %s is refused setup.attempt_invalid and writes nothing",
+  async (_label, database, extra) => {
     const dir = await stateDir();
     await expect(
       writeStartAgainConfirmation(dir, {
         ...record,
-        database: "present",
-        shown: { ...record.shown, recovery, held: value },
+        database,
+        shown: { ...record.shown, ...extra },
       } as unknown as typeof record),
     ).rejects.toMatchObject({ code: "setup.attempt_invalid", params: {} });
     expect(await readdir(join(dir, START_AGAIN_CONFIRMATIONS_DIR)).catch(() => [])).toEqual([]);

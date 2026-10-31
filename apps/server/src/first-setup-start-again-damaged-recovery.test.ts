@@ -105,7 +105,7 @@ async function damagedBesideStoppedRecovery() {
     "{}",
   );
   const before = await host.resolution.inspectFirstSetupResolution();
-  const recovered = await host.owner.recoverFirstSetupOwner({
+  await host.owner.recoverFirstSetupOwner({
     inspectionId: before.inspectionId,
     revision: before.revision!,
     ownerGeneration: before.ownerGeneration!,
@@ -119,14 +119,8 @@ async function damagedBesideStoppedRecovery() {
     revision: current.revision!,
     ownerGeneration: current.ownerGeneration!,
   };
-  const owner = {
-    attemptId: recovered.state.attemptId,
-    revision: recovered.state.revision,
-    ownerGeneration: recovered.state.ownerGeneration,
-    capability: recovered.capability,
-  };
   const actions = createFirstSetupResolutionActions({ ...roots, host, backupRecovery: service });
-  const shown = await actions.startAgainSummary({ ...ids, owner });
+  const shown = await actions.startAgainSummary(ids);
   const register = {
     kind: "current-master" as const,
     status: "Consumed" as const,
@@ -143,7 +137,6 @@ async function damagedBesideStoppedRecovery() {
     start: (damagedShown: boolean) =>
       actions.startAgainFirstSetup({
         ...ids,
-        owner,
         register,
         confirmRecoveryDiscard: { shown },
         ...(damagedShown ? { recoveryRecordDamagedShown: true as const } : {}),

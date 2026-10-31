@@ -18,6 +18,7 @@ import {
 } from "@waitron/provisioning";
 import { selectedRepair } from "../test/first-setup-backup-recovery-fixture.js";
 import { heldSetup } from "../test/held-setup-database.js";
+import { diskSnapshot } from "../test/start-again-deleted.js";
 import "./testing/hour-test-clock.js";
 import { PASSWORD } from "../test/first-fiscal.js";
 import "./first-setup-backup-source.js";
@@ -79,14 +80,9 @@ const spareOption = (roots: { stateDir: string; venueDir: string }) => ({
   logDir: join(roots.stateDir, "logs"),
 });
 
-type Owner = {
-  state: { attemptId: string; revision: number; ownerGeneration: number };
-  capability: string;
-};
-
 type Inspection = { inspectionId: string; revision: number; ownerGeneration: number };
 
-/** The repair page's Start-again flow over the box's real routes: inspection, password, summary, Start again. */
+/** The repair page's Start-again flow over the box's real routes: inspection, summary, Start again. */
 async function startAgainOverRoutes(
   app: Hono,
   confirmation: "confirmMissingDatabase" | "confirmRecoveryDiscard" = "confirmMissingDatabase",
@@ -101,28 +97,7 @@ async function startAgainOverRoutes(
       ownerGeneration: inspected.ownerGeneration,
     };
   };
-  const recovered = await app.request(
-    `${ROUTE}/recover`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...(await read()),
-        clientClaimNonce: randomBytes(32).toString("base64url"),
-        password: PASSWORD,
-      }),
-    },
-    tls(),
-  );
-  expect(recovered.status, await recovered.clone().text()).toBe(200);
-  const owner = (await recovered.json()) as Owner;
-  const headers = {
-    "Content-Type": "application/json",
-    "X-Waitron-Setup-Owner": owner.capability,
-    "X-Waitron-Setup-Attempt": owner.state.attemptId,
-    "X-Waitron-Setup-Revision": String(owner.state.revision),
-    "X-Waitron-Setup-Generation": String(owner.state.ownerGeneration),
-  };
+  const headers = { "Content-Type": "application/json" };
   const ids = await read();
   const summary = await app.request(
     `${ROUTE}/start-again/summary`,
@@ -161,7 +136,7 @@ async function filesUnder(dir: string): Promise<string[]> {
   return names;
 }
 
-it("with the box's spare file, the password step, the summary and Start again all work on a full disk, and the stopped recovery's copy is emptied", async (ctx) => {
+it("with the box's spare file, the summary and Start again both work on a full disk, and the stopped recovery's copy is emptied", async (ctx) => {
   const small = needDisk(ctx);
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);
@@ -274,13 +249,12 @@ it("without a spare file, the password step of the Start-again flow on a full di
   });
 });
 
-it("in the held state, with the box's spare file, the summary answers with what the setup database holds and Start again completes on a full disk", async (ctx) => {
+it("in the held state, with the box's spare file, the summary answers and Start again completes on a full disk", async (ctx) => {
   const small = needDisk(ctx);
   const f = await heldSetup();
   expect(realpathSync(f.roots.venueDir).startsWith(`${process.env.TMPDIR}/`)).toBe(true);
   vi.mocked(backupEntry.firstSetupBackupRecoveryFor).mockReturnValue(f.service);
   const spare = join(f.roots.stateDir, SPARE_SPACE_FILE);
-  // The box's own size: the password step copies the setup database, which needs more than 1 MiB.
   await writeFile(spare, Buffer.alloc(SPARE_SPACE_BYTES, 1));
   const entry = await resolveFirstSetupEntry(
     f.roots,
@@ -294,10 +268,8 @@ it("in the held state, with the box's spare file, the summary answers with what 
   small.fill();
   expect(small.free()).toBeLessThan(65_536);
 
-  const shown = await startAgainOverRoutes(entry.app, "confirmRecoveryDiscard");
+  await startAgainOverRoutes(entry.app, "confirmRecoveryDiscard");
 
-  expect(shown.held).toMatchObject({ kept: 0, records: 0 });
-  expect(shown.held?.rows).toBeGreaterThan(0);
   await expect(stat(spare)).rejects.toMatchObject({ code: "ENOENT" });
   for (const gone of [
     join(f.roots.venueDir, "venue.db"),
@@ -310,4 +282,47 @@ it("in the held state, with the box's spare file, the summary answers with what 
     target: { recoveryId },
   });
   expect(await isEmptiedTombstone(f.roots, recoveryId)).toBe(true);
+});
+
+it("in the held state with no recovery, on a full disk with the box's spare file, the spare is not released, and the summary and Start again answer 507 storage.disk_full, deleting nothing", async (ctx) => {
+  const small = needDisk(ctx);
+  const f = await heldSetup({ recovery: false });
+  expect(realpathSync(f.roots.venueDir).startsWith(`${process.env.TMPDIR}/`)).toBe(true);
+  vi.mocked(backupEntry.firstSetupBackupRecoveryFor).mockReset();
+  const spare = join(f.roots.stateDir, SPARE_SPACE_FILE);
+  await writeFile(spare, Buffer.alloc(SPARE_SPACE_BYTES, 1));
+  const entry = await resolveFirstSetupEntry(
+    f.roots,
+    { WAITRON_ENV: "preproduction" },
+    undefined,
+    () => {},
+    spareOption(f.roots),
+  );
+  if (entry.kind !== "resolution") throw new Error("repair app missing");
+  small.fill();
+  expect(small.free()).toBeLessThan(65_536);
+  const inspected = (await (await entry.app.request(ROUTE, {}, tls())).json()) as Inspection;
+  const ids = {
+    inspectionId: inspected.inspectionId,
+    revision: inspected.revision,
+    ownerGeneration: inspected.ownerGeneration,
+  };
+  const before = await diskSnapshot(f.roots);
+  const send = (path: string) =>
+    entry.app.request(
+      `${ROUTE}${path}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(ids),
+      },
+      tls(),
+    );
+  for (const path of ["/start-again/summary", "/start-again"]) {
+    const answer = await send(path);
+    expect(answer.status, path).toBe(507);
+    expect(await answer.json()).toMatchObject({ error: { code: "storage.disk_full" } });
+  }
+  expect(await diskSnapshot(f.roots)).toEqual(before);
+  expect((await stat(spare)).size).toBe(SPARE_SPACE_BYTES);
 });

@@ -103,9 +103,9 @@ export async function firstSetupUnusedAssignment(
             )?.bytes == null
           )
             throw error;
-          // A damaged recovery record proves nothing about this attempt, so the caller requires the
-          // setup password and the warning. Every other check here still decides, the staged node
-          // key included; only the record's stage comparison is skipped.
+          // A damaged recovery record proves nothing about this attempt, so the caller requires that
+          // the page showed the warning. Every other check here still decides, the staged node key
+          // included; only the record's stage comparison is skipped.
           if (key === null) return false;
           recoveryRecordDamaged = true;
           names.add(`${module.module}.recovery.json`);

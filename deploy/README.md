@@ -386,9 +386,10 @@ Both forms wipe every volume in the table above. Plain `reset` keeps four things
 - `tls/`, which holds the certificate authority the box's devices already trust and the box's own
   certificate signed by it. Because that folder survives, a device that has already been told to
   trust this box does not need to trust it again after a plain `reset`.
-- `first-setup-start-again-confirmations/`, one small record for each Start again that someone
-  confirmed while the venue database was missing, or that discarded a stopped backup recovery: who
-  confirmed, when, and what the repair page showed them.
+- `first-setup-start-again-confirmations/`, one small record for each Start again confirmed while
+  the venue database was missing or partly unreadable, or that discarded a stopped backup recovery:
+  whose setup it was, that it was confirmed on the repair page with nobody signed in, when, and the
+  summary the page confirmed.
 - `first-setup-start-again-choices/`, one small record for each Keep or Move choice someone made
   at Start again.
 - `first-setup-set-aside/`, the files a Move set aside rather than deleted.

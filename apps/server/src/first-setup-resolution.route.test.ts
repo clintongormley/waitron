@@ -108,18 +108,12 @@ it.each(["Consumed", "Not consumed", "Unknown"])(
         reference: "c".repeat(64),
         consultedAt: "2026-10-16T02:00:00.000Z",
       };
-      const ownerHeaders = {
-        "X-Waitron-Setup-Owner": recovered.capability,
-        "X-Waitron-Setup-Attempt": recovered.state.attemptId,
-        "X-Waitron-Setup-Revision": String(recovered.state.revision),
-        "X-Waitron-Setup-Generation": String(recovered.state.ownerGeneration),
-      };
-      const summary = await post("start-again/summary", ids, ownerHeaders);
+      const summary = await post("start-again/summary", ids);
       expect(summary.status, await summary.clone().text()).toBe(200);
       const shown = await summary.json();
       expect(shown).toEqual({ reached: "named" });
       const attemptFile = await readFile(join(f.stateDir, "first-setup.json"));
-      const unconfirmed = await post("start-again", { ...ids, register }, ownerHeaders);
+      const unconfirmed = await post("start-again", { ...ids, register });
       expect(unconfirmed.status).toBe(503);
       expect(await unconfirmed.json()).toMatchObject({ error: { code: "setup.not_ready" } });
       expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(attemptFile);
@@ -132,24 +126,26 @@ it.each(["Consumed", "Not consumed", "Unknown"])(
         ),
       ).toEqual([]);
       const at = new Date().toISOString();
-      const response = await post(
-        "start-again",
-        { ...ids, register, confirmMissingDatabase: { nothingFiledOrSold: true, shown } },
-        ownerHeaders,
-      );
+      const response = await post("start-again", {
+        ...ids,
+        register,
+        confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+      });
       expect(response.status).toBe(200);
       const confirmations = join(f.stateDir, "first-setup-start-again-confirmations");
       const written = await readdir(confirmations);
       expect(written).toEqual([`${Date.parse(at)}-${before.frozen.attemptId}.json`]);
       expect(JSON.parse(await readFile(join(confirmations, written[0]!), "utf8"))).toEqual({
-        version: 1,
+        version: 2,
         at,
         attemptId: before.frozen.attemptId,
         database: "missing",
-        administrator: {
+        setupAdministrator: {
           displayName: before.frozen.request.admin.displayName,
           email: before.frozen.request.admin.email,
         },
+        confirmedOn: "repair-page",
+        signedIn: false,
         ownerGeneration: recovered.state.ownerGeneration,
         shown,
       });
@@ -289,7 +285,7 @@ it("HTTPS rejects foreign origins, stale snapshots and malformed resolution requ
   }
 });
 
-it("HTTPS lets a shown summary carrying held counts past the body check, and refuses a malformed one", async () => {
+it("a shown summary carrying held counts is refused setup.request_invalid", async () => {
   const f = await firstFiscalFixture();
   let server: { close(): Promise<void> } | undefined;
   let agent: Agent | undefined;
@@ -314,8 +310,14 @@ it("HTTPS lets a shown summary carrying held counts past the body check, and ref
       } as RequestInit)
     ).json();
     const before = await readFile(join(f.stateDir, "first-setup.json"));
-    const held = { rows: 20, kept: 3, records: 2, accepted: 1 };
-    const send = (shownHeld: unknown) =>
+    const recovery = {
+      startedAt: "2026-10-24T13:50:12.000Z",
+      lastActiveAt: "2026-10-24T13:51:12.000Z",
+      lastActiveSource: "memory",
+      failed: false,
+      cloud: false,
+    };
+    const send = (confirm: "confirmMissingDatabase" | "confirmRecoveryDiscard", held: unknown) =>
       fetch(`${origin}/setup-api/first-setup/resolution/start-again`, {
         dispatcher: agent,
         method: "POST",
@@ -325,32 +327,83 @@ it("HTTPS lets a shown summary carrying held counts past the body check, and ref
           revision: inspection.revision,
           ownerGeneration: inspection.ownerGeneration,
           register: { kind: "no-current-master", confirmed: true },
-          confirmMissingDatabase: {
-            nothingFiledOrSold: true,
-            shown: { reached: "named", held: shownHeld },
-          },
+          [confirm]:
+            confirm === "confirmMissingDatabase"
+              ? { nothingFiledOrSold: true, shown: { reached: "named", held } }
+              : { shown: { reached: "named", recovery, held } },
         }),
       } as RequestInit);
-    // No owner is signed in, so Start again itself answers setup.not_ready once the body is read.
-    const reached = await send(held);
-    expect(reached.status).toBe(503);
-    expect(await reached.json()).toMatchObject({ error: { code: "setup.not_ready" } });
-    for (const malformed of [
-      { ...held, extra: 1 },
-      { rows: 20, kept: 3, records: 2 },
-      { ...held, kept: -1 },
-      { ...held, rows: 20.5 },
-      { ...held, records: "2" },
-      { ...held, accepted: 3 },
-      { ...held, kept: 21 },
+    const held = { rows: 20, kept: 3, records: 2, accepted: 1 };
+    for (const confirm of ["confirmMissingDatabase", "confirmRecoveryDiscard"] as const)
+      for (const value of [held, { ...held, extra: 1 }, { ...held, kept: -1 }, null]) {
+        const response = await send(confirm, value);
+        expect(response.status, `${confirm} ${JSON.stringify(value)}`).toBe(400);
+        expect(await response.json()).toMatchObject({
+          error: { code: "setup.request_invalid", params: { field: "body" } },
+        });
+      }
+    expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+  } finally {
+    await server?.close();
+    await agent?.close();
+    await f.dispose();
+  }
+});
+
+it("confirmUnreadableDatabase is parsed only with a shown summary that said the database cannot be read", async () => {
+  const f = await firstFiscalFixture();
+  let server: { close(): Promise<void> } | undefined;
+  let agent: Agent | undefined;
+  try {
+    await ensureBoxSecrets({
+      stateDir: f.stateDir,
+      hostnames: ["localhost", "waitron.local"],
+      now: () => new Date(),
+      listIpv4: () => ["127.0.0.1"],
+    });
+    const [port] = await freePorts(1);
+    server = await startServerOrFirstSetupResolution({
+      WAITRON_STATE_DIR: f.stateDir,
+      WAITRON_VENUE_DIR: f.venueDir,
+      WAITRON_HTTP_PORT: String(port),
+    });
+    agent = new Agent({ connect: { ca: await readFile(join(f.stateDir, "tls/ca.crt")) } });
+    const origin = `https://127.0.0.1:${port}`;
+    const inspection = await (
+      await fetch(`${origin}/setup-api/first-setup/resolution`, {
+        dispatcher: agent,
+      } as RequestInit)
+    ).json();
+    const before = await readFile(join(f.stateDir, "first-setup.json"));
+    const send = (confirmUnreadableDatabase: unknown) =>
+      fetch(`${origin}/setup-api/first-setup/resolution/start-again`, {
+        dispatcher: agent,
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: origin },
+        body: JSON.stringify({
+          inspectionId: inspection.inspectionId,
+          revision: inspection.revision,
+          ownerGeneration: inspection.ownerGeneration,
+          confirmUnreadableDatabase,
+        }),
+      } as RequestInit);
+    for (const value of [
+      { shown: { reached: "named" } },
+      { shown: { reached: "named", databaseUnreadable: false } },
+      { shown: { reached: "named", databaseUnreadable: "yes" } },
+      { shown: { reached: "named", databaseUnreadable: true }, extra: 1 },
       null,
     ]) {
-      const response = await send(malformed);
-      expect(response.status, JSON.stringify(malformed)).toBe(400);
+      const response = await send(value);
+      expect(response.status, JSON.stringify(value)).toBe(400);
       expect(await response.json()).toMatchObject({
         error: { code: "setup.request_invalid", params: { field: "body" } },
       });
     }
+    // Past the parser, the action answers for this fixture with its own refusal.
+    const accepted = await send({ shown: { reached: "named", databaseUnreadable: true } });
+    expect(await accepted.json()).toMatchObject({ error: { code: "setup.not_ready" } });
+    expect(accepted.status).toBe(503);
     expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
   } finally {
     await server?.close();

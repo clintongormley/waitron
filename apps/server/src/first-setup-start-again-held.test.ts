@@ -1,9 +1,8 @@
 import { heldSetup } from "../test/held-setup-database.js";
-import { createHash } from "node:crypto";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
-import { access, lstat, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, chmod, readFile, readdir, rm, rmdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { getTableName, sql } from "drizzle-orm";
@@ -13,7 +12,13 @@ import { applyMigrationSet } from "@waitron/db/testing/venue-db.js";
 import { manifestSets } from "@waitron/migrations";
 import {
   START_AGAIN_CONFIRMATIONS_DIR,
+  assertStartAgainAllowedOnDisk,
+  finishStartAgainDeletion,
+  firstSetupFrozenDigest,
+  startAgainMarkerFor,
+  writeStartAgainMarker,
   readStartAgainMarker,
+  resolveFirstSetupBackupWorkspace,
   type StartAgainSummary,
 } from "@waitron/provisioning";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu/src/schema/registros.js";
@@ -23,6 +28,13 @@ import {
   type StartAgainFirstSetupRequest,
 } from "./first-setup-resolution.js";
 import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
+import { diskSnapshot, expectStartAgainDeleted } from "../test/start-again-deleted.js";
+import { foreignHotJournal, foreignWal } from "../test/foreign-journal.js";
+import { checkpointed, damageIndexes, damagePages } from "../test/damaged-database.js";
+import { agreeInternet, archiveForm, clock, restoreApp } from "../test/hour-recovery-host.js";
+import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
+import { recoverySelectPastWaits } from "./testing/hour-test-clock.js";
+import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
 
 // Tables a test adds to a module's `startAgainDeletable`, as the holdings reader sees it.
 const extraDeletable = vi.hoisted(() => new Map<string, readonly string[]>());
@@ -47,48 +59,43 @@ vi.mock("./first-setup-database-holdings.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./first-setup-database-holdings.js")>();
   return {
     ...actual,
-    readSetupDatabaseHoldings: (...args: Parameters<typeof actual.readSetupDatabaseHoldings>) => {
+    readSetupDatabase: (...args: Parameters<typeof actual.readSetupDatabase>) => {
       holdingsRead.calls += 1;
-      return actual.readSetupDatabaseHoldings(...args);
+      return actual.readSetupDatabase(...args);
     },
   };
+});
+
+const copyFails = vi.hoisted(() => ({ on: false, calls: 0 }));
+vi.mock("./venue-private-copy.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./venue-private-copy.js")>();
+  return {
+    ...actual,
+    copyVenueFiles: (...args: Parameters<typeof actual.copyVenueFiles>) => {
+      if (!copyFails.on) return actual.copyVenueFiles(...args);
+      copyFails.calls += 1;
+      return Promise.reject(Object.assign(new Error("no space"), { code: "ENOSPC" }));
+    },
+  };
+});
+afterEach(() => {
+  copyFails.on = false;
+  copyFails.calls = 0;
 });
 
 type WithRecovery = Awaited<ReturnType<typeof heldSetup>>;
 type Held = Omit<WithRecovery, "service"> & { service: WithRecovery["service"] | undefined };
 
-// The rows a real activation stopped at `committed` leaves with the helper's module set.
-const ACTIVATION_ROWS = 106;
-
-async function tree(dir: string, prefix = ""): Promise<Record<string, string>> {
-  const result: Record<string, string> = {};
-  for (const name of (await readdir(join(dir, prefix))).sort()) {
-    const relative = prefix === "" ? name : `${prefix}/${name}`;
-    // Every exclusive turn rewrites the anchor's own lock pair.
-    if (prefix === "" && /^venue\.(lock|holder)/.test(name)) continue;
-    if ((await lstat(join(dir, relative))).isDirectory()) {
-      result[`${relative}/`] = "";
-      Object.assign(result, await tree(dir, relative));
-    } else
-      result[relative] = createHash("sha256")
-        .update(await readFile(join(dir, relative)))
-        .digest("hex");
-  }
-  return result;
-}
-const snapshot = async (f: Pick<Held, "roots">) => ({
-  venue: await tree(f.roots.venueDir),
-  state: await tree(f.roots.stateDir),
-});
+const snapshot = (f: Pick<Held, "roots">) => diskSnapshot(f.roots);
 
 /**
  * Signs the setup owner in, then answers a call that asks for the summary. A setup whose
- * publication completed cannot be signed into again, so with `signIn: false` it asks without an
- * owner.
+ * publication completed cannot be signed into again, so with `signIn: false` it asks without
+ * signing in.
  */
 async function signedIn(f: Held, host: Held["host"] = f.host, signIn = true) {
   const request = signIn
-    ? await f.signIn().then(({ owner, ids }) => ({ ...ids, owner }))
+    ? await f.signIn().then(({ ids }) => ids)
     : await host.resolution.inspectFirstSetupResolution().then((current) => ({
         inspectionId: current.inspectionId,
         revision: current.revision!,
@@ -115,7 +122,7 @@ async function expectRefused(
   expect(await snapshot(f)).toEqual(before);
 }
 
-it("a legitimate held setup database beside a stopped recovery answers the summary with what it holds", async () => {
+it("a legitimate held setup database beside a stopped recovery answers the summary", async () => {
   const f = await heldSetup();
   const shown = await summary(f);
   expect(shown).toEqual({
@@ -127,15 +134,71 @@ it("a legitimate held setup database beside a stopped recovery answers the summa
       failed: false,
       cloud: false,
     },
-    held: { rows: ACTIVATION_ROWS, kept: 0, records: 0, accepted: 0 },
   });
 });
 
-it("a held setup database with an invoice record still answers the summary, counting it", async () => {
+it("a held setup database with an invoice record refuses the summary kept-records, and nothing changes", async () => {
+  await expectRefused(await heldSetup({ invoices: 1 }), {
+    code: "setup.start_again_refused",
+    params: { cause: "kept-records" },
+  });
+});
+
+/** Asks for the summary through its route; answers the kept-records refusal's log reason. */
+async function keptRecordsLogReason(f: Held) {
+  const { ids } = await f.signIn();
+  const actions = createFirstSetupResolutionActions({
+    ...f.roots,
+    host: f.host,
+    ...(f.service === undefined ? {} : { backupRecovery: f.service }),
+  });
+  const lines: { level: string; event: string; fields?: Record<string, unknown> }[] = [];
+  const app = new Hono();
+  mountFirstSetupResolutionApi(
+    app,
+    f.host,
+    (level, event, fields) => lines.push({ level, event, fields }),
+    {
+      summary: actions.startAgainSummary,
+    },
+  );
+  const socket = new TLSSocket(new Socket());
+  try {
+    const response = await app.request(
+      "https://box.test/setup-api/first-setup/resolution/start-again/summary",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(ids),
+      },
+      { incoming: { socket } },
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: { code: "setup.start_again_refused", params: { cause: "kept-records" } },
+    });
+  } finally {
+    socket.destroy();
+  }
+  const refusal = lines.find((line) => line.event === "setup.start_again_refused");
+  expect(refusal?.level).toBe("warn");
+  return refusal?.fields?.logReason;
+}
+
+it("the summary's kept-records refusal logs the counts, not the answer", async () => {
+  expect(await keptRecordsLogReason(await heldSetup({ invoices: 1 }))).toMatch(
+    /^rows=\d+ kept=\d+ records=1 accepted=0$/,
+  );
+});
+
+it("a kept-records refusal after a damaged read logs the damage's code after the counts", async () => {
   const f = await heldSetup({ invoices: 1 });
-  const shown = await summary(f);
-  expect(shown.held).toMatchObject({ records: 1, accepted: 0 });
-  expect(shown.held!.kept).toBeGreaterThanOrEqual(1);
+  damagePages(venueDb(f), "tenants");
+  expect(await keptRecordsLogReason(f)).toMatch(
+    /^rows=\d+ kept=[1-9]\d* records=\d+ accepted=\d+ damaged=errcode 11$/,
+  );
 });
 
 it.each([
@@ -160,10 +223,6 @@ it("a complete attempt with no saved trading settings refuses setup.start_again_
   );
 });
 
-it("a held setup database with no recovery started is still refused setup.not_ready, and nothing changes", async () => {
-  await expectRefused(await heldSetup({ recovery: false }), { code: "setup.not_ready" });
-});
-
 it("a held summary the disk check refuses is refused before what the setup database holds is read, and nothing changes", async () => {
   const f = await heldSetup();
   const node = new DatabaseSync(join(f.roots.venueDir, "node.db"));
@@ -175,23 +234,36 @@ it("a held summary the disk check refuses is refused before what the setup datab
 });
 
 it.each([
-  ["saved trading settings", { recovery: false, tradingSettings: true }, true],
-  ["a complete attempt", { recovery: false, status: "complete" }, false],
+  ["saved trading settings", "trading-settings", { recovery: false, tradingSettings: true }, true],
+  ["a complete attempt", "setup-finished", { recovery: false, status: "complete" }, false],
+  ["an invoice record", "kept-records", { recovery: false, invoices: 1 }, true],
 ] as const)(
-  "%s with no recovery started is refused setup.not_ready, not start_again_refused, and nothing changes",
-  async (_label, options, signIn) => {
-    await expectRefused(await heldSetup(options), { code: "setup.not_ready" }, { signIn });
+  "%s with no recovery started refuses the summary and Start again setup.start_again_refused %s, and nothing changes",
+  async (_label, cause, options, signIn) => {
+    const f = await heldSetup(options);
+    const refusal = { code: "setup.start_again_refused", params: { cause } };
+    await expectRefused(f, refusal, { signIn });
+    await expectStartAgainRefused(f, await handMade(f, signIn, false), refusal);
   },
 );
 
+const notReady = { code: "setup.not_ready" };
 it.each([
-  ["unknown", {}],
-  ["partial", {}],
-  ["unknown", { tradingSettings: true }],
-  ["partial", { tradingSettings: true }],
+  ["unknown", {}, notReady],
+  ["partial", {}, notReady],
+  [
+    "unknown",
+    { tradingSettings: true },
+    { code: "setup.start_again_refused", params: { cause: "trading-settings" } },
+  ],
+  [
+    "partial",
+    { tradingSettings: true },
+    { code: "setup.start_again_refused", params: { cause: "trading-settings" } },
+  ],
 ] as const)(
-  "a database read as %s beside a stopped recovery (%o) is still refused setup.not_ready, and nothing changes",
-  async (database, options) => {
+  "a database read as %s beside a stopped recovery (%o) is refused as %o, and nothing changes",
+  async (database, options, refusal) => {
     const f = await heldSetup(options);
     const inspect = f.host.resolution.inspectFirstSetupResolution;
     const host = {
@@ -201,26 +273,25 @@ it.each([
         inspectFirstSetupResolution: async () => ({ ...(await inspect()), database }),
       },
     } as Held["host"];
-    await expectRefused(f, { code: "setup.not_ready" }, { host });
+    await expectRefused(f, refusal, { host });
   },
 );
 
 /** Signs the owner in and asks for the summary; `run` sends Start again confirming it. */
 async function askStartAgain(f: Held, host: Held["host"] = f.host) {
-  const { owner, ids } = await f.signIn();
+  const { ids } = await f.signIn();
   const actions = createFirstSetupResolutionActions({
     ...f.roots,
     host,
     ...(f.service === undefined ? {} : { backupRecovery: f.service }),
   });
-  const shown = await actions.startAgainSummary({ ...ids, owner });
+  const shown = await actions.startAgainSummary({ ...ids });
   return {
     shown,
-    owner,
     ids,
     actions,
     run: (extra: Partial<StartAgainFirstSetupRequest> = { confirmRecoveryDiscard: { shown } }) =>
-      actions.startAgainFirstSetup({ ...ids, owner, ...extra }),
+      actions.startAgainFirstSetup({ ...ids, ...extra }),
   };
 }
 
@@ -230,6 +301,7 @@ async function confirmations(stateDir: string) {
     (await readdir(folder)).map(
       async (name) =>
         JSON.parse(await readFile(join(folder, name), "utf8")) as {
+          at: string;
           database: string;
           shown: unknown;
         },
@@ -256,18 +328,21 @@ const LEFT_VENUE = /^(venue|recovery|migrations)\.lock(-journal)?$|^venue\.holde
 const LEFT_STATE =
   /^(first-setup-start-again-confirmations\/(\w|[-.])*|first-setup-resolutions\/|first-setup-resolutions\/backup-recovery\/(current\.json)?|first-setup-resolutions\/backup-recovery\/[^/]+\/(\d{6}\.json|target\/|target\/(venue|state)\/|target\/(venue|state)\/((venue|migrations|recovery)\.lock(-journal)?|venue\.holder\.json))?)$/;
 
-it("in the held state, Start again confirming the summary deletes the setup, and keeps who chose it", async () => {
+it("in the held state, Start again confirming the summary deletes the setup, and keeps whose setup it was", async () => {
   const f = await heldSetup();
   const startAgain = await askStartAgain(f);
-  expect(startAgain.shown.held).toBeDefined();
   await expect(startAgain.run()).resolves.toBeUndefined();
   const left = await snapshot(f);
   expect(Object.keys(left.venue).filter((name) => !LEFT_VENUE.test(name))).toEqual([]);
   expect(Object.keys(left.state).filter((name) => !LEFT_STATE.test(name))).toEqual([]);
   const records = await confirmations(f.roots.stateDir);
   expect(records).toHaveLength(1);
-  expect(records[0]).toMatchObject({ database: "present", shown: startAgain.shown });
-  expect((records[0]!.shown as StartAgainSummary).held).toEqual(startAgain.shown.held);
+  expect(records[0]).toMatchObject({
+    database: "present",
+    shown: startAgain.shown,
+    setupAdministrator: { displayName: expect.any(String), email: expect.any(String) },
+    signedIn: false,
+  });
   expect((await f.workspace.readChain()).at(-1)!.phase).toBe("abandoned");
 });
 
@@ -282,7 +357,7 @@ it("in the held state, a damaged recovery-key record: the summary shows it, and 
   const f = await heldSetup();
   await damageRecoveryRecord(f);
   const startAgain = await askStartAgain(f);
-  expect(startAgain.shown).toMatchObject({ recoveryRecordDamaged: true, held: expect.any(Object) });
+  expect(startAgain.shown).toMatchObject({ recoveryRecordDamaged: true });
   await expect(
     startAgain.run({
       confirmRecoveryDiscard: { shown: startAgain.shown },
@@ -337,12 +412,59 @@ it("a setup database that is not empty but holds no rows (a view only) is not th
     emptyDatabase: false,
   });
   await expectRefused(f, { code: "setup.not_ready" });
-  // The summary the page would have shown had the counts been read: nothing.
-  const shown = { ...before.shown, held: { rows: 0, kept: 0, records: 0, accepted: 0 } };
-  const { owner, ids } = await f.signIn();
+  const { shown } = before;
+  const { ids } = await f.signIn();
   await expectStartAgainRefused(
     f,
-    () => before.actions.startAgainFirstSetup({ ...ids, owner, confirmRecoveryDiscard: { shown } }),
+    () => before.actions.startAgainFirstSetup({ ...ids, confirmRecoveryDiscard: { shown } }),
+    { code: "setup.not_ready" },
+  );
+});
+
+it("a setup database whose -wal holds no rows stays refused setup.not_ready when its main file alone still holds one, and nothing changes", async () => {
+  const f = await heldSetup();
+  const before = await askStartAgain(f);
+  for (const name of ["venue.db", "venue.db-wal", "venue.db-shm"])
+    await rm(join(f.roots.venueDir, name), { force: true });
+  const db = await openVenueDatabase(f.roots.venueDir);
+  try {
+    for (const set of TEST_MIGRATIONS) await applyMigrationSet(db.venue, set);
+    db.venue.run(sql`create table held_probe_rows (n)`);
+    db.venue.run(sql`insert into held_probe_rows values (1)`);
+  } finally {
+    await db.close();
+  }
+  // The row's deletion and a view stay in the -wal: the files are copied while the database is open.
+  const venueDb = join(f.roots.venueDir, "venue.db");
+  const writer = new DatabaseSync(venueDb);
+  let files: [Buffer, Buffer];
+  try {
+    writer.exec(
+      "pragma wal_autocheckpoint = 0; delete from held_probe_rows; create view held_probe as select 1 as one",
+    );
+    files = [await readFile(venueDb), await readFile(`${venueDb}-wal`)];
+  } finally {
+    writer.close();
+  }
+  await writeFile(venueDb, files[0]);
+  await writeFile(`${venueDb}-wal`, files[1]);
+  await rm(`${venueDb}-shm`, { force: true });
+  const main = new DatabaseSync(`file:${venueDb}?immutable=1`, { readOnly: true });
+  try {
+    expect(main.prepare("select count(*) as n from held_probe_rows").get()).toEqual({ n: 1 });
+  } finally {
+    main.close();
+  }
+  expect(await f.host.resolution.inspectFirstSetupResolution()).toMatchObject({
+    database: "no-venue-rows",
+    emptyDatabase: false,
+  });
+  await expectRefused(f, { code: "setup.not_ready" });
+  const { shown } = before;
+  const { ids } = await f.signIn();
+  await expectStartAgainRefused(
+    f,
+    () => before.actions.startAgainFirstSetup({ ...ids, confirmRecoveryDiscard: { shown } }),
     { code: "setup.not_ready" },
   );
 });
@@ -353,18 +475,16 @@ it("in the held state, an invoice record refuses Start again kept-records even w
   expect(every).toContain(getTableName(registrosFacturacion));
   extraDeletable.set("fiscal-verifactu", every);
   const f = await heldSetup({ invoices: 1 });
-  const startAgain = await askStartAgain(f);
-  expect(startAgain.shown.held).toMatchObject({ kept: 0, records: 1 });
-  await expectStartAgainRefused(f, () => startAgain.run(), {
+  await expectStartAgainRefused(f, await handMade(f, true), {
     code: "setup.start_again_refused",
     params: { cause: "kept-records" },
+    reason: expect.stringMatching(/^rows=\d+ kept=0 records=1 accepted=0$/),
   });
 });
 
 it("in the held state, an invoice record refuses Start again kept-records, and nothing changes", async () => {
   const f = await heldSetup({ invoices: 1 });
-  const startAgain = await askStartAgain(f);
-  await expectStartAgainRefused(f, () => startAgain.run(), {
+  await expectStartAgainRefused(f, await handMade(f, true), {
     code: "setup.start_again_refused",
     params: { cause: "kept-records" },
   });
@@ -375,7 +495,6 @@ async function handMade(f: Held, signIn: boolean, confirm = true) {
   const ids = signIn
     ? await f.signIn()
     : {
-        owner: undefined,
         ids: await f.host.resolution.inspectFirstSetupResolution().then((current) => ({
           inspectionId: current.inspectionId,
           revision: current.revision!,
@@ -387,14 +506,10 @@ async function handMade(f: Held, signIn: boolean, confirm = true) {
     host: f.host,
     ...(f.service === undefined ? {} : { backupRecovery: f.service }),
   });
-  const shown: StartAgainSummary = {
-    reached: "fiscal-finished",
-    held: { rows: ACTIVATION_ROWS, kept: 0, records: 0, accepted: 0 },
-  };
+  const shown: StartAgainSummary = { reached: "fiscal-finished" };
   return () =>
     actions.startAgainFirstSetup({
       ...ids.ids,
-      ...(ids.owner === undefined ? {} : { owner: ids.owner }),
       ...(confirm && { confirmRecoveryDiscard: { shown } }),
     });
 }
@@ -413,18 +528,6 @@ it("in the held state, a complete attempt with no saved trading settings refuses
     code: "setup.start_again_refused",
     params: { cause: "setup-finished" },
   });
-});
-
-it("in the held state, a confirmation whose summary has no held counts is refused setup.attempt_conflict, and nothing changes", async () => {
-  const f = await heldSetup();
-  const startAgain = await askStartAgain(f);
-  const withoutHeld = { ...startAgain.shown };
-  delete withoutHeld.held;
-  await expectStartAgainRefused(
-    f,
-    () => startAgain.run({ confirmRecoveryDiscard: { shown: withoutHeld } }),
-    { code: "setup.attempt_conflict" },
-  );
 });
 
 it("in the held state, a request carrying confirmMissingDatabase is refused setup.attempt_conflict, and nothing changes", async () => {
@@ -455,16 +558,9 @@ it("in the held state, a request answering no-current-master is refused setup.no
   );
 });
 
-it("a held setup database with no recovery started still refuses Start again setup.not_ready, and nothing changes", async () => {
-  const f = await heldSetup({ recovery: false });
-  // With no recovery, a confirmRecoveryDiscard is refused setup.attempt_conflict before this check.
-  await expectStartAgainRefused(f, await handMade(f, true, false), { code: "setup.not_ready" });
-});
-
-it("in the held state, the Start again route passes the shown held counts on, so confirming the summary over HTTPS starts again", async () => {
+it("in the held state, the Start again route passes the shown summary on, so confirming it over HTTPS starts again", async () => {
   const f = await heldSetup();
   const startAgain = await askStartAgain(f);
-  expect(startAgain.shown.held).toBeDefined();
   const app = new Hono();
   mountFirstSetupResolutionApi(app, f.host, () => {}, {
     startAgain: startAgain.actions.startAgainFirstSetup,
@@ -477,10 +573,6 @@ it("in the held state, the Start again route passes the shown held counts on, so
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Waitron-Setup-Owner": startAgain.owner.capability,
-          "X-Waitron-Setup-Attempt": startAgain.owner.attemptId,
-          "X-Waitron-Setup-Revision": String(startAgain.owner.revision),
-          "X-Waitron-Setup-Generation": String(startAgain.owner.ownerGeneration),
         },
         body: JSON.stringify({
           ...startAgain.ids,
@@ -499,10 +591,26 @@ it("in the held state, the Start again route passes the shown held counts on, so
 
 it("in the held state, the Start again route answers a refusal HTTP 409 with its cause, and nothing changes", async () => {
   const f = await heldSetup({ invoices: 1 });
-  const startAgain = await askStartAgain(f);
+  const { ids } = await f.signIn();
+  const actions = createFirstSetupResolutionActions({
+    ...f.roots,
+    host: f.host,
+    ...(f.service === undefined ? {} : { backupRecovery: f.service }),
+  });
+  // The summary is refused here, so this is the one a page would last have shown.
+  const shown = {
+    reached: "fiscal-finished",
+    recovery: {
+      startedAt: "2026-10-24T13:50:12.000Z",
+      lastActiveAt: "2026-10-24T13:51:12.000Z",
+      lastActiveSource: "memory",
+      failed: false,
+      cloud: false,
+    },
+  };
   const app = new Hono();
   mountFirstSetupResolutionApi(app, f.host, () => {}, {
-    startAgain: startAgain.actions.startAgainFirstSetup,
+    startAgain: actions.startAgainFirstSetup,
   });
   const before = await snapshot(f);
   const socket = new TLSSocket(new Socket());
@@ -513,14 +621,10 @@ it("in the held state, the Start again route answers a refusal HTTP 409 with its
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Waitron-Setup-Owner": startAgain.owner.capability,
-          "X-Waitron-Setup-Attempt": startAgain.owner.attemptId,
-          "X-Waitron-Setup-Revision": String(startAgain.owner.revision),
-          "X-Waitron-Setup-Generation": String(startAgain.owner.ownerGeneration),
         },
         body: JSON.stringify({
-          ...startAgain.ids,
-          confirmRecoveryDiscard: { shown: startAgain.shown },
+          ...ids,
+          confirmRecoveryDiscard: { shown },
         }),
       },
       { incoming: { socket } },
@@ -534,3 +638,702 @@ it("in the held state, the Start again route answers a refusal HTTP 409 with its
   }
   expect(await snapshot(f)).toEqual(before);
 });
+
+/** The ids a page holds after reading the inspection, with nobody signed in. */
+async function withoutSignIn(f: Held, host: Held["host"] = f.host) {
+  const current = await host.resolution.inspectFirstSetupResolution();
+  const ids = {
+    inspectionId: current.inspectionId,
+    revision: current.revision!,
+    ownerGeneration: current.ownerGeneration!,
+  };
+  const actions = createFirstSetupResolutionActions({ ...f.roots, host });
+  return { ids, actions };
+}
+
+const noConfirmations = (f: Held) =>
+  expect(access(join(f.roots.stateDir, START_AGAIN_CONFIRMATIONS_DIR))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+
+it("a held setup database with no recovery: the summary answers and Start again deletes it with no password", async () => {
+  const f = await heldSetup({ recovery: false });
+  const { ids, actions } = await withoutSignIn(f);
+  await expect(actions.startAgainSummary(ids)).resolves.toEqual({ reached: "fiscal-finished" });
+  await expect(actions.startAgainFirstSetup(ids)).resolves.toBeUndefined();
+  await expectStartAgainDeleted(f.roots);
+  await noConfirmations(f);
+});
+
+it("a held setup database with no recovery, when the box knows no modules, refuses the summary and Start again setup.not_ready before reading what it holds, and nothing changes", async () => {
+  const f = await heldSetup({ recovery: false });
+  const host = { ...f.host, modules: undefined } as unknown as Held["host"];
+  const { ids, actions } = await withoutSignIn(f, host);
+  holdingsRead.calls = 0;
+  await expectStartAgainRefused(f, () => actions.startAgainSummary(ids).then(() => {}), {
+    code: "setup.not_ready",
+  });
+  await expectStartAgainRefused(f, () => actions.startAgainFirstSetup(ids), {
+    code: "setup.not_ready",
+  });
+  expect(holdingsRead.calls).toBe(0);
+});
+
+it("a held setup database with no recovery, its venue.db missing and trading settings saved, refuses the summary and Start again setup.not_ready for state/trading.env, and nothing changes", async () => {
+  const f = await heldSetup({ recovery: false, tradingSettings: true });
+  for (const name of ["venue.db", "venue.db-wal", "venue.db-shm"])
+    await rm(join(f.roots.venueDir, name), { force: true });
+  const { ids, actions } = await withoutSignIn(f);
+  const refusal = { code: "setup.not_ready", reason: "refused artifact: state/trading.env" };
+  await expectStartAgainRefused(f, () => actions.startAgainSummary(ids).then(() => {}), refusal);
+  await expectStartAgainRefused(
+    f,
+    () =>
+      actions.startAgainFirstSetup({
+        ...ids,
+        confirmMissingDatabase: { nothingFiledOrSold: true, shown: { reached: "fiscal-finished" } },
+      }),
+    refusal,
+  );
+});
+
+/** A held setup with its venue.db gone, and the modules.json activation wrote, which the missing path refuses. */
+async function missingHeldDatabase() {
+  const f = await heldSetup({ recovery: false });
+  for (const name of ["venue.db", "venue.db-wal", "venue.db-shm"])
+    await rm(join(f.roots.venueDir, name), { force: true });
+  await rm(join(f.roots.stateDir, "modules.json"));
+  expect((await f.host.resolution.inspectFirstSetupResolution()).database).toBe("missing");
+  return f;
+}
+async function startAgainMissing(f: Held) {
+  const { ids, actions } = await withoutSignIn(f);
+  const shown = await actions.startAgainSummary(ids);
+  await actions.startAgainFirstSetup({
+    ...ids,
+    confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+  });
+  await expect(access(join(f.roots.stateDir, "first-setup.json"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+}
+
+it("with the setup database missing and a hot journal left where it was, Start again's wipe leaves no journal", async () => {
+  const f = await missingHeldDatabase();
+  const journal = join(f.roots.venueDir, "venue.db-journal");
+  foreignHotJournal(journal, "rolls-back");
+  await startAgainMissing(f);
+  await expect(access(journal)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("with the setup database missing and no journal, Start again's wipe deletes the setup", async () => {
+  await startAgainMissing(await missingHeldDatabase());
+});
+
+async function stageFreshRestore(f: Held, archive: Held["archive"] = f.archive) {
+  const app = restoreApp({
+    stageRestore: (request) => stageRestoreRequest(f.roots.stateDir, request),
+  });
+  const response = await app.request("https://box.test/setup-api/restore", {
+    method: "POST",
+    body: archiveForm(archive, {
+      selectedSourceId: archive.options.selected.sourceId,
+      oldBoxGone: true,
+      soleRecovery: true,
+    }),
+  });
+  expect(response.status).toBe(202);
+  agreeInternet();
+}
+const exists = (path: string) =>
+  access(path).then(
+    () => true,
+    () => false,
+  );
+
+it("a held setup database, wiped, then the fresh-box restore writes into the usual folders", async () => {
+  const f = await heldSetup({ recovery: false });
+  const { ids, actions } = await withoutSignIn(f);
+  await actions.startAgainFirstSetup(ids);
+  // The backup's hour is chosen after the wipe, as on a box: the wipe deletes an earlier choice.
+  const outcome = (await recoverySelectPastWaits(
+    clock,
+    createSelectedRecoveryPreparation(f.archive.options),
+    { onBox: false },
+  )) as { input: unknown };
+  await stageFreshRestore(f, { ...f.archive, outcome });
+  await expect(runStagedRestore(f.archive.restore)).resolves.toBe(true);
+  expect(await exists(join(f.roots.venueDir, "venue.db"))).toBe(true);
+  expect(await exists(join(f.roots.stateDir, "trading.env"))).toBe(true);
+  for (const dir of [f.roots.venueDir, f.roots.stateDir])
+    expect(await exists(join(dir, "first-setup-resolutions"))).toBe(false);
+  expect((await resolveFirstSetupBackupWorkspace(f.roots)).kind).toBe("absent");
+}, 180_000);
+
+it("control: the same fresh-box restore beside a held setup database that was not wiped is refused, and places nothing", async () => {
+  const f = await heldSetup({ recovery: false });
+  await stageFreshRestore(f);
+  const venue = (await diskSnapshot(f.roots)).venue;
+  await expect(runStagedRestore(f.archive.restore)).rejects.toMatchObject({
+    code: expect.stringMatching(/^setup\.attempt_(conflict|uncertain)$/),
+  });
+  expect((await diskSnapshot(f.roots)).venue).toEqual(venue);
+  expect(await exists(join(f.roots.stateDir, "trading.env"))).toBe(false);
+}, 180_000);
+
+it("a power cut during a held wipe with no recovery: the next start finishes the deletion", async () => {
+  const f = await heldSetup({ recovery: false });
+  const { ids } = await withoutSignIn(f);
+  let removed = 0;
+  const actions = createFirstSetupResolutionActions({
+    ...f.roots,
+    host: f.host,
+    remove: async (path, kind) => {
+      if (removed++ === 1) throw new Error("power cut");
+      await (kind === "file" ? unlink(path) : rmdir(path));
+    },
+  });
+  await expect(actions.startAgainFirstSetup(ids)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+  });
+  expect(removed).toBe(2);
+  expect(await readStartAgainMarker(f.roots.venueDir)).not.toBeNull();
+  await finishStartAgainDeletion(f.roots);
+  await expectStartAgainDeleted(f.roots);
+});
+
+it("a deletion already marked: Start again answers setup.start_again_incomplete and the route asks for a restart", async () => {
+  const f = await heldSetup({ recovery: false });
+  const state = (await f.host.store.read())!;
+  await writeStartAgainMarker(
+    f.roots,
+    await startAgainMarkerFor(
+      await assertStartAgainAllowedOnDisk(f.roots, { held: true }),
+      { attemptId: state.frozen.attemptId, frozenDigest: firstSetupFrozenDigest(state) },
+      { held: true },
+    ),
+  );
+  const { ids, actions } = await withoutSignIn(f);
+  const requestRestart = vi.fn();
+  const app = new Hono();
+  mountFirstSetupResolutionApi(app, f.host, () => {}, {
+    startAgain: actions.startAgainFirstSetup,
+    requestRestart,
+  });
+  const socket = new TLSSocket(new Socket());
+  try {
+    const response = await app.request(
+      "https://box.test/setup-api/first-setup/resolution/start-again",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(ids),
+      },
+      { incoming: { socket } },
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: { code: "setup.start_again_incomplete" },
+    });
+  } finally {
+    socket.destroy();
+  }
+  await vi.waitFor(() => expect(requestRestart).toHaveBeenCalledOnce());
+});
+
+const venueDb = (f: Pick<Held, "roots">) => join(f.roots.venueDir, "venue.db");
+const invoiceTable = getTableName(registrosFacturacion);
+const labelOf = async (f: Held) => (await f.host.resolution.inspectFirstSetupResolution()).database;
+/** The summary with nobody signed in; Start again without the page's confirmation refuses. */
+async function unreadableSummary(f: Held, host: Held["host"] = f.host) {
+  const { ids, actions } = await withoutSignIn(f, host);
+  const shown = await actions.startAgainSummary(ids);
+  await expectStartAgainRefused(f, () => actions.startAgainFirstSetup(ids), {
+    code: "setup.attempt_conflict",
+  });
+  return shown;
+}
+/** Start again sent as the page sends it after showing "cannot be read": the setup is deleted. */
+async function expectUnreadableDeleted(
+  f: Held,
+  shown: StartAgainSummary,
+  host: Held["host"] = f.host,
+) {
+  const { ids, actions } = await withoutSignIn(f, host);
+  await expect(
+    actions.startAgainFirstSetup({ ...ids, confirmUnreadableDatabase: { shown } }),
+  ).resolves.toBeUndefined();
+  await expectStartAgainDeleted(f.roots);
+  const records = await confirmations(f.roots.stateDir);
+  expect(records).toHaveLength(1);
+  expect(records[0]!.database).toBe("unreadable");
+  expect(records[0]!.shown).toEqual(shown);
+}
+async function expectHeldRefused(f: Held, refusal: object, host: Held["host"] = f.host) {
+  const { ids, actions } = await withoutSignIn(f, host);
+  await expectStartAgainRefused(f, () => actions.startAgainSummary(ids).then(() => {}), refusal);
+  await expectStartAgainRefused(f, () => actions.startAgainFirstSetup(ids), refusal);
+}
+const keptRecords = { code: "setup.start_again_refused", params: { cause: "kept-records" } };
+
+it("a held database with a damaged table (no recovery): the summary says it cannot be read, and Start again with that confirmation deletes it", async () => {
+  const f = await heldSetup({ recovery: false });
+  damagePages(venueDb(f), "department_days");
+  expect(await labelOf(f)).toBe("occupied");
+  const shown = await unreadableSummary(f);
+  expect(shown).toEqual({
+    reached: "fiscal-finished",
+    databaseUnreadable: true,
+  });
+  await expectUnreadableDeleted(f, shown);
+});
+
+it("a damaged database whose confirmation shows another summary is refused setup.attempt_conflict, and nothing changes", async () => {
+  const f = await heldSetup({ recovery: false });
+  damagePages(venueDb(f), "department_days");
+  const shown = await unreadableSummary(f);
+  const { ids, actions } = await withoutSignIn(f);
+  await expectStartAgainRefused(
+    f,
+    () =>
+      actions.startAgainFirstSetup({
+        ...ids,
+        confirmUnreadableDatabase: { shown: { ...shown, reached: "named" } },
+      }),
+    { code: "setup.attempt_conflict" },
+  );
+});
+
+it("confirmUnreadableDatabase beside a readable database is refused setup.attempt_conflict, and nothing changes", async () => {
+  const f = await heldSetup({ recovery: false });
+  const { ids, actions } = await withoutSignIn(f);
+  const shown = await actions.startAgainSummary(ids);
+  expect(shown).toEqual({ reached: "fiscal-finished" });
+  await expectStartAgainRefused(
+    f,
+    () =>
+      actions.startAgainFirstSetup({
+        ...ids,
+        confirmUnreadableDatabase: { shown: { ...shown, databaseUnreadable: true } },
+      }),
+    { code: "setup.attempt_conflict" },
+  );
+});
+
+it("a damaged database beside a stopped recovery: the summary names both, and confirmRecoveryDiscard with that summary deletes both", async () => {
+  const f = await heldSetup();
+  damagePages(venueDb(f), "department_days");
+  const startAgain = await askStartAgain(f);
+  expect(startAgain.shown).toMatchObject({
+    reached: "fiscal-finished",
+    databaseUnreadable: true,
+    recovery: expect.any(Object),
+  });
+  await expectStartAgainRefused(
+    f,
+    () =>
+      startAgain.run({
+        confirmRecoveryDiscard: { shown: startAgain.shown },
+        confirmUnreadableDatabase: { shown: startAgain.shown },
+      }),
+    { code: "setup.attempt_conflict" },
+  );
+  await expect(startAgain.run()).resolves.toBeUndefined();
+  const left = await snapshot(f);
+  expect(Object.keys(left.venue).filter((name) => !LEFT_VENUE.test(name))).toEqual([]);
+  expect(Object.keys(left.state).filter((name) => !LEFT_STATE.test(name))).toEqual([]);
+  const records = await confirmations(f.roots.stateDir);
+  expect(records).toHaveLength(1);
+  expect(records[0]).toMatchObject({ database: "unreadable" });
+  expect(records[0]!.shown).toEqual(startAgain.shown);
+  expect((await f.workspace.readChain()).at(-1)!.phase).toBe("abandoned");
+});
+
+/** The modules, with the fiscal module's holdings seat recording what it answered. */
+function recordingFiscalSeat(f: Held) {
+  const answers: unknown[] = [];
+  const modules = f.host.modules.map((module) => {
+    const initialSetup = module.provisioning?.initialSetup;
+    const seat = initialSetup?.startAgainHoldings;
+    if (module.name !== "fiscal-verifactu" || seat === undefined) return module;
+    return {
+      ...module,
+      provisioning: {
+        ...module.provisioning,
+        initialSetup: {
+          ...initialSetup,
+          startAgainHoldings: async (...args: Parameters<typeof seat>) => {
+            try {
+              const resolved = await seat(...args);
+              answers.push({ resolved });
+              return resolved;
+            } catch (error) {
+              answers.push({ rejected: true, errcode: (error as { errcode?: number }).errcode });
+              throw error;
+            }
+          },
+        },
+      },
+    };
+  });
+  expect(answers).toEqual([]);
+  return { host: { ...f.host, modules } as Held["host"], answers };
+}
+
+it("a damaged database beside a stopped recovery: confirmRecoveryDiscard whose summary leaves out that it cannot be read is refused setup.attempt_conflict, and nothing changes", async () => {
+  const f = await heldSetup();
+  damagePages(venueDb(f), "department_days");
+  const startAgain = await askStartAgain(f);
+  const { databaseUnreadable, ...without } = startAgain.shown;
+  expect(databaseUnreadable).toBe(true);
+  await expectStartAgainRefused(
+    f,
+    () => startAgain.run({ confirmRecoveryDiscard: { shown: without } }),
+    {
+      code: "setup.attempt_conflict",
+    },
+  );
+});
+
+/** The actions with the backup service, and a lock that refuses when `lockRefused` is set. */
+function heldActions(f: Held, lockRefused = false) {
+  return createFirstSetupResolutionActions({
+    ...f.roots,
+    host: f.host,
+    ...(f.service === undefined ? {} : { backupRecovery: f.service }),
+    ...(lockRefused && {
+      lock: async () => {
+        throw new Error("lock refused");
+      },
+    }),
+  });
+}
+async function currentIds(f: Held) {
+  const current = await f.host.resolution.inspectFirstSetupResolution();
+  return {
+    inspectionId: current.inspectionId,
+    revision: current.revision!,
+    ownerGeneration: current.ownerGeneration!,
+  };
+}
+/** Start again discards the stopped recovery, then fails to empty it. */
+async function abandonUnemptied(f: Held) {
+  const ids = await currentIds(f);
+  const failing = heldActions(f, true);
+  const shown = await failing.startAgainSummary(ids);
+  await expect(
+    failing.startAgainFirstSetup({ ...ids, confirmRecoveryDiscard: { shown } }),
+  ).rejects.toMatchObject({ code: "setup.start_again_incomplete" });
+  expect((await f.workspace.readChain()).at(-1)!.phase).toBe("abandoned");
+  return shown;
+}
+
+it.each([
+  ["a readable", false, ["present", "unreadable"]],
+  ["an already damaged", true, ["unreadable", "unreadable"]],
+] as const)(
+  "finishing a recovery abandoned over %s database: the damaged database is deleted only with the page's confirmation, which writes its own record",
+  async (_label, damagedFirst, databases) => {
+    const f = await heldSetup();
+    if (damagedFirst) damagePages(venueDb(f), "department_days");
+    const first = await abandonUnemptied(f);
+    expect(first.databaseUnreadable).toBe(damagedFirst ? true : undefined);
+    if (!damagedFirst) damagePages(venueDb(f), "department_days");
+    // A record is named by its millisecond; the suite's clock stands still.
+    vi.setSystemTime(Date.now() + 1000);
+    const ids = await currentIds(f);
+    const actions = heldActions(f);
+    const shown = await actions.startAgainSummary(ids);
+    expect(shown).toEqual({ reached: "fiscal-finished", databaseUnreadable: true });
+    await expect(actions.startAgainFirstSetup(ids)).rejects.toMatchObject({
+      code: "setup.attempt_conflict",
+    });
+    await expect(
+      actions.startAgainFirstSetup({ ...ids, confirmRecoveryDiscard: { shown } }),
+    ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+    await expect(
+      actions.startAgainFirstSetup({ ...ids, confirmUnreadableDatabase: { shown } }),
+    ).resolves.toBeUndefined();
+    await expect(access(venueDb(f))).rejects.toMatchObject({ code: "ENOENT" });
+    const records = (await confirmations(f.roots.stateDir)).sort((a, b) =>
+      a.at.localeCompare(b.at),
+    );
+    expect(records.map((record) => record.database)).toEqual(databases);
+    expect(records.at(-1)!.shown).toEqual(shown);
+  },
+);
+
+it("a damaged recovery-key record beside a damaged database: Start again needs both acknowledgements, and the record carries both", async () => {
+  const f = await heldSetup({ recovery: false });
+  await damageRecoveryRecord(f);
+  damagePages(venueDb(f), "department_days");
+  const { ids, actions } = await withoutSignIn(f);
+  const shown = await actions.startAgainSummary(ids);
+  expect(shown).toEqual({
+    reached: "fiscal-finished",
+    recoveryRecordDamaged: true,
+    databaseUnreadable: true,
+  });
+  await expectStartAgainRefused(
+    f,
+    () => actions.startAgainFirstSetup({ ...ids, confirmUnreadableDatabase: { shown } }),
+    { code: "setup.attempt_conflict" },
+  );
+  await expectStartAgainRefused(
+    f,
+    () => actions.startAgainFirstSetup({ ...ids, recoveryRecordDamagedShown: true }),
+    { code: "setup.attempt_conflict" },
+  );
+  await expect(
+    actions.startAgainFirstSetup({
+      ...ids,
+      recoveryRecordDamagedShown: true,
+      confirmUnreadableDatabase: { shown },
+    }),
+  ).resolves.toBeUndefined();
+  await expectStartAgainDeleted(f.roots);
+  const records = await confirmations(f.roots.stateDir);
+  expect(records.map((record) => [record.database, record.shown])).toEqual([["unreadable", shown]]);
+});
+
+it("the Start again route passes confirmUnreadableDatabase on: confirming a damaged database over HTTPS starts again", async () => {
+  const f = await heldSetup({ recovery: false });
+  damagePages(venueDb(f), "department_days");
+  const { ids, actions } = await withoutSignIn(f);
+  const shown = await actions.startAgainSummary(ids);
+  expect(shown).toMatchObject({ databaseUnreadable: true });
+  const app = new Hono();
+  mountFirstSetupResolutionApi(app, f.host, () => {}, {
+    startAgain: actions.startAgainFirstSetup,
+  });
+  const socket = new TLSSocket(new Socket());
+  try {
+    const response = await app.request(
+      "https://box.test/setup-api/first-setup/resolution/start-again",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...ids, confirmUnreadableDatabase: { shown } }),
+      },
+      { incoming: { socket } },
+    );
+    expect(await response.json()).toEqual({ restarting: true });
+    expect(response.status).toBe(200);
+  } finally {
+    socket.destroy();
+  }
+  await expectStartAgainDeleted(f.roots);
+});
+
+it("a held database whose invoice table is damaged, with no sale: the summary says it cannot be read, the fiscal module's own reader failed with code 11, and Start again with that confirmation deletes it", async () => {
+  const f = await heldSetup({ recovery: false });
+  damagePages(venueDb(f), invoiceTable);
+  expect(await labelOf(f)).toBe("occupied");
+  const { host, answers } = recordingFiscalSeat(f);
+  const shown = await unreadableSummary(f, host);
+  expect(shown).toEqual({
+    reached: "fiscal-finished",
+    databaseUnreadable: true,
+  });
+  expect(answers[0]).toEqual({ rejected: true, errcode: 11 });
+  await expectUnreadableDeleted(f, shown, host);
+});
+
+it("control: the same held database undamaged: the summary does not say it cannot be read, and the fiscal module's reader counted nothing", async () => {
+  const f = await heldSetup({ recovery: false });
+  const { host, answers } = recordingFiscalSeat(f);
+  const { ids, actions } = await withoutSignIn(f, host);
+  expect(await actions.startAgainSummary(ids)).toEqual({ reached: "fiscal-finished" });
+  expect(answers).toEqual([{ resolved: { records: 0, accepted: 0 } }]);
+});
+
+it.each([
+  ["its first page damaged", (f: Held) => damagePages(venueDb(f), null)],
+  ["junk bytes for a database", (f: Held) => writeFile(venueDb(f), "not a database")],
+])(
+  "a held setup database with %s (attempt committed): the summary says it cannot be read, and Start again with that confirmation deletes it",
+  async (_label, damage) => {
+    const f = await heldSetup({ recovery: false });
+    await damage(f);
+    expect(await labelOf(f)).toBe("corrupt");
+    const shown = await unreadableSummary(f);
+    expect(shown).toEqual({
+      reached: "fiscal-finished",
+      databaseUnreadable: true,
+    });
+    await expectUnreadableDeleted(f, shown);
+  },
+);
+
+it("a damaged tenants page beside an invoice refuses kept-records, and deletes nothing", async () => {
+  const f = await heldSetup({ invoices: 1, recovery: false });
+  damagePages(venueDb(f), "tenants");
+  expect(await labelOf(f)).toBe("corrupt");
+  await expectHeldRefused(f, keptRecords);
+});
+
+it("the same sale with only the invoice table and its indexes damaged refuses kept-records, and deletes nothing", async () => {
+  const f = await heldSetup({ invoices: 1, recovery: false });
+  damagePages(venueDb(f), invoiceTable);
+  await expectHeldRefused(f, keptRecords);
+});
+
+it("damaged indexes beside an intact sale and invoice refuse kept-records, and delete nothing", async () => {
+  const f = await heldSetup({ invoices: 1, recovery: false });
+  damageIndexes(venueDb(f));
+  await expectHeldRefused(f, keptRecords);
+});
+
+it("an intact held database with an invoice and another database's hot journal beside it is refused setup.not_ready, and nothing changes", async () => {
+  const f = await heldSetup({ invoices: 1, recovery: false });
+  foreignHotJournal(`${venueDb(f)}-journal`, "rolls-back");
+  expect(await labelOf(f)).toBe("unknown");
+  await expectHeldRefused(f, { code: "setup.not_ready" });
+});
+
+it("an intact held database with an invoice and an empty-original journal from another database beside it is refused setup.not_ready, and nothing changes", async () => {
+  const f = await heldSetup({ invoices: 1, recovery: false });
+  checkpointed(venueDb(f));
+  foreignHotJournal(`${venueDb(f)}-journal`, "empty-original");
+  await expectHeldRefused(f, {
+    code: "setup.not_ready",
+    reason: "journal beside a damaged read: no such table",
+  });
+});
+
+/** Drops tables beside the reader, with foreign keys off, as a part-applied setup leaves them. */
+function dropTables(f: Pick<Held, "roots">, tables: readonly string[]) {
+  const db = new DatabaseSync(venueDb(f));
+  try {
+    db.exec("pragma foreign_keys = off");
+    for (const table of tables) db.exec(`drop table ${table}`);
+  } finally {
+    db.close();
+  }
+}
+
+it("a held database missing its invoice table: the summary says it cannot be read, and Start again with that confirmation deletes it", async () => {
+  const f = await heldSetup({ recovery: false });
+  dropTables(f, [invoiceTable]);
+  const shown = await unreadableSummary(f);
+  expect(shown).toEqual({ reached: "fiscal-finished", databaseUnreadable: true });
+  await expectUnreadableDeleted(f, shown);
+});
+
+it("a held database missing a table beside a readable sale refuses kept-records, and deletes nothing", async () => {
+  const f = await heldSetup({ invoices: 1, recovery: false });
+  dropTables(f, ["department_days"]);
+  await expectHeldRefused(f, keptRecords);
+});
+
+it.each([
+  ["page-1", "partial"],
+  ["other-pages", "corrupt"],
+] as const)(
+  "an intact held database with an invoice and another database's -wal beside it (%s, labelled %s) refuses kept-records, and deletes nothing",
+  async (shape, label) => {
+    const f = await heldSetup({ invoices: 1, recovery: false });
+    checkpointed(venueDb(f));
+    foreignWal(`${venueDb(f)}-wal`, shape);
+    expect(await labelOf(f)).toBe(label);
+    await expectHeldRefused(f, keptRecords);
+  },
+);
+
+it("a damaged held database with no invoice and its own pending -wal: the summary says it cannot be read, and Start again with that confirmation deletes it", async () => {
+  const f = await heldSetup({ pendingWal: true, recovery: false });
+  const wal = await readFile(`${venueDb(f)}-wal`);
+  damagePages(venueDb(f), "department_days");
+  await writeFile(`${venueDb(f)}-wal`, wal);
+  const shown = await unreadableSummary(f);
+  expect(shown).toEqual({ reached: "fiscal-finished", databaseUnreadable: true });
+  await expectUnreadableDeleted(f, shown);
+});
+
+it("an invoice record with the envios table missing refuses kept-records even when every append-only table is listed as deletable, and nothing changes", async () => {
+  extraDeletable.set(
+    "fiscal-verifactu",
+    manifestSets().flatMap((set) => set.appendOnlyTables),
+  );
+  const f = await heldSetup({ invoices: 1, recovery: false });
+  dropTables(f, ["envios"]);
+  await expectHeldRefused(f, {
+    ...keptRecords,
+    reason: expect.stringMatching(/^rows=\d+ kept=0 records=1 accepted=0$/),
+  });
+});
+
+it("with a readable held venue.db, a damaged node.db refuses the summary and Start again setup.not_ready, and nothing changes", async () => {
+  const f = await heldSetup({ recovery: false });
+  await writeFile(join(f.roots.venueDir, "node.db"), "not a database");
+  await expectHeldRefused(f, { code: "setup.not_ready", reason: "node.db unreadable" });
+});
+
+it("control: without the journal, the same held database refuses kept-records", async () => {
+  const f = await heldSetup({ invoices: 1, recovery: false });
+  await expectHeldRefused(f, keptRecords);
+});
+
+it("a damaged held database whose private copy fails is refused setup.not_ready, and nothing changes", async () => {
+  const f = await heldSetup({ pendingWal: true, recovery: false });
+  const wal = await readFile(`${venueDb(f)}-wal`);
+  damagePages(venueDb(f), "department_days");
+  // The damage is written with the -wal checkpointed; putting it back keeps the copy path.
+  await writeFile(`${venueDb(f)}-wal`, wal);
+  copyFails.on = true;
+  await expectHeldRefused(f, { code: "setup.not_ready", reason: "copy failed: ENOSPC" });
+  expect(copyFails.calls).toBeGreaterThan(0);
+});
+
+it("a venue.db the box may not open is refused setup.not_ready, and nothing changes", async () => {
+  const f = await heldSetup({ recovery: false });
+  const before = await snapshot(f);
+  await chmod(venueDb(f), 0o000);
+  try {
+    expect(await labelOf(f)).toBe("unreadable");
+    const { ids, actions } = await withoutSignIn(f);
+    await expect(actions.startAgainSummary(ids)).rejects.toMatchObject({ code: "setup.not_ready" });
+    await expect(actions.startAgainFirstSetup(ids)).rejects.toMatchObject({
+      code: "setup.not_ready",
+    });
+  } finally {
+    await chmod(venueDb(f), 0o644);
+  }
+  expect(await snapshot(f)).toEqual(before);
+  expect(await readStartAgainMarker(f.roots.venueDir)).toBeNull();
+  await noConfirmations(f);
+});
+
+it.each([
+  ["with an invoice", { invoices: 1 }, keptRecords],
+  ["without one", {}, { code: "setup.not_ready" }],
+] as const)(
+  "a readable held database labelled corrupt %s refuses as its contents say, and nothing changes",
+  async (_label, options, refusal) => {
+    const f = await heldSetup({ ...options, recovery: false });
+    const inspect = f.host.resolution.inspectFirstSetupResolution;
+    const host = {
+      ...f.host,
+      resolution: {
+        ...f.host.resolution,
+        inspectFirstSetupResolution: async () => ({
+          ...(await inspect()),
+          database: "corrupt" as const,
+        }),
+      },
+    } as Held["host"];
+    await expectHeldRefused(f, refusal, host);
+  },
+);
+
+it.each([
+  ["saved trading settings", { tradingSettings: true }, "trading-settings"],
+  ["a finished setup", { status: "complete" }, "setup-finished"],
+] as const)(
+  "%s beside a damaged database refuse %s, and nothing changes",
+  async (_label, options, cause) => {
+    const f = await heldSetup({ ...options, recovery: false });
+    damagePages(venueDb(f), "department_days");
+    await expectHeldRefused(f, { code: "setup.start_again_refused", params: { cause } });
+  },
+);

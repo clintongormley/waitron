@@ -1040,14 +1040,9 @@ declare module "@waitron/shared" {
      */
     "setup.reset_unavailable": Record<string, never>;
     /**
-     * Start again with the database present cannot go ahead without the setup password: the kept
-     * recovery-key record cannot be read, or it would discard a stopped recovery.
-     */
-    "setup.start_again_password_required": Record<string, never>;
-    /**
-     * Start again beside a stopped recovery and a setup database that holds records will not go
-     * ahead: the setup already finished, the database holds rows Waitron never deletes, or the
-     * setup already saved the settings the box trades with.
+     * Start again, or its summary, will not go ahead: the setup already finished, the setup
+     * database holds rows Waitron never deletes, or the setup already saved the settings the box
+     * trades with.
      */
     "setup.start_again_refused": { cause: "setup-finished" | "kept-records" | "trading-settings" };
     /**

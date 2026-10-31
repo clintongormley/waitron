@@ -1,10 +1,10 @@
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { executeTarget, openImmutableWhenWalEmpty } from "./read-only-database.js";
+import { executeTarget, openImmutable, openImmutableWhenWalEmpty } from "./read-only-database.js";
 
 let dir: string;
 let path: string;
@@ -37,6 +37,45 @@ it.each([
 it("does not open when the -wal holds pages", async () => {
   await writeFile(`${path}-wal`, "pages");
   expect(await openImmutableWhenWalEmpty(path)).toEqual({ kind: "wal" });
+});
+
+it("openImmutable reads the main file alone, past a row committed only in the -wal, and changes no file", async () => {
+  const writer = new DatabaseSync(path);
+  const aside = await mkdtemp(join(tmpdir(), "read-only-database-wal-"));
+  try {
+    writer.exec("pragma wal_autocheckpoint = 0; insert into t values (8)");
+    // A clean close checkpoints the row into the main file; copies taken while open keep it in
+    // the -wal.
+    for (const name of ["venue.db", "venue.db-wal"])
+      await copyFile(join(dir, name), join(aside, name));
+  } finally {
+    writer.close();
+  }
+  for (const name of ["venue.db", "venue.db-wal"])
+    await copyFile(join(aside, name), join(dir, name));
+  await rm(aside, { recursive: true, force: true });
+  const withWal = new DatabaseSync(path, { readOnly: true });
+  try {
+    expect(withWal.prepare("select n from t order by n").all()).toEqual([{ n: 7 }, { n: 8 }]);
+  } finally {
+    withWal.close();
+  }
+  // That open made a -shm; without it, one the immutable open made would show.
+  await rm(`${path}-shm`, { force: true });
+  const before = await Promise.all(
+    (await readdir(dir)).sort().map(async (name) => [name, await readFile(join(dir, name))]),
+  );
+  const connection = openImmutable(path);
+  try {
+    expect(connection.prepare("select n from t order by n").all()).toEqual([{ n: 7 }]);
+  } finally {
+    connection.close();
+  }
+  expect(
+    await Promise.all(
+      (await readdir(dir)).sort().map(async (name) => [name, await readFile(join(dir, name))]),
+    ),
+  ).toEqual(before);
 });
 
 it("answers the stage that failed", async () => {

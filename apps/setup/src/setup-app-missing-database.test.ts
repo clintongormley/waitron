@@ -14,7 +14,7 @@ import {
   damagedSummary,
   missingDatabaseFixture,
   namedSummary,
-  recoverMissing,
+  openMissing,
   recoveryStartedAt,
   runningActivity,
   shownTimes,
@@ -33,50 +33,105 @@ afterEach(async () => {
   sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY);
   await navigator.locks.request(`waitron:first-setup:attempt:${initial.attemptId}`, () => {});
 });
-it.each([false, true])(
-  "keeps a missing database on repair after password recovery (same tab %s)",
-  async (sameTab) => {
-    const { app, requests } = await missingDatabaseFixture({ sameTab });
-    await recoverMissing(app);
-    expect(q(app, "screen-cert")).toBeNull();
-    expect(q(app, "screen-first-owner")).not.toBeNull();
-    expect(q(app, "missing-database")).not.toBeNull();
-    expect(q<WtButton>(app, "start-again")?.disabled).toBe(false);
-    expect(requests.some((r) => /\/(resume|claim|provision|start-again)$/.test(r.path))).toBe(
-      false,
-    );
-    expect(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)).not.toContain(venue.admin.password);
+it.each([
+  { locale: "en", browser: "en-GB" },
+  { locale: "es", browser: "es-ES" },
+] as const)(
+  "with the database missing, the page offers Start again and no Continue; pressing it draws what the setup reached and the missing-database tick, with no password ($locale)",
+  async ({ locale, browser }) => {
+    const t = initialOwnerStrings[locale];
+    const { app, requests } = await missingDatabaseFixture({ locale: browser });
+    expect(q(app, "missing-database")!.textContent!.trim()).toBe(t.missingDatabase);
+    expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
+    for (const name of ["resume", "resume-password"]) expect(q(app, name), name).toBeNull();
+    await openMissing(app);
+    expect(reached(app)).toEqual([t.reachedNotStarted]);
+    const box = q<HTMLInputElement>(app, "retire-confirmed")!;
+    expect(box.name).toBe("missing-database-confirmed");
+    expect(box.closest("label")!.textContent!.trim()).toBe(t.missingConfirm);
+    for (const name of ["resume", "resume-password"]) expect(q(app, name), name).toBeNull();
+    expect(app.shadowRoot!.querySelector("input[type=password]")).toBeNull();
+    expect(requests.some((r) => r.path.endsWith("/recover"))).toBe(false);
+    expect(requests.some((r) => r.headers.has("X-Waitron-Setup-Owner"))).toBe(false);
   },
 );
 
-it("retires only after password recovery, confirmation and a fresh owner-bound missing inspection", async () => {
+it("with the database missing and the setup finished, pressing Start again draws setupFinished and no Start again, with Reconnect still drawn", async () => {
+  const t = initialOwnerStrings.en;
+  const { app, requests } = await missingDatabaseFixture({
+    intercept(path) {
+      if (path.endsWith("/start-again/summary"))
+        return Response.json(
+          { error: { code: "setup.start_again_refused", params: { cause: "setup-finished" } } },
+          { status: 409 },
+        );
+    },
+  });
+  await openMissing(app);
+  expect(q(app, "start-again-refused")!.textContent).toBe(t.setupFinished);
+  expect(q(app, "start-again")).toBeNull();
+  expect(q(app, "confirm-start-again")).toBeNull();
+  expect(q(app, "reconnect-first")).not.toBeNull();
+  expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
+});
+
+it("pressing Start again with the database missing keeps the page on repair and sends nothing that continues the setup", async () => {
   const { app, requests } = await missingDatabaseFixture();
-  expect(q<WtButton>(app, "start-again")!.disabled).toBe(true);
-  await recoverMissing(app);
+  await openMissing(app);
+  expect(q(app, "screen-cert")).toBeNull();
+  expect(q(app, "screen-first-owner")).not.toBeNull();
+  expect(q(app, "missing-database")).not.toBeNull();
+  expect(q(app, "confirm-start-again")).not.toBeNull();
+  expect(requests.some((r) => /\/(resume|recover|claim|provision|start-again)$/.test(r.path))).toBe(
+    false,
+  );
+});
+
+it("in a tab that signed in before, Continue with the database missing sends no password, keeps the page on repair and offers Start again", async () => {
+  const { app, requests } = await missingDatabaseFixture({
+    sameTab: true,
+    ready: (app) => q(app, "resume-password") !== null,
+  });
+  await userEvent.fill(
+    q<WtInput>(app, "resume-password")!.shadowRoot!.querySelector("input")!,
+    venue.admin.password,
+  );
+  await click(app, "resume");
+  await expect.poll(() => q(app, "start-again")).not.toBeNull();
+  expect(q(app, "missing-database")).not.toBeNull();
+  expect(q(app, "resume-password")).toBeNull();
+  expect(q(app, "screen-cert")).toBeNull();
+  expect(q(app, "screen-first-owner")).not.toBeNull();
+  expect(requests.some((r) => /\/(resume|recover|claim|provision|start-again)$/.test(r.path))).toBe(
+    false,
+  );
+  expect(requests.every((r) => !JSON.stringify(r.body ?? "").includes(venue.admin.password))).toBe(
+    true,
+  );
+});
+
+it("retires only after the confirmation, reading the summary again before sending it", async () => {
+  const { app, requests } = await missingDatabaseFixture();
+  await openMissing(app);
   expect(app.shadowRoot!.textContent).toContain(initialOwnerStrings.en.missingAsk);
   expect(reached(app)).toEqual([initialOwnerStrings.en.reachedNotStarted]);
-  await click(app, "start-again");
-  expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
   expect(q<WtButton>(app, "confirm-start-again")!.disabled).toBe(true);
   expect(q<HTMLInputElement>(app, "retire-confirmed")!.closest("label")!.textContent!.trim()).toBe(
     initialOwnerStrings.en.missingConfirm,
   );
+  const asked = requests.length;
   await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
   await click(app, "confirm-start-again");
   await expect.poll(() => app.shadowRoot!.textContent).toContain(initialOwnerStrings.en.restarting);
   const sent = requests.find((r) => r.path.endsWith("/start-again"))!;
   expect(sent.body).toEqual({
-    inspectionId: "b".repeat(64),
-    revision: 2,
-    ownerGeneration: 2,
+    inspectionId: "a".repeat(64),
+    revision: 1,
+    ownerGeneration: 1,
     confirmMissingDatabase: { nothingFiledOrSold: true, shown: namedSummary },
   });
-  expect(sent.headers.get("X-Waitron-Setup-Owner")).toBe("B".repeat(43));
-  expect(sent.headers.get("X-Waitron-Setup-Attempt")).toBe(initial.attemptId);
-  expect(sent.headers.get("X-Waitron-Setup-Revision")).toBe("2");
-  expect(sent.headers.get("X-Waitron-Setup-Generation")).toBe("2");
-  expect(requests.slice(-3).map((r) => r.path)).toEqual([
-    "/setup-api/first-setup/resolution",
+  expect(sent.headers.has("X-Waitron-Setup-Owner")).toBe(false);
+  expect(requests.slice(asked).map((r) => r.path)).toEqual([
     "/setup-api/first-setup/resolution/start-again/summary",
     "/setup-api/first-setup/resolution/start-again",
   ]);
@@ -84,46 +139,7 @@ it("retires only after password recovery, confirmation and a fresh owner-bound m
   expect(requests.some((r) => /\/(claim|provision|abandon)$/.test(r.path))).toBe(false);
 });
 
-it.each(["complete"] as const)(
-  "does not offer missing-database retirement for %s work",
-  async (recoveredStatus) => {
-    const { app, requests } = await missingDatabaseFixture({ recoveredStatus });
-    await recoverMissing(app);
-    expect(q(app, "screen-cert")).toBeNull();
-    expect(q(app, "finish-setup")).toBeNull();
-    expect(app.shadowRoot!.textContent).not.toContain("Setup is complete");
-    expect(q<WtButton>(app, "start-again")?.disabled ?? true).toBe(true);
-    expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
-  },
-);
-
-it.each([
-  {
-    recoveredStatus: "activation-started",
-    reached: "fiscal-started",
-    line: "reachedFiscalStarted",
-  },
-  { recoveredStatus: "uncertain", reached: "fiscal-started", line: "reachedFiscalStarted" },
-  { recoveredStatus: "committed", reached: "fiscal-finished", line: "reachedFiscalFinished" },
-  { recoveredStatus: "publication", reached: "fiscal-finished", line: "reachedFiscalFinished" },
-] as const)(
-  "offers the missing-database ask for $recoveredStatus work, saying $line",
-  async ({ recoveredStatus, reached: summaryReached, line }) => {
-    const { app, requests } = await missingDatabaseFixture({
-      recoveredStatus,
-      summary: { reached: summaryReached },
-    });
-    await recoverMissing(app);
-    expect(q(app, "screen-cert")).toBeNull();
-    expect(q(app, "finish-setup")).toBeNull();
-    expect(app.shadowRoot!.textContent).not.toContain("Setup is complete");
-    expect(reached(app)).toEqual([initialOwnerStrings.en[line]]);
-    expect(q<WtButton>(app, "start-again")?.disabled).toBe(false);
-    expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
-  },
-);
-
-it("requires password recovery again after a refused retirement and never retries it implicitly", async () => {
+it("a refused retirement offers Start again again and never retries it by itself", async () => {
   const { app, requests } = await missingDatabaseFixture({
     intercept(path) {
       if (path.endsWith("/start-again"))
@@ -133,12 +149,10 @@ it("requires password recovery again after a refused retirement and never retrie
         );
     },
   });
-  await recoverMissing(app);
-  await click(app, "start-again");
+  await openMissing(app);
   await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
   await click(app, "confirm-start-again");
-  await expect.poll(() => q(app, "resume-password")).not.toBeNull();
-  expect(q<WtButton>(app, "start-again")!.disabled).toBe(true);
+  await expect.poll(() => q(app, "start-again")).not.toBeNull();
   expect(q(app, "confirm-start-again")).toBeNull();
   expect(q(app, "screen-cert")).toBeNull();
   expect(requests.filter((r) => r.path.endsWith("/start-again"))).toHaveLength(1);
@@ -147,14 +161,13 @@ it("requires password recovery again after a refused retirement and never retrie
 
 it("cancels missing-database retirement without sending it or continuing the wizard", async () => {
   const { app, requests } = await missingDatabaseFixture();
-  await recoverMissing(app);
-  await click(app, "start-again");
+  await openMissing(app);
   await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
   await click(app, "cancel-start-again");
   expect(q(app, "confirm-start-again")).toBeNull();
   expect(q(app, "screen-cert")).toBeNull();
   expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
-  await click(app, "start-again");
+  await openMissing(app);
   expect(q<HTMLInputElement>(app, "retire-confirmed")!.checked).toBe(false);
   expect(q<WtButton>(app, "confirm-start-again")!.disabled).toBe(true);
 });
@@ -170,8 +183,7 @@ it("ignores duplicate clicks and a retirement answer after the app has left", as
     },
   });
   const operation = vi.spyOn(api, "startAgainFirstSetup");
-  await recoverMissing(app);
-  await click(app, "start-again");
+  await openMissing(app);
   await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
   q(app, "confirm-start-again")!.dispatchEvent(new MouseEvent("click"));
   q(app, "confirm-start-again")!.dispatchEvent(new MouseEvent("click"));
@@ -184,23 +196,19 @@ it("ignores duplicate clicks and a retirement answer after the app has left", as
   expect(app.shadowRoot!.textContent).not.toContain(initialOwnerStrings.en.restarting);
 });
 
-it("does not restore missing-database evidence when a password inspection outlives its page", async () => {
+it("a setup read on pressing Start again that outlives its page opens no confirmation", async () => {
   let answer!: (value: Response) => void;
+  let inspections = 0;
   const { app, api, requests } = await missingDatabaseFixture({
-    sameTab: true,
     intercept(path) {
-      if (path.endsWith("/resolution"))
+      if (path.endsWith("/resolution") && ++inspections === 2)
         return new Promise<Response>((resolve) => {
           answer = resolve;
         });
     },
   });
   const inspection = vi.spyOn(api, "inspectFirstSetupResolution");
-  const field = app.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(
-    "[data-test=resume-password]",
-  )!;
-  await userEvent.fill(field.shadowRoot!.querySelector("input")!, venue.admin.password);
-  await click(app, "resume");
+  await click(app, "start-again");
   await expect.poll(() => answer).toBeTypeOf("function");
   const parent = app.parentNode!;
   app.remove();
@@ -219,11 +227,11 @@ it("does not restore missing-database evidence when a password inspection outliv
       artifacts: [],
     }),
   );
-  await inspection.mock.results[0]!.value;
+  await Promise.all(inspection.mock.results.map((r) => r.value));
   await app.updateComplete;
+  expect(q(app, "retire-confirmed")).toBeNull();
   expect(q(app, "missing-database")).toBeNull();
-  expect(q(app, "resume-password")).toBeNull();
-  expect(requests.some((r) => r.path.endsWith("/recover"))).toBe(false);
+  expect(requests.some((r) => r.path.endsWith("/start-again/summary"))).toBe(false);
 });
 
 const askLines = (locale: "en" | "es") => [
@@ -272,7 +280,7 @@ it.each([
       locale: browser,
       summary: { reached: summaryReached },
     });
-    await recoverMissing(app);
+    await openMissing(app);
     const t = initialOwnerStrings[locale];
     const text = app.shadowRoot!.textContent!;
     expect(text).toContain(t.missingDatabase);
@@ -287,8 +295,7 @@ it.each(locales)(
   "keeps Start again disabled until the missing-database confirmation is ticked ($locale)",
   async ({ locale, browser }) => {
     const { app, requests } = await missingDatabaseFixture({ locale: browser });
-    await recoverMissing(app);
-    await click(app, "start-again");
+    await openMissing(app);
     const t = initialOwnerStrings[locale];
     const box = q<HTMLInputElement>(app, "retire-confirmed")!;
     expect(box.name).toBe("missing-database-confirmed");
@@ -304,11 +311,14 @@ it.each(locales)(
   "draws Recover from backup beside Start again, with no recovery note ($locale)",
   async ({ browser }) => {
     const { app } = await missingDatabaseFixture({ locale: browser });
-    await recoverMissing(app);
+    expect(q(app, "recover-backup")).not.toBeNull();
+    expect(q(app, "start-again")).not.toBeNull();
+    expect(q(app, "recover-backup-note")).toBeNull();
+    await openMissing(app);
     const actions = q(app, "missing-actions")!;
     expect(
       [...actions.querySelectorAll("wt-button")].map((b) => b.getAttribute("data-test")),
-    ).toEqual(["recover-backup", "start-again"]);
+    ).toEqual(["recover-backup"]);
     expect(q(app, "recover-backup-note")).toBeNull();
   },
 );
@@ -317,7 +327,7 @@ it.each(["selected", "uncertain"] as const)(
   "offers no Start again in the ask while a backup recovery's journal reports %s",
   async (backupPhase) => {
     const { app, requests } = await missingDatabaseFixture({ backupPhase });
-    await recoverMissing(app);
+    await openMissing(app);
     expect(app.shadowRoot!.textContent).toContain(initialOwnerStrings.en.missingAsk);
     expect(q(app, "recover-backup")).not.toBeNull();
     expect(q<WtButton>(app, "recover-backup")!.disabled).toBe(backupPhase === "uncertain");
@@ -351,16 +361,17 @@ it.each(["prepared", "placement-started", "restored"] as const)(
       activity: { ...stoppedActivity, phase },
       summary: stoppedSummary,
     });
-    await recoverMissing(app);
-    expect(app.shadowRoot!.textContent).toContain(initialOwnerStrings.en.missingAsk);
     expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
+    await openMissing(app);
+    expect(app.shadowRoot!.textContent).toContain(initialOwnerStrings.en.missingAsk);
+    expect(q(app, "confirm-start-again")).not.toBeNull();
     expect(q(app, "recover-backup")).toBeNull();
     expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
   },
 );
 
 it.each(locales)(
-  "shows none of the ask's lines before the password step ($locale)",
+  "shows none of the ask's lines before Start again is pressed ($locale)",
   async ({ locale, browser }) => {
     const { app, requests } = await missingDatabaseFixture({ locale: browser });
     const text = app.shadowRoot!.textContent!;
@@ -368,7 +379,7 @@ it.each(locales)(
     for (const line of askLines(locale)) expect(text).not.toContain(line);
     expect(q(app, "missing-reached")).toBeNull();
     expect(q(app, "recover-backup")).not.toBeNull();
-    expect(q<WtButton>(app, "start-again")!.disabled).toBe(true);
+    expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
     expect(requests.some((r) => r.path.endsWith("/summary"))).toBe(false);
   },
 );
@@ -376,57 +387,22 @@ it.each(locales)(
 it.each([
   { route: "/start-again/summary", answer: { reached: "unknown" } },
   { route: "/backup/status", answer: { phase: "unknown", proofRequired: true } },
-])("offers no Start again when $route answers an unreadable record", async ({ route, answer }) => {
+])("opens no confirmation when $route answers an unreadable record", async ({ route, answer }) => {
   const { app, requests } = await missingDatabaseFixture({
     intercept(path) {
       if (path.endsWith(route)) return Response.json(answer);
     },
   });
-  await recoverMissing(app);
+  await openMissing(app);
   expect(q(app, "missing-reached")).toBeNull();
-  expect(q<WtButton>(app, "start-again")!.disabled).toBe(true);
+  expect(q(app, "retire-confirmed")).toBeNull();
+  expect(q(app, "confirm-start-again")).toBeNull();
   expect(
-    app.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error,
-  ).not.toBe("");
-  q(app, "start-again")!.dispatchEvent(new MouseEvent("click"));
-  await app.updateComplete;
-  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
-  const asked = requests.length;
-  q(app, "confirm-start-again")!.dispatchEvent(new MouseEvent("click"));
-  await app.updateComplete;
-  expect(requests).toHaveLength(asked);
+    [...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions")].some(
+      (f) => f.error,
+    ),
+  ).toBe(true);
   expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
-});
-
-it("shows the before-password line only before the password step", async () => {
-  let answer!: (value: Response) => void;
-  const { app } = await missingDatabaseFixture({
-    intercept(path) {
-      if (!path.endsWith("/start-again/summary")) return undefined;
-      return new Promise<Response>((resolve) => {
-        answer = resolve;
-      });
-    },
-  });
-  const line = initialOwnerStrings.en.startUnavailable;
-  expect(app.shadowRoot!.textContent).toContain(line);
-  await userEvent.fill(
-    q<WtInput>(app, "resume-password")!.shadowRoot!.querySelector("input")!,
-    venue.admin.password,
-  );
-  await click(app, "resume");
-  await expect.poll(() => answer).toBeTypeOf("function");
-  await app.updateComplete;
-  expect(app.shadowRoot!.textContent).not.toContain(line);
-  answer(Response.json({ error: { code: "setup.attempt_conflict", params: {} } }, { status: 409 }));
-  await expect
-    .poll(
-      () =>
-        app.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")?.error,
-    )
-    .toBeTruthy();
-  expect(q<WtButton>(app, "start-again")!.disabled).toBe(true);
-  expect(app.shadowRoot!.textContent).not.toContain(line);
 });
 
 const shells = { en: shellEn, es: shellEs };
@@ -434,8 +410,7 @@ const startAgainRequests = <R extends { path: string }>(requests: R[]) =>
   requests.filter((r) => r.path.endsWith("/start-again"));
 async function damagedConfirmation(browser: "en-GB" | "es-ES", summary = damagedSummary) {
   const fixture = await missingDatabaseFixture({ locale: browser, summary });
-  await recoverMissing(fixture.app);
-  await click(fixture.app, "start-again");
+  await openMissing(fixture.app);
   return fixture;
 }
 
@@ -547,7 +522,7 @@ it.each(locales)(
   },
 );
 
-it("reads the activity again every 30 s, and offers the password step once the recovery stopped", async () => {
+it("reads the activity again every 30 s, and offers Start again once the recovery stopped", async () => {
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
   try {
     let reads = 0;
@@ -560,9 +535,9 @@ it("reads the activity again every 30 s, and offers the password step once the r
     await expect.poll(() => activityReads()).toHaveLength(2);
     await app.updateComplete;
     expect(q(app, "recovery-running")).not.toBeNull();
-    expect(q(app, "resume-password")).toBeNull();
+    expect(q(app, "start-again")).toBeNull();
     await vi.advanceTimersByTimeAsync(30_000);
-    await expect.poll(() => q(app, "resume-password")).not.toBeNull();
+    await expect.poll(() => q(app, "start-again")).not.toBeNull();
     expect(activityReads()).toHaveLength(3);
     expect(q(app, "recovery-running")).toBeNull();
     await vi.advanceTimersByTimeAsync(120_000);
@@ -587,7 +562,7 @@ it("stops reading the activity when the page leaves", async () => {
   }
 });
 
-it("offers the password step at once for a recovery that failed, and Start again after it", async () => {
+it("offers Start again at once for a recovery that failed, and its confirmation on pressing it", async () => {
   const recovery = { ...stoppedRecovery, failed: true };
   const { app } = await missingDatabaseFixture({
     backupPhase: "placement-started",
@@ -595,14 +570,14 @@ it("offers the password step at once for a recovery that failed, and Start again
     summary: { ...namedSummary, recovery },
   });
   expect(q(app, "recovery-running")).toBeNull();
-  expect(q(app, "resume-password")).not.toBeNull();
-  await recoverMissing(app);
   expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
+  await openMissing(app);
+  expect(q(app, "confirm-start-again")).not.toBeNull();
   expect(q(app, "recover-backup")).toBeNull();
 });
 
 it.each(locales)(
-  "after the password, names the stopped recovery and when it was last active ($locale)",
+  "pressing Start again names the stopped recovery and when it was last active ($locale)",
   async ({ locale, browser }) => {
     const { app } = await missingDatabaseFixture({
       locale: browser,
@@ -611,7 +586,7 @@ it.each(locales)(
       summary: stoppedSummary,
     });
     expect(q(app, "recovery-stopped")).toBeNull();
-    await recoverMissing(app);
+    await openMissing(app);
     const t = initialOwnerStrings[locale];
     expect(reached(app)).toEqual([t.reachedNotStarted]);
     expect(lines(app, "recovery-stopped")).toEqual([
@@ -623,8 +598,7 @@ it.each(locales)(
     const actions = q(app, "missing-actions")!;
     expect(
       [...actions.querySelectorAll("wt-button")].map((b) => b.getAttribute("data-test")),
-    ).toEqual(["start-again"]);
-    await click(app, "start-again");
+    ).toEqual([]);
     expect(
       q<HTMLInputElement>(app, "retire-confirmed")!.closest("label")!.textContent!.trim(),
     ).toBe(t.missingConfirm);
@@ -640,7 +614,7 @@ it.each(locales)(
       activity: { ...stoppedActivity, cloud: true },
       summary: { ...namedSummary, recovery: { ...stoppedRecovery, cloud: true } },
     });
-    await recoverMissing(app);
+    await openMissing(app);
     const t = initialOwnerStrings[locale];
     expect(lines(app, "recovery-stopped")).toEqual([
       t.recoveryStopped.replace("{started}", shownTimes[locale].started),
@@ -662,7 +636,7 @@ it.each(locales)(
         recovery: { ...stoppedRecovery, lastActiveSource: "saved-step" },
       },
     });
-    await recoverMissing(app);
+    await openMissing(app);
     const t = initialOwnerStrings[locale];
     expect(lines(app, "recovery-stopped")).toEqual([
       t.recoveryStopped.replace("{started}", shownTimes[locale].started),
@@ -677,22 +651,21 @@ it("sends the stopped recovery back exactly as it was shown", async () => {
     activity: stoppedActivity,
     summary: stoppedSummary,
   });
-  await recoverMissing(app);
-  await click(app, "start-again");
+  await openMissing(app);
   await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
   await click(app, "confirm-start-again");
   await expect.poll(() => startAgainRequests(requests)).toHaveLength(1);
   expect(startAgainRequests(requests)[0]!.body).toEqual({
-    inspectionId: "b".repeat(64),
-    revision: 2,
-    ownerGeneration: 2,
+    inspectionId: "a".repeat(64),
+    revision: 1,
+    ownerGeneration: 1,
     confirmMissingDatabase: { nothingFiledOrSold: true, shown: stoppedSummary },
   });
 });
 
 it("offers no Start again when the summary names a recovery but no stopped journal is reported", async () => {
   const { app } = await missingDatabaseFixture({ summary: stoppedSummary });
-  await recoverMissing(app);
+  await openMissing(app);
   expect(q(app, "missing-reached")).toBeNull();
   expect(q<WtButton>(app, "start-again")!.disabled).toBe(true);
 });
@@ -701,7 +674,7 @@ it.each(locales)(
   "says the recovery's records cannot be read when its journal is unreadable ($locale)",
   async ({ locale, browser }) => {
     const { app } = await missingDatabaseFixture({ locale: browser, backupPhase: "uncertain" });
-    await recoverMissing(app);
+    await openMissing(app);
     const t = initialOwnerStrings[locale];
     expect(q(app, "recovery-unreadable")!.textContent!.trim()).toBe(t.recoveryUnreadable);
     expect(app.shadowRoot!.textContent).toContain(t.missingAsk);
@@ -714,42 +687,6 @@ it.each(locales)(
       q(app, "recovery-unreadable")!.compareDocumentPosition(q(app, "recover-backup")!) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-  },
-);
-
-it.each(locales)(
-  "explains a password step refused because a recovery is in progress ($locale)",
-  async ({ locale, browser }) => {
-    const { app } = await missingDatabaseFixture({
-      locale: browser,
-      intercept(path) {
-        if (path.endsWith("/resolution/recover"))
-          return Response.json(
-            {
-              error: {
-                code: "setup.recovery_in_progress",
-                params: {
-                  startedAt: stoppedRecovery.startedAt,
-                  lastActiveAt: stoppedRecovery.lastActiveAt,
-                },
-              },
-            },
-            { status: 409 },
-          );
-      },
-    });
-    await userEvent.fill(
-      q<WtInput>(app, "resume-password")!.shadowRoot!.querySelector("input")!,
-      venue.admin.password,
-    );
-    await click(app, "resume");
-    await expect
-      .poll(() =>
-        [
-          ...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions"),
-        ].map((f) => f.error),
-      )
-      .toContain(shells[locale]["shell.first_setup.recovery_in_progress"]);
   },
 );
 
@@ -769,8 +706,7 @@ it.each(locales)(
           );
       },
     });
-    await recoverMissing(app);
-    await click(app, "start-again");
+    await openMissing(app);
     await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
     await click(app, "confirm-start-again");
     await expect
@@ -797,12 +733,17 @@ it("sends no Start again when the stopped recovery changed after it was shown", 
         );
     },
   });
-  await recoverMissing(app);
-  await click(app, "start-again");
+  await openMissing(app);
   await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
   await click(app, "confirm-start-again");
   await expect.poll(() => summaries).toBe(2);
-  await expect.poll(() => q(app, "resume-password")).not.toBeNull();
+  await expect.poll(() => q(app, "retire-confirmed")).toBeNull();
+  await expect.poll(() => q(app, "start-again")).not.toBeNull();
+  expect(
+    [...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions")].map(
+      (f) => f.error,
+    ),
+  ).toContain(initialOwnerStrings.en.heldChanged);
   expect(startAgainRequests(requests)).toHaveLength(0);
 });
 
@@ -842,8 +783,9 @@ it.each([false, true])(
     const { app, requests } = await missingDatabaseFixture({
       sameTab,
       activity: () => (++reads === 1 ? null : runningActivity),
+      ready: (app) => q(app, sameTab ? "resume-password" : "start-again") !== null,
     });
-    expect(q(app, "resume-password")).not.toBeNull();
+    expect(q(app, sameTab ? "resume-password" : "start-again")).not.toBeNull();
     await click(app, "reconnect-first");
     await expect.poll(() => q(app, "recovery-running")).not.toBeNull();
     expect(reads).toBe(2);
@@ -888,7 +830,7 @@ it.each(locales)(
         if (path.endsWith("/backup/status")) return Response.json({ phase, proofRequired: true });
       },
     });
-    await recoverMissing(app);
+    await openMissing(app);
     const t = initialOwnerStrings[locale];
     expect(q(app, "recovery-unreadable")!.textContent!.trim()).toBe(t.recoveryUnreadable);
     expect(q(app, "check-again")!.textContent!.trim()).toBe(t.checkAgain);
@@ -921,7 +863,7 @@ it.each(locales)(
     expect([summaries().length, statuses().length]).toEqual([2, 2]);
     expect(q(app, "check-again")).toBeNull();
     expect(q(app, "recovery-unreadable")).toBeNull();
-    expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
+    expect(q(app, "confirm-start-again")).not.toBeNull();
   },
 );
 
@@ -935,18 +877,19 @@ it.each(["en", "es"] as const)(
 async function unsettledAsk(
   browser: "en-GB" | "es-ES",
   status: (read: number) => Response | undefined = () => undefined,
+  activity: typeof stoppedActivity | null = stoppedActivity,
 ) {
   let statusReads = 0;
   const fixture = await missingDatabaseFixture({
     locale: browser,
-    activity: stoppedActivity,
+    activity,
     summary: stoppedSummary,
     intercept(path) {
       if (path.endsWith("/backup/status"))
         return status(statusReads++) ?? Response.json({ phase: "unstarted", proofRequired: true });
     },
   });
-  await recoverMissing(fixture.app);
+  await openMissing(fixture.app);
   await expect.poll(() => q(fixture.app, "check-again")).not.toBeNull();
   const reads = (suffix: string) => fixture.requests.filter((r) => r.path.endsWith(suffix)).length;
   return { ...fixture, reads };
@@ -983,7 +926,39 @@ it.each(locales)(
     await click(app, "check-again");
     await expect.poll(() => q(app, "recovery-stopped")).not.toBeNull();
     expect(q(app, "check-again")).toBeNull();
-    expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
+    expect(q(app, "confirm-start-again")).not.toBeNull();
+  },
+);
+
+it.each(locales)(
+  "Check again that fails while no recovery activity is reported keeps the records-unreadable line, Check again and Start again disabled ($locale)",
+  async ({ locale, browser }) => {
+    const { app, reads } = await unsettledAsk(
+      browser,
+      (read) =>
+        read === 1
+          ? Response.json(
+              { error: { code: "setup.recovery_in_progress", params: {} } },
+              { status: 409 },
+            )
+          : undefined,
+      null,
+    );
+    await click(app, "check-again");
+    await expect
+      .poll(() =>
+        [
+          ...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions"),
+        ].map((f) => f.error),
+      )
+      .toEqual([shells[locale]["shell.first_setup.recovery_in_progress"]]);
+    expect(reads("/backup/status")).toBe(2);
+    expect(q(app, "recovery-unreadable")?.textContent?.trim()).toBe(
+      initialOwnerStrings[locale].recoveryUnreadable,
+    );
+    expect(q<WtButton>(app, "check-again")?.disabled).toBe(false);
+    expect(q<WtButton>(app, "start-again")?.disabled ?? true).toBe(true);
+    expect(q<WtButton>(app, "recover-backup")?.disabled ?? true).toBe(true);
   },
 );
 
@@ -1000,10 +975,10 @@ it("a second click on the missing database's Check again while the first is read
       (f) => f.error,
     ),
   ).not.toContain(shellEn["shell.first_setup.attempt_conflict"]);
-  expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
+  expect(q(app, "confirm-start-again")).not.toBeNull();
 });
 
-it("an activity re-read that fails keeps the running view, and the next one offers the password step once the recovery stopped", async () => {
+it("an activity re-read that fails keeps the running view, and the next one offers Start again once the recovery stopped", async () => {
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
   try {
     let reads = 0;
@@ -1022,10 +997,10 @@ it("an activity re-read that fails keeps the running view, and the next one offe
     await expect.poll(() => activityReads()).toHaveLength(2);
     await app.updateComplete;
     expect(lines(app, "recovery-running")).toEqual(runningLines("en"));
-    expect(q(app, "resume-password")).toBeNull();
+    expect(q(app, "start-again")).toBeNull();
     expect(app.shadowRoot!.textContent).not.toContain(initialOwnerStrings.en.error);
     await vi.advanceTimersByTimeAsync(30_000);
-    await expect.poll(() => q(app, "resume-password")).not.toBeNull();
+    await expect.poll(() => q(app, "start-again")).not.toBeNull();
     expect(activityReads()).toHaveLength(3);
     expect(q(app, "recovery-running")).toBeNull();
   } finally {

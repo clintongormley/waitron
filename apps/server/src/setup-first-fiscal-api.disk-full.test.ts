@@ -12,6 +12,7 @@ const ROUTE = "https://box.test/setup-api/first-setup/resolution";
 const NEARLY_FULL = 1024 * 1024;
 const ROOM = 4 * FULL_DISK_BYTES;
 const IDS = { inspectionId: "inspection", revision: 1, ownerGeneration: 1 };
+const JSON_HEADERS = { "Content-Type": "application/json" };
 const OWNER_HEADERS = {
   "Content-Type": "application/json",
   "X-Waitron-Setup-Owner": "capability",
@@ -92,13 +93,13 @@ const STEPS = {
   summary: (app: Hono) =>
     app.request(
       `${ROUTE}/start-again/summary`,
-      { method: "POST", headers: OWNER_HEADERS, body: JSON.stringify(IDS) },
+      { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(IDS) },
       tls(),
     ),
   "Start again": (app: Hono) =>
     app.request(
       `${ROUTE}/start-again`,
-      { method: "POST", headers: OWNER_HEADERS, body: JSON.stringify(IDS) },
+      { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(IDS) },
       tls(),
     ),
 };
