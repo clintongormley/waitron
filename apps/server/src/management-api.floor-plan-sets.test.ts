@@ -36,7 +36,7 @@ async function provisionTenant(): Promise<TradingContext> {
         taxId: "75000001K",
         legalName: "Deli Test SL",
         location: {
-          name: "Sala principal",
+          name: "Main room",
           fiscalTerritory: "ES-common",
           invoiceLocales: ["es-ES"],
           operationDescription: "Venta en establecimiento",
@@ -51,7 +51,7 @@ async function provisionTenant(): Promise<TradingContext> {
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword("dashPass123"),
           email: "owner@example.test",
