@@ -75,8 +75,8 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
 }
 
 const inUseProducts: ProductUsingUnit[] = [
-  { id: "p1", name: "Café", active: true },
-  { id: "p2", name: "Té", active: false },
+  { id: "p1", name: "Coffee", active: true },
+  { id: "p2", name: "Tea", active: false },
 ];
 
 function inUseApi(products = inUseProducts): DashboardApi {
@@ -600,7 +600,7 @@ describe("units-screen", () => {
       "p1",
       "p2",
     ]);
-    expect(productTable.shadowRoot!.textContent).toContain("Café");
+    expect(productTable.shadowRoot!.textContent).toContain("Coffee");
     // The Status column reuses the product Active/Archived labels (es-ES is the test locale).
     expect(
       productTable.shadowRoot!.querySelector('[data-sort="status"]')!.textContent!.trim(),
@@ -615,7 +615,7 @@ describe("units-screen", () => {
     // Each row's checkbox is the only place a screen reader hears which product it is ticking.
     expect(
       productTable.shadowRoot!.querySelector('[data-test="select-p1"]')!.getAttribute("aria-label"),
-    ).toBe(`${t("units.select_product")}: Café`);
+    ).toBe(`${t("units.select_product")}: Coffee`);
   });
 
   it("filters the product list in the modal", async () => {
@@ -624,7 +624,7 @@ describe("units-screen", () => {
     dialog
       .querySelector("[data-test=in-use-search]")!
       .dispatchEvent(
-        new CustomEvent("wt-change", { detail: { value: "té" }, bubbles: true, composed: true }),
+        new CustomEvent("wt-change", { detail: { value: "tea" }, bubbles: true, composed: true }),
       );
     await el.updateComplete;
     const productTable = dialog.querySelector("wt-data-table")!;
@@ -688,7 +688,7 @@ describe("units-screen", () => {
     dialog
       .querySelector("[data-test=in-use-search]")!
       .dispatchEvent(
-        new CustomEvent("wt-change", { detail: { value: "caf" }, bubbles: true, composed: true }),
+        new CustomEvent("wt-change", { detail: { value: "cof" }, bubbles: true, composed: true }),
       );
     await el.updateComplete;
     await productTable.updateComplete;
@@ -1317,8 +1317,8 @@ describe("units-screen", () => {
   it("sorts the in-use products by name and by status", async () => {
     const el = await mount(
       inUseApi([
-        { id: "p1", name: "Té", active: true },
-        { id: "p2", name: "Café", active: false },
+        { id: "p1", name: "Tea", active: true },
+        { id: "p2", name: "Coffee", active: false },
       ]),
     );
     const dialog = await openInUseModal(el);
