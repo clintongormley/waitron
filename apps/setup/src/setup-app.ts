@@ -1439,7 +1439,10 @@ export class SetupApp extends LitElement {
         this.firstWipeError = key
           ? say(key)
           : () => initialOwnerStrings[setupLocale()].recoveryDetailsUnread;
-      } else this.firstWipeError = this.#describeRepairError(error);
+      } else {
+        this.firstRecoveryUnsettled = unsettledNow;
+        this.firstWipeError = this.#describeRepairError(error);
+      }
     } finally {
       if (current()) {
         if (!failed) this.firstWipeUnread = false;

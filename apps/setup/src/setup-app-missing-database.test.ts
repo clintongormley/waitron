@@ -877,11 +877,12 @@ it.each(["en", "es"] as const)(
 async function unsettledAsk(
   browser: "en-GB" | "es-ES",
   status: (read: number) => Response | undefined = () => undefined,
+  activity: typeof stoppedActivity | null = stoppedActivity,
 ) {
   let statusReads = 0;
   const fixture = await missingDatabaseFixture({
     locale: browser,
-    activity: stoppedActivity,
+    activity,
     summary: stoppedSummary,
     intercept(path) {
       if (path.endsWith("/backup/status"))
@@ -926,6 +927,38 @@ it.each(locales)(
     await expect.poll(() => q(app, "recovery-stopped")).not.toBeNull();
     expect(q(app, "check-again")).toBeNull();
     expect(q(app, "confirm-start-again")).not.toBeNull();
+  },
+);
+
+it.each(locales)(
+  "Check again that fails while no recovery activity is reported keeps the records-unreadable line, Check again and Start again disabled ($locale)",
+  async ({ locale, browser }) => {
+    const { app, reads } = await unsettledAsk(
+      browser,
+      (read) =>
+        read === 1
+          ? Response.json(
+              { error: { code: "setup.recovery_in_progress", params: {} } },
+              { status: 409 },
+            )
+          : undefined,
+      null,
+    );
+    await click(app, "check-again");
+    await expect
+      .poll(() =>
+        [
+          ...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions"),
+        ].map((f) => f.error),
+      )
+      .toEqual([shells[locale]["shell.first_setup.recovery_in_progress"]]);
+    expect(reads("/backup/status")).toBe(2);
+    expect(q(app, "recovery-unreadable")?.textContent?.trim()).toBe(
+      initialOwnerStrings[locale].recoveryUnreadable,
+    );
+    expect(q<WtButton>(app, "check-again")?.disabled).toBe(false);
+    expect(q<WtButton>(app, "start-again")?.disabled ?? true).toBe(true);
+    expect(q<WtButton>(app, "recover-backup")?.disabled ?? true).toBe(true);
   },
 );
 
