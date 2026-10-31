@@ -1888,7 +1888,7 @@ commands (D1's two-till collision); `i18n/strings.ts` `table.bill_count`, `table
 the ES proposals); tests new `screens/till-table-order-screen.bill-switcher.test.ts`,
 `till-app-table-service.test.ts`, new `screens/till-table-order-screen.bill-controls.a11y.test.ts`.
 
-- [ ] Screen cases `A803 switcher`: one bill → the closed label "Bill 1 · €38.50" and the open list
+- [x] Screen cases `A803 switcher`: one bill → the closed label "Bill 1 · €38.50" and the open list
       holds that bill and "+ New bill"; three bills → "Bill 1 of 3 · €67.00", rows in number order
       with what each owes, "Paid" for a paid one, a name "Bill 2 · Clint", and "Ana has an unsent
       order: 3 items" under the bill Ana has unsent dishes on; **"+ New bill" is the last item of
@@ -1897,21 +1897,84 @@ the ES proposals); tests new `screens/till-table-order-screen.bill-switcher.test
       choosing Bill 3 dispatches `switch-bill` with Bill 3's id (never an index); "+ New bill"
       dispatches `new-bill`; an unnumbered bill reads "Bill" (slice 2's owner answer 5); a party
       with no shown bill draws "Bills" with only "+ New bill"; no party → no switcher.
-- [ ] App cases `A803 new bill`: "+ New bill" calls `createPartyBill(partyId, revision)` once,
+- [x] App cases `A803 new bill`: "+ New bill" calls `createPartyBill(partyId, revision)` once,
       shows the answered bill, and the next draft save names it; "two tills tap + New bill on the
       same revision: the second shows the `party.out_of_date` refusal, its switcher then lists the
       first till's new bill, it stays on its bill, and it sends exactly one `createPartyBill`"
       (I4); switching to a paid bill shows it and New order refuses as `bill.paid` (Owner question
       6); "after the bill on screen vanishes, the closed label names the bill now shown" (I3,
       visible refresh).
-- [ ] RED: `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.bill-switcher.test.ts src/till-app-table-service.test.ts -t 'A803'`
+- [x] RED: `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.bill-switcher.test.ts src/till-app-table-service.test.ts -t 'A803'`
       — the screen cases fail on the missing switcher (the assertion, after the file mounts the
       screen), the app cases on no `createPartyBill` request.
-- [ ] a11y: `till-table-order-screen.bill-controls.a11y.test.ts` covers the switcher closed and open,
+- [x] a11y: `till-table-order-screen.bill-controls.a11y.test.ts` covers the switcher closed and open,
       one bill and three, a paid row and an editor row, the no-bill state, in light and dark; run
       with `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.bill-controls.a11y.test.ts`.
-- [ ] GREEN: the three files; `till-table-order-screen.parties.test.ts`, `till-table-order-screen.test.ts`; till typecheck.
-- [ ] Commit: "A bill switcher with + New bill on every table, even with one bill".
+- [x] GREEN: the three files; `till-table-order-screen.parties.test.ts`, `till-table-order-screen.test.ts`; till typecheck.
+- [x] Commit: "A bill switcher with + New bill on every table, even with one bill".
+
+### Task 9 as built (2026-10-31)
+
+- **RED** (the listed command): 18 failed, 5 passed, 126 skipped (149). The 12 screen cases and
+  the 6 app cases failed on the missing switcher (`[data-bill-switcher]` is null). The app cases
+  reach + New bill and the bill rows by clicking the switcher, so they fail on the missing control
+  before any `createPartyBill` request could be sent. That is a departure from the stated reason
+  ("no `createPartyBill` request"). The passes were the 4 existing A803 cases in
+  `till-app-table-service.test.ts` and "no party: no switcher", which passes without a switcher
+  by design.
+- **GREEN**: the three Task 9 files plus `till-table-order-screen.parties.test.ts` and
+  `till-table-order-screen.test.ts`: 5 files, 540 passed. `till-app-parties.test.ts` and
+  `till-app-bill-payments.test.ts` (the `take-payment` users of the renamed handler): 862 passed.
+  a11y file alone: 12 passed. `pnpm --filter @waitron/till typecheck` exit 0;
+  `vitest run src/i18n` 259 passed; root guards (english-only, style-token-names,
+  primary-coloured-text, native-form-fields) 2062 passed; prettier and eslint clean on the changed
+  files.
+- **Cases.** Screen (`till-table-order-screen.bill-switcher.test.ts`, 13): the ones listed, plus
+  "names the bill on screen, its name and count" ("Bill 2 of 3 · Clint · €54.00"), "says Paid
+  for a paid bill on screen", "choosing the bill on screen dispatches nothing" and "shows on a
+  handheld too". App (`till-app-table-service.test.ts`, `A803 new bill`, 6): the four listed, plus
+  "a refusal other than out of date is said on the banner and changes no bill" and "choosing a
+  bill in the switcher shows it, by its id". The app cases run in the venue's Spanish (the app
+  takes es-ES at sign-in), so they also pin the ES proposals «Cuenta 2 de 2 · …» and «Pagada». The
+  two-till case pins the banner as the existing `describePartyChange` sentence ("Otro dispositivo
+  ha cambiado la mesa 2, así que se ha vuelto a cargar. Sus cuentas han cambiado …").
+- **a11y** (`till-table-order-screen.bill-controls.a11y.test.ts`, 12 cases): {one bill; three bills
+  with a paid row and an editor row; no bill shown} × {closed, open} × {light, dark}, axe run on
+  the switcher. Control: without `role="menu"` on the list, the 6 open cases fail
+  `aria-required-parent`, which shows the open cases do read the list.
+- **Deletion controls** (each production check broken, the named cases watched fail, then the
+  check restored and `cmp`'d against the copy saved before the break):
+  1. switch-bill sends the row's index instead of its id: 4 fail, including "choosing Bill 3
+     dispatches switch-bill with Bill 3's id" and the app's "choosing a bill … by its id".
+  2. + New bill drawn first: 5 fail, including "+ New bill is the last item with one bill and with
+     three".
+  3. count = highest bill number: 1 fails, "after Bill 2 is merged away … counts 2".
+  4. `createPartyBill` sent with revision + 1: "+ New bill asks once … with the party's revision"
+     fails (re-run after the last edit to that line); sent twice: the same case fails.
+  5. the refusal set as `tableWriteError` instead of going through `#onTableRefusal`: the two-till
+     case fails.
+  6. `#followBillsRead` not moving `activeTabId`: "after the bill on screen vanishes, the closed
+     label names the bill now shown" fails.
+- **Controls drawn.** `billSwitcher(...)` and `billRowContent(...)` in
+  `apps/till/src/screens/table-bill-controls.ts`. `billNumberLabel` sits beside `billLabel` in
+  `state/bill-state.ts`, and `billLabel` now uses it. The switcher is a `wt-row-actions` (D2) whose
+  trigger holds the closed label (`data-bill-switcher-label`, with an `aria-hidden` ▾). Its list is
+  a `role="menu"` of native `role="menuitemradio"` buttons (`data-switch-bill=<id>`, `aria-checked`
+  on the bill on screen), then a `role="menuitem"` + New bill (`data-new-bill`). This is the
+  pattern the shell's counter-zone menu uses (`widgets/till-shell.ts`). The accessible name is
+  "Bills: <closed label>", or just "Bills" when no bill is shown, so the visible text is part of it.
+  Choosing the bill already on screen dispatches nothing.
+  `till-app.ts`: `#onTakePayment` became `#onSwitchBill`, which now also handles `switch-bill`
+  (`take-payment` and the held-list path still call it). Its flush-then-check moved to
+  `#flushBeforeSwitch`. `#onNewBill` flushes, sends one `createPartyBill(partyId, revision)`,
+  notes the answer's revision, reloads the bills with `follow` off and shows the new bill. A
+  refusal goes to `#onTableRefusal`. Strings: `table.bill_count` "{bill} of {count}" / «{bill} de
+  {count}», `table.new_bill` "+ New bill" / «+ Cuenta nueva» (ES proposals, Owner question 1).
+- **Departures.** (a) The switcher sits after the Tab button, between it and the floor's Back,
+  not before it. This keeps `till-table-order-screen.test.ts:4159` ("the status's next sibling is
+  the Tab button") and the 390px one-line check at `:4200` passing unchanged, so no existing
+  assertion changed. Task 11c removes the Tab button. (b) The RED reason for the app cases, given
+  above. **Changed test checks: none.** **Owner-question candidates: none new.**
 
 ## Task 10: one ⋮ menu: the bill on screen, then the whole table (≈65 calls)
 

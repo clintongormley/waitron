@@ -3344,3 +3344,176 @@ describe("A803 action results: the bill on screen after a table action", () => {
     expect(await nextSavedBill(el)).toBe("wo-10");
   });
 });
+
+describe("A803 new bill: the switcher's + New bill and switching bills", () => {
+  const bill = (
+    workingOrderId: string,
+    billNumber: number,
+    over: Partial<PartyBill> = {},
+  ): PartyBill => ({
+    workingOrderId,
+    revision: 0,
+    invoiceType: "F2",
+    recipient: null,
+    partyId: "v-2",
+    label: null,
+    billNumber,
+    billName: null,
+    status: "open",
+    total: "12.00",
+    outstanding: "12.00",
+    hasPayments: false,
+    receiptAvailable: false,
+    ...over,
+  });
+  const euros = (amount: string) => formatMoney(amount, currentLocale());
+  const switcher = (el: TillApp) =>
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-bill-switcher]")!;
+  const closedLabel = (el: TillApp) =>
+    switcher(el).querySelector("[data-bill-switcher-label]")!.textContent!.trim();
+  const rows = (el: TillApp) =>
+    [...switcher(el).querySelectorAll<HTMLElement>("[data-switch-bill]")].map((row) =>
+      row.getAttribute("data-switch-bill"),
+    );
+
+  async function choose(el: TillApp, selector: string): Promise<void> {
+    switcher(el).querySelector<HTMLElement>(selector)!.click();
+    await flush(el);
+    await flush(el);
+  }
+
+  /** The bill the next draft save names, once a dish is rung on the screen now showing. */
+  async function nextSavedBill(el: TillApp): Promise<string | undefined> {
+    const before = vi.mocked(drafts.saveDraft).mock.calls.length;
+    await ringCoffee(el, tableOrder(el)!);
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await flush(el);
+    return vi.mocked(drafts.saveDraft).mock.calls.slice(before).at(-1)?.[1].billId;
+  }
+
+  it("+ New bill asks once for a bill with the party's revision, shows it, and the next draft save names it", async () => {
+    let created = false;
+    const createPartyBill = vi.fn(async () => {
+      created = true;
+      return { billId: "wo-new", revision: 4 };
+    });
+    const { el } = await mountApp({
+      createPartyBill,
+      getPartyBills: vi.fn(async () =>
+        created ? [bill("wo-7", 1), bill("wo-new", 2, { outstanding: "0.00" })] : [bill("wo-7", 1)],
+      ),
+    });
+    const screen = await toTableOrder(el);
+    expect(screen.orderId).toBe("wo-7");
+
+    await choose(el, "[data-new-bill]");
+
+    expect(createPartyBill).toHaveBeenCalledOnce();
+    expect(createPartyBill).toHaveBeenCalledWith("v-2", 3);
+    expect(tableOrder(el)!.orderId).toBe("wo-new");
+    expect(closedLabel(el)).toBe(`Cuenta 2 de 2 · ${euros("0.00")}`);
+    expect(await nextSavedBill(el)).toBe("wo-new");
+  });
+
+  it("two tills tap + New bill on the same revision: the second shows the party.out_of_date refusal, lists the first till's new bill, stays on its bill, and sends exactly one createPartyBill", async () => {
+    let refused = false;
+    const createPartyBill = vi.fn(async () => {
+      refused = true;
+      throw { code: "party.out_of_date", partyId: "v-2", revision: 4 };
+    });
+    const { el } = await mountApp({
+      createPartyBill,
+      getTablesState: vi.fn(async () =>
+        refused
+          ? [{ ...openTable, party: { ...openTable.party!, revision: 4, billCount: 2 } }]
+          : [openTable],
+      ),
+      getPartyBills: vi.fn(async () =>
+        refused ? [bill("wo-7", 1), bill("wo-other", 2)] : [bill("wo-7", 1)],
+      ),
+    });
+    await toTableOrder(el);
+
+    await choose(el, "[data-new-bill]");
+    await flush(el);
+
+    expect(banner(el)?.textContent?.trim()).toBe(
+      `Otro dispositivo ha cambiado la mesa 2, así que se ha vuelto a cargar. Sus cuentas han cambiado y quedan ${euros("12.00")} por pagar. Revísala e inténtalo de nuevo.`,
+    );
+    expect(rows(el)).toEqual(["wo-7", "wo-other"]);
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+    expect(createPartyBill).toHaveBeenCalledOnce();
+  });
+
+  it("a refusal other than out of date is said on the banner and changes no bill", async () => {
+    const createPartyBill = vi.fn().mockRejectedValue({ code: "party.not_open" });
+    const getPartyBills = vi.fn(async () => [bill("wo-7", 1)]);
+    const { el } = await mountApp({ createPartyBill, getPartyBills });
+    await toTableOrder(el);
+
+    await choose(el, "[data-new-bill]");
+
+    expect(banner(el)).not.toBeNull();
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+    expect(createPartyBill).toHaveBeenCalledOnce();
+  });
+
+  it("choosing a bill in the switcher shows it, by its id", async () => {
+    const { el } = await mountApp({
+      getPartyBills: vi.fn(async () => [bill("wo-7", 1), bill("wo-8", 2), bill("wo-9", 3)]),
+    });
+    await toTableOrder(el);
+
+    await choose(el, '[data-switch-bill="wo-9"]');
+
+    expect(tableOrder(el)!.orderId).toBe("wo-9");
+    expect(closedLabel(el)).toBe(`Cuenta 3 de 3 · ${euros("12.00")}`);
+    expect(await nextSavedBill(el)).toBe("wo-9");
+  });
+
+  it("switching to a paid bill shows it, and New order refuses it as paid", async () => {
+    const { el } = await mountApp({
+      getPartyBills: vi.fn(async () => [
+        bill("wo-7", 1),
+        bill("wo-8", 2, { status: "settled", outstanding: "0.00", receiptAvailable: true }),
+      ]),
+    });
+    await toTableOrder(el);
+
+    await choose(el, '[data-switch-bill="wo-8"]');
+
+    expect(tableOrder(el)!.orderId).toBe("wo-8");
+    expect(closedLabel(el)).toBe("Cuenta 2 de 2 · Pagada");
+    const store = tableOrder(el)!.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!
+      .store as unknown as { billStatus: string; editsLocked: boolean };
+    expect({ billStatus: store.billStatus, locked: store.editsLocked }).toEqual({
+      billStatus: "settled",
+      locked: true,
+    });
+  });
+
+  it("after the bill on screen vanishes, the closed label names the bill now shown", async () => {
+    let gone = false;
+    const { el } = await mountApp({
+      getPartyBills: vi.fn(async () =>
+        gone ? [bill("wo-7", 1, { outstanding: "9.00" })] : [bill("wo-7", 1), bill("wo-8", 2)],
+      ),
+    });
+    await toTableOrder(el);
+    await choose(el, '[data-switch-bill="wo-8"]');
+    expect(closedLabel(el)).toBe(`Cuenta 2 de 2 · ${euros("12.00")}`);
+
+    gone = true;
+    vi.mocked(api.setPartyName).mockRejectedValueOnce({
+      code: "party.out_of_date",
+      partyId: "v-2",
+      revision: 4,
+    });
+    emit(tableOrder(el)!, "name-party", { name: "Ana" });
+    await flush(el);
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+    expect(closedLabel(el)).toBe(`Cuenta 1 · ${euros("9.00")}`);
+  });
+});

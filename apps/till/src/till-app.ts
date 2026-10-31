@@ -7719,8 +7719,8 @@ export class TillApp extends LitElement {
           this.orderParty?.id === row.partyId
         ) {
           if (this.#tableOrderTabKey() !== undefined) this.#popDrill();
-          await this.#onTakePayment(
-            new CustomEvent("take-payment", { detail: { workingOrderId: row.workingOrderId } }),
+          await this.#onSwitchBill(
+            new CustomEvent("switch-bill", { detail: { workingOrderId: row.workingOrderId } }),
           );
         }
         return;
@@ -16904,22 +16904,54 @@ export class TillApp extends LitElement {
     return bill === undefined ? undefined : billName(this.orderParty?.displayName ?? "", bill);
   }
 
-  async #onTakePayment(event: Event): Promise<void> {
+  /** Saves the draft of the bill on screen, then shows the chosen bill, unless the waiter left the
+   * table or changed bill while the save was out. */
+  async #onSwitchBill(event: Event): Promise<void> {
     const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
+    if (!(await this.#flushBeforeSwitch())) return;
+    this.#showBill(workingOrderId);
+    await this.#loadTabLines();
+  }
+
+  async #flushBeforeSwitch(): Promise<boolean> {
     const session = this.#operatorSession;
     const visit = this.#orderVisit;
     const billId = this.activeTabId;
-    if (this.#draftReady && !(await this.#flushDraft())) return;
-    if (
-      session !== this.#operatorSession ||
-      visit !== this.#orderVisit ||
-      billId !== this.activeTabId
-    )
-      return;
+    if (this.#draftReady && !(await this.#flushDraft())) return false;
+    return (
+      session === this.#operatorSession && visit === this.#orderVisit && billId === this.activeTabId
+    );
+  }
+
+  #showBill(workingOrderId: string): void {
     this.errorKey = undefined;
     this.finishRefused = false;
     this.billGone = null;
     this.activeTabId = workingOrderId;
+  }
+
+  /** + New bill: one empty bill on the party, asked for at the revision the screen shows. A refusal
+   * (another till changed the party first) is said as every party command's is, and the screen
+   * stays on its bill; nothing is asked again by itself. */
+  async #onNewBill(): Promise<void> {
+    const party = this.orderParty;
+    if (party === null) return;
+    const visit = this.#orderVisit;
+    const live = () => visit === this.#orderVisit && this.orderParty?.id === party.id;
+    if (!(await this.#flushBeforeSwitch()) || !live()) return;
+    this.errorKey = undefined;
+    let created: { billId: string; revision: number };
+    try {
+      created = await this.api.createPartyBill(party.id, this.orderParty!.revision);
+    } catch (error) {
+      if (live()) await this.#onTableRefusal(error, live);
+      return;
+    }
+    this.#notePartyRevision(party.id, created.revision);
+    if (!live()) return;
+    await this.#loadPartyBills(undefined, false);
+    if (!live()) return;
+    this.#showBill(created.billId);
     await this.#loadTabLines();
   }
 
@@ -19277,7 +19309,9 @@ export class TillApp extends LitElement {
         @record-unpaid-departure=${() => this.#onRecordUnpaidDeparture()}
         @cancel-credit-bill=${(event: Event) => this.#onCancelCreditBill(event)}
         @request-bill=${(event: Event) => void this.#onRequestBill(event)}
-        @take-payment=${(event: Event) => void this.#onTakePayment(event)}
+        @take-payment=${(event: Event) => void this.#onSwitchBill(event)}
+        @switch-bill=${(event: Event) => void this.#onSwitchBill(event)}
+        @new-bill=${() => void this.#onNewBill()}
         @reprint-bill=${(event: Event) => void this.#onReprintBill(event)}
         @reprint-kitchen-tickets=${(event: Event) => void this.#onReprintKitchenTickets(event)}
         @mark-cleared=${(event: Event) => void this.#onMarkCleared(event)}

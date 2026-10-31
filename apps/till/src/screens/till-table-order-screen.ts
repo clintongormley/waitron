@@ -163,6 +163,7 @@ import type { PayLine, PayWay } from "../widgets/bill-pay-dialog.js";
 import "../widgets/dead-ends-section.js";
 import { PAY_WAYS, paidQuantities, payLines } from "../state/bill-payment.js";
 import { portionGroups, sentSlicePortionKey, tabLinePortionKey } from "../state/portion-groups.js";
+import { billControlStyles, billSwitcher } from "./table-bill-controls.js";
 
 /** The screen's own width, in CSS pixels, from which browsing and the draft show side by side.
  * Narrower, the draft opens on its own Review view. */
@@ -439,6 +440,7 @@ export class TillTableOrderScreen extends LitElement {
 
   static override styles = [
     priceWasStyles,
+    billControlStyles,
     css`
       .allergy-heading {
         display: flex;
@@ -2378,6 +2380,13 @@ export class TillTableOrderScreen extends LitElement {
                 : nothing
             }
           </wt-button>
+          ${billSwitcher({
+            party: this.party,
+            bills: this.bills,
+            billId: this.orderId,
+            onSwitch: (workingOrderId) => this.#dispatch("switch-bill", { workingOrderId }),
+            onNewBill: () => this.#dispatch("new-bill", {}),
+          })}
           ${this.#floorBackButton()}
         </div>
         ${
