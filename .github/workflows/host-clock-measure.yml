@@ -1,0 +1,48 @@
+name: host-clock-measure
+
+# A798-B slice 9b's measurement (docs/superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md).
+# It sets this runner's clock, so it never reaches main: the branch deletes it after Task 4.
+on:
+  pull_request:
+    paths:
+      - scripts/host-clock-measure.sh
+      - .github/workflows/host-clock-measure.yml
+      - deploy/box/**
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    name: Measure setting the host clock
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - id: checkout
+        name: Check out the code
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        continue-on-error: true
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Stop the first checkout's leftover git
+        if: steps.checkout.outcome == 'failure'
+        run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
+      - name: Check out the code, second attempt
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure
+        run: sudo --preserve-env=RUNNER_TEMP timeout 600 bash scripts/host-clock-measure.sh
+      - name: Start the time service again
+        if: always()
+        run: |
+          unit="$(cat "$RUNNER_TEMP/time-unit" 2>/dev/null || echo systemd-timesyncd)"
+          sudo timeout 60 systemctl start "$unit"
+          timedatectl show -p NTP -p NTPSynchronized
