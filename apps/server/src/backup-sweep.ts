@@ -1,5 +1,6 @@
 import { chmod, mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import type { Database, NodeDatabase } from "@waitron/db";
 import type { ClockStep } from "@waitron/fiscal";
 import { recordBackupOutcome, type BackupOutcomeHolder } from "./alert-sources.js";
@@ -69,7 +70,7 @@ export interface BackupSweepDeps {
   backends: StorageBackend[];
   /** Read only for the manifest; the copy goes through {@link BackupSweepDeps.archive}. */
   db: Database;
-  /** Read for the manifest, and copied whole as the archive's `node.dump` through `stagingDir`. */
+  /** Read for the manifest, and copied whole as the archive's `node.dump` through the OS temp folder. */
   node: NodeDatabase;
   modules: readonly WaitronModule[];
   environment: DeploymentEnvironment;
@@ -218,7 +219,9 @@ export async function runOnce(
           venueDir: deps.venueDir,
           modules: deps.modules,
           resolvers: deps.resolvers,
-          snapshotNode: snapshotNodeDatabase(deps.node, deps.stagingDir),
+          // Outside staging: a few KB that staging's space accounting gains nothing from, and nothing
+          // under staging may be removed while a transfer still reads it.
+          snapshotNode: snapshotNodeDatabase(deps.node, tmpdir()),
         },
         budget,
       ),

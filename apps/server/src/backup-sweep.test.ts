@@ -456,6 +456,20 @@ describe("runOnce (fan-out)", () => {
     await runOnce(deps([a]));
     expect(await readdir(staging)).toEqual([]);
   });
+
+  it("takes the node copy outside staging and leaves nothing behind", async () => {
+    const copies: string[] = [];
+    const node = {
+      archiveTo: async (path: string) => {
+        copies.push(path);
+        await writeFile(path, "NODE");
+      },
+    } as unknown as NodeDatabase;
+    await runOnce({ ...deps([new FakeBackend("a")]), node });
+    expect(copies).toHaveLength(1);
+    expect(copies[0]!.startsWith(staging)).toBe(false);
+    expect(await stat(dirname(copies[0]!)).catch(() => null)).toBeNull();
+  });
 });
 
 describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
