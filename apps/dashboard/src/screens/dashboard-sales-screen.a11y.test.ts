@@ -23,7 +23,7 @@ const close: DailyCloseDto = {
       {
         source: "device",
         deviceId: "device-1",
-        deviceName: "Barra 1",
+        deviceName: "Bar 1",
         byMethod: [
           { method: "cash", amount: "50.00", tip: "5.00" },
           { method: "card", amount: "71.00", tip: "0.00" },
@@ -37,12 +37,12 @@ const close: DailyCloseDto = {
   counts: { sales: 8, corrections: 0, voids: 1 },
   topSellers: [
     {
-      name: "Café",
+      name: "Coffee",
       quantity: "5",
       total: "10.00",
       variants: [
-        { name: "Doble", quantity: "3", total: "7.50" },
-        { name: "Solo", quantity: "2", total: "2.50" },
+        { name: "Double", quantity: "3", total: "7.50" },
+        { name: "Single", quantity: "2", total: "2.50" },
       ],
     },
   ],
@@ -59,10 +59,10 @@ const period: SalesPeriodDto = {
   },
   topSellers: [
     {
-      name: "Croqueta",
+      name: "Croquette",
       quantity: "40",
       total: "80.00",
-      variants: [{ name: "Croqueta de jamón", quantity: "40", total: "80.00" }],
+      variants: [{ name: "Ham croquette", quantity: "40", total: "80.00" }],
     },
   ],
 };
@@ -77,7 +77,7 @@ const categories: CategorySalesDto = {
     {
       kind: "category",
       id: "c-drinks",
-      name: "Bebidas Casa",
+      name: "House drinks",
       depth: 0,
       gross: "20.00",
       net: "17.00",
@@ -86,7 +86,7 @@ const categories: CategorySalesDto = {
         {
           kind: "category",
           id: "c-softs",
-          name: "Refrescos Casa",
+          name: "House soft drinks",
           depth: 1,
           gross: "15.00",
           net: "12.50",
@@ -116,8 +116,8 @@ const categories: CategorySalesDto = {
       children: [
         {
           kind: "free_text",
-          id: "Tapas viejas",
-          name: "Tapas viejas",
+          id: "Old snacks",
+          name: "Old snacks",
           depth: 1,
           gross: "1.00",
           net: "4.00",
@@ -145,7 +145,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     getDailyClose: vi.fn().mockResolvedValue(close),
     getSalesPeriod: vi.fn().mockResolvedValue(period),
     getCategorySales: vi.fn().mockResolvedValue(categories),
-    getReportPrinters: vi.fn().mockResolvedValue([{ id: "p-bar", name: "Barra Casa" }]),
+    getReportPrinters: vi.fn().mockResolvedValue([{ id: "p-bar", name: "House bar" }]),
     printCategorySales: vi.fn().mockResolvedValue({ jobId: "job-1" }),
     ...overrides,
   } as unknown as DashboardApi;
