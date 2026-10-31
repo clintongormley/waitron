@@ -807,6 +807,31 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     expect(dialog(el).open).toBe(false);
   });
 
+  it("offers a manager an administrator sign-in in place of the check", async () => {
+    const signIn = (el: BoxStatusScreen) =>
+      q(el, "[data-test=row-clock] [data-test=clock-admin-sign-in]") as HTMLElement | null;
+    expect(signIn(await mountClock(clockApi({ clockStop: null }), false))).toBeNull();
+    cleanupWidgets();
+    const admin = await mountClock(clockApi());
+    expect(signIn(admin)).toBeNull();
+    expect(q(admin, "[data-test=row-clock] [data-test=clock-admin-hint]")).toBeNull();
+    cleanupWidgets();
+    const el = await mountClock(clockApi(), false);
+    expect(openButton(el)).toBeNull();
+    expect(text(signIn(el))).toBe(t("staff.sign_in_as_admin"));
+    expect(text(q(el, "[data-test=row-clock] [data-test=clock-admin-hint]"))).toBe(
+      t("box_status.clock.admin.sign_in_hint"),
+    );
+    const asked = vi.fn();
+    document.body.addEventListener("admin-sign-in", asked);
+    try {
+      await userEvent.click(signIn(el)!);
+    } finally {
+      document.body.removeEventListener("admin-sign-in", asked);
+    }
+    expect(asked).toHaveBeenCalledOnce();
+  });
+
   it("explains the check in a help-mode tooltip beside its button", async () => {
     const el = await mountClock(clockApi());
     const tooltip = q(el, "[data-test=row-clock] .clock-check-action wt-help-tooltip")!;

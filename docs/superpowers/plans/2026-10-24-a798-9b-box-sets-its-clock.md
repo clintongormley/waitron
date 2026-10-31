@@ -2636,6 +2636,26 @@ scripts/alert-codes.test.ts`.
 - **The email cases test for `install`/`instal` as a stem**, so "installer" is caught as well as
   "installed".
 
+### Task 13b's per-task review, folded (2026-10-31)
+
+- **A manager on Box status is offered an administrator sign-in in place.** The Clock row tells
+  every reader that an administrator can use “Check with this device's time”, but the button is
+  drawn only for `person.admin`, and the page needs only `system.manage`. Where the button would
+  be offered, a manager now sees one line ("Only an administrator can check the box's clock with
+  this device's time. Signing in as one signs you out here first.", `box_status.clock.admin.sign_in_hint`)
+  and «Sign in as an administrator» (`staff.sign_in_as_admin`), which raises `admin-sign-in`; the
+  dashboard signs out on it, as the Users, Orders and Backups screens do.
+- **"An administrator can usually set it"** in the bell and both emails: the dashboard offers to
+  set the clock only while the box's time service answers (`source === "timedatectl"`), so the
+  unqualified claim was false in that state.
+- **The emails' and the bell's `clock.unusable` words are tested against "support", "manager" and
+  the Spanish "soporte", "encargad", "gerente"**, as well as the installer.
+- **The till's strings test pins “Check the time” / «Comprobar la hora»** and that both `_check`
+  payment refusals quote the label, so renaming the button fails a till test; the email test pins
+  the same literal.
+- **The dialog's `#send` returns while a confirm is out**, so two clicks dispatched in one step send
+  one confirm.
+
 ### Task 14: Backups pruned safely across a step
 
 **Goal.** Decision 11 for `pruneBackend` (`apps/server/src/backup-sweep.ts:327-351`), which today
@@ -2926,7 +2946,11 @@ ends in "Check the time" instead of «Tell a manager». Its paragraph on fixing 
 administrator confirms it there") is rewritten to stay true after decision 18: the tax agency, an
 administrator, or — just after a start — a staff member with «Check the time»; two tills or
 handhelds that agree with the box only once it has been running (they never set it). `deploy/README.md` gains the host
-service (Task 18).
+service (Task 18). The `box-status.md` guides also quote the Clock row's old words, which Task 13b
+changed: "**Connect the box to the internet so it can correct its clock, or call whoever installed
+it**" (`en/box-status.md:157-158`, `es/box-status.md:165-166`) and "call whoever installed the box:
+the box has no page for setting its clock" (`en/box-status.md:164-165`, `es/box-status.md:172-173`); rewrite both to
+Task 13b's row words and to its review fold's administrator sign-in.
 
 **Focused commands.** `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts`;
 `pnpm exec vitest run scripts/guide-links.test.ts`.
@@ -2936,7 +2960,8 @@ service (Task 18).
 The dev stack (`wa-wt demo`) needs Docker, which is not answering on this Mac, so the LOOK uses the
 browser test runner: a throwaway case (not committed) in `apps/dashboard` renders the Box status
 screen with (a) the set question open, (b) each set refusal above the buttons, (c) the Clock row
-with "Not kept in time over the internet", (d) the bell with `clock.corrected` for each source —
+with "Not kept in time over the internet", (c2) the Clock row during a stop as a manager sees it
+(the administrator sign-in line and button, Task 13b's review fold), (d) the bell with `clock.corrected` for each source —
 AEAT, an administrator, a staff member with the till's name — and each `clock.sync_off` reason,
 and the reworded `clock.unusable`; and a throwaway case in `apps/till` renders (e) the red clock
 line with its "Check the time" hint (both clock codes), alone and as the second of two notices with
@@ -3541,7 +3566,10 @@ Revision 4 changes none of these rulings. It carries out the owner's answer of 2
   refusal's reason cannot be read; the dialog words each reason itself.
 - **`refusalText` had no test file**; its new cases are in `i18n/t.test.ts`, as this task said.
   `find-bill-dialog.ts`, `bill-refund-dialog.ts` and `tender-refund-dialog.ts` word clock refusals
-  too, through `codeMessage`; this task does not name them and they keep «Tell a manager».
+  too: the two refund dialogs through `codeMessage` (`bill-refund-dialog.ts:337`,
+  `tender-refund-dialog.ts:299`), the find-bill dialog by calling `clockUnusableText` and
+  `clockBehindText` without the flag (`find-bill-dialog.ts:329-335`). This task does not name them
+  and all three keep «Tell a manager».
 - **An administrator's PIN shows the question first.** The server refuses a staff member
   `not_start_up` at the challenge, before either time is shown, so "on a PIN sends the confirm
   again" would set the box's clock to this device's time unseen. After the PIN the dialog asks for a

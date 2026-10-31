@@ -110,8 +110,9 @@ export class TillBoxTimeDialog extends LitElement {
 
   /** A fresh challenge, since one lives only a few seconds, then the confirm with this till's time. */
   async #send(): Promise<void> {
+    if (this.view.kind !== "ask" || this.view.sending) return;
     const override = this.#override;
-    if (this.view.kind === "ask") this.view = { ...this.view, sending: true };
+    this.view = { ...this.view, sending: true };
     try {
       const { challengeId } = await this.api.boxClockChallenge(override);
       const deviceAt = Date.now();

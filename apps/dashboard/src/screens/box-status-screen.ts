@@ -433,8 +433,8 @@ export class BoxStatusScreen extends LitElement {
     }
   }
 
-  #offersClockCheck(health: BoxHealth): boolean {
-    return this.canConfirmClock && (stopShowing(health) || health.clockCheckWaiting !== null);
+  #clockCheckNeeded(health: BoxHealth): boolean {
+    return stopShowing(health) || health.clockCheckWaiting !== null;
   }
 
   /** Whether to offer this device's time, from the last read: the box runs a time service it can
@@ -540,6 +540,16 @@ export class BoxStatusScreen extends LitElement {
   #closeClockCheck(): void {
     this.#clockCheckRun += 1;
     this.clockCheckOpen = false;
+  }
+
+  #clockAdminSignIn(): TemplateResult {
+    return html`<wt-button
+      variant="secondary"
+      data-test="clock-admin-sign-in"
+      @click=${() =>
+        this.dispatchEvent(new CustomEvent("admin-sign-in", { bubbles: true, composed: true }))}
+      >${t("staff.sign_in_as_admin")}</wt-button
+    >`;
   }
 
   #clockCheckButton(): TemplateResult {
@@ -798,6 +808,13 @@ export class BoxStatusScreen extends LitElement {
             : nothing
         }
         ${
+          row.id === "clock" && !this.canConfirmClock && this.#clockCheckNeeded(health)
+            ? html`<p class="aside" data-test="clock-admin-hint">
+                ${t("box_status.clock.admin.sign_in_hint")}
+              </p>`
+            : nothing
+        }
+        ${
           disk && !health.canFree
             ? html`<p class="aside" data-test="read-only">${t("box_status.free_read_only")}</p>`
             : nothing
@@ -829,7 +846,13 @@ export class BoxStatusScreen extends LitElement {
         ${outbox === null ? nothing : this.#retryAction(health)}
         ${this.#screensOf(row).map((screen) => this.#goToButton(screen))}
         ${disk ? this.#freeAction(health) : nothing}
-        ${row.id === "clock" && this.#offersClockCheck(health) ? this.#clockCheckButton() : nothing}
+        ${
+          row.id !== "clock" || !this.#clockCheckNeeded(health)
+            ? nothing
+            : this.canConfirmClock
+              ? this.#clockCheckButton()
+              : this.#clockAdminSignIn()
+        }
       </div>
     </li>`;
   }

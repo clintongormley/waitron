@@ -3621,6 +3621,8 @@ export const en = {
   "box_status.clock.behind_chain_fix":
     "With the internet the box corrects its clock by itself; otherwise an administrator can use “Check with this device's time”.",
   "box_status.clock.admin.open": "Check with this device's time",
+  "box_status.clock.admin.sign_in_hint":
+    "Only an administrator can check the box's clock with this device's time. Signing in as one signs you out here first.",
   "box_status.clock.admin.times": "The box's clock says {box}. This device says {device}.",
   "box_status.clock.admin.agree": "They agree. Confirm that the box's clock is right?",
   "box_status.clock.admin.differ":
@@ -7391,6 +7393,8 @@ export const es: Record<StringKey, string> = {
   "box_status.clock.behind_chain_fix":
     "Con internet, el equipo corrige la hora solo; si no, un administrador puede usar «Comprobar con la hora de este dispositivo».",
   "box_status.clock.admin.open": "Comprobar con la hora de este dispositivo",
+  "box_status.clock.admin.sign_in_hint":
+    "Solo un administrador puede comprobar la hora del equipo con la de este dispositivo. Iniciar sesión como administrador cierra primero tu sesión aquí.",
   "box_status.clock.admin.times":
     "El reloj del equipo marca {box}. Este dispositivo marca {device}.",
   "box_status.clock.admin.agree": "Coinciden. ¿Confirmas que la hora del equipo es correcta?",

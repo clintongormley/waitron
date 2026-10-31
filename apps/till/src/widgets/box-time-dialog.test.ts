@@ -139,6 +139,16 @@ describe("till-box-time-dialog", () => {
     expect(words(el)).toBe(en["box_time.confirmed"]);
   });
 
+  it("sends one confirm when the primary is clicked twice before it redraws", async () => {
+    const api = fakeApi(BOX_AGREES);
+    const el = await open(api);
+    control(el, "primary")!.click();
+    control(el, "primary")!.click();
+    await settle(el);
+    expect(api.boxClockChallenge).toHaveBeenCalledTimes(2);
+    expect(api.boxClockConfirm).toHaveBeenCalledOnce();
+  });
+
   it("keeps Not now disabled, and the dialog from closing, while the confirm is out", async () => {
     let answer!: () => void;
     const api = fakeApi(BOX_AGREES, () => {

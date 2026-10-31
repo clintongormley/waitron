@@ -442,14 +442,20 @@ it("never says the payments check may not look at a payment again", () => {
 
 describe("the box's clock set before the earliest date", () => {
   it.each([
-    ["en", "en-GB", /install/i],
-    ["es", "es-ES", /instal/i],
+    ["en", "en-GB", /install|support|manager/i, "an administrator can usually set it"],
+    [
+      "es",
+      "es-ES",
+      /instal|soporte|encargad|gerente/i,
+      "un administrador normalmente puede ponerla",
+    ],
   ] as const)(
-    "points %s readers at the Box status page, not the installer",
-    (lang, locale, installer) => {
+    "points %s readers at the Box status page, not the installer or anyone else",
+    (lang, locale, elsewhere, administrator) => {
       const text = ALERT_MESSAGES["clock.unusable"]![lang];
       expect(text).toContain(t("nav.box_status", locale));
-      expect(text).not.toMatch(installer);
+      expect(text).not.toMatch(elsewhere);
+      expect(text).toContain(administrator);
     },
   );
 });
