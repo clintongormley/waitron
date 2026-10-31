@@ -111,6 +111,8 @@ const bills = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-bills]")!;
 const bill = (el: TillTableOrderScreen, id: string) =>
   bills(el).querySelector<HTMLElement>(`[data-bill="${id}"]`);
+const menu = (el: TillTableOrderScreen) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!;
 
 function capture(el: TillTableOrderScreen, type: string): unknown[] {
   const seen: unknown[] = [];
@@ -206,7 +208,7 @@ describe("till-table-order-screen: the party's bills", () => {
     const el = await mountScreen();
     const asked = capture(el, "reprint-bill");
 
-    bill(el, "wo-tab")!.querySelector<HTMLElement>("[data-bill-receipt]")!.click();
+    menu(el).querySelector<HTMLElement>("[data-bill-receipt]")!.click();
 
     expect(asked).toEqual([{ workingOrderId: "wo-tab" }]);
     expect(bill(el, "wo-check")!.querySelector("[data-bill-receipt]")).toBeNull();
@@ -356,10 +358,10 @@ describe("till-table-order-screen: the bill request", () => {
     const el = await mountScreen({ tables: [floorRow(false)] });
     const asked = capture(el, "request-bill");
 
-    const action = bills(el).querySelector<HTMLElement>("[data-request-bill]")!;
+    const action = menu(el).querySelector<HTMLElement>("[data-request-bill]")!;
     expect(action.textContent!.trim()).toBe("Mark bill requested for Ana");
     expect(bills(el).querySelector("[data-chip='bill-requested']")).toBeNull();
-    expect(bills(el).querySelector("[data-cancel-bill-request]")).toBeNull();
+    expect(menu(el).querySelector("[data-cancel-bill-request]")).toBeNull();
     action.click();
 
     expect(asked).toEqual([{ requested: true }]);
@@ -372,8 +374,8 @@ describe("till-table-order-screen: the bill request", () => {
     expect(bills(el).querySelector("[data-chip='bill-requested']")!.textContent!.trim()).toBe(
       "Bill requested",
     );
-    expect(bills(el).querySelector("[data-request-bill]")).toBeNull();
-    const cancel = bills(el).querySelector<HTMLElement>("[data-cancel-bill-request]")!;
+    expect(menu(el).querySelector("[data-request-bill]")).toBeNull();
+    const cancel = menu(el).querySelector<HTMLElement>("[data-cancel-bill-request]")!;
     expect(cancel.textContent!.trim()).toBe("Cancel the bill request for Ana");
     cancel.click();
 
@@ -384,7 +386,7 @@ describe("till-table-order-screen: the bill request", () => {
     const asking = await mountScreen({ tables: [floorRow(false)], groupCommandBusy: true });
     const cancelling = await mountScreen({ tables: [floorRow(true)], groupCommandBusy: true });
     const disabled = (el: TillTableOrderScreen, selector: string) =>
-      bills(el).querySelector<HTMLElement & { disabled: boolean }>(selector)!.disabled;
+      menu(el).querySelector<HTMLElement & { disabled: boolean }>(selector)!.disabled;
 
     expect(disabled(asking, "[data-request-bill]")).toBe(true);
     expect(disabled(cancelling, "[data-cancel-bill-request]")).toBe(true);
@@ -395,13 +397,13 @@ describe("till-table-order-screen: the bill request", () => {
     const asking = await mountScreen({ tables: [floorRow(false)] });
     const cancelling = await mountScreen({ tables: [floorRow(true)] });
 
-    expect(bills(asking).querySelector("[data-request-bill]")!.textContent!.trim()).toBe(
+    expect(menu(asking).querySelector("[data-request-bill]")!.textContent!.trim()).toBe(
       "Marcar cuenta pedida para Ana",
     );
     expect(
       bills(cancelling).querySelector("[data-chip='bill-requested']")!.textContent!.trim(),
     ).toBe("Cuenta pedida");
-    expect(bills(cancelling).querySelector("[data-cancel-bill-request]")!.textContent!.trim()).toBe(
+    expect(menu(cancelling).querySelector("[data-cancel-bill-request]")!.textContent!.trim()).toBe(
       "Anular la petición de cuenta de Ana",
     );
   });
@@ -412,7 +414,7 @@ describe("till-table-order-screen: Finish table", () => {
     const el = await mountScreen();
     const asked = capture(el, "finish-table");
 
-    bills(el).querySelector<HTMLElement>("[data-finish-table]")!.click();
+    menu(el).querySelector<HTMLElement>("[data-finish-table]")!.click();
 
     expect(asked).toHaveLength(1);
   });

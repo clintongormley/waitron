@@ -1,4 +1,6 @@
+import { userEvent } from "vitest/browser";
 import type { PartyBill, TableParty } from "../api/client.js";
+import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 
 export const switcherParty: TableParty = {
   kitchenNote: { scope: { partyId: "v1" }, note: null, revision: 0, ownerRevision: 4 },
@@ -39,4 +41,14 @@ export function partyBill(
     receiptAvailable: false,
     ...over,
   };
+}
+
+/** Taps the ⋮'s trigger: opens its list, or closes it when it is open. */
+export async function tapTableMenu(el: TillTableOrderScreen): Promise<void> {
+  await userEvent.click(
+    el
+      .shadowRoot!.querySelector("[data-table-menu]")!
+      .shadowRoot!.querySelector<HTMLElement>("button")!,
+  );
+  await el.updateComplete;
 }

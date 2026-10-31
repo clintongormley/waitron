@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
 import { decimal, formatMoney } from "@waitron/shared";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -11,6 +10,7 @@ import {
 } from "./till-table-order-screen.current-orders.test-helpers.js";
 import { dish, extra, recorded } from "./till-table-order-screen.sent-prices.test-helpers.js";
 import { openSentDish } from "./till-table-order-screen.sent.test-helpers.js";
+import { tapTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const money = (value: string) => formatMoney(decimal(value), currentLocale());
 const text = (element: Element) => element.textContent!.replace(/\s+/g, " ").trim();
@@ -105,7 +105,7 @@ it.each(["absent", "different-id", "different-parent", "unadjusted"] as const)(
   },
 );
 
-it("keeps served dishes in Sent without a duplicate Served list in the drawer", async () => {
+it("keeps served dishes in Sent without a duplicate Served list in the table menu", async () => {
   const { el } = await mount({
     lines: [{ ...dish, servedAt: "2026-09-28T20:05:00Z" }],
     currentOrders: current({
@@ -124,9 +124,8 @@ it("keeps served dishes in Sent without a duplicate Served list in the drawer", 
   dialog.closeAfter("saved");
   await closed;
   await el.updateComplete;
-  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-  await el.updateComplete;
+  await tapTableMenu(el);
   expect(
-    el.shadowRoot!.querySelector("[data-drawer] .served, [data-drawer] .served-line"),
+    el.shadowRoot!.querySelector("[data-table-menu] .served, [data-table-menu] .served-line"),
   ).toBeNull();
 });

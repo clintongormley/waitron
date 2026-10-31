@@ -16,12 +16,13 @@ import {
 import { storedDish } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 import { mount } from "./till-table-order-screen.test-helpers.js";
 import { storedExtra } from "./till-table-order-screen.sent-fallback.test-helpers.js";
+import { tapTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
 it.each(["held", "fired"] as const)(
-  "keeps %s firing and serving controls in Sent when opening the drawer",
+  "keeps %s firing and serving controls in Sent when opening the table menu",
   async (state) => {
     const dish = row("dish", "Recorded dish", "2.000", {
       released: state === "fired",
@@ -39,11 +40,10 @@ it.each(["held", "fired"] as const)(
       }),
     });
     const panel = await sentPanelFor(el);
-    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-    await el.updateComplete;
-    const drawer = el.shadowRoot!.querySelector("[data-drawer]")!;
+    await tapTableMenu(el);
+    const menu = el.shadowRoot!.querySelector("[data-table-menu]")!;
     expect(
-      drawer.querySelector(
+      menu.querySelector(
         "[data-group-fire], [data-serve-group], [data-serve-row], [data-unserve-row]",
       ),
     ).toBeNull();
@@ -83,7 +83,7 @@ it.each(["held", "fired"] as const)(
 );
 
 it.each([null, "fired-group"])(
-  "opens the drawer without offering the legacy Send action for group %s",
+  "opens the table menu without offering the legacy Send action for group %s",
   async (groupId) => {
     const line = { ...storedDish, groupId, firedAt: null, state: "queued" as const };
     const { el } = await mount({
@@ -93,20 +93,19 @@ it.each([null, "fired-group"])(
     });
     const commands: CustomEvent[] = [];
     el.addEventListener("send-lines", (event) => commands.push(event as CustomEvent));
-    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-    await el.updateComplete;
-    const drawer = el.shadowRoot!.querySelector("[data-drawer]")!;
+    await tapTableMenu(el);
+    const menu = el.shadowRoot!.querySelector("[data-table-menu]")!;
     expect(el.shadowRoot!.querySelector("[data-sent-fallback]")!.textContent).toContain(
       "Recorded dish",
     );
-    expect(drawer.textContent).not.toContain("Recorded dish");
-    expect(drawer.querySelector("[data-send-line]")).toBeNull();
+    expect(menu.textContent).not.toContain("Recorded dish");
+    expect(menu.querySelector("[data-send-line]")).toBeNull();
     expect(commands).toEqual([]);
   },
 );
 
 it.each(["fired", "served"] as const)(
-  "offers one Comp window from Sent instead of duplicate %s drawer adjustments",
+  "offers one Comp window from Sent instead of duplicate %s adjustments in the table menu",
   async (kind) => {
     const line = {
       ...storedDish,
@@ -157,9 +156,8 @@ it.each(["fired", "served"] as const)(
     });
     const commands: CustomEvent[] = [];
     el.addEventListener("adjust", (event) => commands.push(event as CustomEvent));
-    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-    await el.updateComplete;
-    const drawer = el.shadowRoot!.querySelector("[data-drawer]")!;
+    await tapTableMenu(el);
+    const menu = el.shadowRoot!.querySelector("[data-table-menu]")!;
     const panel = await sentPanelFor(el);
     for (const section of [
       "[data-sent-toggle]",
@@ -174,10 +172,9 @@ it.each(["fired", "served"] as const)(
     const shown = panel.shadowRoot!.querySelector<HTMLElement>(`[data-${kind}-line="${line.id}"]`)!;
     expect(shown.checkVisibility()).toBe(true);
     expect(shown.textContent).toContain("Recorded dish");
-    expect(drawer.textContent).not.toContain("Recorded dish");
-    expect(drawer.querySelector("[data-comp-line], [data-discount-line]")).toBeNull();
-    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-    await el.updateComplete;
+    expect(menu.textContent).not.toContain("Recorded dish");
+    expect(menu.querySelector("[data-comp-line], [data-discount-line]")).toBeNull();
+    await tapTableMenu(el);
     await openSentDish(el, line.id, kind);
     await openSentMore(el);
     await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-sent-line-comp]")!);

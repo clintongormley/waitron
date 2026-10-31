@@ -36,6 +36,7 @@ import type {
   AdjustmentReason,
 } from "../api/client.js";
 import type { TillMenuBrowser } from "../widgets/menu-browser.js";
+import { tapTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const products: TillProduct[] = [
   {
@@ -185,7 +186,7 @@ async function openReview(el: TillTableOrderScreen): Promise<void> {
 }
 
 describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s theme)", (theme) => {
-  it("has no violations with the round grid, the per-line course picker and the open tab drawer", async () => {
+  it("has no violations with the round grid, the per-line course picker and the open table menu", async () => {
     const { el, host } = await mountWidget<TillTableOrderScreen>(
       "till-table-order-screen",
       { products, menus, lines, courses, ...{ fireControl: "waiter" }, orderId: "wo-1" },
@@ -195,10 +196,8 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     el.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!
       .shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!
       .click();
-    // Open the drawer so the full subtree — the Servido ticks, tab total, the reused
-    // pay widget and the status picker — is included in the scan, not just the grid.
-    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await el.updateComplete;
+    // Open the ⋮ so its list is included in the scan, not just the grid.
+    await tapTableMenu(el);
     await openReview(el);
     // The reused basket re-renders on its OWN store subscription (a separate Lit update cycle), and its
     // freshly-created remove `wt-button`s render their inner focusable `<button>` on a following tick — so
@@ -211,9 +210,9 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations with a child extras row in the drawer", async () => {
-    // The child row is painted muted and a size down from its dish, so its contrast against the
-    // drawer surface is its own state — the scan above, which has no child row, cannot see it.
+  it("has no violations with a child extras row", async () => {
+    // The child row is painted muted and a size down from its dish, so its contrast is its own
+    // state — the scan above, which has no child row, cannot see it.
     const childLine: TabLine = {
       changesAfterSending: null,
       stationId: null,
@@ -240,8 +239,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       { products, lines: [...lines, childLine], courses, orderId: "wo-1" },
       theme,
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await el.updateComplete;
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
     await expectNoA11yViolations(host);
@@ -323,8 +320,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
         { products: dishes, lines: lineList, orderId: "wo-1", revision: 4 },
         theme,
       );
-      mounted.el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-      await mounted.el.updateComplete;
       return mounted;
     }
 
@@ -365,8 +360,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
         },
       ]);
       el.draftStore = draft;
-      await el.updateComplete;
-      el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
       await el.updateComplete;
       const picker = await openDraftLine(el, 0);
       expect(picker.shadowRoot!.querySelector("#label-list-cooked-label-rare")).not.toBeNull();
@@ -626,8 +619,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
         },
         theme,
       );
-      mounted.el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-      await mounted.el.updateComplete;
       return mounted;
     }
 
@@ -641,7 +632,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
 
     it("has no violations in New order Move with a recalled source", async () => {
       const { el, host } = await withGroups();
-      el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
       const draft = new DraftStore();
       draft.loadFrom("recalled", [
         {
@@ -764,8 +754,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       },
       theme,
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await el.updateComplete;
     if (el.shadowRoot!.querySelector("[data-bill-payments]") === null)
       throw new Error("the scan must include the bill-payments sentence");
     await expectNoA11yViolations(host);
@@ -792,8 +780,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       },
       theme,
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>('[data-action="merge"]')!.click();
@@ -824,8 +810,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       },
       theme,
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>('[data-action="transfer"]')!.click();
@@ -883,8 +867,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
         theme,
       );
       const { el } = mounted;
-      el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-      await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
       await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>(`[data-action="${action}"]`)!.click();
@@ -960,8 +942,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       { products: [...products, weightProduct], lines: splitLines, orderId: "wo-1" },
       theme,
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>('[data-action="split"]')!.click();
@@ -986,8 +966,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       { products, lines: portions, orderId: "wo-1" },
       theme,
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>('[data-action="split"]')!.click();
@@ -1008,8 +986,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       { products: [...products, weightProduct], lines: splitLines, orderId: "wo-1" },
       theme,
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>('[data-action="split"]')!.click();

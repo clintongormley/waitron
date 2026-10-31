@@ -123,16 +123,10 @@ async function mountScreen(over: Partial<TillTableOrderScreen> = {}) {
     }),
     ...over,
   });
-  el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-  await el.updateComplete;
   return el;
 }
 
 async function comp(el: TillTableOrderScreen, lineNo: number) {
-  if (el.shadowRoot!.querySelector("[data-drawer]") !== null) {
-    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-    await el.updateComplete;
-  }
   const line = el.lines.find((line) => line.lineNo === lineNo)!;
   await openSentDish(el, line.id, line.servedAt === null ? "fired" : "served");
   await openSentMore(el);
@@ -283,8 +277,6 @@ describe("till-table-order-screen: comping a dish", () => {
     expect(noParty.shadowRoot!.querySelector("[data-discount-bill]")).toBeNull();
     cleanupWidgets();
     const paid = await mountScreen({ bills: [{ ...openBill, status: "settled" }] });
-    await userEvent.click(paid.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-    await paid.updateComplete;
     await openSentDish(paid, "line-1");
     await openSentMore(paid);
     expect(paid.shadowRoot!.querySelector("[data-sent-line-comp]")).toBeNull();
@@ -297,8 +289,6 @@ describe("till-table-order-screen: cancelling a dish", () => {
   it("keeps the app cancellation offer target and native Sent Void on the whole dish with its extras", async () => {
     const el = await mountScreen({ lines: [{ ...pizza, quantity: "2.000" }, olives] });
     const asked = capture(el);
-    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-    await el.updateComplete;
     await openSentDish(el, "line-2");
     await openSentMore(el);
     const cancelled: CustomEvent[] = [];
@@ -474,10 +464,6 @@ describe("till-table-order-screen: the price an adjusted line had", () => {
       );
       await userEvent.click(previous.querySelector<HTMLElement>("[data-sent-line-close]")!);
       await closed;
-    }
-    if (el.shadowRoot!.querySelector("[data-drawer]") !== null) {
-      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-      await el.updateComplete;
     }
     return openSentDish(el, line.id, line.servedAt === null ? "fired" : "served");
   }

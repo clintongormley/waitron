@@ -14,6 +14,7 @@ import { storedDish } from "./till-table-order-screen.sent-fallback.test-helpers
 import { beer, menuOf, resized } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
+import { tapTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 afterEach(async () => {
   cleanupWidgets();
@@ -65,23 +66,21 @@ describe.each(["en", "es"] as const)("retired held placement %s", (locale) => {
       host.style.width = "100%";
       await resized(el);
       const q = (selector: string) => el.shadowRoot!.querySelector<HTMLElement>(selector)!;
-      await userEvent.click(q("[data-open-drawer]"));
-      await el.updateComplete;
-      const drawer = q("[data-drawer]");
-      expect(drawer.querySelector("[data-move-line], [data-split-group-line]")).toBeNull();
-      expect(drawer.querySelector("[data-group-line]")).toBeNull();
+      await tapTableMenu(el);
+      const menu = q("[data-table-menu]");
+      expect(menu.querySelector("[data-move-line], [data-split-group-line]")).toBeNull();
+      expect(menu.querySelector("[data-group-line]")).toBeNull();
 
       expect(
-        drawer.querySelector("[data-recall-line], [data-move-station], [data-send-line]"),
+        menu.querySelector("[data-recall-line], [data-move-station], [data-send-line]"),
       ).toBeNull();
       expect(q("[data-move-dialog]")).toBeNull();
       await expectNoA11yViolations(host);
       await page.screenshot({
-        element: drawer,
+        element: menu,
         path: `__screenshots__/a773-retired-placement-${locale}-${theme}-${width}.png`,
       });
-      await userEvent.click(q("[data-open-drawer]"));
-      await el.updateComplete;
+      await tapTableMenu(el);
       if (width < 1280) {
         await userEvent.click(q("[data-review-open]"));
         await el.updateComplete;

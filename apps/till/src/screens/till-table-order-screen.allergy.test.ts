@@ -134,7 +134,6 @@ it("offers Allergies first in Actions even before an answer or dish exists", asy
   await resized(el);
   const events: Event[] = [];
   el.addEventListener("edit-party-allergy", (event) => events.push(event));
-  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
   await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!);
   const controls = el.shadowRoot!.querySelectorAll<HTMLElement>(
     "[data-table-menu-table] [data-action]",

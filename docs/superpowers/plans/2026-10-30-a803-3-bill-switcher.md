@@ -2284,12 +2284,99 @@ whose check reads what only the drawer holds until 11c — the table's still-to-
 table refusal, the Tab badge — are left as they are and listed in the ledger for 11c. If the sweep
 passes ~55 calls, commit at a green file boundary and hand over.
 
-- [ ] RED: none new; the change is in where each test looks. For each file: run it, re-point, run
+- [x] RED: none new; the change is in where each test looks. For each file: run it, re-point, run
       it again; record each changed check (file:line, what it opened before, what it opens now).
-- [ ] GREEN: `rg -l 'till-table-order-screen' apps/till/src/screens -g '*.test.ts' | sed 's#apps/till/##' | xargs pnpm --filter @waitron/till exec vitest run`;
+- [x] GREEN: `rg -l 'till-table-order-screen' apps/till/src/screens -g '*.test.ts' | sed 's#apps/till/##' | xargs pnpm --filter @waitron/till exec vitest run`;
       `rg -n 'data-open-drawer' apps/till/src/screens -g '*.test.ts' -g '*helpers.ts'` prints only
       the sites listed for 11c; till typecheck.
-- [ ] Commit: "Screen tests reach bills and actions through the switcher and the ⋮".
+- [x] Commit: "Screen tests reach bills and actions through the switcher and the ⋮".
+
+### Task 11a as built (2026-10-31)
+
+The sweep ran past the ~55-call mark; it was finished in this run rather than handed over, as
+every file was green at each step.
+
+Runs in the foreground with `AI_AGENT`/`CLAUDECODE` unset; free memory 52–56% before each browser
+run. File names below drop the `till-table-order-screen` prefix; lines are at this task's commit
+unless written "was :N" (a line at `037016e5b` that this task deleted).
+
+- **Before.** The GREEN command at `037016e5b`: `Test Files 91 passed (91)`, `Tests 1758 passed
+  (1758)`, `Errors 6 errors`, exit 1. A first run of the same command also reported `1 failed`;
+  the second did not, and I did not find which case it was. The 6 errors are `TypeError: Cannot
+  read properties of undefined (reading 'length')` in `#tableMenu`
+  (`till-table-order-screen.ts:5479`, `party.tableIds.length`) while `.drag`, `.sent-reorder` and
+  `.arrangement-authority` cases run with a party fixture that has no `tableIds`. They come with
+  Task 10's ⋮ (the same cause as its "Found, not caused here" note), not from this task, and none
+  of those files opens the drawer, so they are left for the driver.
+- **After.** The GREEN command: `Test Files 91 passed (91)`, `Tests 1758 passed (1758)`, the same
+  6 errors, exit 1. The 25 changed test files after the lint fixes: `Test Files 25 passed (25)`,
+  `Tests 666 passed (666)`, exit 0. Every changed file's count equals its count before (main 344,
+  `.parties` 35, `.a11y` 60, `.current-orders` 38, `.bill-payments` 28, the rest as before).
+  `pnpm --filter @waitron/till typecheck` exit 0; `pnpm exec prettier --check` and
+  `pnpm exec eslint` on the changed files exit 0.
+- **Helper.** `tapTableMenu(el)` in `till-table-order-screen.bill-switcher.test-helpers.ts` taps the
+  ⋮'s trigger (opens its list, or closes it when open). No switcher helper was needed: no screen
+  test here reads a bill through the switcher, because the drawer's bill rows (name, total, state,
+  Take payment) have no byte-identical twin in the switcher's rows (see 11c leftovers).
+- **Two kinds of change.** (1) **R**: a check that read the drawer now reads the control that holds
+  the same thing: the drawer's action copies → the ⋮'s, the drawer's tab total → the foot's
+  `[data-order-total]` (the same `#payStore` total when no draft line is unsent, which holds in
+  every case moved), and a "the drawer holds no X" check → "the open ⋮ holds no X", since the ⋮
+  and the switcher are what take the drawer's place. (2) **S**: a drawer opened (or closed) before
+  checks that read nothing in it is no longer opened; every `expect` byte-identical. Several of
+  these opens were closing a drawer an earlier helper had opened (`.adjustments` `:286`/`:300`,
+  `.bill-payments` `:459`, `.a11y` `:644`, all "was").
+- **Departure.** The plan calls every 11a change kind R; the dropped vestigial opens are kind S
+  (setup only), recorded as such. Test titles that said the test opens the drawer were retitled to
+  the table menu; no assertion changed for it.
+- **STOP:** none. No check on money totals, VAT, permissions or filing needed anything other than
+  a re-point: the two tab-total checks moved to the foot's total read the same value with the same
+  `toContain`.
+
+| Test | Kind | Before → after | Source | Task |
+| --- | --- | --- | --- | --- |
+| `.parties.test.ts:211` (Receipt copy of the paid bill on screen) | R | the drawer row's `[data-bill-receipt]` → the ⋮'s; the event check unchanged; `:214` (no receipt on another bill's row) stays on the drawer | D4 | 11a |
+| `.parties.test.ts:361`, `:364`, `:377`, `:378`, `:389`, `:400`, `:406` (Mark bill requested / Cancel the bill request: text EN and ES, disabled while busy, the other absent) | R | `bills(el)` (the drawer's bills section) → `menu(el)` (`[data-table-menu]`); the bill-requested chip checks `:363`, `:374`, `:404` stay on the drawer (the ⋮ has no chip) | D4 | 11a |
+| `.parties.test.ts:417` (Finish table asks) | R | the drawer's `[data-finish-table]` → the ⋮'s | D4 | 11a |
+| `.test.ts:743` (embedded: "body function stays") | R | `[data-open-drawer]` present → `[data-table-menu]` present; retitled "…, keeping the table menu" | D4 | 11a |
+| `.test.ts:565`, `:573` (badge and To serve card after the last dish is served) | R | opens the drawer → the ⋮; `[data-drawer] .pending` null → `[data-table-menu] .pending` null; the badge checks unchanged (11c) | D4 | 11a |
+| `.test.ts:626-628`, `:663-666` (tab total from locked prices; total stays without settlement) | R | opens the drawer and reads `[data-tab-total]` → opens the ⋮ and reads the foot's `[data-order-total]`; `toContain(formatMoney("4.50"))` and `not.toBeNull()` unchanged | the foot holds the total (D9) | 11a |
+| `.test.ts:712-713` ("has no Status section") | R | drawer opened and present → ⋮ opened and its list open (`tableMenuOpen`); the two Status checks unchanged | D4 | 11a |
+| `.test.ts:754-763` (empty tab) | R | drawer → ⋮ for the opened container, its text and `.pending`; `[data-tab-total]` 0.00 → `[data-order-total]` 0.00; the badge check unchanged | D4, D9 | 11a |
+| `.test.ts:2924-2929` (no Send on a held group's line) | R | opens the drawer, `[data-drawer] [data-group-fire]` null → opens the ⋮, `[data-table-menu] [data-group-fire]` null | D4 | 11a |
+| `.test.ts` was `:605`, `:643`, `:672`, `:680`, `:693`, `:706`, `:1661` (`mountGroups`), `:2449`, `:2580`, `:2646`, `:2688`, `:2702`, `:2722`, `:2733`, `:2743`, `:2761`, `:2782`, `:2788`, `:2801`, `:2825`, `:2847`, `:2900`, `:2963`, `:2995`, `:3011`, `:3033`, `:3278` (`openPicker`'s close-if-open), `:3315`, `:3323`, `:3332`, `:3341`, `:3349`, `:3359`, `:3369`, `:3379`, `:3392`, `:3403`, `:3448-3453` (a11y click), `:3488`, `:3503`, `:3536`, `:3581`, `:3621`, `:3632`, `:3653`, `:3670`, `:3685`, `:3717`, `:3733`, `:3750`, `:3768`, `:3777`, `:3813`, `:3833`, `:3879`, `:3893`, `:3901`, `:3918`, `:3936`, `:3949`, `:4213` (`toMenu`), `:7162` | S | `await openDrawer(el)` before checks on Sent, the pay card, the ⋮ or the editors → removed; every `expect` byte-identical | the drawer holds none of it | 11a |
+| `.drawer-placement-retirement.test.ts:50-55`; `.drawer-placement-retirement.a11y.test.ts:69-83`; `.drawer-service-retirement.test.ts:43-46`, `:96-101`, `:159-177`; `.current-list-retirement.test.ts:61-64`; `.drawer-station-retirement.test.ts:52-54`; `.sent-course.test.ts:167-168`; `.sent-course.a11y.test.ts:61-78`; `.sent-prices.test.ts:127-129`; `.sent-prices.a11y.test.ts:91-95`; `.service-migration.a11y.test.ts:67-68`; `.current-orders.test.ts:628-632`; `.standalone-send-retirement.test.ts:93` | R | "the opened drawer holds no X" (placement, firing, serving, course, Served, reminder, Send, station or Comp controls, or the dish's name) → "the opened ⋮ holds no X": the drawer open/close → `tapTableMenu`, `[data-drawer]` → `[data-table-menu]` (the a11y screenshot and `scrollIntoView` element with it); every null / `not.toContain` and every Sent check unchanged; titles that said "drawer" say "table menu" | D4 | 11a |
+| `.reorder-retirement.test.ts:42-48` | R | drawer opened and present → ⋮ opened and its list `:popover-open`; the no-reorder-arrows check unchanged | D4 | 11a |
+| `.empty-drawer.a11y.test.ts:35-57`, `:91-93`; `.populated-drawer.a11y.test.ts:84-99` | R | the drawer open/close → `tapTableMenu`; `drawer` visible / no `.pending` / no To serve title → the ⋮; `[data-tab-total]` (0.00, 2.00 visible within the width; 10.00) → `[data-order-total]`; badge checks unchanged (11c, D17) | D4, D9 | 11a |
+| `.loading.test.ts:30`, `:78` | R | `[data-open-drawer]` hidden while loading / shown after → `[data-table-menu]` | D4 | 11a |
+| `.a11y.test.ts:200` (round grid scan) | R | the drawer opened so its subtree is scanned → the ⋮ opened so its list is; comment says so; retitled "…and the open table menu" | D4 | 11a |
+| `.a11y.test.ts` was `:243`, `:326` (`mountDrawer`), `:369`, `:629` (`withGroups`), `:644`, `:767`, `:795`, `:827`, `:886`, `:963`, `:989`, `:1011`; `.adjustments.test.ts` was `:126` (`mountScreen`), `:132-135` and `:478-481` (close-if-open), `:286`, `:300`; `.bill-payments.test.ts` was `:109` (`mountScreen`), `:459`; `.current-orders.test.ts` was `:59` (`mountCurrent`); `.allergy.test.ts` was `:137`; `.actions-unsaved.test.ts` was `:119`; `.bill-payments.a11y.test.ts` was `:110` (`mountHandheld`) | S | drawer open (or close) before checks that read nothing in it → removed; every `expect` byte-identical. `.a11y.test.ts:213` retitled "has no violations with a child extras row" and its comment no longer names the drawer surface | the drawer holds none of it | 11a |
+| `.adjustments.a11y.test.ts:145-147`; `.bill-payments.a11y.test.ts:124`, `:198` (scans) | R | the drawer opened for the scan → the ⋮ opened for the scan (`:124` also takes `el`); the "scan must include" guards unchanged | D4 | 11a |
+| `.bill-payments.test.ts:179-180` (Full invoice recipient on a bill row) | S | the drawer, opened by `mountScreen` for every case, is opened by this case alone; its check unchanged (11c site) | — | 11a |
+| `.bill-payments.a11y.test.ts:146-147` (LOOK: the drawer's background differs by theme) | S | the drawer, opened by `mountHandheld`, is opened by this case alone; its checks unchanged (11c site) | — | 11a |
+
+**Left for 11c** (each reads what only the drawer, its handle or its badge holds until then;
+`rg -n 'data-open-drawer' apps/till/src/screens -g '*.test.ts' -g '*helpers.ts'` prints exactly
+these):
+
+- `.test.ts:188` (`openDrawer`, used only by `:542`), `:542` ("keeps the tab drawer closed until its
+  handle is tapped"), `:556` (the handle's accessible name with the badge count), `:4102` (the
+  status's next sibling is the Tab button), `:4138` (the Tab button on one line at 390px).
+- `.parties.test.ts:105` (`mountScreen`): the drawer's bills section: bill rows with their name,
+  total, state and `aria-current` (`:129-247`), Take payment on a bill's row (`:217-265`),
+  Receipt copy absent on another bill's row (`:214`), Cancel and credit on another bill's row
+  (`:304-335`), the bill-requested chip (`:363`, `:374`, `:404`), the still-to-pay row (`:142`), and
+  the Finish table refusal with its Take payment and Record unpaid departure (`:422-506`).
+- `.a11y.test.ts:408` (scan of the bills section with the Finish refusal) and `:437` (scan of the
+  bills section with the bill-requested chip; reads the drawer's `[data-cancel-bill-request]`).
+- `.loading.test.ts:38` ("a drawer left open is not shown while loading").
+- `.panel-footer.test.ts:117` (opening and closing the drawer keeps one pay card).
+- `.bill-payments.test.ts:179` (the drawer row's Full invoice recipient, `[data-invoice-choice]`).
+- `.bill-payments.a11y.test.ts:146` (LOOK: the drawer's background differs by theme).
+- `.sent.test-helpers.ts:69` (`sentFallbackFor` closes a drawer a caller left open; app tests in
+  11b may still do so).
+- Badge checks with no drawer open (D17 rows): `.test.ts:550`, `:572`, `:755`;
+  `.empty-drawer.a11y.test.ts:47`; `.populated-drawer.a11y.test.ts:94`.
 
 ## Task 11b: app tests and helpers that opened the drawer (≈55 calls)
 

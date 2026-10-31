@@ -11,12 +11,13 @@ import {
 } from "./till-table-order-screen.current-orders.test-helpers.js";
 import { storedDish } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 import { sentPanelFor } from "./till-table-order-screen.sent.test-helpers.js";
+import { tapTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
 it.each(["loaded", "fallback", "unread"] as const)(
-  "keeps the %s Current orders read in Sent without a second list in the drawer",
+  "keeps the %s Current orders read in Sent without a second list in the table menu",
   async (read) => {
     const { el } = await mount({
       lines: read === "fallback" ? [storedDish] : [],
@@ -57,11 +58,10 @@ it.each(["loaded", "fallback", "unread"] as const)(
           .textContent!.replace(/\s+/g, " "),
       ).toContain("Recorded dish ×2");
     }
-    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-    await el.updateComplete;
-    const drawer = el.shadowRoot!.querySelector("[data-drawer]")!;
+    await tapTableMenu(el);
+    const menu = el.shadowRoot!.querySelector("[data-table-menu]")!;
     expect(
-      drawer.querySelector(
+      menu.querySelector(
         "[data-groups], [data-group-line], [data-ungrouped], [data-current-orders-unread]",
       ),
     ).toBeNull();

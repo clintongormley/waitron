@@ -116,7 +116,6 @@ async function mount(verb: "split" | "transfer" | "split-table" | "merge" = "spl
   const { el: app } = await mountWidget<ActionsLeaveApp>("actions-leave-test-app", {});
   const screen = app.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
   await screen.updateComplete;
-  await click(screen, "[data-open-drawer]");
   screen
     .shadowRoot!.querySelector("[data-move-split]")!
     .shadowRoot!.querySelector<HTMLElement>("button")!

@@ -11,6 +11,7 @@ import {
 import { openSentDish, openSentMore } from "./till-table-order-screen.sent.test-helpers.js";
 import { storedDish } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 import { mount } from "./till-table-order-screen.test-helpers.js";
+import { tapTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
@@ -46,14 +47,12 @@ it.each(["detailed", "fallback"] as const)(
     for (const type of ["move-group-line", "split-group-line"]) {
       el.addEventListener(type, (event) => direct.push(event as CustomEvent));
     }
-    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-    await el.updateComplete;
-    const drawer = el.shadowRoot!.querySelector("[data-drawer]")!;
-    expect(drawer.querySelector("[data-move-line], [data-split-group-line]")).toBeNull();
-    expect(drawer.querySelector("[data-recall-line]")).toBeNull();
+    await tapTableMenu(el);
+    const menu = el.shadowRoot!.querySelector("[data-table-menu]")!;
+    expect(menu.querySelector("[data-move-line], [data-split-group-line]")).toBeNull();
+    expect(menu.querySelector("[data-recall-line]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-move-dialog]")).toBeNull();
-    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-    await el.updateComplete;
+    await tapTableMenu(el);
     if (read === "fallback") {
       const fallback = el.shadowRoot!.querySelector('[data-sent-fallback-line="stored-dish"]')!;
       expect(fallback.textContent).toContain("Recorded dish");

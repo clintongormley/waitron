@@ -27,7 +27,7 @@ describe("till-table-order-screen while loading", () => {
     expect(shown(el, "section.screen")?.getAttribute("aria-busy")).toBe("true");
     expect(shown(el, "[data-back]")).not.toBeNull();
     expect(shown(el, "[data-draft-pane]")).toBeNull();
-    expect(shown(el, "[data-open-drawer]")).toBeNull();
+    expect(shown(el, "[data-table-menu]")).toBeNull();
     expect(shown(el, "till-order-kitchen-note")).toBeNull();
     expect(shown(el, "till-table-status")).toBeNull();
     expect(shown(el, "[data-print-problem]")).toBeNull();
@@ -75,7 +75,7 @@ describe("till-table-order-screen while loading", () => {
     expect(shown(el, "[data-loading]")).toBeNull();
     expect(shown(el, "section.screen")?.hasAttribute("aria-busy")).toBe(false);
     expect(shown(el, "[data-draft-pane]")).not.toBeNull();
-    expect(shown(el, "[data-open-drawer]")).not.toBeNull();
+    expect(shown(el, "[data-table-menu]")).not.toBeNull();
     expect(shown(el, "till-order-kitchen-note")).not.toBeNull();
   });
 });

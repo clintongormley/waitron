@@ -11,12 +11,13 @@ import {
 import { storedDish } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 import { openSentDish, openSentMore } from "./till-table-order-screen.sent.test-helpers.js";
 import { mount } from "./till-table-order-screen.test-helpers.js";
+import { tapTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
 it.each(["editable", "service-only"] as const)(
-  "%s station moves use Sent More without a duplicate drawer button",
+  "%s station moves use Sent More without a duplicate button in the table menu",
   async (read) => {
     const firedAt = "2026-10-18T19:00:00.000Z";
     const line = {
@@ -48,11 +49,9 @@ it.each(["editable", "service-only"] as const)(
     });
     const moves: CustomEvent[] = [];
     el.addEventListener("move-station", (event) => moves.push(event as CustomEvent));
-    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-drawer] [data-move-station]")).toBeNull();
-    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-    await el.updateComplete;
+    await tapTableMenu(el);
+    expect(el.shadowRoot!.querySelector("[data-table-menu] [data-move-station]")).toBeNull();
+    await tapTableMenu(el);
     await openSentDish(el, line.id);
     await openSentMore(el);
     const action = el.shadowRoot!.querySelector<HTMLElement>("[data-sent-line-station]")!;

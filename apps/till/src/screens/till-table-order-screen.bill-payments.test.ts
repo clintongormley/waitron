@@ -1,5 +1,4 @@
 import { openSentDish } from "./till-table-order-screen.sent.test-helpers.js";
-import { userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { decimal, formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -106,8 +105,6 @@ async function mountScreen(over: Partial<TillTableOrderScreen> = {}) {
     bills: [untouched],
     ...over,
   });
-  el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-  await el.updateComplete;
   return el;
 }
 
@@ -179,6 +176,8 @@ describe("till-table-order-screen: the ways to pay part of a bill", () => {
       },
     };
     const el = await mountScreen({ bills: [chosen], billBalance: balance() });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await el.updateComplete;
 
     expect(text(el.shadowRoot!.querySelector('[data-bill="wo-4"] [data-invoice-choice]'))).toBe(
       `${t("invoice.full")} · Cliente SL · B12345674`,
@@ -456,8 +455,6 @@ describe("till-table-order-screen: items already paid for", () => {
       }),
     });
 
-    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-    await el.updateComplete;
     const dialog = await openSentDish(el, "line-3", "held");
     expect(text(dialog.querySelector("[data-sent-line-status]"))).toBe(t("table.group_held"));
     expect(text(dialog.querySelector("[data-line-paid]"))).toBe(t("bill_pay.paid"));

@@ -15,6 +15,7 @@ import type { TillSentOrders } from "../widgets/sent-orders.js";
 import type { WtDialog } from "@waitron/ui";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import "./till-table-order-screen.js";
+import { tapTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const dish = {
   ...storedDish,
@@ -80,22 +81,22 @@ describe.each(["en", "es"] as const)("populated table drawer in %s", (locale) =>
         await resized(el);
         expect(window.innerWidth).toBe(width);
         const q = (selector: string) => el.shadowRoot!.querySelector<HTMLElement>(selector)!;
-        await userEvent.click(q("[data-open-drawer]"));
-        await el.updateComplete;
-        const drawer = q("[data-drawer]");
-        expect(drawer.checkVisibility()).toBe(true);
+        await tapTableMenu(el);
+        const menu = q("[data-table-menu]");
+        expect(menu.checkVisibility()).toBe(true);
         expect(
-          drawer.querySelector(".pending, .pending-line, .served-line, [data-cancel-line]"),
+          menu.querySelector(".pending, .pending-line, .served-line, [data-cancel-line]"),
         ).toBeNull();
-        expect(drawer.textContent).not.toContain(t("table.pending_title"));
-        expect(q("[data-tab-total]").textContent).toContain(formatMoney("10.00", currentLocale()));
+        expect(menu.textContent).not.toContain(t("table.pending_title"));
+        expect(q("[data-order-total]").textContent).toContain(
+          formatMoney("10.00", currentLocale()),
+        );
         expect(q("[data-pending-badge]").textContent).toBe("2");
         await expectNoA11yViolations(host);
         await page.screenshot({
           path: `__screenshots__/a773-populated-drawer-${locale}-${theme}-${width}.png`,
         });
-        await userEvent.click(q("[data-open-drawer]"));
-        await el.updateComplete;
+        await tapTableMenu(el);
         if (q("[data-draft-pane]").hidden) {
           await userEvent.click(q("[data-review-open]"));
           await el.updateComplete;
