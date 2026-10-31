@@ -55,7 +55,7 @@ async function setupVenue(): Promise<{ designated: AdoptResult; adminPersonId: s
         taxId: nextNif(),
         legalName: "Membership Endpoint SL",
         location: {
-          name: "Sala principal",
+          name: "Main room",
           fiscalTerritory: "ES-common",
           invoiceLocales: ["es-ES"],
           operationDescription: "Venta en establecimiento",
@@ -70,7 +70,7 @@ async function setupVenue(): Promise<{ designated: AdoptResult; adminPersonId: s
         seriesCode: "FA",
         rectificativeSeriesCode: "RF",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword(ADMIN_PASSWORD),
           email: "owner@example.test",
@@ -99,7 +99,7 @@ async function seedStaff(): Promise<string> {
     const [person] = await tx
       .insert(persons)
       .values({
-        displayName: "Cajera",
+        displayName: "Cashier",
         pinHash: hashPin("4321"),
         passwordHash: hashPassword(STAFF_PASSWORD),
         role: "staff",

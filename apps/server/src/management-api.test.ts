@@ -122,7 +122,7 @@ async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; s
         taxId: nextNif(),
         legalName: "Deli Test SL",
         location: {
-          name: "Sala principal",
+          name: "Main room",
           fiscalTerritory: "ES-common",
           invoiceLocales: [LOCALE],
           operationDescription: "Venta en establecimiento",
@@ -137,7 +137,7 @@ async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; s
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword("dashPass123"),
           email: "owner@example.test",
@@ -373,7 +373,7 @@ describe("/management-api/zones", () => {
   );
 
   it("POST without displayOrder defaults it to 0", async () => {
-    const name = unique("Terraza");
+    const name = unique("Terrace");
     const { id } = (await (
       await req(
         "/venue-service/zones",
@@ -389,7 +389,7 @@ describe("/management-api/zones", () => {
   });
 
   it("POST with a duplicate name → 409 zone.name_taken", async () => {
-    const name = unique("Barra");
+    const name = unique("Bar");
     await req(
       "/venue-service/zones",
       { method: "POST", body: JSON.stringify({ name }) },
@@ -447,8 +447,8 @@ describe("/management-api/zones", () => {
   });
 
   it("PATCH edits name/displayOrder (204), then GET reflects it", async () => {
-    const id = await createZone(unique("Reservados"));
-    const newName = unique("Reservados-edited");
+    const id = await createZone(unique("Reserved"));
+    const newName = unique("Reserved-edited");
     const patch = await req(
       `/zones/${id}`,
       { method: "PATCH", body: JSON.stringify({ name: newName, displayOrder: 7 }) },
@@ -1146,7 +1146,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
     },
   );
   it("POST creates (201 { id }) + GET lists it active (manager)", async () => {
-    const name = unique("Cocina");
+    const name = unique("Kitchen");
     const id = await createStation(name);
     const found = (await listStations()).find((s) => s.id === id);
     expect(found).toMatchObject({ name, isDefault: false, active: true });
@@ -2520,7 +2520,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
   }
 
   it("POST creates (201 { id }) + GET lists it, active, at its display order (manager)", async () => {
-    const name = unique("Entrantes");
+    const name = unique("Starters");
     const id = await createCourse(name, { displayOrder: 3 });
     const found = (await listCourses()).find((c) => c.id === id);
     expect(found).toMatchObject({ name, displayOrder: 3, active: true });
@@ -2651,7 +2651,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     const used = await createCourse(unique("Used"));
     const unused = await createCourse(unique("Unused"));
     const productId = await withTransaction(suite.db, async (tx) => {
-      const catalogue = await createCatalogue(tx, { name: unique("Carta") });
+      const catalogue = await createCatalogue(tx, { name: unique("Menu") });
       const category = await createCategory(tx, { name: unique("Cat") });
       const product = await createProduct(tx, {
         catalogueId: catalogue.id,
@@ -2833,7 +2833,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     const courseId = await createCourse(unique("Course"));
     const { productId } = await withTransaction(suite.db, async (tx) => {
       const catalogue = await createCatalogue(tx, {
-        name: unique("Carta"),
+        name: unique("Menu"),
       });
       const category = await createCategory(tx, {
         name: unique("Cat"),
@@ -2883,7 +2883,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
   it("PUT /products/:id/course on an unknown or a variant's :id → 404 product.not_found", async () => {
     const courseId = await createCourse(unique("Course"));
     const { variantId } = await withTransaction(suite.db, async (tx) => {
-      const catalogue = await createCatalogue(tx, { name: unique("Carta") });
+      const catalogue = await createCatalogue(tx, { name: unique("Menu") });
       const product = await createProduct(tx, {
         catalogueId: catalogue.id,
         categoryId: null,

@@ -76,7 +76,7 @@ async function setupTenant(): Promise<void> {
         taxId: nextNif(),
         legalName: "Deli Test SL",
         location: {
-          name: "Sala principal",
+          name: "Main room",
           fiscalTerritory: "ES-common",
           invoiceLocales: [LOCALE],
           operationDescription: "Venta en establecimiento",
@@ -91,7 +91,7 @@ async function setupTenant(): Promise<void> {
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword("dashPass123"),
           email: "owner@example.test",

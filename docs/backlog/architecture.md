@@ -534,6 +534,20 @@ until A977).
   street address "Calle Mayor 1" and the legal name "Deli Test SL". The station-printers suite
   (`apps/server/src/station-printers.test.ts`) gives English location and station names to what it
   creates; it keeps its es-ES locale and the operation description "Venta en establecimiento".
+  The management API suites (`apps/server/src/management-api.test.ts` and its
+  accounts-and-receipt-config, passkey, canvas-retirement, device-profiles, floor-plan-sets,
+  membership and status siblings) give English location, administrator, staff, zone, station,
+  course and menu names to what they create; they keep their es-ES locale, the operation
+  description "Venta en establecimiento", the legal name "Deli Test SL" (the membership suite's is
+  "Membership Endpoint SL"), the street address "Calle Mayor 1", the city and province "Madrid",
+  and the Spanish receipt subtitles and footers the account suite saves under its `es-ES` and
+  `ca-ES` keys. The chain-height suite (`apps/server/src/chain-height.test.ts`), whose venue setup
+  copies the status suite's apart from its tax number, uses the same English location and
+  administrator names and keeps the same es-ES locale, operation description, legal name, street
+  address, city and province. The
+  department-receipt-mount, kitchen-delete and service-delete management API suites keep only the
+  Spanish names their shared venue (`apps/server/src/testing/venue-fixtures.ts`) or party venue
+  (`apps/server/src/testing/party-venue.ts`) creates.
   The venue-service menu-timetable suite (`packages/venue-service/src/menu-timetable.test.ts`)
   still keys and names its menus in Spanish (Desayunos, Almuerzo, Cena, Bebidas, Café, Cócteles,
   Copas, "Deli para llevar") and uses "Sala" and "Terraza".
@@ -910,6 +924,20 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   street address "Calle Mayor 1" and the legal name "Deli Test SL". The station-printers suite
   (`apps/server/src/station-printers.test.ts`) gives English location and station names to what it
   creates; it keeps its es-ES locale and the operation description "Venta en establecimiento".
+  The management API suites (`apps/server/src/management-api.test.ts` and its
+  accounts-and-receipt-config, passkey, canvas-retirement, device-profiles, floor-plan-sets,
+  membership and status siblings) give English location, administrator, staff, zone, station,
+  course and menu names to what they create; they keep their es-ES locale, the operation
+  description "Venta en establecimiento", the legal name "Deli Test SL" (the membership suite's is
+  "Membership Endpoint SL"), the street address "Calle Mayor 1", the city and province "Madrid",
+  and the Spanish receipt subtitles and footers the account suite saves under its `es-ES` and
+  `ca-ES` keys. The chain-height suite (`apps/server/src/chain-height.test.ts`), whose venue setup
+  copies the status suite's apart from its tax number, uses the same English location and
+  administrator names and keeps the same es-ES locale, operation description, legal name, street
+  address, city and province. The
+  department-receipt-mount, kitchen-delete and service-delete management API suites keep only the
+  Spanish names their shared venue (`apps/server/src/testing/venue-fixtures.ts`) or party venue
+  (`apps/server/src/testing/party-venue.ts`) creates.
   The venue-service menu-timetable suite (`packages/venue-service/src/menu-timetable.test.ts`)
   still keys and names its menus in Spanish (Desayunos, Almuerzo, Cena, Bebidas, Café, Cócteles,
   Copas, "Deli para llevar") and uses "Sala" and "Terraza".

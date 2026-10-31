@@ -103,7 +103,7 @@ async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
         taxId: nextNif(),
         legalName: "Deli Test SL",
         location: {
-          name: "Sala principal",
+          name: "Main room",
           fiscalTerritory: "ES-common",
           invoiceLocales: [LOCALE],
           operationDescription: "Venta en establecimiento",
@@ -118,7 +118,7 @@ async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword("dashPass123"),
           email: "owner@example.test",
@@ -308,7 +308,7 @@ describe("Management API staff + session routes", () => {
         }),
       });
     const responses = await Promise.all([
-      edit(owner.rows[0]!.id, ownerCookie, "Administradora", "owner@example.test"),
+      edit(owner.rows[0]!.id, ownerCookie, "Administrator", "owner@example.test"),
       edit(managerId, managerCookie, "The Manager", MANAGER_EMAIL),
     ]);
     expect(responses.map((response) => response.status).sort()).toEqual([204, 409]);
