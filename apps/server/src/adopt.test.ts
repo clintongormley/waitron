@@ -6,12 +6,12 @@ import { sql } from "drizzle-orm";
 import {
   locations,
   readDeploymentEnvironment,
-  readDeploymentMode,
   readMirrorConfig,
   stampDeployment,
   tenants,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { readNodeMode } from "@waitron/node-db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { isEnabled, type ModuleConfig } from "@waitron/module";
 import { isAppError } from "@waitron/shared";
@@ -113,6 +113,7 @@ function deps(
 ) {
   return {
     ownerDb: suite.db,
+    ownerNode: suite.node,
     advertisedOrigin: ADVERTISED_ORIGIN,
     environment: extra.environment ?? ("preproduction" as const),
     fetchBundle: extra.fetchBundle ?? (async () => makeBundle()),
@@ -148,7 +149,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
 
     expect(await readDeploymentEnvironment(suite.db)).toBe("preproduction");
     const ownNodeId = persistedTrading[0]!.nodeId;
-    expect(await readDeploymentMode(suite.db, ownNodeId)).toBe("mirror");
+    expect((await readNodeMode(suite.node, ownNodeId)).mode).toBe("mirror");
     const cfg = (await readMirrorConfig(suite.db, ownNodeId))!;
     expect(cfg.relayUrl).toBe("https://relay.test:9000/");
     expect(cfg.originNodeId).toBe(DESIGNATED.nodeId);
@@ -331,7 +332,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     );
     expect(beforeFirstWrite).toHaveBeenCalledTimes(1);
     expect(await readDeploymentEnvironment(suite.db)).toBe("preproduction");
-    expect(await readDeploymentMode(suite.db, persistedTrading[0]!.nodeId)).toBe("mirror");
+    expect((await readNodeMode(suite.node, persistedTrading[0]!.nodeId)).mode).toBe("mirror");
   });
 
   it("refuses a bundle for a DIFFERENT environment before any stamp", async () => {

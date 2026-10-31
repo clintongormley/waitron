@@ -125,7 +125,7 @@ export async function readSingletonRole(db: Database, nodeId: string): Promise<S
  * promotion primitives: a mis-sequenced adopt or promote that "succeeded" before the stamp would
  * leave a node's role recorded on a database nothing has claimed for an environment.
  */
-async function requireStamp(tx: Transaction): Promise<void> {
+export async function requireStamp(tx: Transaction): Promise<void> {
   const [row] = await tx.select({ id: deployment.id }).from(deployment).where(eq(deployment.id, 1));
   if (row === undefined) throw new AppError("deployment.not_stamped", {});
 }

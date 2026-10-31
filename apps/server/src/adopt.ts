@@ -1,10 +1,11 @@
 import {
   readDeploymentEnvironment,
-  setDeploymentMode,
   stampDeployment,
   writeMirrorConfig,
   type Database,
+  type NodeDatabase,
 } from "@waitron/db";
+import { setNodeMode } from "@waitron/node-db";
 import {
   assertNoForeignTenant,
   assertNoOperationalVenue,
@@ -44,9 +45,11 @@ export interface AdoptHooks {
 }
 
 export interface AdoptDeps {
-  /** Writes `deployment`, `node_roles` and `mirror_config`. Nothing in the engine refuses these
-   * writes; `scripts/write-path-tables.test.ts` is what keeps them in named files. */
+  /** Writes `deployment` and `mirror_config`. Nothing in the engine refuses these writes;
+   * `scripts/write-path-tables.test.ts` is what keeps them in named files. */
   ownerDb: Database;
+  /** This box's node.db, where its role is written. */
+  ownerNode: NodeDatabase;
   /** Sends the standby identity so the primary can reserve and endorse it. The fetcher, not this
    * orchestrator, throws `mirror.bundle_fetch_failed`. */
   fetchBundle: (
@@ -74,7 +77,7 @@ export interface AdoptDeps {
  * no SIF, so it forks no fiscal chain; the reserved standby identity stays dormant.
  *
  * Every refusal `adoptFromPrimary` raises itself runs before any write to this node, and
- * `stampDeployment` precedes `setDeploymentMode` because a node's role may be written only to a
+ * `stampDeployment` precedes `setNodeMode` because a node's role may be written only to a
  * stamped database. The caller restarts the box.
  */
 export async function adoptFromPrimary(
@@ -122,7 +125,7 @@ export async function adoptFromPrimary(
   assertAdoptionModules(enabledModules(ALL_MODULES, moduleConfig));
   await hooks.beforeFirstWrite();
   await stampDeployment(deps.ownerDb, bundle.environment);
-  await setDeploymentMode(deps.ownerDb, standby.nodeId, "mirror");
+  await setNodeMode({ venue: deps.ownerDb, node: deps.ownerNode }, standby.nodeId, "mirror");
   await writeMirrorConfig(deps.ownerDb, standby.nodeId, {
     relayUrl: bundle.relayUrl,
     boxHostname: bundle.boxHostname,

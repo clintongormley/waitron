@@ -7,3 +7,11 @@ export {
   nodeRecoveryKey,
   nodeSigningKey,
 } from "./schema/index.js";
+export {
+  readNodeMode,
+  setNodeMode,
+  setNodeModeTx,
+  setSingletonRole,
+  setSingletonRoleTx,
+} from "./mode.js";
+export type { RoleWriteHandles } from "./mode.js";

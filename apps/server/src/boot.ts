@@ -53,10 +53,8 @@ import {
   installChangeFeed,
   subscribeToChanges,
   persistNodeMembershipIfNewer,
-  readDeploymentAxes,
   readMembershipTrustSet,
   readNodeMembership,
-  setSingletonRoleTx,
   readMirrorConfig,
   openVenueDatabase,
   withTransaction,
@@ -65,6 +63,7 @@ import {
   type Database,
   type SingletonRole,
 } from "@waitron/db";
+import { readNodeMode, setSingletonRole } from "@waitron/node-db";
 import { credentialProvisioned, loadKeyRing, tenantCredentials } from "@waitron/credentials";
 import { registerModulePermissions, withPassiveManagementRead } from "@waitron/identity";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
@@ -1458,6 +1457,7 @@ async function bootServer(
           adoptFromPrimary(
             {
               ownerDb: db,
+              ownerNode: store.node,
               fetchBundle: fetchMirrorBundle,
               advertisedOrigin: config.advertisedOrigin,
               environment: config.environment,
@@ -1582,7 +1582,7 @@ async function bootServer(
   // the adoption-pending latch, and the branch above returns while it is set.
   // Both deployment axes from ONE read of the row, so the initial holder pair is never torn: two
   // separate reads could straddle a concurrent promotion and yield an impossible `(mirror, primary)`.
-  const initialAxes = await readDeploymentAxes(db, config.node.nodeId);
+  const initialAxes = await readNodeMode(store.node, config.node.nodeId);
   await assertRestoredMembershipReadable(config.stateDir, db);
   // A returned box that died before it was fenced would otherwise boot with a stale chart and SELL
   // while the promoted cloud is also primary — two nodes filing under one NIF (CLAUDE.md §5). So a
@@ -1623,13 +1623,10 @@ async function bootServer(
   if (fenced && axes.singletonRole === "primary") {
     // Demote the singleton axis, which stops every singleton duty. `mode` stays 'primary'; the
     // read-only gate below, not the mode, enforces the fence.
-    const ownNodeId = config.node.nodeId;
-    await withTransaction(db, async (tx) => {
-      await setSingletonRoleTx(tx, ownNodeId, "secondary");
-    });
+    await setSingletonRole({ venue: db, node: store.node }, config.node.nodeId, "secondary");
     // Re-read rather than synthesize: both axes from one read of the current row, so `mode` cannot
     // be stale if it flipped since the initial read.
-    axes = await readDeploymentAxes(db, config.node.nodeId);
+    axes = await readNodeMode(store.node, config.node.nodeId);
   }
   const holders = createDeploymentHolders(axes.mode, axes.singletonRole);
   // Shared by reference between the fiscal pass that WRITES it and the box-status read that surfaces
@@ -1667,7 +1664,7 @@ async function bootServer(
       });
   // The singleton duties gate on this, not on `isMirror`: a sell-only local secondary is not a mirror,
   // and must not dial a second tunnel or write scheduled backups beside the primary.
-  // `node_roles_role_valid_ck` rejects `(mirror, primary)`, so a mirror is always 'secondary'.
+  // `node_mode_role_valid_ck` rejects `(mirror, primary)`, so a mirror is always 'secondary'.
   //
   // A BOOT decision, deliberately not live: an in-process promotion does not start the duties gated
   // on this without a restart.
@@ -2896,6 +2893,7 @@ async function bootServer(
 
   const promoteDeps: PromoteDeps = {
     db,
+    node: store.node,
     holders,
     log,
     ring,

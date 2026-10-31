@@ -55,6 +55,7 @@
     "@waitron/membership": "workspace:*",
     "@waitron/migrations": "workspace:*",
     "@waitron/module": "workspace:*",
+    "@waitron/node-db": "workspace:*",
     "@waitron/payments": "workspace:*",
     "@waitron/payments-stripe": "workspace:*",
     "@waitron/payments-sumup": "workspace:*",

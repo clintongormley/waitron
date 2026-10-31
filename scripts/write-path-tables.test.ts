@@ -191,6 +191,7 @@ describe("no source writes a table the application role may only read", () => {
     expect(TABLES.slice().sort()).toEqual([
       "deployment",
       "mirror_config",
+      "node_mode",
       "node_roles",
       "nodes",
       "tenants",

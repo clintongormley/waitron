@@ -226,6 +226,7 @@ export {
   readDeploymentEnvironment,
   readDeploymentMode,
   readSingletonRole,
+  requireStamp,
   setBreakGlassVerifierTx,
   setDeploymentMode,
   setDeploymentModeTx,

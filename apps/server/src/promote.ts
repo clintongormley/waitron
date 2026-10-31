@@ -6,13 +6,15 @@ import {
   nodes,
   readNodeMembership,
   readStandardSeriesId,
-  setDeploymentModeTx,
-  setSingletonRoleTx,
+  withNodeTransaction,
   withTransaction,
   writeNodeMembershipTx,
   type Database,
+  type NodeDatabase,
   type Transaction,
 } from "@waitron/db";
+import { setNodeModeTx, setSingletonRoleTx } from "@waitron/node-db";
+import { codeOf } from "@waitron/server-kit";
 import {
   isFencedStanding,
   nextStandings,
@@ -48,6 +50,7 @@ export interface PromotionResult {
 
 export interface PromoteDeps {
   readonly db: Database;
+  readonly node: NodeDatabase;
   readonly holders: DeploymentHolders;
   readonly log: Logger;
   readonly ring: KeyRing;
@@ -75,10 +78,29 @@ export function assertNotFenced(held: SignedMembershipDocument | null, nodeId: s
 }
 
 /**
+ * Writes this node's primary role to node.db after the venue save has committed. The role follows
+ * the venue save rather than sharing its transaction because the two live in different files; a
+ * failure here is logged and rethrown, and each caller decides what it means.
+ */
+async function writePrimaryRole(deps: PromoteDeps): Promise<void> {
+  try {
+    await withNodeTransaction(deps.node, async (tx) => {
+      // `mode` first, so the pair is never the `(mirror, primary)` that `node_mode_role_valid_ck` forbids.
+      await setNodeModeTx(tx, deps.nodeId, "primary");
+      await setSingletonRoleTx(tx, deps.nodeId, "primary");
+    });
+  } catch (error) {
+    deps.log("warn", "promotion.role_write_failed", { errorCode: codeOf(error) });
+    throw error;
+  }
+}
+
+/**
  * Local secondary to primary: the node already sells, so this claims the singleton duties only.
- * Idempotent: an already-primary node is a no-op. The checks and the mint run before the one
- * transaction that flips `singleton_role` and writes the new membership document together, so a
- * crash cannot leave a primary with no document.
+ * Idempotent: an already-primary node is a no-op. The checks and the mint run before the venue
+ * transaction that writes the new membership document; the role in node.db follows it. A failed
+ * role write rejects, because this runs in-process with no restart, so returning normally would
+ * report a promotion the running box does not act on.
  */
 export async function promoteLocalSecondaryToPrimary(
   deps: PromoteDeps,
@@ -87,7 +109,7 @@ export async function promoteLocalSecondaryToPrimary(
   assertFenced(attestation);
 
   // Fresh state, so a re-run after a half-completed promote sees what landed.
-  await refreshDeploymentHolders(deps.db, deps.nodeId, deps.holders);
+  await refreshDeploymentHolders(deps.node, deps.nodeId, deps.holders);
 
   if (deps.holders.mode.current === "mirror") {
     // Refused with a clean code; the `(mirror, primary)` CHECK is only the backstop.
@@ -108,15 +130,15 @@ export async function promoteLocalSecondaryToPrimary(
     },
   );
 
-  // The point of no return: the role flip and the document commit together or not at all.
+  // venue.db is saved first and node.db follows, as two transactions: the role lives in its own file.
   await withTransaction(deps.db, async (tx) => {
-    await setSingletonRoleTx(tx, deps.nodeId, "primary");
     await writeNodeMembershipTx(tx, document);
   });
+  await writePrimaryRole(deps);
 
   // If this refresh throws after the commit, the process keeps the stale holder until a re-run or a
   // restart; a re-run takes the already-primary return, so the term is never bumped twice.
-  await refreshDeploymentHolders(deps.db, deps.nodeId, deps.holders);
+  await refreshDeploymentHolders(deps.node, deps.nodeId, deps.holders);
 
   deps.log("info", "promotion.completed", { target: "local_secondary" });
   return { alreadyPrimary: false };
@@ -140,18 +162,14 @@ export type PromotionOperationRunner = (
 ) => Promise<string>;
 
 /**
- * One transaction, ordered for `node_roles_role_valid_ck`: `mode` first, so the transient pair is
- * `(primary, secondary)` and never the forbidden `(mirror, primary)`. A refused term-guarded write
- * means a concurrent gossip adoption already landed a term at least as high; the throw rolls the whole flip
- * back rather than regress the org chart.
+ * The venue part of a mirror promotion. A refused term-guarded write means a concurrent gossip
+ * adoption already landed a term at least as high; the throw rolls the whole venue save back rather
+ * than regress the org chart, and the role in node.db is never written.
  */
 export async function commitMirrorPromotionTx(
   tx: Transaction,
-  nodeId: string,
   document: SignedMembershipDocument,
 ): Promise<void> {
-  await setDeploymentModeTx(tx, nodeId, "primary");
-  await setSingletonRoleTx(tx, nodeId, "primary");
   const accepted = await persistNodeMembershipIfNewerTx(tx, document);
   if (!accepted) {
     const current = await readNodeMembership(tx);
@@ -163,8 +181,10 @@ export async function commitMirrorPromotionTx(
 }
 
 /**
- * The module activation, trading-series checks and role change share one transaction.
- * The caller restarts only on `{ alreadyPrimary: false }`.
+ * The module activation, trading-series checks and membership document share one venue
+ * transaction; the role in node.db follows it. The caller restarts only on
+ * `{ alreadyPrimary: false }`, and still does when the role write fails: the start that follows
+ * finishes the role.
  */
 export async function promoteMirrorToPrimary(
   deps: MirrorPromoteDeps,
@@ -173,7 +193,7 @@ export async function promoteMirrorToPrimary(
   assertFenced(attestation);
   const supplied = snapshotModuleOperations(deps.moduleOperations);
 
-  await refreshDeploymentHolders(deps.db, deps.nodeId, deps.holders);
+  await refreshDeploymentHolders(deps.node, deps.nodeId, deps.holders);
 
   if (deps.holders.mode.current === "primary") {
     const seriesId = await readStandardSeriesId(deps.db, deps.nodeId);
@@ -211,7 +231,7 @@ export async function promoteMirrorToPrimary(
     const series = await readLiveSeriesIdTx(tx, node.nodeId, "standard");
     await readLiveSeriesIdTx(tx, node.nodeId, "full");
     await deps.persistTradingEnv();
-    await commitMirrorPromotionTx(tx, deps.nodeId, document);
+    await commitMirrorPromotionTx(tx, document);
     for (const m of deps.modules ?? []) {
       if (m.provisioning?.standby?.activate !== undefined)
         moduleOperationFor(operations, m.name, node.nodeId, "promote");
@@ -229,7 +249,12 @@ export async function promoteMirrorToPrimary(
         )
       : await deps.withModuleOperations({ db: deps.db, node }, run);
 
-  await refreshDeploymentHolders(deps.db, deps.nodeId, deps.holders);
-  deps.log("info", "promotion.completed", { target: "mirror" });
+  // venue.db is saved first and node.db follows, as two transactions: the role lives in its own file.
+  const roleWritten = await writePrimaryRole(deps).then(
+    () => true,
+    () => false,
+  );
+  await refreshDeploymentHolders(deps.node, deps.nodeId, deps.holders);
+  if (roleWritten) deps.log("info", "promotion.completed", { target: "mirror" });
   return { alreadyPrimary: false, seriesId };
 }
