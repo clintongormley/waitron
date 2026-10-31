@@ -11,7 +11,8 @@ export interface HelpIdleOptions {
 
 /**
  * Turns help off after `idleMs` without a `pointerdown` or `keydown` inside the host, while
- * the host is in the page and `applies()` holds. Listens in the capture phase so a child that stops an event still counts.
+ * the host is in the page and `applies()` holds. Listens in the capture phase so a child that
+ * stops an event still counts.
  * A host update is not a touch: it starts a clock that is not running, never restarts one.
  */
 export class HelpIdleController implements ReactiveController {

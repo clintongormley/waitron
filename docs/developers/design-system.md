@@ -2435,7 +2435,7 @@ badges only while help is on (a `HelpModeController`), because a pass monitor is
 button at all while help is off, and a help-mode badge's inner button is in the page even while
 the badge is hidden. Tests: `help-idle.test.ts`, `till-shell.kitchen-help.test.ts`,
 `station-queue.help.test.ts`, `till-station-screen.help.test.ts` and `till-expo-screen.help.test.ts`
-(the board and pass suites keep their axe cases in a `*.help.a11y.test.ts` beside each).
+(the board, station-screen and pass suites keep their axe cases in a `*.help.a11y.test.ts` beside each).
 
 - A help badge is `<wt-help-tooltip mode="help-mode">` placed in a primitive's `help` slot, or
   drawn by a primitive from its own `help` (a `wt-menu-row`, a `wt-data-table` column, a `wt-tabs`

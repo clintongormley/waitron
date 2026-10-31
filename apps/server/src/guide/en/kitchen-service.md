@@ -136,8 +136,8 @@ station, even after it restarts. Tap a dish to move it on one step, or tap
 the card's heading to move the card on: only the dishes holding it back move, so a dish already
 further on stays where it is. A card's top edge turns from green to amber as it waits, then its
 whole border red, by the station's late flags, and a forgotten card's border pulses; it holds still
-on a device set to reduce motion. A card whose dishes are all held is dashed, shows no minutes and waits under
-**Waiting** until the waiter [requests cooking](kitchen-service.md#request-cooking).
+on a device set to reduce motion. A card whose dishes are all held is dashed, shows no minutes and
+waits under **Waiting** until the waiter [requests cooking](kitchen-service.md#request-cooking).
 
 The first column, **Overview**, lists each dish waiting or being made with how many, so you can see
 at a glance how many of each to start. After a **+** it shows how many more are held

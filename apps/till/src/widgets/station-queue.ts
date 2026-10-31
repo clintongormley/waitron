@@ -109,9 +109,8 @@ function afterPeriodWords(period: string): string {
  * One station's ticket items, shown as a board: a column per kitchen state, a card per sent group. A
  * pure view: the container owns {@link groups} and turns the events this emits into API calls.
  *
- * A card is aged by its oldest fired dish, against its own station's thresholds. The age band is a top
- * border, never a text background; a `forgotten` band pulses unless reduced motion is asked for. The
- * minutes on each card and the header's late count say it without colour.
+ * A card is aged by its oldest fired dish, against its own station's thresholds, never by a text
+ * background. The minutes on each card and the header's late count say it without colour.
  */
 @customElement("till-station-queue")
 export class TillStationQueue extends LitElement {

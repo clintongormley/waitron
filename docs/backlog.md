@@ -1939,12 +1939,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A1250. The pass marks a late order in the brand colour where the station board marks it amber
   (question for the owner).** A late card's edge is `--wt-color-warning` on the station board
   (`apps/till/src/widgets/station-queue.ts`, `.ticket.age-warm`) and `--wt-color-primary` on the
-  pass (`apps/till/src/screens/till-expo-screen.ts`, `.order.age-warm`); both then turn red. Should the pass use amber too? The help texts describe each as it is today.
+  pass (`apps/till/src/screens/till-expo-screen.ts`, `.order.age-warm`); both then turn red. Should
+  the pass use amber too? The help texts describe each as it is today.
 
-- **A1253. A help badge on a brand-blue button reads as part of the button (question for the
-  owner, A582 slice 5's look check).** The pass's first Course ready / Group ready keeps its badge
-  inside its top corner, and both are filled with the brand blue, so the badge's lower half is
-  blue on blue (shots `pass-1280-*-help-on.png` in `~/waitron-campaign/a582-5-shots/`). Slice 4's
+- **A1253. A help badge on a button in the brand colour reads as part of the button (question for
+  the owner, A582 slice 5's look check).** The pass's first Course ready / Group ready keeps its
+  badge inside its top corner, and both are filled with the brand colour, so the badge's lower half
+  disappears into the button (shots `pass-1280-*-help-on.png` in `~/waitron-campaign/a582-5-shots/`). Slice 4's
   Send all badge has the same clash, less of it because it hangs outside. One answer: a thin ring
   of page colour round every badge in `wt-help-tooltip`, which changes every badge.
 
