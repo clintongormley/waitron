@@ -3453,7 +3453,7 @@ jobs:
   publish:
     needs: [changes, ci]
     # Intentional upstream skips must not suppress publishing after the aggregate succeeds.
-    if: always() && !cancelled() && github.event_name == 'push' && needs.changes.outputs.code == 'true' && needs.ci.result == 'success'
+    if: github.event_name == 'push' && needs.changes.outputs.code == 'true' && needs.ci.result == 'success' && always() && !cancelled()
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Naming any permission drops every default. `packages: write` is for the GHCR push.
