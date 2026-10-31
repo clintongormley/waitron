@@ -1,6 +1,14 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, stampDeployment, withNodeTransaction } from "@waitron/db";
+import {
+  CHECK_VIOLATION,
+  CORE_MIGRATIONS,
+  captureError,
+  engineErrorMessage,
+  isRefusal,
+  stampDeployment,
+  withNodeTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { NODE_MIGRATIONS } from "./migrations.js";
 import {
@@ -120,12 +128,57 @@ describe("the role in node.db", () => {
     });
   });
 
-  it("refuses the singleton duties on a mirror", async () => {
+  it("refuses the singleton duties on a mirror (node_mode_role_valid_ck)", async () => {
     await stampDeployment(suite.db, "preproduction");
     await setNodeMode(handles(), NODE, "mirror");
-    await expect(setSingletonRole(handles(), NODE, "primary")).rejects.toThrow(
-      /node_mode_role_valid_ck/,
+    const error = await captureError(() => setSingletonRole(handles(), NODE, "primary"));
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/node_mode_role_valid_ck/);
+  });
+
+  it("the mode CHECK rejects any value outside primary/mirror", async () => {
+    const error = await captureError(() =>
+      Promise.resolve(
+        suite.node.run(
+          sql`insert into node_mode (node_id, mode, updated_at) values (${NODE}, 'bogus', ${new Date().toISOString()})`,
+        ),
+      ),
     );
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/node_mode_mode_ck/);
+  });
+
+  it("a mode write goes to mirror and back to primary, the legitimate reverse", async () => {
+    await stampDeployment(suite.db, "preproduction");
+    expect((await readNodeMode(suite.node, NODE)).mode).toBe("primary");
+    await setNodeMode(handles(), NODE, "mirror");
+    expect((await readNodeMode(suite.node, NODE)).mode).toBe("mirror");
+    await setNodeMode(handles(), NODE, "primary");
+    expect((await readNodeMode(suite.node, NODE)).mode).toBe("primary");
+  });
+
+  it("a primary mode write leaves a sell-only secondary's singleton role as it is", async () => {
+    await stampDeployment(suite.db, "preproduction");
+    await setSingletonRole(handles(), NODE, "secondary");
+    await setNodeMode(handles(), NODE, "primary");
+    expect(await readNodeMode(suite.node, NODE)).toEqual({
+      mode: "primary",
+      singletonRole: "secondary",
+    });
+  });
+
+  it("a mirror becomes a sole primary in one node transaction, mode first", async () => {
+    await stampDeployment(suite.db, "preproduction");
+    await setSingletonRole(handles(), NODE, "secondary");
+    await setNodeMode(handles(), NODE, "mirror");
+    await withNodeTransaction(suite.node, async (tx) => {
+      await setNodeModeTx(tx, NODE, "primary");
+      await setSingletonRoleTx(tx, NODE, "primary");
+    });
+    expect(await readNodeMode(suite.node, NODE)).toEqual({
+      mode: "primary",
+      singletonRole: "primary",
+    });
   });
 
   it("the transaction forms write without reading the stamp, and roll back with their body", async () => {

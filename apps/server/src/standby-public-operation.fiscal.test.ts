@@ -11,16 +11,8 @@ import { join } from "node:path";
 import { beforeAll, afterAll, beforeEach, expect, it, vi } from "vitest";
 import { and, eq, isNull } from "drizzle-orm";
 import { loadKeyRing } from "@waitron/credentials";
-import {
-  deployment,
-  invoiceSeries,
-  locations,
-  nodes,
-  tenants,
-  readSingletonRole,
-  setDeploymentMode,
-  withTransaction,
-} from "@waitron/db";
+import { deployment, invoiceSeries, locations, nodes, tenants, withTransaction } from "@waitron/db";
+import { readNodeMode, setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -319,6 +311,7 @@ async function promote(held: Awaited<ReturnType<typeof reserve>>, key: string, c
       const result = await promoteMirrorToPrimary(
         {
           db: spare.db,
+          node: spare.node,
           ring: RING,
           nodeId: held.standby.nodeId,
           holders: createDeploymentHolders("mirror", "secondary"),
@@ -362,7 +355,7 @@ it("consumes signed public reservation and takeover evidence through both HTTP r
   expect(held.reserved.series).toEqual([]);
   await establish(held);
   expect(await liveTarget(held.standby.nodeId)).toEqual({ sif: [], series: [], allocations: [] });
-  await setDeploymentMode(spare.db, held.standby.nodeId, "mirror");
+  await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror");
   const key = await mintBreakGlassSecret(spare.db, held.standby.nodeId);
   const response = await promote(held, key);
   expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
@@ -382,12 +375,12 @@ it("consumes signed public reservation and takeover evidence through both HTTP r
     nodeId: held.standby.nodeId,
     eventId: "host-takeover",
   });
-  expect(await readSingletonRole(spare.db, held.standby.nodeId)).toBe("primary");
+  expect((await readNodeMode(spare.node, held.standby.nodeId)).singletonRole).toBe("primary");
 });
 it("refuses absent current outside consumption through HTTP and retains the dormant reservation", async () => {
   const held = await reserve();
   await establish(held);
-  await setDeploymentMode(spare.db, held.standby.nodeId, "mirror");
+  await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror");
   const key = await mintBreakGlassSecret(spare.db, held.standby.nodeId);
   const reservation = await spare.db.select().from(fiscalReservations);
   const response = await promote(held, key, false);
@@ -398,5 +391,5 @@ it("refuses absent current outside consumption through HTTP and retains the dorm
   });
   expect(await liveTarget(held.standby.nodeId)).toEqual({ sif: [], series: [], allocations: [] });
   expect(await spare.db.select().from(fiscalReservations)).toEqual(reservation);
-  expect(await readSingletonRole(spare.db, held.standby.nodeId)).toBe("secondary");
+  expect((await readNodeMode(spare.node, held.standby.nodeId)).singletonRole).toBe("secondary");
 });

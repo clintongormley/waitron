@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   readBreakGlassVerifier,
-  readDeploymentAxes,
   readDeploymentEnvironment,
   setBreakGlassVerifierTx,
   setDeploymentMode,
@@ -27,26 +26,6 @@ const LINK = {
 
 describe("per-node rows in one venue database", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
-
-  it("gives each node its own role, and a node with no row reads as a sole primary", async () => {
-    await stampDeployment(suite.db, "preproduction");
-    await setDeploymentMode(suite.db, NODE_A, "mirror");
-    expect(await readDeploymentAxes(suite.db, NODE_A)).toEqual({
-      mode: "mirror",
-      singletonRole: "secondary",
-    });
-    expect(await readDeploymentAxes(suite.db, NODE_B)).toEqual({
-      mode: "primary",
-      singletonRole: "primary",
-    });
-  });
-
-  it("keeps a singleton role written for one node out of the other's", async () => {
-    await stampDeployment(suite.db, "preproduction");
-    await setSingletonRole(suite.db, NODE_B, "secondary");
-    expect((await readDeploymentAxes(suite.db, NODE_A)).singletonRole).toBe("primary");
-    expect((await readDeploymentAxes(suite.db, NODE_B)).singletonRole).toBe("secondary");
-  });
 
   it("keeps the environment one per database, whichever node's role is written", async () => {
     await stampDeployment(suite.db, "production");
