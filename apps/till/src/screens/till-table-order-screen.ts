@@ -228,6 +228,9 @@ function countsWholeUnits(line: OrderLine): boolean {
 /** The table actions that name a table: Move guests, Join a table and Move this bill. */
 type TableVerb = "move" | "join" | "move-bill";
 type ActionVerb = TableVerb | "merge" | "transfer" | "split";
+/** The pay section's controls by what a tap on one starts: the tender's Cash and Card, the
+ * bill-payment ways and Pay the rest, or the handheld's Pay. */
+type PayControl = "tender" | "bill-pay" | "sheet";
 
 interface ActionDraft {
   tableId: string | null;
@@ -1089,6 +1092,9 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Boolean }) busy = false;
   @property({ type: Boolean }) loading = false;
   @property({ attribute: false }) paymentConfirmation?: RetainedTender;
+  /** A bill payment on the bill on screen is being sent or got no answer: a tap on a bill-payment
+   * control reopens it rather than starting one. */
+  @property({ type: Boolean }) billPaymentHeld = false;
   /** `false` hides the pay section. */
   @property({ type: Boolean }) canSettle = true;
   /** See the tender card's `takesCash`. */
@@ -4050,17 +4056,45 @@ export class TillTableOrderScreen extends LitElement {
     return this.paymentConfirmation !== undefined || shown === undefined || owing(shown);
   }
 
-  /** A line in this screen's New order, or someone's unsent dishes saved on the bill on screen. */
+  /** A dish in this screen's New order, or in another person's draft of this bill drawn with its
+   * Take over, so every quiet Pay has its way out on the screen. */
   #billHasUnsent(): boolean {
-    if ((this.#draftStore?.lineCount ?? 0) > 0) return true;
-    return this.party?.unsentDrafts.some((draft) => draft.billId === this.orderId) ?? false;
+    const draft = this.#draftStore;
+    if (draft === null) return false;
+    return draft.lineCount > 0 || this.otherDrafts.some((other) => other.lines.length > 0);
   }
 
-  /** True, after saying why, when Pay is quiet and the tap must start nothing. */
-  #payQuietTap(): boolean {
-    if (this.paymentConfirmation !== undefined || !this.#billHasUnsent()) return false;
+  /** Whether a tap on `control` reopens a payment already sent on the bill on screen. The tender's
+   * confirmation view, drawn for an unanswered whole payment, has no Cash or Card and reads no
+   * quiet; while one is unanswered the handheld's Pay is drawn only on a presented bill
+   * (`#paysOnSheet`), whose locked sheet it reopens. */
+  #recovers(control: PayControl): boolean {
+    if (control === "tender") return false;
+    return this.billPaymentHeld || (control === "sheet" && this.paymentConfirmation !== undefined);
+  }
+
+  #payQuiet(control: PayControl): boolean {
+    return this.#billHasUnsent() && !this.#recovers(control);
+  }
+
+  /** True, after saying why, when `control` is quiet and the tap must start nothing; a tap that
+   * goes ahead takes down the sentence an earlier quiet tap showed. */
+  #payQuietTap(control: PayControl): boolean {
+    if (!this.#payQuiet(control)) {
+      this.payUnsentFor = null;
+      return false;
+    }
     this.payUnsentFor = { billId: this.orderId };
+    void this.#revealPayUnsent();
     return true;
+  }
+
+  /** The sentence ends the pay section, below the window when the control tapped is at its edge. */
+  async #revealPayUnsent(): Promise<void> {
+    await this.updateComplete;
+    this.renderRoot
+      .querySelector<HTMLElement>("[data-pay-unsent]")
+      ?.scrollIntoView({ block: "nearest" });
   }
 
   #payUnsent(): TemplateResult | typeof nothing {
@@ -4073,8 +4107,6 @@ export class TillTableOrderScreen extends LitElement {
 
   #paySection(): TemplateResult {
     const shown = this.#shownBill;
-    // A whole payment whose answer is unknown is recovered, not started, so it is never quiet.
-    const quiet = this.paymentConfirmation === undefined && this.#billHasUnsent();
     const partlyPaid =
       this.paymentConfirmation === undefined && shown !== undefined && paidInPart(shown)
         ? shown
@@ -4086,7 +4118,7 @@ export class TillTableOrderScreen extends LitElement {
         @confirm-payment=${(event: Event) => this.#onTenderConfirm(event)}
         @pay-quiet-tap=${(event: Event) => {
           event.stopPropagation();
-          this.#payQuietTap();
+          this.#payQuietTap("tender");
         }}
       >
         <h2>${t("table.pay_title")}</h2>
@@ -4097,7 +4129,7 @@ export class TillTableOrderScreen extends LitElement {
           .fullInvoices=${this.fullInvoices}
           .parks=${false}
           .invoices=${false}
-          .payQuiet=${quiet}
+          .payQuiet=${this.#payQuiet("tender")}
           .asksGuests=${shown?.invoiceType !== "F1"}
           .receiptGuests=${defaultReceiptGuests(this.party)}
           .confirmation=${this.paymentConfirmation}
@@ -4108,7 +4140,7 @@ export class TillTableOrderScreen extends LitElement {
     if (partlyPaid === undefined)
       return html`<section class="pay">
         <h2>${t("table.pay_title")}</h2>
-        ${this.#paySheetButton(shown, quiet)}
+        ${this.#paySheetButton(shown)}
         ${this.paymentConfirmation === undefined ? this.#billChoices(shown) : nothing}
         ${this.#payUnsent()}
       </section>`;
@@ -4125,13 +4157,14 @@ export class TillTableOrderScreen extends LitElement {
       }
       ${
         sheet
-          ? html`${this.#paySheetButton(shown, quiet)} ${this.#billChoices(shown)}`
+          ? html`${this.#paySheetButton(shown)} ${this.#billChoices(shown)}`
           : html`<wt-button
-                variant=${quiet ? "secondary" : "primary"}
+                variant=${this.#payQuiet("bill-pay") ? "secondary" : "primary"}
                 data-pay-rest
                 .disabled=${this.busy}
                 @click=${() => {
-                  if (!this.#payQuietTap()) this.#payPart("contribution", partlyPaid.outstanding);
+                  if (!this.#payQuietTap("bill-pay"))
+                    this.#payPart("contribution", partlyPaid.outstanding);
                 }}
               >
                 ${t("bill.pay_with_bill_payments")}
@@ -4155,13 +4188,13 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  #paySheetButton(shown: PartyBill | undefined, quiet: boolean): TemplateResult {
+  #paySheetButton(shown: PartyBill | undefined): TemplateResult {
     return html`<wt-button
-      variant=${quiet ? "secondary" : "primary"}
+      variant=${this.#payQuiet("sheet") ? "secondary" : "primary"}
       data-pay-sheet
       .disabled=${this.busy}
       @click=${() => {
-        if (this.#payQuietTap()) return;
+        if (this.#payQuietTap("sheet")) return;
         if (shown?.status === "placed")
           this.#dispatch("pay-presented", { workingOrderId: shown.workingOrderId });
         else this.#payPart("whole");
@@ -4219,7 +4252,7 @@ export class TillTableOrderScreen extends LitElement {
             data-open-bill-pay=${way}
             .disabled=${this.busy}
             @click=${() => {
-              if (!this.#payQuietTap()) this.#payPart(way);
+              if (!this.#payQuietTap("bill-pay")) this.#payPart(way);
             }}
           >
             ${t(label)}

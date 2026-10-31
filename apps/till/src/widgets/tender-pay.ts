@@ -1369,10 +1369,12 @@ export class TillTenderPay extends LitElement {
       <div class="actions">
         <wt-button
           class="confirm"
-          variant="primary"
+          variant=${this.payQuiet ? "secondary" : "primary"}
           size="lg"
           ?disabled=${this.busy}
-          @click=${() => this.#confirmCard()}
+          @click=${() => {
+            if (!this.#quietTap()) this.#confirmCard();
+          }}
         >
           ${t("action.confirm_payment")}
         </wt-button>
@@ -1418,10 +1420,12 @@ export class TillTenderPay extends LitElement {
       <div class="actions">
         <wt-button
           class="confirm"
-          variant="primary"
+          variant=${this.payQuiet ? "secondary" : "primary"}
           size="lg"
           ?disabled=${short || this.busy}
-          @click=${() => this.#confirm()}
+          @click=${() => {
+            if (!this.#quietTap()) this.#confirm();
+          }}
         >
           ${t("action.confirm_payment")}
         </wt-button>

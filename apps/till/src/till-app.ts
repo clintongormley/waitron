@@ -18853,6 +18853,7 @@ export class TillApp extends LitElement {
       .fullInvoices=${this.fullInvoices}
       .billBalance=${this.billBalance}
       .paymentConfirmation=${this.activeTabId === undefined ? undefined : this.#unansweredWholePayments.get(this.activeTabId)}
+      .billPaymentHeld=${this.activeTabId !== undefined && this.#billPaymentHeld(this.activeTabId)}
       .finishRefused=${this.finishRefused}
       .nameRefusal=${this.nameRefusal}
       .billNameRefusal=${this.billNameRefusal}
@@ -18991,6 +18992,7 @@ export class TillApp extends LitElement {
           .fullInvoices=${this.fullInvoices}
           .billBalance=${this.billBalance}
           .paymentConfirmation=${this.activeTabId === undefined ? undefined : this.#unansweredWholePayments.get(this.activeTabId)}
+          .billPaymentHeld=${this.activeTabId !== undefined && this.#billPaymentHeld(this.activeTabId)}
           .finishRefused=${this.finishRefused}
           .nameRefusal=${this.nameRefusal}
           .billNameRefusal=${this.billNameRefusal}

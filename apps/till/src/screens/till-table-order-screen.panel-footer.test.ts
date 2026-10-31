@@ -497,6 +497,29 @@ describe("A803 pay scope", () => {
 
   describe("quiet Pay while this bill has unsent dishes", () => {
     const sentence = "Bill 1. Send or remove the unsent dishes before paying.";
+    const othersDraft = (lines = withUnsent().lines) => ({
+      id: "d-ana",
+      revision: 1,
+      ownerName: "Ana",
+      takenFromYou: false,
+      lines,
+    });
+
+    beforeEach(async () => {
+      await page.viewport(1024, 768);
+    });
+
+    /** The foot, which a narrow screen with a New order shows on its Review view. */
+    async function showFoot(el: TillTableOrderScreen): Promise<void> {
+      await resized(el);
+      const review = q(el, "[data-review-open]");
+      if (review?.checkVisibility()) {
+        await userEvent.click(review);
+        await el.updateComplete;
+      }
+    }
+
+    const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
 
     async function expectQuiet(
       el: TillTableOrderScreen,
@@ -512,11 +535,18 @@ describe("A803 pay scope", () => {
         expect(control.getAttribute("variant")).toBe("secondary");
         expect(control.hasAttribute("disabled")).toBe(false);
         expect((control as HTMLElement & { disabled?: boolean }).disabled ?? false).toBe(false);
+        // Tapped at the window's bottom edge, as after scrolling down a long bill.
+        controls()[index]!.scrollIntoView({ block: "end" });
+        await frame();
         await userEvent.click(controls()[index]!);
         await el.updateComplete;
+        await frame();
         const alert = q(el, "[data-pay-unsent]")!;
         expect(alert.getAttribute("role")).toBe("alert");
         expect(alert.checkVisibility()).toBe(true);
+        const box = alert.getBoundingClientRect();
+        expect(box.top).toBeGreaterThanOrEqual(0);
+        expect(Math.floor(box.bottom)).toBeLessThanOrEqual(innerHeight);
         expect(alert.textContent!.trim()).toBe(text);
         expect(alert.closest(".pay")).not.toBeNull();
         const tender = el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay");
@@ -538,13 +568,20 @@ describe("A803 pay scope", () => {
       ];
     }
 
-    it("keeps Cash, Card and the pay ways quiet but tappable for a dish in this bill's New order", async () => {
-      const { el } = await mountFooter({ ...twoBills, draftStore: withUnsent() });
-      await resized(el);
-      expect(q(el, "[data-pay-unsent]")).toBeNull();
-      await expectQuiet(el, await tenderButtons(el));
-      expect(el.shadowRoot!.querySelectorAll("[data-open-bill-pay]")).toHaveLength(3);
-    });
+    it.each([
+      [1024, 768],
+      [390, 844],
+    ])(
+      "keeps Cash, Card and the pay ways quiet but tappable for a dish in this bill's New order (%i×%i)",
+      async (width, height) => {
+        await page.viewport(width, height);
+        const { el } = await mountFooter({ ...twoBills, draftStore: withUnsent() });
+        await showFoot(el);
+        expect(q(el, "[data-pay-unsent]")).toBeNull();
+        await expectQuiet(el, await tenderButtons(el));
+        expect(el.shadowRoot!.querySelectorAll("[data-open-bill-pay]")).toHaveLength(3);
+      },
+    );
 
     it("keeps Pay the rest quiet on a part-paid bill", async () => {
       const { el } = await mountFooter({ ...partPaid, draftStore: withUnsent() });
@@ -556,8 +593,9 @@ describe("A803 pay scope", () => {
     });
 
     it("keeps a handheld's Pay quiet", async () => {
+      await page.viewport(390, 844);
       const { el } = await mountFooter({ ...twoBills, handheld: true, draftStore: withUnsent() });
-      await resized(el);
+      await showFoot(el);
       await expectQuiet(el, () => [q(el, "[data-pay-sheet]")!]);
     });
 
@@ -565,9 +603,7 @@ describe("A803 pay scope", () => {
       const { el } = await mountFooter({
         ...twoBills,
         party: { ...twoBills.party, unsentDrafts: [unsentDraft("wo-4")] },
-        otherDrafts: [
-          { id: "d-ana", revision: 1, ownerName: "Ana", takenFromYou: false, lines: [] },
-        ],
+        otherDrafts: [othersDraft()],
       });
       await resized(el);
       await expectQuiet(el, await tenderButtons(el));
@@ -601,6 +637,7 @@ describe("A803 pay scope", () => {
         ...twoBills,
         handheld: true,
         party: { ...twoBills.party, unsentDrafts: [unsentDraft("wo-4")] },
+        otherDrafts: [othersDraft()],
         bills: [{ ...footerBill, status: "placed" }, twoBills.bills[1]!],
         paymentConfirmation: {
           tender: { method: "cash" as const, amount: "12.00" },
@@ -615,6 +652,170 @@ describe("A803 pay scope", () => {
       await userEvent.click(pay);
       expect(presented.map((event) => event.detail)).toEqual([{ workingOrderId: "wo-4" }]);
       expect(q(el, "[data-pay-unsent]")).toBeNull();
+    });
+
+    it("lets the pay ways reopen a bill payment held on this bill, while Cash and Card stay quiet", async () => {
+      const { el } = await mountFooter({
+        ...twoBills,
+        draftStore: withUnsent(),
+        billPaymentHeld: true,
+      });
+      await resized(el);
+      const tender = el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
+      await tender.updateComplete;
+      await expectQuiet(el, () => [
+        tender.shadowRoot!.querySelector<HTMLElement>(".pay")!,
+        tender.shadowRoot!.querySelector<HTMLElement>(".pay-card")!,
+      ]);
+      const payments = capture(el, "bill-pay");
+      for (const way of ["items", "contribution", "share"]) {
+        await userEvent.click(q(el, `[data-open-bill-pay="${way}"]`)!);
+        await el.updateComplete;
+        expect(q(el, "[data-pay-unsent]")).toBeNull();
+      }
+      expect(payments.map((event) => event.detail.way)).toEqual(["items", "contribution", "share"]);
+    });
+
+    it("lets Pay the rest reopen a bill payment held on a part-paid bill", async () => {
+      const { el } = await mountFooter({
+        ...partPaid,
+        draftStore: withUnsent(),
+        billPaymentHeld: true,
+      });
+      await resized(el);
+      const payments = capture(el, "bill-pay");
+      const rest = q(el, "[data-pay-rest]")!;
+      expect(rest.getAttribute("variant")).toBe("primary");
+      await userEvent.click(rest);
+      await el.updateComplete;
+      expect(payments.map((event) => [event.detail.way, event.detail.amount])).toEqual([
+        ["contribution", "8.00"],
+      ]);
+      expect(q(el, "[data-pay-unsent]")).toBeNull();
+    });
+
+    it.each([
+      ["an open", "open", "bill-pay"],
+      ["a presented", "placed", "pay-presented"],
+    ] as const)(
+      "lets a handheld's Pay on %s bill reopen a bill payment held on it",
+      async (_bill, status, event) => {
+        await page.viewport(390, 844);
+        const { el } = await mountFooter({
+          ...twoBills,
+          handheld: true,
+          bills: [{ ...footerBill, status }, twoBills.bills[1]!],
+          draftStore: withUnsent(),
+          billPaymentHeld: true,
+        });
+        await showFoot(el);
+        const sent = capture(el, event);
+        const pay = q(el, "[data-pay-sheet]")!;
+        expect(pay.getAttribute("variant")).toBe("primary");
+        await userEvent.click(pay);
+        await el.updateComplete;
+        expect(sent).toHaveLength(1);
+        expect(q(el, "[data-pay-unsent]")).toBeNull();
+      },
+    );
+
+    it("draws no Pay that starts a bill payment on a handheld's open bill while a whole payment of it has no answer", async () => {
+      await page.viewport(390, 844);
+      const { el } = await mountFooter({
+        ...twoBills,
+        handheld: true,
+        draftStore: withUnsent(),
+        paymentConfirmation: {
+          tender: { method: "cash" as const, amount: "12.00" },
+          outstanding: "10.00",
+          guestCount: 3,
+        },
+      });
+      await showFoot(el);
+      expect(q(el, "[data-pay-sheet]")).toBeNull();
+      expect(q(el, "[data-open-bill-pay]")).toBeNull();
+      expect(q(el, "[data-pay-rest]")).toBeNull();
+      const tender = el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
+      await tender.updateComplete;
+      expect(tender.shadowRoot!.querySelector(".pay")).toBeNull();
+      expect(tender.shadowRoot!.querySelector(".pay-card")).toBeNull();
+      expect(tender.shadowRoot!.querySelector(".confirm")).not.toBeNull();
+    });
+
+    async function expectPayable(el: TillTableOrderScreen): Promise<void> {
+      const tender = el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
+      await tender.updateComplete;
+      expect(tender.shadowRoot!.querySelector(".pay")!.getAttribute("variant")).toBe("primary");
+      expect(tender.shadowRoot!.querySelector(".pay-card")!.getAttribute("variant")).toBe(
+        "primary",
+      );
+      const payments = capture(el, "bill-pay");
+      await userEvent.click(q(el, '[data-open-bill-pay="items"]')!);
+      await el.updateComplete;
+      expect(payments).toHaveLength(1);
+      expect(q(el, "[data-pay-unsent]")).toBeNull();
+    }
+
+    it("is not quiet for an unsent-draft entry of this bill when no draft of it with dishes is on the screen", async () => {
+      const { el } = await mountFooter({
+        ...twoBills,
+        party: { ...twoBills.party, unsentDrafts: [unsentDraft("wo-4")] },
+        otherDrafts: [othersDraft([])],
+      });
+      await resized(el);
+      await expectPayable(el);
+    });
+
+    it("stops being quiet, and clears the sentence, when the other person's draft is read again without dishes", async () => {
+      const { el } = await mountFooter({ ...twoBills, otherDrafts: [othersDraft()] });
+      await resized(el);
+      await userEvent.click((await tenderButtons(el))()[0]!);
+      await el.updateComplete;
+      expect(q(el, "[data-pay-unsent]")).not.toBeNull();
+      el.otherDrafts = [];
+      await el.updateComplete;
+      expect(q(el, "[data-pay-unsent]")).toBeNull();
+      await expectPayable(el);
+    });
+
+    it("is not quiet while the bill's draft could not be read, as no unsent dish is on the screen to act on", async () => {
+      const { el } = await mountFooter({
+        ...twoBills,
+        draftStore: null,
+        party: { ...twoBills.party, unsentDrafts: [unsentDraft("wo-4")] },
+        otherDrafts: [othersDraft()],
+      });
+      await resized(el);
+      expect(q(el, "[data-take-over]")).toBeNull();
+      await expectPayable(el);
+    });
+
+    it("keeps a cash payment begun before the dishes appeared from being confirmed", async () => {
+      const draft = new DraftStore();
+      const { el } = await mountFooter({ ...twoBills, draftStore: draft });
+      await resized(el);
+      const started = ["pay-tab", "confirm-payment"].map((name) => capture(el, name));
+      const tender = el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
+      await tender.updateComplete;
+      await userEvent.click(tender.shadowRoot!.querySelector<HTMLElement>(".pay")!);
+      await tender.updateComplete;
+      const pad = tender.shadowRoot!.querySelector("till-numeric-pad")!;
+      await (pad as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      for (const key of ["2", "0"]) {
+        pad.shadowRoot!.querySelector<HTMLElement>(`[data-key="${key}"]`)!.click();
+        await tender.updateComplete;
+      }
+      draft.appendLines([{ product: beer, quantity: "1" }]);
+      await el.updateComplete;
+      await tender.updateComplete;
+      const confirm = tender.shadowRoot!.querySelector<HTMLElement>(".confirm")!;
+      expect(confirm.getAttribute("variant")).toBe("secondary");
+      expect(confirm.hasAttribute("disabled")).toBe(false);
+      await userEvent.click(confirm);
+      await el.updateComplete;
+      expect(started.flat()).toEqual([]);
+      expect(q(el, "[data-pay-unsent]")!.textContent!.trim()).toBe(sentence);
+      expect(tender.shadowRoot!.querySelector(".confirm")).not.toBeNull();
     });
 
     it("says it in Spanish", async () => {

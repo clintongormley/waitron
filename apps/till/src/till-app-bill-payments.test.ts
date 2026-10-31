@@ -57,6 +57,7 @@ import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
+import type { TillTenderPay } from "./widgets/tender-pay.js";
 import type { TillBillRefundDialog } from "./widgets/bill-refund-dialog.js";
 import type { TillSupervisorOverrideDialog } from "./widgets/supervisor-override-dialog.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
@@ -70,6 +71,7 @@ import type {
   BillRefundResult,
   BillRefundView,
   CurrentOrders,
+  Draft,
   HeldOrderSummary,
   OrderGroup,
   PartyBill,
@@ -2436,6 +2438,163 @@ describe("till-app: a bill payment still out holds the bill (A796 default 7)", (
     expect(takeBillPayment).toHaveBeenCalledTimes(2);
     expect(sent()[1]).toMatchObject({ expectedEdit: { billId: "wo-check" } });
     expect(sent()[1]!.submissionId).not.toBe(sent()[0]!.submissionId);
+  });
+});
+
+describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a sent payment reachable", () => {
+  /** A saved draft of the bill on screen, one dish, owned by `ownerId`. */
+  function savedDraft(ownerId: string, ownerName: string): Draft {
+    return {
+      id: `draft-${ownerId}`,
+      partyId: "v1",
+      billId: "wo-4",
+      ownerId,
+      ownerName,
+      revision: 3,
+      takenOverFrom: null,
+      lines: [
+        {
+          slot: 0,
+          joinGroupId: null,
+          afterGroupId: null,
+          id: `draft-line-${ownerId}`,
+          sourceLineId: null,
+          source: null,
+          menuItemId: "menu-item-cafe-0",
+          variantId: null,
+          menuVersionId: null,
+          options: [],
+          extras: [],
+          note: null,
+          quantity: "1",
+          courseId: null,
+          makeAt: "switched-off",
+          noMerge: false,
+          unavailable: false,
+        },
+      ],
+    };
+  }
+  const unsentEntry = (ownerId: string, ownerName: string) => ({
+    billId: "wo-4",
+    billNumber: 1,
+    ownerId,
+    ownerName,
+    lineCount: 1,
+    savedAt: "2026-10-31T10:00:00.000Z",
+  });
+
+  async function cashButton(order: TillTableOrderScreen): Promise<HTMLElement> {
+    const tender = order.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
+    await tender.updateComplete;
+    return tender.shadowRoot!.querySelector<HTMLElement>(".pay")!;
+  }
+
+  async function reopenTable(el: TillApp): Promise<TillTableOrderScreen> {
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    emit(floor(el), "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    const order = tableOrder(el);
+    await showBillFooter(order);
+    return order;
+  }
+
+  it("Pay items reopens a part payment that got no answer while another person's unsent dish is on the bill; Cash stays quiet", async () => {
+    const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({ takeBillPayment });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await expect
+      .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
+      .toBe(t("bill_pay.unconfirmed"));
+    emit(dialog(el)!, "bill-pay-close");
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+    drafts.drafts.push(savedDraft("p2", "Luis"));
+    vi.mocked(api.getTablesState).mockResolvedValue([
+      mesa({ unsentDrafts: [unsentEntry("p2", "Luis")] }),
+    ]);
+
+    const order = await reopenTable(el);
+    expect(order.shadowRoot!.querySelector('[data-take-over="draft-p2"]')).not.toBeNull();
+    const cash = await cashButton(order);
+    expect(cash.getAttribute("variant")).toBe("secondary");
+    await userEvent.click(cash);
+    await order.updateComplete;
+    expect(text(order.shadowRoot!.querySelector("[data-pay-unsent]"))).toBe(
+      `Bill 1. ${t("bill_pay.unsent")}`,
+    );
+
+    const sends = takeBillPayment.mock.calls.length;
+    await userEvent.click(
+      order.shadowRoot!.querySelector<HTMLElement>('[data-open-bill-pay="items"]')!,
+    );
+    await flush(el);
+    await expect.poll(() => dialog(el)?.confirmationLocked, { timeout: 10_000 }).toBe(true);
+    expect(text(inDialog(el, "[data-pay-confirm]"))).toBe(t("bill_pay.recheck"));
+    expect(order.shadowRoot!.querySelector("[data-pay-unsent]")).toBeNull();
+    expect(takeBillPayment).toHaveBeenCalledTimes(sends);
+    expect(api.recordSale).not.toHaveBeenCalled();
+  });
+
+  it("is not quiet once the waiter removes their own unsent dish, with no floor read", async () => {
+    drafts.drafts.push(savedDraft("p1", "Ana"));
+    const { el } = await mountApp({
+      getTablesState: vi
+        .fn()
+        .mockResolvedValue([mesa({ unsentDrafts: [unsentEntry("p1", "Ana")] })]),
+    });
+    const order = await openTable(el);
+    await showBillFooter(order);
+    expect(order.draftStore!.lineCount).toBe(1);
+    expect((await cashButton(order)).getAttribute("variant")).toBe("secondary");
+    const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
+
+    order.draftStore!.removeLine(0);
+    await flush(el);
+
+    expect(order.party!.unsentDrafts).toHaveLength(1);
+    expect((await cashButton(order)).getAttribute("variant")).toBe("primary");
+    await openDialog(el, "items");
+    expect(dialog(el)).not.toBeNull();
+    expect(order.shadowRoot!.querySelector("[data-pay-unsent]")).toBeNull();
+    expect(vi.mocked(api.getTablesState).mock.calls.length).toBe(floorReads);
+  });
+
+  it("is not quiet after the fifteen-second draft read finds another device's dishes gone", async () => {
+    drafts.drafts.push(savedDraft("p2", "Luis"));
+    const { el } = await mountApp({
+      getTablesState: vi
+        .fn()
+        .mockResolvedValue([mesa({ unsentDrafts: [unsentEntry("p2", "Luis")] })]),
+    });
+    const order = await openTable(el);
+    await showBillFooter(order);
+    expect(order.shadowRoot!.querySelector('[data-take-over="draft-p2"]')).not.toBeNull();
+    expect((await cashButton(order)).getAttribute("variant")).toBe("secondary");
+    const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
+
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      el.api = { ...api } as unknown as TillApi;
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+      drafts.drafts.splice(0);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await el.updateComplete;
+    } finally {
+      vi.useRealTimers();
+    }
+    await flush(el);
+
+    expect(tableOrder(el).shadowRoot!.querySelector("[data-take-over]")).toBeNull();
+    expect((await cashButton(tableOrder(el))).getAttribute("variant")).toBe("primary");
+    expect(vi.mocked(api.getTablesState).mock.calls.length).toBe(floorReads);
   });
 });
 

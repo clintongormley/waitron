@@ -2536,4 +2536,46 @@ describe("A803 table pay", () => {
       expect(query(el, ".pay-card")).not.toBeNull();
     },
   );
+
+  it.each([
+    ["cash keypad", "none", ".pay"],
+    ["card reference", "none", ".pay-card"],
+  ] as const)(
+    "turned quiet with the %s open, Confirm payment is quiet, says so and sends nothing, keeping what was typed",
+    async (_step, cardProvider, opener) => {
+      const el = await mountTable({ cardProvider });
+      const quiet = vi.fn();
+      const confirmed = vi.fn();
+      el.addEventListener("pay-quiet-tap", quiet);
+      el.addEventListener("confirm-payment", confirmed);
+      click(el, opener);
+      await el.updateComplete;
+      if (opener === ".pay") await type(el, "5");
+      else await typeRef(el, "OP-1");
+      el.payQuiet = true;
+      await el.updateComplete;
+
+      const confirm = query(el, ".confirm")!;
+      expect(confirm.getAttribute("variant")).toBe("secondary");
+      expect(confirm.hasAttribute("disabled")).toBe(false);
+      await userEvent.click(confirm);
+      await el.updateComplete;
+
+      expect(quiet).toHaveBeenCalledOnce();
+      expect(confirmed).not.toHaveBeenCalled();
+      expect(query(el, ".confirm")).not.toBeNull();
+      if (opener === ".pay") expect(query(el, ".tendered")!.textContent).toContain("5");
+      else expect((query(el, ".ref-input") as HTMLElement & { value: string }).value).toBe("OP-1");
+
+      el.payQuiet = false;
+      await el.updateComplete;
+      expect(query(el, ".confirm")!.getAttribute("variant")).toBe("primary");
+      await userEvent.click(query(el, ".confirm")!);
+      expect(confirmed).toHaveBeenCalledOnce();
+      expect((confirmed.mock.calls[0]![0] as CustomEvent).detail).toMatchObject(
+        opener === ".pay" ? { method: "cash" } : { method: "card", externalRef: "OP-1" },
+      );
+      expect(quiet).toHaveBeenCalledOnce();
+    },
+  );
 });

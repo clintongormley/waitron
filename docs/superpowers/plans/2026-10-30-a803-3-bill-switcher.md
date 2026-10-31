@@ -316,6 +316,20 @@ Every other word the new controls show is an approved string (D10).
   person's panel (`#otherDraftPanels`, `data-take-over=<draftId>`,
   `till-table-order-screen.ts:3047-3069`): after taking over, the waiter can send or remove them.
   On a narrow screen that panel is on the Review view, as today. No new choice or wording is added.
+  **Addendum (2026-10-31, Task 12 review answers, review I1, I2, M3).** The words above stay as the
+  decision was made; three things now read differently. (1) "This bill has unsent dishes" = the
+  bill on screen has a line in the screen's own New order, or another person's draft of it is
+  drawn with dishes in its Take over panel (`otherDrafts`, the list the panels are drawn from).
+  `party.unsentDrafts` is no longer read: it changes only on a floor read, so it went on naming a
+  dish already removed or cleared elsewhere, leaving Pay quiet with nothing on screen to act on.
+  While the bill's draft could not be read (`draftStore` null), nothing is quiet: no unsent dish
+  is shown, and the server still refuses a payment of a bill with unsent dishes (for a whole
+  payment the app then shows the same sentence; Task 12 review, experiment 5). (2) "Every control that starts a payment" is judged per control: a control whose tap
+  reopens a payment already sent on this bill is not quiet. That is the pay ways, Pay the rest and
+  the handheld's Pay while a bill payment on the bill is being sent or got no answer (A773-1's
+  hold), and the handheld's Pay on a presented bill whose whole payment got no answer. Cash and
+  Card always start a new payment, so they stay quiet. (3) The keypad's and the card reference's
+  Confirm payment are quiet too, for a payment opened before the bill turned quiet.
 - **D6 No Hold on the table screen.** `till-tender-pay` gains `parks` (default `true`); the table
   screen sets it `false`, so Hold is not drawn; `#onTenderPark` goes. The counter's Park is
   untouched.
@@ -3092,9 +3106,11 @@ for app files; lines are at this task's commit unless written "was :N" (a line a
   coffees left in New order) checked that Pay items still pays. Under D5 it is now quiet until
   those dishes are removed. The sentence says "Send or remove"; in a closed zone only Remove is
   possible, and the line controls to do it are on the screen. No owner question is raised for it.
-- **Found, not changed.** The counter screen's test (`till-counter-screen.test.ts`, 48 cases) passes
-  with `parks` defaulting to `false`: the counter's Park is pinned at the widget
-  (`tender-pay.test.ts` `A803 counter unchanged` and the A738 Park cases), not by the counter screen.
+- **Found, not changed** (corrected in the Task 12 review answers, M2). `till-counter-screen.test.ts`
+  alone (48 cases) does not pin Park: it passes with `parks` defaulting to `false`. The counter's
+  help, layout and look suites and `till-app-boot-and-counter.test.ts` do (the review's experiment 7:
+  51 cases fail with `parks` defaulting to `false`), as do `tender-pay.test.ts` `A803 counter
+  unchanged` and the A738 Park cases at the widget.
 - **RED** (the plan's command): `Tests 16 failed | 8 passed | 195 skipped (219)`. Failed: the four
   foot-contents cases (extra `data-discount-bill`, `tender hold`, `tender data-full-invoice`), the
   invoice-number case (`expected <wt-button …> to be null`), six quiet cases (`expected 'primary'
@@ -3138,6 +3154,133 @@ for app files; lines are at this task's commit unless written "was :N" (a line a
 | `.test.ts:7120` (a zone closed to new dishes keeps the bill payable) | B | Pay items with two coffees in New order sends `bill-pay` once → that tap sends nothing and shows `bill_pay.unsent`; after New order is cleared, Pay items sends `bill-pay` once; the zone, draft and Move checks unchanged | D5; spec owner amendment "quiet Pay with unsent dishes" | 12 |
 
 **Owner question 5f candidates:** none. No check was deleted without a replacement.
+
+### Task 12 review answers (2026-10-31, `a803-3-reviews/task-12.md`)
+
+Answered on top of the Task 11c review answers (`e8b1ee8dc`). Runs in the foreground with
+`AI_AGENT`/`CLAUDECODE` unset; free memory 51–55% before each browser run. Every control changed
+one line (one pattern; the app binding's two identical lines together) by a script that asserts the
+pattern's count, ran `.panel-footer.test.ts`, `-bill-payments.test.ts` and `tender-pay.test.ts`
+with `-t A803` (481 cases), and put the file back from a saved copy (`cmp`-equal after); failures
+read per case from Vitest's JSON report. Lines are at this answer's commit. D5 has a dated
+addendum with the new rule.
+
+- **I1 (behaviour), quiet Pay blocked the way back to a bill payment that got no answer.** Fixed:
+  the app binds `billPaymentHeld` (`till-app.ts:18856`, `:18995`, from `#billPaymentHeld`: a bill
+  payment out on the bill or one A773-1 holds unanswered), and the screen's `#recovers`
+  (`till-table-order-screen.ts:4070`) lifts quiet for the bill-payment controls (the pay ways, Pay
+  the rest) and the handheld's Pay while it is set. Each of those taps reaches `#openBillPaying`
+  (the handheld's Pay on a presented bill through `#onPayPresented`), which, by reading, opens the
+  dialog with the held payment's request and preview and `confirmationLocked` set, whichever way
+  was tapped; the app case below runs it for Pay items only. A tap that goes ahead also takes down a
+  sentence an earlier quiet tap showed (`#payQuietTap`, `:4081`).
+  - App case, new: `-bill-payments.test.ts:2503` "Pay items reopens a part payment that got no
+    answer while another person's unsent dish is on the bill; Cash stays quiet" (the review's H1:
+    a contribution with no answer, the dialog closed, Luis's saved draft of the bill read on
+    reopening the table, his Take over drawn; Cash is secondary and its tap shows the sentence;
+    Pay items, tapped with `userEvent.click`, opens the dialog `confirmationLocked` with Check
+    again, the sentence gone, no new send).
+  - Screen cases, new: `.panel-footer.test.ts:657` (the pay ways send `bill-pay` while held, and
+    clear the sentence), `:679` (Pay the rest primary and sends), `:697` (the handheld's Pay on an
+    open and on a presented bill, primary and sends `bill-pay`/`pay-presented`).
+- **M3, the exceptions per control.** `#recovers` names the control: the tender (Cash and Card)
+  never recovers, so it stays quiet under both holds (`:657` and the app case check it); the
+  handheld's Pay recovers under an unanswered whole payment. The state the review read (a handheld
+  showing an open bill while a whole payment of it has no answer, its Pay then sending a new
+  `bill-pay`) is not drawn: `#paysOnSheet` gives the sheet's Pay, with a whole payment unanswered,
+  only to a presented bill, so an open bill gets the pay card's confirmation view, which has no
+  Cash or Card. New case `:722` "draws no Pay that starts a bill payment on a handheld's open bill
+  while a whole payment of it has no answer" (no `[data-pay-sheet]`, no pay way, no Pay the rest,
+  the tender's Confirm payment and no Cash or Card); it passes on the old code too, since it pins
+  the drawing, not the quiet rule. Control C3c (the experiment behind dropping the presented-bill
+  test from `#recovers`): the sheet recovering under an unanswered whole payment whatever the bill's
+  status → `0 failed`, which is why `#recovers` does not repeat `#paysOnSheet`'s status check.
+- **I2 (behaviour), Pay stayed quiet with nothing on screen to act on.** Fixed as the review
+  proposed: `#billHasUnsent` (`:4061`) reads the screen's New order and `otherDrafts` (any of them
+  with a line), never `party.unsentDrafts`, and nothing while no draft is drawn. So it changes with
+  the draft store and the fifteen-second read of other drafts, and every quiet state has its own way
+  out drawn. **Choice for a draft that could not be read:** not quiet (the most conservative of the
+  brief's options): no unsent dish is known and shown, and the server refuses a payment of a bill
+  with unsent dishes on the whole-payment and bill-payment paths (review experiment 5, which also
+  saw the app show the same sentence for a refused whole payment).
+  - App cases, new: `-bill-payments.test.ts:2545` "is not quiet once the waiter removes their own
+    unsent dish, with no floor read" (the review's H2: the floor still lists the waiter's own
+    entry; Cash goes primary after `removeLine(0)` and Pay items opens the dialog, with no floor
+    read); `:2569` "is not quiet after the fifteen-second draft read finds another device's dishes
+    gone" (Luis's draft removed from the draft server, the timer advanced 15 s; his Take over goes
+    and Cash is primary, with no floor read).
+  - Screen cases, new: `.panel-footer.test.ts:759` (an entry of `party.unsentDrafts` for this bill,
+    another person's draft drawn with no dishes → not quiet), `:769` (another person's draft read
+    again without dishes → not quiet, sentence cleared), `:781` (`draftStore` null, with an entry
+    and another person's draft with dishes → no Take over drawn, not quiet).
+- **I3, the sentence below the window.** Fixed: `#payQuietTap` starts `#revealPayUnsent` (`:4092`),
+  which waits for the update and scrolls `[data-pay-unsent]` into view (`block: "nearest"`), as the
+  Finish refusal is. `expectQuiet` now scrolls each control to the window's bottom edge
+  (`scrollIntoView({ block: "end" })`) before tapping it, and checks the alert's box is inside the
+  window (top ≥ 0, bottom rounded down ≤ `innerHeight`). The quiet cases run at 1024×768; the
+  New order case runs at 1024×768 and 390×844 (opening Review where the foot is on it), and the
+  handheld case at 390×844.
+- **M1, a payment opened before the bill turned quiet.** Chosen: guard Confirm payment with the
+  same quiet tap (`tender-pay.ts:1376` card reference, `:1427` keypad), drawn `secondary` while
+  quiet, rather than closing the open step. Why it is clearer to staff: the step does not vanish
+  under them because of something done on another device; the sentence comes at the moment they
+  press Confirm, saying what to do; and the amount typed or the card reference stays, so once the
+  dishes are sent Confirm sends it (closing the step would also drop typed input without asking,
+  against the unsaved-input rule). Widget case, new: `tender-pay.test.ts:2544` (keypad and card
+  reference: Confirm secondary and enabled, a tap sends one `pay-quiet-tap` and no
+  `confirm-payment`, the typed amount or reference kept; quiet lifted, Confirm primary and sends it).
+  Screen case, new: `.panel-footer.test.ts:793` (Cash opened with nothing unsent, 20 typed, then a
+  dish in New order → Confirm secondary, its tap sends no `pay-tab`/`confirm-payment` and shows the
+  sentence).
+- **M2.** The as-built "Found, not changed" bullet now says `till-counter-screen.test.ts` alone does
+  not pin Park, and names the suites that do, with the review's count.
+- **RED** (new and changed cases with the screen, app and widget as at `e8b1ee8dc`; the three
+  files `-t A803`): `481 total, 19 failed, 25 passed`. Per case: the app H1 case `expected
+  undefined to be true` (no dialog); the two app I2 cases and five screen cases (`:679`, both `:697`
+  rows, `:759`, `:781`) `expected 'secondary' to be 'primary'`;
+  `:769` `expected null not to be null`; the position check in every quiet case (`expected 914 to
+  be less than or equal to 768` at 1024×768, `990`/`938` against 844 at 390×844, `983` in Spanish),
+  which also fails `:657` first; the two widget M1 rows and `:793` `expected 'primary' to be
+  'secondary'`.
+- **GREEN.** The plan's Task 12 GREEN command (12 files): `Test Files 12 passed (12)`, `Tests 1112
+  passed (1112)`. `till-counter-screen.test.ts`: `Tests 48 passed (48)`. The whole screen set
+  (91 files): `Test Files 91 passed (91)`, `Tests 1811 passed (1811)` (1801 plus 10 new), no
+  `Errors` line. The 11c review's 12 app files (which include `-parties`, `-drafts`,
+  `-handheld-pay` and `-bill-payments`): `Test Files 12 passed (12)`, `Tests 3203 passed (3203)`
+  (3200 plus 3). All three after the last code edit. `pnpm --filter @waitron/till typecheck` exit
+  0; `prettier --check` and `eslint` on the six changed files exit 0. No string changed, so
+  `src/i18n` and `scripts/english-only.test.ts` were not run.
+- **Controls** (each production line broken, then put back):
+  - C1, `billPaymentHeld` ignored in `#recovers` → 5 failed: the app H1 case (`expected undefined
+    to be true`), `:657` (the sentence not taken down), `:679` and both `:697` rows (`expected
+    'secondary' to be 'primary'`).
+  - C2, the app binding set to `false` at both sites → 1 failed: the app H1 case.
+  - C3, the tender also recovering → 2 failed: the app H1 case and `:657` (`expected 'primary' to be
+    'secondary'`: Cash no longer quiet under a hold).
+  - C3b, the handheld's Pay not recovering an unanswered whole payment → 1 failed: `:635` "is not
+    quiet for a handheld's unanswered whole payment of a presented bill, which it recovers".
+  - C3c, see M3 → 0 failed.
+  - C4, `party.unsentDrafts` counted again for this bill → 4 failed: both app I2 cases, `:759`,
+    `:769`.
+  - C5, the null-draft guard removed (others counted with no draft drawn) → 1 failed: `:781`.
+  - C6, the scroll replaced by `focus({ preventScroll: true })` → 7 failed: every quiet case that
+    taps through `expectQuiet` (both New order rows, Pay the rest, handheld, another person's,
+    `:657`, Spanish), at the position check.
+  - C7, the keypad's Confirm unguarded → 2 failed: `:793` (a `pay-tab` sent) and the widget's
+    keypad row (`pay-quiet-tap` not sent).
+  - C8, the card reference's Confirm unguarded → 1 failed: the widget's card reference row.
+  - C9, a going-ahead tap not taking the sentence down → 2 failed: the app H1 case and `:657`.
+
+| Test | Kind | Before → after | Source | Task |
+| --- | --- | --- | --- | --- |
+| `.panel-footer.test.ts:524` `expectQuiet` (every quiet case) | stricter | the tap and the alert's `checkVisibility()` → each control first scrolled to the window's bottom edge, and the alert's box inside the window after the tap; every earlier check unchanged | review 12 I3 | 12 answers |
+| `.panel-footer.test.ts` quiet cases (the `describe`'s viewport) | S | 1280×1100 (the file's `beforeEach`) → 1024×768 for the quiet cases; the handheld case at 390×844 with the foot shown through Review where it sits there; every `expect` unchanged | review 12 I3 | 12 answers |
+| `.panel-footer.test.ts:571` (was "keeps Cash, Card and the pay ways quiet … New order") | stricter | one run at 1280×1100 → `it.each` over 1024×768 and 390×844; checks unchanged; retitled with the size | review 12 I3 | 12 answers |
+| `.panel-footer.test.ts:602` (another person's unsent dishes) | B | `otherDrafts` entry with no lines (quiet came from `party.unsentDrafts`) → the same entry with one dish; `party.unsentDrafts` kept; every `expect` unchanged | D5 addendum (1) | 12 answers |
+| `.panel-footer.test.ts:635` (a handheld's unanswered whole payment) | B | unsent from `party.unsentDrafts` → also another person's draft with one dish, so the bill really is unsent under the new rule and the exception is what lifts quiet; every `expect` unchanged | D5 addendum (1), (2) | 12 answers |
+| `.panel-footer.test.ts` "is not quiet when the unsent dishes are on Bill 2 only" | unchanged | the case is byte-identical; under the new rule `party.unsentDrafts` is not read, so it passes either way, and Task 12's control "any bill's `unsentDrafts` counting" no longer applies; C4 and `:759` pin the list not being read | D5 addendum (1) | 12 answers |
+
+**Owner question 5f candidates:** none. No check was deleted or loosened.
 
 ## Task 13: whole-slice run and controls (no commit unless a fixture moves, ≈45 calls)
 
