@@ -2780,7 +2780,7 @@ still-to-pay under the bill's total and, when `finishRefused`, the refusal with 
 Record unpaid departure above it (D9); `i18n/strings.ts` `table.open_drawer` goes; the sites left
 for 11c by 11a/11b; the badge rows (D17).
 
-- [ ] Cases `A803 no tab panel` in `till-table-order-screen.panel-footer.test.ts`: no Tab button at
+- [x] Cases `A803 no tab panel` in `till-table-order-screen.panel-footer.test.ts`: no Tab button at
       any width; the foot shows this bill's total, then "Still to pay at this table" with the party's
       outstanding; Finish table refused shows the refusal with Take payment for the first other
       unpaid bill above the foot; choosing Move guests in the ⋮ shows the table picker in the side
@@ -2789,16 +2789,121 @@ for 11c by 11a/11b; the badge rows (D17).
       made (Task 10 review M1). Case `A803 to serve` in `till-table-order-screen.test.ts`: with one
       unserved and one served one-portion sent line, the Sent summary shows them, and after the
       last is served its not-yet-served counts read 0 (D17).
-- [ ] RED: `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.panel-footer.test.ts src/screens/till-table-order-screen.test.ts -t 'A803 no tab panel|A803 to serve'`.
-- [ ] Implement; re-point the 11c sites and the badge rows. Four `.parties.test.ts` behaviours have
+- [x] RED: `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.panel-footer.test.ts src/screens/till-table-order-screen.test.ts -t 'A803 no tab panel|A803 to serve'`.
+- [x] Implement; re-point the 11c sites and the badge rows. Four `.parties.test.ts` behaviours have
       no control to re-point to, because the ⋮ acts only on the bill on screen: Take payment on
       another bill's row (`:217-265`), Cancel and credit on another bill's row (`:304-335`), no
       Receipt copy on another bill's row (`:214`), and the bill-requested chip (`:363`, `:374`,
       `:404`). Record each as kind B citing the spec (§3.5, D4 or D9 for where it goes), or as a
       deleted check that becomes an item of Owner question 5. None is recorded as R.
-- [ ] GREEN: the screen files (11a's command), the 11b files, till typecheck;
+- [x] GREEN: the screen files (11a's command), the 11b files, till typecheck;
       `rg -n 'data-open-drawer|drawerOpen|open_drawer|data-pending-badge' apps/till` prints nothing.
-- [ ] Commit: "The table screen loses the Tab button: bills in the switcher, actions in the ⋮".
+- [x] Commit: "The table screen loses the Tab button: bills in the switcher, actions in the ⋮".
+
+### Task 11c as built (2026-10-31)
+
+Runs in the foreground with `AI_AGENT`/`CLAUDECODE` unset; free memory 48–61% before each browser
+run. File names below drop the `till-table-order-screen` prefix for screen files and the `till-app`
+prefix for app files; lines are at this task's commit unless written "was :N" (a line at
+`f8b8f7ba5`).
+
+- **Built.** The Tab button, its badge, `drawerOpen`, `#toggleDrawer`, `#pending`, `#drawer`,
+  `#billsSection`, `#billRow`, the drawer's `#billRequest` and `#takePayment` are gone, with the CSS
+  only they used (`.badge`, `.bill*`, `.bill-request`, `.finish`, `.drawer ul`) and the signal-chip
+  import and styles the drawer's chip needed. The side column's panel is `.action-panel` (was
+  `.drawer action-panel`). The foot (`#orderSummary`) now draws, in order: the Finish table refusal
+  when `finishRefused` (`#finishRefusal`, same text, Take payment for the first other unpaid bill
+  and Record unpaid departure), this bill's total, "Still to pay at this table" with the party's
+  outstanding (`[data-party-outstanding-row]`, only with a party), then the bill's actions.
+  `table.open_drawer` is deleted in English and Spanish; `rg -n 'table.open_drawer' apps/till`
+  prints nothing.
+- **Departure: the refusal scrolls into view.** The 1024×768 case of `A803 no tab panel` failed its
+  "the refusal is inside the window" check with the refusal drawn above the foot: tapping Finish
+  table in the ⋮ at the top left the refusal below the window, which is the Task 10 review's M1
+  problem in a new place. `updated()` now scrolls the refusal into view (`#showFinishRefusal`, using
+  the step panel's `#scrollIntoViewOnceDrawn`) when `finishRefused` turns on.
+- **Departure: the GREEN grep.** The plan's `rg -n 'data-open-drawer|drawerOpen|open_drawer|data-pending-badge' apps/till`
+  can never print nothing: `open_drawer` also matches `action.open_drawer`, the cash drawer's Open
+  drawer (`strings.ts:338`, `:2149`, `till-paid-view.ts:280`, `till-ticket-view.ts:1095`,
+  `till-paid-view.test.ts:285`), which this slice does not touch. Those five lines are all it
+  prints; the narrowed `rg -n 'data-open-drawer|drawerOpen|table\.open_drawer|data-pending-badge' apps/till`
+  prints nothing (exit 1).
+- **Found, not changed.** `table.pending_title` and `table.none_pending` have no user outside tests
+  on this branch or on `main` (`git grep` at `main` and `HEAD`); tests use them only in absence
+  checks. Their retirement is not this task's.
+- **RED** (the plan's command): `Tests 6 failed | 2 passed | 355 skipped (363)`: the three widths
+  (`expected <wt-button …> to be null`, the Tab button), the still-to-pay and the refusal cases
+  (`expected null not to be null`), and `A803 to serve` (the badge span present). Move guests' step
+  and the no-party case passed before (Task 10 built the step panel). The final cases read the head's
+  children instead of the retired hooks, so the GREEN grep holds.
+- **GREEN.** The screen files (11a's command, 91 files): `Test Files 91 passed (91)`, `Tests 1783
+  passed (1783)`, no `Errors` line, exit 0. The 11b app files plus every other file importing
+  `test/bill-pay-app.ts` (12 files): `Test Files 12 passed (12)`, `Tests 3199 passed (3199)`, exit
+  0; the eight 11b files alone earlier in the task: `Tests 3087`, as before 11c. `.parties` 35 and
+  `-parties` 623, as before; `.test.ts` 345 (344 + `A803 to serve`); `.panel-footer` 18 (11 + 7);
+  `.bill-payments` one fewer (the deleted recipient case below). `pnpm --filter @waitron/till
+  typecheck` exit 0; `vitest run src/i18n` `Tests 259 passed (259)`; root
+  `scripts/english-only.test.ts` `Tests 1988 passed (1988)`; `prettier --check` and `eslint` on the
+  changed files exit 0.
+- **Deletion controls** (each on the plan's RED filter, the screen put back from a saved copy and
+  `cmp`-equal after): the still-to-pay row removed → `Tests 1 failed | 7 passed`; the refusal no
+  longer drawn above the foot → `1 failed | 7 passed`; the scroll call removed → `1 failed | 7
+  passed`; a "Tab" button with a `.badge` put back in the head → `4 failed | 4 passed` (three widths
+  and `A803 to serve`). Only the counts were read, not which case failed in each.
+- **STOP:** none taken, but see the money rows: `-parties` `figures` and `-bill-payments` `listed`
+  read a bill's amount from the switcher's row (what it owes) instead of the drawer row's total.
+  Where total and owing were equal in the fixture (`figures`) every amount is unchanged; in `listed`
+  the partly paid bill reads €70.00 owing where the drawer showed its €120.00 total (kind B, §3.5).
+
+| Test | Kind | Before → after | Source | Task |
+| --- | --- | --- | --- | --- |
+| `.panel-footer.test.ts:110` (one payment widget across the side panel opening and closing) | R | the Tab button tapped twice, `[data-drawer]` present then absent, holding no Discount or `.pay` → Move guests opened from the ⋮ and closed with Back, `[data-action-panel]` present then absent, holding no Discount or `.pay`; the widget checks unchanged | D9 (the action panel replaces the drawer) | 11c |
+| `.test.ts:582` (was "keeps the tab drawer closed until its handle is tapped") | B | drawer absent, then present after the handle → "draws no Tab drawer or handle": `[data-drawer]` and `.drawer-handle` absent | §3.5 "The Tab button and its side panel go" | 11c |
+| `.test.ts:588` (was "badges the drawer handle with the pending-to-serve count") | R | badge text contains 1 → the Sent summary reads `sentCounts(0, 1, 0, 1)` (1 firing, 1 served); one-portion line; the service read added so Sent draws | D17 | 11c |
+| `.test.ts:598` (was "names the drawer handle by … its pending count") | R | the handle's name "Tab 1" → the Sent toggle's name, its title and `sentCounts(0, 1, 0, 1)`, with `toHaveAccessibleName` | D17 | 11c |
+| `.test.ts:610` (was "hides the badge and duplicate To serve card …") | R | the badge null after the last dish is served → moved to `A803 to serve`, which reads the Sent summary's not-yet-served counts as 0 after it; this case runs on the stored-lines fallback, where Sent draws no summary; its other checks unchanged; retitled | D17 | 11c |
+| `.test.ts:802` (empty tab) | R | badge null → `sentSummary` undefined (Sent draws no summary); retitled "no Sent counts" | D17 | 11c |
+| `.test.ts:4150`, `:4186` (status in the head actions; one line each at 390px in Spanish) | R | the status's next sibling, and the button measured beside the pin, the Tab button → the bill switcher; `[1, 1, 1]` and the same-row check unchanged | §3.5, D4 | 11c |
+| `.empty-drawer.a11y.test.ts:51-53` | R | badge null after a served line with the service read unread → the Sent panel draws no summary | D17 | 11c |
+| `.populated-drawer.a11y.test.ts:96-106` | R | badge text "2" → Sent summary `0 ready · 2 firing · 0 held · 1 served`. The 2 agrees for a different reason: the badge counted the dish and its extra row, the summary the dish's two portions; a one-portion fixture would change this case's total checks, so it was kept | D17 | 11c |
+| `.parties.test.ts` `mountScreen` (was `:105`) | S | the drawer opened for every case → not opened | — | 11c |
+| `.parties.test.ts:145` (was "lists every bill with what it came to …") | B + R | the drawer rows' `[data-bill-total]` (14.00, 30.00) and `[data-bill-state]` (Paid, "To pay €30.00") → the switcher rows' `.bill-row-owes` ("Paid ✓", €30.00), row count 2 unchanged (B); `[data-party-outstanding]` €30.00 read in the foot (R, `toBe` byte-identical) | §3.5 "listing each bill with what it owes (or Paid ✓)"; D9 | 11c |
+| `.parties.test.ts:154`, `:161`, `:179` (bill names) | B | the drawer's `.bill-name` "Ana · Bill 1" (`table.bill_of`, `table.bill_of_named`) → the switcher row's `.bill-row-label` "Bill 1", "Bill 2 · Clint"; `:179` still checks a bill's own label never shows | §3.5; D4 (the short label); D10 | 11c |
+| `.parties.test.ts:188`, `:199`, `:205` (no New orders tag; no main-bill mark; abandoned left out) | R | the drawer's rows → the switcher's rows (`:199` the whole shadow root); expected values unchanged | §3.5 | 11c |
+| `.parties.test.ts:211` second check (no Receipt copy on another bill's row) | B | `[data-bill="wo-check"] [data-bill-receipt]` null → with `wo-check` put on screen, the ⋮ has no `[data-bill-receipt]`; the ⋮ acts on the bill on screen | D4; review 11a M4 | 11c |
+| `.parties.test.ts:223` (Take payment on another bill's row) | B | `take-payment` `{ wo-check }` from the row's button, none on the paid row → `switch-bill` `{ wo-check }` from the switcher's row, and nothing from the bill already on screen; the app sends both events to `#onSwitchBill` (11b) | D9 "Take payment on a bill row goes (the switcher replaces it)"; review 11a M4 | 11c |
+| `.parties.test.ts:233` (the bill on screen marked, no Take payment for it) | B | `aria-current="true"`, no `[data-take-payment]` → `aria-checked="true"` on its switcher row, and a tap on it sends no `switch-bill`; the charge check unchanged | D9 | 11c |
+| `.parties.test.ts:249` (no party) | R | `[data-bills]` null → `[data-bill-switcher]` null; retitled | §3.5 | 11c |
+| `.parties.test.ts:266` (Take payment for a presented bill) | B | the row's `take-payment` → the switcher row's `switch-bill`, same id | D9 | 11c |
+| `.parties.test.ts:322`, `:333` (Cancel and credit on another bill's row) | B | `[data-bill="wo-invoiced"] [data-cancel-credit]` → with `wo-invoiced` on screen, the ⋮'s `[data-cancel-credit]`; same text and event; `:333` also checks the ⋮'s bill section is drawn, so the absence means something | D4; review 11a M4 | 11c |
+| `.parties.test.ts:366`, `:379`, `:402` (the bill-requested chip, EN and ES) | B | the drawer's `[data-chip='bill-requested']` → the same chip in the status pin's details (`requestedChip`: tap the pin, read `till-table-details-sheet`); null, "Bill requested" and "Cuenta pedida" unchanged | §3.5; D4 (the ⋮ carries the request, not a chip) | 11c |
+| `.parties.test.ts:427-506` (Finish table refusal, 8 cases) | R | `bills(el)` (the drawer's section) → the screen's shadow root (the refusal is above the foot); every expected value unchanged | D9 | 11c |
+| `.parties.test.ts:439` second check | B | the drawer row's `[data-bill-state]` "To pay €30.00" → the switcher row's €30.00 | §3.5 | 11c |
+| `.a11y.test.ts:398` (scan with Finish refused) | R | the drawer opened for the scan → the bill switcher opened (`openBillSwitcher`, new beside `openTableMenu`); new guard that the refusal is in the scan when refused; retitled | D4, D9 | 11c |
+| `.a11y.test.ts:419` (scan with the bill requested) | R + B | the drawer's own `[data-cancel-bill-request]` → the ⋮ opened and its `[data-cancel-bill-request]` (R); then the status pin's details opened, its chip present, scanned again (B, where the chip is now); retitled | D4 | 11c |
+| `.loading.test.ts:37` (was "a drawer left open is not shown while loading") | R | the drawer → a ⋮ step (Move guests) left open; `[data-action-panel]` present, then absent while loading | D9 | 11c |
+| `.bill-payments.a11y.test.ts:146-153` (LOOK: the themes paint differently) | R | the drawer's background → the bill switcher trigger's (both `--wt-color-surface`); `light` ≠ `dark` unchanged | D4 | 11c |
+| `.sent.test-helpers.ts` `sentFallbackFor` (was `:68-71`) | S | the close of a drawer a caller left open → removed; nothing can open one | — | 11c |
+| `.bill-payments.test.ts` was `:167-184` ("shows a saved full-invoice choice and customer on an unissued bill") | deleted, **Q5e** | the drawer row's `[data-invoice-choice]` "Full invoice · Cliente SL · B12345674" → nothing: no control on the table screen shows a saved recipient once the drawer goes | — | 11c |
+| `-bill-payments.test.ts:574` (saving a full-invoice recipient) | stand-in, **Q5e** | the drawer's `[data-invoice-choice]` contains "Ana García" → the bill the app handed the screen has that recipient (`order.bills`); weaker: not what staff see | — | 11c |
+| `-bill-payments.test.ts` `listed` (`:3049`), used by `:3112`, `:3123`, `:3143` | B | the drawer rows' `[data-bill-total]` (wo-4 €120.00, wo-9 €12.00) → the switcher rows' owing (wo-4 €70.00, the partly paid bill's outstanding; wo-9 €12.00) | §3.5 "what it owes" | 11c |
+| `-parties.test.ts` `figures` (`:784`) and its ten callers (was `:911`, `:941`, `:989`, `:1055`, `:1072`, `:1096`, `:1203`, `:1287`, `:1317`, `:1358`, each opening the drawer first) | B + R + S | the drawer row's `[data-bill-total]` and `[data-bill-state]` "To pay X" → the switcher row's owing X (same amount: each fixture owes its total) (B); `total` field dropped, since the bill's total from the bills read is drawn nowhere now (the foot's total comes from the lines, €30.00 here, and was tried first: 10 failures); still-to-pay from the foot, byte-identical (R); the drawer opens removed (S) | §3.5; D9 | 11c |
+| `-parties.test.ts:2776` (`billNameShown` `:2699`, "4 · Bill 1 · Clint") | B | the drawer's `.bill-name` → the switcher row's label "Bill 1 · Clint"; the drawer open removed | §3.5; D4 | 11c |
+| `-parties.test.ts:5222` (split-off bill still listed) | R | the drawer's `[data-bill]` rows → the switcher's `[data-switch-bill]` rows; `toContain(wo-check)` unchanged | §3.5 | 11c |
+| `-parties.test.ts` `requestedOnScreen` (`:5285`, used at `:5317`, `:5332`, `:5346`, `:5440`) | B | the drawer's bill-requested chip → the ⋮ offering Cancel the bill request (it does only while requested); true/false unchanged | D4 | 11c |
+| `-parties.test.ts` `openDeparture` (`:9658`) | S | the drawer opened before tapping the refusal's Record unpaid departure → not opened (the refusal is above the foot) | D9 | 11c |
+| `-parties.test.ts` `pressCancelCredit` (`:10274`) and `offered` (`:10234`) | B | `[data-bill="wo-check"] [data-cancel-credit]` → `wo-check` put on screen with `switchToBill`, then the ⋮'s `[data-cancel-credit]`; `offered` reads the whole screen for `[data-cancel-credit]` (the other bill offers none) | D4; review 11a M4 | 11c |
+| `test/bill-pay-app.ts` `openTable` (was `:398-399`) | S | the drawer opened → not opened; its callers' refusal checks (`-handheld-pay.test.ts:3399`, `:3508`) read the refusal above the foot, unchanged | D9 | 11c |
+
+**Owner question 5e candidates** (built on the plan's default: the drawer and everything only it drew
+go):
+
+- `.bill-payments.test.ts` was `:167-184` and `-bill-payments.test.ts:574`: the drawer's bill row
+  was the only place on the table screen showing a bill's saved full-invoice choice and customer
+  ("Full invoice · Cliente SL · B12345674"). After 11c staff cannot see on the table that a bill will
+  be a full invoice, or to whom, until they open the Full invoice editor. Neither §3.5 nor D4/D8/D9
+  names a new place. The screen case is deleted; the app case reads the data handed to the screen.
+  Possible answers: show the choice under the foot's Full invoice button, or in the switcher's row.
 
 ## Task 12: the table's foot: totals and Pay, no Hold, quiet Pay, one Full invoice (≈65 calls)
 

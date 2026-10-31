@@ -780,12 +780,11 @@ describe("till-app: seating a party", () => {
   });
 });
 
+/** What the bill on screen's switcher row says it owes, and the table's still-to-pay in the foot. */
 function figures(el: TillApp) {
   const screen = tableOrder(el)!.shadowRoot!;
-  const shown = screen.querySelector('[data-bill="wo-4"]')!;
   return {
-    total: shown.querySelector("[data-bill-total]")?.textContent,
-    toPay: shown.querySelector("[data-bill-state]")?.textContent,
+    toPay: screen.querySelector('[data-switch-bill="wo-4"] .bill-row-owes')?.textContent?.trim(),
     stillToPay: screen.querySelector("[data-party-outstanding]")?.textContent,
   };
 }
@@ -793,8 +792,7 @@ function figures(el: TillApp) {
 /** {@link figures} as they read for these amounts. */
 function figuresOf(total: string, stillToPay: string) {
   return {
-    total: formatMoney(total, "en"),
-    toPay: t("table.bill_to_pay").replace("{amount}", formatMoney(total, "en")),
+    toPay: formatMoney(total, "en"),
     stillToPay: formatMoney(stillToPay, "en"),
   };
 }
@@ -908,7 +906,6 @@ describe("till-app: the party's bills and Finish table", () => {
       ),
     });
     const order = await openMesa(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await flush(el);
     expect(figures(el)).toEqual(figuresOf("14.00", "44.00"));
 
@@ -938,7 +935,6 @@ describe("till-app: the party's bills and Finish table", () => {
         ),
       });
       const order = await openMesa(el);
-      order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
       await flush(el);
 
       await cancelLine(el, order);
@@ -986,7 +982,6 @@ describe("till-app: the party's bills and Finish table", () => {
       }),
     });
     const order = await openMesa(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await flush(el);
 
     await cancelLine(el, order);
@@ -1052,7 +1047,6 @@ describe("till-app: the party's bills and Finish table", () => {
       cheeseServer(async () => ({ revision: 1, party: { id: "v1", revision: 4 } })),
     );
     const order = await openMesa(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await flush(el);
     expect(figures(el)).toEqual(figuresOf("14.00", "44.00"));
 
@@ -1069,7 +1063,6 @@ describe("till-app: the party's bills and Finish table", () => {
       }),
     );
     const order = await openMesa(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await flush(el);
 
     emit(order, "change-line", cheese);
@@ -1093,7 +1086,6 @@ describe("till-app: the party's bills and Finish table", () => {
       }),
     });
     const order = await openMesa(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await flush(el);
 
     emit(order, "change-line", cheese);
@@ -1200,7 +1192,6 @@ describe("till-app: the party's bills and Finish table", () => {
       cheeseServer(async () => ({ revision: 1, party: { id: "v1", revision: 4 } })),
     );
     const order = await openMesa(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await flush(el);
     vi.mocked(api.getTablesState).mockRejectedValue(new TypeError("Failed to fetch"));
     let answerLines!: (lines: Awaited<ReturnType<TillApi["getTabLines"]>>) => void;
@@ -1284,7 +1275,6 @@ describe("till-app: the party's bills and Finish table", () => {
       cheeseServer(async () => ({ revision: 1, party: { id: "v1", revision: 4 } })),
     );
     const order = await openMesa(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await flush(el);
     let rejectFloor!: (error: unknown) => void;
     vi.mocked(api.getTablesState).mockImplementationOnce(
@@ -1314,7 +1304,6 @@ describe("till-app: the party's bills and Finish table", () => {
       cheeseServer(async () => ({ revision: 1, party: { id: "v1", revision: 4 } })),
     );
     const order = await openMesa(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await flush(el);
     vi.mocked(api.getTablesState).mockRejectedValueOnce(new TypeError("Failed to fetch"));
     let answerBills!: (bills: PartyBill[]) => void;
@@ -1355,7 +1344,6 @@ describe("till-app: the party's bills and Finish table", () => {
       cheeseServer(async () => ({ revision: 1, party: { id: "v1", revision: 4 } })),
     );
     const order = await openMesa(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await flush(el);
     vi.mocked(api.getTablesState).mockRejectedValueOnce(new TypeError("Failed to fetch"));
     let answerBills!: (bills: PartyBill[]) => void;
@@ -2710,7 +2698,7 @@ describe("A803 name bill", () => {
   });
   const billNameShown = (el: TillApp, billId: string) =>
     tableOrder(el)!
-      .shadowRoot!.querySelector(`[data-bill="${billId}"] .bill-name`)
+      .shadowRoot!.querySelector(`[data-switch-bill="${billId}"] .bill-row-label`)
       ?.textContent?.trim();
   const billWindow = (el: TillApp) =>
     tableOrder(el)!.shadowRoot!.querySelector<HTMLElement & { value: string; bill: string }>(
@@ -2782,11 +2770,10 @@ describe("A803 name bill", () => {
 
     emit(order, "name-bill", { billId: "wo-4", name: "Clint" });
     await flush(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await flush(el);
 
     expect(api.getPartyBills).toHaveBeenCalledTimes(reads + 1);
-    expect(billNameShown(el, "wo-4")).toBe("4 · Bill 1 · Clint");
+    expect(billNameShown(el, "wo-4")).toBe("Bill 1 · Clint");
     expect(banner(el)).toBeNull();
     emit(tableOrder(el)!, "name-party", { name: "Ana" });
     await flush(el);
@@ -5230,12 +5217,13 @@ describe("till-app: every table move sends the party revision it last read", () 
     emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
     await flush(el);
     const reopened = tableOrder(el)!;
-    reopened.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await flush(el);
 
-    const listed = [...reopened.shadowRoot!.querySelectorAll<HTMLElement>("[data-bill]")].map(
-      (row) => row.dataset.bill,
-    );
+    const listed = [
+      ...reopened.shadowRoot!.querySelectorAll<HTMLElement>(
+        "[data-bill-switcher] [data-switch-bill]",
+      ),
+    ].map((row) => row.dataset.switchBill);
     expect(listed).toContain(checkBill.workingOrderId);
     expect(api.mergeBills).not.toHaveBeenCalled();
     expect(api.transferItems).not.toHaveBeenCalled();
@@ -5293,17 +5281,14 @@ describe("till-app: the bill request", () => {
     ...seated({}, { revision }),
     signals: [{ kind: "bill_requested" as const, requestedAt }],
   });
-  /** Opens the order's Tab drawer, where the bills are, if it is closed. */
-  async function drawer(el: TillApp): Promise<ShadowRoot> {
-    const root = tableOrder(el)!.shadowRoot!;
-    if (root.querySelector("[data-drawer]") === null) {
-      root.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-      await flush(el);
-    }
-    return root;
-  }
-  const requestedOnScreen = async (el: TillApp) =>
-    (await drawer(el)).querySelector("[data-chip='bill-requested']") !== null;
+  /** The ⋮ offers to cancel the request only while the bill is requested. */
+  const requestedOnScreen = async (el: TillApp) => {
+    await flush(el);
+    return (
+      tableOrder(el)!.shadowRoot!.querySelector("[data-table-menu] [data-cancel-bill-request]") !==
+      null
+    );
+  };
 
   it("records the request under a submission id of its own, at the revision the party was shown at", async () => {
     const requestBill = vi.fn().mockResolvedValue({ revision: 4, billRequestedAt: requestedAt });
@@ -9689,10 +9674,6 @@ describe("till-app: recording an unpaid departure", () => {
     emit(order, "finish-table", {});
     await flush(mounted.el);
     const screen = tableOrder(mounted.el)!.shadowRoot!;
-    if (screen.querySelector("[data-drawer]") === null) {
-      screen.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-      await flush(mounted.el);
-    }
     screen.querySelector<HTMLElement>("[data-finish-refusal] [data-record-departure]")!.click();
     await flush(mounted.el);
     return mounted;
@@ -10251,7 +10232,7 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
       ?.textContent?.replace(/\s+/g, " ")
       .trim() ?? null;
   const offered = (el: TillApp) =>
-    tableOrder(el)!.shadowRoot!.querySelector('[data-bill="wo-check"] [data-cancel-credit]');
+    tableOrder(el)!.shadowRoot!.querySelector("[data-cancel-credit]");
 
   /** The server's side of the party's bills: `cancelOrder` cancels the bill unless it rejects. */
   function billServer(cancel: (id: string) => Promise<void> = async () => {}) {
@@ -10289,14 +10270,14 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     return mounted;
   }
 
-  /** The open table's drawer shows its bills, and the invoiced bill's Cancel and credit is pressed. */
+  /** The invoiced bill is put on screen, and the ⋮'s Cancel and credit is pressed. */
   async function pressCancelCredit(el: TillApp): Promise<void> {
-    const screen = tableOrder(el)!.shadowRoot!;
-    if (screen.querySelector("[data-drawer]") === null) {
-      screen.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    const order = tableOrder(el)!;
+    if (order.orderId !== "wo-check") {
+      await switchToBill(order, "wo-check");
       await flush(el);
     }
-    screen.querySelector<HTMLElement>('[data-bill="wo-check"] [data-cancel-credit]')!.click();
+    order.shadowRoot!.querySelector<HTMLElement>("[data-table-menu] [data-cancel-credit]")!.click();
     await flush(el);
   }
 

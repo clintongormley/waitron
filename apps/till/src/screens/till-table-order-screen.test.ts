@@ -187,9 +187,31 @@ const tableMenuOpen = (el: TillTableOrderScreen) =>
     .shadowRoot!.querySelector("[data-table-menu]")!
     .shadowRoot!.querySelector("[popover]")!
     .matches(":popover-open");
-async function openDrawer(el: TillTableOrderScreen): Promise<void> {
-  el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-  await el.updateComplete;
+/** One portion, so the Sent summary's quantities equal its line count, as the Tab badge's did. */
+const onePortionUnserved: TabLine = { ...pendingLine, quantity: "1.000" };
+/** The service read listing `lines` ungrouped, so Sent draws them and its summary. */
+const sentRows = (lines: TabLine[]) =>
+  current({
+    groups: [],
+    reminder: null,
+    ungrouped: lines.map((line) =>
+      currentRow(line.id, "Café", line.quantity, {
+        lineNo: line.lineNo,
+        servedAt: line.servedAt,
+        servedQuantity: line.servedAt === null ? "0.000" : line.quantity,
+        netAmount: grossOf(line.unitPriceGross, line.quantity),
+      }),
+    ),
+  });
+const sentCounts = (ready: number, firing: number, held: number, served: number) =>
+  t("table.sent_counts")
+    .replace("{ready}", String(ready))
+    .replace("{firing}", String(firing))
+    .replace("{held}", String(held))
+    .replace("{served}", String(served));
+async function sentSummary(el: TillTableOrderScreen): Promise<string | null | undefined> {
+  return (await sentPanelFor(el)).shadowRoot!.querySelector("[data-sent-panel] .summary")
+    ?.textContent;
 }
 
 async function sentFallbackFor(el: TillTableOrderScreen): Promise<HTMLElement> {
@@ -540,30 +562,52 @@ describe("till-table-order-screen", () => {
       expect(action.hasAttribute("disabled")).toBe(false);
   });
 
-  it("keeps the tab drawer closed until its handle is tapped", async () => {
+  it("A803 to serve: the Sent summary counts what is still to serve, with no Tab badge", async () => {
+    const unserved = onePortionUnserved;
+    const { el } = await mount({
+      orderId: "wo-4",
+      lines: [unserved, servedLine],
+      currentOrders: sentRows([unserved, servedLine]),
+    });
+    expect(el.shadowRoot!.querySelector(".head-actions .badge, .drawer-handle")).toBeNull();
+    expect(await sentSummary(el)).toBe(sentCounts(0, 1, 0, 1));
+
+    const servedNow = { ...unserved, servedAt: servedLine.servedAt };
+    el.lines = [servedNow, servedLine];
+    el.currentOrders = sentRows([servedNow, servedLine]);
+    await el.updateComplete;
+    expect(await sentSummary(el)).toBe(sentCounts(0, 0, 0, 2));
+  });
+
+  it("draws no Tab drawer or handle", async () => {
     const { el } = await mount({ lines: [pendingLine] });
     expect(el.shadowRoot!.querySelector("[data-drawer]")).toBeNull();
-    await openDrawer(el);
-    expect(el.shadowRoot!.querySelector("[data-drawer]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector(".drawer-handle")).toBeNull();
   });
 
-  it("badges the drawer handle with the pending-to-serve count", async () => {
-    const { el } = await mount({ lines: [pendingLine, servedLine] });
-    // One un-served line ⇒ badge reads 1 (the served line does not count).
-    expect(el.shadowRoot!.querySelector("[data-pending-badge]")!.textContent).toContain("1");
+  it("counts the dishes still to serve in the Sent summary", async () => {
+    const { el } = await mount({
+      orderId: "wo-4",
+      lines: [onePortionUnserved, servedLine],
+      currentOrders: sentRows([onePortionUnserved, servedLine]),
+    });
+    // One un-served line ⇒ 1 firing (the served line does not count).
+    expect(await sentSummary(el)).toBe(sentCounts(0, 1, 0, 1));
   });
 
-  it("names the drawer handle by what it draws, its word and its pending count", async () => {
-    const { el } = await mount({ lines: [pendingLine, servedLine] });
-    const handle = el
-      .shadowRoot!.querySelector("[data-open-drawer]")!
-      .shadowRoot!.querySelector("button")!;
+  it("names the Sent toggle by its title and its counts", async () => {
+    const { el } = await mount({
+      orderId: "wo-4",
+      lines: [onePortionUnserved, servedLine],
+      currentOrders: sentRows([onePortionUnserved, servedLine]),
+    });
+    const toggle = (await sentPanelFor(el)).shadowRoot!.querySelector("[data-sent-toggle]")!;
     await expect
-      .element(page.elementLocator(handle))
-      .toHaveAccessibleName(`${t("table.open_drawer")} 1`);
+      .element(page.elementLocator(toggle))
+      .toHaveAccessibleName(`${t("table.sent_title")} ${sentCounts(0, 1, 0, 1)}`);
   });
 
-  it("hides the badge and duplicate To serve card after the last pending dish is served", async () => {
+  it("hides the duplicate To serve card after the last pending dish is served", async () => {
     const { el } = await mount({ lines: [pendingLine, servedLine] });
     await openTableMenu(el);
     expect(el.shadowRoot!.querySelector(".pending-line")).toBeNull();
@@ -572,7 +616,6 @@ describe("till-table-order-screen", () => {
     );
     el.lines = [{ ...pendingLine, servedAt: servedLine.servedAt }, servedLine];
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-pending-badge]")).toBeNull();
     expect(el.shadowRoot!.querySelector(".pending")).toBeNull();
     const fallback = await sentFallbackFor(el);
     expect(fallback.querySelectorAll("[data-sent-fallback-line]")).toHaveLength(2);
@@ -756,10 +799,10 @@ describe("till-table-order-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-back]")).not.toBeNull();
   });
 
-  it("handles an empty tab: no badge or duplicate To serve card, zero total", async () => {
+  it("handles an empty tab: no Sent counts or duplicate To serve card, zero total", async () => {
     const { el } = await mount({ lines: [] });
     await openTableMenu(el);
-    expect(el.shadowRoot!.querySelector("[data-pending-badge]")).toBeNull();
+    expect(await sentSummary(el)).toBeUndefined();
     const text = tableMenuAndSwitcherText(el);
     expect(text).not.toContain(t("table.none_pending"));
     expect(text).not.toContain(t("table.pending_title"));
@@ -4104,7 +4147,7 @@ describe("till-table-order-screen", () => {
       >("till-table-status");
       expect(status!.party).toBe(p1);
       expect(status!.tables).toBe(tables);
-      expect(status!.nextElementSibling!.hasAttribute("data-open-drawer")).toBe(true);
+      expect(status!.nextElementSibling!.hasAttribute("data-bill-switcher")).toBe(true);
     });
 
     it("on a phone-wide screen in Spanish, a long status pin keeps each head button on one line", async () => {
@@ -4140,7 +4183,7 @@ describe("till-table-order-screen", () => {
           }
           return most;
         };
-        const tab = actions.querySelector<HTMLElement>("[data-open-drawer]")!;
+        const tab = actions.querySelector<HTMLElement>("[data-bill-switcher]")!;
         const back = actions.querySelector<HTMLElement>("[data-back]")!;
         expect([pin, tab, back].map(linesOf)).toEqual([1, 1, 1]);
         const pinBox = pin.getBoundingClientRect();

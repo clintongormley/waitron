@@ -569,7 +569,11 @@ describe("till-app: the three ways to pay part of a bill", () => {
       invoiceType: "F1",
       recipient,
     });
-    expect(text(order.shadowRoot!.querySelector("[data-invoice-choice]"))).toContain("Ana García");
+    // Q5e: nothing on the table screen shows a saved recipient once the drawer goes; this reads
+    // the bill the app handed the screen instead.
+    expect(order.bills.find((bill) => bill.workingOrderId === "wo-4")?.recipient?.legalName).toBe(
+      "Ana García",
+    );
   });
 
   it("reports a bill refresh failure after saving a full-invoice recipient", async () => {
@@ -3041,10 +3045,13 @@ describe("till-app: a change refused on a bill that holds money", () => {
   const heldMoney = balanceOf({ received: "50.00", outstanding: "70.00", payments: [paymentOf()] });
   const banner = (el: TillApp) =>
     el.shadowRoot!.querySelector<HTMLElement>('p.error[role="alert"]');
+  /** The bill switcher's rows: each bill, and what it owes. */
   const listed = (order: TillTableOrderScreen) =>
-    [...order.shadowRoot!.querySelectorAll<HTMLElement>("[data-bill]")].map((row) => ({
-      bill: row.dataset.bill,
-      total: text(row.querySelector("[data-bill-total]")),
+    [
+      ...order.shadowRoot!.querySelectorAll<HTMLElement>("[data-bill-switcher] [data-switch-bill]"),
+    ].map((row) => ({
+      bill: row.dataset.switchBill,
+      owes: text(row.querySelector(".bill-row-owes")),
     }));
 
   /** The table open on the partly paid bill, with how often each read had run by then. */
@@ -3103,8 +3110,8 @@ describe("till-app: a change refused on a bill that holds money", () => {
     ).toBe(codeMessage("product.unavailable"));
     expectReadAgain(reads);
     expect(listed(tableOrder(el))).toEqual([
-      { bill: "wo-4", total: money("120.00") },
-      { bill: "wo-9", total: money("12.00") },
+      { bill: "wo-4", owes: money("70.00") },
+      { bill: "wo-9", owes: money("12.00") },
     ]);
   });
 
@@ -3121,8 +3128,8 @@ describe("till-app: a change refused on a bill that holds money", () => {
     expect(mergeBills).toHaveBeenCalledOnce();
     expect(text(banner(el))).toBe(codeMessage("bill.payments_received"));
     expect(before).toEqual([
-      { bill: "wo-4", total: money("120.00") },
-      { bill: "wo-9", total: money("12.00") },
+      { bill: "wo-4", owes: money("70.00") },
+      { bill: "wo-9", owes: money("12.00") },
     ]);
     expect(listed(tableOrder(el))).toEqual(before);
     expectReadAgain({ bills: reads.bills, balance: reads.balance });

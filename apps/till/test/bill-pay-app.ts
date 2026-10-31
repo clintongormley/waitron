@@ -394,10 +394,7 @@ export async function openTable(el: TillApp): Promise<TillTableOrderScreen> {
   await flush(el);
   emit(floor(el), "open-table", { tableId: "t4", seated: true });
   await flush(el);
-  const order = tableOrder(el);
-  order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-  await flush(el);
-  return order;
+  return tableOrder(el);
 }
 
 export async function openDialog(el: TillApp, way: "items" | "contribution" | "share" | "rest") {

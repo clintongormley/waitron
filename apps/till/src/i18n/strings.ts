@@ -1091,7 +1091,6 @@ export const en = {
   "table.title": "Table order",
   "table.back": "Back to floor",
   "table.loading": "Loading…",
-  "table.open_drawer": "Tab",
   "table.pending_title": "To serve",
   "table.sent_title": "Sent",
   "table.sent_counts": "{ready} ready · {firing} firing · {held} held · {served} served",
@@ -2871,7 +2870,6 @@ export const es: Record<StringKey, string> = {
   "table.title": "Comanda",
   "table.back": "Volver a la sala",
   "table.loading": "Cargando…",
-  "table.open_drawer": "Cuenta",
   "table.pending_title": "Pendiente de servir",
   "table.sent_title": "Enviado",
   "table.sent_counts":

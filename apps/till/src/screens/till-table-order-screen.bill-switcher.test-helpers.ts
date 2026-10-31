@@ -74,15 +74,20 @@ const billSwitcher = (el: TillTableOrderScreen) =>
 const billSwitcherIsOpen = (el: TillTableOrderScreen) =>
   billSwitcher(el).shadowRoot!.querySelector("[popover]")?.matches(":popover-open") ?? false;
 
+/** Opens the bill switcher's list, and fails unless it is open afterwards. */
+export async function openBillSwitcher(el: TillTableOrderScreen): Promise<void> {
+  expect(billSwitcherIsOpen(el)).toBe(false);
+  await userEvent.click(billSwitcher(el).shadowRoot!.querySelector<HTMLElement>("button")!);
+  await el.updateComplete;
+  expect(billSwitcherIsOpen(el)).toBe(true);
+}
+
 /** Opens the bill switcher, failing unless its list opens, and taps the bill's row. */
 export async function switchToBill(
   el: TillTableOrderScreen,
   workingOrderId: string,
 ): Promise<void> {
-  expect(billSwitcherIsOpen(el)).toBe(false);
-  await userEvent.click(billSwitcher(el).shadowRoot!.querySelector<HTMLElement>("button")!);
-  await el.updateComplete;
-  expect(billSwitcherIsOpen(el)).toBe(true);
+  await openBillSwitcher(el);
   await userEvent.click(
     billSwitcher(el).querySelector<HTMLElement>(`[data-switch-bill="${workingOrderId}"]`)!,
   );

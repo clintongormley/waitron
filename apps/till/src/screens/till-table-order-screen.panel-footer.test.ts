@@ -4,13 +4,16 @@ import { cleanupWidgets } from "../widgets/test-helpers.js";
 import type { TillTenderPay } from "../widgets/tender-pay.js";
 import { DraftStore } from "../state/draft-sync.js";
 import { setLocale, t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import { beer, resized } from "./till-table-order-screen.test-helpers.js";
 import {
   footerBalance,
   footerBill,
+  footerParty,
   mountFooter,
 } from "./till-table-order-screen.panel-footer.test-helpers.js";
+import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(async () => {
   setLocale("en");
@@ -104,7 +107,7 @@ describe("the bill actions below Sent and New order", () => {
     },
   );
 
-  it("keeps one payment widget and its open cash flow when the drawer opens and closes", async () => {
+  it("keeps one payment widget and its open cash flow when a step of the table menu opens and closes", async () => {
     const { el } = await mountFooter();
     await resized(el);
     expect(q(el, "[data-bill-actions]")).not.toBeNull();
@@ -114,13 +117,18 @@ describe("the bill actions below Sent and New order", () => {
     await tender.updateComplete;
     expect(tender.shadowRoot!.querySelector(".tendered")).not.toBeNull();
     for (const open of [true, false]) {
-      await userEvent.click(q(el, "[data-open-drawer]")!);
+      if (open) {
+        await openTableMenu(el);
+        await userEvent.click(q(el, '[data-table-menu] [data-action="move"]')!);
+      } else await userEvent.click(q(el, "[data-action-panel] [data-action-back]")!);
       await el.updateComplete;
-      expect(q(el, "[data-drawer]") !== null).toBe(open);
+      expect(q(el, "[data-action-panel]") !== null).toBe(open);
       expect(el.shadowRoot!.querySelectorAll("till-tender-pay")).toHaveLength(1);
       expect(q(el, "till-tender-pay")).toBe(tender);
       expect(tender.shadowRoot!.querySelector(".tendered")).not.toBeNull();
-      expect(q(el, "[data-drawer] [data-discount-bill], [data-drawer] .pay")).toBeNull();
+      expect(
+        q(el, "[data-action-panel] [data-discount-bill], [data-action-panel] .pay"),
+      ).toBeNull();
     }
   });
 
@@ -226,5 +234,115 @@ describe("the bill actions below Sent and New order", () => {
     expect(q(el, "[data-discount-bill]:not([data-table-menu] *)")!.textContent).toContain(
       t("table.discount_bill"),
     );
+  });
+});
+
+describe("A803 no tab panel", () => {
+  const twoBills = {
+    party: { ...footerParty, outstanding: "38.50", billCount: 2 },
+    bills: [
+      footerBill,
+      {
+        ...footerBill,
+        workingOrderId: "wo-5",
+        billNumber: 2,
+        total: "28.50",
+        outstanding: "28.50",
+      },
+    ],
+  };
+
+  it.each([
+    [1280, 1100],
+    [1024, 768],
+    [390, 844],
+  ])("draws no Tab button or drawer at %ix%i", async (width, height) => {
+    await page.viewport(width, height);
+    const { el } = await mountFooter(twoBills);
+    await resized(el);
+    const head = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".head-actions > *")];
+    expect(
+      head.map((node) =>
+        node.hasAttribute("data-bill-switcher")
+          ? "switcher"
+          : node.hasAttribute("data-table-menu")
+            ? "menu"
+            : node.hasAttribute("data-back")
+              ? "back"
+              : node.localName,
+      ),
+    ).toEqual(["till-table-status", "switcher", "menu", "back"]);
+    expect(head.map((node) => node.textContent!.replace(/\s+/g, " ").trim())).not.toContain("Tab");
+    expect(q(el, ".drawer-handle, .badge, [data-drawer]")).toBeNull();
+  });
+
+  it("shows this bill's total, then what is still to pay at the whole table", async () => {
+    const { el } = await mountFooter(twoBills);
+    await resized(el);
+    const total = q(el, "[data-order-total]")!;
+    const still = q(el, "[data-party-outstanding]")!;
+    expect(total.textContent!.trim()).toBe("€10.00");
+    expect(still.checkVisibility()).toBe(true);
+    expect(still.textContent!.trim()).toBe("€38.50");
+    expect(q(el, "[data-party-outstanding-row]")!.textContent).toContain(t("table.still_to_pay"));
+    expect(total.compareDocumentPosition(still) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      still.compareDocumentPosition(q(el, "[data-bill-actions]")!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("shows no table still-to-pay for an order that belongs to no party", async () => {
+    const { el } = await mountFooter({ party: null, bills: [] });
+    await resized(el);
+    expect(q(el, "[data-order-total]")).not.toBeNull();
+    expect(q(el, "[data-party-outstanding]")).toBeNull();
+  });
+
+  it("shows Finish table's refusal above the foot, where the ⋮'s Finish table was tapped", async () => {
+    await page.viewport(1024, 768);
+    const { el } = await mountFooter(twoBills);
+    await resized(el);
+    el.addEventListener("finish-table", () => {
+      el.finishRefused = true;
+    });
+    const payments = capture(el, "take-payment");
+    await openTableMenu(el);
+    await userEvent.click(q(el, "[data-table-menu] [data-finish-table]")!);
+    await el.updateComplete;
+
+    const refusal = q(el, "[data-finish-refusal]")!;
+    expect(refusal).not.toBeNull();
+    expect(refusal.checkVisibility()).toBe(true);
+    expect(refusal.getAttribute("role")).toBe("alert");
+    expect(refusal.textContent).toContain(codeMessage("party.bill_outstanding"));
+    await expect
+      .poll(() => {
+        const box = refusal.getBoundingClientRect();
+        return box.top >= 0 && box.bottom <= innerHeight;
+      })
+      .toBe(true);
+    expect(
+      refusal.compareDocumentPosition(q(el, "[data-order-summary]")!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(q(el, "[data-finish-refusal] [data-record-departure]")).not.toBeNull();
+    await userEvent.click(q(el, "[data-finish-refusal] [data-take-payment]")!);
+    expect(payments.map((event) => event.detail)).toEqual([{ workingOrderId: "wo-5" }]);
+  });
+
+  it("shows Move guests' table picker in the side column, and Back closes it", async () => {
+    const { el } = await mountFooter(twoBills);
+    await resized(el);
+    expect(q(el, "[data-action-panel]")).toBeNull();
+    await openTableMenu(el);
+    await userEvent.click(q(el, '[data-table-menu] [data-action="move"]')!);
+    await el.updateComplete;
+    const panel = q(el, "[data-action-panel]")!;
+    expect(panel.parentElement!.classList.contains("layout")).toBe(true);
+    expect(panel.querySelector("[data-target-picker]")!.checkVisibility()).toBe(true);
+    await userEvent.click(panel.querySelector<HTMLElement>("[data-action-back]")!);
+    await el.updateComplete;
+    expect(q(el, "[data-action-panel]")).toBeNull();
   });
 });

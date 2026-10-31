@@ -48,7 +48,9 @@ describe.each(["en", "es"] as const)("drawer without pending dishes in %s", (loc
         el.currentOrdersUnread = true;
         await el.updateComplete;
         expect(menu.querySelector(".pending")).toBeNull();
-        expect(q("[data-pending-badge]")).toBeNull();
+        const sent = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+        await sent.updateComplete;
+        expect(sent.shadowRoot!.querySelector("[data-sent-panel] .summary")).toBeNull();
         const total = q("[data-order-total]");
         expect(total.textContent).toContain(formatMoney("2.00", currentLocale()));
         expect(total.checkVisibility()).toBe(true);

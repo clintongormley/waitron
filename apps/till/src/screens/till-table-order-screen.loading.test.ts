@@ -4,6 +4,7 @@ import { setLocale } from "../i18n/t.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { PrintProblem } from "../api/client.js";
 import { mount, resized } from "./till-table-order-screen.test-helpers.js";
+import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
@@ -33,14 +34,15 @@ describe("till-table-order-screen while loading", () => {
     expect(shown(el, "[data-print-problem]")).toBeNull();
   });
 
-  it("a drawer left open is not shown while loading", async () => {
+  it("a table menu step left open is not shown while loading", async () => {
     const { el } = await mount();
-    shown(el, "[data-open-drawer]")!.click();
+    await openTableMenu(el);
+    shown(el, '[data-table-menu] [data-action="move"]')!.click();
     await el.updateComplete;
-    expect(shown(el, "[data-drawer]")).not.toBeNull();
+    expect(shown(el, "[data-action-panel]")).not.toBeNull();
     el.loading = true;
     await el.updateComplete;
-    expect(shown(el, "[data-drawer]")).toBeNull();
+    expect(shown(el, "[data-action-panel]")).toBeNull();
     expect(shown(el, "[data-loading]")).not.toBeNull();
   });
 

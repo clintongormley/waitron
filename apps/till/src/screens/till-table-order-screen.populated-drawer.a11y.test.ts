@@ -93,7 +93,16 @@ describe.each(["en", "es"] as const)("populated table drawer in %s", (locale) =>
         expect(q("[data-order-total]").textContent).toContain(
           formatMoney("10.00", currentLocale()),
         );
-        expect(q("[data-pending-badge]").textContent).toBe("2");
+        const sent = q("till-sent-orders") as TillSentOrders;
+        await sent.updateComplete;
+        // Two still to serve: the dish's two portions (the Tab badge counted it and its extra).
+        expect(sent.shadowRoot!.querySelector("[data-sent-panel] .summary")!.textContent).toBe(
+          t("table.sent_counts")
+            .replace("{ready}", "0")
+            .replace("{firing}", "2")
+            .replace("{held}", "0")
+            .replace("{served}", "1"),
+        );
         await expectNoA11yViolations(host);
         await page.screenshot({
           path: `__screenshots__/a773-populated-drawer-${locale}-${theme}-${width}.png`,

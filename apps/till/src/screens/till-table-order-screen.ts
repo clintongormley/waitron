@@ -39,7 +39,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
 import { keyed } from "lit/directives/keyed.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles, focusFirstInvalid, renderFloorChips } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid } from "@waitron/ui";
 import "../widgets/fired-ago.js";
 import "../widgets/sent-orders.js";
 import type { SentLineInfo, SentReorderDetail } from "../widgets/sent-orders.js";
@@ -150,7 +150,6 @@ import {
   type LayoutGroup,
   type SubmitGroup,
 } from "../state/draft-layout.js";
-import { signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 import { billRequestOf } from "../state/table-signals.js";
 import { defaultReceiptGuests } from "../state/receipt-guests.js";
 import {
@@ -549,20 +548,6 @@ export class TillTableOrderScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      .badge {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: var(--wt-space-5);
-        margin-left: var(--wt-space-2);
-        padding: 0 var(--wt-space-2);
-        border-radius: var(--wt-radius-sm);
-        background: var(--wt-color-primary);
-        color: var(--wt-color-on-primary);
-        font-size: var(--wt-font-size-sm);
-        font-weight: var(--wt-font-weight-bold);
-      }
-
       .layout {
         display: flex;
         flex-wrap: wrap;
@@ -574,7 +559,7 @@ export class TillTableOrderScreen extends LitElement {
         min-width: 0;
       }
 
-      .drawer {
+      .action-panel {
         flex: 0 0 22rem;
         display: flex;
         flex-direction: column;
@@ -585,19 +570,10 @@ export class TillTableOrderScreen extends LitElement {
         background: var(--wt-color-surface);
       }
 
-      .drawer h2 {
+      .action-panel h2 {
         margin: 0 0 var(--wt-space-2);
         font-size: var(--wt-font-size-lg);
         font-weight: var(--wt-font-weight-bold);
-      }
-
-      .drawer ul {
-        margin: 0;
-        padding: 0;
-        list-style: none;
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-2);
       }
 
       /* Three buttons do not fit on one line of the dialog at phone width, so they wrap rather than
@@ -696,44 +672,6 @@ export class TillTableOrderScreen extends LitElement {
       .sent-fallback-price {
         flex: 0 0 auto;
         font-variant-numeric: tabular-nums;
-      }
-
-      .bill {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        align-items: center;
-        gap: var(--wt-space-1) var(--wt-space-3);
-        padding: var(--wt-space-2) 0;
-        border-bottom: 1px solid var(--wt-color-border);
-      }
-
-      .bill[aria-current="true"] .bill-name {
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      .bill-total {
-        font-variant-numeric: tabular-nums;
-      }
-
-      .bill-invoice {
-        display: block;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-
-      .bill-state {
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-
-      .bill-actions,
-      .bill-request,
-      .finish {
-        grid-column: 1 / -1;
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-        gap: var(--wt-space-2);
       }
 
       .finish-refusal {
@@ -1097,10 +1035,9 @@ export class TillTableOrderScreen extends LitElement {
       }
     `,
     segmentedOptionStyles,
-    signalChipStyles,
   ];
 
-  /** The APP owns and reloads them; the drawer, total and badge render from these, never a re-price. */
+  /** The APP owns and reloads them; the totals render from these, never a re-price. */
   @property({ attribute: false }) lines: TabLine[] = [];
   /** ALL sellable products across the zone's menus: a tab may span several menus, and every line must
    * still render its name whatever menu is shown. */
@@ -1153,7 +1090,7 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Boolean }) canSettle = true;
   /** See the tender card's `takesCash`. */
   @property({ type: Boolean }) takesCash = true;
-  /** Mounted inside a card host, which supplies the header; the drawer handle and its badge stay. */
+  /** Mounted inside a card host, which supplies the header. */
   @property({ type: Boolean }) embedded = false;
   /** The move and join target lists read this; merge and transfer offer {@link bills}. */
   @property({ attribute: false }) tables: TableState[] = [];
@@ -1194,7 +1131,6 @@ export class TillTableOrderScreen extends LitElement {
     billId: string | undefined;
     visit: number;
   } | null = null;
-  @state() private drawerOpen = false;
   /** The screen is at least {@link DRAFT_SIDE_BY_SIDE_MIN_WIDTH} wide. */
   @state() private wide = false;
   /** Below that width, the draft is open on its Review view in place of browsing. */
@@ -2048,9 +1984,10 @@ export class TillTableOrderScreen extends LitElement {
 
   /** The app clears its offer on this event, so a screen mounted later does not open it again. Taken
    * even when the line is gone, for the same reason. */
-  override updated(): void {
+  override updated(changed: PropertyValues<this>): void {
     this.#refocusMenu();
     this.#placeStepFocus();
+    this.#showFinishRefusal(changed);
     this.#watchAutomaticRouting();
     this.#sizeDraftBar();
     if (!this.#offerTaken) return;
@@ -2116,6 +2053,14 @@ export class TillTableOrderScreen extends LitElement {
     if (panel.isConnected) panel.scrollIntoView({ block: "nearest" });
   }
 
+  /** Finish table is tapped in the ⋮ at the top, and its refusal is drawn above the foot, which can
+   * be below the window. */
+  #showFinishRefusal(changed: PropertyValues<this>): void {
+    if (!changed.has("finishRefused") || !this.finishRefused) return;
+    const refusal = this.renderRoot.querySelector<HTMLElement>("[data-finish-refusal]");
+    if (refusal !== null) void this.#scrollIntoViewOnceDrawn(refusal);
+  }
+
   #drawnStep: ActionStep = "closed";
   #stepFocus?: "step" | "menu";
 
@@ -2145,10 +2090,6 @@ export class TillTableOrderScreen extends LitElement {
 
   #lineGross(line: TabLine): Decimal {
     return this.#lineGrossByLineNo.get(line.lineNo)!;
-  }
-
-  #pending(): TabLine[] {
-    return this.lines.filter((line) => line.servedAt === null);
   }
 
   /** The STAFF label the server froze onto the line, falling back to the live catalogue, then to the raw
@@ -2335,10 +2276,6 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  #toggleDrawer(): void {
-    this.drawerOpen = !this.drawerOpen;
-  }
-
   #back(): void {
     this.dispatchEvent(new CustomEvent("back-to-floor", { bubbles: true, composed: true }));
   }
@@ -2416,7 +2353,6 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #orderScreen(): TemplateResult {
-    const pending = this.#pending();
     const draft = this.#draftStore;
     return html`
       <section
@@ -2433,19 +2369,6 @@ export class TillTableOrderScreen extends LitElement {
         }
         <div class="head-actions">
           <till-table-status .tables=${this.tables} .party=${this.party}></till-table-status>
-          <wt-button
-            class="drawer-handle"
-            data-open-drawer
-            variant="secondary"
-            @click=${() => this.#toggleDrawer()}
-          >
-            ${t("table.open_drawer")}
-            ${
-              pending.length > 0
-                ? html`<span class="badge" data-pending-badge>${pending.length}</span>`
-                : nothing
-            }
-          </wt-button>
           ${billSwitcher({
             party: this.party,
             bills: this.bills,
@@ -2482,7 +2405,7 @@ export class TillTableOrderScreen extends LitElement {
                 </section>`
               : this.#ordering(draft)
           }
-          ${this.drawerOpen ? this.#drawer() : nothing} ${this.#actionPanel()}
+          ${this.#actionPanel()}
         </div>
         ${this.#sentLineDialog()} ${this.#fireGroupDialog()} ${this.#serveDialog()}
         ${this.#takeOverDialog()} ${this.#nameDialog()} ${this.#billNameDialog()}
@@ -2559,7 +2482,8 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #orderSummary(draft: WorkingOrderStore | null): TemplateResult {
-    return html`<div class="total-row" data-order-summary>
+    return html`${this.#finishRefusal()}
+      <div class="total-row" data-order-summary>
         <span class="label">${t("label.total")}</span>
         <span class="amount" data-order-total
           >${this.#money(
@@ -2572,6 +2496,16 @@ export class TillTableOrderScreen extends LitElement {
           )}</span
         >
       </div>
+      ${
+        this.party === null
+          ? nothing
+          : html`<div class="total-row" data-party-outstanding-row>
+              <span class="label">${t("table.still_to_pay")}</span>
+              <span class="amount" data-party-outstanding
+                >${this.#money(this.party.outstanding)}</span
+              >
+            </div>`
+      }
       <div data-bill-actions>
         ${this.#billAdjust()} ${this.canSettle && this.#chargeable() ? this.#paySection() : nothing}
       </div>`;
@@ -4111,20 +4045,6 @@ export class TillTableOrderScreen extends LitElement {
     </wt-dialog>`;
   }
 
-  #drawer(): TemplateResult {
-    return html`
-      <aside class="drawer" data-drawer aria-label=${t("table.open_drawer")}>
-        <div class="total-row">
-          <span class="label">${t("label.total")}</span>
-          <span class="amount" data-tab-total
-            >${formatMoney(this.#payStore!.total, currentLocale())}</span
-          >
-        </div>
-        ${this.#billsSection()}
-      </aside>
-    `;
-  }
-
   #chargeable(): boolean {
     const shown = this.#shownBill;
     return this.paymentConfirmation !== undefined || shown === undefined || owing(shown);
@@ -4325,157 +4245,38 @@ export class TillTableOrderScreen extends LitElement {
     return formatMoney(decimal(amount), currentLocale());
   }
 
-  #billsSection(): TemplateResult | typeof nothing {
-    if (this.party === null) return nothing;
-    const bills = this.#shownBills();
-    const unpaid = bills.filter(owing);
-    // Another bill first: the one on screen is charged from the section above.
+  /** Finish table's refusal while a bill is unpaid, with Take payment for another unpaid bill
+   * first, since the bill on screen is charged in the foot below. */
+  #finishRefusal(): TemplateResult | typeof nothing {
+    if (this.party === null || !this.finishRefused) return nothing;
+    const unpaid = this.#shownBills().filter(owing);
     const firstUnpaid = unpaid.find((bill) => bill.workingOrderId !== this.orderId) ?? unpaid[0];
-    return html`<section class="bills" data-bills>
-      <h2>${t("table.bills_title")}</h2>
-      <ul>
-        ${bills.map((bill) => this.#billRow(bill))}
-      </ul>
-      <div class="total-row">
-        <span class="label">${t("table.still_to_pay")}</span>
-        <span class="amount" data-party-outstanding>${this.#money(this.party.outstanding)}</span>
+    return html`<div class="finish-refusal" role="alert" data-finish-refusal>
+      <span>${codeMessage("party.bill_outstanding")}</span>
+      <div class="finish-refusal-actions">
+        ${
+          firstUnpaid === undefined
+            ? nothing
+            : html`<wt-button
+                  size="sm"
+                  variant="primary"
+                  data-take-payment
+                  @click=${() =>
+                    this.#dispatch("take-payment", { workingOrderId: firstUnpaid.workingOrderId })}
+                >
+                  ${t("table.take_payment")}
+                </wt-button>
+                <wt-button
+                  size="sm"
+                  variant="secondary"
+                  data-record-departure
+                  @click=${() => this.#dispatch("record-unpaid-departure", {})}
+                >
+                  ${t("departure.record")}
+                </wt-button>`
+        }
       </div>
-      ${
-        this.finishRefused
-          ? html`<div class="finish-refusal" role="alert" data-finish-refusal>
-              <span>${codeMessage("party.bill_outstanding")}</span>
-              <div class="finish-refusal-actions">
-                ${
-                  firstUnpaid === undefined
-                    ? nothing
-                    : html`<wt-button
-                          size="sm"
-                          variant="primary"
-                          data-take-payment
-                          @click=${() => this.#takePayment(firstUnpaid)}
-                        >
-                          ${t("table.take_payment")}
-                        </wt-button>
-                        <wt-button
-                          size="sm"
-                          variant="secondary"
-                          data-record-departure
-                          @click=${() => this.#dispatch("record-unpaid-departure", {})}
-                        >
-                          ${t("departure.record")}
-                        </wt-button>`
-                }
-              </div>
-            </div>`
-          : nothing
-      }
-      ${this.#billRequest(this.party)}
-      <div class="finish">
-        <wt-button
-          variant="secondary"
-          data-finish-table
-          @click=${() => this.#dispatch("finish-table", {})}
-        >
-          ${t("table.finish")}
-        </wt-button>
-      </div>
-    </section>`;
-  }
-
-  /** Whether the party has asked for the bill is read from the floor, which carries it. */
-  #billRequest(party: TableParty): TemplateResult {
-    const request = billRequestOf(this.tables, party.id);
-    const scope = (key: "table.request_bill" | "table.cancel_bill_request") =>
-      t(key).replace("{party}", () => party.displayName);
-    return html`<div class="bill-request">
-      ${
-        request !== undefined
-          ? html`${renderFloorChips(signalChips([request]))}
-              <wt-button
-                variant="secondary"
-                data-cancel-bill-request
-                .disabled=${this.groupCommandBusy}
-                @click=${() => this.#dispatch("request-bill", { requested: false })}
-              >
-                ${scope("table.cancel_bill_request")}
-              </wt-button>`
-          : html`<wt-button
-              variant="secondary"
-              data-request-bill
-              .disabled=${this.groupCommandBusy}
-              @click=${() => this.#dispatch("request-bill", { requested: true })}
-            >
-              ${scope("table.request_bill")}
-            </wt-button>`
-      }
     </div>`;
-  }
-
-  #billRow(bill: PartyBill): TemplateResult {
-    const shown = bill.workingOrderId === this.orderId;
-    const paid = bill.status === "settled";
-    return html`<li
-      class="bill"
-      data-bill=${bill.workingOrderId}
-      aria-current=${shown ? "true" : nothing}
-    >
-      <span
-        ><span class="bill-name">${this.#billName(bill)}</span> ${
-          bill.invoiceType === "F1" && bill.recipient !== null
-            ? html`<span class="bill-invoice" data-invoice-choice
-                >${t("invoice.full")} · ${bill.recipient.legalName} · ${bill.recipient.taxId}</span
-              >`
-            : nothing
-        }</span
-      >
-      <span class="bill-total" data-bill-total>${this.#money(bill.total)}</span>
-      <span class="bill-state" data-bill-state
-        >${paid ? t("table.bill_paid") : t("table.bill_to_pay").replace("{amount}", () => this.#money(bill.outstanding))}</span
-      >
-      <span class="bill-actions">
-        ${
-          paid && bill.receiptAvailable
-            ? html`<wt-button
-                size="sm"
-                variant="secondary"
-                data-bill-receipt
-                @click=${() => this.#dispatch("reprint-bill", { workingOrderId: bill.workingOrderId })}
-              >
-                ${t("table.bill_receipt")}
-              </wt-button>`
-            : nothing
-        }
-        ${
-          owing(bill) && !shown
-            ? html`<wt-button
-                size="sm"
-                variant="secondary"
-                data-take-payment
-                @click=${() => this.#takePayment(bill)}
-              >
-                ${t("table.take_payment")}
-              </wt-button>`
-            : nothing
-        }
-        ${
-          bill.status === "placed" && bill.receiptAvailable && !bill.hasPayments
-            ? html`<wt-button
-                size="sm"
-                variant="secondary"
-                data-cancel-credit
-                @click=${() =>
-                  this.#dispatch("cancel-credit-bill", { workingOrderId: bill.workingOrderId })}
-              >
-                ${t("cancel_credit.action")}
-              </wt-button>`
-            : nothing
-        }
-      </span>
-    </li>`;
-  }
-
-  #takePayment(bill: PartyBill): void {
-    this.#dispatch("take-payment", { workingOrderId: bill.workingOrderId });
   }
 
   #lineNote(line: TabLine): TemplateResult | typeof nothing {
@@ -5436,7 +5237,7 @@ export class TillTableOrderScreen extends LitElement {
   #actionPanel(): TemplateResult | typeof nothing {
     if (this.actionStep === "closed") return nothing;
     return html`<aside
-      class="drawer action-panel"
+      class="action-panel"
       data-action-panel
       aria-label=${t("table.actions_title")}
       @keydown=${(event: KeyboardEvent) => {

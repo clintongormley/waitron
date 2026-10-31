@@ -36,7 +36,11 @@ import type {
   AdjustmentReason,
 } from "../api/client.js";
 import type { TillMenuBrowser } from "../widgets/menu-browser.js";
-import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import {
+  closeTableMenu,
+  openBillSwitcher,
+  openTableMenu,
+} from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const products: TillProduct[] = [
   {
@@ -391,7 +395,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
   });
 
   it.each([false, true])(
-    "has no violations in the party's bills with Finish refused: %s",
+    "has no violations with the party's bills in the switcher, and Finish refused: %s",
     async (finishRefused) => {
       const { el, host } = await mountWidget<TillTableOrderScreen>(
         "till-table-order-screen",
@@ -405,13 +409,14 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
         },
         theme,
       );
-      el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-      await el.updateComplete;
+      await openBillSwitcher(el);
+      // The scan must include the refusal when it is shown.
+      expect(el.shadowRoot!.querySelector("[data-finish-refusal]") !== null).toBe(finishRefused);
       await expectNoA11yViolations(host);
     },
   );
 
-  it("has no violations in the party's bills with the bill requested", async () => {
+  it("has no violations with the bill requested, in the table menu and the status pin's details", async () => {
     const asked: TableState = {
       id: "t4",
       label: "Mesa 4",
@@ -434,11 +439,23 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       { products, lines: [], orderId: "wo-1", party, bills: partyBills, tables: [asked] },
       theme,
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await el.updateComplete;
+    await openTableMenu(el);
     expect(
-      el.shadowRoot!.querySelector("[data-cancel-bill-request]:not([data-table-menu] *)"),
+      el.shadowRoot!.querySelector("[data-table-menu] [data-cancel-bill-request]"),
     ).not.toBeNull();
+    await expectNoA11yViolations(host);
+    await closeTableMenu(el);
+    // The bill-requested chip is drawn in the status pin's details.
+    const status = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<boolean> }>(
+      "till-table-status",
+    )!;
+    status.shadowRoot!.querySelector<HTMLElement>("[data-status-pin]")!.click();
+    await status.updateComplete;
+    const sheet = status.shadowRoot!.querySelector<
+      HTMLElement & { updateComplete: Promise<boolean> }
+    >("till-table-details-sheet")!;
+    await sheet.updateComplete;
+    expect(sheet.shadowRoot!.querySelector("[data-chip='bill-requested']")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

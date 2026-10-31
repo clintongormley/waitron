@@ -164,26 +164,6 @@ describe("till-table-order-screen: the ways to pay part of a bill", () => {
     expect(asked).toEqual([{ workingOrderId: "wo-4", revision: 0 }]);
   });
 
-  it("shows a saved full-invoice choice and customer on an unissued bill", async () => {
-    const chosen: PartyBill = {
-      ...partlyPaid,
-      invoiceType: "F1",
-      recipient: {
-        taxId: "B12345674",
-        legalName: "Cliente SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
-        countryCode: "ES",
-      },
-    };
-    const el = await mountScreen({ bills: [chosen], billBalance: balance() });
-    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await el.updateComplete;
-
-    expect(text(el.shadowRoot!.querySelector('[data-bill="wo-4"] [data-invoice-choice]'))).toBe(
-      `${t("invoice.full")} · Cliente SL · B12345674`,
-    );
-  });
-
   it.each([
     ["items", "bill_pay.way_items"],
     ["contribution", "bill_pay.way_contribution"],
