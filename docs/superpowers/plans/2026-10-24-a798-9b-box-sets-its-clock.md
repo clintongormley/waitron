@@ -3159,3 +3159,19 @@ Revision 4 changes none of these rulings. It carries out the owner's answer of 2
   personal (Ana) en una caja"), so the name sits beside the person and not beside the till.
 - Added a staff `differs` case during a stop, so a later caller that skipped the agreement check
   for a staff member is caught here.
+
+### Task 9's departures (2026-10-31, while building Task 9)
+
+- **The step's length in the email uses the bell's own formatter, moved to `@waitron/shared`** as
+  `formatDuration` beside `formatBytes`, which the kit already re-uses the same way; the kit's
+  `{name:duration}` now calls it, and its tests are unchanged.
+- **`boot.ts` is not changed in Task 9.** The code that records a step (`clock-correction.ts`) is
+  Task 10's, so boot keeps the duty's handle and Task 10 hands `boxEmails.remember` to the
+  correction as `onCorrected`; Task 10's "`onCorrected` called once per step" case is the deletion
+  control for that call.
+- **Not configured ends a handled `clock.corrected` episode, as no recipients does**, so a step
+  remembered while email is unset is never emailed once email is set up; the bell keeps it.
+- `boot.failed-start.test.ts`'s stand-in for the duty gains the new `remember` (a fixture growing
+  the method it lacks; no assertion changed).
+- `INCIDENT_EMAIL_CODES` has no whole-list assertion in `apps/server/src` (the plan's grep printed
+  nothing), so there is no changed test check 5.

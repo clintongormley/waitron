@@ -1,4 +1,4 @@
-import { formatBytes, formatMoney } from "@waitron/shared";
+import { formatBytes, formatDuration, formatMoney } from "@waitron/shared";
 import { formatIsoMinute } from "./date-format.js";
 import { currentLocale, pickLocale } from "./i18n.js";
 import { GENERIC_ALERT } from "./strings.js";
@@ -69,34 +69,6 @@ function formatMinute(value: unknown): string {
   const at = new Date(value);
   if (Number.isNaN(at.getTime()) || at.toISOString() !== value) return "—";
   return formatIsoMinute(value);
-}
-
-const DURATION_UNITS = [
-  ["day", 86_400_000],
-  ["hour", 3_600_000],
-  ["minute", 60_000],
-  ["second", 1_000],
-] as const;
-
-// The units' words come from the browser's own locale data, so no language's words live here.
-function formatDuration(value: unknown, l: string): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
-  let rest = Math.abs(value);
-  const unit = (name: string, n: number, digits = 0) =>
-    new Intl.NumberFormat(l, {
-      style: "unit",
-      unit: name,
-      unitDisplay: "long",
-      maximumFractionDigits: digits,
-    }).format(n);
-  if (rest < 1_000) return unit("second", Math.floor(rest / 100) / 10, 1);
-  const parts: string[] = [];
-  for (const [name, ms] of DURATION_UNITS) {
-    const n = Math.floor(rest / ms);
-    rest -= n * ms;
-    if (n > 0 && parts.length < 2) parts.push(unit(name, n));
-  }
-  return new Intl.ListFormat(l, { type: "conjunction" }).format(parts);
 }
 
 function formatParam(value: unknown): string {
