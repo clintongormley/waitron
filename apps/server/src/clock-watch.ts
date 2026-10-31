@@ -10,6 +10,7 @@ import { codeOf } from "@waitron/server-kit";
 import { bootReader, type BootReader, type BootReading } from "./boot-reader.js";
 import { readClockStopState } from "./box-health.js";
 import type { ClockAnchor, clockCorrection } from "./clock-correction.js";
+import type { ClockStartUp } from "./clock-start-up.js";
 import type { ClockWitnessStore } from "./clock-witnesses.js";
 import type { Logger } from "./logger.js";
 import { unrefTimer, type Timer } from "./unref-timer.js";
@@ -76,6 +77,9 @@ export function startClockWatch(deps: {
     ReturnType<typeof clockCorrection>,
     "inTurn" | "set" | "steps" | "writePending"
   >;
+  /** While open, two agreeing devices alone confirm nothing; a look that sees no stop holding
+   * closes it. */
+  startUp?: Pick<ClockStartUp, "open" | "noStop" | "authorityAsked">;
   filesRecords: () => boolean;
   isPrimary: () => boolean;
   intervalMs: number;
@@ -279,6 +283,7 @@ export function startClockWatch(deps: {
     lastAuthorityMs = monotonic();
     const sample = await deps.backend.readAuthorityTime();
     if (stopped) return;
+    deps.startUp?.authorityAsked(sample !== null);
     if (sample !== null) deps.store.noteAuthority(sample);
   }
 
@@ -375,7 +380,10 @@ export function startClockWatch(deps: {
       // The seat answers no stop both at a reading no record could carry (before 28-10-2024) and
       // at one not behind the latest record; only the second ends the stop, and with it AEAT's
       // disagreements (plan decision 4).
-      if (reading === undefined || recordable(reading)) deps.store.endStop();
+      if (reading === undefined || recordable(reading)) {
+        deps.store.endStop();
+        deps.startUp?.noStop();
+      }
       if (reading !== undefined) {
         try {
           await closeWaiting({ instant: reading.instant, offsetMinutes: reading.offsetMinutes });
@@ -385,6 +393,7 @@ export function startClockWatch(deps: {
         if (stopped) return;
       }
     } else {
+      if (stop.proof === "confirmed") deps.startUp?.noStop();
       const at = { instant: reading!.instant, offsetMinutes: reading!.offsetMinutes };
       // A write that keeps failing must not keep the confirmation, AEAT's time and the disproofs
       // from running. The opening and the confirmation are separate transactions so that the
@@ -404,7 +413,9 @@ export function startClockWatch(deps: {
           deps.log("warn", "clock_watch.check_failed", { errorCode: codeOf(error) });
         }
       }
-      if (stop.proof === "ready") {
+      // Plan decision 18: during start-up a person, or AEAT, confirms the box's time.
+      const devicesOnly = stop.agreeing.authority === null && deps.startUp?.open() === true;
+      if (stop.proof === "ready" && !devicesOnly) {
         try {
           await confirm(at, bootAt!, judged);
         } catch (error) {

@@ -12,6 +12,7 @@ const FIXED = {
   "clock.unusable": "staff_notice.clock.unusable",
   "clock.behind_chain": "staff_notice.clock.behind_chain",
   "storage.space_low": "staff_notice.storage.space_low",
+  "clock.check_time": "staff_notice.clock.check_time",
 } as const;
 
 function unknownText(): { main: string; hint: string } {

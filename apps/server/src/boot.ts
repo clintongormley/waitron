@@ -181,6 +181,7 @@ import {
 import { mountNodeApi } from "./node-api.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import { deviceNoticeSources, devicePrinterNoticeSources } from "./box-staff-notices.js";
+import { clockStartUp, tillClockCheck } from "./clock-start-up.js";
 import {
   BOX_EMAIL_CHECK_MS,
   readBoxEmailContext,
@@ -1631,7 +1632,6 @@ async function bootServer(
   const awaitingFiscalCert = { current: false };
   const clockWitnesses = createClockWitnessStore();
   const boxBoot = bootReader();
-  const authorityClock = createAuthorityClockStatus({ onSample: clockWitnesses.noteAuthority });
   const isMirror = holders.mode.current === "mirror";
   // The boot-captured read-only posture; the gate's own per-request predicate re-reads `mode` live,
   // so a promotion lifts it without a restart.
@@ -1667,6 +1667,15 @@ async function bootServer(
   // A BOOT decision, deliberately not live: an in-process promotion does not start the duties gated
   // on this without a restart.
   const isSingletonPrimary = holders.singletonRole.current === "primary";
+  // Before the tills' notice sources, which read it. Closed on a node that is not primary at its
+  // start: the watch looks only on the primary, so nothing would close it there (plan decision 14).
+  const clockStart = clockStartUp({ primaryAtStart: isSingletonPrimary });
+  const authorityClock = createAuthorityClockStatus({
+    onSample: (sample) => {
+      clockWitnesses.noteAuthority(sample);
+      clockStart.authorityAsked(true);
+    },
+  });
   // Asked on each call, unlike `isSingletonPrimary`: the role can change while the box runs.
   const filesRecords = () =>
     fiscalDrainEnabled(config) && holders.singletonRole.current === "primary";
@@ -2009,7 +2018,19 @@ async function bootServer(
         tenantDomain: config.tenantDomain,
         disk: diskFull,
         notices: {
-          sources: deviceNoticeSources({ disk: diskFull, space: freeSpace }, setsToMigrate),
+          sources: deviceNoticeSources(
+            {
+              disk: diskFull,
+              space: freeSpace,
+              clockCheck: tillClockCheck({
+                startUp: clockStart,
+                backend: nodeBackend,
+                witnesses: () => clockWitnesses.witnesses(),
+                filesRecords,
+              }),
+            },
+            setsToMigrate,
+          ),
           deviceSources: devicePrinterNoticeSources({ now, locationId: tradingContext.locationId }),
           clock: tillClock,
           filing: () => ({ enabled: filesRecords() }),
@@ -2479,6 +2500,7 @@ async function bootServer(
     read: (fn) => db.withWriteLock(() => fn(db)),
     transaction: (fn) => withTransaction(db, fn),
     correction,
+    startUp: clockStart,
     filesRecords,
     isPrimary: () => holders.singletonRole.current === "primary",
     intervalMs: CLOCK_WATCH_MS,

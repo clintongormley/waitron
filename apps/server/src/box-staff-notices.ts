@@ -1,6 +1,11 @@
 import type { Transaction } from "@waitron/db";
 import { readPrinterRoles } from "@waitron/layouts";
-import type { StaffNotice, StaffNoticeSource, WaitronModule } from "@waitron/module";
+import type {
+  StaffNotice,
+  StaffNoticeReadContext,
+  StaffNoticeSource,
+  WaitronModule,
+} from "@waitron/module";
 import type { DiskFullState } from "./disk-full-state.js";
 import type { FreeSpaceState } from "./free-space-watch.js";
 import { enabledStaffNoticeSources } from "./modules.js";
@@ -25,17 +30,30 @@ const SPACE_LOW: StaffNotice = {
   params: {},
 };
 
+/** The till offers "Check the time" while it holds this; it draws no line of its own for it. */
+const CHECK_TIME: StaffNotice = {
+  key: "clock.check_time",
+  code: "clock.check_time",
+  severity: "error",
+  params: {},
+};
+
 /** `storage.disk_full` while the full-disk stop is noted, otherwise `storage.space_low` while the
- * low-space warning is on. Reads no disk. */
+ * low-space warning is on; then `clock.check_time` while `clockCheck` answers true. Reads no
+ * disk. */
 export function boxStaffNoticeSource(deps: {
   disk: Pick<DiskFullState, "since">;
   space: Pick<FreeSpaceState, "current">;
+  clockCheck?: (tx: Transaction, reading: StaffNoticeReadContext["reading"]) => Promise<boolean>;
 }): StaffNoticeSource {
   return {
-    read: () => {
-      if (deps.disk.since() !== null) return Promise.resolve([DISK_FULL]);
-      if (deps.space.current().lowSince !== null) return Promise.resolve([SPACE_LOW]);
-      return Promise.resolve([]);
+    read: async ({ tx, reading }) => {
+      const notices: StaffNotice[] = [];
+      if (deps.disk.since() !== null) notices.push(DISK_FULL);
+      else if (deps.space.current().lowSince !== null) notices.push(SPACE_LOW);
+      if (deps.clockCheck !== undefined && (await deps.clockCheck(tx, reading)))
+        notices.push(CHECK_TIME);
+      return notices;
     },
   };
 }
