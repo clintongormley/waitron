@@ -11,7 +11,7 @@ import {
 const input = {
   issuer: { venueName: "Casa Gormley", nif: "B12345678" },
   paidAt: "2026-09-12T12:32:00.000Z",
-  orderLabel: "Mesa 6",
+  orderLabel: "Table 6",
   orderNumber: 41,
   amount: "1.00",
   tip: "0.50",
@@ -75,7 +75,7 @@ describe("payment slip (pure renderer, no database)", () => {
       "Este documento no es una factura",
       "Casa Gormley",
       "B12345678",
-      "Mesa 6 · Pedido 41",
+      "Table 6 · Pedido 41",
       "VISA **** 5838",
       "Sin contacto",
       "328600",
@@ -102,7 +102,7 @@ describe("payment slip (pure renderer, no database)", () => {
       formatPaymentSlip({ ...input, card: null, orderLabel: null, tip: "0.00", charged: "1.00" }),
     );
     expect(text).toContain("\nPedido 41\n");
-    for (const fragment of ["Tarjeta", "Entrada", "Autorización", "Propina", "Mesa"])
+    for (const fragment of ["Tarjeta", "Entrada", "Autorización", "Propina", "Table"])
       expect(text).not.toContain(fragment);
     expect(text).toContain("Cobrado");
   });
@@ -158,7 +158,7 @@ describe("payment slip printer layout", () => {
       formatPaymentSlip({
         ...input,
         issuer: { venueName: "Charcutería y Bodega La Buena Mesa", nif: "B12345678" },
-        orderLabel: "Terraza mesa del fondo",
+        orderLabel: "Terrace back row table",
         printer,
       }),
     );
