@@ -35,9 +35,9 @@ async function setupVenue(): Promise<TradingContext> {
   const [location] = await db
     .insert(locations)
     .values({
-      name: "Barra",
+      name: "Counter",
       invoiceLocales: [LOCALE],
-      operationDescription: "Venta en establecimiento",
+      operationDescription: "In-store sales",
       timeZone: DEFAULT_TIME_ZONE,
     })
     .returning({ id: locations.id });
@@ -69,7 +69,7 @@ async function insertBooking(cfg: TradingContext, tableId: string, time: string)
       bookingDate: "2026-09-15",
       bookingTime: time,
       partySize: 2,
-      contactName: "Ana",
+      contactName: "Ann",
       createdBy: randomUUID(),
       status: "booked",
     }),
