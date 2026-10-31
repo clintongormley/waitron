@@ -1237,6 +1237,17 @@ EDITED to pass and is not on this list is a STOP, unless the spec changes what i
     `"readLatestLiveEntry"`, the read Task 15a exports for Task 15b. Every existing name is
     unchanged; the owner's standing rule lets a whole-shape pin gain the key a new export adds.
     Task 15a.
+18. *(Added while building Task 15a, 2026-10-31; the lead's ruling under Task 15a's STOP.)*
+    `packages/workforce/src/record-read-budget.test.ts:152` and `:174` ("keeps simultaneous live
+    events and ignores the later acknowledgment when deciding clock state"): an automatic clock-out
+    and a clock-in both at 10:00 in one chain. Today's read takes every live entry at the latest
+    instant, so it read both rows (`toBe(2)`); Task 15a's read takes each chain's latest direct
+    entry by position, which is the clock-in, so it reads one (`toBe(1)`). The case's behaviour
+    checks — the next clock-in refused `attendance.already_open`, the chain verifying — are
+    unedited and pass; its name now says the events are ordered by chain position. The STOP is for
+    a rule that changes what a workforce suite sees happen; this one changes only how many rows the
+    read fetches, so the lead rules it a changed check, and the pull request names it for the owner.
+    Task 15a.
 
 **Must pass unedited:** `packages/fiscal-verifactu/src/write-path.e2e.test.ts` (the golden huella),
 `inmutabilidad.test.ts`, `apps/server/src/boot.box-health.test.ts:209-224` ("caches the clock check
