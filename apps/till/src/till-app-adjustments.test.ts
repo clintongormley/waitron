@@ -4783,7 +4783,7 @@ it.each([
     expect(order.shadowRoot!.querySelector("[data-comp-line], [data-discount-line]")).toBeNull();
     expect(window.innerWidth).toBe(width);
     await page.screenshot({
-      element: menu,
+      element: menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!,
       path: `__screenshots__/a773-comp-table-menu-${locale}-${theme}-${width}.png`,
     });
     await closeTableMenu(order);

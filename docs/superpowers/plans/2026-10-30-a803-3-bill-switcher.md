@@ -2734,10 +2734,10 @@ this task's commit unless written "was :N" (a line at `d217cb3f7` that this task
 
 | Test | Kind | Before → after | Source | Task |
 | --- | --- | --- | --- | --- |
-| `-drafts.test.ts:10418` (`chooseSourceBill`, used by "the retained move command carries only the source bill…" and "refuses a retained move command whose captured source observation changed") | R | the drawer row's `[data-bill="wo-7"] [data-take-payment]` → `switchToBill(order, "wo-7")`; `orderId` `toBe("wo-7")` and the `[data-move-line]` null check unchanged | D4 (bills in the switcher) | 11b |
-| `-parties.test.ts:9588` ("the retained held-line command uses the source bill after switching to it") | R | the drawer row's `[data-bill="wo-check"] [data-take-payment]` → `switchToBill(order, "wo-check")`; `orderId` `toBe("wo-check")` and both `[data-move-line]` null checks unchanged | D4 | 11b |
+| `-drafts.test.ts:10418` (`chooseSourceBill`, used by "the retained move command carries only the source bill…" and "refuses a retained move command whose captured source observation changed") | R | the drawer row's `[data-bill="wo-7"] [data-take-payment]` → `switchToBill(order, "wo-7")`; `orderId` `toBe("wo-7")` unchanged; the `[data-move-line]` null check's text is unchanged but it no longer reads the drawer, which nothing opens (moot since 11c deleted it), and it can fail on nothing in production, which has drawn no `data-move-line` since `c9ad7a634` (before this branch; 11b review M1) | D4 (bills in the switcher) | 11b |
+| `-parties.test.ts:9588` ("the retained held-line command uses the source bill after switching to it") | R | the drawer row's `[data-bill="wo-check"] [data-take-payment]` → `switchToBill(order, "wo-check")`; `orderId` `toBe("wo-check")` unchanged; both `[data-move-line]` null checks' text is unchanged but they no longer read the drawer, which nothing opens (moot since 11c deleted it), and they can fail on nothing in production, which has drawn no `data-move-line` since `c9ad7a634` (before this branch; 11b review M1) | D4 | 11b |
 | `-parties.test.ts:5362-5365` (bill request cancelled: Mark bill requested offered again) | R | `(await drawer(el)).querySelector("[data-request-bill]")` not null → `openTableMenu`, then `[data-table-menu] [data-request-bill]` not null; the chip check before it (`requestedOnScreen`) stays on the drawer (11c) | D4 | 11b |
-| `-adjustments.test.ts:4781-4789` (combined Comp of one extra, 8 rows of locale × theme × width) | R | the drawer opened by `openTable4` and `[data-drawer]` holding no `[data-comp-line], [data-discount-line]` → `openTableMenu`, the screen's whole shadow root holding none (11a M1); the screenshot element `[data-drawer]` → `[data-table-menu]` (file `a773-comp-table-menu-…`); the drawer's close → `closeTableMenu` | D4 | 11b |
+| `-adjustments.test.ts:4781-4789` (combined Comp of one extra, 8 rows of locale × theme × width) | R | the drawer opened by `openTable4` and `[data-drawer]` holding no `[data-comp-line], [data-discount-line]` → `openTableMenu`, the screen's whole shadow root holding none (11a M1), which no longer reads the drawer (nothing opens it; moot since 11c deleted it) but does read the ⋮, the switcher and the rest of the screen (11b review M1); the screenshot element `[data-drawer]` → the ⋮'s open list, `[data-table-menu]`'s `[popover]` (file `a773-comp-table-menu-…`; was the ⋮ glyph until the 11b review's M4); the drawer's close → `closeTableMenu` | D4 | 11b |
 | `-adjustments.test.ts` `openTable4` (was `:328-329`), was `:1043` (reopened table before `requestComp`), was `:2182-2183` (a close of the drawer `openTable4` opened) | S | drawer opened (or closed) before checks that read nothing in it → removed; every `expect` byte-identical | the drawer holds none of it | 11b |
 | `-bill-payments.test.ts` was `:4254-4255` (table reopened before `[data-bill-payments]` is read), was `:4375-4376` (a close of the drawer `openTable` opened, before `openSentDish`) | S | removed; every `expect` byte-identical | the drawer holds none of it | 11b |
 | `-drafts.test.ts` was `:10476-10477`, `:10544-10545` (before `chooseSourceBill`) | S | removed; every `expect` byte-identical | the drawer holds none of it | 11b |
@@ -2758,7 +2758,8 @@ apps/till` prints these and the screen-test sites 11a left):
 - `-parties.test.ts:2785`: `billNameShown` (`:2711`) reads the drawer row's `.bill-name`
   ("4 · Bill 1 · Clint"); the switcher's row label is `billLabel`, not that text.
 - `-parties.test.ts:5233`: lists the drawer's `[data-bill]` rows after a split-off bill is left
-  and reopened.
+  and reopened. Not drawer-only: the switcher lists the same `shownBills(this.bills)` (11b review
+  M2); 11c re-pointed it as R.
 - `-parties.test.ts:5300` (`drawer`, used by `requestedOnScreen`): the bill-requested chip,
   `[data-chip='bill-requested']`, which only the drawer draws (`:5332`, `:5347`, `:5361`, `:5455`).
 - `-parties.test.ts:9693` (`openDeparture`): the Finish table refusal's Record unpaid departure,
@@ -2769,6 +2770,47 @@ apps/till` prints these and the screen-test sites 11a left):
   `-bill-payments.test.ts:572` (`[data-invoice-choice]`), `:3045-3047` (the `[data-bill]` rows'
   `[data-bill-total]`), `-handheld-pay.test.ts:3401`, `:3510` (`[data-finish-refusal]`). Moving
   the open into those cases would add drawer sites rather than remove them, so it stays whole.
+
+### Task 11b review answers (2026-10-31, `a803-3-reviews/task-11b.md`)
+
+0 Critical, 0 Important, 5 Minor. Answered at the tip after Task 11c (`2c36c4bc5`), which had
+already deleted the drawer and re-pointed some of the same sites. Runs in the foreground with
+`AI_AGENT`/`CLAUDECODE` unset; free memory 59% before the browser runs.
+
+- **M1 (record only).** The three R rows' unchanged absence checks (`-adjustments` comp line,
+  `-drafts:10418` and `-parties:9588` `[data-move-line]`) no longer read the drawer; the 11b table's
+  rows now say so. Moot since 11c deleted the drawer: `rg -n '#drawer\(|data-drawer\]' apps/till/src
+  -g '!*.test.ts'` prints nothing. The `[data-move-line]` checks can fail on nothing in production:
+  `git log -S'data-move-line'` on the till's non-test source prints `a9a26cc98` (added, in the
+  drawer) and `c9ad7a634` (removed, A773-1), which is on `main` before this branch; `rg -n
+  'data-move-line'` outside tests prints nothing. No assertion changed.
+- **M2 (already answered by 11c).** `-parties` was `:5233` (now `:5222`) reads
+  `[data-bill-switcher] [data-switch-bill]` since 11c, recorded R in the 11c table; the 11b
+  "Left for 11c" bullet now says it was not drawer-only. Control at the tip: the switcher's list
+  made to drop `wo-check` (`table-bill-controls.ts`, `shownBills(options.bills)`) → `-t 'leaves an
+  unpaid split-off bill listed'` `AssertionError: expected [ 'wo-4' ] to include 'wo-check'`,
+  `Tests 1 failed | 622 skipped (623)`; put back from a saved copy (`cmp` equal), then `Tests 1
+  passed | 622 skipped (623)`.
+- **M3.** `switchToBill` now expects the target row's `aria-checked` to be `"false"` before tapping
+  it, so asking for the bill already on screen fails in the helper. Control: `-parties:9573` changed
+  to `switchToBill(order, "wo-4")` (the bill on screen) → `-t 'retained held-line command uses the
+  source bill after switching'` `AssertionError: expected 'true' to be 'false'` at
+  `till-table-order-screen.bill-switcher.test-helpers.ts:97`, `Tests 1 failed | 622 skipped (623)`;
+  put back from a saved copy (`cmp` equal). Its three callers' files (`-drafts`, `-parties`, run
+  with `-adjustments` below): `Test Files 3 passed (3)`, `Tests 1255 passed (1255)` (432 + 623 +
+  200, as before), exit 0.
+- **M4.** The comp case's screenshot element is the ⋮'s open list,
+  `menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!`. Its 8 rows ran in the same run
+  (`-adjustments` 200 passed). The eight `a773-comp-table-menu-…` files are 143–162 × 457–458
+  pixels; `en-light-1280` opened and looked at: the whole list, "Bill 1" then "Whole table".
+- **M5 (record only; predates the branch).** The three `-drafts` retained-move cases ("the retained
+  move command carries only the source bill…" ×2 and "refuses a retained move command whose
+  captured source observation changed") pin the switch only by their `orderId` check: their command
+  checks hold whichever bill is on screen, at `d217cb3f7` too (review run 9(iii)). They are not
+  evidence that the switcher's bill reaches the move command; `-parties`'s "…uses the source bill
+  after switching to it" is (review mutation B).
+- **Checks.** `pnpm --filter @waitron/till typecheck` exit 0; `pnpm exec prettier --check` and
+  `pnpm exec eslint` on the two changed test files exit 0.
 
 ## Task 11c: the Tab button and drawer go (≈55 calls)
 

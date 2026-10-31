@@ -82,15 +82,20 @@ export async function openBillSwitcher(el: TillTableOrderScreen): Promise<void> 
   expect(billSwitcherIsOpen(el)).toBe(true);
 }
 
-/** Opens the bill switcher, failing unless its list opens, and taps the bill's row. */
+/**
+ * Opens the bill switcher, failing unless its list opens, and taps the bill's row. Fails if that
+ * bill is the one already on screen, whose row ignores a tap.
+ */
 export async function switchToBill(
   el: TillTableOrderScreen,
   workingOrderId: string,
 ): Promise<void> {
   await openBillSwitcher(el);
-  await userEvent.click(
-    billSwitcher(el).querySelector<HTMLElement>(`[data-switch-bill="${workingOrderId}"]`)!,
-  );
+  const row = billSwitcher(el).querySelector<HTMLElement>(
+    `[data-switch-bill="${workingOrderId}"]`,
+  )!;
+  expect(row.getAttribute("aria-checked")).toBe("false");
+  await userEvent.click(row);
   await el.updateComplete;
 }
 
