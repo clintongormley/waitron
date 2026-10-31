@@ -1217,6 +1217,15 @@ EDITED to pass and is not on this list is a STOP, unless the spec changes what i
     edit adds one step before `:80`: delete the largest-`created_at` row (0012's; its rebuild
     leaves the same columns, and the next step drops `clock_confirmations` anyway) and lower the
     manifest count by one more. The comment at `:67-68` stays true. No assertion changes. Task 8-0.
+16. *(Added while building Task 15, 2026-10-31.)* `packages/adjustments/src/routes.test.ts:948`
+    (`nowIs`, behind the three "reads the venue's current business day at …" cases) and
+    `apps/server/src/boot.clock-wiring.test.ts:184` (after its `setSystemTime`): each signs its
+    people in at today's real time, then moves `Date` back weeks — a backward step past the idle
+    timeout, which Task 15's management-session rule now ends (`management_session.expired`, the
+    401 the boot case printed). Each gains one statement re-stamping `management_sessions.last_seen_at`
+    at the moved clock, as if they had signed in then. No assertion changes. Found by running every
+    `apps/`/`packages/` test file that fakes `Date` and touches a session (the grep is in Task 15's
+    commit); only these two failed. Task 15.
 
 **Must pass unedited:** `packages/fiscal-verifactu/src/write-path.e2e.test.ts` (the golden huella),
 `inmutabilidad.test.ts`, `apps/server/src/boot.box-health.test.ts:209-224` ("caches the clock check

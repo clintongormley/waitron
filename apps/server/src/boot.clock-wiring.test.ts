@@ -166,6 +166,8 @@ describe("boot's authority clock wiring", () => {
     try {
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(new Date("2026-10-14T00:00:00Z"));
+      // The manager signed in at the moved clock, or a session last seen weeks ahead reads as expired.
+      suite.db.run(sql`update management_sessions set last_seen_at = ${new Date().toISOString()}`);
       scratch = await mkdtemp(join(tmpdir(), "waitron-boot-clock-wiring-"));
       const migrationsRoot = join(scratch, "migrations");
       for (const [index, set] of manifestSets().entries()) {
