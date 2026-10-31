@@ -37,7 +37,7 @@ describe("the bill actions below Sent and New order", () => {
       expect(footer!.checkVisibility()).toBe(true);
       expect(q(el, "[data-drawer]")).toBeNull();
       const summary = q(el, "[data-order-summary]")!;
-      const discount = q(el, "[data-discount-bill]")!;
+      const discount = q(el, "[data-discount-bill]:not([data-table-menu] *)")!;
       const pay = q(el, "till-tender-pay")!;
       expect(summary).not.toBeNull();
       expect(discount).not.toBeNull();
@@ -61,7 +61,7 @@ describe("the bill actions below Sent and New order", () => {
     expect(q(el, "[data-bill-actions]")).not.toBeNull();
     expect(q(el, "[data-order-total]")!.textContent!.trim()).toBe("€16.00");
     const events = capture(el, "adjust");
-    await userEvent.click(q(el, "[data-discount-bill]")!);
+    await userEvent.click(q(el, "[data-discount-bill]:not([data-table-menu] *)")!);
     expect(events.map((event) => event.detail)).toEqual([
       {
         kind: "discount",
@@ -82,7 +82,7 @@ describe("the bill actions below Sent and New order", () => {
     await resized(el);
     expect(q(el, "[data-bill-actions]")).not.toBeNull();
     expect(q(el, "till-tender-pay, .pay, [data-open-bill-pay]")).toBeNull();
-    expect(q(el, "[data-discount-bill]")!.checkVisibility()).toBe(true);
+    expect(q(el, "[data-discount-bill]:not([data-table-menu] *)")!.checkVisibility()).toBe(true);
     expect(q(el, "[data-order-total]")!.textContent!.trim()).toBe("€10.00");
   });
 
@@ -180,7 +180,7 @@ describe("the bill actions below Sent and New order", () => {
         ],
       },
     ]);
-    await userEvent.click(q(el, "[data-choose-bill-invoice]")!);
+    await userEvent.click(q(el, "[data-choose-bill-invoice]:not([data-table-menu] *)")!);
     expect(invoices.map((event) => event.detail)).toEqual([
       { workingOrderId: "wo-4", revision: 7 },
     ]);
@@ -223,6 +223,8 @@ describe("the bill actions below Sent and New order", () => {
     el.orderId = "wo-4";
     await el.updateComplete;
     expect(q(el, "till-tender-pay")).not.toBeNull();
-    expect(q(el, "[data-discount-bill]")!.textContent).toContain(t("table.discount_bill"));
+    expect(q(el, "[data-discount-bill]:not([data-table-menu] *)")!.textContent).toContain(
+      t("table.discount_bill"),
+    );
   });
 });

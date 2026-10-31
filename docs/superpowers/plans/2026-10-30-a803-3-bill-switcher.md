@@ -2149,7 +2149,7 @@ returns to the ⋮ trigger after the naming, guests and split-guests windows clo
 `till-table-order-screen.actions-unsaved.test.ts`, `till-table-order-screen.parties.test.ts`,
 `bill-controls.a11y.test.ts` (menu states), and `till-app-bill-payments.test.ts` (invoice entry).
 
-- [ ] Cases `A803 single menu`: exactly one ⋮ on the screen and no "Table actions" button; its
+- [x] Cases `A803 single menu`: exactly one ⋮ on the screen and no "Table actions" button; its
       first group is named "Bill 2 · Clint" and lists, for an open owing bill with full invoices on,
       Name this bill, Split by item, Transfer items, Merge bills, Move this bill, Comp the bill,
       Full invoice, in that order; its second group is named "Whole table" and lists Guests, Name
@@ -2160,18 +2160,118 @@ returns to the ⋮ trigger after the naming, guests and split-guests windows clo
       group is absent; Full invoice is absent while `fullInvoices` is false; **with no party**
       (`party === null`) the ⋮ offers exactly Split by item, Transfer items and Merge bills under
       "Bill" and Move guests and Join a table under "Whole table", as today's menu does (minor 9).
-- [ ] Cases `A803 invoice entry` in `till-app-bill-payments.test.ts`: the ⋮ Full invoice and the pay
+- [x] Cases `A803 invoice entry` in `till-app-bill-payments.test.ts`: the ⋮ Full invoice and the pay
       step's Full invoice open the same recipient editor for the same bill and revision; a paid bill
       offers none and the test asserts no `setOrderInvoiceChoice` (or any issuance or correction)
       request is made (finding 7, D8).
-- [ ] RED: `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.table-menu.test.ts src/till-app-bill-payments.test.ts -t 'A803'`.
-- [ ] Implement; re-point the kind-R checks.
-- [ ] GREEN: those files and `till-table-order-screen.test.ts`, `.actions-unsaved.test.ts`,
+- [x] RED: `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.table-menu.test.ts src/till-app-bill-payments.test.ts -t 'A803'`.
+- [x] Implement; re-point the kind-R checks.
+- [x] GREEN: those files and `till-table-order-screen.test.ts`, `.actions-unsaved.test.ts`,
       `.parties.test.ts`, `.allergy.test.ts`, `.bill-controls.a11y.test.ts`, plus the drawer-opening
       app files `till-app-parties.test.ts`, `till-app-adjustments.test.ts` and
       `till-app-bill-payments.test.ts` unfiltered (they still open the drawer and must stay green);
       till typecheck.
-- [ ] Commit: "One ⋮ menu for the bill on screen and the whole table".
+- [x] Commit: "One ⋮ menu for the bill on screen and the whole table".
+
+### Task 10 as built (2026-10-31)
+
+Runs in the foreground with `AI_AGENT`/`CLAUDECODE` unset; free memory 56–58% before each browser
+run.
+
+- **RED.** The listed command as two runs. `till-table-order-screen.table-menu.test.ts` plus
+  `till-app-bill-payments.test.ts -t A803` before the app cases were written: `16 failed`, the
+  existing A803 refund case passed; every screen case failed on the missing ⋮
+  (`[data-table-menu]` null). Then the two app cases (`-t 'A803 invoice'`): `Tests 2 failed | 243
+  skipped (245)`, both on the missing ⋮ (`Cannot read properties of null (reading 'click')`,
+  `expected null not to be null`). The paid-bill case's "no Full invoice" line already held for the
+  payment step; it fails only once the ⋮ is drawn without its gate (control C2).
+- **GREEN.** The listed files (`.table-menu`, `till-app-bill-payments`, `till-table-order-screen`,
+  `.actions-unsaved`, `.parties`, `.allergy`, `.bill-controls.a11y`, `.a11y`, `.bill-switcher`,
+  `till-app-parties`, `till-app-adjustments`): `Test Files 11 passed (11)`, `Tests 1608 passed
+  (1608)`. Every file under `src/screens` (168): `Tests 4025 passed (4025)`. Every
+  `till-app*.test.ts` plus `src/i18n` (53 files): `Tests 4783 passed (4783)`.
+  `pnpm --filter @waitron/till typecheck` exit 0; prettier `--check` and eslint on the changed files
+  exit 0; root guards english-only, style-token-names, primary-coloured-text, native-form-fields:
+  `Tests 2062 passed (2062)`.
+- **Built.** `tableMenu(...)` in `table-bill-controls.ts`: a `wt-row-actions` (kebab, label "Table
+  actions", `align="end"`, `data-table-menu` and `data-move-split`) holding two `role="group"`
+  sections, `data-table-menu-bill` and `data-table-menu-table`, each named by its visible heading
+  through `aria-labelledby`, split by a rule (the More menu's pattern). It sits in the panel head
+  after the switcher. The `menu` step and the Table actions button are gone; the drawer no longer
+  holds the action steps. A step chosen in the ⋮ (`pick`, `transfer-lines`, `split-lines`,
+  `split-table`) is drawn in its own side panel (`aside.drawer.action-panel`,
+  `data-action-panel`) beside the order while it is open, and Back from a first step closes it.
+  Comp the bill (`#compBill`, shared with the foot's `#billAdjust`), Full invoice (D8 gate:
+  `fullInvoices && owing && invoiceNumber === undefined`, the same `choose-bill-invoice` detail),
+  Receipt copy, Cancel and credit, Bill requested / cancel request and Finish table are drawn in the
+  ⋮ with their existing hooks and events; the drawer's and the foot's copies are unchanged.
+  `#refocusMenu` focuses the ⋮ when the last of the naming, bill-naming, guests and split-guests
+  windows closes (A1234). New string `table.whole_table` "Whole table" / «Toda la mesa» (ES
+  proposal, for Owner question 1).
+- **Departures.** (a) **Whole table order** is Allergies, Name the party, Guests, Bill requested,
+  Split a table, Join a table, Move guests, Finish table, not D4's Guests, Name the party,
+  Allergies. Two existing checks pin the old order: `till-table-order-screen.allergy.test.ts:139`
+  ("offers Allergies first in Actions", from A669's spec line "Actions gains Allergies, first in the
+  list", `docs/superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md:162`) and
+  `till-table-order-screen.test.ts:6148` ("offers Guests right after Name the party"). Neither the
+  A803 spec (§3.5 lists no Allergies) nor an owner answer moves them, so they were kept and
+  re-pointed only; the driver decides whether D4's order wins. (b) With no party, Whole table reads
+  Join a table, Move guests (the party order), where the case text says "Move guests and Join a
+  table". (c) A ⋮ item that leaves an open step holding a choice (split quantities, a transfer
+  target or lines, Split a table's table) asks the unsaved question first, as Back does
+  (`#fromMenu`); the old menu could not be reached while a step was open. New case in
+  `.actions-unsaved.test.ts` "A803 single menu: another ⋮ item asks before leaving staged split
+  quantities". (d) The step panel (D9's side column) is built now rather than in 11c, because the
+  ⋮ left the drawer and a step chosen from it has to show somewhere; 11c still removes the drawer.
+  (e) The duplicated hooks made unscoped selectors in existing tests find the ⋮ copy first (it is
+  earlier in the page). Positive selections that read the drawer's or the foot's control were
+  scoped `:not([data-table-menu] *)` so each keeps reading the control it read before (rows
+  below); unscoped `toBeNull()` checks were left unscoped, so they now cover the ⋮ copy too. (f)
+  The ⋮ uses `variant="ghost" align="start"` buttons, as the More menu does.
+- **Found, not caused here.** `till-table-order-screen.sent-actions.test.ts` "a retained Void
+  cannot begin consent after party changes" and "a retained Comp cannot open after party changes"
+  fail on the branch without this task's ⋮ (control: the ⋮ taken out of the head, `Tests 2 failed |
+  133 passed (135)`), in `billRowContent` (`party.unsentDrafts.filter`), because the test sets
+  `el.party = { id: "other" }` cast to `TableParty`. I believe this came with Task 9's switcher
+  (not checked against `1707e6fe2`). The ⋮ makes three more such cases fail the same way
+  (`party.tableIds.length`). All five setups now use a whole party (`{ ...switcherParty, id }`),
+  kind S below.
+- **Deletion controls** (each production line broken in a copy, the named cases run, the file put
+  back and `cmp`'d, no difference): C1 Full invoice without `invoiceNumber === undefined`: "a
+  presented bill with an invoice number offers no Full invoice" fails. C2 without `owing(bill)`:
+  the screen's paid-bill case and the app's "a paid bill offers no Full invoice and sends no invoice
+  request" fail. C3 without `fullInvoices`: "offers no Full invoice while full invoices are off"
+  fails. C4 a bill heading with no bill on screen: "with no bill on screen there is no bill group"
+  fails. C5 `#refocusMenu`'s focus line removed: the three A1234 cases fail. C6 `#fromMenu` never
+  asking: the new actions-unsaved case and the existing "departed action-menu controls cannot
+  replace a staged split" fail. C7 `#actionPanel` drawing nothing: "choosing Merge bills shows its
+  picker beside the order, and Back closes it" fails. C8 the bill heading's id changed so
+  `aria-labelledby` names nothing: axe does not report it (`16 passed`), but 8 table-menu cases fail
+  (they read each group's name through it); the heading in `--wt-color-border`: the 8 open a11y
+  cases fail, so the open cases do scan the list. C9 Guests before Name the party: the table-menu
+  order case and `:6148` fail. C10 the ⋮'s Full invoice sending `revision + 1`: "each copy sends
+  its own event" and the app's "the ⋮'s Full invoice and the payment step's write the same bill at
+  the same revision" fail. C11 Split a table at one table: "offers Split a table only at two or more
+  tables" fails. C12 an extra Move this bill item with no party: the no-party case fails (adding
+  Comp the bill there instead changes nothing, as `#adjustable()` already needs a party).
+
+| Test | Kind | Before → after | Source | Task |
+| --- | --- | --- | --- | --- |
+| `till-table-order-screen.test.ts:724-731` ("renders an ENABLED Table actions trigger that opens the action menu") | R | the trigger inside the drawer (`openDrawer` dropped), its `textContent`, `[data-action-menu]` null then not null → the ⋮ host, its `label`, its popup closed then open after its trigger button is clicked; the not-disabled check unchanged | D4 | 10 |
+| `till-table-order-screen.test.ts:4214` (`toMenu`) | S | clicks the `[data-move-split]` host → clicks its trigger button, so the ⋮ opens; still opens the drawer first | D4 | 10 |
+| `till-table-order-screen.test.ts:4245-4253` ("shows all five action verbs … and a Back control") | R | verbs and Split read anywhere → inside `[data-table-menu]`; `[data-action-back]` present → the ⋮'s trigger closes it (popup not open after a second tap) | D4 (the menu step and its Back go) | 10 |
+| `till-table-order-screen.test.ts:4281`, `:5043`, `:6296`, `:6449`, `:6763` (`[data-action-menu]` null after a split, Move guests, merge, transfer, a tab change) | R | → `[data-action-panel]` null (the step closed); before this task the selector would have matched nothing at all | D4 | 10 |
+| `till-table-order-screen.test.ts:5642` ("Back from choosing Split a table's bill returns to its tables", last check) | B | the second Back reaches the menu (`[data-action-menu]` not null) → closes the step (`[data-action-panel]` null); the first Back's check unchanged | D4 ("the old `menu` step goes") | 10 |
+| `till-table-order-screen.test.ts:6017-6023` ("offers Name this bill, right after Name the party") | B | retitled "…, first under the bill on screen, …"; `[data-action="name"]`'s next sibling → the first `wt-button` of `[data-table-menu-bill]`; the label check unchanged | D4 (Name this bill is in the bill section) | 10 |
+| `till-table-order-screen.test.ts:6030` (counter order) | R | `[data-action-menu]` not null → `[data-table-menu]` not null | D4 | 10 |
+| `till-table-order-screen.test.ts:6056` (bill naming window open) | R | `[data-action-menu]` null → the ⋮'s popup not open | D4 | 10 |
+| `till-table-order-screen.test.ts:6739-6748` ("Back from the menu closes; Back from a picker returns to the menu") | R | retitled "Back from a picker closes it"; after Back from the move picker `[data-action-menu]` not null → `[data-action-panel]` null; the second Back (from the menu) has no control left, so its click goes and its two checks (`[data-action-menu]` null, `[data-move-split]` present) are kept after the first Back as `[data-action-panel]` null and `[data-move-split]` present | D4; plan row `:6704` | 10 |
+| `till-table-order-screen.actions-unsaved.test.ts:120` (`mount`) | S | clicks the `[data-move-split]` host → its trigger button | D4 | 10 |
+| `till-table-order-screen.actions-unsaved.test.ts:155`, `:171` (after Discard / clean Back) | B | poll for `[data-action-menu]` present → for `[data-action-panel]` absent | D4 | 10 |
+| `till-table-order-screen.allergy.test.ts:139` ("offers Allergies first in Actions") | R | `[data-action-menu] [data-action]` → `[data-table-menu-table] [data-action]`; Allergies still first (departure a) | D4, A669 spec :162 | 10 |
+| `till-table-order-screen.sent-actions.test.ts:110`, `:496`, `:652`; `till-table-order-screen.sent.test.ts:308`, `:441` | S | `el.party = { id: … } as …` → `{ ...switcherParty, id: … }`, same id; every `expect` byte-identical | a cast fixture the switcher and the ⋮ cannot draw | 10 |
+| `till-table-order-screen.bill-payments.test.ts:161`, `:165`, `:263`, `:487`, `:524`, `:544`; `.panel-footer.test.ts:40`, `:64`, `:85`, `:183`, `:226`; `.panel-footer.a11y.test.ts:53`, `:71`; `.adjustments.test.ts:440`; `.a11y.test.ts:446`; `till-app-adjustments.test.ts:498`, `:698`; `till-app-handheld-pay.test.ts:257`; `till-app-recipient-identity.test.ts:240`; `till-app-bill-payments.test.ts:555`, `:583`, `:620`, `:680`, `:732`, `:804`, `:6390`, `:6432`, `:6469`, `:6507`, `:6532`, `:6586`, `:6650`, `:6683`, `:6727`, `:6755` | R | `"[data-discount-bill]"` / `"[data-choose-bill-invoice]"` / `"[data-cancel-bill-request]"` → the same with `:not([data-table-menu] *)`, so each keeps selecting the foot's, payment step's or drawer's control rather than the ⋮ copy that now comes first; assertions unchanged | D4, review-1 I6 (the drawer's and foot's copies stay) | 10 |
+| `till-table-order-screen.bill-payments.test.ts:299` (a presented bill's unanswered whole payment on a handheld: no Full invoice) | R | no `[data-choose-bill-invoice]` anywhere → none outside the ⋮; the ⋮ offers it for a presented bill with no invoice number (D8's gate) | D8 | 10 |
 
 ## Task 11a: screen tests reach bills and actions through the switcher and the ⋮ (≈60 calls)
 

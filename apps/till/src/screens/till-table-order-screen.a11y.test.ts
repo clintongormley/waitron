@@ -443,7 +443,9 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     );
     el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-cancel-bill-request]")).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector("[data-cancel-bill-request]:not([data-table-menu] *)"),
+    ).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

@@ -552,7 +552,11 @@ describe("till-app: the three ways to pay part of a bill", () => {
     const { el } = await mountApp({ ...fullInvoicesOn(), getPartyBills, setOrderInvoiceChoice });
     const order = await openTable(el);
 
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
     const dialog = el.shadowRoot!.querySelector("till-invoice-recipient-dialog");
     expect(dialog).not.toBeNull();
@@ -576,7 +580,11 @@ describe("till-app: the three ways to pay part of a bill", () => {
     const setOrderInvoiceChoice = vi.fn().mockResolvedValue({ revision: 8 });
     const { el } = await mountApp({ ...fullInvoicesOn(), getPartyBills, setOrderInvoiceChoice });
     const order = await openTable(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
 
     emit(
@@ -609,7 +617,11 @@ describe("till-app: the three ways to pay part of a bill", () => {
       .mockResolvedValueOnce({ revision: 1 });
     const { el } = await mountApp({ ...fullInvoicesOn(), setOrderInvoiceChoice });
     const order = await openTable(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
     const form = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
     for (const [name, value] of [
@@ -665,7 +677,11 @@ describe("till-app: the three ways to pay part of a bill", () => {
     });
     const { el } = await mountApp({ ...fullInvoicesOn(), setOrderInvoiceChoice });
     const order = await openTable(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
 
     emit(
@@ -713,7 +729,11 @@ describe("till-app: the three ways to pay part of a bill", () => {
       .mockResolvedValue({ revision: 9 });
     const { el } = await mountApp({ ...fullInvoicesOn(), setOrderInvoiceChoice });
     const order = await openTable(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
     const form = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
     for (const [name, value] of [
@@ -781,7 +801,11 @@ describe("till-app: the three ways to pay part of a bill", () => {
         getPartyBills,
       });
       const order = await openTable(el);
-      order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+      order
+        .shadowRoot!.querySelector<HTMLElement>(
+          "[data-choose-bill-invoice]:not([data-table-menu] *)",
+        )!
+        .click();
       await flush(el);
       const form = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
       const name = form.shadowRoot!.querySelector("wt-input[name=legalName]")!;
@@ -1134,6 +1158,68 @@ describe("till-app: the three ways to pay part of a bill", () => {
       entry: "manual",
       submissionId: expect.any(String),
     });
+  });
+});
+
+describe("A803 invoice entry: the ⋮ and the payment step open one Full invoice editor", () => {
+  const recipient = {
+    taxId: "12345678Z",
+    legalName: "Ana García",
+    address: "1 Main Street, 28013 Madrid, Madrid",
+    countryCode: "ES",
+  };
+
+  /** Opens the table, taps the Full invoice `selector` names, confirms a recipient, and answers
+   * what was sent. */
+  async function chooseFrom(selector: string): Promise<unknown[][]> {
+    const getPartyBills = vi.fn().mockResolvedValue([billOf({ revision: 7 })]);
+    const setOrderInvoiceChoice = vi.fn().mockResolvedValue({ revision: 8 });
+    const { el } = await mountApp({ ...fullInvoicesOn(), getPartyBills, setOrderInvoiceChoice });
+    const order = await openTable(el);
+
+    order.shadowRoot!.querySelector<HTMLElement>(selector)!.click();
+    await flush(el);
+    const dialog = el.shadowRoot!.querySelector("till-invoice-recipient-dialog");
+    expect(dialog).not.toBeNull();
+    emit(dialog!, "invoice-recipient-confirm", { invoiceType: "F1", recipient });
+    await flush(el);
+    cleanupWidgets();
+    return setOrderInvoiceChoice.mock.calls;
+  }
+
+  it("the ⋮'s Full invoice and the payment step's write the same bill at the same revision", async () => {
+    const fromMenu = await chooseFrom("[data-table-menu] [data-choose-bill-invoice]");
+    const fromPayStep = await chooseFrom(".bill-choices [data-choose-bill-invoice]");
+
+    expect(fromMenu).toEqual([
+      [
+        "wo-4",
+        {
+          expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          revision: 7,
+          invoiceType: "F1",
+          recipient,
+        },
+      ],
+    ]);
+    expect(fromPayStep).toEqual(fromMenu);
+  });
+
+  it("a paid bill offers no Full invoice and sends no invoice request", async () => {
+    const getPartyBills = vi
+      .fn()
+      .mockResolvedValue([
+        billOf({ revision: 7, status: "settled", outstanding: "0.00", receiptAvailable: true }),
+      ]);
+    const setOrderInvoiceChoice = vi.fn().mockResolvedValue({ revision: 8 });
+    const { el } = await mountApp({ ...fullInvoicesOn(), getPartyBills, setOrderInvoiceChoice });
+    const order = await openTable(el);
+
+    expect(order.shadowRoot!.querySelector("[data-table-menu] [data-bill-receipt]")).not.toBeNull();
+    expect(order.shadowRoot!.querySelector("[data-choose-bill-invoice]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+    expect(setOrderInvoiceChoice).not.toHaveBeenCalled();
+    expect(api.getInvoiceDeliveryOptions).not.toHaveBeenCalled();
   });
 });
 
@@ -6301,7 +6387,11 @@ describe("till-app: a bill's full invoice offers A4 on the device's invoice prin
     });
     const order = await openTable(el);
 
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
     const dialog = recipientDialog(el)!;
     expect(getInvoiceDeliveryOptions).toHaveBeenCalledOnce();
@@ -6339,7 +6429,11 @@ describe("till-app: a bill's full invoice offers A4 on the device's invoice prin
       getPartyBills,
     });
     const order = await openTable(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
     const dialog = recipientDialog(el)!;
     expect(dialog.savedDelivery).toEqual({ medium: "a4", pagePrinterId: "pp-office" });
@@ -6372,7 +6466,11 @@ describe("till-app: a bill's full invoice offers A4 on the device's invoice prin
       getPartyBills,
     });
     const order = await openTable(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
     const dialog = recipientDialog(el)!;
     const email = () =>
@@ -6406,7 +6504,11 @@ describe("till-app: a bill's full invoice offers A4 on the device's invoice prin
     const getInvoiceDeliveryOptions = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     const { el } = await mountApp({ ...fullInvoicesOn(), getInvoiceDeliveryOptions });
     const order = await openTable(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
     const dialog = recipientDialog(el)!;
     expect(dialog.deliveryOptions).toBeNull();
@@ -6427,7 +6529,11 @@ describe("till-app: a bill's full invoice offers A4 on the device's invoice prin
       getPartyBills,
     });
     const order = await openTable(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
     const choice = {
       invoiceType: "F1",
@@ -6477,7 +6583,11 @@ describe("till-app: a bill's full invoice offers A4 on the device's invoice prin
     );
     const { el } = await mountApp({ ...fullInvoicesOn(), getInvoiceDeliveryOptions });
     const order = await openTable(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
     expect(recipientDialog(el)).toBeNull();
     emit(order, "logout");
@@ -6537,7 +6647,11 @@ describe("till-app: a bill's full invoice keeps its saved delivery and re-reads 
       getPartyBills,
     });
     const order = await openTable(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
     await fillAndSave(el, "Ana García López");
     expect(setOrderInvoiceChoice).toHaveBeenCalledWith("wo-4", {
@@ -6566,7 +6680,11 @@ describe("till-app: a bill's full invoice keeps its saved delivery and re-reads 
       getPartyBills,
     });
     const order = await openTable(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
     const form = recipientDialog(el)!;
     const field = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
@@ -6606,7 +6724,11 @@ describe("till-app: a bill's full invoice keeps its saved delivery and re-reads 
       getPartyBills,
     });
     const order = await openTable(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
     await fillAndSave(el);
     const form = recipientDialog(el)!;
@@ -6630,7 +6752,7 @@ describe("till-app: a bill's full invoice keeps its saved delivery and re-reads 
     const order = await openTable(el);
     const button = () =>
       order.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-        "[data-choose-bill-invoice]",
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
       )!;
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {

@@ -158,9 +158,11 @@ describe("till-table-order-screen: the ways to pay part of a bill", () => {
     });
     const asked = capture<{ workingOrderId: string; revision: number }>(el, "choose-bill-invoice");
 
-    const button = el.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]");
+    const button = el.shadowRoot!.querySelector<HTMLElement>(
+      "[data-choose-bill-invoice]:not([data-table-menu] *)",
+    );
     expect(text(button)).toBe(t("invoice.full"));
-    await press(el, "[data-choose-bill-invoice]");
+    await press(el, "[data-choose-bill-invoice]:not([data-table-menu] *)");
 
     expect(asked).toEqual([{ workingOrderId: "wo-4", revision: 0 }]);
   });
@@ -258,7 +260,9 @@ describe("till-table-order-screen: Pay on a handheld (A796 default 2)", () => {
       money("39.00"),
     );
     expect(el.shadowRoot!.querySelector("[data-bill-received]")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-choose-bill-invoice]")).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector("[data-choose-bill-invoice]:not([data-table-menu] *)"),
+    ).not.toBeNull();
     expect(el.shadowRoot!.querySelectorAll("[data-pay-sheet]")).toHaveLength(1);
     expect(el.shadowRoot!.querySelector("[data-pay-rest]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-open-bill-pay]")).toBeNull();
@@ -292,7 +296,9 @@ describe("till-table-order-screen: Pay on a handheld (A796 default 2)", () => {
     const presented = capture<{ workingOrderId: string }>(el, "pay-presented");
 
     expect(el.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-choose-bill-invoice]")).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector("[data-choose-bill-invoice]:not([data-table-menu] *)"),
+    ).toBeNull();
     expect(el.shadowRoot!.querySelectorAll("[data-pay-sheet]")).toHaveLength(1);
     await press(el, "[data-pay-sheet]");
 
@@ -478,9 +484,10 @@ describe("till-table-order-screen: a bill's receipt language", () => {
 
     const button = languageButton(el)!;
     expect(text(button)).toBe("Receipt: Catalan");
-    expect(el.shadowRoot!.querySelector("[data-choose-bill-invoice]")!.nextElementSibling).toBe(
-      button,
-    );
+    expect(
+      el.shadowRoot!.querySelector("[data-choose-bill-invoice]:not([data-table-menu] *)")!
+        .nextElementSibling,
+    ).toBe(button);
     await press(el, "[data-choose-bill-language]");
 
     expect(asked).toEqual([{ workingOrderId: "wo-4", revision: 5 }]);
@@ -514,7 +521,7 @@ describe("till-table-order-screen: a bill's receipt language", () => {
   it("draws the language button as quiet as the invoice action, and holds it while the till is busy", async () => {
     const el = await mountScreen({ receiptLanguages: offered, fullInvoices: true });
     const invoice = el.shadowRoot!.querySelector<HTMLElement & { variant: string }>(
-      "[data-choose-bill-invoice]",
+      "[data-choose-bill-invoice]:not([data-table-menu] *)",
     )!;
 
     expect(languageButton(el)!.variant).toBe(invoice.variant);
@@ -534,7 +541,9 @@ describe("till-table-order-screen: a bill's receipt language", () => {
   it("offers no language button when one receipt language is offered", async () => {
     const el = await mountScreen({ receiptLanguages: ["es-ES"], fullInvoices: true });
 
-    expect(el.shadowRoot!.querySelector("[data-choose-bill-invoice]")).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector("[data-choose-bill-invoice]:not([data-table-menu] *)"),
+    ).not.toBeNull();
     expect(languageButton(el)).toBeNull();
   });
 

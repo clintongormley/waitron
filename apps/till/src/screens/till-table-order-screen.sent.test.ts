@@ -12,6 +12,7 @@ import {
   row,
 } from "./till-table-order-screen.current-orders.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
+import { switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(() => {
@@ -304,7 +305,7 @@ it.each([
     if (change === "group-gone") el.groups = groups.filter((g) => g.id !== "g3");
     if (change === "api") el.api = {} as TillTableOrderScreen["api"];
     if (change === "visit") el.serviceVisit++;
-    if (change === "party") el.party = { id: "another-party" } as TillTableOrderScreen["party"];
+    if (change === "party") el.party = { ...switcherParty, id: "another-party" };
     if (change === "busy") el.busy = true;
     if (change === "command") el.groupCommandBusy = true;
     if (change === "detached") el.remove();
@@ -437,7 +438,7 @@ it.each(["busy", "command", "api", "visit", "party", "unread", "served-elsewhere
     if (change === "command") el.groupCommandBusy = true;
     if (change === "api") el.api = {} as TillTableOrderScreen["api"];
     if (change === "visit") el.serviceVisit++;
-    if (change === "party") el.party = { id: "other" } as TillTableOrderScreen["party"];
+    if (change === "party") el.party = { ...switcherParty, id: "other" };
     if (change === "unread") {
       el.currentOrders = null;
       el.currentOrdersUnread = true;

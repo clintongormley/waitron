@@ -1231,6 +1231,7 @@ export const en = {
     "The server did not answer your change to {line}. Open its table and check whether it was saved.",
   // Table actions
   "table.actions_title": "Table actions",
+  "table.whole_table": "Whole table",
   "table.action_move_guests": "Move guests",
   "table.action_join": "Join a table",
   "table.action_merge_bills": "Merge bills",
@@ -3007,6 +3008,7 @@ export const es: Record<StringKey, string> = {
   "table.change_unconfirmed_no_table":
     "El servidor no ha respondido a tu cambio en {line}. Abre su mesa y comprueba si se ha guardado.",
   "table.actions_title": "Acciones de mesa",
+  "table.whole_table": "Toda la mesa",
   "table.action_move_guests": "Mover clientes",
   "table.action_join": "Unir una mesa",
   "table.action_merge_bills": "Juntar cuentas",

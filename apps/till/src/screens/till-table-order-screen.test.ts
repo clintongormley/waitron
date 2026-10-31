@@ -177,6 +177,12 @@ const grid = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;
 const tender = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
+/** Whether the ⋮'s list is open. */
+const tableMenuOpen = (el: TillTableOrderScreen) =>
+  el
+    .shadowRoot!.querySelector("[data-table-menu]")!
+    .shadowRoot!.querySelector("[popover]")!
+    .matches(":popover-open");
 async function openDrawer(el: TillTableOrderScreen): Promise<void> {
   el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
   await el.updateComplete;
@@ -716,14 +722,13 @@ describe("till-table-order-screen", () => {
 
   it("renders an ENABLED Table actions trigger that opens the action menu (TS-3/TS-4)", async () => {
     const { el } = await mount({ lines: [pendingLine] });
-    await openDrawer(el);
     const trigger = el.shadowRoot!.querySelector("[data-move-split]")!;
-    expect(trigger.textContent).toContain(t("table.actions_title"));
+    expect(trigger.getAttribute("label")).toContain(t("table.actions_title"));
     expect(trigger.hasAttribute("disabled")).toBe(false);
-    expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
-    (trigger as HTMLElement).click();
+    expect(tableMenuOpen(el)).toBe(false);
+    trigger.shadowRoot!.querySelector<HTMLElement>("button")!.click();
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-action-menu]")).not.toBeNull();
+    expect(tableMenuOpen(el)).toBe(true);
   });
 
   it("emits a composed, bubbling back-to-floor event from the back control", async () => {
@@ -4206,7 +4211,9 @@ describe("till-table-order-screen", () => {
 
     async function toMenu(el: TillTableOrderScreen): Promise<void> {
       await openDrawer(el);
-      el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
+      el.shadowRoot!.querySelector("[data-move-split]")!
+        .shadowRoot!.querySelector<HTMLElement>("button")!
+        .click();
       await el.updateComplete;
     }
     const click = (el: TillTableOrderScreen, selector: string) =>
@@ -4235,12 +4242,15 @@ describe("till-table-order-screen", () => {
     it("shows all five action verbs with Split enabled and a Back control", async () => {
       const { el } = await mount({ lines: [pendingLine], tables: [] });
       await toMenu(el);
+      const menu = el.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!;
       for (const verb of ["move", "join", "merge", "transfer"]) {
-        expect(el.shadowRoot!.querySelector(`[data-action="${verb}"]`)).not.toBeNull();
+        expect(menu.querySelector(`[data-action="${verb}"]`)).not.toBeNull();
       }
-      const split = el.shadowRoot!.querySelector(`[data-action="split"]`)!;
+      const split = menu.querySelector(`[data-action="split"]`)!;
       expect(split.hasAttribute("disabled")).toBe(false);
-      expect(el.shadowRoot!.querySelector("[data-action-back]")).not.toBeNull();
+      menu.shadowRoot!.querySelector<HTMLElement>("button")!.click();
+      await el.updateComplete;
+      expect(tableMenuOpen(el)).toBe(false);
     });
 
     it("split → line selection → dispatches split-lines with whole-line entries", async () => {
@@ -4268,7 +4278,7 @@ describe("till-table-order-screen", () => {
       expect(captured!.composed).toBe(true);
       expect(captured!.bubbles).toBe(true);
       expect(captured!.detail).toEqual({ transfers: [{ lineNo: 1 }, { lineNo: 2 }] });
-      expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
     });
 
     it("says on the native button, the element a screen reader announces, whether a split line is picked", async () => {
@@ -5030,7 +5040,7 @@ describe("till-table-order-screen", () => {
 
       expect(moved).toEqual([{ toTableId: "t9", prompt: expect.any(Object) }]);
       expect(billChoice(el)).toBeNull();
-      expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-move-split]")).not.toBeNull();
     });
 
@@ -5629,7 +5639,7 @@ describe("till-table-order-screen", () => {
       expect(targetIds(el)).toEqual(["t4", "t5"]);
       click(el, "[data-action-back]");
       await el.updateComplete;
-      expect(el.shadowRoot!.querySelector("[data-action-menu]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
     });
 
     /** Split a table's guests window, open after picking table `tableId` and then bill `billId`. */
@@ -6004,22 +6014,20 @@ describe("till-table-order-screen", () => {
           }),
         );
 
-      it("offers Name this bill, right after Name the party, for the bill on screen at a table", async () => {
+      it("offers Name this bill, first under the bill on screen, for the bill on screen at a table", async () => {
         const { el } = await mount(onCheck());
         await toMenu(el);
 
         const action = el.shadowRoot!.querySelector('[data-action="name-bill"]')!;
         expect(action.textContent!.trim()).toBe(t("table.action_name_bill"));
-        expect(el.shadowRoot!.querySelector('[data-action="name"]')!.nextElementSibling).toBe(
-          action,
-        );
+        expect(el.shadowRoot!.querySelector("[data-table-menu-bill] wt-button")).toBe(action);
       });
 
       it("does not offer Name this bill for a counter order", async () => {
         const { el } = await mount({ ...onCheck(), party: null });
         await toMenu(el);
 
-        expect(el.shadowRoot!.querySelector("[data-action-menu]")).not.toBeNull();
+        expect(el.shadowRoot!.querySelector("[data-table-menu]")).not.toBeNull();
         expect(el.shadowRoot!.querySelector('[data-action="name-bill"]')).toBeNull();
       });
 
@@ -6045,7 +6053,7 @@ describe("till-table-order-screen", () => {
         expect(dialog.value).toBe("Desserts");
         expect(dialog.savedValue).toBe("Desserts");
         expect(dialog.refusal).toBe("");
-        expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+        expect(tableMenuOpen(el)).toBe(false);
       });
 
       it("opens an unnamed bill's window empty", async () => {
@@ -6285,7 +6293,7 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
       expect(captured!.composed).toBe(true);
       expect(captured!.detail).toEqual({ fromBillId: "wo-check" });
-      expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
     });
 
     it("offers neither merge nor transfer a bill holding a pending payment, though it still owes its total", async () => {
@@ -6438,7 +6446,7 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
       expect(captured!.composed).toBe(true);
       expect(captured!.detail).toEqual({ toBillId: "wo-check", transfers: [{ lineNo: 1 }] });
-      expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
     });
 
     it("says on the native button, the element a screen reader announces, whether a transfer line is picked", async () => {
@@ -6728,21 +6736,16 @@ describe("till-table-order-screen", () => {
       );
     });
 
-    it("Back from the menu closes; Back from a picker returns to the menu", async () => {
+    it("Back from a picker closes it", async () => {
       const free = tableState({ id: "t9", state: "free" });
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-7", tables: [free] });
       await toMenu(el);
-      // Into the move picker, then Back → the menu again.
       click(el, '[data-action="move"]');
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector("[data-target-picker]")).not.toBeNull();
       click(el, "[data-action-back]");
       await el.updateComplete;
-      expect(el.shadowRoot!.querySelector("[data-action-menu]")).not.toBeNull();
-      // Back from the menu closes the flow.
-      click(el, "[data-action-back]");
-      await el.updateComplete;
-      expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-move-split]")).not.toBeNull();
     });
 
@@ -6757,7 +6760,7 @@ describe("till-table-order-screen", () => {
       el.orderId = "wo-9";
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector("[data-target-picker]")).toBeNull();
-      expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-move-split]")).not.toBeNull();
     });
   });

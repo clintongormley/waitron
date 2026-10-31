@@ -10,6 +10,7 @@ import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { mount, resized } from "./till-table-order-screen.test-helpers.js";
 import { current, groups, now } from "./till-table-order-screen.current-orders.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
+import { switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(() => {
@@ -106,7 +107,7 @@ it.each([
   expect(fire).not.toBeNull();
   if (change === "busy" || change === "groupCommandBusy") el[change] = true;
   if (change === "api") el.api = {} as TillTableOrderScreen["api"];
-  if (change === "party") el.party = { id: "other" } as TillTableOrderScreen["party"];
+  if (change === "party") el.party = { ...switcherParty, id: "other" };
   if (change === "bill") el.orderId = "other";
   if (change === "serviceVisit") el.serviceVisit++;
   if (change === "unread") el.currentOrdersUnread = true;
@@ -492,7 +493,7 @@ it.each([
   if (change === "busy" || change === "groupCommandBusy") el[change] = true;
   if (change === "abandoned") el.bills = [bill("abandoned")];
   if (change === "api") el.api = {} as TillTableOrderScreen["api"];
-  if (change === "party") el.party = { id: "other" } as TillTableOrderScreen["party"];
+  if (change === "party") el.party = { ...switcherParty, id: "other" };
   if (change === "bill") el.orderId = "other";
   if (change === "serviceVisit") el.serviceVisit++;
   if (change === "unread") el.currentOrdersUnread = true;
@@ -648,7 +649,7 @@ it.each([
   if (change === "owner") store.ownershipLocked = true;
   if (change === "busy") el.busy = true;
   if (change === "api") el.api = {} as TillTableOrderScreen["api"];
-  if (change === "party") el.party = { id: "other" } as TillTableOrderScreen["party"];
+  if (change === "party") el.party = { ...switcherParty, id: "other" };
   if (change === "serviceVisit") el.serviceVisit++;
   if (change === "window") await userEvent.click(q(el, "[data-sent-line-close]"));
   if (change === "gone") el.lines = [];

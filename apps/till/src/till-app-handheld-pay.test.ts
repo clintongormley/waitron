@@ -254,7 +254,7 @@ describe("till-app: paying a table from a handheld", () => {
     const order = await openPhoneTable(el);
 
     expect(inOrder(order, "[data-bill-payments] .amount")).not.toBeNull();
-    expect(inOrder(order, "[data-choose-bill-invoice]")).not.toBeNull();
+    expect(inOrder(order, "[data-choose-bill-invoice]:not([data-table-menu] *)")).not.toBeNull();
     expect(order.shadowRoot!.querySelectorAll("[data-pay-sheet]")).toHaveLength(1);
     expect(inOrder(order, "[data-pay-rest]")).toBeNull();
     expect(inOrder(order, "[data-open-bill-pay]")).toBeNull();

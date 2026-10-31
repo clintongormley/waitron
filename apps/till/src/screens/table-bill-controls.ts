@@ -113,6 +113,49 @@ export function billSwitcher(options: BillSwitcherOptions): TemplateResult | typ
   </wt-row-actions>`;
 }
 
+export interface TableMenuOptions {
+  /** The bill section's heading: the bill on screen's short label. Left out when undefined. */
+  billHeading: string | undefined;
+  billItems: readonly (TemplateResult | typeof nothing)[];
+  tableItems: readonly (TemplateResult | typeof nothing)[];
+}
+
+/** The table screen's one ⋮: what acts on the bill on screen, under its label, then what acts on
+ * the whole table. */
+export function tableMenu(options: TableMenuOptions): TemplateResult {
+  return html`<wt-row-actions
+    class="table-menu"
+    data-table-menu
+    data-move-split
+    align="end"
+    label=${t("table.actions_title")}
+  >
+    ${
+      options.billHeading === undefined
+        ? nothing
+        : html`<div
+              class="table-menu-group"
+              data-table-menu-bill
+              role="group"
+              aria-labelledby="table-menu-bill"
+            >
+              <span id="table-menu-bill" class="table-menu-heading">${options.billHeading}</span>
+              ${options.billItems}
+            </div>
+            <hr class="table-menu-rule" />`
+    }
+    <div
+      class="table-menu-group"
+      data-table-menu-table
+      role="group"
+      aria-labelledby="table-menu-table"
+    >
+      <span id="table-menu-table" class="table-menu-heading">${t("table.whole_table")}</span>
+      ${options.tableItems}
+    </div>
+  </wt-row-actions>`;
+}
+
 export const billControlStyles = css`
   .bill-switcher::part(trigger) {
     min-height: var(--wt-tap-min);
@@ -163,6 +206,22 @@ export const billControlStyles = css`
     display: flex;
     justify-content: space-between;
     gap: var(--wt-space-3);
+  }
+  .table-menu-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--wt-space-1);
+  }
+  .table-menu-heading {
+    padding: var(--wt-space-1) var(--wt-space-4);
+    color: var(--wt-color-text-muted);
+    font-size: var(--wt-font-size-sm);
+  }
+  .table-menu-rule {
+    align-self: stretch;
+    margin: 0;
+    border: 0;
+    border-block-start: 1px solid var(--wt-color-border);
   }
   .bill-row-unsent {
     color: var(--wt-color-text-muted);

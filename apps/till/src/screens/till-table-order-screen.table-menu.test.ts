@@ -1,0 +1,373 @@
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
+import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { setLocale, t } from "../i18n/t.js";
+import "./till-table-order-screen.js";
+import type { TillTableOrderScreen } from "./till-table-order-screen.js";
+import type { PartyBill, TableParty, TableState, TabLine } from "../api/client.js";
+import { partyBill, switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+
+const line: TabLine = {
+  changesAfterSending: null,
+  id: "line-1",
+  name: "Beer",
+  lineNo: 1,
+  productId: "beer",
+  quantity: "1.000",
+  unitPrecision: 0,
+  unitPriceGross: "3.00",
+  stationId: null,
+  movable: false,
+  groupId: null,
+  servedAt: null,
+  courseId: null,
+  sentAt: null,
+  firedAt: null,
+  state: null,
+  note: null,
+  listId: null,
+  menuItemId: null,
+  parentProductId: null,
+};
+
+const twoTables: TableParty = { ...switcherParty, tableIds: ["t4", "t5"] };
+
+function table(id: string, party: TableParty | null): TableState {
+  return {
+    id,
+    label: id,
+    shortName: id,
+    party,
+    signals: [],
+    zoneId: null,
+    state: party === null ? "free" : "open-tab",
+    hasOpenTab: party !== null,
+    condition: party === null ? "free" : "held",
+    pendingDeliveries: 0,
+    pendingToServe: 0,
+    readyToServe: 0,
+    timingBand: "fresh",
+    nextReservation: null,
+    today: null,
+  } as TableState;
+}
+
+const bills = [
+  partyBill("wo-1", 1, "10.00"),
+  partyBill("wo-2", 2, "54.00", { billName: "Clint", revision: 6 }),
+];
+
+async function mountScreen(
+  over: {
+    bills?: PartyBill[];
+    orderId?: string | undefined;
+    party?: TableParty | null;
+    fullInvoices?: boolean;
+  } = {},
+) {
+  const party = over.party === undefined ? twoTables : over.party;
+  const { el } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
+    products: [],
+    lines: [line],
+    orderId: "orderId" in over ? over.orderId : "wo-2",
+    party,
+    bills: over.bills ?? bills,
+    fullInvoices: over.fullInvoices ?? true,
+    tables: party === null ? [] : party.tableIds.map((id) => table(id, party)),
+  });
+  return el;
+}
+
+const menu = (el: TillTableOrderScreen) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!;
+const textOf = (node: Element) => node.textContent!.replace(/\s+/g, " ").trim();
+/** Each group of the ⋮: its accessible name, then the labels of its items in order. */
+function groups(el: TillTableOrderScreen): { name: string; items: string[] }[] {
+  return [...menu(el).querySelectorAll<HTMLElement>('[role="group"]')].map((group) => ({
+    name: textOf(el.shadowRoot!.getElementById(group.getAttribute("aria-labelledby")!)!),
+    items: [...group.querySelectorAll<HTMLElement>("wt-button")].map(textOf),
+  }));
+}
+const item = (el: TillTableOrderScreen, selector: string) =>
+  menu(el).querySelector<HTMLElement>(selector);
+
+function capture(el: TillTableOrderScreen, type: string): unknown[] {
+  const seen: unknown[] = [];
+  el.addEventListener(type, (event) => seen.push((event as CustomEvent).detail));
+  return seen;
+}
+
+/** Focus is on the ⋮'s own trigger button. */
+function focusOnMenu(el: TillTableOrderScreen): boolean {
+  const host = menu(el);
+  return (
+    el.shadowRoot!.activeElement === host &&
+    host.shadowRoot!.activeElement === host.shadowRoot!.querySelector("button")
+  );
+}
+
+beforeEach(() => setLocale("en"));
+afterEach(() => {
+  cleanupWidgets();
+  setLocale("en");
+});
+
+describe("A803 single menu: one ⋮ for the bill on screen, then the whole table", () => {
+  it("draws exactly one ⋮, named Table actions, and no Table actions button", async () => {
+    const el = await mountScreen();
+
+    expect(el.shadowRoot!.querySelectorAll("[data-table-menu]")).toHaveLength(1);
+    expect(menu(el).tagName).toBe("WT-ROW-ACTIONS");
+    expect(menu(el).getAttribute("label")).toBe("Table actions");
+    expect(menu(el).hasAttribute("data-move-split")).toBe(true);
+    const buttons = [...el.shadowRoot!.querySelectorAll<HTMLElement>("wt-button")];
+    expect(buttons.filter((button) => textOf(button) === "Table actions")).toEqual([]);
+  });
+
+  it("an open owing bill: the bill's items under its label, then the whole table's", async () => {
+    const el = await mountScreen();
+
+    expect(groups(el)).toEqual([
+      {
+        name: "Bill 2 · Clint",
+        items: [
+          "Name this bill",
+          "Split by item",
+          "Transfer items",
+          "Merge bills",
+          "Move this bill",
+          "Comp the bill",
+          "Full invoice",
+        ],
+      },
+      {
+        name: "Whole table",
+        items: [
+          "Allergies",
+          "Name the party",
+          "Guests",
+          "Mark bill requested for 4",
+          "Split a table",
+          "Join a table",
+          "Move guests",
+          "Finish table",
+        ],
+      },
+    ]);
+  });
+
+  it("offers Split a table only at two or more tables", async () => {
+    const el = await mountScreen({ party: switcherParty });
+
+    expect(groups(el)[1]!.items).not.toContain("Split a table");
+    expect(groups(el)[1]!.items).toContain("Join a table");
+  });
+
+  it("a paid bill with a receipt offers Name this bill and Receipt copy, and no Full invoice", async () => {
+    const paid = partyBill("wo-2", 2, "0.00", {
+      status: "settled",
+      total: "54.00",
+      receiptAvailable: true,
+      hasPayments: true,
+    });
+    const el = await mountScreen({ bills: [paid] });
+
+    const [bill] = groups(el);
+    expect(bill!.name).toBe("Bill 2");
+    expect(bill!.items).toContain("Name this bill");
+    expect(bill!.items).toContain("Receipt copy");
+    expect(bill!.items).not.toContain("Full invoice");
+    expect(item(el, "[data-choose-bill-invoice]")).toBeNull();
+    expect(item(el, "[data-bill-receipt]")).not.toBeNull();
+  });
+
+  it("a presented bill with a receipt and no payments offers Cancel and credit", async () => {
+    const presented = partyBill("wo-2", 2, "54.00", { status: "placed", receiptAvailable: true });
+    const el = await mountScreen({ bills: [presented] });
+
+    expect(groups(el)[0]!.items).toContain("Cancel and credit");
+    expect(item(el, "[data-cancel-credit]")).not.toBeNull();
+    expect(groups(el)[0]!.items).toContain("Full invoice");
+  });
+
+  it("a presented bill with an invoice number offers no Full invoice", async () => {
+    const issued = partyBill("wo-2", 2, "54.00", {
+      status: "placed",
+      receiptAvailable: true,
+      invoiceNumber: "F-0007",
+    });
+    const el = await mountScreen({ bills: [issued] });
+
+    expect(groups(el)[0]!.items).not.toContain("Full invoice");
+    expect(item(el, "[data-choose-bill-invoice]")).toBeNull();
+  });
+
+  it("offers no Full invoice while full invoices are off", async () => {
+    const el = await mountScreen({ fullInvoices: false });
+
+    expect(groups(el)[0]!.items).not.toContain("Full invoice");
+    expect(item(el, "[data-choose-bill-invoice]")).toBeNull();
+  });
+
+  it("with no bill on screen there is no bill group", async () => {
+    const el = await mountScreen({ orderId: undefined });
+
+    expect(groups(el).map((group) => group.name)).toEqual(["Whole table"]);
+  });
+
+  it("with no party: Split by item, Transfer items and Merge bills under Bill; Join a table and Move guests under Whole table", async () => {
+    const el = await mountScreen({ party: null, bills: [], orderId: "wo-9" });
+
+    expect(groups(el)).toEqual([
+      { name: "Bill", items: ["Split by item", "Transfer items", "Merge bills"] },
+      { name: "Whole table", items: ["Join a table", "Move guests"] },
+    ]);
+  });
+
+  it("names the groups in Spanish", async () => {
+    setLocale("es");
+    const el = await mountScreen();
+
+    expect(groups(el).map((group) => group.name)).toEqual(["Cuenta 2 · Clint", "Toda la mesa"]);
+    expect(menu(el).getAttribute("label")).toBe("Acciones de mesa");
+  });
+
+  it("each copy sends its own event", async () => {
+    const el = await mountScreen();
+    const adjust = capture(el, "adjust");
+    const invoice = capture(el, "choose-bill-invoice");
+    const request = capture(el, "request-bill");
+    const finish = capture(el, "finish-table");
+
+    item(el, "[data-discount-bill]")!.click();
+    item(el, "[data-choose-bill-invoice]")!.click();
+    item(el, "[data-request-bill]")!.click();
+    item(el, "[data-finish-table]")!.click();
+
+    expect(adjust).toEqual([
+      {
+        kind: "discount",
+        target: {
+          lineId: null,
+          name: t("table.bill_of_named")
+            .replace("{party}", "4")
+            .replace("{n}", "2")
+            .replace("{name}", "Clint"),
+          quantity: null,
+          total: expect.anything(),
+          unitTotal: null,
+        },
+      },
+    ]);
+    expect(invoice).toEqual([{ workingOrderId: "wo-2", revision: 6 }]);
+    expect(request).toEqual([{ requested: true }]);
+    expect(finish).toEqual([{}]);
+  });
+
+  it("Receipt copy and Cancel and credit send their events for the bill on screen", async () => {
+    const paid = partyBill("wo-1", 1, "0.00", { status: "settled", receiptAvailable: true });
+    const presented = partyBill("wo-2", 2, "54.00", { status: "placed", receiptAvailable: true });
+    const el = await mountScreen({ bills: [paid, presented], orderId: "wo-1" });
+    const reprint = capture(el, "reprint-bill");
+    item(el, "[data-bill-receipt]")!.click();
+    expect(reprint).toEqual([{ workingOrderId: "wo-1" }]);
+
+    el.orderId = "wo-2";
+    await el.updateComplete;
+    const credit = capture(el, "cancel-credit-bill");
+    item(el, "[data-cancel-credit]")!.click();
+    expect(credit).toEqual([{ workingOrderId: "wo-2" }]);
+  });
+
+  it("choosing Merge bills shows its picker beside the order, and Back closes it", async () => {
+    const el = await mountScreen();
+    await userEvent.click(menu(el));
+    await userEvent.click(item(el, '[data-action="merge"]')!);
+    await el.updateComplete;
+
+    const panel = el.shadowRoot!.querySelector<HTMLElement>("[data-action-panel]")!;
+    expect(panel.querySelector("[data-target-picker]")!.checkVisibility()).toBe(true);
+    expect(panel.querySelector('[data-target="wo-1"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-drawer]")).toBeNull();
+
+    panel.querySelector<HTMLElement>("[data-action-back]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
+  });
+
+  describe("A1234: focus returns to the ⋮ when a window opened from it closes", () => {
+    it("Name the party: Cancel, Escape and Save", async () => {
+      const el = await mountScreen();
+      const dialog = () => el.shadowRoot!.querySelector("till-party-name-dialog")!;
+
+      item(el, '[data-action="name"]')!.click();
+      await el.updateComplete;
+      await dialog().updateComplete;
+      dialog().shadowRoot!.querySelector<HTMLElement>("[data-name-cancel]")!.click();
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("till-party-name-dialog")).toBeNull();
+      expect(focusOnMenu(el)).toBe(true);
+
+      item(el, '[data-action="name"]')!.click();
+      await el.updateComplete;
+      await dialog().updateComplete;
+      await userEvent.keyboard("{Escape}");
+      await expect.poll(() => el.shadowRoot!.querySelector("till-party-name-dialog")).toBeNull();
+      await el.updateComplete;
+      expect(focusOnMenu(el)).toBe(true);
+
+      item(el, '[data-action="name"]')!.click();
+      await el.updateComplete;
+      await dialog().updateComplete;
+      dialog().dispatchEvent(
+        new CustomEvent("party-name-confirm", {
+          detail: { name: "Ana" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await el.updateComplete;
+      expect(focusOnMenu(el)).toBe(true);
+    });
+
+    it("Name this bill and Guests", async () => {
+      const el = await mountScreen();
+
+      item(el, '[data-action="name-bill"]')!.click();
+      await el.updateComplete;
+      const naming = el.shadowRoot!.querySelector("till-bill-name-dialog")!;
+      await naming.updateComplete;
+      naming.shadowRoot!.querySelector<HTMLElement>("[data-name-cancel]")!.click();
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("till-bill-name-dialog")).toBeNull();
+      expect(focusOnMenu(el)).toBe(true);
+
+      (document.activeElement as HTMLElement | null)?.blur();
+      item(el, '[data-action="guests"]')!.click();
+      await el.updateComplete;
+      const counting = el.shadowRoot!.querySelector("till-party-guests-dialog")!;
+      await counting.updateComplete;
+      counting.shadowRoot!.querySelector<HTMLElement>("[data-guests-cancel]")!.click();
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("till-party-guests-dialog")).toBeNull();
+      expect(focusOnMenu(el)).toBe(true);
+    });
+
+    it("Split a table's guests window", async () => {
+      const el = await mountScreen();
+
+      item(el, '[data-action="split-table"]')!.click();
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>('[data-target="t5"]')!.click();
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>('[data-target="none"]')!.click();
+      await el.updateComplete;
+      const splitting = el.shadowRoot!.querySelector("till-split-guests-dialog")!;
+      await splitting.updateComplete;
+      splitting.shadowRoot!.querySelector<HTMLElement>("[data-split-guests-cancel]")!.click();
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("till-split-guests-dialog")).toBeNull();
+      expect(focusOnMenu(el)).toBe(true);
+    });
+  });
+});

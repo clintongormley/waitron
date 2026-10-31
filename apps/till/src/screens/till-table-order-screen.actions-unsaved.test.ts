@@ -117,7 +117,10 @@ async function mount(verb: "split" | "transfer" | "split-table" | "merge" = "spl
   const screen = app.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
   await screen.updateComplete;
   await click(screen, "[data-open-drawer]");
-  await click(screen, "[data-move-split]");
+  screen
+    .shadowRoot!.querySelector("[data-move-split]")!
+    .shadowRoot!.querySelector<HTMLElement>("button")!
+    .click();
   await click(screen, `[data-action="${verb}"]`);
   return { app, screen };
 }
@@ -149,7 +152,7 @@ it("Back retains split quantities until Discard without dispatching a split", as
   await click(screen, "[data-action-back]");
   await answer(app, "discard");
   await expect
-    .poll(() => screen.shadowRoot!.querySelector("[data-action-menu]") !== null)
+    .poll(() => screen.shadowRoot!.querySelector("[data-action-panel]") === null)
     .toBe(true);
   expect(app.commands).toEqual([]);
   expect(screen.lines).toEqual(lines);
@@ -165,7 +168,7 @@ it("reverting split membership clears protection; clean Back asks nothing", asyn
   expect(unload()).toBe(false);
   await click(screen, "[data-action-back]");
   await expect
-    .poll(() => screen.shadowRoot!.querySelector("[data-action-menu]") !== null)
+    .poll(() => screen.shadowRoot!.querySelector("[data-action-panel]") === null)
     .toBe(true);
   expect((await question(app)).open).toBe(false);
 });
@@ -440,5 +443,24 @@ it("departed action-menu controls cannot replace a staged split", async () => {
   expect(selected(screen, "split")).toBe("true");
   expect(screen.shadowRoot!.querySelector("till-party-name-dialog")).toBeNull();
   expect(unload()).toBe(true);
+  expect(app.commands).toEqual([]);
+});
+it("A803 single menu: another ⋮ item asks before leaving staged split quantities", async () => {
+  const { app, screen } = await mount();
+  await click(screen, '[data-split-line="1"]');
+  await click(screen, '[data-split-dec="1"]');
+  expect(unload()).toBe(true);
+  await click(screen, '[data-table-menu] [data-action="merge"]');
+  expect((await question(app)).open).toBe(true);
+  await answer(app, "keep");
+  expect(screen.shadowRoot!.querySelector("[data-split-lines]")).not.toBeNull();
+  expect(screen.shadowRoot!.querySelector('[data-split-count="1"]')!.textContent).toBe("3");
+  await click(screen, '[data-table-menu] [data-action="merge"]');
+  await answer(app, "discard");
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("[data-target-picker]") !== null)
+    .toBe(true);
+  expect(screen.shadowRoot!.querySelector("[data-split-lines]")).toBeNull();
+  expect(unload()).toBe(false);
   expect(app.commands).toEqual([]);
 });

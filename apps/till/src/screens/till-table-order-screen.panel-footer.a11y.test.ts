@@ -50,7 +50,7 @@ describe.each(["en", "es"] as const)("the bill footer in %s", (locale) => {
           expect(q("[data-drawer]")).toBeNull();
           const footer = q("[data-bill-actions]")!;
           const summary = q("[data-order-summary]")!;
-          const discount = q("[data-discount-bill]")!;
+          const discount = q("[data-discount-bill]:not([data-table-menu] *)")!;
           expect(discount.textContent).toContain(t("table.discount_bill"));
           expect(summary.getBoundingClientRect().bottom).toBeLessThanOrEqual(
             footer.getBoundingClientRect().top,
@@ -68,7 +68,7 @@ describe.each(["en", "es"] as const)("the bill footer in %s", (locale) => {
           for (const control of [
             discount,
             ...controls,
-            q("[data-choose-bill-invoice]")!,
+            q("[data-choose-bill-invoice]:not([data-table-menu] *)")!,
             q("[data-choose-bill-language]")!,
           ]) {
             expect(control.checkVisibility()).toBe(true);

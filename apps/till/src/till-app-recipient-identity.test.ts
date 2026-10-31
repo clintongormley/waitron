@@ -237,7 +237,11 @@ it.each(["identifierType", "identifierCountryCode"])(
     });
     const { el } = await mountWidget<TillApp>("till-app", { api });
     const order = await openTable(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
     const form = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
     emit(form.shadowRoot!.querySelector("[name=identifierType]")!, "wt-change", {
