@@ -38,6 +38,34 @@ export async function recordRestarted(
   });
 }
 
+/** Records `clock.corrected` at `detectedAt`, first marking any open one handled by the system:
+ * every step gets its own alert, which would otherwise fold into the open one. */
+export async function recordCorrected(
+  tx: Transaction,
+  input: { detectedAt: Date; params: ErrorParams["clock.corrected"] },
+): Promise<void> {
+  const origin = jobOrigin("dashboard");
+  const open = await tx
+    .select({ id: incidents.id })
+    .from(incidents)
+    .where(
+      and(
+        eq(incidents.source, origin.source),
+        isNull(incidents.deviceId),
+        eq(incidents.code, "clock.corrected"),
+        isNull(incidents.acknowledgedAt),
+      ),
+    );
+  for (const { id } of open)
+    await markIncidentHandled(tx, { id, personId: null, handledAt: input.detectedAt });
+  await recordIncident(tx, {
+    origin,
+    error: new AppError("clock.corrected", input.params),
+    severity: "warning",
+    detectedAt: input.detectedAt,
+  });
+}
+
 /** Records `clock.records_misdated` for the closing just written as `confirmationId`, when
  * `misdatedRecords` finds any record or cannot tell; a closing that finds none records nothing.
  * A list's alert names its earliest listed record's sale. One that cannot tell names no sale, so it

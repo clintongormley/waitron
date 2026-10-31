@@ -372,15 +372,45 @@ declare module "@waitron/shared" {
     /**
      * Recorded, never thrown, by `recordRestarted` (./clock-stop-incidents.ts) for each confirmation
      * that lifts a payment stop. `confirmedBy` is the confirmation's source; `person` is the
-     * administrator's display name when their device confirmed, else null; `clockAt` and
-     * `lastRecordAt` are ISO 8601 instants.
+     * administrator's or staff member's display name when a person confirmed, else null; `clockAt`
+     * and `lastRecordAt` are ISO 8601 instants. `byStaff` is set when a staff member confirmed, and
+     * `device` (the till's label) when the person confirmed on a till.
      */
     "clock.behind_chain_restarted": {
       confirmationId: string;
-      confirmedBy: "authority" | "devices" | "admin";
+      confirmedBy: "authority" | "devices" | "admin" | "staff";
       person: string | null;
       clockAt: string;
       lastRecordAt: string;
+      byStaff?: true;
+      device?: string | null;
+    };
+
+    /**
+     * Recorded, never thrown, by `recordCorrected` (./clock-stop-incidents.ts) for each step of the
+     * box's clock. `confirmationId` is the step's confirmation, null when the step was not verified
+     * (`verified` false, `unverified` true). `person` is the administrator's or staff member's
+     * display name, and `deviceId` and `device` the till's id and label when the reading came from
+     * one, else null. `before` and `after` are ISO 8601 instants, each with its own offset;
+     * `stepMs` the measured step, `direction` its sign. `byAdmin` and `byStaff` say which person
+     * confirmed.
+     */
+    "clock.corrected": {
+      confirmationId: string | null;
+      source: "authority" | "admin" | "staff";
+      person: string | null;
+      deviceId: string | null;
+      device: string | null;
+      before: string;
+      beforeOffsetMinutes: number;
+      after: string;
+      afterOffsetMinutes: number;
+      stepMs: number;
+      direction: "forward" | "back";
+      verified: boolean;
+      unverified: boolean;
+      byAdmin: boolean;
+      byStaff: boolean;
     };
 
     /**

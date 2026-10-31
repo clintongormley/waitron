@@ -471,6 +471,100 @@ describe("the box's clock reading behind its last sale", () => {
   });
 });
 
+describe("the box's clock was stepped", () => {
+  const before = "2026-10-19T07:10:00.000Z";
+  const after = "2026-10-21T10:10:00.000Z";
+  const base = {
+    confirmationId: "c1",
+    source: "authority",
+    person: null,
+    deviceId: null,
+    device: null,
+    before,
+    beforeOffsetMinutes: 60,
+    after,
+    afterOffsetMinutes: 60,
+    stepMs: (2 * 24 + 3) * 3_600_000,
+    direction: "forward",
+    verified: true,
+    unverified: false,
+    byAdmin: false,
+    byStaff: false,
+  };
+  const from = formatIsoMinute(before);
+  const to = formatIsoMinute(after);
+
+  function both(params: Record<string, unknown>) {
+    const english = alertMessage("clock.corrected", params, "en");
+    const spanish = alertMessage("clock.corrected", params, "es");
+    for (const text of [english, spanish]) {
+      expect(text).not.toContain("—");
+      expect(text).not.toMatch(/[{}]/);
+    }
+    return { english, spanish };
+  }
+
+  it("says the tax agency's time set it, which way, how far, and from when to when", () => {
+    const { english, spanish } = both(base);
+    expect(english).toBe(
+      `The box set its clock from the tax agency's time: moved forward 2 days and 3 hours, from ${from} to ${to}.`,
+    );
+    expect(spanish).toBe(
+      `El equipo puso su reloj con la hora de Hacienda: adelantado 2 días y 3 horas, de ${from} a ${to}.`,
+    );
+  });
+
+  it("names the till and the staff member who confirmed it", () => {
+    const params = {
+      ...base,
+      source: "staff",
+      person: "Ana",
+      deviceId: "till-1",
+      device: "Barra 1",
+      byStaff: true,
+      stepMs: -5 * 60_000,
+      direction: "back",
+    };
+    const { english, spanish } = both(params);
+    expect(english).toBe(
+      `The box's clock was set from till Barra 1, confirmed by Ana: moved back 5 minutes, from ${from} to ${to}.`,
+    );
+    expect(spanish).toBe(
+      `El reloj del equipo se puso con la hora de la caja Barra 1, confirmada por Ana: atrasado 5 minutos, de ${from} a ${to}.`,
+    );
+  });
+
+  it("names the administrator whose device set it", () => {
+    const { english, spanish } = both({ ...base, source: "admin", person: "Luis", byAdmin: true });
+    expect(english).toBe(
+      `The box's clock was set from Luis's device: moved forward 2 days and 3 hours, from ${from} to ${to}.`,
+    );
+    expect(spanish).toBe(
+      `El reloj del equipo se puso con la hora del dispositivo de Luis: adelantado 2 días y 3 horas, de ${from} a ${to}.`,
+    );
+  });
+
+  it("says a change it could not confirm was asked for, whoever asked", () => {
+    for (const who of [{}, { source: "staff", person: "Ana", device: "Barra 1", byStaff: true }]) {
+      const params = { ...base, ...who, confirmationId: null, verified: false, unverified: true };
+      const { english, spanish } = both(params);
+      expect(english).toBe(
+        `The box asked to move its clock from ${from} to ${to} (moved forward 2 days and 3 hours), but could not confirm the change took. Check the box's clock on the Box status page.`,
+      );
+      expect(spanish).toBe(
+        `El equipo pidió mover su reloj de ${from} a ${to} (adelantado 2 días y 3 horas), pero no ha podido confirmar que el cambio se aplicara. Comprueba la hora del equipo en Estado del equipo.`,
+      );
+    }
+  });
+
+  it("words a direction it does not know neutrally", () => {
+    expect(ALERT_WORDS["clock_step_direction"]!.otherwise).toEqual({ en: "moved", es: "cambiado" });
+    expect(both({ ...base, direction: "sideways" }).english).toContain(
+      ": moved 2 days and 3 hours,",
+    );
+  });
+});
+
 describe("payments restarted on a clock behind the last sale", () => {
   const base = {
     confirmationId: "c1",

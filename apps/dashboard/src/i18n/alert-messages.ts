@@ -172,6 +172,27 @@ export const ALERT_MESSAGES: Readonly<
     en: "Payments restarted on the box's clock ({clockAt:minute}), earlier than the last sale ({lastRecordAt:minute}), once {confirmedBy:clock_confirmed_by} confirmed it.",
     es: "Se reanudaron los cobros con la hora del equipo ({clockAt:minute}), anterior a la última venta ({lastRecordAt:minute}), al confirmarla {confirmedBy:clock_confirmed_by}.",
   },
+  "clock.corrected": {
+    en: "The box set its clock from the tax agency's time: {direction:clock_step_direction} {stepMs:duration}, from {before:minute} to {after:minute}.",
+    es: "El equipo puso su reloj con la hora de Hacienda: {direction:clock_step_direction} {stepMs:duration}, de {before:minute} a {after:minute}.",
+    variants: {
+      unverified: {
+        mode: "replace",
+        en: "The box asked to move its clock from {before:minute} to {after:minute} ({direction:clock_step_direction} {stepMs:duration}), but could not confirm the change took. Check the box's clock on the Box status page.",
+        es: "El equipo pidió mover su reloj de {before:minute} a {after:minute} ({direction:clock_step_direction} {stepMs:duration}), pero no ha podido confirmar que el cambio se aplicara. Comprueba la hora del equipo en Estado del equipo.",
+      },
+      byStaff: {
+        mode: "replace",
+        en: "The box's clock was set from till {device}, confirmed by {person}: {direction:clock_step_direction} {stepMs:duration}, from {before:minute} to {after:minute}.",
+        es: "El reloj del equipo se puso con la hora de la caja {device}, confirmada por {person}: {direction:clock_step_direction} {stepMs:duration}, de {before:minute} a {after:minute}.",
+      },
+      byAdmin: {
+        mode: "replace",
+        en: "The box's clock was set from {person}'s device: {direction:clock_step_direction} {stepMs:duration}, from {before:minute} to {after:minute}.",
+        es: "El reloj del equipo se puso con la hora del dispositivo de {person}: {direction:clock_step_direction} {stepMs:duration}, de {before:minute} a {after:minute}.",
+      },
+    },
+  },
   "clock.records_misdated": {
     en: "{count} sales were recorded with a time later than the real time (from {from:minute} to {to:minute}). They stay as recorded. Go through them with your tax adviser; the list is on the Box status page.",
     es: "Se registraron {count} ventas con una hora posterior a la real (de {from:minute} a {to:minute}). Quedan como se registraron. Revísalas con tu asesor; la lista está en Estado del equipo.",
@@ -506,6 +527,14 @@ export const ALERT_WORDS: Readonly<
   },
   // What confirmed the box's clock when payments restarted, by the `confirmedBy` param of
   // `clock.behind_chain_restarted`.
+  // `clock.corrected`'s direction; the reloj (masculine) is what moved, in Spanish.
+  clock_step_direction: {
+    words: {
+      forward: { en: "moved forward", es: "adelantado" },
+      back: { en: "moved back", es: "atrasado" },
+    },
+    otherwise: { en: "moved", es: "cambiado" },
+  },
   clock_confirmed_by: {
     words: {
       authority: { en: "the tax agency's time", es: "la hora de Hacienda" },

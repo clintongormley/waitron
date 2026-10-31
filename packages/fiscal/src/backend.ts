@@ -227,10 +227,32 @@ export interface ClockAdminReading {
   uncertaintyMs: number;
 }
 
+/** The person who confirmed the box's clock: an administrator, or a staff member (`role:
+ * "staff"`) on a till; `device` names the till when the reading came from one. */
 export interface ClockAdminConfirm {
   personId: string;
   personName: string;
   reading: ClockAdminReading;
+  role?: "staff";
+  device?: { deviceId: string; deviceLabel: string | null; address: string | null };
+}
+
+/** A step of the box's clock from `before` to `after`, read on the boot-time clock either side.
+ * `stepMs` is the measured step; `verified` false when the box could not confirm the step took.
+ * `admin` names the person for the `admin` and `staff` sources, with `role: "staff"` for `staff`. */
+export interface ClockStepRequest {
+  before: Pick<TrustedReading, "instant" | "offsetMinutes">;
+  after: Pick<TrustedReading, "instant" | "offsetMinutes">;
+  bootBefore: BootReading;
+  bootAfter: BootReading;
+  targetAt: string;
+  stepMs: number;
+  verified: boolean;
+  reason: "behind_chain" | "unusable";
+  source: "authority" | "admin" | "staff";
+  witnesses: readonly ClockWitness[];
+  admin?: ClockAdminConfirm;
+  nodeId: string;
 }
 
 export interface ClockConfirmation {
@@ -371,6 +393,15 @@ export interface FiscalBackend {
   confirmClockStop?(
     tx: Transaction,
     input: ClockConfirmRequest,
+  ): Promise<{ confirmation: ClockConfirmation | null }>;
+
+  /** Records a step of the box's clock: one confirmation row when the step was verified (closing
+   * the stop's check and, when the clock still reads behind the latest record, lifting the stop
+   * from the after reading), and `clock.corrected` either way. Absent when the regime never stops
+   * a clock. */
+  confirmClockStep?(
+    tx: Transaction,
+    input: ClockStepRequest,
   ): Promise<{ confirmation: ClockConfirmation | null }>;
 
   /** Records when a stop began: opens a check while the stop holds and none is open, and answers
