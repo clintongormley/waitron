@@ -3284,3 +3284,36 @@ Revision 4 changes none of these rulings. It carries out the owner's answer of 2
   before `witnesses()` could prune them.
 - **For Task 11a** (review): the watch's `correction` dependency widens from `{ inTurn }` to also
   take `set`, `steps` and `writePending`.
+
+### Task 11a's departures (2026-10-31, while building Task 11a)
+
+- **The set carries AEAT's reading alone as its witness**, not every witness the look judged:
+  the seat's step row takes the first `authority` witness and every `device` witness it is
+  handed as the proof that set the clock (`packages/fiscal-verifactu/src/clock-step.ts`), so
+  disagreeing devices handed in beside AEAT would be recorded as having set it.
+- **A disagreement the store no longer hands out for setting sets nothing**: the offset's
+  `measuredAt` comes from `forSetting()`, matched to the stop's `contrary.authority` by its two
+  times, and a reading older than five minutes by the steady clock (or from before a step) is
+  not among them, although the stop still lists it until the stop ends. Its own case, with a
+  fresh reading beside it as the control.
+- **No new boot-level case**: Task 11's `boot.clock-correction.test.ts` already shows the watch
+  handed the correction boot made and among its anchors (Task 11's departures). Boot passes the
+  whole correction, so `set`, `steps` and `writePending` reach the watch with no boot change.
+- **The look's other failures do not stop it**: a `writePending()` or a `set` that throws is
+  logged `clock_watch.check_failed`, and the look goes on (a set still runs after a failed
+  `writePending()`; AEAT's disagreement is still recorded after a failed set). The plan's
+  `writePending()` rule is kept as written: only after that look's first `recordPending()`
+  succeeded.
+- **The refusal log** is `info` `clock_watch.cannot_set { reason }`, written when the reason
+  differs from the last one logged; a set that goes through forgets the last reason, so the same
+  refusal after it is logged again.
+- **Fixtures grown, no assertion changed**: the fake stores in `clock-watch.test.ts` (two) and
+  `clock-watch.elapsed.test.ts` gain `forSetting`, and `clock-watch.anchor.test.ts`'s harness
+  fills in `set`, `steps` and `writePending` (a refusal, 0, nothing) around the `inTurn` its
+  cases hand it, since the watch's `correction` dependency now names all four.
+- **Deletion controls**: besides the plan's three (drop the `contrary` branch; a revision 3
+  branch setting from the devices' reading; drop the backoff), each of these fails a named case
+  of `clock-watch.correction.test.ts`: back off every refusal; no doubling; no four-hour cap; a
+  backoff not keyed by the check; log every refusal; keep the last reason after a set;
+  `writePending()` after a failed disproof write; no `writePending()`; `stepsSeen` not read; a
+  set during `clock.unusable`; a stale reading set with the look's own clocks.
