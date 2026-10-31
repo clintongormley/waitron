@@ -3516,4 +3516,205 @@ describe("A803 new bill: the switcher's + New bill and switching bills", () => {
     expect(tableOrder(el)!.orderId).toBe("wo-7");
     expect(closedLabel(el)).toBe(`Cuenta 1 · ${euros("9.00")}`);
   });
+
+  type Created = { billId: string; revision: number };
+  /** A `createPartyBill` whose answer waits for `answer`; `created()` is true once it has answered. */
+  function heldCreate() {
+    let answered = false;
+    let release!: (value: Created) => void;
+    const createPartyBill = vi.fn(
+      () =>
+        new Promise<Created>((resolve) => {
+          release = (value) => {
+            answered = true;
+            resolve(value);
+          };
+        }),
+    );
+    return { createPartyBill, answer: (value: Created) => release(value), created: () => answered };
+  }
+  const newBillItem = (el: TillApp) => switcher(el).querySelector<HTMLElement>("[data-new-bill]")!;
+
+  it("a second tap on + New bill while the first is out sends nothing more, draws + New bill busy, and says nothing", async () => {
+    const held = heldCreate();
+    const { el } = await mountApp({
+      createPartyBill: held.createPartyBill,
+      getPartyBills: vi.fn(async () =>
+        held.created() ? [bill("wo-7", 1), bill("wo-new", 2)] : [bill("wo-7", 1)],
+      ),
+    });
+    const screen = await toTableOrder(el);
+
+    emit(screen, "new-bill", {});
+    emit(screen, "new-bill", {});
+    await flush(el);
+    await flush(el);
+    expect(newBillItem(el).getAttribute("aria-disabled")).toBe("true");
+    held.answer({ billId: "wo-new", revision: 4 });
+    await flush(el);
+    await flush(el);
+
+    expect(held.createPartyBill).toHaveBeenCalledOnce();
+    expect(banner(el)).toBeNull();
+    expect(tableOrder(el)!.orderId).toBe("wo-new");
+    expect(newBillItem(el).hasAttribute("aria-disabled")).toBe(false);
+  });
+
+  it("a bill chosen while + New bill is out stays on screen when the answer comes, and the switcher lists the new bill", async () => {
+    const held = heldCreate();
+    const { el } = await mountApp({
+      createPartyBill: held.createPartyBill,
+      getPartyBills: vi.fn(async () =>
+        held.created()
+          ? [bill("wo-7", 1), bill("wo-8", 2), bill("wo-new", 3)]
+          : [bill("wo-7", 1), bill("wo-8", 2)],
+      ),
+    });
+    await toTableOrder(el);
+
+    await choose(el, "[data-new-bill]");
+    await choose(el, '[data-switch-bill="wo-8"]');
+    expect(tableOrder(el)!.orderId).toBe("wo-8");
+    held.answer({ billId: "wo-new", revision: 4 });
+    await flush(el);
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-8");
+    expect(rows(el)).toEqual(["wo-7", "wo-8", "wo-new"]);
+    expect(banner(el)).toBeNull();
+    expect(await nextSavedBill(el)).toBe("wo-8");
+  });
+
+  it("a bill chosen while + New bill's own bills read is out stays on screen when that read answers", async () => {
+    let created = false;
+    let holdRead = false;
+    let releaseRead!: () => void;
+    const { el } = await mountApp({
+      createPartyBill: vi.fn(async () => {
+        created = true;
+        holdRead = true;
+        return { billId: "wo-new", revision: 4 };
+      }),
+      getPartyBills: vi.fn(async () => {
+        if (holdRead) {
+          holdRead = false;
+          await new Promise<void>((resolve) => (releaseRead = resolve));
+        }
+        return created
+          ? [bill("wo-7", 1), bill("wo-8", 2), bill("wo-new", 3)]
+          : [bill("wo-7", 1), bill("wo-8", 2)];
+      }),
+    });
+    await toTableOrder(el);
+
+    await choose(el, "[data-new-bill]");
+    await choose(el, '[data-switch-bill="wo-8"]');
+    expect(tableOrder(el)!.orderId).toBe("wo-8");
+    releaseRead();
+    await flush(el);
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-8");
+    expect(rows(el)).toEqual(["wo-7", "wo-8", "wo-new"]);
+    expect(await nextSavedBill(el)).toBe("wo-8");
+  });
+
+  it("two bills chosen in a row while a draft save is out: the screen shows the last one once the save answers", async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const saveDraft = vi.fn(drafts.saveDraft).mockImplementationOnce(async (...args) => {
+      await held;
+      return drafts.saveDraft(...args);
+    });
+    const { el } = await mountApp({
+      saveDraft,
+      getPartyBills: vi.fn(async () => [bill("wo-7", 1), bill("wo-8", 2), bill("wo-9", 3)]),
+    });
+    await toTableOrder(el);
+    await ringCoffee(el, tableOrder(el)!);
+
+    await choose(el, '[data-switch-bill="wo-8"]');
+    await choose(el, '[data-switch-bill="wo-9"]');
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+    release();
+    await flush(el);
+    await flush(el);
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-9");
+    expect(saveDraft).toHaveBeenCalled();
+    expect(new Set(saveDraft.mock.calls.map((call) => call[1].billId))).toEqual(new Set(["wo-7"]));
+  });
+
+  it("+ New bill saves the draft of the bill on screen before it asks for the new bill", async () => {
+    const createPartyBill = vi.fn(async () => ({ billId: "wo-new", revision: 4 }));
+    const { el } = await mountApp({ createPartyBill });
+    await toTableOrder(el);
+    await ringCoffee(el, tableOrder(el)!);
+    const saveDraft = vi.mocked(drafts.saveDraft);
+    const before = saveDraft.mock.calls.length;
+
+    await choose(el, "[data-new-bill]");
+
+    expect(saveDraft.mock.calls.slice(before).map((call) => call[1].billId)).toEqual(["wo-7"]);
+    expect(saveDraft.mock.invocationCallOrder[before]).toBeLessThan(
+      createPartyBill.mock.invocationCallOrder[0]!,
+    );
+    expect(tableOrder(el)!.orderId).toBe("wo-new");
+  });
+
+  it("+ New bill asks for no bill when the draft's save is refused, and stays on its bill", async () => {
+    const createPartyBill = vi.fn(async () => ({ billId: "wo-new", revision: 4 }));
+    const { el } = await mountApp({
+      createPartyBill,
+      saveDraft: vi.fn(drafts.saveDraft).mockRejectedValueOnce({
+        code: "draft.out_of_date",
+        status: 409,
+      }),
+    });
+    await toTableOrder(el);
+    await ringCoffee(el, tableOrder(el)!);
+
+    await choose(el, "[data-new-bill]");
+    await flush(el);
+
+    expect(api.saveDraft).toHaveBeenCalled();
+    expect(createPartyBill).not.toHaveBeenCalled();
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+  });
+
+  it("a party command after + New bill carries the revision + New bill answered", async () => {
+    const { el } = await mountApp({
+      createPartyBill: vi.fn(async () => ({ billId: "wo-new", revision: 4 })),
+    });
+    await toTableOrder(el);
+    await choose(el, "[data-new-bill]");
+
+    emit(tableOrder(el)!, "name-party", { name: "Ana" });
+    await flush(el);
+    await flush(el);
+
+    expect(api.setPartyName).toHaveBeenCalledWith("v-2", "Ana", 4);
+  });
+
+  it("a failed bills read after + New bill keeps the new bill on screen and says the table could not be read again", async () => {
+    let created = false;
+    const { el } = await mountApp({
+      createPartyBill: vi.fn(async () => {
+        created = true;
+        return { billId: "wo-new", revision: 4 };
+      }),
+      getPartyBills: vi.fn(async () => {
+        if (created) throw new TypeError("Failed to fetch");
+        return [bill("wo-7", 1)];
+      }),
+    });
+    await toTableOrder(el);
+
+    await choose(el, "[data-new-bill]");
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-new");
+    expect(banner(el)?.textContent?.trim()).toBe(t("table.reread_failed"));
+  });
 });

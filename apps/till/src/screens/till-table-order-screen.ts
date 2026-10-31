@@ -1408,6 +1408,8 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) retainedDraft: RetainedDraftCandidate | null = null;
   /** Says that the bill on screen left the party's bills and which one shows instead (D11). */
   @property({ attribute: false }) billGone: string | null = null;
+  /** This till's + New bill for the party is out. */
+  @property({ type: Boolean }) newBillBusy = false;
   @property({ type: Boolean }) candidateReviewAllowed = false;
   @property({ type: Boolean }) candidateReviewBusy = false;
   /** Moved on by the app each time it refuses a bill's name because someone else's unsent dishes
@@ -2384,6 +2386,7 @@ export class TillTableOrderScreen extends LitElement {
             party: this.party,
             bills: this.bills,
             billId: this.orderId,
+            newBillBusy: this.newBillBusy,
             onSwitch: (workingOrderId) => this.#dispatch("switch-bill", { workingOrderId }),
             onNewBill: () => this.#dispatch("new-bill", {}),
           })}

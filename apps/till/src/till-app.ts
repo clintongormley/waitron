@@ -2904,6 +2904,8 @@ export class TillApp extends LitElement {
   /** Bills reads numbered up to this were sent before this till learned of the bill it chose to
    * show ({@link #chooseBill}), so a bill missing from one of them has not gone. */
   #billChosenRead = 0;
+  /** The bill chosen last in the switcher while the draft's save before showing it is out. */
+  #switchTo: string | undefined;
   /** Numbers each read of the party's groups as it starts; {@link #printProblemsShown} is the number
    * of the read whose printing problems are on screen, so an answer from a read that started before
    * it is dropped and a read that ends without an answer drops nothing. */
@@ -3052,6 +3054,8 @@ export class TillApp extends LitElement {
   @state() private activeTableId?: string;
   /** What the order screen says once the bill on screen has left the party's bills (D11). */
   @state() private billGone: string | null = null;
+  /** Parties whose + New bill this till has sent and not yet had answered. */
+  @state() private newBillsOut: ReadonlySet<string> = new Set();
   /** The open tab's lines at their locked add-time prices; a tab does not re-price. */
   @state() private tabLines: TabLine[] = [];
   /** The revision {@link tabLines} was read at. */
@@ -16918,12 +16922,15 @@ export class TillApp extends LitElement {
     return bill === undefined ? undefined : billName(this.orderParty?.displayName ?? "", bill);
   }
 
-  /** Saves the draft of the bill on screen, then shows the chosen bill, unless the waiter left the
-   * table or changed bill while the save was out. */
+  /** Saves the draft of the bill on screen, then shows the bill chosen last, unless the waiter left
+   * the table or the bill on screen changed while the save was out. */
   async #onSwitchBill(event: Event): Promise<void> {
-    const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
+    this.#switchTo = (event as CustomEvent<{ workingOrderId: string }>).detail.workingOrderId;
     if (!(await this.#flushBeforeSwitch())) return;
-    this.#showBill(workingOrderId);
+    const chosen = this.#switchTo;
+    this.#switchTo = undefined;
+    if (chosen === undefined) return;
+    this.#showBill(chosen);
     await this.#loadTabLines();
   }
 
@@ -16956,13 +16963,26 @@ export class TillApp extends LitElement {
 
   /** + New bill: one empty bill on the party, asked for at the revision the screen shows. A refusal
    * (another till changed the party first) is said as every party command's is, and the screen
-   * stays on its bill; nothing is asked again by itself. */
+   * stays on its bill; nothing is asked again by itself, and a tap while one is out does nothing. */
   async #onNewBill(): Promise<void> {
     const party = this.orderParty;
-    if (party === null) return;
+    if (party === null || this.newBillsOut.has(party.id)) return;
+    this.newBillsOut = new Set([...this.newBillsOut, party.id]);
+    try {
+      await this.#askForNewBill(party);
+    } finally {
+      this.newBillsOut = new Set([...this.newBillsOut].filter((id) => id !== party.id));
+    }
+  }
+
+  /** The new bill is shown only while the bill on screen is still the one + New bill was tapped
+   * on; a bill the waiter chose since stays, and the bills read lists the new one beside it. A
+   * failed bills read leaves the new bill shown and says the table could not be read again. */
+  async #askForNewBill(party: TableParty): Promise<void> {
     const visit = this.#orderVisit;
     const live = () => visit === this.#orderVisit && this.orderParty?.id === party.id;
     if (!(await this.#flushBeforeSwitch()) || !live()) return;
+    const tappedOn = this.activeTabId;
     this.errorKey = undefined;
     let created: { billId: string; revision: number };
     try {
@@ -16973,9 +16993,10 @@ export class TillApp extends LitElement {
     }
     this.#notePartyRevision(party.id, created.revision);
     if (!live()) return;
-    await this.#loadPartyBills(undefined, false);
-    if (!live()) return;
+    const { read, bills } = await this.#loadPartyBills(undefined, false);
+    if (!live() || this.activeTabId !== tappedOn) return;
     this.#showBill(created.billId);
+    if (bills === null && read === this.#partyBillsRead) this.errorKey = "table.reread_failed";
     await this.#loadTabLines();
   }
 
@@ -18819,6 +18840,7 @@ export class TillApp extends LitElement {
       .otherDrafts=${this.#otherDrafts(draft)}
       .retainedDraft=${draft === this.#draftSync?.store ? this.#draftSync.candidate : null}
       .billGone=${this.billGone}
+      .newBillBusy=${this.orderParty !== null && this.newBillsOut.has(this.orderParty.id)}
       .candidateReviewAllowed=${this.#draftSync?.billStatus === "open" && (this.#draftSync.edit?.editorId === null || this.#draftSync?.edit?.editorId === this.operatorPersonId)}
       .candidateReviewBusy=${this.resolvingDraftCandidate === this.#draftSync}
       .takeOversAnswered=${this.takeOversAnswered}
@@ -18956,6 +18978,7 @@ export class TillApp extends LitElement {
           .otherDrafts=${this.#otherDrafts(draft)}
           .retainedDraft=${draft === this.#draftSync?.store ? this.#draftSync.candidate : null}
           .billGone=${this.billGone}
+          .newBillBusy=${this.orderParty !== null && this.newBillsOut.has(this.orderParty.id)}
           .candidateReviewAllowed=${this.#draftSync?.billStatus === "open" && (this.#draftSync.edit?.editorId === null || this.#draftSync?.edit?.editorId === this.operatorPersonId)}
           .candidateReviewBusy=${this.resolvingDraftCandidate === this.#draftSync}
           .takeOversAnswered=${this.takeOversAnswered}

@@ -11,12 +11,21 @@ function owes(bill: PartyBill): string {
     : formatMoney(decimal(bill.outstanding), currentLocale());
 }
 
+/** The ✓ drawn after "Paid"; the word alone is what is read out. */
+function paidMark(bill: PartyBill | undefined): TemplateResult | typeof nothing {
+  return bill?.status === "settled"
+    ? html`<span data-paid-mark aria-hidden="true"> ✓</span>`
+    : nothing;
+}
+
+const chevron = html`<span aria-hidden="true"> ▾</span>`;
+
 /** One bill's row in the switcher: its short label, what it owes, and who has unsent dishes on it. */
 export function billRowContent(bill: PartyBill, party: TableParty): TemplateResult {
   const unsent = party.unsentDrafts.filter((draft) => draft.billId === bill.workingOrderId);
   return html`<span class="bill-row-head"
       ><span class="bill-row-label">${billLabel(bill)}</span>
-      <span class="bill-row-owes">${owes(bill)}</span></span
+      <span class="bill-row-owes">${owes(bill)}${paidMark(bill)}</span></span
     >
     ${unsent.map(
       (draft) =>
@@ -48,6 +57,8 @@ export interface BillSwitcherOptions {
   bills: readonly PartyBill[];
   /** The bill on screen. */
   billId: string | undefined;
+  /** + New bill is out, so it is drawn quiet and a tap on it does nothing. */
+  newBillBusy: boolean;
   onSwitch(workingOrderId: string): void;
   onNewBill(): void;
 }
@@ -68,7 +79,7 @@ export function billSwitcher(options: BillSwitcherOptions): TemplateResult | typ
     label=${shown === undefined ? closed : `${t("table.bills_title")}: ${closed}`}
   >
     <span slot="trigger"
-      ><span data-bill-switcher-label>${closed}</span><span aria-hidden="true"> ▾</span></span
+      ><span data-bill-switcher-label>${closed}</span>${paidMark(shown)}${chevron}</span
     >
     <div role="menu" class="bill-switcher-menu">
       ${bills.map(
@@ -91,7 +102,10 @@ export function billSwitcher(options: BillSwitcherOptions): TemplateResult | typ
         role="menuitem"
         class="bill-switcher-item"
         data-new-bill
-        @click=${() => options.onNewBill()}
+        aria-disabled=${options.newBillBusy ? "true" : nothing}
+        @click=${() => {
+          if (!options.newBillBusy) options.onNewBill();
+        }}
       >
         ${t("table.new_bill")}
       </button>
@@ -103,6 +117,9 @@ export const billControlStyles = css`
   .bill-switcher::part(trigger) {
     min-height: var(--wt-tap-min);
     padding: var(--wt-space-2) var(--wt-space-3);
+    border: 1px solid var(--wt-color-border);
+    border-radius: var(--wt-radius-md);
+    background: var(--wt-color-surface);
     font-weight: var(--wt-font-weight-bold);
   }
   .bill-switcher-menu {
@@ -116,16 +133,27 @@ export const billControlStyles = css`
     gap: var(--wt-space-1);
     min-height: var(--wt-tap-min);
     padding: var(--wt-space-2) var(--wt-space-3);
-    border: 0;
+    border: 1px solid transparent;
+    border-radius: var(--wt-radius-md);
     background: transparent;
     color: var(--wt-color-text);
     font: inherit;
     cursor: pointer;
     text-align: start;
   }
-  .bill-switcher-item:hover,
+  /* The open list is painted --wt-color-surface, which --wt-color-surface-raised equals in the
+     light theme. */
+  .bill-switcher-item:hover {
+    background: var(--wt-color-bg);
+  }
   .bill-switcher-item[aria-checked="true"] {
-    background: var(--wt-color-surface-raised);
+    border-color: var(--wt-color-border);
+    background: var(--wt-color-surface-lifted);
+  }
+  .bill-switcher-item[aria-disabled="true"] {
+    color: var(--wt-color-text-muted);
+    background: transparent;
+    cursor: not-allowed;
   }
   .bill-switcher-item:focus-visible {
     outline: var(--wt-focus-ring);

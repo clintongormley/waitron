@@ -798,6 +798,8 @@ task's red run; a red assertion not on this list that is not kind B/R/W/S/F unde
 | The plan's 8d row `till-app-parties.test.ts:2126`, `:2452`, `:4395`, `:4405`, `:5830`; `till-app-drafts.test.ts:8720` | — | `:2126`, `:2452` and `till-app-drafts.test.ts:8720` needed no change (green under Task 8d unedited); `:4395`/`:4405`/`:5830` are, by title, the `:4736` and `:6132` rows above | — | 8d |
 | 8d review I2 (lines at the 8d review commit): `till-app-parties.test.ts` `A803 bill gone` cases `:4325` (merged away), `:4343` (moved away), `:4361` (no bill survives), `:4407` (stale opening bill) | B (additions) | each gains a check that the vanished bill's lines leave the screen: `expect(api.getTabLines).toHaveBeenLastCalledWith("wo-4")` right after the switch (`:4325`, `:4343`, `:4407`) and the screen's `lines` `toEqual([])` (`:4361`); every other check unchanged | D11 rule 3 ("never keeps a vanished bill on screen"); 8d review I2 | 8d review |
 | 8d review M5: `till-app-parties.test.ts:4407` (stale opening bill) | B | `[data-bill-gone]` "Bill is no longer at this table. Now showing Bill 1." → "That bill is no longer at this table. Now showing Bill 1." (`table.bill_gone_unnumbered`); the drafts abandoned case's text is in its row above | D11 rule 3; 8d review M5; Owner question 1 | 8d review |
+| Task 9 review M6: `screens/till-table-order-screen.bill-switcher.test.ts:81` (three bills), `:132` (Bill 2 merged away), `:97` (Paid on screen) | B | the paid row's text `"Bill 3 Paid"` → `"Bill 3 Paid ✓"` (`:81`, `:132`); `:97` keeps `closedLabel` `"Bill 3 of 3 · Paid"` byte-identical and gains: the trigger's text `"Bill 3 of 3 · Paid ✓ ▾"`, the accessible name `"Bills: Bill 3 of 3 · Paid"` (no ✓), and both ✓ marks `aria-hidden="true"`. Every other check unchanged | spec §3.5 and board 12 B ("Paid ✓"); Task 9 review M6 | 9 review |
+| Task 9 review I1: `screens/till-table-order-screen.bill-controls.a11y.test.ts:29` (`states`) | W | the state list gains "one bill, + New bill out" (`newBillBusy: true`); each existing state gains `false`, which is the default it was mounted with; every `expect` byte-identical. 12 → 16 cases | Task 9 review I1 | 9 review |
 | 8d review M2: `till-app-parties.test.ts:2180` (Move guests: "opens the lowest-numbered unpaid bill of the party the guests moved into, …") and `:2518` (Split a table: "opens the party's main bill once the bill on screen has gone with the table split off") | B (additions), S | each gains `[data-bill-gone]` `toBeNull()` after this till's own action, where the till picks the bill itself (D11 rule 1). `:2518` setup: the bills read after the split lists `[tabBill]` (was the suite's `[tabBill, checkBill]` throughout, which kept `wo-check` at the party after it left with the split-off table); `orderId` `"wo-4"` byte-identical; with this setup and the added check, green on Task 9's production code (`8cea9e48d`) too | D11 rules 1 and 3; 8d review M2 | 8d review |
 
 **Task 3a's red run found 50 red cases (each `it.each` row counted) in 15 files** (trace: the union of the plan's command and
@@ -2059,6 +2061,79 @@ the ES proposals); tests new `screens/till-table-order-screen.bill-switcher.test
   assertion changed. Task 11c removes the Tab button. (b) The RED reason for the app cases, given
   above. **Changed test checks: none.** **Owner-question candidates: none new.**
 
+### Task 9 review answers (2026-10-31, `a803-3-reviews/task-9.md`)
+
+Done on `1707e6fe2`, in one commit. Runs in the foreground with `AI_AGENT`/`CLAUDECODE` unset,
+`--maxWorkers` 2 to 4, free memory 53–57% before each browser run. Each control broke one
+production line in a copy, ran the A803 cases of the switcher screen file and
+`till-app-table-service.test.ts` (`-t A803`), then put the file back and `cmp`'d it (no difference).
+
+- **RED** (the new and changed cases, `-t A803` on the two files): `Tests 11 failed | 24 passed |
+  126 skipped (161)`. Failing: the I1 app and screen cases, both I2 cases, M1, M3, I3 (light), M5,
+  and the three M6 text pins. The M2 cases and I3 dark passed before the fix: they pin behaviour
+  that was already right (I3 dark: `surface-raised` already differs from the popup there).
+- **I1.** `#onNewBill` keeps `newBillsOut`, the parties whose + New bill is out, set before the
+  flush and cleared in `finally`; a tap while its party's is out does nothing. The screen's
+  `newBillBusy` draws + New bill `aria-disabled="true"` in `--wt-color-text-muted` with a
+  `not-allowed` cursor, and its click sends nothing (`wt-row-actions` keeps the list open on an
+  `aria-disabled` item). No new string. Cases: app `:3538` (two `new-bill` events before any
+  redraw: one `createPartyBill`, no banner, busy while out, not after); screen `:164`. Controls:
+  C1 app guard removed → `:3538` fails (`1 failed | 34 passed`); C2 the screen's click guard
+  removed → `:164` fails.
+- **I2.** `#askForNewBill` takes the bill on screen after the flush and shows the new bill only if
+  it is still that one after the answer and after its own bills read (follow off); otherwise the
+  read lists the new bill and the screen stays. It never shows the new bill once the waiter has
+  chosen another, so `#billChosenRead` is not involved: the waiter's choice of a listed bill sets
+  it to 0 as before and the + New bill read never follows. Cases `:3563` (P2's shape: choice while
+  `createPartyBill` is out) and `:3588` (choice while + New bill's own bills read is out). Control
+  C4, the after-read check reduced to `!live()`: both fail (`2 failed`). A separate branch for a
+  choice made while `createPartyBill` was out was tried first and dropped: its deletion (C3)
+  passed, as the after-read check covers it.
+- **M1.** `#onSwitchBill` stores the id in `#switchTo` and, after the flush, shows the latest one.
+  Case `:3622`: `saveDraft` held, Bill 2 then Bill 3 chosen, release → Bill 3 on screen; every
+  save names `wo-7`. Control C5 (show the event's own id): fails `expected 'wo-8' to be 'wo-9'`.
+  Seen while building it: this case sends two `saveDraft` calls naming `wo-7` with the same lines,
+  on the committed `1707e6fe2` code too (run with that `till-app.ts` put back:
+  `[["wo-7",null],["wo-7",null]]`). Not changed here; no save named another bill.
+- **M2.** Cases `:3649` (the `saveDraft` naming `wo-7` is invoked before `createPartyBill`),
+  `:3666` (a refused save, `draft.out_of_date`, sends no `createPartyBill`; screen stays on
+  `wo-7`), `:3686` (`setPartyName` after + New bill carries revision 4, the answer's, over the
+  floor's 3). Controls: C6 flush removed → `:3649` and `:3666` fail; C7 `#notePartyRevision`
+  removed → `:3686` fails.
+- **M3.** Choice: the existing `table.reread_failed` message, as `#rereadAmounts` and the invoice
+  recipient's save already say for a failed bills read after a write. The new bill stays shown
+  (the server just made it); the list is not given a made-up row. Case `:3700`. Control C8
+  (message line removed): fails.
+- **I3.** Checked row: `--wt-color-surface-lifted` with a `--wt-color-border` edge (rows carry a
+  transparent 1px border so nothing moves); hover `--wt-color-bg`. No ✓ column: with M6 a paid
+  row already ends in ✓, and a second ✓ for "on screen" would read the same. Case: screen
+  `describe.each` light/dark, the checked row's computed background differs from the open
+  popup's and from an unchecked row's. Control C9 (back to `surface-raised`): the light case
+  fails. Hover is not asserted. LOOK (throwaway probe, deleted): 1024 px, three bills, light and
+  dark, idle and + New bill out; Bill 2's tinted row is plain in both themes, + New bill reads
+  muted while out. Screenshots outside the repository in `/tmp/a803t9/shots/`.
+- **M4.** Not changed (shared `wt-row-actions`, predates the branch). Filed as A1256 in
+  `docs/backlog/dashboard.md`, listed in `docs/backlog.md` beside A781; Task 16 carries a note.
+- **M5.** The trigger part gets `1px solid --wt-color-border`, `--wt-radius-md` and
+  `--wt-color-surface`. Case `:180`; control C10 (border removed): fails.
+- **M6.** An `aria-hidden` ✓ after "Paid" in the row and the closed trigger; the label span and the
+  accessible name stay "Paid". Rows in Changed test checks (Task 9 review M6). Control C11 (mark
+  removed): the three pins fail.
+- **GREEN.** The seven named files (switcher, bill-controls a11y, `till-table-order-screen`,
+  `.parties`, `till-app-table-service`, `till-app-parties`, `till-app-bill-payments`):
+  `Test Files 7 passed (7)`, `Tests 1422 passed (1422)`. The switcher screen files, the two
+  table-screen files and `src/i18n` again after the last edit: `Test Files 16 passed`, `Tests 671
+  passed (671)`. a11y file alone: `Tests 16 passed (16)`. Every `till-app*.test.ts` (41 files):
+  in one run with `src/i18n`, `Tests 1 failed | 4780 passed (4781)`: `till-app-late-send.test.ts`
+  "a manager's PIN > shows a refused approver on the app's line when the dialog was closed while
+  it was sent" (that file sends no `switch-bill`, `take-payment` or `new-bill`; `table-bill-controls.ts`
+  was reformatted while that run was going). The file alone: `82 passed`; that `describe` three
+  times: `21 passed` each. Then the 41 files again in four runs: `1160`, `1817`, `263`, `1282`
+  passed, 0 failed (4522). The known split-click flake did not show.
+  `pnpm --filter @waitron/till typecheck` exit 0; prettier `--check` and eslint on the six changed
+  code files exit 0; root guards english-only, style-token-names, primary-coloured-text,
+  native-form-fields: `Tests 2062 passed (2062)`.
+
 ## Task 10: one ⋮ menu: the bill on screen, then the whole table (≈65 calls)
 
 **Files.** `table-bill-controls.ts` (`tableMenu(...)`); the screen: `#actionSection`'s `closed` and
@@ -2281,6 +2356,11 @@ in both themes), the `data-discount-bill` sites (`panel-footer.test.ts`,
 
 ## Task 16: backlog, questions, PR text, hand-off (≈25 calls)
 
+- [ ] Task 9 review M4 (keyboard of the shared `wt-row-actions`: no arrow keys in a `role="menu"`,
+      focus dropped to the page after a choice, no `aria-haspopup`) was not fixed in this slice: the
+      primitive predates it and the counter-zone menu shares it. Filed as A1256 in
+      `docs/backlog/dashboard.md` (and `docs/backlog.md` beside A781) with the review's experiment.
+      List it in the PR as known and not this slice's.
 - [ ] `docs/backlog.md` A803 entry (`:1983-2000`): remove the switcher, kebab, no-Hold, quiet-Pay,
       Full invoice and main-bill clauses; slices 4 and 6 remain. Delete: A1232 (`:2025-2030`, Task
       5), A1233 (`:2032-2036`, Task 9/10), A1234 (`:2038-2042`, Task 10), A786 (`:2323-2326`, D7),

@@ -78,7 +78,7 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     expect(items(el)).toEqual([
       "Bill 1 €67.00",
       "Bill 2 · Clint €54.00 Ana has an unsent order: 3 items",
-      "Bill 3 Paid",
+      "Bill 3 Paid ✓",
       "+ New bill",
     ]);
     const current = switcher(el)!.querySelector('[data-switch-bill="wo-1"]')!;
@@ -98,6 +98,16 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     const el = await mountScreen(three, "wo-3");
 
     expect(closedLabel(el)).toBe("Bill 3 of 3 · Paid");
+    const trigger = switcher(el)!.querySelector<HTMLElement>('[slot="trigger"]')!;
+    expect(trigger.textContent!.replace(/\s+/g, " ").trim()).toBe("Bill 3 of 3 · Paid ✓ ▾");
+    expect(switcher(el)!.getAttribute("label")).toBe("Bills: Bill 3 of 3 · Paid");
+    const marks = [...switcher(el)!.querySelectorAll<HTMLElement>("[data-paid-mark]")];
+    expect(
+      marks.map((mark) => [mark.textContent!.trim(), mark.getAttribute("aria-hidden")]),
+    ).toEqual([
+      ["✓", "true"],
+      ["✓", "true"],
+    ]);
   });
 
   it("+ New bill is the last item with one bill and with three", async () => {
@@ -119,7 +129,7 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     const el = await mountScreen(merged, "wo-1");
 
     expect(closedLabel(el)).toBe("Bill 1 of 2 · €67.00");
-    expect(items(el)).toEqual(["Bill 1 €67.00", "Bill 3 Paid", "+ New bill"]);
+    expect(items(el)).toEqual(["Bill 1 €67.00", "Bill 3 Paid ✓", "+ New bill"]);
   });
 
   it("choosing Bill 3 dispatches switch-bill with Bill 3's id", async () => {
@@ -149,6 +159,31 @@ describe("A803 switcher: the table screen's bill switcher", () => {
 
     expect(seen).toEqual([{}]);
     expect(switched).toEqual([]);
+  });
+
+  it("+ New bill is drawn quiet and marked aria-disabled while one is out, and a tap on it then sends nothing", async () => {
+    const el = await mountScreen(one, "wo-1");
+    const seen = capture(el, "new-bill");
+    const newBill = () => switcher(el)!.querySelector<HTMLElement>("[data-new-bill]")!;
+    expect(newBill().hasAttribute("aria-disabled")).toBe(false);
+    const idle = getComputedStyle(newBill()).color;
+
+    el.newBillBusy = true;
+    await el.updateComplete;
+    newBill().click();
+
+    expect(newBill().getAttribute("aria-disabled")).toBe("true");
+    expect(getComputedStyle(newBill()).color).not.toBe(idle);
+    expect(seen).toEqual([]);
+  });
+
+  it("the closed switcher is drawn with a border, as a secondary button is", async () => {
+    const el = await mountScreen(one, "wo-1");
+    const trigger = switcher(el)!.shadowRoot!.querySelector<HTMLElement>('[part="trigger"]')!;
+    const style = getComputedStyle(trigger);
+
+    expect([style.borderTopStyle, style.borderTopWidth]).toEqual(["solid", "1px"]);
+    expect(style.borderTopColor).not.toBe("rgba(0, 0, 0, 0)");
   });
 
   it("an unnumbered bill reads Bill", async () => {
@@ -188,3 +223,27 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     expect(closedLabel(el)).toBe("Bill 1 · €38.50");
   });
 });
+
+describe.each(["light", "dark"] as const)(
+  "A803 switcher: the bill on screen in the %s theme",
+  (theme) => {
+    it("the checked row's background differs from the open list's, and from an unchecked row's", async () => {
+      const { el } = await mountWidget<TillTableOrderScreen>(
+        "till-table-order-screen",
+        { products: [], lines: [], orderId: "wo-2", party: switcherParty, bills: three },
+        theme,
+      );
+      const host = switcher(el) as HTMLElement & { show(): void; updateComplete: Promise<boolean> };
+      host.show();
+      await host.updateComplete;
+      const popup = host.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+      const background = (selector: string) =>
+        getComputedStyle(host.querySelector<HTMLElement>(selector)!).backgroundColor;
+
+      expect(popup.matches(":popover-open")).toBe(true);
+      const checked = background('[data-switch-bill="wo-2"]');
+      expect(checked).not.toBe(getComputedStyle(popup).backgroundColor);
+      expect(checked).not.toBe(background('[data-switch-bill="wo-1"]'));
+    });
+  },
+);
