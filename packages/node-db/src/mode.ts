@@ -4,19 +4,13 @@ import {
   requireStamp,
   tableExists,
   withNodeTransaction,
-  type Database,
   type DeploymentMode,
   type NodeDatabase,
   type NodeTransaction,
   type SingletonRole,
 } from "@waitron/db";
+import type { VenueAndNodeHandles } from "./handles.js";
 import { nodeMode } from "./schema/node-mode.js";
-
-/** The handles a role write needs: `venue` for the deployment stamp, `node` for the row. */
-export interface RoleWriteHandles {
-  readonly venue: Database;
-  readonly node: NodeDatabase;
-}
 
 /**
  * Both of one node's axes from ONE read of its row, so the pair is never torn. A node with no row,
@@ -41,7 +35,7 @@ export async function readNodeMode(
  * environment.
  */
 export async function setNodeMode(
-  handles: RoleWriteHandles,
+  handles: VenueAndNodeHandles,
   nodeId: string,
   mode: DeploymentMode,
 ): Promise<void> {
@@ -74,7 +68,7 @@ export async function setNodeModeTx(
 
 /** Sets one node's singleton role; refuses an unstamped `venue.db` as {@link setNodeMode} does. */
 export async function setSingletonRole(
-  handles: RoleWriteHandles,
+  handles: VenueAndNodeHandles,
   nodeId: string,
   role: SingletonRole,
 ): Promise<void> {

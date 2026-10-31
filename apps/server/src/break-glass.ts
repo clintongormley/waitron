@@ -10,20 +10,19 @@ import {
   type RecoveryPackRecord,
   type Transaction,
 } from "@waitron/db";
-import { readRecoveryKeyName, readRecoveryKeyVerifier, setRecoveryKeyTx } from "@waitron/node-db";
-
-/** The two files a recovery key touches: the venue's packs name keys, node.db holds the check. */
-export interface RecoveryKeyHandles {
-  readonly venue: Database;
-  readonly node: NodeDatabase;
-}
+import {
+  readRecoveryKeyName,
+  readRecoveryKeyVerifier,
+  setRecoveryKeyTx,
+  type VenueAndNodeHandles,
+} from "@waitron/node-db";
 
 /**
  * Stores only the secret's verifier and returns the RAW secret, which is never stored or logged.
  * Re-minting overwrites the verifier, so an earlier secret stops verifying.
  */
 export async function mintBreakGlassSecret(
-  handles: RecoveryKeyHandles,
+  handles: VenueAndNodeHandles,
   nodeId: string,
 ): Promise<string> {
   return (await mintBreakGlassKey(handles, nodeId)).secret;
@@ -44,32 +43,32 @@ export function takenKeyNames(
 }
 
 /**
- * A fresh secret, its verifier and a name no key in force or earlier pack has used. Writes
- * nothing, so a caller can save it inside its own node transaction.
+ * A name no key in force or earlier pack has used. Writes nothing, so a caller can choose it and
+ * save the key inside its own node transaction.
  */
-export async function chooseBreakGlassKey(
+export async function chooseBreakGlassKeyName(
   venue: Database | Transaction,
   node: NodeDatabase | NodeTransaction,
   nodeId: string,
-): Promise<{ secret: string; verifier: string; name: string }> {
-  const secret = generatePassword();
-  const name = newBreakGlassKeyName(
+): Promise<string> {
+  return newBreakGlassKeyName(
     new Date().toISOString().slice(0, 10),
     takenKeyNames(await readRecoveryKeyName(node, nodeId), await readRecoveryPacks(venue, nodeId)),
   );
-  return { secret, verifier: hashSecret(secret), name };
 }
 
 /** Refuses `deployment.not_stamped` on a venue.db no environment has claimed. */
 export async function mintBreakGlassKey(
-  handles: RecoveryKeyHandles,
+  handles: VenueAndNodeHandles,
   nodeId: string,
 ): Promise<{ secret: string; name: string }> {
   await requireStamp(handles.venue);
+  const secret = generatePassword();
+  const verifier = hashSecret(secret);
   return withNodeTransaction(handles.node, async (tx) => {
-    const key = await chooseBreakGlassKey(handles.venue, tx, nodeId);
-    await setRecoveryKeyTx(tx, nodeId, key.verifier, key.name);
-    return { secret: key.secret, name: key.name };
+    const name = await chooseBreakGlassKeyName(handles.venue, tx, nodeId);
+    await setRecoveryKeyTx(tx, nodeId, verifier, name);
+    return { secret, name };
   });
 }
 

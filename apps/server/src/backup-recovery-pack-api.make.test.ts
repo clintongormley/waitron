@@ -7,7 +7,7 @@ import { TLSSocket } from "node:tls";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import {
   insertRecoveryPack,
@@ -719,6 +719,49 @@ describe("a made pack", () => {
         (await readRecoveryKeyVerifier(suite.node, node.nodeId))!,
       ),
     ).toBe(true);
+  });
+
+  it("holds node.db's lock while it makes a pack with a new key, so a key replacement waits for the pack", async () => {
+    const order: string[] = [];
+    const original = suite.db.withWriteLock;
+    const spy = vi.spyOn(suite.db, "withWriteLock").mockImplementation(async (body) => {
+      const value = await original(body);
+      order.push("venue write committed");
+      return value;
+    });
+    onTestFinished(() => spy.mockRestore());
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let arrived!: () => void;
+    const inside = new Promise<void>((resolve) => (arrived = resolve));
+    const response = fixture({
+      seat: async (tx, seatNode, context) => {
+        arrived();
+        await gate;
+        return drawingSeat(tx, seatNode, context);
+      },
+    }).make(true);
+    await inside;
+    const replacement = mintBreakGlassKey({ venue: suite.db, node: suite.node }, node.nodeId).then(
+      (replaced) => {
+        order.push("key replaced");
+        return replaced;
+      },
+    );
+    // Room for a replacement nothing holds back to finish before the pack does.
+    await Promise.race([replacement, new Promise((resolve) => setTimeout(resolve, 100))]);
+    release();
+    const answer = await response;
+    expect(answer.status).toBe(200);
+    const replaced = await replacement;
+    expect(order.at(-1)).toBe("key replaced");
+    expect(order.slice(0, -1)).toContain("venue write committed");
+    const file = await readRecoveryPackPdf(new Uint8Array(await answer.arrayBuffer()));
+    const carried = (file.serverKey as { nodeKey: { name: string } }).nodeKey;
+    const [record] = await packs();
+    expect(record!.parts[2]).toMatchObject({ keyName: carried.name, carriedKey: true });
+    expect(replaced.name).not.toBe(carried.name);
+    expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(replaced.name);
   });
 
   it("takes the backup key from the box's settings file, never the key the backups loaded", async () => {

@@ -79,6 +79,7 @@ it.each(["missing", "wrong event", "wrong source"] as const)(
       params: { reason: mode === "wrong source" ? "event_mismatch" : "reservation_missing" },
     };
     expect(await readFile(join(f.venueDir, "venue.db"))).toEqual(destination.bytes);
+    expect(await readFile(join(f.venueDir, "node.db"))).toEqual(destination.nodeBytes);
     expect(await f.snapshot()).toEqual(destination.rows);
     expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toBe("untouched identity");
     expect(f.journal()).toBe(retained);
@@ -98,6 +99,7 @@ it("refuses the archive encryption key as node authentication before changing th
   );
   const expectedRefusal = { code: "promotion.break_glass_invalid" };
   expect(await readFile(join(f.venueDir, "venue.db"))).toEqual(destination.bytes);
+  expect(await readFile(join(f.venueDir, "node.db"))).toEqual(destination.nodeBytes);
   expect(await f.snapshot()).toEqual(destination.rows);
   expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toBe("untouched identity");
   expect(f.journal()).toBe(retained);

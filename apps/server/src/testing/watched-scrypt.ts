@@ -163,9 +163,26 @@ export async function writerBesideRequest<T>(
   request: () => Promise<T>,
 ): Promise<{ result: T; order: string[]; outside: number }> {
   const { withTransaction } = await import("@waitron/db");
+  return writerBeside(db, (body) => withTransaction(db, body), request);
+}
+
+/** `writerBesideRequest` on `node.db`'s write lock. */
+export async function nodeWriterBesideRequest<T>(
+  node: NodeDatabase,
+  request: () => Promise<T>,
+): Promise<{ result: T; order: string[]; outside: number }> {
+  const { withNodeTransaction } = await import("@waitron/db");
+  return writerBeside(node, (body) => withNodeTransaction(node, body), request);
+}
+
+async function writerBeside<D extends Database, X extends Transaction, T>(
+  db: D,
+  transaction: (body: (tx: X) => unknown) => Promise<unknown>,
+  request: () => Promise<T>,
+): Promise<{ result: T; order: string[]; outside: number }> {
   let writerAsking = false;
   const original = db.withWriteLock;
-  const spy = vi.spyOn(db, "withWriteLock").mockImplementation((body) =>
+  const spy = vi.spyOn(db as Database, "withWriteLock").mockImplementation((body) =>
     writerAsking
       ? original(body)
       : original(async () => {
@@ -183,7 +200,7 @@ export async function writerBesideRequest<T>(
       const writer = new Promise<void>((resolve, reject) => {
         setImmediate(() => {
           writerAsking = true;
-          const committed = withTransaction(db, (tx) => tx.execute(sql`select 1`));
+          const committed = transaction((tx) => tx.execute(sql`select 1`));
           writerAsking = false;
           committed.then(() => {
             passwords.order.push("writer");

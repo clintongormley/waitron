@@ -70,7 +70,8 @@ export async function withRecoveryKeyAuthority<T>(
       };
       const commit = async <R>(body: (tx: Transaction) => Promise<R>): Promise<R> => {
         authorise();
-        // node.db's lock is taken outside venue.db's, so the key cannot change before this commits.
+        // node.db's lock is held across the venue commit, and every key write takes it, so the key
+        // cannot change before this commits; it is taken outside venue.db's, never inside.
         return withNodeTransaction(deps.node, (node) =>
           withTransaction(deps.db, async (tx) => {
             authorise();

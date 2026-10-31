@@ -65,7 +65,8 @@ export async function createRecoveryPack(
     if (!modules.some((module) => module.name === name && module.backup?.recoveryPack))
       return refuse("module_unsupported");
   }
-  // node.db's lock is taken outside venue.db's, so the key cannot change while the pack is made.
+  // node.db's lock is held across the venue commit, and every key write takes it, so the key
+  // cannot change while the pack is made; it is taken outside venue.db's, never inside.
   return withNodeTransaction(deps.nodeDb, (nodeTx) =>
     withTransaction(deps.db, async (tx) => {
       await deps.authorize?.(tx);

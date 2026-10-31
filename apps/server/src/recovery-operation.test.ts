@@ -11,9 +11,9 @@ import {
 import { mintBreakGlassSecret } from "./break-glass.js";
 import * as operations from "./operation-authentication.js";
 import {
+  nodeWriterBesideRequest,
   whileChangingNodeOnLockRequest,
   whileChangingOnLockRequest,
-  writerBesideRequest,
 } from "./testing/watched-scrypt.js";
 
 vi.mock("node:crypto", async (importOriginal) =>
@@ -133,7 +133,7 @@ describe("scoped recovery-key authority", () => {
   it("derives outside the write lock and rolls back a refused operation", async () => {
     const original = await readRecoveryKeyVerifier(suite.node, NODE);
     let held: unknown;
-    const observed = await writerBesideRequest(suite.db, () =>
+    const observed = await nodeWriterBesideRequest(suite.node, () =>
       operations.withRecoveryKeyOperation(
         { db: suite.db, node: suite.node, nodeId: NODE },
         binding,

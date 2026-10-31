@@ -1,9 +1,20 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, stampDeployment } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { NODE_MIGRATIONS, readRecoveryKeyVerifier } from "@waitron/node-db";
 import { mintBreakGlassSecret, verifyBreakGlass } from "./break-glass.js";
+
+const hashing = vi.hoisted(() => ({ underNodeLock: false, seen: [] as boolean[] }));
+
+vi.mock("node:crypto", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:crypto")>();
+  const scryptSync = (...args: Parameters<typeof actual.scryptSync>) => {
+    hashing.seen.push(hashing.underNodeLock);
+    return actual.scryptSync(...args);
+  };
+  return { ...actual, scryptSync };
+});
 
 // The core set and node.db's own: mint and verify touch nothing else.
 const suite = useVenueDb({
@@ -54,6 +65,25 @@ describe("break-glass mint + verify", () => {
       done = true;
     }
     expect(turns).toBeGreaterThan(1);
+  });
+
+  it("hashes the new secret before it takes node.db's lock", async () => {
+    const original = suite.node.withWriteLock;
+    const spy = vi.spyOn(suite.node, "withWriteLock").mockImplementation((body) =>
+      original(async () => {
+        hashing.underNodeLock = true;
+        try {
+          return await body();
+        } finally {
+          hashing.underNodeLock = false;
+        }
+      }),
+    );
+    onTestFinished(() => spy.mockRestore());
+    hashing.seen = [];
+    const secret = await mintBreakGlassSecret(handles(), NODE);
+    expect(hashing.seen).toEqual([false]);
+    expect(await verifyBreakGlass(suite.node, NODE, secret)).toBe(true);
   });
 
   it("verify returns false when no verifier is set", async () => {

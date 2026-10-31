@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { eq, isNull } from "drizzle-orm";
 import { CORE_MIGRATIONS, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -6,7 +6,7 @@ import { hashPassword, IDENTITY_MIGRATIONS, managementSessions, persons } from "
 import { readOperationAuthority, type OperationAuthority } from "@waitron/module";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { generateSync } from "otplib";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintBreakGlassSecret, verifyBreakGlass } from "./break-glass.js";
 import {
   withAuthenticatedOperation,
   withRecoveryKeyOperation,
@@ -288,5 +288,43 @@ describe("a recovery key's authority", () => {
 
   it("commits the waiting write when the key is not replaced", async () => {
     expect(await waitingWrite(false)).toBe("committed");
+  });
+
+  it("holds node.db's lock until the authorised write commits, so a key replacement waits for it", async () => {
+    const secret = await mintBreakGlassSecret(handles(), NODE);
+    const order: string[] = [];
+    const original = suite.db.withWriteLock;
+    const spy = vi.spyOn(suite.db, "withWriteLock").mockImplementation(async (body) => {
+      const value = await original(body);
+      order.push("venue write committed");
+      return value;
+    });
+    onTestFinished(() => spy.mockRestore());
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let arrived!: () => void;
+    const inside = new Promise<void>((resolve) => (arrived = resolve));
+    const result = withRecoveryKeyOperation(
+      { db: suite.db, node: suite.node, nodeId: NODE },
+      recovery,
+      secret,
+      async () => {
+        arrived();
+        await gate;
+        return "committed";
+      },
+    );
+    await inside;
+    const replacement = mintBreakGlassSecret(handles(), NODE).then((replaced) => {
+      order.push("key replaced");
+      return replaced;
+    });
+    // Room for a replacement nothing holds back to finish before the write does.
+    await Promise.race([replacement, new Promise((resolve) => setTimeout(resolve, 100))]);
+    release();
+    expect(await result).toBe("committed");
+    const replaced = await replacement;
+    expect(order).toEqual(["venue write committed", "key replaced"]);
+    expect(await verifyBreakGlass(suite.node, NODE, replaced)).toBe(true);
   });
 });

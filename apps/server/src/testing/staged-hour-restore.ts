@@ -260,13 +260,18 @@ export async function stagedHourRestore(
     };
     const seedDestination = async () => {
       await db.archiveTo(join(roots.venueDir, "venue.db"));
+      await nodeDb.archiveTo(join(roots.venueDir, "node.db"));
       const copy = await openVenueDatabase(roots.venueDir);
       try {
         await copy.venue.update(invoiceSeries).set({ nextNumber: 777 });
       } finally {
         await copy.close();
       }
-      return { rows: await snapshot(), bytes: await readFile(join(roots.venueDir, "venue.db")) };
+      return {
+        rows: await snapshot(),
+        bytes: await readFile(join(roots.venueDir, "venue.db")),
+        nodeBytes: await readFile(join(roots.venueDir, "node.db")),
+      };
     };
     const advanceCounters = async () => {
       const copy = await openVenueDatabase(roots.venueDir);

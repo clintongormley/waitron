@@ -117,6 +117,15 @@ it("previews a backup with an older venue schema by migrating only its private s
           ...fakeModule("core"),
           migrations: { name: "core", table: "__drizzle_migrations_db", from: "../db/drizzle" },
         },
+        {
+          ...fakeModule("node"),
+          migrations: {
+            name: "node",
+            table: "__drizzle_migrations_node",
+            from: "../node-db/drizzle",
+            database: "node",
+          },
+        },
       ],
     });
     expect(preview.nodeRecoveryKeyName).toBeNull();
@@ -219,6 +228,15 @@ it("binds a bucket copy with an older venue schema before private preview migrat
         {
           ...fakeModule("core"),
           migrations: { name: "core", table: "__drizzle_migrations_db", from: "../db/drizzle" },
+        },
+        {
+          ...fakeModule("node"),
+          migrations: {
+            name: "node",
+            table: "__drizzle_migrations_node",
+            from: "../node-db/drizzle",
+            database: "node",
+          },
         },
       ],
       environment: "preproduction",

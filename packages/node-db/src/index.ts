@@ -1,4 +1,5 @@
 export { NODE_CLASSIFICATION } from "./classification.js";
+export type { VenueAndNodeHandles } from "./handles.js";
 export { NODE_MIGRATIONS } from "./migrations.js";
 export {
   nodeMirrorLink,
@@ -16,5 +17,4 @@ export {
   setSingletonRole,
   setSingletonRoleTx,
 } from "./mode.js";
-export type { RoleWriteHandles } from "./mode.js";
 export { readRecoveryKeyName, readRecoveryKeyVerifier, setRecoveryKeyTx } from "./recovery-key.js";

@@ -75,6 +75,7 @@ it("rereads the retained selected-hour binding and refuses a changed event befor
     params: { reason: "reservation_missing" },
   };
   expect(await readFile(join(f.venueDir, "venue.db"))).toEqual(destination.bytes);
+  expect(await readFile(join(f.venueDir, "node.db"))).toEqual(destination.nodeBytes);
   expect(await f.snapshot()).toEqual(destination.rows);
   expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toBe("untouched identity");
   expect(f.journal()).toBe(journal);
