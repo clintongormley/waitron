@@ -38,6 +38,7 @@ export type {
   ClockCheckCloseRequest,
   ClockCheckOpenRequest,
   ClockConfirmRequest,
+  ClockStep,
   ClockStepRecorded,
   ClockStepRequest,
   ClockProvedWrong,

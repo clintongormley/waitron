@@ -1,6 +1,7 @@
 import "./errors.js";
+import { desc, ne } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import type { ClockStepRecorded, ClockStepRequest } from "@waitron/fiscal";
+import type { ClockStep, ClockStepRecorded, ClockStepRequest } from "@waitron/fiscal";
 import type { ErrorParams, NodeId } from "@waitron/shared";
 import { CLOCK_BEHIND_MARGIN_MS, chainHeads, latestRecord } from "./clock-behind.js";
 import {
@@ -172,4 +173,18 @@ export async function confirmClockStep(
       recordId: named?.id ?? null,
     },
   };
+}
+
+/** The latest confirmation that moved the clock, by `seq`: the clock is what is in doubt, so
+ * `confirmed_at` cannot order them. */
+export async function latestClockStep(tx: Transaction): Promise<ClockStep | null> {
+  const [row] = await tx
+    .select({ confirmedAt: clockConfirmations.confirmedAt, stepMs: clockConfirmations.stepMs })
+    .from(clockConfirmations)
+    .where(ne(clockConfirmations.stepMs, 0))
+    .orderBy(desc(clockConfirmations.seq))
+    .limit(1);
+  return row === undefined
+    ? null
+    : { confirmedAt: row.confirmedAt.toISOString(), stepMs: row.stepMs };
 }

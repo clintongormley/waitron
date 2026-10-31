@@ -617,3 +617,45 @@ it("never marks the open clock.corrected handled before it was detected, when a 
   expect(corrected[0]).toMatchObject({ acknowledged_at: iso(first) });
   expect(corrected[1]).toMatchObject({ acknowledged_at: null });
 });
+
+describe("latestClockStep", () => {
+  const latest = () => withTransaction(suite.db, (tx) => backend.latestClockStep(tx));
+
+  it("answers null before the box has stepped its clock", async () => {
+    await expect(latest()).resolves.toBeNull();
+  });
+
+  it("answers the step written last, by its order, not by its date", async () => {
+    await sale(R - 5 * H);
+    await step(request(R + H));
+    const back = R - 2 * H;
+    await step(request(back, { source: "admin", admin: LUIS, witnesses: [], stepMs: back - R }));
+
+    await expect(latest()).resolves.toEqual({ confirmedAt: iso(back), stepMs: back - R });
+  });
+
+  it("passes over a confirmation that moved nothing", async () => {
+    await sale(R - 5 * M);
+    await step(request(R + H));
+    await withTransaction(suite.db, async (tx) => {
+      const [{ seq }] = await tx
+        .select({ seq: sql<number>`max(${clockConfirmations.seq})` })
+        .from(clockConfirmations);
+      await tx.insert(clockConfirmations).values({
+        seq: seq + 1,
+        nodeId,
+        boxClockAt: new Date(R + 2 * H),
+        confirmedAt: new Date(R + 2 * H),
+        stepMs: 0,
+        source: "authority",
+        reason: "behind_chain",
+        proof: {},
+      });
+    });
+
+    await expect(latest()).resolves.toEqual({
+      confirmedAt: iso(R + H),
+      stepMs: request(R + H).stepMs,
+    });
+  });
+});

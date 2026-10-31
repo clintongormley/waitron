@@ -262,6 +262,13 @@ export interface ClockStepRecorded {
   corrected: { id: string; params: Readonly<Record<string, unknown>> } | null;
 }
 
+/** A step the box made to its own clock: when it was confirmed, by the clock after it, and by how
+ * much it moved the clock (negative for back). */
+export interface ClockStep {
+  confirmedAt: string;
+  stepMs: number;
+}
+
 export interface ClockConfirmation {
   id: string;
   seq: number;
@@ -407,6 +414,11 @@ export interface FiscalBackend {
    * from the after reading), and `clock.corrected` for a verified step or an unverified one of
    * more than a second, answering both. Absent when the regime never stops a clock. */
   confirmClockStep?(tx: Transaction, input: ClockStepRequest): Promise<ClockStepRecorded>;
+
+  /** The latest step `confirmClockStep` recorded that moved the clock, by the order rows were
+   * written, never by their dates; null when none has. A step the time service or a person on the
+   * host made has no row, so it is never answered here. */
+  latestClockStep?(tx: Transaction): Promise<ClockStep | null>;
 
   /** Records when a stop began: opens a check while the stop holds and none is open, and answers
    * the open one; null, and nothing written, while there is no stop. */
