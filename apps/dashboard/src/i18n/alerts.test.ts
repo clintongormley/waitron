@@ -606,6 +606,7 @@ describe("payments restarted on a clock behind the last sale", () => {
       authority: { en: "the tax agency's time", es: expect.any(String) },
       devices: { en: "two tills or handhelds", es: expect.any(String) },
       admin: { en: "an administrator", es: expect.any(String) },
+      staff: { en: "a staff member", es: expect.any(String) },
     });
     expect(ALERT_WORDS["clock_confirmed_by"]!.otherwise).toEqual({
       en: "a check recorded on the box",
