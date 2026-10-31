@@ -844,7 +844,7 @@ export interface StartServerSeams {
   freeSpaceWatch?: { intervalMs?: number; statfs?: Statfs };
   testClock?: ModuleOperationHost["testClock"];
   requestFromBox?: (c: Context) => boolean;
-  /** The box's clock service; boot tests pass a stand-in so none reaches a socket. */
+  /** The box's clock service; unset, the server talks to the host's socket. */
   boxHost?: BoxHostClient;
 }
 

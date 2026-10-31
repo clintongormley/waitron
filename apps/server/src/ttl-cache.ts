@@ -14,7 +14,8 @@ export function createTtlCache<V>(opts: { ttlMs: number; now: () => Date }): Ttl
     async get(key, compute) {
       const nowMs = opts.now().getTime();
       const hit = entries.get(key);
-      if (hit && nowMs - hit.at < opts.ttlMs) return hit.value;
+      // An entry from the clock's future is stale: the clock was set back since it was read.
+      if (hit && hit.at <= nowMs && nowMs - hit.at < opts.ttlMs) return hit.value;
       const value = compute();
       entries.set(key, { at: nowMs, value });
       // A rejected compute must not stick: drop it so the next call retries.
