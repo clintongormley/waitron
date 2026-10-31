@@ -1,3 +1,4 @@
+import type { BoxHostClient } from "./box-host-client.js";
 import { clearStagedRecoveries, createSetupRecoveryPreparation } from "./recovery-preparation.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
 import type { WaitronModule } from "@waitron/module";
@@ -842,6 +843,8 @@ export interface StartServerSeams {
   freeSpaceWatch?: { intervalMs?: number; statfs?: Statfs };
   testClock?: ModuleOperationHost["testClock"];
   requestFromBox?: (c: Context) => boolean;
+  /** The box's clock service; boot tests pass a stand-in so none reaches a socket. */
+  boxHost?: BoxHostClient;
 }
 
 /**
