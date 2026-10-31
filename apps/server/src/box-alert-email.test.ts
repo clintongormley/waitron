@@ -131,6 +131,42 @@ describe("boxEmailMessage for payments restarted", () => {
     });
   });
 
+  it("names the staff member and the till when a staff member confirmed, in both languages", () => {
+    const params = {
+      ...RESTARTED,
+      confirmedBy: "staff",
+      person: "Ana",
+      byStaff: true,
+      device: "Bar",
+    };
+    expect(
+      boxEmailMessage("clock.behind_chain_restarted", "en", "Corner Bistro", params).text,
+    ).toBe(
+      "The box's clock was confirmed by Ana, a staff member, on till Bar, and payments started again. Sales recorded with a later time than the real one are listed on the Box status page (in the dashboard, Settings → Box status).",
+    );
+    expect(
+      boxEmailMessage("clock.behind_chain_restarted", "es", "Corner Bistro", params).text,
+    ).toBe(
+      "La hora del equipo la confirmó Ana, un empleado, en la caja Bar, y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
+    );
+  });
+
+  it("names a till without a label as a till", () => {
+    const params = {
+      ...RESTARTED,
+      confirmedBy: "staff",
+      person: "Ana",
+      byStaff: true,
+      device: null,
+    };
+    expect(
+      boxEmailMessage("clock.behind_chain_restarted", "en", "Corner Bistro", params).text,
+    ).toContain("confirmed by Ana, a staff member, on a till, and payments");
+    expect(
+      boxEmailMessage("clock.behind_chain_restarted", "es", "Corner Bistro", params).text,
+    ).toContain("la confirmó Ana, un empleado, en una caja, y se volvió");
+  });
+
   it("words a source it does not know as a check recorded on the box", () => {
     const params = { ...RESTARTED, confirmedBy: "sundial" };
     expect(

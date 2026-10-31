@@ -224,6 +224,19 @@ describe("renderMisdatedSalesCsv", () => {
       ]);
     });
 
+    it("names the staff member who confirmed on a till, in English and Spanish", () => {
+      for (const language of ["en", "es"] as const) {
+        const staff = input([record()], {
+          language,
+          closing: { source: "staff" },
+          confirmedByName: "Ana",
+        });
+        expect(rows(renderMisdatedSalesCsv(staff))[0]![0]).toContain(
+          `${CLOCK_CONFIRMED_BY_WORDS[language].staff} (Ana)`,
+        );
+      }
+    });
+
     it("fills the Spanish template with the same values", () => {
       const lines = rows(
         renderMisdatedSalesCsv(input([record(), record({ recordId: "r2" })], { language: "es" })),
