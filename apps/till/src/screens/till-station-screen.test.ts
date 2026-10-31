@@ -1784,7 +1784,10 @@ describe("till-station-screen device mode with several stations (A366 decision 7
     it("offers the switch with two stations, in the actions row, and opens stacked", async () => {
       const { el } = await mountFor("dev-1");
       expect(toggle(el)!.textContent!.trim()).toBe("Merged");
-      expect(toggle(el)!.parentElement).toBe(el.shadowRoot!.querySelector(".actions"));
+      // The toggle sits in a wrapper that also holds its help badge; the wrapper leads the row.
+      const actions = el.shadowRoot!.querySelector(".actions")!;
+      expect(toggle(el)!.parentElement!.parentElement).toBe(actions);
+      expect(actions.firstElementChild).toBe(toggle(el)!.parentElement);
       expect(sections(el)).toHaveLength(3);
     });
 

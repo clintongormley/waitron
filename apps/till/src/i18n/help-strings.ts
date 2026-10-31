@@ -53,6 +53,8 @@ export const helpEn = {
     "Tap a column's heading to fold it to a narrow strip, and again to open it. Columns sets the order of the columns and hides the ones you do not need. This device keeps both, for each board.",
   "help.kitchen.notices":
     "Read each change, which names its order, then tap Got it. Got it clears it from every screen at this station; it does not change the card.",
+  "help.kitchen.merge":
+    "Switches between a board for each station and one board for all of them, where each dish names its station. This device remembers the choice.",
 } as const;
 
 export type HelpKey = keyof typeof helpEn;
@@ -108,6 +110,8 @@ export const helpEs: Record<HelpKey, string> = {
     "Toca la cabecera de una columna para plegarla en una franja estrecha, y otra vez para abrirla. Columnas ordena las columnas y oculta las que no necesitas. Este dispositivo guarda las dos cosas para cada tablero.",
   "help.kitchen.notices":
     "Lee cada cambio, que nombra su pedido, y toca Entendido. Entendido lo quita de todas las pantallas de esta estación; no cambia la tarjeta.",
+  "help.kitchen.merge":
+    "Cambia entre un tablero por estación y un solo tablero para todas, donde cada plato indica su estación. Este dispositivo recuerda la elección.",
 };
 const helpCatalogues: Record<string, Partial<Record<HelpKey, string>>> = {
   en: helpEn,
