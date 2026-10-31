@@ -79,6 +79,21 @@ export function backoffMs(intentos: number): number {
   return Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** Math.max(0, intentos - 1));
 }
 
+/** Every stored retry time is at most `BACKOFF_MAX_MS` after the clock that wrote it, so one
+ * further ahead was written before the clock stepped back, and is due. */
+function retryDue(column: SQL, now: Date): SQL {
+  const latest = new Date(now.getTime() + BACKOFF_MAX_MS).toISOString();
+  return sql`(${column} <= ${now.toISOString()} or ${column} > ${latest})`;
+}
+
+/** A claim stamped `RECUPERACION_ENVIANDO_MS` before now is abandoned; so is one stamped further
+ * ahead than that, before the clock stepped back. */
+function claimStale(column: SQL, now: Date): SQL {
+  const cutoff = new Date(now.getTime() - RECUPERACION_ENVIANDO_MS).toISOString();
+  const latest = new Date(now.getTime() + RECUPERACION_ENVIANDO_MS).toISOString();
+  return sql`(${column} < ${cutoff} or ${column} > ${latest})`;
+}
+
 export interface DrainDeps {
   db: Database;
   /**
@@ -119,19 +134,18 @@ type DueRow = RegistroRow & {
  *
  * - `proximo_intento_en <= now` is INCLUSIVE. A due successor can still wait for an earlier
  *   record's retry or in-flight answer.
- * - `enviado_en < now - RECUPERACION_ENVIANDO_MS` is STRICT, the same cutoff `recoverStaleClaims`
- *   computes, so a row this reports stale is a row that pass will recover.
+ * - A stale claim is `claimStale`, the test `recoverStaleClaims` applies, so a row this reports
+ *   stale is a row that pass will recover.
  *
  * Timestamps are compared as TEXT, as everywhere in this file: the `ts` column writes
  * `Date.prototype.toISOString`, fixed-width UTC, so lexical order is chronological order.
  */
 async function workIsDue(db: Database, now: Date, environment: Entorno): Promise<boolean> {
-  const staleCutoff = new Date(now.getTime() - RECUPERACION_ENVIANDO_MS).toISOString();
   const rows = await db.execute<{ due: number }>(sql`
     select (exists (
       select 1 from envios
-      where (estado = 'pendiente' and proximo_intento_en <= ${now.toISOString()})
-         or (estado = 'enviando' and enviado_en < ${staleCutoff})
+      where (estado = 'pendiente' and ${retryDue(sql`proximo_intento_en`, now)})
+         or (estado = 'enviando' and ${claimStale(sql`enviado_en`, now)})
     ) or exists (${dueProbes(now, environment)}) or exists (${releasableHeads()})) as due
   `);
   return rows.rows[0]!.due === 1;
@@ -218,7 +232,7 @@ async function drainDue(
   });
 
   const { flujo, dueCount0 } = await withTransaction(db, async (tx) => ({
-    flujo: await readFlujo(tx),
+    flujo: await readGate(tx, now),
     dueCount0: await countDue(tx, now, environment),
   }));
   if (dueCount0 === 0) return;
@@ -409,13 +423,29 @@ async function readFlujo(
     : { proximoEnvioEn: null, tiempoEsperaSeg: 0 };
 }
 
+/**
+ * The flow-control state, with a gate further ahead than its own wait reset to one wait from now
+ * and stored: it was written before the clock stepped back, so how long ago the last envío went is
+ * unknown, and sending at once could break AEAT's wait. Stored, or each pass would push it on.
+ */
+async function readGate(
+  tx: Transaction,
+  now: Date,
+): Promise<{ proximoEnvioEn: Date | null; tiempoEsperaSeg: number }> {
+  const flujo = await readFlujo(tx);
+  const latest = new Date(now.getTime() + flujo.tiempoEsperaSeg * 1000);
+  if (flujo.proximoEnvioEn === null || flujo.proximoEnvioEn <= latest) return flujo;
+  await upsertFlujo(tx, latest, flujo.tiempoEsperaSeg);
+  return { ...flujo, proximoEnvioEn: latest };
+}
+
 /** How many rows are due now, including successors held behind an earlier retry, and the probes
  * due now. */
 async function countDue(tx: Transaction, now: Date, environment: Entorno): Promise<number> {
   const rows = await tx.execute<{ count: number }>(sql`
     select (
       select count(*) from envios
-      where estado = 'pendiente' and proximo_intento_en <= ${now.toISOString()}
+      where estado = 'pendiente' and ${retryDue(sql`proximo_intento_en`, now)}
     ) + (select count(*) from (${dueProbes(now, environment)})) as count
   `);
   return rows.rows[0]!.count;
@@ -428,7 +458,7 @@ async function nextClaimOpportunity(
 ): Promise<Date | null> {
   const rows = await tx.execute<{ next_retry: string | null; oldest_claim: string | null }>(sql`
     select
-      min(case when estado = 'pendiente' and proximo_intento_en > ${now.toISOString()}
+      min(case when estado = 'pendiente' and not ${retryDue(sql`proximo_intento_en`, now)}
         then proximo_intento_en end) as next_retry,
       min(case when estado = 'enviando' then enviado_en end) as oldest_claim
     from envios
@@ -467,7 +497,7 @@ function bumpNextDue(result: CommittedCounts, at: Date | null): void {
  * within the same pass. Raises the flag only, never an `incidents` row.
  */
 async function recoverStaleClaims(tx: Transaction, now: Date, environment: Entorno): Promise<void> {
-  await requeueClaims(tx, now, new Date(now.getTime() - RECUPERACION_ENVIANDO_MS), environment);
+  await requeueClaims(tx, now, true, environment);
 }
 
 /**
@@ -484,23 +514,22 @@ export async function resetInFlightClaims(db: Database, now: Date): Promise<void
     if (environment !== null && (await pendingWasSendable(tx, now, environment))) {
       await openTechnicalIncident(tx, environment, now, []);
     }
-    await requeueClaims(tx, now, null, environment);
+    await requeueClaims(tx, now, false, environment);
   });
 }
 
-/** `enviando` rows back to `pendiente`, due `now`, with `incidencia` raised — only those claimed
- * before `claimedBefore` when one is given, every one when it is `null`. */
+/** `enviando` rows back to `pendiente`, due `now`, with `incidencia` raised — only the stale ones
+ * (`claimStale`) when `onlyStale`, every one otherwise. */
 async function requeueClaims(
   tx: Transaction,
   now: Date,
-  claimedBefore: Date | null,
+  onlyStale: boolean,
   environment: Entorno | null,
 ): Promise<void> {
-  const stale =
-    claimedBefore === null ? sql.empty() : sql` and enviado_en < ${claimedBefore.toISOString()}`;
+  const stale = onlyStale ? sql` and ${claimStale(sql`enviado_en`, now)}` : sql.empty();
   const interrupted = await tx.execute<{ id: string; entorno: Entorno | null }>(sql`
     select r.id, r.entorno from envios e join registros_facturacion r on r.id = e.registro_id
-    where e.estado = 'enviando'${claimedBefore === null ? sql.empty() : sql` and e.enviado_en < ${claimedBefore.toISOString()}`}
+    where e.estado = 'enviando'${stale}
   `);
   for (const env of new Set(interrupted.rows.map((row) => row.entorno))) {
     if (env === null || (environment !== null && env !== environment)) continue;
@@ -595,7 +624,7 @@ async function claimBatch(
       from envios e
       join registros_facturacion r on r.id = e.registro_id
       join waiting w on w.id = r.id
-      where e.estado = 'pendiente' and e.proximo_intento_en <= ${now.toISOString()}
+      where e.estado = 'pendiente' and ${retryDue(sql`e.proximo_intento_en`, now)}
         ${alreadyBlocked === null ? sql`` : sql`and r.sif_id not in ${alreadyBlocked}`}
         -- A cancellation can alter the authority's row under this invoice key before our original's
         -- duplicate reply reveals that the row belongs to someone else.
@@ -615,7 +644,7 @@ async function claimBatch(
           where prior.sif_id = r.sif_id and prior.secuencia < r.secuencia
             and (earlier.estado = 'enviando'
               or (earlier.estado = 'pendiente' and (
-                earlier.proximo_intento_en > ${now.toISOString()}
+                not ${retryDue(sql`earlier.proximo_intento_en`, now)}
                 or (prior.tipo_registro = 'anulacion' and not exists (
                   select 1 from registros_facturacion prior_original
                   join envios prior_original_envio on prior_original_envio.registro_id = prior_original.id
@@ -965,12 +994,14 @@ function brakeHeldHeads(environment: Entorno): SQL {
 }
 
 /** The brake-held heads due a probe at `now`: the chain's last send is at least
- * `BRAKE_PROBE_INTERVAL_MS` ago. */
+ * `BRAKE_PROBE_INTERVAL_MS` ago, or further ahead than that, stamped before the clock stepped
+ * back. */
 function dueProbes(now: Date, environment: Entorno): SQL {
   const cutoff = new Date(now.getTime() - BRAKE_PROBE_INTERVAL_MS).toISOString();
+  const latest = new Date(now.getTime() + BRAKE_PROBE_INTERVAL_MS).toISOString();
   return sql`
     select heads.id, heads.run_code from (${brakeHeldHeads(environment)}) heads
-    where heads.last_sent <= ${cutoff}
+    where heads.last_sent <= ${cutoff} or heads.last_sent > ${latest}
   `;
 }
 
