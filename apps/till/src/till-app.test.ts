@@ -10100,7 +10100,11 @@ describe("till-app", () => {
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines,
           splitBill,
-          getPartyBills: vi.fn().mockResolvedValue([smallPartyBill]),
+          getPartyBills: vi.fn(async () =>
+            splitBill.mock.calls.length === 0
+              ? [smallPartyBill]
+              : [smallPartyBill, { ...smallPartyBill, workingOrderId: "wo-check", billNumber: 2 }],
+          ),
           recordSale,
           reprint,
         });

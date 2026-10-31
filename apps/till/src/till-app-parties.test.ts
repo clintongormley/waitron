@@ -157,6 +157,17 @@ const checkBill: PartyBill = {
   hasPayments: false,
   receiptAvailable: false,
 };
+/** The one bill of the party a seat answers with (`seatTable`'s `tabId`), before anything is on it. */
+const newPartyBill: PartyBill = {
+  ...tabBill,
+  workingOrderId: "wo-new",
+  partyId: "v-new",
+  total: "0.00",
+  outstanding: "0.00",
+};
+/** A bills read in which only the newly seated party has a bill. */
+const onlyNewPartyBills = () =>
+  vi.fn(async (partyId: string) => (partyId === "v-new" ? [newPartyBill] : []));
 
 const tabLine: TabLine = {
   changesAfterSending: null,
@@ -284,7 +295,9 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     getPartyBills: vi.fn(async (partyId: string) =>
       partyId === "v7" || partyId === "v9"
         ? [{ ...tabBill, partyId, workingOrderId: partyId === "v7" ? "wo-7" : "wo-9" }]
-        : [tabBill, checkBill],
+        : partyId === "v-new"
+          ? [newPartyBill]
+          : [tabBill, checkBill],
     ),
     finishTable: vi.fn().mockResolvedValue({ state: "closed" }),
     markTableCleared: vi.fn().mockResolvedValue(undefined),
@@ -526,7 +539,7 @@ describe("till-app: seating a party", () => {
       .fn()
       .mockResolvedValueOnce([table4, table7, table9])
       .mockResolvedValue([table4, table7, seatedMesa9]);
-    const { el } = await mountApp({ getTablesState, getPartyBills: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountApp({ getTablesState, getPartyBills: onlyNewPartyBills() });
     const screen = await toFloor(el);
 
     screen.shadowRoot!.querySelector<HTMLElement>('[data-table="t9"]')!.click();
@@ -591,7 +604,7 @@ describe("till-app: seating a party", () => {
     const { el } = await mountApp({
       seatAtTables,
       getTablesState,
-      getPartyBills: vi.fn().mockResolvedValue([]),
+      getPartyBills: onlyNewPartyBills(),
     });
     const screen = await toFloor(el);
 
@@ -629,7 +642,7 @@ describe("till-app: seating a party", () => {
         table({ id: "t11", label: "11", today: today("j1") }),
       ])
       .mockRejectedValue(new TypeError("Failed to fetch"));
-    const { el } = await mountApp({ getTablesState, getPartyBills: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountApp({ getTablesState, getPartyBills: onlyNewPartyBills() });
     const screen = await toFloor(el);
 
     emit(screen, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
@@ -664,7 +677,7 @@ describe("till-app: seating a party", () => {
       .fn()
       .mockResolvedValueOnce([table({ id: "t9", label: "Counter 4", today })])
       .mockRejectedValue(new TypeError("Failed to fetch"));
-    const { el } = await mountApp({ getTablesState, getPartyBills: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountApp({ getTablesState, getPartyBills: onlyNewPartyBills() });
     const screen = await toFloor(el);
 
     emit(screen, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
@@ -1011,8 +1024,12 @@ describe("till-app: the party's bills and Finish table", () => {
         server.changed = true;
         return updateOrderLine();
       }),
-      getPartyBills: vi.fn(async () =>
-        server.changed ? [withCheese, checkBill] : [tabBill, checkBill],
+      getPartyBills: vi.fn(async (partyId: string) =>
+        partyId === "v7"
+          ? [{ ...tabBill, partyId, workingOrderId: "wo-7" }]
+          : server.changed
+            ? [withCheese, checkBill]
+            : [tabBill, checkBill],
       ),
       getTablesState: vi.fn(async () =>
         server.changed
@@ -2125,6 +2142,7 @@ describe("till-app: table actions on the party", () => {
     const { el } = await mountApp({
       getTablesState: reads.getTablesState,
       listDrafts: draftsOnceJoinedByAna(() => reads.other.acted),
+      getPartyBills: billsOnceJoinedByAna(() => reads.other.acted, "v7"),
       moveGuests: vi.fn(async () => {
         reads.other.acted = true;
         return { partyId: "v7", billIds: ["wo-7", "wo-4", "wo-check"] };
@@ -5645,6 +5663,21 @@ describe("till-app: the order's groups", () => {
   it("follows the round onto the party's next tab after its tab was paid", async () => {
     const { el } = await mountApp({
       submitDraft: answering({ tabId: "wo-next", revision: 5, groups: [] }),
+      getPartyBills: vi.fn(async () =>
+        vi.mocked(api.submitDraft).mock.calls.length === 0
+          ? [tabBill, checkBill]
+          : [
+              { ...tabBill, status: "settled", outstanding: "0.00" },
+              checkBill,
+              {
+                ...tabBill,
+                workingOrderId: "wo-next",
+                billNumber: 3,
+                total: "0.00",
+                outstanding: "0.00",
+              },
+            ],
+      ),
     });
     const order = await openMesa(el);
     const reads = vi.mocked(api.getTablesState).mock.calls.length;
@@ -5944,7 +5977,7 @@ describe("till-app: the order's groups", () => {
         .fn()
         .mockResolvedValueOnce([table4, table7, table9])
         .mockRejectedValue(new TypeError("Failed to fetch")),
-      getPartyBills: vi.fn().mockResolvedValue([]),
+      getPartyBills: onlyNewPartyBills(),
       submitDraft: answering({ tabId: "wo-new", revision: 1, groups: [] }),
     });
     const screen = await toFloor(el);
@@ -11448,13 +11481,15 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
         .fn()
         .mockResolvedValue({ ...till, capabilities: [...till.capabilities, "take-cash"] }),
       finishTable: vi.fn().mockRejectedValueOnce(refusal()).mockResolvedValue({ state: "closed" }),
-      getPartyBills: vi.fn().mockResolvedValue(
-        [tabBill, checkBill].map((row) => ({
-          ...row,
-          status: "settled",
-          outstanding: "0.00",
-          hasPayments: true,
-        })),
+      getPartyBills: vi.fn(async (partyId: string) =>
+        partyId === "v7"
+          ? [{ ...tabBill, partyId, workingOrderId: "wo-7" }]
+          : [tabBill, checkBill].map((row) => ({
+              ...row,
+              status: "settled",
+              outstanding: "0.00",
+              hasPayments: true,
+            })),
       ),
       getCancellation: vi.fn(async (_party: string, lineId: string) =>
         consent(dish(lineId, lineId === "line-1" ? "wo-4" : "wo-check")),
