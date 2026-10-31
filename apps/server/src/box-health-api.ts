@@ -335,7 +335,6 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
         return { authorizedBy, personName: await requiredNameOf(tx, authorizedBy) };
       });
       const { challengeId, deviceAt } = confirmBody(await readRawJsonBody<unknown>(c));
-      const witnesses = clockConfirm.witnesses();
       const stepsSeen = correction.steps();
       const reading = clockConfirm.clock.now();
       const steadyMs = clockConfirm.steady();
@@ -350,7 +349,8 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
         offsetMs: Math.round(deviceAt - boxAtMs),
         measuredAt: { wallMs: boxAtMs, monoMs: steadyMs - halfMs },
         stepsSeen,
-        witnesses,
+        // What set the clock is the administrator's device alone, which travels as `admin`.
+        witnesses: [],
         admin: {
           personId: authorizedBy,
           personName,

@@ -3364,3 +3364,30 @@ Revision 4 changes none of these rulings. It carries out the owner's answer of 2
   del equipo", with the tell-a-manager hint the other fixed codes take. Its case checks only the
   words (review M3), so Task 13a's change of hint edits no assertion.
 - 26 deletion controls (20 from the task, 6 from the review), each failing a named case.
+
+### Task 12's departures and per-task review, folded (2026-10-31)
+
+- **`clock.set_refused` already carries `target_invalid` and `pending_disproofs`**, because an
+  administrator's set can be refused for both (a device time before 28-10-2024 or from 2100 on;
+  readings from before an earlier step not yet recorded). Task 12a adds only `not_start_up` and
+  `authority_pending`; Task 13's refusal words cover `stale`, `target_invalid` and
+  `pending_disproofs` as well as decision 10's list.
+- **The route judges which stop it is answering** from the seat's date check
+  (`assertRecordableAt`): `clock.unusable` there is the before-28-10-2024 stop, anything else the
+  clock-behind one. The correction judges the stop again inside its turn either way.
+- **The correction's successful answer carries `confirmedAt`**, the reading the row's
+  `confirmed_at` is written from, so the route answers `{ confirmationId, stepMs, confirmedAt }`
+  without a second reading.
+- **The administrator's set hands the correction no witnesses** (review I1): the row's proof lists
+  what set the clock, and that is the administrator's device alone, which travels as `admin`.
+  Handing over the witness store wrote every device the box had noted, and during the
+  before-28-10-2024 stop an AEAT reading kept from the stop before, into an uncorrectable row as
+  if they had set it. Both cases now pin `authority: null, devices: []`; each fails when the
+  store's witnesses are handed over again.
+- **Review, folded:** the error comments now say the box asked its host to set nothing (it does
+  ask for the time service's status), that `target_invalid` also covers 2100 on, that
+  `pending_disproofs` is an earlier step's readings, and that `refused` is a clock that moved by a
+  second or less; the midpoint case's round trip is 4 seconds, so a wall/steady pair measured at
+  different moments is refused `stale` (its control fails that case).
+- **Not changed (review M4):** the order case's 200 ms race and the deadlock case's 100 ms wait
+  decide only whether the broken versions are caught; with the turn in place neither can fail.
