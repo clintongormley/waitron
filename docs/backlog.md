@@ -5730,7 +5730,9 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   Check the later regional demo guides’ photo-library name claims against image metadata and the
   screen’s content-language selection.
   Repair the setup-test helper’s cleanup after a listener-readiness refusal, and retain the
-  shared port fixture’s multiple-listener limit. [Detail](backlog/ci.md#a1251-setup-test-cleanup-after-a-listener-readiness-refusal).
+  shared port fixture’s multiple-listener limit. Keep the IPP clock-driver limit explicit when
+  changing the polling continuation, and check that a failed fixture’s print call settles after
+  teardown. [Detail](backlog/ci.md#a1251-setup-test-cleanup-after-a-listener-readiness-refusal).
 
 - **A1242: qualify publishing after reused CI and the differing-tree fallback on real main pushes.**
   Retain real main run ids proving publication after reuse and the full suite after an unequal-tree

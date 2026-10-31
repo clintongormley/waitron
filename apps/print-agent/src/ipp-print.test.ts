@@ -9,7 +9,7 @@ import {
 import type { AddressInfo } from "node:net";
 import { Duplex } from "node:stream";
 import type { PageHold } from "@waitron/print-agent";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { exchangeIpp } from "./ipp-http.js";
 import {
   IPP_POLL_LIMIT_MS,
@@ -250,8 +250,10 @@ async function until(check: () => boolean): Promise<void> {
 }
 
 const servers: Server[] = [];
+const realReplyTimers: ReturnType<typeof setTimeout>[] = [];
 afterEach(async () => {
   vi.useRealTimers();
+  for (const timer of realReplyTimers.splice(0)) clearTimeout(timer);
   stalled.on = false;
   stalled.dials = 0;
   client.requests = 0;
@@ -259,6 +261,17 @@ afterEach(async () => {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
+});
+
+it("cancels real printer replies when a case ends", () => {
+  const realSetTimeout = setTimeout;
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], now: 0 });
+  let replied = false;
+  realReplyTimers.push(realSetTimeout(() => (replied = true), 5));
+  onTestFinished(async () => {
+    await new Promise((resolve) => realSetTimeout(resolve, 20));
+    expect(replied).toBe(false);
+  });
 });
 
 const DOCUMENT = Buffer.from("%PDF-1.7 synthetic invoice page\n");
@@ -897,7 +910,8 @@ describe("printOverIpp — a job the printer is holding", () => {
         (req, res) => {
           const answer = () =>
             res.end(jobState(req, elapsed() > 700 ? COMPLETED : PROCESSING, ["job-printing"]));
-          if (printer.polls().length <= 5 && replyDelayMs > 0) realSetTimeout(answer, replyDelayMs);
+          if (printer.polls().length <= 5 && replyDelayMs > 0)
+            realReplyTimers.push(realSetTimeout(answer, replyDelayMs));
           else answer();
         },
         (req, res) => {

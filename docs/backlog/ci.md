@@ -424,7 +424,24 @@ were changed to start the till in the language instead; the table-service and pa
 switch mid-screen and pass. Not diagnosed: a test-harness effect, or a refusal a language change
 hides. Left open by A798-B slice 8 (#2012).
 
+## IPP timing fixture completion after its wait fails
+
+A1251’s review of the #2092 cleanup repair observed no print outcome for the 2100 ms reply
+case before the rest of the suite finished. A driver probe observed the same absence on the
+repair’s parent, while both ordinary reply variants logged their outcomes. Check whether the
+fixture must abort and await that call during teardown. Those runs did not establish whether it
+sends any further requests after the fake printer closes or retains a live resource; do not
+infer either from the missing outcome alone.
+
 ## Decisions and deliberate limits
+
+- **The IPP polling-clock fixture observes server connections, not the next agent pause (A1251,
+  #2092).** Keep the exact 295 ms first-query assertion. In disposable probes, adding one
+  `setImmediate` turn after the agent reads a job reply made both cases report 300 ms; five turns
+  made their real-time wait expire. Delaying every server reply by 4 ms passed both cases.
+  These probes changed the poller; they do not establish the cause of the historical CI failure.
+  If you add a wait to that continuation, coordinate the fixture with it rather than widening
+  the boundary assertion.
 
 - **The floor suites' fixed till-API clock keeps the system clock's time-zone offset (A1117,
   #2100).** `{ ...v.clock, now: () => ({ ...v.clock.now(), instant: NOW }) }` changes only the
