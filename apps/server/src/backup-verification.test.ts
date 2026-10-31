@@ -32,7 +32,9 @@ vi.mock("node:fs/promises", async (original) => {
 });
 const realFs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
 
-const modules = ALL_MODULES.filter((m) => ["core", "credentials", "fiscal-none"].includes(m.name));
+const modules = ALL_MODULES.filter((m) =>
+  ["core", "credentials", "fiscal-none", "node"].includes(m.name),
+);
 const sourceNodeId = "20000000-0000-4000-8000-000000000002";
 const locationId = "10000000-0000-4000-8000-000000000001";
 const capturedAt = "2026-10-20T08:00:00.000Z";
@@ -217,6 +219,12 @@ describe("complete backup verification", () => {
           semanticsVersion: 1,
           status: "passed",
           checks: [{ code: "not_applicable", status: "passed" }],
+        },
+        {
+          name: "node",
+          semanticsVersion: 1,
+          status: "passed",
+          checks: [{ code: "data", status: "passed" }],
         },
       ],
       status: "passed",
@@ -511,7 +519,7 @@ describe("complete backup verification", () => {
     await seal(f);
     const result = await verify(f);
     expect(result).toMatchObject({ status: "invalid", reason: "module_integrity" });
-    expect(result.modules).toHaveLength(3);
+    expect(result.modules).toHaveLength(4);
     expect(result.modules[0]).toEqual({
       name: "core",
       semanticsVersion: 1,
@@ -825,7 +833,7 @@ describe("complete backup verification", () => {
           ? "module_data_check_requires_authority"
           : "semantics_missing",
       );
-      expect(result.modules).toHaveLength(3);
+      expect(result.modules).toHaveLength(4);
       expect(result.modules[0]!.checks).toContainEqual({ code: "source", status: sourceStatus });
     },
   );
