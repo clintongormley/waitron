@@ -22,6 +22,9 @@ const seen = vi.hoisted(() => ({
   startUps: [] as { input: { primaryAtStart: boolean }; window: unknown }[],
   noticeBoxes: [] as Record<string, unknown>[],
   watchStartUps: [] as unknown[],
+  watchArgs: [] as Record<string, unknown>[],
+  checkArgs: [] as Record<string, unknown>[],
+  notedAuthority: [] as unknown[],
   onSamples: [] as (((sample: unknown) => void) | undefined)[],
 }));
 
@@ -35,6 +38,10 @@ vi.mock("./clock-start-up.js", async (importOriginal) => {
       const window = { ...real, authorityAsked: vi.fn(real.authorityAsked) };
       seen.startUps.push({ input, window });
       return window;
+    },
+    tillClockCheck: (...args: Parameters<typeof actual.tillClockCheck>) => {
+      seen.checkArgs.push(args[0] as unknown as Record<string, unknown>);
+      return actual.tillClockCheck(...args);
     },
   };
 });
@@ -57,7 +64,25 @@ vi.mock("./clock-watch.js", async (importOriginal) => {
     ...actual,
     startClockWatch: (...args: Parameters<typeof actual.startClockWatch>) => {
       seen.watchStartUps.push(args[0].startUp);
+      seen.watchArgs.push(args[0] as unknown as Record<string, unknown>);
       return actual.startClockWatch(...args);
+    },
+  };
+});
+
+vi.mock("./clock-witnesses.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./clock-witnesses.js")>();
+  return {
+    ...actual,
+    createClockWitnessStore: (...args: Parameters<typeof actual.createClockWitnessStore>) => {
+      const store = actual.createClockWitnessStore(...args);
+      return {
+        ...store,
+        noteAuthority: (sample: Parameters<typeof store.noteAuthority>[0]) => {
+          seen.notedAuthority.push(sample);
+          store.noteAuthority(sample);
+        },
+      };
     },
   };
 });
@@ -83,6 +108,9 @@ beforeEach(async () => {
   seen.startUps.length = 0;
   seen.noticeBoxes.length = 0;
   seen.watchStartUps.length = 0;
+  seen.watchArgs.length = 0;
+  seen.checkArgs.length = 0;
+  seen.notedAuthority.length = 0;
   seen.onSamples.length = 0;
   scratch = await mkdtemp(join(tmpdir(), "waitron-boot-clock-start-up-"));
 });
@@ -137,6 +165,11 @@ describe("boot's clock start-up window", () => {
       expect(seen.noticeBoxes[0]!.clockCheck).toBeTypeOf("function");
       expect(seen.noticeBoxes[1]!.clockCheck).toBeUndefined();
       expect(seen.watchStartUps).toEqual([window]);
+      // The till's check reads the same window, seat and filing switch as the watch.
+      expect(seen.checkArgs).toHaveLength(1);
+      expect(seen.checkArgs[0]!.startUp).toBe(window);
+      expect(seen.checkArgs[0]!.backend).toBe(seen.watchArgs[0]!.backend);
+      expect(seen.checkArgs[0]!.filesRecords).toBe(seen.watchArgs[0]!.filesRecords);
 
       expect(seen.onSamples).toHaveLength(1);
       const sample: AuthorityTimeSample = {
@@ -146,6 +179,7 @@ describe("boot's clock start-up window", () => {
       };
       seen.onSamples[0]!(sample);
       expect(window.authorityAsked).toHaveBeenCalledExactlyOnceWith(true);
+      expect(seen.notedAuthority).toEqual([sample]);
     } finally {
       await server.close();
     }

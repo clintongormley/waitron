@@ -132,6 +132,21 @@ describe("tillClockCheck", () => {
     expect(h.backend.clockStopState).toHaveBeenLastCalledWith(TX, NOW, h.witnesses);
   });
 
+  it("offers the till during the stop proper when the seat cannot read AEAT's time", async () => {
+    const h = check(STOPPED);
+    const seat = {
+      assertRecordableAt: h.backend.assertRecordableAt,
+      clockStopState: h.backend.clockStopState,
+    };
+    const clockCheck = tillClockCheck({
+      startUp: h.startUp,
+      backend: seat,
+      witnesses: () => h.witnesses,
+      filesRecords: () => true,
+    });
+    expect(await clockCheck(TX, NOW)).toBe(true);
+  });
+
   it("offers the till during the stop proper when the box files no records", async () => {
     const h = check(STOPPED, { files: false });
     expect(await h.clockCheck(TX, NOW)).toBe(true);
