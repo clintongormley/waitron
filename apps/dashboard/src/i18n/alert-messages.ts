@@ -205,6 +205,10 @@ export const ALERT_MESSAGES: Readonly<
     en: "{count} devices agree that the time is {deviceAt:minute}, but the box's clock reads {boxAt:minute}. Check the box's date and time on the Box status page.",
     es: "{count} dispositivos coinciden en que marcan {deviceAt:minute}, pero el equipo marca {boxAt:minute}. Comprueba la fecha y la hora del equipo en Estado del equipo.",
   },
+  "clock.sync_off": {
+    en: "{reason:clock_sync_off}",
+    es: "{reason:clock_sync_off}",
+  },
   "clock.jump_detected": {
     en: "This device's clock went backwards: it changed by {wallClockDeltaSeconds} seconds. Check its date and time.",
     es: "La hora de este equipo ha retrocedido: ha cambiado {wallClockDeltaSeconds} segundos. Revisa su fecha y hora.",
@@ -473,6 +477,32 @@ export const ALERT_WORDS: Readonly<
       },
     },
     otherwise: { en: "Contact support.", es: "Contacta con soporte." },
+  },
+  // Why the box's time service is not keeping its clock right, by the `reason` param of
+  // `clock.sync_off`. `unreachable` names no install step: the person reading it has no terminal.
+  clock_sync_off: {
+    words: {
+      off: {
+        en: "The box's time service is switched off, so nothing keeps its clock right. Check its date and time on the Box status page.",
+        es: "El servicio de hora del equipo está desactivado, así que nada mantiene su reloj en hora. Comprueba su fecha y hora en Estado del equipo.",
+      },
+      stopped: {
+        en: "The box's time service is on but not running, so nothing keeps its clock right. Check its date and time on the Box status page.",
+        es: "El servicio de hora del equipo está activado pero no funciona, así que nada mantiene su reloj en hora. Comprueba su fecha y hora en Estado del equipo.",
+      },
+      unsynchronised: {
+        en: "The box's time service has not reached a time server, so its clock may drift. Check that the box can reach the internet, and its date and time on the Box status page.",
+        es: "El servicio de hora del equipo no ha contactado con ningún servidor de hora, así que su reloj puede desviarse. Comprueba que el equipo tiene conexión a internet, y su fecha y hora en Estado del equipo.",
+      },
+      unreachable: {
+        en: "This box cannot read or set its own clock: the part of the box that does that is not answering. If the box can reach the internet, its own time service may still put the clock right by itself. An administrator can still confirm the clock when it is right.",
+        es: "Este equipo no puede leer ni cambiar su propio reloj: la parte del equipo que lo hace no responde. Si el equipo tiene conexión a internet, su propio servicio de hora aún puede poner el reloj en hora por sí solo. Un administrador puede confirmar el reloj cuando esté en hora.",
+      },
+    },
+    otherwise: {
+      en: "The box's clock is not being kept right. Check its date and time on the Box status page.",
+      es: "El reloj del equipo no se mantiene en hora. Comprueba su fecha y hora en Estado del equipo.",
+    },
   },
   // What confirmed the box's clock when payments restarted, by the `confirmedBy` param of
   // `clock.behind_chain_restarted`.

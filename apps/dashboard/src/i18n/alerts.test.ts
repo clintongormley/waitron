@@ -611,3 +611,47 @@ describe("a restarted clock that later proved wrong", () => {
     );
   });
 });
+
+describe("the box's time service not keeping its clock right", () => {
+  const REASONS = ["off", "stopped", "unsynchronised", "unreachable"] as const;
+
+  it("says what is wrong for each reason, in English", () => {
+    expect(alertMessage("clock.sync_off", { reason: "off" }, "en")).toBe(
+      "The box's time service is switched off, so nothing keeps its clock right. Check its date and time on the Box status page.",
+    );
+    expect(alertMessage("clock.sync_off", { reason: "stopped" }, "en")).toBe(
+      "The box's time service is on but not running, so nothing keeps its clock right. Check its date and time on the Box status page.",
+    );
+    expect(alertMessage("clock.sync_off", { reason: "unsynchronised" }, "en")).toBe(
+      "The box's time service has not reached a time server, so its clock may drift. Check that the box can reach the internet, and its date and time on the Box status page.",
+    );
+    expect(alertMessage("clock.sync_off", { reason: "unreachable" }, "en")).toBe(
+      "This box cannot read or set its own clock: the part of the box that does that is not answering. If the box can reach the internet, its own time service may still put the clock right by itself. An administrator can still confirm the clock when it is right.",
+    );
+  });
+
+  it("words each reason differently in Spanish, with every slot filled", () => {
+    const spanish = REASONS.map((reason) => alertMessage("clock.sync_off", { reason }, "es"));
+    expect(new Set(spanish).size).toBe(REASONS.length);
+    for (const text of spanish) {
+      expect(text).not.toContain("{");
+      expect(text).not.toBe(alertMessage("clock.sync_off", { reason: "other" }, "es"));
+    }
+    for (const text of spanish.slice(0, 3)) expect(text).toContain(t("nav.box_status", "es-ES"));
+  });
+
+  it("never tells anyone to install anything when the clock service does not answer", () => {
+    for (const language of ["en", "es"] as const) {
+      const text = alertMessage("clock.sync_off", { reason: "unreachable" }, language);
+      expect(text.toLowerCase()).not.toContain("instal");
+    }
+  });
+
+  it("never shows a reason it has no words for as the raw code", () => {
+    const text = alertMessage("clock.sync_off", { reason: "not_a_reason" }, "en");
+    expect(text).not.toContain("not_a_reason");
+    expect(text).toBe(
+      "The box's clock is not being kept right. Check its date and time on the Box status page.",
+    );
+  });
+});

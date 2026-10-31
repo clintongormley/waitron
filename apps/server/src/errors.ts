@@ -1409,6 +1409,10 @@ declare module "@waitron/shared" {
      * off. `deviceAt` is the box's time moved by their mean difference. Built as data by the
      * clock-disagrees alert source, never thrown. */
     "clock.disagrees": { count: number; deviceAt: string; boxAt: string };
+    /** The box's time service is switched off (`off`), on with no time unit running (`stopped`),
+     * running but not synchronised (`unsynchronised`), or the box's clock service did not answer in
+     * production (`unreachable`). Built as data by the clock-sync alert source, never thrown. */
+    "clock.sync_off": { reason: "off" | "stopped" | "unsynchronised" | "unreachable" };
     /** A restored box's first start (a certificate for this machine, the next membership term)
      * failed, so the box sells but does not copy to the bucket. Built as data by
      * `firstStartAlertSource`, never thrown. */

@@ -306,6 +306,7 @@ import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxHealthApi } from "./box-health-api.js";
 import { clockCheckWaitingReader, clockStopReader, collectBoxHealth } from "./box-health.js";
 import { CLOCK_WATCH_MS, startClockWatch } from "./clock-watch.js";
+import { clockSyncAlertSource } from "./clock-sync-alert.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
 import { readDiskUsage, type DiskUsage } from "./disk-usage.js";
 import { createSpaceFreer, surveyLeftovers, type LeftoverDeps } from "./free-space-now.js";
@@ -2451,7 +2452,15 @@ async function bootServer(
     log,
   });
   undoOnFailure.push(() => clockWatch.stop());
+  const boxHost = seams.boxHost ?? boxHostClient();
+  // One read of the host's clock service a minute, shared by every reader of it.
+  const clockServiceCache = createTtlCache<ClockServiceStatus>({ ttlMs: 60_000, now });
+  const readClockService = () => clockServiceCache.get("status", () => boxHost.clockStatus());
   const serverAlertSources: AlertSource[] = [
+    clockSyncAlertSource({
+      status: readClockService,
+      production: config.environment === "production",
+    }),
     backupSource,
     storageAlertSource({ space: freeSpace, disk: diskFull }),
     sealedStateAlertSource(sealedStateStatus),
@@ -2497,14 +2506,11 @@ async function bootServer(
   mountAlertsApi(app, { db, registry: alertRegistry, now }, log);
   mountDiskStopApi(app, { db, disk: diskFull, registry: alertRegistry, now }, log);
 
-  const boxHost = seams.boxHost ?? boxHostClient();
-  // One read of the host's clock service a minute, shared by every reader of it.
-  const clockServiceCache = createTtlCache<ClockServiceStatus>({ ttlMs: 60_000, now });
   const timeHealthCache = createTtlCache<TimeHealth>({ ttlMs: 60_000, now });
   const readTimeHealth = () =>
     timeHealthCache.get("sync", () =>
       checkTimeHealth({
-        status: () => clockServiceCache.get("status", () => boxHost.clockStatus()),
+        status: readClockService,
       }),
     );
   mountBoxStatusApi(
