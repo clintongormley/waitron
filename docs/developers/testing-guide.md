@@ -1606,12 +1606,34 @@ section above); the bucket-copy cases in `apps/server/src/health.test.ts` hold `
 
 **Timers and real work**
 
+## A child’s exit can precede its readable output
+
+A1257 reproduced the unavailable result reported in main run `41195102945`
+by pausing a real child's pipe until after its exit event. The former exit handler
+discarded both successful results and last-progress frames in that experiment.
+The historical run did not record its pipe ordering.
+The runner tests retain those two delayed-output cases and controlled checks for
+pipe end, close, cancellation, late messages and a pipe that outlives the child.
+Child evidence is delivered only after the recorded process exits; pipe draining
+stays within the existing total attempt budget. Run the server's
+`fiscal-certificate-diagnosis-runner.test.ts`
+and `fiscal-certificate-diagnosis-process.test.ts` together.
+
 ## A deadline test must separate timer ordering from filesystem speed
 
 A test that gives a real file copy a short deadline also measures the machine running it.
 Use controlled `setTimeout` and `clearTimeout` callbacks when checking cancellation and settlement
 ordering. Keep the filesystem real, wait for the destination result, then advance the timer.
 Keep real-time deadline coverage in tests that check cancellation itself.
+
+A1257's one-millisecond certificate startup case kept that same work budget for
+its subsequent no-child admission check. Main run `41032398364` refused that
+second check from the runner's elapsed-work guard. A controlled monotonic-clock
+probe reproduced the refusal by advancing two milliseconds during the second
+attempt, then accepted the same `"next"` result with a fixed clock. The startup
+case now keeps the real clock through child termination and its elapsed-time
+assertion, then fixes only the follow-up check's clock. Its original assertions
+and deadline values remain unchanged.
 
 A1035 reproduced the folder failure from main run `39976326621` with 150 ms of synchronous work
 after both destinations started. Each had its own 100 ms timer: both fired at about 150 ms,

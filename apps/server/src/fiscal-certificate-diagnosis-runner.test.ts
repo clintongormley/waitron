@@ -3,6 +3,9 @@ import { EventEmitter } from "node:events";
 import { Duplex, PassThrough } from "node:stream";
 import { createServer, createConnection, type AddressInfo, type Socket } from "node:net";
 import { spawn, type ChildProcess } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createCertificateDiagnosisRunner } from "./fiscal-certificate-diagnosis-runner.js";
 import {
   diagnosisFrame,
@@ -29,8 +32,221 @@ function runner(options = {}) {
   runners.push(value);
   return value;
 }
+function controlledChild() {
+  const channel = new Duplex({
+    read() {},
+    write(_chunk, _encoding, callback) {
+      callback();
+    },
+  });
+  const child = Object.assign(new EventEmitter(), {
+    pid: 123456,
+    kill: vi.fn(() => true),
+    stdio: [null, null, null, channel],
+  });
+  vi.mocked(spawn).mockReturnValueOnce(child as unknown as ChildProcess);
+  return { channel, child };
+}
 
 describe("certificate diagnosis admission", () => {
+  it.each([
+    ["normal", { outcome: "completed", value: { value: "selected" } }],
+    [
+      "progress-crash",
+      {
+        outcome: "interrupted",
+        reason: "unavailable",
+        lastProgress: { stage: "response", category: "http-response", httpStatus: 403 },
+      },
+    ],
+  ])("retains %s output delivered after the exact child's exit", async (mode, expected) => {
+    const root = await mkdtemp(join(tmpdir(), "diagnosis-exit-output-"));
+    const actual = await vi.importActual<typeof import("node:child_process")>("node:child_process");
+    let exited = false;
+    vi.mocked(spawn).mockImplementationOnce((...args) => {
+      const child = actual.spawn(...args);
+      const channel = child.stdio[3] as Duplex;
+      channel.pause();
+      child.once("exit", () => {
+        exited = true;
+        setImmediate(() => channel.resume());
+      });
+      return child;
+    });
+    const value = runner({
+      entry: new URL("./testing/certificate-diagnosis-child.ts", import.meta.url),
+      execArgv: ["--import", import.meta.resolve("tsx")],
+    });
+    try {
+      await expect(
+        value.attempt(
+          async (runChild, abort) => ({
+            result: await runChild({ mode, marker: join(root, "child"), value: "selected" }, abort),
+          }),
+          signal(),
+        ),
+      ).resolves.toEqual({ result: expected });
+      expect(exited).toBe(true);
+      await expect(value.attempt(async () => "next", signal())).resolves.toBe("next");
+    } finally {
+      await value.stop();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each(["end", "close", "bound", "cancel"])(
+    "keeps an exited child's unread pipe bounded through %s",
+    async (terminal) => {
+      vi.useFakeTimers();
+      const { child, channel } = controlledChild();
+      const value = runner({ workMs: 1_000, cleanupMs: 200 });
+      const controller = new AbortController();
+      let settled = false;
+      const pending = value.attempt(
+        async (runChild, abort) => ({ result: await runChild(null, abort) }),
+        controller.signal,
+      );
+      void pending.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+      const answer =
+        terminal === "cancel"
+          ? expect(pending).rejects.toMatchObject({
+              code: "fiscal.certificate_diagnosis_unavailable",
+            })
+          : expect(pending).resolves.toEqual({
+              result: { outcome: "interrupted", reason: "unavailable", lastProgress: null },
+            });
+      child.emit("exit", 0);
+      await vi.advanceTimersByTimeAsync(199);
+      expect(settled).toBe(false);
+      await expect(value.attempt(async () => "early", signal())).rejects.toMatchObject({
+        code: "fiscal.certificate_diagnosis_busy",
+      });
+      if (terminal === "cancel") controller.abort();
+      else if (terminal === "bound") await vi.advanceTimersByTimeAsync(1);
+      else channel.emit(terminal);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(settled).toBe(true);
+      await answer;
+      expect(channel.destroyed).toBe(true);
+      expect(child.kill).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+      await expect(value.attempt(async () => "next", signal())).resolves.toBe("next");
+    },
+  );
+
+  it("keeps an independent child cancellation active while its exited pipe drains", async () => {
+    const { child, channel } = controlledChild();
+    const value = runner();
+    const controller = new AbortController();
+    const pending = value.attempt(
+      async (runChild) => ({ result: await runChild(null, controller.signal) }),
+      signal(),
+    );
+    child.emit("exit", 0);
+    controller.abort("session-expired");
+    channel.emit("data", Buffer.from('{"type":"result","value":{"selected":true}}\n'));
+    channel.emit("end");
+    await expect(pending).rejects.toMatchObject({
+      code: "fiscal.certificate_diagnosis_unavailable",
+    });
+    expect(child.kill).not.toHaveBeenCalled();
+    await expect(value.attempt(async () => "next", signal())).resolves.toBe("next");
+  });
+
+  it("closes an exited child's unread pipe when its caller finishes without awaiting it", async () => {
+    vi.useFakeTimers();
+    const { child, channel } = controlledChild();
+    const value = runner();
+    let finish!: () => void;
+    let childResult!: Promise<unknown>;
+    const pending = value.attempt(async (runChild, abort) => {
+      childResult = runChild(null, abort);
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      return "caller";
+    }, signal());
+    child.emit("exit", 0);
+    finish();
+    await expect(pending).resolves.toBe("caller");
+    expect(channel.destroyed).toBe(true);
+    await expect(childResult).resolves.toEqual({
+      outcome: "interrupted",
+      reason: "unavailable",
+      lastProgress: null,
+    });
+    expect(vi.getTimerCount()).toBe(0);
+    expect(child.kill).not.toHaveBeenCalled();
+    await expect(value.attempt(async () => "next", signal())).resolves.toBe("next");
+  });
+
+  it("refuses further frames after a result delivered after child exit", async () => {
+    const { child, channel } = controlledChild();
+    const value = runner();
+    const pending = value.attempt(
+      async (runChild, abort) => ({ result: await runChild(null, abort) }),
+      signal(),
+    );
+    child.emit("exit", 0);
+    channel.emit("data", Buffer.from('{"type":"result","value":{"selected":true}}\n'));
+    channel.emit("data", Buffer.from('{"type":"progress","value":"PRIVATE LATE"}\n'));
+    channel.emit("end");
+    await expect(pending).resolves.toEqual({
+      result: { outcome: "interrupted", reason: "unavailable", lastProgress: null },
+    });
+    expect(channel.destroyed).toBe(true);
+  });
+
+  it("delivers a result already read at exit without waiting for its pipe to close", async () => {
+    vi.useFakeTimers();
+    const { child, channel } = controlledChild();
+    const value = runner();
+    let settled = false;
+    const pending = value.attempt(
+      async (runChild, abort) => ({ result: await runChild(null, abort) }),
+      signal(),
+    );
+    void pending.then(() => {
+      settled = true;
+    });
+    channel.emit("data", Buffer.from('{"type":"result","value":{"selected":true}}\n'));
+    child.emit("exit", 0);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toBe(true);
+    await expect(pending).resolves.toEqual({
+      result: { outcome: "completed", value: { selected: true } },
+    });
+    expect(channel.destroyed).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(child.kill).not.toHaveBeenCalled();
+  });
+
+  it("discards output arriving after the work deadline while an exited pipe drains", async () => {
+    vi.useFakeTimers();
+    const { child, channel } = controlledChild();
+    const value = runner({ workMs: 100, cleanupMs: 200 });
+    const pending = value.attempt(
+      async (runChild, abort) => ({ result: await runChild(null, abort) }),
+      signal(),
+    );
+    child.emit("exit", 0);
+    await vi.advanceTimersByTimeAsync(100);
+    channel.emit("data", Buffer.from('{"type":"result","value":{"selected":true}}\n'));
+    await expect(pending).resolves.toEqual({
+      result: { outcome: "interrupted", reason: "deadline", lastProgress: null },
+    });
+    expect(channel.destroyed).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(child.kill).not.toHaveBeenCalled();
+  });
+
   it("refuses a second attempt before calling its authorization or material reader", async () => {
     const value = runner();
     let finish!: () => void;
