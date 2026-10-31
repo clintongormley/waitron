@@ -46,7 +46,7 @@
     "overrides": {
       "typed-rest-client>qs": "^6.16.0",
       "@esbuild-kit/core-utils>esbuild": "^0.25.0",
-      "archiver-utils>glob": "14.0.3"
+      "archiver-utils>glob": "^14.0.3"
     }
   }
 }
