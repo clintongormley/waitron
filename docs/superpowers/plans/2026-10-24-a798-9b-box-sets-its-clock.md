@@ -3246,3 +3246,26 @@ Revision 4 changes none of these rulings. It carries out the owner's answer of 2
   boxEmails.remember` (Task 9's departure), and an anchor whose `reanchor` clears
   `clockServiceCache` and `timeHealthCache`, so a reading taken before a set is not served for a
   minute after it (Task 7's review).
+
+### Task 11's departures (2026-10-31, while building Task 11)
+
+- **Boot's wiring has its own boot-level case**, `apps/server/src/boot.clock-correction.test.ts`
+  (not named in Task 11's files): the watch is handed the correction boot made and is one of its
+  anchors, and after the anchors re-anchor, box status and the alerts read the time service
+  afresh instead of from the one-minute caches. Each of the four wiring lines has a deletion
+  control that fails it.
+- **The correction has two anchors, not one**: the watch, and one whose `reanchor` clears
+  `clockServiceCache` and `timeHealthCache` (Task 10's departure). Task 11a's boot case ("that
+  correction has the watch as its one anchor") must read "has the watch among its anchors".
+- **The host client and both caches are created before the correction in boot**, above
+  `startClockWatch`, so the cache anchor names them; nothing else about them moved.
+- **`forSetting()` answers `SettableReading { witness, at }`**, AEAT's fresh agreeing readings
+  first, then its fresh kept disagreements, in the order `witnesses()` lists them; "fresh" is the
+  store's own test (at most five minutes old by the steady clock, no step since), so a kept
+  disagreement older than five minutes is not handed out for setting either (its own case).
+- **The two-looks case moves the wall clock before each look**, not once before both: with a
+  single move, clearing the hold on the next look still passed (the second look compares
+  against the first look's reading, taken after the move). With a move before each, that
+  deletion control fails.
+- **`reanchor` clearing the hold when its write fails** has its own deletion control (clear it
+  only on success → the reanchor-fails case sees no jump).
