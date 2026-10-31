@@ -109,9 +109,11 @@ describe("the running server's clock correction", () => {
       expect(seen.corrections).toHaveLength(1);
       expect(seen.watches).toHaveLength(1);
       expect(seen.watchCorrections).toHaveLength(1);
-      expect((seen.watchCorrections[0] as { inTurn: unknown }).inTurn).toBe(
-        seen.corrections[0]!.inTurn,
-      );
+      for (const method of ["inTurn", "set", "steps", "writePending"] as const) {
+        expect((seen.watchCorrections[0] as Record<string, unknown>)[method]).toBe(
+          (seen.corrections[0] as Record<string, unknown>)[method],
+        );
+      }
       expect(seen.anchors[0]).toContain(seen.watches[0]);
 
       await vi.waitFor(async () => {
