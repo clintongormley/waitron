@@ -1095,7 +1095,8 @@ to the chain code. Where a check could never be confirmed, it does not stop sell
 > found while the box is running alerts the administrators. Slice 9b's plan, revision 4,
 > [plan](../plans/2026-10-24-a798-9b-box-sets-its-clock.md) (decisions 6 and 14–17), carries it out
 > and says what stays: slice 9's lift on two devices that agree with the box is unchanged in 9b
-> except while a stop found at start-up lasts, when a person confirms instead (its revision 5).
+> except while a stop found at start-up lasts, when a person confirms instead, or AEAT's time
+> agreeing with the box still lifts it (its revision 5).
 > A staff member's confirmation is recorded as `source = 'staff'`, through one migration that
 > widens part i's `clock_confirmations` CHECKs.
 

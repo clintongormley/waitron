@@ -2,7 +2,7 @@
 
 > **Revision 5 (2026-10-31, the fresh-context review of revision 4, commit `b43a6c337`, and the
 > lead's rulings on it).** Two of revision 4's defaults are reversed by the lead, because they
-> follow the owner's words rather than being his to override:
+> follow the owner's words and are not the lead's to override:
 > - **(R1) While the start-up window is open, two agreeing devices no longer lift the stop by
 >   themselves**; AEAT agreeing still does (decision 18, Task 11b). Slice 9's lift is unchanged
 >   outside the window.
@@ -24,14 +24,28 @@
 > and 15 and the `questions.md` block are rewritten to match; 9c's outline and the design pointer
 > follow R1.
 >
+> **Revision 5a (2026-10-31, a fresh claim check of revision 5, commit `ee3489826`).** Folded:
+> `witnessed` covers any AEAT reading taken during the stop, agreeing or not, for `admin` and
+> `staff`, with the agreeing case tested in Tasks 10 and 12a and both `witnessed` wordings made
+> true for it (decisions 10, 14 and 15); `scripts/migration-upgrade.test.ts` is no longer claimed
+> to check Task 8-0's migration, and a dedicated upgrade test takes its place; changed test check
+> 13 (`hour-recovery-staged.test.ts`'s hand-undone migrations); the CSV header names a staff
+> member (Task 8a); the generation's `PRAGMA` lines and `--name`; CHECK deletion controls that
+> regenerate the migration; the journal-replaying suites added to Task 8-0's checks; the
+> `apply.ts` lines corrected; Task 11b's `noStop()` path and boot's `primaryAtStart` tested; a
+> separate `checkTimeOffered` helper in Task 13a; a node demoted while running keeps its window
+> (decision 14); `not_admitted` answered as `device_profile.not_admitted`, and where an
+> administrator's override is checked (decision 15); AEAT agreeing still lifts the stop at
+> start-up (the `questions.md` block and the design pointer); and they/them for the owner.
+>
 > **Revision 4 (2026-10-31, the owner's answer of 07:00 and 07:05).** The owner did not pick
-> either option of the question this plan asked; he gave a new rule instead (`questions.md`,
+> either option of the question this plan asked; they gave a new rule instead (`questions.md`,
 > "OWNER ANSWER 2026-10-31 ~07:00" and "~07:05", `~/waitron-campaign-b/questions.md:823-836`):
 > "If we can't check the time on the internet, then use a till to choose the likely time, but ask
 > for confirmation from a human before continuing with startup." Then: any staff member signed in
 > on site may confirm; a clock problem found while the box is already running "gets an alert to an
 > admin"; and every confirmation is recorded, alerted and emailed like the other clock changes. That
-> replaces his 24 October 04:24 rule ("two tills may set it, no admin needed"), which revisions 1–3
+> replaces the owner's 24 October 04:24 rule ("two tills may set it, no admin needed"), which revisions 1–3
 > built. What changed:
 > - **Two agreeing devices no longer set the clock.** The tax agency's (AEAT's) time still sets it
 >   with nobody asked. The administrator's "Use your device's time?" stays, at any time.
@@ -303,7 +317,8 @@ files, each check's state) into the ledger before going on.
 > from their own phone or computer; every change is recorded, alerted and emailed with who
 > confirmed, which till, the times before and after, and the step. Two tills can no longer set the
 > clock with nobody present, and during start-up two tills that agree with the box no longer
-> restart payments by themselves either — a person confirms. A staff member's confirmation is
+> restart payments by themselves either — a person confirms, unless the tax agency's time agrees
+> with the box, which still restarts them. A staff member's confirmation is
 > recorded as a staff member's (one small database change, made before go-live).
 >
 > What this slice does not yet cover: the till is asked only when the box already knows its clock
@@ -448,7 +463,8 @@ Litestream, logs, sessions and every `new Date()` outside the clock seat keep th
     (`packages/db/src/change-feed.ts:144-151`, called first in `applyMigrations`,
     `packages/migrations/src/apply.ts:65`).
   - **Its own append-only triggers** go with the `DROP TABLE` and are put back right after the set
-    (`installAppendOnlyTriggers`, `apply.ts:68-73`; `create trigger if not exists`,
+    (`installAppendOnlyTriggers`, called inside the per-set loop at `apply.ts:74`, its comment
+    `:72-73`; `create trigger if not exists`,
     `packages/store/src/append-only.ts:58-65`). Boot counts only triggers missing BEFORE the
     migration (`missingBeforeMigration`, `apps/server/src/boot.ts:1011-1014`), so the rebuild
     raises no `append_only.triggers_restored` warning.
@@ -772,7 +788,7 @@ Filled from the job's log by the lead; each row gives the run's URL and the prin
      on a till they sign in on, revision 5, decision 15).
    **Devices never set the clock by themselves any more**: a group of devices from two addresses
    disagreeing is kept in the proof and shown on Box status, and sets nothing (revision 4; the
-   owner's 07:00 rule replaces his 24 October 04:24 one). Never while `clockStatus()` says
+   owner's 07:00 rule replaces their 24 October 04:24 one). Never while `clockStatus()` says
    synchronised; never when the host service is unavailable.
    **Each set carries where its offset was measured** (round 2, C1): `measuredAt: { wallMs,
    monoMs }`, the box's wall and steady clocks when the witness's reading arrived (for AEAT, the
@@ -880,8 +896,9 @@ Filled from the job's log by the lead; each row gives the run's URL and the prin
     same challenge (`clock-challenges.ts`) and the same on-the-box refusal. Refusals are
     `clock.set_refused { reason }` (409), judged in this order so that each says what is true
     (round 2, I4): `same_machine`; `not_stopped` (no stop proper and no `clock.unusable`);
-    `host_unavailable`; `synchronised`; `witnessed` (AEAT has spoken during the stop, and the box
-    can set its clock: it sets or confirms from AEAT itself — revision 4: devices no longer count
+    `host_unavailable`; `synchronised`; `witnessed` (AEAT has spoken during the stop — any AEAT
+    reading among the stop's witnesses, agreeing or disagreeing, for both `admin` and `staff`
+    (revision 5a) — and the box can set its clock: it sets or confirms from AEAT itself — revision 4: devices no longer count
     here, since they no longer set the clock); `agrees` (the
     device is within a minute: confirm instead); `stale` (the clock stepped while the request was
     in flight: read the time again). `clock.check_expired` (400) as today; a failed or unverified
@@ -925,6 +942,10 @@ Filled from the job's log by the lead; each row gives the run's URL and the prin
       promoted while running treats a stop it then has as a running one, and a restart after the
       promotion opens it as usual (revision 5, the review's split-soundness point: the watch returns
       early off the primary, `clock-watch.ts:214-217`, so a window opened there would never close).
+      The reverse case (revision 5a): a node that is primary at its start and demoted while running
+      keeps its window open, since the watch asks `isPrimary` on every look (`boot.ts:2450`) and
+      returns early once it is false, so no look closes it. Little harm: the tills follow the
+      primary (CLAUDE.md §5), so the demoted node's offer and route are not where a till asks.
     - **Closes for good** when any reader of the stop sees none holding: the clock watch's look — the
       branch where it already ends the stop for the witness store (`stop === null` and the reading
       recordable, `apps/server/src/clock-watch.ts:255-259`), or a stop state whose `proof` is
@@ -950,9 +971,15 @@ Filled from the job's log by the lead; each row gives the run's URL and the prin
     - **`admit(...)`, for the till route's staff branch** (revision 5, I7): `not_start_up` once the
       window has closed; `authority_pending` while AEAT is `not_asked` and the box can ask; **null
       otherwise — including once AEAT has `answered`**, although `tillMayOffer` is then false. So a
-      request that arrives after AEAT answered is judged on: `witnessed` when AEAT disagrees and the
-      box can set its clock, `contrary_proof` on the agreeing branch, or served when AEAT agreed and
-      the stop still holds (it will not hold long: slice 9's watch lifts on AEAT agreeing).
+      request that arrives after AEAT answered is judged on: on the differing branch, `witnessed`
+      whenever an AEAT reading taken during the stop is among the witnesses and the box can set its
+      clock, whether AEAT agreed with the box or not (decision 10, revision 5a); on the agreeing
+      branch, `contrary_proof` when AEAT disagrees. The agreeing case matters because the watch
+      confirms before it asks AEAT in the same look (`clock-watch.ts:279-288`), so an agreeing AEAT
+      answer lifts the stop only at the next look, up to `CLOCK_WATCH_MS` (15 s,
+      `clock-watch.ts:16`) later; a differing till served in that
+      gap would set the clock against AEAT. An agreeing AEAT reading stays among the witnesses while
+      it is fresh, five minutes by the steady clock (`clock-witnesses.ts:26-29`).
     - "Start" is the server process's start, a restart included (FYI 8). The boot reader's boot id
       (`apps/server/src/boot-reader.ts:45-51`) could tell a machine boot from a restart; it is not
       used for this.
@@ -1026,8 +1053,21 @@ Filled from the job's log by the lead; each row gives the run's URL and the prin
         administrator), the till's offset and — for a staff member only — the window's check plus
         the admission check as `admit`, which judges in Task 12's order — `stale`, `not_stopped`,
         then `admit` (`device_profile.not_admitted`, `not_start_up`, `authority_pending`),
-        `host_unavailable`, `synchronised` (FYI 2), `witnessed` (AEAT has spoken during the stop
-        and the box can set its clock).
+        `host_unavailable`, `synchronised` (FYI 2), `witnessed` (AEAT has spoken during the stop,
+        agreeing with the box or not, and the box can set its clock — decision 14, revision 5a).
+        `admit`'s `"not_admitted"` is answered at the route as `device_profile.not_admitted` (403),
+        the same code and status as the route's other admission refusals, never as
+        `clock.set_refused`; its `not_start_up` and `authority_pending` are `clock.set_refused {
+        reason }` (409).
+      - **Where an administrator's override is checked** (revision 5a). On the agreeing branch,
+        `authorize(tx, …)` runs inside that branch's one transaction, before `confirmClockStop`. On
+        the differing branch, `correction.set` holds no transaction while the host sets (decision
+        10), so `authorize(tx, …)` runs in its own `withTransaction` inside `withPinCheckAhead`,
+        before `correction.set` and outside the correction's turn — a **commented decision at the
+        site** (CLAUDE.md §3: splitting one logical change across transactions is a commented
+        decision). The comment says what the split costs: an administrator whose `person.admin` is
+        withdrawn between that transaction and the set is still served, and the stop is judged
+        again inside the set's own turn either way.
       It answers `{ confirmationId, stepMs, confirmedAt }`; a failed or unverified set is
       `clock.set_failed` (502). The host's requester is `{ source: "staff" | "admin", person:
       <uuid>, device: <uuid> }`, ids only. Either branch that sees no stop holding closes the window
@@ -1146,6 +1186,18 @@ EDITED to pass and is not on this list is a STOP, unless the spec changes what i
    cases (Task 11). Listed so the review checks it.
 12. *(Revision 4.)* `clock-watch.test.ts`'s harness passes no `startUp` dep either, which the watch
     reads as "nothing to tell" (Task 11b). Listed so the review checks that no existing case changed.
+13. *(Revision 5a.)* `apps/server/src/hour-recovery-staged.test.ts:66-98` (`olderBackup()`, "a
+    backup taken by the release before fiscal-verifactu's 0009"): it undoes the set's latest three
+    migrations by hand, newest first — each step drops that migration's schema, deletes the row with
+    the largest `created_at` from `__drizzle_migrations_fiscal`, and lowers
+    `manifest.modules["fiscal-verifactu"]` by one (`:80-85` for 0011, `:86-91` for 0010, `:92-98`
+    for 0009). Once Task 8-0's migration is the newest, those three deletes remove 0012's, 0011's
+    and 0010's rows instead, so the backup records 0009 applied while 0009's two columns are gone;
+    the test still passes but no longer tests what its comment says (the claim check's probe
+    printed `{"n":10,"m":1792550481436}`, 0009's `when`, and no `technical_incidence` column). The
+    edit adds one step before `:80`: delete the largest-`created_at` row (0012's; its rebuild
+    leaves the same columns, and the next step drops `clock_confirmations` anyway) and lower the
+    manifest count by one more. The comment at `:67-68` stays true. No assertion changes. Task 8-0.
 
 **Must pass unedited:** `packages/fiscal-verifactu/src/write-path.e2e.test.ts` (the golden huella),
 `inmutabilidad.test.ts`, `apps/server/src/boot.box-health.test.ts:209-224` ("caches the clock check
@@ -1503,11 +1555,18 @@ that needs it — Tasks 8, 8a and 12a write `staff` rows. Nothing writes one yet
 `` sql`(${t.source} in ('admin', 'staff')) = (${t.personId} is not null) and (${t.personId} is null or length(${t.personId}) > 0)` ``;
 the comment above `personId` says a person is an administrator or a staff member);
 `packages/fiscal/src/backend.ts` (`ClockConfirmationSource`, `:184`, gains `"staff"`); the
-generation `pnpm --filter @waitron/fiscal-verifactu db:generate` writes (`drizzle/0012_*.sql`, its
-snapshot, `_journal.json`) — **made by drizzle-kit and never edited by hand**, CLAUDE.md §3; read
-the SQL and check it is the rebuild "What slice 9 left" rehearsed: one `__new_clock_confirmations`
-table, an `INSERT … SELECT` naming all thirteen columns, `DROP`, `RENAME`, the three indexes again,
-and nothing else; `packages/fiscal-verifactu/src/clock-confirmations.test.ts` (new cases only);
+generation `pnpm --filter @waitron/fiscal-verifactu db:generate --name clock_confirmations_staff`
+writes (`drizzle/0012_clock_confirmations_staff.sql`, its snapshot, `_journal.json`; without
+`--name` drizzle-kit picks a random name) — **made by drizzle-kit and never edited by hand**,
+CLAUDE.md §3; read the SQL and check it is the rebuild "What slice 9 left" rehearsed:
+`PRAGMA foreign_keys=OFF`, one `__new_clock_confirmations` table, an `INSERT … SELECT` naming all
+thirteen columns, `DROP`, `RENAME`, `PRAGMA foreign_keys=ON`, the three indexes again, and nothing
+else (drizzle-kit writes the two `PRAGMA` lines around every table rebuild, e.g.
+`packages/adjustments/drizzle/0005_lucky_chamber.sql:1` and `:28`; inside the migrator's
+transaction they change nothing, as "What slice 9 left" says);
+`packages/fiscal-verifactu/src/clock-confirmations.test.ts` (new cases only); a new
+`packages/fiscal-verifactu/src/clock-confirmations-upgrade.test.ts` (below);
+`apps/server/src/hour-recovery-staged.test.ts` (changed test check 13);
 `apps/server/src/misdated-sales-csv.ts` (`SOURCE_WORD`, `:26-31`, gains `staff: "staff"`, which its
 `satisfies Record<ClockConfirmationSource, …>` now demands) and
 `apps/server/src/i18n/box-emails.ts` (`CLOCK_CONFIRMED_BY_WORDS`, `:45-58`, gains `staff`: "a staff
@@ -1518,24 +1577,55 @@ a `staff` row with a person and a negative `step_ms` → kept, read back with it
 without a person → `clock_confirmations_person_ck`; `admin` with a person → still kept (control);
 `devices` with a person → still refused; the existing refusal table (`:211-231`, including the
 undeclared `"clock"`) and "keeps a full row for every declared source and reason" (`:143-192`) pass
-unedited. A `migration-upgrade` run carries a slice-9 database (with `admin`, `devices` and
-`elapsed` rows) across the new generation with every row kept and both append-only triggers back.
+unedited.
+
+**The upgrade test** (revision 5a), `clock-confirmations-upgrade.test.ts`, modelled on
+`packages/fiscal-verifactu/src/outage-upgrade.test.ts`: copy `FISCAL_MIGRATIONS.migrationsFolder`
+to a temporary folder and cut its journal below the new migration (that file's `:16-23` does the
+same below `0009_aeat_outage_flag`); apply the test migration sets with the cut fiscal set
+(keeping `clock_confirmations` among its append-only tables, since slice 9's migration created it);
+insert one `admin` row (with a person), one `devices` row and one `elapsed` row; read every row;
+run `runMigrations(suite.db, FISCAL_MIGRATIONS)` and put the append-only triggers back with
+`installAppendOnlyTriggers`, as `applyMigrations` does after a set
+(`packages/migrations/src/apply.ts:74`; `runMigrations` alone does not,
+`packages/db/src/migrate.ts:23-31`); then the rows read
+back are `toEqual` to those read before, both of `clock_confirmations`' append-only triggers
+exist, and an UPDATE and a DELETE of a row are each refused by them. This case cannot fail before
+the generation exists (the cut then removes nothing), so it is not a failing test first; its proof
+is the deletion control below. `scripts/migration-upgrade.test.ts` stays in
+the guards as a guard only: its header says its rows are synthetic, that "Rows are counted, not
+compared", and that apart from "the nine product triggers" "other triggers dropped by a rebuild
+are not checked here" (`scripts/migration-upgrade.test.ts:18-50`, the quoted words at `:47-49`), so it
+is not evidence this migration keeps rows or triggers.
 
 **Guards to run** (CLAUDE.md §3's list for a generation): `pnpm exec vitest run
 scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts
 scripts/behavioural-triggers.test.ts scripts/migrations-match-schema.test.ts
 scripts/journal-monotonic.test.ts scripts/append-only-migration-sets.test.ts
 scripts/migration-upgrade.test.ts`; `pnpm --filter @waitron/fiscal-verifactu exec vitest run
-inmutabilidad src/write-path.e2e.test.ts src/clock-confirmations.test.ts`; `pnpm --filter
+inmutabilidad src/write-path.e2e.test.ts src/clock-confirmations.test.ts
+src/clock-confirmations-upgrade.test.ts src/outage-upgrade.test.ts`; the suites that replay this
+set's journal (revision 5a): `pnpm exec vitest run scripts/fiscal-allocation-migration.test.ts
+scripts/fiscal-certificate-migration.test.ts` and `pnpm --filter @waitron/server exec vitest run
+src/hour-recovery-staged.test.ts`; `pnpm --filter
 @waitron/fiscal typecheck`, `pnpm --filter @waitron/fiscal-verifactu typecheck` and `pnpm --filter
 @waitron/server typecheck` (the `satisfies` reader). **On a rebase that collides with another fiscal-verifactu migration number:**
 reset `packages/fiscal-verifactu/drizzle/` to `main`'s, run `db:generate` again, and rerun every
 guard above — never hand-edit a snapshot or the journal.
 
-**Deletion controls.** Leave the person CHECK as slice 9 wrote it (only the source widened) → the
-`staff`-with-a-person case is refused `clock_confirmations_person_ck`; drop `staff` from the source
-list (only the person CHECK widened) → the same case is refused `clock_confirmations_source_ck`;
-drop `staff` from `SOURCE_WORD` → `tsc` fails on the `satisfies`.
+**Deletion controls.** The test database is built from the migrations, not from the TypeScript
+schema, so each CHECK control is made by regenerating the migration from the changed schema (or by
+editing the generated SQL for the run only, then restoring it with `git checkout`); editing the
+schema alone changes nothing the test sees. Leave the person CHECK as slice 9 wrote it (only the
+source widened) → the `staff`-with-a-person case is refused `clock_confirmations_person_ck`; drop
+`staff` from the source list (only the person CHECK widened) → the same case is refused
+`clock_confirmations_source_ck`; leave a column out of the generated `INSERT … SELECT` (SQL edited
+for the run only) → the upgrade test's `toEqual` fails; drop `staff` from `SOURCE_WORD` → `tsc`
+fails on the `satisfies`. Changed test check 13 makes no test fail when left out (the claim check
+found the test still passes), so it gets a probe instead: a read of the backup's
+`max(created_at)` from `__drizzle_migrations_fiscal` prints 0009's `when` (`1792550481436`,
+`_journal.json:71`) without the extra undo step and 0008's (`1792358085639`, `:64`) with it — say
+what the run printed.
 
 **STOP** if any guard above shows the rebuild loses a row, leaves a trigger missing after apply,
 or if drizzle-kit's SQL differs from the rehearsed shape in anything but whitespace and quoting.
@@ -1666,7 +1756,12 @@ till's label) whenever a `till` is given — `person` is already there; `closeWa
 waiting check, decision 15), `packages/fiscal-verifactu/src/errors.ts`
 (`clock.behind_chain_restarted`, `:378-384`: `confirmedBy` gains `"staff"`, and `byStaff?: true`
 and `device: string | null` params), `apps/server/src/box-health.ts` (`:180-182`: nothing but the
-widened type), `apps/dashboard/src/api/client.ts` (the confirmation's `source`, `:1890`, gains
+widened type), `apps/server/src/misdated-sales-csv.ts` (revision 5a: the header names a
+person only when `closing.source === "admin"`, `:57-60`, with the condition at `:58`; it widens to
+`admin` or `staff`, worded with `by[SOURCE_WORD[closing.source]]` rather than `by.admin`, so a
+staff closing reads "a staff member on a till (Ana)"; the name comes from the closing's
+`person_id`, `apps/server/src/box-health-api.ts:214`, which a `staff` row carries),
+`apps/dashboard/src/api/client.ts` (the confirmation's `source`, `:1890`, gains
 `"staff"`), `apps/dashboard/src/screens/box-status-rows.ts` (`confirmedBy`, `:387-396`, finds
 `staff` in the words), `apps/dashboard/src/i18n/alert-messages.ts` (`clock_confirmed_by`,
 `:507-516`, gains `staff`: "a staff member" / "un empleado"; `clock.behind_chain_restarted`,
@@ -1701,7 +1796,8 @@ logger masks it in any line; `device` is a till's label, not personal data.
 
 **Deletion controls.** Drop the `role` branch in `confirmClockStop` → the staff case stores
 `source: "admin"`; drop the `not_stopped` refusal for a staff input on a waiting check → that case
-writes a row; drop `byStaff` from the restarted params → the bell and email cases name nobody.
+writes a row; drop `byStaff` from the restarted params → the bell and email cases name nobody;
+keep `misdated-sales-csv.ts`'s condition `admin`-only → the staff closing's header names nobody.
 
 **Focused commands.** `pnpm --filter @waitron/fiscal-verifactu exec vitest run
 src/clock-confirmation.test.ts src/clock-misdated.test.ts src/clock-stop-incidents.test.ts
@@ -1829,7 +1925,9 @@ export function clockCorrection(deps: {
 - **`staff`** (revision 4): `admit` answering `not_start_up` → `{ set: false, reason:
   "not_start_up" }`, no anchor told, no host call; `authority_pending` and `not_admitted` the same;
   control, `admit` answering null → set, and `confirmClockStep` called with `source: "staff"` and
-  the `admin` input carrying `role: "staff"`.
+  the `admin` input carrying `role: "staff"`. `set` answers `{ set: false, reason: "not_admitted" }`
+  as it is; the till's route (Task 12a) turns that one reason into `device_profile.not_admitted`
+  (403), not `clock.set_refused` (decision 15, revision 5a).
 - **`agrees`** (revision 5, M7; decision 10 lists it, revision 4 never tested it): an `admin` or
   `staff` offset within a minute of the box, uncertainty included → `{ set: false, reason:
   "agrees" }`, no anchor told, no host call — the caller confirms instead (Task 12's route answers
@@ -1838,8 +1936,12 @@ export function clockCorrection(deps: {
   AEAT disagreement, so the watch never asks (Task 11a). `admit` is called after the stop is judged (the order list shows it), so a stop
   that ended answers `not_stopped`, not `not_start_up`.
 - **`witnessed`** for `admin` and `staff`: an AEAT disagreement taken during the stop, the host
-  available and unsynchronised → `witnessed`, no host call; control: a group of devices from two
-  addresses disagreeing and no AEAT → not `witnessed` (devices set nothing now), the set goes on.
+  available and unsynchronised → `witnessed`, no host call; **an AEAT reading that AGREES with the
+  box, taken during the stop, the stop still holding (the watch has not yet looked again), the
+  host available and unsynchronised → `witnessed`, no host call, for both `admin` and `staff`**
+  (revision 5a, decision 14; written and seen failing before the rule is widened); control: a
+  group of devices from two addresses disagreeing and no AEAT → not `witnessed` (devices set
+  nothing now), the set goes on.
 - The requester holds ids only: `{ source: "authority", check }` for AEAT, `{ source: "admin",
   person: <uuid> }` for an administrator, `{ source: "staff", person: <uuid>, device: <uuid> }` for
   a staff member; a test asserts no `personName` and no device label reaches the host.
@@ -1848,7 +1950,8 @@ export function clockCorrection(deps: {
 case fails; drop the turn → the together case sees two sets; drop the step-counter check (keep
 the turn) → the together case sees two sets (the host still unsynchronised); drop the stop
 re-judging → the `not_stopped` case calls the host; skip `admit` → the `not_start_up` case calls
-the host; drop the `agrees` check → the 30-second case calls the host; count devices in `witnessed` → the devices control answers `witnessed`.
+the host; drop the `agrees` check → the 30-second case calls the host; count devices in `witnessed` → the devices control answers `witnessed`; count only AEAT
+disagreements in `witnessed` → the agreeing-AEAT case calls the host.
 
 **Focused command.** `pnpm --filter @waitron/server exec vitest run src/clock-correction.test.ts`.
 
@@ -2003,8 +2106,9 @@ decision 18's gate on `confirm`, `:279-285`), `apps/server/src/box-staff-notices
 (`boxStaffNoticeSource` gains a `clockCheck?: (tx, reading) => Promise<boolean>` input and sends `{
 key: "clock.check_time", code: "clock.check_time", severity: "error", params: {} }` while it
 answers true — the literal sits in this file, which `scripts/staff-notice-codes.test.ts:15` already
-reads; the `clockCheck` built in boot also calls `noStop()` when its read sees no stop holding,
-decision 14), `apps/server/src/boot.ts` (create the window BEFORE the tills' notice sources at
+reads; the `clockCheck` also calls `noStop()` when its read sees no stop holding, decision 14,
+and is built by an exported `tillClockCheck(...)` in `clock-start-up.ts` rather than inline in
+boot, so its `noStop()` path is tested on its own — revision 5a), `apps/server/src/boot.ts` (create the window BEFORE the tills' notice sources at
 `:2011` — revision 5, M6 — open only when `isSingletonPrimary`, `:1668`, else closed; pass it to the
 watch at `:2441`; wrap `createAuthorityClockStatus`'s `onSample` at `:1633` so a filing reply's AEAT
 time also reports `answered`; hand the `clockCheck`, built from `startUp.tillMayOffer`, the seat's
@@ -2040,7 +2144,11 @@ export function clockStartUp(input: { primaryAtStart: boolean }): ClockStartUp;
   after AEAT answered reaches `witnessed` or `contrary_proof`); `unusable: true` → true before any
   ask; `canAskAuthority: false` → true before any ask; after `noStop()` → false and `admit` →
   `not_start_up`, whatever follows; `stopped: false` → false. `primaryAtStart: false` → closed from
-  the start, `admit` → `not_start_up`.
+  the start, `admit` → `not_start_up`. **The notice source's `noStop()` path** (revision 5a), with
+  `tillClockCheck` over a stub seat and a real window: a read that sees no stop holding at a
+  recordable reading → answers false and `open()` is false afterwards; a read whose stop state is
+  `confirmed` → the same; a read during the stop proper → `open()` stays true; a read at a 2001
+  reading (`clock.unusable`) → `open()` stays true.
 - In a new `apps/server/src/clock-watch.start-up.test.ts` (the existing harness): a look with no
   stop at a recordable reading calls `noStop()` once; a look whose stop state is `confirmed` calls
   it; a look at a 2001 reading (no stop, not recordable) does not; a look during the stop proper
@@ -2056,7 +2164,10 @@ export function clockStartUp(input: { primaryAtStart: boolean }): ClockStartUp;
 - Boot-level, in `boot.clock-watch.test.ts`'s style (calls recorded through the module mocks the
   file already uses): the devices' notice source is built with a `clockCheck` and the page's
   without; the window is created before `deviceNoticeSources` is first called; a filing-reply
-  `onSample` reaches the window's `authorityAsked(true)`.
+  `onSample` reaches the window's `authorityAsked(true)`; **`clockStartUp` is called with
+  `primaryAtStart: true` on a primary boot and `primaryAtStart: false` on a boot whose singleton
+  role is not primary** (revision 5a: boot passes `isSingletonPrimary`, `boot.ts:1668`), read from
+  the mock's recorded argument.
 
 **Deletion controls.** Close the window on a `clock.unusable` look too → the 2001 case calls
 `noStop()`; let a later `false` overwrite `answered` → that case offers; make `admit` answer
@@ -2064,7 +2175,10 @@ export function clockStartUp(input: { primaryAtStart: boolean }): ClockStartUp;
 → the no-stop look leaves the window open; drop the `confirmed` condition → the lifted case leaves
 it open; drop decision 18's gate → the devices-only window-open case confirms; hand the
 `clockCheck` to the page's `deviceNoticeSources` call too (revision 5, M2) → the boot-level case
-sees it on both; open the window on a non-primary → the `primaryAtStart: false` case fails.
+sees it on both; open the window on a non-primary inside `clockStartUp` → the `primaryAtStart:
+false` case fails; pass `primaryAtStart: true` from boot whatever the role → the boot-level
+non-primary case fails (revision 5a: the `clockStartUp` case alone cannot see this one); drop
+`tillClockCheck`'s `noStop()` call → its no-stop and `confirmed` cases leave `open()` true.
 
 **Focused commands.** `pnpm --filter @waitron/server exec vitest run src/clock-start-up.test.ts
 src/clock-watch.start-up.test.ts src/clock-watch.test.ts src/clock-watch.restart.test.ts
@@ -2150,7 +2264,8 @@ check 11, and its refusing cases).
 
 **The routes**, as decision 15 says. Their `STATUS` map: `session.required` 401,
 `device.unauthorized` 403, `device_profile.not_admitted` 403 (revision 5, I6; the till's own map
-has it at `till-api.ts:466`), `pin.invalid` and `pin.throttled` and `authorization.not_permitted`
+has it at `till-api.ts:466`; also the answer to `correction.set`'s `not_admitted` reason, revision
+5a), `pin.invalid` and `pin.throttled` and `authorization.not_permitted`
 as the drawer route answers them, `clock.set_refused` 409, `clock.confirm_refused` 409,
 `clock.check_expired` 400, `clock.set_failed` 502, `management.request_invalid` 400 (the body's
 field, as `confirmBody` throws it). The person is the session's (`requireSession(deps, c)`,
@@ -2193,7 +2308,10 @@ real `clockStartUp({ primaryAtStart: true })` the test drives):
   `not_start_up`; AEAT `not_asked` with the box able to ask → `authority_pending` (and the
   challenge route answers it too, before any challenge is issued); **AEAT `answered` and
   disagreeing during the stop, the host able to set → `witnessed`** (reachable because `admit`
-  answers null once AEAT has answered, Task 11b); the till's time in 2001 → `target_invalid`, also
+  answers null once AEAT has answered, Task 11b); **AEAT `answered` and AGREEING with the box
+  during the stop, the stop still holding (no watch look since), a staff member's till a day
+  ahead, the host able to set → `witnessed`, zero host sets** (revision 5a, decision 14; written
+  and seen failing first), and the same with an administrator's override → `witnessed`; the till's time in 2001 → `target_invalid`, also
   when the box's own clock reads 2001 and the till 30 s from it (the agreeing branch, which never
   reaches the correction's own range check); the till a day ahead with the host synchronised →
   `synchronised`, and with the host missing → `host_unavailable`; the till agreeing while AEAT
@@ -2220,7 +2338,8 @@ agreeing 2001 case reaches `confirmClockStop`, which throws `clock.unusable`
 other-session case is served; drop the admission check inside the confirm's transaction (keep the
 one in the challenge) → the withdrawn-between case writes a row; drop `stale` from the agreeing
 branch → its counter case writes a row; skip the override's `authorize` → the manager-override case
-writes a row.
+writes a row; count only AEAT disagreements in `witnessed` (Task 10) → the agreeing-AEAT case
+sets the clock from the till.
 
 **Focused commands.** `pnpm --filter @waitron/server exec vitest run src/till-box-clock-api.test.ts
 src/till-api.profile-actions.test.ts src/till-api.profile-zones.test.ts
@@ -2281,9 +2400,11 @@ time"; on Confirm a fresh challenge and `clockSet`. `#offersClockCheck`
 **Words** (concise; CLAUDE.md §3's refusal rule — what happened and what each choice does, never
 "ask someone"): `synchronised` — "The box keeps its clock in time over the internet and says it is
 right, so it does not take a time from a device. If your device's time is right, check the box's
-internet connection." `witnessed` — "The tax agency's time disagrees with the box's clock, so the
-box sets its clock to that time itself, not to a device's. If a try fails, it tries again later;
-the bell says when the clock is set." (Revision 4: "or two tills" goes — devices no longer set the
+internet connection." `witnessed` — "The box has the tax agency's time, so it confirms or sets its
+clock from that time itself, not from a device's. If a try fails, it tries again later."
+(Revision 5a: `witnessed` now also answers when AEAT agrees with the box, decision 14, so the words
+no longer say it disagrees, and the bell clause goes because nothing is set when AEAT agrees.
+Revision 4: "or two tills" goes — devices no longer set the
 clock. Revision 5, M4: "sets its clock … by itself" alone was untrue while the backoff holds or the
 host refuses a set, decision 6, so the words say it tries and may try again; no "within a minute".) `stale` — "The box's clock changed while this was being
 checked. Read the time again." `agrees` — the existing agree path. `host_unavailable` — decision
@@ -2317,8 +2438,13 @@ point at it, and a dialog shows the box's time beside the till's, asks the signe
 confirm, offers an administrator's sign-in in place when a staff member cannot (I5 a), and words
 every refusal as CLAUDE.md §3 asks — what happened and what each choice does, never "ask someone".
 
-**Files.** Modify `apps/till/src/state/staff-notices.ts` (`nextNotices`, `:23`, keeps the marker
-out of the list it hands the strip, and hands the strip `checkTimeOffered: true` instead),
+**Files.** Modify `apps/till/src/state/staff-notices.ts` (`nextNotices`, `:23-37`, keeps its
+signature and still returns a plain `StaffNotice[]`, leaving out any `clock.check_time` entry; a
+new exported `checkTimeOffered(read: DeviceEquipmentRead): boolean` beside it answers whether the
+read's well-formed notices hold that marker — revision 5a: a flag on `nextNotices`'s answer would
+change its shape and break the file's `toEqual` cases (`apps/till/src/state/staff-notices.test.ts:21`,
+`:25`, `:35`, `:43`, `:49`, `:66`, `:94`), which stay unedited; `till-app.ts` calls both where it
+calls `nextNotices` today, `:9807`),
 `apps/till/src/widgets/notice-strip.ts` (with `checkTimeOffered`, a `clock.behind_chain` or
 `clock.unusable` line draws a `wt-button` "Check the time" as its hint, in the first line and in the
 opened list; a press dispatches `till-check-time`, `bubbles: true, composed: true`, an app-owned
@@ -2373,8 +2499,9 @@ sends its own `Date.now()`.
   them, `:19-22`);
   `authority_pending` "The box is still trying the tax agency's time over the internet. Check again
   in a minute." (Check again, Close);
-  `witnessed` (revision 5, M4) "The tax agency's time disagrees with the box's clock, so the box sets
-  its clock to that time itself, not to this till's. If a try fails, it tries again later." (Close);
+  `witnessed` (revision 5, M4; revision 5a, since it now also answers when AEAT agrees) "The box
+  has the tax agency's time, so it confirms or sets its clock from that time itself, not from this
+  till's. If a try fails, it tries again later." (Close);
   `target_invalid` "This till's clock reads {till}, which cannot be right. Correct this till's date
   and time in its settings, then check again." (Check again, Close);
   `synchronised` "The box keeps its clock in time over the internet, so it does not take a time
@@ -2395,9 +2522,9 @@ sends its own `Date.now()`.
   again, Close). Spanish to match; words as short as the meaning allows.
 
 **Failing tests first** (browser; `memory_pressure | grep free` first):
-- `state/staff-notices.test.ts`: a read carrying the marker and `clock.behind_chain` → the list
-  holds the clock notice only, and `checkTimeOffered` is true; without the marker → false and the
-  list as today.
+- `state/staff-notices.test.ts` (new cases): a read carrying the marker and `clock.behind_chain` →
+  `nextNotices` answers the clock notice only, and `checkTimeOffered(read)` is true; without the
+  marker → false and the list as today.
 - `notice-strip.test.ts` (new cases): `checkTimeOffered` with a `clock.behind_chain` notice → the
   line's words unchanged and its hint a "Check the time" button, no «Tell a manager»; the same for
   `clock.unusable`; a press dispatches `till-check-time` once, bubbling out of the shadow root; the
