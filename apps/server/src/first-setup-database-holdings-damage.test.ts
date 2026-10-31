@@ -8,7 +8,6 @@ import {
   mainFile,
   PRIVATE_COPY,
 } from "../test/setup-holdings-fixture.js";
-// Imported first: its `vi.mock` of the internet clock must be in place before any fiscal module loads.
 import { heldSetup } from "../test/held-setup-database.js";
 import { chmod, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";

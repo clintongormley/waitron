@@ -1,5 +1,4 @@
 import { ADJUSTMENT_REFUND, ACTIVATION_ROWS, read, write } from "../test/setup-holdings-fixture.js";
-// Imported first: its `vi.mock` of the internet clock must be in place before any fiscal module loads.
 import { heldSetup } from "../test/held-setup-database.js";
 import { root } from "../test/hour-recovery-host.js";
 import { mkdir } from "node:fs/promises";
