@@ -1049,6 +1049,62 @@ computed opacity, not what is painted, on the menu, the order's lines, Move to�
 all group only, and the "newly added line" cases cover a line added after the bar is drawn and the
 phone's Review view opening, not a line revealed as the screen first draws.
 
+**Table screen: bill switcher and ⋮ (A803 slice 3).** The Order screen's panel head holds, after the
+status, the bill switcher and then the ⋮ (`billSwitcher` and `tableMenu`,
+`apps/till/src/screens/table-bill-controls.ts`), on every width, a handheld included; there is no
+Tab button and no side drawer.
+
+- **The switcher** is a `wt-row-actions`, drawn whenever the screen has a party (none without one).
+  Its trigger part has a 1px `--wt-color-border` edge, `--wt-radius-md` corners and
+  `--wt-color-surface`. The closed label is "Bill 1 · €38.50" for one bill and "Bill 2 of 3 · Clint
+  · €54.00" for several, where the count is the bills listed, not the highest number; a paid bill's
+  amount is "Paid" with an `aria-hidden` ✓; an unnumbered bill reads "Bill"; with no bill on screen
+  it reads "Bills". Its `label` is "Bills: " and the closed label. The list is a `role="menu"` of
+  `menuitemradio` rows in number order, `aria-checked` on the bill on screen, whose background
+  differs from the open list's and an unchecked row's in both themes. Each row holds the bill's
+  short label, what it owes or "Paid ✓", and one line per person with unsent dishes on it ("Ana has
+  an unsent order: 3 items"). **+ New bill** is always the last item, with one bill, several or
+  none; while one is being made it is `aria-disabled` and a tap sends nothing. Choosing the bill on
+  screen sends nothing; choosing another sends `switch-bill` with its id.
+- **A vanished bill.** When a bills read no longer holds the bill on screen, the screen shows the
+  lowest-numbered bill still owing, else the lowest-numbered listed bill, and a `role="status"` line
+  says "Bill 2 is no longer at this table. Now showing Bill 1." ("Bill 2 is no longer at this
+  table." when none is left, with no New order). Choosing another bill or opening another table
+  clears it. A bill paid elsewhere is not vanished: it stays on screen, with no line.
+- **The ⋮** is a `wt-row-actions` (label "Table actions", `align="end"`, `opens-below`) holding two
+  `role="group"` sections, each named by its visible heading through `aria-labelledby` and split by
+  a rule. The bill section, headed with the bill on screen's short label and left out when no bill
+  is on screen, lists for an open owing bill Name this bill, Split by item, Transfer items, Merge
+  bills, Move this bill, Comp the bill and Full invoice, in that order; Receipt copy and Cancel and
+  credit join it where the bill offers them. Whole table lists Allergies, Name the party, Guests,
+  Mark bill requested (or Cancel the bill request), Split a table (two or more tables only), Join a
+  table, Move guests and Finish table. With no party it offers Split by item, Transfer items and
+  Merge bills under "Bill" and Join a table and Move guests under Whole table. Full invoice, in the
+  ⋮ and on the payment step alike, is offered only for a bill still owing with no invoice number.
+- **The action panel.** A ⋮ item that needs a choice draws its step in `aside.action-panel`
+  (`data-action-panel`) beside the order while it is open. Its heading takes focus and the panel is
+  scrolled into view; Back and Escape close it (Escape closes an open list first) and return focus
+  to the ⋮'s trigger, and focus returns there too when a naming, guests or split-guests window
+  opened from the ⋮ closes.
+- **The foot**, in order: the Finish table refusal, only after Finish table was refused
+  (`role="alert"`, with Take payment and Record unpaid departure, brought into view at
+  1024×768 and at 390×844); this bill's total; "Still to pay at this table" with the party's
+  outstanding, only with a party; then the pay section. For an open owing bill on a wide screen the
+  pay section holds exactly `till-tender-pay`'s Cash and Card (no Park and no Full invoice of its
+  own), the bill's Full invoice, its receipt language when two or more are offered, and Pay items,
+  Contribute and Split equally. A part-paid bill shows what it still owes, Pay the rest, the bill's
+  choices and the pay ways. A handheld shows one Pay and the bill's choices. Comp the bill is never
+  in the foot.
+
+Guards: `apps/till/src/screens/till-table-order-screen.bill-switcher.test.ts`,
+`till-table-order-screen.table-menu.test.ts`, `till-table-order-screen.panel-footer.test.ts` ("A803
+no tab panel", "A803 pay scope") and `till-table-order-screen.bill-controls.a11y.test.ts` (axe in
+both themes, the ⋮ at a phone's height), and in `apps/till/src/` `till-app-parties.test.ts` ("A803
+bill gone"), `till-app-table-service.test.ts` ("A803 new bill") and `till-app-handheld-pay.test.ts`
+(the refusal on a handheld); weaker than the paragraph: the foot's contents are checked for those
+three bills only, and the switcher's checked-row colour is checked as differing, not as a named
+token.
+
 When the zones read offers another layout (`layoutDue`), a device that can change today shows a
 `role="status"` line above the map or the list, "{period} layout is ready." or, with no new period
 to name, "A newer layout is ready.", beside an Update layout button (`#layoutBanner`,
@@ -2850,6 +2906,23 @@ and the staffing grid's block editor in the A761 entry):
   Fire for a selected sendable dish, and Move to… for a selection. Those actions are quiet while
   disabled and use their primary colour when available. The allergy question and dish assignments
   run before the send when needed.
+  **Exception: quiet Pay with unsent dishes** (A803 slice 3, owner amendment 5). While the bill on
+  a table screen has unsent dishes on the screen (a line in the screen's own New order, or another
+  person's draft of that bill drawn with dishes in its Take over panel; another bill's do not
+  count), Cash, Card, the pay ways, Pay the rest, a handheld's Pay, and the keypad's and the card
+  reference's Confirm payment are drawn `secondary` and are never `disabled`, because the tap
+  explains: it starts nothing and shows the bill's label and `bill_pay.unsent` ("Bill 1. Send or
+  remove the unsent dishes before paying.") in a `role="alert"` line at the end of the pay section,
+  brought into view. Showing another bill, or the bill having no unsent dish left, clears the line.
+  The pay ways, Pay the rest and a handheld's Pay keep their own variant while a payment already
+  sent on the bill on screen is held without an answer, since their tap reopens it; a handheld's
+  Pay also keeps it on a presented bill whose whole payment has no answer. Cash and Card never do.
+  The bill payment dialog, reopened from a held payment or opened before the dishes were read,
+  starts no new payment while the bill has unsent dishes; its Check again of a payment still without an answer always goes ahead. Guards: in
+  `apps/till/src/`, `screens/till-table-order-screen.panel-footer.test.ts` ("quiet Pay while this
+  bill has unsent dishes"), `widgets/tender-pay.test.ts` ("A803 table pay"),
+  `till-app-bill-payments.test.ts` ("A803 quiet Pay …") and
+  `screens/till-table-order-screen.bill-controls.a11y.test.ts` ("A803 quiet Pay", both themes).
   A649 brought Add a device's Pair (Enable for a returning device) in the waiting-devices table
   under it (owner, 2026-10-14): it is drawn `secondary` while the screen holds no pairing hold.
   A689 brought the translations dialog's Translate all under it: it is drawn `secondary` while the

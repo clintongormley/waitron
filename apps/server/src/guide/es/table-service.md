@@ -8,6 +8,11 @@ pago. La elección guardada permite superar el límite de factura simplificada. 
 la cuenta se emite la factura; al registrar que se han ido sin pagar también se emite y queda
 pendiente de pago.
 
+**Factura completa** está en la zona de cobro de la cuenta, debajo del pedido, y en el menú **⋮**,
+bajo el nombre de la cuenta; las dos abren el mismo formulario para la cuenta en pantalla. Ninguna
+aparece cuando la cuenta ya está pagada o ya se ha emitido su factura. Convertir una cuenta pagada en
+factura completa sería corregir una factura ya emitida, y Waitron todavía no ofrece esa corrección.
+
 El cobro de mostrador todavía no puede emitir una factura completa. Mantén el pedido del cliente
 en una cuenta de mesa y usa los pagos de esa cuenta. Tramitar un pedido de mostrador por sí solo
 no emite una factura.
@@ -235,23 +240,83 @@ corto, aunque cambien las mayúsculas: si Guardar dice «Terraza 1 ya usa T1», 
 «Tb1». **Añadir mesas** muestra los nombres cortos que dará, y deja escribirlos cuando eliges
 nombres personalizados; **Añadir mesa unida** pide uno.
 
+## Cambiar de cuenta {#bill-switcher}
+
+Es habitual que los clientes paguen por separado: dos parejas en una misma mesa, o alguien que paga
+sus propias bebidas. Cada uno tiene entonces su propia cuenta en la mesa. El selector de cuentas,
+arriba en la pantalla de la mesa, indica qué cuenta está en pantalla, como **Cuenta 1 · 38,50 €**, o
+**Cuenta 2 de 3 · Clint · 54,00 €** cuando la mesa tiene tres. Aparece aunque la mesa tenga una sola
+cuenta, así que una segunda cuenta está siempre a un toque.
+
+Toca el selector para ver las cuentas de la mesa por orden de número. Cada fila muestra el número y
+el nombre de la cuenta, lo que queda por pagar o **Pagada ✓**, y una línea como **Ana tiene un
+pedido sin enviar: 3 artículos** por cada persona con platos sin enviar en esa cuenta. Elige una
+fila para poner esa cuenta en pantalla. Una cuenta pagada también se abre, para que puedas ponerle
+nombre o, si tiene ticket, imprimir una copia, pero no admite platos nuevos. **+ Cuenta nueva** está
+siempre al final de la lista: abre una cuenta nueva y vacía en la mesa y la pone en pantalla.
+
+Todo lo demás que haces en la mesa está en el menú **⋮**, junto al selector, en dos partes. La
+primera, con el nombre de la cuenta en pantalla como título, por ejemplo **Cuenta 2 · Clint**, actúa
+solo sobre esa cuenta: **Poner nombre a esta cuenta**, **Dividir por artículo**, **Transferir
+artículos**, **Juntar cuentas**, **Mover esta cuenta**, **Descuento en la cuenta**, **Factura
+completa**, **Copia del ticket** y **Cancelar y abonar**, cada una cuando corresponde a la cuenta.
+La segunda, **Toda la mesa**, actúa sobre todos los de la mesa: **Alergias**, **Poner nombre a los
+clientes**, **Comensales**, **Marcar cuenta pedida para …** con el nombre del grupo (una vez pedida,
+**Anular la petición de cuenta de …**), **Separar una mesa** (cuando el grupo ocupa más de una
+mesa), **Unir una mesa**, **Mover clientes** y **Cerrar mesa**. Una acción que necesita una
+elección, como con qué cuenta juntar, se abre junto al pedido, y **Atrás** la cierra.
+
+Unir una mesa, o mover clientes a otra, conserva todas las cuentas: las que llegan toman los
+siguientes números del grupo que las recibe. Para juntar dos cuentas, usa **Juntar cuentas**. Si
+otra caja junta la cuenta que tienes en pantalla con otra, o la mueve a otra mesa, tu pantalla pasa
+a otra de las cuentas de la mesa, si queda alguna, y lo indica, por ejemplo **Cuenta 2 ya no está en
+esta mesa. Ahora se muestra Cuenta 1.** Los platos que habías añadido a la cuenta que se fue y no
+habías enviado no pasan a la cuenta que ahora se muestra: aparecen bajo **Tus cambios no se han
+guardado.**, con **Descartar cambios** y **Actualizar el pedido**. Una cuenta cobrada en otra caja
+sigue en tu pantalla, marcada como **Pagada**.
+
+Debajo del pedido, el pie muestra el **Total** de esta cuenta, después **Pendiente de pago en la
+mesa** para todas las cuentas de la mesa, y luego las formas de cobrar esta cuenta: **Efectivo** y
+**Tarjeta**, **Pagar artículos**, **Aportar una cantidad** y **Dividir a partes iguales**, la
+**Factura completa** de la cuenta y, cuando el local ofrece más de un idioma de ticket, el idioma en
+que se imprimirá su ticket. Cuando ya se ha pagado una parte de la cuenta, **Parte de esta cuenta ya
+está pagada: cobra el resto como pago de cuenta** ocupa el lugar de **Efectivo** y **Tarjeta**. En
+un móvil o una tableta, un solo botón **Cobrar** ocupa el lugar de **Efectivo**, **Tarjeta** y las
+formas de cobrar, salvo en una cuenta presentada que ya está pagada en parte. El pie no tiene
+**Aparcar**: la cuenta de una mesa ya espera en su mesa.
+
+Waitron no cobra una cuenta con platos sin enviar. Mientras la cuenta en pantalla tiene platos en tu
+**Pedido sin enviar**, o se muestran platos sin enviar de otra persona para ella con su botón
+**Tomar el pedido**, los botones que empiezan un cobro se ven apagados. Aun así responden: un toque
+no empieza ningún cobro y explica por qué, por ejemplo **Cuenta 1. Envía o quita los platos sin
+enviar antes de cobrar.** Envía o quita tus propios platos. Para los de otra persona, toca primero
+**Tomar el pedido** y después envíalos o quítalos. Los platos sin enviar de otra cuenta de la mesa
+no frenan esta. Si se envió un cobro de esta cuenta y no llegó respuesta, los botones de cobro que
+no son **Efectivo** ni **Tarjeta** siguen abriéndolo, para que puedas saber si se completó; esa
+ventana no acepta un cobro nuevo mientras haya platos sin enviar.
+
+Si eliges **Cerrar mesa** con una cuenta aún sin pagar, la caja indica **Hay una cuenta de esta mesa
+sin pagar. Cóbrala antes de cerrar la mesa** encima del pie. **Cobrar esta cuenta** pone en pantalla
+una cuenta sin pagar para que la cobres, y **Registrar salida sin pagar** registra que los clientes
+se fueron sin pagar.
+
 ## Poner nombre a una cuenta {#bill-names}
 
-Las cuentas de unos clientes van numeradas, y la caja muestra cada una con el nombre de los clientes,
-su número y el nombre que le pongas, como **4 · Cuenta 2 · Clint**. Para poner nombre a la cuenta en
-pantalla, por ejemplo el del cliente que la paga, abre **Acciones de mesa**, elige **Poner nombre a
-esta cuenta**, escribe hasta 40 caracteres y elige **Guardar**. Vacía el campo para quitar el
-nombre. **Poner nombre a los clientes**, justo encima, pone nombre a todo el grupo. Si otra persona
-tiene platos sin enviar en la cuenta, toma primero su pedido.
+Las cuentas de unos clientes van numeradas, y la caja muestra cada una con su número y el nombre que
+le pongas, como **Cuenta 2 · Clint**, y en algunos sitios con el nombre de los clientes delante,
+como **4 · Cuenta 2 · Clint**. Para poner nombre a la cuenta en pantalla, por ejemplo el del cliente
+que la paga, abre el menú **⋮**, elige **Poner nombre a esta cuenta**, escribe hasta 40 caracteres y
+elige **Guardar**. Vacía el campo para quitar el nombre. **Poner nombre a los clientes**, en **Toda
+la mesa** del mismo menú, pone nombre a todo el grupo. Si otra persona tiene platos sin enviar en la
+cuenta, toma primero su pedido.
 
 Una cuenta conserva su número mientras sigue con esos clientes. Juntar una cuenta con otra deja un
 hueco: junta la Cuenta 2 con la Cuenta 1 y quedan las Cuentas 1 y 3. Una cuenta que llega de otra
 mesa o del mostrador toma el siguiente número de los clientes, y también las cuentas de una mesa que
-unes, salvo la que **Juntar las cuentas** suma a la cuenta principal de estos clientes. Una mesa que
-separas con una cuenta vuelve a empezar por la Cuenta 1, igual que una mesa que se vuelve a ocupar
-cuando sus clientes terminan. Una cuenta conserva su nombre cuando se mueve, también al mostrador,
-donde no tiene número. Solo puedes poner nombre a una cuenta en una mesa. El nombre no se imprime en
-los tickets de cocina ni en los recibos.
+unes. Una mesa que separas con una cuenta vuelve a empezar por la Cuenta 1, igual que una mesa que
+se vuelve a ocupar cuando sus clientes terminan. Una cuenta conserva su nombre cuando se mueve,
+también al mostrador, donde no tiene número. Solo puedes poner nombre a una cuenta en una mesa. El
+nombre no se imprime en los tickets de cocina ni en los recibos.
 
 ## Ver qué mesas tienen comida lista {#ready-bar}
 
