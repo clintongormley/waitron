@@ -35,10 +35,11 @@ const PENDING_MAX = 1_440;
  * last finished, on the primary only. While the seat answers a clock stop state, each check offers
  * the seat a clock check to open, confirms the clock when the witnesses are ready, and asks AEAT's
  * time when an ask is due; while the seat answers a waiting check, each check does the same ask and
- * offers the seat the witnesses to close it. `stop` resolves once a check in flight has finished;
- * nothing is read, asked or written after it. As a set's anchor, it takes no jump from the wall
- * clock between `stepComing` and `reanchor`, and records every AEAT reading measured on the old
- * clock before the set's row can be written. */
+ * offers the seat the witnesses to close it. `stop` resolves once a check in flight has finished,
+ * and no check runs after it; a disproof write that `stepComing` or `reanchor` began before it can
+ * still finish later. As a set's anchor, it takes no jump from the wall clock between
+ * `stepComing` and `reanchor`, and each of them first records the disproof of every disagreeing
+ * AEAT reading not yet taken, or throws. */
 export function startClockWatch(deps: {
   backend: Pick<
     FiscalBackend,
@@ -146,10 +147,12 @@ export function startClockWatch(deps: {
     }
   }
 
-  /** AEAT's readings not yet taken were measured on the clock as it is now. */
+  /** Throws when a disproof is left unrecorded because the watch has stopped: the set it guards
+   * must not go ahead without it. */
   async function recordUntaken(): Promise<void> {
     keepDisagreeing();
     await recordPending();
+    if (stopped && pending.length > 0) throw new Error("clock_watch.stopped");
   }
 
   function recordable(reading: Reading): boolean {

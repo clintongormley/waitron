@@ -334,6 +334,14 @@ describe("createClockWitnessStore", () => {
     expect(store.forSetting()).toEqual([]);
   });
 
+  it("hands forSetting no agreeing AEAT reading after a step, read before witnesses()", () => {
+    const clock = clocks();
+    const store = storeWith(clock);
+    store.noteAuthority({ authorityMs: START_WALL + 500, uncertaintyMs: 700, at: clock.arrived() });
+    clock.stepWall(5_000);
+    expect(store.forSetting()).toEqual([]);
+  });
+
   it("hands forSetting no AEAT disagreement older than five minutes", () => {
     const clock = clocks();
     const store = storeWith(clock);
