@@ -81,9 +81,9 @@ const NO_PRINTERS = { receiptPrinterIds: [], paymentSlipPrinterIds: [] };
 const scopeChoices: ProfileScopeChoices = {
   departments: [{ id: "d1", name: "Restaurante", active: true }],
   zones: [
-    { id: "z1", name: "Comedor", departmentId: "d1", active: true },
-    { id: "z2", name: "Terraza", departmentId: "d1", active: true },
-    { id: "z4", name: "Barra vieja", departmentId: "d1", active: false },
+    { id: "z1", name: "Dining room", departmentId: "d1", active: true },
+    { id: "z2", name: "Terrace", departmentId: "d1", active: true },
+    { id: "z4", name: "Old bar", departmentId: "d1", active: false },
   ],
 };
 
@@ -1206,8 +1206,8 @@ describe("device-profiles-screen kitchen screens", () => {
     ]);
     expect(shown(el, "profile-pass-monitor-zones")).toEqual([
       [t("device_profiles.every_zone_venue"), false],
-      ["Comedor", false],
-      ["Terraza", true],
+      ["Dining room", false],
+      ["Terrace", true],
     ]);
   });
 
@@ -1249,8 +1249,8 @@ describe("device-profiles-screen kitchen screens", () => {
     await flush(el);
     expect(shown(el, "profile-pass-monitor-zones")).toEqual([
       [t("device_profiles.every_zone_venue"), false],
-      ["Comedor", true],
-      ["Terraza", true],
+      ["Dining room", true],
+      ["Terrace", true],
     ]);
     toggle(el, "profile-pass-monitor-zone-z1", false);
     await flush(el);
@@ -1404,11 +1404,11 @@ describe("device-profiles-screen kitchen screens", () => {
   it.each([
     [
       "en",
-      "Saved. Pantalla Pase no longer shows Deli. Pantalla Bar no longer shows Pass screen, Terraza.",
+      "Saved. Pantalla Pase no longer shows Deli. Pantalla Bar no longer shows Pass screen, Terrace.",
     ],
     [
       "es",
-      "Guardado. Pantalla Pase ya no muestra Deli. Pantalla Bar ya no muestra Pantalla de pase, Terraza.",
+      "Guardado. Pantalla Pase ya no muestra Deli. Pantalla Bar ya no muestra Pantalla de pase, Terrace.",
     ],
   ] as const)("names the devices a save narrowed, in %s", async (locale, expected) => {
     const previous = currentLocale();
@@ -1426,7 +1426,7 @@ describe("device-profiles-screen kitchen screens", () => {
             {
               deviceId: "dv2",
               deviceName: "Pantalla Bar",
-              lost: { screens: ["pass"], stations: [], zones: [{ id: "z2", name: "Terraza" }] },
+              lost: { screens: ["pass"], stations: [], zones: [{ id: "z2", name: "Terrace" }] },
             },
           ],
         }),
@@ -1811,7 +1811,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
         departments: [...scopeChoices.departments, { id: "d2", name: "Deli", active: true }],
         zones: [
           ...scopeChoices.zones,
-          { id: "z3", name: "Mostrador", departmentId: "d2", active: true },
+          { id: "z3", name: "Counter", departmentId: "d2", active: true },
         ],
       }),
     });
@@ -3346,7 +3346,7 @@ it("service deletion refreshes native profile zones and chooses a permitted star
       "[data-test=profile-starting-zone]",
     )!;
     await start.updateComplete;
-    expect(start.shadowRoot!.querySelector("button")!.textContent).toContain("Terraza");
+    expect(start.shadowRoot!.querySelector("button")!.textContent).toContain("Terrace");
     expect(start.value).toBe("z2");
     expect(
       el
@@ -3513,7 +3513,7 @@ it("scope opening keeps a newer zone snapshot after the held profile read", asyn
     )!;
     await start.updateComplete;
     expect(start.value).toBe("z2");
-    expect(start.shadowRoot!.querySelector("button")!.textContent).toContain("Terraza");
+    expect(start.shadowRoot!.querySelector("button")!.textContent).toContain("Terrace");
     expect(el.shadowRoot!.querySelector("[data-test=profile-zone-z1]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=profile-zone-z2]")).not.toBeNull();
     const name = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
