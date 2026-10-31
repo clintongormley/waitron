@@ -91,7 +91,7 @@ async function authorizeSystemManager(db: Database, c: Context): Promise<string>
 /** Dates beyond this are not times `Date` can hold. */
 const LATEST_DATE_MS = 8.64e15;
 
-function confirmBody(body: unknown): { challengeId: string; deviceAt: number } {
+export function confirmBody(body: unknown): { challengeId: string; deviceAt: number } {
   const fields =
     typeof body === "object" && body !== null && !Array.isArray(body)
       ? (body as { challengeId?: unknown; deviceAt?: unknown })
