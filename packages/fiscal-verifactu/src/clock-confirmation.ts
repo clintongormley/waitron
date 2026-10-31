@@ -137,9 +137,10 @@ function adminAgrees(reading: ClockAdminReading): boolean {
   return differenceMs + reading.uncertaintyMs <= CLOCK_WITNESS_MARGIN_MS;
 }
 
-/** The administrator's confirmation of a check that waits: refused `not_stopped` with none,
- * `contrary_proof` when AEAT, or a group of devices from two addresses, taken after the stop ended
- * disagrees, and `differs` when the administrator's device does not agree with the box. */
+/** The administrator's confirmation of a check that waits: refused `not_stopped` with none, or
+ * for a staff member, who never closes one; `contrary_proof` when AEAT, or a group of devices
+ * from two addresses, taken after the stop ended disagrees; and `differs` when the
+ * administrator's device does not agree with the box. */
 async function closeWaitingAsAdmin(
   tx: Transaction,
   input: ClockConfirmRequest,
@@ -179,6 +180,9 @@ export async function confirmClockStop(
   input: ClockConfirmRequest,
 ): Promise<{ confirmation: ClockConfirmation | null }> {
   const { admin } = input;
+  // A staff member's reading counts only as a device that is not the box, so it needs the till.
+  if (admin?.role === "staff" && admin.device === undefined)
+    throw new Error("confirmClockStop: a staff member's confirmation was given no till");
   if (admin !== undefined) refuseBeforeFirstIssueDate(input.reading);
   const judged = await judge(tx, input.reading, input.witnesses);
   if (admin === undefined) {

@@ -607,7 +607,7 @@ describe("payments restarted on a clock behind the last sale", () => {
       `Payments restarted on the box's clock (${clockAt}), earlier than the last sale (${lastRecordAt}), once Ana, a staff member, confirmed it on till Bar.`,
     );
     expect(alertMessage("clock.behind_chain_restarted", params, "es")).toBe(
-      `Se reanudaron los cobros con la hora del equipo (${clockAt}), anterior a la última venta (${lastRecordAt}), al confirmarla Ana, un empleado, en la caja Bar.`,
+      `Se reanudaron los cobros con la hora del equipo (${clockAt}), anterior a la última venta (${lastRecordAt}), al confirmarla Ana, miembro del personal, en la caja Bar.`,
     );
   });
 

@@ -175,7 +175,7 @@ export const ALERT_MESSAGES: Readonly<
       byStaff: {
         mode: "replace",
         en: "Payments restarted on the box's clock ({clockAt:minute}), earlier than the last sale ({lastRecordAt:minute}), once {person}, a staff member, confirmed it on till {device}.",
-        es: "Se reanudaron los cobros con la hora del equipo ({clockAt:minute}), anterior a la última venta ({lastRecordAt:minute}), al confirmarla {person}, un empleado, en la caja {device}.",
+        es: "Se reanudaron los cobros con la hora del equipo ({clockAt:minute}), anterior a la última venta ({lastRecordAt:minute}), al confirmarla {person}, miembro del personal, en la caja {device}.",
       },
     },
   },
