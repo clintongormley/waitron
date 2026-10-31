@@ -265,7 +265,12 @@ describe("the clock watch sets the clock from AEAT during a stop", () => {
     const h = harness({
       answer: (_input, call) =>
         call === 2
-          ? { set: true, confirmationId: "confirmation-1", stepMs: 2 * DAY }
+          ? {
+              set: true,
+              confirmationId: "confirmation-1",
+              stepMs: 2 * DAY,
+              confirmedAt: "2026-10-31T10:00:00.000Z",
+            }
           : { set: false, reason: "synchronised" },
     });
     await h.looksFor(3 * CLOCK_WATCH_MS);

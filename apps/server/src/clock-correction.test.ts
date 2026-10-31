@@ -16,6 +16,8 @@ const TX = { fake: "tx" } as unknown as Transaction;
 const S = 1_000;
 const H = 3_600_000;
 const START_MS = Date.parse("2026-10-31T10:00:00.000Z");
+/** The box's reading once the default host has set it an hour on, taking 50 ms. */
+const SET_AT = new Date(START_MS + H + 50).toISOString();
 
 const STOPPED: ClockStopState = {
   clockAt: "2026-10-31T10:00:00.000Z",
@@ -289,7 +291,12 @@ describe("setting the box's clock", () => {
       "confirmClockStep",
       "onCorrected",
     ]);
-    expect(answer).toEqual({ set: true, confirmationId: "confirmation-1", stepMs: H });
+    expect(answer).toEqual({
+      set: true,
+      confirmationId: "confirmation-1",
+      stepMs: H,
+      confirmedAt: SET_AT,
+    });
     expect(h.hostSets).toEqual([
       { targetMs: START_MS + H, requester: { source: "authority", check: "check-1" } },
     ]);
@@ -345,7 +352,7 @@ describe("setting the box's clock", () => {
 
     expect(h.hostSets).toHaveLength(1);
     expect(h.calls).not.toContain("confirmClockStep");
-    expect(answer).toEqual({ set: true, confirmationId: null, stepMs: H });
+    expect(answer).toEqual({ set: true, confirmationId: null, stepMs: H, confirmedAt: SET_AT });
     expect(h.log).toHaveBeenCalledWith("warn", "clock_correction.row_pending", expect.anything());
 
     failing = false;
@@ -360,7 +367,7 @@ describe("setting the box's clock", () => {
     const h = harness({ seatFails: 1 });
     const answer = await h.correction.set(aeat(h));
 
-    expect(answer).toEqual({ set: true, confirmationId: null, stepMs: H });
+    expect(answer).toEqual({ set: true, confirmationId: null, stepMs: H, confirmedAt: SET_AT });
     expect(h.seatCalls).toHaveLength(0);
     expect(h.corrected).toHaveLength(0);
     expect(
@@ -516,7 +523,12 @@ describe("what a seat or host may lack", () => {
 
   it("sets but records nothing when the seat records no step", async () => {
     const h = harness({ seat: "no-step" });
-    expect(await h.correction.set(aeat(h))).toEqual({ set: true, confirmationId: null, stepMs: H });
+    expect(await h.correction.set(aeat(h))).toEqual({
+      set: true,
+      confirmationId: null,
+      stepMs: H,
+      confirmedAt: SET_AT,
+    });
     expect(h.corrected).toEqual([]);
   });
 
@@ -607,6 +619,7 @@ describe("clocks that move or cannot be read", () => {
       set: true,
       confirmationId: "confirmation-1",
       stepMs: H,
+      confirmedAt: SET_AT,
     });
     expect(h.seatCalls[0]).toMatchObject({ verified: true, stepMs: H });
   });
@@ -617,6 +630,7 @@ describe("clocks that move or cannot be read", () => {
       set: true,
       confirmationId: "confirmation-1",
       stepMs: H,
+      confirmedAt: SET_AT,
     });
     await h.correction.writePending();
     expect(h.seatCalls).toHaveLength(1);
