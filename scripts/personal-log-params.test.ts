@@ -91,8 +91,16 @@ const NOT_PERSONAL: ReadonlyMap<string, string> = new Map([
   ["backup.stream_request_failed.name", 'an error\'s name from a fixed list, or "other"'],
   ["category.name_taken.name", "the name of a category"],
   [
+    "clock.behind_chain_restarted.byStaff",
+    "true when a staff member confirmed; picks the alert's words and names no one",
+  ],
+  [
     "clock.behind_chain_restarted.confirmedBy",
-    "an enum of who confirmed: authority, devices or admin",
+    "an enum of who confirmed: authority, devices, admin or staff",
+  ],
+  [
+    "clock.corrected.byStaff",
+    "true when a staff member confirmed; picks the alert's words and names no one",
   ],
   ["course.name_taken.name", "the name of a course"],
   ["credentials.key_invalid.byteLength", "a size in bytes"],

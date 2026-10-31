@@ -10,7 +10,9 @@ export { formatBytes };
  * that calendar day, the way the alert's language writes it; `{name:bytes}` writes a number of
  * bytes as gigabytes or megabytes, the way the alert's language writes them; `{name:minute}` writes
  * an instant in `toISOString`'s shape as `YYYY-MM-DD HH:MM` in the browser's zone, in either
- * language; `{name:list}` writes the words a registered word list gives the param's value.
+ * language; `{name:duration}` writes a number of milliseconds, either sign, as its two largest
+ * whole units from days to seconds (tenths of a second below one), in the alert's language;
+ * `{name:list}` writes the words a registered word list gives the param's value.
  * A variant is chosen by its param being `true`: a `replace` variant's words stand instead of the
  * message, and otherwise each `append` variant's words follow it. `one` words stand instead of the
  * message's own when the param they name is the number 1; variants apply over them as usual. */
@@ -69,6 +71,34 @@ function formatMinute(value: unknown): string {
   return formatIsoMinute(value);
 }
 
+const DURATION_UNITS = [
+  ["day", 86_400_000],
+  ["hour", 3_600_000],
+  ["minute", 60_000],
+  ["second", 1_000],
+] as const;
+
+// The units' words come from the browser's own locale data, so no language's words live here.
+function formatDuration(value: unknown, l: string): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  let rest = Math.abs(value);
+  const unit = (name: string, n: number, digits = 0) =>
+    new Intl.NumberFormat(l, {
+      style: "unit",
+      unit: name,
+      unitDisplay: "long",
+      maximumFractionDigits: digits,
+    }).format(n);
+  if (rest < 1_000) return unit("second", Math.floor(rest / 100) / 10, 1);
+  const parts: string[] = [];
+  for (const [name, ms] of DURATION_UNITS) {
+    const n = Math.floor(rest / ms);
+    rest -= n * ms;
+    if (n > 0 && parts.length < 2) parts.push(unit(name, n));
+  }
+  return new Intl.ListFormat(l, { type: "conjunction" }).format(parts);
+}
+
 function formatParam(value: unknown): string {
   if (value === null || value === undefined) return "—";
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean")
@@ -115,6 +145,7 @@ export function alertWords(
       if (kind === "date") return formatDay(value, l);
       if (kind === "bytes") return formatBytes(value, l);
       if (kind === "minute") return formatMinute(value);
+      if (kind === "duration") return formatDuration(value, l);
       if (kind === undefined) return formatParam(value);
       if (!Object.hasOwn(wordLists, kind)) return formatParam(null);
       const list = wordLists[kind]!;
