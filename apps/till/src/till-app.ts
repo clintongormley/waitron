@@ -3464,6 +3464,9 @@ export class TillApp extends LitElement {
     revision: number;
     partyId: string;
     session: number;
+    /** What opened the window: the ⋮, or the pay area's Full invoice. */
+    opener?: HTMLElement;
+    screen?: HTMLElement;
   };
   private invoiceRecipientSaving = false;
   #invoiceRecipientLifetime = {};
@@ -17065,6 +17068,14 @@ export class TillApp extends LitElement {
     if (bill?.revision !== revision || partyId === undefined) return;
     const expectedEdit = this.#billChoiceEdit(workingOrderId);
     if (expectedEdit === null) return;
+    const screen = event
+      .composedPath()
+      .find(
+        (node): node is HTMLElement =>
+          node instanceof HTMLElement && node.localName === "till-table-order-screen",
+      );
+    // The screen sends the event itself, so the control tapped is read from its focus.
+    const tapped = screen?.shadowRoot?.activeElement;
     const target = {
       orderId: workingOrderId,
       revision,
@@ -17072,6 +17083,10 @@ export class TillApp extends LitElement {
       session: this.#operatorSession,
       expectedEdit,
       api: this.api,
+      opener:
+        tapped?.closest<HTMLElement>("[data-table-menu]") ??
+        (tapped?.hasAttribute("data-choose-bill-invoice") ? (tapped as HTMLElement) : undefined),
+      screen,
     };
     this.invoiceRecipientBill = target;
     this.invoiceRecipientOrderId = undefined;
@@ -17113,7 +17128,10 @@ export class TillApp extends LitElement {
       this.invoiceRecipientOpen = !close;
       this.invoiceRecipientRefusal = "";
       this.invoiceRecipientRefusalField = "";
-      if (close) this.invoiceRecipientBill = undefined;
+      if (close) {
+        this.invoiceRecipientBill = undefined;
+        this.#returnInvoiceFocus(bill);
+      }
       if (this.orderParty?.id === bill.partyId) {
         const refreshed = await this.#loadPartyBills();
         if (
@@ -17155,6 +17173,20 @@ export class TillApp extends LitElement {
     } finally {
       if (this.#invoiceRecipientLifetime === lifetime) this.invoiceRecipientSaving = false;
     }
+  }
+
+  /** The control that opened the window is disabled while its delivery read runs, so the browser
+   * has nothing to hand focus back to; it goes to that control, else to the ⋮. */
+  #returnInvoiceFocus(bill: NonNullable<TillApp["invoiceRecipientBill"]>): void {
+    const { opener, screen, session } = bill;
+    if (screen === undefined) return;
+    void this.updateComplete.then(() => {
+      if (session !== this.#operatorSession || !screen.isConnected) return;
+      const root = screen.shadowRoot!;
+      if (opener?.isConnected) opener.focus();
+      if (opener === undefined || root.activeElement !== opener)
+        root.querySelector<HTMLElement>("[data-table-menu]")?.focus();
+    });
   }
 
   async #onReprintBill(event: Event): Promise<void> {
@@ -19642,6 +19674,8 @@ export class TillApp extends LitElement {
                   this.invoiceRecipientOrderId = undefined;
                 }}
                 @invoice-recipient-cancel=${() => {
+                  if (this.invoiceRecipientBill !== undefined)
+                    this.#returnInvoiceFocus(this.invoiceRecipientBill);
                   this.invoiceRecipientOpen = false;
                   this.invoiceRecipientOrderId = undefined;
                   this.invoiceRecipientBill = undefined;

@@ -1,4 +1,5 @@
 import { openSentDish } from "./screens/till-table-order-screen.sent.test-helpers.js";
+import { openTableMenu } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
 import type { TillFindBillDialog } from "./widgets/find-bill-dialog.js";
 import {
@@ -1226,6 +1227,134 @@ describe("A803 invoice entry: the ⋮ and the payment step open one Full invoice
     expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
     expect(setOrderInvoiceChoice).not.toHaveBeenCalled();
     expect(api.getInvoiceDeliveryOptions).not.toHaveBeenCalled();
+  });
+});
+
+describe("A803 LOOK F2: the foot of a bill that is not open", () => {
+  it.each([
+    ["presented", { status: "placed", outstanding: "7.80" }],
+    ["paid", { status: "settled", outstanding: "0.00" }],
+  ] as const)(
+    "shows a %s bill's total from the bills read when its lines are refused",
+    async (_, state) => {
+      const getTabLines = vi.fn().mockRejectedValue({ code: "tab.not_open" });
+      const { el } = await mountApp({
+        getPartyBills: vi.fn().mockResolvedValue([billOf({ ...state, total: "7.80" })]),
+        getTabLines,
+      });
+      const order = await openTable(el);
+      await showBillFooter(order);
+
+      expect(getTabLines).toHaveBeenCalledWith("wo-4");
+      expect(text(order.shadowRoot!.querySelector("[data-order-total]"))).toBe(money("7.80"));
+    },
+  );
+});
+
+describe("A803 LOOK F7: focus goes back to what opened Full invoice", () => {
+  const recipient = {
+    taxId: "12345678Z",
+    legalName: "Ana García",
+    address: "1 Main Street, 28013 Madrid, Madrid",
+    countryCode: "ES",
+  };
+  const MENU = "[data-table-menu]";
+  const PAY_AREA = ".bill-choices [data-choose-bill-invoice]";
+
+  /** Focus is on `host` or inside it: `host` is on the chain of focused elements that runs
+   * through every shadow root. */
+  function focusedOn(host: Element): boolean {
+    for (let at = document.activeElement; at !== null; at = at.shadowRoot?.activeElement ?? null)
+      if (at === host) return true;
+    return false;
+  }
+
+  /** Opens the table and taps Full invoice from the ⋮ or the pay area, as a waiter would. The
+   * delivery read answers a task later, as over a network, so the screen is busy meanwhile. */
+  async function openFrom(from: "menu" | "pay") {
+    const getPartyBills = vi.fn().mockResolvedValue([billOf({ revision: 7 })]);
+    const setOrderInvoiceChoice = vi.fn().mockResolvedValue({ revision: 8 });
+    const getInvoiceDeliveryOptions = vi.fn(
+      () => new Promise((resolve) => setTimeout(() => resolve({ invoicePrinter: null }), 50)),
+    );
+    const { el } = await mountApp({
+      ...fullInvoicesOn(),
+      getPartyBills,
+      setOrderInvoiceChoice,
+      getInvoiceDeliveryOptions,
+    });
+    const order = await openTable(el);
+    await showBillFooter(order);
+    if (from === "menu") {
+      await openTableMenu(order);
+      await userEvent.click(
+        order.shadowRoot!.querySelector<HTMLElement>(`${MENU} [data-choose-bill-invoice]`)!,
+      );
+    } else {
+      await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>(PAY_AREA)!);
+    }
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).not.toBeNull(),
+    );
+    await flush(el);
+    const dialog = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+    expect(dialog).not.toBeNull();
+    expect(focusedOn(dialog)).toBe(true);
+    return { el, order, dialog, setOrderInvoiceChoice };
+  }
+
+  async function save(el: TillApp, dialog: Element): Promise<void> {
+    emit(dialog, "invoice-recipient-confirm", { invoiceType: "F1", recipient });
+    await flush(el);
+  }
+
+  async function cancel(el: TillApp, dialog: Element): Promise<void> {
+    const button = [...dialog.shadowRoot!.querySelectorAll<HTMLElement>("wt-button")].find(
+      (each) => text(each) === t("action.cancel"),
+    )!;
+    await userEvent.click(button);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull(),
+    );
+    await flush(el);
+  }
+
+  it.each([
+    ["saving", save],
+    ["Cancel", cancel],
+  ] as const)("after %s from the ⋮, focus is on the ⋮", async (_, close) => {
+    const { el, order, dialog } = await openFrom("menu");
+
+    await close(el, dialog);
+
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+    expect(focusedOn(order.shadowRoot!.querySelector(MENU)!)).toBe(true);
+  });
+
+  it.each([
+    ["saving", save],
+    ["Cancel", cancel],
+  ] as const)("after %s from the pay area, focus is on its Full invoice", async (_, close) => {
+    const { el, order, dialog } = await openFrom("pay");
+
+    await close(el, dialog);
+
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+    expect(focusedOn(order.shadowRoot!.querySelector(PAY_AREA)!)).toBe(true);
+  });
+
+  it("after saving from the pay area, focus is on the ⋮ when that Full invoice has gone", async () => {
+    const { el, order, dialog, setOrderInvoiceChoice } = await openFrom("pay");
+    setOrderInvoiceChoice.mockImplementation(async () => {
+      order.fullInvoices = false;
+      await order.updateComplete;
+      return { revision: 8 };
+    });
+
+    await save(el, dialog);
+
+    expect(order.shadowRoot!.querySelector(PAY_AREA)).toBeNull();
+    expect(focusedOn(order.shadowRoot!.querySelector(MENU)!)).toBe(true);
   });
 });
 

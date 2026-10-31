@@ -2494,7 +2494,7 @@ export class TillTableOrderScreen extends LitElement {
         <span class="amount" data-order-total
           >${this.#money(
             panelTotal(
-              this.#payStore!.total,
+              this.#savedTotal(),
               this.otherDrafts.length === 0
                 ? (draft?.lines ?? [])
                 : this.otherDrafts.flatMap((other) => other.lines),
@@ -2515,6 +2515,13 @@ export class TillTableOrderScreen extends LitElement {
       <div data-bill-actions>
         ${this.canSettle && this.#chargeable() ? this.#paySection() : nothing}
       </div>`;
+  }
+
+  /** The server reads lines only of an open bill (`tab.not_open`), so a presented or paid bill's
+   * total comes from the bills read. */
+  #savedTotal(): string {
+    const shown = this.#shownBill;
+    return shown === undefined || shown.status === "open" ? this.#payStore!.total : shown.total;
   }
 
   #sentOrders(): TemplateResult {
@@ -5396,7 +5403,8 @@ export class TillTableOrderScreen extends LitElement {
           ? []
           : [
               action("name-bill", "table.action_name_bill", () => this.#openBillNaming()),
-              ...lineVerbs,
+              // The server refuses each of these on a presented or paid bill.
+              ...(shown.status === "open" ? lineVerbs : []),
               this.#movable() ? verb("move-bill", "table.action_move_bill") : nothing,
               this.#compBill(),
               ...this.#billDocumentItems(shown),

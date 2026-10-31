@@ -359,6 +359,59 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     },
   );
 
+  describe("A803 LOOK F5: the bill's items are those the server takes in the bill's state", () => {
+    const paid = partyBill("wo-2", 2, "0.00", {
+      status: "settled",
+      total: "54.00",
+      receiptAvailable: true,
+      hasPayments: true,
+    });
+    const presented = partyBill("wo-2", 2, "54.00", { status: "placed", receiptAvailable: true });
+    const billItem = (el: TillTableOrderScreen, selector: string) =>
+      menu(el).querySelector<HTMLElement>(`[data-table-menu-bill] ${selector}`);
+
+    // splitBill refuses `bill.paid` and `bill.presented`; mergeBills and transferItems refuse the
+    // bill on screen the same way (apps/server/src/bill-actions.ts, refuseClosedBill).
+    it.each([
+      ["a paid bill", paid],
+      ["a presented bill", presented],
+    ])("%s offers no Split by item, Transfer items or Merge bills", async (_, bill) => {
+      const el = await mountScreen({ bills: [bill] });
+
+      expect(billItem(el, '[data-action="split"]')).toBeNull();
+      expect(billItem(el, '[data-action="transfer"]')).toBeNull();
+      expect(billItem(el, '[data-action="merge"]')).toBeNull();
+      expect(groups(el)[0]!.items).not.toContain("Split by item");
+      expect(groups(el)[0]!.items).not.toContain("Transfer items");
+      expect(groups(el)[0]!.items).not.toContain("Merge bills");
+    });
+
+    it("a paid bill keeps Name this bill and Receipt copy", async () => {
+      const el = await mountScreen({ bills: [paid] });
+
+      expect(groups(el)[0]!.items).toEqual(["Name this bill", "Receipt copy"]);
+    });
+
+    it("a presented bill keeps Name this bill, Move this bill, Full invoice and Cancel and credit", async () => {
+      const el = await mountScreen({ bills: [presented] });
+
+      expect(groups(el)[0]!.items).toEqual([
+        "Name this bill",
+        "Move this bill",
+        "Full invoice",
+        "Cancel and credit",
+      ]);
+    });
+
+    it("an open bill holding a payment keeps Split by item", async () => {
+      const el = await mountScreen({
+        bills: [partyBill("wo-2", 2, "40.00", { total: "54.00", hasPayments: true })],
+      });
+
+      expect(billItem(el, '[data-action="split"]')).not.toBeNull();
+    });
+  });
+
   describe("the ⋮'s copies keep the guards of the controls they copy", () => {
     it("a paid bill without a receipt offers no Receipt copy", async () => {
       const paid = partyBill("wo-2", 2, "0.00", {

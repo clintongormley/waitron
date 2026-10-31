@@ -295,6 +295,25 @@ describe("A803 no tab panel", () => {
     ).toBeTruthy();
   });
 
+  // The till reads no lines for a bill that is not open (`tab.not_open`), so the bills read is
+  // all it has of this bill's total.
+  it.each([
+    ["presented", { status: "placed", outstanding: "7.80" }],
+    ["paid", { status: "settled", outstanding: "0.00" }],
+  ] as const)(
+    "shows a %s bill's own total, read with no lines, beside what the table still owes",
+    async (_, state) => {
+      const { el } = await mountFooter({
+        party: { ...footerParty, outstanding: "7.80" },
+        bills: [{ ...footerBill, ...state, total: "7.80" }],
+        lines: [],
+      });
+      await resized(el);
+      expect(q(el, "[data-order-total]")!.textContent!.trim()).toBe("€7.80");
+      expect(q(el, "[data-party-outstanding]")!.textContent!.trim()).toBe("€7.80");
+    },
+  );
+
   it("shows no table still-to-pay for an order that belongs to no party", async () => {
     const { el } = await mountFooter({ party: null, bills: [] });
     await resized(el);
