@@ -715,11 +715,12 @@ task's red run; a red assertion not on this list that is not kind B/R/W/S/F unde
 | `party-table-actions.test.ts:643` (was `:641`, "makes the incoming main bill main when the receiving one is presented") | B (Task 6b's red run) | `mainBillId` `toBe(ana.tabId)` → `toBeNull()`, plus `numbersOf(luis)` `[[luis.tabId, 1, null], [ana.tabId, 2, null]]`; retitled "keeps the incoming open bill as the receiving party's Bill 2, naming no main bill, when the receiving one is presented"; the answer and both bills' status/party checks unchanged | §3.4 | 6b |
 | `party-table-actions.test.ts:1125` (was `:1121`, split: "the chosen bill as its main") | B (Task 6b's red run) | `mainBillId: b2` → `mainBillId: null` in the same `toMatchObject` (its `numbersOf` `[[b2, 1, null]]` and status checks were already there); retitled "… as its Bill 1"; the staying party's `mainBillId: ana.tabId` unchanged | §3.4; master plan "any eligible bill" | 6b |
 | `party-table-actions.test.ts:1149` (was `:1145`, split with no bill: "a new, empty main bill") | B (Task 6b's red run) | `mainBillId` `toBe(main.id)` → `toBeNull()`, plus `numbersOf` `[[main.id, 1, null]]`; retitled "… a new, empty Bill 1 …"; every other check unchanged | §3.4; D1 | 6b |
-| `department-transfer-api.test.ts:1661`, `order-portions.lifecycle.test.ts:261`, `order-portions.adjustments.test.ts:1910` (calls of `mergeCheckedBills`, directly or through `testing/bill-action-fixture.ts`) | F (Task 6b) | the `partyId` argument goes with the parameter, which only the main-bill bookkeeping read; `department-transfer-api`'s setup stops keeping the party id it no longer passes; no `expect` changes | D12 | 6b |
+| `department-transfer-api.test.ts:1661`, `order-portions.lifecycle.test.ts:261`, `order-portions.adjustments.test.ts:1910` (calls of `mergeCheckedBills`, directly or through `testing/bill-action-fixture.ts`) | F (Task 6b) | a function parameter was dropped, not a field: `mergeCheckedBills` no longer has its `partyId` parameter, which only the main-bill bookkeeping read, so the argument goes at each call; expectations unchanged; `department-transfer-api`'s setup stops keeping the party id it no longer passes; no `expect` changes | D12 | 6b |
 | `apps/server/src/parties.test.ts`, `till-api.parties.test.ts:807-821`, and any `TableParty`/floor whole-shape pin | W | `mainBillId` → `openingBillId` | D7 | 6c |
 | `scripts/behavioural-triggers.test.ts` `EXPECTED_TRIGGERS` (`:158-159`) and `describe("working_orders_release_main_bill")` (`:1544-1590`) | **W, B, Q5 item 3** | the two names leave the list; the describe becomes "the main bill is gone": `parties` has no `main_bill_id` column (`pragma_table_info`) and no trigger's SQL names `main_bill` (`sqlite_master`) | §3.4 | 7 |
 | `scripts/migration-upgrade.test.ts` `RESETS` | **W, Q5 item 4** | gains the new core rebuild step, `refused: ["DROP TABLE \`parties\`", "FOREIGN KEY constraint failed"]` (as `:437-439`; the exact text from the run's own output) | finding 9 | 7 |
 | `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts:119-130` (expectation adapter) | **W, Q5 item 5** | the captured `parties` table's expectation drops the `main_bill_id` column and its foreign key, as the adapter already adds columns; the hashed fixture is not edited | finding 9 | 7 |
+| `apps/server/src/party-bill-actions.test.ts` `A803 no main bill (writers):` (Task 6b's writers describe, lines at `2d009763b`): the `mainOf` helper `:1283-1284` and its 14 reads of `parties.mainBillId` — `:1304` (in `presentedParty`), `:1320`, `:1324`, `:1334`, `:1345`, `:1361`, `:1367`, `:1374`, `:1386`, `:1387`, `:1398`, `:1399`, `:1410`, `:1411` | **R, Q5 (deleted checks)** | the column goes, so every `mainOf(...)` `toBeNull()` line and the helper are deleted. The case "Merge bills leaves the party with no main bill when Bill 1 is merged away" (`:1318`) has no other check and is deleted whole. The other seven cases (`:1327`, `:1337`, `:1348`, `:1364`, `:1377`, `:1391`, `:1403`) keep every other `expect` byte-identical (the answers' `partyId`, `billId` and `billIds` checks, the new bill's party, and `openingBillOfParty` at `:1388` and `:1400`); their titles and the describe's lose the "no main bill" clause. What carries the guarantee afterwards (that no table action names a main bill): Task 7's new behavioural-triggers case "the main bill is gone" — `parties` has no `main_bill_id` column (`pragma_table_info`) and no trigger's SQL names `main_bill` — so nothing can store one. Task 6b's six rewritten lines (at `e31ede59e`: party-bill-actions `:744`; party-move-bill `:838`, `:961`; party-table-actions `:655`, `:1137`, `:1159`) no longer read `mainBillId` at `2d009763b` (Task 6c re-pointed them, rows above) and are not in this row. `till-api.table-actions.test.ts:775`, `:800` ("no answer carries mainBillId", `not.toHaveProperty("mainBillId")`) are absence checks on the answer, not reads of the column: they survive the drop unchanged and stay | §3.4 | 7 |
 | `apps/till/src/api/client.test.ts:2738-2749`, `apps/till/src/i18n/codes.test.ts:323-333`, `apps/till/src/till-app-parties.test.ts:2491`, `:4101` (`party.main_bill_stays`) | B | the code's rows go (no thrower, D14); `codes.test.ts`'s loop keeps its other two codes | §3.4, D14 | 8d |
 | `till-app-parties.test.ts:2126`, `:2452`, `:4395`, `:4405`, `:5830`; `till-app-drafts.test.ts:8720` (opening/following the main bill) | B | follow D7/D11: `openingBillId`, kept or lowest-numbered bill | §3.4, Review focus 4 | 8d |
 | `till-app-parties.test.ts:3964` ("goes back to the floor when the moved bill was the party's last") | F | **kept**: every assertion unchanged (D11 rule 2); only its emitted event detail loses `bills: "merge"` | D11 | 8b |
@@ -1326,6 +1327,12 @@ number), as their rows say.
       is 0 bytes. Deletion control: `moveBillOnce`'s `setMainBill` for a free table put back →
       "Move this bill to a free table names no main bill on the new party" fails, 7 pass; restored.)
 - [x] Commit: "Table actions no longer read or write a main bill".
+- Note (Task 6b review, Minor 2): what staff see changes at this commit. The review's probe: from
+  6b on, a party made by Move this bill, Split a table or Join has no main bill on its floor row,
+  so the till opens it via one extra request (the party's bill list), and Ana's party moved onto
+  Luis's party whose only bill is presented now opens on Luis's presented Bill 1 (before: Ana's
+  open bill). This matches D7's end state (the lowest-numbered bill still owing). The PR text must
+  name it in its list of changed behaviour (Task 16).
 
 ## Task 6c: seating names no main bill; the floor names the bill a table opens on (≈65 calls)
 
@@ -1368,7 +1375,9 @@ in 4a), `till-api.move-bill.test.ts` (its one read) — every row above for Task
       among them and are re-pointed there.)
 - [x] GREEN: those files; F; H2; Filing; server typecheck;
       `rg -n 'mainBillId|partyMainBill|setMainBill|readMainBill' apps/server packages --glob '!**/drizzle/**'`
-      prints only `packages/db/src/schema/parties.ts` (Task 7).
+      prints only `packages/db/src/schema/parties.ts` (Task 7), `party-bill-actions.test.ts:1284`
+      (the writers describe's `mainOf`, retired at Task 7 by its row) and
+      `till-api.table-actions.test.ts:775`, `:800` (absence checks that stay).
       (Run: the named files plus the 33 floor readers, 46 files, 2397 passed, exit 0; every other
       server test file seating a party or using the party, bill, draft or group fixtures, 275 files
       in four chunks: 2107, 1984, 1924 and 1645 passed, each exit 0. F 267 passed; Filing 67
@@ -1406,13 +1415,18 @@ the new files); `docs/developers/conventions-data.md:3512-3513` list gains the n
 - [ ] RED: `pnpm exec vitest run scripts/behavioural-triggers.test.ts -t 'main bill'` — fails on the
       column still present.
 - [ ] Generate both migrations; apply exactly the Q5 items 3–5 changes, no other edit to those files.
+- [ ] Retire the `mainOf` reads of `party-bill-actions.test.ts`'s `A803 no main bill (writers):`
+      exactly as its row says (Q5, deleted checks); the "the main bill is gone" case above is what
+      holds their guarantee from here.
 - [ ] GREEN: S (all three commands; `migration-upgrade` with its new `RESETS` row; record the
       refusal text from its own output, and confirm it is the `DROP TABLE parties` foreign-key
       refusal on a box with a closed party too, review-1 minor 7); H2; F; Filing;
       `pnpm --filter @waitron/server exec vitest run scripts/demo-seed/seed.madrid-baseline.test.ts src/canvas-retirement-upgrade.test.ts`;
       `pnpm --filter @waitron/db exec vitest run src/schema/parties.test.ts`; server typecheck;
       `rg -n 'main_bill|mainBill' packages apps/server --glob '!**/drizzle/**' --glob '!**/test-fixtures/**'`
-      prints only the dated README sentence; `git diff a90f4f87b -- scripts apps/server/scripts`
+      prints only the dated README sentence, `till-api.table-actions.test.ts:775`, `:800` (absence
+      checks, kept) and `simplified-limit.test.ts`'s local `mainBill` (a name for Bill 1 in its
+      `twoBills` helper; it reads no column); `git diff a90f4f87b -- scripts apps/server/scripts`
       matches Q5 items 3–5 and nothing else.
 - [ ] Commit: "Drop the main bill column and its triggers (venue reset needed)". Body: the rebuild
       and why the triggers go first; the children of `parties` and that the rebuild fails on any box
@@ -1818,7 +1832,9 @@ in both themes), the `data-discount-bill` sites (`panel-footer.test.ts`,
 - [ ] PR title: "One bill switcher and one ⋮ at a table; no main bill (A803 slice 3; venue reset
       needed)". First line: "Needs a venue reset: the migration rebuilds `parties` to drop the main
       bill, and fails on any box that has ever seated a party." Then, in plain English: what a waiter
-      sees; that joins and moves never merge bills now and Merge bills does it on purpose; the seven
+      sees; that joins and moves never merge bills now and Merge bills does it on purpose; that a
+      table whose party was made by Move, Split or Join opens on its lowest-numbered owing bill,
+      which may be a presented one (Task 6b's note); the seven
       owner questions and their defaults; the five Spanish proposals and the ES guide section; a
       "Changed test checks" section; Owner question 5's items with their before and after; the LOOK
       screenshots; the deletion controls of Task 13; that F and H2 ran unedited.

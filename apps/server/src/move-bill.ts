@@ -467,12 +467,6 @@ async function counterLabel(tx: Transaction, party: SourceParty): Promise<string
   return partyDisplayName(party.name, (await partyTableLabels(tx, [party.id])).get(party.id)!);
 }
 
-/** A bill's status and when a payment in full at a reader began, as {@link takeIntoParty} answers. */
-export interface BillState {
-  status: (typeof workingOrders.$inferSelect)["status"];
-  attemptAt: string | null;
-}
-
 /**
  * One more write on an open or presented bill, without `bumpRevision`'s refusal of money in flight:
  * a move changes no amount, and a card at the reader completes on the bill wherever it now is.
@@ -482,7 +476,7 @@ const movedRevision = sql`${workingOrders.revision} + 1`;
 /**
  * The bill joins the party: no longer delivered to a table, its revision moved on, and, while it is
  * open or presented, its service context taking `zoneId`, so a till limited to that zone may take
- * its payment. Answers the bill's state.
+ * its payment.
  */
 export async function takeIntoParty(
   tx: Transaction,
@@ -491,18 +485,17 @@ export async function takeIntoParty(
   partyId: string,
   zoneId: string | null,
   beforeSend?: () => Promise<void>,
-): Promise<BillState> {
+): Promise<void> {
   const [bill] = await tx
     .update(workingOrders)
     .set({ partyId, deliveryTableId: null, revision: movedRevision })
     .where(eq(workingOrders.id, billId))
-    .returning({ status: workingOrders.status, attemptAt: workingOrders.paymentAttemptAt });
+    .returning({ status: workingOrders.status });
   await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [billId]);
   await beforeSend?.();
   if (zoneId !== null && (bill!.status === "open" || bill!.status === "placed")) {
     await adoptZone(tx, cfg, billId, zoneId, { takesOrders: bill!.status === "open" });
   }
-  return bill!;
 }
 
 /**
