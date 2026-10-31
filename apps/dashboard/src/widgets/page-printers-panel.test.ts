@@ -37,7 +37,7 @@ const row = (over: Partial<PagePrinterRow> = {}): PagePrinterRow => ({
   resolutionDpi: 300,
   active: true,
   agentId: "a1",
-  agentName: "Cocina agent",
+  agentName: "Kitchen agent",
   ...over,
 });
 const ROWS = [
@@ -134,7 +134,7 @@ it("lists each office printer under the A4 printers heading, with its agent, add
     expect(cells).not.toContain(marker);
   expect(q(el, "[data-test^=page-printer-kind-]")).toBeNull();
   expect(text(el, "[data-test=page-printer-name-pp1]")).toContain("Office");
-  expect(text(el, "[data-test=page-printer-agent-pp1]")).toBe("Cocina agent");
+  expect(text(el, "[data-test=page-printer-agent-pp1]")).toBe("Kitchen agent");
   expect(text(el, "[data-test=page-printer-agent-pp3]")).toBe(
     t("printers.invoice_printer_agent_gone"),
   );
