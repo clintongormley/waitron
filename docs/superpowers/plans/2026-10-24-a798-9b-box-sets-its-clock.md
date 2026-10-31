@@ -3501,3 +3501,28 @@ Revision 4 changes none of these rulings. It carries out the owner's answer of 2
 - **Not changed:** the 30-minute limit is judged on the step alone (review M2): the confirming
   administrator's request has just stamped the session's last use, so only the step can carry it
   past the limit; a backward step ends a session from Task 15 on, in this same pull request.
+
+### Task 13a's departures (2026-10-31)
+
+- **English quotes the button's name as “Check the time”**, not «Check the time»: the till's English
+  strings quote with curly double quotes; Spanish keeps «Comprobar la hora». Spanish calls the till
+  "caja", as the till's other Spanish strings do.
+- **With the offer set and a clock stop as the FIRST of several notices**, the first line is no
+  longer one toggle button: its words and "Check the time" sit in the line, and "+N" is a toggle of
+  its own beside them, since a button never holds another. Without the offer, or with any other
+  first notice, the strip is drawn exactly as before.
+- **The administrators are listed by `GET /api/adjustment-approvers?roles=admin`**, the existing
+  session-gated list of active people holding given roles (`apps/server/src/adjustments-api.ts:307`);
+  `person.admin` is the admin role's alone (`packages/identity/src/permissions.ts:15-16`). No new
+  route.
+- **A refusal reason the till does not word** (`agrees`, a confirm's `differs`), and no answer at
+  all, are worded "The box's time was not checked. Nothing was changed." with Check again and Close.
+  `pending_disproofs` has its own words ("…Check again in a minute.").
+- **`apps/till/src/i18n/codes.ts` gains plain sentences for the four codes**, used only where a
+  refusal's reason cannot be read; the dialog words each reason itself.
+- **`refusalText` had no test file**; its new cases are in `i18n/t.test.ts`, as this task said.
+  `find-bill-dialog.ts` draws the clock refusals too; it is not named by this task and keeps «Tell a
+  manager».
+- **The till app's wiring was written before `till-app.box-time.test.ts`**; each of its three
+  cases is proved by deletion instead (removing the flag, the dialog's opening, or the read after
+  a success each fails a named case), with the plan's five controls and four more.
