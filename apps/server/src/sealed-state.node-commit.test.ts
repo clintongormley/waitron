@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import { withNodeTransaction, withTransaction, type NodeDatabase } from "@waitron/db";
+import { nodeRecoveryKey } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { writeRecoveryKey } from "./backup-env-writer.js";
@@ -20,15 +21,36 @@ vi.mock("@hono/node-server", async () => {
   return ephemeralHttpMock();
 });
 
-/** The node handle the start gave its sealed-state refresher, so the test writes through it. */
-const seen = vi.hoisted(() => ({ refresherDeps: [] as unknown[] }));
+/**
+ * The node handle the start gave its sealed-state refresher, so the test writes through it; every
+ * refresh it was asked for, and every line it logged.
+ */
+const seen = vi.hoisted(() => ({
+  refresherDeps: [] as unknown[],
+  refreshes: [] as Promise<unknown>[],
+  logs: [] as unknown[][],
+}));
 vi.mock("./sealed-state.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./sealed-state.js")>();
   return {
     ...actual,
     createSealedStateRefresher: (deps: Parameters<typeof actual.createSealedStateRefresher>[0]) => {
       seen.refresherDeps.push(deps);
-      return actual.createSealedStateRefresher(deps);
+      const refresher = actual.createSealedStateRefresher({
+        ...deps,
+        log: (...line) => {
+          seen.logs.push(line);
+          deps.log(...line);
+        },
+      });
+      return {
+        ...refresher,
+        refresh: () => {
+          const outcome = refresher.refresh();
+          seen.refreshes.push(outcome);
+          return outcome;
+        },
+      };
     },
   };
 });
@@ -58,14 +80,52 @@ async function verifierInSealedRow(nodeId: string, scratch: string): Promise<str
 }
 
 async function putVerifier(node: NodeDatabase, nodeId: string, verifier: string): Promise<void> {
-  // Plain SQL: the server does not depend on `@waitron/node-db`, which declares the table.
   await withNodeTransaction(node, async (tx) => {
-    await tx.run(
-      sql`insert into node_recovery_key (node_id, verifier, key_name, updated_at)
-          values (${nodeId}, ${verifier}, 'key-one', ${new Date().toISOString()})
-          on conflict (node_id) do update set verifier = excluded.verifier`,
-    );
+    await tx
+      .insert(nodeRecoveryKey)
+      .values({ nodeId, verifier, keyName: "key-one" })
+      .onConflictDoUpdate({ target: nodeRecoveryKey.nodeId, set: { verifier } });
   });
+}
+
+/** Starts a set-up box on the suite's venue, its node holding `verifier`, with state in `scratch`. */
+async function startBox(scratch: string, verifier: string) {
+  const venue = await setupVenue(suite.db);
+  const nodeId = venue.cfg.nodeId;
+  await putVerifier(suite.node, nodeId, verifier);
+  const migrationsRoot = join(scratch, "migrations");
+  for (const [index, set] of manifestSets().entries()) {
+    await cp(migrations[index]!.migrationsFolder, join(migrationsRoot, set.name), {
+      recursive: true,
+    });
+  }
+  await writeFile(
+    join(scratch, "modules.json"),
+    JSON.stringify({ modules: { "fiscal-none": false } }),
+  );
+  await writeRecoveryKey(scratch, {
+    recoveryKey: KEY,
+    keyRotatedAt: "2026-10-31T08:00:00.000Z",
+  });
+  // The sealed row needs every recovery file, which a set-up box holds.
+  await writeFile(join(scratch, "trading.env"), `WAITRON_NODE_ID=${nodeId}\n`);
+  await ensureBoxSecrets({ stateDir: scratch, hostnames: ["localhost"], now: () => new Date() });
+  const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
+  const [port] = await freePorts(1);
+  const env = {
+    WAITRON_HTTP_LANDING_PORT: "0",
+    WAITRON_HTTP_PORT: String(port),
+    WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example",
+    WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+    WAITRON_CREDENTIALS_KEY_VERSION: "1",
+    WAITRON_STATE_DIR: scratch,
+    WAITRON_LOG_DIR: join(scratch, "logs"),
+    WAITRON_VENUE_DIR: dirname(database),
+    WAITRON_NODE_ID: nodeId,
+    WAITRON_MIGRATIONS_DIR: migrationsRoot,
+    WAITRON_ENV: "preproduction",
+  };
+  return { nodeId, server: await startServer(env, env) };
 }
 
 it("a recovery key replaced after the last refresh is in the next sealed row", async () => {
@@ -74,42 +134,9 @@ it("a recovery key replaced after the last refresh is in the next sealed row", a
   const scratch = await mkdtemp(join(tmpdir(), "waitron-sealed-node-commit-"));
   let server: StartedServer | undefined;
   try {
-    const venue = await setupVenue(suite.db);
-    const nodeId = venue.cfg.nodeId;
-    await putVerifier(suite.node, nodeId, "verifier-before-start");
-    const migrationsRoot = join(scratch, "migrations");
-    for (const [index, set] of manifestSets().entries()) {
-      await cp(migrations[index]!.migrationsFolder, join(migrationsRoot, set.name), {
-        recursive: true,
-      });
-    }
-    await writeFile(
-      join(scratch, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
-    await writeRecoveryKey(scratch, {
-      recoveryKey: KEY,
-      keyRotatedAt: "2026-10-31T08:00:00.000Z",
-    });
-    // The sealed row needs every recovery file, which a set-up box holds.
-    await writeFile(join(scratch, "trading.env"), `WAITRON_NODE_ID=${nodeId}\n`);
-    await ensureBoxSecrets({ stateDir: scratch, hostnames: ["localhost"], now: () => new Date() });
-    const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
-    const [port] = await freePorts(1);
-    const env = {
-      WAITRON_HTTP_LANDING_PORT: "0",
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example",
-      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
-      WAITRON_CREDENTIALS_KEY_VERSION: "1",
-      WAITRON_STATE_DIR: scratch,
-      WAITRON_LOG_DIR: join(scratch, "logs"),
-      WAITRON_VENUE_DIR: dirname(database),
-      WAITRON_NODE_ID: nodeId,
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_ENV: "preproduction",
-    };
-    server = await startServer(env, env);
+    const started = await startBox(scratch, "verifier-before-start");
+    const nodeId = started.nodeId;
+    server = started.server;
 
     // The start's own refresh sealed the verifier the box held then.
     expect(await verifierInSealedRow(nodeId, scratch)).toBe("verifier-before-start");
@@ -124,6 +151,31 @@ it("a recovery key replaced after the last refresh is in the next sealed row", a
       },
       { timeout: 10_000, interval: 100 },
     );
+  } finally {
+    await server?.close();
+    await rm(scratch, { recursive: true, force: true });
+  }
+}, 60_000);
+
+it("a node change committed just before close is sealed before the database closes", async () => {
+  seen.refresherDeps.length = 0;
+  beforeServerStarts();
+  const scratch = await mkdtemp(join(tmpdir(), "waitron-sealed-node-commit-"));
+  let server: StartedServer | undefined;
+  try {
+    const started = await startBox(scratch, "verifier-before-start");
+    server = started.server;
+    const { node } = seen.refresherDeps[0] as SealedStateDeps;
+    seen.refreshes.length = 0;
+    seen.logs.length = 0;
+
+    await putVerifier(node, started.nodeId, "verifier-before-close");
+    expect(seen.refreshes).toHaveLength(1);
+    await server.close();
+    server = undefined;
+    await Promise.all(seen.refreshes);
+
+    expect(seen.logs).toEqual([["info", "backup.sealed_state_refreshed", expect.anything()]]);
   } finally {
     await server?.close();
     await rm(scratch, { recursive: true, force: true });

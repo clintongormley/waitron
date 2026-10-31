@@ -213,7 +213,7 @@ function buildApp(
   base: NodeJS.ProcessEnv = {},
   readRecoveryKey = async (): Promise<string | undefined> =>
     loadRecoveryKey(await loadBoxEnv(base, stateDir)),
-  sealedState: SealedStateRefresher = { refresh: async () => "sealed" },
+  sealedState: Pick<SealedStateRefresher, "refresh"> = { refresh: async () => "sealed" },
   readStream: () => StreamView = () => ({ state: "off" }),
   turns: Turns = createTurns(),
   extra: Partial<BackupApiDeps> = {},
@@ -2573,7 +2573,7 @@ describe("backup admin routes", () => {
       // The key each re-lock of this node's state row saw, read from the state folder at the time.
       const relocked: (string | undefined)[] = [];
       let stateDir = "";
-      const sealedState: SealedStateRefresher = {
+      const sealedState: Pick<SealedStateRefresher, "refresh"> = {
         refresh: async () => {
           relocked.push(loadRecoveryKey(await loadBoxEnv({}, stateDir)));
           return "sealed";

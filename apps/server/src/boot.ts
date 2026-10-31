@@ -3272,6 +3272,8 @@ async function bootServer(
           () => suggestionLoop,
           unsubscribeFromChanges,
           stopSealingNodeCommits,
+          // A refresh still running would otherwise write venue.db after closePools closes the store.
+          () => sealedState.settled(),
           () => menuActivation.stop(),
           () => appendOnlyWatch.stop(),
           () => freeSpaceWatch.stop(),

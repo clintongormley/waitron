@@ -436,4 +436,93 @@ describe("createSealedStateRefresher", () => {
     const sealedNow = await row();
     expect(codeThrownBy(() => unsealNodeState(sealedNow!, OTHER_KEY))).toBe("nothing thrown");
   }, 20_000);
+
+  it("a burst of requests during a running refresh causes exactly one more refresh", async () => {
+    let releaseFirst!: () => void;
+    const firstHeld = new Promise<void>((resolve) => (releaseFirst = resolve));
+    let reads = 0;
+    const refresher = createSealedStateRefresher(
+      deps({
+        readRecoveryKey: async () => {
+          reads += 1;
+          if (reads === 1) await firstHeld;
+          return KEY;
+        },
+      }),
+    );
+    const first = refresher.refresh();
+    const burst = Array.from({ length: 10 }, () => refresher.refresh());
+    releaseFirst();
+    expect(await first).toBe("sealed");
+    expect(await Promise.all(burst)).toEqual(Array.from({ length: 10 }, () => "sealed"));
+    expect(reads).toBe(2);
+  });
+
+  it("a node change made while a refresh is running is in the final sealed row", async () => {
+    suite.node.run(sql`create table node_probe (value text)`);
+    try {
+      suite.node.run(sql`insert into node_probe (value) values ('before')`);
+      let releaseFirst!: () => void;
+      const firstHeld = new Promise<void>((resolve) => (releaseFirst = resolve));
+      let firstLogged!: () => void;
+      const firstLogging = new Promise<void>((resolve) => (firstLogged = resolve));
+      let logs = 0;
+      // The first refresh is held at its log line, after its row is written: it is still running.
+      const log = vi.fn(async () => {
+        if ((logs += 1) === 1) {
+          firstLogged();
+          await firstHeld;
+        }
+      });
+      const refresher = createSealedStateRefresher(deps({ log }));
+      const first = refresher.refresh();
+      await firstLogging;
+      suite.node.run(sql`update node_probe set value = 'during'`);
+      const second = refresher.refresh();
+      releaseFirst();
+      await Promise.all([first, second]);
+      const entries = unsealNodeState((await row())!, KEY);
+      const copy = join(stateDir, "node.copy");
+      await writeFile(copy, entries.find((e) => e.name === "node.dump")!.bytes);
+      const opened = await openBackupQuery(copy);
+      try {
+        const values = [];
+        for await (const probe of opened.query.rows("select value from node_probe"))
+          values.push(probe.value);
+        expect(values).toEqual(["during"]);
+      } finally {
+        await opened.close();
+      }
+    } finally {
+      suite.node.run(sql`drop table node_probe`);
+    }
+  });
+
+  it("settles its tail only once every queued refresh has finished", async () => {
+    let releaseFirst!: () => void;
+    const firstHeld = new Promise<void>((resolve) => (releaseFirst = resolve));
+    let reads = 0;
+    let finished = 0;
+    const refresher = createSealedStateRefresher(
+      deps({
+        readRecoveryKey: async () => {
+          reads += 1;
+          if (reads === 1) await firstHeld;
+          return KEY;
+        },
+        log: () => {
+          finished += 1;
+        },
+      }),
+    );
+    void refresher.refresh();
+    void refresher.refresh();
+    let settled = false;
+    const tail = refresher.settled().then(() => (settled = true));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(settled).toBe(false);
+    releaseFirst();
+    await tail;
+    expect(finished).toBe(2);
+  });
 });

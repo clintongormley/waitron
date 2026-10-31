@@ -71,7 +71,7 @@ export interface BackupApiDeps {
   readBoxEnv: () => Promise<Record<string, string | undefined>>;
   /** Rewrites this node's sealed state row, which carries `backup.env` and is locked with the recovery
    * key. */
-  sealedState: SealedStateRefresher;
+  sealedState: Pick<SealedStateRefresher, "refresh">;
   readStream: () => StreamView;
   /** Shared with the stream settings routes, which also read and then write the key in
    * `backup.env`. */
