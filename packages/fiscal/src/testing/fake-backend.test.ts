@@ -66,6 +66,7 @@ describe("the clock-stop methods", () => {
     expect(fake.clockStopState).toBeUndefined();
     expect("restartAfterClockStop" in fake).toBe(false);
     expect(fake.confirmClockStop).toBeUndefined();
+    expect(fake.confirmClockStep).toBeUndefined();
     expect(fake.openClockCheck).toBeUndefined();
     expect(fake.closeClockCheckByItself).toBeUndefined();
     expect(fake.waitingClockCheck).toBeUndefined();
