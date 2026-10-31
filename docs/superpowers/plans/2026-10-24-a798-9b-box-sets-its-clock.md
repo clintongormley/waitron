@@ -3317,3 +3317,25 @@ Revision 4 changes none of these rulings. It carries out the owner's answer of 2
   backoff not keyed by the check; log every refusal; keep the last reason after a set;
   `writePending()` after a failed disproof write; no `writePending()`; `stepsSeen` not read; a
   set during `clock.unusable`; a stale reading set with the look's own clocks.
+
+### Task 11a's per-task review, folded (2026-10-31)
+
+- **A host socket that is gone at the set is `host_unavailable`, not `refused`** (review M1): the
+  host client's `missing` answer means the request never reached the host, so the correction
+  answers `host_unavailable` and the watch does not back off on it, as decision 6 says. A
+  timeout, a lost connection, a malformed answer and the host's own refusal still answer
+  `refused` when the clock did not move.
+- **No set on a look whose first disproof write failed** (review M2): the set could only be
+  refused `pending_disproofs`, after asking the host's status and retrying the failing write
+  twice through the watch's own anchor methods. This also keeps true the comment that each
+  pending disproof is tried at most once a look.
+- **When the step counter is read has its own case** (review M3): the counter rises while the seat
+  judges the stop, and the set must carry the value read with the witnesses.
+- **The stop-during-a-look cases now see what they name** (review M4): the `writePending` variant
+  asserts no stop read follows; the check after the set was removed, since the check before the
+  AEAT ask already covers it (nothing between them can run on a `contrary` stop).
+- **Renamed** the case that counts sets per backoff step (review M5); the boot case checks all
+  four correction methods the watch is handed, with a deletion control (review M6); the watch's
+  description names the automatic set (review M7).
+- **Not changed**: a steady clock that cannot be read lets a set through the backoff, as it lets
+  an AEAT ask through (`authorityDue`); the reviewer called it a deliberate choice.
