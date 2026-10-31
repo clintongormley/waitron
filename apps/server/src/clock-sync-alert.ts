@@ -5,8 +5,8 @@ import "./errors.js";
 
 type Reason = ErrorParams["clock.sync_off"]["reason"];
 
-/** Raised while the box's time service is off, stopped or not synchronised. A clock service that
- * does not answer is raised only in production: a laptop or Docker Desktop never has one. */
+/** Raised while the box's time service is off, stopped or not synchronised, and, in production
+ * only, while the box's clock service does not answer. */
 export function clockSyncAlertSource(deps: {
   status: () => Promise<ClockServiceStatus>;
   production: boolean;

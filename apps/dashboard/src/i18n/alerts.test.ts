@@ -623,10 +623,10 @@ describe("the box's time service not keeping its clock right", () => {
       "The box's time service is on but not running, so nothing keeps its clock right. Check its date and time on the Box status page.",
     );
     expect(alertMessage("clock.sync_off", { reason: "unsynchronised" }, "en")).toBe(
-      "The box's time service has not reached a time server, so its clock may drift. Check that the box can reach the internet, and its date and time on the Box status page.",
+      "The box's time service has not reached a time server, so its clock may drift. Check that the box can reach the internet and look at its date and time on the Box status page.",
     );
     expect(alertMessage("clock.sync_off", { reason: "unreachable" }, "en")).toBe(
-      "This box cannot read or set its own clock: the part of the box that does that is not answering. If the box can reach the internet, its own time service may still put the clock right by itself. An administrator can still confirm the clock when it is right.",
+      "This box cannot see or control its time service: the part of the box that does that is not answering. If the box can reach the internet, its time service may still keep the clock right by itself.",
     );
   });
 

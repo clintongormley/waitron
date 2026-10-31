@@ -491,12 +491,12 @@ export const ALERT_WORDS: Readonly<
         es: "El servicio de hora del equipo está activado pero no funciona, así que nada mantiene su reloj en hora. Comprueba su fecha y hora en Estado del equipo.",
       },
       unsynchronised: {
-        en: "The box's time service has not reached a time server, so its clock may drift. Check that the box can reach the internet, and its date and time on the Box status page.",
-        es: "El servicio de hora del equipo no ha contactado con ningún servidor de hora, así que su reloj puede desviarse. Comprueba que el equipo tiene conexión a internet, y su fecha y hora en Estado del equipo.",
+        en: "The box's time service has not reached a time server, so its clock may drift. Check that the box can reach the internet and look at its date and time on the Box status page.",
+        es: "El servicio de hora del equipo no ha contactado con ningún servidor de hora, así que su reloj puede desviarse. Comprueba que el equipo tiene conexión a internet y revisa su fecha y hora en Estado del equipo.",
       },
       unreachable: {
-        en: "This box cannot read or set its own clock: the part of the box that does that is not answering. If the box can reach the internet, its own time service may still put the clock right by itself. An administrator can still confirm the clock when it is right.",
-        es: "Este equipo no puede leer ni cambiar su propio reloj: la parte del equipo que lo hace no responde. Si el equipo tiene conexión a internet, su propio servicio de hora aún puede poner el reloj en hora por sí solo. Un administrador puede confirmar el reloj cuando esté en hora.",
+        en: "This box cannot see or control its time service: the part of the box that does that is not answering. If the box can reach the internet, its time service may still keep the clock right by itself.",
+        es: "Este equipo no puede ver ni controlar su servicio de hora: la parte del equipo que lo hace no responde. Si el equipo tiene conexión a internet, puede que su servicio de hora aún mantenga el reloj en hora por sí solo.",
       },
     },
     otherwise: {
