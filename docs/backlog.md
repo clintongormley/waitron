@@ -6217,6 +6217,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **A1241. Continue the dashboard test sample-name cleanup, one small slice per PR.**
   Historical-category and renamed-parent samples in the sales-category suite, plus catalogue,
   device, device-profile and floor-plan suites still carry Spanish sample names.
+  The order-delivery suite still uses `Barra` and `Oficina` as printer sample names.
   The payment-screen suites now use English till and counter sample names; their card-reader
   holder fixtures still use `Terraza` and `Móvil 2`.
   Keep Spanish-language checks, recorded receipt snapshots and the unit-screen accent-search

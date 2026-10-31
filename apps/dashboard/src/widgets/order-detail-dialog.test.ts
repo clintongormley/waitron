@@ -18,7 +18,7 @@ const detail: OrderDetailDto = {
     label: null,
     partyId: "party-1",
     partyName: "Rosa",
-    tables: ["Mesa 5"],
+    tables: ["Table 5"],
     counter: false,
     saleId: "sale-1",
     invoiceNumber: "A/12",
@@ -84,7 +84,7 @@ const detail: OrderDetailDto = {
     closedAt: "2026-09-30T14:00:00Z",
     openedBy: "Ana",
     closedBy: "Luis",
-    tables: ["Mesa 5"],
+    tables: ["Table 5"],
   },
   departure: {
     recordedAt: "2026-09-30T13:00:00Z",
@@ -98,7 +98,7 @@ const detail: OrderDetailDto = {
       requestedAt: "2026-09-30T15:00:00Z",
       personId: "laura",
       personName: "Laura",
-      printerName: "Barra",
+      printerName: "Bar",
     },
   ],
   deliveries: null,
@@ -131,11 +131,11 @@ it("shows the bill's items, invoices, payments, party, departure and copies", as
     "Cash",
     "Wrong card",
     "Rosa",
-    "Mesa 5",
+    "Table 5",
     "Forgot wallet",
     "Luis",
     "Laura",
-    "Barra",
+    "Bar",
   ])
     expect(words).toContain(value);
   expect(api.getOrder).toHaveBeenCalledWith("bill-1");
@@ -415,7 +415,7 @@ it("shows a reprinting person's name holding a later placeholder as it is", asyn
     mayReprint: () => true,
   });
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Soup"));
-  expect(el.shadowRoot!.textContent).toContain("copy printed by Person {printer} on Barra");
+  expect(el.shadowRoot!.textContent).toContain("copy printed by Person {printer} on Bar");
 });
 
 it.each(["en-GB", "es-ES"])(
