@@ -1166,6 +1166,20 @@ EDITED to pass and is not on this list is a STOP, unless the spec changes what i
     a rule that changes what a workforce suite sees happen; this one changes only how many rows the
     read fetches, so the lead rules it a changed check, and the pull request names it for the owner.
     Task 15a.
+19. *(Added while building Task 15c-1, 2026-11-01; the lead's ruling.)* Four drain fixtures
+    planted a stored time no drain can write, which Task 15c-1's rule now reads as left from a
+    backward step: `packages/fiscal-verifactu/src/drain.test.ts:299` ("defers the pass behind a
+    still-open gate…": a gate 4 minutes ahead stored with a 60-second wait) and
+    `drain.names.test.ts:121` (`closeGateUntil`, the same) now store a 300-second wait;
+    `drain.probe.gate.test.ts:39` (`held()`: a gate 59 minutes ahead with the 5-second wait the
+    fake AEAT gave) now stores a 3600-second wait; `drain.probe.test.ts:529` ("keeps holding the
+    records behind a record whose answer is still awaited": a retry 1 h 59 min ahead, past the
+    longest retry wait `BACKOFF_MAX_MS`) now stores one 59 minutes ahead. The drain writes a gate
+    at most its stored wait ahead (`upsertFlujo` with `now + t`) and a retry at most
+    `BACKOFF_MAX_MS` ahead (`backoffMs`), so each new value is one the drain could have written.
+    No assertion changes; with these values the four files' 96 tests pass on the code before
+    Task 15c-1, in a throwaway worktree (`~/waitron-campaign-b/a798-9b/t15c1/old-code.out`, whose
+    5 failures are the new suite's). Task 15c-1.
 
 **Whole-shape lists gaining entries** (the owner's standing exception of 2026-09-27):
 2. `packages/fiscal-verifactu/src/alerts.test.ts:10-11` (`FISCAL_ALERTS` `toEqual`) gains the
@@ -3159,6 +3173,19 @@ commit, per-task review and push)*:
   snapshots, content suggestion jobs, invoice deliveries.
 - **15c-4, schedulers and leases** — the payments reconcile scheduler, the print-job lease, the
   backup schedule (and its two comments), then the `nowIso()` / `Date.now` grep.
+
+### Task 15c-1's departure (2026-11-01)
+
+- **AEAT's sending wait is not opened at once** (the lead's ruling). The rule above would open a
+  gate further ahead than its stored wait. But how long ago the last envío went is then unknown,
+  and opening at once can send before AEAT's wait has passed. The drain instead resets such a gate
+  to one stored wait from now and stores it (`readGate`): it never sends early, and waits at most
+  one wait. Stored, because a reset worked out afresh each pass would move on with the clock and
+  never open. Retries (`retryDue`), abandoned claims (`claimStale`) and hourly probes
+  (`dueProbes`) follow the rule as written; requeueing a stale claim already rewrote its retry
+  time to now, and still does. `nextProbeAt` and `nextClaimOpportunity`'s oldest-claim instant
+  are unchanged: by reading, a probe or claim due by this rule is claimed or requeued in the same
+  pass, so neither is reached with one (read, not run).
 
 ### Task 15's departures and notes (2026-10-31)
 

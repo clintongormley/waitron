@@ -36,7 +36,9 @@ async function held() {
   );
   const first = (await appendPendingAlta(suite.db, seeded, 4)).registroId;
   await drain(deps(aeat.client()), new Date("2026-07-21T00:02:00Z"));
-  await suite.db.execute(sql`update envio_flujo set proximo_envio_en = ${GATE.toISOString()}`);
+  await suite.db.execute(
+    sql`update envio_flujo set proximo_envio_en = ${GATE.toISOString()}, tiempo_espera_seg = 3600`,
+  );
   const sent: string[][] = [];
   const client: VerifactuClient = {
     ...aeat.client(),
