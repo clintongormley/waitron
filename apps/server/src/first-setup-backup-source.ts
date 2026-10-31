@@ -1,4 +1,4 @@
-import { copyFile, mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { openVenueDatabase, readBreakGlassKeyName } from "@waitron/db";
 import type { OperationBinding } from "@waitron/module";
@@ -6,6 +6,7 @@ import { readRecoveryCopyPreview, type RecoveryBackupPreview } from "./recovery-
 import { withRecoveryKeyAuthority } from "./operation-authentication.js";
 import type { RecoveryPreparationSource } from "./setup-recovery-preparation-api.js";
 import {
+  copyStagedCopy,
   readArtifactIdentity,
   validateArtifact,
   validateDatabaseEntries,
@@ -96,8 +97,7 @@ export async function authenticatedFirstSetupBackupPreview(
   // Preview migration owns another copy so activation still binds the original validated bytes.
   const directory = await mkdtemp(join(dirname(copy.databasePath), "proof-"));
   try {
-    await copyFile(copy.databasePath, join(directory, "venue.db"));
-    const database = await openVenueDatabase(directory);
+    const database = await openVenueDatabase(dirname(await copyStagedCopy(copy, directory)));
     try {
       if (!(await readBreakGlassKeyName(database.venue, node.nodeId))?.trim()) refuse();
       await withRecoveryKeyAuthority(

@@ -1,5 +1,6 @@
 import { nodeDumpEntry } from "./testing/node-copy.js";
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
@@ -214,6 +215,35 @@ it("authenticates against the placed database and keeps the scoped authority ali
     await opened.close();
   }
   expect(await readFile(join(f.deps.stateDir, "trading.env"), "utf8")).toContain(NODE);
+});
+
+it("the admission check's folder holds the backup's node copy, not an empty node.db", async () => {
+  await suite.node.run(sql`create table backup_marker (v text)`);
+  try {
+    await suite.node.run(sql`insert into backup_marker values ('backup')`);
+    const f = await fixture(regime(async () => ({ report: "restored" })));
+    let seen: unknown[] | undefined;
+    f.deps.withModuleOperations!.checkBeforePlacement = async () => {
+      const [admission] = (await readdir(f.deps.stagingDir)).filter((name) =>
+        name.startsWith("restore-admission-"),
+      );
+      const copy = new DatabaseSync(join(f.deps.stagingDir, admission!, "node.db"), {
+        readOnly: true,
+      });
+      try {
+        seen = copy
+          .prepare("select v from backup_marker")
+          .all()
+          .map((row) => row.v);
+      } finally {
+        copy.close();
+      }
+    };
+    await writeValidated(f.validated, f.deps);
+    expect(seen).toEqual(["backup"]);
+  } finally {
+    await suite.node.run(sql`drop table backup_marker`);
+  }
 });
 
 it("refuses a wrong node key before hooks or restored identity are published", async () => {

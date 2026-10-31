@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import { copyFile, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { DatabaseSync } from "node:sqlite";
 import { CORE_MIGRATIONS, locations, nodes, stampDeployment, tenants } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
@@ -16,6 +17,37 @@ import { sealNodeState, writeSealedStateRow } from "./sealed-state.js";
 import { mintBreakGlassKey } from "./break-glass.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import * as adapter from "./first-setup-backup-source.js";
+
+const proofNodeRows = vi.hoisted(() => ({ seen: [] as unknown[][] }));
+vi.mock("./recovery-backup-preview.js", async (original) => {
+  const actual = await original<typeof import("./recovery-backup-preview.js")>();
+  const path = await import("node:path");
+  const { DatabaseSync } = await import("node:sqlite");
+  return {
+    ...actual,
+    readRecoveryCopyPreview: async (...args: Parameters<typeof actual.readRecoveryCopyPreview>) => {
+      const copy = new DatabaseSync(path.join(path.dirname(args[0].databasePath), "node.db"), {
+        readOnly: true,
+      });
+      try {
+        const marked = copy
+          .prepare("select name from sqlite_master where name = 'backup_marker'")
+          .all();
+        proofNodeRows.seen.push(
+          marked.length === 0
+            ? []
+            : copy
+                .prepare("select v from backup_marker")
+                .all()
+                .map((row) => row.v),
+        );
+      } finally {
+        copy.close();
+      }
+      return actual.readRecoveryCopyPreview(...args);
+    },
+  };
+});
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const NODE = "d0000000-0000-4000-8000-000000000001";
@@ -343,7 +375,41 @@ it("authenticates the selected backup before revealing its private preview, reta
       locationName: "Selected location",
     });
     expect(await readFile(selected.copy.databasePath)).toEqual(before);
-    expect(await readdir(dirname(selected.copy.databasePath))).toEqual(["venue.db"]);
+    expect(await readdir(dirname(selected.copy.databasePath))).toEqual(["node.db", "venue.db"]);
+  } finally {
+    await selected.copy.discard();
+  }
+});
+
+it("the proof preview's folder holds the backup's node copy, not an empty node.db", async () => {
+  const marker = join(scratch, "marker-node.db");
+  const source = new DatabaseSync(marker);
+  source.exec("create table backup_marker (v text); insert into backup_marker values ('backup')");
+  source.close();
+  artifact = encryptArtifact(
+    packArchive([
+      ...entries.filter((entry) => entry.name !== "node.dump"),
+      { name: "node.dump", bytes: await readFile(marker) },
+      { name: "db.dump", bytes: await readFile(database) },
+    ]),
+    "archive-key",
+  );
+  const selected = await adapter.openFirstSetupBackupSource(archive(), deps());
+  try {
+    proofNodeRows.seen = [];
+    await adapter.authenticatedFirstSetupBackupPreview(
+      selected,
+      {
+        module: "core",
+        action: "restore",
+        eventId: "repair-proof",
+        targetNodeId: NODE,
+        sourceId: selected.copy.sourceId!,
+      },
+      key.secret,
+      deps(),
+    );
+    expect(proofNodeRows.seen).toEqual([["backup"]]);
   } finally {
     await selected.copy.discard();
   }
@@ -368,7 +434,7 @@ it.each(["", "wrong-node-key"])(
           deps(),
         ),
       ).rejects.toMatchObject({ code: "promotion.break_glass_invalid", params: {} });
-      expect(await readdir(dirname(selected.copy.databasePath))).toEqual(["venue.db"]);
+      expect(await readdir(dirname(selected.copy.databasePath))).toEqual(["node.db", "venue.db"]);
     } finally {
       await selected.copy.discard();
     }
@@ -528,7 +594,7 @@ it.each([
         deps(),
       ),
     ).rejects.toMatchObject({ code: "promotion.break_glass_invalid", params: {} });
-    expect(await readdir(dirname(selected.copy.databasePath))).toEqual(["venue.db"]);
+    expect(await readdir(dirname(selected.copy.databasePath))).toEqual(["node.db", "venue.db"]);
   } finally {
     await selected.copy.discard();
   }
@@ -575,7 +641,7 @@ it("cleans the private proof copy when selected backup evidence cannot be parsed
         { ...deps(), modules: [badModule] },
       ),
     ).rejects.toThrow("invalid history");
-    expect(await readdir(dirname(selected.copy.databasePath))).toEqual(["venue.db"]);
+    expect(await readdir(dirname(selected.copy.databasePath))).toEqual(["node.db", "venue.db"]);
   } finally {
     await selected.copy.discard();
   }

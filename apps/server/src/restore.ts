@@ -36,6 +36,7 @@ import {
   type Database,
   type NodeDatabase,
   type Transaction,
+  type VenueDatabase,
   type VenueLock,
 } from "@waitron/db";
 import { applyMigrations, expectedSchemaVersion, migrationOptionsFor } from "@waitron/migrations";
@@ -179,6 +180,45 @@ export interface ValidatedArtifact {
   readonly secretEntries: readonly ArchiveEntry[];
 }
 
+/**
+ * Writes a backup's node copy as `node.db` beside a staged `venue.db`, replacing any `node.db` set
+ * a store open already created there; with no copy, that set is only removed.
+ */
+export async function writeStagedNodeCopy(
+  databasePath: string,
+  nodeDump: Uint8Array | undefined,
+): Promise<void> {
+  const target = join(dirname(databasePath), NODE_FILE);
+  for (const suffix of ["", ...SIDE_FILE_SUFFIXES]) await rm(`${target}${suffix}`, { force: true });
+  if (nodeDump !== undefined)
+    await writeFile(target, nodeDump, { mode: VENUE_FILE_MODE, flag: "wx" });
+}
+
+/** Opening a staged folder without its `node.db` would create an empty one in its place. */
+export function assertStagedNodeCopy(directory: string): void {
+  if (!lstatSync(join(directory, NODE_FILE), { throwIfNoEntry: false })?.isFile())
+    throw new AppError("restore.archive_incomplete", { missing: NODE_DUMP_NAME });
+}
+
+export async function openStagedCopy(directory: string): Promise<VenueDatabase> {
+  assertStagedNodeCopy(directory);
+  return openVenueDatabase(directory);
+}
+
+/**
+ * Copies a validated copy's `venue.db` into `directory` with its node copy beside it, so opening
+ * that folder never creates an empty `node.db`; returns the new `venue.db`.
+ */
+export async function copyStagedCopy(
+  copy: Pick<ValidatedArtifact, "databasePath" | "nodeDump">,
+  directory: string,
+): Promise<string> {
+  const target = join(directory, VENUE_FILE);
+  await copyFile(copy.databasePath, target);
+  await writeStagedNodeCopy(target, copy.nodeDump);
+  return target;
+}
+
 /** Validate before replacing any destination database, identity or secrets. */
 export async function validateArtifact(
   deps: ValidationDeps,
@@ -203,6 +243,7 @@ export async function validateEntries(
   const databasePath = join(scratch, VENUE_FILE);
   try {
     await writeFile(databasePath, dumpEntry.bytes, { mode: VENUE_FILE_MODE, flag: "wx" });
+    await writeStagedNodeCopy(databasePath, metadata.nodeDump);
     return { ...metadata, databasePath, discard };
   } catch (error) {
     await discard();
@@ -393,9 +434,10 @@ export async function writeValidated(
       if (deps.resumeOperation === undefined) {
         admissionDirectory = await mkdtemp(join(deps.stagingDir, "restore-admission-"));
         directory = admissionDirectory;
-        const databasePath = join(directory, VENUE_FILE);
-        await copyFile(validated.databasePath, databasePath);
-        admitted = { ...validated, databasePath };
+        admitted = {
+          ...validated,
+          databasePath: await copyStagedCopy(validated, directory),
+        };
         await (deps.migrate ?? applyMigrations)(
           directory,
           migrationOptionsFor(orderedMigrationSets(deps.modules), deps.migrationsRoot),
@@ -948,6 +990,7 @@ export async function validateArtifactFile(
       input.kind === "bytes" ? input.entry : { name: input.name, bytes: new Uint8Array() },
     );
     const { manifest, nodeDump, secretEntries } = await validateEntryMetadata(entries, deps);
+    await writeStagedNodeCopy(join(scratch, VENUE_FILE), nodeDump);
     return {
       manifest,
       secretEntries,

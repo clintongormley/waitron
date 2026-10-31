@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { copyFile, lstat, mkdtemp, readdir, rm } from "node:fs/promises";
+import { lstat, mkdtemp, readdir, rm } from "node:fs/promises";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -28,6 +28,7 @@ import {
   createFirstSetupBackupWorkspace,
 } from "@waitron/provisioning";
 import { AppError, isAppError } from "@waitron/shared";
+import { NODE_FILE } from "@waitron/store";
 import type { DeploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
 import { createCloudRecoveryClient, type CloudRecoveryOptions } from "./cloud-recovery.js";
@@ -40,6 +41,9 @@ import {
 } from "./first-setup-backup-source.js";
 import type { RecoveryBackupPreview } from "./recovery-backup-preview.js";
 import {
+  assertStagedNodeCopy,
+  copyStagedCopy,
+  openStagedCopy,
   readArtifactNode,
   resolveArtifactNode,
   writeValidated,
@@ -124,6 +128,9 @@ function ownerRequired(): never {
 async function fingerprint(selected: Selected): Promise<string> {
   const hash = createHash("sha256");
   for await (const bytes of createReadStream(selected.copy.databasePath)) hash.update(bytes);
+  assertStagedNodeCopy(dirname(selected.copy.databasePath));
+  for await (const bytes of createReadStream(join(dirname(selected.copy.databasePath), NODE_FILE)))
+    hash.update(bytes);
   hash.update(JSON.stringify([selected.sourceId, selected.copy.sourceId, selected.copy.manifest]));
   for (const entry of selected.copy.secretEntries) {
     hash.update(JSON.stringify([entry.name, entry.bytes.byteLength]));
@@ -133,7 +140,7 @@ async function fingerprint(selected: Selected): Promise<string> {
 }
 async function verifier(selected: Selected): Promise<string | null> {
   const node = await readArtifactNode(selected.copy);
-  const db = await openVenueDatabase(dirname(selected.copy.databasePath));
+  const db = await openStagedCopy(dirname(selected.copy.databasePath));
   try {
     return await readBreakGlassVerifier(db.venue, node.nodeId);
   } finally {
@@ -646,8 +653,10 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       const directory = await mkdtemp(
         join(dirname(entry.selected.copy.databasePath), "preparation-"),
       );
-      await copyFile(entry.selected.copy.databasePath, join(directory, "venue.db"));
-      const copy = { ...entry.selected.copy, databasePath: join(directory, "venue.db") };
+      const copy = {
+        ...entry.selected.copy,
+        databasePath: await copyStagedCopy(entry.selected.copy, directory),
+      };
       await readRecoveryCopyPreview(copy, entry.selected.sourceId, options.sources);
       entry.working = directory;
     }

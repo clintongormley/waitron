@@ -1,7 +1,7 @@
 import { root, key, node, clock } from "../test/hour-recovery-host.js";
 import { createHash } from "node:crypto";
 import { access, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { expect, it, vi } from "vitest";
 import { nodes, tenants } from "@waitron/db";
 
@@ -284,6 +284,33 @@ it("rechecks the exact selected-copy bytes after derivation, before returning it
     code: "setup.attempt_conflict",
   });
   await expect(readFile(copy!.copy.databasePath)).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await f.workspace.read()).toEqual([]);
+});
+
+it("a staged copy whose node copy changed after the preview is refused as a conflict", async () => {
+  const f = await fixture();
+  const real = (await vi.importActual<typeof sources>("./first-setup-backup-source.js"))
+    .openFirstSetupBackupSource;
+  let copy: Awaited<ReturnType<typeof real>> | undefined;
+  vi.spyOn(sources, "openFirstSetupBackupSource").mockImplementation(async (...args) => {
+    copy = await real(...args);
+    return copy;
+  });
+  const original = f.host.resolution.withVenueExclusion;
+  let turns = 0;
+  f.host.resolution.withVenueExclusion = (run) =>
+    original(async () => {
+      if (++turns === 2) {
+        const path = join(dirname(copy!.copy.databasePath), "node.db");
+        const bytes = await readFile(path);
+        bytes[bytes.length - 1] = bytes[bytes.length - 1]! ^ 1;
+        await writeFile(path, bytes);
+      }
+      return run();
+    });
+  await expect(recovery(f.options).open(f.request, { onBox: false })).rejects.toMatchObject({
+    code: "setup.attempt_conflict",
+  });
   expect(await f.workspace.read()).toEqual([]);
 });
 

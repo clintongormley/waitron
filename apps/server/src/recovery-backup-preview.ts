@@ -5,6 +5,7 @@ import { AppError } from "@waitron/shared";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets } from "@waitron/module";
 import {
+  openStagedCopy,
   readArtifactNode,
   validateDatabaseEntries,
   type EntryValidationDeps,
@@ -42,7 +43,7 @@ export async function readRecoveryCopyPreview(
 ): Promise<RecoveryBackupPreview> {
   const node = await readArtifactNode(copy);
   const directory = dirname(copy.databasePath);
-  const original = await openVenueDatabase(directory);
+  const original = await openStagedCopy(directory);
   let recordedVersions: Record<string, number>;
   try {
     recordedVersions = await schemaVersionsByModule(original, deps.modules);

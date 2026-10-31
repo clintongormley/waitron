@@ -24,7 +24,9 @@ import type { ArchiveEntry } from "./backup-archive.js";
 import { parseEnvFile } from "./env-file.js";
 import type { Logger } from "./logger.js";
 import {
+  openStagedCopy,
   validateDatabaseEntries,
+  writeStagedNodeCopy,
   writeValidated,
   type PlacementDeps,
   type RestoreOperationRunner,
@@ -161,7 +163,7 @@ export async function refuseIfArchiveSourceLive(args: {
     (entry) => entry.name === "secrets/secrets.env",
   );
   if (secrets === undefined) return;
-  const copy = await openVenueDatabase(dirname(args.validated.databasePath));
+  const copy = await openStagedCopy(dirname(args.validated.databasePath));
   let settings;
   try {
     const ring = loadKeyRing(parseEnvFile(Buffer.from(secrets.bytes).toString("utf8")));
@@ -324,6 +326,11 @@ export async function prepareStreamRestore(deps: PrepareStreamDeps): Promise<Pre
       log: deps.log,
     });
     const entries = unsealNodeState(sealed, kit.recoveryKey);
+    // A sealed state with no node copy is refused when its entries are validated.
+    await writeStagedNodeCopy(
+      databasePath,
+      entries.find((entry) => entry.name === "node.dump")?.bytes,
+    );
     deps.log("info", "restore.stream_prepared", { generation });
     return { databasePath, entries, nodeId, generation, venue, discard };
   } catch (error) {

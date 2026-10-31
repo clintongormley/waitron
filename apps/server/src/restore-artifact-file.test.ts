@@ -127,7 +127,7 @@ it("validates one protected database, owns cleanup and retains the encrypted sou
   const validated = await validateArtifactFile(f);
   expect((await stat(validated.databasePath)).mode & 0o777).toBe(0o600);
   expect((await stat(join(validated.databasePath, ".."))).mode & 0o777).toBe(0o700);
-  expect(await readdir(join(validated.databasePath, ".."))).toEqual(["venue.db"]);
+  expect(await readdir(join(validated.databasePath, ".."))).toEqual(["node.db", "venue.db"]);
   const opened = await openVenueDatabase(join(validated.databasePath, ".."));
   try {
     expect((await opened.venue.select().from(tenants))[0].legalName).toBe("File roundtrip");

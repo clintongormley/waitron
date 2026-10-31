@@ -258,6 +258,9 @@ describe("prepareStreamRestore", () => {
         bucket: KIT.bucket,
       }),
     );
+    expect(await readFile(join(dirname(prepared.databasePath), "node.db"))).toEqual(
+      Buffer.from(ENTRIES.find((entry) => entry.name === "node.dump")!.bytes),
+    );
     // The checks only read, so no committed row is left in a side file beside the one staged.
     const wal = await stat(`${prepared.databasePath}-wal`).catch(() => null);
     expect(wal === null || wal.size === 0).toBe(true);
@@ -684,6 +687,8 @@ describe("refuseIfArchiveSourceLive", () => {
   ): Promise<ValidatedArtifact> {
     const file = join(await fresh("waitron-archive-db-"), "venue.db");
     await suite.db.archiveTo(file);
+    // A staged copy's folder holds a node.db; opening the store makes one.
+    if (!withSettings) await (await openVenueDatabase(dirname(file))).close();
     if (withSettings) {
       const store = await openVenueDatabase(dirname(file));
       try {

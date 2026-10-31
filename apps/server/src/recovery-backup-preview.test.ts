@@ -6,7 +6,7 @@ import { once } from "node:events";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
@@ -32,6 +32,7 @@ import { createMemoryObjectStore } from "@waitron/stream/testing/memory-store.js
 import { copyFile } from "node:fs/promises";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { previewRecoveryArchive } from "./recovery-backup-preview.js";
+import { validateArtifact } from "./restore.js";
 import type { StartedServer } from "./boot.js";
 import { awaitListening, copyMigrationsRoot, httpsVia } from "./testing/boot-harness.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
@@ -149,6 +150,34 @@ it("reads the selected copy's node-key name after the live box has replaced its 
     locationName: "Old location",
   });
   expect(await readdir(scratch)).toEqual(["selected.db"]);
+});
+
+it("a validated archive's staged folder holds its node copy beside its venue copy", async () => {
+  const copy = await validateArtifact(args());
+  try {
+    expect(await readFile(join(dirname(copy.databasePath), "node.db"))).toEqual(
+      Buffer.from(copy.nodeDump),
+    );
+  } finally {
+    await copy.discard();
+  }
+});
+
+it("a staged folder with no node.db is refused as incomplete, and no node.db is created", async () => {
+  const copy = await validateArtifact(args());
+  try {
+    const folder = dirname(copy.databasePath);
+    await rm(join(folder, "node.db"));
+    await expect(
+      previewModule.readRecoveryCopyPreview(copy, "source", { modules, migrationsRoot: null }),
+    ).rejects.toMatchObject({
+      code: "restore.archive_incomplete",
+      params: { missing: "node.dump" },
+    });
+    expect(await readdir(folder)).not.toContain("node.db");
+  } finally {
+    await copy.discard();
+  }
 });
 
 it("refuses a wrong archive encryption key without treating it as the node credential", async () => {

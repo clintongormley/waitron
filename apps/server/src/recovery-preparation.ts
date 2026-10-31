@@ -22,11 +22,13 @@ import {
 import { AppError, isAppError } from "@waitron/shared";
 import { isDeepStrictEqual } from "node:util";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { chmod, copyFile, lstat, mkdir, rm } from "node:fs/promises";
+import { chmod, lstat, mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { readRecoveryCopyPreview } from "./recovery-backup-preview.js";
 import {
+  copyStagedCopy,
+  openStagedCopy,
   readArtifactNode,
   validateArtifact,
   validateDatabaseEntries,
@@ -308,7 +310,7 @@ export function createInteractiveRecoveryPreparation(options: {
           selected.fiscalSelection?.module !== input.binding.module
         )
           return refuse();
-        const store = await openVenueDatabase(dirname(copy.databasePath));
+        const store = await openStagedCopy(dirname(copy.databasePath));
         try {
           await withRecoveryKeyAuthority(
             { db: store.venue, nodeId: node.nodeId },
@@ -511,8 +513,7 @@ export function createSetupRecoveryPreparation(
     try {
       const folder = join(dirname(copy.databasePath), "working");
       await mkdir(folder, { mode: 0o700 });
-      working = join(folder, VENUE_FILE);
-      await copyFile(copy.databasePath, working);
+      working = await copyStagedCopy(copy, folder);
       await chmod(working, 0o600);
       preview = await readRecoveryCopyPreview(
         { ...copy, databasePath: working },
