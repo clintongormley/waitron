@@ -2411,7 +2411,7 @@ search field's and the list headings' badges are whole
 `till-counter-screen.ts`, `till-floor-screen.ts` and `till-table-order-screen.ts` (Counter and Floor
 keep their axe cases in a `*.help.a11y.test.ts` beside it), and `menu-browser.help.test.ts`.
 
-**Kitchen screens.** A kitchen screen is never locked, so help there goes off by itself after two
+**Kitchen screens.** A kitchen screen never waits at the lock screen, so help there goes off by itself after two
 minutes without a touch, and a guide page left open in the shell closes with it.
 `HelpIdleController` (`apps/till/src/state/help-idle.ts`) runs the clock in `till-shell` while help
 is on and the shell is in kiosk mode or has the `kds` form factor: turning help on starts it, a

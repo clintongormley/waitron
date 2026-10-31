@@ -90,7 +90,7 @@ export class TillShell extends LitElement {
     super();
     new LocaleChangeController(this);
     new ThemeChoiceController(this);
-    // A kitchen screen is never locked, so help and a guide left open go after two idle minutes.
+    // A kitchen screen never waits at the lock screen, so help and a guide left open go after two idle minutes.
     new HelpIdleController(this, {
       applies: () => this.kiosk || this.formFactor === "kds",
       onIdle: () => {

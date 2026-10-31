@@ -2573,7 +2573,7 @@ describe("till-station-screen kitchen notices", () => {
     }
   });
 
-  it("an unknown notice (another screen already acknowledged it) is removed as gone, with no error shown", async () => {
+  it("a kitchen_notice.not_found refusal removes the row, with no error shown", async () => {
     const api = stubApi({
       getStationQueue: vi.fn().mockResolvedValue(twoNotices),
       acknowledgeKitchenNotice: vi.fn().mockRejectedValue({ code: "kitchen_notice.not_found" }),

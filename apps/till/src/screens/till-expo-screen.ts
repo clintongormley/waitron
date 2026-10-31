@@ -794,7 +794,7 @@ export class TillExpoScreen extends LitElement {
     return this.deviceMode || this.monitor;
   }
 
-  /** A kitchen display's monitor, or a till whose device chose one: no button on the board. */
+  /** A kitchen display's monitor, or a till whose device chose one. */
   #isMonitor(): boolean {
     return this.monitor || this.selected === "monitor";
   }

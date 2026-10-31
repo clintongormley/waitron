@@ -566,9 +566,9 @@ the server checks each at the route, never trusting the till's copy:
   zone with a permitted survivor. The reader fallback above still handles moved or invalid stored
   scope; it does not offer Enable for a deleted zone.
 - **A profile's kitchen screens are its manager's choices, not its routing.** A profile of any form
-  factor may offer a station screen, a pass screen and a pass monitor (a view-only pass board with
-  no buttons), each with its stations and, for the pass kinds, its zones, as "Every station" or a
-  list. Each device on it chooses within those (Devices → edit; `setDeviceKitchenScreens`,
+  factor may offer a station screen, a pass screen and a pass monitor (a view-only pass board),
+  each with its stations and, for the pass kinds, its zones, as "Every station" or a list. Each
+  device on it chooses within those (Devices → edit; `setDeviceKitchenScreens`,
   `packages/venue-service/src/kitchen-screens.ts`): a kitchen display runs exactly one
   (`kitchen_screen.required` without one); a till or handheld may choose none, or a station screen
   and one of a pass screen or a pass monitor, which then narrow its Station and Pass screens. A

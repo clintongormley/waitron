@@ -152,10 +152,10 @@ cabecera de una columna, que muestra cuántas tarjetas tiene, para plegarla en u
 que conserva su nombre y su número (**Listo · 3**); tócala otra vez para abrirla. La pantalla
 recuerda qué columnas están plegadas, en cada estación, incluso después de reiniciarse. Toca un
 plato para avanzarlo un paso, o toca la cabecera de la tarjeta para avanzar la tarjeta: solo avanzan
-los platos que la retienen, así que un plato que ya va más adelante se queda donde está. La franja
-de la parte superior de una tarjeta pasa de verde a ámbar y a rojo mientras espera, según los avisos
-de demora de la estación, y la franja de una tarjeta olvidada late; en un dispositivo configurado
-para reducir el movimiento se queda quieta. Una tarjeta cuyos platos están todos en espera tiene el
+los platos que la retienen, así que un plato que ya va más adelante se queda donde está. El borde
+superior de una tarjeta pasa de verde a ámbar mientras espera, y después todo el borde a rojo, según
+los avisos de demora de la estación, y el borde de una tarjeta olvidada late; en un dispositivo
+configurado para reducir el movimiento se queda quieto. Una tarjeta cuyos platos están todos en espera tiene el
 borde discontinuo, no muestra minutos y espera en **Esperando** hasta que el camarero [pida la
 preparación](kitchen-service.md#request-cooking).
 
@@ -193,7 +193,7 @@ dos.
 ## Ayuda en la pantalla de cocina {#kitchen-help}
 
 Toca **?** arriba a la derecha de una pantalla de cocina, antes de los botones de tema e idioma,
-para activar la ayuda. Aparecen marcas **?** azules en la primera tarjeta y en **Columnas** de cada
+para activar la ayuda. Aparecen marcas **?** en la primera tarjeta y en **Columnas** de cada
 tablero, en **Cambios en los pedidos** mientras haya cambios por leer, y en **Todo junto** o **Por
 estación** en una pantalla con más de una estación. En el pase aparecen en la primera tarjeta de
 pedido y en el primer **Curso listo** o **Grupo listo**; un monitor del pase solo marca su primera

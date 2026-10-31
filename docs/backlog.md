@@ -1936,11 +1936,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   #1911).** The guide sheet closes on lock only because a lock draws a new shell; on a kitchen
   screen it also closes when help goes off after two idle minutes.
 
-- **A1250. The pass marks a late order blue where the station board marks it amber (question for
-  the owner).** A late card's edge is `--wt-color-warning` on the station board
-  (`apps/till/src/widgets/station-queue.ts`, `.ticket.age-warm`) and `--wt-color-primary`, the
-  brand blue, on the pass (`apps/till/src/screens/till-expo-screen.ts`, `.order.age-warm`); both
-  then turn red. Should the pass use amber too? The help texts describe each as it is today.
+- **A1250. The pass marks a late order in the brand colour where the station board marks it amber
+  (question for the owner).** A late card's edge is `--wt-color-warning` on the station board
+  (`apps/till/src/widgets/station-queue.ts`, `.ticket.age-warm`) and `--wt-color-primary` on the
+  pass (`apps/till/src/screens/till-expo-screen.ts`, `.order.age-warm`); both then turn red. Should the pass use amber too? The help texts describe each as it is today.
 
 - **A1253. A help badge on a brand-blue button reads as part of the button (question for the
   owner, A582 slice 5's look check).** The pass's first Course ready / Group ready keeps its badge
