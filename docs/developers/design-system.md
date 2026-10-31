@@ -1056,8 +1056,8 @@ Tab button and no side drawer.
 
 - **The switcher** is a `wt-row-actions`, drawn whenever the screen has a party (none without one).
   Its trigger part has a 1px `--wt-color-border` edge, `--wt-radius-md` corners and
-  `--wt-color-surface`. The closed label is "Bill 1 · €38.50" for one bill and "Bill 2 of 3 · Clint
-  · €54.00" for several, where the count is the bills listed, not the highest number; a paid bill's
+  `--wt-color-surface`. The closed label is "Bill 1 · €38.50" for one bill and "Bill 2 · 3 bills ·
+  Clint · €54.00" for several, where the count is the bills listed, not the highest number; a paid bill's
   amount is "Paid" with an `aria-hidden` ✓; an unnumbered bill reads "Bill"; with no bill on screen
   it reads "Bills". Its `label` is "Bills: " and the closed label. The list is a `role="menu"` of
   `menuitemradio` rows in number order, `aria-checked` on the bill on screen, whose background

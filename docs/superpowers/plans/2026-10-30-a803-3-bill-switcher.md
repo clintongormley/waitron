@@ -200,6 +200,8 @@ slice.
 | `table.new_bill` | `+ New bill` | `+ Cuenta nueva` | `table.bills_title` «Cuentas»; «+» as in `kitchen_note.add` «+ Nota para cocina» (`strings.ts:1947`) |
 | `table.whole_table` | `Whole table` | `Toda la mesa` | «mesa» throughout (`table.actions_title` «Acciones de mesa», `:3012`) |
 
+Owner 2026-10-31 (Q1): the several-bills label is 'Bill 4 · 2 bills' / «Cuenta 4 · 2 cuentas». `table.bill_count` is `{bill} · {count} bills` / `{bill} · {count} cuentas`.
+
 Every other word the new controls show is an approved string (D10).
 
 ## Owner decisions this plan applies
@@ -262,7 +264,7 @@ Every other word the new controls show is an approved string (D10).
   and whose default slot holds one row button per shown bill (`shownBills`,
   `apps/till/src/state/bill-state.ts:23-31`) and **+ New bill**. Closed label: one bill "Bill 1 ·
   €38.50"; several "Bill 2 of 3 · Clint · €54.00"; a paid bill's amount is "Paid"
-  (`table.bill_paid`). Each row: the bill's short label, what it owes or "Paid", and, for each
+  (`table.bill_paid`). (Owner 2026-10-31 (Q1): the several-bills label is 'Bill 4 · 2 bills' / «Cuenta 4 · 2 cuentas».) Each row: the bill's short label, what it owes or "Paid", and, for each
   person with unsent dishes on it, the approved floor sentence ("Ana has an unsent order: 3 items",
   `floor.unsent_owner`/`_one`, `strings.ts:977-978`) from `party.unsentDrafts`. It renders in the
   screen's shadow root (so the existing `data-*` test hooks keep working), in its own module

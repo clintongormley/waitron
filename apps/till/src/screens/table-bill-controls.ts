@@ -39,7 +39,7 @@ export function billRowContent(bill: PartyBill, party: TableParty): TemplateResu
     )}`;
 }
 
-/** "Bill 1 · €38.50"; with several bills "Bill 2 of 3 · Clint · €54.00"; "Bills" with none shown. */
+/** "Bill 1 · €38.50"; with several bills "Bill 2 · 3 bills · Clint · €54.00"; "Bills" with none shown. */
 function closedLabel(bills: readonly PartyBill[], shown: PartyBill | undefined): string {
   if (shown === undefined) return t("table.bills_title");
   const number = billNumberLabel(shown);

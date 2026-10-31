@@ -3407,7 +3407,7 @@ describe("A803 new bill: the switcher's + New bill and switching bills", () => {
     expect(createPartyBill).toHaveBeenCalledOnce();
     expect(createPartyBill).toHaveBeenCalledWith("v-2", 3);
     expect(tableOrder(el)!.orderId).toBe("wo-new");
-    expect(closedLabel(el)).toBe(`Cuenta 2 de 2 · ${euros("0.00")}`);
+    expect(closedLabel(el)).toBe(`Cuenta 2 · 2 cuentas · ${euros("0.00")}`);
     expect(await nextSavedBill(el)).toBe("wo-new");
   });
 
@@ -3463,7 +3463,7 @@ describe("A803 new bill: the switcher's + New bill and switching bills", () => {
     await choose(el, '[data-switch-bill="wo-9"]');
 
     expect(tableOrder(el)!.orderId).toBe("wo-9");
-    expect(closedLabel(el)).toBe(`Cuenta 3 de 3 · ${euros("12.00")}`);
+    expect(closedLabel(el)).toBe(`Cuenta 3 · 3 cuentas · ${euros("12.00")}`);
     expect(await nextSavedBill(el)).toBe("wo-9");
   });
 
@@ -3479,7 +3479,7 @@ describe("A803 new bill: the switcher's + New bill and switching bills", () => {
     await choose(el, '[data-switch-bill="wo-8"]');
 
     expect(tableOrder(el)!.orderId).toBe("wo-8");
-    expect(closedLabel(el)).toBe("Cuenta 2 de 2 · Pagada");
+    expect(closedLabel(el)).toBe("Cuenta 2 · 2 cuentas · Pagada");
     const store = tableOrder(el)!.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!
       .store as unknown as { billStatus: string; editsLocked: boolean };
     expect({ billStatus: store.billStatus, locked: store.editsLocked }).toEqual({
@@ -3497,7 +3497,7 @@ describe("A803 new bill: the switcher's + New bill and switching bills", () => {
     });
     await toTableOrder(el);
     await choose(el, '[data-switch-bill="wo-8"]');
-    expect(closedLabel(el)).toBe(`Cuenta 2 de 2 · ${euros("12.00")}`);
+    expect(closedLabel(el)).toBe(`Cuenta 2 · 2 cuentas · ${euros("12.00")}`);
 
     gone = true;
     vi.mocked(api.setPartyName).mockRejectedValueOnce({

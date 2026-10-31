@@ -74,7 +74,7 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     };
     const el = await mountScreen(three, "wo-1", party);
 
-    expect(closedLabel(el)).toBe("Bill 1 of 3 · €67.00");
+    expect(closedLabel(el)).toBe("Bill 1 · 3 bills · €67.00");
     expect(items(el)).toEqual([
       "Bill 1 €67.00",
       "Bill 2 · Clint €54.00 Ana has an unsent order: 3 items",
@@ -91,16 +91,16 @@ describe("A803 switcher: the table screen's bill switcher", () => {
   it("names the bill on screen, its name and count in the closed label", async () => {
     const el = await mountScreen(three, "wo-2");
 
-    expect(closedLabel(el)).toBe("Bill 2 of 3 · Clint · €54.00");
+    expect(closedLabel(el)).toBe("Bill 2 · 3 bills · Clint · €54.00");
   });
 
   it("says Paid for a paid bill on screen", async () => {
     const el = await mountScreen(three, "wo-3");
 
-    expect(closedLabel(el)).toBe("Bill 3 of 3 · Paid");
+    expect(closedLabel(el)).toBe("Bill 3 · 3 bills · Paid");
     const trigger = switcher(el)!.querySelector<HTMLElement>('[slot="trigger"]')!;
-    expect(trigger.textContent!.replace(/\s+/g, " ").trim()).toBe("Bill 3 of 3 · Paid ✓ ▾");
-    expect(switcher(el)!.getAttribute("label")).toBe("Bills: Bill 3 of 3 · Paid");
+    expect(trigger.textContent!.replace(/\s+/g, " ").trim()).toBe("Bill 3 · 3 bills · Paid ✓ ▾");
+    expect(switcher(el)!.getAttribute("label")).toBe("Bills: Bill 3 · 3 bills · Paid");
     const marks = [...switcher(el)!.querySelectorAll<HTMLElement>("[data-paid-mark]")];
     expect(
       marks.map((mark) => [mark.textContent!.trim(), mark.getAttribute("aria-hidden")]),
@@ -128,8 +128,18 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     );
     const el = await mountScreen(merged, "wo-1");
 
-    expect(closedLabel(el)).toBe("Bill 1 of 2 · €67.00");
+    expect(closedLabel(el)).toBe("Bill 1 · 2 bills · €67.00");
     expect(items(el)).toEqual(["Bill 1 €67.00", "Bill 3 Paid ✓", "+ New bill"]);
+  });
+
+  it("a table holding Bills 1 and 4 names Bill 4 and counts 2 bills apart from it", async () => {
+    const el = await mountScreen(
+      [partyBill("wo-1", 1, "67.00"), partyBill("wo-4", 4, "21.00")],
+      "wo-4",
+    );
+
+    expect(closedLabel(el)).toBe("Bill 4 · 2 bills · €21.00");
+    expect(closedLabel(el)).not.toContain(" of ");
   });
 
   it("choosing Bill 3 dispatches switch-bill with Bill 3's id", async () => {

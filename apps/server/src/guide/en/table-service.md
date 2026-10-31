@@ -232,8 +232,8 @@ them when you choose custom names; **Add joined table** asks for one.
 
 Guests often pay separately: two couples at one table, or one guest who pays for their own drinks.
 Each of them gets a bill of their own at the table. The bill switcher, at the top of the table
-screen, says which bill is on screen, such as **Bill 1 · €38.50**, or **Bill 2 of 3 · Clint ·
-€54.00** when the table has three. It is there even when the table has one bill, so a second bill is
+screen, says which bill is on screen, such as **Bill 1 · €38.50**, or **Bill 2 · 3 bills · Clint
+· €54.00** when the table has three. It is there even when the table has one bill, so a second bill is
 always one tap away.
 
 Tap the switcher to list the table's bills in number order. Each row shows the bill's number and

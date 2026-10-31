@@ -1386,7 +1386,7 @@ export const en = {
   "table.bill_gone_none": "{gone} is no longer at this table.",
   "table.bill_gone_unnumbered": "That bill is no longer at this table. Now showing {shown}.",
   "table.bill_gone_unnumbered_none": "That bill is no longer at this table.",
-  "table.bill_count": "{bill} of {count}",
+  "table.bill_count": "{bill} · {count} bills",
   "table.new_bill": "+ New bill",
   // Errors
   "pin.invalid": "Wrong PIN, try again",
@@ -3162,7 +3162,7 @@ export const es: Record<StringKey, string> = {
   "table.bill_gone_none": "{gone} ya no está en esta mesa.",
   "table.bill_gone_unnumbered": "Esa cuenta ya no está en esta mesa. Ahora se muestra {shown}.",
   "table.bill_gone_unnumbered_none": "Esa cuenta ya no está en esta mesa.",
-  "table.bill_count": "{bill} de {count}",
+  "table.bill_count": "{bill} · {count} cuentas",
   "table.new_bill": "+ Cuenta nueva",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "pin.throttled": "Demasiados PIN incorrectos. Espera un momento y vuelve a intentarlo",

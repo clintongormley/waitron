@@ -245,7 +245,7 @@ nombres personalizados; **Añadir mesa unida** pide uno.
 Es habitual que los clientes paguen por separado: dos parejas en una misma mesa, o alguien que paga
 sus propias bebidas. Cada uno tiene entonces su propia cuenta en la mesa. El selector de cuentas,
 arriba en la pantalla de la mesa, indica qué cuenta está en pantalla, como **Cuenta 1 · 38,50 €**, o
-**Cuenta 2 de 3 · Clint · 54,00 €** cuando la mesa tiene tres. Aparece aunque la mesa tenga una sola
+**Cuenta 2 · 3 cuentas · Clint · 54,00 €** cuando la mesa tiene tres. Aparece aunque la mesa tenga una sola
 cuenta, así que una segunda cuenta está siempre a un toque.
 
 Toca el selector para ver las cuentas de la mesa por orden de número. Cada fila muestra el número y
