@@ -2,23 +2,24 @@ import { heldSetup } from "./held-setup-database.js";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
-import { access, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { getTableName } from "drizzle-orm";
 import { afterEach, expect, vi } from "vitest";
-import {
-  START_AGAIN_CONFIRMATIONS_DIR,
-  readStartAgainMarker,
-  type StartAgainSummary,
-} from "@waitron/provisioning";
+import { type StartAgainSummary } from "@waitron/provisioning";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu/src/schema/registros.js";
 import {
   createFirstSetupResolutionActions,
   type StartAgainFirstSetupRequest,
 } from "../src/first-setup-resolution.js";
 import { mountFirstSetupResolutionApi } from "../src/setup-first-fiscal-api.js";
-import { diskSnapshot, expectStartAgainDeleted } from "./start-again-deleted.js";
+import {
+  expectStartAgainDeleted,
+  snapshot,
+  heldConfirmationRecords as confirmations,
+  expectStartAgainRefused,
+} from "./start-again-deleted.js";
 import { agreeInternet, archiveForm, restoreApp } from "./hour-recovery-host.js";
 import { stageRestoreRequest } from "../src/restore-request.js";
 
@@ -78,8 +79,6 @@ afterEach(() => {
 type WithRecovery = Awaited<ReturnType<typeof heldSetup>>;
 
 type Held = Omit<WithRecovery, "service"> & { service: WithRecovery["service"] | undefined };
-
-const snapshot = (f: Pick<Held, "roots">) => diskSnapshot(f.roots);
 
 /**
  * Signs the setup owner in, then answers a call that asks for the summary. A setup whose
@@ -179,39 +178,9 @@ async function askStartAgain(f: Held, host: Held["host"] = f.host) {
   };
 }
 
-async function confirmations(stateDir: string) {
-  const folder = join(stateDir, START_AGAIN_CONFIRMATIONS_DIR);
-  return Promise.all(
-    (await readdir(folder)).map(
-      async (name) =>
-        JSON.parse(await readFile(join(folder, name), "utf8")) as {
-          at: string;
-          database: string;
-          shown: unknown;
-        },
-    ),
-  );
-}
-
-/** Sends Start again, and checks the refusal changed nothing: files, journal, records. */
-async function expectStartAgainRefused(f: Held, send: () => Promise<void>, refusal: object) {
-  const before = await snapshot(f);
-  const last = (await f.workspace.readChain()).at(-1);
-  await expect(send()).rejects.toMatchObject(refusal);
-  expect(await snapshot(f)).toEqual(before);
-  expect((await f.workspace.readChain()).at(-1)).toEqual(last);
-  expect(await readStartAgainMarker(f.roots.venueDir)).toBeNull();
-  await expect(access(join(f.roots.stateDir, START_AGAIN_CONFIRMATIONS_DIR))).rejects.toMatchObject(
-    { code: "ENOENT" },
-  );
-}
-
 // What Start again leaves: the anchor's lock files, the confirmation record, and the discarded
 // recovery's journal pointer, records and its target's lock files.
 const LEFT_VENUE = /^(venue|recovery|migrations)\.lock(-journal)?$|^venue\.holder\.json$/;
-
-const LEFT_STATE =
-  /^(first-setup-start-again-confirmations\/(\w|[-.])*|first-setup-resolutions\/|first-setup-resolutions\/backup-recovery\/(current\.json)?|first-setup-resolutions\/backup-recovery\/[^/]+\/(\d{6}\.json|target\/|target\/(venue|state)\/|target\/(venue|state)\/((venue|migrations|recovery)\.lock(-journal)?|venue\.holder\.json))?)$/;
 
 /** Leaves the fiscal module's recovery-key record unreadable, as a damaged disk would. */
 const damageRecoveryRecord = (f: Held) =>
@@ -255,11 +224,6 @@ async function withoutSignIn(f: Held, host: Held["host"] = f.host) {
   const actions = createFirstSetupResolutionActions({ ...f.roots, host });
   return { ids, actions };
 }
-
-const noConfirmations = (f: Held) =>
-  expect(access(join(f.roots.stateDir, START_AGAIN_CONFIRMATIONS_DIR))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
 
 /** A held setup with its venue.db gone, and the modules.json activation wrote, which the missing path refuses. */
 async function missingHeldDatabase(): Promise<Held & { service: undefined }> {
@@ -426,20 +390,15 @@ export {
   extraDeletable,
   holdingsRead,
   copyFails,
-  snapshot,
   summary,
   expectRefused,
   keptRecordsLogReason,
   notReady,
   askStartAgain,
-  confirmations,
-  expectStartAgainRefused,
   LEFT_VENUE,
-  LEFT_STATE,
   damageRecoveryRecord,
   handMade,
   withoutSignIn,
-  noConfirmations,
   missingHeldDatabase,
   startAgainMissing,
   stageFreshRestore,

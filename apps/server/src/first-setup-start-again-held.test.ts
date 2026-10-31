@@ -4,11 +4,11 @@ import {
   expectRefused,
   keptRecordsLogReason,
   notReady,
-  expectStartAgainRefused,
   handMade,
   venueDb,
   type Held,
 } from "../test/start-again-held-fixture.js";
+import { expectStartAgainRefused } from "../test/start-again-deleted.js";
 import { heldSetup } from "../test/held-setup-database.js";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";

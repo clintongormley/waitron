@@ -1,10 +1,6 @@
 import {
-  snapshot,
   askStartAgain,
-  confirmations,
-  expectStartAgainRefused,
   LEFT_VENUE,
-  LEFT_STATE,
   damageRecoveryRecord,
   withoutSignIn,
   venueDb,
@@ -20,6 +16,13 @@ import {
   abandonUnemptied,
   type Held,
 } from "../test/start-again-held-fixture.js";
+import {
+  expectStartAgainDeleted,
+  snapshot,
+  heldConfirmationRecords as confirmations,
+  expectStartAgainRefused,
+  LEFT_STATE,
+} from "../test/start-again-deleted.js";
 import { heldSetup } from "../test/held-setup-database.js";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
@@ -27,7 +30,7 @@ import { Hono } from "hono";
 import { access, writeFile } from "node:fs/promises";
 import { expect, it, vi } from "vitest";
 import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
-import { expectStartAgainDeleted } from "../test/start-again-deleted.js";
+
 import { damageIndexes, damagePages } from "../test/damaged-database.js";
 
 it("a held database with a damaged table (no recovery): the summary says it cannot be read, and Start again with that confirmation deletes it", async () => {

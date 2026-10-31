@@ -1,9 +1,7 @@
 import {
   extraDeletable,
   copyFails,
-  snapshot,
   withoutSignIn,
-  noConfirmations,
   venueDb,
   invoiceTable,
   labelOf,
@@ -14,6 +12,7 @@ import {
   dropTables,
   type Held,
 } from "../test/start-again-held-fixture.js";
+import { snapshot, noConfirmations } from "../test/start-again-deleted.js";
 import { heldSetup } from "../test/held-setup-database.js";
 import { chmod, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";

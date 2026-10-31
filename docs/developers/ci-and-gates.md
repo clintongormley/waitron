@@ -1555,7 +1555,11 @@ The held-setup cases now occupy the original summary suite and its `-recovery`,
 `-wipe`, `-damaged` and `-journals` siblings. The holdings-reader cases occupy the
 original suite and its `-damage` and `-ledger` siblings. Shared helpers and hooks
 live in `apps/server/test/start-again-held-fixture.ts` and
-`apps/server/test/setup-holdings-fixture.ts`. This also maps the old test paths
+`apps/server/test/setup-holdings-fixture.ts`; confirmation-folder assertions stay
+in the existing `apps/server/test/start-again-deleted.ts` reader. The
+`start-again-records-writers` guard scans tracked test helpers as well as product
+files, so moving those folder references into another fixture is refused. The
+guard reads names as text and does not inspect writes. This also maps the old test paths
 used by the A1131 plans: fresh-box restore cases belong in the `-wipe` suite.
 The local baseline passed 110 cases; a token comparison retained all 93 test
 declarations, including their parameter tables, assertions and timeouts.

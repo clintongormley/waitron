@@ -1,15 +1,17 @@
 import {
   extraDeletable,
-  snapshot,
   expectRefused,
   askStartAgain,
-  confirmations,
-  expectStartAgainRefused,
   LEFT_VENUE,
-  LEFT_STATE,
   damageRecoveryRecord,
   handMade,
 } from "../test/start-again-held-fixture.js";
+import {
+  snapshot,
+  heldConfirmationRecords as confirmations,
+  expectStartAgainRefused,
+  LEFT_STATE,
+} from "../test/start-again-deleted.js";
 import { heldSetup } from "../test/held-setup-database.js";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";

@@ -1,14 +1,18 @@
 import {
   holdingsRead,
-  expectStartAgainRefused,
   withoutSignIn,
-  noConfirmations,
   missingHeldDatabase,
   startAgainMissing,
   stageFreshRestore,
   exists,
   type Held,
 } from "../test/start-again-held-fixture.js";
+import {
+  diskSnapshot,
+  expectStartAgainDeleted,
+  expectStartAgainRefused,
+  noConfirmations,
+} from "../test/start-again-deleted.js";
 import { heldSetup } from "../test/held-setup-database.js";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
@@ -27,7 +31,7 @@ import {
 } from "@waitron/provisioning";
 import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
 import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
-import { diskSnapshot, expectStartAgainDeleted } from "../test/start-again-deleted.js";
+
 import { foreignHotJournal } from "../test/foreign-journal.js";
 import { clock } from "../test/hour-recovery-host.js";
 import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
