@@ -447,7 +447,12 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
           ? vi.fn().mockResolvedValue({ ...answer, confirmedAt: "2026-10-22T19:30:05.000Z" })
           : vi.fn().mockRejectedValue(answer);
       const settable = health({
-        clockStop: { ...PROOF_READY.clockStop!, proof: "none" },
+        clockStop: {
+          ...PROOF_READY.clockStop!,
+          proof: "none",
+          agreeing: { authority: null, devices: [] },
+          contrary: { authority: null, devices: [] },
+        },
         clock: {
           ...STOPPED.clock,
           sync: { synced: false, source: "timedatectl", warn: true },

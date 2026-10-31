@@ -1910,7 +1910,7 @@ export interface ClockConfirmView {
 
 /** LOCAL copy of `POST /api/box/clock-set`'s answer (`apps/server/src/box-health-api.ts`). */
 export interface ClockSetView {
-  confirmationId: string;
+  confirmationId: string | null;
   stepMs: number;
   confirmedAt: string;
 }

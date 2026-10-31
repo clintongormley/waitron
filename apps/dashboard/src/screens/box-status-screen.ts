@@ -47,8 +47,8 @@ const CONFIRM_REFUSALS = {
 
 /** The reasons a refused set names that have their own sentence; `agrees` turns to Confirm. */
 const SET_REFUSALS = {
-  same_machine: "box_status.clock.admin.refused.same_machine",
-  not_stopped: "box_status.clock.admin.refused.not_stopped",
+  same_machine: "box_status.clock.admin.set.refused.same_machine",
+  not_stopped: "box_status.clock.admin.set.refused.not_stopped",
   synchronised: "box_status.clock.admin.set.refused.synchronised",
   witnessed: "box_status.clock.admin.set.refused.witnessed",
   stale: "box_status.clock.admin.set.refused.stale",
@@ -56,6 +56,14 @@ const SET_REFUSALS = {
   target_invalid: "box_status.clock.admin.set.refused.target_invalid",
   pending_disproofs: "box_status.clock.admin.set.refused.pending_disproofs",
 } as const satisfies Record<string, StringKey>;
+
+const SET_FAILURES = {
+  refused: "box_status.clock.admin.set.failed.refused",
+  unverified: "box_status.clock.admin.set.failed.unverified",
+} as const satisfies Record<string, StringKey>;
+
+/** Refused sets a second press could only meet again, so the question goes. */
+const SET_ENDS_THE_QUESTION: ReadonlySet<string> = new Set(["not_stopped", "witnessed", "stale"]);
 
 /** LOCAL copy of `IDLE_TIMEOUT_MS` (`packages/identity/src/management-session.ts:13`): a step
  * past it either way ends the dashboard session that asked for it. */
@@ -429,15 +437,16 @@ export class BoxStatusScreen extends LitElement {
     return this.canConfirmClock && (stopShowing(health) || health.clockCheckWaiting !== null);
   }
 
-  /** Whether the box's set route would take this device's time: it runs a time service it can
-   * set and is not in time by it, and a stop holds. A waiting check alone is not a stop. */
+  /** Whether to offer this device's time, from the last read: the box runs a time service it can
+   * set and is not in time by it, and a stop holds that the tax agency has not spoken on. A
+   * waiting check alone is not a stop. The box judges all of it again when asked. */
   #canSetClock(health: BoxHealth | null): boolean {
     return (
       health !== null &&
       this.canConfirmClock &&
       health.clock.sync.source === "timedatectl" &&
       !health.clock.sync.synced &&
-      stopShowing(health)
+      settableStop(health)
     );
   }
 
@@ -509,21 +518,21 @@ export class BoxStatusScreen extends LitElement {
       const { challengeId, reading } = await this.#readBoxTime();
       fresh = reading;
       const { stepMs } = await this.api.clockSet({ challengeId, deviceAt: Date.now() });
-      const signInAgain = Math.abs(stepMs) > SESSION_IDLE_MS;
-      this.clockSetDone = { signInAgain };
-      // A read now would meet the ended session before the sentence asking to sign in is read.
-      if (!signInAgain) this.api.liveData.refresh();
+      this.clockSetDone = { signInAgain: Math.abs(stepMs) > SESSION_IDLE_MS };
     } catch (error) {
       const reason = setRefusalReason(error);
       if (fresh !== null && reason === "agrees") {
         this.clockReading = { ...fresh, agrees: true };
-        this.api.liveData.refresh();
       } else {
-        if (reason === "not_stopped") this.clockReading = null;
+        if (
+          codeOf(error) === "clock.set_failed" ||
+          (reason !== null && SET_ENDS_THE_QUESTION.has(reason))
+        )
+          this.clockReading = null;
         this.clockCheckError = setRefusal(error);
-        this.api.liveData.refresh();
       }
     } finally {
+      this.api.liveData.refresh();
       this.confirmingClock = false;
     }
   }
@@ -531,7 +540,6 @@ export class BoxStatusScreen extends LitElement {
   #closeClockCheck(): void {
     this.#clockCheckRun += 1;
     this.clockCheckOpen = false;
-    if (this.clockSetDone?.signInAgain === true) this.api.liveData.refresh();
   }
 
   #clockCheckButton(): TemplateResult {
@@ -1171,12 +1179,21 @@ function atSeconds(ms: number): string {
   return `${formatIsoMinute(at.toISOString())}:${String(at.getSeconds()).padStart(2, "0")}`;
 }
 
-/** A stop the box's set route takes: one not yet confirmed, or a clock before 28-10-2024. */
+/** A stop not yet confirmed, or a clock before 28-10-2024. */
 function stopShowing(health: BoxHealth): boolean {
   return (
     (health.clockStop !== null && health.clockStop.proof !== "confirmed") ||
     health.notices.some((notice) => notice.code === "clock.unusable")
   );
+}
+
+/** A stop the box's set route takes a device's time for: once the tax agency's time is in hand
+ * during a clock-behind stop, the box answers `witnessed`. */
+function settableStop(health: BoxHealth): boolean {
+  const stop = health.clockStop;
+  if (stop !== null && stop.proof !== "confirmed")
+    return stop.agreeing.authority === null && stop.contrary.authority === null;
+  return health.notices.some((notice) => notice.code === "clock.unusable");
 }
 
 function reasonOf(error: unknown, code: string): string | null {
@@ -1194,10 +1211,18 @@ function setRefusalReason(error: unknown): string | null {
 }
 
 function setRefusal(error: unknown): string {
+  const code = codeOf(error);
+  if (code === "clock.set_failed") {
+    const failure = reasonOf(error, code);
+    return failure !== null && Object.hasOwn(SET_FAILURES, failure)
+      ? t(SET_FAILURES[failure as keyof typeof SET_FAILURES])
+      : codeMessage(code);
+  }
+  if (code !== "clock.set_refused") return clockRefusal(error);
   const reason = setRefusalReason(error);
   return reason !== null && Object.hasOwn(SET_REFUSALS, reason)
     ? t(SET_REFUSALS[reason as keyof typeof SET_REFUSALS])
-    : codeMessage(codeOf(error));
+    : codeMessage(code);
 }
 
 function clockRefusal(error: unknown): string {
