@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { stageStreamRestore } from "./restore-request.js";
 import { recoveryStreamSourceId } from "./recovery-source.js";
 import { createHash } from "node:crypto";
@@ -96,6 +97,7 @@ beforeEach(async () => {
         ),
       },
       { name: "db.dump", bytes: await readFile(database) },
+      await nodeDumpEntry(suite.node, scratch),
       {
         name: "secrets/trading.env",
         bytes: Buffer.from(`WAITRON_NODE_ID=${NODE}\n`),

@@ -1,6 +1,7 @@
 // Every database here is a real venue DIRECTORY migrated by the product's own `applyMigrations`,
 // so the append-only triggers on `registros_facturacion`, and the schema every assertion reads,
 // are the ones a box would carry.
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { createHash } from "node:crypto";
 import { cp, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -280,6 +281,7 @@ async function buildArtifact(older: boolean, artifact: string): Promise<void> {
     const entries: ArchiveEntry[] = [
       { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
       { name: "db.dump", bytes: await readFile(dumpPath) },
+      await nodeDumpEntry(store.node, scratchRoot),
       {
         name: "secrets/trading.env",
         bytes: Buffer.from(

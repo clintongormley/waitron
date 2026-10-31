@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -112,7 +113,11 @@ it.each(["archive", "stream"] as const)(
       },
     ];
     const artifact = encryptArtifact(
-      packArchive([...entries, { name: "db.dump", bytes: await readFile(databasePath) }]),
+      packArchive([
+        ...entries,
+        { name: "db.dump", bytes: await readFile(databasePath) },
+        await nodeDumpEntry(suite.node, root),
+      ]),
       "separate archive password",
     );
     const binding = {

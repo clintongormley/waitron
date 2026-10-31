@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
@@ -101,6 +102,7 @@ async function artifact(f: Awaited<ReturnType<typeof fixture>>) {
   const entries = [
     { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
     { name: "db.dump", bytes: await readFile(database) },
+    await nodeDumpEntry(suite.node, f.root),
     {
       name: "secrets/trading.env",
       bytes: Buffer.from(`WAITRON_NODE_ID=${ids.node}\n`),

@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -94,6 +95,7 @@ describe("business-day timeline through cold restore and reset", () => {
         packArchive([
           { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
           { name: "db.dump", bytes: await readFile(dump) },
+          await nodeDumpEntry(suite.node, root),
           {
             name: "secrets/secrets.env",
             bytes: Buffer.from(

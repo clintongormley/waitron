@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -77,7 +78,11 @@ it.each(["archive", "bucket"])(
       },
     ];
     const artifact = encryptArtifact(
-      packArchive([...entries, { name: "db.dump", bytes: await readFile(database) }]),
+      packArchive([
+        ...entries,
+        { name: "db.dump", bytes: await readFile(database) },
+        await nodeDumpEntry(suite.node, scratch),
+      ]),
       "archive-key",
     );
     download.mockResolvedValue({

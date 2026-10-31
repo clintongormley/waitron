@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -104,6 +105,7 @@ async function fixture() {
   const entries: ArchiveEntry[] = [
     { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
     { name: "db.dump", bytes: await readFile(source) },
+    await nodeDumpEntry(suite.node, root),
     ...RECOVERY_FILES.map((name) => ({
       name: "secrets/" + name,
       bytes: Buffer.from(

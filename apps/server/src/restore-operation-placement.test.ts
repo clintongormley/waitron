@@ -1,6 +1,7 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import {
@@ -523,6 +524,7 @@ it("carries the runner through encrypted file validation and placement with a se
       packArchive([
         { name: "manifest.json", bytes: Buffer.from(JSON.stringify(f.validated.manifest)) },
         { name: "db.dump", bytes: await readFile(f.validated.databasePath) },
+        await nodeDumpEntry(suite.node, dirname(f.validated.databasePath)),
         ...f.validated.secretEntries,
       ]),
       recoveryKey,

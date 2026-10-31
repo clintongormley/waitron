@@ -60,6 +60,7 @@ import { generateNodeKeyPair } from "@waitron/membership";
 import { encodeRecoveryKit, signPointer, writePointer } from "@waitron/stream";
 import { createMemoryObjectStore } from "@waitron/stream/testing/memory-store.js";
 import { sealNodeState, writeSealedStateRow } from "../src/sealed-state.js";
+import { nodeDumpEntry } from "../src/testing/node-copy.js";
 import {
   createFakeTimersHourClock,
   recoverySelectPastWaits,
@@ -288,6 +289,7 @@ export async function archiveHost(kind: "archive" | "stream" = "archive") {
     packArchive([
       { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
       { name: "db.dump", bytes: await readFile(database) },
+      await nodeDumpEntry(suite.node, root),
       {
         name: "secrets/trading.env",
         bytes: Buffer.from(`WAITRON_NODE_ID=${node.nodeId}\n`),

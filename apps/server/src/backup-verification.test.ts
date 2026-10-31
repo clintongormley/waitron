@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { createHash } from "node:crypto";
 import { appendFile, cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import * as fs from "node:fs/promises";
@@ -96,6 +97,7 @@ async function fixture() {
   const entries: ArchiveEntry[] = [
     { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
     { name: "db.dump", bytes: await readFile(databasePath) },
+    await nodeDumpEntry(suite.node, root),
     ...recoveryEntries.map((e) => ({ name: e.name, bytes: Buffer.from(e.bytes) })),
   ];
   const artifactPath = join(root, "input.enc");

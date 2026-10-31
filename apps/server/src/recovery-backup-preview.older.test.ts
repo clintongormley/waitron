@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { sealNodeState, writeSealedStateRow } from "./sealed-state.js";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { signPointer, writePointer } from "@waitron/stream";
@@ -90,6 +91,7 @@ it("previews a backup predating named keys by migrating only its private scratch
           ),
         },
         { name: "db.dump", bytes: sourceBytes },
+        await nodeDumpEntry(suite.node, scratch),
         {
           name: "secrets/trading.env",
           bytes: Buffer.from(`WAITRON_NODE_ID=${nodeId}\n`),

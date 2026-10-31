@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -41,6 +42,7 @@ async function fixture() {
   const entries: ArchiveEntry[] = [
     { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
     { name: "db.dump", bytes: await readFile(source) },
+    await nodeDumpEntry(suite.node, root),
     {
       name: "secrets/trading.env",
       bytes: Buffer.from(`WAITRON_NODE_ID=${node}\nWAITRON_ENV=preproduction\n`),

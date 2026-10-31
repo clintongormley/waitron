@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { createHash } from "node:crypto";
 import { copyFile, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -69,7 +70,11 @@ beforeEach(async () => {
     { name: "secrets/credentials.key", bytes: Buffer.from(Buffer.alloc(32, 7).toString("base64")) },
   ];
   artifact = encryptArtifact(
-    packArchive([...entries, { name: "db.dump", bytes: await readFile(database) }]),
+    packArchive([
+      ...entries,
+      { name: "db.dump", bytes: await readFile(database) },
+      await nodeDumpEntry(suite.node, scratch),
+    ]),
     "archive-key",
   );
 });
@@ -402,7 +407,11 @@ it("does not disclose a private preview when the selected database's node key ha
   await withTransaction(suite.db, (tx) => setBreakGlassVerifierTx(tx, NODE, verifier!, null));
   await suite.db.archiveTo(database);
   const bytes = encryptArtifact(
-    packArchive([...entries, { name: "db.dump", bytes: await readFile(database) }]),
+    packArchive([
+      ...entries,
+      { name: "db.dump", bytes: await readFile(database) },
+      await nodeDumpEntry(suite.node, scratch),
+    ]),
     "archive-key",
   );
   const selected = await adapter.openFirstSetupBackupSource(
@@ -435,7 +444,11 @@ it("passes only the selected copy's original node identity across asynchronous p
   await mintBreakGlassKey(suite.db, other);
   await suite.db.archiveTo(database);
   const bytes = encryptArtifact(
-    packArchive([...entries, { name: "db.dump", bytes: await readFile(database) }]),
+    packArchive([
+      ...entries,
+      { name: "db.dump", bytes: await readFile(database) },
+      await nodeDumpEntry(suite.node, scratch),
+    ]),
     "archive-key",
   );
   const selected = await adapter.openFirstSetupBackupSource(

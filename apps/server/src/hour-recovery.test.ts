@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { createHash } from "node:crypto";
 import { copyFile, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -81,7 +82,11 @@ async function archive(
   const database = join(scratch, "selected.db");
   await suite.db.archiveTo(database);
   const artifact = encryptArtifact(
-    packArchive([...entries, { name: "db.dump", bytes: await readFile(database) }]),
+    packArchive([
+      ...entries,
+      { name: "db.dump", bytes: await readFile(database) },
+      await nodeDumpEntry(suite.node, scratch),
+    ]),
     archiveKey,
   );
   return { manifest, entries, database, artifact };
@@ -232,6 +237,7 @@ it("does not infer recorded filing authority from migrations applied only while 
         ),
       },
       { name: "db.dump", bytes: await readFile(f.database) },
+      await nodeDumpEntry(suite.node, scratch),
     ]),
     archiveKey,
   );
@@ -324,7 +330,11 @@ async function hourEvidenceArchive(value: unknown = publicHourEvidence) {
     { name: hourEvidenceName, bytes: Buffer.from(JSON.stringify(value)) },
   ];
   const artifact = encryptArtifact(
-    packArchive([...entries, { name: "db.dump", bytes: await readFile(f.database) }]),
+    packArchive([
+      ...entries,
+      { name: "db.dump", bytes: await readFile(f.database) },
+      await nodeDumpEntry(suite.node, scratch),
+    ]),
     archiveKey,
   );
   return { ...f, entries, artifact };

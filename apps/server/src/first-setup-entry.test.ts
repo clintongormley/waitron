@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { CORE_MIGRATIONS, tenants, openVenueDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { packArchive } from "./backup-archive.js";
@@ -339,6 +340,7 @@ it.each(["pre-consumption-abandoned", "complete"])(
           ),
         },
         { name: "db.dump", bytes: await readFile(source) },
+        await nodeDumpEntry(suite.node, f.root),
       ]),
       "synthetic-archive-key",
     );

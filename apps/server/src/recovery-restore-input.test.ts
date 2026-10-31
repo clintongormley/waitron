@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -115,6 +116,7 @@ beforeEach(async () => {
       packArchive([
         { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
         { name: "db.dump", bytes: await readFile(databasePath) },
+        await nodeDumpEntry(suite.node, root),
         ...secretEntries,
       ]),
       kit.recoveryKey,

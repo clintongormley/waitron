@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "../src/testing/node-copy.js";
 import { FISCAL_OPERATIONS as historicalFiscalOperations } from "@waitron/fiscal-verifactu/src/allocation-configuration.js";
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
@@ -251,7 +252,11 @@ it.each(["archive", "bucket"])(
       kind === "bucket"
         ? encodeRecoveryKit(kit)
         : encryptArtifact(
-            packArchive([...entries, { name: "db.dump", bytes: await readFile(source) }]),
+            packArchive([
+              ...entries,
+              { name: "db.dump", bytes: await readFile(source) },
+              await nodeDumpEntry(suite.node, root),
+            ]),
             backupKey,
           ),
     );

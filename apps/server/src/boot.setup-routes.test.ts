@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import { ownedHourSetup } from "../test/owned-hour-setup.js";
@@ -933,6 +934,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             ),
           },
           { name: "db.dump", bytes: await readFile(dump) },
+          await nodeDumpEntry(source.store.node, dumpDir),
           {
             name: "secrets/trading.env",
             bytes: Buffer.from(
@@ -1267,6 +1269,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
               ),
             },
             { name: "db.dump", bytes: await readFile(dump) },
+            await nodeDumpEntry(source.store.node, dirname(dump)),
             {
               name: "secrets/secrets.env",
               bytes: Buffer.from(

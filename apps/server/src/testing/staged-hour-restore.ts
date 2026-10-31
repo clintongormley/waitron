@@ -28,6 +28,7 @@ import { previewRecoveryArchive } from "../recovery-backup-preview.js";
 import { recoveryStreamSourceId } from "../recovery-source.js";
 import { createSelectedRecoveryPreparation } from "../recovery-preparation.js";
 import { runStagedRestore, stageRestoreRequest } from "../restore-request.js";
+import { nodeDumpEntry } from "./node-copy.js";
 import {
   createFakeTimersHourClock,
   recoverySelectPastWaits,
@@ -174,7 +175,11 @@ export async function stagedHourRestore(
     ];
     await db.archiveTo(databasePath);
     const artifact = encryptArtifact(
-      packArchive([...entries, { name: "db.dump", bytes: await readFile(databasePath) }]),
+      packArchive([
+        ...entries,
+        { name: "db.dump", bytes: await readFile(databasePath) },
+        await nodeDumpEntry(nodeDb, root),
+      ]),
       encryptionKey,
     );
     const restore = {
