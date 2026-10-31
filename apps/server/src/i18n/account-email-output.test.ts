@@ -34,7 +34,7 @@ describe("account email output", () => {
         expiresAt: "2026-09-08T12:30:00.000Z",
       });
 
-      expect(sent).toEqual([message]);
+      expect(sent).toStrictEqual([message]);
     },
   );
 });
