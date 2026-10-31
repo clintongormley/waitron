@@ -813,36 +813,34 @@ function mountedFloor(): Mock | undefined {
 }
 
 /**
- * A bills read that answers what a server holding the floor would: for a party, the bill the latest
- * floor answer names for it (`openingBillId`), then each of `more[partyId]`, numbered in that order.
+ * A bills read that answers what a server holding the floor would: for a party, every bill a floor
+ * answer so far named for it (`openingBillId`), since a party keeps its bills when the floor stops
+ * naming them, then each of `more(partyId)`, numbered in that order.
  * It reads the answers `floor()`'s mock already gave, by default the mounted `till-app`'s
  * `getTablesState`, and never calls it; a party the floor does not seat has no bills.
  */
 export function floorPartyBills(
   floor: () => Mock | undefined = mountedFloor,
-  more: Record<string, readonly string[]> = {},
+  more: (partyId: string) => readonly string[] = () => [],
 ): Mock {
   return vi.fn(async (partyId: string): Promise<PartyBill[]> => {
-    let tables: TableState[] | undefined;
-    for (const result of [...(floor()?.mock.results ?? [])].reverse()) {
+    const named: string[] = [];
+    let party: TableState["party"] = null;
+    for (const result of floor()?.mock.results ?? []) {
       if (result.type !== "return") continue;
+      let answer: unknown;
       try {
-        const answer: unknown = await result.value;
-        if (Array.isArray(answer)) {
-          tables = answer as TableState[];
-          break;
-        }
+        answer = await result.value;
       } catch {
-        // A refused floor read names no bill; an earlier answer may.
+        continue;
       }
+      if (!Array.isArray(answer)) continue;
+      const row = (answer as TableState[]).find((table) => table.party?.id === partyId)?.party;
+      if (row == null) continue;
+      party = row;
+      if (row.openingBillId != null) named.push(row.openingBillId);
     }
-    const party = tables?.find((row) => row.party?.id === partyId)?.party ?? null;
-    const ids = [
-      ...new Set([
-        ...(party?.openingBillId == null ? [] : [party.openingBillId]),
-        ...(more[partyId] ?? []),
-      ]),
-    ];
+    const ids = [...new Set([...named, ...more(partyId)])];
     return ids.map((id, at) =>
       partyBillOf(
         partyId,

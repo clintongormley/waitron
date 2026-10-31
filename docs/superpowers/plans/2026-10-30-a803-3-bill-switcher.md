@@ -780,6 +780,7 @@ task's red run; a red assertion not on this list that is not kind B/R/W/S/F unde
 | `till-table-order-screen.panel-footer.test.ts:29-54` (one tender-pay, Full invoice count, Discount in the foot) | B, R | one Full invoice on the table's payment step (D8); `data-discount-bill` found in the ⋮ bill section, not the foot (D16) | amendment 1, amendment 4, Owner questions 3 and 7 | 12 |
 | `data-discount-bill` sites: `panel-footer.test.ts` (7), `till-table-order-screen.adjustments.test.ts` (4), `till-app-adjustments.test.ts` (2), `panel-footer.a11y.test.ts` (1) | R | open the ⋮ first, then the same button, same event and detail | D16, Owner question 7 | 12 |
 | Any case that pins the payment step's Full invoice on a presented bill that already has an invoice number | B | not drawn (D8 gate, matching the server's `working_order.not_open`); confirm at red, none found by reading | master plan "an issued/paid bill never opens that editor" | 12 |
+| Task 8d-0: bills fakes list the floor's bills, every `expect` identical; files: `apps/till/src/widgets/test-helpers.ts` (new `partyBillOf`, `floorPartyBills`), `apps/till/test/allergy-app-fixture.ts`, `till-app-drafts.test.ts`, `till-app-table-service.test.ts`, `till-app-device-zones.test.ts`, `till-app-open-table.test.ts`, `till-app-bar-tables.test.ts`, `till-app-kitchen-note.test.ts`, `till-app-menu-refresh.test.ts`, `till-app-counter-adjustments.test.ts`, `till-app-setup-refresh.test.ts`, `till-app.a11y.test.ts`, `till-app-parties.test.ts`, `till-app.test.ts` | S | a bills fake that answered `[]`, or one party's bills whoever asked, answers what a server would: every bill a floor answer has named for the party (`openingBillId`), a newly seated party its `wo-new`, table 7's party its `wo-7`, the party the guests moved into all its bills (`billsOnceJoinedByAna`), and after a split or a paid tab the bill the answer named. Four cases keep their `[]` read (named in the Task 8d-0 record). No `expect`, title or production line changed (`git diff -U0 \| rg '^[-+].*expect'` prints nothing) | owner's standing rule: a fixture may grow what it lacks | 8d-0 |
 
 **Task 3a's red run found 50 red cases (each `it.each` row counted) in 15 files** (trace: the union of the plan's command and
 `rg -l 'joinTables\(|moveGuests\(|combineParties\(|/join|/move-guests'`, 84 files); the rows
@@ -1763,6 +1764,42 @@ proposals, Owner question 1); tests `till-app-open-table.test.ts`, `till-app-par
 - [ ] Implement; the Changed test checks rows for 8d.
 - [ ] GREEN: the five files unfiltered; till typecheck clean; `rg -n 'party\.main_bill_stays' apps/till` prints nothing.
 - [ ] Commit: "The till opens a table on the bill the floor names and never keeps a vanished bill on screen".
+
+### Task 8d-0 record (test setup only, done 2026-10-31 before Task 8d)
+
+Commits `8ea48348b`, `9851ee87c` and the one adding this record. Every till-app file whose bills
+fake went red under Task 8d's production hunks is done; none is left. Measured with only the WIP
+patch's production hunks applied (`git apply --exclude='*.test.ts'`), red cases before → after:
+`till-app-drafts` 379 → 3, `till-app-table-service` 97 → 1, `till-app-device-zones` 47 → 0,
+`till-app-open-table` 34 → 1, `till-app-allergy` 28 → 0, `till-app-bar-tables` 27 → 0,
+`till-app-parties` 14 → 5, `till-app-kitchen-note` 10 → 0, `till-app-late-send` 10 → 0,
+`till-app` 1 → 0, `till-app-menu-refresh` ? → 1, `till-app-counter-adjustments` ? → 1,
+`till-app-setup-refresh` and `till-app.a11y` ? → 0 (? = not measured before the change). The other
+27 `till-app*.test.ts` files were green under the hunks. On the current code every changed file
+passes: the twelve files using `floorPartyBills`, 1197 of 1197; `till-app-parties` and
+`till-app`, 1735 of 1735.
+
+Still red under the hunks, for Task 8d to judge (no `expect` was touched):
+- In the Changed test checks rows for 8d: `till-app-parties` "shows party.main_bill_stays in its
+  own words after split-table" and "… and moves nothing on screen" (the `:2491`/`:4101` row);
+  "opens the latest bill when every bill of the party is paid" and "keeps the party on screen, not
+  the older copy on the kept floor, …" (by line drift, the `:4395`/`:4405`/`:5830` row; not
+  confirmed by title).
+- Kept on their `[]` bills read, because a realistic read turns them red on the current code too:
+  `till-app-drafts` "retains local edits without saving to the old party, then reads the relocated
+  bill" and "decides a later addition from the new party's groups, not the old party's" (Move
+  guests refused `party.out_of_date`); `till-app-open-table` "moving guests onto the table just left
+  waits for its own save" (the 8a row for `:1405`/`:1427`); `till-app-parties` "acts on the party
+  the seat answered with when the floor cannot be read after seating" (with `wo-new` listed, Finish
+  sends its editor state, and the case expects `[]`).
+- Not in the plan: `till-app-drafts` "opening a abandoned bill keeps its Sent reads but accepts no
+  fresh dishes" (D11 never shows an abandoned bill, so the screen leaves it); `till-app-menu-refresh`
+  "reads the table's party again and shows the tab the table now points at" (the party's earlier
+  bill is still in its bills, so the screen keeps it; Task 8d's find-tab follow change);
+  `till-app-table-service` "a table of 4 on one open bill shows 4, and a cash payment changed to 5
+  sends 5 beside a bare tender" (`recordSale` not called); `till-app-counter-adjustments` "allows a
+  table Move after table navigation overtakes a pending Make at" (no station-choice dialog). Not
+  diagnosed.
 
 ## Task 9: the bill switcher with + New bill (≈65 calls)
 

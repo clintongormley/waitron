@@ -294,6 +294,16 @@ function stubApi(overrides: Record<string, unknown> = {}) {
   } as Record<string, ReturnType<typeof vi.fn>>;
 }
 
+/** A bills read in which a split's new bill, `wo-check`, joins the party it was split from once the
+ * split has answered. */
+function billsAfterSplit() {
+  return floorPartyBills(undefined, (partyId) =>
+    (api.splitBill?.mock.calls ?? []).some(([, , ask]) => ask?.partyId === partyId)
+      ? ["wo-check"]
+      : [],
+  );
+}
+
 async function mountApp(
   overrides: Record<string, unknown> = {},
   sessionActivity?: TillApp["sessionActivity"],
@@ -1435,6 +1445,7 @@ describe("till-app: a table's draft is kept on the server", () => {
 
   it("keeps unsent dishes on their original bill when a sent dish is split off", async () => {
     const { el } = await mountApp({
+      getPartyBills: billsAfterSplit(),
       splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
       getTabLines: vi.fn().mockResolvedValue({
         lines: [
@@ -3408,6 +3419,7 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
     const splitting = () => ({
       splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
       mergeBills: vi.fn().mockResolvedValue(undefined),
+      getPartyBills: billsAfterSplit(),
     });
 
     async function samSplitsBeforeTheSaveAnswers(
