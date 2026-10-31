@@ -223,6 +223,25 @@ describe("the running server's Box status read and free-space deletion", () => {
     expect(checkTimeHealth).toHaveBeenCalledTimes(1);
   });
 
+  it("reads Box status's clock through the same minute's cache", async () => {
+    const box = await start();
+    vi.mocked(checkTimeHealth).mockClear();
+
+    await box.get();
+    for (let read = 0; read < 2; read += 1) {
+      const response = await fetch(`${box.origin}/api/box/status`, {
+        headers: { cookie: box.venue.managerCookie },
+      });
+      expect(response.status).toBe(200);
+      expect(((await response.json()) as { time: unknown }).time).toEqual({
+        synced: false,
+        source: "unavailable",
+        warn: false,
+      });
+    }
+    expect(checkTimeHealth).toHaveBeenCalledTimes(1);
+  });
+
   it("never frees a configured backup folder inside backup staging", async () => {
     let archive = "";
     let other = "";

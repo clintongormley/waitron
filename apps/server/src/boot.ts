@@ -1,4 +1,4 @@
-import type { BoxHostClient } from "./box-host-client.js";
+import { boxHostClient, type BoxHostClient, type ClockServiceStatus } from "./box-host-client.js";
 import { clearStagedRecoveries, createSetupRecoveryPreparation } from "./recovery-preparation.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
 import type { WaitronModule } from "@waitron/module";
@@ -2497,6 +2497,16 @@ async function bootServer(
   mountAlertsApi(app, { db, registry: alertRegistry, now }, log);
   mountDiskStopApi(app, { db, disk: diskFull, registry: alertRegistry, now }, log);
 
+  const boxHost = seams.boxHost ?? boxHostClient();
+  // One read of the host's clock service a minute, shared by every reader of it.
+  const clockServiceCache = createTtlCache<ClockServiceStatus>({ ttlMs: 60_000, now });
+  const timeHealthCache = createTtlCache<TimeHealth>({ ttlMs: 60_000, now });
+  const readTimeHealth = () =>
+    timeHealthCache.get("sync", () =>
+      checkTimeHealth({
+        status: () => clockServiceCache.get("status", () => boxHost.clockStatus()),
+      }),
+    );
   mountBoxStatusApi(
     app,
     {
@@ -2513,6 +2523,7 @@ async function bootServer(
       // box enforces and tracks a live promotion.
       readMode: () => holders.mode.current,
       readSingletonRole: () => holders.singletonRole.current,
+      readTime: readTimeHealth,
       readAwaitingFiscalCertificate: () => awaitingFiscalCert.current,
     },
     log,
@@ -2528,7 +2539,6 @@ async function bootServer(
     log,
     backupDirs: localBackupDirs,
   };
-  const timeHealthCache = createTtlCache<TimeHealth>({ ttlMs: 60_000, now });
   const diskUsageCache = createTtlCache<DiskUsage>({ ttlMs: 60_000, now });
   // Its own, so the page's notice failures are logged once per spell apart from the equipment read's.
   const pageNoticeLog = createStaffNoticeLog(log);
@@ -2565,7 +2575,7 @@ async function bootServer(
                 },
               }),
           authorityClock: authorityClock.read,
-          timeHealth: () => timeHealthCache.get("sync", () => checkTimeHealth()),
+          timeHealth: readTimeHealth,
           disk: diskFull,
           space: freeSpace,
           usage: () =>
