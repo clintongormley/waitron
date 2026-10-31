@@ -35,7 +35,7 @@ beforeEach(async () => {
   const [location] = await suite.db
     .insert(locations)
     .values({
-      name: "Sala",
+      name: "Dining room",
       invoiceLocales: ["en"],
       operationDescription: "Restaurant",
       timeZone: "UTC",

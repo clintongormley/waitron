@@ -465,6 +465,7 @@ until A977).
   cannot scan `apps/*/scripts` until the remaining demos and test-fixture cleanup land.
 - **A976 — remaining test-venue defaults.** Menu-period rule samples use English names.
   The kitchen-note upgrade fixture uses an English operation description.
+  Native allergy, kitchen-note and bill-identity suites use English sample location names.
   The bill, party, boot, stream and clock fixtures
   listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
   still need English defaults, as do the split-extras venue's operation description and the
@@ -617,6 +618,8 @@ until A977).
   The kitchen-note upgrade fixture uses an English operation description and keeps its
   es-ES locale, translated dish description and populated-predecessor comparisons.
   The kitchen-notice suite uses English station samples; its statement-count checks remain.
+  Native allergy, kitchen-note and bill-identity suites use English sample location names;
+  their allergy assignments, note revisions and bill-number checks remain.
   Catalogue stored-name-key samples use English dish and template names; accented folding,
   variant renaming, batch boundaries and clash checks stay.
   Catalogue pricing samples use English dish and modifier text; pricing checks retain
@@ -859,6 +862,8 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   The kitchen-note upgrade fixture uses an English operation description and keeps its
   es-ES locale, translated dish description and populated-predecessor comparisons.
   The kitchen-notice suite uses English station samples; its statement-count checks remain.
+  Native allergy, kitchen-note and bill-identity suites use English sample location names;
+  their allergy assignments, note revisions and bill-number checks remain.
   Catalogue stored-name-key samples use English dish and template names; accented folding,
   variant renaming, batch boundaries and clash checks stay.
   Catalogue pricing samples use English dish and modifier text; pricing checks retain
