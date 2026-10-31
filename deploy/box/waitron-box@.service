@@ -8,3 +8,4 @@ StandardInput=socket
 StandardOutput=socket
 StandardError=journal
 RuntimeMaxSec=15
+CollectMode=inactive-or-failed

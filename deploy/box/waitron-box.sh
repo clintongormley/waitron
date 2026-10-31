@@ -27,13 +27,14 @@ REQUESTER='^\{[ -~]*\}$'
 answer() { printf '%s\n' "$1"; }
 refuse() { answer "{\"ok\":false,\"reason\":\"$1\"}"; }
 
-# The time services systemd-timedated knows, from every ntp-units.d list.
+# Every unit named in every ntp-units.d list. Unlike systemd-timedated, a list in /etc does not
+# hide a same-named list in /usr/lib here: a unit any list names is one root may stop and start.
 listed_units() {
   local dir file unit
   for dir in $NTP_UNITS_DIRS; do
     for file in "$dir"/*.list; do
       [ -f "$file" ] || continue
-      while IFS= read -r unit || [ -n "$unit" ]; do
+      while read -r unit || [ -n "$unit" ]; do
         case "$unit" in "" | "#"*) continue ;; esac
         [[ $unit =~ $UNIT_NAME ]] && printf '%s\n' "$unit"
       done < "$file"
@@ -69,15 +70,21 @@ uptime_ms() {
   printf '%s' $((10#$seconds * 1000 + 10#${fraction:0:3}))
 }
 
-# Starts every unit the instance's marker names that is a listed time service, then removes the
-# marker. A marker the handler did not write names nothing root should start, hence the list check.
+# Starts every unit the instance's marker names that is a listed time service. A marker the
+# handler did not write names nothing root should start, hence the list check. The marker keeps
+# the units that would not start, so the unit's ExecStopPost tries them again.
 restore() {
-  local marker="$STATE_DIR/stopped.$1" unit
+  local marker="$STATE_DIR/stopped.$1" unit failed=""
   [ -f "$marker" ] || return 0
   while IFS= read -r unit; do
-    is_listed "$unit" && systemctl start "$unit" > /dev/null 2>&1
+    is_listed "$unit" || continue
+    systemctl start "$unit" > /dev/null 2>&1 || failed="$failed$unit"$'\n'
   done < "$marker"
-  rm -f "$marker"
+  if [ -n "$failed" ]; then
+    printf '%s' "$failed" > "$marker"
+  else
+    rm -f "$marker"
+  fi
 }
 
 clock_status() {
@@ -93,7 +100,8 @@ clock_status() {
     service=on
   fi
   [ -n "$unit" ] && unit_json="\"$unit\""
-  [ -e "$TIMESYNC_SYNCHRONIZED" ] && last="$(date -r "$TIMESYNC_SYNCHRONIZED" +%s%3N)"
+  [ -e "$TIMESYNC_SYNCHRONIZED" ] && last="$(date -r "$TIMESYNC_SYNCHRONIZED" +%s%3N 2> /dev/null)"
+  [[ $last =~ ^[0-9]+$ ]] || last=null
   answer "{\"ok\":true,\"service\":\"$service\",\"unit\":$unit_json,\"synchronised\":$([ "$synced" = yes ] && echo true || echo false),\"lastSyncAt\":$last,\"nowMs\":$(date +%s%3N)}"
 }
 

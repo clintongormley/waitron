@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -11,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { setTimeout as sleep } from "node:timers/promises";
 import { delimiter, dirname, join } from "node:path";
+import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 
@@ -19,7 +21,12 @@ const BOX = join(HERE, "..", "deploy", "box");
 const HANDLER = join(BOX, "waitron-box.sh");
 
 const dirs = [];
+const logs = [];
 afterEach(() => {
+  // No case, whatever it sends, may switch automatic time off.
+  for (const log of logs.splice(0)) {
+    expect(readFileSync(log, "utf8")).not.toMatch(/^timedatectl\tset-ntp/m);
+  }
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
@@ -31,7 +38,7 @@ afterEach(() => {
 // names a file it creates it and sleeps WB_SETTIME_SLEEP seconds first, so a case can kill the
 // handler mid-set; with WB_MARKER_SEEN set it copies the state folder's markers beside the log.
 // systemctl: `is-active` succeeds for the units listed in WB_ACTIVE; `stop`
-// rewrites the uptime file to WB_UPTIME_AFTER_STOP when set. date: `+%s%3N` answers the time
+// rewrites the uptime file to WB_UPTIME_AFTER_STOP when set; `start` fails when WB_START_FAIL=1. date: `+%s%3N` answers the time
 // `set-time` recorded, or WB_NOW_MS before any set; `-r <file>` answers WB_MTIME_MS. flock exits
 // WB_FLOCK_RC. touch with `-d` is only logged; without, it runs the real touch.
 const STUB_BIN = mkdtempSync(join(tmpdir(), "waitron-box-bin-"));
@@ -71,6 +78,7 @@ case "$1" in
     u="\${!#}"
     for a in \${WB_ACTIVE}; do [ "$a" = "$u" ] && exit 0; done
     exit 3 ;;
+  start) [ "\${WB_START_FAIL}" = 1 ] && exit 1 ;;
   stop) [ -n "\${WB_UPTIME_AFTER_STOP}" ] && printf '%s 1.00\\n' "\${WB_UPTIME_AFTER_STOP}" > "\${WAITRON_BOX_UPTIME}" ;;
 esac
 exit 0
@@ -95,6 +103,7 @@ function sandbox(extra = {}) {
   writeFileSync(join(units, "50-chrony.list"), "# the time service\nchrony.service\n");
   const log = join(dir, "calls.log");
   writeFileSync(log, "");
+  logs.push(log);
   writeFileSync(join(dir, "uptime"), "100.00 200.00\n");
   writeFileSync(join(dir, "clock"), "");
   const synchronized = join(dir, "synchronized");
@@ -165,6 +174,20 @@ describe("waitron-box.sh clock.status", () => {
   it("answers stopped when automatic time is on and no listed unit runs", () => {
     const sb = sandbox({ WB_ACTIVE: "ssh.service" });
     expect(answer(sb, "clock.status")).toMatchObject({ service: "stopped", unit: null });
+  });
+
+  it("answers a null last synchronisation when the file's time cannot be read", () => {
+    const sb = sandbox({ WB_MTIME_MS: "" });
+    expect(answer(sb, "clock.status").lastSyncAt).toBeNull();
+  });
+
+  it("reads a list line with whitespace around the unit's name", () => {
+    const sb = sandbox();
+    writeFileSync(
+      join(sb.env.WAITRON_BOX_NTP_UNITS_DIRS, "50-chrony.list"),
+      "  chrony.service \t\n",
+    );
+    expect(answer(sb, "clock.status")).toMatchObject({ service: "on", unit: "chrony.service" });
   });
 
   it("answers a null last synchronisation when the time service never wrote its file", () => {
@@ -273,16 +296,31 @@ describe("waitron-box.sh reads one bounded line", () => {
     expect(answer(sb, line)).toEqual({ ok: false, reason: "requester_invalid" });
   });
 
-  it("answers request_invalid when no line arrives within the limit", async () => {
-    const sb = sandbox({ WAITRON_BOX_READ_SECONDS: "1" });
-    const child = spawn("bash", [HANDLER, "7-100-0"], { env: sb.env });
-    let out = "";
-    child.stdout.on("data", (d) => (out += d));
-    const code = await new Promise((resolve) => child.on("exit", resolve));
-    child.stdin.end();
-    expect(code).toBe(0);
-    expect(JSON.parse(out)).toEqual({ ok: false, reason: "request_invalid" });
-  }, 10_000);
+  for (const [name, partial] of [
+    ["no line", ""],
+    ["a request with no end of line", "clock.status"],
+  ]) {
+    it(`answers request_invalid when ${name} arrives within the limit`, async () => {
+      const sb = sandbox({ WAITRON_BOX_READ_SECONDS: "1" });
+      const started = performance.now();
+      const child = spawn("bash", [HANDLER, "7-100-0"], { env: sb.env });
+      if (partial) child.stdin.write(partial);
+      let out = "";
+      child.stdout.on("data", (d) => (out += d));
+      const code = await new Promise((resolve) => child.on("exit", resolve));
+      child.stdin.end();
+      expect(code).toBe(0);
+      expect(performance.now() - started).toBeLessThan(3000);
+      expect(JSON.parse(out)).toEqual({ ok: false, reason: "request_invalid" });
+    }, 10_000);
+  }
+
+  it("counts the line's bytes, not its characters, whatever the locale", () => {
+    const sb = sandbox({ LANG: process.platform === "darwin" ? "en_US.UTF-8" : "C.UTF-8" });
+    const line = `${"a".repeat(699)}é`;
+    expect(Buffer.byteLength(line)).toBe(701);
+    expect(answer(sb, line)).toEqual({ ok: false, reason: "request_invalid" });
+  });
 
   it("answers unknown_request for an unknown first word and for an empty line", () => {
     const sb = sandbox();
@@ -402,6 +440,15 @@ describe("waitron-box.sh --restore", () => {
     expect(existsSync(join(sb.state, "stopped.7-100-0"))).toBe(false);
   });
 
+  it("keeps the marker naming a unit that would not start, so the stop step tries again", () => {
+    const sb = sandbox({ WB_START_FAIL: "1" });
+    mkdirSync(sb.state);
+    writeFileSync(join(sb.state, "stopped.7-100-0"), "chrony.service\n");
+    expect(ask(sb, "", ["--restore", "7-100-0"]).status).toBe(0);
+    expect(sb.calls()).toEqual([["systemctl", "start", "chrony.service"]]);
+    expect(readFileSync(join(sb.state, "stopped.7-100-0"), "utf8")).toBe("chrony.service\n");
+  });
+
   it("does nothing when no marker is left", () => {
     const sb = sandbox();
     expect(ask(sb, "", ["--restore", "7-100-0"]).status).toBe(0);
@@ -423,11 +470,12 @@ describe("the box's systemd units", () => {
         "SocketUser=root",
         "SocketGroup=waitron-box",
         "MaxConnections=4",
+        "WantedBy=sockets.target",
       ]),
     );
   });
 
-  it("run the handler with the request on the socket, its errors in the journal, for at most 15 seconds", () => {
+  it("run the handler with the request on the socket, its errors in the journal, for at most 15 seconds, and leave no failed instance behind", () => {
     expect(lines(service())).toEqual(
       expect.arrayContaining([
         "StandardInput=socket",
@@ -436,6 +484,7 @@ describe("the box's systemd units", () => {
         "RuntimeMaxSec=15",
         "ExecStart=/usr/local/lib/waitron/waitron-box.sh %i",
         "ExecStopPost=/usr/local/lib/waitron/waitron-box.sh --restore %i",
+        "CollectMode=inactive-or-failed",
       ]),
     );
   });
