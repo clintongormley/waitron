@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, sql, type SQL } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
 import { readOrigin } from "@waitron/shared";
 import { timeEntries } from "./schema/time-entries.js";
@@ -11,6 +11,7 @@ import { recordInPeriod } from "./record-period.js";
 import { readClosures } from "./pay-period-reads.js";
 import "./errors.js";
 import { isRecordDate } from "./record-dates.js";
+import { compareEvents, liveClockEntries } from "./effective-entries.js";
 
 export interface TimeRecordQuery {
   period: Period;
@@ -80,23 +81,61 @@ export async function readRecordedEntries(
   return rows.map(recordFromRow);
 }
 
-export async function readLatestLiveEntries(
+/**
+ * The entry that decides a person's clock state. A chain is one node and one location, and within
+ * it a later position is a later write whatever the box's clock said, so each chain's latest direct
+ * entry is taken by `sequence_no`; event times are compared only across chains, and against an
+ * approved missing-entry correction, which a manager dates rather than the clock. While the clock
+ * only moves forward this is the latest entry by `compareEvents`; after a backward step it is still
+ * the last one written. Retimes are left out, as the hours projection applies those.
+ */
+export async function readLatestLiveEntry(
   tx: Transaction,
   personId: string,
-): Promise<TimeEntryRecord[]> {
-  // Keep the full latest instant: the recording tuple resolves simultaneous live events.
-  const rows = await tx
+  options: { kind?: "in" } = {},
+): Promise<TimeEntryRecord | undefined> {
+  const directKinds =
+    options.kind === undefined
+      ? sql`${timeEntries.entryKind} in ('in','out','break_start','break_end')`
+      : sql`${timeEntries.entryKind} = ${options.kind}`;
+  const missingKind = (column: SQL) =>
+    options.kind === undefined ? sql`${column} is not null` : sql`${column} = ${options.kind}`;
+  const heads = tx
+    .select({
+      nodeId: timeEntries.nodeId,
+      locationId: timeEntries.locationId,
+      sequenceNo: sql<number>`max(${timeEntries.sequenceNo})`.as("head_sequence_no"),
+    })
+    .from(timeEntries)
+    .where(and(eq(timeEntries.personId, personId), directKinds))
+    .groupBy(timeEntries.nodeId, timeEntries.locationId)
+    .as("heads");
+  const direct = await tx
+    .select({ entry: timeEntries })
+    .from(timeEntries)
+    .innerJoin(
+      heads,
+      and(
+        eq(timeEntries.nodeId, heads.nodeId),
+        eq(timeEntries.locationId, heads.locationId),
+        eq(timeEntries.sequenceNo, heads.sequenceNo),
+      ),
+    );
+  // Keep the full latest instant: the recording tuple resolves simultaneous corrections.
+  const corrections = await tx
     .select()
     .from(timeEntries)
     .where(
       and(
         eq(timeEntries.personId, personId),
-        sql`(${timeEntries.entryKind} in ('in','out','break_start','break_end') or (${timeEntries.entryKind} = 'correction' and ${timeEntries.correctionStatus} = 'approved' and ${timeEntries.correctsEntryId} is null and ${timeEntries.missingEntryKind} is not null))`,
+        sql`${timeEntries.entryKind} = 'correction' and ${timeEntries.correctionStatus} = 'approved' and ${timeEntries.correctsEntryId} is null and ${missingKind(sql`${timeEntries.missingEntryKind}`)}`,
         sql`${timeEntries.eventAt} = (select max(recent.event_at) from time_entries recent where recent.person_id = ${personId}
-      and (recent.entry_kind in ('in','out','break_start','break_end') or (recent.entry_kind = 'correction' and recent.correction_status = 'approved' and recent.corrects_entry_id is null and recent.missing_entry_kind is not null)))`,
+      and recent.entry_kind = 'correction' and recent.correction_status = 'approved' and recent.corrects_entry_id is null and ${missingKind(sql`recent.missing_entry_kind`)})`,
       ),
     );
-  return rows.map(recordFromRow);
+  return liveClockEntries([...direct.map((r) => r.entry), ...corrections].map(recordFromRow))
+    .sort(compareEvents)
+    .at(-1);
 }
 
 function recordFromRow(row: typeof timeEntries.$inferSelect): TimeEntryRecord {

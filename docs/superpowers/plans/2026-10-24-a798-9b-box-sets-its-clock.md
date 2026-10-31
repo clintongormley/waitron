@@ -2963,6 +2963,19 @@ the correction branch → the later-dated missing-entry control reads `working`.
 then `pnpm --filter @waitron/workforce exec vitest run` whole, since the rule touches the state
 every clocking route reads.
 
+### Task 15a's departures (2026-10-31)
+
+- Step 3's "dated after" is `compareEvents`: the direct entry and the correction candidates are
+  sorted together, so a correction at the same `event_at` as the direct entry is decided by the
+  recording tuple, as today's read decides it.
+- The export-list pin (`packages/workforce/src/index.test.ts`) gains the new export: "Changed
+  test checks" entry 17. The row-count pin in `record-read-budget.test.ts` drops from 2 to 1:
+  entry 18, the lead's ruling that it is a changed check, not this task's STOP.
+- Deletion controls: `~/waitron-campaign-b/a798-9b/t15a/mutate.py` (each chain by event time →
+  the stepped case and, through the `kind` filter, the ordinary-day control fail; order by
+  `sequence_no` across chains → the two-location control fails; no corrections → the later
+  missing clock-out control fails).
+
 ### Task 15b: The till reads the same state
 
 **Goal.** The till's state, its stale-request check and the attendance reconcile follow Task

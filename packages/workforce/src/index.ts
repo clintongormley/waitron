@@ -83,6 +83,7 @@ export { computeEntryHash, verifyChain } from "./chain-hash.js";
 export type { ChainVerification, EntryHashInput, VerifiableEntry } from "./chain-hash.js";
 export { WorkforceBackend } from "./clocking.js";
 export { projectTimeRecord } from "./record-projection.js";
+export { readLatestLiveEntry } from "./record-reads.js";
 export type { TimeRecordQuery } from "./record-reads.js";
 export type {
   ClockEventInput,
