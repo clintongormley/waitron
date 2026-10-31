@@ -2741,14 +2741,14 @@ describe("TillApi", () => {
   });
 
   it("moveBill rejects with the server's code and params", async () => {
-    const fetchStub = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({ error: { code: "group.held_leaves_party", params: { partyId: "v1" } } }),
-          { status: 409, headers: { "content-type": "application/json" } },
-        ),
-      );
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: { code: "group.held_leaves_party", params: { tabId: "wo-4", lineNo: 2 } },
+        }),
+        { status: 409, headers: { "content-type": "application/json" } },
+      ),
+    );
 
     await expect(
       new TillApi("", fetchStub).moveBill(
@@ -2760,7 +2760,12 @@ describe("TillApi", () => {
           expectedEdits: [{ billId: "wo-4", editorVersion: 6, draftId: null, draftRevision: null }],
         },
       ),
-    ).rejects.toEqual({ code: "group.held_leaves_party", partyId: "v1", status: 409 });
+    ).rejects.toEqual({
+      code: "group.held_leaves_party",
+      tabId: "wo-4",
+      lineNo: 2,
+      status: 409,
+    });
   });
 
   it("joinTables POSTs the table and a table read free as otherPartyId null to the party's /join route", async () => {

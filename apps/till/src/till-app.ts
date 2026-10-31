@@ -2901,6 +2901,9 @@ export class TillApp extends LitElement {
   #tabLinesRead = 0;
   /** The same for the party's bills. */
   #partyBillsRead = 0;
+  /** Bills reads numbered up to this were sent before this till learned of the bill it chose to
+   * show ({@link #chooseBill}), so a bill missing from one of them has not gone. */
+  #billChosenRead = 0;
   /** Numbers each read of the party's groups as it starts; {@link #printProblemsShown} is the number
    * of the read whose printing problems are on screen, so an answer from a read that started before
    * it is dropped and a read that ends without an answer drops nothing. */
@@ -11032,7 +11035,7 @@ export class TillApp extends LitElement {
           // only here.
           if (session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
           this.activeTableId = tableId;
-          this.activeTabId = tabId;
+          this.#chooseBill(tabId);
           this.orderParty = {
             id: partyId,
             revision,
@@ -11807,6 +11810,7 @@ export class TillApp extends LitElement {
     if (
       bills === null ||
       read !== this.#partyBillsRead ||
+      read <= this.#billChosenRead ||
       partyId === null ||
       partyId !== this.orderParty?.id
     )
@@ -11819,12 +11823,20 @@ export class TillApp extends LitElement {
     this.activeTabId = next;
     if (gone !== undefined) {
       const was = [...bills, ...before].find((bill) => bill.workingOrderId === gone);
-      const goneLabel = was === undefined ? t("floor.unsent_bill_unnumbered") : billLabel(was);
+      const numbered = was !== undefined && was.billNumber !== null;
       const shown = bills.find((bill) => bill.workingOrderId === next);
-      this.billGone =
+      const key =
         shown === undefined
-          ? fill(t("table.bill_gone_none"), { gone: goneLabel })
-          : fill(t("table.bill_gone"), { gone: goneLabel, shown: billLabel(shown) });
+          ? numbered
+            ? "table.bill_gone_none"
+            : "table.bill_gone_unnumbered_none"
+          : numbered
+            ? "table.bill_gone"
+            : "table.bill_gone_unnumbered";
+      this.billGone = fill(t(key), {
+        gone: numbered ? billLabel(was) : "",
+        shown: shown === undefined ? "" : billLabel(shown),
+      });
       if (sync !== undefined && sync.billId === gone) {
         this.#dropDraft();
         if (next !== undefined) this.#carryCandidate(sync.personId, gone, next);
@@ -12528,7 +12540,7 @@ export class TillApp extends LitElement {
    * operator is still on the first; the floor has already been read after the send. */
   #followDraft(sentTo: string, landedOn: string): void {
     if (landedOn === sentTo || this.activeTabId !== sentTo) return;
-    this.activeTabId = landedOn;
+    this.#chooseBill(landedOn);
     this.#rememberOrderParty();
   }
 
@@ -14886,7 +14898,7 @@ export class TillApp extends LitElement {
     }
     const { bills: read } = await this.#loadPartyBills(undefined, false);
     if (this.#hasLeftParty(followed, sent)) return;
-    this.activeTabId = billToShow(kept, read ?? []) ?? billIds[0];
+    this.#chooseBill(billToShow(kept, read ?? []) ?? billIds[0]);
     await this.#loadLinesAndBills();
   }
 
@@ -14963,7 +14975,7 @@ export class TillApp extends LitElement {
     );
     this.billGone = null;
     if (next === undefined) this.#leaveTable();
-    else this.activeTabId = next;
+    else this.#chooseBill(next);
     if (next !== undefined) await this.#loadTabLines();
   }
 
@@ -15442,7 +15454,9 @@ export class TillApp extends LitElement {
       const { bills: read } = await this.#loadPartyBills(undefined, false);
       if (!live()) return;
       this.billGone = null;
-      this.activeTabId = billToShow(undefined, read ?? []);
+      const next = billToShow(undefined, read ?? []);
+      if (next === undefined) this.activeTabId = undefined;
+      else this.#chooseBill(next);
     }
     await this.#loadLinesAndBills();
     if (
@@ -15793,7 +15807,7 @@ export class TillApp extends LitElement {
         expectedEdit: asked.expectedEdits[0]!,
       });
       if (!this.#billCompositionCurrent(asked)) return;
-      this.activeTabId = split.billId;
+      this.#chooseBill(split.billId);
     } catch (error) {
       if (!this.#billCompositionCurrent(asked)) return;
       const code = (error as { code?: string }).code;
@@ -16927,7 +16941,17 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     this.finishRefused = false;
     this.billGone = null;
-    this.activeTabId = workingOrderId;
+    this.#chooseBill(workingOrderId);
+  }
+
+  /** Shows `billId` as this till's own choice. A bill the shown bills list holds came from a read no
+   * later than any read still followed; any other (a seat's, a split's, + New bill's, an answer's)
+   * is unknown to every bills read sent so far. */
+  #chooseBill(billId: string): void {
+    this.activeTabId = billId;
+    this.#billChosenRead = this.partyBills.some((bill) => bill.workingOrderId === billId)
+      ? 0
+      : this.#partyBillsRead;
   }
 
   /** + New bill: one empty bill on the party, asked for at the revision the screen shows. A refusal

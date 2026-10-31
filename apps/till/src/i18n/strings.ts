@@ -1384,6 +1384,8 @@ export const en = {
   "table.take_over_gone": "This order is no longer on this table. Here is the table as it is now.",
   "table.bill_gone": "{gone} is no longer at this table. Now showing {shown}.",
   "table.bill_gone_none": "{gone} is no longer at this table.",
+  "table.bill_gone_unnumbered": "That bill is no longer at this table. Now showing {shown}.",
+  "table.bill_gone_unnumbered_none": "That bill is no longer at this table.",
   "table.bill_count": "{bill} of {count}",
   "table.new_bill": "+ New bill",
   // Errors
@@ -3158,6 +3160,8 @@ export const es: Record<StringKey, string> = {
   "table.take_over_gone": "Este pedido ya no está en esta mesa. Así está ahora la mesa.",
   "table.bill_gone": "{gone} ya no está en esta mesa. Ahora se muestra {shown}.",
   "table.bill_gone_none": "{gone} ya no está en esta mesa.",
+  "table.bill_gone_unnumbered": "Esa cuenta ya no está en esta mesa. Ahora se muestra {shown}.",
+  "table.bill_gone_unnumbered_none": "Esa cuenta ya no está en esta mesa.",
   "table.bill_count": "{bill} de {count}",
   "table.new_bill": "+ Cuenta nueva",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",

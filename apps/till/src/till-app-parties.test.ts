@@ -2212,6 +2212,7 @@ describe("till-app: table actions on the party", () => {
 
     expect(tableOrder(el)!.orderId).toBe("wo-luis");
     expect(tableOrder(el)!.party).toEqual(combined.party);
+    expect(tableOrder(el)!.shadowRoot!.querySelector("[data-bill-gone]")).toBeNull();
   });
 
   it("says nothing about the bills after Move guests", async () => {
@@ -2523,6 +2524,7 @@ describe("till-app: table actions on the party", () => {
     );
     const { el } = await mountApp({
       getTablesState: reads.getTablesState,
+      getPartyBills: vi.fn(async () => (reads.other.acted ? [tabBill] : [tabBill, checkBill])),
       splitTable: vi.fn(async () => {
         reads.other.acted = true;
         return { partyId: "v-split", billId: "wo-check" };
@@ -2537,6 +2539,7 @@ describe("till-app: table actions on the party", () => {
     await flush(el);
 
     expect(tableOrder(el)!.orderId).toBe("wo-4");
+    expect(tableOrder(el)!.shadowRoot!.querySelector("[data-bill-gone]")).toBeNull();
   });
 
   it.each([
@@ -4327,6 +4330,7 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
     await rereadAfterAnotherTill(el);
 
     expect(tableOrder(el)!.orderId).toBe("wo-4");
+    expect(api.getTabLines).toHaveBeenLastCalledWith("wo-4");
     expect(gone(el)!.getAttribute("role")).toBe("status");
     expect(gone(el)!.textContent!.trim()).toBe(
       "Bill 2 is no longer at this table. Now showing Bill 1.",
@@ -4344,6 +4348,7 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
     await rereadAfterAnotherTill(el);
 
     expect(tableOrder(el)!.orderId).toBe("wo-4");
+    expect(api.getTabLines).toHaveBeenLastCalledWith("wo-4");
     expect(gone(el)!.textContent!.trim()).toBe(
       "Bill 2 is no longer at this table. Now showing Bill 1.",
     );
@@ -4364,6 +4369,7 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
     await flush(el);
 
     expect(tableOrder(el)!.orderId).toBeUndefined();
+    expect(tableOrder(el)!.lines).toEqual([]);
     expect(gone(el)!.textContent!.trim()).toBe("Bill 2 is no longer at this table.");
     expect(tableOrder(el)!.draftStore).toBeNull();
     expect(createPartyBill).not.toHaveBeenCalled();
@@ -4408,8 +4414,9 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
     await flush(el);
 
     expect(tableOrder(el)!.orderId).toBe("wo-4");
+    expect(api.getTabLines).toHaveBeenLastCalledWith("wo-4");
     expect(gone(el)!.textContent!.trim()).toBe(
-      "Bill is no longer at this table. Now showing Bill 1.",
+      "That bill is no longer at this table. Now showing Bill 1.",
     );
     await ringAndWait(el);
     emit(tableOrder(el)!, "fire-group", { groupId: "g3" });
@@ -4437,6 +4444,157 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
     await ringAndWait(el);
     expect(savesSince(before)).toEqual([]);
     expect(newOrderRefusesPaid(el)).toEqual({ billStatus: "settled", locked: true, lines: 0 });
+  });
+
+  it("the notice clears when the waiter chooses another bill, and when another table opens", async () => {
+    const thirdBill: PartyBill = { ...checkBill, workingOrderId: "wo-third", billNumber: 3 };
+    let current = [tabBill, checkBill, thirdBill];
+    const bills = vi.fn(async (partyId: string) =>
+      partyId === "v7" ? [{ ...tabBill, partyId, workingOrderId: "wo-7" }] : current,
+    );
+    const el = await onBillTwo(bills);
+    current = [tabBill, { ...checkBill, status: "abandoned", outstanding: "0.00" }, thirdBill];
+    await rereadAfterAnotherTill(el);
+    expect(gone(el)!.textContent!.trim()).toBe(
+      "Bill 2 is no longer at this table. Now showing Bill 1.",
+    );
+
+    emit(tableOrder(el)!, "switch-bill", { workingOrderId: "wo-third" });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-third");
+    expect(gone(el)).toBeNull();
+
+    emit(tableOrder(el)!, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+    current = [tabBill, thirdBill];
+    await rereadAfterAnotherTill(el);
+    expect(gone(el)).not.toBeNull();
+    emit(tableOrder(el)!, "take-payment", { workingOrderId: "wo-third" });
+    await flush(el);
+    expect(gone(el)).toBeNull();
+
+    emit(tableOrder(el)!, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+    await rereadAfterAnotherTill(el);
+    expect(gone(el)).not.toBeNull();
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+    expect(gone(el)).toBeNull();
+  });
+
+  /** A bills fake whose next answer, once `hold()` is called, waits for `release`. */
+  function heldBills(answer: () => PartyBill[]) {
+    let held: ((value: PartyBill[]) => void) | undefined;
+    let holdNext = false;
+    const bills = vi.fn(() => {
+      if (holdNext) {
+        holdNext = false;
+        return new Promise<PartyBill[]>((resolve) => (held = resolve));
+      }
+      return Promise.resolve(answer());
+    });
+    return {
+      bills,
+      hold: () => (holdNext = true),
+      held: () => held !== undefined,
+      release: (value: PartyBill[]) => {
+        const resolve = held!;
+        held = undefined;
+        resolve(value);
+      },
+    };
+  }
+
+  it("a bills read sent before this till's own Split this bill answered leaves the split's new bill on screen, with nothing said", async () => {
+    const split = () => vi.mocked(api.splitBill).mock.calls.length > 0;
+    const read = heldBills(() => (split() ? [tabBill, checkBill] : [tabBill]));
+    const floor = vi.fn(async () => {
+      if (split() && read.held()) {
+        read.release([tabBill]);
+        await new Promise((resolve) => setTimeout(resolve, 30));
+      }
+      return [table4, table7, table9];
+    });
+    const { el } = await mountApp({ getPartyBills: read.bills, getTablesState: floor });
+    const order = await openMesa(el);
+    expect(order.orderId).toBe("wo-4");
+    read.hold();
+    emit(tableOrder(el)!, "name-bill", { billId: "wo-4", name: "Clint" });
+    await flush(el);
+    expect(read.held()).toBe(true);
+
+    emit(tableOrder(el)!, "split-lines", { transfers: [{ lineNo: 1 }] });
+    await flush(el);
+    await flush(el);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    await flush(el);
+
+    expect(read.held()).toBe(false);
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+    expect(gone(el)).toBeNull();
+  });
+
+  it("a bills read sent before the waiter switched to a listed bill still moves the screen off it once it has gone, and says so", async () => {
+    const read = heldBills(() => [tabBill, checkBill]);
+    const { el } = await mountApp({ getPartyBills: read.bills });
+    const order = await openMesa(el);
+    expect(order.orderId).toBe("wo-4");
+    read.hold();
+    emit(tableOrder(el)!, "name-bill", { billId: "wo-4", name: "Clint" });
+    await flush(el);
+    expect(read.held()).toBe(true);
+
+    emit(tableOrder(el)!, "switch-bill", { workingOrderId: "wo-check" });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+    read.release([tabBill, { ...checkBill, status: "abandoned", outstanding: "0.00" }]);
+    await flush(el);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
+    expect(gone(el)!.textContent!.trim()).toBe(
+      "Bill 2 is no longer at this table. Now showing Bill 1.",
+    );
+  });
+
+  it("a bills read sent before + New bill answered leaves the new bill on screen, with nothing said", async () => {
+    const newBill: PartyBill = {
+      ...checkBill,
+      workingOrderId: "wo-added",
+      billNumber: 2,
+      total: "0.00",
+      outstanding: "0.00",
+    };
+    let created = false;
+    const read = heldBills(() => (created ? [tabBill, newBill] : [tabBill]));
+    const createPartyBill = vi.fn(async () => {
+      created = true;
+      return { billId: "wo-added", revision: 6 };
+    });
+    const { el } = await mountApp({ getPartyBills: read.bills, createPartyBill });
+    const order = await openMesa(el);
+    expect(order.orderId).toBe("wo-4");
+    read.hold();
+    emit(tableOrder(el)!, "name-bill", { billId: "wo-4", name: "Clint" });
+    await flush(el);
+    expect(read.held()).toBe(true);
+
+    emit(tableOrder(el)!, "new-bill", {});
+    await flush(el);
+    await flush(el);
+    expect(createPartyBill).toHaveBeenCalledOnce();
+    expect(tableOrder(el)!.orderId).toBe("wo-added");
+    read.release([tabBill]);
+    await flush(el);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-added");
+    expect(gone(el)).toBeNull();
   });
 });
 

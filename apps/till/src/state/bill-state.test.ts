@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { PartyBill } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
-import { billName, billToShow, shownBills } from "./bill-state.js";
+import { billLabel, billName, billToShow, shownBills } from "./bill-state.js";
 
 afterEach(() => setLocale("en"));
 
@@ -91,6 +91,22 @@ describe("A803 bill names", () => {
     ]);
     expect(shown.map((row) => row.workingOrderId)).toEqual(["wo-y", "wo-z"]);
   });
+});
+
+describe("A803 billLabel", () => {
+  it.each([
+    ["en", "Bill 2", "Bill 2 · Clint", "Bill", "Bill · Clint"],
+    ["es", "Cuenta 2", "Cuenta 2 · Clint", "Cuenta", "Cuenta · Clint"],
+  ])(
+    "in %s, names a bill by its number, then its name, or by the word alone with no number",
+    (locale, numbered, named, unnumbered, unnumberedNamed) => {
+      setLocale(locale);
+      expect(billLabel(bill({ billNumber: 2 }))).toBe(numbered);
+      expect(billLabel(bill({ billNumber: 2, billName: "Clint" }))).toBe(named);
+      expect(billLabel(bill({ billNumber: null }))).toBe(unnumbered);
+      expect(billLabel(bill({ billNumber: null, billName: "Clint" }))).toBe(unnumberedNamed);
+    },
+  );
 });
 
 describe("billToShow", () => {

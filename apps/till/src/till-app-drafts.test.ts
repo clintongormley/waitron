@@ -9438,13 +9438,36 @@ describe("A773 non-open bill draft restrictions", () => {
   it("opening a table whose floor names an abandoned bill leaves it, says so, and accepts no fresh dishes", async () => {
     const { el } = await mountApp({
       getPartyBills: vi.fn().mockResolvedValue([bill("abandoned")]),
+      getTabLines: vi.fn().mockResolvedValue({
+        lines: [
+          {
+            id: "line-1",
+            groupId: null,
+            lineNo: 1,
+            productId: "product-offer-beer",
+            quantity: "1.000",
+            unitPriceGross: "5.00",
+            servedAt: null,
+            courseId: null,
+            sentAt: "2026-07-01T10:00:00.000Z",
+            firedAt: null,
+            state: null,
+            note: null,
+            listId: null,
+            menuItemId: null,
+            parentProductId: null,
+          },
+        ],
+        revision: 0,
+      }),
     });
     const order = await openTable(el);
     expect(browser(el)).toBeNull();
     expect(order.orderId).toBeUndefined();
+    expect(order.lines).toEqual([]);
     expect(order.draftStore).toBeNull();
     expect(order.shadowRoot!.querySelector("[data-bill-gone]")!.textContent!.trim()).toBe(
-      "Bill is no longer at this table.",
+      "That bill is no longer at this table.",
     );
     expect(api.getTabLines).toHaveBeenCalledWith("wo-4");
     expect(server.saveDraft).not.toHaveBeenCalled();

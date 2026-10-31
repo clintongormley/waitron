@@ -51,8 +51,8 @@ export function billNumberLabel(bill: Pick<PartyBill, "billNumber">): string {
     : fill(t("floor.unsent_bill"), { n: String(bill.billNumber) });
 }
 
-/** A bill's short label, as the floor names a bill: "Bill 2", or "Bill 2 · Clint" when it has a
- * name; "Bill" for a bill stored with no number. */
+/** A bill's short label: "Bill 2", or "Bill 2 · Clint" when it has a name; "Bill" for a bill stored
+ * with no number. */
 export function billLabel(bill: Pick<PartyBill, "billNumber" | "billName">): string {
   const label = billNumberLabel(bill);
   return bill.billName === null ? label : `${label} · ${bill.billName}`;
