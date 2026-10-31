@@ -6,6 +6,8 @@
 # It SETS THIS MACHINE'S CLOCK: run it only on a throwaway runner, never on a box or a laptop.
 # Every line it prints starts "M<n>:"; a row's verdict line ends "expected", "FAILING CASE" or
 # "not measured". It exits 1 when any of M2–M6, M8 or M9 printed its failing case.
+# With --shipped it measures instead the files deploy/box/ ships (Task 4: M5′, M7′, M8′, M9′,
+# M10′), after a first run has written the time service's name to $RUNNER_TEMP/time-unit.
 set -euo pipefail
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -47,12 +49,169 @@ true_offset_s() { # how far the wall clock is from the reference reading carried
 }
 
 cleanup() {
-  $T systemctl stop waitron-box-measure.socket 2>/dev/null || true
+  $T systemctl stop waitron-box-measure.socket waitron-box.socket 2>/dev/null || true
   rm -f "$UNIT_DIR/waitron-box-measure.socket" "$UNIT_DIR/waitron-box-measure@.service"
-  rm -rf "$MEASURE_DIR" "$HANDLER_DIR"
+  rm -f "$UNIT_DIR/waitron-box.socket" "$UNIT_DIR/waitron-box@.service"
+  rm -rf "$UNIT_DIR/waitron-box@.service.d" "$MEASURE_DIR" "$HANDLER_DIR"
   $T systemctl daemon-reload 2>/dev/null || true
 }
 trap cleanup EXIT
+
+CLIENT='
+const net = require("node:net");
+const fs = require("node:fs");
+const started = performance.now();
+const [line] = process.argv.slice(1);
+const done = (text) => {
+  console.log(text);
+  console.log("boot " + fs.readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim());
+  console.log("took " + Math.round(performance.now() - started) + " ms");
+  process.exit(0);
+};
+const timer = setTimeout(() => done("unavailable timeout"), 2000);
+let reply = "";
+const socket = net.createConnection("/run/waitron-box/box.sock");
+socket.on("error", (error) => { clearTimeout(timer); done("unavailable " + error.code); });
+socket.on("data", (chunk) => { reply += chunk; });
+socket.on("end", () => { clearTimeout(timer); done("reply " + reply.trim()); });
+socket.on("connect", () => socket.write(line + "\n"));
+'
+ask_box() { # dir line: one request from an unprivileged container with the folder bound
+  timeout 180 docker run --rm --user 10001:10001 -v "$1:/run/waitron-box" "$IMAGE" node -e "$CLIENT" "$2" 2>&1 | tr '\n' ' ' || true
+}
+# set-time to the present clears the kernel's synchronised flag, which the shipped handler's
+# clock.set needs; the unit is started again at once, as a box's would be.
+desync() {
+  $T systemctl stop "$UNIT" || true
+  $T timedatectl set-time "@$(date +%s.%3N)" || true
+  $T systemctl start "$UNIT" || true
+}
+
+if [ "${1:-}" = --shipped ]; then
+  UNIT=$(cat "$UNIT_STATE_FILE")
+  UNIT_ID=$($T systemctl show -p Id --value "$UNIT")
+  say M9′ "/run/systemd/system: $([ -d /run/systemd/system ] && echo present || echo absent) (install's test that systemd runs)"
+  getent group waitron-box >/dev/null || $T groupadd --system --gid 10001 waitron-box
+  say M5′ "group: $(getent group waitron-box)"
+  install -d -m 0755 /usr/local/lib/waitron
+  install -m 0755 deploy/box/waitron-box.sh /usr/local/lib/waitron/waitron-box.sh
+  install -m 0644 deploy/box/waitron-box.socket deploy/box/waitron-box@.service "$UNIT_DIR/"
+  $T systemctl daemon-reload
+
+  # ---- M9′: the shipped units, as systemd reads them
+  rc=0
+  out=$($T systemd-analyze verify "$UNIT_DIR/waitron-box.socket" "$UNIT_DIR/waitron-box@.service" 2>&1) || rc=$?
+  say M9′ "systemd-analyze verify rc=$rc output: ${out:-<none>}"
+  props=$($T systemctl show -p StandardError -p RuntimeMaxUSec -p CollectMode waitron-box@measure.service | tr '\n' ' ')
+  say M9′ "waitron-box@measure.service: $props"
+  if [ "$rc" -eq 0 ] && echo "$props" | grep -q 'StandardError=journal' && echo "$props" | grep -q 'RuntimeMaxUSec=15s' \
+    && echo "$props" | grep -q 'CollectMode=inactive-or-failed'; then
+    verdict M9′ yes "the shipped units verify, and an instance sends errors to the journal, ends at 15 s and is collected"
+  else
+    verdict M9′ no "the shipped units are not read as written"
+  fi
+
+  # ---- M5′: the shipped socket and handler, from an unprivileged container
+  rc=0
+  $T systemctl start waitron-box.socket || rc=$?
+  say M5′ "socket start rc=$rc; $(stat -c '%A %U:%G' /run/waitron-box/box.sock 2>&1)"
+  host_boot=$(boot_id)
+  status_out=$(ask_box /run/waitron-box clock.status)
+  say M5′ "clock.status from the container: $status_out"
+  desync
+  say M5′ "before the set: $($T timedatectl show -p NTPSynchronized | tr '\n' ' ')"
+  set_target=$(($(date +%s%3N) + 30000))
+  set_out=$(ask_box /run/waitron-box "clock.set $set_target {\"source\":\"measure\"}")
+  say M5′ "clock.set $set_target from the container: $set_out"
+  after_ms=$(echo "$set_out" | sed -n 's/.*"afterMs":\([0-9]*\).*/\1/p' | head -1)
+  m5_ok=yes
+  m5_why=""
+  echo "$status_out" | grep -q "^reply {\"ok\":true,\"service\":\"on\",\"unit\":\"$UNIT_ID\"" || { m5_ok=no; m5_why="$m5_why no status naming $UNIT_ID;"; }
+  echo "$status_out" | grep -q "boot $host_boot " || { m5_ok=no; m5_why="$m5_why the container's boot id differs;"; }
+  if [ -z "$after_ms" ] || ! within "$after_ms" "$set_target" 2000; then
+    m5_ok=no
+    m5_why="$m5_why the set did not land within 2 s of its target;"
+  fi
+  sleep 1
+  say M5′ "$UNIT after the set: $($T systemctl is-active "$UNIT" || true); markers: $(ls /run/waitron-box-state/ 2>&1 | tr '\n' ' ')"
+  [ "$($T systemctl is-active "$UNIT" || true)" = active ] || { m5_ok=no; m5_why="$m5_why $UNIT was not started again;"; }
+  $T journalctl -t waitron-box --no-pager -n 3 -o cat 2>&1 | sed 's/^/M5′: logged: /' || true
+  verdict M5′ "$m5_ok" "the shipped handler answers status and sets the host clock for an unprivileged container, then starts $UNIT again${m5_why:+ — but:$m5_why}"
+
+  # ---- M8′: a backward set through the shipped handler moves timesyncd's clock file with it
+  CLOCK_FILE=/var/lib/systemd/timesync/clock
+  made_clock=no
+  if [ ! -e "$CLOCK_FILE" ]; then
+    mkdir -p "$(dirname "$CLOCK_FILE")"
+    made_clock=yes
+  fi
+  touch -d "@$(($(date +%s) + 3600))" "$CLOCK_FILE"
+  say M8′ "clock file $CLOCK_FILE (made for this row: $made_clock) mtime $(stat -c %Y "$CLOCK_FILE"), now $(date +%s)"
+  desync
+  back_target=$(($(date +%s%3N) - 120000))
+  back_out=$(ask_box /run/waitron-box "clock.set $back_target {\"source\":\"measure\"}")
+  now_after=$(date +%s)
+  mtime_after=$(stat -c %Y "$CLOCK_FILE")
+  say M8′ "clock.set $back_target: $back_out"
+  say M8′ "after: the file's mtime $mtime_after, now $now_after"
+  if echo "$back_out" | grep -q '"ok":true' && [ "$mtime_after" -le "$now_after" ]; then
+    verdict M8′ yes "the file is not later than the new time"
+  else
+    verdict M8′ no "the set failed, or the file stays later than the new time"
+  fi
+  [ "$made_clock" = yes ] && rm -f "$CLOCK_FILE"
+
+  # ---- M7′: compose mounts the socket's folder only when .env names it
+  : >"${RUNNER_TEMP:-/tmp}/empty.env"
+  for value in "" /run/waitron-box; do
+    mount=$(WAITRON_BOX_SOCKET_DIR="$value" $T docker compose --env-file "${RUNNER_TEMP:-/tmp}/empty.env" -f deploy/compose.yml config --format json 2>&1 \
+      | jq -c '.services.app.volumes[] | select(.target == "/run/waitron-box")' 2>&1 || true)
+    say M7′ "WAITRON_BOX_SOCKET_DIR='$value': $mount"
+    if [ -z "$value" ]; then without=$mount; else with=$mount; fi
+  done
+  if echo "$without" | grep -q '"type":"volume","source":"box_socket"' && echo "$with" | grep -q '"type":"bind","source":"/run/waitron-box"'; then
+    verdict M7′ yes "a named volume without the variable, the host folder with it"
+  else
+    verdict M7′ no "the app's mount does not follow the variable"
+  fi
+
+  # ---- M10′: a kill at RuntimeMaxSec still starts the time service again (ExecStopPost)
+  mkdir -p "$UNIT_DIR/waitron-box@.service.d"
+  cat >"$UNIT_DIR/waitron-box@.service.d/measure.conf" <<DROPIN
+[Service]
+ExecStart=
+ExecStart=/bin/bash -c 'systemctl stop $UNIT_ID; mkdir -p -m 0700 /run/waitron-box-state; echo $UNIT_ID > /run/waitron-box-state/stopped.%i; sleep 60'
+DROPIN
+  $T systemctl daemon-reload
+  python3 -c 'import socket, time; s = socket.socket(socket.AF_UNIX); s.connect("/run/waitron-box/box.sock"); time.sleep(40)' &
+  holder=$!
+  started=$(date +%s)
+  stopped_seen=""
+  ended=""
+  for _ in $(seq 1 30); do
+    sleep 1
+    state=$($T systemctl is-active "$UNIT" || true)
+    [ "$state" != active ] && [ -z "$stopped_seen" ] && stopped_seen=$(($(date +%s) - started))
+    if [ -n "$stopped_seen" ] && [ "$state" = active ]; then ended=$(($(date +%s) - started)); break; fi
+  done
+  kill "$holder" 2>/dev/null || true
+  say M10′ "$UNIT stopped by the instance after ${stopped_seen:-never} s, active again after ${ended:-never} s; markers left: $(ls /run/waitron-box-state/ 2>&1 | grep stopped | tr '\n' ' ')"
+  $T journalctl -u 'waitron-box@*' --no-pager -n 6 -o cat 2>&1 | sed 's/^/M10′: journal: /' || true
+  if [ -n "$stopped_seen" ] && [ -n "$ended" ] && [ "$ended" -le 21 ] && ! ls /run/waitron-box-state/ 2>/dev/null | grep -q stopped; then
+    verdict M10′ yes "killed at its limit, the instance's stop step started $UNIT again and removed the marker"
+  else
+    verdict M10′ no "the stop step did not start $UNIT again within 5 s of the kill"
+  fi
+  rm -rf "$UNIT_DIR/waitron-box@.service.d"
+  $T systemctl start "$UNIT" || true
+
+  if [ "${#FAILED[@]}" -gt 0 ]; then
+    echo "SUMMARY: failing cases in ${FAILED[*]}"
+    exit 1
+  fi
+  echo "SUMMARY: no failing case"
+  exit 0
+fi
 
 # ---- M1: which time service runs, and is it in the list set-time and set-ntp know?
 say M1 "$($T timedatectl show -p NTP -p NTPSynchronized | tr '\n' ' ')"
@@ -222,25 +381,6 @@ say M5 "socket start rc=$rc; $(stat -c '%A %U:%G' "$MEASURE_DIR/box.sock" 2>&1)"
 say M5 "group 10001 in /etc/group: $(getent group 10001 || echo none)"
 $T journalctl -u waitron-box-measure.socket --no-pager -n 20 -o cat 2>&1 | sed 's/^/M5: journal: /' || true
 $T docker pull -q "$IMAGE" >/dev/null 2>&1 || true
-CLIENT='
-const net = require("node:net");
-const fs = require("node:fs");
-const started = performance.now();
-const [line] = process.argv.slice(1);
-const done = (text) => {
-  console.log(text);
-  console.log("boot " + fs.readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim());
-  console.log("took " + Math.round(performance.now() - started) + " ms");
-  process.exit(0);
-};
-const timer = setTimeout(() => done("unavailable timeout"), 2000);
-let reply = "";
-const socket = net.createConnection("/run/waitron-box/box.sock");
-socket.on("error", (error) => { clearTimeout(timer); done("unavailable " + error.code); });
-socket.on("data", (chunk) => { reply += chunk; });
-socket.on("end", () => { clearTimeout(timer); done("reply " + reply.trim()); });
-socket.on("connect", () => socket.write(line + "\n"));
-'
 host_boot=$(boot_id)
 status_out=$(timeout 180 docker run --rm --user 10001:10001 -v "$MEASURE_DIR:/run/waitron-box" \
   "$IMAGE" node -e "$CLIENT" "clock.status" 2>&1 || true)
