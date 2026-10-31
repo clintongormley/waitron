@@ -15,6 +15,7 @@ import type { BackupManifest } from "./backup-manifest.js";
 import {
   type BackupSweepDeps,
   type ManifestBuilder,
+  clockStepHold,
   pruneBackend,
   runBackupSweep,
   runOnce,
@@ -152,6 +153,27 @@ describe("runOnce (fan-out)", () => {
     expect([...a.objects.keys()]).toHaveLength(1);
     expect(a.objects.has(earlier)).toBe(false);
     expect(entriesOf(a).get("db.dump")!.toString()).toBe("DUMP-BYTES");
+  });
+
+  it("keeps the archives a recent step of the box's clock holds, and asks for the step each run", async () => {
+    const day = 24 * 60 * 60 * 1000;
+    const nowMs = Date.parse("2026-09-05T00:00:00Z");
+    const behind = backupArchiveKey(new Date(nowMs - 401 * day));
+    const ahead = backupArchiveKey(new Date(nowMs + 399 * day));
+    const a = new FakeBackend("a");
+    a.objects.set(behind, Buffer.from("behind"));
+    a.objects.set(ahead, Buffer.from("ahead"));
+    const latestClockStep = vi.fn(async () => ({
+      confirmedAt: new Date(nowMs - day).toISOString(),
+      stepMs: 400 * day,
+    }));
+
+    await runOnce({ ...deps([a]), retain: 1, retainDays: 7, latestClockStep });
+
+    expect(latestClockStep).toHaveBeenCalledOnce();
+    expect(a.objects.size).toBe(3);
+    expect(a.objects.has(behind)).toBe(true);
+    expect(a.objects.has(ahead)).toBe(true);
   });
 
   it("encrypts the archive once and fans the SAME ciphertext to every backend", async () => {
@@ -1006,6 +1028,107 @@ describe("pruneBackend (dual count + age retention)", () => {
       expect((await readdir(dir)).sort()).toEqual([plain, odd].sort());
     } finally {
       await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+describe("pruneBackend across a step the box made to its clock", () => {
+  const call = () => ({ signal: new AbortController().signal });
+  const day = 24 * 60 * 60 * 1000;
+  const nowMs = Date.parse("2026-10-31T03:00:00Z");
+  const stepAt = nowMs - day;
+  let n = 0;
+  const key = (ms: number) =>
+    backupArchiveKey(
+      new Date(ms),
+      `00000000-0000-4000-8000-${(++n).toString(16).padStart(12, "0")}`,
+    );
+  function holding(stamps: number[]) {
+    const backend = new FakeBackend("step");
+    const keys = stamps.map(key);
+    for (const k of keys) backend.objects.set(k, Buffer.from(k));
+    return { backend, keys };
+  }
+  const kept = (backend: FakeBackend) => [...backend.objects.keys()].sort();
+  const hold = (stepMs: number, at = nowMs, retainDays = 7) =>
+    clockStepHold({ confirmedAt: new Date(stepAt).toISOString(), stepMs }, at, retainDays);
+
+  it("keeps every archive stamped before a +400-day step, and applies both caps to the others", async () => {
+    const behind = [0, 1, 2, 3, 4].map((d) => stepAt - 400 * day - d * day);
+    const { backend, keys } = holding([...behind, stepAt + 60_000, nowMs - 60_000, nowMs]);
+
+    await pruneBackend(backend, 2, 7, nowMs, call(), undefined, hold(400 * day));
+
+    expect(kept(backend)).toEqual([...keys.slice(0, 5), keys[6]!, keys[7]!].sort());
+  });
+
+  it("keeps the archives stamped ahead before a -400-day step, and each new one up to the count", async () => {
+    const ahead = [0, 1, 2].map((d) => stepAt + 400 * day - d * day);
+    const after = [stepAt + 60_000, nowMs - 12 * 3_600_000, nowMs - 60_000, nowMs];
+    const { backend, keys } = holding([...ahead, ...after]);
+
+    await pruneBackend(backend, 3, 7, nowMs, call(), undefined, hold(-400 * day));
+
+    expect(kept(backend)).toEqual([...keys.slice(0, 3), ...keys.slice(4)].sort());
+  });
+
+  it("holds nothing once the step is as old as the age cap, so pruning is as without one", () => {
+    expect(hold(400 * day, stepAt + 7 * day - 1)).toEqual({
+      fromMs: stepAt,
+      toMs: stepAt + 7 * day - 1 + 60_000,
+    });
+    expect(hold(400 * day, stepAt + 7 * day)).toBeUndefined();
+    expect(hold(-400 * day, stepAt + 8 * day)).toBeUndefined();
+    expect(clockStepHold(null, nowMs, 7)).toBeUndefined();
+  });
+
+  it("prunes as without a step once the hold has lapsed, after either step", async () => {
+    const later = stepAt + 8 * day;
+    const behind = holding([stepAt - 400 * day, later - day, later]);
+    await pruneBackend(behind.backend, 3, 7, later, call(), undefined, hold(400 * day, later));
+    expect(kept(behind.backend)).toEqual([behind.keys[1]!, behind.keys[2]!].sort());
+
+    const ahead = holding([stepAt + 400 * day, later - day, later]);
+    await pruneBackend(ahead.backend, 2, 7, later, call(), undefined, hold(-400 * day, later));
+    expect(kept(ahead.backend)).toEqual([ahead.keys[1]!, ahead.keys[2]!].sort());
+  });
+
+  it("with no step, ranks an archive stamped more than a minute ahead after every other", async () => {
+    const { backend, keys } = holding([nowMs + 400 * day, nowMs + 60_000, nowMs - day]);
+
+    await pruneBackend(backend, 1, 3650, nowMs, call());
+
+    expect(kept(backend)).toEqual([keys[1]!]);
+  });
+
+  it("never deletes the archive this run stored while a step holds others", async () => {
+    const { backend, keys } = holding([
+      stepAt - 400 * day,
+      nowMs - 60_000,
+      nowMs - 120_000,
+      nowMs - 180_000,
+    ]);
+
+    await pruneBackend(backend, 1, 7, nowMs, call(), keys[3], hold(400 * day));
+
+    expect(kept(backend)).toEqual([keys[0]!, keys[1]!, keys[3]!].sort());
+  });
+
+  it("never lets the held archives fill the destination over thirty daily runs", async () => {
+    const retain = 3;
+    const ahead = [0, 1, 2].map((d) => stepAt + 400 * day - d * day);
+    const { backend, keys } = holding(ahead);
+    const heldAtStep = new Set(keys);
+    for (let i = 0; i < 30; i++) {
+      const at = stepAt + i * day + 3_600_000;
+      const stored = key(at);
+      backend.objects.set(stored, Buffer.from(stored));
+      await pruneBackend(backend, retain, 14, at, call(), stored, hold(-400 * day, at, 14));
+      expect(backend.objects.size).toBeLessThanOrEqual(retain + heldAtStep.size);
+      expect(backend.objects.has(stored)).toBe(true);
+      const stampedAhead = kept(backend).filter(
+        (k) => parseBackupArchiveKey(k)!.timestamp.getTime() > at + 60_000,
+      );
+      for (const k of stampedAhead) expect(heldAtStep.has(k)).toBe(true);
     }
   });
 });

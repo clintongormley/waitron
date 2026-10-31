@@ -254,6 +254,8 @@ describe("boot's authority clock wiring", () => {
       expect(clocks.archive!.readInstallationStart).toBe(hooks.readInstallationStart);
       expect(clocks.archive!.recordArchivesDeleted).toBe(hooks.recordArchivesDeleted);
       expect(clocks.archive!.statfs).toBeUndefined();
+      // The box has not stepped its clock, so the read answers, and answers none.
+      await expect(clocks.archive!.latestClockStep!()).resolves.toBeNull();
       // Before the first backup run, which could raise the same alert for its own deletions.
       expect(recordStartDeletions).toHaveBeenCalledOnce();
       expect(vi.mocked(recordStartDeletions).mock.calls[0]![0]).toMatchObject({

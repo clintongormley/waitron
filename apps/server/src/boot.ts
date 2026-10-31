@@ -2371,6 +2371,11 @@ async function bootServer(
     stagingTurn,
     readInstallationStart: backupRoom.readInstallationStart,
     recordArchivesDeleted: backupRoom.recordArchivesDeleted,
+    // A write-lock turn, not a transaction: a run on a nearly full disk must still read it.
+    latestClockStep: async () => {
+      const read = nodeBackend.latestClockStep?.bind(nodeBackend);
+      return read === undefined ? null : db.withWriteLock(() => read(db));
+    },
     nodeId: tradingContext.nodeId,
     log,
   });

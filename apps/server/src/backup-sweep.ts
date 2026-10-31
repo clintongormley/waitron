@@ -1,6 +1,7 @@
 import { chmod, mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { Database } from "@waitron/db";
+import type { ClockStep } from "@waitron/fiscal";
 import { recordBackupOutcome, type BackupOutcomeHolder } from "./alert-sources.js";
 import type { WaitronModule } from "@waitron/module";
 import { assembleArchiveEntries, collectStateParts } from "./archive-entries.js";
@@ -68,6 +69,9 @@ export interface BackupSweepDeps {
   schedule: BackupSchedule;
   /** How many of the newest artifacts each destination keeps. */
   retain: number;
+  /** The latest step the box made to its own clock, read once a run; absent, nothing is held
+   * (see {@link clockStepHold}). */
+  latestClockStep?: () => Promise<ClockStep | null>;
   /** An artifact older than this many days is deleted even within the count cap. */
   retainDays: number;
   /** Node-stable, so a fleet spreads its `auto` backups across a window rather than firing together. */
@@ -183,6 +187,7 @@ export async function runOnce(
   const reportDeleted = (deleted: readonly DeletableArchive[]) =>
     reportArchivesDeleted(deps.onArchivesDeleted, deleted, now(), deps.log);
   try {
+    const held = clockStepHold((await deps.latestClockStep?.()) ?? null, nowMs, deps.retainDays);
     // Collected before the copy, so a broken state folder fails the tick without copying the
     // whole database.
     const [manifest, parts] = await Promise.all([
@@ -268,7 +273,7 @@ export async function runOnce(
             deps.onUploaded?.(backend.id);
             if (deps.outcomes)
               recordBackupOutcome(deps.outcomes, backend.id, true, stamp.toISOString());
-            await pruneBackend(backend, deps.retain, deps.retainDays, nowMs, call, key);
+            await pruneBackend(backend, deps.retain, deps.retainDays, nowMs, call, key, held);
           });
           deps.log("info", "backup.destination_completed", { destination: backend.id, key });
         } catch (err) {
@@ -320,10 +325,32 @@ export async function runOnce(
  * number. */
 const DELETE_BATCH = 1000;
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** How far ahead of the clock an archive's stamp may be and still be ranked by it. */
+const AHEAD_TOLERANCE_MS = 60_000;
+
+/** The stamps a recent step makes untrustworthy: those before the step's `confirmedAt`, written by
+ * the clock it corrected, and those more than a minute ahead of now. Held while the step is less
+ * than `retainDays` old by the clock now. Only a step the box made has a row to read, so a step by
+ * the time service, or by hand on the host, holds nothing. */
+export function clockStepHold(
+  step: ClockStep | null,
+  nowMs: number,
+  retainDays: number,
+): { fromMs: number; toMs: number } | undefined {
+  if (step === null) return undefined;
+  const fromMs = Date.parse(step.confirmedAt);
+  if (nowMs - fromMs >= retainDays * DAY_MS) return undefined;
+  return { fromMs, toMs: nowMs + AHEAD_TOLERANCE_MS };
+}
+
 /** Deletes an archive past EITHER cap: beyond the `retain` newest, or older than `retainDays`, both
  * by the stamp in its key, never the file's mtime. Only a name {@link parseBackupArchiveKey} reads
  * is an archive; any other name is left where it is and does not take a kept slot. `justStored`,
- * the archive this run put, ranks first among archives sharing its stamp and is never deleted. */
+ * the archive this run put, ranks first among archives sharing its stamp and is never deleted. An
+ * archive stamped more than a minute ahead of `nowMs` ranks after every other. One stamped outside
+ * `held` (see {@link clockStepHold}) is kept and takes no kept slot. */
 export async function pruneBackend(
   backend: StorageBackend,
   retain: number,
@@ -331,17 +358,24 @@ export async function pruneBackend(
   nowMs: number,
   call: StorageCall,
   justStored?: string,
+  held?: { fromMs: number; toMs: number },
 ): Promise<void> {
   const archives = (await backend.list(BACKUP_KEY_PREFIX, call)).flatMap(({ key }) => {
     const parsed = parseBackupArchiveKey(key);
-    return parsed === null ? [] : [{ key, ms: parsed.timestamp.getTime() }];
+    if (parsed === null) return [];
+    const ms = parsed.timestamp.getTime();
+    if (held !== undefined && (ms < held.fromMs || ms > held.toMs)) return [];
+    return [{ key, ms, ahead: ms > nowMs + AHEAD_TOLERANCE_MS ? 1 : 0 }];
   });
   const rank = (key: string) => (key === justStored ? 1 : 0);
   archives.sort(
     (a, b) =>
-      b.ms - a.ms || rank(b.key) - rank(a.key) || (a.key < b.key ? 1 : a.key > b.key ? -1 : 0),
+      a.ahead - b.ahead ||
+      b.ms - a.ms ||
+      rank(b.key) - rank(a.key) ||
+      (a.key < b.key ? 1 : a.key > b.key ? -1 : 0),
   );
-  const maxAgeMs = retainDays * 24 * 60 * 60 * 1000;
+  const maxAgeMs = retainDays * DAY_MS;
   const toDelete = archives
     .filter(
       (archive, i) => archive.key !== justStored && (i >= retain || nowMs - archive.ms > maxAgeMs),
