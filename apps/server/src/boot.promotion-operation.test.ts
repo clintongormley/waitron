@@ -7,12 +7,11 @@ import {
   invoiceSeries,
   locations,
   nodes,
-  tenants,
-  readSingletonRole,
-  setDeploymentMode,
   stampDeployment,
+  tenants,
   writeMirrorConfig,
 } from "@waitron/db";
+import { readNodeMode, setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons, hashPassword } from "@waitron/identity";
 import { loadKeyRing } from "@waitron/credentials";
@@ -125,7 +124,7 @@ it.each(["account", "key"])(
       .insert(persons)
       .values({ id: ADMIN, displayName: "Administrator", role: "admin", passwordHash: HASH });
     await stampDeployment(suite.db, "preproduction");
-    await setDeploymentMode(suite.db, NODE, "mirror");
+    await setNodeMode({ venue: suite.db, node: suite.node }, NODE, "mirror");
     await writeMirrorConfig(suite.db, NODE, {
       relayUrl: "https://127.0.0.1:1/",
       boxHostname: "box.test",
@@ -196,7 +195,7 @@ it.each(["account", "key"])(
         "FF-P000042",
         "R-P000042",
       ]);
-      expect(await readSingletonRole(suite.db, NODE)).toBe("primary");
+      expect((await readNodeMode(suite.node, NODE)).singletonRole).toBe("primary");
       await vi.waitFor(() => expect(kill).toHaveBeenCalledWith(process.pid, "SIGTERM"));
     } finally {
       await server?.close();

@@ -3,14 +3,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
-import {
-  invoiceSeries,
-  locations,
-  nodes,
-  tenants,
-  stampDeployment,
-  setDeploymentMode,
-} from "@waitron/db";
+import { invoiceSeries, locations, nodes, stampDeployment, tenants } from "@waitron/db";
+import { setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { tenantCredentials } from "@waitron/credentials";
@@ -85,7 +79,7 @@ it("boot retains allocation-dependent adoption as pending without an ambient ses
     taxModule: "vat",
   });
   await stampDeployment(suite.db, "preproduction");
-  await setDeploymentMode(suite.db, STANDBY, "mirror");
+  await setNodeMode({ venue: suite.db, node: suite.node }, STANDBY, "mirror");
   const pending: PendingAdoption = {
     locationId: LOCATION,
     originNodeId: PRIMARY,

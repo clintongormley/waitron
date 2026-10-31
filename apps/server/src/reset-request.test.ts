@@ -10,11 +10,11 @@ import {
   openVenueDatabase,
   readDeploymentEnvironment,
   readMirrorConfig,
-  setDeploymentMode,
   stampDeployment,
   tenants,
   writeMirrorConfig,
 } from "@waitron/db";
+import { setNodeMode } from "@waitron/node-db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
 import { adoptFromPrimary, type AdoptHooks, type AdoptRequest } from "./adopt.js";
@@ -95,7 +95,7 @@ async function halfAdoptedBox(): Promise<{
   const store = await openVenueDatabase(venueDir);
   try {
     await stampDeployment(store.venue, "preproduction");
-    await setDeploymentMode(store.venue, NODE_ID, "mirror");
+    await setNodeMode({ venue: store.venue, node: store.node }, NODE_ID, "mirror");
     await writeMirrorConfig(store.venue, NODE_ID, {
       relayUrl: "https://relay.example",
       boxHostname: "waitron.local",
@@ -227,8 +227,8 @@ describe("runStagedReset", () => {
     try {
       expect(await readDeploymentEnvironment(store.venue)).toBeNull();
       expect(await readMirrorConfig(store.venue, NODE_ID)).toBeNull();
-      const roles = await store.venue.execute<{ n: number }>(
-        sql`select count(*) as n from node_roles`,
+      const roles = await store.node.execute<{ n: number }>(
+        sql`select count(*) as n from node_mode`,
       );
       expect(roles.rows[0]?.n).toBe(0);
     } finally {
@@ -252,6 +252,7 @@ describe("runStagedReset", () => {
         adoptFromPrimary(
           {
             ownerDb: store.venue,
+            ownerNode: store.node,
             fetchBundle: async (_url, _credential, standby) => {
               standbyNodeId = standby.nodeId;
               return BUNDLE;

@@ -14,7 +14,6 @@ import {
   nodeSealedState,
   openVenueDatabase,
   readNodeMembership,
-  setDeploymentMode,
   writeMirrorConfig,
   writeNodeMembership,
   stampDeployment,
@@ -22,6 +21,7 @@ import {
   type Database,
   type VenueDatabase,
 } from "@waitron/db";
+import { setNodeMode } from "@waitron/node-db";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
@@ -433,7 +433,12 @@ describe("startServer, against a migrated venue directory", () => {
       // Demoting a fenced node writes its role, and so does making one a mirror: `requireStamp`
       // refuses both on an unstamped database.
       if (document === "fenced" || asMirror) await stampDeployment(db, "preproduction");
-      if (asMirror) await setDeploymentMode(db, TILL_ENV.WAITRON_NODE_ID, "mirror");
+      if (asMirror)
+        await setNodeMode(
+          { venue: db, node: venue.store.node },
+          TILL_ENV.WAITRON_NODE_ID,
+          "mirror",
+        );
       const [port, deadPeerPort] = await freePorts(2);
       if (withPeer) {
         await writeMirrorConfig(db, TILL_ENV.WAITRON_NODE_ID, {

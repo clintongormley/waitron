@@ -6,16 +6,8 @@ import { join } from "node:path";
 import { beforeAll, afterAll, beforeEach, expect, it, vi } from "vitest";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { loadKeyRing, tryGetCredential } from "@waitron/credentials";
-import {
-  deployment,
-  invoiceSeries,
-  locations,
-  nodes,
-  tenants,
-  readSingletonRole,
-  setDeploymentMode,
-  withTransaction,
-} from "@waitron/db";
+import { deployment, invoiceSeries, locations, nodes, tenants, withTransaction } from "@waitron/db";
+import { readNodeMode, setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -300,6 +292,7 @@ async function promote(held: Awaited<ReturnType<typeof reserve>>, key: string, c
   return promoteMirrorToPrimary(
     {
       db: spare.db,
+      node: spare.node,
       ring: RING,
       nodeId: held.standby.nodeId,
       holders: createDeploymentHolders("mirror", "secondary"),
@@ -355,7 +348,7 @@ it("reserves and adopts without an active SIF or series, then opens all purposes
   expect(await spare.db.select().from(fiscalReservations)).toHaveLength(1);
   expect(await primary.db.select().from(registroSif)).toEqual(primaryBefore);
   expect(await primary.db.select().from(fiscalAllocations)).toEqual(allocationsBefore);
-  await setDeploymentMode(spare.db, held.standby.nodeId, "mirror");
+  await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror");
   const key = await mintBreakGlassSecret(spare.db, held.standby.nodeId);
   const result = await promote(held, key);
   expect(result.alreadyPrimary).toBe(false);
@@ -376,7 +369,7 @@ it("reserves and adopts without an active SIF or series, then opens all purposes
     nodeId: held.standby.nodeId,
     eventId: "host-takeover",
   });
-  expect(await readSingletonRole(spare.db, held.standby.nodeId)).toBe("primary");
+  expect((await readNodeMode(spare.node, held.standby.nodeId)).singletonRole).toBe("primary");
 });
 
 it("rolls back the sealed key and spare node when the carrier includes premature series", async () => {
@@ -395,7 +388,7 @@ it("rolls back the sealed key and spare node when the carrier includes premature
 it("retains a dormant spare when independent current consumption is absent at takeover", async () => {
   const held = await reserve();
   await establish(held);
-  await setDeploymentMode(spare.db, held.standby.nodeId, "mirror");
+  await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror");
   const key = await mintBreakGlassSecret(spare.db, held.standby.nodeId);
   const reservation = await spare.db.select().from(fiscalReservations);
   await expect(promote(held, key, false)).rejects.toMatchObject({
@@ -404,13 +397,13 @@ it("retains a dormant spare when independent current consumption is absent at ta
   });
   expect(await liveTarget(held.standby.nodeId)).toEqual({ sif: [], series: [], allocations: [] });
   expect(await spare.db.select().from(fiscalReservations)).toEqual(reservation);
-  expect(await readSingletonRole(spare.db, held.standby.nodeId)).toBe("secondary");
+  expect((await readNodeMode(spare.node, held.standby.nodeId)).singletonRole).toBe("secondary");
 });
 
 it("retains the dormant reservation and all fiscal rows after a refused membership write", async () => {
   const held = await reserve();
   await establish(held);
-  await setDeploymentMode(spare.db, held.standby.nodeId, "mirror");
+  await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror");
   const key = await mintBreakGlassSecret(spare.db, held.standby.nodeId);
   const reservation = await spare.db.select().from(fiscalReservations);
   await spare.db.execute(
@@ -420,7 +413,7 @@ it("retains the dormant reservation and all fiscal rows after a refused membersh
     await expect(promote(held, key)).rejects.toThrow("test chart refusal");
     expect(await liveTarget(held.standby.nodeId)).toEqual({ sif: [], series: [], allocations: [] });
     expect(await spare.db.select().from(fiscalReservations)).toEqual(reservation);
-    expect(await readSingletonRole(spare.db, held.standby.nodeId)).toBe("secondary");
+    expect((await readNodeMode(spare.node, held.standby.nodeId)).singletonRole).toBe("secondary");
   } finally {
     await spare.db.execute(sql`drop trigger refuse_chart`);
   }
@@ -436,6 +429,7 @@ it("a refused public adoption retains its independently signed reservation witho
     adoptFromPrimary(
       {
         ownerDb: unadopted.db,
+        ownerNode: unadopted.node,
         advertisedOrigin: "https://spare.test",
         environment: "preproduction",
         database: "synthetic-empty-spare",

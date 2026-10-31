@@ -141,7 +141,7 @@ declare module "@waitron/shared" {
     /** No node with this id. The id is a caller-supplied uuid, not a secret. */
     "node.not_found": { id: string };
     /**
-     * A write reached a node running as a read-only MIRROR (`node_roles.mode = 'mirror'`): the
+     * A write reached a node running as a read-only MIRROR (node.db's `node_mode.mode = 'mirror'`): the
      * read-only gate (`read-only-gate.ts`) refuses every non-GET, and the invoice customer search
      * and download refuse their GETs too. Cleared by promotion, read live.
      */

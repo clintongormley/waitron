@@ -9,12 +9,12 @@ import {
   locations,
   nodes,
   sales,
-  setDeploymentMode,
   stampDeployment,
   tenants,
   withTransaction,
   writeMirrorConfig,
 } from "@waitron/db";
+import { setNodeMode } from "@waitron/node-db";
 import { persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { stringToCents } from "@waitron/shared";
@@ -105,6 +105,7 @@ async function environment(ownNode: boolean, pending = false) {
   );
   const destination = join(venue, "venue.db");
   await source.db.execute(sql`vacuum into ${destination}`);
+  await source.node.execute(sql`vacuum into ${join(venue, "node.db")}`);
   if (pending) {
     await writeFile(
       join(state, "pending-adoption.json"),
@@ -334,7 +335,7 @@ it.each(["mirror", "primary"] as const)(
     );
     await stampDeployment(source.db, "preproduction");
     if (mode === "mirror") {
-      await setDeploymentMode(source.db, NODE, "mirror");
+      await setNodeMode({ venue: source.db, node: source.node }, NODE, "mirror");
       await writeMirrorConfig(source.db, NODE, {
         relayUrl: "http://127.0.0.1:1/",
         boxHostname: "origin-box.local",

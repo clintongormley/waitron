@@ -5,16 +5,14 @@ import { beforeAll, afterAll, beforeEach, describe, expect, it, vi } from "vites
 import { eq, sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
-  type Transaction,
   invoiceSeries,
   locations,
   nodes,
-  readDeploymentMode,
-  readSingletonRole,
-  setDeploymentMode,
   stampDeployment,
+  type Transaction,
   withTransaction,
 } from "@waitron/db";
+import { NODE_MIGRATIONS, readNodeMode, setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, tryGetCredential } from "@waitron/credentials";
 import { generateNodeKeyPair } from "@waitron/membership";
@@ -38,7 +36,9 @@ import { mintBreakGlassSecret } from "./break-glass.js";
 
 const modules = vi.hoisted(() => [] as WaitronModule[]);
 vi.mock("./modules.js", () => ({ ALL_MODULES: modules }));
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+});
 const LOCATION = "e0000000-0000-4000-8000-000000000001";
 const PRIMARY = "e0000000-0000-4000-8000-000000000002";
 const TARGET = "e0000000-0000-4000-8000-000000000003";
@@ -155,8 +155,8 @@ it("collects the standby's current outside input before the promotion transactio
     ),
   );
   expect(result.alreadyPrimary).toBe(false);
-  expect(await readDeploymentMode(suite.db, TARGET)).toBe("primary");
-  expect(await readSingletonRole(suite.db, TARGET)).toBe("primary");
+  expect((await readNodeMode(suite.node, TARGET)).mode).toBe("primary");
+  expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("primary");
   expect((await suite.db.select().from(invoiceSeries)).map((row) => row.purpose).sort()).toEqual([
     "full",
     "rectificative",
@@ -185,17 +185,18 @@ it("does not promote or open series after the standby's outside source refuses",
       ),
     ).rejects.toThrow("current-register-refused");
   });
-  expect(await readDeploymentMode(suite.db, TARGET)).toBe("mirror");
-  expect(await readSingletonRole(suite.db, TARGET)).toBe("secondary");
+  expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
+  expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("secondary");
   expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
 });
 
 async function mirror(activate: StandbyProvisioning["activate"]) {
   await suite.db.insert(nodes).values({ id: TARGET, locationId: LOCATION, name: "Standby" });
-  await setDeploymentMode(suite.db, TARGET, "mirror");
+  await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror");
   await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, TARGET);
   return {
     db: suite.db,
+    node: suite.node,
     ring: RING,
     nodeId: TARGET,
     holders: createDeploymentHolders("mirror", "secondary"),
@@ -336,7 +337,7 @@ describe("opaque authenticated standby carriers", () => {
 
   it("activates a dormant module before reading series and commits with the role change", async () => {
     await suite.db.insert(nodes).values({ id: TARGET, locationId: LOCATION, name: "Standby" });
-    await setDeploymentMode(suite.db, TARGET, "mirror");
+    await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror");
     await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, TARGET);
     const scope = { ...binding, action: "promote" };
     const module = regime(
@@ -362,6 +363,7 @@ describe("opaque authenticated standby carriers", () => {
       const result = await promoteMirrorToPrimary(
         {
           db: suite.db,
+          node: suite.node,
           ring: RING,
           nodeId: TARGET,
           holders,
@@ -379,8 +381,8 @@ describe("opaque authenticated standby carriers", () => {
         )[0]!.purpose,
       ).toBe("standard");
     });
-    expect(await readDeploymentMode(suite.db, TARGET)).toBe("primary");
-    expect(await readSingletonRole(suite.db, TARGET)).toBe("primary");
+    expect((await readNodeMode(suite.node, TARGET)).mode).toBe("primary");
+    expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("primary");
     expect(holders.mode.current).toBe("primary");
   });
 
@@ -405,7 +407,7 @@ describe("opaque authenticated standby carriers", () => {
       { oldNodeNeutralised: true },
     );
     expect(result.alreadyPrimary).toBe(false);
-    expect(await readSingletonRole(suite.db, TARGET)).toBe("primary");
+    expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("primary");
   });
 
   it("refuses a recovery key replaced while the host prepares promotion", async () => {
@@ -435,8 +437,8 @@ describe("opaque authenticated standby carriers", () => {
     ).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
     expect(entered).toBe(false);
     expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
-    expect(await readDeploymentMode(suite.db, TARGET)).toBe("mirror");
-    expect(await readSingletonRole(suite.db, TARGET)).toBe("secondary");
+    expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
+    expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("secondary");
   });
 
   it("rolls back activation when the module omits the full-purpose series", async () => {
@@ -459,8 +461,8 @@ describe("opaque authenticated standby carriers", () => {
     ).rejects.toMatchObject({ code: "series.no_full_for_node" });
     expect(persisted).toBe(false);
     expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
-    expect(await readDeploymentMode(suite.db, TARGET)).toBe("mirror");
-    expect(await readSingletonRole(suite.db, TARGET)).toBe("secondary");
+    expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
+    expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("secondary");
   });
 
   it("rolls back activation when the membership write refuses", async () => {
@@ -473,8 +475,8 @@ describe("opaque authenticated standby carriers", () => {
         "test chart refusal",
       );
       expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
-      expect(await readDeploymentMode(suite.db, TARGET)).toBe("mirror");
-      expect(await readSingletonRole(suite.db, TARGET)).toBe("secondary");
+      expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
+      expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("secondary");
     } finally {
       await suite.db.execute(sql`drop trigger refuse_chart`);
     }
@@ -513,7 +515,7 @@ describe("opaque authenticated standby carriers", () => {
       await blocker;
       expect((await pending).alreadyPrimary).toBe(false);
     });
-    expect(await readSingletonRole(suite.db, TARGET)).toBe("primary");
+    expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("primary");
   });
 
   it("snapshots freshly authenticated host entries before the first activation hook", async () => {
@@ -585,7 +587,7 @@ describe("opaque authenticated standby carriers", () => {
     await refused;
     expect(persisted).toBe(false);
     expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
-    expect(await readDeploymentMode(suite.db, TARGET)).toBe("mirror");
+    expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
   });
 
   it("refuses authority revoked during the trading-settings write", async () => {
@@ -618,7 +620,7 @@ describe("opaque authenticated standby carriers", () => {
     release();
     await refused;
     expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
-    expect(await readDeploymentMode(suite.db, TARGET)).toBe("mirror");
+    expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
   });
 
   it("snapshots reserve input before waiting for a prior transaction", async () => {
@@ -745,8 +747,8 @@ describe("opaque authenticated standby carriers", () => {
       ),
     ).rejects.toThrow("settings write refused");
     expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
-    expect(await readDeploymentMode(suite.db, TARGET)).toBe("mirror");
-    expect(await readSingletonRole(suite.db, TARGET)).toBe("secondary");
+    expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
+    expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("secondary");
   });
 
   it.each(["module", "action", "targetNodeId"] as const)(
@@ -771,16 +773,17 @@ describe("opaque authenticated standby carriers", () => {
       });
       expect(entered).toBe(false);
       expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
-      expect(await readDeploymentMode(suite.db, TARGET)).toBe("mirror");
+      expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
     },
   );
 
   it("refuses a mirror whose configured node has no venue row", async () => {
-    await setDeploymentMode(suite.db, TARGET, "mirror");
+    await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror");
     await expect(
       promoteMirrorToPrimary(
         {
           db: suite.db,
+          node: suite.node,
           ring: RING,
           nodeId: TARGET,
           holders: createDeploymentHolders("mirror", "secondary"),
@@ -790,7 +793,7 @@ describe("opaque authenticated standby carriers", () => {
         { oldNodeNeutralised: true },
       ),
     ).rejects.toMatchObject({ code: "node.not_found", params: { id: TARGET } });
-    expect(await readDeploymentMode(suite.db, TARGET)).toBe("mirror");
+    expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
   });
 });
 

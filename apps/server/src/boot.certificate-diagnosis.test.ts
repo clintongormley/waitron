@@ -3,12 +3,8 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  setDeploymentMode,
-  stampDeployment,
-  writeMirrorConfig,
-  writeNodeMembership,
-} from "@waitron/db";
+import { stampDeployment, writeMirrorConfig, writeNodeMembership } from "@waitron/db";
+import { setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -91,7 +87,7 @@ async function prepared(posture: "primary" | "mirror" | "fenced" = "primary", fi
   if (posture !== "primary") {
     await stampDeployment(suite.db, "preproduction");
     if (posture === "mirror") {
-      await setDeploymentMode(suite.db, venue.cfg.nodeId, "mirror");
+      await setNodeMode({ venue: suite.db, node: suite.node }, venue.cfg.nodeId, "mirror");
       await writeMirrorConfig(suite.db, venue.cfg.nodeId, {
         relayUrl: "https://127.0.0.1:1/",
         boxHostname: "box.test",

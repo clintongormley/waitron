@@ -8,18 +8,17 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   invoiceDeliveries,
-  workingOrders,
   invoiceSeries,
   locations,
   nodes,
   printJobs,
-  setDeploymentMode,
-  setSingletonRole,
   stampDeployment,
   tenants,
   withTransaction,
+  workingOrders,
   writeMirrorConfig,
 } from "@waitron/db";
+import { setNodeMode, setSingletonRole } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { departmentReceipts, departments } from "@waitron/venue-service";
 import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -324,7 +323,7 @@ describe("invoice delivery recovery at trading boot", () => {
 
   it("leaves inherited delivery claims unchanged when the trading node is read-only", async () => {
     const ctx = await fixture();
-    await setDeploymentMode(suite.db, ctx.node, "mirror");
+    await setNodeMode({ venue: suite.db, node: suite.node }, ctx.node, "mirror");
     await writeMirrorConfig(suite.db, ctx.node, {
       relayUrl: `http://127.0.0.1:${ctx.deadPeerPort}`,
       boxHostname: "waitron.local",
@@ -652,7 +651,7 @@ describe("invoice email worker at trading boot", () => {
     let server: StartedServer | undefined;
     try {
       const email = await queuedEmail(ctx, smtp.smtp);
-      await setSingletonRole(suite.db, ctx.node, "secondary");
+      await setSingletonRole({ venue: suite.db, node: suite.node }, ctx.node, "secondary");
       const before = await delivery(email.id);
       server = await startServer(ctx.env);
       await new Promise<void>((resolve) => setTimeout(resolve, 600));
@@ -670,7 +669,7 @@ describe("invoice email worker at trading boot", () => {
     let server: StartedServer | undefined;
     try {
       const email = await queuedEmail(ctx, smtp.smtp);
-      await setDeploymentMode(suite.db, ctx.node, "mirror");
+      await setNodeMode({ venue: suite.db, node: suite.node }, ctx.node, "mirror");
       await writeMirrorConfig(suite.db, ctx.node, {
         relayUrl: `http://127.0.0.1:${ctx.deadPeerPort}`,
         boxHostname: "waitron.local",

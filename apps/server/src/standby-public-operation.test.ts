@@ -9,12 +9,10 @@ import {
   invoiceSeries,
   locations,
   nodes,
-  readDeploymentMode,
-  readSingletonRole,
-  setDeploymentMode,
   stampDeployment,
   withTransaction,
 } from "@waitron/db";
+import { NODE_MIGRATIONS, readNodeMode, setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing } from "@waitron/credentials";
@@ -38,7 +36,12 @@ import { TOTP_KEY_RING, enrolAuthenticator, wrongTotpCode } from "./testing/auth
 const modules = vi.hoisted(() => [] as WaitronModule[]);
 vi.mock("./modules.js", () => ({ ALL_MODULES: modules }));
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [
+    CORE_MIGRATIONS,
+    CREDENTIALS_MIGRATIONS,
+    IDENTITY_MIGRATIONS,
+    { ...NODE_MIGRATIONS, database: "node" },
+  ],
 });
 const LOCATION = "f1000000-0000-4000-8000-000000000001";
 const PRIMARY = "f1000000-0000-4000-8000-000000000002";
@@ -151,7 +154,7 @@ beforeEach(async () => {
   );
 });
 async function promotionApp() {
-  await setDeploymentMode(suite.db, TARGET, "mirror");
+  await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror");
   await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, TARGET);
   const holders = createDeploymentHolders("mirror", "secondary");
   const app = new Hono();
@@ -164,6 +167,7 @@ async function promotionApp() {
       const result = await promoteMirrorToPrimary(
         {
           db: suite.db,
+          node: suite.node,
           ring: RING,
           nodeId: TARGET,
           holders,
@@ -220,8 +224,8 @@ function bundleBody() {
 }
 async function untouched() {
   expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
-  expect(await readDeploymentMode(suite.db, TARGET)).toBe("mirror");
-  expect(await readSingletonRole(suite.db, TARGET)).toBe("secondary");
+  expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
+  expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("secondary");
 }
 it.each(["account", "key"])(
   "activates all purposes through the public promotion route with %s authentication",
@@ -243,7 +247,7 @@ it.each(["account", "key"])(
       { code: "FF-P000042", purpose: "full" },
       { code: "R-P000042", purpose: "rectificative" },
     ]);
-    expect(await readSingletonRole(suite.db, TARGET)).toBe("primary");
+    expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("primary");
     expect(collected).toEqual(["promote"]);
     const expectedOperator =
       method === "account"
@@ -398,7 +402,7 @@ it("returns the committed promotion result after a lost response without consult
   expect(collected).toEqual(["promote"]);
 });
 it("refuses a promotion runner redirected to another node before collecting evidence", async () => {
-  await setDeploymentMode(suite.db, TARGET, "mirror");
+  await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror");
   const app = new Hono();
   mountPromoteApi(app, {
     appDb: suite.db,

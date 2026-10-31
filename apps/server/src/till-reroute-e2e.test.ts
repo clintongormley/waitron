@@ -10,8 +10,6 @@ import {
   locations,
   nodes,
   openVenueDatabase,
-  setDeploymentMode,
-  setSingletonRole,
   stampDeployment,
   tenants,
   workingOrders,
@@ -19,6 +17,7 @@ import {
   type Database,
   type VenueDatabase,
 } from "@waitron/db";
+import { setNodeMode, setSingletonRole } from "@waitron/node-db";
 import { hashPin, hashSecret, persons } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
@@ -37,8 +36,8 @@ vi.mock("./promote-api.js", async (original) => {
     mountPromoteApi: (...args: Parameters<typeof actual.mountPromoteApi>) => {
       const [app, deps] = args;
       app.post("/management-api/promote", async (c) => {
-        await setDeploymentMode(deps.appDb, NODE_B, "primary");
-        await setSingletonRole(deps.appDb, NODE_B, "primary");
+        await setNodeMode({ venue: deps.appDb, node: storeB.node }, NODE_B, "primary");
+        await setSingletonRole({ venue: deps.appDb, node: storeB.node }, NODE_B, "primary");
         return c.body(null, 204);
       });
     },
@@ -261,11 +260,11 @@ beforeAll(async () => {
   await seedVenue(b);
 
   // B is the mirror: stamp it, flip mode='mirror' (co-sets singleton_role='secondary'), and seed the
-  // `mirror_config` row a mirror boot requires. A gets no `node_roles` row, so it reads
-  // 'primary'/'primary' through `readDeploymentAxes`'s missing-row fallback; a stamp is all it needs.
+  // `mirror_config` row a mirror boot requires. A gets no `node_mode` row, so it reads
+  // 'primary'/'primary' through `readNodeMode`'s missing-row fallback; a stamp is all it needs.
   await stampDeployment(a, "preproduction");
   await stampDeployment(b, "preproduction");
-  await setDeploymentMode(b, NODE_B, "mirror");
+  await setNodeMode({ venue: b, node: storeB.node }, NODE_B, "mirror");
   await writeMirrorConfig(b, NODE_B, {
     relayUrl: "http://127.0.0.1:1/",
     boxHostname: "reroute-box.local",

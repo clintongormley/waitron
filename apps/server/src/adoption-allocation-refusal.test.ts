@@ -67,6 +67,7 @@ function bundle(): MirrorBundle {
 function deps(value = bundle()) {
   return {
     ownerDb: suite.db,
+    ownerNode: suite.node,
     advertisedOrigin: "https://spare.test",
     environment: "preproduction" as const,
     fetchBundle: async () => value,

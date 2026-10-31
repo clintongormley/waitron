@@ -9,11 +9,12 @@ import {
   locations,
   nodes,
   openVenueDatabase,
-  setSingletonRole,
   stampDeployment,
   tenants,
   type Database,
+  type NodeDatabase,
 } from "@waitron/db";
+import { setSingletonRole } from "@waitron/node-db";
 import { runTunnelClient } from "@waitron/tunnel";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
@@ -29,7 +30,7 @@ vi.mock("@hono/node-server", async () => {
 const { startServer } = ephemeralServerFixture();
 
 /**
- * A sell-only local secondary — `node_roles.mode='primary'` with `singleton_role='secondary'` — is
+ * A sell-only local secondary — `node_mode.mode='primary'` with `singleton_role='secondary'` — is
  * not a mirror, yet must run neither singleton duty (scheduled backup, outbound tunnel client),
  * because the one singleton primary owns them. A default-`primary` directory of the same identity is
  * the control that runs both, so the secondary's absence is not a boot that wired nothing.
@@ -121,12 +122,14 @@ async function seedIdentity(db: Database): Promise<void> {
 }
 
 /** Migrated and seeded here, not by boot, because the rows have to exist before boot reads them. */
-async function migratedVenueDir(seed: (db: Database) => Promise<void>): Promise<string> {
+async function migratedVenueDir(
+  seed: (db: Database, node: NodeDatabase) => Promise<void>,
+): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), "waitron-singleton-venue-"));
   await applyMigrations(directory, migrationOptionsFor(manifestSets(), null));
   const store = await openVenueDatabase(directory);
   try {
-    await seed(store.venue);
+    await seed(store.venue, store.node);
   } finally {
     await store.close();
   }
@@ -144,12 +147,12 @@ beforeAll(async () => {
   backupDir = await mkdtemp(join(tmpdir(), "waitron-singleton-backup-"));
 
   // The mode keeps its default 'primary': a `(primary, secondary)` node.
-  secondaryVenueDir = await migratedVenueDir(async (db) => {
+  secondaryVenueDir = await migratedVenueDir(async (db, node) => {
     await seedIdentity(db);
     await stampDeployment(db, "preproduction");
-    await setSingletonRole(db, TILL_ENV.WAITRON_NODE_ID, "secondary");
+    await setSingletonRole({ venue: db, node }, TILL_ENV.WAITRON_NODE_ID, "secondary");
   });
-  // No `node_roles` row: `readDeploymentAxes` reads it as ('primary', 'primary').
+  // No `node_mode` row: `readNodeMode` reads it as ('primary', 'primary').
   primaryVenueDir = await migratedVenueDir(async (db) => {
     await seedIdentity(db);
     await stampDeployment(db, "preproduction");

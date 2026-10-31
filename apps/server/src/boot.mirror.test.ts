@@ -11,8 +11,6 @@ import {
   locations,
   nodes,
   openVenueDatabase,
-  readSingletonRole,
-  setDeploymentMode,
   stampDeployment,
   tenants,
   withTransaction,
@@ -20,6 +18,7 @@ import {
   type Database,
   type VenueDatabase,
 } from "@waitron/db";
+import { readNodeMode, setNodeMode } from "@waitron/node-db";
 import { persons, resolveManagementSession } from "@waitron/identity";
 import { strFromU8, unzipSync } from "fflate";
 import { drain } from "@waitron/fiscal-verifactu";
@@ -142,15 +141,27 @@ beforeAll(async () => {
   await db.mirror
     .insert(persons)
     .values({ id: MIRROR_STAFF_ID, displayName: "Marta", role: "staff" });
-  // The primary directory writes no `node_roles` row: `readDeploymentAxes` reads it as 'primary'.
+  // The primary directory writes no `node_mode` row: `readNodeMode` reads it as 'primary'.
   await stampDeployment(db.mirror, "preproduction");
-  await setDeploymentMode(db.mirror, TILL_ENV.WAITRON_NODE_ID, "mirror");
+  await setNodeMode(
+    { venue: db.mirror, node: stores.mirror.node },
+    TILL_ENV.WAITRON_NODE_ID,
+    "mirror",
+  );
   await stampDeployment(db.primary, "preproduction");
   await stampDeployment(db.noConfig, "preproduction");
-  await setDeploymentMode(db.noConfig, TILL_ENV.WAITRON_NODE_ID, "mirror");
+  await setNodeMode(
+    { venue: db.noConfig, node: stores.noConfig.node },
+    TILL_ENV.WAITRON_NODE_ID,
+    "mirror",
+  );
   // Adoption-pending: stamped and mode 'mirror', but deliberately NOT seeded with the till identity.
   await stampDeployment(db.adopting, "preproduction");
-  await setDeploymentMode(db.adopting, TILL_ENV.WAITRON_NODE_ID, "mirror");
+  await setNodeMode(
+    { venue: db.adopting, node: stores.adopting.node },
+    TILL_ENV.WAITRON_NODE_ID,
+    "mirror",
+  );
 
   // `noConfig` deliberately gets none.
   await writeMirrorConfig(db.mirror, TILL_ENV.WAITRON_NODE_ID, {
@@ -329,8 +340,8 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
         ),
       );
 
-    // The role `setDeploymentMode('mirror')` set, not one invented for the test.
-    const role = await readSingletonRole(db.mirror, TILL_ENV.WAITRON_NODE_ID);
+    // The role `setNodeMode('mirror')` set, not one invented for the test.
+    const role = (await readNodeMode(stores.mirror.node, TILL_ENV.WAITRON_NODE_ID)).singletonRole;
     expect(role).toBe("secondary");
 
     // An hour ahead, so the seeded envío is unambiguously due for the primary control below.
