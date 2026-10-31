@@ -30,7 +30,25 @@ const SPACE_LOW: StaffNotice = {
   params: {},
 };
 
-/** The till offers "Check the time" while it holds this; it draws no line of its own for it. */
+/** `storage.disk_full` while the full-disk stop is noted, otherwise `storage.space_low` while the
+ * low-space warning is on. Reads no disk. */
+export function boxStaffNoticeSource(deps: {
+  disk: Pick<DiskFullState, "since">;
+  space: Pick<FreeSpaceState, "current">;
+}): StaffNoticeSource {
+  return {
+    read: () => {
+      if (deps.disk.since() !== null) return Promise.resolve([DISK_FULL]);
+      if (deps.space.current().lowSince !== null) return Promise.resolve([SPACE_LOW]);
+      return Promise.resolve([]);
+    },
+  };
+}
+
+/** Owner name of the clock check's marker: apart from the box's, so a failing read of the clock
+ * stop leaves the storage notices served. No module is named this. */
+export const BOX_CLOCK_NOTICE_OWNER = "box-clock";
+
 const CHECK_TIME: StaffNotice = {
   key: "clock.check_time",
   code: "clock.check_time",
@@ -38,34 +56,26 @@ const CHECK_TIME: StaffNotice = {
   params: {},
 };
 
-/** `storage.disk_full` while the full-disk stop is noted, otherwise `storage.space_low` while the
- * low-space warning is on; then `clock.check_time` while `clockCheck` answers true. Reads no
- * disk. */
-export function boxStaffNoticeSource(deps: {
-  disk: Pick<DiskFullState, "since">;
-  space: Pick<FreeSpaceState, "current">;
-  clockCheck?: (tx: Transaction, reading: StaffNoticeReadContext["reading"]) => Promise<boolean>;
-}): StaffNoticeSource {
+type ClockCheck = (tx: Transaction, reading: StaffNoticeReadContext["reading"]) => Promise<boolean>;
+
+/** `clock.check_time` while `check` answers true at the read's reading. */
+export function clockCheckNoticeSource(check: ClockCheck): StaffNoticeSource {
   return {
-    read: async ({ tx, reading }) => {
-      const notices: StaffNotice[] = [];
-      if (deps.disk.since() !== null) notices.push(DISK_FULL);
-      else if (deps.space.current().lowSince !== null) notices.push(SPACE_LOW);
-      if (deps.clockCheck !== undefined && (await deps.clockCheck(tx, reading)))
-        notices.push(CHECK_TIME);
-      return notices;
-    },
+    read: async ({ tx, reading }) => ((await check(tx, reading)) ? [CHECK_TIME] : []),
   };
 }
 
-/** The box's source, then the modules', so the box's notice comes first among equal severities.
- * Give it the enabled modules. */
+/** The box's source, the clock check's when given, then the modules', so the box's notices come
+ * first among equal severities. Give it the enabled modules. */
 export function deviceNoticeSources(
-  box: Parameters<typeof boxStaffNoticeSource>[0],
+  box: Parameters<typeof boxStaffNoticeSource>[0] & { clockCheck?: ClockCheck },
   modules: readonly WaitronModule[],
 ): readonly OwnedStaffNoticeSource[] {
   return [
     { owner: BOX_NOTICE_OWNER, source: boxStaffNoticeSource(box) },
+    ...(box.clockCheck === undefined
+      ? []
+      : [{ owner: BOX_CLOCK_NOTICE_OWNER, source: clockCheckNoticeSource(box.clockCheck) }]),
     ...enabledStaffNoticeSources(modules),
   ];
 }

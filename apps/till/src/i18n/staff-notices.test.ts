@@ -13,7 +13,7 @@ const LANGUAGES = [
 ] as const;
 
 describe.each(LANGUAGES)("staffNoticeText in %s", (locale, words) => {
-  it.each(["storage.disk_full", "clock.unusable", "storage.space_low", "clock.check_time"])(
+  it.each(["storage.disk_full", "clock.unusable", "storage.space_low"])(
     "words %s with its own words and the tell-a-manager hint",
     (code) => {
       setLocale(locale);
@@ -23,6 +23,13 @@ describe.each(LANGUAGES)("staffNoticeText in %s", (locale, words) => {
       });
     },
   );
+
+  it("words the check-the-time marker with its own words", () => {
+    setLocale(locale);
+    expect(staffNoticeText({ code: "clock.check_time", params: {} }).main).toBe(
+      words["staff_notice.clock.check_time"],
+    );
+  });
 
   it("words the clock-behind stop with its own words and the tell-a-manager hint", () => {
     setLocale(locale);

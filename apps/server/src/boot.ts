@@ -1668,7 +1668,7 @@ async function bootServer(
   // on this without a restart.
   const isSingletonPrimary = holders.singletonRole.current === "primary";
   // Before the tills' notice sources, which read it. Closed on a node that is not primary at its
-  // start: the watch looks only on the primary, so nothing would close it there (plan decision 14).
+  // start: the watch looks only on the primary, so it would not close it there (plan decision 14).
   const clockStart = clockStartUp({ primaryAtStart: isSingletonPrimary });
   const authorityClock = createAuthorityClockStatus({
     onSample: (sample) => {
