@@ -121,16 +121,23 @@ mandates. Giving the till the same reader needs a matrix accessor as well (`qrSv
 string, never the library's `qr` object) and a module-boundary decision about where the helper
 lives.
 
-## `node-forge` has a high-severity security alert with no fixed version
+## Minimatch security alert #47 still needs a compatible lint-plugin release
 
-Dependabot alert #20 (2026-10-01). Every version up to 1.4.0, the one in the lockfile,
-accepts some RSA signatures
-it should reject when checking them. It is a direct dependency of `packages/server-kit`,
-`apps/server` and `apps/print-agent`. From reading the code on 2026-10-02 (nothing run), product
-code only creates and signs certificates and certificate requests with it
-(`packages/server-kit/src/certificate.ts`, `apps/server/src/self-signed-cert.ts`,
-`apps/server/src/cloud-remote.ts`); it checks signatures with it only in tests. **Next action:**
-bump it when a fixed version is published, and run the certificate suites in those three packages.
+A1260, [#2348](https://github.com/clintongormley/waitron/pull/2348), leaves the older minimatch copies in place.
+On 2026-10-31, an isolated install with a global minimatch 11.0.3 override made
+`pnpm exec eslint eslint.config.js` exit 2: `eslint-plugin-import-x` 4.17.1 imports
+`makeRe`, which that version no longer exports. Removing that override while keeping
+`archiver-utils>glob` at 14.0.3 restored exit 0. This checks config loading, not a full lint run.
+
+Next, upgrade the lint plugin to a compatible release and qualify each remaining parent:
+ESLint, its config array, typescript-eslint, Stryker and readdir-glob. Check the current
+lockfile paths with `pnpm why -r minimatch`; do not replace every copy before checking
+those callers. A maintained dependency patch is a separate owner decision.
+
+| Source | Source words | What this establishes |
+| --- | --- | --- |
+| [Minimatch changelog, v11.0.3](https://github.com/isaacs/minimatch/blob/v11.0.3/changelog.md) | “Remove `makeRe()`” | Version 11 removes an API the installed plugin imports. |
+| [Import plugin issue #569](https://github.com/un-ts/eslint-plugin-import-x/issues/569) | “needs a refactor” | Upstream has a report of this dependency incompatibility; it does not establish when a fix will ship. |
 
 ## Dependabot's Zod security run reported an older latest resolvable version
 

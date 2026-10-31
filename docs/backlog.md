@@ -6130,8 +6130,9 @@ _Formerly parts of B9 and Track C._ Open work:
 - **There is no snapshot file anywhere in the repository.**
   [Detail](backlog/dependencies.md#readable-qr-snapshot-differences)
 
-- **`node-forge` has a high-severity security alert with no fixed version** — OPEN (Dependabot alert #20).
-  [Detail](backlog/dependencies.md#node-forge-has-a-high-severity-security-alert-with-no-fixed-version)
+- **Minimatch security alert #47 still needs a compatible lint-plugin release** — A1260.
+  The installed import plugin fails to load with minimatch 11.0.3; the older copies remain.
+  [Detail](backlog/dependencies.md#minimatch-security-alert-47-still-needs-a-compatible-lint-plugin-release)
 
 - **Whether the vulnerability the upgrade fixes is reachable in this product is open** — left
   behind by the passkey library upgrade (#453, 2026-09-19).
