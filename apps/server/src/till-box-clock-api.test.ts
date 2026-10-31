@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -33,7 +33,16 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { mountTillApi } from "./till-api.js";
 import { systemClock } from "./till-backend.js";
 import { SESSION_COOKIE } from "./till-session.js";
+import {
+  watchDerivationsAndLock,
+  watchedDerivationCount,
+  watchedOrder,
+} from "./testing/watched-scrypt.js";
 import "./errors.js";
+
+vi.mock("node:crypto", async (importOriginal) =>
+  (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
+);
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -465,6 +474,10 @@ it("sets the box's clock from a staff member's till during start-up, the control
 
 it("confirms the box's own time from a staff member's till that agrees", async () => {
   const box = await stoppedBox(DAY);
+  box.witnesses.noteDevice(randomUUID(), "192.168.10.40", boxTime(box), {
+    wallMs: boxTime(box),
+    monoMs: 0,
+  });
   const before = written(box);
   const answer = await check(box, staffCookie, 20_000);
   expect(answer.status).toBe(200);
@@ -480,6 +493,7 @@ it("confirms the box's own time from a staff member's till that agrees", async (
     device: "Barra",
   });
   expect(await stopNow(box)).toMatchObject({ proof: "confirmed" });
+  expect(box.witnesses.witnesses()).toEqual([]);
 });
 
 it("refuses an agreeing till whose comparison a set made void", async () => {
@@ -910,4 +924,88 @@ it("answers a seat's own refusal of the box's reading as a failure, setting noth
   const answer = await ask(box, staffCookie);
   expect(answer.status).toBe(500);
   expect(written(box)).toEqual(before);
+});
+
+it("refuses an agreeing till when the box's clock stepped while it waited for the turn", async () => {
+  const box = await stoppedBox(DAY);
+  const before = written(box);
+  const answer = await confirmWhileHeld(box, 20_000, async () => {
+    box.setClock(boxTime(box) + 10 * MINUTE);
+  });
+  expect(answer.status).toBe(409);
+  expect(answer.json).toEqual(setRefused("stale"));
+  expect(written(box)).toEqual(before);
+});
+
+it("checks the window at the confirm when the challenge carried an override and the confirm none", async () => {
+  const fake = { override: { personId: randomUUID(), pin: "0000" } };
+  for (const offsetMs of [DAY, 20_000]) {
+    const pending = await stoppedBox(DAY, { authority: "not_asked" });
+    const asked = await ask(pending, staffCookie, fake);
+    expect(asked.status).toBe(200);
+    await expectRefused(
+      pending,
+      confirmWith(pending, staffCookie, {
+        challengeId: asked.json.challengeId,
+        deviceAt: boxTime(pending) + offsetMs,
+      }),
+      409,
+      setRefused("authority_pending"),
+    );
+    expect(pending.host.statusAsks).toBe(0);
+
+    const closed = await stoppedBox(DAY);
+    closed.startUp.noStop();
+    const again = await ask(closed, staffCookie, fake);
+    expect(again.status).toBe(200);
+    await expectRefused(
+      closed,
+      confirmWith(closed, staffCookie, {
+        challengeId: again.json.challengeId,
+        deviceAt: boxTime(closed) + offsetMs,
+      }),
+      409,
+      setRefused("not_start_up"),
+    );
+    expect(closed.host.statusAsks).toBe(0);
+  }
+});
+
+it("refuses a challenge to the next person signed in on the same till", async () => {
+  const box = await stoppedBox(DAY);
+  const till = await enrolDeviceForTest(venue.db, venue.cfg, { name: "Caja turno", profileId });
+  const ana = await signIn(till, venue.operatorId, "5555");
+  const asked = await ask(box, ana);
+  expect(asked.status).toBe(200);
+  const marta = await signIn(till, managerId, "1234");
+  await expectRefused(
+    box,
+    confirmWith(box, marta, { challengeId: asked.json.challengeId, deviceAt: boxTime(box) + DAY }),
+    400,
+    { code: "clock.check_expired", params: {} },
+  );
+});
+
+it("derives an administrator's override PIN once, outside the write lock", async () => {
+  for (const offsetMs of [DAY, 20_000]) {
+    const box = await stoppedBox(DAY);
+    box.startUp.noStop();
+    watchDerivationsAndLock(venue.db, "1234", () =>
+      withTransaction(venue.db, (tx) => tx.execute(sql`select 1`)),
+    );
+    const answer = await check(box, staffCookie, offsetMs, {
+      override: { personId: venue.adminId, pin: "1234" },
+    });
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
+    expect(watchedDerivationCount()).toBe(1);
+  }
+});
+
+it("refuses an override that is not an object as the request's field", async () => {
+  const box = await stoppedBox(DAY);
+  await expectRefused(box, check(box, staffCookie, DAY, { override: "1234" }), 400, {
+    code: "management.request_invalid",
+    params: { field: "override" },
+  });
 });

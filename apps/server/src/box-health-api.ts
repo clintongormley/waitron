@@ -117,7 +117,7 @@ function listRecord(record: MisdatedRecord) {
   };
 }
 
-async function requiredNameOf(tx: Transaction, personId: string): Promise<string> {
+export async function requiredNameOf(tx: Transaction, personId: string): Promise<string> {
   const name = await displayNameOf(tx, personId);
   if (name === null) throw new Error(`no person ${personId}`);
   return name;

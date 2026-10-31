@@ -20,15 +20,15 @@ import {
   type PinAttempts,
 } from "@waitron/identity";
 import { codeOf, createErrorBoundary, readJsonBody, readRawJsonBody } from "@waitron/server-kit";
-import { AppError, isUuid } from "@waitron/shared";
-import { confirmBody } from "./box-health-api.js";
-import { displayNameOf } from "./box-health.js";
+import { AppError } from "@waitron/shared";
+import { confirmBody, requiredNameOf } from "./box-health-api.js";
 import { clockChallenges } from "./clock-challenges.js";
 import type { ClockSetRefusal, clockCorrection } from "./clock-correction.js";
 import type { ClockStartUp } from "./clock-start-up.js";
 import type { Logger } from "./logger.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { requestAddress, requestFromBox } from "./request-from-box.js";
+import { parseOverrideField } from "./till-api.js";
 import { assertStillSignedIn, requireSession } from "./till-session.js";
 
 export interface TillBoxClockDeps {
@@ -66,9 +66,10 @@ const run = createErrorBoundary(
 
 const EARLIEST_TARGET_MS = Date.UTC(2024, 9, 28);
 const LATEST_TARGET_MS = Date.UTC(2100, 0, 1);
+/** How far the wall clock may move against the steady clock before a comparison is stale. */
+const STALE_MS = 1_000;
 
 type Session = Awaited<ReturnType<typeof requireSession>>;
-type Override = { personId: string; pin: string };
 
 function refuse(
   reason: Exclude<ClockSetRefusal, "not_admitted" | "refused" | "unverified"> | "same_machine",
@@ -76,17 +77,10 @@ function refuse(
   throw new AppError("clock.set_refused", { reason });
 }
 
-/** A malformed override is `pin.invalid`, as the till's other overrides answer it. */
-function overrideOf(body: unknown): Override | undefined {
-  const raw =
-    typeof body === "object" && body !== null && !Array.isArray(body)
-      ? (body as { override?: unknown }).override
-      : undefined;
-  if (raw === undefined || raw === null) return undefined;
-  const { personId, pin } = raw as { personId?: unknown; pin?: unknown };
-  if (typeof personId !== "string" || !isUuid(personId) || typeof pin !== "string")
-    throw new AppError("pin.invalid", {});
-  return { personId, pin };
+function overrideOf(body: unknown): { personId: string; pin: string } | undefined {
+  return typeof body === "object" && body !== null && !Array.isArray(body)
+    ? parseOverrideField((body as { override?: unknown }).override)
+    : undefined;
 }
 
 /** "Check the time" on a till: `POST /api/box-clock/challenge` and `POST /api/box-clock/confirm`
@@ -263,11 +257,16 @@ export function mountTillBoxClockApi(
             // the write lock a transaction holds.
             correction.inTurn(() =>
               withTransaction(db, async (tx) => {
-                // A set landed after the reading, so the comparison is void.
-                if (correction.steps() !== stepsSeen) refuse("stale");
                 const deviceLabel = await admitted(tx, session);
                 const witnesses = boxClock.witnesses();
                 const now = clock.now();
+                // A set landed, or the wall clock stepped, after the reading: the comparison is void.
+                const drift =
+                  now.instant.getTime() -
+                  reading.instant.getTime() -
+                  (boxClock.steady() - steadyMs);
+                if (correction.steps() !== stepsSeen || !(Math.abs(drift) <= STALE_MS))
+                  refuse("stale");
                 const stop = await stopAt(tx, now, witnesses);
                 if (!stop.stopped) noStop();
                 let personId = session.personId;
@@ -284,7 +283,7 @@ export function mountTillBoxClockApi(
                   boot: boxClock.readBoot(),
                   witnesses,
                   nodeId: deps.nodeId,
-                  admin: person(personId, (await displayNameOf(tx, personId))!, deviceLabel),
+                  admin: person(personId, await requiredNameOf(tx, personId), deviceLabel),
                 });
                 // With a person, the seat answers a row or throws.
                 return answer.confirmation!;
@@ -310,7 +309,7 @@ export function mountTillBoxClockApi(
           ).authorizedBy
         : session.personId;
       const { personName, deviceLabel } = await withTransaction(db, async (tx) => ({
-        personName: (await displayNameOf(tx, personId))!,
+        personName: await requiredNameOf(tx, personId),
         deviceLabel: await admitted(tx, session),
       }));
       const unusable = unusableAt(reading);
