@@ -1094,11 +1094,28 @@ up-to-date squash and a squash after an independent main commit. Run:
 The behavioural verifier tests supply API responses; they do not run GitHub's scheduler.
 Real equal-tree and unequal-tree main push qualification is required by A1242 before it closes.
 
+Publishing after intentionally skipped checks needs an explicit status function as well as a
+successful aggregate. The publish condition's explicit status functions override implicit
+`success()`. It refuses cancellation observed during condition evaluation and still requires a
+push, `code=true` and `needs.ci.result == 'success'`.
+The publication truth table in `scripts/ci-workflow.test.mjs` evaluates that extracted condition;
+it is weaker than a scheduler test because it models GitHub's implicit status rule locally.
+Its red case depends on that default-success model. Its substitutions support the functions and
+context fields this condition uses, not the full GitHub expression language.
+
+The first real reuse, [main run 41180442132](https://github.com/clintongormley/waitron/actions/runs/41180442132)
+at `fa6a8eb0bdceccbd86bec266613bfd12b4d3ca79`, reused PR run `41177810227` after full main
+run `41175259965`. Its image smoke and aggregate succeeded, but publishing was skipped.
+The same commit range produces `code=true` through `scripts/changed-packages.mjs scope --stdin`.
+The publish condition lacked a status function, so the intentional ancestor skips suppressed it.
+Keep that result distinct from a run proving publication after this correction.
+
 | Source | Source wording | Use here |
 | --- | --- | --- |
 | [GitHub workflow runs API](https://docs.github.com/en/rest/actions/workflow-runs) | `workflow_id`, `run_attempt`, `head_sha`, `conclusion` | Match workflow, attempt, commit and successful completion; read them again after jobs. |
 | [GitHub workflow jobs API](https://docs.github.com/en/rest/actions/workflow-jobs#list-jobs-for-a-workflow-run-attempt) | “List jobs for a workflow run attempt” | Fetch jobs from the admitted attempt rather than combining attempts. |
 | [GitHub commits API](https://docs.github.com/en/rest/commits/commits#list-pull-requests-associated-with-a-commit) | “List pull requests associated with a commit” | Find the associated PR, then check its repository, merge and head rather than trusting association alone. |
+| [GitHub job dependencies](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-jobs) | “a failure or skip applies to all jobs in the dependency chain” | Override implicit status evaluation after intentional skips while retaining the explicit successful aggregate requirement. |
 
 ### Two pushes to `main` must never share a concurrency group
 

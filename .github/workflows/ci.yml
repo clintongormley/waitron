@@ -3452,9 +3452,8 @@ jobs:
   # of `ci` (needs `ci`, `if:` reads `needs.ci.result`) rather than merely absent.
   publish:
     needs: [changes, ci]
-    # `needs: ci` already enforces GitHub's implicit success(); the explicit `needs.ci.result` keeps
-    # the gate legible in place and is what the guard test pins. A pull request never publishes.
-    if: github.event_name == 'push' && needs.changes.outputs.code == 'true' && needs.ci.result == 'success'
+    # Intentional upstream skips must not suppress publishing after the aggregate succeeds.
+    if: github.event_name == 'push' && needs.changes.outputs.code == 'true' && needs.ci.result == 'success' && always() && !cancelled()
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Naming any permission drops every default. `packages: write` is for the GHCR push.

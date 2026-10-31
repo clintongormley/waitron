@@ -5710,9 +5710,10 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
-- **A1242: qualify identical-tree PR CI reuse on real main pushes.** Owner-approved safeguards
-  require a complete green run for earlier main and retain main image smoke. Finish current-head
-  qualification, then retain main run ids proving equal-tree reuse and different-tree full fallback.
+- **A1242: qualify publishing after reused CI and the differing-tree fallback on real main pushes.**
+  The first reused run skipped publishing after its aggregate and image smoke succeeded. Fix its
+  publication condition, then retain real main run ids proving publication after reuse and the full
+  suite after an unequal-tree merge.
 
 - **A1213. Does a re-run till shard's report reach `test-till-merge`?** Seen once, not proven, in
   A1125's CI (#2238, 2026-10-29), while the merge still used the download action. Since A1216 the
