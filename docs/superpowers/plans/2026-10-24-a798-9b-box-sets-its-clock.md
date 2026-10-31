@@ -1178,6 +1178,12 @@ EDITED to pass and is not on this list is a STOP, unless the spec changes what i
     profile action" — naming its refusing and allowed cases (CLAUDE.md §3). A comment, not an
     assertion; listed so the review checks the row. Task 12a.
 
+14. *(Added while building Task 10, 2026-10-31.)* `packages/fiscal-verifactu/src/clock-step.test.ts`
+    `:219`, `:527` and `:538`: three `toEqual`s of `confirmClockStep`'s whole answer gain the
+    `corrected` key Task 10 adds (`expect.anything()` for the two that record an alert, `null` for
+    the sub-second unverified step); every existing value is unchanged. New cases check what
+    `corrected` holds. Task 10.
+
 **Fixtures only, no assertion changed:**
 6. `apps/server/src/box-status.route.test.ts:120` and
    `apps/server/src/awaiting-fiscal-cert.test.ts:70`:
@@ -3194,3 +3200,37 @@ Revision 4 changes none of these rulings. It carries out the owner's answer of 2
 - Comments narrowed: the restart limit applies only to an alert already handled (an open one is
   read again after a restart); the episode ends when nothing is left worth trying.
 - Not changed: the review's M7 (the guide half "assigned to no task") — Task 16 already names it.
+
+### Task 10's departures (2026-10-31, while building Task 10)
+
+- **`confirmClockStep` answers the alert it recorded**, `corrected: { id, params } | null`
+  (`ClockStepRecorded` in `packages/fiscal/src/backend.ts`), because the email duty's `remember`
+  needs the alert's id and core's `recordIncident` answers nothing: `recordCorrected` reads back
+  the one open `clock.corrected` after recording it. Changed test check 14.
+- **The interface's deps grow two methods it needs**: `backend` also picks `assertRecordableAt`
+  (how the correction judges `clock.unusable` again, as the watch's `recordable` does), and
+  `store` also picks `witnesses` (what `clockStopState` judges, and AEAT's readings during
+  `clock.unusable`). `latestRecordAt` is not an input: the stop judged inside the turn names the
+  latest record.
+- **The order of refusals inside the turn**: `stale`, then `target_invalid`, both before anything
+  is read; then the stop and, for a staff member, `admit`, in one write-lock turn; then the host's
+  status (`host_unavailable`, `synchronised`); then, for a person, `witnessed` and `agrees`. So
+  `stale` and the till's refusals ask the host nothing at all, and `witnessed` and `agrees` are
+  answered only once the host is known to be available and unsynchronised, as decision 10 orders
+  them. During `clock.unusable`, `witnessed` is any AEAT reading among the store's witnesses.
+- **A set the host did not confirm is never verified**: a timeout or a lost connection is
+  recorded with `verified: false` even when the clock reached the target (Task 10's test text;
+  decision 4's "verified" means the step is measured, not trusted). The seat is asked for nothing,
+  and the witness store is kept, when the clock moved by a second or less, whatever the host
+  answered; the set then answers `refused`. A verified set whose row is pending answers
+  `confirmationId: null`.
+- **The step counter's deletion control is its own case**: in the two-together case the first
+  set moves the fake wall clock, so the wall-against-steady check also refuses the second; the
+  counter is proved by "refuses an offset measured before a step the correction made", which
+  measures afresh after the step.
+- **`clock.set_refused` and `clock.set_failed` are added with the route that throws them, Task
+  12**, not here: the correction answers its refusals as data and throws neither.
+- **Boot builds the correction in Task 11**, with its first caller, the watch: `onCorrected:
+  boxEmails.remember` (Task 9's departure), and an anchor whose `reanchor` clears
+  `clockServiceCache` and `timeHealthCache`, so a reading taken before a set is not served for a
+  minute after it (Task 7's review).
