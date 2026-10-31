@@ -49,12 +49,12 @@ describe.each([
     setLocale(locale!);
     const params = {
       extraLists: [
-        { id: "s", name: "Salsas" },
+        { id: "s", name: "Sauces" },
         { id: "t", name: "Toppings" },
       ],
     };
     expect(refusalText("product.offered_as_extra", params)).toBe(
-      `${codeMessage("product.offered_as_extra")} Salsas, Toppings`,
+      `${codeMessage("product.offered_as_extra")} Sauces, Toppings`,
     );
     expect(refusalText("product.archived", params)).toBe(codeMessage("product.archived"));
   });
