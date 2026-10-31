@@ -5727,6 +5727,8 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 - **A1251. Finish qualifying and reviewing historical PRs that skipped the Claude run-it review.**
   Exclude documentation-only changes, verified test-data/name renames and changes already reviewed.
   Review the remaining code and workflow changes, and address still-live findings in separate PRs.
+  Check the later regional demo guides’ photo-library name claims against image metadata and the
+  screen’s content-language selection.
 
 - **A1242: qualify publishing after reused CI and the differing-tree fallback on real main pushes.**
   Retain real main run ids proving publication after reuse and the full suite after an unequal-tree

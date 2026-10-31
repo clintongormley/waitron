@@ -7,8 +7,6 @@ Your products, sections, [modifiers](modifiers.md) and units share these languag
 The image library uses them too, but a photo still needs a name in your default language when
 you upload or edit it.
 
-In a Madrid demo set up in English, the photograph library shows staff names such as **House coffee** and **Roast chicken**. In the same demo set up in Spanish, it shows **Café de la casa** and **Pollo asado**. The pictures and customer translations stay the same.
-
 In Catalonia and the Balearic Islands, the demo's library uses Catalan staff names,
 including **Botifarra amb mongetes**, in both English and Spanish screens. Its regional
 pictures belong to that practice restaurant; you still choose and replace pictures in the same way.
