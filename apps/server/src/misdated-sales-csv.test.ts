@@ -232,7 +232,9 @@ describe("renderMisdatedSalesCsv", () => {
           confirmedByName: "Ana",
         });
         expect(rows(renderMisdatedSalesCsv(staff))[0]![0]).toContain(
-          `${CLOCK_CONFIRMED_BY_WORDS[language].staff} (Ana)`,
+          language === "en"
+            ? "confirmed by a staff member (Ana) on a till on"
+            : "un miembro del personal (Ana) en una caja",
         );
       }
     });

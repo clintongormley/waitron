@@ -49,6 +49,7 @@ export const CLOCK_CONFIRMED_BY_WORDS = {
     admin: "an administrator",
     staff: "a staff member on a till",
     otherwise: "a check recorded on the box",
+    staffNamed: "a staff member ({person}) on a till",
   },
   es: {
     authority: "la hora de Hacienda",
@@ -56,6 +57,7 @@ export const CLOCK_CONFIRMED_BY_WORDS = {
     admin: "un administrador",
     staff: "un empleado en una caja",
     otherwise: "una comprobación anotada en el equipo",
+    staffNamed: "un miembro del personal ({person}) en una caja",
   },
 } as const satisfies Record<"en" | "es", Record<string, string>>;
 
@@ -72,7 +74,7 @@ export const CLOCK_RESTARTED_EMAIL_WORDS = {
     subject: "Se reanudaron los cobros en {venue}",
     text: "La hora del equipo se confirmó con {confirmedBy} y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
     byStaff:
-      "La hora del equipo la confirmó {person}, un empleado, en {till}, y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
+      "La hora del equipo la confirmó {person}, miembro del personal, en {till}, y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
     namedTill: "la caja {device}",
     unnamedTill: "una caja",
   },

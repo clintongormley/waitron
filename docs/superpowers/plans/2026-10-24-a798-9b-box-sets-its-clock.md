@@ -3145,3 +3145,17 @@ Revision 4 changes none of these rulings. It carries out the owner's answer of 2
   NOT NULL in the schema, so `deviceLabel` is null only when the device row is not found; Task 12a
   builds the staff input from the signed-in device's own row, and the bell then writes the kit's
   "—" for a missing value.
+
+### Task 8a's per-task review, folded (2026-10-31)
+
+- **`confirmClockStop` refuses a staff member's input with no till** before any write, as Task 8's
+  `confirmClockStep` does: a staff reading counts only as a device that is not the box (decision
+  15), and an append-only row naming no till could never be put right. No caller passes `role`
+  yet; Task 12a's route is the first.
+- **The two sentences that name a staff member say "miembro del personal" in Spanish**, not "un
+  empleado" as Task 8a's text had it: the person's name follows, and the code cannot know whether
+  "empleado" or "empleada" fits. The words without a name keep "un empleado".
+- **The wrongly-dated sales CSV header reads "a staff member (Ana) on a till"** ("un miembro del
+  personal (Ana) en una caja"), so the name sits beside the person and not beside the till.
+- Added a staff `differs` case during a stop, so a later caller that skipped the agreement check
+  for a staff member is caught here.

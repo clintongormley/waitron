@@ -55,11 +55,15 @@ function header(input: MisdatedSalesInput, boundMs: number, offsetMinutes: numbe
   const { closing, records } = input.detail;
   const words = MISDATED_SALES_WORDS[input.language];
   const by = CLOCK_CONFIRMED_BY_WORDS[input.language];
-  const word = by[SOURCE_WORD[closing.source]];
+  const name = input.confirmedByName;
   const confirmedBy =
-    (closing.source === "admin" || closing.source === "staff") && input.confirmedByName !== null
-      ? `${word} (${input.confirmedByName})`
-      : word;
+    name === null
+      ? by[SOURCE_WORD[closing.source]]
+      : closing.source === "admin"
+        ? `${by.admin} (${name})`
+        : closing.source === "staff"
+          ? by.staffNamed.replaceAll("{person}", () => name)
+          : by[SOURCE_WORD[closing.source]];
   // "Made before" stays true at minute precision only when a bound with seconds is rounded up.
   const roundedBound = Math.ceil(boundMs / MINUTE_MS) * MINUTE_MS;
   const sentence = fill(records.length === 1 ? words.header.one : words.header.text, {

@@ -1053,6 +1053,23 @@ describe("a staff member on a till", () => {
     ]);
   });
 
+  it("without a till, is refused before any write: a caller's bug", async () => {
+    await sale(T);
+    await openCheck(R);
+    const noDevice = { ...staffReading(R - 2 * S, 10 * S), device: undefined };
+    await expect(confirmAsAdmin(R, [], noDevice)).rejects.toThrow(/staff/);
+    expect(count("clock_confirmations")).toBe(0);
+    expect(incidentParams("clock.behind_chain_restarted")).toEqual([]);
+  });
+
+  it("whose till differs from the box during a stop, is refused as differs, writing nothing", async () => {
+    await sale(T);
+    await openCheck(R);
+    await adminRefused(R, [], staffReading(R, 2 * M), "clock.confirm_refused", {
+      reason: "differs",
+    });
+  });
+
   it("never closes a check that waits: refused as not stopped, writing nothing", async () => {
     await sale(T);
     await openCheck(R);
