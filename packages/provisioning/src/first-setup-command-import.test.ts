@@ -188,7 +188,12 @@ it.each([false, true])(
   async (newTaxpayer) => {
     const f = await fixture(newTaxpayer);
     const before = (await f.runtime.store.read())!;
-    const result = await completeFirstSetupCommand(f.runtime, target.db, f.owner, f.deployment);
+    const result = await completeFirstSetupCommand(
+      f.runtime,
+      { venue: target.db, node: target.node },
+      f.owner,
+      f.deployment,
+    );
     expect((await target.db.execute("select name from products")).rows).toEqual([
       { name: "Imported gazpacho" },
     ]);
@@ -241,7 +246,12 @@ it("command completion refuses a replaced retained artifact before stamping or a
     ),
   );
   await expect(
-    completeFirstSetupCommand(f.runtime, target.db, f.owner, f.deployment),
+    completeFirstSetupCommand(
+      f.runtime,
+      { venue: target.db, node: target.node },
+      f.owner,
+      f.deployment,
+    ),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   expect(await readDeploymentEnvironment(target.db)).toBeNull();
   expect((await target.db.execute("select count(*) as n from tenants")).rows).toEqual([{ n: 0 }]);
@@ -277,7 +287,12 @@ it.each([
   async (_label, change, field) => {
     const f = await fixture(false, change);
     await expect(
-      completeFirstSetupCommand(f.runtime, target.db, f.owner, f.deployment),
+      completeFirstSetupCommand(
+        f.runtime,
+        { venue: target.db, node: target.node },
+        f.owner,
+        f.deployment,
+      ),
     ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field } });
     expect(await readDeploymentEnvironment(target.db)).toBeNull();
     expect((await target.db.execute("select count(*) as n from tenants")).rows).toEqual([{ n: 0 }]);
@@ -289,7 +304,12 @@ it("command refuses new-taxpayer import retaining the source taxpayer", async ()
     bundle.venue.taxId = "B12345674";
   });
   await expect(
-    completeFirstSetupCommand(f.runtime, target.db, f.owner, f.deployment),
+    completeFirstSetupCommand(
+      f.runtime,
+      { venue: target.db, node: target.node },
+      f.owner,
+      f.deployment,
+    ),
   ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field: "taxId" } });
   expect(await readDeploymentEnvironment(target.db)).toBeNull();
 });
@@ -308,7 +328,12 @@ it("command rechecks the artifact after publication settings have been checked",
     );
   };
   await expect(
-    completeFirstSetupCommand(f.runtime, target.db, f.owner, f.deployment),
+    completeFirstSetupCommand(
+      f.runtime,
+      { venue: target.db, node: target.node },
+      f.owner,
+      f.deployment,
+    ),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   expect(await readDeploymentEnvironment(target.db)).toBeNull();
   expect((await target.db.execute("select count(*) as n from tenants")).rows).toEqual([{ n: 0 }]);
@@ -319,7 +344,12 @@ it("an import refusal rolls back the venue and fiscal activation together", asyn
     bundle.tables.products![0]!.unexpected_column = "invalid";
   });
   await expect(
-    completeFirstSetupCommand(f.runtime, target.db, f.owner, f.deployment),
+    completeFirstSetupCommand(
+      f.runtime,
+      { venue: target.db, node: target.node },
+      f.owner,
+      f.deployment,
+    ),
   ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field: "table:products" } });
   expect(await readDeploymentEnvironment(target.db)).toBe("preproduction");
   for (const name of ["tenants", "fiscal_allocations", "products"])
@@ -342,7 +372,12 @@ it("recovered exact Finish completes after imported configuration has been clear
     return result;
   };
   await expect(
-    completeFirstSetupCommand(f.runtime, target.db, f.owner, f.deployment),
+    completeFirstSetupCommand(
+      f.runtime,
+      { venue: target.db, node: target.node },
+      f.owner,
+      f.deployment,
+    ),
   ).rejects.toThrow("synthetic interruption after import cleanup");
   expect((await target.db.execute("select name from products")).rows).toEqual([
     { name: "Imported gazpacho" },
@@ -366,7 +401,12 @@ it("recovered exact Finish completes after imported configuration has been clear
       WAITRON_ADVERTISED_ORIGIN: "https://olivo.example.test:3443",
     },
   });
-  await completeFirstSetupCommand(f.runtime, target.db, owner, deployment);
+  await completeFirstSetupCommand(
+    f.runtime,
+    { venue: target.db, node: target.node },
+    owner,
+    deployment,
+  );
   expect((await f.runtime.store.read())!.status).toBe("complete");
   expect((await f.runtime.store.read())!.inputs).toEqual(inputs);
   expect(await target.db.select().from(invoiceSeries)).toEqual(series);

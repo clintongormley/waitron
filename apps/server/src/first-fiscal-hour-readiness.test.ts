@@ -197,6 +197,7 @@ async function preparedActivation(environment: "production" | "preproduction") {
     environment,
     devMode: environment === "preproduction",
     db: venue.db,
+    node: venue.node,
     ring,
     firstFiscal: host,
     provision: (req, beforeTransaction) =>

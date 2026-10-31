@@ -100,6 +100,7 @@ async function fixture(fault?: string) {
   const deps: SetupDeps = {
     environment: "production",
     db: suite.db,
+    node: suite.node,
     ring: loadKeyRing({ WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 8).toString("base64") }),
     firstFiscal: host,
     provision: async (req, beforeTransaction) => {

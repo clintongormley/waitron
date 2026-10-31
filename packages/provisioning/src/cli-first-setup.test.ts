@@ -617,7 +617,7 @@ it("stale command ownership refuses before loading publication settings", async 
   const publication = vi.spyOn(deployment, "publication");
   const { completeFirstSetupCommand } = await import("./first-setup-command-activation.js");
   await expect(
-    completeFirstSetupCommand(f.runtime, venue.db, owner, deployment),
+    completeFirstSetupCommand(f.runtime, { venue: venue.db, node: venue.node }, owner, deployment),
   ).rejects.toMatchObject({ code: "setup.owner_required" });
   expect(publication).not.toHaveBeenCalled();
   expect((await f.runtime.store.read())!.status).toBe("committed");

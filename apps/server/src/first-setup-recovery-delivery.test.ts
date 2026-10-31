@@ -9,7 +9,7 @@ import { loadKeyRing } from "@waitron/credentials";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
-import { readBreakGlassVerifier } from "@waitron/db";
+import { readRecoveryKeyVerifier } from "@waitron/node-db";
 import { verifySecretAsync } from "@waitron/identity";
 import { firstFiscalPublicDigest } from "./first-fiscal-delivery.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
@@ -126,6 +126,7 @@ async function fixture(publicDocumentSeat = true) {
   const deps: SetupDeps = {
     environment: "preproduction",
     db: suite.db,
+    node: suite.node,
     ring,
     provision: async (req, beforeTransaction) => {
       activations++;
@@ -259,7 +260,7 @@ it("kept confirmation installs the delivered verifier once, with only public met
   await f.kept();
   await f.activate();
   expect(f.counts()).toEqual({ activations: 1, publications: 1 });
-  const verifier = await readBreakGlassVerifier(suite.db, f.staged.key.nodeId);
+  const verifier = await readRecoveryKeyVerifier(suite.node, f.staged.key.nodeId);
   expect(verifier).toBe(f.staged.stage.verifier);
   expect(await verifySecretAsync(f.staged.key.secret, verifier!)).toBe(true);
   const snapshot = await f.host.resolution.captureFirstSetupOriginals();

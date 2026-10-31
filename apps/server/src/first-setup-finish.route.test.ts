@@ -104,6 +104,7 @@ async function fixture(realEntry = false, withoutBookings = false) {
     const deps: SetupDeps = {
       environment: "production",
       db: suite.db,
+      node: suite.node,
       ring,
       provision: async (req, beforeTransaction) => {
         activations++;
@@ -163,6 +164,7 @@ async function fixture(realEntry = false, withoutBookings = false) {
     const [port] = await freePorts(1);
     if (realEntry) {
       await suite.db.archiveTo(join(f.venueDir, "venue.db"));
+      await suite.node.archiveTo(join(f.venueDir, "node.db"));
       entryServer = await startServerOrFirstSetupResolution(
         {
           WAITRON_ENV: "production",
@@ -549,6 +551,7 @@ it("publication refuses a symlinked reserved node database before opening anothe
     const outside = join(f.root, "outside.db");
     await suite.db.archiveTo(outside);
     const before = await readFile(outside);
+    await rm(join(f.venueDir, "node.db"));
     await symlink(outside, join(f.venueDir, "node.db"));
     const response = await f.post("finish", { ...(await f.snapshot()), publication }, owner);
     expect(response.status).toBe(409);

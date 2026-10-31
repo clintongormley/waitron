@@ -3,15 +3,24 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
+import { sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
-  nodeRoles,
+  insertRecoveryPack,
   readRecoveryPacks,
   stampDeployment,
+  withNodeTransaction,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { verifySecretAsync } from "@waitron/identity";
+import {
+  NODE_MIGRATIONS,
+  nodeRecoveryKey,
+  readRecoveryKeyName,
+  readRecoveryKeyVerifier,
+  setRecoveryKeyTx,
+} from "@waitron/node-db";
 import { request, PASSWORD } from "../test/first-setup-request.js";
 import { createFirstSetupOwner } from "./first-setup-owner.js";
 import {
@@ -21,7 +30,11 @@ import {
 } from "./first-setup-state.js";
 import { createFirstSetupNodeKeys, readFirstSetupStagedKey } from "./first-setup-node-key.js";
 
-const database = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const database = useVenueDb({
+  migrations: [CORE_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+});
+const handles = () => ({ venue: database.db, node: database.node });
+const storedKeys = () => database.node.select().from(nodeRecoveryKey);
 const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -200,9 +213,9 @@ it.each(["uncommitted", "missing result", "different node"])(
         : await f.committed(part === "missing result" ? null : { venue: { nodeId: randomUUID() } });
     await stampDeployment(database.db, "preproduction");
     await expect(
-      f.keys.installStagedNodeKey(database.db, state, f.staged!.stage),
+      f.keys.installStagedNodeKey(handles(), state, f.staged!.stage),
     ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
-    expect(await database.db.select().from(nodeRoles)).toEqual([]);
+    expect(await storedKeys()).toEqual([]);
   },
 );
 
@@ -213,18 +226,19 @@ it.each(["verifier", "name", "both"])(
     const state = await f.committed();
     const stage = f.staged!.stage;
     await stampDeployment(database.db, "preproduction");
-    await withTransaction(database.db, async (tx) => {
-      await tx.insert(nodeRoles).values({
-        nodeId: stage.nodeId,
-        breakGlassVerifier: part === "name" ? stage.verifier : "another-verifier",
-        breakGlassKeyName: part === "verifier" ? stage.name : "another-name",
-      });
-    });
-    const before = await database.db.select().from(nodeRoles);
-    await expect(f.keys.installStagedNodeKey(database.db, state, stage)).rejects.toMatchObject({
+    await withNodeTransaction(database.node, (tx) =>
+      setRecoveryKeyTx(
+        tx,
+        stage.nodeId,
+        part === "name" ? stage.verifier : "another-verifier",
+        part === "verifier" ? stage.name : "another-name",
+      ),
+    );
+    const before = await storedKeys();
+    await expect(f.keys.installStagedNodeKey(handles(), state, stage)).rejects.toMatchObject({
       code: "setup.attempt_uncertain",
     });
-    expect(await database.db.select().from(nodeRoles)).toEqual(before);
+    expect(await storedKeys()).toEqual(before);
   },
 );
 
@@ -241,10 +255,10 @@ it.each(["stale state", "supplied stage", "stored stage", "changed frozen reques
       await writeFile(f.path, JSON.stringify({ ...stage, stageId: randomUUID() }));
     else state.frozen.request.legalName = "Another business";
     const retained = await readFile(f.path);
-    await expect(f.keys.installStagedNodeKey(database.db, state, stage)).rejects.toMatchObject({
+    await expect(f.keys.installStagedNodeKey(handles(), state, stage)).rejects.toMatchObject({
       code: "setup.attempt_uncertain",
     });
-    expect(await database.db.select().from(nodeRoles)).toEqual([]);
+    expect(await storedKeys()).toEqual([]);
     expect(await readFile(f.path)).toEqual(retained);
   },
 );
@@ -253,19 +267,19 @@ it("installs the delivered verifier once and preserves it on exact publication r
   const f = await fixture();
   const state = await f.committed();
   await stampDeployment(database.db, "preproduction");
-  await f.keys.installStagedNodeKey(database.db, state, f.staged!.stage);
-  const before = await database.db.select().from(nodeRoles);
+  await f.keys.installStagedNodeKey(handles(), state, f.staged!.stage);
+  const before = await storedKeys();
   expect(before).toMatchObject([
     {
       nodeId: state.frozen.nodeId,
-      breakGlassVerifier: f.staged!.stage.verifier,
-      breakGlassKeyName: f.staged!.stage.name,
+      verifier: f.staged!.stage.verifier,
+      keyName: f.staged!.stage.name,
     },
   ]);
   await f.coordinator.run((hold) =>
-    f.keys.installStagedNodeKey(database.db, state, f.staged!.stage, hold),
+    f.keys.installStagedNodeKey(handles(), state, f.staged!.stage, hold),
   );
-  expect(await database.db.select().from(nodeRoles)).toEqual(before);
+  expect(await storedKeys()).toEqual(before);
 });
 
 it("records recovery pack 1 as received beside the installed key, once across a publication retry", async () => {
@@ -273,7 +287,7 @@ it("records recovery pack 1 as received beside the installed key, once across a 
   const state = await f.committed();
   await stampDeployment(database.db, "preproduction");
   const before = Date.now();
-  await f.keys.installStagedNodeKey(database.db, state, f.staged!.stage);
+  await f.keys.installStagedNodeKey(handles(), state, f.staged!.stage);
   const after = Date.now();
   const packs = await readRecoveryPacks(database.db, state.frozen.nodeId);
   expect(packs).toEqual([
@@ -300,9 +314,65 @@ it("records recovery pack 1 as received beside the installed key, once across a 
   expect(receivedAt).toBeLessThanOrEqual(after);
   expect(packs[0]!.madeAt.getTime()).toBe(receivedAt);
   await f.coordinator.run((hold) =>
-    f.keys.installStagedNodeKey(database.db, state, f.staged!.stage, hold),
+    f.keys.installStagedNodeKey(handles(), state, f.staged!.stage, hold),
   );
   expect(await readRecoveryPacks(database.db, state.frozen.nodeId)).toEqual(packs);
+});
+
+it("a first setup interrupted after pack 1 and before the key installs the key on the next run, and makes no second pack", async () => {
+  const f = await fixture();
+  const state = await f.committed();
+  const stage = f.staged!.stage;
+  await stampDeployment(database.db, "preproduction");
+  database.node.run(
+    sql`create trigger interrupt_key before insert on node_recovery_key begin select raise(abort, 'interrupted'); end`,
+  );
+  try {
+    await expect(f.keys.installStagedNodeKey(handles(), state, stage)).rejects.toThrow(
+      /interrupted/,
+    );
+  } finally {
+    database.node.run(sql`drop trigger interrupt_key`);
+  }
+  const packs = await readRecoveryPacks(database.db, stage.nodeId);
+  expect(packs).toMatchObject([{ number: 1, receivedAt: expect.any(Date) }]);
+  expect(await readRecoveryKeyVerifier(database.node, stage.nodeId)).toBeNull();
+  await f.coordinator.run((hold) => f.keys.installStagedNodeKey(handles(), state, stage, hold));
+  expect(await readRecoveryKeyVerifier(database.node, stage.nodeId)).toBe(stage.verifier);
+  expect(await readRecoveryKeyName(database.node, stage.nodeId)).toBe(stage.name);
+  expect(await readRecoveryPacks(database.db, stage.nodeId)).toEqual(packs);
+});
+
+it.each([
+  ["the staged key with no pack 1", "staged", null],
+  ["no key and a pack 1 naming another key", null, "another"],
+  ["the staged key and a pack 1 naming another key", "staged", "another"],
+] as const)("refuses a re-run that finds %s, writing nothing", async (_, key, packName) => {
+  const f = await fixture();
+  const state = await f.committed();
+  const stage = f.staged!.stage;
+  await stampDeployment(database.db, "preproduction");
+  if (key === "staged")
+    await withNodeTransaction(database.node, (tx) =>
+      setRecoveryKeyTx(tx, stage.nodeId, stage.verifier, stage.name),
+    );
+  if (packName !== null)
+    await withTransaction(database.db, (tx) =>
+      insertRecoveryPack(tx, {
+        nodeId: stage.nodeId,
+        number: 1,
+        madeAt: new Date(),
+        madeBy: null,
+        parts: [{ part: "server-key", state: "included", keyName: packName, carriedKey: true }],
+      }),
+    );
+  const keys = await storedKeys();
+  const packs = await readRecoveryPacks(database.db, stage.nodeId);
+  await expect(f.keys.installStagedNodeKey(handles(), state, stage)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+  expect(await storedKeys()).toEqual(keys);
+  expect(await readRecoveryPacks(database.db, stage.nodeId)).toEqual(packs);
 });
 
 it.each(["verifier", "name"])(
@@ -312,14 +382,15 @@ it.each(["verifier", "name"])(
     const state = await f.committed();
     const stage = f.staged!.stage;
     await stampDeployment(database.db, "preproduction");
-    await withTransaction(database.db, async (tx) => {
-      await tx.insert(nodeRoles).values({
-        nodeId: stage.nodeId,
-        breakGlassVerifier: part === "name" ? stage.verifier : "another-verifier",
-        breakGlassKeyName: part === "verifier" ? stage.name : "another-name",
-      });
-    });
-    await expect(f.keys.installStagedNodeKey(database.db, state, stage)).rejects.toMatchObject({
+    await withNodeTransaction(database.node, (tx) =>
+      setRecoveryKeyTx(
+        tx,
+        stage.nodeId,
+        part === "name" ? stage.verifier : "another-verifier",
+        part === "verifier" ? stage.name : "another-name",
+      ),
+    );
+    await expect(f.keys.installStagedNodeKey(handles(), state, stage)).rejects.toMatchObject({
       code: "setup.attempt_uncertain",
     });
     expect(await readRecoveryPacks(database.db, stage.nodeId)).toEqual([]);

@@ -113,6 +113,7 @@ export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSet
     const deps: SetupDeps = {
       environment: "production",
       db: held.venue,
+      node: held.node,
       ring,
       firstFiscal: host,
       provision: (request, beforeTransaction) =>

@@ -112,6 +112,7 @@ export async function activateFirstFiscal(
   if (
     deps.provision === undefined ||
     deps.db === undefined ||
+    deps.node === undefined ||
     deps.ring === undefined ||
     deps.establishIdentity === undefined ||
     deps.seedMembership === undefined ||
@@ -211,6 +212,7 @@ export async function publishCheckedFirstFiscal(
 ): Promise<VenueResult> {
   if (
     deps.db === undefined ||
+    deps.node === undefined ||
     deps.ring === undefined ||
     deps.establishIdentity === undefined ||
     deps.seedMembership === undefined ||
@@ -222,6 +224,7 @@ export async function publishCheckedFirstFiscal(
     host,
     {
       db: deps.db,
+      node: deps.node,
       publishSelection: async (current) => {
         await host.publishSelection(current);
       },
@@ -267,7 +270,12 @@ export async function publishCheckedFirstFiscal(
         const binding = firstSetupModuleContext(current, module).binding;
         if (!(await host.delivery.has(binding))) return;
         const stage = await host.keys.readStage({ ...owner, revision: current.revision }, hold);
-        await host.keys.installStagedNodeKey(deps.db!, current, stage, hold);
+        await host.keys.installStagedNodeKey(
+          { venue: deps.db!, node: deps.node! },
+          current,
+          stage,
+          hold,
+        );
       },
       sealSettings: async (result) => {
         if (payload.required)

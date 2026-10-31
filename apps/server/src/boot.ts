@@ -1476,6 +1476,7 @@ async function bootServer(
         // Handed to the fiscal contribution's `provisioningSecret.seal` seat, so boot imports no
         // regime package.
         db,
+        node: store.node,
         ring,
         persistTrading,
         requestRestart: () => process.kill(process.pid, "SIGTERM"),

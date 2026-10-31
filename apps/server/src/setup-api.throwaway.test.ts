@@ -359,6 +359,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
         environment: box.environment,
         devMode: box.devMode,
         db: venueDb.db,
+        node: venueDb.node,
         ring,
         operations: createSetupOperationStore(stateDir),
         provision,

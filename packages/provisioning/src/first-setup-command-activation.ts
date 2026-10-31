@@ -1,4 +1,4 @@
-import type { Database } from "@waitron/db";
+import type { Database, NodeDatabase } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import {
   activateFirstSetup,
@@ -18,7 +18,7 @@ import "./errors.js";
 export interface FirstSetupCommandDeployment {
   publication(state: FirstSetupState): Promise<{
     digest: string;
-    deps: Omit<FirstSetupPublicationDeps, "db">;
+    deps: Omit<FirstSetupPublicationDeps, "db" | "node">;
   }>;
   assertReady(state: FirstSetupState): Promise<void>;
   runReadiness?(state: FirstSetupState): Promise<FiscalReadinessResult>;
@@ -31,7 +31,7 @@ export interface FirstSetupCommandDeployment {
 
 export async function completeFirstSetupCommand(
   runtime: ReturnType<typeof createFirstSetupRuntime>,
-  db: Database,
+  { venue: db, node }: { readonly venue: Database; readonly node: NodeDatabase },
   owner: FirstSetupOwnerAttempt,
   deployment: FirstSetupCommandDeployment,
 ): Promise<VenueResult> {
@@ -53,7 +53,7 @@ export async function completeFirstSetupCommand(
       ) =>
         publishCheckedFirstSetup(
           runtime,
-          { ...publication.deps, db },
+          { ...publication.deps, db, node },
           current,
           checked,
           owner,

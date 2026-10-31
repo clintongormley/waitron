@@ -27,7 +27,7 @@ import {
   verifySecretAsync,
 } from "@waitron/identity";
 import { AppError, FALLBACK_LOCALE, SUPPORTED_LOCALE_CODES, isAppError } from "@waitron/shared";
-import { withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import { putCredential, type KeyRing } from "@waitron/credentials";
 import type { DeploymentEnvironment } from "./config.js";
 import type { ProvisionRequest } from "./provision.js";
@@ -133,6 +133,7 @@ export interface SetupDeps {
   /** Used to seal the fiscal regime's provisioning secret through its `provisioningSecret.seal`
    * seat. */
   db?: Database;
+  node?: NodeDatabase;
   ring?: KeyRing;
   establishIdentity?: (nodeId: string) => Promise<void>;
   /** Mints the venue's term-0 membership document after `establishIdentity` seals the identity key.

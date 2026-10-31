@@ -137,6 +137,7 @@ async function fixture() {
   const deps: SetupDeps = {
     environment: "preproduction",
     db: suite.db,
+    node: suite.node,
     ring,
     provision: async (req, beforeTransaction) => {
       activations++;
@@ -708,6 +709,7 @@ it("real HTTPS resolution boot finishes the retained hour database without docum
   const f = await fixture();
   await expect(f.activate()).rejects.toThrow("synthetic after commit");
   await suite.db.archiveTo(join(f.venueDir, "venue.db"));
+  await suite.node.archiveTo(join(f.venueDir, "node.db"));
   await ensureBoxSecrets({
     stateDir: f.stateDir,
     hostnames: ["localhost", "waitron.local"],
@@ -809,6 +811,7 @@ it("real HTTPS hour Finish survives a discarded answer and two trading boots wit
   const f = await fixture();
   await expect(f.activate()).rejects.toThrow("synthetic after commit");
   await suite.db.archiveTo(join(f.venueDir, "venue.db"));
+  await suite.node.archiveTo(join(f.venueDir, "node.db"));
   await ensureBoxSecrets({
     stateDir: f.stateDir,
     hostnames: ["localhost", "waitron.local"],

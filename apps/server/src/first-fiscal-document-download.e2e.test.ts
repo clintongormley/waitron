@@ -397,6 +397,7 @@ it.each(["en", "es"] as const)(
       try {
         await mkdir(backupDir);
         await source.venue.archiveTo(join(backupDir, "venue.db"));
+        await source.node.archiveTo(join(backupDir, "node.db"));
       } finally {
         await source.close();
       }

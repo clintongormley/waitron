@@ -61,6 +61,7 @@ export async function withFirstSetupPublication<T>(
       environment: state.frozen.environment,
       devMode: config.devMode,
       db,
+      node: opened.node,
       ring,
       recoverProvision: (request) => recoverProvisionedVenue(db, request, host.modules),
       establishIdentity: (nodeId) => establishNodeIdentity({ ownerDb: db, ring }, nodeId),

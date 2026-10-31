@@ -353,7 +353,10 @@ export function createFirstSetupRecoveryDelivery(options: Options) {
       });
     },
     install(
-      db: import("@waitron/db").Database,
+      db: {
+        readonly venue: import("@waitron/db").Database;
+        readonly node: import("@waitron/db").NodeDatabase;
+      },
       state: FirstSetupState,
       owner: FirstSetupOwnerAttempt,
       module: string,

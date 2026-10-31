@@ -443,7 +443,12 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
             deps.io.stdout(`Fiscal test: ${result.status}`);
             if (!["accepted", "not-applicable"].includes(result.status)) return 1;
           }
-          const result = await completeFirstSetupCommand(runtime, target, owner, deployment);
+          const result = await completeFirstSetupCommand(
+            runtime,
+            { venue: target, node },
+            owner,
+            deployment,
+          );
           deps.io.stdout("");
           deps.io.stdout(`node:     ${result.nodeId}`);
           for (const s of result.seeded) deps.io.stdout(`seeded:   ${s.module} — ${s.report}`);
