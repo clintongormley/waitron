@@ -265,16 +265,16 @@ it("omits zero-sized and excessively tall raster images", () => {
 
 describe("text", () => {
   it("gives each drawn line's image the text read back from it, and the job its lines", () => {
-    const result = previewPrintJob(esc(WIDE).line("Café 5 €").line().line("Fin").bytes());
-    expect(result.blocks).toEqual([band("Café 5 €"), band(""), band("Fin")]);
-    expect(result.text).toBe("Café 5 €\n\nFin\n");
+    const result = previewPrintJob(esc(WIDE).line("Café 5 €").line().line("End").bytes());
+    expect(result.blocks).toEqual([band("Café 5 €"), band(""), band("End")]);
+    expect(result.text).toBe("Café 5 €\n\nEnd\n");
   });
 
   it("keeps the spaces a centred line starts with, on the grid of the image's width", () => {
     const result = previewPrintJob(
-      esc({ paperWidth: "58mm", resolution: "203dpi" }).align("center").line("Hola").bytes(),
+      esc({ paperWidth: "58mm", resolution: "203dpi" }).align("center").line("Test").bytes(),
     );
-    expect(result.blocks).toEqual([{ ...band(`${" ".repeat(13)}Hola`, 384), align: "center" }]);
+    expect(result.blocks).toEqual([{ ...band(`${" ".repeat(13)}Test`, 384), align: "center" }]);
   });
 
   it("gives an image that is not drawn text no text: a QR code, a ruler", () => {
@@ -335,7 +335,7 @@ describe("text", () => {
   });
 
   it("sizes the paper by the width the job's lines were drawn at, not the printer's setting now", () => {
-    const narrow = esc({ paperWidth: "58mm", resolution: "203dpi" }).line("Hola").bytes();
+    const narrow = esc({ paperWidth: "58mm", resolution: "203dpi" }).line("Test").bytes();
     expect(previewPrintJob(narrow, { widthDots: 576 })).toMatchObject({
       widthDots: 384,
       columns: 30,
