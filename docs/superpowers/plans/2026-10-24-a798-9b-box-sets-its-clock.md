@@ -3469,3 +3469,22 @@ Revision 4 changes none of these rulings. It carries out the owner's answer of 2
   no `stepComing` and answered `pending_disproofs`.
 - **Wiring controls, each failing the boot case:** no `boxClock` handed to `mountTillApi` (404), and a
   filing switch that is always on (409 at the challenge: AEAT not yet asked).
+
+### Task 13's departures (2026-10-31)
+
+- **`host_unavailable`'s words speak to the administrator reading them.** Decision 13's last
+  sentence, "An administrator can still confirm the clock when it is right", becomes "Once the
+  box's clock is within a minute of your device's, you can confirm it here", since the person who
+  reads it is that administrator; "the part of its install" becomes "the part of the box", as
+  Task 7's departure did for `clock.sync_off`.
+- **`target_invalid` and `pending_disproofs` have their own words** (Task 12's departure added
+  both reasons): "Your device's date is not one the box can take. Check your device's date and
+  time." and "The box is still recording what it found after an earlier change of its clock. Try
+  again in a minute." `same_machine` and `not_stopped` reuse the confirmation's sentences, and
+  `not_stopped` clears the question as it clears the confirmation's times.
+- **A set clock keeps the dialog open** with "The box's clock is set." and Close only, so the
+  sentence is read. When the step is more than `IDLE_TIMEOUT_MS` either way, the dialog adds
+  "Sign in again to go on." and the screen's read waits for Close: a read at once would meet the
+  ended session and leave the page before the sentence is read.
+- **`clock.set_failed` is worded by its code** for both reasons ("The box could not set its
+  clock. Read the time again."), and a reason the screen does not know by `clock.set_refused`'s.
