@@ -62,6 +62,43 @@ describe("boxStaffNoticeSource", () => {
   it("answers nothing before the first reading", async () => {
     expect(await read(null, { freeBytes: null, readAt: null, lowSince: null })).toEqual([]);
   });
+
+  describe("the till's clock check", () => {
+    const CHECK_TIME = {
+      key: "clock.check_time",
+      code: "clock.check_time",
+      severity: "error",
+      params: {},
+    };
+    function readWith(clockCheck: ((...args: unknown[]) => Promise<boolean>) | undefined) {
+      return (since: Date | null, reading: FreeSpaceReading) =>
+        boxStaffNoticeSource({
+          disk: { since: () => since },
+          space: { current: () => reading },
+          ...(clockCheck === undefined ? {} : { clockCheck }),
+        }).read(CTX);
+    }
+
+    it("answers the check-the-time marker while the check answers true, asking at the read's reading", async () => {
+      const clockCheck = vi.fn(async () => true);
+      expect(await readWith(clockCheck)(null, OFF)).toEqual([CHECK_TIME]);
+      expect(clockCheck).toHaveBeenCalledExactlyOnceWith(CTX.tx, CTX.reading);
+    });
+
+    it("answers no marker while the check answers false", async () => {
+      expect(await readWith(async () => false)(null, OFF)).toEqual([]);
+    });
+
+    it("answers no marker with no check", async () => {
+      expect(await readWith(undefined)(null, OFF)).toEqual([]);
+    });
+
+    it("keeps the storage notices beside the marker", async () => {
+      const check = readWith(async () => true);
+      expect(await check(AT, ON)).toEqual([DISK_FULL, CHECK_TIME]);
+      expect(await check(null, ON)).toEqual([SPACE_LOW, CHECK_TIME]);
+    });
+  });
 });
 
 describe("printer notices", () => {

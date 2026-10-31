@@ -13,7 +13,7 @@ const LANGUAGES = [
 ] as const;
 
 describe.each(LANGUAGES)("staffNoticeText in %s", (locale, words) => {
-  it.each(["storage.disk_full", "clock.unusable", "storage.space_low"])(
+  it.each(["storage.disk_full", "clock.unusable", "storage.space_low", "clock.check_time"])(
     "words %s with its own words and the tell-a-manager hint",
     (code) => {
       setLocale(locale);
