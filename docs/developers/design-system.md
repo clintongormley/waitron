@@ -2376,8 +2376,9 @@ the dashboard shows one in its banner and turns help off whenever it returns to 
 On the till, `till-shell` alone draws a `wt-help-switch`, on its bar: on a till, first in the bar's
 session row, before the person's menu and More; on a handheld, after the person's name while the
 name is on the bar, and before More, so "?" and More stay together at the end whether or not the
-name is in More. It is never in More, and the kitchen display, kiosk mode (whose shell draws no bar)
-and the lock screen (drawn in the shell's place) have none. On a till at phone width nothing else
+name is in More. It is never in More, and the lock screen (drawn in the shell's place) has none.
+On a kitchen screen and in kiosk mode, where the shell draws no bar, the switch goes first in the
+corner, before the theme and language choosers (kitchen screens below). On a till at phone width nothing else
 leaves the bar for it, so the tab strip, which already scrolls sideways there, gets narrower: 8 px
 wide at 320 px with a long name, pinned as a known limit in `till-shell.help-phone.test.ts` and left
 to the owner in the backlog. Help goes off whenever the till shows its lock screen (`#setScreen` in
@@ -2409,6 +2410,31 @@ search field's and the list headings' badges are whole
 (`till-counter-screen.help-clip.test.ts`, `till-floor-screen.help-place.test.ts`). Tests: the `*.help.test.ts` file beside each of
 `till-counter-screen.ts`, `till-floor-screen.ts` and `till-table-order-screen.ts` (Counter and Floor
 keep their axe cases in a `*.help.a11y.test.ts` beside it), and `menu-browser.help.test.ts`.
+
+**Kitchen screens.** A kitchen screen is never locked, so help there goes off by itself after two
+minutes without a touch, and a guide page left open in the shell closes with it.
+`HelpIdleController` (`apps/till/src/state/help-idle.ts`) runs the clock in `till-shell` while help
+is on and the shell is in kiosk mode or has the `kds` form factor: turning help on starts it, a
+`pointerdown` or `keydown` anywhere inside the shell restarts it (heard in the capture phase, so a
+part that stops the event still counts; `till-guide-sheet` relays a same-origin guide page's own), turning help off or the shell
+leaving the page stops it, and a redraw never restarts it. On a till or a handheld help still goes
+off only at the lock screen. The station board (`till-station-queue`) marks its first card drawn,
+Columns, and the Changes to orders heading while there are changes; the station screen marks
+Merged / Stacked, drawn only on a kitchen screen with more than one station; the pass and its
+monitor mark the first order card, and the pass also the first Course ready or Group ready, whose
+wrapper is drawn whether help is on or off. One card and one lever per board carry a badge, so a busy
+board does not fill with identical "?" marks and Tab stops. These badges show on a till's Kitchen and
+Pass screens too. On these boards the cards, Columns and the first lever carry `help-inset`
+(`kitchenHelpStyles` in `help-badge.ts`), which keeps the badge inside the part's trailing edge:
+at phone width the boards have no side padding, and a badge hung past a full-width card or the
+right-aligned Columns would make the screen scroll sideways. Merged / Stacked sits at the leading
+edge, so its badge hangs outward; the notices heading keeps half a badge's target of room after
+its words, help on or off, so its badge starts where the words end. `till-expo-screen` draws its
+badges only while help is on (a `HelpModeController`), because a pass monitor is pinned to have no
+button at all while help is off, and a help-mode badge's inner button is in the page even while
+the badge is hidden. Tests: `help-idle.test.ts`, `till-shell.kitchen-help.test.ts`,
+`station-queue.help.test.ts`, `till-station-screen.help.test.ts` and `till-expo-screen.help.test.ts`
+(the board and pass suites keep their axe cases in a `*.help.a11y.test.ts` beside each).
 
 - A help badge is `<wt-help-tooltip mode="help-mode">` placed in a primitive's `help` slot, or
   drawn by a primitive from its own `help` (a `wt-menu-row`, a `wt-data-table` column, a `wt-tabs`

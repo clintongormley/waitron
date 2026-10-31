@@ -662,6 +662,14 @@ plans to retire the editor.
 
 ## Decisions and deliberate limits
 
+- **Help mode beside hints (A582 and A237, owner, 2026-10-18; A582 design §7).** A short
+  explanation stays the field's hint, never a "?" button (owner, 2026-10-03); help mode holds the
+  longer explanation. The dashboard's remaining "?" buttons became help-mode badges, and the setup
+  wizard keeps its own.
+
+- **Each screen gains help when a change touches it (A582 design §8).** After help mode's five
+  slices, a screen without help gets its badges in the change that next touches it.
+
 - **Dashboard document lifecycle (A1229, 2026-10-30).** Suspend live streams and cached reads
   when the document leaves; preserve mounted observers for Back/Forward restoration and retain
   updates after a cancelled navigation. Error recovery waits one task so pagehide can cancel it.
@@ -891,73 +899,6 @@ The owner reversed the disabled-zone ruling on 2026-10-08.
   Existing invalid stored-scope validation still applies; this earlier A396 receipt remains historical.
 
 The per-form classifications remain in the [A331 plan](../superpowers/plans/2026-10-07-a331-save-follows-changes.md).
-
-## A582. Help mode: a "?" in the top bar marks everything that has help (owner 2026-10-13)
-
-The owner's words (2026-10-13, watcher session): "I want a help interface so that there is a
-question mark with a circle around it up in the top nav bar. And when you click it, it highlights
-lots of things on the page with the circle with a question mark inside. And then if you click any of
-those, it gives you help or it takes you to a page on the documentation. So it's essentially a help
-mode that you can turn on and off. It doesn't obscure the page during the normal use, but you can get
-help about anything you want very quickly."
-
-- **Where.** The dashboard AND the devices: tills and handhelds, and probably the kitchen screens and
-  monitors too (owner, 2026-10-13: "This for the dashboard and the devices, handhelds and tills. And
-  probably the screens, monitors as well."). A monitor is view-only, so its help explains what it
-  shows.
-- **The switch.** A circled "?" in the top bar (on the dashboard, in the banner beside the account
-  menu; on a device, in its own top bar) turns help mode on and off. It shows clearly when it is on.
-- **While on.** Each part of the page that has help — a field, a button, a column, a section, a tab —
-  shows a small circled "?" beside it. Clicking one shows a short help text in a popover, or opens
-  the matching documentation page when the help is longer.
-- **While off.** Nothing is added to the page; normal use is unobstructed.
-- **Documentation.** Three user guides, Products, Modifiers and Languages and photos, are in
-  `apps/server/src/guide/en/` with Spanish twins in `apps/server/src/guide/es/`, and the box serves
-  them at `/help/<en|es>/<page>`. Where they live and how they are served:
-  [conventions-ui.md](../developers/conventions-ui.md), "The user guides".
-- **Design (2026-10-18):** [2026-10-18-a582-help-mode-design.md](../superpowers/specs/2026-10-18-a582-help-mode-design.md),
-  pictures in [mockups/a582-help-mode/](mockups/a582-help-mode/). It settles the open points above.
-  The owner approved it on 2026-10-18 with one change: on a till or handheld there is no Help row
-  in More, because the "?" stays in the bar at the top right at every width. With help on, an open
-  menu shows a blue "?" beside each option that has help.
-- [Help badge plan](../superpowers/plans/2026-10-18-a582-1-help-badge.md).
-- [Dashboard help plan](../superpowers/plans/2026-10-18-a582-2-dashboard-help.md).
-- **Left open by 2a:** `wt-help-tooltip` is not in `packages/ui/src/tap-target-and-focus.test.ts`'s
-  interactive set; a throwaway check in #1848's review showed it would fail that guard's focus
-  check, because focus on the element does not pass to its inner button. Decide whether it should
-  delegate focus, then add it to the set.
-- [Guide pages plan](../superpowers/plans/2026-10-18-a582-3-guide-pages.md).
-- **Left open by 3:**
-  - `apps/server/src/guide-markdown.ts` renders the small subset
-    they use, refuses the other shapes it checks for, and lets the rest through unrefused.
-  - A `wt-data-table` column badge, a `wt-tabs` item's badge and a `wt-menu-row` badge cannot carry a
-    guide link.
-  - Products' VAT and Availability badges have no guide link.
-  - `apps/server/src/guide-markdown.ts` takes `escapeHtml` from `recovery-surface.ts`, so the
-    renderer loads that module's imports too (Hono, `@waitron/db`, the login locale). Moving
-    `escapeHtml` to a file of its own would end that; a reviewer called it optional.
-  - The failed-start recovery page (started from `apps/server/src/node-entry.ts`, outside
-    `bootServer`) does not serve the guides.
-- [Till help plan](../superpowers/plans/2026-10-20-a582-4-till-help.md).
-- **Left open by 4a:** on a till at phone width the "?" leaves the tab strip 8 px wide at 320 px
-  with a long name; whether the person's name should give room is the owner's question, A921.
-- **Left open by 4b:** help on Counter's payment buttons waits for A739, which is redesigning the
-  payment window (plan, decision 11); once A739 lands, add it there.
-- **Left open by 4b:** `till-shell` does not clear its guide when it is removed; the sheet closes on
-  lock only because a lock draws a new shell.
-- **Remaining slice** (design §8): **5** kitchen screens and monitors — the corner switch, off after
-  two minutes without a touch.
-- **Left open by 2b:**
-  - Help on a link option in a menu: `wt-menu-row` supports a `wt-button` option only; a link
-    inside it would lose the look `wt-row-actions` gives a link (`::slotted(a[href])` styles only a
-    direct child). No menu needs it yet.
-  - Help on the dashboard's other screens, added as each is next touched; Products is the only
-    screen with it.
-- **Relation to A237.** The standing rule (owner 2026-10-03) makes a short explanation the field's
-  hint, never a "?" button. Help mode fits beside it: hints stay where they are, and help mode is the
-  place for the longer explanation. Decided with the design (owner, 2026-10-18; design §7): the
-  dashboard's remaining "?" buttons become help-mode badges, and the setup wizard keeps its own.
-
 
 ## A653 — every long dashboard table scrolls the same way, with less above it
 

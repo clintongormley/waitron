@@ -190,6 +190,21 @@ terminal, una tarjeta ofrece además **Reimprimir**, y **Entregar** cuando su pe
 pendiente de recoger; una pantalla de cocina en la que nadie inicia sesión no muestra ninguno de los
 dos.
 
+## Ayuda en la pantalla de cocina {#kitchen-help}
+
+Toca **?** arriba a la derecha de una pantalla de cocina, antes de los botones de tema e idioma,
+para activar la ayuda. Aparecen marcas **?** azules en la primera tarjeta y en **Columnas** de cada
+tablero, en **Cambios en los pedidos** mientras haya cambios por leer, y en **Todo junto** o **Por
+estación** en una pantalla con más de una estación. En el pase aparecen en la primera tarjeta de
+pedido y en el primer **Curso listo** o **Grupo listo**; un monitor del pase solo marca su primera
+tarjeta de pedido. Toca una marca para leer una nota breve sobre esa parte; algunas notas enlazan
+con esta guía. El resto de la pantalla funciona como siempre mientras la ayuda está activa.
+
+La ayuda se desactiva sola dos minutos después de la última vez que se tocó la pantalla, y una
+página de la guía abierta desde una nota se cierra con ella. Toca **?** otra vez para desactivarla
+antes. Las pantallas **Cocina** y **Pase** de un terminal muestran las mismas marcas, salvo **Todo
+junto** y **Por estación**; allí la ayuda se desactiva cuando el terminal se bloquea.
+
 ## Los platos iguales comparten fila {#identical-dishes}
 
 Un pedido de 2 × Hamburguesa, de una mesa o del mostrador, llega a cocina como dos platos, para que en una mesa el terminal pueda

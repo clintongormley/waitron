@@ -166,6 +166,21 @@ Each card carries its order's kitchen note and any printing problem. On a till, 
 **Reprint**, and **Collect** once its order is paid and waiting to be collected; a kitchen screen
 that nobody signs in on shows neither.
 
+## Get help on a kitchen screen {#kitchen-help}
+
+Tap **?** at the top right of a kitchen screen, before the theme and language buttons, to turn help
+on. Blue **?** marks then show on the first card and on **Columns** of each board, on **Changes to
+orders** while there are changes to read, and on **Merged** or **Stacked** on a screen with more
+than one station. On the pass they show on the first order card and on the first **Course ready** or
+**Group ready**; a pass monitor marks only its first order card. Tap a mark to read a short note
+about that part; some notes link to this guide. The rest of the screen works as usual while help is
+on.
+
+Help goes off by itself two minutes after the screen was last touched, and a guide page opened from
+a note closes with it. Tap **?** again to turn it off sooner. A till's **Kitchen** and **Pass**
+screens show the same marks, apart from **Merged** and **Stacked**; there help goes off when the till
+locks.
+
 ## Identical dishes share a row {#identical-dishes}
 
 An order of 2 × Burger, from a table or the counter, reaches the kitchen as two dishes, so at a table the till can serve or move each
