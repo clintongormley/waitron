@@ -16,6 +16,8 @@ export {
 } from "./venue-holder-identity.js";
 export type {
   Database,
+  NodeDatabase,
+  NodeTransaction,
   OpenVenueOptions,
   Schema,
   Transaction,
@@ -296,7 +298,7 @@ export {
   type BillParty,
   type TableNames,
 } from "./party-table-labels.js";
-export { withTransaction } from "./tenancy.js";
+export { withNodeTransaction, withTransaction } from "./tenancy.js";
 export { isRefusal, isUniqueViolation } from "./unique-violation.js";
 export {
   checkFailed,

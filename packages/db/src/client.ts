@@ -49,12 +49,21 @@ export type Transaction = NodeSqliteDatabase<Schema>;
  */
 export type Database = StoreHandle<Schema>;
 
+/**
+ * `node.db`'s handle, marked so the compiler can tell it from `venue.db`'s: `withTransaction`
+ * refuses it, because that function drains `change_log`, a table only `venue.db` carries.
+ */
+export type NodeDatabase = Database & { readonly __file: "node" };
+
+/** A transaction on `node.db`, as `withNodeTransaction` hands it to its body. */
+export type NodeTransaction = Transaction & { readonly __file: "node" };
+
 /** This node's two open files. */
 export interface VenueDatabase {
   /** `venue.db`, which every migration set is applied to (`packages/migrations/src/apply.ts`). */
   venue: Database;
   /** `node.db`, which no migration set is applied to; reserved for a later slice. */
-  node: Database;
+  node: NodeDatabase;
   /** Closes both files. */
   close(): Promise<void>;
 }
@@ -78,7 +87,7 @@ export async function openVenueDatabase(
       exclusive: options.exclusive,
     }),
   );
-  return { venue: store.venue, node: store.node, close: store.close };
+  return { venue: store.venue, node: store.node as NodeDatabase, close: store.close };
 }
 
 /**
