@@ -243,11 +243,11 @@ export function createCertificateDiagnosisRunner(options: {
           childExited = true;
           child.removeListener("error", spawnFailed);
           child.removeListener("exit", exited);
-          childSignal.removeEventListener("abort", childCancelled);
           state.child = null;
           endSupervision();
           const finish = () => {
             cleanChild = undefined;
+            childSignal.removeEventListener("abort", childCancelled);
             removeFrames();
             channel.removeListener("end", finish);
             channel.removeListener("close", finish);
