@@ -281,6 +281,92 @@ describe("attendance duty pass", () => {
   });
 });
 
+// The audit table's attendance row (A798-B slice 9b, Task 15): a shift running at 09:00 on 7 January
+// while the pass's clock reads 400 days off, then the right time again.
+describe("a running shift across a clock days off", () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const working = async () => {
+    await withTransaction(suite.db, async (tx) => {
+      await backend.clockIn(tx, {
+        nodeId,
+        locationId,
+        personId,
+        at: "2026-01-07T08:00:00Z",
+        offsetMinutes: 60,
+        origin: jobOrigin("dashboard"),
+      });
+      await recordAttendanceFact(tx, {
+        source: "order",
+        key: "morning-order",
+        locationId,
+        personId,
+        kind: "order",
+        at: "2026-01-07T08:30:00Z",
+        offsetMinutes: 60,
+        outcome: "qualified",
+      });
+      await beginAttendanceDiscovery(tx, { locationId, generation: "opened" });
+    });
+  };
+  const settleAt = async (at: Date) => {
+    const { runAttendancePass } = await import("./attendance-loop.js");
+    for (let i = 0; i < 40; i++)
+      if (!(await runAttendancePass({ ...deps(), now: () => at })).more) return;
+    throw new Error("duty exceeded bounded fixture batches");
+  };
+  const clock = (kind: "clockIn" | "clockOut", at: string) =>
+    withTransaction(suite.db, (tx) =>
+      backend[kind](tx, {
+        nodeId,
+        locationId,
+        personId,
+        at,
+        offsetMinutes: 60,
+        origin: jobOrigin("dashboard"),
+      }),
+    );
+  const entries = async () =>
+    (await suite.db.select().from(timeEntries)).map((e) => [e.entryKind, e.eventAt, e.authorKind]);
+
+  it("a clock 400 days ahead closes the shift at its last order; after the step back nothing is deleted and the worker clocks in again", async () => {
+    await working();
+    await settleAt(new Date(now.getTime() + 400 * DAY_MS));
+    expect(await entries()).toEqual([
+      ["in", "2026-01-07T08:00:00.000Z", "worker"],
+      ["out", "2026-01-07T08:30:00.000Z", "automatic"],
+    ]);
+    // The step: the right time again. The automatic clock-out stands, so a clock-out is refused as
+    // for anyone already out, and a clock-in is written.
+    await expect(clock("clockOut", "2026-01-07T09:30:00Z")).rejects.toMatchObject({
+      code: "attendance.no_open_entry",
+    });
+    await clock("clockIn", "2026-01-07T10:00:00Z");
+    await settleAt(new Date("2026-01-08T06:00:00Z"));
+    expect(await entries()).toEqual([
+      ["in", "2026-01-07T08:00:00.000Z", "worker"],
+      ["out", "2026-01-07T08:30:00.000Z", "automatic"],
+      ["in", "2026-01-07T10:00:00.000Z", "worker"],
+    ]);
+    expect(verifyChain(await readChain(suite.db, { nodeId, locationId }))).toEqual({ ok: true });
+  });
+
+  it("a clock 400 days behind closes nothing; after the step forward the worker clocks out and in", async () => {
+    await working();
+    await settleAt(new Date(now.getTime() - 400 * DAY_MS));
+    expect(await entries()).toEqual([["in", "2026-01-07T08:00:00.000Z", "worker"]]);
+    expect(await suite.db.select().from(attendanceQuestions)).toEqual([]);
+    await clock("clockOut", "2026-01-07T09:30:00Z");
+    await clock("clockIn", "2026-01-07T10:00:00Z");
+    await settleAt(new Date("2026-01-08T06:00:00Z"));
+    expect(await entries()).toEqual([
+      ["in", "2026-01-07T08:00:00.000Z", "worker"],
+      ["out", "2026-01-07T09:30:00.000Z", "worker"],
+      ["in", "2026-01-07T10:00:00.000Z", "worker"],
+    ]);
+    expect(verifyChain(await readChain(suite.db, { nodeId, locationId }))).toEqual({ ok: true });
+  });
+});
+
 describe("attendance loop lifecycle", () => {
   it("reports a failed sleep and keeps the duty alive for the next tick", async () => {
     const abort = new AbortController();

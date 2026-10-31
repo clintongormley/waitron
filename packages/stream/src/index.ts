@@ -46,6 +46,7 @@ export { spawnLitestream } from "./litestream-process.js";
 export {
   DEFAULT_WAL_LIMIT_BYTES,
   L0_RETENTION_MS,
+  PRUNE_WINDOW_MS,
   StreamSupervisor,
   TICK_MS,
 } from "./supervisor.js";

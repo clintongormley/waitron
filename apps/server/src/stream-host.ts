@@ -8,6 +8,7 @@ import { AppError } from "@waitron/shared";
 import { VENUE_FILE, WAL_SUFFIX } from "@waitron/store";
 import {
   DEFAULT_WAL_LIMIT_BYTES,
+  PRUNE_WINDOW_MS,
   SentPointers,
   StreamSupervisor,
   type BucketConfig,
@@ -16,6 +17,8 @@ import {
   type StreamNotStarted,
   type StreamView,
 } from "@waitron/stream";
+import type { ClockStep } from "@waitron/fiscal";
+import { clockStepHold } from "./backup-sweep.js";
 import type { Logger } from "./logger.js";
 import { credentialField } from "./credentials.js";
 import { readNodeIdentityKey } from "./node-identity.js";
@@ -96,10 +99,26 @@ export interface StreamHostDeps {
   /** False while a restored box's first start is unfinished (`rebuild-first-start.ts`). Read at
    * each start, so a reload after a settings save is held too. Default: always true. */
   mayStream?: () => boolean;
+  /** The box's latest step of its clock; old generations are kept for the week after it.
+   * Absent: none is kept for a step. */
+  latestClockStep?: () => Promise<ClockStep | null>;
   /** Test seams; production leaves them unset. */
   spawn?: SpawnFn;
   store?: ObjectStore;
   walLimitBytes?: number;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** True while `read`'s step holds old generations: the hold the backups' pruning uses, for the
+ * prune's own window. A throw from `read` reaches the supervisor, which then keeps them. A box left
+ * a week on a clock set wrongly forward then prunes against it (docs/backlog/box.md). */
+function pruneHeldBy(
+  read: (() => Promise<ClockStep | null>) | undefined,
+): ((now: Date) => Promise<boolean>) | undefined {
+  if (read === undefined) return undefined;
+  return async (now) =>
+    clockStepHold(await read(), now.getTime(), PRUNE_WINDOW_MS / DAY_MS) !== undefined;
 }
 
 /**
@@ -171,6 +190,7 @@ export class StreamHost {
         store: this.#deps.store,
         onCommit: (listener) => db.onCommit(listener),
         sentPointers: this.#sentPointers,
+        pruneHeld: pruneHeldBy(this.#deps.latestClockStep),
       });
       this.#supervisor = supervisor;
       await supervisor.start();

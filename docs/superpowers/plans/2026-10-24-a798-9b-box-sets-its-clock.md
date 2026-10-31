@@ -2977,6 +2977,68 @@ finds nothing reconciled.
 src/till-clock-state.test.ts src/till-clock-api.test.ts src/till-clock-attendance.test.ts
 src/attendance-discovery.test.ts src/boot.till-clock.test.ts`.
 
+### Task 15c: Stored limits that sit ahead of the clock after a backward step
+
+*(Added while building Task 15, 2026-10-31, from its audit; the lead's ruling under the STOP rule.)*
+
+**Goal.** Task 15's audit (`docs/developers/conventions-data.md`, "Jobs that compare a stored
+time with the clock") found, by reading, stored times that a step days back leaves far ahead of
+the clock, so a limit lasts the step's length longer. Each below either blocks a legal record or
+keeps a credential, link or grant alive past its limit, which the STOP rule does not accept.
+
+**The rule (the lead's ruling).** A stored deadline more than its own length ahead of now counts as
+passed — the mirror Task 15 gave management sessions. Where the length is stored with the deadline,
+use it; where it is a constant, use the constant. A start time (`createdAt`, `sentAt`) more than the
+limit ahead of now counts as past its limit. Nothing is shifted or rewritten at the step.
+
+**Each site, test first** (every row of the table names its lines; check each on the tree first,
+since they were read, not run):
+- **AEAT filing** (`packages/fiscal-verifactu/src/drain.ts:226`): the gate is open when
+  `proximo_envio_en` is more than `tiempo_espera_seg` ahead of now; a record's `proximo_intento_en`
+  more than the longest retry wait ahead is due; an `enviado_en` ahead of now by more than
+  `RECUPERACION_ENVIANDO_MS` is stale. Test in the drain's suite: a gate and a retry stored as if
+  the clock had been 400 days ahead → the next pass files. The golden huella test and `inmutabilidad`
+  run unedited.
+- **Account-action links** (`packages/identity/src/account-action.ts:191`, `:279`, `:431`): an
+  `expiresAt` more than the purpose's lifetime ahead is refused `account_action.invalid`, with the
+  just-inside control.
+- **Join requests** (`apps/server/src/join-requests.ts:39`, `:655`): a request created more than
+  `JOIN_TTL_MS` ahead lapses.
+- **Google sign-in state and authenticator enrolment** (`packages/identity/src/google-oidc.ts:98`,
+  `profile.ts:196`): an `expiresAt` more than its 10 minutes ahead is refused.
+- **Card-refund resend** (`apps/server/src/bill-refunds.ts:485`): a `sentAt` more than the resend
+  window ahead is outside it, so no resend under the old key.
+- **Pairing window** (`apps/server/src/pairing-mode.ts:57`): a window whose end is more than its
+  length ahead is shut.
+- **Payments reconcile scheduler** (`packages/scheduler/src/derive.ts:120`, `store.ts:128`): a
+  claim or retry time more than its own lease or wait ahead is reclaimable or due.
+- **Cloud snapshots** (`apps/server/src/cloud-snapshot-worker.ts:186`): a `nextAt` more than the
+  snapshot interval ahead is due.
+- **Content suggestion jobs** (`apps/server/src/content-suggestion-runner.ts:170`): a job created
+  more than its lifetime ahead ends expired.
+
+Each gets the failing case first, its control just inside the limit, and a deletion control. If a
+site's stored length cannot be known, or a fix would change what an existing test checks, add it
+to "Changed test checks" or stop for a decision, as the STOP rule says. The audit table's rows move
+from "Task 15c fixes it" to "fixed (test: …)" in this task's commit.
+
+**Focused commands.** Each site's own suite; `pnpm --filter @waitron/fiscal-verifactu exec vitest
+run src/write-path.e2e.test.ts inmutabilidad`.
+
+### Task 15's departures and notes (2026-10-31)
+
+- The hold is built in `StreamHost` from a `latestClockStep` read (the same function boot hands the
+  backups), not by boot passing a `pruneHeld` closure: `StreamHost` builds every supervisor, and its
+  test can read what each was built with. The window reuses `clockStepHold` with
+  `PRUNE_WINDOW_MS`, so a step dated more than a minute ahead holds nothing, as for backups.
+- A throw from the step read keeps the generations (logged `stream.prune_failed`).
+- Management sessions: two existing fixtures signed in at the real clock and then moved `Date` back
+  weeks; "Changed test checks" entry 16.
+- The attendance row was written from the test the plan named; it showed no deleted entry and no
+  blocked clock event caused by the step (a clock-out after the wrongly early automatic one is
+  refused as for anyone already out, and a clock-in is written).
+- The audit found more rows than the plan named, several under the STOP rule: Task 15c.
+
 ### Task 16: Guides, English and Spanish
 
 **Files.** `apps/server/src/guide/en/box-status.md` and `apps/server/src/guide/es/box-status.md`:

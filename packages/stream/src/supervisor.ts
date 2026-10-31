@@ -118,6 +118,11 @@ export interface SupervisorDeps {
   onCommit(listener: () => void): () => void;
   /** Shared by every supervisor one process starts for this venue; see `SentPointers`. */
   sentPointers: SentPointers;
+  /**
+   * True while old generations must be kept whatever `now` says, as after a step of the clock; a
+   * throw keeps them too. Absent: never held.
+   */
+  pruneHeld?: (now: Date) => Promise<boolean>;
 }
 
 /** How often, while streaming, the side file is measured. */
@@ -817,7 +822,15 @@ export class StreamSupervisor {
     if (this.#pruning || now.getTime() - this.#lastPruneAt < PRUNE_EVERY_MS) return;
     this.#lastPruneAt = now.getTime();
     this.#pruning = true;
-    void pruneGenerations(this.#store, this.#deps.venueId, live, now, PRUNE_WINDOW_MS, { signal })
+    void Promise.resolve()
+      .then(() => this.#deps.pruneHeld?.(now) ?? false)
+      .then((held) =>
+        held
+          ? []
+          : pruneGenerations(this.#store, this.#deps.venueId, live, now, PRUNE_WINDOW_MS, {
+              signal,
+            }),
+      )
       .then((deleted) => {
         if (deleted.length > 0) {
           this.#deps.log("info", "stream.generations_pruned", { count: deleted.length });

@@ -80,6 +80,7 @@ interface HarnessOptions {
   shareSentPointers?: boolean;
   /** What the supervisor reaches the bucket through, given the harness's own store. */
   wrapStore?: (store: ObjectStore) => ObjectStore;
+  pruneHeld?: SupervisorDeps["pruneHeld"];
 }
 
 async function harness(options: HarnessOptions = {}) {
@@ -166,6 +167,7 @@ async function harness(options: HarnessOptions = {}) {
     sentPointers,
     ...(options.stopWaitMs === undefined ? {} : { stopWaitMs: options.stopWaitMs }),
     ...(options.readCommandLine === undefined ? {} : { readCommandLine: options.readCommandLine }),
+    ...(options.pruneHeld === undefined ? {} : { pruneHeld: options.pruneHeld }),
   };
   const supervisor = new StreamSupervisor(deps);
   const successors: StreamSupervisor[] = [];
@@ -1585,6 +1587,49 @@ describe("generation housekeeping", () => {
     await h.clock.next();
     await vi.waitFor(() => expect(h.store.has(fullCopyOf(older))).toBe(false));
     expect(h.store.has(fullCopyOf(h.generation))).toBe(true);
+  });
+
+  it("prunes nothing while a clock step holds the old generations, and prunes once it no longer does", async () => {
+    let held = true;
+    const asked: string[] = [];
+    const h = await streaming({
+      pruneHeld: async (now) => {
+        asked.push(now.toISOString());
+        return held;
+      },
+    });
+    const old = generationName(1, "node-old", new Date(Date.parse(START) - 9 * DAY));
+    oldGeneration(h, old, Date.parse(START) - 8 * DAY);
+    h.clock.advance(8 * DAY);
+    await h.clock.next(); // the streaming tick
+    await vi.waitFor(() => expect(asked).toEqual([h.clock.now().toISOString()]));
+    await h.clock.asleep();
+    expect(h.store.has(fullCopyOf(old))).toBe(true);
+    expect(h.logs.some((line) => line.event === "stream.generations_pruned")).toBe(false);
+
+    held = false;
+    h.clock.advance(PRUNE_EVERY_MS);
+    await h.clock.next();
+    await vi.waitFor(() => expect(h.store.has(fullCopyOf(old))).toBe(false));
+    expect(h.store.has(fullCopyOf(h.generation))).toBe(true);
+    expect(asked).toHaveLength(2);
+  });
+
+  it("prunes nothing and logs the failure when whether a step holds them cannot be read", async () => {
+    const h = await streaming({
+      pruneHeld: async () => {
+        throw new Error("the step could not be read");
+      },
+    });
+    const old = generationName(1, "node-old", new Date(Date.parse(START) - 9 * DAY));
+    oldGeneration(h, old, Date.parse(START) - 8 * DAY);
+    h.clock.advance(8 * DAY);
+    await h.clock.next(); // the streaming tick
+    await vi.waitFor(() =>
+      expect(h.logs.some((line) => line.event === "stream.prune_failed")).toBe(true),
+    );
+    expect(h.store.has(fullCopyOf(old))).toBe(true);
+    expect(h.supervisor.status().state).toBe("streaming");
   });
 
   it("logs a prune the bucket refuses, and streams on", async () => {

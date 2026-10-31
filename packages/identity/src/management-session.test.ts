@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import {
+  IDLE_TIMEOUT_MS,
   endManagementSession,
   resolveManagementSession,
   startManagementSession,
@@ -123,6 +124,42 @@ describe("management session lifecycle", () => {
     await run((tx) => tx.execute(agedTo(minutesAgo(2 * 24 * 60), session.token)));
     const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.token)));
     expect(code).toBe("management_session.expired");
+  });
+
+  describe("a last-seen time ahead of the clock, as a backward clock step leaves it", () => {
+    const aheadBy = (ms: number) => new Date(Date.now() + ms).toISOString();
+
+    it("throws management_session.expired once last-seen is more than the idle timeout ahead", async () => {
+      const personId = await seedPerson(suite.db, "manager");
+      const session = await run((tx) => startManagementSession(tx, { personId }));
+      await run((tx) => tx.execute(agedTo(aheadBy(IDLE_TIMEOUT_MS + 1_000), session.token)));
+      const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.token)));
+      expect(code).toBe("management_session.expired");
+    });
+
+    it("accepts a last-seen just inside the idle timeout ahead", async () => {
+      const personId = await seedPerson(suite.db, "manager");
+      const session = await run((tx) => startManagementSession(tx, { personId }));
+      await run((tx) => tx.execute(agedTo(aheadBy(IDLE_TIMEOUT_MS - 1_000), session.token)));
+      const resolved = await run((tx) => resolveManagementSession(tx, session.token));
+      expect(resolved.personId).toBe(personId);
+    });
+
+    it("accepts a last-seen ten minutes ahead, and the touch stamps it back at the clock", async () => {
+      const personId = await seedPerson(suite.db, "manager");
+      const session = await run((tx) => startManagementSession(tx, { personId }));
+      await run((tx) => tx.execute(agedTo(aheadBy(10 * 60_000), session.token)));
+      const before = Date.now();
+      await run((tx) => resolveManagementSession(tx, session.token));
+      const after = Date.now();
+      const [row] = (
+        await suite.db.execute<{ last_seen_at: string }>(
+          sql`select last_seen_at from management_sessions where person_id = ${personId}`,
+        )
+      ).rows;
+      expect(Date.parse(row!.last_seen_at)).toBeGreaterThanOrEqual(before);
+      expect(Date.parse(row!.last_seen_at)).toBeLessThanOrEqual(after);
+    });
   });
 
   it("throws person.suspended when the person is suspended mid-session", async () => {

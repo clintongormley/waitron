@@ -2414,6 +2414,7 @@ async function bootServer(
     now,
     isPrimary: () => holders.singletonRole.current === "primary",
     mayStream: () => firstStart.mayStream,
+    latestClockStep,
     ...seams.stream,
   });
   undoOnFailure.push(() => streamHost.stop());

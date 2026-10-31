@@ -1472,6 +1472,37 @@ wrong clock. The note is written when backup settings load (`backup-supervisor.t
 clock steps, so carrying the step means a new note field and a rewrite on every step. Left open by
 A798-B slice 9b, Task 14a.
 
+## The live copy ages old generations by the box's clock.
+
+After a step the box makes to its clock, old generations in the bucket are kept for a week
+(`StreamHost`'s hold over the supervisor's daily prune). A box left a week on a clock set wrongly
+forward then prunes against it. Ageing generations by the bucket's own times (the live generation's
+newest `lastModified`) would remove that limit, but changes what
+`packages/stream/src/generations.test.ts` checks (old generations pruned beside an old live one).
+Left open by A798-B slice 9b, Task 15.
+
+## Closing a pay period trusts the box's clock.
+
+`closePayPeriod` (`packages/workforce/src/pay-period-close.ts`) refuses `pay_period.not_due` until
+the clock passes the period's end. A clock wrongly days ahead could close a period that has not
+ended, and the closure is append-only. No production code calls it yet; the caller that is added
+needs a clock check (the fiscal clock-behind stop's shape, or a confirmed reading). Left open by
+A798-B slice 9b, Task 15 (its audit table, `docs/developers/conventions-data.md`).
+
+## A device's last-seen time across a backward clock step.
+
+Device last-seen stamps (`device-session.ts`, `station-outputs-down.ts`, `alert-sources.ts`) are
+compared with the clock. After a step days back, a stamp sits ahead and a device that has gone dark
+is not flagged until the clock catches up. Read, not run. Left open by A798-B slice 9b, Task 15.
+
+## The box's certificate issued under a wrong clock.
+
+The box's leaf (`apps/server/src/self-signed-cert.ts`, `notBefore` the clock less a day) issued
+while the clock was more than a day ahead is refused by every device whose clock is right. The box's
+repair route reissues a leaf the box itself sees as not healthy; whether a device that refuses the
+certificate can reach that route is not checked. Slice 9c should refuse a certificate issue while a
+clock check waits. Read, not run. Left open by A798-B slice 9b, Task 15.
+
 ## AEAT's time outranks the devices.
 
 AEAT agreeing with the box restarts payments even if two

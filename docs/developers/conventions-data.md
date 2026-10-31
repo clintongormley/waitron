@@ -4213,6 +4213,46 @@ closings and presses they name. What nothing checks:
 - that only `writeClosing` and `confirmClockStop` write the table: nothing refuses another writer,
   and a row it wrote that passes the cover's checks would cover.
 
+### The box sets its own clock
+
+#### Jobs that compare a stored time with the clock, across a step of days
+
+A798-B slice 9b, Task 15. One row per job that compares a stored time with the wall clock. "+400"
+is a step 400 days forward (stored times now look 400 days old), "−400" one 400 days back (stored
+times sit 400 days ahead). A step the box makes moves its clock towards the right time; a time
+stored while the clock was wrong is what the step exposes. Rows marked "test" name the test that
+ran both directions; every other row was read on the branch at `a3ef1ff3a`, not run. The audit's
+two greps (calls of `Date.now()`, `new Date()` and `now().getTime()`, and files holding timers,
+outside tests) are in Task 15's commit message. Timers and times held only in memory (backoffs,
+request durations) are left out, as the plan scopes it.
+
+| Job | +400 | −400 | Decision |
+| --- | --- | --- | --- |
+| Dashboard sessions (`packages/identity/src/management-session.ts:81`) | expired, as before | expired once last seen more than the 30-minute idle timeout ahead; a smaller step ends none | fixed (test: `management-session.test.ts`, "a last-seen time ahead of the clock") |
+| Passkey challenges (`packages/identity/src/passkey.ts:110`) | expired | expired when stamped more than a minute ahead | fixed (test: `passkey.test.ts`, "stamped more than a minute ahead") |
+| Stream generations (`packages/stream/src/supervisor.ts`, `#pruneDaily`) | old generations would look a week old and be deleted | the prune deletes nothing until the clock catches up | fixed: kept for the week after the box's latest step, through `StreamHost`'s `latestClockStep` (tests: `supervisor.test.ts` "prunes nothing while a clock step holds", `stream-host.test.ts` "old generations across a step of the clock", `boot.clock-wiring.test.ts`). Limit: a box left a week on a clock set wrongly forward then prunes against it |
+| Backup archives (`apps/server/src/backup-sweep.ts`, `pruneBackend`; making room) | without a hold, every archive past `retainDays` deleted | archives stamped ahead rank last | fixed in Tasks 14 and 14a for steps the box makes (tests in `backup-sweep.test.ts`, `backup-room.test.ts`, `low-space-backups.test.ts`); a step by the time service or by hand holds nothing — accepted: only steps the box makes are recorded |
+| Cached time health (`apps/server/src/ttl-cache.ts`) | entry stale, recomputed | an entry from the clock's future would be served for days | fixed in Task 6 (test: `ttl-cache.test.ts`) |
+| Attendance day close (`runAttendanceLoop`, `packages/workforce/src/end-of-day.ts`) | a clock wrongly 400 days ahead closes a running shift at its last order with an automatic clock-out; after the step back a clock-out is refused `attendance.no_open_entry` and a clock-in is written; nothing deleted, chain intact | closes nothing; after the step forward the worker clocks out and in and the day closes as it ends | accepted (test: `attendance-loop.test.ts`, "a running shift across a clock days off"): the wrong close comes from the clock being wrong before any step, which 9b does not cause; a manager corrects the record as for any wrong automatic clock-out |
+| AEAT filing wait gate and record retries (`packages/fiscal-verifactu/src/drain.ts:226`, `:369`; `proximo_intento_en`, `enviado_en`) | everything due at once | gate and retries sit 400 days ahead: nothing is filed until 1 000 records are due | Task 15c fixes it (blocks a legal record) |
+| Account-action links (`packages/identity/src/account-action.ts:191`, `:279`, `:431`) | every outstanding link refused | a password-reset, invitation or email-change link stays usable for 400 days plus its limit | Task 15c fixes it (a credential past its limit) |
+| Join requests (`apps/server/src/join-requests.ts:39`) | every pending request deleted; devices ask again | a request stays approvable for 400 days plus 15 minutes | Task 15c fixes the −400 side; +400 accepted: the device asks again |
+| Google sign-in state, authenticator enrolment (`packages/identity/src/google-oidc.ts:98`, `profile.ts:196`) | refused | usable for 400 days plus 10 minutes | Task 15c fixes it |
+| Card-refund resend window (`apps/server/src/bill-refunds.ts:485`) | never resent; waits for a manager | resent under the same key past the provider's window, once a clock confirmation lifts the stop | Task 15c fixes it |
+| Pairing window (`apps/server/src/pairing-mode.ts:57`, in memory) | shuts | stays open for 400 days plus 3 minutes | Task 15c fixes it |
+| Payments reconcile scheduler (`packages/scheduler/src/derive.ts:120`, `store.ts:128`) | runs due at once | a stuck run is not reclaimed and a failed one not retried for 400 days | Task 15c fixes it |
+| Cloud snapshots (`apps/server/src/cloud-snapshot-worker.ts:186`, `:226`) | due at once; a pending capture over a day old is abandoned and its local file deleted | no snapshot for 400 days | Task 15c fixes the −400 side; +400 accepted: only an unpublished local capture goes |
+| Content suggestion jobs (`apps/server/src/content-suggestion-runner.ts:170`) | the job ends expired | the job lives 400 days, refusing every new run | Task 15c fixes it |
+| Pay-period close (`packages/workforce/src/pay-period-close.ts:110`) | a period not yet ended could be closed, append-only | a due period refused `pay_period.not_due` | accepted with a backlog line: no production caller on this tree (only `apps/server/test/attendance-export-fixture.ts:77`) |
+| Certificate reminders (`packages/fiscal-verifactu/src/certificate-dates.ts:46`, `certificate-reminders.ts:107`) | the stage jumps ahead; an expired email may go | warnings stop until the date catches up; a failed send waits 400 days | accepted: a reminder, compared with the certificate's own dates, which a clock set right reads correctly |
+| Crash reports kept (`apps/server/src/free-space-now.ts:218`, `start-space.ts:151`) | deleted the next time space is freed | kept 400 days longer | accepted: diagnostic files only |
+| Staged recovery copy (`apps/server/src/recovery-preparation.ts:436`) | the staging copy is dropped | an hour's timer still drops it | accepted: the original backup is untouched |
+| Device last seen (`device-session.ts:287`, `station-outputs-down.ts:219`, `alert-sources.ts:400`) | devices may read dark until they next call | stamps not refreshed; dark devices not flagged for 400 days | accepted with a backlog line |
+| Cloud grants and lease (`cloud-backup.ts:137`, `cloud-backup-upload.ts:29`, `cloud-recovery.ts:121`, `cloud-installation.ts:215`) | refused; a new one is asked for | judged live locally; the Cloud enforces its own expiry | accepted: the times are the Cloud's |
+| Backup schedule (`backup-sweep.ts:451`) | fires within an hour | fires at its fixed time, at most an hour late (in-memory, hour-long sleeps) | accepted |
+| Venue liveness (`packages/store/src/venue-liveness.ts:127`) | none: measured on `process.hrtime` | none | nothing to do |
+| The box's TLS certificate (`apps/server/src/self-signed-cert.ts:160`) | — | the box may see its own leaf as not yet valid; its repair route reissues one | accepted with a backlog line (plan Task 15): a leaf issued while the clock was more than a day ahead is refused by devices whose clock is right; read, not run |
+
 ## An envío to AEAT carries one taxpayer name
 
 The envío's header (`Cabecera`) is built from its first record's name, and a legal-name change
