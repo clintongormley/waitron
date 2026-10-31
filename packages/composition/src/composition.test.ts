@@ -12,6 +12,7 @@ import {
 import { BOOKINGS_MIGRATIONS } from "@waitron/bookings";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CREDENTIALS_MIGRATIONS } from "@waitron/credentials";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { CORE_ALERTS, CORE_MIGRATIONS } from "@waitron/db";
 import { FISCAL_NONE_MIGRATIONS } from "@waitron/fiscal-none";
 import { describe, expect, it } from "vitest";
@@ -104,6 +105,7 @@ describe("the migration manifest", () => {
     const byName = Object.fromEntries(manifestSets().map((set) => [set.name, set.table]));
     expect(byName).toEqual({
       core: CORE_MIGRATIONS.migrationsTable,
+      node: NODE_MIGRATIONS.migrationsTable,
       catalogue: CATALOGUE_MIGRATIONS.migrationsTable,
       media: MEDIA_MIGRATIONS.migrationsTable,
       "venue-service": VENUE_SERVICE_MIGRATIONS.migrationsTable,

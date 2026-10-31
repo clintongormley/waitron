@@ -44,6 +44,7 @@ export async function applyMigrations(
   directory: string,
   options: readonly VenueMigrationOptions[],
 ): Promise<void> {
+  for (const set of options) assertNoNodeAppendOnly(set);
   // Before the venue file is opened, not after: the store's open takes `venue.lock`, which refuses a
   // second process at once instead of making it wait.
   await mkdir(directory, { recursive: true });
@@ -53,6 +54,17 @@ export async function applyMigrations(
   } finally {
     // No commit: nothing was written, and closing releases the lock.
     lock.release();
+  }
+}
+
+/** node.db never gets append-only triggers, so a node set that names tables for them is refused. */
+function assertNoNodeAppendOnly(set: VenueMigrationOptions): void {
+  const tables = set.appendOnlyTables ?? [];
+  if (set.database === "node" && tables.length > 0) {
+    throw new AppError("migrations.node_append_only", {
+      set: set.migrationsTable,
+      tables: [...tables],
+    });
   }
 }
 

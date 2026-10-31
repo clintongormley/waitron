@@ -94,6 +94,42 @@ describe("applyMigrations routes a set to the file it names", () => {
     });
   });
 
+  // node.db is never given append-only triggers, so a node set naming such tables would leave them
+  // unprotected while claiming otherwise. Refused before either file is written.
+  it("refuses a node set that declares append-only tables, and migrates nothing", async () => {
+    const venue = freshVenue();
+    await expect(
+      applyMigrations(venue, [
+        {
+          migrationsFolder: folderOf([MIGRATION.entry]),
+          migrationsTable: TABLE,
+          database: "node",
+          appendOnlyTables: ["probe_node"],
+        },
+      ]),
+    ).rejects.toMatchObject({
+      code: "migrations.node_append_only",
+      params: { set: TABLE, tables: ["probe_node"] },
+    });
+    expect(await tablesIn(venue)).toEqual({
+      node: { table: false, journal: false },
+      venue: { table: false, journal: false },
+    });
+  });
+
+  it("accepts a node set that declares an empty append-only list", async () => {
+    const venue = freshVenue();
+    await applyMigrations(venue, [
+      {
+        migrationsFolder: folderOf([MIGRATION.entry]),
+        migrationsTable: TABLE,
+        database: "node",
+        appendOnlyTables: [],
+      },
+    ]);
+    expect((await tablesIn(venue)).node).toEqual({ table: true, journal: true });
+  });
+
   it("refuses a short node set with migrations.incomplete", async () => {
     const venue = freshVenue();
     await applyMigrations(venue, [

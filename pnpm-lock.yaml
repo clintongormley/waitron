@@ -744,6 +744,9 @@ importers:
       '@waitron/module':
         specifier: workspace:*
         version: link:../module
+      '@waitron/node-db':
+        specifier: workspace:*
+        version: link:../node-db
       '@waitron/payments':
         specifier: workspace:*
         version: link:../payments

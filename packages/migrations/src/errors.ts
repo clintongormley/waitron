@@ -26,5 +26,7 @@ declare module "@waitron/shared" {
      * table, as for `migrations.incomplete`; the engine's own failure is the error's `cause`.
      */
     "migrations.apply_failed": { set: string };
+    /** A set applied to node.db names append-only tables; node.db is never given those triggers. */
+    "migrations.node_append_only": { set: string; tables: string[] };
   }
 }

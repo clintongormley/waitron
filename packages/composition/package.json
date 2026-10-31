@@ -25,6 +25,7 @@
     "@waitron/identity": "workspace:*",
     "@waitron/layouts": "workspace:*",
     "@waitron/module": "workspace:*",
+    "@waitron/node-db": "workspace:*",
     "@waitron/payments": "workspace:*",
     "@waitron/payments-stripe": "workspace:*",
     "@waitron/payments-sumup": "workspace:*",

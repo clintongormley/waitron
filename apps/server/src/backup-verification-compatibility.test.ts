@@ -71,6 +71,7 @@ const suite = useVenueDb({
       ["extra", extraSql],
       ["future", ["create table future_data (id text);"]],
       ["empty", []],
+      ["node", ["create table node_things (node_id text primary key);"]],
     ] as const) {
       await mkdir(join(root, name, "meta"), { recursive: true });
       const entries = Array.from(statements.keys(), (idx) => ({
@@ -172,6 +173,48 @@ describe("strict backup compatibility", () => {
     execute("delete from __drizzle_migrations_core where created_at=2; drop table deployment;");
     manifest = { ...manifest, modules: { core: 1, extra: 1 } };
     await expect(run()).resolves.toBe("passed");
+  });
+  describe("a module whose set is applied to node.db", () => {
+    function addNodeModule() {
+      const base = module("node", ["node_things"]);
+      modules.push({
+        ...base,
+        tier: "mandatory",
+        requires: undefined,
+        migrations: { ...base.migrations, database: "node" },
+      });
+      bindTarget();
+      manifest = { ...manifest, modules: { ...manifest.modules, node: 1 } };
+    }
+    it("does not look for its tables or journal in the venue copy", async () => {
+      addNodeModule();
+      await expect(run()).resolves.toBe("passed");
+    });
+    // The control: the same module with no `database` is looked for in the venue copy.
+    it("is reported missing from the venue copy when it names no file", async () => {
+      addNodeModule();
+      const node = modules.at(-1)!;
+      modules[modules.length - 1] = {
+        ...node,
+        migrations: { name: "node", table: "__drizzle_migrations_node", from: "unused" },
+      };
+      bindTarget();
+      await expect(run()).resolves.toBe("invalid");
+    });
+    it("refuses a venue copy that carries its table", async () => {
+      addNodeModule();
+      execute("create table node_things (node_id text primary key)");
+      await expect(run()).resolves.toBe("unsupported");
+    });
+    it("refuses a venue copy that carries its journal", async () => {
+      addNodeModule();
+      await runMigrations(suite.db, {
+        migrationsFolder: join(root!, "node"),
+        migrationsTable: "__drizzle_migrations_node",
+      });
+      execute("drop table node_things");
+      await expect(run()).resolves.toBe("unsupported");
+    });
   });
   it("refuses a source module absent from the target", async () => {
     manifest = { ...manifest, modules: { ...manifest.modules, missing: 1 } };

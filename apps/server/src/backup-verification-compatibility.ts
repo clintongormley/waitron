@@ -157,14 +157,20 @@ async function reconcile(
   }
   const owned = new Set<string>();
   const journals = new Set<string>();
+  // A node set's tables and journal live in node.db, never in the venue copy, so the venue copy
+  // is reconciled without them and a venue copy holding one is refused as unknown.
+  const venueOwned = new Set<string>();
+  const venueJournals = new Set<string>();
   for (const { module, verification } of inventory) {
     const classified = (module.classification ?? []).map((c) => c.table).sort();
     if (!isDeepStrictEqual(classified, [...verification.data.tables].sort())) refuse("unsupported");
     for (const table of classified) {
       if (owned.has(table)) refuse("unsupported");
       owned.add(table);
+      if (module.migrations.database !== "node") venueOwned.add(table);
     }
     journals.add(module.migrations.table);
+    if (module.migrations.database !== "node") venueJournals.add(module.migrations.table);
     const descriptor = actual.modules.find((m) => m.name === module.name)!;
     if (source[module.name] !== undefined && source[module.name]! > 0) {
       for (const dependency of Object.keys(descriptor.requires)) {
@@ -209,8 +215,8 @@ async function reconcile(
   )) {
     if (typeof row.name !== "string" || row.type !== "table") refuse("unsupported");
     tables.set(row.name, row);
-    if (owned.has(row.name)) continue;
-    if (journals.has(row.name))
+    if (venueOwned.has(row.name)) continue;
+    if (venueJournals.has(row.name))
       tableShape(row.name, row, "id SERIAL PRIMARY KEY, hash text NOT NULL, created_at numeric");
     else {
       const internals: Readonly<Record<string, string>> = {
@@ -232,6 +238,8 @@ async function reconcile(
     }
   }
   for (const { module, verification } of inventory) {
+    // Not yet read from anywhere: no archive carries a copy of node.db.
+    if (module.migrations.database === "node") continue;
     const version = Object.hasOwn(source, module.name) ? source[module.name]! : null;
     const material = verification.entries.filter((e) => !HOST_ENTRIES.includes(e.name));
     const present =
