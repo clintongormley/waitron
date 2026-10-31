@@ -221,8 +221,9 @@ The shell regressions in `scripts/pre-push.test.mjs` exercise scope and failure 
 
 **Claude never pushes with `--no-verify`**; the owner may, in an emergency (owner decision
 2026-10-03), and the failure still has to be fixed because CI runs the same checks. The hook's
-failure message says so beside its skip hint, pinned by `scripts/pre-push.test.mjs`. A hook failure the PR does not reproduce is a check CI has deferred to the
-unfiltered `main` run, not a wrong hook.
+failure message says so beside its skip hint, pinned by `scripts/pre-push.test.mjs`. A hook failure
+the PR does not reproduce still needs investigation. PR scoping or verified reuse may skip that
+check; a green scoped run does not overrule the hook's failure.
 
 ## Coverage thresholds: one bar for every package
 
@@ -1041,6 +1042,11 @@ A tree identifies the complete tracked file contents and modes. A different comm
 does not require another test run; additional main changes do.
 
 On a push to `refs/heads/main`, `scripts/ci-reuse.mjs` reads GitHub's API before allowing reuse.
+Every checkout in this workflow explicitly selects the PR head on PR events and the pushed
+commit otherwise. This avoids claiming that a temporary merge tree tested by PR CI was the
+head tree. The PR trigger selects main as its base branch. A source run with an identical
+tree includes these same workflow rules; this does not depend on the run API retaining its
+optional PR association list after a merge.
 It requires one associated closed, merged PR whose merge commit is this push, targeting this
 repository's main branch with its head in the same repository. Both commit responses must name
 the requested commits and have the same valid tree id. The latest exact-head PR run must belong
@@ -1057,7 +1063,9 @@ unexpected process failure fails changes rather than creating permission to skip
 
 The changes summary links the source run id, its attempt, PR head and tree. Its separate reuse
 outputs skip the other upstream jobs, including lint, root guards, builds, image smoke and the
-in-workflow shared mutation job. The existing classification still decides whether publishing
+in-workflow shared mutation job. Lint and root guards still run if changes fails, even after
+it emitted reuse outputs, so a classifier failure retains those diagnostics. The existing
+classification still decides whether publishing
 is needed. The ci aggregate still checks its current dependencies through needs and the jobs
 API; its coverage-merge exception requires a reuse decision with a source run id and head SHA.
 Publish remains downstream of ci, builds the current commit and asks main-tag-guard before

@@ -5710,6 +5710,10 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
+- **A1242: reuse identical-tree PR CI on main.** Candidate implementation waits for the owner's
+  decisions about earlier main runs that are red or unfinished, and image smoke skipped by PR
+  scoping. Then finish current-head qualification and prove reuse and full fallback on real main pushes.
+
 - **A1213. Does a re-run till shard's report reach `test-till-merge`?** Seen once, not proven, in
   A1125's CI (#2238, 2026-10-29), while the merge still used the download action. Since A1216 the
   merge runs `scripts/download-coverage-blobs.mjs`, which keeps the highest-id copy of each report

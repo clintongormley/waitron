@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -368,15 +368,19 @@ describe("main CI reuse", () => {
     { runId: "0" },
   ])("retains normal CI before API reads for %j", async (change) => {
     const findReuse = await verifier();
+    const { api } = fixture();
+    let reads = 0;
     expect(
       findReuse(
         { ...context, ...change },
-        () => {
-          throw new Error("unexpected API read");
+        (path) => {
+          reads++;
+          return api(path);
         },
         workflow,
       ),
     ).toBeNull();
+    expect(reads).toBe(0);
   });
 
   it("rejects a source attempt restarted after its jobs were read", async () => {
@@ -469,6 +473,24 @@ afterEach(() => {
   for (const path of scratch.splice(0)) rmSync(path, { recursive: true, force: true });
 });
 
+it("a verifier process with an unwritable output exits unsuccessfully", () => {
+  const dir = mkdtempSync(join(tmpdir(), "waitron-a1242-crash-"));
+  scratch.push(dir);
+  const result = spawnSync(process.execPath, [modulePath.pathname], {
+    env: {
+      ...process.env,
+      GITHUB_EVENT_NAME: "workflow_dispatch",
+      GITHUB_OUTPUT: join(dir, "missing", "output"),
+      GITHUB_STEP_SUMMARY: join(dir, "summary"),
+    },
+    encoding: "utf8",
+    timeout: 10_000,
+  });
+  expect(result.error).toBeUndefined();
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain("ENOENT");
+}, 15_000);
+
 it("an up-to-date local squash preserves the PR head tree and a behind squash does not", () => {
   const dir = mkdtempSync(join(tmpdir(), "waitron-a1242-squash-"));
   scratch.push(dir);
@@ -507,4 +529,4 @@ it("an up-to-date local squash preserves the PR head tree and a behind squash do
   git("commit", "-sm", "behind squash");
   expect(git("rev-parse", "HEAD^{tree}")).not.toBe(headTree);
   expect(readFileSync(join(dir, "main-only"), "utf8")).toBe("main");
-});
+}, 210_000);

@@ -2317,7 +2317,10 @@ describe("the lint and root-guards jobs", () => {
       expect(
         job(id).body.filter((line) => /^ {4}(if|needs):/.test(line)),
         id,
-      ).toEqual(["    needs: changes", "    if: needs.changes.outputs.reuse != 'true'"]);
+      ).toEqual([
+        "    needs: changes",
+        "    if: always() && (needs.changes.result != 'success' || needs.changes.outputs.reuse != 'true')",
+      ]);
     }
   });
 
@@ -2330,6 +2333,46 @@ describe("the lint and root-guards jobs", () => {
 });
 
 describe("verified equal-tree main CI reuse", () => {
+  it("still runs root diagnostics if changes fails after emitting a reuse decision", () => {
+    for (const id of ["lint", "root-guards"]) {
+      const line = job(id).body.find((entry) => /^ {4}if:/.test(entry));
+      expect(line, id).toContain("always()");
+      const expression = line
+        .replace(/^ {4}if:\s*/, "")
+        .replace(/always\(\)/g, "true")
+        .replace(/needs\.changes\.result/g, '"failure"')
+        .replace(/needs\.changes\.outputs\.reuse/g, '"true"')
+        .replace(/==/g, "===")
+        .replace(/!=/g, "!==");
+      expect(Boolean(new Function(`return (${expression});`)()), id).toBe(true);
+    }
+  });
+
+  it("tests the PR head itself in every CI checkout and admits PR events only for main", () => {
+    expect(lines.join("\n")).toMatch(/\n {2}pull_request:\n {4}branches: \[main\]/);
+    let count = 0;
+    for (const { id, body } of jobs) {
+      for (let i = 0; i < body.length; i++) {
+        if (!/^ {6}(?:- | {2})uses: actions\/checkout@/.test(body[i])) continue;
+        const end = body.findIndex((line, at) => at > i && /^ {6}- /.test(line));
+        const step = body.slice(i, end === -1 ? undefined : end).join("\n");
+        expect(step, id).toContain(
+          "          ref: ${{ github.event.pull_request.head.sha || github.sha }}",
+        );
+        count++;
+      }
+    }
+    expect(count).toBeGreaterThan(0);
+  });
+
+  it("cannot tolerate a verifier crash in changes", () => {
+    const body = job("changes").body;
+    const start = body.findIndex((line) => line === "      - id: reuse");
+    expect(start).toBeGreaterThan(-1);
+    const end = body.findIndex((line, at) => at > start && /^ {6}- /.test(line));
+    expect(body.slice(start, end).join("\n")).not.toContain("continue-on-error:");
+  });
+
   it("runs the verifier with read-only API permissions and publishes its independent decision", () => {
     const body = job("changes").body.join("\n");
     expect(body).toContain("run: node scripts/ci-reuse.mjs");
@@ -2354,6 +2397,8 @@ describe("verified equal-tree main CI reuse", () => {
           .replace(/^ {4}if:\s*/, "")
           .replace(/needs\.changes\.outputs\.reuse/g, JSON.stringify(reuse))
           .replace(/needs\.changes\.outputs\.\w+/g, '"true"')
+          .replace(/needs\.changes\.result/g, '"success"')
+          .replace(/always\(\)/g, "true")
           .replace(/github\.event_name/g, '"push"')
           .replace(/==/g, "===")
           .replace(/!=/g, "!==");

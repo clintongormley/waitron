@@ -34,6 +34,7 @@ on:
     # be published from a commit whose suite has not run. Release tags take the full, unscoped path.
     tags: ["v*"]
   pull_request:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -64,7 +65,7 @@ jobs:
   # Works out what the rest of the workflow needs to do. Everything below gates on its outputs.
   #
   # Two independent decisions, deliberately not merged into one:
-  #   `code`  — does anything here reach a code-gated job? Without reuse, only `lint` (eslint and
+  #   `code`  — does anything here reach a code-gated job? If not, absent reuse only `lint` (eslint and
   #             format:check) and `root-guards` (the repo-level Vitest project) jobs run, on pull requests
   #             AND on main, so an inert change — prose, or root config no code-gated job reads —
   #             costs nothing in either place, and neither does a change to the repository's OWN
@@ -147,6 +148,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -160,6 +162,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -342,13 +345,15 @@ jobs:
   # path and a clean path identically, so the obvious probe proves nothing.
   lint:
     needs: changes
-    if: needs.changes.outputs.reuse != 'true'
+    if: always() && (needs.changes.result != 'success' || needs.changes.outputs.reuse != 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -361,6 +366,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -388,13 +395,15 @@ jobs:
 
   root-guards:
     needs: changes
-    if: needs.changes.outputs.reuse != 'true'
+    if: always() && (needs.changes.result != 'success' || needs.changes.outputs.reuse != 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -407,6 +416,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -457,6 +468,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -469,6 +482,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -714,6 +729,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -726,6 +743,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -803,6 +822,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -816,6 +836,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -897,6 +918,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -909,6 +932,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -981,6 +1006,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -994,6 +1020,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -1092,6 +1119,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -1104,6 +1133,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -1219,6 +1250,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -1231,6 +1264,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -1292,6 +1327,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -1305,6 +1341,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -1394,6 +1431,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -1406,6 +1445,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -1470,6 +1511,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -1482,6 +1525,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -1578,6 +1623,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -1590,6 +1637,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -1673,6 +1722,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -1685,6 +1736,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -1750,6 +1803,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -1762,6 +1817,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -1851,6 +1908,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -1863,6 +1922,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -1924,6 +1985,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -1936,6 +1999,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -1999,6 +2064,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -2011,6 +2078,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2146,6 +2215,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -2158,6 +2229,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2213,6 +2286,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -2225,6 +2300,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2277,6 +2354,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -2289,6 +2368,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2344,6 +2425,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2357,6 +2439,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2414,6 +2497,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2427,6 +2511,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2485,6 +2570,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2498,6 +2584,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2555,6 +2642,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2568,6 +2656,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2624,6 +2713,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -2636,6 +2727,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2700,6 +2793,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -2712,6 +2807,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2768,6 +2865,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2781,6 +2879,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2822,6 +2921,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2835,6 +2935,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2880,6 +2981,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2893,6 +2995,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2984,6 +3087,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2997,6 +3101,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -3095,6 +3200,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -3107,6 +3214,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -3356,6 +3465,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -3368,6 +3479,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
