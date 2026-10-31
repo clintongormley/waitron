@@ -1561,16 +1561,25 @@ in `apps/server/test/setup-holdings-fixture.ts`. All 35 test declarations retain
 their parameter tables, assertions and timeouts. Hosted PR run `41190126243`
 measured these three suites at 77.8, 97.4 and 46.8 seconds respectively.
 
-The held-setup file still needs splitting after A1131's recovery work in PR #2335
-lands. Its measured duration is included in the table, but moving that whole file
-does not bring its shard down to four minutes. Keep this remaining split and
-three subsequent main-run observations open in the backlog.
+The second slice splits the held-setup cases into the original suite and its
+`-damaged`, `-journals`, `-recovery` and `-wipe` siblings. Their shared mocks and
+hooks live in `apps/server/test/start-again-held-fixture.ts`; retained-record
+readers stay in `apps/server/test/start-again-deleted.ts`. The three fresh-box
+restore cases added by A1131 in PR #2335 travel with the other wipe cases.
+All existing test bodies, parameter tables and timeouts are retained.
+
+The earlier reviewed candidate's hosted run `41190126243` measured these five
+suites at 150.3, 128.3, 124.1, 161.1 and 79.8 seconds respectively, before A1131's
+three cases were added. Those measurements seed their table entries; the new
+PR's hosted measurements must replace them before qualification. Three later
+main runs that execute all server shards remain the qualification for the
+four-minute target.
 
 The refresh uses ordinary server-shard logs from the newest six successful main
 runs that actually ran them: `41175259965`, `41174680766`, `41174582937`,
 `41174376178`, `41170107932` and `41169670010`. Feed only `test-server (N)` logs
 to `scripts/test-durations.mjs`, since other packages use the same file-progress
-format and can reuse relative file names. The three split entries use the hosted
+format and can reuse relative file names. The split entries use the hosted
 measurements above; the other entries retain the six-main medians.
 
 ### The server's shards: sixteen, packed by measured duration
