@@ -3543,12 +3543,12 @@ Not fixed: a window focus or the page becoming visible again re-reads the draft 
 
 ## Task 16: backlog, questions, PR text, hand-off (≈25 calls)
 
-- [ ] Task 9 review M4 (keyboard of the shared `wt-row-actions`: no arrow keys in a `role="menu"`,
+- [x] Task 9 review M4 (keyboard of the shared `wt-row-actions`: no arrow keys in a `role="menu"`,
       focus dropped to the page after a choice, no `aria-haspopup`) was not fixed in this slice: the
       primitive predates it and the counter-zone menu shares it. Filed as A1256 in
       `docs/backlog/dashboard.md` (and `docs/backlog.md` beside A781) with the review's experiment.
       List it in the PR as known and not this slice's.
-- [ ] `docs/backlog.md` A803 entry (`:1983-2000`): remove the switcher, kebab, no-Hold, quiet-Pay,
+- [x] `docs/backlog.md` A803 entry (`:1983-2000`): remove the switcher, kebab, no-Hold, quiet-Pay,
       Full invoice and main-bill clauses; slices 4 and 6 remain. Delete: A1232 (`:2025-2030`, Task
       5), A1233 (`:2032-2036`, Task 9/10), A1234 (`:2038-2042`, Task 10), A786 (`:2323-2326`, D7),
       the `party.main_bill_stays` wording point (`:2944-2945`, `docs/backlog/till.md:899-900`) and
@@ -3560,16 +3560,16 @@ Not fixed: a window focus or the page becoming visible again re-reads the draft 
       question 4 is answered "yes"; the paid-bill Full invoice once A802 has a till entry (Owner
       question 2); A739 Cut B to put the wide screen's pay controls behind one Pay button (D16, Owner
       question 7), as a line in A739's entry rather than a new item if A739's entry already says it.
-- [ ] `questions.md`: one section for Owner questions 1, 2, 3, 4, 6 and 7, one at a time with its
+- [x] `questions.md`: one section for Owner questions 1, 2, 3, 4, 6 and 7, one at a time with its
       default and its pictures, headed "A803 slice 3 (#PR) — six questions; the build used the
       defaults; the PR waits for 1, 5 and 7"; and the FYI section the owner's rule asks for, headed
       "A803 slice 3 (#PR) — changed test checks, FYI, no answer needed", pointing at the PR's
       "Changed test checks" section.
-- [ ] Changed-checks receipt outside product source, attached to the PR: every row above with its
+- [x] Changed-checks receipt outside product source, attached to the PR: every row above with its
       red and green output, plus any found at red runs, and a statement that F and H2 are
       byte-unedited and the Filing files and `scripts/`-level files changed only as Owner question 5
       says.
-- [ ] PR title: "One bill switcher and one ⋮ at a table; no main bill (A803 slice 3; venue reset
+- [x] PR title: "One bill switcher and one ⋮ at a table; no main bill (A803 slice 3; venue reset
       needed)". First line: "Needs a venue reset: the migration rebuilds `parties` to drop the main
       bill, and fails on any box that has ever seated a party." Then, in plain English: what a waiter
       sees; that joins and moves never merge bills now and Merge bills does it on purpose; that a
@@ -3578,7 +3578,7 @@ Not fixed: a window focus or the page becoming visible again re-reads the draft 
       owner questions and their defaults; the seven Spanish proposals and the ES guide section; a
       "Changed test checks" section; Owner question 5's items with their before and after; the LOOK
       screenshots; the deletion controls of Task 13; that F and H2 ran unedited.
-- [ ] PR text, Task 7 corrections (Task 7 review, Minors 1 and 2; the commit body is not
+- [x] PR text, Task 7 corrections (Task 7 review, Minors 1 and 2; the commit body is not
       rewritten): (1) the commit body's "Every party keeps … its tables in party_tables after it
       closes" is wrong: closing a party deletes its `party_tables` rows (`closePartyTables`,
       `apps/server/src/parties.ts:793-797`); a closed party stays named by its bills
@@ -3591,7 +3591,7 @@ Not fixed: a window focus or the page becoming visible again re-reads the draft 
       cascade silently deletes those parties' `party_allergy`, `order_kitchen_notes` and
       `service_step_completions` rows (measured 1 → 0). The reset is required either way
       (pre-live, root `CLAUDE.md` §3).
-- [ ] Overlap note in the PR: lane E's `feat/a696-startup-zone-validation` changes other functions
+- [x] Overlap note in the PR: lane E's `feat/a696-startup-zone-validation` changes other functions
       of `bill-actions.ts`, `till-api.ts`, `working-order.ts` and till `strings.ts`; whoever lands
       second rebases. A739 Cut B will rebuild the pay section this slice edits (D5, D6, D8, D16).
 - [ ] **Landing gate.** Not fiscal code: no sale, invoice number, receipt, `registros_facturacion`,
@@ -3602,6 +3602,21 @@ Not fixed: a window focus or the page becoming visible again re-reads the draft 
       a follow-up task on this branch before landing.
 - [ ] Ledger `Status: done` for the build (parked for the owner); tell the owner the branch is ready
       for `finish-branch`.
+
+### Task 16 as done (2026-10-31)
+
+Backlog commit `2ce0a3247`. Deleted: A1233, A1234, A786, and the `party.main_bill_stays` wording and
+"Keep separate bills" loose ends (`docs/backlog.md`, `docs/backlog/till.md`); A1232 was already gone
+(Task 5). The A803 entry keeps slices 4 and 6 and names slice 3's follow-ups. Kept: the two Full
+invoice buttons entry, now pointing at the Q3 pictures. Edited: A1256 (both files; LOOK F6), A739
+(a line: its window replaces the foot's pay controls, D16, Q7), A797 (slice 3 has landed, #PR). New,
+from the counter (A1261 read, A1266 written back): A1261 paid-bill Full invoice after A802 (Q2),
+A1262 Transfer items / Merge bills on an open bill holding a payment, A1263 `#switchProfile`, A1264
+bills not re-read on focus or visibility, A1265 the ⋮ list taller than the room below it (LOOK F8;
+A1258 is about resizing, so not its home). Nothing for Q4 (conditional on "yes"). Questions 1, 2, 3,
+4, 6, 7 and the changed-checks FYI appended to lane C's `questions.md`; the receipt is
+`~/waitron-campaign-c/a803-3-changed-checks.md` and the PR text `~/waitron-campaign-c/a803-3-pr-description.md`,
+both with "#PR" for the number.
 
 ## Against the master plan's slice 3
 
