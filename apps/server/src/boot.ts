@@ -306,6 +306,7 @@ import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxHealthApi } from "./box-health-api.js";
 import { clockCheckWaitingReader, clockStopReader, collectBoxHealth } from "./box-health.js";
 import { CLOCK_WATCH_MS, startClockWatch } from "./clock-watch.js";
+import { clockCorrection } from "./clock-correction.js";
 import { clockSyncAlertSource } from "./clock-sync-alert.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
 import { readDiskUsage, type DiskUsage } from "./disk-usage.js";
@@ -2438,6 +2439,37 @@ async function bootServer(
     log,
   });
   undoOnFailure.push(() => boxEmails.stop());
+  const boxHost = seams.boxHost ?? boxHostClient();
+  // One read of the host's clock service a minute, shared by every reader of it.
+  const clockServiceCache = createTtlCache<ClockServiceStatus>({ ttlMs: 60_000, now });
+  const readClockService = () => clockServiceCache.get("status", () => boxHost.clockStatus());
+  const timeHealthCache = createTtlCache<TimeHealth>({ ttlMs: 60_000, now });
+  const readTimeHealth = () =>
+    timeHealthCache.get("sync", () =>
+      checkTimeHealth({
+        status: readClockService,
+      }),
+    );
+  const correction = clockCorrection({
+    host: boxHost,
+    backend: nodeBackend,
+    store: clockWitnesses,
+    clock: tillClock,
+    boot: boxBoot,
+    read: (fn) => db.withWriteLock(() => fn(db)),
+    transaction: (fn) => withTransaction(db, fn),
+    onCorrected: boxEmails.remember,
+    nodeId: tradingContext.nodeId,
+    log,
+  });
+  // A reading of the time service taken before a set is not served after it.
+  correction.addAnchor({
+    stepComing: async () => {},
+    reanchor: async () => {
+      clockServiceCache.clear();
+      timeHealthCache.clear();
+    },
+  });
   const clockWatch = startClockWatch({
     backend: nodeBackend,
     store: clockWitnesses,
@@ -2446,16 +2478,14 @@ async function bootServer(
     nodeId: tradingContext.nodeId,
     read: (fn) => db.withWriteLock(() => fn(db)),
     transaction: (fn) => withTransaction(db, fn),
+    correction,
     filesRecords,
     isPrimary: () => holders.singletonRole.current === "primary",
     intervalMs: CLOCK_WATCH_MS,
     log,
   });
   undoOnFailure.push(() => clockWatch.stop());
-  const boxHost = seams.boxHost ?? boxHostClient();
-  // One read of the host's clock service a minute, shared by every reader of it.
-  const clockServiceCache = createTtlCache<ClockServiceStatus>({ ttlMs: 60_000, now });
-  const readClockService = () => clockServiceCache.get("status", () => boxHost.clockStatus());
+  correction.addAnchor(clockWatch);
   const serverAlertSources: AlertSource[] = [
     clockSyncAlertSource({
       status: readClockService,
@@ -2506,13 +2536,6 @@ async function bootServer(
   mountAlertsApi(app, { db, registry: alertRegistry, now }, log);
   mountDiskStopApi(app, { db, disk: diskFull, registry: alertRegistry, now }, log);
 
-  const timeHealthCache = createTtlCache<TimeHealth>({ ttlMs: 60_000, now });
-  const readTimeHealth = () =>
-    timeHealthCache.get("sync", () =>
-      checkTimeHealth({
-        status: readClockService,
-      }),
-    );
   mountBoxStatusApi(
     app,
     {
