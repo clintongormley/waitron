@@ -758,7 +758,7 @@ describe("what a move refuses, changing nothing", () => {
 });
 
 describe("the party's last unpaid bill", () => {
-  it("moves the party's only unpaid bill, and the party's next order makes a new one", async () => {
+  it("moves the party's only unpaid bill, and the party's next order lands on a new bill the test helper makes", async () => {
     const mesa = await v.table("Mesa ultima");
     const ana = await seat(v, mesa);
     await order(v, ana.tabId, "Burger", "Vino");
@@ -1210,7 +1210,7 @@ describe("a presented party bill leaves its party", () => {
     expect(await openingBillOfParty(v, luis.partyId)).toBe(luis.tabId);
   });
 
-  it("opens a new party at a free table on the presented bill, and its next order makes a new bill, since a presented bill takes no orders", async () => {
+  it("opens a new party at a free table on the presented bill, and its next order lands on a new bill the test helper makes, since a presented bill takes no orders", async () => {
     const { second, lines } = await presentedSplit("Mesa presentada 4");
     const libre = await v.table("Mesa presentada 4 libre");
 

@@ -335,7 +335,7 @@ describe("A803 bill numbers: move bill", () => {
     await everyPartyBillNumbered();
   });
 
-  it("a bill moved to a table whose main bill is presented stays separate and takes that table's next number", async () => {
+  it("a bill moved to a table whose Bill 1 is presented stays separate and takes that table's next number", async () => {
     const from = await tableWithBills("M3b", 2);
     const to = await seat(v, await v.table("M3b to"));
     await order(v, to.tabId, "Agua");

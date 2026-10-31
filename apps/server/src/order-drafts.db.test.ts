@@ -3469,7 +3469,7 @@ describe("merging parties (D2)", () => {
     expect(await storedLines(incoming.id)).toHaveLength(1);
   });
 
-  it("merges the main bills after explicit takeover, retaining every row and the separate bill", async () => {
+  it("merges the two tables' Bill 1s after explicit takeover, retaining every row and the separate bill", async () => {
     const v = await setupVenue();
     const table4 = await seated(v);
     const table5 = await seated(v, "Mesa 5");

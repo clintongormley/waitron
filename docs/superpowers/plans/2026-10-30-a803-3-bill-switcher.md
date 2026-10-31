@@ -43,7 +43,10 @@ commit. `/finish-branch` pushes the whole branch once.
 
 ## Owner answers
 
-None yet. The defaults under "Owner questions" are what the build uses. **Question 5 (test and
+- 2026-10-31 ~02:40, via the watcher: question 5 — yes, all six items as written (questions.md).
+  Question 5b (below) is not yet answered.
+
+Otherwise none yet. The defaults under "Owner questions" are what the build uses. **Question 5 (test and
 guard changes) is asked in `questions.md` at Task 0, before the build edits any of those files**;
 the build goes ahead on its default meanwhile, as the owner's 2026-10-05 rule allows ("ask in
 questions.md, carry on with other work meanwhile"), and the PR cannot land until it is answered
@@ -321,8 +324,13 @@ Every other word the new controls show is an approved string (D10).
   only: nothing on the server writes to it or falls back to it. This keeps opening a seated table
   at one request (today's main-bill shortcut, `till-app.ts:11002-11015`) and closes A786
   (`docs/backlog.md:2323-2326`), which measured the bills-then-lines round trip at 241–266 ms
-  against 113–120 ms. The rule matches today's `billToOpen` (`till-app.ts:696-700`: first owing,
-  else last) under number order.
+  against 113–120 ms. As built, bills read in number order with unnumbered ones last, so with
+  nothing owing an unnumbered bill (a fault state, logged as `bill.number_missing`) wins over the
+  highest-numbered shown bill (Task 6c review, probe P5: an unnumbered paid bill beside a paid
+  Bill 1 → the unnumbered one). The rule differs from the till's `billToOpen`
+  (`till-app.ts:696-700`: first owing, else last): with nothing owing, `billToOpen` takes the last
+  bill of the bills read, which can be an abandoned one (Task 6c review probe: it opened the
+  abandoned bill; `billToOpen` predates this branch), while D7 skips abandoned bills.
 - **D8 Full invoice.** On the payment step the bill's own button (`#billChoices`) stays; on the
   table screen `till-tender-pay`'s own Full invoice is not drawn (new property `invoices`, default
   `true`, set `false` by the table screen), which removes the duplicate (Owner question 3) and the
@@ -690,8 +698,8 @@ task's red run; a red assertion not on this list that is not kind B/R/W/S/F unde
 | **As built at Task 6c** (lines at `e31ede59e`). `openingBillOfParty(v, partyId)` is a new `testing/party-venue.ts` helper: the floor row's `party.openingBillId` for the party's tables (D7). Every red run below failed only on a `mainBillId` read; none on money, VAT, permissions or filing | | | | |
 | `party-main-bill.test.ts:78`, `:93`, `:98` (seated/paid/next main bill) | B | `partyRow.mainBillId` `toBe(tabId)` / `toBeNull()` / `toBe(dessert)` → the floor's `openingBillId` `toBe(tabId)` / `toBe(tabId)` (the paid bill, highest shown) / `toBe(dessert)`; describe "the main bill" → "the bill a table opens on"; `:86` retitled "stays the paid bill once it is paid, and moves to the new, empty bill …" | D7 | 6c |
 | `party-main-bill.test.ts:111`, `:115` (presented, next order) | B | `toBeNull()` → `openingBillId` `toBe(tabId)` (presented still owes); `toBe(next)` → `numbersOf` `[[tabId, 1, null], [next, 2, null]]`, `next` status `open`, and `openingBillId` still `tabId`; retitled | D7 | 6c |
-| `party-main-bill.test.ts:122` ("is cleared by setMainBill naming none") | **B, Q5 (retired)** | deleted: `setMainBill` no longer exists, and nothing writes the column (the behaviour is gone). The column itself goes in Task 7 | §3.4 | 6c |
-| `party-main-bill.test.ts:132-155` (a hand-written main bill naming a presented / another party's bill refuses `tab.not_open`) | B | the order now names that bill itself: refused `bill.presented` / `bill.other_party` with `params: { workingOrderId: target }`; the lines, bills and revision before/after checks unchanged; the hand-written `parties.mainBillId` write goes; retitled "refuses an order naming %s, writing nothing" | §3.4, Review focus 4 | 6c |
+| `party-main-bill.test.ts:122` ("is cleared by setMainBill naming none") | **B, Q5b item 1 (retired)** | deleted: `setMainBill` no longer exists, and nothing writes the column (the behaviour is gone). The column itself goes in Task 7 | §3.4 | 6c |
+| `party-main-bill.test.ts:132-155` (a hand-written main bill naming a presented / another party's bill refuses `tab.not_open`) | **B, Q5b item 2 (retired and replaced)** | retired with the main bill: the refused order named no bill, which only the test fixture could send (production `placeGroups` already required a named bill on `a90f4f87b`; the refusal lived in the fixture since #1897), so no product refusal code changes. Replaced by a different request, overlapping the `:249` `it.each` rows: the order names that bill itself and is refused `bill.presented` / `bill.other_party` with `params: { workingOrderId: target }`; the lines, bills and revision before/after checks unchanged; the hand-written `parties.mainBillId` write goes; retitled "refuses an order naming %s, writing nothing" | §3.4, Review focus 4 | 6c |
 | `party-main-bill.test.ts:171` (group command's landed bill is main) | B | → `numbersOf` `[[tabId, 1, null], [landed, 2, null]]` and `landed` status `open`; revision-once checks unchanged; title "next main bill" → "next bill" | §3.4 | 6c |
 | `party-main-bill.test.ts:217` (`before.party.mainBillId` `toBeNull()`, the precondition) | B | → `before.bills` `toEqual([tabId])` (no bill made, beside the unchanged before/after `toEqual`); title "next main bill" → "next bill" | §3.4 | 6c |
 | `party-main-bill.test.ts:224` (abandoned main bill cleared) | B | → the floor's `openingBillId` `toBeNull()` (no shown bill); retitled "is none when the party's only bill is abandoned" | D7 | 6c |
@@ -706,7 +714,8 @@ task's red run; a red assertion not on this list that is not kind B/R/W/S/F unde
 | `party-bill-actions.test.ts:1313`, `:1380`, `:1391` (Task 6b's writers describe) | B | seating names no main bill, so `mainOf(partyId)` `toBe(main)` / `toBe(tabId)` → `toBeNull()`; `:1380` and `:1391` also gain `openingBillOfParty(partyId)` `toBe(tabId)` (the staying party keeps its bill). The describe keeps reading the column (`mainOf`) as its guard until Task 7 drops it; `:1311` and `:1370` retitled | §3.4 | 6c |
 | `bill-identities.test.ts:171` | B | `toBeNull()` → `openingBillOfParty` `toBe(tabId)` (the paid bill); title "a main bill given to …" → "a bill made for …" | D7 | 6c |
 | `order-drafts.db.test.ts:1059` | B | `mainBillId` `toBe(tabId)` → `firstOpenBillOf(tx, partyId)` `toBe(tabId)`; title "… while another bill is main" → "… while another bill has a lower number" | §3.4 | 6c |
-| `till-api.drafts.test.ts:181-186` helper `mainBillOf` (13 call sites and the check at `:1104`) | S | the helper reads `firstOpenBillOf` and is renamed `openBillOf`; the `:1104` check reads `expect(await openBillOf(party.partyId)).toBe(party.tabId)`, differing from before only in the helper's name; every other `expect` byte-identical | §3.4 | 6c |
+| `till-api.drafts.test.ts:181-186` helper `mainBillOf` (13 call sites) | S | the helper reads `firstOpenBillOf` and is renamed `openBillOf`; every `expect` other than `:1102`'s byte-identical | §3.4 | 6c |
+| `till-api.drafts.test.ts:1102` (was `:1104`) | B | before: Bill 1 is still the party's main bill after a submit to Bill 2. After: `expect(await openBillOf(party.partyId)).toBe(party.tabId)` — Bill 1 is the party's lowest-numbered open bill, which holds as long as Bill 1 stays open. A different and weaker statement: no main bill exists to check (Task 6c review Minor 2) | §3.4 | 6c |
 | `order-kitchen-note.moves.test.ts:355` title | S | "… when the party needs a replacement main bill" → "… on a new bill made after the party's bill is paid", with the planned `insertPartyBill` at `:367` | D1 | 6c |
 | `apps/server/src/party-bill-actions.test.ts:690`, `:736` (merge keeps/moves the main bill) | B | the explicit merge's surviving bill keeps its number; no main bill | §3.4 | 6b |
 | `party-bill-actions.test.ts:739` (was `:736`, "makes the bill merged into the main bill when the main bill is merged away") | B (Task 6b's red run) | `mainBillId` `toBe(second)` → `toBeNull()`, plus `numbersOf` `[[main, 1, null], [second, 2, null]]` and `second`'s status `open`; retitled "keeps the bill merged into as Bill 2, naming no main bill, when Bill 1 is merged away"; the abandoned and lines checks unchanged. `:690` stayed green (seating's main bill is not the one merged away) and is unchanged | §3.4; D12 | 6b |
@@ -720,7 +729,7 @@ task's red run; a red assertion not on this list that is not kind B/R/W/S/F unde
 | `scripts/behavioural-triggers.test.ts` `EXPECTED_TRIGGERS` (`:158-159`) and `describe("working_orders_release_main_bill")` (`:1544-1590`) | **W, B, Q5 item 3** | the two names leave the list; the describe becomes "the main bill is gone": `parties` has no `main_bill_id` column (`pragma_table_info`) and no trigger's SQL names `main_bill` (`sqlite_master`) | §3.4 | 7 |
 | `scripts/migration-upgrade.test.ts` `RESETS` | **W, Q5 item 4** | gains the new core rebuild step, `refused: ["DROP TABLE \`parties\`", "FOREIGN KEY constraint failed"]` (as `:437-439`; the exact text from the run's own output) | finding 9 | 7 |
 | `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts:119-130` (expectation adapter) | **W, Q5 item 5** | the captured `parties` table's expectation drops the `main_bill_id` column and its foreign key, as the adapter already adds columns; the hashed fixture is not edited | finding 9 | 7 |
-| `apps/server/src/party-bill-actions.test.ts` `A803 no main bill (writers):` (Task 6b's writers describe, lines at `2d009763b`): the `mainOf` helper `:1283-1284` and its 14 reads of `parties.mainBillId` — `:1304` (in `presentedParty`), `:1320`, `:1324`, `:1334`, `:1345`, `:1361`, `:1367`, `:1374`, `:1386`, `:1387`, `:1398`, `:1399`, `:1410`, `:1411` | **R, Q5 (deleted checks)** | the column goes, so every `mainOf(...)` `toBeNull()` line and the helper are deleted. The case "Merge bills leaves the party with no main bill when Bill 1 is merged away" (`:1318`) has no other check and is deleted whole. The other seven cases (`:1327`, `:1337`, `:1348`, `:1364`, `:1377`, `:1391`, `:1403`) keep every other `expect` byte-identical (the answers' `partyId`, `billId` and `billIds` checks, the new bill's party, and `openingBillOfParty` at `:1388` and `:1400`); their titles and the describe's lose the "no main bill" clause. What carries the guarantee afterwards (that no table action names a main bill): Task 7's new behavioural-triggers case "the main bill is gone" — `parties` has no `main_bill_id` column (`pragma_table_info`) and no trigger's SQL names `main_bill` — so nothing can store one. Task 6b's six rewritten lines (at `e31ede59e`: party-bill-actions `:744`; party-move-bill `:838`, `:961`; party-table-actions `:655`, `:1137`, `:1159`) no longer read `mainBillId` at `2d009763b` (Task 6c re-pointed them, rows above) and are not in this row. `till-api.table-actions.test.ts:775`, `:800` ("no answer carries mainBillId", `not.toHaveProperty("mainBillId")`) are absence checks on the answer, not reads of the column: they survive the drop unchanged and stay | §3.4 | 7 |
+| `apps/server/src/party-bill-actions.test.ts` `A803 no main bill (writers):` (Task 6b's writers describe, lines at `2d009763b`): the `mainOf` helper `:1283-1284` and its 14 reads of `parties.mainBillId` — `:1304` (in `presentedParty`), `:1320`, `:1324`, `:1334`, `:1345`, `:1361`, `:1367`, `:1374`, `:1386`, `:1387`, `:1398`, `:1399`, `:1410`, `:1411` | **R, Q5b item 3 (deleted checks)** | the column goes, so every `mainOf(...)` `toBeNull()` line and the helper are deleted. The case "Merge bills leaves the party with no main bill when Bill 1 is merged away" (`:1318`) has no other check and is deleted whole. The other seven cases (`:1327`, `:1337`, `:1348`, `:1364`, `:1377`, `:1391`, `:1403`) keep every other `expect` byte-identical (the answers' `partyId`, `billId` and `billIds` checks, the new bill's party, and `openingBillOfParty` at `:1388` and `:1400`); their titles and the describe's lose the "no main bill" clause. What carries the guarantee afterwards (that no table action names a main bill): Task 7's new behavioural-triggers case "the main bill is gone" — `parties` has no `main_bill_id` column (`pragma_table_info`) and no trigger's SQL names `main_bill` — so nothing can store one. Task 6b's six rewritten lines (at `e31ede59e`: party-bill-actions `:744`; party-move-bill `:838`, `:961`; party-table-actions `:655`, `:1137`, `:1159`) no longer read `mainBillId` at `2d009763b` (Task 6c re-pointed them, rows above) and are not in this row. `till-api.table-actions.test.ts:775`, `:800` ("no answer carries mainBillId", `not.toHaveProperty("mainBillId")`) are absence checks on the answer, not reads of the column: they survive the drop unchanged and stay | §3.4 | 7 |
 | `apps/till/src/api/client.test.ts:2738-2749`, `apps/till/src/i18n/codes.test.ts:323-333`, `apps/till/src/till-app-parties.test.ts:2491`, `:4101` (`party.main_bill_stays`) | B | the code's rows go (no thrower, D14); `codes.test.ts`'s loop keeps its other two codes | §3.4, D14 | 8d |
 | `till-app-parties.test.ts:2126`, `:2452`, `:4395`, `:4405`, `:5830`; `till-app-drafts.test.ts:8720` (opening/following the main bill) | B | follow D7/D11: `openingBillId`, kept or lowest-numbered bill | §3.4, Review focus 4 | 8d |
 | `till-app-parties.test.ts:3964` ("goes back to the floor when the moved bill was the party's last") | F | **kept**: every assertion unchanged (D11 rule 2); only its emitted event detail loses `bills: "merge"` | D11 | 8b |
@@ -803,6 +812,20 @@ is written to `questions.md` at Task 0, before any file it names is edited.** Th
    when nothing merges. That weakness predates the branch. The branch adds, copied from `:300`:
    `expect(await orderState(fromTab)).toMatchObject({ status: "abandoned" })`, `registroCount(intoTab)` 1, `registroCount(fromTab)` 0 and `filedSaleTotal(intoTab)` "3.50" (café 1.50 + agua 2.00). They fail when the case's Merge bills step is deleted. They stay only if you
    say yes.
+
+   **5b. Three more deleted checks** (asked 2026-10-31 ~02:35, unanswered; questions.md, "question
+   5b"). Default: yes to all three; the PR cannot land until it is answered.
+   1. `apps/server/src/party-main-bill.test.ts:122`, "is cleared by setMainBill naming none": the
+      function it checked is deleted with the main bill, so the check goes; nothing replaces it.
+   2. The old "the receiving one is presented" case in `party-main-bill.test.ts` (`:132-155` before
+      Task 6c): an order naming no bill was refused `tab.not_open` when the main bill pointed at a
+      presented or another party's bill. Only the test helper could send such an order, so the
+      check is retired and replaced by a case naming the bill and expecting `bill.presented` /
+      `bill.other_party`. No product refusal code changes.
+   3. Task 7's `party-bill-actions.test.ts` "A803 no main bill (writers)" lines: the `mainOf` helper
+      (`:1283-1284`) and its 14 reads of `main_bill_id`; the case at `:1318` goes whole, the other
+      seven keep their other checks. Task 7's "the main bill is gone" trigger test holds the
+      guarantee afterwards.
 6. **A paid bill on screen.** Default: the switcher lists paid bills and choosing one puts it on
    screen (as A1233 suggests), where the ⋮ offers Name this bill and Receipt copy, and New order
    refuses as it does for a paid bill today (`bill.paid`, `apps/till/src/state/draft-sync.ts:471-480`).
@@ -1371,8 +1394,10 @@ in 4a), `till-api.move-bill.test.ts` (its one read) — every row above for Task
       `rg -l 'readSeatedParties|listTablesWithState|/api/tables/state' apps/server/src -g '*.test.ts'`.
       (First run of the named files: 32 failed, 1181 passed, all on a `mainBillId` read in
       `party-bill-actions`, `party-move-bill`, `party-table-actions`, `parties`, `order-drafts.db`
-      and `tabs`; each is a row under "As built at Task 6c". The 15 cases of Task 6a's note are
-      among them and are re-pointed there.)
+      and `tabs`; each is a row under "As built at Task 6c". 7 of the 15 cases of Task 6a's note are
+      among them (`parties` `:662`, `:767`; `party-move-bill` `:774`, `:1218`; `party-table-actions`
+      `:682` twice, `:1181`); the other 8 are in `party-main-bill.test.ts`, which was not in that run,
+      and were rewritten with it, each with its own row. Task 6c review Minor 4.)
 - [x] GREEN: those files; F; H2; Filing; server typecheck;
       `rg -n 'mainBillId|partyMainBill|setMainBill|readMainBill' apps/server packages --glob '!**/drizzle/**'`
       prints only `packages/db/src/schema/parties.ts` (Task 7), `party-bill-actions.test.ts:1284`
@@ -1393,6 +1418,21 @@ in 4a), `till-api.move-bill.test.ts` (its one read) — every row above for Task
       as shown → the same case fails; `placeGroups` sending to the party's lowest open bill instead
       of the one named → the two send cases fail. Each restored.)
 - [x] Commit: "The server keeps no main bill; the floor names the bill a table opens on".
+- [x] Review fix (Task 6c review Minor 2), titles only, no assertion or setup changed:
+      - `party-main-bill.test.ts:151` "a group command without a bill creates the next bill and
+        moves the party revision once" → "a group command without a bill lands on the next bill the
+        test helper makes, and moves the party revision once";
+      - `party-table-actions.test.ts:666` "… and the next order makes Bill 3, when the receiving one
+        is …" → "… and the bill the test helper makes for the next order is Bill 3, when the
+        receiving one is …";
+      - `party-move-bill.test.ts:761` "… and the party's next order makes a new one" → "… and the
+        party's next order lands on a new bill the test helper makes";
+      - `party-move-bill.test.ts:1213` "… and its next order makes a new bill, since …" → "… and its
+        next order lands on a new bill the test helper makes, since …";
+      - `bill-identities.test.ts:338` "a bill moved to a table whose main bill is presented …" → "a
+        bill moved to a table whose Bill 1 is presented …";
+      - `order-drafts.db.test.ts:3472` "merges the main bills after explicit takeover, …" → "merges
+        the two tables' Bill 1s after explicit takeover, …".
 
 ## Task 7: the migration that drops `parties.main_bill_id` (venue reset) (≈45 calls)
 
@@ -1541,6 +1581,9 @@ proposals, Owner question 1); tests `till-app-open-table.test.ts`, `till-app-par
 - [ ] Case `A803 action results` in `till-app-parties.test.ts`: Move this bill to another table
       leaves the screen on the staying party's lowest-numbered owing bill, and the next draft
       request names it; `:3964` (back to the floor when it was the last) stays green unedited.
+- [ ] The till's new opening rule (`billToShow`, and any reuse of `billToOpen` for D11) must not
+      carry `billToOpen`'s abandoned-bill pick: abandoned bills are never chosen (D7; Task 6c
+      review Minor 3).
 - [ ] RED: `pnpm --filter @waitron/till exec vitest run src/till-app-open-table.test.ts src/till-app-parties.test.ts -t 'A803'`.
 - [ ] Implement; the Changed test checks rows for 8d.
 - [ ] GREEN: the five files unfiltered; till typecheck clean; `rg -n 'party\.main_bill_stays' apps/till` prints nothing.
@@ -1845,7 +1888,7 @@ in both themes), the `data-discount-bill` sites (`panel-footer.test.ts`,
       `computeHuella`, chain or alta builder changes; F and H2 unedited. But it edits two filing
       tests and `scripts/`-level guards on Owner question 5's default, so the lane's queue entry
       goes to `needs-owner-review` and the PR is **not landed until the owner has answered Owner
-      questions 1, 5 and 7** and CI is green on the current head. A different answer is built as
+      questions 1, 5, 5b and 7** and CI is green on the current head. A different answer is built as
       a follow-up task on this branch before landing.
 - [ ] Ledger `Status: done` for the build (parked for the owner); tell the owner the branch is ready
       for `finish-branch`.

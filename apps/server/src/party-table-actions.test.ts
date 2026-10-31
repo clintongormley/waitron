@@ -663,7 +663,7 @@ describe("the bills when parties combine", () => {
   });
 
   for (const receiving of ["presented", "paid"] as const) {
-    it(`opens the combined party on its lowest-numbered owing bill, and the next order makes Bill 3, when the receiving one is ${receiving} and the incoming one presented`, async () => {
+    it(`opens the combined party on its lowest-numbered owing bill, and the bill the test helper makes for the next order is Bill 3, when the receiving one is ${receiving} and the incoming one presented`, async () => {
       const [m4, m7] = await tables(`Ninguna ${receiving}`, 4, 7);
       const ana = await seat(v, m4);
       const luis = await seat(v, m7);

@@ -148,7 +148,7 @@ describe("the bill a table opens on", () => {
     expect(await revisionOf(v, partyId)).toBe(revisionBefore);
   });
 
-  it("a group command without a bill creates the next bill and moves the party revision once", async () => {
+  it("a group command without a bill lands on the next bill the test helper makes, and moves the party revision once", async () => {
     const { partyId, tabId } = await seat(v, await v.table("Group main"));
     await order(v, tabId, "Burger");
     await pay(v, tabId, "12.00");
