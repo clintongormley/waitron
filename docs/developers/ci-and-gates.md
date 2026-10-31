@@ -1540,6 +1540,35 @@ The existing shard-count check in `scripts/ci-workflow.test.mjs` now pins twenty
 It reads workflow text; the duration sequencer's tree-walk guard still does not
 prove which files Vitest executes or that the estimates are fresh.
 
+### Refresh after the held-setup suites grew
+
+A1252 (31 October 2026) keeps twenty shards and splits two serial test files.
+On the newest ten successful main runs that executed server tests, shard 7 took
+239–552 seconds and shard 3 took 201–337 seconds. The latest three runs
+(`41174582937`, `41174680766`, `41175259965`) measured
+`first-setup-start-again-held.test.ts` at 489–499 seconds and
+`first-setup-database-holdings.test.ts` at 249–288 seconds. Neither file was in
+the committed duration table. Those files alone exceeded a four-minute target;
+repacking their other files could not remove that serial work.
+
+The held-setup cases now occupy the original summary suite and its `-recovery`,
+`-wipe`, `-damaged` and `-journals` siblings. The holdings-reader cases occupy the
+original suite and its `-damage` and `-ledger` siblings. Shared helpers and hooks
+live in `apps/server/test/start-again-held-fixture.ts` and
+`apps/server/test/setup-holdings-fixture.ts`. This also maps the old test paths
+used by the A1131 plans: fresh-box restore cases belong in the `-wipe` suite.
+The local baseline passed 110 cases; a token comparison retained all 93 test
+declarations, including their parameter tables, assertions and timeouts.
+
+The duration refresh uses ordinary server-shard logs from the newest six
+successful main runs that actually ran them: `41175259965`, `41174680766`,
+`41174582937`, `41174376178`, `41170107932` and `41169670010`. Feed only the
+`test-server (N)` logs to `scripts/test-durations.mjs`, since other packages use
+the same file-progress format and can reuse relative file names. New split
+files initially use scaled local measurements; the PR records their hosted
+measurements and any subsequent correction. Three later main runs still need
+to establish whether every server shard stays around four minutes.
+
 ### The server's shards: sixteen, packed by measured duration
 
 The following A938 measurements describe the earlier sixteen-shard layout. The current
