@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { StatementSync } from "node:sqlite";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -37,6 +38,24 @@ async function act(path: string, at: string) {
   const expected = (await state()).lastEntryId;
   instant = new Date(at);
   return request(path, expected);
+}
+async function latestReads(body: () => unknown) {
+  const all = StatementSync.prototype.all;
+  let reads = 0;
+  const spy = vi.spyOn(StatementSync.prototype, "all").mockImplementation(function (
+    this: StatementSync,
+    ...args
+  ) {
+    // readLatestLiveEntry's chain-head lookup.
+    if (/select head\.id from time_entries head/.test(this.sourceSQL)) reads++;
+    return Reflect.apply(all, this, args) as ReturnType<typeof all>;
+  });
+  try {
+    await body();
+    return reads;
+  } finally {
+    spy.mockRestore();
+  }
 }
 async function rows() {
   return suite.db.select().from(timeEntries).orderBy(timeEntries.sequenceNo);
@@ -101,8 +120,13 @@ describe("the till's clock across a backward step of the box's clock", () => {
         origin: jobOrigin("dashboard"),
       }),
     );
+    const atOther = (await rows()).find((row) => row.locationId === other!.id)!;
     instant = new Date("2026-01-05T13:30:00Z");
-    expect(await state()).toMatchObject({ state: "working", activeLocationId: other!.id });
+    expect(await state()).toMatchObject({
+      state: "working",
+      activeLocationId: other!.id,
+      lastEntryId: atOther.id,
+    });
   });
 
   it("reconciles the business day of the clock-in written after the step", async () => {
@@ -114,8 +138,19 @@ describe("the till's clock across a backward step of the box's clock", () => {
 
     instant = new Date("2026-01-06T04:10:00Z");
     await state();
-    expect(
-      (await suite.db.select().from(attendanceDayWork)).map((row) => row.businessDay),
-    ).toEqual(["2026-01-05"]);
+    expect((await suite.db.select().from(attendanceDayWork)).map((row) => row.businessDay)).toEqual(
+      ["2026-01-05"],
+    );
+  });
+
+  it("reads the person's latest entry once for the state when nothing needs reconciling", async () => {
+    instant = new Date("2026-01-05T08:00:00Z");
+    expect((await request("in")).status).toBe(200);
+    instant = new Date("2026-01-05T09:00:00Z");
+    // The reconcile's state read and its clock-in read; the answer reuses the first.
+    expect(await latestReads(() => request("state"))).toBe(2);
+    const expected = (await state()).lastEntryId;
+    // As above, then the clock-out's own check and the state after it.
+    expect(await latestReads(() => request("out", expected))).toBe(4);
   });
 });

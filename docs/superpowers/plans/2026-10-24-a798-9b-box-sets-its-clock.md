@@ -3048,6 +3048,28 @@ finds nothing reconciled.
 src/till-clock-state.test.ts src/till-clock-api.test.ts src/till-clock-attendance.test.ts
 src/attendance-discovery.test.ts src/boot.till-clock.test.ts`.
 
+### Task 15b's per-task review, folded (2026-11-01)
+
+Review C0/I1/M4 (`~/waitron-campaign-b/a798-9b/t15b/review.md`). The reviewer compared the old and
+new reads over 42,200 random forward-only states and found no difference; with random backward
+steps the same probe found 1,615.
+- **I1:** the new test file is formatted.
+- **M2, a claim corrected.** "Failing tests first" above says a second clock-out is "today: written".
+  That was the tree before Task 15a. The reviewer ran Task 15a's tree through the till's routes:
+  the second clock-out was already refused (`attendance.no_open_entry`, no row) and the clock-in
+  after it accepted. What 15b fixes is the till's READ: after the step it said `working`, so the
+  till offered only a clock-out the routes refused, could not confirm an uncertain clock-out, and
+  the reconcile read the wrong day. Commit 179bd4c5a's message says the person "could be clocked
+  out twice"; the pull request's text says what is written here instead.
+- **M3, the reads' cost.** Each latest-entry read costs about 0.5 ms more than the old ordered
+  read, and a request made several. `reconcileAttendanceBeforeClock` now returns the state it read
+  when it reconciled nothing (`null` when it reconciled a day), and both till routes reuse it: the
+  state read makes two latest-entry reads instead of three, a clock action four instead of five.
+  A case counts them.
+- **M4:** the two-location case asserts `lastEntryId` is location B's clock-in.
+- **M1:** the deletion-control script now carries the imports its mutations need and refuses a
+  run where every case fails; rerun in a throwaway worktree (`t15b/mutate.py` → `mutate.out`).
+
 ### Task 15c: Stored limits that sit ahead of the clock after a backward step
 
 *(Added while building Task 15, 2026-10-31, from its audit; the lead's ruling under the STOP rule.)*
