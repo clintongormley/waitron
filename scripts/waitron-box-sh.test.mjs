@@ -459,32 +459,42 @@ describe("waitron-box.sh --restore", () => {
 describe("the box's systemd units", () => {
   const socket = () => readFileSync(join(BOX, "waitron-box.socket"), "utf8");
   const service = () => readFileSync(join(BOX, "waitron-box@.service"), "utf8");
-  const lines = (text) => text.split("\n").map((l) => l.trim());
+  // Each setting as "<section>/<key>=<value>": systemd ignores a key in the wrong section, with only
+  // a warning (run 3 of the measurement: CollectMode under [Service]).
+  const settings = (text) => {
+    let section = "";
+    return text.split("\n").flatMap((raw) => {
+      const line = raw.trim();
+      const header = /^\[(\w+)\]$/.exec(line);
+      if (header) section = header[1];
+      return header || line === "" || line.startsWith("#") ? [] : [`${section}/${line}`];
+    });
+  };
 
   it("listen on the app's socket for one request per connection, readable only by the box's group", () => {
-    expect(lines(socket())).toEqual(
+    expect(settings(socket())).toEqual(
       expect.arrayContaining([
-        "ListenStream=/run/waitron-box/box.sock",
-        "Accept=yes",
-        "SocketMode=0660",
-        "SocketUser=root",
-        "SocketGroup=waitron-box",
-        "MaxConnections=4",
-        "WantedBy=sockets.target",
+        "Socket/ListenStream=/run/waitron-box/box.sock",
+        "Socket/Accept=yes",
+        "Socket/SocketMode=0660",
+        "Socket/SocketUser=root",
+        "Socket/SocketGroup=waitron-box",
+        "Socket/MaxConnections=4",
+        "Install/WantedBy=sockets.target",
       ]),
     );
   });
 
   it("run the handler with the request on the socket, its errors in the journal, for at most 15 seconds, and leave no failed instance behind", () => {
-    expect(lines(service())).toEqual(
+    expect(settings(service())).toEqual(
       expect.arrayContaining([
-        "StandardInput=socket",
-        "StandardOutput=socket",
-        "StandardError=journal",
-        "RuntimeMaxSec=15",
-        "ExecStart=/usr/local/lib/waitron/waitron-box.sh %i",
-        "ExecStopPost=/usr/local/lib/waitron/waitron-box.sh --restore %i",
-        "CollectMode=inactive-or-failed",
+        "Service/StandardInput=socket",
+        "Service/StandardOutput=socket",
+        "Service/StandardError=journal",
+        "Service/RuntimeMaxSec=15",
+        "Service/ExecStart=/usr/local/lib/waitron/waitron-box.sh %i",
+        "Service/ExecStopPost=/usr/local/lib/waitron/waitron-box.sh --restore %i",
+        "Unit/CollectMode=inactive-or-failed",
       ]),
     );
   });
