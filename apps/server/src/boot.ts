@@ -2407,6 +2407,9 @@ async function bootServer(
   // Reached by every boot past setup and adoption, standby and mirror included: each node writes its
   // own row by design (one row per node; owner, 2026-09-24).
   await sealedState.refresh();
+  // The refresher writes only venue.db, so its own commit cannot call it again.
+  const stopSealingNodeCommits = store.node.onCommit(() => void sealedState.refresh());
+  undoOnFailure.push(async () => stopSealingNodeCommits());
   // The live copy of venue.db to the owner's bucket, primary only. `start()` returns without
   // waiting for the bucket, so a bucket that never answers cannot hold boot or a sale.
   const streamHost = new StreamHost({
@@ -3270,6 +3273,7 @@ async function bootServer(
           () => cloudSnapshots,
           () => suggestionLoop,
           unsubscribeFromChanges,
+          stopSealingNodeCommits,
           () => menuActivation.stop(),
           () => appendOnlyWatch.stop(),
           () => freeSpaceWatch.stop(),
