@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, incidents } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { formatDuration } from "@waitron/shared";
 import {
   boxEmailMessage,
   isBoxEmailCode,
@@ -11,6 +12,7 @@ import {
 import {
   BOX_EMAIL_WORDS,
   CLOCK_CONFIRMED_BY_WORDS,
+  CLOCK_CORRECTED_EMAIL_WORDS,
   CLOCK_MISDATED_EMAIL_WORDS,
   CLOCK_RESTARTED_EMAIL_WORDS,
 } from "./i18n/box-emails.js";
@@ -265,6 +267,142 @@ describe("boxEmailMessage for wrongly dated sales", () => {
   });
 });
 
+describe("boxEmailMessage for the box setting its clock", () => {
+  const DAY = 86_400_000;
+  const STEP = {
+    confirmationId: "c-step",
+    source: "authority",
+    person: null,
+    deviceId: null,
+    device: null,
+    before: "2025-03-14T08:12:00.000Z",
+    beforeOffsetMinutes: 60,
+    after: "2026-10-18T21:40:00.000Z",
+    afterOffsetMinutes: 120,
+    stepMs: 2 * DAY + 3 * 3_600_000,
+    direction: "forward",
+    verified: true,
+    unverified: false,
+    byAdmin: false,
+    byStaff: false,
+  };
+  const ES = CLOCK_CORRECTED_EMAIL_WORDS.es;
+  const message = (language: "en" | "es", params: Record<string, unknown>) =>
+    boxEmailMessage("clock.corrected", language, "Corner Bistro", params);
+
+  it("says the tax agency's time set it, which way, how far, and both times in their own offsets", () => {
+    expect(message("en", STEP)).toEqual({
+      subject: "Corner Bistro: the box's clock was set",
+      text: "The box set its clock from the tax agency's time: moved forward 2 days and 3 hours, from 14/03/2025 09:12 to 18/10/2026 23:40.",
+    });
+    expect(message("es", STEP)).toEqual({
+      subject: ES.subject.replaceAll("{venue}", "Corner Bistro"),
+      text: ES.authority
+        .replaceAll(
+          "{step}",
+          ES.forward.replaceAll("{duration}", formatDuration(STEP.stepMs, "es-ES")),
+        )
+        .replaceAll("{before}", "14/03/2025 09:12")
+        .replaceAll("{after}", "18/10/2026 23:40"),
+    });
+  });
+
+  it("names the administrator whose device set it, in both languages", () => {
+    const params = { ...STEP, source: "admin", person: "Ben", byAdmin: true };
+    expect(message("en", params).text).toBe(
+      "The box's clock was set from Ben's device: moved forward 2 days and 3 hours, from 14/03/2025 09:12 to 18/10/2026 23:40.",
+    );
+    expect(message("es", params).text).toBe(
+      ES.admin
+        .replaceAll("{person}", "Ben")
+        .replaceAll(
+          "{step}",
+          ES.forward.replaceAll("{duration}", formatDuration(STEP.stepMs, "es-ES")),
+        )
+        .replaceAll("{before}", "14/03/2025 09:12")
+        .replaceAll("{after}", "18/10/2026 23:40"),
+    );
+  });
+
+  it("names the staff member who confirmed it and the till that proposed it, in both languages", () => {
+    const params = {
+      ...STEP,
+      source: "staff",
+      person: "Ana",
+      deviceId: "d-bar",
+      device: "Bar",
+      byStaff: true,
+      direction: "back",
+      stepMs: -DAY,
+    };
+    expect(message("en", params).text).toBe(
+      "The box's clock was set from the time on till Bar, confirmed by Ana, a staff member: moved back 1 day, from 14/03/2025 09:12 to 18/10/2026 23:40.",
+    );
+    expect(message("es", params).text).toBe(
+      ES.staff
+        .replaceAll("{till}", ES.namedTill.replaceAll("{device}", "Bar"))
+        .replaceAll("{person}", "Ana")
+        .replaceAll("{step}", ES.back.replaceAll("{duration}", formatDuration(-DAY, "es-ES")))
+        .replaceAll("{before}", "14/03/2025 09:12")
+        .replaceAll("{after}", "18/10/2026 23:40"),
+    );
+    expect(message("es", params).text).toContain("la caja Bar");
+  });
+
+  it("names a till without a label as a till", () => {
+    const params = { ...STEP, source: "staff", person: "Ana", byStaff: true };
+    expect(message("en", params).text).toContain("from the time on a till, confirmed by Ana,");
+    expect(message("es", params).text).toContain(
+      ES.staff.split("{till}")[0]!.concat(ES.unnamedTill),
+    );
+  });
+
+  it("says a step it could not confirm was only tried, and what the clock read before and after", () => {
+    const params = {
+      ...STEP,
+      confirmationId: null,
+      verified: false,
+      unverified: true,
+      source: "admin",
+      person: "Ben",
+      byAdmin: true,
+    };
+    expect(message("en", params)).toEqual({
+      subject: "Corner Bistro: the box could not confirm it set its clock",
+      text: "The box tried to set its clock but could not confirm the change took. Its clock read 14/03/2025 09:12 before and 18/10/2026 23:40 after (moved forward 2 days and 3 hours). Check the box's clock on the Box status page (in the dashboard, Settings → Box status).",
+    });
+    expect(message("es", params)).toEqual({
+      subject: ES.unverifiedSubject.replaceAll("{venue}", "Corner Bistro"),
+      text: ES.unverified
+        .replaceAll(
+          "{step}",
+          ES.forward.replaceAll("{duration}", formatDuration(STEP.stepMs, "es-ES")),
+        )
+        .replaceAll("{before}", "14/03/2025 09:12")
+        .replaceAll("{after}", "18/10/2026 23:40"),
+    });
+  });
+
+  it("words a step of exactly one day and one of 400 days", () => {
+    expect(message("en", { ...STEP, stepMs: DAY }).text).toContain("moved forward 1 day, from");
+    expect(message("en", { ...STEP, stepMs: 400 * DAY }).text).toContain(
+      "moved forward 400 days, from",
+    );
+    expect(message("es", { ...STEP, stepMs: 400 * DAY }).text).toContain(
+      ES.forward.replaceAll("{duration}", formatDuration(400 * DAY, "es-ES")),
+    );
+  });
+
+  it("words a direction it does not know as moved", () => {
+    expect(message("en", { ...STEP, direction: "sideways" }).text).toContain(
+      "time: moved 2 days and 3 hours, from",
+    );
+    expect(message("es", { ...STEP, direction: "sideways" }).text).toContain(
+      ES.moved.replaceAll("{duration}", formatDuration(STEP.stepMs, "es-ES")),
+    );
+  });
+});
+
 describe("every clock email", () => {
   const STOP = {
     clockAt: "2025-03-14T08:12:00.000Z",
@@ -294,6 +432,27 @@ describe("every clock email", () => {
     ["clock.records_misdated", { ...MISDATED, partial: true }],
     ["clock.records_misdated", { ...MISDATED, count: 1, partial: true }],
     ["clock.records_misdated", { ...MISDATED, count: 0, unconfirmed: true }],
+    ...[
+      { source: "authority", person: null, device: null },
+      { source: "admin", person: "Ben", device: null, byAdmin: true },
+      { source: "staff", person: "Ana", device: "Bar", byStaff: true },
+      { source: "staff", person: "Ana", device: null, byStaff: true },
+      { source: "authority", person: null, device: null, unverified: true },
+    ].map(
+      (who) =>
+        [
+          "clock.corrected",
+          {
+            before: "2025-03-14T08:12:00.000Z",
+            beforeOffsetMinutes: 60,
+            after: "2026-10-18T21:40:00.000Z",
+            afterOffsetMinutes: 120,
+            stepMs: 86_400_000,
+            direction: "forward",
+            ...who,
+          },
+        ] as const,
+    ),
   ] as const;
   const EVERY = EMAILS.flatMap(([code, params]) =>
     LANGUAGES.map((language) => [code, language, params] as const),

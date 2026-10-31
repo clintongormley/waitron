@@ -58,6 +58,7 @@ export type {
 export { centsToDecimal, decimalToCents, rawCentsToDecimal, stringToCents } from "./cents.js";
 export { currencySymbol, formatMoney, type CurrencySymbol } from "./money-format.js";
 export { formatBytes } from "./bytes-format.js";
+export { formatDuration } from "./duration-format.js";
 export {
   JOIN_SIDES,
   NEW_TABLE_SIZE,
