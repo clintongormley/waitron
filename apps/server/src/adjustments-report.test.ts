@@ -1,4 +1,5 @@
 import { readBillEditState } from "./bill-editing.js";
+import { firstOpenBillOf } from "./testing/party-bill-of.js";
 import { observedPaymentBody } from "./testing/bill-payment-fixture.js";
 import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -119,12 +120,10 @@ async function seat(who: Member): Promise<{ partyId: string; billId: string }> {
 type Draft = { id: string; revision: number; lines: { id: string }[] };
 
 async function draft(who: Member, partyId: string, dishes: string[]): Promise<Draft> {
-  const [party] = await inTx(venue, (tx) =>
-    tx.select({ billId: parties.mainBillId }).from(parties).where(eq(parties.id, partyId)),
-  );
+  const billId = await inTx(venue, (tx) => firstOpenBillOf(tx, partyId));
   return (
     await call(who, "PUT", `/api/parties/${partyId}/drafts`, {
-      billId: party!.billId,
+      billId,
       draftId: null,
       revision: 0,
       lines: dishes.map((name) => ({ menuItemId: venue.item(name), quantity: "1" })),

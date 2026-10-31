@@ -39,6 +39,7 @@ import {
   order,
   orderForParty,
   partyAt,
+  openingBillOfParty,
   partyRow,
   pay,
   placeByHand,
@@ -203,7 +204,7 @@ async function refundInFull(billId: string, paymentId: string): Promise<void> {
   );
 }
 
-/** A party at a fresh table whose main bill holds a Burger and whose second bill holds a Vino. */
+/** A party at a fresh table whose Bill 1 holds a Burger and whose Bill 2 holds a Vino. */
 async function twoBills(label: string): Promise<{ partyId: string; main: string; second: string }> {
   const { partyId, tabId } = await seat(v, await v.table(label));
   await orderForParty(v, partyId, ["Burger", "Vino"]);
@@ -260,7 +261,7 @@ describe("split a bill", () => {
         vat: l.vatClass,
       })),
     ).toEqual([{ name: "Agua", price: 200, vat: "general" }]);
-    expect((await partyRow(v, partyId)).mainBillId).toBe(tabId);
+    expect(await openingBillOfParty(v, partyId)).toBe(tabId);
     expect(await activeTablesOf(v, partyId)).toEqual([mesa4]);
   });
 
@@ -728,20 +729,23 @@ describe("merge bills", () => {
     expect(await activeTablesOf(v, partyId)).toEqual(tablesBefore);
     expect(tablesBefore).toEqual([mesa]);
     const party = await partyRow(v, partyId);
-    expect({ mainBillId: party.mainBillId, revision: party.revision }).toEqual({
-      mainBillId: tabId,
+    expect({
+      openingBillId: await openingBillOfParty(v, partyId),
+      revision: party.revision,
+    }).toEqual({
+      openingBillId: tabId,
       revision: revision + 1,
     });
     expect(await paymentsOf(tabId)).toEqual([]);
     expect(await paymentsOf(second)).toEqual([]);
   });
 
-  it("keeps the bill merged into as Bill 2, naming no main bill, when Bill 1 is merged away", async () => {
+  it("keeps the bill merged into as Bill 2, and the table opens on it, when Bill 1 is merged away", async () => {
     const { partyId, main, second } = await twoBills("Mesa 21");
 
     await merge(partyId, second, main);
 
-    expect((await partyRow(v, partyId)).mainBillId).toBeNull();
+    expect(await openingBillOfParty(v, partyId)).toBe(second);
     expect(await numbersOf(v, partyId)).toEqual([
       [main, 1, null],
       [second, 2, null],
@@ -872,9 +876,12 @@ describe("transfer items", () => {
     expect(burger!.groupId).not.toBeNull();
     expect((await linesOf(v, second)).map((l) => l.name)).toEqual(["Vino", "Burger"]);
     const party = await partyRow(v, partyId);
-    expect({ revision: party.revision, mainBillId: party.mainBillId }).toEqual({
+    expect({
+      revision: party.revision,
+      openingBillId: await openingBillOfParty(v, partyId),
+    }).toEqual({
       revision: revision + 1,
-      mainBillId: tabId,
+      openingBillId: tabId,
     });
     expect(await activeTablesOf(v, partyId)).toEqual([mesa]);
   });
@@ -954,7 +961,7 @@ describe("requireUntouched", () => {
 
 describe("bills of two service modes", () => {
   /**
-   * A party whose main bill (Agua) takes the counter zone's `prepay` mode, by a direct retarget of
+   * A party whose Bill 1 (Agua) takes the counter zone's `prepay` mode, by a direct retarget of
    * its service context, while its second bill (Burger, already fired to the kitchen) stays
    * `table_tab`.
    */
@@ -1064,7 +1071,7 @@ describe("sent work moved between a party's bills at two of its tables", () => {
   }
 
   /**
-   * A party at `label` whose main bill has `burgers` Burgers sent to the kitchen and whose second
+   * A party at `label` whose Bill 1 has `burgers` Burgers sent to the kitchen and whose second
    * bill holds a sent Vino, which has then moved to `Patio label` and joined a second table. The
    * printer is at the station of `watched`'s work.
    */
@@ -1289,7 +1296,7 @@ describe("A803 no main bill (writers):", () => {
     return inTx(v, (tx) => moveBill(tx, v.cfg, billId, to, options));
   }
 
-  /** A seated party whose only bill is presented, so the triggers have cleared its main bill. */
+  /** A seated party whose only bill is presented. */
   async function presentedParty(label: string) {
     const seated = await seat(v, await v.table(label));
     await orderForParty(v, seated.partyId, ["Burger"]);
@@ -1308,9 +1315,9 @@ describe("A803 no main bill (writers):", () => {
     return { ...seated, second };
   }
 
-  it("Merge bills leaves the main bill cleared when it is merged away", async () => {
+  it("Merge bills leaves the party with no main bill when Bill 1 is merged away", async () => {
     const { partyId, main, second } = await twoBills("Mesa nomain merge");
-    expect(await mainOf(partyId)).toBe(main);
+    expect(await mainOf(partyId)).toBeNull();
 
     await merge(partyId, second, main);
 
@@ -1367,7 +1374,7 @@ describe("A803 no main bill (writers):", () => {
     expect(await mainOf(partyId)).toBeNull();
   });
 
-  it("Split a table taking an open bill names no main bill on the new party, and the staying party keeps its own", async () => {
+  it("Split a table taking an open bill names no main bill on the new party, and the staying party keeps its own bill", async () => {
     const { partyId, tabId, second } = await atTwoTables("Mesa nomain split bill");
     await orderForParty(v, partyId, ["Burger", "Vino"]);
     const taken = await splitOff(partyId, tabId, [2]);
@@ -1377,7 +1384,8 @@ describe("A803 no main bill (writers):", () => {
 
     expect(result.billId).toBe(taken);
     expect(await mainOf(result.partyId)).toBeNull();
-    expect(await mainOf(partyId)).toBe(tabId);
+    expect(await mainOf(partyId)).toBeNull();
+    expect(await openingBillOfParty(v, partyId)).toBe(tabId);
   });
 
   it("Split a table with no bill names no main bill on the new party's empty bill", async () => {
@@ -1388,7 +1396,8 @@ describe("A803 no main bill (writers):", () => {
 
     expect((await billRow(v, result.billId)).partyId).toBe(result.partyId);
     expect(await mainOf(result.partyId)).toBeNull();
-    expect(await mainOf(partyId)).toBe(tabId);
+    expect(await mainOf(partyId)).toBeNull();
+    expect(await openingBillOfParty(v, partyId)).toBe(tabId);
   });
 
   it("Split a table taking the staying party's only bill names no main bill on the bill it is given", async () => {

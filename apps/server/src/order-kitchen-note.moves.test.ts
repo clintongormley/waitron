@@ -9,7 +9,7 @@ import { readKitchenNotes, kitchenNoteKey, writeKitchenNote } from "@waitron/ven
 import { mergeBills, splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { moveBill, type MoveTarget } from "./testing/move-bill-fixture.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
-import { partyMainBill } from "./parties.js";
+import { insertPartyBill } from "./parties.js";
 import { joinTables, splitTable } from "./testing/table-action-fixture.js";
 import {
   OPERATOR,
@@ -352,7 +352,7 @@ describe("kitchen notes when bills and parties move", () => {
     expect(await saved({ partyId: source.partyId })).toEqual({ note: null, revision: 2 });
   });
 
-  it("accepts a 2000-character combined note and keeps it when the party needs a replacement main bill", async () => {
+  it("accepts a 2000-character combined note and keeps it on a new bill made after the party's bill is paid", async () => {
     const fromTable = await freshTable("Boundary source");
     const from = await seat(v, fromTable);
     const into = await seat(v, await freshTable("Boundary target"));
@@ -364,7 +364,7 @@ describe("kitchen notes when bills and parties move", () => {
     });
     await order(v, into.tabId, "Burger");
     await pay(v, into.tabId, "12.00");
-    const replacement = await inTx(v, (tx) => partyMainBill(tx, v.cfg, into.partyId, "moved"));
+    const replacement = await inTx(v, (tx) => insertPartyBill(tx, v.cfg, into.partyId));
     expect(replacement).not.toBe(into.tabId);
     expect(await effective(replacement)).toMatchObject({
       note: "t".repeat(998) + "; " + "s".repeat(1000),

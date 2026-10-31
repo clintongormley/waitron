@@ -100,6 +100,7 @@ import {
   bumpPartyRevision,
   checkAndBumpParty,
   readBillsOfParties,
+  type FamilyBill,
   runServiceCommand,
   tableHeld,
   partyFamily,
@@ -8584,8 +8585,12 @@ export interface TableParty {
   name: string | null;
   /** `name`, or else the party's tables' shown names ({@link partyDisplayName}). */
   displayName: string;
-  /** The bill an order that names none goes on; null until the party's next order makes one. */
-  mainBillId: string | null;
+  /**
+   * The bill the till opens the table on: the lowest-numbered bill still owing, else the
+   * highest-numbered shown bill, else null. Only a read for opening the screen; nothing writes to it
+   * or sends to it in its stead.
+   */
+  openingBillId: string | null;
   /** What the party's bills, and those of every party merged into it, still owe. */
   outstanding: string;
   /** The party's bills that are not abandoned, merged parties' included. */
@@ -8979,6 +8984,13 @@ async function readTodayTables(
   );
 }
 
+/** {@link TableParty.openingBillId}; `bills` come in number order, unnumbered last. */
+function openingBillOf(bills: readonly FamilyBill[]): string | null {
+  const shown = bills.filter((bill) => bill.status !== "abandoned");
+  const owing = shown.find((bill) => bill.status === "open" || bill.status === "placed");
+  return (owing ?? shown.at(-1))?.workingOrderId ?? null;
+}
+
 interface Labelled {
   id: string;
   label: string;
@@ -9001,7 +9013,6 @@ async function readSeatedParties(
       guestCount: parties.guestCount,
       state: parties.state,
       name: parties.name,
-      mainBillId: parties.mainBillId,
       billRequestedAt: parties.billRequestedAt,
       openedAt: parties.openedAt,
       zoneId: diningTables.zoneId,
@@ -9050,7 +9061,7 @@ async function readSeatedParties(
       state: member.state,
       name: member.name,
       displayName: partyDisplayName(member.name, labels.get(member.partyId)!),
-      mainBillId: member.mainBillId,
+      openingBillId: openingBillOf(own),
       outstanding: toScale(sumDecimals(own.map((bill) => decimal(bill.outstanding))), MONEY_SCALE),
       billCount: own.filter((bill) => bill.status !== "abandoned").length,
       tableIds: [member.tableId],

@@ -1,5 +1,6 @@
 import { readBillEditState } from "./bill-editing.js";
 import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
+import { firstOpenBillOf } from "./testing/party-bill-of.js";
 import {
   saveDraftForTest as saveDraft,
   takeOverDraftForTest as takeOverDraft,
@@ -1045,7 +1046,7 @@ describe("draft bill ownership", () => {
     );
   });
 
-  it("sends to the draft's recorded bill even while another bill is main", async () => {
+  it("sends to the draft's recorded bill even while another bill has a lower number", async () => {
     const v = await setupVenue();
     const { partyId, tabId } = await seated(v);
     const billId = await otherBill(v, partyId, tabId);
@@ -1055,8 +1056,7 @@ describe("draft bill ownership", () => {
     ]);
     expect(sent.tabId).toBe(billId);
     expect((await tabLines(partyId)).map(({ workingOrderId }) => workingOrderId)).toEqual([billId]);
-    const [party] = await db.select().from(parties).where(eq(parties.id, partyId));
-    expect(party!.mainBillId).toBe(tabId);
+    expect(await withTransaction(db, (tx) => firstOpenBillOf(tx, partyId))).toBe(tabId);
   });
 
   it("refuses a legacy draft without a bill instead of interpreting it as the main bill", async () => {

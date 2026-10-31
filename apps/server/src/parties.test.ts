@@ -30,6 +30,7 @@ import {
   inTx,
   order,
   orderForParty,
+  openingBillOfParty,
   partyRow,
   pay,
   placeByHand,
@@ -659,7 +660,8 @@ describe("joined tables (Mesa 4 and Mesa 5)", () => {
       expect(await inTx(suite, (tx) => partyForTable(tx, table))).toMatchObject({ partyId });
     }
     expect(await partyIdOf(dessertTab)).toBe(partyId);
-    expect((await partyRow(suite, partyId)).mainBillId).toBe(dessertTab);
+    expect(await statusOf(suite, dessertTab)).toBe("open");
+    expect(await openingBillOfParty(venue, partyId)).toBe(dessertTab);
   });
 
   it("lets the next party at either table see no earlier bill once the party finishes", async () => {
@@ -709,7 +711,7 @@ describe("joined tables (Mesa 4 and Mesa 5)", () => {
       expect(await inTx(suite, (tx) => partyForTable(tx, table))).toBeNull();
       expect((await floorRow(venue, table)).state).toBe("free");
     }
-    expect((await partyRow(suite, partyId)).mainBillId).toBe(tabId);
+    expect(await openingBillOfParty(venue, partyId)).toBe(tabId);
   });
 });
 
@@ -764,7 +766,8 @@ describe("a paid party (paying changes no table of the party)", () => {
     }
     const { tabId: dessertTab } = await orderForParty(venue, partyId, ["Flan"]);
     expect(await partyIdOf(dessertTab)).toBe(partyId);
-    expect((await partyRow(suite, partyId)).mainBillId).toBe(dessertTab);
+    expect(await statusOf(suite, dessertTab)).toBe("open");
+    expect(await openingBillOfParty(venue, partyId)).toBe(dessertTab);
   });
 });
 

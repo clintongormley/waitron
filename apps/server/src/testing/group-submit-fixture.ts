@@ -1,10 +1,4 @@
-import {
-  parties,
-  withTransaction,
-  workingOrders,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
+import { parties, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { AppError, isUuid } from "@waitron/shared";
@@ -22,7 +16,7 @@ import {
 import { applyPartyAllergyPatch, assertPartyAllergyAnswered } from "../party-allergy.js";
 import { insertTabRound, priceTabRound } from "../working-order.js";
 import type { BillEditExpected } from "../order-drafts.js";
-import { bumpPartyRevision, insertPartyBill, setMainBill } from "../parties.js";
+import { bumpPartyRevision, insertPartyBill } from "../parties.js";
 import { firstOpenBillOf } from "./party-bill-of.js";
 import type { OriginConfig } from "../trading-context.js";
 import type { OrderAttendance } from "../working-order.js";
@@ -53,24 +47,13 @@ async function openBillFor(
   revisionMoved: boolean | undefined,
 ): Promise<string> {
   const [party] = await tx
-    .select({
-      state: parties.state,
-      mainBillId: parties.mainBillId,
-      billStatus: workingOrders.status,
-      billPartyId: workingOrders.partyId,
-    })
+    .select({ state: parties.state })
     .from(parties)
-    .leftJoin(workingOrders, eq(workingOrders.id, parties.mainBillId))
     .where(eq(parties.id, partyId));
   if (party?.state !== "open") throw new AppError("party.not_open", { partyId });
-  // Task 6c removes this.
-  if (party.mainBillId !== null && (party.billStatus !== "open" || party.billPartyId !== partyId))
-    throw new AppError("tab.not_open", { tabId: party.mainBillId });
   const open = await firstOpenBillOf(tx, partyId);
   if (open !== null) return open;
   const billId = await insertPartyBill(tx, cfg, partyId);
-  // Task 6c removes this.
-  await setMainBill(tx, partyId, billId);
   if (revisionMoved !== true) await bumpPartyRevision(tx, partyId);
   return billId;
 }

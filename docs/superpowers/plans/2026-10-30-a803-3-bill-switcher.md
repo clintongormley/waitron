@@ -687,6 +687,27 @@ task's red run; a red assertion not on this list that is not kind B/R/W/S/F unde
 | Cases in any group-submit/draft-command user whose sent bill changes at Task 6a (red or not) because the main bill was null while another open bill existed (the old helper made a new bill; the new one picks the existing lowest-numbered open bill) | S | the case names the bill the old helper would have made: its setup calls `insertPartyBill` and passes that id; every `expect` byte-identical | D1, I5 | 6a |
 | `apps/server/src/current-orders.test.ts:1279` ("…across a paid bill, a split one and a later one": its mains, sent with no bill after the first bill was paid, landed on the split bill, so the case read two bills, not three) | S | the setup makes the later bill with `insertPartyBill` and sends the mains to it (the file's `group()` helper gains an optional `billId`); every `expect` byte-identical | D1, I5; Task 6a review I1 | 6a |
 | The seven `expect((await partyRow(…)).mainBillId).toBe(<the bill the helper made>)` assertions that rest on Task 6a's kept `setMainBill`: `parties.test.ts:662`, `:767`; `party-move-bill.test.ts:774`, `:1218`; `party-table-actions.test.ts:682` (two cases), `:1181` | B | decided at Task 6c (the review offers, as an example: the order's bill is the party's, open, and numbered next after the party's existing bills, read with `numbersOf`) | §3.4; Task 6a review M3 | 6c |
+| **As built at Task 6c** (lines at `e31ede59e`). `openingBillOfParty(v, partyId)` is a new `testing/party-venue.ts` helper: the floor row's `party.openingBillId` for the party's tables (D7). Every red run below failed only on a `mainBillId` read; none on money, VAT, permissions or filing | | | | |
+| `party-main-bill.test.ts:78`, `:93`, `:98` (seated/paid/next main bill) | B | `partyRow.mainBillId` `toBe(tabId)` / `toBeNull()` / `toBe(dessert)` → the floor's `openingBillId` `toBe(tabId)` / `toBe(tabId)` (the paid bill, highest shown) / `toBe(dessert)`; describe "the main bill" → "the bill a table opens on"; `:86` retitled "stays the paid bill once it is paid, and moves to the new, empty bill …" | D7 | 6c |
+| `party-main-bill.test.ts:111`, `:115` (presented, next order) | B | `toBeNull()` → `openingBillId` `toBe(tabId)` (presented still owes); `toBe(next)` → `numbersOf` `[[tabId, 1, null], [next, 2, null]]`, `next` status `open`, and `openingBillId` still `tabId`; retitled | D7 | 6c |
+| `party-main-bill.test.ts:122` ("is cleared by setMainBill naming none") | **B, Q5 (retired)** | deleted: `setMainBill` no longer exists, and nothing writes the column (the behaviour is gone). The column itself goes in Task 7 | §3.4 | 6c |
+| `party-main-bill.test.ts:132-155` (a hand-written main bill naming a presented / another party's bill refuses `tab.not_open`) | B | the order now names that bill itself: refused `bill.presented` / `bill.other_party` with `params: { workingOrderId: target }`; the lines, bills and revision before/after checks unchanged; the hand-written `parties.mainBillId` write goes; retitled "refuses an order naming %s, writing nothing" | §3.4, Review focus 4 | 6c |
+| `party-main-bill.test.ts:171` (group command's landed bill is main) | B | → `numbersOf` `[[tabId, 1, null], [landed, 2, null]]` and `landed` status `open`; revision-once checks unchanged; title "next main bill" → "next bill" | §3.4 | 6c |
+| `party-main-bill.test.ts:217` (`before.party.mainBillId` `toBeNull()`, the precondition) | B | → `before.bills` `toEqual([tabId])` (no bill made, beside the unchanged before/after `toEqual`); title "next main bill" → "next bill" | §3.4 | 6c |
+| `party-main-bill.test.ts:224` (abandoned main bill cleared) | B | → the floor's `openingBillId` `toBeNull()` (no shown bill); retitled "is none when the party's only bill is abandoned" | D7 | 6c |
+| `party-main-bill.test.ts:248`, `:362`, `:375`, `:397`, `:422`, `:460` | B, W | `:248` → `openingBillId` `toBe(tabId)` (retitled "… and the table still opens on Bill 1"); `:362` → `numbersOf` `[[tabId,1],[checkId,2],[dessertTab,3]]`; `:375` `party: { mainBillId }` → `{ openingBillId: dessertTab }`; `:397` whole-shape `mainBillId: null` → `openingBillId: tabId` (the paid bill); `:422` → `openingBillId` `toBe(dessertTab)`; `:460` → `openingBillId` `toBe(next)` | D7 | 6c |
+| `parties.test.ts:662`, `:767` (two of the seven) | B | `mainBillId` `toBe(dessertTab)` → `dessertTab` status `open` and `openingBillOfParty` `toBe(dessertTab)` (the paid Bill 1 owes nothing) | §3.4, D7 | 6c |
+| `parties.test.ts:712` | B | `toBe(tabId)` → `openingBillOfParty` `toBe(tabId)` | D7 | 6c |
+| `party-move-bill.test.ts:774`, `:1218` (two of the seven), `:770`, `:1216`, `:961`, `:835-839` | B | `:770` `toBeNull()` → `openingBillOfParty` `toBe(paid)` (the paid split bill is the only one shown); `:774` → `toBe(tabId)`; `:1216` `toBeNull()` → `toBe(second)` (presented, owing); `:1218` (now `:1222`) `toBe(tabId)` → `numbersOf` `[[second,1],[tabId,2]]` and `tabId` status `open`; `:961` `toBeNull()` → `toBe(orderId)`; `:835` whole object `mainBillId: null` → `openingBillId: second`. Describe "the main bill" → "the party's last unpaid bill"; titles at `:760`, `:1208`, `:358`, `:378`, `:1543` and comments `:408`, `:1272` say Bill 1 instead of main bill | D7 | 6c |
+| `party-move-bill.test.ts:315`, `:316`, `:339`, `:355`, `:401`, `:847`, `:874`, `:907`, `:939`, `:1040`, `:1205` | B | `partyRow.mainBillId` `toBe(x)` → `openingBillOfParty` `toBe(x)`, same `x` | D7 | 6c |
+| `party-table-actions.test.ts:682` (two of the seven, the loop), `:679`, `:655`, `:1181`, `:1183`, `:1159`, `:1137`, `:278`, `:344`, `:1143` | B | `:682` (now `:689`) `toBe(tabId)` → `numbersOf` `[[luis.tabId,1],[ana.tabId,2],[tabId,3]]` and status `open`; `:679` `toBeNull()` → `openingBillOfParty` `toBe(luis.tabId)` when presented, `toBe(ana.tabId)` when paid; `:655` `toBeNull()` → `toBe(luis.tabId)`; `:1183` `toBeNull()` → `toBe(b2)`; `:1181` (now `:1194`) `toBe(tabId)` → `numbersOf` `[[b2,1],[tabId,2]]` and status `open`; `:1159` `toBeNull()` → `toBe(main.id)`; `:1137` `mainBillId: null` in `toMatchObject` → `openingBillOfParty` `toBe(b2)`; `:278`, `:344`, `:1143` the `mainBillId` key leaves the `toMatchObject` for a separate `openingBillOfParty` `toBe` of the same value. Describe "the main bill when parties combine" → "the bills when parties combine"; titles at `:312`, `:351`, `:368`, `:385`, `:643`, `:665`, `:1164` and comment `:1115` retitled | D7 | 6c |
+| `party-table-actions.test.ts:365`, `:1040`, `:1592` | B | `toBe(x)` → `openingBillOfParty` `toBe(x)`, same `x` | D7 | 6c |
+| `party-bill-actions.test.ts:263`, `:731-734`, `:875-878`, `:744` | B | `:263` → `openingBillOfParty` `toBe(tabId)`; `:731`, `:875` the whole objects' `mainBillId: tabId` → `openingBillId: tabId`; `:744` `toBeNull()` → `toBe(second)`, retitled "… and the table opens on it, when Bill 1 is merged away" | D7 | 6c |
+| `party-bill-actions.test.ts:1313`, `:1380`, `:1391` (Task 6b's writers describe) | B | seating names no main bill, so `mainOf(partyId)` `toBe(main)` / `toBe(tabId)` → `toBeNull()`; `:1380` and `:1391` also gain `openingBillOfParty(partyId)` `toBe(tabId)` (the staying party keeps its bill). The describe keeps reading the column (`mainOf`) as its guard until Task 7 drops it; `:1311` and `:1370` retitled | §3.4 | 6c |
+| `bill-identities.test.ts:171` | B | `toBeNull()` → `openingBillOfParty` `toBe(tabId)` (the paid bill); title "a main bill given to …" → "a bill made for …" | D7 | 6c |
+| `order-drafts.db.test.ts:1059` | B | `mainBillId` `toBe(tabId)` → `firstOpenBillOf(tx, partyId)` `toBe(tabId)`; title "… while another bill is main" → "… while another bill has a lower number" | §3.4 | 6c |
+| `till-api.drafts.test.ts:181-186` helper `mainBillOf` (13 call sites and the check at `:1104`) | S | the helper reads `firstOpenBillOf` and is renamed `openBillOf`; the `:1104` check reads `expect(await openBillOf(party.partyId)).toBe(party.tabId)`, differing from before only in the helper's name; every other `expect` byte-identical | §3.4 | 6c |
+| `order-kitchen-note.moves.test.ts:355` title | S | "… when the party needs a replacement main bill" → "… on a new bill made after the party's bill is paid", with the planned `insertPartyBill` at `:367` | D1 | 6c |
 | `apps/server/src/party-bill-actions.test.ts:690`, `:736` (merge keeps/moves the main bill) | B | the explicit merge's surviving bill keeps its number; no main bill | §3.4 | 6b |
 | `party-bill-actions.test.ts:739` (was `:736`, "makes the bill merged into the main bill when the main bill is merged away") | B (Task 6b's red run) | `mainBillId` `toBe(second)` → `toBeNull()`, plus `numbersOf` `[[main, 1, null], [second, 2, null]]` and `second`'s status `open`; retitled "keeps the bill merged into as Bill 2, naming no main bill, when Bill 1 is merged away"; the abandoned and lines checks unchanged. `:690` stayed green (seating's main bill is not the one merged away) and is unchanged | §3.4; D12 | 6b |
 | `party-move-bill.test.ts:822` (was `:827`, a bill moved to a free table is the new party's main bill) | B (Task 6b's red run) | `mainBillId: second` → `mainBillId: null` in the same `toEqual`, plus `numbersOf(new party)` `[[second, 1, null]]` and `second`'s status `open`; retitled "… with the bill as its Bill 1 …"; every other check unchanged | §3.4 | 6b |
@@ -1319,7 +1340,7 @@ that nothing writes to it; `:9017`, `:9066`); `packages/bookings/src/testing/fak
 `till-api.zone-closed.test.ts:327`, `:382-385`, `:474`, `print-problems.test.ts:1808` (if not done
 in 4a), `till-api.move-bill.test.ts` (its one read) — every row above for Task 6c.
 
-- [ ] New cases `A803 no main bill:` in `party-main-bill.test.ts` (Review focus 4): "a seated
+- [x] New cases `A803 no main bill:` in `party-main-bill.test.ts` (Review focus 4): "a seated
       table's floor row names Bill 1 as the bill it opens on"; "after the only bill is paid the
       floor row names it, and an order needs a bill made with `createPartyBill`"; "a send naming a
       bill that has since moved to another party refuses `bill.other_party`, and no line, draft or
@@ -1327,18 +1348,42 @@ in 4a), `till-api.move-bill.test.ts` (its one read) — every row above for Task
       party that is not the lowest-numbered lands on exactly that bill"; "the floor row opens on the
       lowest-numbered owing bill, else the highest-numbered shown bill" (seed numbers against
       opening order).
-- [ ] RED: `pnpm --filter @waitron/server exec vitest run src/party-main-bill.test.ts -t 'A803 no main bill'`
+      (As built: the last case seeds Bill 3 opened first and Bill 2 second, checks all open → Bill 1,
+      then Bill 1 paid and Bill 2 presented → Bill 2; and a second party with Bills 1 and 2 paid and
+      Bill 3 abandoned → Bill 2.)
+- [x] RED: `pnpm --filter @waitron/server exec vitest run src/party-main-bill.test.ts -t 'A803 no main bill'`
       — fails on `openingBillId` (undefined).
-- [ ] Remove, with the `party-main-bill.test.ts` rewrite, the two spots Task 6a left in
+      (Run: 3 failed, 2 passed, 24 skipped; each failure "expected undefined to be '<bill id>'". The
+      two send cases were already green: the server already refuses or lands a named send; they
+      guard it.)
+- [x] Remove, with the `party-main-bill.test.ts` rewrite, the two spots Task 6a left in
       `testing/group-submit-fixture.ts` `openBillFor` (each commented): the `setMainBill` on a bill
       the helper creates, and the `tab.not_open` refusal when `mainBillId` names a bill that is not
       the party's open one. The 15 cases Task 6a's note lists are the ones that rest on them.
-- [ ] Implement; rewrite the main-bill cases (Changed test checks); run the files above and
+- [x] Implement; rewrite the main-bill cases (Changed test checks); run the files above and
       `rg -l 'readSeatedParties|listTablesWithState|/api/tables/state' apps/server/src -g '*.test.ts'`.
-- [ ] GREEN: those files; F; H2; Filing; server typecheck;
+      (First run of the named files: 32 failed, 1181 passed, all on a `mainBillId` read in
+      `party-bill-actions`, `party-move-bill`, `party-table-actions`, `parties`, `order-drafts.db`
+      and `tabs`; each is a row under "As built at Task 6c". The 15 cases of Task 6a's note are
+      among them and are re-pointed there.)
+- [x] GREEN: those files; F; H2; Filing; server typecheck;
       `rg -n 'mainBillId|partyMainBill|setMainBill|readMainBill' apps/server packages --glob '!**/drizzle/**'`
       prints only `packages/db/src/schema/parties.ts` (Task 7).
-- [ ] Commit: "The server keeps no main bill; the floor names the bill a table opens on".
+      (Run: the named files plus the 33 floor readers, 46 files, 2397 passed, exit 0; every other
+      server test file seating a party or using the party, bill, draft or group fixtures, 275 files
+      in four chunks: 2107, 1984, 1924 and 1645 passed, each exit 0. F 267 passed; Filing 67
+      passed, both files unchanged from HEAD; H2 20 passed; `@waitron/bookings` 277 passed; server
+      and till typecheck clean; prettier and eslint clean on the changed files; the F/H2 diff from
+      `a90f4f87b` is 0 bytes. **Departure:** the `rg` also prints two test sites, kept on purpose:
+      `till-api.table-actions.test.ts:775`, `:800` ("no answer carries mainBillId", a negative
+      check) and `party-bill-actions.test.ts`'s `mainOf` (Task 6b's writers guard, reading the
+      column until Task 7 drops it); re-pointing or deleting either would loosen a check. The till
+      still reads the floor's `mainBillId` until Task 8c, as "Not a working product between Tasks 2
+      and 8d" says; no compatibility field was added. Controls: `readBillsOfParties`' number sort
+      removed (opening order) → "the floor row opens on …" fails, 4 pass; abandoned bills counted
+      as shown → the same case fails; `placeGroups` sending to the party's lowest open bill instead
+      of the one named → the two send cases fail. Each restored.)
+- [x] Commit: "The server keeps no main bill; the floor names the bill a table opens on".
 
 ## Task 7: the migration that drops `parties.main_bill_id` (venue reset) (≈45 calls)
 

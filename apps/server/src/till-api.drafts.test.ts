@@ -1,6 +1,7 @@
 import { readBillEditState } from "./bill-editing.js";
 import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
 import { createOpenOrder } from "./working-order.js";
+import { firstOpenBillOf } from "./testing/party-bill-of.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
@@ -127,7 +128,7 @@ async function newDraft(
   billId?: string,
 ): Promise<DraftAnswer> {
   const saved = await caller("PUT", `/api/parties/${partyId}/drafts`, {
-    billId: billId ?? (await mainBillOf(partyId)),
+    billId: billId ?? (await openBillOf(partyId)),
     draftId: null,
     revision: 0,
     lines,
@@ -178,11 +179,8 @@ async function lineNames(billId: string): Promise<string[]> {
   return rows.map((row) => row.name);
 }
 
-async function mainBillOf(partyId: string): Promise<string | null> {
-  const [row] = await inTx(venue, (tx) =>
-    tx.select({ mainBillId: parties.mainBillId }).from(parties).where(eq(parties.id, partyId)),
-  );
-  return row!.mainBillId;
+async function openBillOf(partyId: string): Promise<string | null> {
+  return inTx(venue, (tx) => firstOpenBillOf(tx, partyId));
 }
 
 function refusal(code: string, params?: Record<string, unknown>) {
@@ -468,7 +466,7 @@ describe("PUT /api/parties/:id/drafts", () => {
         const draft = await newDraft(ana, party.partyId, [dish("Pulpo")]);
         const before = await snapshot();
         const answer = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
-          billId: await mainBillOf(party.partyId),
+          billId: await openBillOf(party.partyId),
           draftId: draft.id,
           revision: draft.revision,
           lines: [{ ...dish("Caña"), slot: field === "afterGroupId" ? 1 : 0, [field]: groupId }],
@@ -504,7 +502,7 @@ describe("PUT /api/parties/:id/drafts", () => {
       { slot: 3, joinGroupId: null, afterGroupId: groupId },
     ];
     const saved = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
-      billId: await mainBillOf(party.partyId),
+      billId: await openBillOf(party.partyId),
       draftId: null,
       revision: 0,
       lines: places.map((place) => ({ ...dish("Caña"), ...place })),
@@ -514,7 +512,7 @@ describe("PUT /api/parties/:id/drafts", () => {
     expect(draft.lines).toMatchObject(places);
     expect(draft.lines).toHaveLength(4);
     const again = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
-      billId: await mainBillOf(party.partyId),
+      billId: await openBillOf(party.partyId),
       draftId: draft.id,
       revision: draft.revision,
       lines: draft.lines,
@@ -546,7 +544,7 @@ describe("PUT /api/parties/:id/drafts", () => {
     const draft = await newDraft(ana, party.partyId, [dish("Pulpo")]);
     const before = await snapshot();
     const answer = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
-      billId: await mainBillOf(party.partyId),
+      billId: await openBillOf(party.partyId),
       draftId: draft.id,
       revision: draft.revision,
       lines: [{ ...dish("Caña"), ...place }],
@@ -568,7 +566,7 @@ describe("PUT /api/parties/:id/drafts", () => {
         .returning({ id: kitchenStations.id }),
     );
     const saved = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
-      billId: await mainBillOf(party.partyId),
+      billId: await openBillOf(party.partyId),
       draftId: null,
       revision: 0,
       lines: [{ ...dish("Caña"), makeAt: bar!.id }, dish("Caña")],
@@ -597,7 +595,7 @@ describe("PUT /api/parties/:id/drafts", () => {
         .returning({ id: kitchenStations.id }),
     );
     const first = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
-      billId: await mainBillOf(party.partyId),
+      billId: await openBillOf(party.partyId),
       draftId: null,
       revision: 0,
       lines: [{ ...dish("Caña"), makeAt: bar!.id }],
@@ -608,7 +606,7 @@ describe("PUT /api/parties/:id/drafts", () => {
       tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, bar!.id)),
     );
     const second = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
-      billId: await mainBillOf(party.partyId),
+      billId: await openBillOf(party.partyId),
       draftId: draft.id,
       revision: draft.revision,
       lines: [{ ...dish("Caña"), quantity: "2", makeAt: bar!.id }],
@@ -617,7 +615,7 @@ describe("PUT /api/parties/:id/drafts", () => {
     expect(second.json.draft).toMatchObject({ lines: [{ quantity: "2.000", makeAt: bar!.id }] });
     const updated = second.json.draft as unknown as DraftAnswer;
     const newChoice = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
-      billId: await mainBillOf(party.partyId),
+      billId: await openBillOf(party.partyId),
       draftId: draft.id,
       revision: updated.revision,
       lines: [
@@ -634,7 +632,7 @@ describe("PUT /api/parties/:id/drafts", () => {
 
   it("refuses 409 draft.person_not_signed_in for a new order saved for someone else, writing nothing", async () => {
     const party = await seated();
-    const billId = (await mainBillOf(party.partyId))!;
+    const billId = (await openBillOf(party.partyId))!;
     const before = await snapshot();
 
     const refused = await send(
@@ -661,7 +659,7 @@ describe("PUT /api/parties/:id/drafts", () => {
 
   it("refuses 409 draft.person_not_signed_in for an empty save for someone else", async () => {
     const party = await seated();
-    const billId = (await mainBillOf(party.partyId))!;
+    const billId = (await openBillOf(party.partyId))!;
     const before = await snapshot();
 
     const refused = await send(
@@ -688,7 +686,7 @@ describe("PUT /api/parties/:id/drafts", () => {
 
   it("still saves the signed-in person's own new order, whatever case the id is written in", async () => {
     const party = await seated();
-    const billId = (await mainBillOf(party.partyId))!;
+    const billId = (await openBillOf(party.partyId))!;
 
     const saved = await send(
       venue.app,
@@ -713,7 +711,7 @@ describe("PUT /api/parties/:id/drafts", () => {
     const party = await seated();
 
     const saved = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
-      billId: await mainBillOf(party.partyId),
+      billId: await openBillOf(party.partyId),
       draftId: null,
       revision: 0,
       operatorId: venue.adminId,
@@ -742,7 +740,7 @@ describe("PUT /api/parties/:id/drafts", () => {
     });
 
     const saved = await admin("PUT", `/api/parties/${party.partyId}/drafts`, {
-      billId: await mainBillOf(party.partyId),
+      billId: await openBillOf(party.partyId),
       draftId: anas.id,
       revision: anas.revision,
       operatorId: venue.operatorId,
@@ -866,7 +864,7 @@ describe("a draft's chosen station at submission", () => {
       await setStationToday(tx, venue.cfg, bar!.id, "closed", new Date());
     });
     const chosen = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
-      billId: await mainBillOf(party.partyId),
+      billId: await openBillOf(party.partyId),
       draftId: null,
       revision: 0,
       lines: [{ ...dish("Caña"), makeAt: bar!.id }],
@@ -946,7 +944,7 @@ describe("POST /api/parties/:id/drafts/:did/take-over", () => {
       await anotherBill(party.partyId),
     );
     const other = await admin("PUT", `/api/parties/${party.partyId}/drafts`, {
-      billId: await mainBillOf(party.partyId),
+      billId: await openBillOf(party.partyId),
       draftId: null,
       revision: 0,
       lines: [{ ...dish("Caña"), makeAt: bar!.id }],
@@ -1101,7 +1099,7 @@ describe("POST /api/parties/:id/drafts/:did/submit uses its saved bill", () => {
     expect(named.json).toMatchObject({ tabId: party.tabId });
     expect(await lineNames(checkId)).toEqual(["Caña"]);
     expect(await lineNames(party.tabId)).toEqual(["Pulpo"]);
-    expect(await mainBillOf(party.partyId)).toBe(party.tabId);
+    expect(await openBillOf(party.partyId)).toBe(party.tabId);
     const before = await snapshot();
 
     // `undefined` leaves the key out of the JSON body.
@@ -1125,7 +1123,7 @@ describe("a draft named on another party", () => {
 
     const answers = [
       await ana("PUT", `/api/parties/${secondParty.partyId}/drafts`, {
-        billId: await mainBillOf(secondParty.partyId),
+        billId: await openBillOf(secondParty.partyId),
         draftId: anas.id,
         revision: anas.revision,
         lines: [],
@@ -1310,7 +1308,7 @@ describe("a line's answers of the wrong shape", () => {
       const line = { ...dish("Caña"), ...answers };
 
       const saved = await admin("PUT", `/api/parties/${party.partyId}/drafts`, {
-        billId: await mainBillOf(party.partyId),
+        billId: await openBillOf(party.partyId),
         draftId: null,
         revision: 0,
         lines: [line],

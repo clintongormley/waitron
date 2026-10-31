@@ -2,8 +2,7 @@
 // It reproduces the table read, the `table.not_found`/`table.inactive`/`tab.already_open` guards on
 // a table a party holds, and these writes of seating: a party, the `working_orders` insert whose id
 // is the tab id, opened from the dashboard as boot binds it, and the party's membership of the
-// table. It records no main bill for the party. The order number
-// is a counter; the verbs ignore it.
+// table. The order number is a counter; the verbs ignore it.
 //
 // `table.inactive`/`tab.already_open` are apps/server's codes, declared here so the package's
 // production errors.ts does not claim them.

@@ -35,6 +35,7 @@ import {
   inTx,
   order,
   orderForParty,
+  openingBillOfParty,
   partyRow,
   partyAt,
   pay,
@@ -164,11 +165,11 @@ describe("A803 bill numbers: created", () => {
     await everyPartyBillNumbered();
   });
 
-  it("a main bill given to a party whose bills are all paid takes the next number, not Bill 1 again", async () => {
+  it("a bill made for a party whose bills are all paid takes the next number, not Bill 1 again", async () => {
     const { partyId, tabId } = await seat(v, await v.table("N4"));
     await order(v, tabId, "Burger");
     await pay(v, tabId, "12.00");
-    expect((await partyRow(v, partyId)).mainBillId).toBeNull();
+    expect(await openingBillOfParty(v, partyId)).toBe(tabId);
 
     const { tabId: next } = await orderForParty(v, partyId, ["Agua"]);
 

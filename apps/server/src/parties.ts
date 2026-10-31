@@ -132,7 +132,6 @@ export async function seatTable(
   });
   await tx.insert(partyTables).values({ partyId, tableId: args.tableId });
   await seatMergeMembers(tx, partyId, args.tableId);
-  await setMainBill(tx, partyId, tabId);
   return { partyId, tabId, revision, orderNumber };
 }
 
@@ -147,50 +146,6 @@ export function moduleCoreServices(
     floorDeletion: floorDeletionFor(cfg, removals),
     floorPlanSets: floorPlanSetsFor(cfg),
   };
-}
-
-/**
- * The party's main bill, where an order that names no bill goes: always an open bill of the party.
- * When the party has none, an empty one is made on the party and becomes its main bill, moving the
- * party's revision on unless the caller's command already has (`"moved"`). A main bill that is not
- * an open bill of the party is refused `tab.not_open`, so a caller may write to the answer without
- * checking it again.
- */
-export async function partyMainBill(
-  tx: Transaction,
-  cfg: OriginConfig,
-  partyId: string,
-  revision: "move" | "moved" = "move",
-): Promise<string> {
-  const [party] = await tx
-    .select({
-      state: parties.state,
-      mainBillId: parties.mainBillId,
-      billStatus: workingOrders.status,
-      billPartyId: workingOrders.partyId,
-    })
-    .from(parties)
-    .leftJoin(workingOrders, eq(workingOrders.id, parties.mainBillId))
-    .where(eq(parties.id, partyId));
-  if (party?.state !== "open") {
-    throw new AppError("party.not_open", { partyId });
-  }
-  if (party.mainBillId !== null) {
-    if (party.billStatus !== "open" || party.billPartyId !== partyId) {
-      throw new AppError("tab.not_open", { tabId: party.mainBillId });
-    }
-    return party.mainBillId;
-  }
-  const billId = randomUUID();
-  const zoneId = await partyZone(tx, cfg, partyId);
-  await createOpenOrder(tx, cfg, billId, [], null, {
-    zoneId: zoneId ?? undefined,
-    partyId,
-    existingService: true,
-  });
-  await setMainBill(tx, partyId, billId);
-  if (revision === "move") await bumpPartyRevision(tx, partyId);
-  return billId;
 }
 
 /**
@@ -222,28 +177,6 @@ export async function createPartyBill(
   const revision = await checkAndBumpParty(tx, partyId, command.expectedPartyRevision, "open");
   const billId = await insertPartyBill(tx, cfg, partyId);
   return { billId, revision };
-}
-
-/**
- * Name the party's main bill. This is the only writer of `parties.main_bill_id` in apps/server. The
- * database checks only that it names an existing order; nothing checks that the bill is open or the
- * party's, and the triggers in `0038_main_bill_release.sql` only clear it.
- */
-export async function setMainBill(
-  tx: Transaction,
-  partyId: string,
-  billId: string | null,
-): Promise<void> {
-  await tx.update(parties).set({ mainBillId: billId }).where(eq(parties.id, partyId));
-}
-
-/** The party's main bill as recorded, or null. */
-export async function readMainBill(tx: Transaction, partyId: string): Promise<string | null> {
-  const [party] = await tx
-    .select({ mainBillId: parties.mainBillId })
-    .from(parties)
-    .where(eq(parties.id, partyId));
-  return party!.mainBillId;
 }
 
 /** The service zone of the party's earliest active table; null when it holds none, or no zone. */

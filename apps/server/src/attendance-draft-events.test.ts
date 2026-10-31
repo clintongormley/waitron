@@ -1,4 +1,5 @@
 import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
+import { firstOpenBillOf } from "./testing/party-bill-of.js";
 import {
   saveDraftForTest as saveDraft,
   takeOverDraftForTest as takeOverDraft,
@@ -10,7 +11,6 @@ import {
   orderDraftEvents,
   orderDraftLines,
   orderDrafts,
-  parties,
   workingOrders,
   withTransaction,
 } from "@waitron/db";
@@ -55,17 +55,14 @@ function save(
   billId?: string,
 ) {
   return run(async (tx) => {
-    const [row] = await tx
-      .select({ billId: parties.mainBillId })
-      .from(parties)
-      .where(eq(parties.id, party));
+    const firstOpen = await firstOpenBillOf(tx, party);
     return saveDraft(
       tx,
       v.cfg,
       party,
       owner,
       {
-        billId: billId ?? row!.billId!,
+        billId: billId ?? firstOpen!,
         draftId: null,
         revision: 0,
         lines: [
@@ -89,11 +86,11 @@ function save(
 async function saveOtherBill(owner: string) {
   const billId = newId();
   await run(async (tx) => {
-    const [party] = await tx.select().from(parties).where(eq(parties.id, partyId));
+    const firstOpen = await firstOpenBillOf(tx, partyId);
     await createOpenOrder(tx, v.cfg, billId, [], "Other bill", {
       partyId,
       existingService: true,
-      copyServiceContextFrom: party!.mainBillId!,
+      copyServiceContextFrom: firstOpen!,
     });
   });
   return save(owner, partyId, recordAttendanceFact, billId);
