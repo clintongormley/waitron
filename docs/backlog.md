@@ -4919,6 +4919,9 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   [Detail](backlog/box.md#authenticated-server-certificate-recovery)
 
 - **A1089: diagnose and correct conflicting backup keys in the app.**
+  Add authenticated inspection and correction with a safe Stop. Keep both key records when
+  the effective key cannot be confirmed. Qualify which key opens an existing backup separately
+  from accepting a later submission.
   [Correction](backlog/self-service-refusals.md#backup-key)
 
 - **A1089: boot recovery must offer choices instead of an installer referral.** Recheck each
