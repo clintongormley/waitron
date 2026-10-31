@@ -853,8 +853,11 @@ file"):
   `ExecStopPost=` running the handler with `--restore %i`.
 
 **Deletion controls.** Remove the `synchronised` refusal → its case fails; remove the `trap` → the
-kill case fails; remove the range check → the 2100 case fails; drop the leading-zero pattern
-(keep only the range) → the `037000000000000` case fails; drop the more-than-700 check (keep
+kill case fails (built: both traps; with only the `TERM` one removed bash 3.2.57 still ran the
+`EXIT` trap on the kill and the case passed); remove the range check → the 2100 case fails; drop
+the target pattern (keep only the range) → the `01793425531250` case fails (built: a leading-zero
+target in range once read as base 10 — `037000000000000` and `0370000000009` stay refused by the
+range, since every sum reads `10#$t`); drop the more-than-700 check (keep
 `-n 701`) → the 701-character case fails; drop the restore's list check → the `ssh.service`
 case fails. Restore each.
 

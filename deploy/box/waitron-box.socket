@@ -1,0 +1,13 @@
+[Unit]
+Description=Waitron box: the app's clock requests
+
+[Socket]
+ListenStream=/run/waitron-box/box.sock
+Accept=yes
+SocketMode=0660
+SocketUser=root
+SocketGroup=waitron-box
+MaxConnections=4
+
+[Install]
+WantedBy=sockets.target
