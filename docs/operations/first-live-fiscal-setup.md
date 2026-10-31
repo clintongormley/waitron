@@ -142,8 +142,8 @@ box keeps them in memory only, so a restart ends them too (`runningInMemory` in
 `apps/server/src/first-setup-backup-recovery.ts`).
 
 Once a backup recovery has stopped, the repair page says it started and did not finish and that
-Start again deletes it. **Recover from backup** is offered beside it too, and its confirmation says
-only "The previous recovery from backup started on … did not complete." With the venue database
+Start again deletes it. **Recover from backup** is offered beside it too, and in its confirmation the
+stopped recovery's line reads "The previous recovery from backup started on … did not complete." With the venue database
 missing, the page shows this once **Start again** or **Recover from backup** is pressed, and either
 deletes the recovery with the attempt after the missing-database confirmation above. With the venue database present,
 the page shows the stopped recovery beside **Start again**, within the limits above. Start again
@@ -157,9 +157,8 @@ by itself within an hour of when it was given, and that until then Cloud cannot 
 recovery for this box's venue.
 
 Start again keeps the discarded recovery's journal records and its lock files, and deletes the
-rest. If a file cannot be deleted, or the disk fills part-way through, the page says "Start again
-has not finished. Reload this page to see what is left to do. If the box is restarting, wait until
-it answers.", the box restarts, and the next start tries the deletion again. With the venue
+rest. If a file cannot be deleted, or the disk fills part-way through, the page says "Deletion
+interrupted. Reload the page to continue.", the box restarts, and the next start tries the deletion again. With the venue
 database missing, a recovery whose records cannot be read is reported as such, and neither Start
 again nor Recover from backup is offered beside it.
 

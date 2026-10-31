@@ -631,7 +631,7 @@ it.each(["en-GB", "es-ES"])(
 
 const shellText = (locale: string) => (locale.startsWith("es") ? shellEs : shellEn);
 
-it("words an unfinished deletion the same after Start again and after Recover from backup", () => {
+it("the unfinished-deletion message is the owner's words, in English and Spanish", () => {
   expect(shellEn["shell.first_setup.start_again_incomplete"]).toBe(
     "Deletion interrupted. Reload the page to continue.",
   );
