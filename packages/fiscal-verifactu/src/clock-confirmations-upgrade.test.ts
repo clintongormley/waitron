@@ -8,6 +8,7 @@ import { applyMigrationSet, useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
+import { clockChecks } from "./schema/clock-checks.js";
 import { clockConfirmations } from "./schema/clock-confirmations.js";
 
 const PERSON = "33333333-3333-4333-8333-333333333333";
@@ -45,8 +46,28 @@ async function confirmationRows() {
   return (await suite.db.execute(sql`select * from clock_confirmations order by seq`)).rows;
 }
 
+async function confirmationIndexes() {
+  return (
+    await suite.db.execute(
+      sql`select name, sql from sqlite_master where type = 'index' and tbl_name = 'clock_confirmations' order by name`,
+    )
+  ).rows;
+}
+
 it("keeps every confirmation and both append-only triggers across the staff migration", async () => {
-  const { nodeId } = await seedPendingEnvios(suite.db, { count: 0 });
+  const { nodeId, registroIds } = await seedPendingEnvios(suite.db, { count: 1 });
+  const [check] = await withTransaction(suite.db, (tx) =>
+    tx
+      .insert(clockChecks)
+      .values({
+        seq: 1,
+        nodeId,
+        openedAt: new Date("2026-07-21T09:58:00.000Z"),
+        reason: "behind_chain",
+        detail: { clockAt: "2026-07-21T09:58:00.000Z", heads: {} },
+      })
+      .returning({ id: clockChecks.id }),
+  );
   const base = {
     nodeId,
     boxClockAt: new Date("2026-07-21T10:00:00.000Z"),
@@ -58,17 +79,31 @@ it("keeps every confirmation and both append-only triggers across the staff migr
   };
   await withTransaction(suite.db, (tx) =>
     tx.insert(clockConfirmations).values([
-      { ...base, seq: 1, stepMs: -60_000, source: "admin", personId: PERSON, proof: { a: 1 } },
+      {
+        ...base,
+        seq: 1,
+        stepMs: -60_000,
+        source: "admin",
+        personId: PERSON,
+        proof: { a: 1 },
+        checkId: check!.id,
+        registroId: registroIds[0]!,
+        recordAt: new Date("2026-07-21T10:30:00.000Z"),
+      },
       { ...base, seq: 2, stepMs: 0, source: "devices", personId: null, proof: { d: [1, 2] } },
       { ...base, seq: 3, stepMs: 0, source: "elapsed", personId: null, proof: {} },
     ]),
   );
   const before = await confirmationRows();
   expect(before).toHaveLength(3);
+  const indexesBefore = await confirmationIndexes();
+  // The three declared indexes and the primary key's automatic one.
+  expect(indexesBefore).toHaveLength(4);
 
   await applyMigrationSet(suite.db, FISCAL_SET);
 
   expect(await confirmationRows()).toEqual(before);
+  expect(await confirmationIndexes()).toEqual(indexesBefore);
   const { rows: triggers } = await suite.db.execute<{ name: string }>(
     sql`select name from sqlite_master where type = 'trigger' and tbl_name = 'clock_confirmations' order by name`,
   );
