@@ -6154,9 +6154,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A1241. Continue the dashboard test sample-name cleanup, one small slice per PR.**
-  The alert formatter, device-delete copy, archive-refusal and page-printer panel suites now use
-  English samples; their Spanish message wording stays Spanish. Keep Spanish-language checks and recorded receipt
-  snapshots. This slice skips `apps/dashboard/src/widgets/alerts-bell.test.ts`, which the
+  The alert formatter, device-delete copy, archive-refusal, page-printer panel and unit-screen
+  suites (including unit-screen accessibility) use English sample names. Keep
+  Spanish-language checks, recorded receipt snapshots and the unit-screen accent-search fixture
+  `Gin & Tónic`. This slice skips `apps/dashboard/src/widgets/alerts-bell.test.ts`, which the
   in-flight A1089 reply-evidence branch changes. Recheck live branch paths before the next slice.
 
 - **A977. Widen the English-only guard to every text file, after A963–A975.** Accented
