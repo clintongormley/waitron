@@ -9,6 +9,7 @@ import { setLocale } from "../i18n/t.js";
 import { current, groups, now } from "./till-table-order-screen.current-orders.test-helpers.js";
 import { beer, flan, mount, resized } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
+import { switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(async () => {
   setLocale("en");
@@ -452,7 +453,7 @@ it.each([
   if (change === "ownership") draft.ownershipLocked = true;
   if (change === "bill-status") draft.billStatus = "settled";
   if (change === "unread") el.currentOrdersUnread = true;
-  if (change === "party") el.party = { id: "other" } as TillTableOrderScreen["party"];
+  if (change === "party") el.party = { ...switcherParty, id: "other" };
   if (change === "sending") draft.sending = true;
   if (change === "api") el.api = {} as TillTableOrderScreen["api"];
   if (change === "bill") el.orderId = "other";

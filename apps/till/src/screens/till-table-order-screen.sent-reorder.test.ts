@@ -8,6 +8,7 @@ import { DraftStore } from "../state/draft-sync.js";
 import { current, groups, now } from "./till-table-order-screen.current-orders.test-helpers.js";
 import { mount, resized } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
+import { switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(() => {
@@ -63,7 +64,7 @@ it.each([
     const events = collect(el, "reorder-groups");
     if (change === "busy" || change === "groupCommandBusy") el[change] = true;
     if (change === "api") el.api = {} as TillTableOrderScreen["api"];
-    if (change === "party") el.party = { id: "other" } as TillTableOrderScreen["party"];
+    if (change === "party") el.party = { ...switcherParty, id: "other" };
     if (change === "bill") el.orderId = "other";
     if (change === "serviceVisit") el.serviceVisit++;
     if (change === "unread") el.currentOrdersUnread = true;

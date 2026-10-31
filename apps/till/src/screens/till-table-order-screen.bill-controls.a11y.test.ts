@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import type { WtRowActions } from "@waitron/ui/src/components/wt-row-actions.js";
 import { setLocale } from "../i18n/t.js";
 import type { PartyBill, TableParty } from "../api/client.js";
@@ -124,3 +125,42 @@ describe.each(["light", "dark"] as const)("A803 single menu: the ⋮ in the %s t
     });
   });
 });
+
+describe.each(["light", "dark"] as const)(
+  "A803 single menu at a phone's height, %s theme",
+  (theme) => {
+    it("is accessible while its list scrolls, and with a step it opened focused", async () => {
+      await page.viewport(375, 667);
+      try {
+        const { el } = await mountWidget<TillTableOrderScreen>(
+          "till-table-order-screen",
+          {
+            products: [],
+            lines: [],
+            orderId: "wo-2",
+            party: { ...switcherParty, tableIds: ["t4", "t5"] },
+            bills: [
+              partyBill("wo-1", 1, "10.00"),
+              partyBill("wo-2", 2, "54.00", { billName: "Clint" }),
+            ],
+            fullInvoices: true,
+          },
+          theme,
+        );
+        const menu = el.shadowRoot!.querySelector<WtRowActions>("[data-table-menu]")!;
+        await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+        const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+        expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
+        await expectNoA11yViolations(menu);
+
+        await userEvent.click(menu.querySelector<HTMLElement>('[data-action="merge"]')!);
+        await el.updateComplete;
+        const panel = el.shadowRoot!.querySelector<HTMLElement>("[data-action-panel]")!;
+        expect(el.shadowRoot!.activeElement).toBe(panel.querySelector("h2"));
+        await expectNoA11yViolations(panel);
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    });
+  },
+);

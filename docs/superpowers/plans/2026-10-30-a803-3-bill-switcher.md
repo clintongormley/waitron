@@ -2257,7 +2257,7 @@ run.
 
 | Test | Kind | Before → after | Source | Task |
 | --- | --- | --- | --- | --- |
-| `till-table-order-screen.test.ts:724-731` ("renders an ENABLED Table actions trigger that opens the action menu") | R | the trigger inside the drawer (`openDrawer` dropped), its `textContent`, `[data-action-menu]` null then not null → the ⋮ host, its `label`, its popup closed then open after its trigger button is clicked; the not-disabled check unchanged | D4 | 10 |
+| `till-table-order-screen.test.ts:724-731` ("renders an ENABLED Table actions trigger that opens the action menu") | R | the trigger inside the drawer (`openDrawer` dropped), its `textContent`, `[data-action-menu]` null then not null → the ⋮ host, its `label`, its popup closed then open after its trigger button is clicked; the not-disabled check was left on the host, which never carries `disabled`, so it could not fail (review M3; corrected in "Task 10 review answers") | D4 | 10 |
 | `till-table-order-screen.test.ts:4214` (`toMenu`) | S | clicks the `[data-move-split]` host → clicks its trigger button, so the ⋮ opens; still opens the drawer first | D4 | 10 |
 | `till-table-order-screen.test.ts:4245-4253` ("shows all five action verbs … and a Back control") | R | verbs and Split read anywhere → inside `[data-table-menu]`; `[data-action-back]` present → the ⋮'s trigger closes it (popup not open after a second tap) | D4 (the menu step and its Back go) | 10 |
 | `till-table-order-screen.test.ts:4281`, `:5043`, `:6296`, `:6449`, `:6763` (`[data-action-menu]` null after a split, Move guests, merge, transfer, a tab change) | R | → `[data-action-panel]` null (the step closed); before this task the selector would have matched nothing at all | D4 | 10 |
@@ -2271,7 +2271,7 @@ run.
 | `till-table-order-screen.allergy.test.ts:139` ("offers Allergies first in Actions") | R | `[data-action-menu] [data-action]` → `[data-table-menu-table] [data-action]`; Allergies still first (departure a) | D4, A669 spec :162 | 10 |
 | `till-table-order-screen.sent-actions.test.ts:110`, `:496`, `:652`; `till-table-order-screen.sent.test.ts:308`, `:441` | S | `el.party = { id: … } as …` → `{ ...switcherParty, id: … }`, same id; every `expect` byte-identical | a cast fixture the switcher and the ⋮ cannot draw | 10 |
 | `till-table-order-screen.bill-payments.test.ts:161`, `:165`, `:263`, `:487`, `:524`, `:544`; `.panel-footer.test.ts:40`, `:64`, `:85`, `:183`, `:226`; `.panel-footer.a11y.test.ts:53`, `:71`; `.adjustments.test.ts:440`; `.a11y.test.ts:446`; `till-app-adjustments.test.ts:498`, `:698`; `till-app-handheld-pay.test.ts:257`; `till-app-recipient-identity.test.ts:240`; `till-app-bill-payments.test.ts:555`, `:583`, `:620`, `:680`, `:732`, `:804`, `:6390`, `:6432`, `:6469`, `:6507`, `:6532`, `:6586`, `:6650`, `:6683`, `:6727`, `:6755` | R | `"[data-discount-bill]"` / `"[data-choose-bill-invoice]"` / `"[data-cancel-bill-request]"` → the same with `:not([data-table-menu] *)`, so each keeps selecting the foot's, payment step's or drawer's control rather than the ⋮ copy that now comes first; assertions unchanged | D4, review-1 I6 (the drawer's and foot's copies stay) | 10 |
-| `till-table-order-screen.bill-payments.test.ts:299` (a presented bill's unanswered whole payment on a handheld: no Full invoice) | R | no `[data-choose-bill-invoice]` anywhere → none outside the ⋮; the ⋮ offers it for a presented bill with no invoice number (D8's gate) | D8 | 10 |
+| `till-table-order-screen.bill-payments.test.ts:299` (a presented bill's unanswered whole payment on a handheld: no Full invoice) | ~~R~~ **loosened; reverted** | was changed to "none outside the ⋮", which let the ⋮ offer Full invoice while a whole payment's answer is unknown (review I1: a loosened check, not kind R). Restored to its unscoped `toBeNull()`, byte-identical to `6711fb40e`, and the ⋮'s Full invoice now takes the payment step's gate (see "Task 10 review answers", I1) | D8, A773-1 (`c9ad7a634`) | 10, fixed in the review answers |
 
 ## Task 11a: screen tests reach bills and actions through the switcher and the ⋮ (≈60 calls)
 
@@ -2378,6 +2378,143 @@ these):
 - Badge checks with no drawer open (D17 rows): `.test.ts:550`, `:572`, `:755`;
   `.empty-drawer.a11y.test.ts:47`; `.populated-drawer.a11y.test.ts:94`.
 
+### Task 10 review answers (2026-10-31, `a803-3-reviews/task-10.md`)
+
+Runs in the foreground with `AI_AGENT`/`CLAUDECODE` unset; free memory 53% before the browser runs.
+Every deletion control below changed one production line in the worktree by a script that asserts
+its pattern occurs once, ran the named files, and put the file back (`cmp` against a saved copy, no
+difference).
+
+- **I1, Full invoice in the ⋮ while a whole payment is unanswered.** Fixed: `#billDocumentItems`
+  gates the ⋮'s Full invoice on `this.paymentConfirmation === undefined` as well, the same condition
+  the payment step's `#billChoices` is drawn under. RED: `.bill-payments.test.ts:299` restored to
+  `expect(el.shadowRoot!.querySelector("[data-choose-bill-invoice]")).toBeNull()` (byte-identical to
+  `6711fb40e`), run before the fix: `Tests 1 failed | 27 skipped (28)`, `AssertionError: expected
+  <wt-button …(5)></wt-button> to be null`. GREEN: the file `Tests 28 passed (28)`. The RED run is the
+  deletion control (the code without the gate). Not added: a refusal in the app's
+  `#onChooseBillInvoice` (the review's optional second gate); the screen's gate is still the only one.
+- **I2, the ⋮ list taller than the window.** Fixed in the primitive, opt-in: `wt-row-actions` gains
+  a boolean `opens-below` (`opensBelow`). With it the popup is placed at the trigger's bottom and its
+  `max-height` is the room from there to 8px above the window's bottom, so the list scrolls (the
+  popover's own `overflow: auto`) instead of moving up over its trigger. Without it nothing changes:
+  `positionPopup` takes the old path, and the existing "lifts its popup to exactly 8px above that
+  edge" case still passes. `tableMenu(...)` sets `opens-below`. No new painted property (no token
+  test needed); a11y covered below. The other users of `wt-row-actions` do not set it. Measured
+  (LOOK run): 1024×768 trigger 58–102, list 102–760, `scrollHeight 791 / clientHeight 656`; 375×667
+  trigger 110–154, list 154–659, `791 / 503`.
+  - `wt-row-actions.test.ts` "opens-below": four cases. RED (the old primitive put back, new tests
+    kept): `Tests 4 failed | 75 passed (79)`: "a menu taller than the room under its trigger…"
+    (`expected 8 to be close to 92`), "does not open over its own trigger…" (the point at the
+    trigger's centre was a `wt-button`, not the host), and the two new a11y cases (`expected 1452 to
+    be greater than 1452`: nothing scrolled). The other two ("without it, the same menu still moves up
+    to fit, over its trigger"; "leaves a menu that fits under its trigger at its own height") pass on
+    both, as controls. GREEN: `Tests 79 passed (79)`.
+  - `.table-menu.test.ts` "at 1024x768 / 375x667 the list opens under its trigger, fits the window and
+    scrolls Finish table into reach": 15 items, list top ≥ trigger bottom, bottom ≤ window, it
+    scrolls, the point at the trigger's centre is the ⋮ host, and a real click on Finish table sends
+    `finish-table`. Control (`opens-below` taken out of `tableMenu`): both fail, `expected 8 to be
+    greater than or equal to 101.5` and `… 153.5`.
+  - LOOK: no scrollbar is drawn in headless Chromium (overlay scrollbars), so nothing but the cut
+    edge shows that the list scrolls; at 1024×768 the cut falls between two items. Left as it is.
+- **I3 and M2, a step chosen from the ⋮ out of view, focus dropped.** Fixed: a ⋮ item that opens a
+  step (`#chooseVerb`, Split a table) marks the step for focus; after the render the panel's step
+  heading (each step's `h2`, now `tabindex="-1"`, as `#draft-title` already is) takes focus, and the
+  panel is scrolled into view (`block: "nearest"`) once its buttons have drawn (scrolling at once
+  measured the panel before its buttons had their height and left its bottom 71px out of the
+  window). `update()` notes, before the render removes it, whether focus is inside the panel: a step
+  replaced while focus is there (Split a table's second step, Back from it) focuses the new heading;
+  a step closed while focus is there (Back, Escape, a pick that finishes) focuses the ⋮'s trigger;
+  a step closed while focus is elsewhere (another bill chosen) leaves focus alone. **Escape** inside
+  the panel does what its Back does, including asking first when the step holds a choice: every step
+  has Back, and Escape already closes the ⋮'s list and the till's windows, so it was cheap and
+  consistent. LOOK: Spanish 1024×768 Merge bills, panel top 604, height 164 (bottom 768), heading
+  focused («Juntar una cuenta con Clint · Cuenta 2 · Ana»); the panel still sits under the whole
+  order at that width, which is 11c's layout (D9).
+  - Cases in `.table-menu.test.ts` "a step chosen from the ⋮ is shown and takes focus; leaving it
+    returns focus to the ⋮": (1) Spanish 1024×768, four sent lines, three bills: Merge bills' panel
+    wholly inside the window (polled) with its heading focused, Tab reaches the first target, Back
+    (real click) → panel gone and focus on the ⋮'s trigger, Escape → the same; (2) Split a table →
+    table → the second step's heading focused, Escape → the first step, heading focused; (3) see M4;
+    (4) a step closed by choosing another bill while the switcher has focus leaves focus on the
+    switcher. Controls, each failing only the cases named: no `scrollIntoView` → (1)
+    (`expected 1225.28125 to be less than 768`, before the wait-for-buttons change; after it the
+    same case fails on the poll); scrolling before the buttons draw → (1); no heading focus → (1),
+    (2); no ⋮ focus on close → (1); no step-to-step focus → (2); no Escape handler → (1), (2);
+    focus to the ⋮ on every close → (4).
+  - `.bill-controls.a11y.test.ts` "A803 single menu at a phone's height": in both themes at 375×667
+    the open ⋮ (scrolling) and then the Merge step with its heading focused pass axe.
+- **I4, seven ⋮ guards with no failing case.** Five cases added in `.table-menu.test.ts` ("the ⋮'s
+  copies keep the guards of the controls they copy") and one in `.actions-unsaved.test.ts`. Each
+  mutation run against `.table-menu`, `.actions-unsaved` and `.parties` (unmutated `Tests 77 passed
+  (77)`):
+  - M2 Receipt copy without `receiptAvailable`: `1 failed`, "a paid bill without a receipt offers no
+    Receipt copy".
+  - M3 Cancel and credit without `!hasPayments`: `1 failed`, "a presented bill with a receipt and
+    payments offers no Cancel and credit".
+  - M5 the request item always sending `{ requested: true }`: `2 failed`, the new "a requested bill
+    offers to cancel the request, which sends requested false" and `.parties` "shows a requested bill,
+    and offers to cancel the request…" (Task 11a re-pointed that case to the ⋮, after the review ran).
+  - M6 the request item without `.disabled=${this.groupCommandBusy}`: `2 failed`, the new "holds Mark
+    bill requested while a party command runs, and Full invoice while busy" and `.parties` "holds the
+    action while another command on the party runs" (also 11a's re-point).
+  - M7 Full invoice without `.disabled=${this.busy}`: `1 failed`, "holds Mark bill requested while…".
+  - M10 `#fromMenu` without `#actionControlCurrent(event)`: `1 failed`, "a step or window item does
+    nothing while the screen is busy".
+  - **M9 `#fromMenu`'s `opening`/`step` check: no case can fail without it**, and I did not find one
+    that could. The leave coordinator (`packages/ui-core/src/unsaved-changes.ts`, `invalidate` and
+    the `"stale"` result) aborts an open question whenever the step's draft scope changes or is
+    disposed, and every path that changes the step or `#actionOpening` while a question is open
+    goes through `changed()` or `#retireActions()`; so `proceed` never runs with a stale step. Tried:
+    the new case "a ⋮ item's old Discard answer does not replace a step opened since" (Confirm
+    between the question and an old Discard), a Confirm in the same turn as Discard, and Back pressed
+    under an open question: each gives the same result with and without M9. `#actionBack`'s
+    identical check is in the same state: without it `.actions-unsaved` gives `Tests 21 passed (21)`.
+    The check is kept as a second layer; the new case is kept because it pins the outcome both
+    layers protect, and it says so here rather than in its title.
+- **M3, a re-pointed check that could not fail.** `.test.ts:721-731` now reads the ⋮'s own trigger
+  button: `button.disabled` false, its `aria-disabled` not `"true"`, and no `inert` ancestor, as well
+  as the host's `disabled`; it taps that button. The old check (`6711fb40e`, from `6f0139c73`, which
+  turned a hard-disabled "Move · Split" button into Table actions) guarded that the control the waiter
+  taps is not disabled. Controls: `disabled` on the primitive's button → fails at `:724`
+  (`expected true to be false`; the host-only check passed this); `inert` on the ⋮ in `tableMenu` →
+  fails at `:726`.
+- **M4, the A1234 refocus stealing focus.** Case (3) above, "a redraw with no step or window closing
+  leaves focus where it is": the switcher's trigger focused, then three redraws (`bills`,
+  `groupCommandBusy`, `lines`), focus unchanged. Control (the review's M8, `if (!open)`): fails, as
+  does case (4).
+- **M1** is Task 11c's: one line added to its case list (the Finish table refused case taps the ⋮
+  item with the drawer closed). Not built here.
+- **The 6 errors.** `TableParty.tableIds` is required (`apps/till/src/api/client.ts`, `tableIds:
+  string[]`), so the parties were partial cast fixtures. Kind S rows below. Before:
+  `.drag`, `.sent-reorder`, `.arrangement-authority`: `Tests 100 passed (100)`, `Errors 3 errors`,
+  each `TypeError: Cannot read properties of undefined (reading 'length')`. After, with
+  `.split-authority` (the same cast, no error seen, changed for the same reason): `Tests 148 passed
+  (148)`, no `Errors` line.
+- **GREEN.** `rg -l 'till-table-order-screen' apps/till/src/screens -g '*.test.ts' | sed 's#apps/till/##' | xargs pnpm --filter @waitron/till exec vitest run`:
+  `Test Files 91 passed (91)`, `Tests 1772 passed (1772)`, no `Errors` line, exit 0 (one run, no
+  failure seen, so the unexplained `1 failed` 11a saw once did not recur). `till-app-bill-payments`,
+  `till-app-parties`, `till-app-adjustments`: `Tests 1068 passed (1068)`, exit 0. Every
+  `till-shell*.test.ts` (the More menu uses `wt-row-actions` without `opens-below`): `Tests 383
+  passed (383)`. `packages/ui` `wt-row-actions.test.ts` and `.a11y.test.ts`: `Tests 79 passed (79)`;
+  `no-hardcoded-chrome.test.ts`: `Tests 88 passed (88)`. `pnpm --filter @waitron/till typecheck` and
+  `pnpm --filter @waitron/ui typecheck` exit 0; `pnpm exec prettier --check` and `pnpm exec eslint`
+  on the changed files exit 0.
+- **LOOK.** `a803-3-reviews/task-10-fix-shots/`: `en-1024x768-{light,dark}-open[-scrolled].png`,
+  `en-375x667-{light,dark}-open[-scrolled].png`, `es-1024x768-{light,dark}-merge-step[-later].png`.
+  Looked at: 1024 light open (list under the switcher row, ending at Split a table with room below),
+  1024 dark scrolled (Finish table last, inside the window), 375 dark scrolled (Finish table inside
+  the window), Spanish merge step light and dark (panel wholly visible at the window's bottom). The
+  ⋮'s kebab icon does not draw in these screen tests (an empty gap between the switcher and Back to
+  floor); I did not look into why.
+- **STOP:** none. No check on money totals, VAT, permissions or filing changed; the one Full invoice
+  check is restored, not changed.
+
+| Test | Kind | Before → after | Source | Task |
+| --- | --- | --- | --- | --- |
+| `.bill-payments.test.ts:299` | restored | Task 10's `:not([data-table-menu] *)` scope removed; byte-identical to `6711fb40e` | review I1 | 10 review |
+| `.test.ts:721-731` ("renders an ENABLED Table actions trigger…") | R (tightened) | the host's `disabled` only → also the trigger button's `disabled`, its `aria-disabled` and no `inert` ancestor; the click goes to that button (as before) | review M3; `6f0139c73` | 10 review |
+| `.drag.test.ts:456`, `.sent-reorder.test.ts:67`, `.arrangement-authority.test.ts:200`, `.split-authority.test.ts:85` | S | `el.party = { id: "other" } as …` → `{ ...switcherParty, id: "other" }`, same id; every `expect` byte-identical | a cast fixture the ⋮ cannot draw (`tableIds` required) | 10 review |
+
 ## Task 11b: app tests and helpers that opened the drawer (≈55 calls)
 
 **Files.** `till-app-parties.test.ts` (25 sites), `till-app-adjustments.test.ts`,
@@ -2406,7 +2543,9 @@ for 11c by 11a/11b; the badge rows (D17).
       any width; the foot shows this bill's total, then "Still to pay at this table" with the party's
       outstanding; Finish table refused shows the refusal with Take payment for the first other
       unpaid bill above the foot; choosing Move guests in the ⋮ shows the table picker in the side
-      column and Back closes it. Case `A803 to serve` in `till-table-order-screen.test.ts`: with one
+      column and Back closes it. The Finish table refused case taps the ⋮'s Finish table with the
+      drawer closed (no `emit` of `finish-table`), so it proves the refusal is seen where the tap was
+      made (Task 10 review M1). Case `A803 to serve` in `till-table-order-screen.test.ts`: with one
       unserved and one served one-portion sent line, the Sent summary shows them, and after the
       last is served its not-yet-served counts read 0 (D17).
 - [ ] RED: `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.panel-footer.test.ts src/screens/till-table-order-screen.test.ts -t 'A803 no tab panel|A803 to serve'`.

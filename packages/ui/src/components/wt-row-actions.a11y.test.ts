@@ -52,6 +52,21 @@ describe.each(["light", "dark"] as const)("wt-row-actions a11y (%s theme)", (the
     await expectNoA11yViolations(host);
   });
 
+  test("an open menu taller than the room under its trigger, which opens below and scrolls", async () => {
+    const actions = Array.from(
+      { length: 30 },
+      (_, index) => `<wt-button variant="ghost" align="start">Action ${index + 1}</wt-button>`,
+    ).join("");
+    const el = await mountThemed(
+      `<wt-row-actions label="Table actions" opens-below>${actions}</wt-row-actions>`,
+      theme,
+    );
+    (el as unknown as { show(): void }).show();
+    const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
+    await expectNoA11yViolations(host);
+  });
+
   test("detects a missing accessible name on the hamburger", async () => {
     const el = await mountThemed(
       '<wt-row-actions label="Department actions"></wt-row-actions>',

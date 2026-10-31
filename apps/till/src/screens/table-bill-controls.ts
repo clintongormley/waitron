@@ -128,6 +128,7 @@ export function tableMenu(options: TableMenuOptions): TemplateResult {
     data-table-menu
     data-move-split
     align="end"
+    opens-below
     label=${t("table.actions_title")}
   >
     ${

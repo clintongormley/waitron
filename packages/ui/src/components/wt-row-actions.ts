@@ -91,6 +91,9 @@ export class WtRowActions extends LitElement {
   @property() iconSize: WtIconSize = "md";
   /** The trigger edge the popup lines up with; "end" suits a menu at the trailing edge. */
   @property() align: "start" | "end" = "start";
+  /** Opens the popup under the trigger and scrolls what does not fit, rather than moving it up over
+   * the trigger, where a second tap would land on an action. */
+  @property({ type: Boolean, attribute: "opens-below" }) opensBelow = false;
   @state() private expanded = false;
   @query("button") private trigger!: HTMLButtonElement;
   @query("[popover]") private popup!: HTMLElement;
@@ -132,10 +135,14 @@ export class WtRowActions extends LitElement {
 
   private positionPopup(): void {
     const anchor = this.trigger.getBoundingClientRect();
+    if (this.opensBelow)
+      this.popup.style.maxHeight = `${Math.max(0, innerHeight - anchor.bottom - 8)}px`;
     const popup = this.popup.getBoundingClientRect();
     const desiredLeft = this.align === "end" ? anchor.right - popup.width : anchor.left;
     this.popup.style.left = `${Math.max(8, Math.min(desiredLeft, innerWidth - popup.width - 8))}px`;
-    this.popup.style.top = `${Math.max(8, Math.min(anchor.bottom, innerHeight - popup.height - 8))}px`;
+    this.popup.style.top = this.opensBelow
+      ? `${anchor.bottom}px`
+      : `${Math.max(8, Math.min(anchor.bottom, innerHeight - popup.height - 8))}px`;
   }
 
   // Judged while capturing, before the action's own listeners: a real click runs microtasks after

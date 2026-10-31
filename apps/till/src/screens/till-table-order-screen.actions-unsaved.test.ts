@@ -463,3 +463,20 @@ it("A803 single menu: another ⋮ item asks before leaving staged split quantiti
   expect(unload()).toBe(false);
   expect(app.commands).toEqual([]);
 });
+it("A803 single menu: a ⋮ item's old Discard answer does not replace a step opened since", async () => {
+  const { app, screen } = await mount();
+  await click(screen, '[data-split-line="1"]');
+  await click(screen, '[data-table-menu] [data-action="merge"]');
+  const q = await question(app);
+  expect(q.open).toBe(true);
+  const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
+  await click(screen, "[data-split-confirm]");
+  await expect.poll(() => q.open).toBe(false);
+  await click(screen, '[data-table-menu] [data-action="split"]');
+  await click(screen, '[data-split-line="2"]');
+  oldDiscard.click();
+  await screen.updateComplete;
+  expect(selected(screen, "split", 2)).toBe("true");
+  expect(screen.shadowRoot!.querySelector("[data-target-picker]")).toBeNull();
+  expect(app.commands).toHaveLength(1);
+});

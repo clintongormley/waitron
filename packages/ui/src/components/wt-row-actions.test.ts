@@ -509,6 +509,93 @@ test("a menu at the bottom of the screen lifts its popup to exactly 8px above th
   expect(edge.popup.top).toBeLessThan(edge.trigger.bottom);
 });
 
+describe("opens-below", () => {
+  async function longMenu(count: number) {
+    const { el, trigger, popup } = await mountActions();
+    el.style.setProperty("position", "fixed");
+    el.style.setProperty("inset-inline-start", "40%");
+    el.style.setProperty("inset-block-start", "48px");
+    const picked: string[] = [];
+    const actions = Array.from({ length: count }, (_, index) => {
+      const action = document.createElement("wt-button");
+      action.textContent = `Action ${index + 1}`;
+      action.addEventListener("click", () => picked.push(action.textContent!));
+      return action;
+    });
+    el.append(...actions);
+    await Promise.all(actions.map((action) => action.updateComplete));
+    return { el, trigger, popup, actions, picked };
+  }
+
+  it("a menu taller than the room under its trigger opens under it, fits the window and scrolls its last action into reach", async () => {
+    await page.viewport(600, 400);
+    try {
+      const { el, trigger, popup, actions, picked } = await longMenu(15);
+      el.opensBelow = true;
+      await el.updateComplete;
+      await userEvent.click(trigger);
+
+      const box = popup.getBoundingClientRect();
+      const anchor = trigger.getBoundingClientRect();
+      expect(box.top).toBeCloseTo(anchor.bottom, 0);
+      expect(box.bottom).toBeCloseTo(innerHeight - 8, 0);
+      expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
+      const last = actions.at(-1)!;
+      await userEvent.click(last);
+      expect(picked).toEqual(["Action 15"]);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
+  it("does not open over its own trigger, so a second tap there reaches the trigger, not an action", async () => {
+    await page.viewport(600, 400);
+    try {
+      const { el, trigger, popup } = await longMenu(15);
+      el.opensBelow = true;
+      await el.updateComplete;
+      el.show();
+      const anchor = trigger.getBoundingClientRect();
+      const hit = document.elementFromPoint(
+        anchor.left + anchor.width / 2,
+        anchor.top + anchor.height / 2,
+      );
+      expect(hit).toBe(el);
+      expect(popup.getBoundingClientRect().top).toBeGreaterThanOrEqual(anchor.bottom - 0.5);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
+  it("without it, the same menu still moves up to fit, over its trigger", async () => {
+    await page.viewport(600, 400);
+    try {
+      const { el, trigger, popup } = await longMenu(5);
+      el.style.setProperty("inset-block-start", "300px");
+      el.show();
+      const box = popup.getBoundingClientRect();
+      expect(box.bottom).toBeCloseTo(innerHeight - 8, 0);
+      expect(box.top).toBeLessThan(trigger.getBoundingClientRect().bottom);
+      expect(popup.style.maxHeight).toBe("");
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
+  it("leaves a menu that fits under its trigger at its own height", async () => {
+    const { el, trigger, popup } = await longMenu(2);
+    el.show();
+    const natural = popup.getBoundingClientRect().height;
+    el.hide();
+    el.opensBelow = true;
+    await el.updateComplete;
+    el.show();
+    const box = popup.getBoundingClientRect();
+    expect(box.height).toBeCloseTo(natural, 0);
+    expect(box.top).toBeCloseTo(trigger.getBoundingClientRect().bottom, 0);
+  });
+});
+
 test("Escape that closes the menu goes no further, so a dialog around it stays open", async () => {
   const { el, host, popup } = await mountActions();
   el.show();

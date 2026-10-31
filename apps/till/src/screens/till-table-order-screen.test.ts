@@ -718,10 +718,14 @@ describe("till-table-order-screen", () => {
   it("renders an ENABLED Table actions trigger that opens the action menu (TS-3/TS-4)", async () => {
     const { el } = await mount({ lines: [pendingLine] });
     const trigger = el.shadowRoot!.querySelector("[data-move-split]")!;
+    const button = trigger.shadowRoot!.querySelector("button")!;
     expect(trigger.getAttribute("label")).toContain(t("table.actions_title"));
     expect(trigger.hasAttribute("disabled")).toBe(false);
+    expect(button.disabled).toBe(false);
+    expect(button.getAttribute("aria-disabled")).not.toBe("true");
+    expect(trigger.closest("[inert]")).toBeNull();
     expect(tableMenuOpen(el)).toBe(false);
-    trigger.shadowRoot!.querySelector<HTMLElement>("button")!.click();
+    button.click();
     await el.updateComplete;
     expect(tableMenuOpen(el)).toBe(true);
   });

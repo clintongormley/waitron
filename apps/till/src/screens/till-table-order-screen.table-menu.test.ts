@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import "./till-table-order-screen.js";
@@ -32,13 +32,13 @@ const line: TabLine = {
 
 const twoTables: TableParty = { ...switcherParty, tableIds: ["t4", "t5"] };
 
-function table(id: string, party: TableParty | null): TableState {
+function table(id: string, party: TableParty | null, requested = false): TableState {
   return {
     id,
     label: id,
     shortName: id,
     party,
-    signals: [],
+    signals: requested ? [{ kind: "bill_requested", requestedAt: "2026-10-31T20:00:00.000Z" }] : [],
     zoneId: null,
     state: party === null ? "free" : "open-tab",
     hasOpenTab: party !== null,
@@ -63,6 +63,9 @@ async function mountScreen(
     orderId?: string | undefined;
     party?: TableParty | null;
     fullInvoices?: boolean;
+    requested?: boolean;
+    busy?: boolean;
+    groupCommandBusy?: boolean;
   } = {},
 ) {
   const party = over.party === undefined ? twoTables : over.party;
@@ -73,7 +76,10 @@ async function mountScreen(
     party,
     bills: over.bills ?? bills,
     fullInvoices: over.fullInvoices ?? true,
-    tables: party === null ? [] : party.tableIds.map((id) => table(id, party)),
+    tables:
+      party === null ? [] : party.tableIds.map((id) => table(id, party, over.requested ?? false)),
+    busy: over.busy ?? false,
+    groupCommandBusy: over.groupCommandBusy ?? false,
   });
   return el;
 }
@@ -293,6 +299,202 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     panel.querySelector<HTMLElement>("[data-action-back]")!.click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
+  });
+
+  it.each([
+    [1024, 768],
+    [375, 667],
+  ])(
+    "at %ix%i the list opens under its trigger, fits the window and scrolls Finish table into reach",
+    async (width, height) => {
+      await page.viewport(width, height);
+      try {
+        const el = await mountScreen();
+        const finish = capture(el, "finish-table");
+        const trigger = menu(el).shadowRoot!.querySelector("button")!;
+        const popup = menu(el).shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+        await userEvent.click(trigger);
+
+        expect(groups(el).flatMap((group) => group.items)).toHaveLength(15);
+        const box = popup.getBoundingClientRect();
+        const anchor = trigger.getBoundingClientRect();
+        expect(box.top).toBeGreaterThanOrEqual(anchor.bottom - 0.5);
+        expect(box.bottom).toBeLessThanOrEqual(innerHeight);
+        expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
+        const centre = el.shadowRoot!.elementFromPoint(
+          anchor.left + anchor.width / 2,
+          anchor.top + anchor.height / 2,
+        );
+        expect(centre).toBe(menu(el));
+        await userEvent.click(item(el, "[data-finish-table]")!);
+        expect(finish).toEqual([{}]);
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    },
+  );
+
+  describe("the ⋮'s copies keep the guards of the controls they copy", () => {
+    it("a paid bill without a receipt offers no Receipt copy", async () => {
+      const paid = partyBill("wo-2", 2, "0.00", {
+        status: "settled",
+        total: "54.00",
+        receiptAvailable: false,
+        hasPayments: true,
+      });
+      const el = await mountScreen({ bills: [paid] });
+
+      expect(groups(el)[0]!.items).toContain("Name this bill");
+      expect(item(el, "[data-bill-receipt]")).toBeNull();
+    });
+
+    it("a presented bill with a receipt and payments offers no Cancel and credit", async () => {
+      const presented = partyBill("wo-2", 2, "20.00", {
+        status: "placed",
+        total: "54.00",
+        receiptAvailable: true,
+        hasPayments: true,
+      });
+      const el = await mountScreen({ bills: [presented] });
+
+      expect(groups(el)[0]!.items).toContain("Name this bill");
+      expect(item(el, "[data-cancel-credit]")).toBeNull();
+    });
+
+    it("a requested bill offers to cancel the request, which sends requested false", async () => {
+      const el = await mountScreen({ requested: true });
+      const request = capture(el, "request-bill");
+
+      expect(item(el, "[data-request-bill]")).toBeNull();
+      const cancel = item(el, "[data-cancel-bill-request]")!;
+      expect(textOf(cancel)).toBe("Cancel the bill request for 4");
+      cancel.click();
+      expect(request).toEqual([{ requested: false }]);
+    });
+
+    it("holds Mark bill requested while a party command runs, and Full invoice while busy", async () => {
+      const commanding = await mountScreen({ groupCommandBusy: true });
+      const busy = await mountScreen({ busy: true });
+      const disabled = (el: TillTableOrderScreen, selector: string) =>
+        (item(el, selector) as HTMLElement & { disabled: boolean }).disabled;
+
+      expect(disabled(commanding, "[data-request-bill]")).toBe(true);
+      expect(disabled(commanding, "[data-choose-bill-invoice]")).toBe(false);
+      expect(disabled(busy, "[data-choose-bill-invoice]")).toBe(true);
+      expect(disabled(busy, "[data-request-bill]")).toBe(false);
+    });
+
+    it("a step or window item does nothing while the screen is busy", async () => {
+      const el = await mountScreen({ busy: true });
+      await userEvent.click(menu(el));
+      await userEvent.click(item(el, '[data-action="merge"]')!);
+      await userEvent.click(menu(el));
+      await userEvent.click(item(el, '[data-action="name"]')!);
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("till-party-name-dialog")).toBeNull();
+    });
+  });
+
+  describe("a step chosen from the ⋮ is shown and takes focus; leaving it returns focus to the ⋮", () => {
+    const sent = (lineNo: number): TabLine => ({
+      ...line,
+      id: `line-${lineNo}`,
+      lineNo,
+      name: `Dish ${lineNo}`,
+      sentAt: "2026-10-31T20:00:00.000Z",
+    });
+    const three = [
+      partyBill("wo-1", 1, "10.00"),
+      partyBill("wo-2", 2, "54.00", { billName: "Ana" }),
+      partyBill("wo-3", 3, "0.00", { status: "settled", total: "8.00", hasPayments: true }),
+    ];
+    /** The panel's step heading has focus. */
+    const focusOnStep = (el: TillTableOrderScreen) =>
+      el.shadowRoot!.activeElement === el.shadowRoot!.querySelector("[data-action-panel] h2");
+
+    it("in Spanish at 1024x768: Merge bills is scrolled into view with its heading focused; Back and Escape return to the ⋮", async () => {
+      setLocale("es");
+      await page.viewport(1024, 768);
+      try {
+        const el = await mountScreen({ bills: three });
+        el.lines = [1, 2, 3, 4].map(sent);
+        await el.updateComplete;
+        await userEvent.click(menu(el));
+        await userEvent.click(item(el, '[data-action="merge"]')!);
+        await el.updateComplete;
+
+        const panel = el.shadowRoot!.querySelector<HTMLElement>("[data-action-panel]")!;
+        await expect
+          .poll(() => panel.getBoundingClientRect().bottom)
+          .toBeLessThanOrEqual(innerHeight + 1);
+        expect(panel.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
+        expect(focusOnStep(el)).toBe(true);
+        await userEvent.keyboard("{Tab}");
+        expect(el.shadowRoot!.activeElement).toBe(panel.querySelector('[data-target="wo-1"]'));
+
+        await userEvent.click(panel.querySelector<HTMLElement>("[data-action-back]")!);
+        await el.updateComplete;
+        expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
+        expect(focusOnMenu(el)).toBe(true);
+
+        await userEvent.click(menu(el));
+        await userEvent.click(item(el, '[data-action="merge"]')!);
+        await el.updateComplete;
+        expect(focusOnStep(el)).toBe(true);
+        await userEvent.keyboard("{Escape}");
+        await el.updateComplete;
+        expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
+        expect(focusOnMenu(el)).toBe(true);
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    });
+
+    it("a second step replacing the first takes focus too, and Back from it returns to the first", async () => {
+      const el = await mountScreen({ bills: three });
+      await userEvent.click(menu(el));
+      await userEvent.click(item(el, '[data-action="split-table"]')!);
+      await el.updateComplete;
+      expect(focusOnStep(el)).toBe(true);
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>('[data-target="t5"]')!);
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector('[data-target="none"]')).not.toBeNull();
+      expect(focusOnStep(el)).toBe(true);
+      await userEvent.keyboard("{Escape}");
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector('[data-target="t5"]')).not.toBeNull();
+      expect(focusOnStep(el)).toBe(true);
+    });
+
+    it("a redraw with no step or window closing leaves focus where it is", async () => {
+      const el = await mountScreen();
+      const switcher = el.shadowRoot!.querySelector<HTMLElement>("[data-bill-switcher]")!;
+      switcher.focus();
+      expect(el.shadowRoot!.activeElement).toBe(switcher);
+
+      el.bills = bills.map((bill) => ({ ...bill }));
+      await el.updateComplete;
+      el.groupCommandBusy = true;
+      await el.updateComplete;
+      el.lines = [{ ...line, quantity: "2.000" }];
+      await el.updateComplete;
+      expect(el.shadowRoot!.activeElement).toBe(switcher);
+    });
+
+    it("a step closed while focus is elsewhere leaves focus there", async () => {
+      const el = await mountScreen();
+      await userEvent.click(menu(el));
+      await userEvent.click(item(el, '[data-action="merge"]')!);
+      await el.updateComplete;
+      const switcher = el.shadowRoot!.querySelector<HTMLElement>("[data-bill-switcher]")!;
+      switcher.focus();
+      el.orderId = "wo-1";
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
+      expect(el.shadowRoot!.activeElement).toBe(switcher);
+    });
   });
 
   describe("A1234: focus returns to the ⋮ when a window opened from it closes", () => {

@@ -295,9 +295,7 @@ describe("till-table-order-screen: Pay on a handheld (A796 default 2)", () => {
     const presented = capture<{ workingOrderId: string }>(el, "pay-presented");
 
     expect(el.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
-    expect(
-      el.shadowRoot!.querySelector("[data-choose-bill-invoice]:not([data-table-menu] *)"),
-    ).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-choose-bill-invoice]")).toBeNull();
     expect(el.shadowRoot!.querySelectorAll("[data-pay-sheet]")).toHaveLength(1);
     await press(el, "[data-pay-sheet]");
 

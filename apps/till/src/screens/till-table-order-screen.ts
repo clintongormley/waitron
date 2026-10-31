@@ -385,6 +385,9 @@ class TabPayStore extends WorkingOrderStore {
   }
 }
 
+type ActionStep =
+  "closed" | "pick" | "transfer-lines" | "split-lines" | "split-table" | "split-table-bill";
+
 @customElement("till-table-order-screen")
 export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) allergyView: PartyAllergyRead | null = null;
@@ -1293,9 +1296,7 @@ export class TillTableOrderScreen extends LitElement {
     }
   }
 
-  @state() private actionStep:
-    "closed" | "pick" | "transfer-lines" | "split-lines" | "split-table" | "split-table-bill" =
-    "closed";
+  @state() private actionStep: ActionStep = "closed";
   @state() private actionVerb: ActionVerb | null = null;
   /** The table Split a table takes away, once chosen. */
   @state() private splitTableId: string | null = null;
@@ -1937,6 +1938,12 @@ export class TillTableOrderScreen extends LitElement {
 
   #kitchenNoteVisit = 0;
 
+  /** After `willUpdate`, which can close a step, and before the render removes it. */
+  protected override update(changed: PropertyValues<this>): void {
+    this.#noteStepFocus();
+    super.update(changed);
+  }
+
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("draftStore")) this.#kitchenNoteVisit++;
     if (this.sentLinePending !== null && this.#sentLine() === undefined)
@@ -2043,6 +2050,7 @@ export class TillTableOrderScreen extends LitElement {
    * even when the line is gone, for the same reason. */
   override updated(): void {
     this.#refocusMenu();
+    this.#placeStepFocus();
     this.#watchAutomaticRouting();
     this.#sizeDraftBar();
     if (!this.#offerTaken) return;
@@ -2069,6 +2077,47 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #menuWindowOpen = false;
+
+  /** A step the ⋮ opens is drawn in the side panel, which can be below the order: focus and scroll
+   * go to its heading. A step replaced or closed while focus is in the panel would drop focus to the
+   * page, so it goes to the next step's heading, or back to the ⋮. Read while the old step is
+   * still on the page. */
+  #noteStepFocus(): void {
+    if (this.actionStep === this.#drawnStep) return;
+    const panel = this.renderRoot.querySelector("[data-action-panel]");
+    const active = (this.renderRoot as ShadowRoot).activeElement;
+    const inPanel = panel !== null && active !== null && panel.contains(active);
+    if (this.actionStep === "closed") {
+      if (inPanel) this.#stepFocus = "menu";
+    } else if (inPanel) this.#stepFocus = "step";
+    this.#drawnStep = this.actionStep;
+  }
+
+  #placeStepFocus(): void {
+    const focus = this.#stepFocus;
+    this.#stepFocus = undefined;
+    if (focus === "menu") {
+      this.renderRoot.querySelector<HTMLElement>("[data-table-menu]")?.focus();
+      return;
+    }
+    if (focus !== "step") return;
+    const panel = this.renderRoot.querySelector<HTMLElement>("[data-action-panel]");
+    if (panel === null) return;
+    panel.querySelector<HTMLElement>("h2")?.focus({ preventScroll: true });
+    void this.#scrollIntoViewOnceDrawn(panel);
+  }
+
+  /** The step's buttons draw after the screen does, and only then does the panel have its height. */
+  async #scrollIntoViewOnceDrawn(panel: HTMLElement): Promise<void> {
+    const drawing = [...panel.querySelectorAll("*")].flatMap((node) =>
+      node instanceof LitElement ? [node.updateComplete] : [],
+    );
+    await Promise.all(drawing);
+    if (panel.isConnected) panel.scrollIntoView({ block: "nearest" });
+  }
+
+  #drawnStep: ActionStep = "closed";
+  #stepFocus?: "step" | "menu";
 
   /** Copies the draft bar's height to `--draft-bar-size` on `.round-bar`, the bar's parent, from
    * which the basket's lines inherit it. Measured at once when the bar is drawn or shown, because
@@ -4863,6 +4912,7 @@ export class TillTableOrderScreen extends LitElement {
       this.splitAttempted = false;
     }
     this.actionStep = verb === "split" ? "split-lines" : "pick";
+    this.#stepFocus = "step";
     this.#watchActions();
   }
 
@@ -5051,7 +5101,7 @@ export class TillTableOrderScreen extends LitElement {
               ];
         });
     return html`<section class="actions" data-split-table>
-      <h2>
+      <h2 tabindex="-1">
         ${
           choosingBill
             ? t("table.split_table_bill_heading")
@@ -5380,6 +5430,11 @@ export class TillTableOrderScreen extends LitElement {
       class="drawer action-panel"
       data-action-panel
       aria-label=${t("table.actions_title")}
+      @keydown=${(event: KeyboardEvent) => {
+        if (event.key !== "Escape" || event.defaultPrevented) return;
+        event.preventDefault();
+        this.#actionBack(event);
+      }}
     >
       ${this.#actionSection()}
     </aside>`;
@@ -5479,6 +5534,7 @@ export class TillTableOrderScreen extends LitElement {
         party.tableIds.length > 1
           ? action("split-table", "table.action_split_table", () => {
               this.actionStep = "split-table";
+              this.#stepFocus = "step";
               this.#watchActions();
             })
           : nothing,
@@ -5495,12 +5551,16 @@ export class TillTableOrderScreen extends LitElement {
     });
   }
 
-  /** Full invoice for a bill owing with no sale filed; Receipt copy and Cancel and credit as the
-   * bills list offers them. */
+  /** Full invoice for a bill owing with no sale filed, and, as on the payment step, not while a
+   * whole payment's answer is unknown; Receipt copy and Cancel and credit as the bills list offers
+   * them. */
   #billDocumentItems(bill: PartyBill): (TemplateResult | typeof nothing)[] {
     const target = { workingOrderId: bill.workingOrderId };
     return [
-      this.fullInvoices && owing(bill) && bill.invoiceNumber === undefined
+      this.fullInvoices &&
+      owing(bill) &&
+      bill.invoiceNumber === undefined &&
+      this.paymentConfirmation === undefined
         ? html`<wt-button
             variant="ghost"
             align="start"
@@ -5567,7 +5627,7 @@ export class TillTableOrderScreen extends LitElement {
     }));
     const emptyKey = "table.no_other_bills";
     return html`<section class="actions" data-target-picker>
-      <h2>
+      <h2 tabindex="-1">
         ${
           this.actionVerb === "merge"
             ? this.#billsHeading("table.merge_into", { bill: this.orderId })
@@ -5603,7 +5663,7 @@ export class TillTableOrderScreen extends LitElement {
     const movingBill = this.actionVerb === "move-bill";
     const targets = this.#tableTargets();
     return html`<section class="actions" data-target-picker>
-      <h2>${this.#tablePickerHeading()}</h2>
+      <h2 tabindex="-1">${this.#tablePickerHeading()}</h2>
       ${
         targets.length === 0 && !movingBill
           ? html`<p class="empty">${t("table.no_other_tables")}</p>`
@@ -5662,7 +5722,7 @@ export class TillTableOrderScreen extends LitElement {
     // offering a child row here only buys a refusal.
     const rows = this.#pickerRows();
     return html`<section class="actions" data-transfer-lines>
-      <h2>
+      <h2 tabindex="-1">
         ${this.#billsHeading("table.transfer_from_to", {
           from: this.orderId,
           to: this.transferToBillId,
@@ -5712,7 +5772,7 @@ export class TillTableOrderScreen extends LitElement {
     const rows = this.#pickerRows();
     const errors = this.splitAttempted ? this.#splitErrors() : [];
     return html`<section class="actions" data-split-lines>
-      <h2>${t("table.split_pick_lines")}</h2>
+      <h2 tabindex="-1">${t("table.split_pick_lines")}</h2>
       ${
         this.#holdsDishWithExtrasToPart()
           ? html`<p data-split-help>${t("table.split_options_together")}</p>`
