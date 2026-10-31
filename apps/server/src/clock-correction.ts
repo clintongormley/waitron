@@ -65,7 +65,7 @@ export interface ClockSetInput {
 }
 
 export type ClockSetAnswer =
-  | { set: true; confirmationId: string | null; stepMs: number }
+  | { set: true; confirmationId: string | null; stepMs: number; confirmedAt: string }
   | { set: false; reason: ClockSetRefusal };
 
 /** Sets the box's clock during a stop, one set at a time: judges the stop again, asks the host,
@@ -295,7 +295,9 @@ export function clockCorrection(deps: {
       }
     }
     deps.log("info", "clock_correction.stepped", { source: input.source, stepMs, verified });
-    return verified ? { set: true, confirmationId, stepMs } : { set: false, reason: "unverified" };
+    return verified
+      ? { set: true, confirmationId, stepMs, confirmedAt: after.instant.toISOString() }
+      : { set: false, reason: "unverified" };
   }
 
   return {
