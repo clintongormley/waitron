@@ -1095,10 +1095,13 @@ The behavioural verifier tests supply API responses; they do not run GitHub's sc
 Real equal-tree and unequal-tree main push qualification is required by A1242 before it closes.
 
 Publishing after intentionally skipped checks needs an explicit status function as well as a
-successful aggregate. The publish condition uses `always()` to override implicit `success()`,
-rejects a cancelled run and still requires a push, `code=true` and `needs.ci.result == 'success'`.
+successful aggregate. The publish condition's explicit status functions override implicit
+`success()`. It refuses cancellation observed during condition evaluation and still requires a
+push, `code=true` and `needs.ci.result == 'success'`.
 The publication truth table in `scripts/ci-workflow.test.mjs` evaluates that extracted condition;
 it is weaker than a scheduler test because it models GitHub's implicit status rule locally.
+Its red case depends on that default-success model. Its substitutions support the functions and
+context fields this condition uses, not the full GitHub expression language.
 
 The first real reuse, [main run 41180442132](https://github.com/clintongormley/waitron/actions/runs/41180442132)
 at `fa6a8eb0bdceccbd86bec266613bfd12b4d3ca79`, reused PR run `41177810227` after full main
