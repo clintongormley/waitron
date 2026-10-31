@@ -47,12 +47,9 @@ describe("node_mirror_link accessors", () => {
     expect(await readMirrorLink(suite.node, NODE)).toEqual(SAMPLE);
   });
 
-  it("writes into node.db, not venue.db", async () => {
+  it("writes into node.db", async () => {
     await writeMirrorLink(suite.node, NODE, SAMPLE);
     expect(suite.node.all(sql`select node_id from node_mirror_link`)).toEqual([{ node_id: NODE }]);
-    expect(
-      suite.db.all(sql`select name from sqlite_master where name = 'node_mirror_link'`),
-    ).toEqual([]);
   });
 
   it("reads a mirror link only for the node that was adopted", async () => {

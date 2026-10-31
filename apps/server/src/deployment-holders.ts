@@ -20,7 +20,8 @@ export function createDeploymentHolders(
 
 /**
  * Re-reads this node's two axes into the holders. Both come from a SINGLE read of one row, so the
- * holders can never hold a torn `(mode, singleton_role)` pair that `node_mode_role_valid_ck` forbids.
+ * holders can never hold a torn `(mode, singleton_role)` pair that `node_mode_role_valid_ck`
+ * forbids.
  */
 export async function refreshDeploymentHolders(
   node: NodeDatabase,

@@ -213,9 +213,10 @@ function primaryEnv(venueDir: string, port: number, nodeId: string): Record<stri
   };
 }
 
-/** The env for B's MIRROR boot: no mirror config rides in env. A mirror boot REQUIRES a `mirror_config`
- * row (seeded in beforeAll) and reads its DATA SCOPE from it — `origin_node_id`, the primary whose rows
- * its node-scoped reads display; an absent row is a loud `server.config_invalid` (boot.ts). */
+/** The env for B's MIRROR boot: no mirror config rides in env. A mirror boot REQUIRES a
+ * `node_mirror_link` row in node.db (seeded in beforeAll) and reads its DATA SCOPE from it —
+ * `origin_node_id`, the primary whose rows its node-scoped reads display; an absent row is a loud
+ * `server.config_invalid` (boot.ts). */
 function mirrorEnv(venueDir: string, port: number): Record<string, string> {
   return {
     ...KEY_ENV,
@@ -274,7 +275,7 @@ beforeAll(async () => {
   await seedVenue(b);
 
   // B is the mirror: stamp it, flip mode='mirror' (co-sets singleton_role='secondary'), and seed the
-  // `mirror_config` row a mirror boot requires. A gets no `node_mode` row, so it reads
+  // node.db `node_mirror_link` row a mirror boot requires. A gets no `node_mode` row, so it reads
   // 'primary'/'primary' through `readNodeMode`'s missing-row fallback; a stamp is all it needs.
   await stampDeployment(a, "preproduction");
   await stampDeployment(b, "preproduction");

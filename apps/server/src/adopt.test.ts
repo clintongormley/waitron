@@ -165,6 +165,20 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(await verifyBreakGlass(suite.db, ownNodeId, result.breakGlassSecret)).toBe(true);
   });
 
+  it("leaves no mirror role behind when its link cannot be written", async () => {
+    await suite.node.execute(
+      sql.raw(`create trigger refuse_mirror_link before insert on node_mirror_link
+        begin select raise(abort, 'refused by test'); end`),
+    );
+    try {
+      await expect(adoptFromPrimary(deps(), REQ, NO_HOOKS)).rejects.toThrow();
+      const roles = await suite.node.execute(sql`select node_id, mode from node_mode`);
+      expect(roles.rows).toEqual([]);
+    } finally {
+      await suite.node.execute(sql`drop trigger if exists refuse_mirror_link`);
+    }
+  });
+
   it("hands over the stored name with the recovery key", async () => {
     let ownNodeId = "";
     const result = await adoptFromPrimary(

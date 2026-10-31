@@ -50,8 +50,8 @@ export async function writeMirrorLink(
 }
 
 /**
- * Upserts this node's mirror link on a caller's node transaction. Re-adopting overwrites it in
- * place: a box can legitimately move relays or rotate its CA.
+ * Upserts this node's mirror link on a caller's node transaction. A second write for the same node
+ * replaces its row.
  */
 export async function writeMirrorLinkTx(
   tx: NodeTransaction,

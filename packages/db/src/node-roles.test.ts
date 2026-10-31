@@ -7,7 +7,6 @@ import {
   setSingletonRole,
   stampDeployment,
 } from "./deployment.js";
-import { readMirrorConfig, writeMirrorConfig } from "./mirror-config.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { withTransaction } from "./tenancy.js";
 import { useVenueDb } from "./testing/venue-db.js";
@@ -16,13 +15,6 @@ import { useVenueDb } from "./testing/venue-db.js";
 // node's copy. Each must read its own row or none, never the other's.
 const NODE_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const NODE_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-
-const LINK = {
-  relayUrl: "https://relay.test:9000/",
-  boxHostname: "waitron.local",
-  boxCaPem: "-----BEGIN CERTIFICATE-----\nX\n-----END CERTIFICATE-----\n",
-  originNodeId: "11111111-1111-4111-8111-111111111111",
-};
 
 describe("per-node rows in one venue database", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -39,11 +31,5 @@ describe("per-node rows in one venue database", () => {
     await withTransaction(suite.db, (tx) => setBreakGlassVerifierTx(tx, NODE_A, "scrypt$aa$bb"));
     expect(await readBreakGlassVerifier(suite.db, NODE_A)).toBe("scrypt$aa$bb");
     expect(await readBreakGlassVerifier(suite.db, NODE_B)).toBeNull();
-  });
-
-  it("reads a mirror link only for the node that was adopted", async () => {
-    await writeMirrorConfig(suite.db, NODE_A, LINK);
-    expect(await readMirrorConfig(suite.db, NODE_A)).toEqual(LINK);
-    expect(await readMirrorConfig(suite.db, NODE_B)).toBeNull();
   });
 });

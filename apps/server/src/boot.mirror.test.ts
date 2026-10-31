@@ -38,10 +38,11 @@ vi.mock("@hono/node-server", async () => {
 
 const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
-// Mirror-mode server boot. A mirror reads its origin, relay and CA from node.db's `node_mirror_link`. Four venue
-// directories: `mirror` (read-only, refuses writes); `primary`, the same identity booted as primary —
-// the control that the mirror's absences are real; `noConfig`, mirror-stamped with no
-// `node_mirror_link` row, which must refuse to boot; and `adopting`, which holds no venue rows.
+// Mirror-mode server boot. A mirror reads its origin, relay and CA from node.db's
+// `node_mirror_link`. Four venue directories: `mirror` (read-only, refuses writes); `primary`, the
+// same identity booted as primary — the control that the mirror's absences are real; `noConfig`,
+// mirror-stamped with no `node_mirror_link` row, which must refuse to boot; and `adopting`, which
+// holds no venue rows.
 // Nothing is reset between tests, and the four directories never meet.
 const VENUES = ["mirror", "primary", "noConfig", "adopting"] as const;
 type VenueName = (typeof VENUES)[number];
