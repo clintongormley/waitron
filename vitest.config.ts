@@ -35,9 +35,7 @@ import { rootGuardWorkers } from "./scripts/root-test-budget.mjs";
 // `pnpm --filter "...@waitron/ui" ls -r --depth -1 --json` lists `@waitron/ui` alone, and
 // `--filter "...@waitron/payments"` lists six packages, none of them `@waitron/db`. CI's
 // `test-heavy` shard is gated on `@waitron/db` being in scope too, so on such a pull request their
-// first run was the unfiltered `main` merge. Here they are ungated in both places: ci.yml's `lint`
-// job runs `pnpm vitest run --coverage` on every push, and `.husky/pre-push` runs it on every push
-// that is not documentation-only.
+// first run was the unfiltered `main` merge.
 //
 // WHAT THE MOVE COST, stated because nothing else in the tree says it: the guards under `scripts/`
 // are TypeScript and NOTHING TYPECHECKS THEM ANY MORE. The workspace root is outside `pnpm -r`, so

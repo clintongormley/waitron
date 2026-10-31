@@ -52,7 +52,7 @@ what `main` gained since the merge-base is documentation, or code only in files 
 not touch, it lands as it is with `gh pr merge --squash --admin`. `--admin` there bypasses
 the up-to-date requirement and nothing else — never a failing check or an open review. The
 up-to-date rule guards against semantic conflicts, which documentation cannot cause, and the
-post-merge unfiltered `main` run tests the merged tree (verified #119 with code, #240 with five
+post-merge `main` run tests a different merged tree without reuse (verified #119 with code, #240 with five
 docs commits; `/land-branch` step 2 classifies it). Rebase in the worktree only for
 `CONFLICTING`, or when `main` touched a code file this branch also changed — `pnpm install`, then
 push through the hook, never `--no-verify`. **Never `gh pr update-branch`**, whose merge commit
@@ -172,7 +172,8 @@ before deleting; the scratch copy was 113 lines behind what landed.
 **Before a PR**, run focused tests for the behavior you changed, then `/finish-branch`. Let the
 normal hook run the §2 local checks once; let CI run mandatory package tests and coverage. Do not
 add a whole-workspace local run solely because the branch is being finished. Verify the current-head
-CI scope and results; the unfiltered `main` merge checks the combined tree when code is in scope.
+CI scope and results; without verified equal-tree PR reuse, main checks the combined tree when
+code is in scope. [Reuse requirements](ci-and-gates.md#main-can-reuse-an-identical-pull-request-tree).
 
 ### First Live setup qualification
 

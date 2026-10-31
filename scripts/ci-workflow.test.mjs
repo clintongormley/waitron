@@ -41,7 +41,7 @@ import {
 // file ever starts disagreeing with the workflow.
 
 // eslint.config.js gives `scripts/**/*.mjs` only `console` and `process` as globals.
-const { AbortController } = globalThis;
+const { AbortController, structuredClone } = globalThis;
 
 const repoRoot = join(import.meta.dirname, "..");
 const lines = readFileSync(join(repoRoot, ".github", "workflows", "ci.yml"), "utf8").split("\n");
@@ -158,10 +158,12 @@ function outputsOf(body) {
   return keys;
 }
 
-/** Every `needs.changes.outputs.<name>` a job's `if:` reads. */
+/** Classification gates; verified reuse is checked separately across every upstream job. */
 function gatesRead(body) {
   const ifLine = body.find((line) => /^ {4}if:/.test(line)) ?? "";
-  return [...ifLine.matchAll(/needs\.changes\.outputs\.([A-Za-z0-9_-]+)/g)].map(([, name]) => name);
+  return [...ifLine.matchAll(/needs\.changes\.outputs\.([A-Za-z0-9_-]+)/g)]
+    .map(([, name]) => name)
+    .filter((name) => name !== "reuse");
 }
 
 /**
@@ -883,6 +885,25 @@ describe("the `ci` aggregate's verdict", () => {
     needs[merge].result = mergeResult;
     return needs;
   };
+
+  it("accepts skipped selected coverage only with a concrete verified reuse receipt", () => {
+    const [{ id, gate }] = ciMergeJobs;
+    const needs = scoped(
+      { code: "true", [gate]: "true", reuse: "true", reuse_run: "42", reuse_sha: "b".repeat(40) },
+      id,
+    );
+    for (const [name, value] of Object.entries(needs))
+      if (name !== "changes") value.result = "skipped";
+    expect(runVerdict(needs).status).toBe(0);
+    for (const bad of [{ reuse_run: "" }, { reuse_run: "0" }, { reuse_sha: "bad" }]) {
+      const malformed = structuredClone(needs);
+      Object.assign(malformed.changes.outputs, bad);
+      expect(runVerdict(malformed).status, JSON.stringify(bad)).toBe(JQ_REFUSED);
+    }
+    const failed = structuredClone(needs);
+    failed.changes.result = "failure";
+    expect(runVerdict(failed).status).toBe(JQ_REFUSED);
+  });
 
   it(
     "fails when a selected package's coverage merge job was skipped, naming the package",
@@ -2028,10 +2049,11 @@ describe("the image smoke's scoping", () => {
     const line = job("image").body.find((entry) => /^ {4}if:/.test(entry)) ?? "";
     return line.replace(/^ {4}if:\s*/, "").trim();
   };
-  const runsWhen = (expr, { event_name, code, deploy }) => {
+  const runsWhen = (expr, { event_name, code, deploy, reuse = "false" }) => {
     const js = expr
       .replace(/needs\.changes\.outputs\.code/g, JSON.stringify(code))
       .replace(/needs\.changes\.outputs\.deploy/g, JSON.stringify(deploy))
+      .replace(/needs\.changes\.outputs\.reuse/g, JSON.stringify(reuse))
       .replace(/github\.event_name/g, JSON.stringify(event_name))
       .replace(/==/g, "===")
       .replace(/!=/g, "!==");
@@ -2041,6 +2063,11 @@ describe("the image smoke's scoping", () => {
   };
 
   const cases = [
+    {
+      name: "verified reuse skips the repeated smoke",
+      ctx: { event_name: "push", code: "true", deploy: "true", reuse: "true" },
+      run: false,
+    },
     {
       name: "a PR that changes no image input skips",
       ctx: { event_name: "pull_request", code: "true", deploy: "false" },
@@ -2103,22 +2130,28 @@ describe("the image smoke's scoping", () => {
 
 describe("main push package gates", () => {
   it.each([
-    ["docs behind a queued code run", "false", false],
-    ["docs behind a cancelled code run", "true", true],
-    ["a code push", "true", true],
-  ])("evaluates shard gates with the supplied code output for %s", (_name, code, expected) => {
-    expect(testShardJobs.length).toBeGreaterThan(0);
-    for (const { id, body } of testShardJobs) {
-      const line = body.find((entry) => /^ {4}if:/.test(entry));
-      expect(line, id).toBeDefined();
-      const expression = line
-        .replace(/^ {4}if:\s*/, "")
-        .replace(/needs\.changes\.outputs\.code/g, JSON.stringify(code))
-        .replace(/needs\.changes\.outputs\.\w+/g, '"true"')
-        .replace(/==/g, "===");
-      expect(Boolean(new Function(`return (${expression});`)()), id).toBe(expected);
-    }
-  });
+    ["docs behind a queued code run", "false", "false", false],
+    ["docs behind a cancelled code run", "true", "false", true],
+    ["a code push", "true", "false", true],
+    ["verified reuse", "true", "true", false],
+  ])(
+    "evaluates shard gates with the supplied code output for %s",
+    (_name, code, reuse, expected) => {
+      expect(testShardJobs.length).toBeGreaterThan(0);
+      for (const { id, body } of testShardJobs) {
+        const line = body.find((entry) => /^ {4}if:/.test(entry));
+        expect(line, id).toBeDefined();
+        const expression = line
+          .replace(/^ {4}if:\s*/, "")
+          .replace(/needs\.changes\.outputs\.code/g, JSON.stringify(code))
+          .replace(/needs\.changes\.outputs\.reuse/g, JSON.stringify(reuse))
+          .replace(/needs\.changes\.outputs\.\w+/g, '"true"')
+          .replace(/==/g, "===")
+          .replace(/!=/g, "!==");
+        expect(Boolean(new Function(`return (${expression});`)()), id).toBe(expected);
+      }
+    },
+  );
 });
 
 describe("the sharded jobs", () => {
@@ -2276,15 +2309,15 @@ describe("the sharded jobs", () => {
 describe("the lint and root-guards jobs", () => {
   // The repo-level project runs in a job of its own so its time runs beside lint's rather than
   // inside it.
-  it("run the repo-level Vitest project only in root-guards, which nothing gates", () => {
+  it("run the repo-level Vitest project only in root-guards, with only verified reuse gating it", () => {
     const runsRoot = (body) =>
       body.some((line) => !line.trim().startsWith("#") && /pnpm vitest run --coverage/.test(line));
     expect(jobs.filter(({ body }) => runsRoot(body)).map(({ id }) => id)).toEqual(["root-guards"]);
     for (const id of ["lint", "root-guards"]) {
       expect(
-        job(id).body.some((line) => /^ {4}(if|needs):/.test(line)),
+        job(id).body.filter((line) => /^ {4}(if|needs):/.test(line)),
         id,
-      ).toBe(false);
+      ).toEqual(["    needs: changes", "    if: needs.changes.outputs.reuse != 'true'"]);
     }
   });
 
@@ -2293,6 +2326,45 @@ describe("the lint and root-guards jobs", () => {
       .body.map((line) => /^ {6}- run: (.*)$/.exec(line)?.[1])
       .filter((run) => run !== undefined);
     expect(runs).toEqual(["pnpm install --frozen-lockfile", "pnpm lint", "pnpm format:check"]);
+  });
+});
+
+describe("verified equal-tree main CI reuse", () => {
+  it("runs the verifier with read-only API permissions and publishes its independent decision", () => {
+    const body = job("changes").body.join("\n");
+    expect(body).toContain("run: node scripts/ci-reuse.mjs");
+    expect(body).toContain("pull-requests: read");
+    for (const key of ["reuse", "reuse_run", "reuse_sha"]) {
+      expect(outputsOf(job("changes").body)).toContain(key);
+      expect(body).toContain(`${key}: \u0024{{ steps.reuse.outputs.${key} }}`);
+    }
+  });
+
+  it("skips every upstream check only on the verified reuse output, preserving publish and concurrency", () => {
+    for (const { id, body } of jobs) {
+      if (["changes", "ci", "publish"].includes(id)) continue;
+      expect(
+        body.find((line) => /^ {4}if:/.test(line)),
+        id,
+      ).toContain("needs.changes.outputs.reuse != 'true'");
+      expect(body.join("\n"), id).toMatch(/needs:(?: changes|\s*\[changes|\n\s*- changes)/);
+      for (const reuse of ["false", "true"]) {
+        const expression = body
+          .find((line) => /^ {4}if:/.test(line))
+          .replace(/^ {4}if:\s*/, "")
+          .replace(/needs\.changes\.outputs\.reuse/g, JSON.stringify(reuse))
+          .replace(/needs\.changes\.outputs\.\w+/g, '"true"')
+          .replace(/github\.event_name/g, '"push"')
+          .replace(/==/g, "===")
+          .replace(/!=/g, "!==");
+        expect(Boolean(new Function(`return (${expression});`)()), `${id} reuse=${reuse}`).toBe(
+          reuse === "false",
+        );
+      }
+    }
+    expect(job("publish").body.join("\n")).not.toContain("outputs.reuse");
+    expect(job("publish").body.join("\n")).toContain("decision=$(scripts/main-tag-guard.sh");
+    expect(concurrency.group).toContain("github.event_name == 'push' && github.run_id");
   });
 });
 

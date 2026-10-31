@@ -6728,7 +6728,8 @@ the reason that is left is the `@vitest/coverage-v8` cross-fork branch-merge art
 is in #558's first commit message (2026-09-24). `packages/db` keeps `maxWorkers: 4`, which CI's
 `test-heavy` shards inherit because they pass no worker count of their own. Either way a new package
 that copies one of those configs must hold `98/98/98/95` (CLAUDE.md §2) — anything else and
-`scripts/coverage-thresholds.test.ts` fails it in the ungated `root-guards` job.
+`scripts/coverage-thresholds.test.ts` fails it in `root-guards` (or in the PR run that main reuses
+after verifying equal trees).
 
 **Specs still in the tree** (checked against the code 2026-09-27). A spec whose work is built is
 deleted once nothing points at it; one stays while a developer doc or code comment points at it, or

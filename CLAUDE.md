@@ -128,7 +128,10 @@ hook, or how tests are scheduled:
 - **Moving harness code out of a `.test.ts` and into `src/testing/` can put it under coverage and
   mutation**, depending on the package's coverage settings and Stryker `mutate` list.
 - **CI does not run every check on every push.** Read the `changes` job's `code`, `scope` and
-  `packages` outputs before treating a green PR as evidence about the workspace.
+  `packages` outputs before treating a green PR as evidence about the workspace. A main push
+  reuses a same-repository PR's successful CI only after API verification of equal trees and
+  complete successful job evidence; its summary names the source run. Otherwise normal CI runs.
+  [Details and limits](docs/developers/ci-and-gates.md#main-can-reuse-an-identical-pull-request-tree).
 - **No front-end bundle is built by a pull request that changed no image input**, and wherever one
   is built nothing opens it, so a bundle that renders nothing passes anyway.
 - **Every Node bundle is built by `scripts/bundle-node.mjs`, which leaves sharp out; the box image
@@ -710,8 +713,9 @@ browser test** — most of these rules exist because a test passed while proving
   marker that only provider-verified adoption clears.
 - **Source scanners select files, not just paths ending in `.ts`.** A failing browser test creates a
   screenshot DIRECTORY named `*.test.ts`; `sourceFilesIn` checks `isFile()`.
-- **A guard that reads the whole tree belongs in the ROOT Vitest project**, which the ungated
-  `root-guards` job and the hook run on every non-docs push. The root project does
+- **A guard that reads the whole tree belongs in the ROOT Vitest project**, which the
+  `root-guards` job runs unless main reuses verified equal-tree PR CI; the hook runs it on every
+  non-docs push. The root project does
   not typecheck, and a module tested only from there must be in the root `coverage.include` to be
   measured at all, and excluded from its own package's.
 - **Prove a guard by deletion**, and confirm a negative control fails for the reason you think.

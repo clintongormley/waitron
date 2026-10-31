@@ -319,7 +319,8 @@ config, so no ui test reaches it. Excluding it also needs a change to the exclus
 
   `bundle-smoke` builds esbuild bundles only. The only thing that runs `vite build` is
   `deploy/Dockerfile`, which the `image` job runs — on a pull request only when an image input has
-  changed (`.github/workflows/ci.yml`, the `image` job's `if`), and on every main push; it never
+  changed (`.github/workflows/ci.yml`, the `image` job's `if`), and on main when its code/deploy gate
+  selects it and verified equal-tree PR CI is not reused; it never
   OPENS one, so a bundle that builds and renders nothing passes there too. This is the work item
   `CLAUDE.md` §2 and `docs/developers/ci-and-gates.md` point at.
 

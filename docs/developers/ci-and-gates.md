@@ -408,7 +408,7 @@ Where each failure arrives differs, which is the part a session gets wrong:
 
 | package | what runs it | when a drop below 90 is seen |
 | --- | --- | --- |
-| `shared` | `mutation-shared` in `.github/workflows/ci.yml` | a pull request whose resolved scope contains the package; on `main` the scope is `global`, so always |
+| `shared` | `mutation-shared` in `.github/workflows/ci.yml` | a pull request whose resolved scope contains the package; on `main` the scope is `global`, unless verified equal-tree PR CI is reused |
 | `ui-core` | the sharded `mutation-ui-core` matrix plus `mutation-ui-core-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand, on the merged score of the four shards — a branch that thins a UI test goes green and reddens the next night, and a LOCAL `pnpm --filter @waitron/ui-core mutation` prints a score and gates nothing |
 | `ui` | the sharded `mutation-ui` matrix plus `mutation-ui-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand, on the merged score of the thirty shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/ui mutation` prints a score and gates nothing |
 | `fiscal` | nothing in CI | only a local `pnpm --filter @waitron/fiscal mutation` |
@@ -1022,17 +1022,63 @@ not count, and a step an `if:` switches off does; a reporter counts only in a `-
 on a `pnpm … test:shard` or `test:coverage` line, never one set in a package's own config; and only
 root `scripts/` is scanned.
 
-`lint` (eslint and `format:check`) and `root-guards` (the repo-level Vitest project) are ungated
-and run on every push, so a regression in a skipped path is caught there only as far as the root suites
-exercise it.
+`lint` (eslint and `format:check`) and `root-guards` (the repo-level Vitest project) run unless
+main reuses verified equal-tree PR CI. A regression in a skipped path is caught there only as
+far as the root suites exercise it.
 
-A merge to `main` runs the unfiltered suite whenever its `code` output is true. The range starts
+A merge to `main` without verified reuse runs the unfiltered suite whenever its `code` output is true. The range starts
 at the nearest ancestor with its own queued, running or successful main CI run. Earlier code
 stays with that run, so a docs push does not repeat its package suites while it waits.
 A range containing only inert paths, documentation or machinery neither
 `ROOT_SCOPE_CONSUMERS` nor `GLOBAL_ROOT_FILES` lists can skip it. That run verifies the narrowing.
 Read the `changes` job's `code`, `scope` and `packages` outputs
 before treating a green PR as evidence about the workspace. Designed and built in #27.
+
+### Main can reuse an identical pull-request tree
+
+When you squash an up-to-date PR, its commit can have the same Git tree as the PR head.
+A tree identifies the complete tracked file contents and modes. A different commit id alone
+does not require another test run; additional main changes do.
+
+On a push to `refs/heads/main`, `scripts/ci-reuse.mjs` reads GitHub's API before allowing reuse.
+It requires one associated closed, merged PR whose merge commit is this push, targeting this
+repository's main branch with its head in the same repository. Both commit responses must name
+the requested commits and have the same valid tree id. The latest exact-head PR run must belong
+to this repository and the current CI workflow id and path, and be completed with success.
+
+The verifier reads that run's exact attempt. Its jobs must form a complete single API page,
+cover every current workflow job, have distinct names and the expected run, attempt and head,
+and all be completed with success or an intentional skip. Changes, lint, root-guards and ci
+must each have one successful entry. It re-reads the source run afterwards; a changed attempt
+or unsuccessful result refuses reuse. Missing evidence, API errors, more than one page of runs
+or jobs, direct pushes, release tags, manual dispatches and different trees retain normal CI.
+Each API command has a 15-second timeout; the workflow step has a three-minute limit. An
+unexpected process failure fails changes rather than creating permission to skip checks.
+
+The changes summary links the source run id, its attempt, PR head and tree. Its separate reuse
+outputs skip the other upstream jobs, including lint, root guards, builds, image smoke and the
+in-workflow shared mutation job. The existing classification still decides whether publishing
+is needed. The ci aggregate still checks its current dependencies through needs and the jobs
+API; its coverage-merge exception requires a reuse decision with a source run id and head SHA.
+Publish remains downstream of ci, builds the current commit and asks main-tag-guard before
+moving `:main`. Every main push keeps its own run. Other workflow files are unchanged.
+
+You are reusing the PR's scoped result, not claiming unrelated package suites ran. An unequal
+tree takes the existing main selection, which runs all packages when code is in scope.
+Check `reuse`, `reuse_run`, `reuse_sha` and the linked source run before interpreting a skipped
+main job. A missing source or a failed source must never be explained as reuse.
+
+Local qualification runs the real aggregate jq and a Git fixture that performs both an
+up-to-date squash and a squash after an independent main commit. Run:
+`pnpm exec vitest run scripts/ci-reuse.test.mjs scripts/ci-workflow.test.mjs`.
+The behavioural verifier tests supply API responses; they do not run GitHub's scheduler.
+Real equal-tree and unequal-tree main push qualification is required by A1242 before it closes.
+
+| Source | Source wording | Use here |
+| --- | --- | --- |
+| [GitHub workflow runs API](https://docs.github.com/en/rest/actions/workflow-runs) | `workflow_id`, `run_attempt`, `head_sha`, `conclusion` | Match workflow, attempt, commit and successful completion; read them again after jobs. |
+| [GitHub workflow jobs API](https://docs.github.com/en/rest/actions/workflow-jobs#list-jobs-for-a-workflow-run-attempt) | “List jobs for a workflow run attempt” | Fetch jobs from the admitted attempt rather than combining attempts. |
+| [GitHub commits API](https://docs.github.com/en/rest/commits/commits#list-pull-requests-associated-with-a-commit) | “List pull requests associated with a commit” | Find the associated PR, then check its repository, merge and head rather than trusting association alone. |
 
 ### Two pushes to `main` must never share a concurrency group
 
@@ -2644,8 +2690,9 @@ package-wide coverage. Run additional consumer tests locally when useful for inv
 
 ### Adding a workspace package breaks the root guards until it is wired in
 
-Three guards in the root Vitest project read workspace members BY NAME, and the ungated `root-guards` job and
-`.husky/pre-push` both run that project on every non-documentation push. So a new member that is not
+Three guards in the root Vitest project read workspace members BY NAME. The `root-guards` job
+runs that project unless main reuses verified equal-tree PR CI; `.husky/pre-push` runs it on
+every non-documentation push. So a new member that is not
 wired in fails the hook, on a branch that may have nothing else wrong with it.
 
 Measured twice, in both directions, on 2026-09-16 — adding `@waitron/bench-sqlite-failover`, then
