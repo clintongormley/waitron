@@ -50,7 +50,7 @@ importers:
         version: 8.72.0(@typescript/typescript6@6.0.2)(eslint@10.13.0)
       vitest:
         specifier: ^4.1.12
-        version: 4.1.12(@types/node@26.6.5)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 4.1.12(@types/node@26.6.6)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   apps/dashboard:
     dependencies:
@@ -99,7 +99,7 @@ importers:
         version: 1.5.6
       '@vitest/browser-playwright':
         specifier: ^4.1.12
-        version: 4.1.12(playwright@1.64.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(vitest@4.1.12)
+        version: 4.1.12(playwright@1.64.1)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(vitest@4.1.12)
       '@vitest/coverage-v8':
         specifier: ^4.1.12
         version: 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
@@ -120,10 +120,10 @@ importers:
         version: 7.0.2
       vite:
         specifier: ^8.3.5
-        version: 8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
+        version: 8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
       vitest:
         specifier: ^4.1.12
-        version: 4.1.12(@types/node@26.6.5)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 4.1.12(@types/node@26.6.6)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   apps/print-agent:
     dependencies:
@@ -153,8 +153,8 @@ importers:
         specifier: ^0.28.2
         version: 0.28.2
       node-forge:
-        specifier: ^1.3.1
-        version: 1.4.0
+        specifier: ^1.4.1
+        version: 1.4.1
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
@@ -306,8 +306,8 @@ importers:
         specifier: ^7.2.5
         version: 7.2.5
       node-forge:
-        specifier: ^1.3.1
-        version: 1.4.0
+        specifier: ^1.4.1
+        version: 1.4.1
       nodemailer:
         specifier: ^10.2.1
         version: 10.2.1
@@ -426,7 +426,7 @@ importers:
     devDependencies:
       '@vitest/browser-playwright':
         specifier: ^4.1.12
-        version: 4.1.12(playwright@1.64.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(vitest@4.1.12)
+        version: 4.1.12(playwright@1.64.1)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(vitest@4.1.12)
       '@vitest/coverage-v8':
         specifier: ^4.1.12
         version: 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
@@ -444,10 +444,10 @@ importers:
         version: 7.0.2
       vite:
         specifier: ^8.3.5
-        version: 8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
+        version: 8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
       vitest:
         specifier: ^4.1.12
-        version: 4.1.12(@types/node@26.6.5)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 4.1.12(@types/node@26.6.6)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   apps/till:
     dependencies:
@@ -840,7 +840,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^4.1.12
-        version: 4.1.12(@types/node@26.6.5)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 4.1.12(@types/node@26.6.6)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/country-es:
     dependencies:
@@ -875,7 +875,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^4.1.12
-        version: 4.1.12(@types/node@26.6.5)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 4.1.12(@types/node@26.6.6)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/country-packs:
     dependencies:
@@ -900,7 +900,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^4.1.12
-        version: 4.1.12(@types/node@26.6.5)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 4.1.12(@types/node@26.6.6)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/credentials:
     dependencies:
@@ -1073,7 +1073,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^4.1.12
-        version: 4.1.12(@types/node@26.6.5)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 4.1.12(@types/node@26.6.6)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/fiscal:
     dependencies:
@@ -1255,8 +1255,8 @@ importers:
         specifier: ^0.28.2
         version: 0.28.2
       node-forge:
-        specifier: ^1.3.1
-        version: 1.4.0
+        specifier: ^1.4.1
+        version: 1.4.1
       playwright:
         specifier: ^1.64.1
         version: 1.64.1
@@ -1964,8 +1964,8 @@ importers:
         specifier: ^4.13.13
         version: 4.13.13
       node-forge:
-        specifier: ^1.3.1
-        version: 1.4.0
+        specifier: ^1.4.1
+        version: 1.4.1
     devDependencies:
       '@types/node':
         specifier: ^26.6.5
@@ -1987,10 +1987,10 @@ importers:
     devDependencies:
       '@stryker-mutator/core':
         specifier: ^10.0.0
-        version: 10.0.0(@types/node@26.6.5)
+        version: 10.0.0(@types/node@26.6.6)
       '@stryker-mutator/vitest-runner':
         specifier: ^10.0.0
-        version: 10.0.0(@stryker-mutator/core@10.0.0(@types/node@26.6.5))(vitest@4.1.12)
+        version: 10.0.0(@stryker-mutator/core@10.0.0(@types/node@26.6.6))(vitest@4.1.12)
       '@vitest/coverage-v8':
         specifier: ^4.1.12
         version: 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
@@ -1999,7 +1999,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^4.1.12
-        version: 4.1.12(@types/node@26.6.5)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 4.1.12(@types/node@26.6.6)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/staffing:
     dependencies:
@@ -2169,13 +2169,13 @@ importers:
     devDependencies:
       '@stryker-mutator/core':
         specifier: ^10.0.0
-        version: 10.0.0(@types/node@26.6.5)
+        version: 10.0.0(@types/node@26.6.6)
       '@stryker-mutator/vitest-runner':
         specifier: ^10.0.0
-        version: 10.0.0(@stryker-mutator/core@10.0.0(@types/node@26.6.5))(vitest@4.1.12)
+        version: 10.0.0(@stryker-mutator/core@10.0.0(@types/node@26.6.6))(vitest@4.1.12)
       '@vitest/browser-playwright':
         specifier: ^4.1.12
-        version: 4.1.12(playwright@1.64.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(vitest@4.1.12)
+        version: 4.1.12(playwright@1.64.1)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(vitest@4.1.12)
       '@vitest/coverage-v8':
         specifier: ^4.1.12
         version: 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
@@ -2190,22 +2190,22 @@ importers:
         version: 7.0.2
       vite:
         specifier: ^8.3.5
-        version: 8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
+        version: 8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
       vitest:
         specifier: ^4.1.12
-        version: 4.1.12(@types/node@26.6.5)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 4.1.12(@types/node@26.6.6)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/ui-core:
     devDependencies:
       '@stryker-mutator/core':
         specifier: ^10.0.0
-        version: 10.0.0(@types/node@26.6.5)
+        version: 10.0.0(@types/node@26.6.6)
       '@stryker-mutator/vitest-runner':
         specifier: ^10.0.0
-        version: 10.0.0(@stryker-mutator/core@10.0.0(@types/node@26.6.5))(vitest@4.1.12)
+        version: 10.0.0(@stryker-mutator/core@10.0.0(@types/node@26.6.6))(vitest@4.1.12)
       '@vitest/browser-playwright':
         specifier: ^4.1.12
-        version: 4.1.12(playwright@1.64.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(vitest@4.1.12)
+        version: 4.1.12(playwright@1.64.1)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(vitest@4.1.12)
       '@vitest/coverage-v8':
         specifier: ^4.1.12
         version: 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
@@ -2226,10 +2226,10 @@ importers:
         version: 7.0.2
       vite:
         specifier: ^8.3.5
-        version: 8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
+        version: 8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
       vitest:
         specifier: ^4.1.12
-        version: 4.1.12(@types/node@26.6.5)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 4.1.12(@types/node@26.6.6)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/venue-service:
     dependencies:
@@ -3759,10 +3759,12 @@ packages:
   '@smithy/core@3.35.0':
     resolution: {integrity: sha512-zRMhfkByhT2snNdr1si24vJitU6Cr9ix2MikUfWmkAgp4jrNP0GcKSP5YvwQ+TlI8AZXER5QOGJn3JsVtSD9/A==}
     engines: {node: '>=18.0.0'}
+    deprecated: Deprecated due to a bug in custom logger data redaction. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/core@3.36.2':
     resolution: {integrity: sha512-oRw0rB9QSUiCZfEs23G5F4Af+b2rQt1lItIICWu5IejFNd+uPM8SWqiKLMpQ6bX1Q7slsLbjuoE2niErFtkVPQ==}
     engines: {node: '>=18.0.0'}
+    deprecated: Deprecated due to a bug in custom logger data redaction. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/credential-provider-imds@4.5.2':
     resolution: {integrity: sha512-A9uSdn72ozbRUSit0eib0TW7nXuNPlaeM0zcGkJ+nE6tFcSDbnmtwoxbTCFBukVQcszDAyvsd7+rTduPTXpygg==}
@@ -3860,6 +3862,9 @@ packages:
 
   '@types/node@26.6.5':
     resolution: {integrity: sha512-uMzsv9stDdofIZBx4UGh4Z9ZgXnGC9seRDscilBcTHAeOFk67MZg/k9bWVfO+bk4qZmG+l52hRnLwUiH2LnJTg==}
+
+  '@types/node@26.6.6':
+    resolution: {integrity: sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog==}
 
   '@types/nodemailer@8.0.2':
     resolution: {integrity: sha512-c7M5ox8p0nEOfbJ2E9Qcmt8/QCu/VzsiAhzBiZbvky2PhKZDHpKB3sQHBM5MEZNkCfBOaS6S9//AGPRTNB7IaA==}
@@ -5346,8 +5351,8 @@ packages:
   natural-compare@1.4.0:
     resolution: {integrity: sha512-OWND8ei3VtNC9h7V60qff3SVobHr996CTwgxubgyQYEpg290h9J0buyECNNJexkFm5sOajh5G116RYA1c8ZMSw==}
 
-  node-forge@1.4.0:
-    resolution: {integrity: sha512-LarFH0+6VfriEhqMMcLX2F7SwSXeWwnEAJEsYm5QKWchiVYVvJyV9v7UDvUv+w5HO23ZpQTXDv/GxdDdMyOuoQ==}
+  node-forge@1.4.1:
+    resolution: {integrity: sha512-w5/MfWaeMrpR/5ba6fZyAUTLSuE6aYz7H/3cYrqwZEmf5eQS3IaaLgJt4MBv7HglGFWmV22K8h4U18RJQmw/ow==}
     engines: {node: '>= 6.13.0'}
 
   node-releases@2.0.57:
@@ -6947,12 +6952,28 @@ snapshots:
     optionalDependencies:
       '@types/node': 26.6.5
 
+  '@inquirer/checkbox@5.2.1(@types/node@26.6.6)':
+    dependencies:
+      '@inquirer/ansi': 2.0.7
+      '@inquirer/core': 11.2.1(@types/node@26.6.6)
+      '@inquirer/figures': 2.0.7
+      '@inquirer/type': 4.0.7(@types/node@26.6.6)
+    optionalDependencies:
+      '@types/node': 26.6.6
+
   '@inquirer/confirm@6.1.1(@types/node@26.6.5)':
     dependencies:
       '@inquirer/core': 11.2.1(@types/node@26.6.5)
       '@inquirer/type': 4.0.7(@types/node@26.6.5)
     optionalDependencies:
       '@types/node': 26.6.5
+
+  '@inquirer/confirm@6.1.1(@types/node@26.6.6)':
+    dependencies:
+      '@inquirer/core': 11.2.1(@types/node@26.6.6)
+      '@inquirer/type': 4.0.7(@types/node@26.6.6)
+    optionalDependencies:
+      '@types/node': 26.6.6
 
   '@inquirer/core@11.2.1(@types/node@26.6.5)':
     dependencies:
@@ -6966,6 +6987,18 @@ snapshots:
     optionalDependencies:
       '@types/node': 26.6.5
 
+  '@inquirer/core@11.2.1(@types/node@26.6.6)':
+    dependencies:
+      '@inquirer/ansi': 2.0.7
+      '@inquirer/figures': 2.0.7
+      '@inquirer/type': 4.0.7(@types/node@26.6.6)
+      cli-width: 4.1.0
+      fast-wrap-ansi: 0.2.2
+      mute-stream: 3.0.0
+      signal-exit: 4.1.0
+    optionalDependencies:
+      '@types/node': 26.6.6
+
   '@inquirer/editor@5.2.2(@types/node@26.6.5)':
     dependencies:
       '@inquirer/core': 11.2.1(@types/node@26.6.5)
@@ -6974,6 +7007,14 @@ snapshots:
     optionalDependencies:
       '@types/node': 26.6.5
 
+  '@inquirer/editor@5.2.2(@types/node@26.6.6)':
+    dependencies:
+      '@inquirer/core': 11.2.1(@types/node@26.6.6)
+      '@inquirer/external-editor': 3.0.3(@types/node@26.6.6)
+      '@inquirer/type': 4.0.7(@types/node@26.6.6)
+    optionalDependencies:
+      '@types/node': 26.6.6
+
   '@inquirer/expand@5.1.1(@types/node@26.6.5)':
     dependencies:
       '@inquirer/core': 11.2.1(@types/node@26.6.5)
@@ -6981,12 +7022,26 @@ snapshots:
     optionalDependencies:
       '@types/node': 26.6.5
 
+  '@inquirer/expand@5.1.1(@types/node@26.6.6)':
+    dependencies:
+      '@inquirer/core': 11.2.1(@types/node@26.6.6)
+      '@inquirer/type': 4.0.7(@types/node@26.6.6)
+    optionalDependencies:
+      '@types/node': 26.6.6
+
   '@inquirer/external-editor@3.0.3(@types/node@26.6.5)':
     dependencies:
       chardet: 2.2.0
       iconv-lite: 0.7.3
     optionalDependencies:
       '@types/node': 26.6.5
+
+  '@inquirer/external-editor@3.0.3(@types/node@26.6.6)':
+    dependencies:
+      chardet: 2.2.0
+      iconv-lite: 0.7.3
+    optionalDependencies:
+      '@types/node': 26.6.6
 
   '@inquirer/figures@2.0.7': {}
 
@@ -6997,12 +7052,26 @@ snapshots:
     optionalDependencies:
       '@types/node': 26.6.5
 
+  '@inquirer/input@5.1.2(@types/node@26.6.6)':
+    dependencies:
+      '@inquirer/core': 11.2.1(@types/node@26.6.6)
+      '@inquirer/type': 4.0.7(@types/node@26.6.6)
+    optionalDependencies:
+      '@types/node': 26.6.6
+
   '@inquirer/number@4.1.1(@types/node@26.6.5)':
     dependencies:
       '@inquirer/core': 11.2.1(@types/node@26.6.5)
       '@inquirer/type': 4.0.7(@types/node@26.6.5)
     optionalDependencies:
       '@types/node': 26.6.5
+
+  '@inquirer/number@4.1.1(@types/node@26.6.6)':
+    dependencies:
+      '@inquirer/core': 11.2.1(@types/node@26.6.6)
+      '@inquirer/type': 4.0.7(@types/node@26.6.6)
+    optionalDependencies:
+      '@types/node': 26.6.6
 
   '@inquirer/password@5.1.1(@types/node@26.6.5)':
     dependencies:
@@ -7011,6 +7080,14 @@ snapshots:
       '@inquirer/type': 4.0.7(@types/node@26.6.5)
     optionalDependencies:
       '@types/node': 26.6.5
+
+  '@inquirer/password@5.1.1(@types/node@26.6.6)':
+    dependencies:
+      '@inquirer/ansi': 2.0.7
+      '@inquirer/core': 11.2.1(@types/node@26.6.6)
+      '@inquirer/type': 4.0.7(@types/node@26.6.6)
+    optionalDependencies:
+      '@types/node': 26.6.6
 
   '@inquirer/prompts@8.5.2(@types/node@26.6.5)':
     dependencies:
@@ -7027,12 +7104,34 @@ snapshots:
     optionalDependencies:
       '@types/node': 26.6.5
 
+  '@inquirer/prompts@8.5.2(@types/node@26.6.6)':
+    dependencies:
+      '@inquirer/checkbox': 5.2.1(@types/node@26.6.6)
+      '@inquirer/confirm': 6.1.1(@types/node@26.6.6)
+      '@inquirer/editor': 5.2.2(@types/node@26.6.6)
+      '@inquirer/expand': 5.1.1(@types/node@26.6.6)
+      '@inquirer/input': 5.1.2(@types/node@26.6.6)
+      '@inquirer/number': 4.1.1(@types/node@26.6.6)
+      '@inquirer/password': 5.1.1(@types/node@26.6.6)
+      '@inquirer/rawlist': 5.3.1(@types/node@26.6.6)
+      '@inquirer/search': 4.2.1(@types/node@26.6.6)
+      '@inquirer/select': 5.2.1(@types/node@26.6.6)
+    optionalDependencies:
+      '@types/node': 26.6.6
+
   '@inquirer/rawlist@5.3.1(@types/node@26.6.5)':
     dependencies:
       '@inquirer/core': 11.2.1(@types/node@26.6.5)
       '@inquirer/type': 4.0.7(@types/node@26.6.5)
     optionalDependencies:
       '@types/node': 26.6.5
+
+  '@inquirer/rawlist@5.3.1(@types/node@26.6.6)':
+    dependencies:
+      '@inquirer/core': 11.2.1(@types/node@26.6.6)
+      '@inquirer/type': 4.0.7(@types/node@26.6.6)
+    optionalDependencies:
+      '@types/node': 26.6.6
 
   '@inquirer/search@4.2.1(@types/node@26.6.5)':
     dependencies:
@@ -7041,6 +7140,14 @@ snapshots:
       '@inquirer/type': 4.0.7(@types/node@26.6.5)
     optionalDependencies:
       '@types/node': 26.6.5
+
+  '@inquirer/search@4.2.1(@types/node@26.6.6)':
+    dependencies:
+      '@inquirer/core': 11.2.1(@types/node@26.6.6)
+      '@inquirer/figures': 2.0.7
+      '@inquirer/type': 4.0.7(@types/node@26.6.6)
+    optionalDependencies:
+      '@types/node': 26.6.6
 
   '@inquirer/select@5.2.1(@types/node@26.6.5)':
     dependencies:
@@ -7051,9 +7158,22 @@ snapshots:
     optionalDependencies:
       '@types/node': 26.6.5
 
+  '@inquirer/select@5.2.1(@types/node@26.6.6)':
+    dependencies:
+      '@inquirer/ansi': 2.0.7
+      '@inquirer/core': 11.2.1(@types/node@26.6.6)
+      '@inquirer/figures': 2.0.7
+      '@inquirer/type': 4.0.7(@types/node@26.6.6)
+    optionalDependencies:
+      '@types/node': 26.6.6
+
   '@inquirer/type@4.0.7(@types/node@26.6.5)':
     optionalDependencies:
       '@types/node': 26.6.5
+
+  '@inquirer/type@4.0.7(@types/node@26.6.6)':
+    optionalDependencies:
+      '@types/node': 26.6.6
 
   '@isaacs/cliui@8.0.2':
     dependencies:
@@ -7490,6 +7610,37 @@ snapshots:
     transitivePeerDependencies:
       - '@types/node'
 
+  '@stryker-mutator/core@10.0.0(@types/node@26.6.6)':
+    dependencies:
+      '@inquirer/prompts': 8.5.2(@types/node@26.6.6)
+      '@stryker-mutator/api': 10.0.0
+      '@stryker-mutator/instrumenter': 10.0.0
+      '@stryker-mutator/util': 10.0.0
+      ajv: 8.20.0
+      chalk: 5.6.2
+      commander: 14.0.3
+      diff-match-patch: 1.0.5
+      emoji-regex: 10.6.0
+      execa: 9.6.1
+      json-rpc-2.0: 1.7.1
+      lodash.groupby: 4.6.0
+      minimatch: 10.2.5
+      mutation-server-protocol: 0.4.1
+      mutation-testing-elements: 3.8.4
+      mutation-testing-metrics: 3.8.4
+      mutation-testing-report-schema: 3.8.4
+      npm-run-path: 6.0.0
+      progress: 2.0.3
+      rxjs: 7.8.2
+      semver: 7.8.5
+      source-map: 0.7.6
+      tree-kill: 1.2.2
+      tslib: 2.8.1
+      typed-inject: 5.0.0
+      typed-rest-client: 2.3.1
+    transitivePeerDependencies:
+      - '@types/node'
+
   '@stryker-mutator/instrumenter@10.0.0':
     dependencies:
       '@babel/core': 8.0.6
@@ -7517,6 +7668,15 @@ snapshots:
       semver: 7.8.5
       tslib: 2.8.1
       vitest: 4.1.12(@types/node@26.6.5)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+
+  '@stryker-mutator/vitest-runner@10.0.0(@stryker-mutator/core@10.0.0(@types/node@26.6.6))(vitest@4.1.12)':
+    dependencies:
+      '@stryker-mutator/api': 10.0.0
+      '@stryker-mutator/core': 10.0.0(@types/node@26.6.6)
+      '@stryker-mutator/util': 10.0.0
+      semver: 7.8.5
+      tslib: 2.8.1
+      vitest: 4.1.12(@types/node@26.6.6)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   '@swc/helpers@0.5.23':
     dependencies:
@@ -7580,6 +7740,11 @@ snapshots:
     dependencies:
       undici-types: 8.9.0
 
+  '@types/node@26.6.6':
+    dependencies:
+      undici-types: 8.9.0
+    optional: true
+
   '@types/nodemailer@8.0.2':
     dependencies:
       '@types/node': 26.6.5
@@ -7590,7 +7755,7 @@ snapshots:
 
   '@types/pg@8.23.1':
     dependencies:
-      '@types/node': 26.6.5
+      '@types/node': 26.6.6
       pg-protocol: 1.16.1
       pg-types: 2.2.0
     optional: true
@@ -7856,6 +8021,19 @@ snapshots:
       - utf-8-validate
       - vite
 
+  '@vitest/browser-playwright@4.1.12(playwright@1.64.1)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(vitest@4.1.12)':
+    dependencies:
+      '@vitest/browser': 4.1.12(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(vitest@4.1.12)
+      '@vitest/mocker': 4.1.12(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+      playwright: 1.64.1
+      tinyrainbow: 3.1.1
+      vitest: 4.1.12(@types/node@26.6.6)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+    transitivePeerDependencies:
+      - bufferutil
+      - msw
+      - utf-8-validate
+      - vite
+
   '@vitest/browser@4.1.12(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(vitest@4.1.12)':
     dependencies:
       '@blazediff/core': 1.9.1
@@ -7866,6 +8044,23 @@ snapshots:
       sirv: 3.0.2
       tinyrainbow: 3.1.1
       vitest: 4.1.12(@types/node@26.6.5)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+      ws: 8.21.1
+    transitivePeerDependencies:
+      - bufferutil
+      - msw
+      - utf-8-validate
+      - vite
+
+  '@vitest/browser@4.1.12(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(vitest@4.1.12)':
+    dependencies:
+      '@blazediff/core': 1.9.1
+      '@vitest/mocker': 4.1.12(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+      '@vitest/utils': 4.1.12
+      magic-string: 0.30.21
+      pngjs: 7.0.0
+      sirv: 3.0.2
+      tinyrainbow: 3.1.1
+      vitest: 4.1.12(@types/node@26.6.6)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
       ws: 8.21.1
     transitivePeerDependencies:
       - bufferutil
@@ -7885,9 +8080,9 @@ snapshots:
       obug: 2.2.1
       std-env: 4.2.0
       tinyrainbow: 3.1.1
-      vitest: 4.1.12(@types/node@26.6.5)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+      vitest: 4.1.12(@types/node@26.6.6)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
     optionalDependencies:
-      '@vitest/browser': 4.1.12(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(vitest@4.1.12)
+      '@vitest/browser': 4.1.12(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(vitest@4.1.12)
 
   '@vitest/expect@4.1.12':
     dependencies:
@@ -7905,6 +8100,14 @@ snapshots:
       magic-string: 0.30.21
     optionalDependencies:
       vite: 8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
+
+  '@vitest/mocker@4.1.12(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))':
+    dependencies:
+      '@vitest/spy': 4.1.12
+      estree-walker: 3.0.3
+      magic-string: 0.30.21
+    optionalDependencies:
+      vite: 8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
 
   '@vitest/pretty-format@4.1.12':
     dependencies:
@@ -8949,7 +9152,7 @@ snapshots:
 
   natural-compare@1.4.0: {}
 
-  node-forge@1.4.0: {}
+  node-forge@1.4.1: {}
 
   node-releases@2.0.57: {}
 
@@ -9697,6 +9900,20 @@ snapshots:
       tsx: 4.23.15
       yaml: 2.9.1
 
+  vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1):
+    dependencies:
+      lightningcss: 1.33.0
+      picomatch: 4.0.7
+      postcss: 8.5.31
+      rolldown: 1.2.15
+      tinyglobby: 0.2.17
+    optionalDependencies:
+      '@types/node': 26.6.6
+      esbuild: 0.28.2
+      fsevents: 2.3.3
+      tsx: 4.23.15
+      yaml: 2.9.1
+
   vitest@4.1.12(@types/node@26.6.5)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)):
     dependencies:
       '@vitest/expect': 4.1.12
@@ -9722,6 +9939,35 @@ snapshots:
     optionalDependencies:
       '@types/node': 26.6.5
       '@vitest/browser-playwright': 4.1.12(playwright@1.64.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(vitest@4.1.12)
+      '@vitest/coverage-v8': 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
+    transitivePeerDependencies:
+      - msw
+
+  vitest@4.1.12(@types/node@26.6.6)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)):
+    dependencies:
+      '@vitest/expect': 4.1.12
+      '@vitest/mocker': 4.1.12(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+      '@vitest/pretty-format': 4.1.12
+      '@vitest/runner': 4.1.12
+      '@vitest/snapshot': 4.1.12
+      '@vitest/spy': 4.1.12
+      '@vitest/utils': 4.1.12
+      es-module-lexer: 2.3.2
+      expect-type: 1.4.0
+      magic-string: 0.30.21
+      obug: 2.2.1
+      pathe: 2.0.3
+      picomatch: 4.0.7
+      std-env: 4.2.0
+      tinybench: 2.9.0
+      tinyexec: 1.3.1
+      tinyglobby: 0.2.17
+      tinyrainbow: 3.1.1
+      vite: 8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@types/node': 26.6.6
+      '@vitest/browser-playwright': 4.1.12(playwright@1.64.1)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(vitest@4.1.12)
       '@vitest/coverage-v8': 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
     transitivePeerDependencies:
       - msw
