@@ -4220,20 +4220,21 @@ closings and presses they name. What nothing checks:
 A798-B slice 9b, Task 15. One row per job that compares a stored time with the wall clock. "+400"
 is a step 400 days forward (stored times now look 400 days old), "−400" one 400 days back (stored
 times sit 400 days ahead). A step the box makes moves its clock towards the right time; a time
-stored while the clock was wrong is what the step exposes. Rows marked "test" name the test that
-ran both directions; every other row was read on the branch at `a3ef1ff3a`, not run. The rows come
-from the audit's two greps (calls of `Date.now()`, `new Date()` and `now().getTime()`, and files
-holding timers, outside tests; both in Task 15's commit message) and from Task 15's review. The
-greps do not find `nowIso()` cutoffs or comparisons made in SQL, so a job of that shape may be
-missing. Times held only in memory are in the table when they can outlast a step (the pairing
-window, the PIN throttle); short ones (backoffs, request durations) are left out.
+stored while the clock was wrong is what the step exposes. Rows marked "test" name the tests
+behind them; every other row was read, not run (at `a3ef1ff3a`, or by Task 15's two reviews, which
+ran the backup schedule, the PIN throttle and the three in-memory limiters). The rows come from the
+audit's two greps (calls of `Date.now()`, `new Date()` and `now().getTime()`, and files holding
+timers, outside tests; both in Task 15's commit message) and from those reviews. The greps do not
+find `nowIso()` cutoffs, comparisons made in SQL, or `Date.now` handed on as a value, so a job of
+those shapes may still be missing. Short in-memory timers (backoffs, request durations) are left
+out.
 
 | Job | +400 | −400 | Decision |
 | --- | --- | --- | --- |
 | Dashboard sessions (`packages/identity/src/management-session.ts:81`) | expired, as before | expired once last seen more than the 30-minute idle timeout ahead; a smaller step ends none | fixed (test: `management-session.test.ts`, "a last-seen time ahead of the clock") |
-| A mirror's viewer session (`apps/server/src/mirror-session.ts`, the keepalive) | re-stamped, as before | the keepalive re-stamps a last-seen time ahead of the clock, so the viewer is not refused | fixed (test: `mirror-session.test.ts`, "left hours ahead by a backward clock step") |
+| A mirror's viewer session (`apps/server/src/mirror-session.ts`, the keepalive) | re-stamped, as before | the keepalive re-stamps a last-seen time ahead of the clock, so the viewer is not refused | fixed (tests: `mirror-session.test.ts`, "refreshes a STALE session" for +400 and "left hours ahead by a backward clock step" for −400) |
 | Passkey challenges (`packages/identity/src/passkey.ts:110`) | expired | expired when stamped more than a minute ahead | fixed (test: `passkey.test.ts`, "stamped more than a minute ahead") |
-| Stream generations (`packages/stream/src/supervisor.ts`, `#pruneDaily`) | no effect: generations are aged by the bucket's own times against the bucket's clock, and the prune runs once a day by the steady clock | no effect, for the same reason | fixed (test: `supervisor.test.ts`, "ages old generations by the bucket's clock", both directions; nothing is pruned until the bucket's clock has been read). Before the fix the bucket's times were compared with the box's clock, so a box clock wrongly a week ahead deleted every old generation, with or without a step |
+| Stream generations (`packages/stream/src/supervisor.ts`, `#pruneDaily`) | no effect: generations are aged by the bucket's own times against the bucket's clock, and the prune runs once a day by the steady clock | no effect, for the same reason | fixed (test: `supervisor.test.ts`, "ages old generations by the bucket's clock", both directions; nothing is pruned while the bucket's clock cannot be read, and a read that failed at opening is tried again at the daily prune). Before the fix the bucket's times were compared with the box's clock, so a box clock wrongly a week ahead deleted every old generation, with or without a step |
 | Backup archives (`apps/server/src/backup-sweep.ts`, `pruneBackend`; making room) | without a hold, every archive past `retainDays` deleted | archives stamped ahead rank last | fixed in Tasks 14 and 14a for steps the box makes (tests in `backup-sweep.test.ts`, `backup-room.test.ts`, `low-space-backups.test.ts`); a step by the time service or by hand holds nothing — accepted: only steps the box makes are recorded |
 | Cached time health (`apps/server/src/ttl-cache.ts`) | entry stale, recomputed | an entry from the clock's future would be served for days | fixed in Task 6 (test: `ttl-cache.test.ts`) |
 | Attendance day close (`runAttendanceLoop`, `packages/workforce/src/end-of-day.ts`) | a clock wrongly 400 days ahead closes a running shift at its last order with an automatic clock-out; after the step back a clock-out is refused `attendance.no_open_entry` and a clock-in is written; nothing deleted, chain intact | closes nothing and raises no question; after the step forward the worker's clock-out and clock-in are written; nothing deleted, chain intact | accepted (test: `attendance-loop.test.ts`, "a running shift across a clock days off"): the wrong close comes from the clock being wrong before any step, which 9b does not cause; a manager corrects the record as for any wrong automatic clock-out |
@@ -4256,6 +4257,9 @@ window, the PIN throttle); short ones (backoffs, request durations) are left out
 | Invoice deliveries (`apps/server/src/invoice-delivery.ts:229`, `:253-256`) | retried at once; a stuck claim lapses | a retry waits 400 days; a claim stamped ahead never lapses until a restart | Task 15c fixes it (a customer's invoice copy) |
 | Print-job lease (`packages/printing/src/runtime.ts:55-62`) | a job mid-print is claimed again | a job left printing is not claimed again for 400 days: a ticket that never prints | Task 15c fixes it (cuts a station off) |
 | PIN throttle (`packages/identity/src/pin-throttle.ts:89-96`, `:118-122`, in memory) | waits end | a person in a wait is refused at that slot for 400 days, until a restart | Task 15c fixes it (cuts a person off the till) |
+| Device-join limiter (`apps/server/src/enrol-rate-limit.ts:39-56`, in memory) | the window reopens | the window never reopens: once 30 joins are counted every device join is refused `device.join_rate_limited`, until a restart | Task 15c fixes it (cuts tills off) |
+| Account-action limiter (`apps/server/src/account-rate-limit.ts:31-54`, in memory) | the window reopens | once its count is reached, account actions are refused `account_action.rate_limited`, until a restart | Task 15c fixes it |
+| Password-reset and invitation cooldown (`apps/server/src/account-rate-limit.ts:14-28`, in memory) | ends | that email's reset or invitation is blocked for 400 days, until a restart | Task 15c fixes it |
 | Venue liveness (`packages/store/src/venue-liveness.ts:127`) | none: measured on `process.hrtime` | none | nothing to do |
 | The box's TLS certificate (`apps/server/src/self-signed-cert.ts:160`) | — | the box may see its own leaf as not yet valid; its repair route reissues one | accepted with a backlog line (plan Task 15): a leaf issued while the clock was more than a day ahead is refused by devices whose clock is right; read, not run |
 

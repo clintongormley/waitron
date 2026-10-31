@@ -276,8 +276,10 @@ export class StreamSupervisor {
   #newestUploadAt: Date | null = null;
   /** The bucket's clock minus {@link SupervisorDeps.monotonic}'s reading. */
   #skewMs = 0;
-  /** False while {@link #skewMs} is this box's time of day standing in for the bucket's. */
+  /** True once {@link #skewMs} is the bucket's clock, read for the live generation. */
   #bucketClockRead = false;
+  /** The live generation's marker write, by the steady clock, so a failed read can be retried. */
+  #markerWrite: { key: string; started: number; ended: number } | null = null;
   #lastProbeAt = 0;
   #lastClassifyAt = Number.NEGATIVE_INFINITY;
   /** Numbers each bucket check the stream starts, so a late answer can tell a newer one began. */
@@ -710,6 +712,7 @@ export class StreamSupervisor {
     this.#skewMs = (started.wall + ended.wall) / 2 - steady;
     this.#bucketClockRead = false;
     const key = markerKey(this.#deps.venueId, generation);
+    this.#markerWrite = { key, started: started.steady, ended: ended.steady };
     try {
       const offset = await bucketClockOffset(this.#store, key, started.steady, ended.steady, {
         signal,
@@ -817,20 +820,28 @@ export class StreamSupervisor {
    * Deletes this venue's generations older than a week, never `live`, at most once a day. Litestream
    * tidies only the generation it writes. Ages are the bucket's own times measured against the
    * bucket's clock, so a step or a wrong setting of this box's clock deletes nothing early or late;
-   * nothing is pruned until the bucket's clock has been read. Not awaited: a bucket that never
+   * nothing is pruned while the bucket's clock cannot be read. Not awaited: a bucket that never
    * answers must not hold the tick, which is where the side-file limit is checked. One prune at a
    * time.
    */
   #pruneDaily(live: string, signal: AbortSignal): void {
     const steady = this.#monotonic();
-    if (!this.#bucketClockRead) return;
     if (this.#pruning || steady - this.#lastPruneAt < PRUNE_EVERY_MS) return;
     this.#lastPruneAt = steady;
     this.#pruning = true;
-    const bucketNow = new Date(steady + this.#skewMs);
-    void pruneGenerations(this.#store, this.#deps.venueId, live, bucketNow, PRUNE_WINDOW_MS, {
-      signal,
-    })
+    void this.#readBucketClock(signal)
+      .then((read) =>
+        read
+          ? pruneGenerations(
+              this.#store,
+              this.#deps.venueId,
+              live,
+              new Date(this.#monotonic() + this.#skewMs),
+              PRUNE_WINDOW_MS,
+              { signal },
+            )
+          : [],
+      )
       .then((deleted) => {
         if (deleted.length > 0) {
           this.#deps.log("info", "stream.generations_pruned", { count: deleted.length });
@@ -842,6 +853,20 @@ export class StreamSupervisor {
       .finally(() => {
         this.#pruning = false;
       });
+  }
+
+  /** True once the bucket's clock is known: measured at opening, or read again from the marker now. */
+  async #readBucketClock(signal: AbortSignal): Promise<boolean> {
+    if (this.#bucketClockRead) return true;
+    const write = this.#markerWrite;
+    if (write === null) return false;
+    const offset = await bucketClockOffset(this.#store, write.key, write.started, write.ended, {
+      signal,
+    });
+    if (offset === null || this.#markerWrite !== write) return false;
+    this.#skewMs = offset;
+    this.#bucketClockRead = true;
+    return true;
   }
 
   /**

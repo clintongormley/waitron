@@ -1607,10 +1607,15 @@ describe("generation housekeeping", () => {
     },
   );
 
-  it("prunes nothing while the bucket's clock has not been measured", async () => {
+  it("prunes nothing while the bucket's clock cannot be read", async () => {
     const h = await harness();
     const list = h.store.list.bind(h.store);
-    h.store.list = async (prefix) => (prefix.endsWith("opened.json") ? [] : list(prefix));
+    let markerReads = 0;
+    h.store.list = async (prefix) => {
+      if (!prefix.endsWith("opened.json")) return list(prefix);
+      markerReads += 1;
+      return [];
+    };
     await h.supervisor.start();
     await h.clock.until(() => h.litestream.running() !== undefined);
     h.store.upload(fullCopyOf(h.supervisor.status().generation!));
@@ -1619,10 +1624,33 @@ describe("generation housekeeping", () => {
     oldGeneration(h, old, Date.parse(START) - 8 * DAY);
     h.clock.advance(8 * DAY);
     await h.clock.next(); // the streaming tick
-    await h.clock.asleep();
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // Read once at opening and once more by the prune, which then deletes nothing.
+    await vi.waitFor(() => expect(markerReads).toBe(2));
+    await new Promise((resolve) => setImmediate(resolve));
     expect(h.store.has(fullCopyOf(old))).toBe(true);
     expect(h.supervisor.status().state).toBe("streaming");
+  });
+
+  it("reads the bucket's clock again at the daily prune when the marker could not be read at opening", async () => {
+    const h = await harness();
+    h.store.failNext({
+      operation: "list",
+      key: markerOf(generationName(2, NODE, new Date(START))),
+      error: new Error("connection reset"),
+    });
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    h.store.upload(fullCopyOf(h.supervisor.status().generation!));
+    await h.clock.until(() => h.supervisor.status().state === "streaming");
+    const old = generationName(1, "node-old", new Date(Date.parse(START) - 9 * DAY));
+    oldGeneration(h, old, Date.parse(START) - 8 * DAY);
+    const recent = generationName(1, "node-recent", new Date(Date.parse(START) - 2 * DAY));
+    oldGeneration(h, recent, Date.parse(START) - DAY);
+    h.clock.step(400 * DAY);
+    h.clock.advance(PRUNE_EVERY_MS);
+    await h.clock.next(); // the streaming tick
+    await vi.waitFor(() => expect(h.store.has(fullCopyOf(old))).toBe(false));
+    expect(h.store.has(fullCopyOf(recent))).toBe(true);
   });
 
   it("logs a prune the bucket refuses, and streams on", async () => {

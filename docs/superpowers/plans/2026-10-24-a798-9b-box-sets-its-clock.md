@@ -1223,10 +1223,13 @@ EDITED to pass and is not on this list is a STOP, unless the spec changes what i
     people in at today's real time, then moves `Date` back weeks — a backward step past the idle
     timeout, which Task 15's management-session rule now ends (`management_session.expired`, the
     401 the boot case printed). Each gains one statement re-stamping `management_sessions.last_seen_at`
-    at the moved clock, as if they had signed in then. No assertion changes. Found by running every
-    `apps/`/`packages/` test file that fakes `Date` and touches a session; only these two failed.
-    The build did not save its command; this one, written at the review fold, selects 115 files,
-    both of these among them:
+    at the moved clock, as if they had signed in then. No assertion changes. The build ran the
+    `apps/`/`packages/` test files that fake `Date` and touch a session and saw only these two
+    fail; CI on `63f3c866b` (run 41240072661, server shard 13) then failed a third,
+    `apps/server/src/orders-api.test.ts` ("Orders data node clock": staff signed in at the real
+    time, `Date` moved months back, 401), which gains the same re-stamp after its second
+    `setSystemTime`; the review of the fold found it too. The build did not save its command; this
+    one, written at the review fold, selects 115 files, all three among them:
     `git ls-files 'apps/*.test.ts' 'packages/*.test.ts' | xargs /usr/bin/grep -l 'useFakeTimers\|setSystemTime' | xargs /usr/bin/grep -il 'session\|passkey'`.
     Task 15.
 
@@ -3021,9 +3024,13 @@ since they were read, not run):
   more than its lifetime ahead ends expired.
 - *(Added from Task 15's review.)* **The backup schedule** (`apps/server/src/backup-sweep.ts:430-452`):
   the wait for the next fire works out `fireAt` once, before the wait, so after a step back it
-  sleeps until the new clock reaches the old `fireAt`. Recompute it when it lies more than one
-  interval ahead of now. Test in `backup-sweep.test.ts`: a step back 400 days during the wait →
-  the next archive is taken within an interval; a run with no step as the control.
+  sleeps until the new clock reaches the old `fireAt`. Recompute it when it lies further ahead of
+  now than the schedule allows: one interval for an `interval` schedule, the schedule's longest
+  gap for the wall-clock ones (`daily`, weekdays, `auto`, `backup-schedule.ts:68-80`, up to 8 civil
+  days). Test in `backup-sweep.test.ts`: a step back 400 days during the wait → the next archive is
+  taken within that gap; a run with no step as the control. The comments at `backup-sweep.ts:421-423`
+  and `backup-schedule.ts:9` say a clock jump is noticed within the hour, true only forward: correct
+  them in the same change.
 - *(Added from Task 15's review.)* **Invoice deliveries** (`apps/server/src/invoice-delivery.ts:229`,
   `:253-256`): a `next_attempt_at` more than the longest retry wait ahead is due; a `claimed_at`
   ahead of now by more than the claim's 60 seconds lapses.
@@ -3031,9 +3038,17 @@ since they were read, not run):
   `claimed_at` ahead of now by more than the lease lapses, so the job is claimed again.
 - *(Added from Task 15's review.)* **PIN throttle** (`packages/identity/src/pin-throttle.ts:89-96`,
   `:118-122`, in memory): an entry whose last failure is ahead of now by more than the longest wait
-  counts as lapsed.
-- The greps behind the audit do not find `nowIso()` cutoffs or SQL comparisons; before building,
-  grep `nowIso()` in non-test source and add any further site of this shape here.
+  counts as lapsed. The idle sweeps in `hasRoom` and `wouldRefuse` (`:99-105`, `:136-140`) stop at
+  the first entry that is not idle, assuming oldest first; an entry stamped ahead at the head stops
+  them, so they skip such an entry rather than stopping. `packages/provisioning/src/password-throttle.ts:101`
+  has the same sweep (read only; check it).
+- *(Added from the review of Task 15's fold.)* **The device-join and account-action limiters**
+  (`apps/server/src/enrol-rate-limit.ts:39-56`, `account-rate-limit.ts:31-54`, in memory): a window
+  start ahead of now reopens the window. **The password-reset and invitation cooldown**
+  (`account-rate-limit.ts:14-28`): a deadline more than the cooldown ahead of now has passed.
+- The greps behind the audit do not find `nowIso()` cutoffs, SQL comparisons or `Date.now` handed
+  on as a value (`now = Date.now`); before building, grep `nowIso()` and `Date.now\b` not followed
+  by `(` in non-test source, and add any further site of this shape here.
 
 Each gets the failing case first, its control just inside the limit, and a deletion control. If a
 site's stored length cannot be known, or a fix would change what an existing test checks, add it
@@ -3054,9 +3069,11 @@ run src/write-path.e2e.test.ts inmutabilidad`.
   daily prune by the steady clock, and prunes nothing while the bucket's clock has not been read
   (the marker listing failed or did not show the marker). `generations.test.ts` is unchanged:
   `pruneGenerations` already takes `now`. The `pruneHeld` dependency, its `StreamHost` and boot
-  wiring and their tests are gone; the backlog line about the limit is deleted. Not tested: a
-  later generation whose marker cannot be read after an earlier one's could (the flag resets at
-  each measurement; read, not run).
+  wiring and their tests are gone; the backlog line about the limit is deleted. When the marker
+  cannot be read at opening, the daily prune reads it again (its `lastModified` against the
+  opening write's steady-clock times), so one failed read does not stop pruning for the
+  generation's life. Not tested: a later generation whose marker cannot be read after an earlier
+  one's could (the flag resets at each measurement; read, not run).
 - **A mirror's viewer** (review I1): the keepalive also re-stamps a last-seen time ahead of the
   clock, or the two-sided idle rule refused the viewer after a backward step of more than 30
   minutes, until a restart.
