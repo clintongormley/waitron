@@ -129,6 +129,17 @@ describe("HelpIdleController", () => {
     expect(host.onIdle).not.toHaveBeenCalled();
   });
 
+  it("an update already queued when the host leaves the page starts no clock", async () => {
+    const host = await mounted();
+    setHelpMode(true);
+    host.requestUpdate();
+    host.remove();
+    await host.updateComplete;
+    vi.advanceTimersByTime(600_000);
+    expect(currentHelpMode()).toBe(true);
+    expect(host.onIdle).not.toHaveBeenCalled();
+  });
+
   it("back in the page with help on, it starts a fresh two minutes", async () => {
     const host = await mounted();
     setHelpMode(true);

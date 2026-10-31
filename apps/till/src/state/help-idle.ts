@@ -11,7 +11,7 @@ export interface HelpIdleOptions {
 
 /**
  * Turns help off after `idleMs` without a `pointerdown` or `keydown` inside the host, while
- * `applies()` holds. Listens in the capture phase so a child that stops an event still counts.
+ * the host is in the page and `applies()` holds. Listens in the capture phase so a child that stops an event still counts.
  * A host update is not a touch: it starts a clock that is not running, never restarts one.
  */
 export class HelpIdleController implements ReactiveController {
@@ -51,7 +51,8 @@ export class HelpIdleController implements ReactiveController {
   }
 
   #check(): void {
-    if (!currentHelpMode() || !this.#options.applies()) this.#stop();
+    // An update queued before the host left the page still runs `hostUpdated` after it left.
+    if (!this.#host.isConnected || !currentHelpMode() || !this.#options.applies()) this.#stop();
     else if (this.#timer === undefined) this.#start();
   }
 
