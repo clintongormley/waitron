@@ -6154,7 +6154,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A1241. Continue the dashboard test sample-name cleanup, one small slice per PR.**
-  The alert formatter and device-delete copy suites now use English device and order samples;
+  The alert formatter, device-delete copy and archive-refusal suites now use English samples;
   their Spanish message wording stays Spanish. Keep Spanish-language checks and recorded receipt
   snapshots. This slice skips `apps/dashboard/src/widgets/alerts-bell.test.ts`, which the
   in-flight A1089 reply-evidence branch changes. Recheck live branch paths before the next slice.
