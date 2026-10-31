@@ -25,7 +25,11 @@ import {
   servedMenus,
 } from "../widgets/test-helpers.js";
 import { openDraftLine, resized } from "./till-table-order-screen.test-helpers.js";
-import { TillTableOrderScreen, type AdjustDetail } from "./till-table-order-screen.js";
+import {
+  TillTableOrderScreen,
+  type AdjustDetail,
+  type TableRelocationOpenDetail,
+} from "./till-table-order-screen.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type {
@@ -4725,6 +4729,64 @@ describe("till-table-order-screen", () => {
       return details;
     }
 
+    describe("A803 no merge question", () => {
+      const anyDialog = (el: TillTableOrderScreen) =>
+        el.shadowRoot!.querySelector("till-bill-choice-dialog, wt-dialog[open], dialog[open]");
+
+      it("Move guests onto a seated table dispatches at once, with no bills and no dialog", async () => {
+        const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables(true) });
+        const moved = heard(el, "move-guests");
+        await toMenu(el);
+        click(el, '[data-action="move"]');
+        await el.updateComplete;
+        click(el, '[data-target="t7"]');
+        await el.updateComplete;
+
+        expect(moved).toEqual([{ toTableId: "t7", prompt: expect.any(Object) }]);
+        expect(anyDialog(el)).toBeNull();
+        expect(el.shadowRoot!.querySelector("[data-target-picker]")).toBeNull();
+      });
+
+      it("Join a seated table dispatches at once, with no bills and no dialog", async () => {
+        const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
+        const joined = heard(el, "join-tables");
+        await toMenu(el);
+        click(el, '[data-action="join"]');
+        await el.updateComplete;
+        click(el, '[data-target="t7"]');
+        await el.updateComplete;
+
+        expect(joined).toEqual([{ tableId: "t7", prompt: expect.any(Object) }]);
+        expect(anyDialog(el)).toBeNull();
+      });
+
+      it("Move this bill to a seated table, a free one or the counter dispatches at once, with no bills and no dialog", async () => {
+        const { el } = await mount({
+          lines: [pendingLine],
+          orderId: "wo-check",
+          ...partyTables(),
+          bills: partyBills().bills,
+        });
+        const moved = heard(el, "move-bill");
+        await toMenu(el);
+        for (const [index, id] of ["t7", "t9", "counter"].entries()) {
+          if (index > 0) click(el, "[data-move-split]");
+          await el.updateComplete;
+          click(el, '[data-action="move-bill"]');
+          await el.updateComplete;
+          target(el, id)!.click();
+          await el.updateComplete;
+          expect(anyDialog(el)).toBeNull();
+        }
+
+        expect(moved).toEqual([
+          { to: { tableId: "t7", seated: { id: "v7", revision: 9 } }, prompt: expect.any(Object) },
+          { to: { tableId: "t9", seated: null }, prompt: expect.any(Object) },
+          { to: { counter: true }, prompt: expect.any(Object) },
+        ]);
+      });
+    });
+
     describe("Move this bill", () => {
       /** Ana's second bill on screen, at Mesa 4, with the floor around her. */
       const onCheck = () => ({
@@ -4784,33 +4846,22 @@ describe("till-table-order-screen", () => {
         await el.updateComplete;
 
         expect(moved).toEqual([
-          { to: { counter: true }, bills: "merge", prompt: expect.any(Object) },
-          { to: { tableId: "t9", seated: null }, bills: "merge", prompt: expect.any(Object) },
+          { to: { counter: true }, prompt: expect.any(Object) },
+          { to: { tableId: "t9", seated: null }, prompt: expect.any(Object) },
         ]);
         expect(billChoice(el)).toBeNull();
       });
 
-      it("asks about the bills first at a table another party holds, naming the bill and where it goes", async () => {
+      it("moves the bill at once to a table another party holds, asking nothing, naming who was seated there", async () => {
         const { el } = await mount(onCheck());
         const moved = heard(el, "move-bill");
         await toMoveBill(el);
         target(el, "t7")!.click();
         await el.updateComplete;
 
-        const dialog = billChoice(el)!;
-        expect(moved).toEqual([]);
-        expect(dialog.scope).toBe(
-          t("table.move_bill_scope").replace("{bill}", scope).replace("{into}", "Luis (Mesa 7)"),
-        );
-        await (dialog as unknown as { updateComplete: Promise<unknown> }).updateComplete;
-        expect(dialog.shadowRoot!.textContent).toContain(t("table.bill_move_question"));
-        dialog.shadowRoot!.querySelector<HTMLElement>("[data-bills-separate]")!.click();
-        await el.updateComplete;
-
         expect(moved).toEqual([
           {
             to: { tableId: "t7", seated: { id: "v7", revision: 9 } },
-            bills: "separate",
             prompt: expect.any(Object),
           },
         ]);
@@ -4823,18 +4874,24 @@ describe("till-table-order-screen", () => {
           bills: [tabBill, { ...checkBill, billName: "{into}" }, paidBill],
         });
         await toMoveBill(el);
-        target(el, "t7")!.click();
-        await el.updateComplete;
 
-        expect(billChoice(el)!.scope).toBe("Ana · Bill 2 · {into} to Luis (Mesa 7)");
+        expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
+          t("table.move_bill_heading").replace("{bill}", () => "Ana · Bill 2 · {into}"),
+        );
       });
 
-      it("sends the party the bill choice names, though the floor read since seats another there", async () => {
+      it("sends the party the picker showed, though the floor read since seats another there", async () => {
         const { el } = await mount(onCheck());
         const moved = heard(el, "move-bill");
+        let ready: (() => void) | undefined;
+        el.addEventListener("table-relocation-open", (event) => {
+          event.preventDefault();
+          ready = (event as CustomEvent<TableRelocationOpenDetail>).detail.ready;
+        });
         await toMoveBill(el);
         target(el, "t7")!.click();
         await el.updateComplete;
+        expect(moved).toEqual([]);
         el.tables = el.tables.map((table) =>
           table.id === "t7"
             ? {
@@ -4850,31 +4907,31 @@ describe("till-table-order-screen", () => {
             : table,
         );
         await el.updateComplete;
-
-        const dialog = billChoice(el)!;
-        expect(dialog.scope).toBe(
-          t("table.move_bill_scope").replace("{bill}", scope).replace("{into}", "Luis (Mesa 7)"),
-        );
-        await (dialog as unknown as { updateComplete: Promise<unknown> }).updateComplete;
-        dialog.shadowRoot!.querySelector<HTMLElement>("[data-bills-merge]")!.click();
+        ready!();
         await el.updateComplete;
 
         expect(moved).toEqual([
           {
             to: { tableId: "t7", seated: { id: "v7", revision: 9 } },
-            bills: "merge",
             prompt: expect.any(Object),
           },
         ]);
       });
 
-      it("sends nothing when the bill choice is cancelled", async () => {
+      it("sends nothing when the waiter goes back before the move is ready to send", async () => {
         const { el } = await mount(onCheck());
         const moved = heard(el, "move-bill");
+        let ready: (() => void) | undefined;
+        el.addEventListener("table-relocation-open", (event) => {
+          event.preventDefault();
+          ready = (event as CustomEvent<TableRelocationOpenDetail>).detail.ready;
+        });
         await toMoveBill(el);
         target(el, "t7")!.click();
         await el.updateComplete;
-        billChoice(el)!.shadowRoot!.querySelector<HTMLElement>("[data-bills-cancel]")!.click();
+        click(el, "[data-action-back]");
+        await el.updateComplete;
+        ready!();
         await el.updateComplete;
 
         expect(moved).toEqual([]);
@@ -4959,7 +5016,7 @@ describe("till-table-order-screen", () => {
       );
     });
 
-    it("Move guests to a free table dispatches move-guests { toTableId, bills } at once and closes", async () => {
+    it("Move guests to a free table dispatches move-guests { toTableId } at once and closes", async () => {
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
       const moved = heard(el, "move-guests");
       await toMenu(el);
@@ -4969,13 +5026,13 @@ describe("till-table-order-screen", () => {
       click(el, '[data-target="t9"]');
       await el.updateComplete;
 
-      expect(moved).toEqual([{ toTableId: "t9", bills: "merge", prompt: expect.any(Object) }]);
+      expect(moved).toEqual([{ toTableId: "t9", prompt: expect.any(Object) }]);
       expect(billChoice(el)).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-move-split]")).not.toBeNull();
     });
 
-    it("Move guests to a seated table asks about the bills first, stating who joins whom, and sends the choice", async () => {
+    it("Move guests to a seated table asks nothing about the bills and sends at once", async () => {
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables(true) });
       const moved = heard(el, "move-guests");
       await toMenu(el);
@@ -4985,27 +5042,12 @@ describe("till-table-order-screen", () => {
       click(el, '[data-target="t7"]');
       await el.updateComplete;
 
-      expect(moved).toEqual([]);
-      expect(billChoice(el)!.scope).toBe(
-        t("table.combine_scope")
-          .replace("{from}", "Ana (Mesa 4, 5)")
-          .replace("{into}", "Luis (Mesa 7)"),
-      );
-      billChoice(el)!.dispatchEvent(
-        new CustomEvent("bill-choice-confirm", {
-          detail: { bills: "separate" },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-      await el.updateComplete;
-
-      expect(moved).toEqual([{ toTableId: "t7", bills: "separate", prompt: expect.any(Object) }]);
+      expect(moved).toEqual([{ toTableId: "t7", prompt: expect.any(Object) }]);
       expect(billChoice(el)).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-move-split]")).not.toBeNull();
     });
 
-    it("cancelling the bill choice sends nothing and leaves the table list open", async () => {
+    it("picking a seated table offers no bill choice and closes the table list", async () => {
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
       const moved = heard(el, "move-guests");
       await toMenu(el);
@@ -5014,17 +5056,12 @@ describe("till-table-order-screen", () => {
       click(el, '[data-target="t7"]');
       await el.updateComplete;
 
-      billChoice(el)!.dispatchEvent(
-        new CustomEvent("bill-choice-cancel", { bubbles: true, composed: true }),
-      );
-      await el.updateComplete;
-
-      expect(moved).toEqual([]);
+      expect(moved).toEqual([{ toTableId: "t7", prompt: expect.any(Object) }]);
       expect(billChoice(el)).toBeNull();
-      expect(el.shadowRoot!.querySelector("[data-target-picker]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-target-picker]")).toBeNull();
     });
 
-    it("Join a table to a seated table asks with the other party joining this one, and dispatches join-tables", async () => {
+    it("Join a table to a seated table asks nothing about the bills, and dispatches join-tables", async () => {
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
       const joined = heard(el, "join-tables");
       await toMenu(el);
@@ -5042,23 +5079,11 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
       click(el, '[data-target="t7"]');
       await el.updateComplete;
-      expect(billChoice(el)!.scope).toBe(
-        t("table.combine_scope")
-          .replace("{from}", "Luis (Mesa 7)")
-          .replace("{into}", "Ana (Mesa 4)"),
-      );
-      billChoice(el)!.dispatchEvent(
-        new CustomEvent("bill-choice-confirm", {
-          detail: { bills: "merge" },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-      await el.updateComplete;
+      expect(billChoice(el)).toBeNull();
 
       expect(joined).toEqual([
-        { tableId: "t9", bills: "merge", prompt: expect.any(Object) },
-        { tableId: "t7", bills: "merge", prompt: expect.any(Object) },
+        { tableId: "t9", prompt: expect.any(Object) },
+        { tableId: "t7", prompt: expect.any(Object) },
       ]);
     });
 
@@ -5079,7 +5104,7 @@ describe("till-table-order-screen", () => {
       click(el, '[data-target="t5"]');
       await el.updateComplete;
       expect(billChoice(el)).toBeNull();
-      expect(moved).toEqual([{ toTableId: "t5", bills: "merge", prompt: expect.any(Object) }]);
+      expect(moved).toEqual([{ toTableId: "t5", prompt: expect.any(Object) }]);
     });
 
     it("Join a table offers only tables in the party's service zone; Move guests still offers every zone", async () => {

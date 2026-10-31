@@ -85,9 +85,7 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "../widgets/menu-switcher.js";
 import "../widgets/diet-filter.js";
 import "../widgets/modifier-picker.js";
-import "../widgets/bill-choice-dialog.js";
 import {
-  moveBillScope,
   partyScope,
   partyTablesLabel,
   seatedRead,
@@ -241,7 +239,7 @@ interface ActionDraft {
 /** Move this bill's choice: to a table, with who the picker showed seated there, or to the counter. */
 export interface MoveBillDetail {
   to: { tableId: string; seated: SeatedRead } | { counter: true };
-  bills: BillChoiceDetail["bills"];
+  bills?: BillChoiceDetail["bills"];
   prompt?: object;
 }
 
@@ -1302,9 +1300,6 @@ export class TillTableOrderScreen extends LitElement {
   @state() private actionVerb: ActionVerb | null = null;
   /** The table Split a table takes away, once chosen. */
   @state() private splitTableId: string | null = null;
-  /** A move or join to a table another party holds, waiting for the bill choice. */
-  @state() private billChoice: { verb: TableVerb; table: TableState; prompt?: object } | null =
-    null;
   #relocationPrompt: object | null = null;
   /** The party-name dialog, while open: the name it starts from and a refusal beside the field. */
   @state() private naming: { value: string; refusal: string } | null = null;
@@ -2405,8 +2400,8 @@ export class TillTableOrderScreen extends LitElement {
           ${this.drawerOpen ? this.#drawer() : nothing}
         </div>
         ${this.#sentLineDialog()} ${this.#fireGroupDialog()} ${this.#serveDialog()}
-        ${this.#takeOverDialog()} ${this.#billChoiceDialog()} ${this.#nameDialog()}
-        ${this.#billNameDialog()} ${this.#guestsDialog()} ${this.#splitGuestsDialog()}
+        ${this.#takeOverDialog()} ${this.#nameDialog()} ${this.#billNameDialog()}
+        ${this.#guestsDialog()} ${this.#splitGuestsDialog()}
       </section>
     `;
   }
@@ -4814,7 +4809,6 @@ export class TillTableOrderScreen extends LitElement {
     this.actionStep = "closed";
     this.actionVerb = null;
     this.splitTableId = null;
-    this.billChoice = null;
     this.transferToBillId = null;
     this.transferLineNos = new Set();
     this.splitQuantities = new Map();
@@ -4860,75 +4854,26 @@ export class TillTableOrderScreen extends LitElement {
   #pickTable(table: TableState): void {
     const verb: TableVerb =
       this.actionVerb === "move" || this.actionVerb === "move-bill" ? this.actionVerb : "join";
-    this.#prepareRelocation(verb, table, (prompt) => {
-      const other = table.party !== null && table.party.id !== this.party?.id;
-      if (other) this.billChoice = { verb, table, prompt };
-      else this.#sendTableAction(verb, table, "merge", prompt);
-    });
+    this.#prepareRelocation(verb, table, (prompt) => this.#sendTableAction(verb, table, prompt));
   }
 
-  #sendTableAction(
-    verb: TableVerb,
-    table: TableState,
-    bills: BillChoiceDetail["bills"],
-    prompt?: object,
-  ): void {
+  #sendTableAction(verb: TableVerb, table: TableState, prompt: object): void {
     const tableId = table.id;
-    const observation = prompt === undefined ? {} : { prompt };
-    if (verb === "move")
-      this.#dispatch("move-guests", { toTableId: tableId, bills, ...observation });
+    if (verb === "move") this.#dispatch("move-guests", { toTableId: tableId, prompt });
     else if (verb === "move-bill")
       this.#dispatch("move-bill", {
         to: { tableId, seated: seatedRead(table) },
-        bills,
-        ...observation,
+        prompt,
       } satisfies MoveBillDetail);
-    else this.#dispatch("join-tables", { tableId, bills, ...observation });
+    else this.#dispatch("join-tables", { tableId, prompt });
     this.#closeActions();
   }
 
   #moveBillToCounter(): void {
     this.#prepareRelocation("move-bill", null, (prompt) => {
-      this.#dispatch("move-bill", {
-        to: { counter: true },
-        bills: "merge",
-        prompt,
-      } satisfies MoveBillDetail);
+      this.#dispatch("move-bill", { to: { counter: true }, prompt } satisfies MoveBillDetail);
       this.#closeActions();
     });
-  }
-
-  #onBillChoice(event: Event): void {
-    event.stopPropagation();
-    const choice = this.billChoice;
-    if (choice === null) return;
-    const { bills } = (event as CustomEvent<BillChoiceDetail>).detail;
-    this.#sendTableAction(choice.verb, choice.table, bills, choice.prompt);
-  }
-
-  #billChoiceDialog(): TemplateResult | typeof nothing {
-    const choice = this.billChoice;
-    const own = this.party;
-    const other = choice?.table.party;
-    if (choice === null || own === null || other === null || other === undefined) return nothing;
-    const theirs = this.#partyScope(other);
-    const ours = this.#partyScope(own);
-    const [from, into] = choice.verb === "join" ? [theirs, ours] : [ours, theirs];
-    const scope =
-      choice.verb === "move-bill"
-        ? moveBillScope(this.#shownBillName() ?? "", into)
-        : t("table.combine_scope")
-            .replace("{from}", () => from)
-            .replace("{into}", () => into);
-    return html`<till-bill-choice-dialog
-      .scope=${scope}
-      .question=${choice.verb === "move-bill" ? t("table.bill_move_question") : ""}
-      @bill-choice-confirm=${(event: Event) => this.#onBillChoice(event)}
-      @bill-choice-cancel=${(event: Event) => {
-        event.stopPropagation();
-        this.billChoice = null;
-      }}
-    ></till-bill-choice-dialog>`;
   }
 
   #openNaming(): void {

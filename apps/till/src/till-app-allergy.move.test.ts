@@ -95,7 +95,7 @@ async function counter(
         .mockResolvedValue({ workingOrderId: "counter-bill", partyId: null, edit: sourceEdit }),
       listDrafts: vi.fn().mockResolvedValue({ drafts: [], billEdits: [] }),
       previewBillMoveAllergy: vi.fn().mockResolvedValue(preview(answer)),
-      moveBill: vi.fn().mockResolvedValue({ partyId: "v1", billId: "counter-bill", merged: false }),
+      moveBill: vi.fn().mockResolvedValue({ partyId: "v1", billId: "counter-bill" }),
       ...overrides,
     },
     undefined,
@@ -151,7 +151,7 @@ describe("A669 counter move refusal recovery", () => {
     const write = vi
       .fn()
       .mockRejectedValueOnce({ code: "allergy.invalid", field: "guests.0.who" })
-      .mockResolvedValue({ partyId: "v1", billId: "counter-bill", merged: false });
+      .mockResolvedValue({ partyId: "v1", billId: "counter-bill" });
     const { el, move } = await counter({ moveBill: write }, "allergies");
     move();
     await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
@@ -350,7 +350,7 @@ describe("A669 counter-to-table allergy confirmation", () => {
     const original = structuredClone(write.mock.calls[0]!.slice(0, 5));
     expect(write.mock.calls.slice(1).map((call) => call.slice(0, 5))).toEqual([original, original]);
     expect(form.shadowRoot!.querySelector<HTMLInputElement>("[data-tick]")!.disabled).toBe(true);
-    write.mockResolvedValue({ partyId: "v1", billId: "counter-bill", merged: false });
+    write.mockResolvedValue({ partyId: "v1", billId: "counter-bill" });
     await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
     await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(4));
     expect(write.mock.calls[3]!.slice(0, 5)).toEqual(original);
@@ -365,7 +365,7 @@ describe("A669 counter-to-table allergy confirmation", () => {
         api.previewBillMoveAllergy!.mockResolvedValue(preview("allergies"));
         throw { code: "party.out_of_date" };
       })
-      .mockResolvedValue({ partyId: "v1", billId: "counter-bill", merged: false });
+      .mockResolvedValue({ partyId: "v1", billId: "counter-bill" });
     const { el, move } = await counter({ moveBill: write });
     move();
     await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
@@ -461,7 +461,7 @@ describe("A669 counter-to-table allergy confirmation", () => {
           api.previewBillMoveAllergy!.mockResolvedValue(latest);
           throw { code };
         })
-        .mockResolvedValue({ partyId: "v1", billId: "counter-bill", merged: false });
+        .mockResolvedValue({ partyId: "v1", billId: "counter-bill" });
       const { el, move } = await counter({ moveBill: write }, "allergies");
       move();
       await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
@@ -579,7 +579,7 @@ for (const language of ["en", "es"] as const)
         await page.screenshot({
           path: `__screenshots__/a669-counter-move/retry-${language}-${theme}-${width}.png`,
         });
-        write.mockResolvedValue({ partyId: "v1", billId: "counter-bill", merged: false });
+        write.mockResolvedValue({ partyId: "v1", billId: "counter-bill" });
         await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
         await vi.waitFor(() => expect(dialog(el)).toBeNull());
       });

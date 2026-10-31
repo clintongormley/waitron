@@ -14,6 +14,7 @@ import {
 } from "./widgets/test-helpers.js";
 import { productUnit } from "./widgets/product-name.js";
 import { TillApp } from "./till-app.js";
+import { DRAFT_SAVE_DELAY_MS } from "./state/draft-sync.js";
 import { sentFallbackFor } from "./screens/till-table-order-screen.sent.test-helpers.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
@@ -286,9 +287,9 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     recallToDraft: vi.fn().mockRejectedValue({ code: "server.internal" }),
     ...adjustmentStubs(),
     updateOrderLine: vi.fn().mockResolvedValue({ revision: 1, party: null }),
-    moveGuests: vi.fn().mockResolvedValue({ partyId: "v-2", mainBillId: "wo-7", merged: false }),
-    joinTables: vi.fn().mockResolvedValue({ partyId: "v-2", mainBillId: "wo-7", merged: false }),
-    splitTable: vi.fn().mockResolvedValue({ partyId: "v-new", mainBillId: null }),
+    moveGuests: vi.fn().mockResolvedValue({ partyId: "v-2", billIds: ["wo-7"] }),
+    joinTables: vi.fn().mockResolvedValue({ partyId: "v-2", billIds: ["wo-7"] }),
+    splitTable: vi.fn().mockResolvedValue({ partyId: "v-new", billId: "wo-new" }),
     setPartyName: vi.fn().mockResolvedValue({ revision: 4, name: "Ana" }),
     setPartyGuests: vi.fn().mockResolvedValue({ revision: 4, guestCount: 4 }),
     mergeBills: vi.fn().mockResolvedValue(undefined),
@@ -3166,5 +3167,179 @@ describe("till-app table ordering: a menu published while a table is open", () =
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("A803 action results: the bill on screen after a table action", () => {
+  const partyBill = (
+    workingOrderId: string,
+    partyId: string,
+    billNumber: number,
+    status: PartyBill["status"] = "open",
+  ): PartyBill => ({
+    workingOrderId,
+    revision: 0,
+    invoiceType: "F2",
+    recipient: null,
+    partyId,
+    label: null,
+    billNumber,
+    billName: null,
+    status,
+    total: "3.00",
+    outstanding: status === "settled" ? "0.00" : "3.00",
+    hasPayments: false,
+    receiptAvailable: false,
+  });
+  const seated = (
+    table: Pick<TableState, "id" | "label">,
+    party: Partial<NonNullable<TableState["party"]>>,
+  ): TableState => ({
+    ...openTable,
+    ...table,
+    shortName: table.label,
+    party: { ...openTable.party!, ...party },
+  });
+
+  /** The bill the next draft save names, once a dish is rung on the screen now showing. */
+  async function nextSavedBill(el: TillApp): Promise<string | undefined> {
+    const screen = tableOrder(el)!;
+    const before = vi.mocked(drafts.saveDraft).mock.calls.length;
+    await ringCoffee(el, screen);
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await flush(el);
+    const calls = vi.mocked(drafts.saveDraft).mock.calls.slice(before);
+    expect(calls.length).toBeGreaterThan(0);
+    return calls.at(-1)![1].billId;
+  }
+
+  beforeEach(() => drafts.bills.add("wo-10"));
+
+  /** The drafts read of the party seated at the destination before the action lists its own bill
+   * only, as the server's does; the shared fake lists every bill it knows. */
+  const destinationDrafts = (before: () => boolean) =>
+    vi.fn(async (partyId: string) =>
+      partyId === "v-9" && before()
+        ? { drafts: [], billEdits: [drafts.edit("wo-8")] }
+        : drafts.listDrafts(partyId),
+    );
+
+  it("Move guests onto a seated table keeps the bill on screen, which the answer lists, and the next draft names it", async () => {
+    let floorAfter = false;
+    const t9 = { id: "t9", label: "9" };
+    const { el } = await mountApp({
+      getTablesState: vi.fn(async () =>
+        floorAfter
+          ? [seated(t9, { id: "v-9", revision: 5, mainBillId: null, tableIds: ["t9"] })]
+          : [
+              openTable,
+              seated(t9, { id: "v-9", revision: 4, mainBillId: "wo-8", tableIds: ["t9"] }),
+            ],
+      ),
+      getPartyBills: vi.fn(async (partyId: string) =>
+        partyId === "v-9"
+          ? [partyBill("wo-8", "v-9", 1), partyBill("wo-7", "v-9", 2)]
+          : [partyBill("wo-7", "v-2", 1)],
+      ),
+      listDrafts: destinationDrafts(() => !floorAfter),
+      moveGuests: vi.fn(async () => {
+        floorAfter = true;
+        return { partyId: "v-9", billIds: ["wo-8", "wo-7"] };
+      }),
+    });
+    const screen = await toTableOrder(el);
+    expect(screen.orderId).toBe("wo-7");
+
+    emit(screen, "move-guests", { toTableId: "t9" });
+    await flush(el);
+    await flush(el);
+
+    expect(api.moveGuests).toHaveBeenCalledOnce();
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+    expect(banner(el)).toBeNull();
+    expect(await nextSavedBill(el)).toBe("wo-7");
+  });
+
+  it("Join a seated table keeps the bill on screen, and the next draft names it", async () => {
+    let floorAfter = false;
+    const t9 = { id: "t9", label: "9" };
+    const { el } = await mountApp({
+      getTablesState: vi.fn(async () =>
+        floorAfter
+          ? [
+              seated(openTable, { revision: 4, mainBillId: null, tableIds: ["t2", "t9"] }),
+              seated(t9, { revision: 4, mainBillId: null, tableIds: ["t2", "t9"] }),
+            ]
+          : [
+              openTable,
+              seated(t9, { id: "v-9", revision: 4, mainBillId: "wo-8", tableIds: ["t9"] }),
+            ],
+      ),
+      getPartyBills: vi.fn(async () =>
+        floorAfter
+          ? [partyBill("wo-8", "v-2", 1), partyBill("wo-7", "v-2", 2)]
+          : [partyBill("wo-7", "v-2", 1)],
+      ),
+      listDrafts: destinationDrafts(() => !floorAfter),
+      joinTables: vi.fn(async () => {
+        floorAfter = true;
+        return { partyId: "v-2", billIds: ["wo-8", "wo-7"] };
+      }),
+    });
+    const screen = await toTableOrder(el);
+
+    emit(screen, "join-tables", { tableId: "t9" });
+    await flush(el);
+    await flush(el);
+
+    expect(api.joinTables).toHaveBeenCalledOnce();
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+    expect(banner(el)).toBeNull();
+    expect(await nextSavedBill(el)).toBe("wo-7");
+  });
+
+  it("Split a table giving away the bill on screen shows the staying party's lowest-numbered owing bill, and the next draft names it", async () => {
+    let floorAfter = false;
+    const t3 = { id: "t3", label: "3" };
+    const before = { revision: 3, mainBillId: "wo-8", tableIds: ["t2", "t3"] };
+    const { el } = await mountApp({
+      getTablesState: vi.fn(async () =>
+        floorAfter
+          ? [
+              seated(openTable, { revision: 4, mainBillId: null, tableIds: ["t2"] }),
+              seated(t3, { id: "v-new", revision: 0, mainBillId: null, tableIds: ["t3"] }),
+            ]
+          : [seated(openTable, before), seated(t3, before)],
+      ),
+      // Read with Bill 3 first, so a pick of the first owing bill read would differ.
+      getPartyBills: vi.fn(async () =>
+        floorAfter
+          ? [
+              partyBill("wo-9", "v-2", 3),
+              partyBill("wo-10", "v-2", 2),
+              partyBill("wo-7", "v-2", 1, "settled"),
+            ]
+          : [
+              partyBill("wo-9", "v-2", 3),
+              partyBill("wo-8", "v-2", 4),
+              partyBill("wo-10", "v-2", 2),
+              partyBill("wo-7", "v-2", 1, "settled"),
+            ],
+      ),
+      splitTable: vi.fn(async () => {
+        floorAfter = true;
+        return { partyId: "v-new", billId: "wo-8" };
+      }),
+    });
+    const screen = await toTableOrder(el);
+    expect(screen.orderId).toBe("wo-8");
+
+    emit(screen, "split-table", { tableId: "t3", billId: "wo-8" });
+    await flush(el);
+    await flush(el);
+
+    expect(api.splitTable).toHaveBeenCalledOnce();
+    expect(tableOrder(el)!.orderId).toBe("wo-10");
+    expect(await nextSavedBill(el)).toBe("wo-10");
   });
 });

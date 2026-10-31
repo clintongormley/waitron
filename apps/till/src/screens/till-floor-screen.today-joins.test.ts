@@ -713,8 +713,7 @@ describe("till-floor-screen: joins and the room's revision", () => {
     const api = stubApi();
     api.joinTables.mockResolvedValueOnce({
       partyId: "P",
-      mainBillId: null,
-      merged: false,
+      billIds: ["bill-P", "bill-Q"],
       zoneRevisions: { z1: 8, z2: 3 },
     });
     const terrace = { ...planned("t9", 5, { zoneRevision: 5 }), zoneId: "z2" };
@@ -1066,7 +1065,7 @@ describe("floor join cancellation and late replies", () => {
     const next = stubApi();
     el.api = next as unknown as TillApi;
     await el.updateComplete;
-    resolve({ partyId: "Q", mainBillId: null, merged: false, zoneRevisions: { z1: 99 } });
+    resolve({ partyId: "Q", billIds: ["bill-Q", "bill-P"], zoneRevisions: { z1: 99 } });
     await new Promise<void>((done) => requestAnimationFrame(() => done()));
     await el.updateComplete;
     expect(refreshes.count).toBe(0);

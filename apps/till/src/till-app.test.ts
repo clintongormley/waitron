@@ -520,8 +520,8 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     sendLines: vi.fn().mockResolvedValue(undefined),
     recallLines: vi.fn().mockResolvedValue(undefined),
     ...adjustmentStubs(),
-    moveGuests: vi.fn().mockResolvedValue({ partyId: "v-2", mainBillId: "wo-7", merged: false }),
-    joinTables: vi.fn().mockResolvedValue({ partyId: "v-2", mainBillId: "wo-7", merged: false }),
+    moveGuests: vi.fn().mockResolvedValue({ partyId: "v-2", billIds: ["wo-7"] }),
+    joinTables: vi.fn().mockResolvedValue({ partyId: "v-2", billIds: ["wo-7"] }),
     mergeBills: vi.fn().mockResolvedValue(undefined),
     transferItems: vi.fn().mockResolvedValue(undefined),
     splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
@@ -9897,9 +9897,7 @@ describe("till-app", () => {
 
       // ── Move / join / merge / transfer table actions ──────────────────────────────────
       it("move-guests moves the party then reloads the floor (staying on the screen)", async () => {
-        const moveGuests = vi
-          .fn()
-          .mockResolvedValue({ partyId: "v-2", mainBillId: "wo-7", merged: false });
+        const moveGuests = vi.fn().mockResolvedValue({ partyId: "v-2", billIds: ["wo-7"] });
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
         const { el } = await mountApp({
           getTablesState,
@@ -9925,9 +9923,7 @@ describe("till-app", () => {
       });
 
       it("join-tables adds a table to the party then reloads the floor", async () => {
-        const joinTables = vi
-          .fn()
-          .mockResolvedValue({ partyId: "v-2", mainBillId: "wo-7", merged: false });
+        const joinTables = vi.fn().mockResolvedValue({ partyId: "v-2", billIds: ["wo-7"] });
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
         const { el } = await mountApp({
           getTablesState,
@@ -17391,7 +17387,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       listWorkingOrders: vi.fn().mockResolvedValue([counterOrder]),
       getTablesState: vi.fn().mockResolvedValue([mesa7, mesa9]),
       previewBillMoveAllergy: counterMovePreview(),
-      moveBill: vi.fn().mockResolvedValue({ partyId: "v-new", billId: "wo-12", merged: false }),
+      moveBill: vi.fn().mockResolvedValue({ partyId: "v-new", billId: "wo-12" }),
       getFindBill: vi.fn().mockResolvedValue({
         ...billRow({ workingOrderId: "wo-12", partyId: null }),
         edit: {
@@ -17481,7 +17477,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     const reads = vi.mocked(currentApi.listWorkingOrders).mock.calls.length;
     el.api = { ...currentApi } as unknown as TillApi;
     await flush(el);
-    answer({ partyId: "v-new", billId: "wo-12", merged: false });
+    answer({ partyId: "v-new", billId: "wo-12" });
     await flush(el);
     expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(reads);
     expect(toast(el).open).toBe(false);
@@ -17519,7 +17515,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
                 draftRevision: null,
               },
             }
-          : { partyId: "v-new", billId: "wo-12", merged: false },
+          : { partyId: "v-new", billId: "wo-12" },
       );
       await flush(el);
       expect(currentApi.moveBill).toHaveBeenCalledTimes(phase === "read" ? 0 : 1);
@@ -17637,7 +17633,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
   });
 
   it("does not reload held orders when a move to a table answers after sign-out", async () => {
-    let answer!: (result: { partyId: string; billId: string; merged: boolean }) => void;
+    let answer!: (result: { partyId: string; billId: string }) => void;
     const { el, c } = await counterWith({
       moveBill: vi.fn(() => new Promise((resolve) => (answer = resolve))),
     });
@@ -17650,7 +17646,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     await flush(el);
     await discardMoveDraftIfAsked(el);
     const heldReads = vi.mocked(currentApi.listWorkingOrders).mock.calls.length;
-    answer({ partyId: "v-new", billId: "wo-12", merged: false });
+    answer({ partyId: "v-new", billId: "wo-12" });
     await flush(el);
 
     expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(heldReads);
@@ -17718,9 +17714,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       stations: [{ id: "kitchen", name: "Kitchen", open: true }],
     });
     const setMakeAt = vi.fn().mockResolvedValue({ revision: 4 });
-    const moveBill = vi
-      .fn()
-      .mockResolvedValue({ partyId: "v-new", billId: "wo-12", merged: false });
+    const moveBill = vi.fn().mockResolvedValue({ partyId: "v-new", billId: "wo-12" });
     const { el, c } = await counterWith({ askOrderDeadEnds, setMakeAt, moveBill });
     emit(c, "move-held-order-open", { orderId: "wo-12" });
     await flush(el);
@@ -17770,7 +17764,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     const moveBill = vi
       .fn()
       .mockRejectedValueOnce({ code: "station.no_replacement" })
-      .mockResolvedValue({ partyId: "v-new", billId: "wo-12", merged: false });
+      .mockResolvedValue({ partyId: "v-new", billId: "wo-12" });
     const setMakeAt = vi.fn().mockResolvedValue({ revision: 4 });
     const { el, c } = await counterWith({ askOrderDeadEnds, moveBill, setMakeAt });
     emit(c, "move-held-order-open", { orderId: "wo-12" });
@@ -21882,9 +21876,7 @@ describe("W69 held move basket protection", () => {
           .mockResolvedValue([{ ...freeTable, id: "t9", label: "Mesa 9", shortName: "Mesa 9" }]),
         askOrderDeadEnds: vi.fn().mockResolvedValue({ sends: false, deadEnds: [] }),
         previewBillMoveAllergy: counterMovePreview(),
-        moveBill: vi
-          .fn()
-          .mockResolvedValue({ partyId: "party-new", billId: "wo-1", merged: false }),
+        moveBill: vi.fn().mockResolvedValue({ partyId: "party-new", billId: "wo-1" }),
         getFindBill: vi.fn(async (id: string) => ({
           ...billRow({ workingOrderId: id, partyId: null }),
           edit: {
@@ -22007,7 +21999,7 @@ describe("W69 held move basket protection", () => {
     expect(unloadCancelled()).toBe(true);
   });
   it("a pending move cannot clear a later local basket edit", async () => {
-    let release!: (value: { partyId: string; billId: string; merged: boolean }) => void;
+    let release!: (value: { partyId: string; billId: string }) => void;
     const { el, c } = await loaded({
       moveBill: vi.fn(() => new Promise((resolve) => (release = resolve))),
     });
@@ -22016,7 +22008,7 @@ describe("W69 held move basket protection", () => {
     await answerCounterMoveIfAsked(el);
     await expect.poll(() => currentApi.moveBill).toHaveBeenCalledOnce();
     c.store.label = "Typed during move";
-    release({ partyId: "party-new", billId: "wo-1", merged: false });
+    release({ partyId: "party-new", billId: "wo-1" });
     await flush(el);
     expect(c.store.id).toBe("wo-1");
     expect(c.store.label).toBe("Typed during move");
@@ -22024,7 +22016,7 @@ describe("W69 held move basket protection", () => {
     expect(unloadCancelled()).toBe(true);
   });
   it("a pending move cannot clear a newly loaded copy with the same id and values", async () => {
-    let release!: (value: { partyId: string; billId: string; merged: boolean }) => void;
+    let release!: (value: { partyId: string; billId: string }) => void;
     const { el, c } = await loaded({
       moveBill: vi.fn(() => new Promise((resolve) => (release = resolve))),
     });
@@ -22033,7 +22025,7 @@ describe("W69 held move basket protection", () => {
     await answerCounterMoveIfAsked(el);
     await expect.poll(() => currentApi.moveBill).toHaveBeenCalledOnce();
     c.store.loadFrom("wo-1", [...c.store.lines], "Mesa 4", 3);
-    release({ partyId: "party-new", billId: "wo-1", merged: false });
+    release({ partyId: "party-new", billId: "wo-1" });
     await flush(el);
     expect(c.store.id).toBe("wo-1");
     expect(c.store.label).toBe("Mesa 4");

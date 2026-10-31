@@ -897,15 +897,15 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations in the bill choice over the table screen", async () => {
+    it("has no violations once Move guests picks a seated table, which draws no bill choice", async () => {
       const { el, host } = await toAction("move");
+      let sent = 0;
+      el.addEventListener("move-guests", () => sent++);
       el.shadowRoot!.querySelector<HTMLElement>('[data-target="t7"]')!.click();
       await el.updateComplete;
-      const dialog = el.shadowRoot!.querySelector<
-        HTMLElement & { updateComplete: Promise<unknown> }
-      >("till-bill-choice-dialog");
-      if (dialog === null) throw new Error("the scan must include the bill choice");
-      await dialog.updateComplete;
+      if (sent !== 1) throw new Error("picking the seated table must send at once");
+      if (el.shadowRoot!.querySelector("till-bill-choice-dialog") !== null)
+        throw new Error("no bill choice may be drawn");
       await expectNoA11yViolations(host);
     });
 
@@ -918,15 +918,15 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations in the bill choice for a bill moving to a seated table", async () => {
+    it("has no violations once a bill is moved to a seated table, which draws no bill choice", async () => {
       const { el, host } = await toAction("move-bill", "wo-2");
+      let sent = 0;
+      el.addEventListener("move-bill", () => sent++);
       el.shadowRoot!.querySelector<HTMLElement>('[data-target="t7"]')!.click();
       await el.updateComplete;
-      const dialog = el.shadowRoot!.querySelector<
-        HTMLElement & { updateComplete: Promise<unknown> }
-      >("till-bill-choice-dialog");
-      if (dialog === null) throw new Error("the scan must include the bill choice");
-      await dialog.updateComplete;
+      if (sent !== 1) throw new Error("picking the seated table must send at once");
+      if (el.shadowRoot!.querySelector("till-bill-choice-dialog") !== null)
+        throw new Error("no bill choice may be drawn");
       await expectNoA11yViolations(host);
     });
 

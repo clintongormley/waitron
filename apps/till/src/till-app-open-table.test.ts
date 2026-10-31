@@ -1379,7 +1379,7 @@ describe("A768 the left draft saves in the background", () => {
 
   it("leaving while a move waits for a background save never reads or moves the abandoned destination", async () => {
     const { el } = await mountApp({
-      moveGuests: vi.fn().mockResolvedValue({ partyId: "v1", mainBillId: "wo-4", merged: true }),
+      moveGuests: vi.fn().mockResolvedValue({ partyId: "v1", billIds: ["wo-4", "wo-7"] }),
     });
     await openTable(el);
     await tap(el, "Beer");
@@ -1402,7 +1402,7 @@ describe("A768 the left draft saves in the background", () => {
 
   it("moving guests onto the table just left waits for its own save", async () => {
     const { el } = await mountApp({
-      moveGuests: vi.fn().mockResolvedValue({ partyId: "v1", mainBillId: "wo-4", merged: true }),
+      moveGuests: vi.fn().mockResolvedValue({ partyId: "v1", billIds: ["wo-4", "wo-7"] }),
     });
     await openTable(el);
     await tap(el, "Beer");
@@ -1424,7 +1424,8 @@ describe("A768 the left draft saves in the background", () => {
     await flush(el, 6);
     expect(api.moveGuests).toHaveBeenCalledOnce();
     expect(tableOrder(el)!.party?.id).toBe("v1");
-    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+    expect(rows(el)).toEqual([]);
     await tap(el, "Steak");
     await back(el);
     expect(banner(el)).toBeNull();

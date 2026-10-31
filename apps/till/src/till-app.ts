@@ -303,7 +303,7 @@ import type {
   SplitTableDetail,
 } from "./screens/till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
-import { billName, owing, paidInPart, shownBills } from "./state/bill-state.js";
+import { billName, billToShow, owing, paidInPart, shownBills } from "./state/bill-state.js";
 import { foldRetrievedPortions, portionWireLines } from "./state/counter-portion-rows.js";
 import { billRequestOf } from "./state/table-signals.js";
 import {
@@ -14765,12 +14765,11 @@ export class TillApp extends LitElement {
 
   async #onMoveGuests(event: Event): Promise<void> {
     const { toTableId, bills, prompt } = (
-      event as CustomEvent<{ toTableId: string; bills: "merge" | "separate"; prompt?: object }>
+      event as CustomEvent<{ toTableId: string; bills?: "merge" | "separate"; prompt?: object }>
     ).detail;
     const party = this.orderParty;
     if (party === null) return;
     const sent = this.#sentNow();
-    const visit = this.#orderVisit;
     this.errorKey = undefined;
     const asked = await (prompt === undefined
       ? this.#relocationEdits(
@@ -14803,18 +14802,23 @@ export class TillApp extends LitElement {
     if (!live()) return;
     this.activeTableId = toTableId;
     this.#rememberOrderParty();
+    await this.#followActionBills(result.billIds, sent);
+  }
+
+  /** After this till's Move guests or Join, the screen keeps its bill while the answer's `billIds`
+   * hold it, and reads lines and bills together as before; otherwise it reads the party's bills
+   * first and shows {@link billToShow}'s choice, else the answer's first bill. */
+  async #followActionBills(billIds: readonly string[], sent: Sent): Promise<void> {
     const followed = this.orderParty?.id;
-    if (result.partyId !== party.id) {
-      if (result.mainBillId !== null) this.activeTabId = result.mainBillId;
-      else {
-        const { bills: read } = await this.#loadPartyBills();
-        if (this.#hasLeftParty(followed, sent)) return;
-        this.activeTabId = billToOpen(read ?? []);
-      }
+    const kept = this.activeTabId;
+    if (kept !== undefined && billIds.includes(kept)) {
+      await this.#loadLinesAndBills();
+      return;
     }
+    const { bills: read } = await this.#loadPartyBills();
+    if (this.#hasLeftParty(followed, sent)) return;
+    this.activeTabId = billToShow(kept, read ?? []) ?? billIds[0];
     await this.#loadLinesAndBills();
-    if (this.#hasLeftParty(followed, sent) || this.#leftSince(visit)) return;
-    this.#sayBillsKeptApart(revisions, bills, result);
   }
 
   async #onMoveBill(event: Event): Promise<void> {
@@ -14886,7 +14890,6 @@ export class TillApp extends LitElement {
     const next = this.#billAfterMove(billId, read);
     if (next === undefined) this.#leaveTable();
     else this.activeTabId = next;
-    this.#sayBillsKeptApart(revisions, bills, result);
     if (next !== undefined) await this.#loadTabLines();
   }
 
@@ -15282,12 +15285,11 @@ export class TillApp extends LitElement {
 
   async #onJoinTables(event: Event): Promise<void> {
     const { tableId, bills, prompt } = (
-      event as CustomEvent<{ tableId: string; bills: "merge" | "separate"; prompt?: object }>
+      event as CustomEvent<{ tableId: string; bills?: "merge" | "separate"; prompt?: object }>
     ).detail;
     const party = this.orderParty;
     if (party === null) return;
     const sent = this.#sentNow();
-    const visit = this.#orderVisit;
     this.errorKey = undefined;
     const asked = await (prompt === undefined
       ? this.#relocationEdits(
@@ -15316,19 +15318,9 @@ export class TillApp extends LitElement {
     if (!live()) return;
     await this.#refreshBillDraft();
     if (!live()) return;
-    await this.#reloadOrder();
-    if (this.#hasLeftParty(result.partyId, sent) || this.#leftSince(visit)) return;
-    this.#sayBillsKeptApart(revisions, bills, result);
-  }
-
-  #sayBillsKeptApart(
-    revisions: { otherPartyId?: string | null },
-    bills: "merge" | "separate",
-    result: { merged: boolean },
-  ): void {
-    const combined = typeof revisions.otherPartyId === "string";
-    if (combined && bills === "merge" && !result.merged)
-      this.errorKey = "table.bills_kept_separate";
+    await this.#reloadTables();
+    this.#rememberOrderParty();
+    await this.#followActionBills(result.billIds, sent);
   }
 
   // Refreshing the view cannot replace the bill observation a guests dialog opened with.
@@ -15399,13 +15391,9 @@ export class TillApp extends LitElement {
     if (!live()) return;
     this.#rememberOrderParty();
     if (billId !== null && this.activeTabId === billId) {
-      const main = this.orderParty?.mainBillId ?? null;
-      if (main !== null) this.activeTabId = main;
-      else {
-        const { bills: read } = await this.#loadPartyBills();
-        if (!live()) return;
-        this.activeTabId = billToOpen(read ?? []);
-      }
+      const { bills: read } = await this.#loadPartyBills();
+      if (!live()) return;
+      this.activeTabId = billToShow(undefined, read ?? []);
     }
     await this.#loadLinesAndBills();
     if (

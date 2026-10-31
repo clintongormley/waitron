@@ -2182,12 +2182,12 @@ export interface TableActionRevisions {
   expectedOtherPartyRevision?: number;
 }
 
-/** A move or join's answer: the party the guests are in now, its main bill, and whether the two
- * main bills were merged. */
+/** A move or join's answer: the party the guests are in now and its bills, in number order; no
+ * bill is merged. `zoneRevisions` is the rooms' revisions after a join that merged tables. */
 export interface TableActionResult {
   partyId: string;
-  mainBillId: string | null;
-  merged: boolean;
+  billIds: string[];
+  zoneRevisions?: Record<string, number>;
 }
 
 /** What a bill action sends of the party the till read the bill under: its revision and its id. Both
@@ -2209,12 +2209,11 @@ export interface MoveBillRevisions
   expectedEdits: BillEditExpected[];
 }
 
-/** A move's answer: the party the bill is in now (null at the counter), and the bill it ended up
- * as, the receiving main bill when `merged`. */
+/** A move's answer: the party the bill is in now (null at the counter), and the bill, which arrives
+ * as a bill of its own. */
 export interface MoveBillResult {
   partyId: string | null;
   billId: string;
-  merged: boolean;
 }
 
 /** Whole grid squares; `x` and `y` name the unrotated table's top-left corner. */
@@ -4417,32 +4416,28 @@ export class TillApi {
 
   /**
    * The party moves off all its tables to `toTableId` → `POST /api/parties/:id/move`. At a table
-   * another party holds the two become one, and `bills` says whether their main bills merge. Rejects,
+   * another party holds the two become one, keeping every bill. `bills` is not sent. Rejects,
    * among others, `table.needs_clearing`, `table.already_in_party`, `table.inactive`,
    * `service_zone.mode_incompatible`, `party.not_open` and `party.out_of_date`.
    */
   moveGuests(
     partyId: string,
     toTableId: string,
-    bills: "merge" | "separate",
+    _bills: "merge" | "separate" | undefined,
     revisions: TableActionRevisions,
   ): Promise<TableActionResult> {
-    return this.#request(`/api/parties/${partyId}/move`, "POST", {
-      toTableId,
-      bills,
-      ...revisions,
-    });
+    return this.#request(`/api/parties/${partyId}/move`, "POST", { toTableId, ...revisions });
   }
 
   /**
-   * Move a whole bill to a table or the counter → `POST /api/bills/:id/move`. Rejects, among others,
-   * `bill.paid`, `party.main_bill_stays`, `group.held_leaves_party`, `table.needs_clearing`,
-   * `table.already_in_party` and `party.out_of_date`.
+   * Move a whole bill to a table or the counter → `POST /api/bills/:id/move`; it arrives as a bill
+   * of its own. `bills` is not sent. Rejects, among others, `bill.paid`, `group.held_leaves_party`,
+   * `table.needs_clearing`, `table.already_in_party` and `party.out_of_date`.
    */
   moveBill(
     billId: string,
     to: MoveBillTarget,
-    bills: "merge" | "separate",
+    _bills: "merge" | "separate" | undefined,
     revisions: MoveBillRevisions,
     command?: { submissionId: string; allergy: AllergyPatch },
     options: ReadOptions = {},
@@ -4450,7 +4445,7 @@ export class TillApi {
     return this.#request(
       `/api/bills/${billId}/move`,
       "POST",
-      { to, bills, ...revisions, ...command },
+      { to, ...revisions, ...command },
       options.signal,
     );
   }
@@ -4458,14 +4453,14 @@ export class TillApi {
   previewBillMoveAllergy(
     billId: string,
     to: MoveBillTarget,
-    bills: "merge" | "separate",
+    _bills: "merge" | "separate" | undefined,
     revisions: MoveBillRevisions,
     options: ReadOptions = {},
   ): Promise<AllergyMoveRead> {
     return this.#request(
       `/api/bills/${billId}/move/allergy-preview`,
       "POST",
-      { to, bills, ...revisions },
+      { to, ...revisions },
       options.signal,
     );
   }
@@ -4478,21 +4473,16 @@ export class TillApi {
   joinTables(
     partyId: string,
     tableId: string,
-    bills: "merge" | "separate",
+    _bills: "merge" | "separate" | undefined,
     revisions: TableActionRevisions,
     merge?: JoinMerge & { zoneRevision: number },
-  ): Promise<TableActionResult & { zoneRevisions?: Record<string, number> }> {
+  ): Promise<TableActionResult> {
     if (merge === undefined) {
-      return this.#request(`/api/parties/${partyId}/join`, "POST", {
-        tableId,
-        bills,
-        ...revisions,
-      });
+      return this.#request(`/api/parties/${partyId}/join`, "POST", { tableId, ...revisions });
     }
     const { zoneRevision, ...shape } = merge;
     return this.#request(`/api/parties/${partyId}/join`, "POST", {
       tableId,
-      bills,
       ...revisions,
       merge: shape,
       zoneRevision,
@@ -4651,9 +4641,9 @@ export class TillApi {
 
   /**
    * `tableId` leaves the party and a new party starts there with `billId`, or with a new empty bill
-   * when it is null → `POST /api/parties/:id/split-table`. `guestCounts`, when given, is each side's
+   * when it is null → `POST /api/parties/:id/split-table`, answering the new party and its bill. `guestCounts`, when given, is each side's
    * guest count afterwards; without it the staying party keeps its count. Rejects, among others, `table.not_shared`,
-   * `table.not_joined`, `party.main_bill_stays`, `group.held_leaves_party` and `party.out_of_date`.
+   * `table.not_joined`, `group.held_leaves_party` and `party.out_of_date`.
    */
   splitTable(
     partyId: string,
@@ -4664,7 +4654,7 @@ export class TillApi {
     guestCounts?: { staying: number | null; leaving: number | null },
   ): Promise<{
     partyId: string;
-    mainBillId: string | null;
+    billId: string;
     zoneRevisions?: Record<string, number>;
   }> {
     return this.#request(`/api/parties/${partyId}/split-table`, "POST", {
@@ -4674,6 +4664,15 @@ export class TillApi {
       expectedEdits,
       ...(guestCounts === undefined ? {} : { guestCounts }),
     });
+  }
+
+  /** A new empty bill on the party → `POST /api/parties/:id/bills`, answering it and the party's new
+   * revision. Rejects, among others, `party.not_open` and `party.out_of_date`. */
+  createPartyBill(
+    partyId: string,
+    expectedPartyRevision: number,
+  ): Promise<{ billId: string; revision: number }> {
+    return this.#request(`/api/parties/${partyId}/bills`, "POST", { expectedPartyRevision });
   }
 
   /** Name the party, or clear its name with null → `PUT /api/parties/:id/name`. A name over 40

@@ -734,6 +734,19 @@ task's red run; a red assertion not on this list that is not kind B/R/W/S/F unde
 | `till-app-parties.test.ts:2126`, `:2452`, `:4395`, `:4405`, `:5830`; `till-app-drafts.test.ts:8720` (opening/following the main bill) | B | follow D7/D11: `openingBillId`, kept or lowest-numbered bill | §3.4, Review focus 4 | 8d |
 | `till-app-parties.test.ts:3964` ("goes back to the floor when the moved bill was the party's last") | F | **kept**: every assertion unchanged (D11 rule 2); only its emitted event detail loses `bills: "merge"` | D11 | 8b |
 | `till-app-parties.test.ts` kept-apart message tests (`table.bills_kept_separate`) and merge-question tests in the table screen | B | no question; the request carries no `bills` | §3.4 bullet 2, §6 | 8a |
+| As built at Task 8a (lines at `3e83dc464`): `apps/till/src/api/client.test.ts` request-body pins `:2624`, `:2661`, `:2690`, `:2723`, `:2772`, `:2814`, `:2823`, `:2832`, `:3020`, `:4512`, `:4527`; `party-allergy-client.test.ts:52`, `:84` | B | the body's `bills` entry goes; every other key and value of the same `JSON.stringify`/`toEqual` pin unchanged | §3.4 bullet 2, §6, D13 | 8a |
+| `client.test.ts` mocked answers `:2601`, `:2638`, `:2677`, `:2703`, `:2753`, `:2782`, `:2996-2997`, `:3030`, `:3071`; `party-allergy-client.test.ts:59`; `till-floor-screen.today-joins.test.ts:716-718`, `:1069`; till-app fixtures (`till-app.test.ts:523-524`, `:9902`, `:9930`, `:17394`, `:17484`, `:17522`, `:17640`, `:17653`, `:17723`, `:17773`, `:21887`, `:22010`, `:22019`, `:22027`, `:22036`; `till-app-allergy.move.test.ts:98`, `:154`, `:353`, `:368`, `:464`, `:582`; `till-app-table-service.test.ts:289-291`; `till-app-parties.test.ts:300-302`, `:311`, `:1573`, `:1732`, `:1768`, `:1813`, `:2174-2175` (first answer), `:2240`, `:2281`, `:2463`, `:3285`, `:3292`, `:3378`, `:3383`, `:3388`, `:3454`, `:3486`, `:3598`, `:3650`, `:3704`, `:3761-3763`, `:3815`, `:3980`, `:4002`, `:4089`, `:5183`, `:10508`, `:10562`, `:10917`, `:10981`) | F | the answer takes the new shape: `mainBillId: X, merged` → `billIds: [X]` (`[]` for null), split `mainBillId` → `billId` (null → a new bill's id), `merged` dropped from move answers and type casts; `it.each` rows `:2154-2155`, `:4085-4086` lose their unread `merged` value. Every `expect` unchanged | master plan interfaces | 8a |
+| `till-app-parties.test.ts:2092` (follows the guests into Luis's party: `orderId` `wo-7`, banner `table.bills_kept_separate`), `:2153` (it.each, answer), `:2170` (join: banner `table.bills_kept_separate`), `:3496` (floor unreadable: `orderId` `wo-7`, banner kept apart), `:4000` (move bill: banner kept apart) | B | answers list every bill the party holds afterwards (`["wo-7", "wo-4", "wo-check"]`); the screen keeps the bill it showed, `wo-4` (was the destination's main bill `wo-7`), and the banner is `null` (was the kept-apart sentence); titles say so. `:2092` and `:2155` read Luis's drafts through `draftsOnceJoinedByAna`, which lists Ana's bills under him once joined (setup) | D11 rule 1; §3.4 bullet 2, §6. **Departure:** the plan's 8d row lists `:2126`; the Move guests follow it and these cases pin changed in 8a, so they changed here; the Move guests follow it pins changed here | 8a |
+| `till-app-parties.test.ts:2126` ("opens the first unpaid bill … when it has no main bill") | B | retitled "… when its answer no longer lists the bill on screen"; answer `billIds: ["wo-7", "wo-luis"]`; the same `orderId` `wo-7` and party checks (lowest-numbered owing bill of the read) | D11 rule 1 | 8a |
+| `till-app-parties.test.ts:10928-10995` (relocation observations "while the bill choice is open" ×3, "read before opening the bill choice" ×3) | B | no dialog: the source-observation case holds the destination's drafts read and changes the source meanwhile (same `not.toHaveBeenCalled` and `draft.out_of_date` banner); the destination case checks the send used the one read made when the table was picked (`before + 1`, was the count when the dialog opened) and the same `expectedEdits`; `relocationPrompt` asserts no dialog is drawn | §3.4 bullet 2, §6 | 8a |
+| `till-app-open-table.test.ts:1405`/`:1427` (moving guests back onto Ana's table showed her `Beer ×1`, the merged main bill) | B | answer `billIds: ["wo-4", "wo-7"]`; the screen keeps `wo-7` (new `orderId` check) and its rows are `[]`; the waits-for-its-save checks and `savedLines()` unchanged. `:1382`'s answer F | D11 rule 1, §3.4 | 8a |
+| `till-app-menu-refresh.test.ts:2069`, `:2074` | F | answer `billIds: ["wo-other", "wo-7"]`; the comment no longer says the party has a new main bill; every `expect` unchanged | §3.4 | 8a |
+| `till-table-order-screen.test.ts:4767` (`:4785-4786`), `:4962`, `:5065` (`:5082`) (`bills: "merge"` in the event detail) | B | the detail carries no `bills`; same `toEqual` otherwise | §3.4 bullet 2, §6 | 8a |
+| `till-table-order-screen.test.ts:4793` (Move this bill to a seated table asks, then sends `separate`), `:4978` (Move guests asks, then sends `separate`), `:5027` (Join asks, then sends `merge`) | B | sends at once with no `bills`, no dialog. **The dialog's wording checks go with it** (`table.move_bill_scope` `:4802-4804`, `:4855-4857`, `table.bill_move_question` `:4806`, `table.combine_scope` `:4989-4993`, `:5045-5049`): the question no longer exists on this screen; its words stay tested by `bill-choice-dialog.test.ts` and `held-orders.test.ts` until 8b | §3.4 bullet 2, §6 | 8a |
+| `till-table-order-screen.test.ts:4820` (a slot-named bill printed as typed in the question's scope) | R | the same bill name, `Ana · Bill 2 · {into}`, printed as typed in Move this bill's picker heading (`table.move_bill_heading`) | §3.4 bullet 2 | 8a |
+| `till-table-order-screen.test.ts:4832` (sends the seated party the question was asked about, though the floor changed) | B | the screen's remaining wait, `table-relocation-open` held until `ready`: the floor changes meanwhile and the send still names `v7` rev 9 | §3.4 bullet 2 | 8a |
+| `till-table-order-screen.test.ts:4871` (cancelling the question sends nothing), `:5008` (cancelling leaves the list open) | B | `:4871` → "sends nothing when the waiter goes back before the move is ready to send" (same `[]`); `:5008` → picking a seated table offers no choice, sends once and closes the list | §3.4 bullet 2, §6 | 8a |
+| `till-table-order-screen.a11y.test.ts:900`, `:921` (axe over the bill choice) | B | axe over the screen after picking the seated table, which must have sent once and drawn no bill choice; both themes as before | §3.4 bullet 2 | 8a |
 | merge-question tests in the floor screen and parked orders, and every other `bills: "merge"` event detail or client argument in till tests | B / F | no question, no `bills` | §3.4 bullet 2, §6 | 8b |
 | `apps/till/src/widgets/bill-choice-dialog.test.ts`, `bill-choice-dialog.a11y.test.ts` | **B, Q5 item 6b** (deleted with the widget) | deleted; replaced by the "no question" cases of Tasks 8a/8b, which fail if a question is drawn or `bills` is sent | §3.4 bullet 2 ("The … question goes") | 8b |
 | 73 till files' `mainBillId:` lines (fixtures, helpers, three app reads) | F | renamed `openingBillId:` with the same value, mechanically; no assertion changes | D7 | 8c |
@@ -1512,17 +1525,45 @@ doc comments `:2185-2186`, `:2213`, `:4420`); `apps/till/src/state/bill-state.ts
 `till-app-table-service.test.ts`, `till-table-order-screen.test.ts`, `till-app-allergy.move.test.ts`
 (those the trace's `"merge"|"separate"` list names for the table screen and app).
 
-- [ ] Cases `A803 action results` in `api/client.test.ts` (the request bodies of the four calls
+- [x] Cases `A803 action results` in `api/client.test.ts` (the request bodies of the four calls
       carry no `bills` even when a caller passes one; the parsed answers; `createPartyBill`'s
       request and answer) and `till-app-table-service.test.ts` (after Join, Move guests and Split a
       table: the bill on screen is chosen by D11 rule 1, and the next `saveDraft` request's
       `billId` equals that id — Review focus 4); `billToShow` unit cases in `state/bill-state.test.ts`
       (kept, named, lowest owing, lowest shown, none); `A803 no merge question` in
       `till-table-order-screen.test.ts` (picking a seated table dispatches at once, with no dialog).
-- [ ] RED: `pnpm --filter @waitron/till exec vitest run src/api/client.test.ts src/state/bill-state.test.ts src/till-app-table-service.test.ts src/screens/till-table-order-screen.test.ts -t 'A803|billToShow'`.
-- [ ] Implement; run the trace's till files for the table screen and app.
-- [ ] GREEN: those files unfiltered; till typecheck clean.
-- [ ] Commit: "The table screen asks no merge question and follows the bills an action leaves".
+      (Built: client 6, table service 3, `billToShow` 5, screen 3 — Move guests, Join, Move this bill
+      to a seated table, a free one and the counter.)
+- [x] RED: `pnpm --filter @waitron/till exec vitest run src/api/client.test.ts src/state/bill-state.test.ts src/till-app-table-service.test.ts src/screens/till-table-order-screen.test.ts -t 'A803|billToShow'`.
+      (Run: 4 files failed, 11 tests failed, 22 passed: the bodies carried `bills`;
+      `createPartyBill is not a function`; `billToShow` not exported (file failed to load); the
+      screen sent nothing and drew `till-bill-choice-dialog`; Split showed `wo-9`, the first owing
+      bill read, not `wo-10`, Bill 2. The table-service Move guests and Join cases failed on their
+      setup (`moveGuests` called 0 times: the shared drafts fake lists every bill for every party,
+      so the destination's observations repeated the source's); after a per-party drafts read in
+      setup they pass, and the controls below show they fail when the follow ignores the answer.)
+- [x] Implement; run the trace's till files for the table screen and app.
+      (Built: client keeps `bills` as an ignored, possibly `undefined`, parameter until 8b;
+      `TableActionResult` is `{ partyId; billIds; zoneRevisions? }`; `#followActionBills` keeps the
+      bill on screen while the answer lists it (lines and bills read together, as before), else
+      reads the bills and takes `billToShow`'s choice; Split takes `billToShow` over the staying
+      party's bills; `#sayBillsKeptApart` and `table.bills_kept_separate` (EN, ES) go; the screen
+      sends at once and draws no dialog, and no longer imports it. First trace run, 18 files:
+      45 red cases in 6 files (client 9, allergy client 2, table screen 10, its a11y 4, open table 1, parties 19), each a row under "As built at Task 8a"; old-shape answer fixtures elsewhere showed only as unhandled rejections, and two floor-screen fixtures only at typecheck; no money, VAT, permission or
+      filing check among them.)
+- [x] GREEN: those files unfiltered; till typecheck clean.
+      (Run: the 11 table-screen and client files of the trace, 967 passed, exit 0; the 7 till-app
+      files, 2681 passed, exit 0 (a vite client log "Cannot read properties of null (reading
+      'approvedProfiles')" printed once; nothing on this branch names `approvedProfiles`, `git diff
+      a90f4f87b -- apps/till` counted 0; not counted by Vitest as an error). `pnpm --filter
+      @waitron/till typecheck` clean; prettier `--check` and eslint clean on the 17 changed files.
+      Controls, each restored: `bills` back in the Move guests body → the client case fails;
+      `#followActionBills` ignoring the kept bill and the answer → the Move guests and Join cases
+      fail; Split choosing the first owing bill read (`billToOpen`) → the Split case fails; the
+      screen holding back a seated table's send → the three no-question cases fail; the ready guard
+      dropped → "sends nothing when the waiter goes back …" fails; `billToShow` without the owing
+      step → its "lowest-numbered still owing" case fails.)
+- [x] Commit: "The table screen asks no merge question and follows the bills an action leaves".
 
 ## Task 8b: the floor and parked orders ask no merge question; the dialog and `bills` go (≈50 calls)
 

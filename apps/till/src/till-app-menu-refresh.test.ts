@@ -2066,12 +2066,12 @@ describe("a round that got no answer while its tab moved to another table", () =
         submitDraft: failLater((reject) => (fail = reject)),
         moveGuests: vi
           .fn()
-          .mockResolvedValue({ partyId: "party-a", mainBillId: "wo-other", merged: false }),
+          .mockResolvedValue({ partyId: "party-a", billIds: ["wo-other", "wo-7"] }),
       }),
     );
     await toTable(el);
     await sendLemonadeRound(el);
-    // The guests move from t2 to t4, and the party, which holds both, has a new main bill.
+    // The guests move from t2 to t4; the party, which holds both, also holds another bill.
     const spread = {
       ...party,
       kitchenNote: { scope: { partyId: party.id }, note: null, revision: 0, ownerRevision: 2 },
