@@ -161,6 +161,7 @@ import type { AdjustKind, AdjustTarget } from "../widgets/adjustment-dialog.js";
 import type { PayLine, PayWay } from "../widgets/bill-pay-dialog.js";
 import "../widgets/dead-ends-section.js";
 import { PAY_WAYS, paidQuantities, payLines } from "../state/bill-payment.js";
+import { billUnsentText } from "../state/bill-unsent.js";
 import { portionGroups, sentSlicePortionKey, tabLinePortionKey } from "../state/portion-groups.js";
 import { billControlStyles, billSwitcher, tableMenu } from "./table-bill-controls.js";
 
@@ -593,9 +594,11 @@ export class TillTableOrderScreen extends LitElement {
         font-variant-numeric: tabular-nums;
       }
 
-      .bill-adjust {
-        display: flex;
-        justify-content: flex-end;
+      .pay-unsent {
+        margin: var(--wt-space-2) 0 0;
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-danger);
+        border-radius: var(--wt-radius-md);
       }
 
       .bill-choices,
@@ -1356,6 +1359,8 @@ export class TillTableOrderScreen extends LitElement {
   @state() private takeOverPending: OtherDraft | null = null;
   /** {@link takeOversAnswered} when a take-over was sent; unset while none is out. */
   @state() private takeOverSent: number | null = null;
+  /** The bill a quiet Pay was tapped on, while it still has unsent dishes. */
+  @state() private payUnsentFor: { billId: string | undefined } | null = null;
 
   get #draftStore(): WorkingOrderStore | null {
     const store = this.draftStore === undefined ? this.#ownDraft : this.draftStore;
@@ -1927,6 +1932,11 @@ export class TillTableOrderScreen extends LitElement {
     this.#watchActions();
     if (changed.has("busy") && this.busy) this.#actionScope?.changed();
     this.#shownBill = this.bills.find((bill) => bill.workingOrderId === this.orderId);
+    if (
+      this.payUnsentFor !== null &&
+      (this.payUnsentFor.billId !== this.orderId || !this.#billHasUnsent())
+    )
+      this.payUnsentFor = null;
     if (changed.has("groups") || this.#heldGroupIds === undefined) {
       this.#heldGroupIds = heldGroupIds(this.groups);
       this.#groupsInOrder = [...this.groups].sort((a, b) => a.position - b.position);
@@ -2231,19 +2241,14 @@ export class TillTableOrderScreen extends LitElement {
     this.dispatchEvent(new CustomEvent("adjust", { detail, bubbles: true, composed: true }));
   }
 
-  #billAdjust(): TemplateResult | typeof nothing {
-    const comp = this.#compBill("secondary");
-    return comp === nothing ? nothing : html`<div class="bill-adjust">${comp}</div>`;
-  }
-
   /** Discount on the bill on screen, named as the bills list names it. */
-  #compBill(variant: "secondary" | "ghost"): TemplateResult | typeof nothing {
+  #compBill(): TemplateResult | typeof nothing {
     if (!this.#adjustable() || this.lines.length === 0) return nothing;
     const shown = this.#shownBills().find((bill) => bill.workingOrderId === this.orderId);
     const name = shown === undefined ? t("adjust.whole_bill") : this.#billName(shown);
     return html`<wt-button
-      variant=${variant}
-      align=${variant === "ghost" ? "start" : nothing}
+      variant="ghost"
+      align="start"
       data-discount-bill
       @click=${() =>
         this.#adjust("discount", {
@@ -2338,12 +2343,6 @@ export class TillTableOrderScreen extends LitElement {
     event.stopPropagation();
     const detail = (event as CustomEvent<ConfirmPaymentDetail>).detail;
     this.dispatchEvent(new CustomEvent("pay-tab", { detail, bubbles: true, composed: true }));
-  }
-
-  /** A persisted tab cannot be parked, so the pay widget's Hold must never reach the app's counter
-   * `#onParkOrder`. */
-  #onTenderPark(event: Event): void {
-    event.stopPropagation();
   }
 
   /** One probe across both views, because {@link #observeWidth} watches the element it first finds. */
@@ -2507,7 +2506,7 @@ export class TillTableOrderScreen extends LitElement {
             </div>`
       }
       <div data-bill-actions>
-        ${this.#billAdjust()} ${this.canSettle && this.#chargeable() ? this.#paySection() : nothing}
+        ${this.canSettle && this.#chargeable() ? this.#paySection() : nothing}
       </div>`;
   }
 
@@ -4050,8 +4049,31 @@ export class TillTableOrderScreen extends LitElement {
     return this.paymentConfirmation !== undefined || shown === undefined || owing(shown);
   }
 
+  /** A line in this screen's New order, or someone's unsent dishes saved on the bill on screen. */
+  #billHasUnsent(): boolean {
+    if ((this.#draftStore?.lineCount ?? 0) > 0) return true;
+    return this.party?.unsentDrafts.some((draft) => draft.billId === this.orderId) ?? false;
+  }
+
+  /** True, after saying why, when Pay is quiet and the tap must start nothing. */
+  #payQuietTap(): boolean {
+    if (this.paymentConfirmation !== undefined || !this.#billHasUnsent()) return false;
+    this.payUnsentFor = { billId: this.orderId };
+    return true;
+  }
+
+  #payUnsent(): TemplateResult | typeof nothing {
+    if (this.payUnsentFor === null) return nothing;
+    const shown = this.#shownBill;
+    return html`<p class="pay-unsent" role="alert" data-pay-unsent>
+      ${billUnsentText(shown === undefined ? undefined : billLabel(shown))}
+    </p>`;
+  }
+
   #paySection(): TemplateResult {
     const shown = this.#shownBill;
+    // A whole payment whose answer is unknown is recovered, not started, so it is never quiet.
+    const quiet = this.paymentConfirmation === undefined && this.#billHasUnsent();
     const partlyPaid =
       this.paymentConfirmation === undefined && shown !== undefined && paidInPart(shown)
         ? shown
@@ -4061,7 +4083,10 @@ export class TillTableOrderScreen extends LitElement {
       return html`<section
         class="pay"
         @confirm-payment=${(event: Event) => this.#onTenderConfirm(event)}
-        @park-order=${(event: Event) => this.#onTenderPark(event)}
+        @pay-quiet-tap=${(event: Event) => {
+          event.stopPropagation();
+          this.#payQuietTap();
+        }}
       >
         <h2>${t("table.pay_title")}</h2>
         <till-tender-pay
@@ -4069,17 +4094,22 @@ export class TillTableOrderScreen extends LitElement {
           .busy=${this.busy}
           .takesCash=${this.takesCash}
           .fullInvoices=${this.fullInvoices}
+          .parks=${false}
+          .invoices=${false}
+          .payQuiet=${quiet}
           .asksGuests=${shown?.invoiceType !== "F1"}
           .receiptGuests=${defaultReceiptGuests(this.party)}
           .confirmation=${this.paymentConfirmation}
         ></till-tender-pay>
         ${this.paymentConfirmation === undefined ? html`${this.#billChoices(shown)} ${this.#payWays()}` : nothing}
+        ${this.#payUnsent()}
       </section>`;
     if (partlyPaid === undefined)
       return html`<section class="pay">
         <h2>${t("table.pay_title")}</h2>
-        ${this.#paySheetButton(shown)}
+        ${this.#paySheetButton(shown, quiet)}
         ${this.paymentConfirmation === undefined ? this.#billChoices(shown) : nothing}
+        ${this.#payUnsent()}
       </section>`;
     const received = this.#balanceShown()?.received;
     return html`<section class="pay" data-bill-payments>
@@ -4094,17 +4124,20 @@ export class TillTableOrderScreen extends LitElement {
       }
       ${
         sheet
-          ? html`${this.#paySheetButton(shown)} ${this.#billChoices(shown)}`
+          ? html`${this.#paySheetButton(shown, quiet)} ${this.#billChoices(shown)}`
           : html`<wt-button
-                variant="primary"
+                variant=${quiet ? "secondary" : "primary"}
                 data-pay-rest
                 .disabled=${this.busy}
-                @click=${() => this.#payPart("contribution", partlyPaid.outstanding)}
+                @click=${() => {
+                  if (!this.#payQuietTap()) this.#payPart("contribution", partlyPaid.outstanding);
+                }}
               >
                 ${t("bill.pay_with_bill_payments")}
               </wt-button>
               ${this.#billChoices(shown)} ${this.#payWays()}`
       }
+      ${this.#payUnsent()}
     </section>`;
   }
 
@@ -4121,28 +4154,31 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  #paySheetButton(shown: PartyBill | undefined): TemplateResult {
+  #paySheetButton(shown: PartyBill | undefined, quiet: boolean): TemplateResult {
     return html`<wt-button
-      variant="primary"
+      variant=${quiet ? "secondary" : "primary"}
       data-pay-sheet
       .disabled=${this.busy}
-      @click=${() =>
-        shown?.status === "placed"
-          ? this.#dispatch("pay-presented", { workingOrderId: shown.workingOrderId })
-          : this.#payPart("whole")}
+      @click=${() => {
+        if (this.#payQuietTap()) return;
+        if (shown?.status === "placed")
+          this.#dispatch("pay-presented", { workingOrderId: shown.workingOrderId });
+        else this.#payPart("whole");
+      }}
       >${t("action.pay")}</wt-button
     >`;
   }
 
-  /** Full invoice while full invoices are on, and the receipt's language when several are offered, for a
-   * bill still owing. */
+  /** For a bill still owing: Full invoice while full invoices are on and no sale is filed, and the
+   * receipt's language when several are offered. */
   #billChoices(bill: PartyBill | undefined): TemplateResult | typeof nothing {
     if (bill === undefined || !owing(bill)) return nothing;
-    if (!this.fullInvoices && this.receiptLanguages.length < 2) return nothing;
+    const invoice = this.fullInvoices && bill.invoiceNumber === undefined;
+    if (!invoice && this.receiptLanguages.length < 2) return nothing;
     const target = { workingOrderId: bill.workingOrderId, revision: bill.revision };
     return html`<div class="bill-choices">
       ${
-        this.fullInvoices
+        invoice
           ? html`<wt-button
               variant="secondary"
               data-choose-bill-invoice
@@ -4181,7 +4217,9 @@ export class TillTableOrderScreen extends LitElement {
             variant="secondary"
             data-open-bill-pay=${way}
             .disabled=${this.busy}
-            @click=${() => this.#payPart(way)}
+            @click=${() => {
+              if (!this.#payQuietTap()) this.#payPart(way);
+            }}
           >
             ${t(label)}
           </wt-button>`,
@@ -5330,7 +5368,7 @@ export class TillTableOrderScreen extends LitElement {
               action("name-bill", "table.action_name_bill", () => this.#openBillNaming()),
               ...lineVerbs,
               this.#movable() ? verb("move-bill", "table.action_move_bill") : nothing,
-              this.#compBill("ghost"),
+              this.#compBill(),
               ...this.#billDocumentItems(shown),
             ],
       tableItems: [

@@ -743,14 +743,13 @@ describe("till-table-order-screen", () => {
     },
   );
 
-  it("swallows a Hold (park-order) from the embedded pay widget — a tab cannot be parked", async () => {
+  it("draws no Hold in the embedded pay widget — a tab cannot be parked", async () => {
     const { el } = await mount({ lines: [pendingLine] });
-    let leaked = false;
-    el.addEventListener("park-order", () => (leaked = true));
-    tender(el).dispatchEvent(
-      new CustomEvent("park-order", { detail: {}, bubbles: true, composed: true }),
-    );
-    expect(leaked).toBe(false);
+    const widget = tender(el);
+    await widget.updateComplete;
+    expect(widget.shadowRoot!.querySelector(".pay")).not.toBeNull();
+    expect(widget.shadowRoot!.querySelector(".hold")).toBeNull();
+    expect(widget.shadowRoot!.textContent).not.toContain(t("action.hold"));
   });
 
   it("has no Status section", async () => {
@@ -7149,6 +7148,14 @@ describe("closed department ordering", () => {
       const paid = vi.fn();
       el.addEventListener("bill-pay", paid);
       payment.click();
+      await el.updateComplete;
+      expect(paid).not.toHaveBeenCalled();
+      expect(el.shadowRoot!.querySelector("[data-pay-unsent]")!.textContent).toContain(
+        t("bill_pay.unsent"),
+      );
+      draft.clear();
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>('[data-open-bill-pay="items"]')!.click();
       expect(paid).toHaveBeenCalledOnce();
       el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
       await el.updateComplete;

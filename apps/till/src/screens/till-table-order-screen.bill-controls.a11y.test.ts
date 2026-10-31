@@ -7,6 +7,10 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/
 import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import { partyBill, switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { mountFooter } from "./till-table-order-screen.panel-footer.test-helpers.js";
+import { beer, resized } from "./till-table-order-screen.test-helpers.js";
+import { DraftStore } from "../state/draft-sync.js";
+import type { TillTenderPay } from "../widgets/tender-pay.js";
 
 afterEach(() => {
   cleanupWidgets();
@@ -164,3 +168,31 @@ describe.each(["light", "dark"] as const)(
     });
   },
 );
+
+describe.each(["light", "dark"] as const)("A803 quiet Pay, %s theme", (theme) => {
+  it.each([false, true])(
+    "is accessible quiet, and with its sentence shown (handheld %s)",
+    async (handheld) => {
+      const draft = new DraftStore();
+      draft.appendLines([{ product: beer, quantity: "1" }]);
+      const { el, host } = await mountFooter(
+        { draftStore: draft, handheld, fullInvoices: true },
+        theme,
+      );
+      await resized(el);
+      const tender = el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay");
+      await tender?.updateComplete;
+      const pay = handheld
+        ? el.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!
+        : tender!.shadowRoot!.querySelector<HTMLElement>(".pay")!;
+      expect(pay.getAttribute("variant")).toBe("secondary");
+      await expectNoA11yViolations(host);
+
+      await userEvent.click(pay);
+      await el.updateComplete;
+      const alert = el.shadowRoot!.querySelector<HTMLElement>("[data-pay-unsent]")!;
+      expect(alert.checkVisibility()).toBe(true);
+      await expectNoA11yViolations(host);
+    },
+  );
+});

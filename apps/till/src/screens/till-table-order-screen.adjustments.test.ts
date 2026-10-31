@@ -8,6 +8,7 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import "./till-table-order-screen.js";
 import type { AdjustDetail, TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { PartyBill, TabLine, TableParty } from "../api/client.js";
+import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const money = (amount: string) => formatMoney(decimal(amount), currentLocale());
 const olivesWithPizza = () =>
@@ -427,8 +428,9 @@ describe("till-table-order-screen: comping the whole bill", () => {
   it("asks the app to comp the bill on screen, naming it and its total", async () => {
     const el = await mountScreen();
     const asked = capture(el);
+    await openTableMenu(el);
     const button = el.shadowRoot!.querySelector<HTMLElement>(
-      "[data-discount-bill]:not([data-table-menu] *)",
+      "[data-table-menu] [data-discount-bill]",
     )!;
     expect(button.textContent!.trim()).toBe(t("table.discount_bill"));
 

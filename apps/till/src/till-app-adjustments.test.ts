@@ -496,11 +496,10 @@ describe("till-app: giving away a dish", () => {
   it("discounts the whole bill", async () => {
     const { el } = await mountApp();
     const order = await openTable4(el);
+    await openTableMenu(order);
     await press(
       el,
-      order.shadowRoot!.querySelector<HTMLElement>(
-        "[data-discount-bill]:not([data-table-menu] *)",
-      )!,
+      order.shadowRoot!.querySelector<HTMLElement>("[data-table-menu] [data-discount-bill]")!,
     );
     await chooseReason(el, "Complaint");
     const input = inDialog(el, 'wt-input[name="percent"]').shadowRoot!.querySelector("input")!;
@@ -696,11 +695,10 @@ describe("till-app: a bill changed on another device", () => {
       previewAdjustment: vi.fn().mockRejectedValue({ code: "working_order.out_of_date" }),
     });
     const order = await openTable4(el);
+    await openTableMenu(order);
     await press(
       el,
-      order.shadowRoot!.querySelector<HTMLElement>(
-        "[data-discount-bill]:not([data-table-menu] *)",
-      )!,
+      order.shadowRoot!.querySelector<HTMLElement>("[data-table-menu] [data-discount-bill]")!,
     );
     await chooseReason(el, "Complaint");
     const input = inDialog(el, 'wt-input[name="percent"]').shadowRoot!.querySelector("input")!;

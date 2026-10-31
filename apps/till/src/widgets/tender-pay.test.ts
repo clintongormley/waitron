@@ -2463,3 +2463,77 @@ describe("the receipt's guests field", () => {
     expect(card.mock.calls[0]![0]).not.toHaveProperty("guestCount");
   });
 });
+
+describe("A803 counter unchanged", () => {
+  it("draws Hold and Full invoice, and Cash and Card primary, with the new properties left at their defaults", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(coffee, "1");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store,
+      fullInvoices: true,
+    });
+
+    expect(el.parks).toBe(true);
+    expect(el.invoices).toBe(true);
+    expect(el.payQuiet).toBe(false);
+    expect(query(el, ".hold")).not.toBeNull();
+    expect(query(el, "[data-full-invoice]")).not.toBeNull();
+    expect(query(el, ".pay")!.getAttribute("variant")).toBe("primary");
+    expect(query(el, ".pay-card")!.getAttribute("variant")).toBe("primary");
+  });
+});
+
+describe("A803 table pay", () => {
+  async function mountTable(over: Partial<TillTenderPay> = {}) {
+    const store = new WorkingOrderStore();
+    store.addProduct(coffee, "1");
+    return (
+      await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        fullInvoices: true,
+        cardProvider: "simulator",
+        ...over,
+      })
+    ).el;
+  }
+
+  it("draws no Hold when it does not park", async () => {
+    const el = await mountTable({ parks: false });
+    expect(query(el, ".hold")).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain(t("action.hold"));
+    expect(query(el, "[data-full-invoice]")).not.toBeNull();
+  });
+
+  it("draws no Full invoice of its own when it does not take invoices", async () => {
+    const el = await mountTable({ invoices: false });
+    expect(query(el, "[data-full-invoice]")).toBeNull();
+    expect(query(el, ".hold")).not.toBeNull();
+  });
+
+  it.each([".pay", ".pay-card"])(
+    "while quiet draws %s secondary and enabled, and a tap on it says so and starts nothing",
+    async (selector) => {
+      const el = await mountTable({ payQuiet: true });
+      const quiet = vi.fn();
+      const started = vi.fn();
+      el.addEventListener("pay-quiet-tap", quiet);
+      for (const name of ["collect-card", "confirm-payment", "place-order", "park-order"])
+        el.addEventListener(name, started);
+      const button = query(el, selector)!;
+      expect(button.getAttribute("variant")).toBe("secondary");
+      expect(button.hasAttribute("disabled")).toBe(false);
+
+      await userEvent.click(button);
+      await el.updateComplete;
+
+      expect(quiet).toHaveBeenCalledOnce();
+      const event = quiet.mock.calls[0]![0] as CustomEvent;
+      expect(event.detail).toEqual({});
+      expect(event.bubbles && event.composed).toBe(true);
+      expect(started).not.toHaveBeenCalled();
+      expect(query(el, ".tendered")).toBeNull();
+      expect(query(el, ".pay")).not.toBeNull();
+      expect(query(el, ".pay-card")).not.toBeNull();
+    },
+  );
+});

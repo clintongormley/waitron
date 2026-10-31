@@ -2964,7 +2964,7 @@ in both themes), the `data-discount-bill` sites (`panel-footer.test.ts`,
 `till-table-order-screen.adjustments.test.ts`, `till-app-adjustments.test.ts`,
 `panel-footer.a11y.test.ts`, kind R).
 
-- [ ] Cases `A803 pay scope` in `panel-footer.test.ts`:
+- [x] Cases `A803 pay scope` in `panel-footer.test.ts`:
       - **the foot's exact contents, in order** (I8, D16): for an open owing bill on a wide screen —
         `[data-order-total]`, the still-to-pay row, then the pay section holding exactly Cash and
         Card (no Park/Hold, no tender-pay Full invoice), `[data-choose-bill-invoice]`, and the three
@@ -2982,11 +2982,90 @@ in both themes), the `data-discount-bill` sites (`panel-footer.test.ts`,
         antes de cobrar.».
       In `tender-pay.test.ts` `A803 counter unchanged`: with defaults, Park and Full invoice are
       drawn and Cash is primary.
-- [ ] RED: `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.panel-footer.test.ts src/widgets/tender-pay.test.ts -t 'A803'`.
-- [ ] Implement; re-point the `data-discount-bill` sites (open the ⋮ first).
-- [ ] GREEN: `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.panel-footer.test.ts src/screens/till-table-order-screen.panel-footer.a11y.test.ts src/screens/till-table-order-screen.adjustments.test.ts src/till-app-adjustments.test.ts src/screens/till-table-order-screen.actions-unsaved.test.ts src/widgets/bill-pay-dialog.unsent.test.ts src/widgets/tender-pay.test.ts src/widgets/tender-pay.a11y.test.ts src/screens/till-table-order-screen.bill-payments.test.ts src/screens/till-table-order-screen.bill-controls.a11y.test.ts src/till-app-bill-payments.test.ts src/till-app-handheld-pay.test.ts`;
+- [x] RED: `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.panel-footer.test.ts src/widgets/tender-pay.test.ts -t 'A803'`.
+- [x] Implement; re-point the `data-discount-bill` sites (open the ⋮ first).
+- [x] GREEN: `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.panel-footer.test.ts src/screens/till-table-order-screen.panel-footer.a11y.test.ts src/screens/till-table-order-screen.adjustments.test.ts src/till-app-adjustments.test.ts src/screens/till-table-order-screen.actions-unsaved.test.ts src/widgets/bill-pay-dialog.unsent.test.ts src/widgets/tender-pay.test.ts src/widgets/tender-pay.a11y.test.ts src/screens/till-table-order-screen.bill-payments.test.ts src/screens/till-table-order-screen.bill-controls.a11y.test.ts src/till-app-bill-payments.test.ts src/till-app-handheld-pay.test.ts`;
       `pnpm --filter @waitron/till exec vitest run src/screens/till-counter-screen.test.ts` (the counter keeps Park); till typecheck.
-- [ ] Commit: "The table's foot: totals and Pay, quiet while this bill has unsent dishes".
+- [x] Commit: "The table's foot: totals and Pay, quiet while this bill has unsent dishes".
+
+### Task 12 as built (2026-10-31)
+
+Runs in the foreground with `AI_AGENT`/`CLAUDECODE` unset; free memory 55–61% before each browser
+run. File names drop the `till-table-order-screen` prefix for screen files and the `till-app` prefix
+for app files; lines are at this task's commit unless written "was :N" (a line at `89f76bf08`).
+
+- **Built.** `till-tender-pay` gains `parks`, `invoices` (both default `true`) and `payQuiet`
+  (default `false`) and the event `pay-quiet-tap` (detail `{}`, bubbling and composed). With
+  `payQuiet`, Cash and Card are `secondary`, stay enabled, and a tap dispatches `pay-quiet-tap` and
+  starts nothing. Hold is drawn only with `parks`, its own Full invoice only with `invoices`. The
+  table screen sets `parks=false`, `invoices=false` and `payQuiet` from `#billHasUnsent()` (a line
+  in the screen's New order, or an entry of `party.unsentDrafts` naming the bill on screen). Pay the
+  rest and the handheld's Pay are drawn `secondary` while quiet; they and the pay ways show the
+  sentence and send nothing on a tap. The sentence (`billUnsentText(billLabel(bill))`, the existing
+  `bill_pay.unsent` string: **no new string**, so nothing joins Q1) is a `role="alert"` line,
+  `[data-pay-unsent]`, at the end of the pay section; `willUpdate` clears it when another bill is
+  shown or the bill has no unsent dishes left. `#onTenderPark` is gone. `#billChoices`' Full
+  invoice is gated on `invoiceNumber === undefined` too; the receipt-language gate is unchanged.
+  `#billAdjust` and its `.bill-adjust` style are gone, so Comp the bill is only in the ⋮;
+  `#compBill` lost its variant parameter (only the ⋮'s `ghost` was left).
+- **Departure: an unanswered whole payment is never quiet.** `till-app-handheld-pay.test.ts:1069`
+  ("a resend carries the original request after another person's draft has changed the bill")
+  failed: another person's draft on a presented bill made the handheld's Pay quiet, so the locked
+  sheet that resends a whole payment whose answer is unknown could not be opened. That Pay recovers
+  a payment already sent, it does not start one (D5 names "every control that starts a payment"),
+  and on a wide screen the pay card shows its confirmation view, with no Cash or Card, in that state.
+  So quiet is off while `paymentConfirmation` is set. New case in `A803 pay scope`: "is not quiet
+  for a handheld's unanswered whole payment of a presented bill, which it recovers".
+- **Surprise, not changed: a closed zone.** `.test.ts:7120` (a zone closed to new dishes, two
+  coffees left in New order) checked that Pay items still pays. Under D5 it is now quiet until
+  those dishes are removed. The sentence says "Send or remove"; in a closed zone only Remove is
+  possible, and the line controls to do it are on the screen. No owner question is raised for it.
+- **Found, not changed.** The counter screen's test (`till-counter-screen.test.ts`, 48 cases) passes
+  with `parks` defaulting to `false`: the counter's Park is pinned at the widget
+  (`tender-pay.test.ts` `A803 counter unchanged` and the A738 Park cases), not by the counter screen.
+- **RED** (the plan's command): `Tests 16 failed | 8 passed | 195 skipped (219)`. Failed: the four
+  foot-contents cases (extra `data-discount-bill`, `tender hold`, `tender data-full-invoice`), the
+  invoice-number case (`expected <wt-button …> to be null`), six quiet cases (`expected 'primary'
+  to be 'secondary'`; the clearing case `expected null not to be null`), and the five widget cases
+  (`expected undefined to be true` for the defaults, Hold and Full invoice present, `primary`).
+  Passed before: the seven `A803 no tab panel` cases and "is not quiet when the unsent dishes are
+  on Bill 2 only" (nothing was quiet yet).
+- **GREEN.** The plan's GREEN command (12 files): `Test Files 12 passed (12)`, `Tests 1095 passed
+  (1095)`, exit 0. `till-counter-screen.test.ts`: `Tests 48 passed (48)`. The whole screen set
+  (91 files): `Test Files 91 passed (91)`, `Tests 1800 passed (1800)`, no `Errors` line, exit 0
+  (1783 at 11c, plus 17 new cases). The other files that touch the pay controls, plus
+  `-parties` and `-drafts` (30 files): `Test Files 30 passed (30)`, `Tests 3654 passed (3654)`.
+  `pnpm --filter @waitron/till typecheck` exit 0; `prettier --check` and `eslint` on the changed
+  files exit 0. No string changed, so `src/i18n` and `scripts/english-only.test.ts` were not run.
+- **Deletion controls** (each on the plan's RED filter, the file put back from a saved copy and
+  `cmp`-equal after): Hold drawn whatever `parks` → 3 failed (the two wide foot-contents cases,
+  "draws no Hold when it does not park"); tender-pay's Full invoice whatever `invoices` → 4 failed
+  (the two wide foot-contents cases, the one-Full-invoice case, "draws no Full invoice of its own");
+  a quiet Cash tap also starting the payment → 5 failed (four screen quiet cases, the widget's `.pay`
+  case); a quiet Card tap also starting the card → 5 failed (four screen quiet cases, the widget's
+  `.pay-card` case; before the screen's quiet check also read the pay card after each tap, this
+  control failed only 2); the screen's quiet tap never refusing → 6 failed (every screen quiet case
+  that taps); the alert line never drawn → 6 failed (the same six); the `invoiceNumber` gate
+  removed → 1 failed (the one-Full-invoice case); the clearing in `willUpdate` removed → 1 failed
+  (the clearing case); any bill's `unsentDrafts` counting → 1 failed (Bill 2 only); quiet not
+  lifted for an unanswered payment → 1 failed (the recovery case); `parks`, `invoices` or
+  `payQuiet` default flipped → `A803 counter unchanged` fails each time (plus the other widget case
+  that relies on that default).
+
+| Test | Kind | Before → after | Source | Task |
+| --- | --- | --- | --- | --- |
+| `.panel-footer.test.ts:33` (was "offers payment and Discount without opening the drawer") | B + R | the foot's Discount visible and before the pay card → no `[data-discount-bill]` in `[data-bill-actions]` (B); Discount found and visible in the opened ⋮ (R); the summary, pay card and one-widget checks unchanged; retitled | D16 "Comp the bill leaves the foot for the ⋮ bill section"; D4 | 12 |
+| `.panel-footer.test.ts:60` (Discount keeps the saved amount) | R | the foot's Discount tapped → the ⋮ opened and its Discount tapped; the `adjust` detail `toEqual` byte-identical | D16 | 12 |
+| `.panel-footer.test.ts:85` (no payment without settling, Discount kept) | R | the foot's Discount visible → the ⋮'s Discount visible; the other checks unchanged | D16 | 12 |
+| `.panel-footer.test.ts:138` (was "… swallows a counter Hold from the relocated widget", was `:135`) | B | a synthetic `park-order` from the widget did not leave the screen → the widget draws no Hold (`.hold` null, no `action.hold` text) beside a drawn Cash; the `pay-tab` forwarding checks byte-identical; retitled | D6 ("`#onTenderPark` goes"; Hold is not drawn, so the widget cannot send `park-order`) | 12 |
+| `.panel-footer.test.ts:215` (the bill's state after switching, was `:213`) | R | the foot's Discount text → the ⋮ opened, its Discount text; `toContain(t("table.discount_bill"))` unchanged | D16 | 12 |
+| `.panel-footer.a11y.test.ts:28` (24 cases: EN/ES × themes × widths × partial) | B + R | the foot's Discount in the visible, ≥ 44 px, inside-the-width loop and tapped for the whole bill → no Discount in the foot (B); the ⋮ opened and its Discount given the same text, visibility, height and width checks, then tapped (closed first for the part-paid case, whose tap is Pay the rest); the `adjust` and `bill-pay` checks byte-identical (R) | D16 | 12 |
+| `.adjustments.test.ts:428` (comp the bill on screen) | R | the foot's Discount → the ⋮ opened and its Discount; text and `adjust` detail unchanged | D16 | 12 |
+| `-adjustments.test.ts:496`, `:693` (whole-bill discount; refused as out of date) | R | the foot's Discount pressed → the ⋮ opened (`openTableMenu`), its Discount pressed; everything after unchanged | D16 | 12 |
+| `.test.ts:746` (was "swallows a Hold (park-order) from the embedded pay widget") | B | the synthetic `park-order` did not leak → the widget draws Cash and no Hold; retitled | D6 | 12 |
+| `.test.ts:7120` (a zone closed to new dishes keeps the bill payable) | B | Pay items with two coffees in New order sends `bill-pay` once → that tap sends nothing and shows `bill_pay.unsent`; after New order is cleared, Pay items sends `bill-pay` once; the zone, draft and Move checks unchanged | D5; spec owner amendment "quiet Pay with unsent dishes" | 12 |
+
+**Owner question 5f candidates:** none. No check was deleted without a replacement.
 
 ## Task 13: whole-slice run and controls (no commit unless a fixture moves, ≈45 calls)
 
