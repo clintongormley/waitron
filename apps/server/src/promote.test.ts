@@ -30,6 +30,7 @@ import {
   type MembershipNode,
   type SignedMembershipDocument,
 } from "@waitron/membership";
+import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
@@ -747,12 +748,22 @@ describe("promoteMirrorToPrimary", () => {
     await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary"));
     await db.delete(deployment);
     const persist = vi.fn(async () => {});
+    const activate = vi.fn(async () => {});
+    const activating = fakeModule("activating-regime", {
+      provisioning: {
+        standby: { reserve: async () => ({ state: {} }), establish: async () => {}, activate },
+      },
+    });
 
     const error = await captureError(() =>
-      promoteMirrorToPrimary(deps(noopLog, persist), { oldNodeNeutralised: true }),
+      promoteMirrorToPrimary(
+        { ...deps(noopLog, persist), modules: [activating] },
+        { oldNodeNeutralised: true },
+      ),
     );
 
     expect(isAppError(error) && error.code).toBe("deployment.not_stamped");
+    expect(activate).not.toHaveBeenCalled();
     expect(persist).not.toHaveBeenCalled();
     expect((await readNodeMembership(db))?.body.term).toBe(3);
     expect(await readNodeMode(suite.node, nodeId)).toEqual({

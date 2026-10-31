@@ -2,8 +2,8 @@ import type { DeploymentMode, NodeDatabase, SingletonRole } from "@waitron/db";
 import { readNodeMode } from "@waitron/node-db";
 
 /**
- * This node's two role axes (node.db's `node_mode`), each in a cell read live per request / per pass so a
- * promotion needs no restart.
+ * This node's two role axes (node.db's `node_mode`), each in a cell read live per request / per
+ * pass so a promotion needs no restart.
  */
 export interface DeploymentHolders {
   readonly mode: { current: DeploymentMode };

@@ -105,7 +105,6 @@ it("rejects naming the missing recovery file when it and the node copy both fail
 });
 
 it("rejects naming the missing recovery file when the node copy fails first", async () => {
-  // The recovery file is missing only once the node copy has already failed.
   const stateDir = await mkdtemp(join(tmpdir(), "archive-entries-"));
   dirs.push(stateDir);
   const collecting = collectStateParts({

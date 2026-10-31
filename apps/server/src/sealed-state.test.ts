@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openBackupQuery } from "@waitron/store";
 import {
@@ -464,21 +464,33 @@ describe("createSealedStateRefresher", () => {
       suite.node.run(sql`insert into node_probe (value) values ('before')`);
       let releaseFirst!: () => void;
       const firstHeld = new Promise<void>((resolve) => (releaseFirst = resolve));
-      let firstLogged!: () => void;
-      const firstLogging = new Promise<void>((resolve) => (firstLogged = resolve));
-      let logs = 0;
-      // The first refresh is held at its log line, after its row is written: it is still running.
-      const log = vi.fn(async () => {
-        if ((logs += 1) === 1) {
-          firstLogged();
-          await firstHeld;
-        }
+      let firstAtWrite!: () => void;
+      const firstWriting = new Promise<void>((resolve) => (firstAtWrite = resolve));
+      let writes = 0;
+      // The first refresh is held as it asks for the row's write lock, after its node snapshot.
+      const db = new Proxy(suite.db, {
+        get(target, prop) {
+          if (prop === "withWriteLock") {
+            return async (work: Parameters<Database["withWriteLock"]>[0]) => {
+              if ((writes += 1) === 1) {
+                firstAtWrite();
+                await firstHeld;
+              }
+              return target.withWriteLock(work);
+            };
+          }
+          const value: unknown = Reflect.get(target, prop, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
       });
-      const refresher = createSealedStateRefresher(deps({ log }));
-      const first = refresher.refresh();
-      await firstLogging;
+      const refresher = createSealedStateRefresher(deps({ db }));
+      let firstDone = false;
+      const first = refresher.refresh().finally(() => (firstDone = true));
+      await firstWriting;
       suite.node.run(sql`update node_probe set value = 'during'`);
       const second = refresher.refresh();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(firstDone).toBe(false);
       releaseFirst();
       await Promise.all([first, second]);
       const entries = unsealNodeState((await row())!, KEY);

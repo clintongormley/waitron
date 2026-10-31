@@ -170,7 +170,7 @@ export function createSealedStateRefresher(deps: SealedStateDeps): SealedStateRe
   let waiting: Promise<SealedStateOutcome> | undefined;
   const start = (): Promise<SealedStateOutcome> => {
     // Reached only when building a failure's log fields throws, as reading an unreadable `code`
-    // does; without it one rejection would reject every later refresh unrun.
+    // does; without it the refresh would reject.
     const run = Promise.resolve()
       .then(once)
       .catch((): SealedStateOutcome => "failed")

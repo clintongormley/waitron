@@ -189,7 +189,7 @@ async function poll<T>(predicate: () => T | undefined): Promise<T | undefined> {
   return undefined;
 }
 
-describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
+describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
   it("serves dashboard reads, another person's download among them, via the ambient viewer and refuses writes", async () => {
     const port = await freePort();
     const server = await startServer({

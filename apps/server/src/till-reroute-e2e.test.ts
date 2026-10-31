@@ -27,6 +27,19 @@ import { freePorts } from "./testing/free-ports.js";
 
 const { beforeServerStarts, startServer } = serverFixture();
 
+const serverStores = vi.hoisted((): VenueDatabase[] => []);
+vi.mock("@waitron/db", async (original) => {
+  const actual = await original<typeof import("@waitron/db")>();
+  return {
+    ...actual,
+    openVenueDatabase: async (...args: Parameters<typeof actual.openVenueDatabase>) => {
+      const store = await actual.openVenueDatabase(...args);
+      serverStores.push(store);
+      return store;
+    },
+  };
+});
+
 // This reroute fixture changes only the stored axes, through the mirror's server-side queue.
 vi.mock("./promote-api.js", async (original) => {
   const actual = await original<typeof import("./promote-api.js")>();
@@ -35,8 +48,10 @@ vi.mock("./promote-api.js", async (original) => {
     mountPromoteApi: (...args: Parameters<typeof actual.mountPromoteApi>) => {
       const [app, deps] = args;
       app.post("/management-api/promote", async (c) => {
-        await setNodeMode({ venue: deps.appDb, node: storeB.node }, NODE_B, "primary");
-        await setSingletonRole({ venue: deps.appDb, node: storeB.node }, NODE_B, "primary");
+        const server = serverStores.find((s) => s.venue === deps.appDb);
+        if (server === undefined) throw new Error("the promoted server's store was not captured");
+        await setNodeMode({ venue: deps.appDb, node: server.node }, NODE_B, "primary");
+        await setSingletonRole({ venue: deps.appDb, node: server.node }, NODE_B, "primary");
         return c.body(null, 204);
       });
     },
