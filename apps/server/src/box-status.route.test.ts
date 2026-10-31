@@ -130,6 +130,7 @@ function buildApp(
       readStream: opts.readStream ?? (() => ({ state: "off" })),
       readMode: () => "primary",
       readSingletonRole: () => "primary",
+      readTime: async () => ({ synced: false, source: "unavailable", warn: false }),
       readAwaitingFiscalCertificate: () => false,
     },
     () => {},
