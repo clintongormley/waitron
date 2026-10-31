@@ -199,6 +199,8 @@ interface Box {
   stepAfterReading(): void;
   /** Holds the correction's one-at-a-time turn until the answer's `release`. */
   holdTurn(): { release: () => Promise<void> };
+  /** How many of the route's requests have asked for the turn, directly or through a set. */
+  turnAsks(): number;
 }
 
 /** A new latest record, then a box whose clock reads `gapMs` behind it (or `at`), an empty witness
@@ -222,6 +224,7 @@ async function stoppedBox(
   let fromBox = false;
   let filesRecords = true;
   let lag = 0;
+  let turnAsks = 0;
   const witnesses = createClockWitnessStore({ wall: () => boxMs, monotonic: () => steadyMs });
   const base = systemClock();
   const clock: TrustedClock = {
@@ -289,8 +292,14 @@ async function stoppedBox(
       devMode: options.devMode ?? false,
       boxClock: {
         correction: {
-          inTurn: correction.inTurn,
-          set: correction.set,
+          inTurn: (fn) => {
+            turnAsks += 1;
+            return correction.inTurn(fn);
+          },
+          set: (input) => {
+            turnAsks += 1;
+            return correction.set(input);
+          },
           steps: () => {
             const steps = correction.steps() - lag;
             lag = 0;
@@ -331,6 +340,7 @@ async function stoppedBox(
     stepAfterReading: () => {
       lag = 1;
     },
+    turnAsks: () => turnAsks,
     holdTurn: () => {
       let open = () => {};
       const gate = new Promise<void>((resolve) => {
@@ -677,17 +687,16 @@ async function confirmWhileHeld(
   const asked = await ask(box, cookie);
   expect(asked.status).toBe(200);
   const turn = box.holdTurn();
+  const asks = box.turnAsks();
   const sent = confirmWith(box, cookie, {
     challengeId: asked.json.challengeId,
     deviceAt: boxTime(box) + offsetMs,
   });
-  await sleep(200);
+  await vi.waitFor(() => expect(box.turnAsks()).toBe(asks + 1));
   await meanwhile();
   await turn.release();
   return sent;
 }
-
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 it("refuses a confirm whose admission is withdrawn while it waits for its turn", async () => {
   const box = await stoppedBox(DAY);
@@ -1032,20 +1041,18 @@ it("sets the clock once when two tills confirm differing times together", async 
       deviceAt: boxTime(box) + DAY,
     }),
   );
-  await sleep(200);
+  await vi.waitFor(() => expect(box.turnAsks()).toBe(2));
   await turn.release();
   const answers = await Promise.all(sent);
   expect(box.host.sets).toHaveLength(1);
   expect(written(box)).toMatchObject({ rows: before.rows + 1, hostSets: 1 });
   expect(answers.map((answer) => answer.status).sort()).toEqual([200, 409]);
-  // Without the step counter the turn's own judgement refuses it `not_stopped`: the first set's
-  // row confirms the stop.
   expect(answers.find((answer) => answer.status === 409)!.json).toEqual(setRefused("stale"));
 });
 
 /** A differing till's set held at the host's status read, so holding the turn, and an agreeing
- * till's confirmation sent meanwhile. */
-async function agreeingWhileSetHolds(box: Box) {
+ * till's confirmation sent meanwhile and released once it has `reached` its turn. */
+async function agreeingWhileSetHolds(box: Box, reached = () => box.turnAsks() === 2) {
   let release: () => void = () => {};
   box.host.statusGate = new Promise<void>((resolve) => {
     release = resolve;
@@ -1061,7 +1068,7 @@ async function agreeingWhileSetHolds(box: Box) {
     challengeId: forConfirm.json.challengeId,
     deviceAt: boxTime(box),
   });
-  await sleep(100);
+  await vi.waitFor(() => expect(reached()).toBe(true));
   release();
   return { set, confirmed };
 }
@@ -1089,7 +1096,11 @@ it("writes an agreeing till's confirmation only after a set holding the turn", a
     },
   }) as FiscalBackend;
   const box = await stoppedBox(10 * MINUTE, { backend });
-  const { set, confirmed } = await agreeingWhileSetHolds(box);
+  // Out of the turn, the confirmation writes without asking for it.
+  const { set, confirmed } = await agreeingWhileSetHolds(
+    box,
+    () => box.turnAsks() === 2 || order.includes("stop"),
+  );
   expect((await set).status).toBe(200);
   // The set moved the clock after the till's reading, so the comparison is void.
   expect((await confirmed).json).toEqual(setRefused("stale"));
