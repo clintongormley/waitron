@@ -209,10 +209,7 @@ export class VerifactuBackend implements FiscalBackend {
     return confirmClockStop(tx, input);
   }
 
-  confirmClockStep(
-    tx: Transaction,
-    input: ClockStepRequest,
-  ): Promise<ClockStepRecorded> {
+  confirmClockStep(tx: Transaction, input: ClockStepRequest): Promise<ClockStepRecorded> {
     return confirmClockStep(tx, input);
   }
 
