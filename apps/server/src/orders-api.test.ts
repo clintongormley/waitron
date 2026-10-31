@@ -10,11 +10,12 @@ import {
   sales,
   tenants,
   withTransaction,
+  type Database,
 } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { recordSale } from "@waitron/core";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { locationId, nodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -435,6 +436,12 @@ describe("Orders routes", () => {
   );
 });
 
+/** Re-stamps every dashboard session as last seen at the (faked) clock. */
+const signedInNow = (db: Database) =>
+  withTransaction(db, (tx) =>
+    tx.execute(sql`update management_sessions set last_seen_at = ${new Date().toISOString()}`),
+  );
+
 describe("Orders data node clock", () => {
   let scopedVenue: OrderVenue;
   useVenueDb({
@@ -452,6 +459,8 @@ describe("Orders data node clock", () => {
       const billId = await placedIssuedBill(scopedVenue, "Paella");
       expect((await collect(scopedVenue, billId, "35.00")).status).toBe(200);
       vi.setSystemTime(new Date("2026-06-10T12:00:00.000Z"));
+      // Staff signed in at the moved clock, or a session last seen months ahead reads as expired.
+      await signedInNow(scopedVenue.db);
       const ownNode = nodeId(randomUUID());
       const ownLocation = locationId(randomUUID());
       const printer = await withTransaction(scopedVenue.db, async (tx) => {
