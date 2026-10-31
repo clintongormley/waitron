@@ -2566,7 +2566,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
         agentName: "Box",
       };
     }
-    const offices = [a4("pg1", "Oficina"), a4("pg2", "Almacén", false), a4("pg3", "Recepción")];
+    const offices = [a4("pg1", "Office"), a4("pg2", "Storeroom", false), a4("pg3", "Reception")];
     const invoiceProfile: DeviceProfile = {
       ...listedProfile,
       invoicePrinterIds: ["pg3", "pr2"],
@@ -2590,11 +2590,11 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
           s.getAttribute("name"),
         ]),
       ).toEqual([
-        ["pg3", "Recepción · A4", true, "invoicePrinterIds"],
+        ["pg3", "Reception · A4", true, "invoicePrinterIds"],
         ["pr2", "Kitchen", true, "invoicePrinterIds"],
         ["pr1", "Counter", false, "invoicePrinterIds"],
         ["pr3", "Terrace", false, "invoicePrinterIds"],
-        ["pg1", "Oficina · A4", false, "invoicePrinterIds"],
+        ["pg1", "Office · A4", false, "invoicePrinterIds"],
       ]);
       expect(el.shadowRoot!.querySelector("#invoice-printers-heading")?.textContent?.trim()).toBe(
         t("device_profiles.invoice_printers"),
@@ -2605,7 +2605,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
       expect(fallback.value).toBe("pg3");
       expect(fallback.options).toEqual([
         { value: "", label: t("device_profiles.default_none") },
-        { value: "pg3", label: "Recepción · A4" },
+        { value: "pg3", label: "Reception · A4" },
         { value: "pr2", label: "Kitchen" },
       ]);
     });
