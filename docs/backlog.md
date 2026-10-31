@@ -5767,6 +5767,14 @@ For package distribution and the four-minute target, use the
   not qualify the concurrent path. The standalone parties suite also reaches its local
   deadline; the cause is unknown. [Detail](backlog/ci.md#local-multi-file-till-browser-interruption).
 
+- **A1089. Investigate the certificate child's lifecycle failures on main.**
+  The normal-success case returned `interrupted/unavailable` instead of `completed` in
+  [run 41195102945](https://github.com/clintongormley/waitron/actions/runs/41195102945/job/124522873238)
+  (`fiscal-certificate-diagnosis-process.test.ts:64`). A different case's next attempt was
+  refused in [run 41032398364](https://github.com/clintongormley/waitron/actions/runs/41032398364/job/123986726025)
+  (`:107`). Reproduce both and retain process/pipe diagnostics before changing the runner;
+  neither cause is established. A passing re-run does not close this investigation.
+
 - **A1089 merge read-back: server coverage upload timed out.**
   [Detail](backlog/ci.md#a1089-merge-read-back-server-coverage-upload-timed-out).
 

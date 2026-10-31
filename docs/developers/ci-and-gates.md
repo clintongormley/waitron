@@ -1568,12 +1568,11 @@ readers stay in `apps/server/test/start-again-deleted.ts`. The three fresh-box
 restore cases added by A1131 in PR #2335 travel with the other wipe cases.
 All existing test bodies, parameter tables and timeouts are retained.
 
-The earlier reviewed candidate's hosted run `41190126243` measured these five
-suites at 150.3, 128.3, 124.1, 161.1 and 79.8 seconds respectively, before A1131's
-three cases were added. Those measurements seed their table entries; the new
-PR's hosted measurements must replace them before qualification. Three later
-main runs that execute all server shards remain the qualification for the
-four-minute target.
+Hosted PR run `41198792682` measured these five suites, including A1131's
+three additional cases, at 153.1, 135.7, 110.0, 164.9 and 105.0 seconds respectively.
+Those measurements replace the earlier reviewed candidate's timings in the
+table. Three later main runs that execute all server shards remain the
+qualification for the four-minute target.
 
 The refresh uses ordinary server-shard logs from the newest six successful main
 runs that actually ran them: `41175259965`, `41174680766`, `41174582937`,
