@@ -552,10 +552,18 @@ for (const [kind, screen] of [
       expect(q(app, other), other).toBeNull();
   });
 
-it("a Recover send refused kept-records, then a Reconnect that finds the setup still claimed, draws the repair page, not Join or recover", async () => {
-  const { options } = restartingBox();
-  const { app } = await wipeFixture({ ...options, startAgain: () => refusedCause("kept-records") });
+it("a Recover send whose answer is lost while the box kept the setup: Reconnect, finding it still claimed, draws the repair page, not Join or recover", async () => {
+  const { box, options } = restartingBox();
+  const { app } = await wipeFixture({
+    ...options,
+    intercept: (path: string) =>
+      path.endsWith("/resolution/start-again")
+        ? Promise.reject(new TypeError("Failed to fetch"))
+        : options.intercept(path),
+  });
   await sendWipe(app, "recover");
+  expect(box.wiped).toBe(false);
+  expect(formErrors(app)).toContain(t.error);
   await click(app, "reconnect-first");
   await expect.poll(() => q<WtButton>(app, "reconnect-first")?.disabled).toBe(false);
   await settled(app);
@@ -563,10 +571,26 @@ it("a Recover send refused kept-records, then a Reconnect that finds the setup s
   expect(q(app, "screen-role")).toBeNull();
 });
 
-it("a Recover send the box refused forgets the choice: a Reconnect that then finds no setup opens the venue screen", async () => {
+it("a Recover send refused kept-records forgets the choice: a Reconnect that then finds no setup opens the venue screen", async () => {
   const { box, options } = restartingBox();
   const { app } = await wipeFixture({ ...options, startAgain: () => refusedCause("kept-records") });
   await sendWipe(app, "recover");
+  box.wiped = true;
+  await click(app, "reconnect-first");
+  await expect.poll(() => q(app, "screen-first-owner")).toBeNull();
+  expect(q(app, "screen-venue")).not.toBeNull();
+  expect(q(app, "screen-role")).toBeNull();
+});
+
+it("a Recover send refused setup.attempt_conflict forgets the choice: a Reconnect that then finds no setup opens the venue screen", async () => {
+  const { box, options } = restartingBox();
+  const { app } = await wipeFixture({
+    ...options,
+    startAgain: () =>
+      Response.json({ error: { code: "setup.attempt_conflict", params: {} } }, { status: 409 }),
+  });
+  await sendWipe(app, "recover");
+  expect(formErrors(app)).toContain(t.heldChanged);
   box.wiped = true;
   await click(app, "reconnect-first");
   await expect.poll(() => q(app, "screen-first-owner")).toBeNull();

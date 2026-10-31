@@ -1468,7 +1468,8 @@ export class SetupApp extends LitElement {
     const current = () => this.isConnected && generation === this.#firstGeneration;
     this.firstOwnerBusy = true;
     this.firstWipeError = undefined;
-    // Kept unless the box refused: the box may have deleted the setup with no answer reaching here.
+    // Forgotten below only on a refusal the page names; after any other failure the box may have
+    // deleted the setup with no answer reaching here.
     this.#afterWipe = this.firstWipeKind;
     try {
       await sendWipe(this.api, this.#firstResolutionSnapshot(), inspection.database, shown);
