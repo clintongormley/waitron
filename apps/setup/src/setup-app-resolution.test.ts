@@ -134,6 +134,28 @@ it("Start again's confirmation words are the design's, in English and Spanish", 
   );
   expect(en.noInvoiceSent).toBe("No invoice was sent to AEAT.");
   expect(es.noInvoiceSent).toBe("No se envió ninguna factura a la AEAT.");
+  expect(en.recoverDeletes).toBe(
+    "Recover from backup first deletes what was entered in the setup that stopped part way.",
+  );
+  expect(es.recoverDeletes).toBe(
+    "Recuperar desde una copia primero borra lo que se introdujo en la configuración que se detuvo a medias.",
+  );
+  expect(en.recoverThen).toBe("Then you choose the backup.");
+  expect(es.recoverThen).toBe("Después eliges la copia.");
+  expect(`${en.recoverDeletes} ${en.noInvoiceSent} ${en.recoverThen}`).toBe(
+    "Recover from backup first deletes what was entered in the setup that stopped part way. No invoice was sent to AEAT. Then you choose the backup.",
+  );
+  expect(`${es.recoverDeletes} ${es.noInvoiceSent} ${es.recoverThen}`).toBe(
+    "Recuperar desde una copia primero borra lo que se introdujo en la configuración que se detuvo a medias. No se envió ninguna factura a la AEAT. Después eliges la copia.",
+  );
+  expect(en.retireRecover).toBe("Delete the old attempt and recover from a backup.");
+  expect(es.retireRecover).toBe("Borrar el intento anterior y recuperar desde una copia.");
+  expect(en.recoveryStoppedRecover).toBe(
+    "A recovery from backup started on {started} and did not finish. Recover from backup deletes it first.",
+  );
+  expect(es.recoveryStoppedRecover).toBe(
+    "Una recuperación desde una copia, iniciada el {started}, no terminó. Recuperar desde una copia la borra primero.",
+  );
   for (const strings of [en, es])
     for (const key of [
       "heldNoInvoices",
