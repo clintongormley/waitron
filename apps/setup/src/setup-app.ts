@@ -1468,10 +1468,11 @@ export class SetupApp extends LitElement {
     const current = () => this.isConnected && generation === this.#firstGeneration;
     this.firstOwnerBusy = true;
     this.firstWipeError = undefined;
+    // Kept unless the box refused: the box may have deleted the setup with no answer reaching here.
+    this.#afterWipe = this.firstWipeKind;
     try {
       await sendWipe(this.api, this.#firstResolutionSnapshot(), inspection.database, shown);
       if (!current()) return;
-      this.#afterWipe = this.firstWipeKind;
       this.#closeWipe();
       this.firstRestarting = true;
       this.firstOwnerPassword = "";
@@ -1480,16 +1481,12 @@ export class SetupApp extends LitElement {
       this.#firstSession = undefined;
     } catch (error) {
       if (!current()) return;
-      // The box has asked for its own restart, and the start tries to finish the deletion.
-      if ((error as { code?: unknown })?.code === "setup.start_again_incomplete")
-        this.#afterWipe = this.firstWipeKind;
+      const code = (error as { code?: unknown })?.code;
       const refusal = wipeRefusal(error);
+      if (refusal !== undefined || code === "setup.attempt_conflict") this.#afterWipe = undefined;
       // The summary showed no kept records, and an attempt conflict here means the summary or the
       // inspection changed after the page read them.
-      if (
-        refusal === "kept-records" ||
-        (error as { code?: unknown })?.code === "setup.attempt_conflict"
-      ) {
+      if (refusal === "kept-records" || code === "setup.attempt_conflict") {
         this.#closeWipe();
         this.firstWipeError = () => initialOwnerStrings[setupLocale()].heldChanged;
         void this.#focusAfterUpdate(

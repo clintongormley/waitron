@@ -509,6 +509,71 @@ it("a Recover send answered setup.start_again_incomplete keeps the choice: Recon
   await expect.poll(() => q(app, "screen-role")).not.toBeNull();
 });
 
+/** A box that deletes the setup and restarts before its answer reaches the page. */
+function answerLostBox() {
+  const { box, options } = restartingBox();
+  return {
+    box,
+    options: {
+      ...options,
+      intercept: (path: string) => {
+        if (path.endsWith("/resolution/start-again")) {
+          box.wiped = true;
+          return Promise.reject(new TypeError("Failed to fetch"));
+        }
+        return options.intercept(path);
+      },
+    },
+  };
+}
+async function sendWipe(app: SetupApp, kind: "recover" | "start-again") {
+  await click(app, kind === "recover" ? "recover-backup" : "start-again");
+  await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
+  await userEvent.click(tick(app));
+  await click(app, kind === "recover" ? "confirm-recover" : "confirm-start-again");
+  await expect.poll(() => q<WtButton>(app, "reconnect-first")?.disabled).toBe(false);
+  await settled(app);
+}
+
+for (const [kind, screen] of [
+  ["recover", "screen-role"],
+  ["start-again", "screen-mode"],
+] as const)
+  it(`a ${kind} wipe whose answer never reaches the page: Reconnect, once the box answers no setup, opens ${screen}`, async () => {
+    const { box, options } = answerLostBox();
+    const { app } = await wipeFixture(options);
+    await sendWipe(app, kind);
+    expect(box.wiped).toBe(true);
+    expect(formErrors(app)).toContain(t.error);
+    await click(app, "reconnect-first");
+    await expect.poll(() => q(app, "screen-first-owner")).toBeNull();
+    expect(q(app, screen)).not.toBeNull();
+    for (const other of ["screen-role", "screen-mode", "screen-venue"].filter((s) => s !== screen))
+      expect(q(app, other), other).toBeNull();
+  });
+
+it("a Recover send refused kept-records, then a Reconnect that finds the setup still claimed, draws the repair page, not Join or recover", async () => {
+  const { options } = restartingBox();
+  const { app } = await wipeFixture({ ...options, startAgain: () => refusedCause("kept-records") });
+  await sendWipe(app, "recover");
+  await click(app, "reconnect-first");
+  await expect.poll(() => q<WtButton>(app, "reconnect-first")?.disabled).toBe(false);
+  await settled(app);
+  expect(q(app, "screen-first-owner")).not.toBeNull();
+  expect(q(app, "screen-role")).toBeNull();
+});
+
+it("a Recover send the box refused forgets the choice: a Reconnect that then finds no setup opens the venue screen", async () => {
+  const { box, options } = restartingBox();
+  const { app } = await wipeFixture({ ...options, startAgain: () => refusedCause("kept-records") });
+  await sendWipe(app, "recover");
+  box.wiped = true;
+  await click(app, "reconnect-first");
+  await expect.poll(() => q(app, "screen-first-owner")).toBeNull();
+  expect(q(app, "screen-venue")).not.toBeNull();
+  expect(q(app, "screen-role")).toBeNull();
+});
+
 it("from Join or recover, Restore from backup opens the fresh-box restore screen, and nothing went to the old recovery's routes", async () => {
   const { options } = restartingBox();
   const { app, requests } = await wipeFixture(options);
