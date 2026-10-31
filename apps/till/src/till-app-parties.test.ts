@@ -328,22 +328,33 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
 /** The server's side of the party's drafts, fresh for each test. */
 let drafts: DraftServer;
 
-/** The drafts read of {@link stubApi}, except that once `joined()` Luis's party (v7) also holds
- * Ana's two bills, as it does after her guests move onto his table. */
-function draftsOnceJoinedByAna(joined: () => boolean) {
+/** The drafts read of {@link stubApi}, except that once `joined()` the party `into` (Luis's v7 by
+ * default) also holds Ana's two bills, as it does after her guests move onto its table. */
+function draftsOnceJoinedByAna(joined: () => boolean, into: "v7" | "v9" = "v7") {
   return vi.fn(async (partyId: string) => {
     const snapshot = await drafts.listDrafts(partyId);
+    const base = partyId === "v7" ? "wo-7" : partyId === "v9" ? "wo-9" : null;
     const own =
-      partyId === "v7"
-        ? joined()
-          ? ["wo-7", "wo-4", "wo-check"]
-          : ["wo-7"]
-        : partyId === "v9"
-          ? ["wo-9"]
-          : null;
+      base === null ? null : partyId === into && joined() ? [base, "wo-4", "wo-check"] : [base];
     return own === null
       ? snapshot
       : { ...snapshot, billEdits: snapshot.billEdits.filter((edit) => own.includes(edit.billId)) };
+  });
+}
+
+/** The bills read of {@link stubApi}, except that once `joined()` the party `into` also holds
+ * Ana's two bills, numbered after its own, as the server lists them after her guests move there. */
+function billsOnceJoinedByAna(joined: () => boolean, into: "v7" | "v9") {
+  return vi.fn(async (partyId: string) => {
+    if (partyId !== "v7" && partyId !== "v9") return [tabBill, checkBill];
+    const own: PartyBill = {
+      ...tabBill,
+      partyId,
+      workingOrderId: partyId === "v7" ? "wo-7" : "wo-9",
+    };
+    return partyId === into && joined()
+      ? [own, { ...tabBill, partyId, billNumber: 2 }, { ...checkBill, partyId, billNumber: 3 }]
+      : [own];
   });
 }
 
@@ -1729,7 +1740,7 @@ describe("till-app: the party on a handheld", () => {
       expect(orderCard(el)!.orderId).toBeUndefined();
     });
 
-    it("Move guests: back on the order tab, the screen has followed the guests into the other party, and the floor tab said nothing about the bills", async () => {
+    it("Move guests: back on the order tab, the screen has followed the guests into the other party, keeping the bill it showed, and the floor tab said nothing about the bills", async () => {
       const { call, answer } = held();
       const table9Seated = seated(
         { id: "t9", label: "9" },
@@ -1741,6 +1752,8 @@ describe("till-app: the party on a handheld", () => {
         getTablesState: vi.fn(async () =>
           moved ? [table(), table7, table9Seated] : [table4, table7, table9Seated],
         ),
+        getPartyBills: billsOnceJoinedByAna(() => moved, "v9"),
+        listDrafts: draftsOnceJoinedByAna(() => moved, "v9"),
         moveGuests: call,
       });
       emit(await openOnPhone(el), "move-guests", { toTableId: "t9", bills: "merge" });
@@ -1748,14 +1761,14 @@ describe("till-app: the party on a handheld", () => {
       await selectTab(el, "floor");
 
       moved = true;
-      answer.settle({ partyId: "v9", billIds: ["wo-9"] });
+      answer.settle({ partyId: "v9", billIds: ["wo-9", "wo-4", "wo-check"] });
       await flush(el);
       expect(banner(el)).toBeNull();
       await selectTab(el, "order");
 
       expect(call).toHaveBeenCalledOnce();
       expect(orderCard(el)!.party?.id).toBe("v9");
-      expect(orderCard(el)!.orderId).toBe("wo-9");
+      expect(orderCard(el)!.orderId).toBe("wo-4");
       expect(banner(el)).toBeNull();
     });
 
@@ -2143,7 +2156,7 @@ describe("till-app: table actions on the party", () => {
     expect(banner(el)).toBeNull();
   });
 
-  it("opens the lowest-numbered unpaid bill of the party the guests moved into when its answer no longer lists the bill on screen", async () => {
+  it("opens the lowest-numbered unpaid bill of the party the guests moved into, past its paid Bill 1, when its answer no longer lists the bill on screen", async () => {
     const combined = seated(
       { id: "t7", label: "7" },
       { id: "v7", revision: 10, mainBillId: null, tableIds: ["t7"] },
@@ -2154,7 +2167,16 @@ describe("till-app: table actions on the party", () => {
       getTablesState: reads.getTablesState,
       getPartyBills: vi.fn(async (partyId: string) =>
         partyId === "v7"
-          ? [{ ...tabBill, workingOrderId: "wo-7", status: "placed" }, luisBill]
+          ? [
+              {
+                ...tabBill,
+                workingOrderId: "wo-7",
+                partyId: "v7",
+                status: "settled",
+                outstanding: "0.00",
+              },
+              luisBill,
+            ]
           : [tabBill],
       ),
       moveGuests: vi.fn(async () => {
@@ -2167,30 +2189,33 @@ describe("till-app: table actions on the party", () => {
     emit(order, "move-guests", { toTableId: "t7", bills: "separate" });
     await flush(el);
 
-    expect(tableOrder(el)!.orderId).toBe("wo-7");
+    expect(tableOrder(el)!.orderId).toBe("wo-luis");
     expect(tableOrder(el)!.party).toEqual(combined.party);
   });
 
   it.each([
-    ["merged", "merge"],
-    ["kept apart when asked to", "separate"],
-  ] as const)("says nothing about the bills when they %s", async (_how, bills) => {
-    let joined = false;
-    const { el } = await mountApp({
-      listDrafts: draftsOnceJoinedByAna(() => joined),
-      moveGuests: vi.fn(async () => {
-        joined = true;
-        return { partyId: "v7", billIds: ["wo-7", "wo-4", "wo-check"] };
-      }),
-    });
-    const order = await openMesa(el);
+    ["merge", "merge"],
+    ["separate", "separate"],
+  ] as const)(
+    "says nothing about the bills after Move guests, with the event's bills value %s",
+    async (_how, bills) => {
+      let joined = false;
+      const { el } = await mountApp({
+        listDrafts: draftsOnceJoinedByAna(() => joined),
+        moveGuests: vi.fn(async () => {
+          joined = true;
+          return { partyId: "v7", billIds: ["wo-7", "wo-4", "wo-check"] };
+        }),
+      });
+      const order = await openMesa(el);
 
-    emit(order, "move-guests", { toTableId: "t7", bills });
-    await flush(el);
+      emit(order, "move-guests", { toTableId: "t7", bills });
+      await flush(el);
 
-    expect(api.moveGuests).toHaveBeenCalledOnce();
-    expect(banner(el)).toBeNull();
-  });
+      expect(api.moveGuests).toHaveBeenCalledOnce();
+      expect(banner(el)).toBeNull();
+    },
+  );
 
   it("joins a free table with the party's revision, and a seated one with the other party's too", async () => {
     const { el } = await mountApp({
@@ -3405,12 +3430,12 @@ describe("till-app: a table action's answer once the waiter has opened another p
     },
     {
       read: "the bills it opens one of",
-      answer: { partyId: "v9", billIds: [] },
+      answer: { partyId: "v9", billIds: ["wo-9"] },
       holds: (method: string, partyId?: string) => method === "getPartyBills" && partyId === "v9",
     },
     {
-      read: "the bills it says the merge from",
-      answer: { partyId: "v9", billIds: ["wo-9"] },
+      read: "the bills read with the lines",
+      answer: { partyId: "v9", billIds: ["wo-9", "wo-4", "wo-check"] },
       holds: (method: string, partyId?: string) => method === "getPartyBills" && partyId === "v9",
     },
   ])(
@@ -3462,10 +3487,13 @@ describe("till-app: a table action's answer once the waiter has opened another p
     },
   );
 
-  it("Move guests answering after the waiter came back to the same party still follows the guests", async () => {
+  it("Move guests answering after the waiter came back to the same party still follows the guests, keeping the bill on screen", async () => {
     const { call, answer } = held();
+    let moved = false;
     const { el } = await mountApp({
       getTablesState: vi.fn().mockResolvedValue([table4, table7, table9Seated]),
+      getPartyBills: billsOnceJoinedByAna(() => moved, "v9"),
+      listDrafts: draftsOnceJoinedByAna(() => moved, "v9"),
       moveGuests: call,
     });
     const order = await openMesa(el);
@@ -3476,11 +3504,12 @@ describe("till-app: a table action's answer once the waiter has opened another p
     emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
     await flush(el);
 
-    answer.settle({ partyId: "v9", billIds: ["wo-9"] });
+    moved = true;
+    answer.settle({ partyId: "v9", billIds: ["wo-9", "wo-4", "wo-check"] });
     await flush(el);
 
     expect(tableOrder(el)!.party?.id).toBe("v9");
-    expect(tableOrder(el)!.orderId).toBe("wo-9");
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
   });
 
   it("Join a seated table: an answer arriving after the waiter opened that table leaves it as opened, saying nothing about the bills", async () => {
@@ -4047,7 +4076,7 @@ describe("till-app: moving a bill", () => {
     expect(banner(el)).toBeNull();
   });
 
-  it("sends the party the bill choice named, though the floor read since seats another there", async () => {
+  it("sends the party the waiter picked, though the floor read since seats another there", async () => {
     const pedro = seated(
       { id: "t7", label: "7" },
       { id: "v8", revision: 2, mainBillId: "wo-8", tableIds: ["t7"] },
@@ -4105,20 +4134,23 @@ describe("till-app: moving a bill", () => {
   });
 
   it.each([
-    ["merged into their main bill", "merge"],
-    ["kept separate when asked to", "separate"],
-  ] as const)("says nothing about the bills when the bill was %s", async (_how, bills) => {
-    const { el } = await mountApp({
-      moveBill: vi.fn().mockResolvedValue({ partyId: "v7", billId: "wo-7" }),
-    });
-    const order = await openMesa(el);
+    ["merge", "merge"],
+    ["separate", "separate"],
+  ] as const)(
+    "says nothing about the bills after Move this bill, with the event's bills value %s",
+    async (_how, bills) => {
+      const { el } = await mountApp({
+        moveBill: vi.fn().mockResolvedValue({ partyId: "v7", billId: "wo-7" }),
+      });
+      const order = await openMesa(el);
 
-    emit(order, "move-bill", { to: { tableId: "t7", seated: { id: "v7", revision: 9 } }, bills });
-    await flush(el);
+      emit(order, "move-bill", { to: { tableId: "t7", seated: { id: "v7", revision: 9 } }, bills });
+      await flush(el);
 
-    expect(api.moveBill).toHaveBeenCalledOnce();
-    expect(banner(el)).toBeNull();
-  });
+      expect(api.moveBill).toHaveBeenCalledOnce();
+      expect(banner(el)).toBeNull();
+    },
+  );
 
   it.each([
     "party.main_bill_stays",

@@ -17996,7 +17996,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     expect(toast(el).message).toBe(t("counter.moved_to_table").replace("{table}", "Mesa 7"));
   });
 
-  it("sends the party the bill choice named, though the floor read since seats another there", async () => {
+  it("sends the party the waiter picked, though the floor read since seats another there", async () => {
     const pedro = { ...luisParty, id: "v8", revision: 2, name: "Pedro", displayName: "Pedro" };
     const { el, c } = await counterWith({
       getTablesState: vi.fn().mockResolvedValue([{ ...mesa7, party: pedro }, mesa9]),

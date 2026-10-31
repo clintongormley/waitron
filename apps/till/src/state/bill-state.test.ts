@@ -107,18 +107,13 @@ describe("billToShow", () => {
   const read = [three, dropped, two, one];
 
   it("keeps the bill on screen while the read still holds it, paid or not", () => {
-    expect(billToShow("wo-3", read, "wo-2")).toBe("wo-3");
-    expect(billToShow("wo-1", read, "wo-2")).toBe("wo-1");
-  });
-
-  it("takes the bill the answer names when the kept one has gone", () => {
-    expect(billToShow("wo-9", read, "wo-3")).toBe("wo-3");
-    expect(billToShow(undefined, read, "wo-1")).toBe("wo-1");
+    expect(billToShow("wo-3", read)).toBe("wo-3");
+    expect(billToShow("wo-1", read)).toBe("wo-1");
   });
 
   it("else takes the lowest-numbered bill still owing, skipping a paid Bill 1", () => {
     expect(billToShow("wo-9", read)).toBe("wo-2");
-    expect(billToShow("wo-9", read, "wo-9")).toBe("wo-2");
+    expect(billToShow(undefined, read)).toBe("wo-2");
   });
 
   it("else the lowest-numbered shown bill, never an abandoned one", () => {
@@ -126,11 +121,10 @@ describe("billToShow", () => {
     const paidThree = { ...three, status: "settled" as const, outstanding: "0.00" };
     expect(billToShow(undefined, [paidThree, dropped, paidTwo, one])).toBe("wo-1");
     expect(billToShow("wo-0", [paidThree, dropped, paidTwo])).toBe("wo-2");
-    expect(billToShow(undefined, [paidThree, dropped, paidTwo], "wo-0")).toBe("wo-2");
   });
 
   it("none when no bill is shown", () => {
     expect(billToShow("wo-1", [])).toBeUndefined();
-    expect(billToShow("wo-0", [dropped], "wo-0")).toBeUndefined();
+    expect(billToShow("wo-0", [dropped])).toBeUndefined();
   });
 });

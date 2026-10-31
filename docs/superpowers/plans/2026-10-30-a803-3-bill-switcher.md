@@ -366,11 +366,10 @@ Every other word the new controls show is an approved string (D10).
   (`:1094`, `:2876`), and the `party.main_bill_stays` wording (`apps/till/src/i18n/codes.ts:294-297`).
 - **D11 Which bill is on screen** (master plan `A803 switcher`: "If it disappears, choose lowest
   surviving stored number with a visible refresh, or explicitly create an empty bill when none
-  survive; never submit to a hidden fallback"; Review focus 4). One rule, `billToShow(kept, read,
-  named?)` in `state/bill-state.ts`, used in every place below:
+  survive; never submit to a hidden fallback"; Review focus 4). One rule, `billToShow(kept, read)` in
+  `state/bill-state.ts`, used in every place below:
   1. **After this till's Join, Move guests or Split a table**: keep the bill it showed if that id is
-     in the answer's `billIds`/the party's bills afterwards; otherwise the bill the answer names
-     (split: `billId` when the screen follows the leaving party); otherwise the lowest-numbered
+     in the answer's `billIds`/the party's bills afterwards; otherwise the lowest-numbered
      owing bill; otherwise the lowest-numbered shown bill. The server guarantees the resulting
      party has a bill (D1), so "none" cannot follow these.
   2. **After this till's Move this bill**: the moved bill has left; the screen shows the rule's
@@ -735,9 +734,14 @@ task's red run; a red assertion not on this list that is not kind B/R/W/S/F unde
 | `till-app-parties.test.ts:3964` ("goes back to the floor when the moved bill was the party's last") | F | **kept**: every assertion unchanged (D11 rule 2); only its emitted event detail loses `bills: "merge"` | D11 | 8b |
 | `till-app-parties.test.ts` kept-apart message tests (`table.bills_kept_separate`) and merge-question tests in the table screen | B | no question; the request carries no `bills` | §3.4 bullet 2, §6 | 8a |
 | As built at Task 8a (lines at `3e83dc464`): `apps/till/src/api/client.test.ts` request-body pins `:2624`, `:2661`, `:2690`, `:2723`, `:2772`, `:2814`, `:2823`, `:2832`, `:3020`, `:4512`, `:4527`; `party-allergy-client.test.ts:52`, `:84` | B | the body's `bills` entry goes; every other key and value of the same `JSON.stringify`/`toEqual` pin unchanged | §3.4 bullet 2, §6, D13 | 8a |
-| `client.test.ts` mocked answers `:2601`, `:2638`, `:2677`, `:2703`, `:2753`, `:2782`, `:2996-2997`, `:3030`, `:3071`; `party-allergy-client.test.ts:59`; `till-floor-screen.today-joins.test.ts:716-718`, `:1069`; till-app fixtures (`till-app.test.ts:523-524`, `:9902`, `:9930`, `:17394`, `:17484`, `:17522`, `:17640`, `:17653`, `:17723`, `:17773`, `:21887`, `:22010`, `:22019`, `:22027`, `:22036`; `till-app-allergy.move.test.ts:98`, `:154`, `:353`, `:368`, `:464`, `:582`; `till-app-table-service.test.ts:289-291`; `till-app-parties.test.ts:300-302`, `:311`, `:1573`, `:1732`, `:1768`, `:1813`, `:2174-2175` (first answer), `:2240`, `:2281`, `:2463`, `:3285`, `:3292`, `:3378`, `:3383`, `:3388`, `:3454`, `:3486`, `:3598`, `:3650`, `:3704`, `:3761-3763`, `:3815`, `:3980`, `:4002`, `:4089`, `:5183`, `:10508`, `:10562`, `:10917`, `:10981`) | F | the answer takes the new shape: `mainBillId: X, merged` → `billIds: [X]` (`[]` for null), split `mainBillId` → `billId` (null → a new bill's id), `merged` dropped from move answers and type casts; `it.each` rows `:2154-2155`, `:4085-4086` lose their unread `merged` value. Every `expect` unchanged | master plan interfaces | 8a |
+| `client.test.ts` mocked answers `:2601`, `:2638`, `:2677`, `:2703`, `:2753`, `:2782`, `:2996-2997`, `:3030`, `:3071`; `party-allergy-client.test.ts:59`; `till-floor-screen.today-joins.test.ts:716-718`, `:1069`; till-app fixtures (`till-app.test.ts:523-524`, `:9902`, `:9930`, `:17394`, `:17484`, `:17522`, `:17640`, `:17653`, `:17723`, `:17773`, `:21887`, `:22010`, `:22019`, `:22027`, `:22036`; `till-app-allergy.move.test.ts:98`, `:154`, `:353`, `:368`, `:464`, `:582`; `till-app-table-service.test.ts:289-291`; `till-app-parties.test.ts:300-302`, `:311`, `:1573`, `:1768`, `:1813`, `:2174-2175` (first answer), `:2240`, `:2281`, `:2463`, `:3285`, `:3292`, `:3378`, `:3486`, `:3598`, `:3650`, `:3704`, `:3761-3763`, `:3815`, `:3980`, `:4002`, `:4089`, `:5183`, `:10508`, `:10562`, `:10917`, `:10981`) | F | the answer takes the new shape: `mainBillId: X, merged` → `billIds: [X]` (`[]` for null), split `mainBillId` → `billId` (null → a new bill's id), `merged` dropped from move answers and type casts; `it.each` rows `:2154-2155`, `:4085-4086` lose their unread `merged` value. Every `expect` unchanged | master plan interfaces | 8a |
 | `till-app-parties.test.ts:2092` (follows the guests into Luis's party: `orderId` `wo-7`, banner `table.bills_kept_separate`), `:2153` (it.each, answer), `:2170` (join: banner `table.bills_kept_separate`), `:3496` (floor unreadable: `orderId` `wo-7`, banner kept apart), `:4000` (move bill: banner kept apart) | B | answers list every bill the party holds afterwards (`["wo-7", "wo-4", "wo-check"]`); the screen keeps the bill it showed, `wo-4` (was the destination's main bill `wo-7`), and the banner is `null` (was the kept-apart sentence); titles say so. `:2092` and `:2155` read Luis's drafts through `draftsOnceJoinedByAna`, which lists Ana's bills under him once joined (setup) | D11 rule 1; §3.4 bullet 2, §6. **Departure:** the plan's 8d row lists `:2126`; the Move guests follow it and these cases pin changed in 8a, so they changed here; the Move guests follow it pins changed here | 8a |
 | `till-app-parties.test.ts:2126` ("opens the first unpaid bill … when it has no main bill") | B | retitled "… when its answer no longer lists the bill on screen"; answer `billIds: ["wo-7", "wo-luis"]`; the same `orderId` `wo-7` and party checks (lowest-numbered owing bill of the read) | D11 rule 1 | 8a |
+| Task 8a review (lines at `7e78e9495`): `till-app-parties.test.ts:2146` (follows the party the guests moved into when its answer no longer lists the bill on screen; the B row above as `:2126`) | B | the read's Bill 1 `wo-7` is now `settled` (paid, `outstanding` `0.00`) and Luis's `wo-luis` open; `orderId` `wo-7` → `wo-luis`; retitled "… past its paid Bill 1 …"; the party check unchanged. Red: `#followActionBills` taking `billIds[0]` fails it (`expected 'wo-7' to be 'wo-luis'`); green with the code as built | D11 rule 1 | 8a |
+| Task 8a review: `till-app-parties.test.ts:1732` (handheld: back on the order tab the screen followed the guests into v9) and `:3465` (the answer arrives after the waiter came back to the same party) — filed above as kind F at base `:1732`, `:3454` | B | the answer is the server's shape, `billIds: ["wo-9", "wo-4", "wo-check"]`; once moved, the bills and drafts reads list Ana's bills under v9 (`billsOnceJoinedByAna`, new, and `draftsOnceJoinedByAna` with its new `into` argument: setup); `orderId` `wo-9` → `wo-4`, the bill the screen showed; titles add "keeping the bill …"; every other `expect` unchanged. Red: with the old `wo-9` expectation both fail `expected 'wo-4' to be 'wo-9'` | D11 rule 1; §3.4 bullet 2 | 8a |
+| Task 8a review: `till-app-parties.test.ts:3407`, `:3412` (rows 2 and 3 of "Move guests: $read, read after the answer …") — filed above as kind F at base `:3383`, `:3388` | B | row 2's answer `billIds: []`, which the server never sends (D1), → `["wo-9"]` (the "not listed" path: another till took the bill on screen); row 3, "the bills it says the merge from", → "the bills read with the lines", answer `["wo-9", "wo-4", "wo-check"]` (the "listed, keep it" path); the held read and every `expect` unchanged | D1; D11 rule 1 | 8a |
+| Task 8a review: titles only — `client.test.ts:2600`, `:2636`, `:2746` ("… the bill choice …"); `till-app-parties.test.ts:2177`, `:4110` (`it.each` rows "merged" / "kept apart when asked to", "merged into their main bill" / "kept separate when asked to"); `till-app-parties.test.ts:4050` and `till-app.test.ts:17999` ("sends the party the bill choice named …") | B (titles; no `expect` changes) | the client titles drop "the bill choice"; each `it.each` pair is titled by the event's `bills` value it sends ("… with the event's bills value merge/separate"), the two rows now being the same behaviour; "the bill choice named" → "the waiter picked" | §3.4 bullet 2 | 8a |
+| Task 8a review: `state/bill-state.test.ts` calls passing `named` (all added at Task 8a) | B | the case "takes the bill the answer names when the kept one has gone" (two checks) is deleted with `billToShow`'s `named` parameter, which no production code passed; `billToShow(undefined, [paidThree, dropped, paidTwo], "wo-0")` → `wo-2` is deleted, the same read with `kept` `"wo-0"` → `wo-2` staying beside it; `billToShow("wo-9", read, "wo-9")` → `wo-2` becomes `billToShow(undefined, read)` → `wo-2`; the other three calls drop the argument with the same expectation | D11 (no step for a bill the answer names) | 8a |
 | `till-app-parties.test.ts:10928-10995` (relocation observations "while the bill choice is open" ×3, "read before opening the bill choice" ×3) | B | no dialog: the source-observation case holds the destination's drafts read and changes the source meanwhile (same `not.toHaveBeenCalled` and `draft.out_of_date` banner); the destination case checks the send used the one read made when the table was picked (`before + 1`, was the count when the dialog opened) and the same `expectedEdits`; `relocationPrompt` asserts no dialog is drawn | §3.4 bullet 2, §6 | 8a |
 | `till-app-open-table.test.ts:1405`/`:1427` (moving guests back onto Ana's table showed her `Beer ×1`, the merged main bill) | B | answer `billIds: ["wo-4", "wo-7"]`; the screen keeps `wo-7` (new `orderId` check) and its rows are `[]`; the waits-for-its-save checks and `savedLines()` unchanged. `:1382`'s answer F | D11 rule 1, §3.4 | 8a |
 | `till-app-menu-refresh.test.ts:2069`, `:2074` | F | answer `billIds: ["wo-other", "wo-7"]`; the comment no longer says the party has a new main bill; every `expect` unchanged | §3.4 | 8a |
@@ -1530,7 +1534,7 @@ parameter **optional and no longer put it in the request body** until Task 8b de
 last callers, so the till typecheck stays clean (I6); new `createPartyBill(partyId,
 expectedPartyRevision): Promise<{ billId: string; revision: number }>` → `POST /api/parties/:id/bills`;
 doc comments `:2185-2186`, `:2213`, `:4420`); `apps/till/src/state/bill-state.ts` (new
-`billToShow(kept, bills, named?)`, D11); `apps/till/src/till-app.ts` (Move guests answer
+`billToShow(kept, bills)`, D11); `apps/till/src/till-app.ts` (Move guests answer
 `:14806-14813` and split follow `:15401-15409` follow D11 rule 1 from the answer's ids;
 `#sayBillsKeptApart` `:15324-15332` and its calls `:14817`, `:14889`, `:15321` go);
 `apps/till/src/screens/till-table-order-screen.ts` (`#pickTable` `:4860-4867` sends at once,
@@ -1567,10 +1571,22 @@ doc comments `:2185-2186`, `:2213`, `:4420`); `apps/till/src/state/bill-state.ts
       45 red cases in 6 files (client 9, allergy client 2, table screen 10, its a11y 4, open table 1, parties 19), each a row under "As built at Task 8a"; old-shape answer fixtures elsewhere showed only as unhandled rejections, and two floor-screen fixtures only at typecheck; no money, VAT, permission or
       filing check among them.)
 - [x] GREEN: those files unfiltered; till typecheck clean.
-      (Run: the 11 table-screen and client files of the trace, 967 passed, exit 0; the 7 till-app
-      files, 2681 passed, exit 0 (a vite client log "Cannot read properties of null (reading
-      'approvedProfiles')" printed once; nothing on this branch names `approvedProfiles`, `git diff
-      a90f4f87b -- apps/till` counted 0; not counted by Vitest as an error). `pnpm --filter
+      (Run after the Task 8a review's answer, each set in one foreground run: the 11 table-screen
+      and client files — `src/api/client.test.ts`, `src/api/party-allergy-client.test.ts`,
+      `src/screens/till-floor-screen.today-joins.test.ts`, `src/screens/till-table-order-screen.test.ts`,
+      `src/screens/till-table-order-screen.a11y.test.ts`,
+      `src/screens/till-table-order-screen.actions-unsaved.test.ts`, `src/state/floor-today.test.ts`,
+      `src/widgets/held-orders.test.ts`, `src/widgets/bill-choice-dialog.test.ts`,
+      `src/widgets/bill-choice-dialog.a11y.test.ts`, `src/state/bill-state.test.ts` — 942 passed,
+      exit 0; the 7 till-app files — `src/till-app-allergy.move.test.ts`, `src/till-app-drafts.test.ts`,
+      `src/till-app-menu-refresh.test.ts`, `src/till-app-open-table.test.ts`,
+      `src/till-app-parties.test.ts`, `src/till-app-table-service.test.ts`, `src/till-app.test.ts` —
+      2466 passed, exit 0. The review counted 943 and 2466 on the same sets at `7e78e9495`; the one
+      fewer is the `billToShow` case removed with its `named` parameter. A vite client log "Cannot
+      read properties of null (reading 'approvedProfiles')" prints when `AI_AGENT` is set; it comes
+      from `till-app.test.ts:21173` ("does not leave the dialog busy when a step after the switch
+      throws", from `7873b97e2`), which makes the device read answer `null` on purpose, and the
+      review saw it at `3e83dc464` too; Vitest does not count it as an error.) `pnpm --filter
       @waitron/till typecheck` clean; prettier `--check` and eslint clean on the 17 changed files.
       Controls, each restored: `bills` back in the Move guests body → the client case fails;
       `#followActionBills` ignoring the kept bill and the answer → the Move guests and Join cases
@@ -1579,6 +1595,18 @@ doc comments `:2185-2186`, `:2213`, `:4420`); `apps/till/src/state/bill-state.ts
       dropped → "sends nothing when the waiter goes back …" fails; `billToShow` without the owing
       step → its "lowest-numbered still owing" case fails.)
 - [x] Commit: "The table screen asks no merge question and follows the bills an action leaves".
+- [x] Answer the Task 8a review (`a803-3-reviews/task-8a.md`): `billToShow` loses its `named`
+      parameter, which no production caller passed (`rg -n 'billToShow\(' apps/till/src`: the two
+      callers in `till-app.ts` pass two arguments); the app-level "lowest owing" case and the two
+      Move guests cases that pinned the destination's bill take real-shaped answers; the three
+      client titles, the parties titles at `:4050` and the two `it.each` pairs, `till-app.test.ts:17999`
+      and the `#followActionBills` comment stop naming the retired bill choice or saying "as
+      before". Every changed check is a row below ("Task 8a review"). Controls, each restored:
+      `#followActionBills` taking `billIds[0]` instead of `billToShow(kept, read ?? []) ?? billIds[0]`
+      → the `:2146` case fails `expected 'wo-7' to be 'wo-luis'`; the two Move guests cases with
+      their old `wo-9` expectation and the real-shaped answer → both fail `expected 'wo-4' to be
+      'wo-9'`. The two `it.each` pairs keep both rows while the event still carries `bills`; Task 8b's
+      `bills` sweep (its row below) folds each pair into one case.
 
 ## Task 8b: the floor and parked orders ask no merge question; the dialog and `bills` go (≈50 calls)
 

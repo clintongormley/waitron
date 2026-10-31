@@ -2597,7 +2597,7 @@ describe("TillApi", () => {
 
   // --- Table actions on a party (/api/parties/:id/<verb>) and bill actions (/api/bills/:id/<verb>) ---
 
-  it("moveGuests POSTs the target table, the bill choice and both parties read to the party's /move route", async () => {
+  it("moveGuests POSTs the target table and both parties read to the party's /move route", async () => {
     const answer = { partyId: "v7", billIds: ["wo-7", "wo-1"] };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
 
@@ -2633,7 +2633,7 @@ describe("TillApi", () => {
     );
   });
 
-  it("moveBill POSTs where the bill goes, the bill choice and the parties read to the bill's /move route, and answers the move", async () => {
+  it("moveBill POSTs where the bill goes and the parties read to the bill's /move route, and answers the move", async () => {
     const answer = { partyId: "v7", billId: "wo-check" };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
 
@@ -2743,7 +2743,7 @@ describe("TillApi", () => {
     ).rejects.toEqual({ code: "party.main_bill_stays", partyId: "v1", status: 409 });
   });
 
-  it("joinTables POSTs the table, the bill choice and a table read free as otherPartyId null to the party's /join route", async () => {
+  it("joinTables POSTs the table and a table read free as otherPartyId null to the party's /join route", async () => {
     const answer = { partyId: "v1", billIds: ["wo-4"] };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
 

@@ -32,18 +32,16 @@ export function shownBills(bills: readonly PartyBill[]): PartyBill[] {
 
 /**
  * The bill to show of `bills`, the party's bills as last read: `kept`, the bill on screen, while it
- * is still shown; else `named`, the bill an action's answer names; else the lowest-numbered bill
- * still owing; else the lowest-numbered shown bill; none when no bill is shown. Abandoned bills are
- * never chosen.
+ * is still shown; else the lowest-numbered bill still owing; else the lowest-numbered shown bill;
+ * none when no bill is shown. Abandoned bills are never chosen.
  */
 export function billToShow(
   kept: string | undefined,
   bills: readonly PartyBill[],
-  named?: string,
 ): string | undefined {
   const shown = shownBills(bills);
-  const held = (id: string | undefined) => shown.find((bill) => bill.workingOrderId === id);
-  return (held(kept) ?? held(named) ?? shown.find(owing) ?? shown[0])?.workingOrderId;
+  return (shown.find((bill) => bill.workingOrderId === kept) ?? shown.find(owing) ?? shown[0])
+    ?.workingOrderId;
 }
 
 /** A bill's name under the party's display name: its stored number, and its own name if it has one. */
