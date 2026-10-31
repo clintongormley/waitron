@@ -1808,15 +1808,15 @@ export const en = {
   "staff_notice.check_time": "Check the time",
   "box_time.title": "Check the time",
   "box_time.loading": "Reading the box's time…",
-  "box_time.differs": "The box's clock says {box}. This till says {till}.",
+  "box_time.differs": "The box's clock says {box}. This device says {till}.",
   "box_time.differs_ask":
-    "Use this till's time? The box's clock is set to it and payments start again. Every manager is told it was you, from this till.",
+    "Use this device's time? The box's clock is set to it and payments start again. Every manager is told it was you, from this device.",
   "box_time.differs_wrong_till":
-    "If this till's time is wrong too, correct it in the till's own settings first.",
+    "If this device's time is wrong too, correct it in the device's own settings first.",
   "box_time.agrees":
-    "The box's clock says {box}, and this till agrees. If that is the right time, confirm it: payments start again. Every manager is told it was you.",
+    "The box's clock says {box}, and this device agrees. If that is the right time, confirm it: payments start again. Every manager is told it was you.",
   "box_time.not_now": "Not now",
-  "box_time.use_till": "Use this till's time",
+  "box_time.use_till": "Use this device's time",
   "box_time.time_right": "The time is right",
   "box_time.set_to": "The box's clock is set to {after}.",
   "box_time.confirmed": "The box's time is confirmed.",
@@ -1825,31 +1825,32 @@ export const en = {
   "box_time.admin": "Administrator sign-in",
   "box_time.refused.not_stopped": "The box's clock no longer needs checking.",
   "box_time.refused.not_start_up":
-    "The box has been running since its clock was last right, so a staff member can no longer set it from a till. An administrator can, here.",
+    "The box has been running since its clock was last right, so a staff member can no longer set it from a device. An administrator can, here.",
   "box_time.refused.authority_pending":
     "The box is still trying the tax agency's time over the internet. Check again in a minute.",
   "box_time.refused.witnessed":
-    "The box has the tax agency's time, so it confirms or sets its clock from that time itself, not from this till's. If a try fails, it tries again later.",
+    "The box has the tax agency's time, so it confirms or sets its clock from that time itself, not from this device's. If a try fails, it tries again later.",
   "box_time.refused.target_invalid":
-    "This till's clock reads {till}, which cannot be right. Correct this till's date and time in its settings, then check again.",
+    "This device's clock reads {till}, which cannot be right. Correct this device's date and time in its settings, then check again.",
   "box_time.refused.synchronised":
-    "The box keeps its clock in time over the internet, so it does not take a time from a till. Check this till's own clock.",
+    "The box keeps its clock in time over the internet, so it does not take a time from a device. Check this device's own clock.",
   "box_time.refused.host_unavailable":
-    "This box cannot read or set its own clock: the part of the box that does that is not answering. If the box can reach the internet, its own time service may still put the clock right by itself. If this till's time agrees with the box's, you can still confirm it.",
+    "This box cannot read or set its own clock: the part of the box that does that is not answering. If the box can reach the internet, its own time service may still put the clock right by itself. If this device's time agrees with the box's, you can still confirm it.",
   "box_time.refused.stale": "The box's clock changed while this was being checked.",
   "box_time.refused.check_expired": "This took too long.",
   "box_time.refused.same_machine":
     "This screen is the box itself, so its clock is the box's own. Check from a till or handheld instead.",
   "box_time.refused.contrary_proof":
-    "The tax agency's time or two other tills disagree with the box's clock, so this till cannot confirm it. If one of those tills shows the right time, check the time from that till.",
+    "The tax agency's time or two other devices disagree with the box's clock, so this device cannot confirm it. If one of those devices shows the right time, check the time from that device.",
   "box_time.refused.not_admitted":
-    "This till's profile no longer lets you work on it, so it cannot check the time for you. Sign in on a till whose profile admits you.",
+    "This device's profile no longer lets you work on it, so it cannot check the time for you. Sign in on a device whose profile admits you.",
   "box_time.refused.set_failed_refused": "The box could not set its clock. Nothing was changed.",
   "box_time.refused.set_failed_unverified":
     "The box asked for its clock to be set but could not confirm it took.",
   "box_time.refused.pending_disproofs":
     "The box has not finished recording what it found about its clock. Check again in a minute.",
-  "box_time.refused.other": "The box's time was not checked. Nothing was changed.",
+  "box_time.refused.other":
+    "The box's time could not be checked. Check again to see where it stands.",
   "staff_notice.retried": "Retried automatically",
   "staff_notice.more": "+{n}",
   "staff_notice.more_label": "{n} more notices",
@@ -3625,15 +3626,15 @@ export const es: Record<StringKey, string> = {
   "staff_notice.check_time": "Comprobar la hora",
   "box_time.title": "Comprobar la hora",
   "box_time.loading": "Leyendo la hora del equipo…",
-  "box_time.differs": "El reloj del equipo marca {box}. Esta caja marca {till}.",
+  "box_time.differs": "El reloj del equipo marca {box}. Este dispositivo marca {till}.",
   "box_time.differs_ask":
-    "¿Usar la hora de esta caja? El reloj del equipo se pone a esa hora y se puede volver a cobrar. Se avisa a todos los encargados de que fuiste tú, desde esta caja.",
+    "¿Usar la hora de este dispositivo? El reloj del equipo se pone a esa hora y se puede volver a cobrar. Se avisa a todos los encargados de que fuiste tú, desde este dispositivo.",
   "box_time.differs_wrong_till":
-    "Si la hora de esta caja también está mal, corrígela primero en los ajustes de la propia caja.",
+    "Si la hora de este dispositivo también está mal, corrígela primero en los ajustes del propio dispositivo.",
   "box_time.agrees":
-    "El reloj del equipo marca {box} y esta caja coincide. Si es la hora correcta, confírmala: se puede volver a cobrar. Se avisa a todos los encargados de que fuiste tú.",
+    "El reloj del equipo marca {box} y este dispositivo coincide. Si es la hora correcta, confírmala: se puede volver a cobrar. Se avisa a todos los encargados de que fuiste tú.",
   "box_time.not_now": "Ahora no",
-  "box_time.use_till": "Usar la hora de esta caja",
+  "box_time.use_till": "Usar la hora de este dispositivo",
   "box_time.time_right": "La hora es correcta",
   "box_time.set_to": "El reloj del equipo marca ahora {after}.",
   "box_time.confirmed": "La hora del equipo está confirmada.",
@@ -3642,32 +3643,33 @@ export const es: Record<StringKey, string> = {
   "box_time.admin": "Acceso de administrador",
   "box_time.refused.not_stopped": "Ya no hace falta comprobar el reloj del equipo.",
   "box_time.refused.not_start_up":
-    "El equipo lleva en marcha desde la última vez que su reloj estaba bien, así que un empleado ya no puede ponerlo en hora desde una caja. Un administrador sí puede, aquí.",
+    "El equipo lleva en marcha desde la última vez que su reloj estaba bien, así que un empleado ya no puede ponerlo en hora desde un dispositivo. Un administrador sí puede, aquí.",
   "box_time.refused.authority_pending":
     "El equipo aún está intentando obtener la hora de Hacienda por internet. Vuelve a comprobarlo dentro de un minuto.",
   "box_time.refused.witnessed":
-    "El equipo tiene la hora de Hacienda, así que confirma o pone su reloj en hora con esa hora él solo, no con la de esta caja. Si un intento falla, lo vuelve a intentar más tarde.",
+    "El equipo tiene la hora de Hacienda, así que confirma o pone su reloj en hora con esa hora él solo, no con la de este dispositivo. Si un intento falla, lo vuelve a intentar más tarde.",
   "box_time.refused.target_invalid":
-    "El reloj de esta caja marca {till}, y eso no puede ser correcto. Corrige la fecha y la hora de esta caja en sus ajustes y vuelve a comprobarlo.",
+    "El reloj de este dispositivo marca {till}, y eso no puede ser correcto. Corrige la fecha y la hora de este dispositivo en sus ajustes y vuelve a comprobarlo.",
   "box_time.refused.synchronised":
-    "El equipo mantiene su reloj en hora por internet, así que no toma la hora de una caja. Comprueba el reloj de esta caja.",
+    "El equipo mantiene su reloj en hora por internet, así que no toma la hora de un dispositivo. Comprueba el reloj de este dispositivo.",
   "box_time.refused.host_unavailable":
-    "Este equipo no puede leer ni poner su propio reloj en hora: la parte del equipo que lo hace no responde. Si el equipo tiene conexión a internet, puede que su servicio de hora aún corrija el reloj por sí solo. Si la hora de esta caja coincide con la del equipo, aún puedes confirmarla.",
+    "Este equipo no puede leer ni poner su propio reloj en hora: la parte del equipo que lo hace no responde. Si el equipo tiene conexión a internet, puede que su servicio de hora aún corrija el reloj por sí solo. Si la hora de este dispositivo coincide con la del equipo, aún puedes confirmarla.",
   "box_time.refused.stale": "El reloj del equipo ha cambiado mientras se comprobaba.",
   "box_time.refused.check_expired": "Ha tardado demasiado.",
   "box_time.refused.same_machine":
     "Esta pantalla es el propio equipo, así que su reloj es el del equipo. Compruébalo desde una caja o un terminal de mano.",
   "box_time.refused.contrary_proof":
-    "La hora de Hacienda u otras dos cajas no coinciden con el reloj del equipo, así que esta caja no puede confirmarlo. Si una de esas cajas muestra la hora correcta, comprueba la hora desde esa caja.",
+    "La hora de Hacienda u otros dos dispositivos no coinciden con el reloj del equipo, así que este dispositivo no puede confirmarlo. Si uno de esos dispositivos muestra la hora correcta, comprueba la hora desde ese dispositivo.",
   "box_time.refused.not_admitted":
-    "El perfil de esta caja ya no te deja trabajar en ella, así que no puede comprobar la hora por ti. Inicia sesión en una caja cuyo perfil te admita.",
+    "El perfil de este dispositivo ya no te deja trabajar en él, así que no puede comprobar la hora por ti. Inicia sesión en un dispositivo cuyo perfil te admita.",
   "box_time.refused.set_failed_refused":
     "El equipo no ha podido poner su reloj en hora. No se ha cambiado nada.",
   "box_time.refused.set_failed_unverified":
     "El equipo pidió poner su reloj en hora, pero no ha podido confirmar que se hiciera.",
   "box_time.refused.pending_disproofs":
     "El equipo aún no ha terminado de registrar lo que encontró sobre su reloj. Vuelve a comprobarlo dentro de un minuto.",
-  "box_time.refused.other": "No se ha comprobado la hora del equipo. No se ha cambiado nada.",
+  "box_time.refused.other":
+    "No se ha podido comprobar la hora del equipo. Vuelve a comprobarlo para ver cómo está.",
   "staff_notice.retried": "Se reintenta solo",
   "staff_notice.more": "+{n}",
   "staff_notice.more_label": "{n} avisos más",

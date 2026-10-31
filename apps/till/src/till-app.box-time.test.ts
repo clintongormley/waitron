@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DeviceEquipmentRead, StaffNotice } from "./api/client.js";
 import type { TillApp } from "./till-app.js";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
-import { mountEquipmentApp, signIn } from "../test/equipment-app.js";
+import { emit, mountEquipmentApp, signIn } from "../test/equipment-app.js";
 import { NFC_EQUIPMENT } from "../test/equipment-nfc.js";
 
 const BEHIND: StaffNotice = {
@@ -69,6 +69,23 @@ describe("the till's Check the time", () => {
     const { el } = await mounted(read([BEHIND]));
     expect(strip(el)!.checkTimeOffered).toBe(false);
     expect(dialog(el)).toBeNull();
+  });
+
+  it("drops the offer on logging out", async () => {
+    const { el } = await mounted(read([MARKER, BEHIND]));
+    expect(strip(el)!.checkTimeOffered).toBe(true);
+    emit(el.shadowRoot!.querySelector("till-shell")!, "logout");
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull());
+    expect((el as unknown as { checkTimeOffered: boolean }).checkTimeOffered).toBe(false);
+  });
+
+  it("keeps the offer through a read that could not reach the box's clock", async () => {
+    const { el, getDeviceEquipment } = await mounted(read([MARKER, BEHIND]));
+    getDeviceEquipment.mockResolvedValue({ ...read([BEHIND]), noticesUnavailable: ["box-clock"] });
+    emit(el.shadowRoot!.querySelector("till-shell")!, "open-equipment");
+    await vi.waitFor(() => expect(getDeviceEquipment.mock.calls.length).toBeGreaterThan(1));
+    await settle(el);
+    expect(strip(el)!.checkTimeOffered).toBe(true);
   });
 
   it("opens the dialog on till-check-time and reads the equipment again at once after a success", async () => {

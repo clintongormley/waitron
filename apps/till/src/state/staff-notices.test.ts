@@ -117,18 +117,28 @@ describe("the box's check-the-time marker", () => {
   it("is offered, and left out of the notices shown, when the read carries it", () => {
     const withMarker = read({ notices: [marker, behind] });
     expect(nextNotices([], withMarker)).toEqual([behind]);
-    expect(checkTimeOffered(withMarker)).toBe(true);
+    expect(checkTimeOffered(withMarker, false)).toBe(true);
   });
 
   it("is not offered when the read does not carry it, and the notices are as before", () => {
     const without = read({ notices: [behind] });
     expect(nextNotices([], without)).toEqual([behind]);
-    expect(checkTimeOffered(without)).toBe(false);
-    expect(checkTimeOffered(read())).toBe(false);
+    expect(checkTimeOffered(without, false)).toBe(false);
+    expect(checkTimeOffered(read(), false)).toBe(false);
+  });
+
+  it("keeps the earlier answer while a read names the box's clock owner unavailable", () => {
+    const blind = read({ notices: [behind], noticesUnavailable: ["box-clock"] });
+    expect(checkTimeOffered(blind, true)).toBe(true);
+    expect(checkTimeOffered(blind, false)).toBe(false);
+    expect(checkTimeOffered(read({ notices: [behind] }), true)).toBe(false);
+    expect(
+      checkTimeOffered(read({ notices: [behind], noticesUnavailable: ["fiscal"] }), true),
+    ).toBe(false);
   });
 
   it("is not offered by a marker that is not well formed", () => {
     const broken = { ...marker, params: null } as unknown as StaffNotice;
-    expect(checkTimeOffered(read({ notices: [broken] }))).toBe(false);
+    expect(checkTimeOffered(read({ notices: [broken] }), false)).toBe(false);
   });
 });

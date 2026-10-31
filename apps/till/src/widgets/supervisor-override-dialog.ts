@@ -16,7 +16,7 @@ export interface OverrideConfirmDetail {
 }
 
 /** It NEVER surfaces the raw code — a domain code is an internal contract, not UI copy. */
-function overrideErrorText(code: string): string {
+export function overrideErrorText(code: string): string {
   if (code === "pin.invalid" || code === "pin.throttled") return t(code);
   return code === "authorization.not_permitted" ? codeMessage(code) : t("override.error");
 }

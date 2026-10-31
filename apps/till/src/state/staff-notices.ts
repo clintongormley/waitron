@@ -4,6 +4,7 @@ const RANK: Record<StaffNotice["severity"], number> = { error: 0, warning: 1, no
 
 /** The box's marker that this till may offer "Check the time": never shown as a line of its own. */
 const CHECK_TIME = "clock.check_time";
+const BOX_CLOCK_OWNER = "box-clock";
 
 function wellFormed(entry: unknown): StaffNotice | null {
   if (typeof entry !== "object" || entry === null) return null;
@@ -43,7 +44,10 @@ export function nextNotices(
   return [...fresh, ...kept].sort((a, b) => RANK[a.severity] - RANK[b.severity]);
 }
 
-/** Whether `read` carries the box's well-formed check-the-time marker. */
-export function checkTimeOffered(read: DeviceEquipmentRead): boolean {
+/** Whether `read` carries the box's well-formed check-the-time marker; `previous` while it names
+ * the marker's owner unavailable, as `nextNotices` keeps that owner's lines. */
+export function checkTimeOffered(read: DeviceEquipmentRead, previous: boolean): boolean {
+  const unavailable = Array.isArray(read.noticesUnavailable) ? read.noticesUnavailable : [];
+  if (unavailable.includes(BOX_CLOCK_OWNER)) return previous;
   return freshNotices(read).some((notice) => notice.code === CHECK_TIME);
 }

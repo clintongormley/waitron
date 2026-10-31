@@ -9872,7 +9872,7 @@ export class TillApp extends LitElement {
     if (session === this.#operatorSession && sent > this.#noticeReadApplied) {
       this.#noticeReadApplied = sent;
       this.staffNotices = nextNotices(this.staffNotices, read);
-      this.checkTimeOffered = checkTimeOffered(read);
+      this.checkTimeOffered = checkTimeOffered(read, this.checkTimeOffered);
     }
     return read;
   }

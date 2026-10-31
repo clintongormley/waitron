@@ -590,6 +590,14 @@ describe("till-presented-pay-dialog: refusals, busy and closing", () => {
     expect(actions(el).error).toBe(t("sale.clock_unusable").replace("{date}", "01/01/2001"));
   });
 
+  it("points a wrong clock at Check the time while the box offers it", async () => {
+    const el = await mount({
+      checkTimeOffered: true,
+      refusal: { code: "clock.unusable", clockAt: "2001-01-01T11:00:00.000Z", offsetMinutes: 60 },
+    });
+    expect(actions(el).error).toBe(t("sale.clock_unusable_check").replace("{date}", "01/01/2001"));
+  });
+
   it.each([
     [{ clockAt: "not a time", offsetMinutes: 60 }],
     [{ clockAt: "2001-01-01T11:00:00.000Z" }],

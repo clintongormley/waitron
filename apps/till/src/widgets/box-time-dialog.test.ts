@@ -3,6 +3,7 @@ import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { en, es } from "../i18n/strings.js";
 import { clockDateTime, setLocale } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import "./box-time-dialog.js";
 import type { BoxTimeApi, TillBoxTimeDialog } from "./box-time-dialog.js";
 
@@ -136,6 +137,32 @@ describe("till-box-time-dialog", () => {
     answer();
     await settle(el);
     expect(words(el)).toBe(en["box_time.confirmed"]);
+  });
+
+  it("keeps Not now disabled, and the dialog from closing, while the confirm is out", async () => {
+    let answer!: () => void;
+    const api = fakeApi(BOX_AGREES, () => {
+      return new Promise((resolve) => {
+        answer = () => resolve({ confirmationId: "k1", stepMs: 0, confirmedAt: BOX_AGREES });
+      });
+    });
+    const el = await open(api);
+    const box = () => root(el).querySelector<HTMLElement & { dismissible: boolean }>("wt-dialog")!;
+    expect(box().dismissible).toBe(true);
+    await press(el, "primary");
+    expect(control(el, "not-now")!.disabled).toBe(true);
+    expect(box().dismissible).toBe(false);
+    answer();
+    await settle(el);
+    expect(box().dismissible).toBe(true);
+  });
+
+  it.each([
+    [60_000, "box_time.time_right"],
+    [60_001, "box_time.use_till"],
+  ] as const)("treats a till %i ms from the box as %s", async (gap, label) => {
+    const el = await open(fakeApi(new Date(TILL_AT - gap).toISOString()));
+    expect(flat(control(el, "primary"))).toBe(en[label]);
   });
 
   it("sends nothing on Not now and closes", async () => {
@@ -329,7 +356,9 @@ describe("till-box-time-dialog", () => {
       return el;
     }
 
-    it("lists the administrators and, on a PIN, sends the confirm again with it", async () => {
+    const override = { personId: ADMIN.personId, pin: "1234" };
+
+    it("lists the administrators and, on a PIN, shows both times before sending anything", async () => {
       const api = fakeApi(BOX_BEHIND, okConfirm(5_000));
       const el = await refusedNotStartUp(api);
       expect(api.listAdjustmentApprovers).toHaveBeenCalledWith(["admin"]);
@@ -337,24 +366,68 @@ describe("till-box-time-dialog", () => {
       expect(dialog.authorizers).toEqual([ADMIN]);
       expect(dialog.approverRole).toBe("admin");
       await signIn(el);
-      const override = { personId: ADMIN.personId, pin: "1234" };
-      expect(api.boxClockChallenge.mock.calls.at(-1)).toEqual([override]);
-      expect(api.boxClockConfirm.mock.calls).toEqual([
-        [{ challengeId: "c1", deviceAt: TILL_AT, override }],
-      ]);
       expect(pinDialog(el)).toBeNull();
+      expect(api.boxClockChallenge.mock.calls.at(-1)).toEqual([override]);
+      expect(api.boxClockConfirm).not.toHaveBeenCalled();
+      expect(words(el)).toContain(
+        en["box_time.differs"]
+          .replace("{box}", clockDateTime(Date.parse(BOX_BEHIND)))
+          .replace("{till}", clockDateTime(TILL_AT)),
+      );
+      expect(controls(el)).toEqual(["not-now", "primary"]);
+      await press(el, "primary");
+      expect(api.boxClockConfirm.mock.calls).toEqual([
+        [{ challengeId: "c2", deviceAt: TILL_AT, override }],
+      ]);
       expect(words(el)).toBe(en["box_time.set_to"].replace("{after}", clockDateTime(TILL_AT)));
     });
 
-    it.each(["pin.invalid", "pin.throttled", "authorization.not_permitted"])(
-      "keeps the PIN pad open with %s",
-      async (code) => {
+    it.each([
+      ["pin.invalid", en["pin.invalid"]],
+      ["pin.throttled", en["pin.throttled"]],
+      ["authorization.not_permitted", codeMessage("authorization.not_permitted")],
+    ])(
+      "shows a PIN refused at the confirm (%s) and offers the sign-in again",
+      async (code, text) => {
         const api = fakeApi(BOX_BEHIND, refusing({ code }));
         const el = await refusedNotStartUp(api);
         await signIn(el);
-        expect(pinDialog(el)!.error).toBe(code);
+        await press(el, "primary");
+        expect(shownError(el)).toBe(text);
+        expect(controls(el)).toEqual(["close", "admin"]);
+        await press(el, "admin");
+        await signIn(el, "5678");
+        expect(api.boxClockChallenge.mock.calls.at(-1)).toEqual([
+          { personId: ADMIN.personId, pin: "5678" },
+        ]);
       },
     );
+
+    it("takes one sign-in when the PIN pad answers twice", async () => {
+      const api = fakeApi(BOX_BEHIND);
+      const el = await refusedNotStartUp(api);
+      const pad = pinDialog(el)!;
+      for (const pin of ["1234", "1234"])
+        pad.dispatchEvent(
+          new CustomEvent("override-confirm", {
+            detail: { personId: ADMIN.personId, pin },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      await settle(el);
+      expect(api.boxClockChallenge).toHaveBeenCalledTimes(2);
+      expect(api.boxClockConfirm).not.toHaveBeenCalled();
+    });
+
+    it("carries the administrator's PIN on Check again", async () => {
+      const api = fakeApi(BOX_BEHIND, refusing({ code: "clock.set_refused", reason: "stale" }));
+      const el = await refusedNotStartUp(api);
+      await signIn(el);
+      await press(el, "primary");
+      await press(el, "check-again");
+      expect(api.boxClockChallenge.mock.calls.at(-1)).toEqual([override]);
+    });
 
     it("goes back to the refusal when the sign-in is cancelled", async () => {
       const api = fakeApi(BOX_BEHIND);

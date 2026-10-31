@@ -618,6 +618,32 @@ describe("a presented bill on a handheld", () => {
     expect(await sheetMessage(el)).toBe(t("sale.clock_unusable").replace("{date}", "01/01/2001"));
   });
 
+  it("a cash send refused for a wrong clock points at Check the time while the box offers it", async () => {
+    const marker = {
+      owner: "box-clock",
+      key: "clock.check_time",
+      code: "clock.check_time",
+      severity: "error",
+      params: {},
+    };
+    const { el } = await openPresented({
+      getDeviceEquipment: vi
+        .fn()
+        .mockResolvedValue({ ...equipmentWith(SECOND_READER), notices: [marker] }),
+      collectOrder: vi.fn().mockRejectedValue({
+        code: "clock.unusable",
+        clockAt: "2001-01-01T11:00:00.000Z",
+        offsetMinutes: 60,
+        status: 409,
+      }),
+    });
+    await payFromSheet(el, { method: "cash", tendered: "150.00", guestCount: 4 });
+
+    expect(await sheetMessage(el)).toBe(
+      t("sale.clock_unusable_check").replace("{date}", "01/01/2001"),
+    );
+  });
+
   it("a sheet send on a terminal the box does not talk to, refused for a full disk, adds the card advice", async () => {
     const { el } = await openPresented({
       collectOrder: vi.fn().mockRejectedValue({ code: "storage.disk_full", status: 507 }),

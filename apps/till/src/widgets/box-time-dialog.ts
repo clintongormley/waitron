@@ -9,7 +9,7 @@ import { clockDateTime, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { trackDialog } from "./track-dialog.js";
 import "./supervisor-override-dialog.js";
-import type { OverrideConfirmDetail } from "./supervisor-override-dialog.js";
+import { overrideErrorText, type OverrideConfirmDetail } from "./supervisor-override-dialog.js";
 
 type Override = { personId: string; pin: string };
 
@@ -89,7 +89,6 @@ export class TillBoxTimeDialog extends LitElement {
 
   @state() private view: View = { kind: "loading" };
   @state() private admins: StaffMember[] | null = null;
-  @state() private pinError: string | null = null;
   @state() private active = true;
   /** An administrator who signed in here: every later check carries their PIN. */
   #override?: Override;
@@ -121,7 +120,6 @@ export class TillBoxTimeDialog extends LitElement {
         deviceAt,
         ...(override === undefined ? {} : { override }),
       });
-      this.admins = null;
       this.view = {
         kind: "done",
         text:
@@ -134,11 +132,15 @@ export class TillBoxTimeDialog extends LitElement {
       this.dispatchEvent(new CustomEvent("box-time-done", { bubbles: true, composed: true }));
     } catch (error) {
       const code = (error as { code?: unknown } | null)?.code;
-      if (this.admins !== null && typeof code === "string" && PIN_REFUSALS.has(code)) {
-        this.pinError = code;
+      if (override !== undefined && typeof code === "string" && PIN_REFUSALS.has(code)) {
+        this.view = {
+          kind: "refused",
+          text: overrideErrorText(code),
+          checkAgain: false,
+          admin: true,
+        };
         return;
       }
-      this.admins = null;
       this.#refused(error);
     }
   }
@@ -155,19 +157,19 @@ export class TillBoxTimeDialog extends LitElement {
 
   async #askAdmin(): Promise<void> {
     try {
-      const admins = await this.api.listAdjustmentApprovers(["admin"]);
-      this.pinError = null;
-      this.admins = admins;
+      this.admins = await this.api.listAdjustmentApprovers(["admin"]);
     } catch (error) {
       this.#refused(error);
     }
   }
 
+  /** The PIN is checked only at the confirm, so the question with both times is shown first. */
   #signedIn(event: CustomEvent<OverrideConfirmDetail>): void {
     event.stopPropagation();
-    this.pinError = null;
+    if (this.admins === null) return;
+    this.admins = null;
     this.#override = { personId: event.detail.personId, pin: event.detail.pin };
-    void this.#send();
+    void this.#check();
   }
 
   #close(): void {
@@ -250,6 +252,7 @@ export class TillBoxTimeDialog extends LitElement {
         ${trackDialog()}
         .open=${this.active}
         .heading=${t("box_time.title")}
+        .dismissible=${!(this.view.kind === "ask" && this.view.sending)}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
           if (event.target === event.currentTarget) this.#close();
@@ -261,11 +264,9 @@ export class TillBoxTimeDialog extends LitElement {
           : html`<till-supervisor-override-dialog
               .authorizers=${this.admins}
               .approverRole=${"admin"}
-              .error=${this.pinError}
               @override-cancel=${(event: Event) => {
                 event.stopPropagation();
                 this.admins = null;
-                this.pinError = null;
               }}
               @override-confirm=${(event: CustomEvent<OverrideConfirmDetail>) =>
                 this.#signedIn(event)}

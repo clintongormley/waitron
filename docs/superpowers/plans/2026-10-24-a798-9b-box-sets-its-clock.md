@@ -3504,9 +3504,12 @@ Revision 4 changes none of these rulings. It carries out the owner's answer of 2
 
 ### Task 13a's departures (2026-10-31)
 
-- **English quotes the button's name as “Check the time”**, not «Check the time»: the till's English
-  strings quote with curly double quotes; Spanish keeps «Comprobar la hora». Spanish calls the till
-  "caja", as the till's other Spanish strings do.
+- **English quotes the button's three-word name as “Check the time”**, so a sentence such as "Use
+  “Check the time” at the top of the screen" reads as one instruction; the till's English names a
+  one-word button unquoted ("press Pay"). Spanish keeps «Comprobar la hora».
+- **The dialog says "this device", not "this till"** ("This device says…", "Use this device's
+  time"), in Spanish "este dispositivo", since the strip shows on handhelds too; the till's other
+  strings say the same for the screen in hand (`device_zones.title`).
 - **With the offer set and a clock stop as the FIRST of several notices**, the first line is no
   longer one toggle button: its words and "Check the time" sit in the line, and "+N" is a toggle of
   its own beside them, since a button never holds another. Without the offer, or with any other
@@ -3516,13 +3519,28 @@ Revision 4 changes none of these rulings. It carries out the owner's answer of 2
   `person.admin` is the admin role's alone (`packages/identity/src/permissions.ts:15-16`). No new
   route.
 - **A refusal reason the till does not word** (`agrees`, a confirm's `differs`), and no answer at
-  all, are worded "The box's time was not checked. Nothing was changed." with Check again and Close.
+  all, are worded "The box's time could not be checked. Check again to see where it stands." with
+  Check again and Close: a confirm whose answer was lost may have set the clock, so the words claim
+  nothing about what changed.
   `pending_disproofs` has its own words ("…Check again in a minute.").
 - **`apps/till/src/i18n/codes.ts` gains plain sentences for the four codes**, used only where a
   refusal's reason cannot be read; the dialog words each reason itself.
 - **`refusalText` had no test file**; its new cases are in `i18n/t.test.ts`, as this task said.
-  `find-bill-dialog.ts` draws the clock refusals too; it is not named by this task and keeps «Tell a
-  manager».
+  `find-bill-dialog.ts`, `bill-refund-dialog.ts` and `tender-refund-dialog.ts` word clock refusals
+  too, through `codeMessage`; this task does not name them and they keep «Tell a manager».
+- **An administrator's PIN shows the question first.** The server refuses a staff member
+  `not_start_up` at the challenge, before either time is shown, so "on a PIN sends the confirm
+  again" would set the box's clock to this device's time unseen. After the PIN the dialog asks for a
+  challenge carrying it and shows both times; the confirm goes only on the primary, and carries the
+  PIN. The PIN is checked only there: a `pin.*` or `authorization.not_permitted` refusal is shown as
+  the refusal, in the PIN pad's own words, with Close and «Administrator sign-in». The pad closes on
+  the first answer and ignores a second; the dialog cannot be dismissed while a confirm is out.
+- **A read naming the `box-clock` source unavailable keeps the previous offer**
+  (`checkTimeOffered(read, previous)`), as `nextNotices` keeps that source's lines.
+- **Three flag sites have no case of their own**: the pay dialogs' field messages (a clock refusal
+  names no field) and the presented sheet's locked-view `.error` (the app always hands that sheet
+  worded text through `#counterRefusal`). Every other site is proved by deletion
+  (`~/waitron-campaign-b/a798-9b/t13a/mutate-fold.py`).
 - **The till app's wiring was written before `till-app.box-time.test.ts`**; each of its three
   cases is proved by deletion instead (removing the flag, the dialog's opening, or the read after
   a success each fails a named case), with the plan's five controls and four more.
