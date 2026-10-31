@@ -849,6 +849,22 @@ it("starts no database server on the box, and needs no secret before the box boo
   expect(ENV_EXAMPLE).not.toContain("POSTGRES_PASSWORD");
 });
 
+describe("the app's mount of the box's clock socket", () => {
+  const app = COMPOSE.slice(COMPOSE.indexOf("\n  app:\n"), COMPOSE.indexOf("\n  mailpit:\n"));
+
+  it("binds the folder .env names, or an empty named volume when .env names none", () => {
+    expect(app).toMatch(/^ {6}- \$\{WAITRON_BOX_SOCKET_DIR:-box_socket\}:\/run\/waitron-box$/m);
+    expect(COMPOSE.slice(COMPOSE.indexOf("\nvolumes:\n"))).toMatch(/^ {2}box_socket:$/m);
+    expect(ENV_EXAMPLE).toMatch(/^# WAITRON_BOX_SOCKET_DIR=\/run\/waitron-box$/m);
+  });
+
+  it("gives no container the power to set the clock itself", () => {
+    expect(COMPOSE).not.toMatch(/^\s*cap_add:/m);
+    expect(COMPOSE).not.toContain("SYS_TIME");
+    expect(COMPOSE).not.toContain("/dev/rtc");
+  });
+});
+
 it("stores image-library bytes in the database without a separate image volume", () => {
   expect(IMAGE_ENV).not.toHaveProperty("WAITRON_MEDIA_DIR");
   expect(DOCKERFILE).not.toContain("/var/lib/waitron/media");
