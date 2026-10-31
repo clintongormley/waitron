@@ -495,14 +495,14 @@ in a copy at another path and on `main`.
 ## A discarded recovery whose files cannot be deleted brings the repair page back after each Start again
 
 - **A discarded recovery whose files cannot be deleted brings the repair page back after each Start
-  again.** Each press answers "Start again has not finished" and restarts the box. A1098 lets the
+  again.** Each press answers "Deletion interrupted" and restarts the box. A1098 lets the
   person keep or move aside files the box did not create after a cut-off Start again; a file the
   box created that cannot be deleted stays a manual loop. Left open by A1042.
   [Detail](setup.md#a-discarded-recovery-whose-files-cannot-be-deleted-brings-the-repair-page-back-after-each-start-again)
 
 Left open by A1042. When a file in a discarded recovery cannot be deleted, each Start again answers
-"Start again has not finished. Reload this page to see what is left to do. If the box is
-restarting, wait until it answers." and restarts the box. The next start logs
+"Deletion interrupted. Reload the page to continue." (A1042's run below saw the earlier words,
+"Start again has not finished…") and restarts the box. The next start logs
 `setup.recovery_cleanup_refused`, leaves the files, and brings the repair page back, so the person
 can only press Start again again. Run by A1042's U7d review with the restored database made
 undeletable (`chflags uchg`), through the real route and the next start: each press restarted the

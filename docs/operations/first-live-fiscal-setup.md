@@ -143,7 +143,7 @@ box keeps them in memory only, so a restart ends them too (`runningInMemory` in
 
 Once a backup recovery has stopped, the repair page says it started and did not finish and that
 Start again deletes it. **Recover from backup** is offered beside it too, and its confirmation says
-instead that Recover from backup deletes it first. With the venue database
+only "The previous recovery from backup started on … did not complete." With the venue database
 missing, the page shows this once **Start again** or **Recover from backup** is pressed, and either
 deletes the recovery with the attempt after the missing-database confirmation above. With the venue database present,
 the page shows the stopped recovery beside **Start again**, within the limits above. Start again

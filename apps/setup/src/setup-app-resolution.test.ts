@@ -151,10 +151,10 @@ it("Start again's confirmation words are the design's, in English and Spanish", 
   expect(en.retireRecover).toBe("Delete the old attempt and recover from a backup.");
   expect(es.retireRecover).toBe("Borrar el intento anterior y recuperar desde una copia.");
   expect(en.recoveryStoppedRecover).toBe(
-    "A recovery from backup started on {started} and did not finish. Recover from backup deletes it first.",
+    "The previous recovery from backup started on {started} did not complete.",
   );
   expect(es.recoveryStoppedRecover).toBe(
-    "Una recuperación desde una copia, iniciada el {started}, no terminó. Recuperar desde una copia la borra primero.",
+    "La recuperación anterior desde una copia, iniciada el {started}, no se completó.",
   );
   for (const strings of [en, es])
     for (const key of [
@@ -630,6 +630,15 @@ it.each(["en-GB", "es-ES"])(
 );
 
 const shellText = (locale: string) => (locale.startsWith("es") ? shellEs : shellEn);
+
+it("words an unfinished deletion the same after Start again and after Recover from backup", () => {
+  expect(shellEn["shell.first_setup.start_again_incomplete"]).toBe(
+    "Deletion interrupted. Reload the page to continue.",
+  );
+  expect(shellEs["shell.first_setup.start_again_incomplete"]).toBe(
+    "Borrado interrumpido. Recarga la página para continuar.",
+  );
+});
 
 it.each([
   ["setup.start_again_incomplete", "shell.first_setup.start_again_incomplete", "en-GB"],

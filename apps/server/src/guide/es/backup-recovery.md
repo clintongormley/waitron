@@ -44,8 +44,8 @@ configurar este equipo. Si se recarga la página antes de pulsar **Reconectar**,
 elegiste y abre su primera pantalla. Si esa pantalla pregunta «¿Es segura esta página?», pulsa
 **Continuar con la configuración**; después, para restaurar, elige **Unirse o recuperar**.
 
-Si la página dice que «Empezar de nuevo» no ha terminado, recárgala para ver lo que falta. Si el
-equipo se está reiniciando, espera a que responda.
+Si la página dice «Borrado interrumpido», después de **Empezar de nuevo** o de **Recuperar desde una
+copia**, recárgala para continuar.
 
 Si un «Empezar de nuevo» se interrumpió y después el equipo encuentra archivos que «Empezar de
 nuevo» no creó, como un local copiado desde una copia de seguridad, el equipo no arranca. Si su

@@ -39,8 +39,8 @@ this box. If the page is reloaded before you press **Reconnect**, it does not re
 chose and opens its first screen. If that screen asks "Is this page secure?", press **Continue to
 setup**; then, to restore, choose **Join or recover**.
 
-If the page says that Start again has not finished, reload it to see what is left to do. If the box
-is restarting, wait until it answers.
+If the page says "Deletion interrupted", after **Start again** or after **Recover from backup**,
+reload it to continue.
 
 If a Start again was cut off and the box then finds files that Start again did not create, such as
 a venue copied from a backup, the box does not start. If its page lists the files, it also asks,

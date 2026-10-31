@@ -571,7 +571,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   holds "disk". [Detail](backlog/setup.md#a-boot-tests-disk-assertion-reads-the-checkouts-path)
 
 - **A discarded recovery whose files cannot be deleted brings the repair page back after each Start again.**
-  Each press answers "Start again has not finished" and restarts the box. Left open by A1042.
+  Each press answers "Deletion interrupted" and restarts the box. Left open by A1042.
   [Detail](backlog/setup.md#a-discarded-recovery-whose-files-cannot-be-deleted-brings-the-repair-page-back-after-each-start-again).
 
 - **A1142: a cut-off Start again beside found files the Move cannot handle gets only the explanation.**
