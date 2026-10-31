@@ -47,7 +47,18 @@ jobs:
         timeout-minutes: 5
         run: bash scripts/ci-setup-pnpm.sh
 
-      - uses: actions/setup-node@v7
+      - id: setup-node
+        name: Set up Node
+        uses: actions/setup-node@v7
+        timeout-minutes: 2
+        continue-on-error: true
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+      - name: Set up Node, second attempt
+        if: steps.setup-node.outcome == 'failure'
+        uses: actions/setup-node@v7
+        timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
           cache: pnpm

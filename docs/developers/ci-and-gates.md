@@ -1970,6 +1970,49 @@ first version check. The same added case in the full root run failed beside 6,69
 baseline had passed all 6,694 cases, so this probe establishes the short-limit failure mechanism;
 it does not establish why A737's original intermittent first check was delayed.
 
+### Every Node setup is bounded
+
+Each `actions/setup-node` site has two adjacent attempts, each with
+`timeout-minutes: 2`. The first has `id: setup-node` and `continue-on-error: true`;
+the second runs only for `steps.setup-node.outcome == 'failure'` and does not tolerate
+failure. Both use the same action version, inputs and environment. A successful first attempt
+skips the retry. The job's existing deadline still covers all its steps, so a five-minute job
+can exhaust its time before both attempts finish. This does not bound the runner's earlier
+action-repository download or add a separate limit to post-job cache saving.
+
+A1254 measured the latest 200 repository workflow runs returned by the API on 2026-10-31,
+from `2026-10-30T18:26:26Z` through `2026-10-31T08:09:05Z`. Across 6,268 job records,
+4,343 main `Run actions/setup-node@v7` steps were present, excluding `Post …` steps:
+
+- 4,335 succeeded: median 8 seconds, 99th percentile 11 seconds, maximum 29 seconds.
+- One exceeded 60 seconds: [run 41176538952, dashboard shard 1](https://github.com/clintongormley/waitron/actions/runs/41176538952/job/124465342022),
+  cancelled after 420 seconds. No shard tests ran in that job; the internal cause remains unverified.
+- Three other setup steps were cancelled after 2, 8 and 2 seconds; four were skipped.
+  Thus eight step records were not successful, including the four skipped records.
+
+The scan used `gh api repos/clintongormley/waitron/actions/runs?per_page=100&page=N`
+for pages 1 and 2, then each run's `/jobs?per_page=100&page=N` pages. Durations are
+`completed_at - started_at`; post steps and skipped steps are excluded from the executed timings.
+The sample covers all workflow names and branches, with the latest job attempt returned by the API.
+A single jobs-page request returned HTTP 502; collection resumed from saved pages and completed.
+The two-minute limit gives the sample's slowest successful setup room; it does not establish a
+maximum duration for every healthy future setup.
+
+External provenance, read 2026-10-31:
+
+| Claim | Source's words | Application here |
+| --- | --- | --- |
+| A step has its own deadline | [Workflow syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idstepstimeout-minutes): “before killing the process” | Each attempt declares its own two-minute limit. |
+| A first failure may be tolerated | [Workflow syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idstepscontinue-on-error): “Prevents a job from failing when a step fails.” | Only the first attempt sets `continue-on-error: true`. |
+| Retry selection uses the original result | [Steps context](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#steps-context): “before `continue-on-error` is applied” | The retry checks `outcome`, rather than the adjusted `conclusion`. |
+
+The Node-setup cases in `scripts/ci-workflow.test.mjs` are weaker than their name:
+they read literal workflow steps and check both deadlines, the failure-only condition, tolerated
+first failure, strict second failure, and equal action versions, inputs and environment. They do
+not run the hosted timeout or retry path. Composite actions, external reusable workflows, YAML
+anchors and expression-based action names are outside the reader. `scripts/setup-node-pnpm.test.mjs`
+continues to check the package-manager cache prerequisites for both attempts.
+
 ### Every checkout is bounded
 
 Every `actions/checkout` step in `.github/workflows/*.yml` is three steps in a row:

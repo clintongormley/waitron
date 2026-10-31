@@ -156,6 +156,9 @@ hook, or how tests are scheduled:
 - **Every workflow pnpm setup runs `scripts/ci-setup-pnpm.sh`: three attempts, each under `timeout`,
   then fail. Never use `pnpm/action-setup`.** Guards: `scripts/ci-workflow.test.mjs` (weaker than its
   name: reads text) and `scripts/ci-setup-pnpm.test.mjs`.
+- **Every `actions/setup-node` has two bounded attempts; only a failed first attempt runs the retry,
+  and a second failure fails the job.** Guard: `scripts/ci-workflow.test.mjs`, weaker than its name:
+  reads workflow text. Receipt: [ci-and-gates.md](docs/developers/ci-and-gates.md#every-node-setup-is-bounded).
 - **Every `actions/checkout` uses a bounded first attempt with git's low-speed limit and
   `continue-on-error`, a leftover-git stop, then a failure-only second attempt.** Guard:
   `scripts/ci-workflow.test.mjs`, weaker than its name: reads text, never runs a workflow.

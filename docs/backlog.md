@@ -5785,7 +5785,7 @@ values rather than PIN substrings inside random IDs. See the
   [Recovery procedure](developers/ci-and-gates.md#recover-a-main-commit-whose-ci-run-was-never-created).
 
 - **Other `uses:` steps that fetch over the network have no step time limit, and the runner's own action download at job set-up is bounded only by long limits of its own (left open by A935).**
-  Artifact uploads now have bounded retries (A1100); the remaining sites are setup-node, cache, Docker and CodeQL.
+  Artifact uploads (A1100) and Node setup (A1254) now have bounded retries; the remaining sites are cache, Docker and CodeQL.
   [Detail](backlog/ci.md#other-uses-steps-that-fetch-over-the-network-have-no-step-time-limit-and-the-runners-own-action-download-at-job-set-up-is-bounded-only-by-long-limits-of-its-own-left-open-by-a935).
 
 - **Whether the checkout stalls were a GitHub-side incident remains unverified (A935).**
