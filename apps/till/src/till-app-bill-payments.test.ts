@@ -2596,6 +2596,225 @@ describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a
     expect((await cashButton(tableOrder(el))).getAttribute("variant")).toBe("primary");
     expect(vi.mocked(api.getTablesState).mock.calls.length).toBe(floorReads);
   });
+
+  /** A 40.00 cash contribution sent with no answer on Bill 1 and its dialog closed, then the table
+   * opened again with `owner`'s saved one-dish draft of `billId`. */
+  async function heldWithUnsent(
+    overrides: Record<string, unknown> = {},
+    owner: [string, string] = ["p2", "Luis"],
+    billId = "wo-4",
+  ) {
+    const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({ takeBillPayment, ...overrides });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await expect
+      .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
+      .toBe(t("bill_pay.unconfirmed"));
+    emit(dialog(el)!, "bill-pay-close");
+    await flush(el);
+    drafts.drafts.push({ ...savedDraft(...owner), billId });
+    vi.mocked(api.getTablesState).mockResolvedValue([
+      mesa({
+        unsentDrafts: [{ ...unsentEntry(...owner), billId, billNumber: billId === "wo-4" ? 1 : 2 }],
+      }),
+    ]);
+    const order = await reopenTable(el);
+    return { el, order, takeBillPayment };
+  }
+
+  /** The held payment shown by a balance read as `state` on another device. */
+  const answeredElsewhere = (state: BillPaymentView["state"]) =>
+    balanceOf({
+      payments: [
+        paymentOf({
+          submissionId: sent()[0]!.submissionId,
+          applied: "40.00",
+          tendered: "50.00",
+          change: "10.00",
+          state,
+        }),
+      ],
+    });
+
+  it("takes no new payment from a reopened payment that Check again finds declined while the bill has unsent dishes", async () => {
+    const { el, order, takeBillPayment } = await heldWithUnsent();
+    await userEvent.click(
+      order.shadowRoot!.querySelector<HTMLElement>('[data-open-bill-pay="items"]')!,
+    );
+    await flush(el);
+    await expect.poll(() => dialog(el)?.confirmationLocked, { timeout: 10_000 }).toBe(true);
+    takeBillPayment.mockResolvedValueOnce({
+      ...takenOf({ applied: "40.00" }, {}),
+      outcome: "declined",
+    });
+    await press(el, "[data-pay-confirm]");
+    await expect.poll(() => dialog(el)?.confirmationLocked, { timeout: 10_000 }).toBe(false);
+    expect(text(inDialog(el, "[data-pay-confirm]"))).toBe(t("bill_pay.take"));
+    const original = sent()[0]!.submissionId;
+    const sends = sent().length;
+    expect(sent().every((request) => request.submissionId === original)).toBe(true);
+
+    await press(el, "[data-pay-confirm]");
+
+    expect(sent().length).toBe(sends);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(`4 · Bill 1. ${t("bill_pay.unsent")}`);
+    expect(api.recordSale).not.toHaveBeenCalled();
+  });
+
+  it.each(["declined", "received"] as const)(
+    "starts no new preview from a reopened payment another device answered %s while the bill has unsent dishes",
+    async (state) => {
+      let answered = false;
+      const { el, order } = await heldWithUnsent({
+        getBillBalance: vi.fn(async () => (answered ? answeredElsewhere(state) : balanceOf())),
+      });
+      expect(order.billPaymentHeld).toBe(true);
+      answered = true;
+      await userEvent.click(
+        order.shadowRoot!.querySelector<HTMLElement>('[data-open-bill-pay="contribution"]')!,
+      );
+      await flush(el);
+      await expect
+        .poll(() => inDialog(el, "[data-pay-continue]") !== null, { timeout: 10_000 })
+        .toBe(true);
+      expect(dialog(el)!.confirmationLocked).toBe(false);
+      const previews = vi.mocked(api.previewBillPayment).mock.calls.length;
+      await type(el, "amount", "10");
+      await type(el, "tendered", "10");
+
+      await press(el, "[data-pay-continue]");
+
+      expect(vi.mocked(api.previewBillPayment).mock.calls.length).toBe(previews);
+      expect(inDialog(el, "wt-form-actions")!.error).toBe(`4 · Bill 1. ${t("bill_pay.unsent")}`);
+    },
+  );
+
+  it("saves the waiter's own removal before a new preview from a reopened payment", async () => {
+    let answered = false;
+    let savedAtPreview: number | undefined;
+    const { el, order } = await heldWithUnsent(
+      {
+        getBillBalance: vi.fn(async () => (answered ? answeredElsewhere("declined") : balanceOf())),
+        previewBillPayment: vi.fn(async () => {
+          savedAtPreview = drafts.drafts
+            .filter((draft) => draft.billId === "wo-4")
+            .flatMap((draft) => draft.lines).length;
+          return cash("10.00", "0.00");
+        }),
+      },
+      ["p1", "Ana"],
+    );
+    expect(order.draftStore!.lineCount).toBe(1);
+    answered = true;
+    await userEvent.click(
+      order.shadowRoot!.querySelector<HTMLElement>('[data-open-bill-pay="contribution"]')!,
+    );
+    await flush(el);
+    await expect
+      .poll(() => inDialog(el, "[data-pay-continue]") !== null, { timeout: 10_000 })
+      .toBe(true);
+    await type(el, "amount", "10");
+    await type(el, "tendered", "10");
+    order.draftStore!.removeLine(0);
+
+    await press(el, "[data-pay-continue]");
+
+    await expect.poll(() => savedAtPreview, { timeout: 10_000 }).toBeDefined();
+    expect(savedAtPreview).toBe(0);
+  });
+
+  it("says in the dialog that the waiter's removal was not saved, and asks for no preview", async () => {
+    let answered = false;
+    const { el, order } = await heldWithUnsent(
+      {
+        getBillBalance: vi.fn(async () => (answered ? answeredElsewhere("declined") : balanceOf())),
+      },
+      ["p1", "Ana"],
+    );
+    answered = true;
+    await userEvent.click(
+      order.shadowRoot!.querySelector<HTMLElement>('[data-open-bill-pay="contribution"]')!,
+    );
+    await flush(el);
+    await expect
+      .poll(() => inDialog(el, "[data-pay-continue]") !== null, { timeout: 10_000 })
+      .toBe(true);
+    await type(el, "amount", "10");
+    await type(el, "tendered", "10");
+    const previews = vi.mocked(api.previewBillPayment).mock.calls.length;
+    vi.mocked(api.saveDraft).mockRejectedValue(new TypeError("Failed to fetch"));
+    order.draftStore!.removeLine(0);
+
+    await press(el, "[data-pay-continue]");
+
+    await expect
+      .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
+      .toBe(t("table.draft_save_failed"));
+    expect(vi.mocked(api.previewBillPayment).mock.calls.length).toBe(previews);
+  });
+
+  it.each(["continue", "take"] as const)(
+    "starts no payment from a dialog opened before another person's dishes were read (%s)",
+    async (step) => {
+      const { el } = await mountApp();
+      const order = await openTable(el);
+      await showBillFooter(order);
+      await openDialog(el, "contribution");
+      await type(el, "amount", "40");
+      await type(el, "tendered", "50");
+      if (step === "take") await press(el, "[data-pay-continue]");
+      const previews = vi.mocked(api.previewBillPayment).mock.calls.length;
+      drafts.drafts.push(savedDraft("p2", "Luis"));
+      window.dispatchEvent(new Event("focus"));
+      await expect
+        .poll(() => tableOrder(el).shadowRoot!.querySelector('[data-take-over="draft-p2"]'), {
+          timeout: 10_000,
+        })
+        .not.toBeNull();
+      expect(dialog(el)).not.toBeNull();
+
+      await press(el, step === "take" ? "[data-pay-confirm]" : "[data-pay-continue]");
+
+      expect(vi.mocked(api.previewBillPayment).mock.calls.length).toBe(previews);
+      expect(api.takeBillPayment).not.toHaveBeenCalled();
+      expect(inDialog(el, "wt-form-actions")!.error).toBe(`4 · Bill 1. ${t("bill_pay.unsent")}`);
+    },
+  );
+
+  it("leaves another bill's Pay quiet while a payment on Bill 1 has no answer", async () => {
+    const { el, order } = await heldWithUnsent(
+      {
+        getPartyBills: vi
+          .fn()
+          .mockResolvedValue([billOf(), billOf({ workingOrderId: "wo-5", billNumber: 2 })]),
+      },
+      ["p2", "Luis"],
+      "wo-5",
+    );
+    expect(order.billPaymentHeld).toBe(true);
+
+    emit(order, "switch-bill", { workingOrderId: "wo-5" });
+    await flush(el);
+
+    const shown = tableOrder(el);
+    await showBillFooter(shown);
+    expect(shown.orderId).toBe("wo-5");
+    expect(shown.billPaymentHeld).toBe(false);
+    expect((await cashButton(shown)).getAttribute("variant")).toBe("secondary");
+    await userEvent.click(
+      shown.shadowRoot!.querySelector<HTMLElement>('[data-open-bill-pay="items"]')!,
+    );
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+    expect(text(shown.shadowRoot!.querySelector("[data-pay-unsent]"))).toBe(
+      `Bill 2. ${t("bill_pay.unsent")}`,
+    );
+  });
 });
 
 describe("till-app: a balance read that shows the held payment (A796 default 7)", () => {

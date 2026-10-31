@@ -323,13 +323,27 @@ Every other word the new controls show is an approved string (D10).
   `party.unsentDrafts` is no longer read: it changes only on a floor read, so it went on naming a
   dish already removed or cleared elsewhere, leaving Pay quiet with nothing on screen to act on.
   While the bill's draft could not be read (`draftStore` null), nothing is quiet: no unsent dish
-  is shown, and the server still refuses a payment of a bill with unsent dishes (for a whole
-  payment the app then shows the same sentence; Task 12 review, experiment 5). (2) "Every control that starts a payment" is judged per control: a control whose tap
+  is shown. What then stops a payment is the till's own draft save, which fails first, so no
+  request reaches the server, and the till says "Your last change to an order was not saved.
+  Open its table to check it." (`table.draft_save_failed`, from code on `main`); the server's
+  refusal of a bill with unsent dishes stands behind it (corrected 2026-10-31, fixes review M2,
+  its experiment 4). (2) "Every control that starts a payment" is judged per control: a control whose tap
   reopens a payment already sent on this bill is not quiet. That is the pay ways, Pay the rest and
   the handheld's Pay while a bill payment on the bill is being sent or got no answer (A773-1's
   hold), and the handheld's Pay on a presented bill whose whole payment got no answer. Cash and
   Card always start a new payment, so they stay quiet. (3) The keypad's and the card reference's
   Confirm payment are quiet too, for a payment opened before the bill turned quiet.
+  **Addendum (2026-10-31, fix review answers, review I1).** (2)'s exception covers reopening the
+  payment already sent, nothing after it. The bill payment dialog starts no new payment while the
+  bill on screen has unsent dishes under (1)'s rule, however it was opened: once a reopened
+  payment's hold has ended (Check again answered, or a balance read shows it answered on another
+  device), and when the dishes were read in after the dialog opened. Its Continue and Take payment
+  show the dialog's own unsent sentence (`bill_pay.unsent` after the bill's label) and send
+  nothing. Checking again a payment still without an answer is not new and is never stopped.
+  Before a new preview the dialog saves the New order, as opening it from a Pay that is not quiet
+  does. A handheld's presented sheet, in the case run (another person's draft read in after it
+  opened), already sends nothing: its pay saves the New order first, and that save fails while
+  that draft holds the bill; the server's refusal of a bill with unsent dishes stands behind it.
 - **D6 No Hold on the table screen.** `till-tender-pay` gains `parks` (default `true`); the table
   screen sets it `false`, so Hold is not drawn; `#onTenderPark` goes. The counter's Park is
   untouched.
@@ -3031,7 +3045,7 @@ answer's commit.
 | --- | --- | --- | --- | --- |
 | `.panel-footer.test.ts:305` (Finish table's refusal above the foot) | stricter | 1024×768 only, Record unpaid departure only `not.toBeNull()` → also 390×844; Take payment and Record unpaid departure `checkVisibility()` true; a real tap on Record unpaid departure sends one `record-unpaid-departure`; every earlier check unchanged; retitled with the size | D9; review 11c I1, M2 | 11c answers |
 | `.test.ts:801` (empty tab) | S | the mount gains `orderId: "wo-4"` and an empty service read; the `expect`s are byte-identical | review 11c I2 | 11c answers |
-| `.empty-drawer.a11y.test.ts:53` (was) → `:82` | stricter | no summary while the read is unread → after the read, the summary is exactly 0 ready, 0 firing, 0 held, 1 served | D17; review 11c I2 | 11c answers |
+| `.empty-drawer.a11y.test.ts:53` (was) → `:82` | removed + stricter | no summary while the read is unread (removed) → after the read, the summary is exactly 0 ready, 0 firing, 0 held, 1 served (added). Relabelled 2026-10-31 (fixes review M3; was "stricter"): a grep of the till's tests that set `currentOrdersUnread`, reading each hit, found no other check that no summary is drawn while the read is unread (a grep, not a mutation) | D17; review 11c I2 | 11c answers |
 
 ## Task 12: the table's foot: totals and Pay, no Hold, quiet Pay, one Full invoice (≈65 calls)
 
@@ -3200,9 +3214,14 @@ addendum with the new rule.
   with a line), never `party.unsentDrafts`, and nothing while no draft is drawn. So it changes with
   the draft store and the fifteen-second read of other drafts, and every quiet state has its own way
   out drawn. **Choice for a draft that could not be read:** not quiet (the most conservative of the
-  brief's options): no unsent dish is known and shown, and the server refuses a payment of a bill
-  with unsent dishes on the whole-payment and bill-payment paths (review experiment 5, which also
-  saw the app show the same sentence for a refused whole payment).
+  brief's options): no unsent dish is known and shown. Corrected 2026-10-31 (fixes review M2,
+  its experiment 4): what then stops a payment is the till's own draft save. `#onPayTab` and
+  `#onBillPay` save the draft before anything else, that save fails with no draft read, and no
+  request reaches the server; the till shows "Your last change to an order was not saved. Open
+  its table to check it." (`table.draft_save_failed`; the save-first lines are on `main`,
+  `c9ad7a634` and `1356ff14a`), about a change the waiter never made. The server's refusal of a
+  bill with unsent dishes stands behind it on both paths. Whether Pay should look payable in that
+  state is a design question for Task 16's backlog pass.
   - App cases, new: `-bill-payments.test.ts:2545` "is not quiet once the waiter removes their own
     unsent dish, with no floor read" (the review's H2: the floor still lists the waiter's own
     entry; Cash goes primary after `removeLine(0)` and Pay items opens the dialog, with no floor
@@ -3278,7 +3297,107 @@ addendum with the new rule.
 | `.panel-footer.test.ts:571` (was "keeps Cash, Card and the pay ways quiet … New order") | stricter | one run at 1280×1100 → `it.each` over 1024×768 and 390×844; checks unchanged; retitled with the size | review 12 I3 | 12 answers |
 | `.panel-footer.test.ts:602` (another person's unsent dishes) | B | `otherDrafts` entry with no lines (quiet came from `party.unsentDrafts`) → the same entry with one dish; `party.unsentDrafts` kept; every `expect` unchanged | D5 addendum (1) | 12 answers |
 | `.panel-footer.test.ts:635` (a handheld's unanswered whole payment) | B | unsent from `party.unsentDrafts` → also another person's draft with one dish, so the bill really is unsent under the new rule and the exception is what lifts quiet; every `expect` unchanged | D5 addendum (1), (2) | 12 answers |
-| `.panel-footer.test.ts` "is not quiet when the unsent dishes are on Bill 2 only" | unchanged | the case is byte-identical; under the new rule `party.unsentDrafts` is not read, so it passes either way, and Task 12's control "any bill's `unsentDrafts` counting" no longer applies; C4 and `:759` pin the list not being read | D5 addendum (1) | 12 answers |
+| `.panel-footer.test.ts` "is not quiet when the unsent dishes are on Bill 2 only" | unchanged | the case is byte-identical. Corrected 2026-10-31 (fixes review M4): it still fails if any bill's `party.unsentDrafts` is read (the review's mutation Ma: 4 cases fail, it, `:759` and both app I2 cases; Task 13's control 6 turned it red too). C4, which counts only this bill's entries, does not fail it | D5 addendum (1) | 12 answers |
+
+**Owner question 5f candidates:** none. No check was deleted or loosened.
+
+### Fix review answers (2026-10-31, `a803-3-reviews/fixes-11c-12.md`)
+
+Answered on top of the Task 12 review answers (`7edaa74c3`). Runs in the foreground or as one
+background command, with `AI_AGENT`/`CLAUDECODE` unset; free memory 49–56% before each browser
+run. Each control changed one line (the app binding's two identical lines together) by a script
+that asserts the pattern's count, ran the `A803 quiet Pay` cases of `-bill-payments.test.ts`, and
+put `till-app.ts` back from a saved copy (`cmp`-equal after). Lines are at this answer's commit. D5
+has a second dated addendum with the narrowing. No string was added: the dialog shows its own
+existing unsent sentence.
+
+- **I1 (behaviour), a reopened payment became a new-payment dialog while the bill had unsent
+  dishes.** Fixed in the app, where the dialog's events land. `#unsentOnScreen` (`till-app.ts`)
+  reads the screen's rule through a helper both now share, `billHasUnsent`
+  (`state/bill-unsent.ts`: a dish in the New order drawn for the bill, or in another person's
+  draft of it drawn with its Take over; nothing while no New order is drawn). `#refusedUnsent`
+  puts the dialog's refusal to `bill.unsent_dishes` for the bill, which the dialog already words
+  as `billUnsentText` after the bill's label ("4 · Bill 1. Send or remove the unsent dishes before
+  paying.", the sentence it shows today when the server refuses for unsent dishes), and sends
+  nothing. `#onBillPayPreview` asks it before any preview (after the existing check that a held
+  payment is still unanswered, which reopens it as before); `#onBillPayConfirm` asks it before any
+  send except Check again of a payment still without an answer (`previous?.unconfirmed === true`),
+  so the recovery is never stopped. The typed amount and the confirmation stay, as the screen's
+  keypad Confirm keeps them (Task 12 review answers, M1).
+  - **Draft saved before a new preview.** `#onBillPayPreview` now saves the New order
+    (`#flushDraft`) before reading the bill's edit and asking for a preview, on every table
+    dialog. The skip it closes predates the branch: `#onBillPay` skips the save while a payment
+    holds the bill (`git blame`: `c9ad7a634`, A773-1, #1897, and `9a52b5efc`, A796, #1921, both
+    on `origin/main`, `git merge-base --is-ancestor` exit 0); this slice opened the path to that
+    dialog while the bill has unsent dishes. A save that fails says so in the dialog
+    (`#saidInDialog`: the till's own error text, which the dialog would otherwise cover), and no
+    preview is sent.
+  - **A dialog opened before the dishes appeared.** Run, and the same gap was there: with the
+    dialog open, another person's draft read in (the window's `focus` refresh), Continue sent a
+    preview and Take payment sent a payment. The same check covers it. **The presented sheet**
+    (handheld) was run the same way, and in that case nothing is sent: its pay saves the New order
+    first, that save fails while another person's draft holds the bill, and the till's banner says
+    "Luis has taken over this order. …" (the sheet itself shows nothing). Not run: the waiter's
+    own dish on a presented bill. New case pins that nothing is collected in the case run. A
+    guard in `#payWholeTab` to show the unsent sentence there instead was tried and dropped: it
+    failed 6 existing `-drafts.test.ts` cases ("A773 Pay requires takeover before paying a
+    colleague's bill", the four "flushes before … Pay and retains the bill and dishes on refusal"
+    rows and "sends no pay-tab when the local draft cannot be saved"), which pin the save-first
+    path, and no existing assertion is changed in this answer.
+  - App cases, new (`-bill-payments.test.ts`): `:2644` "takes no new payment from a reopened
+    payment that Check again finds declined while the bill has unsent dishes" (the review's A1b);
+    `:2669` "starts no new preview from a reopened payment another device answered declined /
+    received while the bill has unsent dishes" (A3b, two rows); `:2697` "saves the waiter's own
+    removal before a new preview from a reopened payment"; `:2731` "says in the dialog that the
+    waiter's removal was not saved, and asks for no preview"; `:2761` "starts no payment from a
+    dialog opened before another person's dishes were read" (continue, take). In
+    `-handheld-pay.test.ts`: `:314` "a sheet opened before another person's dish was read collects
+    nothing" (passes on the old code too: it pins that nothing is sent).
+- **M1, `billPaymentHeld` belongs to the bill on screen.** New app case `-bill-payments.test.ts:2789`
+  "leaves another bill's Pay quiet while a payment on Bill 1 has no answer" (the review's A2: a
+  contribution on Bill 1 with no answer, Luis's dish on Bill 2 only, Bill 2 shown: `billPaymentHeld`
+  false, Cash secondary, Pay items opens no dialog and shows "Bill 2. Send or remove …"). It passes
+  on the old code (HEAD was right); control D4 turns it red.
+- **M2.** The I2 bullet above and D5's first addendum now give the path the review ran: the
+  till's own draft save fails first, no request reaches the server, and the till says "Your last
+  change to an order was not saved. Open its table to check it."
+- **M3.** The `.empty-drawer.a11y.test.ts` row in the Task 11c review answers is relabelled
+  "removed + stricter", saying no other check of "no summary while unread" was found (a grep).
+- **M4.** The Task 12 review answers' "Bill 2 only" row now says the case still fails when any
+  bill's `party.unsentDrafts` is read.
+- **Task 13's plan text.** Controls 1, 2 and 7 corrected in its list, and "Task 13 as run" added.
+- **RED** (the new cases with `till-app.ts` as at `7edaa74c3`, the screen's helper change kept,
+  `-t 'A803 quiet Pay|a sheet opened before'` over the two app files): `Tests 7 failed | 5 passed`.
+  Per case: A1b `expected 5 to be 4` (a fifth send, under a new submission id) at `:2664`; both A3b
+  rows `expected 2 to be 1` (a second preview) at `:2692`; the draft-save case `expected 1 to be
+  +0` (the preview went out while the server still held the dish) at `:2728`; the save-failure
+  case `expected '' to be 'Your last change to an order was not …'` at `:2757`; the opened-before
+  rows `expected 1 to be +0` (a preview) at `:2783` and `takeBillPayment` called once at `:2784`.
+  Passed: the three Task 12 answer cases, M1's case and the presented sheet's case.
+- **GREEN.** `A803 quiet Pay`: `Tests 11 passed`. The 11c review's 12 app files: `Test Files 12
+  passed (12)`, `Tests 3212 passed (3212)` (3203 plus 9). The plan's Task 12 GREEN command (12 files): `Test Files
+  12 passed (12)`, `Tests 1121 passed (1121)` (1112 plus 9). The whole `src/screens` folder
+  (`vitest run src/screens`, 168 files, which hold the 91-file screen set): `Test Files 168
+  passed (168)`, `Tests 4078 passed (4078)`, no `Errors` line. All after the
+  last code edit. `pnpm --filter @waitron/till typecheck` exit 0; `prettier --check` and `eslint`
+  on the five changed code and test files exit 0. No string changed, so `src/i18n` and
+  `scripts/english-only.test.ts` were not run. No server file was touched.
+- **Controls** (each production line broken, then put back):
+  - D1, `#onBillPayPreview`'s unsent check removed → 3 failed: both A3b rows at `:2693` and the
+    opened-before Continue row at `:2785` (`expected 'Luis has taken over this order. Your …' to
+    be '4 · Bill 1. …'`). No preview went out even so: the new draft save fails while Luis's draft
+    holds the bill, and the dialog shows that save's refusal instead of the unsent sentence.
+  - D2, `#onBillPayConfirm`'s unsent check removed → 2 failed: A1b at `:2664` (`expected 5 to be
+    4`) and the opened-before Take payment row at `:2784` (`takeBillPayment` called once).
+  - D3, the draft save before a preview removed → 2 failed: `:2728` (`expected 1 to be +0`) and
+    `:2757` (`expected '' to be …`).
+  - D3b, a failed save leaving the dialog's refusal empty → 1 failed: `:2757`.
+  - D4 (M1), both app bindings set to "any bill held" (`[...#unansweredPayments.values()].some(…
+    unconfirmed) || #paymentsOut.size > 0`) → 1 failed: `:2807` (`expected true to be false`).
+  - D5, Check again of an unanswered payment no longer exempt → 1 failed: A1b at `:2656`
+    (`expected true to be false`: Check again refused, the dialog stays locked).
+
+No existing assertion changed, so this answer adds no Changed-checks row.
 
 **Owner question 5f candidates:** none. No check was deleted or loosened.
 
@@ -3290,8 +3409,11 @@ addendum with the new rule.
       typechecks.
 - [ ] Proof by deletion, one at a time in the working tree and reverted, each turning the named case
       red for that reason (record each red line in the ledger):
-      1. restore the merge arm in `moveBillOnce` → "arrives as its own bill …" (Task 2);
-      2. restore the `merging` decision in `combineParties` → "joining a seated table … keeps both" (Task 3a);
+      1. restore the merge arm in `moveBillOnce` → "arrives as its own bill …" (Task 2). The old
+         condition (an untouched bill) is gone, so the control makes every move merge instead;
+      2. restore the `merging` decision in `combineParties` → "joining a seated table … keeps both"
+         (Task 3a). The old condition (the main bill) is gone, so the control makes the combine
+         merge the two parties' first bills instead;
       3. drop the empty-bill creation in `splitTable` for the staying party → "leaves the staying party
          one new empty bill" (Task 4a);
       4. compute `openingBillId` as the first bill in opening order → "the floor row opens on the
@@ -3300,7 +3422,11 @@ addendum with the new rule.
          "the next draft save names it" (Task 9);
       6. count another bill's unsent dishes in D5's rule → "NOT quiet when the unsent dishes are on
          Bill 2 only" (Task 12);
-      7. drop `payQuiet`'s tap guard so a quiet Cash tap dispatches → "dispatches no `pay-tab`" (Task 12);
+      7. drop the keypad Confirm's quiet guard → `panel-footer.test.ts:816` in "keeps a cash payment
+         begun before the dishes appeared from being confirmed", which checks that no `pay-tab` is
+         dispatched (Task 12). A
+         quiet Cash tap only opens the keypad and never dispatches `pay-tab`; dropping Cash's own
+         guard is caught by the sentence and position checks at `:545`/`:549` instead;
       8. draw the ⋮ Full invoice for a paid bill → "a paid bill offers none … no request" (Task 10);
       9. remove the vanished-bill check from `#loadPartyBills` → "another till merged the bill on
          screen away" (Task 8d);
@@ -3311,6 +3437,34 @@ addendum with the new rule.
 - [ ] Coverage is CI's (root `CLAUDE.md` §2): after the push, read the `changes` job's `packages`
       output on the PR head (it must name `@waitron/server`, `@waitron/till`, `@waitron/db`) and each
       one's coverage or merge job. Not from this worktree (changed-since matches nothing in a worktree).
+
+### Task 13 as run (2026-10-31)
+
+Run at `7edaa74c3` with no commit (tree clean after); the counts are from the run's ledger line.
+
+- **Suites, all green.** Server, one run per task's GREEN list: Task 1 367, 2 505, 3a 520, 3b 350,
+  4a 383, 4b 644, 5 705, 6a 1041, 6b 354, 6c 1240, 7 279; db parties 12. Till: the 105 changed
+  test files in three batches, 1222 + 1315 + 4366, no `Errors` line, no flake. S 558 + 4041 + 34
+  (4041 against 4040 at Task 1, all passing, the one extra not investigated); H2 20; F 267; Filing
+  67; G 75 + 12; words and codes 2046. Server and till typechecks exit 0. F and H2 byte-unedited
+  (`git diff --stat a90f4f87b` on them empty).
+- **Controls, each red** (failing cases / cases run):
+  1. every move merging → `party-move-bill` `:331` "arrives as its own bill …" (26/66);
+  2. the combine merging the first bills → `:1700` "joining a seated table … keeps both parties'
+     bills …" (17/83);
+  3. no empty bill for the staying party → `till-api.table-actions` `:709` (1/84);
+  4. the number sort removed → `party-main-bill` `:580` (1/28);
+  5. New bill showing the lowest-numbered bill → `:3409`, `wo-7` where `wo-new` was expected (3);
+  6. any bill's unsent drafts counted → "is not quiet when the unsent dishes are on Bill 2 only"
+     (2/42);
+  7. the keypad Confirm's quiet guard dropped → `panel-footer` `:816` (1/42); Cash's own guard
+     dropped instead → 7 fail, at `:545`/`:549`;
+  8. a paid bill's ⋮ Full invoice drawn → 1/248;
+  9. the vanished-bill check removed → 6/623, including "another till merged the bill on screen
+     away";
+  10. `createPartyBill` on opening → `till-app-open-table` `:2069` (1/66);
+  11. `insertPartyBill` moving the revision → `party-bill-create` `:158` and `table-actions`
+      `:769` (6/90).
 
 ## Task 14: guides and the design-system contract (≈35 calls)
 

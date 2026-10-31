@@ -311,6 +311,54 @@ describe("a presented bill on a handheld", () => {
     await flush(el);
   }
 
+  it("a sheet opened before another person's dish was read collects nothing", async () => {
+    const { el } = await openPresented();
+    drafts.drafts.push({
+      id: "draft-luis",
+      partyId: "v1",
+      billId: "wo-4",
+      ownerId: "p2",
+      ownerName: "Luis",
+      revision: 3,
+      takenOverFrom: null,
+      lines: [
+        {
+          slot: 0,
+          joinGroupId: null,
+          afterGroupId: null,
+          id: "draft-line-1",
+          sourceLineId: null,
+          source: null,
+          menuItemId: "menu-item-cafe-0",
+          variantId: null,
+          menuVersionId: null,
+          options: [],
+          extras: [],
+          note: null,
+          quantity: "1",
+          courseId: null,
+          makeAt: "switched-off",
+          noMerge: false,
+          unavailable: false,
+        },
+      ],
+    });
+    window.dispatchEvent(new Event("focus"));
+    await expect
+      .poll(() => tableOrder(el).shadowRoot!.querySelector('[data-take-over="draft-luis"]'), {
+        timeout: 10_000,
+      })
+      .not.toBeNull();
+    expect(presented(el)).not.toBeNull();
+
+    await payFromSheet(el, { method: "cash", tendered: "150.00", guestCount: 3 });
+
+    expect(vi.mocked(api.collectOrder)).not.toHaveBeenCalled();
+    expect(text(el.shadowRoot!.querySelector('p.error[role="alert"]'))).toContain(
+      "Luis has taken over this order.",
+    );
+  });
+
   it("Pay opens the presented bill's sheet on its whole amount and reads the equipment again", async () => {
     const { el, stubs, readsBefore } = await openPresented();
 

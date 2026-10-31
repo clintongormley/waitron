@@ -12,7 +12,7 @@ import {
   type AllergyFieldRefusal,
 } from "./widgets/party-allergy-dialog.js";
 import type { BillEditExpected, BillUnsent, LateSend, Tender } from "./api/client.js";
-import { billUnsentOf, billUnsentText } from "./state/bill-unsent.js";
+import { billHasUnsent, billUnsentOf, billUnsentText } from "./state/bill-unsent.js";
 import {
   endedPeriodOf,
   isLateSendManagerRefusal,
@@ -17933,6 +17933,32 @@ export class TillApp extends LitElement {
     return true;
   }
 
+  /** The screen's quiet-Pay rule for `billId`, while it is the bill on screen. */
+  #unsentOnScreen(billId: string): boolean {
+    if (billId !== this.activeTabId) return false;
+    const draft = this.tableOpening ? null : this.#tableDraft();
+    return billHasUnsent(draft, this.#otherDrafts(draft));
+  }
+
+  /** True, after the dialog says why, when the bill on screen has an unsent dish: no new payment
+   * starts from the dialog then, as none does from the screen's quiet Pay, however long the
+   * dialog has been open. Answering a payment already sent is not new. */
+  #refusedUnsent(open: BillPaying): boolean {
+    if (open.surface !== "table" || !this.#unsentOnScreen(open.billId)) return false;
+    const refusal = refusalOf({ code: "bill.unsent_dishes", billId: open.billId }, false);
+    refusal.billLabel = this.#paymentBillLabel(open.billId);
+    this.billPaying = { ...open, refusal };
+    return true;
+  }
+
+  /** The till's own error, as the dialog shows it over the banner it covers. */
+  #saidInDialog(): PayRefusal | null {
+    const error = this.errorKey;
+    if (error === undefined) return null;
+    const said = errorText(error, this.tableMenus, this.tables);
+    return typeof said === "string" ? { code: "draft_unsaved", text: said } : null;
+  }
+
   async #onBillPayPreview(event: Event): Promise<void> {
     const asked = (event as CustomEvent<PayRequest>).detail;
     // The dialog's events come only while it is open. A press while a request is out is dropped.
@@ -17943,8 +17969,15 @@ export class TillApp extends LitElement {
       this.billPaying = { ...open, ...pending.shown, refusal: { code: "network" } };
       return;
     }
+    if (this.#refusedUnsent(open)) return;
     this.billPaying = { ...open, refusal: null, taken: null, refunded: null, busy: true };
     try {
+      // A dialog reopened on a held payment was opened without saving the New order.
+      if (open.surface === "table" && !(await this.#flushDraft())) {
+        const now = this.#billPayingNow(open.id);
+        if (now !== null) this.billPaying = { ...now, busy: false, refusal: this.#saidInDialog() };
+        return;
+      }
       const expectedEdit =
         open.surface === "counter" ? null : this.#draftSync?.expectedEditFor(open.billId);
       if (expectedEdit === undefined || (open.surface === "table" && expectedEdit === null))
@@ -18011,6 +18044,7 @@ export class TillApp extends LitElement {
               expectedEdit: open.expectedEdit,
             }),
           };
+    if (previous?.unconfirmed !== true && this.#refusedUnsent(open)) return;
     const turn = (this.#paymentSends.get(key) ?? 0) + 1;
     this.#paymentSends.set(key, turn);
     this.billPaying = { ...open, refusal: null, taken: null, refunded: null, busy: true };

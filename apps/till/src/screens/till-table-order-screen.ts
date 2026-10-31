@@ -161,7 +161,7 @@ import type { AdjustKind, AdjustTarget } from "../widgets/adjustment-dialog.js";
 import type { PayLine, PayWay } from "../widgets/bill-pay-dialog.js";
 import "../widgets/dead-ends-section.js";
 import { PAY_WAYS, paidQuantities, payLines } from "../state/bill-payment.js";
-import { billUnsentText } from "../state/bill-unsent.js";
+import { billHasUnsent, billUnsentText } from "../state/bill-unsent.js";
 import { portionGroups, sentSlicePortionKey, tabLinePortionKey } from "../state/portion-groups.js";
 import { billControlStyles, billSwitcher, tableMenu } from "./table-bill-controls.js";
 
@@ -4056,12 +4056,8 @@ export class TillTableOrderScreen extends LitElement {
     return this.paymentConfirmation !== undefined || shown === undefined || owing(shown);
   }
 
-  /** A dish in this screen's New order, or in another person's draft of this bill drawn with its
-   * Take over, so every quiet Pay has its way out on the screen. */
   #billHasUnsent(): boolean {
-    const draft = this.#draftStore;
-    if (draft === null) return false;
-    return draft.lineCount > 0 || this.otherDrafts.some((other) => other.lines.length > 0);
+    return billHasUnsent(this.#draftStore, this.otherDrafts);
   }
 
   /** Whether a tap on `control` reopens a payment already sent on the bill on screen. The tender's
