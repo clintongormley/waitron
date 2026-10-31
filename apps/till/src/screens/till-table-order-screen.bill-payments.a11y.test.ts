@@ -6,7 +6,7 @@ import { setLocale } from "../i18n/t.js";
 import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { BillBalance, PartyBill, TabLine, TableParty } from "../api/client.js";
-import { tapTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("es-ES"));
 afterEach(cleanupWidgets);
@@ -121,7 +121,7 @@ describe.each(["light", "dark"] as const)(
       ["a partly paid bill", bill, balance],
     ] as const)("has no violations for %s", async (_case, shownBill, billBalance) => {
       const { el, host } = await mountHandheld(theme, shownBill, billBalance);
-      await tapTableMenu(el);
+      await openTableMenu(el);
       await expectNoA11yViolations(host);
     });
   },
@@ -195,7 +195,7 @@ describe.each(["light", "dark"] as const)(
         },
         theme,
       );
-      await tapTableMenu(el);
+      await openTableMenu(el);
       if (el.shadowRoot!.querySelector("[data-open-bill-pay]") === null)
         throw new Error("the scan must include the ways to pay");
       await expectNoA11yViolations(host);

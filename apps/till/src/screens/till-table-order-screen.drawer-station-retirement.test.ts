@@ -11,7 +11,10 @@ import {
 import { storedDish } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 import { openSentDish, openSentMore } from "./till-table-order-screen.sent.test-helpers.js";
 import { mount } from "./till-table-order-screen.test-helpers.js";
-import { tapTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import {
+  closeTableMenu,
+  openTableMenu,
+} from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
@@ -49,9 +52,9 @@ it.each(["editable", "service-only"] as const)(
     });
     const moves: CustomEvent[] = [];
     el.addEventListener("move-station", (event) => moves.push(event as CustomEvent));
-    await tapTableMenu(el);
-    expect(el.shadowRoot!.querySelector("[data-table-menu] [data-move-station]")).toBeNull();
-    await tapTableMenu(el);
+    await openTableMenu(el);
+    expect(el.shadowRoot!.querySelector("[data-move-station]")).toBeNull();
+    await closeTableMenu(el);
     await openSentDish(el, line.id);
     await openSentMore(el);
     const action = el.shadowRoot!.querySelector<HTMLElement>("[data-sent-line-station]")!;

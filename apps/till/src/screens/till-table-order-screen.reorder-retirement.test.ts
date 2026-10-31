@@ -6,7 +6,7 @@ import type { TillSentOrders } from "../widgets/sent-orders.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { current, groups, now } from "./till-table-order-screen.current-orders.test-helpers.js";
 import { mount, resized } from "./till-table-order-screen.test-helpers.js";
-import { tapTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
@@ -39,7 +39,7 @@ it.each([390, 1280])(
     await userEvent.click(menu.querySelector<HTMLElement>("[data-group-later]")!);
     expect(reorders.map((event) => event.detail)).toEqual([{ heldGroupIds: ["g4", "g3"] }]);
     expect(reorders[0]!.bubbles && reorders[0]!.composed).toBe(true);
-    await tapTableMenu(el);
+    await openTableMenu(el);
     expect(
       el
         .shadowRoot!.querySelector("[data-table-menu]")!

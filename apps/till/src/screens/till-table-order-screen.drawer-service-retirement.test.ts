@@ -16,7 +16,11 @@ import {
 import { storedDish } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 import { mount } from "./till-table-order-screen.test-helpers.js";
 import { storedExtra } from "./till-table-order-screen.sent-fallback.test-helpers.js";
-import { tapTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import {
+  closeTableMenu,
+  openTableMenu,
+  tableMenuAndSwitcherText,
+} from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
@@ -40,10 +44,9 @@ it.each(["held", "fired"] as const)(
       }),
     });
     const panel = await sentPanelFor(el);
-    await tapTableMenu(el);
-    const menu = el.shadowRoot!.querySelector("[data-table-menu]")!;
+    await openTableMenu(el);
     expect(
-      menu.querySelector(
+      el.shadowRoot!.querySelector(
         "[data-group-fire], [data-serve-group], [data-serve-row], [data-unserve-row]",
       ),
     ).toBeNull();
@@ -93,13 +96,12 @@ it.each([null, "fired-group"])(
     });
     const commands: CustomEvent[] = [];
     el.addEventListener("send-lines", (event) => commands.push(event as CustomEvent));
-    await tapTableMenu(el);
-    const menu = el.shadowRoot!.querySelector("[data-table-menu]")!;
+    await openTableMenu(el);
     expect(el.shadowRoot!.querySelector("[data-sent-fallback]")!.textContent).toContain(
       "Recorded dish",
     );
-    expect(menu.textContent).not.toContain("Recorded dish");
-    expect(menu.querySelector("[data-send-line]")).toBeNull();
+    expect(tableMenuAndSwitcherText(el)).not.toContain("Recorded dish");
+    expect(el.shadowRoot!.querySelector("[data-send-line]")).toBeNull();
     expect(commands).toEqual([]);
   },
 );
@@ -156,8 +158,6 @@ it.each(["fired", "served"] as const)(
     });
     const commands: CustomEvent[] = [];
     el.addEventListener("adjust", (event) => commands.push(event as CustomEvent));
-    await tapTableMenu(el);
-    const menu = el.shadowRoot!.querySelector("[data-table-menu]")!;
     const panel = await sentPanelFor(el);
     for (const section of [
       "[data-sent-toggle]",
@@ -169,12 +169,13 @@ it.each(["fired", "served"] as const)(
         await panel.updateComplete;
       }
     }
+    await openTableMenu(el);
     const shown = panel.shadowRoot!.querySelector<HTMLElement>(`[data-${kind}-line="${line.id}"]`)!;
     expect(shown.checkVisibility()).toBe(true);
     expect(shown.textContent).toContain("Recorded dish");
-    expect(menu.textContent).not.toContain("Recorded dish");
-    expect(menu.querySelector("[data-comp-line], [data-discount-line]")).toBeNull();
-    await tapTableMenu(el);
+    expect(tableMenuAndSwitcherText(el)).not.toContain("Recorded dish");
+    expect(el.shadowRoot!.querySelector("[data-comp-line], [data-discount-line]")).toBeNull();
+    await closeTableMenu(el);
     await openSentDish(el, line.id, kind);
     await openSentMore(el);
     await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-sent-line-comp]")!);

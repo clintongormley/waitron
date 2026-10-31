@@ -9,7 +9,11 @@ import { storedServed } from "./till-table-order-screen.sent-fallback.test-helpe
 import { current, row } from "./till-table-order-screen.current-orders.test-helpers.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import "./till-table-order-screen.js";
-import { tapTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import {
+  closeTableMenu,
+  openTableMenu,
+  tableMenuAndSwitcherText,
+} from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 afterEach(async () => {
   cleanupWidgets();
@@ -32,11 +36,11 @@ describe.each(["en", "es"] as const)("drawer without pending dishes in %s", (loc
         host.style.width = "100%";
         await resized(el);
         const q = (selector: string) => el.shadowRoot!.querySelector<HTMLElement>(selector)!;
-        await tapTableMenu(el);
+        await openTableMenu(el);
         const menu = q("[data-table-menu]");
         expect(menu.checkVisibility()).toBe(true);
-        expect(menu.querySelector(".pending")).toBeNull();
-        expect(menu.textContent).not.toContain(t("table.none_pending"));
+        expect(q(".pending")).toBeNull();
+        expect(tableMenuAndSwitcherText(el)).not.toContain(t("table.none_pending"));
         expect(q("[data-order-total]").textContent).toContain(formatMoney("0.00", currentLocale()));
         await expectNoA11yViolations(host);
 
@@ -54,7 +58,7 @@ describe.each(["en", "es"] as const)("drawer without pending dishes in %s", (loc
           path: `__screenshots__/a773-empty-drawer-${locale}-${theme}-${width}.png`,
         });
 
-        await tapTableMenu(el);
+        await closeTableMenu(el);
         const fallback = q('[data-sent-fallback-line="stored-served"]');
         expect(fallback.checkVisibility()).toBe(true);
         expect(fallback.textContent).toContain("Recorded served dish");
@@ -88,9 +92,9 @@ describe.each(["en", "es"] as const)("drawer without pending dishes in %s", (loc
         )!;
         expect(served.checkVisibility()).toBe(true);
         expect(served.textContent).toContain("Recorded served dish");
-        await tapTableMenu(el);
-        expect(q("[data-table-menu]").querySelector(".pending")).toBeNull();
-        expect(q("[data-table-menu]").textContent).not.toContain(t("table.pending_title"));
+        await openTableMenu(el);
+        expect(q(".pending")).toBeNull();
+        expect(tableMenuAndSwitcherText(el)).not.toContain(t("table.pending_title"));
         expect(el.getBoundingClientRect().width).toBe(width);
         expect(window.innerWidth).toBe(width);
       },

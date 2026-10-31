@@ -32,7 +32,7 @@ import {
   steak,
   cake,
 } from "./till-table-order-screen.current-orders.test-helpers.js";
-import { tapTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
@@ -625,11 +625,11 @@ describe("the release reminder in Sent", () => {
 
   it("keeps a due reminder only in Sent when the table menu is open", async () => {
     const { el } = await mountSent();
-    await tapTableMenu(el);
+    await openTableMenu(el);
     expect(sq(el, "[data-reminder-snooze]")).not.toBeNull();
     expect(sq(el, "[data-reminder-fire]")).not.toBeNull();
-    expect(q(el, "[data-table-menu] [data-reminder-snooze]")).toBeNull();
-    expect(q(el, "[data-table-menu] [data-reminder-fire]")).toBeNull();
+    expect(q(el, "[data-reminder-snooze]")).toBeNull();
+    expect(q(el, "[data-reminder-fire]")).toBeNull();
   });
 
   it("offers Snooze and Fire on the group once its reminder is due", async () => {

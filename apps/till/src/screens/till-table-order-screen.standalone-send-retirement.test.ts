@@ -7,7 +7,7 @@ import type { SubmitDraftDetail } from "./till-table-order-screen.js";
 import { orderGroup } from "./till-table-order-screen.current-orders.test-helpers.js";
 import { storedDish, storedExtra } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 import { beer, mount, resized } from "./till-table-order-screen.test-helpers.js";
-import { tapTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
@@ -90,7 +90,7 @@ it.each([
   });
   const sent: CustomEvent[] = [];
   el.addEventListener("send-lines", (event) => sent.push(event as CustomEvent));
-  await tapTableMenu(el);
+  await openTableMenu(el);
   expect(el.shadowRoot!.querySelector("[data-send-line]")).toBeNull();
   expect(sent).toEqual([]);
 });

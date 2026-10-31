@@ -2330,8 +2330,10 @@ unless written "was :N" (a line at `037016e5b` that this task deleted).
   (setup only), recorded as such. Test titles that said the test opens the drawer were retitled to
   the table menu; no assertion changed for it.
 - **STOP:** none. No check on money totals, VAT, permissions or filing needed anything other than
-  a re-point: the two tab-total checks moved to the foot's total read the same value with the same
-  `toContain`.
+  a re-point: six tab-total checks moved to the foot's total (`.test.ts:628`, `:666`, `:763`;
+  `.empty-drawer.a11y` at 0.00 and at 2.00; `.populated-drawer.a11y` at 10.00), each with the same
+  `toContain` or `not.toBeNull()`. The values match in all six because each setup is a single bill
+  with no party (the review's probe printed both texts in each: equal).
 
 | Test | Kind | Before → after | Source | Task |
 | --- | --- | --- | --- | --- |
@@ -2515,6 +2517,46 @@ difference).
 | `.test.ts:721-731` ("renders an ENABLED Table actions trigger…") | R (tightened) | the host's `disabled` only → also the trigger button's `disabled`, its `aria-disabled` and no `inert` ancestor; the click goes to that button (as before) | review M3; `6f0139c73` | 10 review |
 | `.drag.test.ts:456`, `.sent-reorder.test.ts:67`, `.arrangement-authority.test.ts:200`, `.split-authority.test.ts:85` | S | `el.party = { id: "other" } as …` → `{ ...switcherParty, id: "other" }`, same id; every `expect` byte-identical | a cast fixture the ⋮ cannot draw (`tableIds` required) | 10 review |
 
+### Task 11a review answers (2026-10-31, `a803-3-reviews/task-11a.md`)
+
+Runs in the foreground with `AI_AGENT`/`CLAUDECODE` unset; free memory 61% before the browser runs.
+
+- **I1.** `tapTableMenu` is gone from `.bill-switcher.test-helpers.ts`; `openTableMenu(el)` and
+  `closeTableMenu(el)` each `expect` the ⋮'s `[popover]` closed (open) before the tap and open
+  (closed) after it. Every caller now opens or closes by name. One caller relied on the old toggle:
+  `.drawer-service-retirement.test.ts` (the Comp/discount case) opened the ⋮, then tapped the Sent
+  panel's toggles, which close the ⋮'s list, and its "close" tap opened the list again. The open now
+  comes after the toggles, right before the checks it serves; the checks are unchanged. Control:
+  the first `await openTableMenu(el)` in `.empty-drawer.a11y.test.ts` deleted: `Tests 8 failed (8)`,
+  `AssertionError: expected false to be true` at `closeTableMenu`; file put back from a saved copy.
+- **M1.** Every 11a re-pointed absence check scoped to `[data-table-menu]` now reads the screen's
+  whole shadow root, which takes in the ⋮, the switcher, the foot and the side panel but not
+  `till-sent-orders`' own shadow. The text checks ("Recorded dish", the To serve titles) read the ⋮
+  and the switcher together (`tableMenuAndSwitcherText`), since the screen's `[data-sent-fallback]`
+  legitimately holds that text. Expected values unchanged.
+- **M2.** Retitled to say what they check now: `.test.ts` "keeps serving in Sent, with no duplicate
+  Served list anywhere on the screen", "fires a held dish through Sent More, with no direct Send
+  anywhere on the screen", "keeps sent line $lineNo read-only on the screen instead of opening a
+  direct Change editor", and the describe "the party's groups in the Sent panel". The narrower
+  reach of the kind-S checks (they no longer see inside the drawer, which nothing opens) holds until
+  11c deletes the drawer; not changed here.
+- **M3.** Already fixed in `11bb4ec8c`: `.split-authority.test.ts:85` uses
+  `{ ...switcherParty, id: "other" }`; `rg -n 'party = \{ id:[^}]*\} as' apps/till/src/screens`
+  prints nothing.
+- **M4.** Added to Task 11c below.
+- **M5.** The as-built STOP paragraph now counts six tab-total checks.
+- **Runs.** The 19 changed test files: `Test Files 19 passed (19)`, `Tests 546 passed (546)`. The
+  GREEN command: `Test Files 91 passed (91)`, `Tests 1772 passed (1772)`, no `Errors` line, exit 0.
+  `pnpm --filter @waitron/till typecheck` exit 0; `pnpm exec prettier --check` and
+  `pnpm exec eslint` on the changed files exit 0.
+
+| Test | Kind | Before → after | Source | Task |
+| --- | --- | --- | --- | --- |
+| every `tapTableMenu` caller (`.test.ts`, `.a11y`, `.adjustments.a11y`, `.bill-payments.a11y`, `.current-orders`, `.current-list-retirement`, `.drawer-placement-retirement*`, `.drawer-service-retirement`, `.drawer-station-retirement`, `.empty-drawer.a11y`, `.populated-drawer.a11y`, `.reorder-retirement`, `.sent-course*`, `.sent-prices*`, `.service-migration.a11y`, `.standalone-send-retirement`) | R (tightened) | a toggle tap asserting nothing → `openTableMenu` / `closeTableMenu`, each asserting the list's state before and after | review I1 | 11a review |
+| `.drawer-service-retirement.test.ts` Comp/discount case | R (tightened) | the ⋮ opened before the Sent toggles (which closed it) → opened after them, before the checks; checks unchanged | review I1 | 11a review |
+| `.empty-drawer.a11y.test.ts:38-39`, `:92-93`; `.populated-drawer.a11y.test.ts:88-90`; `.test.ts:573`, `:760-763`, `:2932`; `.drawer-placement-retirement*`; `.drawer-service-retirement`; `.drawer-station-retirement`; `.current-list-retirement`; `.sent-course*`; `.sent-prices*`; `.service-migration.a11y`; `.current-orders.test.ts:631-632` | R (widened) | `[data-table-menu] X` / `menu.querySelector(X)` null → `el.shadowRoot.querySelector(X)` null; the ⋮'s `textContent` → the ⋮'s and the switcher's text; expected values unchanged | review M1 | 11a review |
+| `.test.ts` "keeps serving in Sent…", "fires a held dish through Sent More…", "keeps sent line $lineNo read-only…", describe "the party's groups in the Sent panel" | retitled | titles promising a drawer check → what the case checks; no assertion changed | review M2 | 11a review |
+
 ## Task 11b: app tests and helpers that opened the drawer (≈55 calls)
 
 **Files.** `till-app-parties.test.ts` (25 sites), `till-app-adjustments.test.ts`,
@@ -2549,7 +2591,12 @@ for 11c by 11a/11b; the badge rows (D17).
       unserved and one served one-portion sent line, the Sent summary shows them, and after the
       last is served its not-yet-served counts read 0 (D17).
 - [ ] RED: `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.panel-footer.test.ts src/screens/till-table-order-screen.test.ts -t 'A803 no tab panel|A803 to serve'`.
-- [ ] Implement; re-point the 11c sites and the badge rows.
+- [ ] Implement; re-point the 11c sites and the badge rows. Four `.parties.test.ts` behaviours have
+      no control to re-point to, because the ⋮ acts only on the bill on screen: Take payment on
+      another bill's row (`:217-265`), Cancel and credit on another bill's row (`:304-335`), no
+      Receipt copy on another bill's row (`:214`), and the bill-requested chip (`:363`, `:374`,
+      `:404`). Record each as kind B citing the spec (§3.5, D4 or D9 for where it goes), or as a
+      deleted check that becomes an item of Owner question 5. None is recorded as R.
 - [ ] GREEN: the screen files (11a's command), the 11b files, till typecheck;
       `rg -n 'data-open-drawer|drawerOpen|open_drawer|data-pending-badge' apps/till` prints nothing.
 - [ ] Commit: "The table screen loses the Tab button: bills in the switcher, actions in the ⋮".

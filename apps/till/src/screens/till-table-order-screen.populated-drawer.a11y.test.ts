@@ -15,7 +15,11 @@ import type { TillSentOrders } from "../widgets/sent-orders.js";
 import type { WtDialog } from "@waitron/ui";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import "./till-table-order-screen.js";
-import { tapTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import {
+  closeTableMenu,
+  openTableMenu,
+  tableMenuAndSwitcherText,
+} from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const dish = {
   ...storedDish,
@@ -81,13 +85,11 @@ describe.each(["en", "es"] as const)("populated table drawer in %s", (locale) =>
         await resized(el);
         expect(window.innerWidth).toBe(width);
         const q = (selector: string) => el.shadowRoot!.querySelector<HTMLElement>(selector)!;
-        await tapTableMenu(el);
+        await openTableMenu(el);
         const menu = q("[data-table-menu]");
         expect(menu.checkVisibility()).toBe(true);
-        expect(
-          menu.querySelector(".pending, .pending-line, .served-line, [data-cancel-line]"),
-        ).toBeNull();
-        expect(menu.textContent).not.toContain(t("table.pending_title"));
+        expect(q(".pending, .pending-line, .served-line, [data-cancel-line]")).toBeNull();
+        expect(tableMenuAndSwitcherText(el)).not.toContain(t("table.pending_title"));
         expect(q("[data-order-total]").textContent).toContain(
           formatMoney("10.00", currentLocale()),
         );
@@ -96,7 +98,7 @@ describe.each(["en", "es"] as const)("populated table drawer in %s", (locale) =>
         await page.screenshot({
           path: `__screenshots__/a773-populated-drawer-${locale}-${theme}-${width}.png`,
         });
-        await tapTableMenu(el);
+        await closeTableMenu(el);
         if (q("[data-draft-pane]").hidden) {
           await userEvent.click(q("[data-review-open]"));
           await el.updateComplete;

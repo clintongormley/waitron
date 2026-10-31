@@ -14,7 +14,7 @@ import {
 import { resized } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import "../till-app.js";
-import { tapTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 afterEach(async () => {
   cleanupWidgets();
@@ -64,8 +64,8 @@ describe.each(["en", "es"] as const)("Sent service migration in %s", (locale) =>
         el.addEventListener("snooze-group", (event) => snoozes.push((event as CustomEvent).detail));
         await userEvent.click(snooze);
         expect(snoozes).toEqual([{ groupId: "g3", minutes: 5 }]);
-        await tapTableMenu(el);
-        expect(el.shadowRoot!.querySelector("[data-table-menu] [data-group-reminder]")).toBeNull();
+        await openTableMenu(el);
+        expect(el.shadowRoot!.querySelector("[data-group-reminder]")).toBeNull();
         expect(panel.getBoundingClientRect().right).toBeLessThanOrEqual(width);
         expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
         await expectNoA11yViolations(host);

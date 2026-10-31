@@ -1,3 +1,4 @@
+import { expect } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { PartyBill, TableParty } from "../api/client.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
@@ -43,12 +44,32 @@ export function partyBill(
   };
 }
 
-/** Taps the ⋮'s trigger: opens its list, or closes it when it is open. */
-export async function tapTableMenu(el: TillTableOrderScreen): Promise<void> {
-  await userEvent.click(
-    el
-      .shadowRoot!.querySelector("[data-table-menu]")!
-      .shadowRoot!.querySelector<HTMLElement>("button")!,
-  );
+const tableMenu = (el: TillTableOrderScreen) => el.shadowRoot!.querySelector("[data-table-menu]")!;
+
+const tableMenuIsOpen = (el: TillTableOrderScreen) =>
+  tableMenu(el).shadowRoot!.querySelector("[popover]")?.matches(":popover-open") ?? false;
+
+async function tapTableMenu(el: TillTableOrderScreen): Promise<void> {
+  await userEvent.click(tableMenu(el).shadowRoot!.querySelector<HTMLElement>("button")!);
   await el.updateComplete;
 }
+
+/** Opens the ⋮'s list, and fails unless it is open afterwards. */
+export async function openTableMenu(el: TillTableOrderScreen): Promise<void> {
+  expect(tableMenuIsOpen(el)).toBe(false);
+  await tapTableMenu(el);
+  expect(tableMenuIsOpen(el)).toBe(true);
+}
+
+/** Closes the ⋮'s list, and fails unless it is closed afterwards. */
+export async function closeTableMenu(el: TillTableOrderScreen): Promise<void> {
+  expect(tableMenuIsOpen(el)).toBe(true);
+  await tapTableMenu(el);
+  expect(tableMenuIsOpen(el)).toBe(false);
+}
+
+/** The text of the ⋮'s list and the bill switcher together. */
+export const tableMenuAndSwitcherText = (el: TillTableOrderScreen): string =>
+  [...el.shadowRoot!.querySelectorAll("[data-table-menu], [data-bill-switcher]")]
+    .map((node) => node.textContent ?? "")
+    .join("\n");

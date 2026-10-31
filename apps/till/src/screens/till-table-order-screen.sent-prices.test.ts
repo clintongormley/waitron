@@ -10,7 +10,7 @@ import {
 } from "./till-table-order-screen.current-orders.test-helpers.js";
 import { dish, extra, recorded } from "./till-table-order-screen.sent-prices.test-helpers.js";
 import { openSentDish } from "./till-table-order-screen.sent.test-helpers.js";
-import { tapTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const money = (value: string) => formatMoney(decimal(value), currentLocale());
 const text = (element: Element) => element.textContent!.replace(/\s+/g, " ").trim();
@@ -124,8 +124,6 @@ it("keeps served dishes in Sent without a duplicate Served list in the table men
   dialog.closeAfter("saved");
   await closed;
   await el.updateComplete;
-  await tapTableMenu(el);
-  expect(
-    el.shadowRoot!.querySelector("[data-table-menu] .served, [data-table-menu] .served-line"),
-  ).toBeNull();
+  await openTableMenu(el);
+  expect(el.shadowRoot!.querySelector(".served, .served-line")).toBeNull();
 });

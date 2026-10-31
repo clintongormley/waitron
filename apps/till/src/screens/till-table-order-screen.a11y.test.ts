@@ -36,7 +36,7 @@ import type {
   AdjustmentReason,
 } from "../api/client.js";
 import type { TillMenuBrowser } from "../widgets/menu-browser.js";
-import { tapTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const products: TillProduct[] = [
   {
@@ -197,7 +197,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       .shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!
       .click();
     // Open the ⋮ so its list is included in the scan, not just the grid.
-    await tapTableMenu(el);
+    await openTableMenu(el);
     await openReview(el);
     // The reused basket re-renders on its OWN store subscription (a separate Lit update cycle), and its
     // freshly-created remove `wt-button`s render their inner focusable `<button>` on a following tick — so

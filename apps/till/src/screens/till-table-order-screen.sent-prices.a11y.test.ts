@@ -9,7 +9,7 @@ import { dish, extra, recorded } from "./till-table-order-screen.sent-prices.tes
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import type { WtDialog } from "@waitron/ui";
-import { tapTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 afterEach(async () => {
   cleanupWidgets();
@@ -88,10 +88,8 @@ describe.each(["en", "es"] as const)("Served prices %s", (locale) => {
         );
         await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-sent-line-close]")!);
         await closed;
-        await tapTableMenu(el);
-        expect(
-          el.shadowRoot!.querySelector("[data-table-menu] .served, [data-table-menu] .served-line"),
-        ).toBeNull();
+        await openTableMenu(el);
+        expect(el.shadowRoot!.querySelector(".served, .served-line")).toBeNull();
         el.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!.scrollIntoView({
           block: "center",
         });

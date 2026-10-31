@@ -51,7 +51,10 @@ import type { TillMenuBrowser } from "../widgets/menu-browser.js";
 import type { TillBasket } from "../widgets/basket.js";
 import type { TillModifierPicker } from "../widgets/modifier-picker.js";
 import type { TillTenderPay } from "../widgets/tender-pay.js";
-import { tapTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import {
+  openTableMenu,
+  tableMenuAndSwitcherText,
+} from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const coffee: TillProduct = {
   id: "cafe",
@@ -562,7 +565,7 @@ describe("till-table-order-screen", () => {
 
   it("hides the badge and duplicate To serve card after the last pending dish is served", async () => {
     const { el } = await mount({ lines: [pendingLine, servedLine] });
-    await tapTableMenu(el);
+    await openTableMenu(el);
     expect(el.shadowRoot!.querySelector(".pending-line")).toBeNull();
     expect((await sentFallbackFor(el)).querySelectorAll("[data-sent-fallback-line]")).toHaveLength(
       2,
@@ -570,12 +573,12 @@ describe("till-table-order-screen", () => {
     el.lines = [{ ...pendingLine, servedAt: servedLine.servedAt }, servedLine];
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-pending-badge]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-table-menu] .pending")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".pending")).toBeNull();
     const fallback = await sentFallbackFor(el);
     expect(fallback.querySelectorAll("[data-sent-fallback-line]")).toHaveLength(2);
   });
 
-  it("keeps serving in Sent and removes the duplicate Served drawer list", async () => {
+  it("keeps serving in Sent, with no duplicate Served list anywhere on the screen", async () => {
     const { el } = await mount({
       orderId: "wo-4",
       lines: [pendingLine, servedLine],
@@ -623,7 +626,7 @@ describe("till-table-order-screen", () => {
 
   it("shows the tab total from the LOCKED add-time prices (never a catalogue recompute)", async () => {
     const { el } = await mount({ lines: [pendingLine, servedLine] });
-    await tapTableMenu(el);
+    await openTableMenu(el);
     // 2 × 1.50 + 1 × 1.50 = 4.50, summed at money scale from the locked unit prices.
     expect(el.shadowRoot!.querySelector("[data-order-total]")!.textContent).toContain(
       formatMoney("4.50", currentLocale()),
@@ -660,7 +663,7 @@ describe("till-table-order-screen", () => {
 
   it("hides the pay section when settlement is disabled (an order-only handheld)", async () => {
     const { el } = await mount({ lines: [pendingLine], canSettle: false });
-    await tapTableMenu(el);
+    await openTableMenu(el);
     expect(el.shadowRoot!.querySelector("section.pay")).toBeNull();
     // The total row stays visible — the waiter can see the tab total, just can't take payment.
     expect(el.shadowRoot!.querySelector("[data-order-total]")).not.toBeNull();
@@ -709,7 +712,7 @@ describe("till-table-order-screen", () => {
 
   it("has no Status section", async () => {
     const { el } = await mount({ lines: [pendingLine] });
-    await tapTableMenu(el);
+    await openTableMenu(el);
     expect(tableMenuOpen(el)).toBe(true);
     expect(el.shadowRoot!.querySelector("section.status")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-status-clear]")).toBeNull();
@@ -755,12 +758,12 @@ describe("till-table-order-screen", () => {
 
   it("handles an empty tab: no badge or duplicate To serve card, zero total", async () => {
     const { el } = await mount({ lines: [] });
-    await tapTableMenu(el);
+    await openTableMenu(el);
     expect(el.shadowRoot!.querySelector("[data-pending-badge]")).toBeNull();
-    const text = el.shadowRoot!.querySelector("[data-table-menu]")!.textContent ?? "";
+    const text = tableMenuAndSwitcherText(el);
     expect(text).not.toContain(t("table.none_pending"));
     expect(text).not.toContain(t("table.pending_title"));
-    expect(el.shadowRoot!.querySelector("[data-table-menu] .pending")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".pending")).toBeNull();
     expect(el.shadowRoot!.querySelector(".served")).toBeNull();
     const panel = await sentPanelFor(el);
     expect(panel.shadowRoot!.querySelector("[data-sent-panel]")).toBeNull();
@@ -1581,7 +1584,7 @@ describe("till-table-order-screen", () => {
     parentProductId: null,
   };
 
-  describe("the party's groups in the Tab drawer", () => {
+  describe("the party's groups in the Sent panel", () => {
     const at = "2026-09-27T10:00:00.000Z";
     /** A dish line of this bill in group `groupId`, held (never sent) unless `fired`. */
     function dishLine(
@@ -2827,7 +2830,7 @@ describe("till-table-order-screen", () => {
       expect(parseFloat(child.fontSize)).toBeLessThan(parseFloat(dish.fontSize));
     });
 
-    it("fires a held dish through Sent More without a duplicate drawer Send", async () => {
+    it("fires a held dish through Sent More, with no direct Send anywhere on the screen", async () => {
       const { el } = await mount({ lines: [heldLine], courses });
       expect(el.shadowRoot!.querySelector('[data-send-line="3"]')).toBeNull();
       expect(await recallControl(el, 3)).toBeNull();
@@ -2925,12 +2928,10 @@ describe("till-table-order-screen", () => {
           await panel.updateComplete;
         }
       }
-      await tapTableMenu(el);
+      await openTableMenu(el);
       expect(el.shadowRoot!.querySelector('[data-send-line="3"]')).toBeNull();
       expect(panel.shadowRoot!.querySelector('[data-group-fire="g-held"]')).not.toBeNull();
-      expect(
-        el.shadowRoot!.querySelector('[data-table-menu] [data-group-fire="g-held"]'),
-      ).toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-group-fire="g-held"]')).toBeNull();
     });
 
     it("sends a recalled source through New order when its old group has fired", async () => {
@@ -3289,7 +3290,7 @@ describe("till-table-order-screen", () => {
     }
 
     it.each([burgerLine, recalledLine])(
-      "keeps sent line $lineNo read-only in the drawer instead of opening a direct Change editor",
+      "keeps sent line $lineNo read-only on the screen instead of opening a direct Change editor",
       async (line) => {
         const { el } = await mountLines([line]);
         expect(lineAction(el, "change", line.lineNo)).toBeNull();

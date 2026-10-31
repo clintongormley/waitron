@@ -11,7 +11,7 @@ import {
 } from "./till-table-order-screen.current-orders.test-helpers.js";
 import { storedDish } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 import { sentPanelFor } from "./till-table-order-screen.sent.test-helpers.js";
-import { tapTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
@@ -58,10 +58,9 @@ it.each(["loaded", "fallback", "unread"] as const)(
           .textContent!.replace(/\s+/g, " "),
       ).toContain("Recorded dish ×2");
     }
-    await tapTableMenu(el);
-    const menu = el.shadowRoot!.querySelector("[data-table-menu]")!;
+    await openTableMenu(el);
     expect(
-      menu.querySelector(
+      el.shadowRoot!.querySelector(
         "[data-groups], [data-group-line], [data-ungrouped], [data-current-orders-unread]",
       ),
     ).toBeNull();
