@@ -44,7 +44,7 @@ it("prints a duplicate on the selected printer and says where it went", async ()
   setLocale("en-GB");
   const api = {
     getOrderPrinters: vi.fn().mockResolvedValue([
-      { id: "printer-1", name: "Barra" },
+      { id: "printer-1", name: "Bar printer" },
       { id: "printer-2", name: "Kitchen" },
     ]),
     reprintOrder: vi.fn().mockResolvedValue({ jobId: "job-1" }),
@@ -71,7 +71,7 @@ it("says the printer the copy was sent to, though another was chosen while the r
   let finish!: (queued: { jobId: string }) => void;
   const api = {
     getOrderPrinters: vi.fn().mockResolvedValue([
-      { id: "printer-1", name: "Barra" },
+      { id: "printer-1", name: "Bar printer" },
       { id: "printer-2", name: "Kitchen" },
     ]),
     reprintOrder: vi.fn().mockReturnValue(new Promise((resolve) => (finish = resolve))),
@@ -90,33 +90,35 @@ it("says the printer the copy was sent to, though another was chosen while the r
     new CustomEvent("wt-change", { detail: { value: "printer-2" }, bubbles: true, composed: true }),
   );
   finish({ jobId: "job-1" });
-  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Copy sent to Barra"));
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Copy sent to Bar printer"));
   expect(el.shadowRoot!.textContent).not.toContain("sent to Kitchen");
 });
 
 it("puts a bill label holding the invoice placeholder, and a printer name holding a replacement pattern, in as written", async () => {
   setLocale("en-GB");
   const api = {
-    getOrderPrinters: vi.fn().mockResolvedValue([{ id: "printer-1", name: "Barra $&" }]),
+    getOrderPrinters: vi.fn().mockResolvedValue([{ id: "printer-1", name: "Bar printer $&" }]),
     reprintOrder: vi.fn().mockResolvedValue({ jobId: "job-1" }),
     liveData: new LiveData(),
   } as unknown as DashboardApi;
   const { el } = await mountWidget<OrderReprintDialog>("dashboard-order-reprint-dialog", {
     api,
-    row: { ...row, orderNumber: null, label: "Terraza {invoice} $&" },
+    row: { ...row, orderNumber: null, label: "Terrace {invoice} $&" },
   });
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("wt-combobox")?.value).toBe("printer-1"),
   );
-  expect(el.shadowRoot!.textContent).toContain("Bill Terraza {invoice} $&, invoice A/12");
+  expect(el.shadowRoot!.textContent).toContain("Bill Terrace {invoice} $&, invoice A/12");
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=print]")!.click();
-  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Copy sent to Barra $&"));
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain("Copy sent to Bar printer $&"),
+  );
 });
 
 it("keeps a refused print open and shows the printer refusal under its control", async () => {
   setLocale("en-GB");
   const api = {
-    getOrderPrinters: vi.fn().mockResolvedValue([{ id: "printer-1", name: "Barra" }]),
+    getOrderPrinters: vi.fn().mockResolvedValue([{ id: "printer-1", name: "Bar printer" }]),
     reprintOrder: vi.fn().mockRejectedValue({ code: "printer.not_found" }),
     liveData: new LiveData(),
   } as unknown as DashboardApi;
@@ -146,7 +148,7 @@ it("clears a failed load's message once the server answers again", async () => {
       codeMessage("connection.failed"),
     ),
   );
-  getOrderPrinters.mockResolvedValue([{ id: "printer-1", name: "Barra" }]);
+  getOrderPrinters.mockResolvedValue([{ id: "printer-1", name: "Bar printer" }]);
   liveData.refresh();
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("wt-combobox")?.value).toBe("printer-1"),
@@ -157,7 +159,7 @@ it("clears a failed load's message once the server answers again", async () => {
 it("keeps a print's connection failure when the printer list recovers", async () => {
   setLocale("en-GB");
   const liveData = new LiveData();
-  const printers = [{ id: "printer-1", name: "Barra" }];
+  const printers = [{ id: "printer-1", name: "Bar printer" }];
   const getOrderPrinters = vi
     .fn()
     .mockResolvedValueOnce(printers)
@@ -213,7 +215,7 @@ it.each(["light", "dark"] as const)(
     expect(print.getAttribute("disabled")).not.toBeNull();
     expect(print.variant).toBe("secondary");
     expect(buttonFill(print)).toBe(cancelFill);
-    arrive([{ id: "printer-1", name: "Barra" }]);
+    arrive([{ id: "printer-1", name: "Bar printer" }]);
     await vi.waitFor(() => expect(print.getAttribute("disabled")).toBeNull());
     expect(print.variant).toBe("primary");
     expect(buttonFill(print)).not.toBe(cancelFill);
@@ -245,7 +247,7 @@ it("keeps Print quiet when there is no printer to send to", async () => {
 it("keeps Print blue while the copy it sent is in progress", async () => {
   let finish!: () => void;
   const api = {
-    getOrderPrinters: vi.fn().mockResolvedValue([{ id: "printer-1", name: "Barra" }]),
+    getOrderPrinters: vi.fn().mockResolvedValue([{ id: "printer-1", name: "Bar printer" }]),
     reprintOrder: vi.fn().mockReturnValue(new Promise<void>((resolve) => (finish = resolve))),
     liveData: new LiveData(),
   } as unknown as DashboardApi;
@@ -266,7 +268,7 @@ it("keeps Print blue while the copy it sent is in progress", async () => {
 it("keeps Print blue while its copy is being sent, even if the printers vanish meanwhile", async () => {
   let finish!: () => void;
   const liveData = new LiveData();
-  const getOrderPrinters = vi.fn().mockResolvedValue([{ id: "printer-1", name: "Barra" }]);
+  const getOrderPrinters = vi.fn().mockResolvedValue([{ id: "printer-1", name: "Bar printer" }]);
   const api = {
     getOrderPrinters,
     reprintOrder: vi.fn().mockReturnValue(new Promise<void>((resolve) => (finish = resolve))),
@@ -335,7 +337,7 @@ it.each(locales)(
 it.each(locales)("lists the loaded printers with no message beside them (%s)", async (locale) => {
   setLocale(locale);
   const api = {
-    getOrderPrinters: vi.fn().mockResolvedValue([{ id: "printer-1", name: "Barra" }]),
+    getOrderPrinters: vi.fn().mockResolvedValue([{ id: "printer-1", name: "Bar printer" }]),
     liveData: new LiveData(),
   } as unknown as DashboardApi;
   const { el } = await mountWidget<OrderReprintDialog>("dashboard-order-reprint-dialog", {
@@ -386,7 +388,7 @@ it.each(locales)(
     expect(el.shadowRoot!.textContent).not.toContain(texts[locale].none);
     expect(loadingLine(el)).toBeNull();
     expect(printButton(el).getAttribute("disabled")).not.toBeNull();
-    getOrderPrinters.mockResolvedValue([{ id: "printer-1", name: "Barra" }]);
+    getOrderPrinters.mockResolvedValue([{ id: "printer-1", name: "Bar printer" }]);
     retryButton(el)!.click();
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("wt-combobox")?.value).toBe("printer-1"),
@@ -403,7 +405,7 @@ it("keeps a refused print's message when a later printer read fails", async () =
   const liveData = new LiveData();
   const getOrderPrinters = vi
     .fn()
-    .mockResolvedValueOnce([{ id: "printer-1", name: "Barra" }])
+    .mockResolvedValueOnce([{ id: "printer-1", name: "Bar printer" }])
     .mockRejectedValue({ code: "connection.failed" });
   const reprintOrder = vi.fn().mockRejectedValue({ code: "authorization.not_permitted" });
   const api = { getOrderPrinters, reprintOrder, liveData } as unknown as DashboardApi;
@@ -457,7 +459,7 @@ it("keeps a stale printer list usable after a later failed read, and offers a re
   const liveData = new LiveData();
   const getOrderPrinters = vi
     .fn()
-    .mockResolvedValueOnce([{ id: "printer-1", name: "Barra" }])
+    .mockResolvedValueOnce([{ id: "printer-1", name: "Bar printer" }])
     .mockRejectedValue({ code: "connection.failed" });
   const api = { getOrderPrinters, liveData } as unknown as DashboardApi;
   const { el } = await mountWidget<OrderReprintDialog>("dashboard-order-reprint-dialog", {
@@ -503,7 +505,7 @@ it("keeps a print's message when Try again reads the printers again", async () =
   const liveData = new LiveData();
   const getOrderPrinters = vi
     .fn()
-    .mockResolvedValueOnce([{ id: "printer-1", name: "Barra" }])
+    .mockResolvedValueOnce([{ id: "printer-1", name: "Bar printer" }])
     .mockRejectedValue({ code: "connection.failed" });
   const reprintOrder = vi.fn().mockRejectedValue({ code: "authorization.not_permitted" });
   const api = { getOrderPrinters, reprintOrder, liveData } as unknown as DashboardApi;
@@ -553,7 +555,7 @@ it("keeps the earlier printer usable when Try again fails too", async () => {
   const liveData = new LiveData();
   const getOrderPrinters = vi
     .fn()
-    .mockResolvedValueOnce([{ id: "printer-1", name: "Barra" }])
+    .mockResolvedValueOnce([{ id: "printer-1", name: "Bar printer" }])
     .mockRejectedValue({ code: "connection.failed" });
   const api = { getOrderPrinters, liveData } as unknown as DashboardApi;
   const { el } = await mountWidget<OrderReprintDialog>("dashboard-order-reprint-dialog", {
@@ -592,9 +594,9 @@ it("says the printers are loading, not that there is none, when reopened after a
 });
 
 describe("printing a full invoice", () => {
-  const BAR_PRINTER = { id: "printer-1", name: "Barra", kind: "receipt" as const };
-  const OFFICE_PRINTER = { id: "page-1", name: "Oficina", kind: "a4" as const };
-  const KITCHEN_PRINTER = { id: "printer-2", name: "Cocina", kind: "receipt" as const };
+  const BAR_PRINTER = { id: "printer-1", name: "Bar printer", kind: "receipt" as const };
+  const OFFICE_PRINTER = { id: "page-1", name: "Office printer", kind: "a4" as const };
+  const KITCHEN_PRINTER = { id: "printer-2", name: "Kitchen printer", kind: "receipt" as const };
   const fullRow: OrderRowDto = { ...row, invoiceType: "F1" };
   const invoiceDetail = (
     printers: OfferedPrinter[] | null,
@@ -658,7 +660,7 @@ describe("printing a full invoice", () => {
   const invoiceApi = (detail: OrderDetailDto, overrides: Record<string, unknown> = {}) =>
     ({
       getOrder: vi.fn().mockResolvedValue(detail),
-      getOrderPrinters: vi.fn().mockResolvedValue([{ id: "printer-1", name: "Barra" }]),
+      getOrderPrinters: vi.fn().mockResolvedValue([{ id: "printer-1", name: "Bar printer" }]),
       requestOrderPrintDelivery: vi.fn().mockResolvedValue(deliveryAttempt("queued")),
       reprintOrder: vi.fn(),
       liveData: new LiveData(),
@@ -702,9 +704,9 @@ describe("printing a full invoice", () => {
     const el = await openInvoice(api);
     await vi.waitFor(() => expect(chooser(el)?.options).toHaveLength(3));
     expect(chooser(el)!.options).toEqual([
-      { value: "printer-1", label: "Barra" },
-      { value: "page-1", label: "Oficina · A4" },
-      { value: "printer-2", label: "Cocina" },
+      { value: "printer-1", label: "Bar printer" },
+      { value: "page-1", label: "Office printer · A4" },
+      { value: "printer-2", label: "Kitchen printer" },
     ]);
     expect(chooser(el)!.value).toBe("page-1");
     expect(api.getOrder).toHaveBeenCalledWith("bill-1");
@@ -761,7 +763,9 @@ describe("printing a full invoice", () => {
     const [id, printerId, key] = api.requestOrderPrintDelivery.mock.calls[0] as string[];
     expect([id, printerId]).toEqual(["bill-1", "page-1"]);
     expect(key).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Invoice sent to Oficina"));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.textContent).toContain("Invoice sent to Office printer"),
+    );
     expect(api.reprintOrder).not.toHaveBeenCalled();
   });
 
@@ -774,7 +778,9 @@ describe("printing a full invoice", () => {
     await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
     api.getOrder.mockResolvedValue(withCurrent(invoiceDetail(null, OFFICE_PRINTER.id), "queued"));
     printButton(el).click();
-    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Invoice sent to Oficina"));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.textContent).toContain("Invoice sent to Office printer"),
+    );
     await vi.waitFor(() => expect(chooser(el)).toBeNull());
     expect(el.shadowRoot!.querySelector("[data-test=print-busy]")).toBeNull();
     expect(el.shadowRoot!.textContent).not.toContain("There is no active printer to print on");
@@ -927,7 +933,7 @@ describe("printing a full invoice", () => {
     await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
     expect(el.shadowRoot!.querySelector("wt-dialog")!.getAttribute("heading")).toBe(title);
     expect(printButton(el).textContent?.trim()).toBe(action);
-    if (locale === "es-ES") expect(chooser(el)!.options[1]!.label).toBe("Oficina · A4");
+    if (locale === "es-ES") expect(chooser(el)!.options[1]!.label).toBe("Office printer · A4");
   });
 
   it("shows a failed read as a load failure with a retry that reads the bill again", async () => {
@@ -975,8 +981,8 @@ describe("printing a full invoice", () => {
     await el.updateComplete;
     held.answer(deliveryAttempt("queued"));
     await vi.waitFor(() => expect(printButton(el).loading).toBe(false));
-    expect(el.shadowRoot!.textContent).toContain("Invoice sent to Oficina");
-    expect(el.shadowRoot!.textContent).not.toContain("sent to Barra");
+    expect(el.shadowRoot!.textContent).toContain("Invoice sent to Office printer");
+    expect(el.shadowRoot!.textContent).not.toContain("sent to Bar printer");
   });
 
   it("words the confirmation by the copy the server says it made, not by a later offer", async () => {
@@ -998,7 +1004,7 @@ describe("printing a full invoice", () => {
     );
     held.answer(deliveryAttempt("queued", "original"));
     await vi.waitFor(() => expect(printButton(el).loading).toBe(false));
-    expect(el.shadowRoot!.textContent).toContain("Invoice sent to Oficina");
+    expect(el.shadowRoot!.textContent).toContain("Invoice sent to Office printer");
   });
 
   it("calls a print a copy when the server answers that it made a copy", async () => {
@@ -1009,7 +1015,9 @@ describe("printing a full invoice", () => {
     const el = await openInvoice(api);
     await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
     printButton(el).click();
-    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Copy sent to Oficina"));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.textContent).toContain("Copy sent to Office printer"),
+    );
   });
 
   it.each([
@@ -1051,7 +1059,9 @@ describe("printing a full invoice", () => {
       expect(printButton(el).loading).toBe(false);
       api.requestOrderPrintDelivery.mockResolvedValue(deliveryAttempt("queued"));
       printButton(el).click();
-      await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Invoice sent to Barra"));
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.textContent).toContain("Invoice sent to Bar printer"),
+      );
       expect(api.requestOrderPrintDelivery).toHaveBeenLastCalledWith(
         "bill-2",
         "printer-1",
