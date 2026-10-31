@@ -12,7 +12,7 @@ import type { StreamView } from "@waitron/stream";
 import type { BackupStatus } from "./backup-status.js";
 import { readCertExpiry, type CertExpiry } from "./cert-expiry.js";
 import { readChainHeight, type ChainHeight } from "./chain-height.js";
-import { checkTimeHealth, type TimeHealth } from "./time-health.js";
+import type { TimeHealth } from "./time-health.js";
 import { healthSnapshot, type HealthState } from "./health.js";
 import { requireManagementSession } from "@waitron/server-kit";
 import { createErrorBoundary } from "@waitron/server-kit";
@@ -98,6 +98,8 @@ export type BoxStatusDeps = {
   readMode: () => DeploymentMode;
   readSingletonRole: () => SingletonRole;
   readAwaitingFiscalCertificate: () => boolean;
+  /** Shared with `/api/box/health`, so both read the host's clock service once a minute. */
+  readTime: () => Promise<TimeHealth>;
 };
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -124,7 +126,7 @@ export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): 
         mode: () => Promise.resolve(deps.readMode()),
         singletonRole: () => Promise.resolve(deps.readSingletonRole()),
         environment: deps.environment,
-        time: () => checkTimeHealth(),
+        time: deps.readTime,
         cert: certPath === undefined ? undefined : () => readCertExpiry(certPath, deps.now()),
         awaitingFiscalCertificate: () => deps.readAwaitingFiscalCertificate(),
         chain: async () => chain,
