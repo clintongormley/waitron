@@ -32,9 +32,9 @@ const LOCK_WAIT_MS = 120_000;
  * for a set marked `"node"`, `venue.db` for every other set.
  *
  * It also installs the append-only triggers on `venue.db`, set by set, from each venue set's
- * `appendOnlyTables`, which a
- * `migrationOptionsFor(...)` result carries. A caller that hands over no `appendOnlyTables` gets a
- * migrated database with no triggers on it (`scripts/apply-migrations-callers.test.ts`).
+ * `appendOnlyTables`, which a `migrationOptionsFor(...)` result carries. A caller that hands over
+ * no `appendOnlyTables` gets a migrated database with no triggers on it
+ * (`scripts/apply-migrations-callers.test.ts`).
  *
  * It removes the change feed first and does not put it back, because a migration cannot drop a
  * column the feed's update trigger names; `installChangeFeed` in

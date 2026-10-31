@@ -39,7 +39,7 @@ export {
   savedPart,
   stillJoinedPart,
 } from "./joined-parts.js";
-export type { MigrationOptions } from "./migrate.js";
+export type { MigrationDatabase, MigrationOptions } from "./migrate.js";
 export { claimRows } from "./job-claim.js";
 export type { ClaimSpec } from "./job-claim.js";
 // The column vocabulary. Another package reaches it only through this barrel (CLAUDE.md §3), and

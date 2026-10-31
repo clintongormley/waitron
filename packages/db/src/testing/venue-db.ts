@@ -10,7 +10,7 @@ import {
   type NodeDatabase,
   type VenueDatabase,
 } from "../client.js";
-import { runMigrations, type MigrationOptions } from "../migrate.js";
+import { runMigrations, type MigrationDatabase, type MigrationOptions } from "../migrate.js";
 import { assertSafeIdentifier } from "./identifiers.js";
 
 // Captured at load so a suite's `vi.useFakeTimers()` cannot replace it and stall the hook below.
@@ -27,7 +27,7 @@ const DEFAULT_SETUP_TIMEOUT_MS = 60_000;
 export type VenueMigrationSet = MigrationOptions & {
   readonly appendOnlyTables?: readonly string[];
   /** `"node"` applies the set to the node handle, as `applyMigrations` does; absent means venue. */
-  readonly database?: "venue" | "node";
+  readonly database?: MigrationDatabase;
 };
 
 export interface VenueDbOptions {

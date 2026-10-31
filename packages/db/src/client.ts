@@ -60,9 +60,9 @@ export type NodeTransaction = Transaction & { readonly __file: "node" };
 
 /** This node's two open files. */
 export interface VenueDatabase {
-  /** `venue.db`, which every migration set is applied to (`packages/migrations/src/apply.ts`). */
+  /** `venue.db`. */
   venue: Database;
-  /** `node.db`, which no migration set is applied to; reserved for a later slice. */
+  /** `node.db`, this node's own file. */
   node: NodeDatabase;
   /** Closes both files. */
   close(): Promise<void>;

@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { MigrationOptions } from "@waitron/db";
+import type { MigrationDatabase, MigrationOptions } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import manifest from "../migrations.manifest.json" with { type: "json" };
 import "./errors.js";
@@ -27,9 +27,6 @@ export interface VenueMigrationOptions extends MigrationOptions {
   /** Which of the node's two files the set is applied to. Absent means `venue.db`. */
   readonly database?: MigrationDatabase;
 }
-
-/** The two database files a node keeps: `venue.db`, shared with the venue, and its own `node.db`. */
-export type MigrationDatabase = "venue" | "node";
 
 /**
  * Where one migration set's SQL lives. What a module DESCRIPTOR declares — everything a caller
