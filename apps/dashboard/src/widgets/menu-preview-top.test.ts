@@ -56,12 +56,12 @@ it("names every includer and links to its Preview", async () => {
     menuName: "Drinks",
     includedBy: [
       { id: "lunch", name: "Lunch" },
-      { id: "terrace", name: "Terraza" },
+      { id: "terrace", name: "Terrace" },
     ],
   });
   const note = el.shadowRoot!.querySelector('[data-test="only-this-menu"]');
   expect(text(note)).toBe(
-    "Lunch and Terraza include this menu. They keep their live version until each of them is published.",
+    "Lunch and Terrace include this menu. They keep their live version until each of them is published.",
   );
   expect([...note!.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual([
     "/manage/menus/menu/lunch/view/preview",
