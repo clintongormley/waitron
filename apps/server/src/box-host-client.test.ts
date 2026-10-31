@@ -3,7 +3,12 @@ import { createServer, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { boxHostClient, DEFAULT_SET_MS, DEFAULT_STATUS_MS } from "./box-host-client.js";
+import {
+  boxHostClient,
+  DEFAULT_SET_MS,
+  DEFAULT_SOCKET_PATH,
+  DEFAULT_STATUS_MS,
+} from "./box-host-client.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
@@ -75,13 +80,14 @@ describe("boxHostClient().clockStatus", () => {
     });
   });
 
-  it("answers missing at once when no socket is there", async () => {
+  it("answers missing at once when no socket is there, naming the error", async () => {
     const dir = mkdtempSync(join(tmpdir(), "box-host-"));
     cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
     const started = performance.now();
     expect(await boxHostClient({ socketPath: join(dir, "box.sock") }).clockStatus()).toEqual({
       available: false,
       reason: "missing",
+      detail: "ENOENT",
     });
     expect(performance.now() - started).toBeLessThan(50);
   });
@@ -110,6 +116,10 @@ describe("boxHostClient().clockStatus", () => {
       "a last synchronisation that is not a time",
       `${JSON.stringify({ ...STATUS, lastSyncAt: -1 })}\n`,
     ],
+    [
+      "a last synchronisation past the latest date",
+      `${JSON.stringify({ ...STATUS, lastSyncAt: 9e15 })}\n`,
+    ],
     ["a JSON list", "[]\n"],
     ["JSON null", "null\n"],
     ["an answer that is neither yes nor no", `${JSON.stringify({ ok: "maybe" })}\n`],
@@ -136,6 +146,30 @@ describe("boxHostClient().clockStatus", () => {
       reason: "malformed",
     });
     await expect.poll(() => closed).toBe(true);
+  });
+
+  it("answers lost when the host drops the connection as soon as it is made", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "box-host-"));
+    const path = join(dir, "box.sock");
+    const server = createServer((socket) => socket.destroy());
+    await new Promise<void>((resolve) => server.listen(path, resolve));
+    cleanups.push(async () => {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      rmSync(dir, { recursive: true, force: true });
+    });
+    expect(await boxHostClient({ socketPath: path }).clockStatus()).toEqual({
+      available: false,
+      reason: "lost",
+    });
+  });
+
+  it("asks the box's own socket when given no path", async () => {
+    expect(DEFAULT_SOCKET_PATH).toBe("/run/waitron-box/box.sock");
+    // No machine running this suite has the box's service.
+    expect(await boxHostClient({ statusMs: 200 }).clockStatus()).toMatchObject({
+      available: false,
+      reason: "missing",
+    });
   });
 
   it("waits two seconds by default", () => {
@@ -176,6 +210,35 @@ describe("boxHostClient().setClock", () => {
     ).toEqual({ available: false, reason: "malformed" });
   });
 
+  it("answers lost, not missing, when the host closes the connection after the request without answering", async () => {
+    const h = await host((_line, socket) => socket.destroy());
+    expect(
+      await boxHostClient({ socketPath: h.path }).setClock({
+        targetMs: 1793425531250,
+        requester: {},
+      }),
+    ).toMatchObject({ available: false, reason: "lost" });
+    expect(h.lines).toHaveLength(1);
+  });
+
+  it("escapes letters outside ASCII and refuses a requester over 512 bytes without connecting", async () => {
+    const h = await host(answer({ ok: true, beforeMs: 1, afterMs: 2 }));
+    const client = boxHostClient({ socketPath: h.path });
+    await client.setClock({ targetMs: 1793425531250, requester: { note: "José" } });
+    expect(h.lines).toEqual(['clock.set 1793425531250 {"note":"Jos\\u00e9"}']);
+    const over = await client.setClock({
+      targetMs: 1793425531250,
+      requester: { note: "x".repeat(502) },
+    });
+    expect(over).toEqual({ available: false, reason: "malformed" });
+    expect(h.lines).toHaveLength(1);
+    const at = await client.setClock({
+      targetMs: 1793425531250,
+      requester: { note: "x".repeat(501) },
+    });
+    expect(at).toMatchObject({ available: true });
+  });
+
   it("answers missing when no socket is there", async () => {
     const dir = mkdtempSync(join(tmpdir(), "box-host-"));
     cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
@@ -184,7 +247,7 @@ describe("boxHostClient().setClock", () => {
         targetMs: 1793425531250,
         requester: {},
       }),
-    ).toEqual({ available: false, reason: "missing" });
+    ).toMatchObject({ available: false, reason: "missing" });
   });
 
   it("answers malformed for a host refusal without a reason", async () => {
