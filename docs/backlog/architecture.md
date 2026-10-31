@@ -524,6 +524,15 @@ until A977).
   (`apps/server/src/receipt-lines.test.ts`) uses English dish, extra, unit and option samples; it
   keeps its `es-ES` language keys, its "kg" unit and the Spanish names its two-language
   variant-name case joins.
+  The receipt-preview suite (`apps/server/src/receipt-preview-api.test.ts`) gives English device
+  and receipt-printer names to what it creates, in the same name order its tie-break cases read;
+  it keeps the Spanish header and footer text it saves under the `es-ES` key, the Galician and
+  Spanish receipt labels it checks, and what its shared venue
+  (`apps/server/src/testing/venue-fixtures.ts`) creates: Spanish names, among them "Sala
+  principal", "Administradora", "Bebidas", "Café", "Agua" and "Venta en establecimiento", the
+  street address "Calle Mayor 1" and the legal name "Deli Test SL". The station-printers suite
+  (`apps/server/src/station-printers.test.ts`) gives English location and station names to what it
+  creates; it keeps its es-ES locale and the operation description "Venta en establecimiento".
   The venue-service menu-timetable suite (`packages/venue-service/src/menu-timetable.test.ts`)
   still keys and names its menus in Spanish (Desayunos, Almuerzo, Cena, Bebidas, Café, Cócteles,
   Copas, "Deli para llevar") and uses "Sala" and "Terraza".
@@ -887,6 +896,15 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   (`apps/server/src/receipt-lines.test.ts`) uses English dish, extra, unit and option samples; it
   keeps its `es-ES` language keys, its "kg" unit and the Spanish names its two-language
   variant-name case joins.
+  The receipt-preview suite (`apps/server/src/receipt-preview-api.test.ts`) gives English device
+  and receipt-printer names to what it creates, in the same name order its tie-break cases read;
+  it keeps the Spanish header and footer text it saves under the `es-ES` key, the Galician and
+  Spanish receipt labels it checks, and what its shared venue
+  (`apps/server/src/testing/venue-fixtures.ts`) creates: Spanish names, among them "Sala
+  principal", "Administradora", "Bebidas", "Café", "Agua" and "Venta en establecimiento", the
+  street address "Calle Mayor 1" and the legal name "Deli Test SL". The station-printers suite
+  (`apps/server/src/station-printers.test.ts`) gives English location and station names to what it
+  creates; it keeps its es-ES locale and the operation description "Venta en establecimiento".
   The venue-service menu-timetable suite (`packages/venue-service/src/menu-timetable.test.ts`)
   still keys and names its menus in Spanish (Desayunos, Almuerzo, Cena, Bebidas, Café, Cócteles,
   Copas, "Deli para llevar") and uses "Sala" and "Terraza".
