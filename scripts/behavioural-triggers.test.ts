@@ -319,23 +319,6 @@ function seed(connection) {
     party("party-frozen"),
     table("dt-bystander", "6"),
 
-    // A party per main-bill case, each with the open bill its case names as the main bill, so no
-    // case's write changes what another case reads. `party-main-other` also holds a second open
-    // bill, which its case moves.
-    party("party-main-settles"),
-    party("party-main-places"),
-    party("party-main-moves"),
-    party("party-main-revision"),
-    party("party-main-other"),
-    party("party-main-destination"),
-    workingOrder("wo-main-settles", "open", { partyId: "party-main-settles" }),
-    workingOrder("wo-main-places", "open", { partyId: "party-main-places" }),
-    workingOrder("wo-main-moves", "open", { partyId: "party-main-moves" }),
-    workingOrder("wo-main-revision", "open", { partyId: "party-main-revision" }),
-    workingOrder("wo-main-other", "open", { partyId: "party-main-other" }),
-    workingOrder("wo-main-other-split", "open", { partyId: "party-main-other" }),
-    workingOrder("wo-main-destination", "open", { partyId: "party-main-destination" }),
-
     // Sales and their tenders. Every tender is written BEFORE any settlement, because
     // tenders_reject_post_settlement is one of the triggers under test.
     sale("sale-bare", 1000),

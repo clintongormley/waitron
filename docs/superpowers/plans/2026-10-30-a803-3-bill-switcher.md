@@ -726,7 +726,7 @@ task's red run; a red assertion not on this list that is not kind B/R/W/S/F unde
 | `party-table-actions.test.ts:1149` (was `:1145`, split with no bill: "a new, empty main bill") | B (Task 6b's red run) | `mainBillId` `toBe(main.id)` → `toBeNull()`, plus `numbersOf` `[[main.id, 1, null]]`; retitled "… a new, empty Bill 1 …"; every other check unchanged | §3.4; D1 | 6b |
 | `department-transfer-api.test.ts:1661`, `order-portions.lifecycle.test.ts:261`, `order-portions.adjustments.test.ts:1910` (calls of `mergeCheckedBills`, directly or through `testing/bill-action-fixture.ts`) | F (Task 6b) | a function parameter was dropped, not a field: `mergeCheckedBills` no longer has its `partyId` parameter, which only the main-bill bookkeeping read, so the argument goes at each call; expectations unchanged; `department-transfer-api`'s setup stops keeping the party id it no longer passes; no `expect` changes | D12 | 6b |
 | `apps/server/src/parties.test.ts`, `till-api.parties.test.ts:807-821`, and any `TableParty`/floor whole-shape pin | W | `mainBillId` → `openingBillId` | D7 | 6c |
-| `scripts/behavioural-triggers.test.ts` `EXPECTED_TRIGGERS` (`:158-159`) and `describe("working_orders_release_main_bill")` (`:1544-1590`) | **W, B, Q5 item 3** | the two names leave the list; the describe becomes "the main bill is gone": `parties` has no `main_bill_id` column (`pragma_table_info`) and no trigger's SQL names `main_bill` (`sqlite_master`) | §3.4 | 7 |
+| `scripts/behavioural-triggers.test.ts` `EXPECTED_TRIGGERS` (`:158-159`) and `describe("working_orders_release_main_bill")` (`:1544-1590`) | **W, B, Q5 item 3** | the two names leave the list; the describe becomes "the main bill is gone": `parties` has no `main_bill_id` column (`pragma_table_info`) and no trigger's SQL names `main_bill` (`sqlite_master`). The seed rows the retired cases used (`party-main-*`, `wo-main-*`) and their comment are removed (setup the retired cases used, removed; no check changed; 368 tests before and after) | §3.4 | 7 |
 | `scripts/migration-upgrade.test.ts` `RESETS` | **W, Q5 item 4** | gains the new core rebuild step, `refused: ["DROP TABLE \`parties\`", "FOREIGN KEY constraint failed"]` (as `:437-439`; the exact text from the run's own output) | finding 9 | 7 |
 | `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts:119-130` (expectation adapter) | **W, Q5 item 5** | the captured `parties` table's expectation drops the `main_bill_id` column and its foreign key, as the adapter already adds columns; the hashed fixture is not edited | finding 9 | 7 |
 | `apps/server/src/party-bill-actions.test.ts` `A803 no main bill (writers):` (Task 6b's writers describe, lines at `2d009763b`): the `mainOf` helper `:1283-1284` and its 14 reads of `parties.mainBillId` — `:1304` (in `presentedParty`), `:1320`, `:1324`, `:1334`, `:1345`, `:1361`, `:1367`, `:1374`, `:1386`, `:1387`, `:1398`, `:1399`, `:1410`, `:1411` | **R, Q5b item 3 (deleted checks)** | the column goes, so every `mainOf(...)` `toBeNull()` line and the helper are deleted. The case "Merge bills leaves the party with no main bill when Bill 1 is merged away" (`:1318`) has no other check and is deleted whole. The other seven cases (`:1327`, `:1337`, `:1348`, `:1364`, `:1377`, `:1391`, `:1403`) keep every other `expect` byte-identical (the answers' `partyId`, `billId` and `billIds` checks, the new bill's party, and `openingBillOfParty` at `:1388` and `:1400`); their titles and the describe's lose the "no main bill" clause. What carries the guarantee afterwards (that no table action names a main bill): Task 7's new behavioural-triggers case "the main bill is gone" — `parties` has no `main_bill_id` column (`pragma_table_info`) and no trigger's SQL names `main_bill` — so nothing can store one. Task 6b's six rewritten lines (at `e31ede59e`: party-bill-actions `:744`; party-move-bill `:838`, `:961`; party-table-actions `:655`, `:1137`, `:1159`) no longer read `mainBillId` at `2d009763b` (Task 6c re-pointed them, rows above) and are not in this row. `till-api.table-actions.test.ts:775`, `:800` ("no answer carries mainBillId", `not.toHaveProperty("mainBillId")`) are absence checks on the answer, not reads of the column: they survive the drop unchanged and stay | §3.4 | 7 |
@@ -1481,6 +1481,21 @@ the new files); `docs/developers/conventions-data.md:3512-3513` list gains the n
       migrated to `0200`: a closed party named by a `party_tables` row, or by a settled
       `working_orders` bill, is refused with the same two messages; a closed party with no child row
       migrates (control). The Madrid adapter failed 2 of 2 before its three lines.)
+      **Correction (Task 7 review, Minor 1):** closing a party deletes its `party_tables` rows
+      (`closePartyTables`, `apps/server/src/parties.ts:793-797`, the delete at `:796`), so "a
+      closed party named by a `party_tables` row" is a state closing never leaves. A closed party
+      stays named by its bills (`working_orders`, `bill_identities`) and, after a combine, by the
+      party it joined (`parties.merged_into_party_id`); that part is from reading the code, not a run.
+      **Both outcomes (Task 7 review, Minor 2; the review's run at `3e83dc464` is the receipt):**
+      (a) on a box where any party has a refusing child (`working_orders`, `bill_identities`,
+      `party_tables`, `order_drafts`, `order_groups`, `order_group_events`, `unpaid_departures`,
+      `parties.merged_into_party_id`), `DROP TABLE parties` is refused, the whole core set rolls
+      back with `0201`, every row stays, and the box stays at `0200` and refuses to start with
+      `migrations.apply_failed`; (b) on a box where no party has a refusing child, the migration
+      succeeds and the cascade deletes those parties' `party_allergy`, `order_kitchen_notes` and
+      `service_step_completions` rows without a word (measured 1 → 0 each). The venue reset is
+      needed either way (pre-live: root `CLAUDE.md` §3, "No backwards-compatibility … until
+      production").
 - [x] Retire the `mainOf` reads of `party-bill-actions.test.ts`'s `A803 no main bill (writers):`
       exactly as its row says (Q5, deleted checks); the "the main bill is gone" case above is what
       holds their guarantee from here.
@@ -1942,6 +1957,19 @@ in both themes), the `data-discount-bill` sites (`panel-footer.test.ts`,
       owner questions and their defaults; the five Spanish proposals and the ES guide section; a
       "Changed test checks" section; Owner question 5's items with their before and after; the LOOK
       screenshots; the deletion controls of Task 13; that F and H2 ran unedited.
+- [ ] PR text, Task 7 corrections (Task 7 review, Minors 1 and 2; the commit body is not
+      rewritten): (1) the commit body's "Every party keeps … its tables in party_tables after it
+      closes" is wrong: closing a party deletes its `party_tables` rows (`closePartyTables`,
+      `apps/server/src/parties.ts:793-797`); a closed party stays named by its bills
+      (`working_orders`, `bill_identities`) and, after a combine, by the party it joined (from
+      reading, not a run). (2) Both outcomes of the migration on an unreset box, with the review's
+      run as receipt: where any party has a refusing child (`working_orders`, `bill_identities`,
+      `party_tables`, `order_drafts`, `order_groups`, `order_group_events`, `unpaid_departures`,
+      `parties.merged_into_party_id`) the `DROP TABLE parties` is refused, the whole core set rolls
+      back, rows stay and the box stays at `0200`; where no party has one, it migrates and the
+      cascade silently deletes those parties' `party_allergy`, `order_kitchen_notes` and
+      `service_step_completions` rows (measured 1 → 0). The reset is required either way
+      (pre-live, root `CLAUDE.md` §3).
 - [ ] Overlap note in the PR: lane E's `feat/a696-startup-zone-validation` changes other functions
       of `bill-actions.ts`, `till-api.ts`, `working-order.ts` and till `strings.ts`; whoever lands
       second rebases. A739 Cut B will rebuild the pay section this slice edits (D5, D6, D8, D16).
