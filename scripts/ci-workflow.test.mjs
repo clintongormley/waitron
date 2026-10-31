@@ -651,6 +651,38 @@ describe("ci.yml's job graph", () => {
     expect(ifLine).toMatch(/needs\.ci\.result\s*==\s*'success'/);
   });
 
+  it.each([
+    ["ordinary main", "push", "true", "success", true, false, true],
+    ["main with skipped ancestors", "push", "true", "success", false, false, true],
+    ["documentation", "push", "false", "success", false, false, false],
+    ["pull request", "pull_request", "true", "success", false, false, false],
+    ["manual recovery", "workflow_dispatch", "true", "success", true, false, false],
+    ["failed aggregate", "push", "true", "failure", false, false, false],
+    ["cancelled aggregate", "push", "true", "cancelled", false, false, false],
+    ["skipped aggregate", "push", "true", "skipped", false, false, false],
+    ["cancelled run", "push", "true", "success", false, true, false],
+  ])(
+    "publication condition serves %s",
+    (_name, event, code, ci, ancestorsSucceeded, cancelled, expected) => {
+      const line = job("publish").body.find((entry) => /^ {4}if:/.test(entry));
+      expect(line).toBeDefined();
+      let condition = line.replace(/^ {4}if:\s*/, "");
+      // GitHub adds success() when no status function is present; skipped ancestors fail it.
+      if (!/\b(?:always|success|failure|cancelled)\s*\(/.test(condition))
+        condition = `success() && (${condition})`;
+      const expression = condition
+        .replace(/github\.event_name/g, JSON.stringify(event))
+        .replace(/needs\.changes\.outputs\.code/g, JSON.stringify(code))
+        .replace(/needs\.ci\.result/g, JSON.stringify(ci))
+        .replace(/always\(\)/g, "true")
+        .replace(/success\(\)/g, JSON.stringify(ancestorsSucceeded && !cancelled))
+        .replace(/cancelled\(\)/g, JSON.stringify(cancelled))
+        .replace(/==/g, "===")
+        .replace(/!=/g, "!==");
+      expect(Boolean(new Function(`return (${expression});`)())).toBe(expected);
+    },
+  );
+
   it("publishes the print-agent image from the gated publish job", () => {
     const body = job("publish").body.join("\n");
     expect(body).toContain("target: print-agent");
