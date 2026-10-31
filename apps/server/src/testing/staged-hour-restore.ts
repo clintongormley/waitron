@@ -86,7 +86,7 @@ export async function stagedHourRestore(
   try {
     await seedTenants(db);
     await stampDeployment(db, "preproduction");
-    const key = await mintBreakGlassKey(db, TENANT_A.nodeId);
+    const key = await mintBreakGlassKey({ venue: db, node: nodeDb }, TENANT_A.nodeId);
     const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
     const initial: OperationBinding = {
       module: "fiscal-verifactu",
@@ -208,6 +208,7 @@ export async function stagedHourRestore(
       node,
       secret: key.secret,
       database: () => db,
+      nodeDatabase: () => nodeDb,
       selected,
       testClock: clock,
       readIsolation: async () => ({

@@ -14,6 +14,7 @@ import {
   stampDeployment,
   tenants,
 } from "@waitron/db";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   readOperationAuthority,
@@ -33,7 +34,9 @@ import { restoreFromArtifactFile, writeValidated, type PlacementDeps } from "./r
 import { encryptArtifact } from "./artifact-cipher.js";
 import { packArchive } from "./backup-archive.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+});
 const NODE = "d0000000-0000-4000-8000-000000000001";
 const LOCATION = "d0000000-0000-4000-8000-000000000002";
 const binding = {
@@ -63,7 +66,7 @@ beforeEach(async () => {
     { nodeId: NODE, code: "FF", purpose: "full" },
     { nodeId: NODE, code: "R", purpose: "rectificative" },
   ]);
-  nodeKey = await mintBreakGlassSecret(suite.db, NODE);
+  nodeKey = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
 });
 afterEach(async () => {
   for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
@@ -102,9 +105,12 @@ async function fixture(module: WaitronModule) {
     environment: "preproduction",
     migrate: async () => {},
     log: () => {},
-    withModuleOperations: ({ db, node }, run) =>
-      withRecoveryKeyOperation({ db, nodeId: node.nodeId }, binding, nodeKey, (tx, authority) =>
-        run(tx, new Map([[binding.module, { input, binding, authority }]])),
+    withModuleOperations: ({ db, nodeDb, node }, run) =>
+      withRecoveryKeyOperation(
+        { db, node: nodeDb, nodeId: node.nodeId },
+        binding,
+        nodeKey,
+        (tx, authority) => run(tx, new Map([[binding.module, { input, binding, authority }]])),
       ),
   };
   return { validated, deps };
@@ -269,7 +275,7 @@ it("identifies the chosen backup's paper key before authentication can refuse it
   const archivedName = await suite.db.execute<Record<string, unknown>>(
     sql`select * from node_roles where node_id = ${NODE}`,
   );
-  await mintBreakGlassSecret(suite.db, NODE);
+  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
   const entries: { code: string; params: Record<string, unknown> | undefined }[] = [];
   f.deps = {
     ...f.deps,
@@ -310,9 +316,9 @@ it("rolls authentication and earlier hook writes back together when a later modu
         },
       },
     ],
-    withModuleOperations: ({ db, node }, run) =>
+    withModuleOperations: ({ db, nodeDb, node }, run) =>
       withRecoveryKeyOperation(
-        { db, nodeId: node.nodeId },
+        { db, node: nodeDb, nodeId: node.nodeId },
         binding,
         nodeKey,
         async (tx, authority) => {
@@ -370,13 +376,18 @@ it("snapshots operation inputs issued by the host before an earlier restore hook
   await expect(
     writeValidated(f.validated, {
       ...f.deps,
-      withModuleOperations: ({ db, node }, run) =>
-        withRecoveryKeyOperation({ db, nodeId: node.nodeId }, binding, nodeKey, (tx, authority) => {
-          const operations = new Map([
-            [binding.module, { input, binding: suppliedBinding, authority }],
-          ]);
-          return run(tx, operations);
-        }),
+      withModuleOperations: ({ db, nodeDb, node }, run) =>
+        withRecoveryKeyOperation(
+          { db, node: nodeDb, nodeId: node.nodeId },
+          binding,
+          nodeKey,
+          (tx, authority) => {
+            const operations = new Map([
+              [binding.module, { input, binding: suppliedBinding, authority }],
+            ]);
+            return run(tx, operations);
+          },
+        ),
       modules: [
         {
           ...fakeModule("earlier"),

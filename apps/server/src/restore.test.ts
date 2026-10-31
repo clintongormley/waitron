@@ -904,7 +904,7 @@ describe("restore hooks (identity phase)", () => {
         .values({ nodeId: T.nodeId, code: "FA-1", purpose: "rectificative" });
     });
     await stampDeployment(suite.db, "preproduction");
-    const secret = await mintBreakGlassSecret(suite.db, T.nodeId);
+    const secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, T.nodeId);
     const fixture = allocationFixture({
       node: { nodeId: brandNodeId(T.nodeId), locationId: locationId(T.locationId) },
       identity: "P000042",

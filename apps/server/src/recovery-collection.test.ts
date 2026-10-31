@@ -3,17 +3,20 @@ import {
   CORE_MIGRATIONS,
   nodeRoles,
   readBreakGlassVerifier,
-  setBreakGlassVerifierTx,
+  withNodeTransaction,
   stampDeployment,
   withTransaction,
 } from "@waitron/db";
+import { NODE_MIGRATIONS, setRecoveryKeyTx } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashSecret, IDENTITY_MIGRATIONS, managementSessions, persons } from "@waitron/identity";
 import { readOperationAuthority, type OperationAuthority } from "@waitron/module";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+});
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const binding = {
   module: "test-regime",
@@ -26,14 +29,14 @@ let secret: string;
 
 beforeEach(async () => {
   await stampDeployment(suite.db, "preproduction");
-  secret = await mintBreakGlassSecret(suite.db, NODE);
+  secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
 });
 
 it("collects with scoped key authority before the local transaction and still creates no account", async () => {
   let collected = false;
   let authorityAfter: unknown;
   const result = await withRecoveryKeyOperation(
-    { db: suite.db, nodeId: NODE },
+    { db: suite.db, node: suite.node, nodeId: NODE },
     binding,
     secret,
     async (_tx, authority) => {
@@ -70,7 +73,7 @@ it("refuses a changed key after outside collection and before entering the local
   let consumedOutside = false;
   await expect(
     withRecoveryKeyOperation(
-      { db: suite.db, nodeId: NODE },
+      { db: suite.db, node: suite.node, nodeId: NODE },
       binding,
       secret,
       async () => {
@@ -78,8 +81,8 @@ it("refuses a changed key after outside collection and before entering the local
       },
       async (_authority, commit) => {
         consumedOutside = true;
-        await withTransaction(suite.db, (tx) =>
-          setBreakGlassVerifierTx(tx, NODE, hashSecret("replacement")),
+        await withNodeTransaction(suite.node, (tx) =>
+          setRecoveryKeyTx(tx, NODE, hashSecret("replacement"), "replacement"),
         );
         return commit();
       },
@@ -96,7 +99,7 @@ it("outside collection failure enters no local operation and revokes its authori
   const failure = new Error("outside evidence unavailable");
   await expect(
     withRecoveryKeyOperation(
-      { db: suite.db, nodeId: NODE },
+      { db: suite.db, node: suite.node, nodeId: NODE },
       binding,
       secret,
       async () => {
@@ -116,7 +119,7 @@ it("outside collection failure enters no local operation and revokes its authori
 it("a captured commit cannot write after the collection callback returns", async () => {
   let captured!: () => Promise<string>;
   await withRecoveryKeyOperation(
-    { db: suite.db, nodeId: NODE },
+    { db: suite.db, node: suite.node, nodeId: NODE },
     binding,
     secret,
     async (tx) => {
@@ -150,7 +153,7 @@ it("a transaction queued by collection refuses after its key authority expires",
   let pending!: Promise<string>;
   let entered = false;
   await withRecoveryKeyOperation(
-    { db: suite.db, nodeId: NODE },
+    { db: suite.db, node: suite.node, nodeId: NODE },
     binding,
     secret,
     async () => {
@@ -176,7 +179,7 @@ it("local failure keeps the outside consumed mark and rolls back local changes",
   let held: unknown;
   await expect(
     withRecoveryKeyOperation(
-      { db: suite.db, nodeId: NODE },
+      { db: suite.db, node: suite.node, nodeId: NODE },
       binding,
       secret,
       async (tx) => {
@@ -207,7 +210,7 @@ it("rolls back local writes if collection returns before its in-flight transacti
   const before = await suite.db.select().from(nodeRoles);
   let pending!: Promise<string>;
   await withRecoveryKeyOperation(
-    { db: suite.db, nodeId: NODE },
+    { db: suite.db, node: suite.node, nodeId: NODE },
     binding,
     secret,
     async (tx) => {
@@ -232,7 +235,7 @@ it.each(["wrong", ""])("invalid keys never start outside consumption %#", async 
   let collected = false;
   await expect(
     withRecoveryKeyOperation(
-      { db: suite.db, nodeId: NODE },
+      { db: suite.db, node: suite.node, nodeId: NODE },
       binding,
       invalid,
       async () => undefined,

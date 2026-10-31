@@ -7,13 +7,14 @@ import {
   locations,
   markRecoveryPackReceived,
   nextRecoveryPackNumber,
-  readBreakGlassKeyName,
   readRecoveryPack,
   readRecoveryPacks,
   readTenant,
-  setBreakGlassVerifierTx,
+  withNodeTransaction,
   withTransaction,
   type Database,
+  type NodeDatabase,
+  type NodeTransaction,
   type RecoveryPackRecord,
   type Transaction,
 } from "@waitron/db";
@@ -25,6 +26,7 @@ import {
   type TotpKeyRing,
 } from "@waitron/identity";
 import type { ProvisionedNode, WaitronModule } from "@waitron/module";
+import { readRecoveryKeyName, setRecoveryKeyTx } from "@waitron/node-db";
 import { generatePassword, newBreakGlassKeyName } from "@waitron/provisioning";
 import { renderRecoveryPack, type PackLocale } from "@waitron/recovery-pack";
 import {
@@ -106,6 +108,8 @@ export interface BackupRecoveryPackMakeDeps extends BackupRecoveryPackApiDeps {
   origin: string;
   keyRing: TotpKeyRing;
   ring: KeyRing;
+  /** This box's node.db, which holds the recovery-key check. */
+  nodeDb: NodeDatabase;
   node: ProvisionedNode;
   venueId: string;
   modules: readonly WaitronModule[];
@@ -240,7 +244,9 @@ async function currentChecks(
     keyChangedAt: loadKeyRotatedAt(env),
     bucket: streamRevision === null ? null : { revision: streamRevision },
     archives: await currentArchives(tx, deps, env),
-    serverKeyName: filesInvoices ? await readBreakGlassKeyName(tx, deps.node.nodeId) : undefined,
+    serverKeyName: filesInvoices
+      ? await readRecoveryKeyName(deps.nodeDb, deps.node.nodeId)
+      : undefined,
   };
 }
 
@@ -255,9 +261,13 @@ type MakeInput = {
   verifier: string | undefined;
 };
 
-/** Builds, renders and records one pack inside the caller's transaction. */
+/**
+ * Builds, renders and records one pack inside the caller's venue transaction. A new key it carries
+ * is returned for the caller to save in node.db; this saves nothing there.
+ */
 async function makePack(
   tx: Transaction,
+  nodeTx: NodeTransaction,
   deps: BackupRecoveryPackMakeDeps,
   input: MakeInput,
 ): Promise<{
@@ -265,6 +275,7 @@ async function makePack(
   pdf: Uint8Array<ArrayBuffer>;
   key: "failed" | "replaced" | "unchanged";
   parts: BuiltPart[];
+  replacement: { verifier: string; name: string } | undefined;
 }> {
   const { request, madeAt, newSecret } = input;
   const nodeId = deps.node.nodeId;
@@ -282,7 +293,7 @@ async function makePack(
     .from(persons)
     .where(eq(persons.id, input.personId));
   const number = await nextRecoveryPackNumber(tx, nodeId);
-  const keyName = await readBreakGlassKeyName(tx, nodeId);
+  const keyName = await readRecoveryKeyName(nodeTx, nodeId);
   const records = await readRecoveryPacks(tx, nodeId);
   const keyInForce = keyInForceOf(keyName, records, venue.timeZone);
   const newKey =
@@ -339,7 +350,6 @@ async function makePack(
       ...Object.assign({}, ...parts.map((p) => p.file)),
     },
   });
-  if (carried) await setBreakGlassVerifierTx(tx, nodeId, input.verifier!, newKey!.name);
   await insertRecoveryPack(tx, {
     nodeId,
     number,
@@ -348,7 +358,13 @@ async function makePack(
     parts: parts.map((p) => p.record),
   });
   const key = serverKey.part.state === "failed" ? "failed" : carried ? "replaced" : "unchanged";
-  return { number, pdf, key, parts };
+  return {
+    number,
+    pdf,
+    key,
+    parts,
+    replacement: carried ? { verifier: input.verifier!, name: newKey!.name } : undefined,
+  };
 }
 
 export function mountBackupRecoveryPackMakeApi(
@@ -383,18 +399,32 @@ export function mountBackupRecoveryPackMakeApi(
           const madeAt = deps.now().toISOString();
           const newSecret = request.newServerKey ? generatePassword() : undefined;
           const verifier = newSecret === undefined ? undefined : hashSecret(newSecret);
-          return withTransaction(deps.db, (tx) =>
-            makePack(tx, deps, {
-              token,
-              personId,
-              request,
-              env,
-              seat,
-              madeAt,
-              newSecret,
-              verifier,
-            }),
-          );
+          return withNodeTransaction(deps.nodeDb, async (nodeTx) => {
+            const made = await withTransaction(deps.db, (tx) =>
+              makePack(tx, nodeTx, deps, {
+                token,
+                personId,
+                request,
+                env,
+                seat,
+                madeAt,
+                newSecret,
+                verifier,
+              }),
+            );
+            // venue.db's pack record is saved first and the key in node.db follows. If this save
+            // fails the old key still works, and the pack reads as `key_replaced` because the key
+            // it names is not the one in force.
+            if (made.replacement !== undefined) {
+              await setRecoveryKeyTx(
+                nodeTx,
+                nodeId,
+                made.replacement.verifier,
+                made.replacement.name,
+              );
+            }
+            return made;
+          });
         }),
       );
       log("info", "recovery.pack_made", {

@@ -128,7 +128,7 @@ it.each(["account", "key"])(
     const credentials =
       method === "account"
         ? { personId: ADMIN, password: PASSWORD }
-        : { breakGlass: await mintBreakGlassSecret(suite.db, NODE) };
+        : { breakGlass: await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE) };
     const scratch = await mkdtemp(join(tmpdir(), "waitron-boot-promotion-operation-"));
     let server: StartedServer | undefined;
     const kill = vi.spyOn(process, "kill").mockImplementation(() => true);

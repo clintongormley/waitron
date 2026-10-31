@@ -162,7 +162,7 @@ beforeEach(async () => {
   await withTransaction(suite.db, (tx) =>
     registerSif(tx, { nodeId: NODE, nif: "50000000R", idSistemaInformatico: "W1" }),
   );
-  secret = await mintBreakGlassSecret(suite.db, NODE);
+  secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
   root = await mkdtemp(join(tmpdir(), "restore-allocation-"));
   venueDir = join(root, "venue");
   await mkdir(venueDir);

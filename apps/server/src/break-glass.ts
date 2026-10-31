@@ -1,21 +1,32 @@
 import { generatePassword, newBreakGlassKeyName } from "@waitron/provisioning";
 import { hashSecret, verifySecretAsync } from "@waitron/identity";
 import {
-  readBreakGlassVerifier,
-  readBreakGlassKeyName,
   readRecoveryPacks,
-  setBreakGlassVerifierTx,
-  withTransaction,
+  requireStamp,
+  withNodeTransaction,
   type Database,
+  type NodeDatabase,
+  type NodeTransaction,
   type RecoveryPackRecord,
+  type Transaction,
 } from "@waitron/db";
+import { readRecoveryKeyName, readRecoveryKeyVerifier, setRecoveryKeyTx } from "@waitron/node-db";
+
+/** The two files a recovery key touches: the venue's packs name keys, node.db holds the check. */
+export interface RecoveryKeyHandles {
+  readonly venue: Database;
+  readonly node: NodeDatabase;
+}
 
 /**
  * Stores only the secret's verifier and returns the RAW secret, which is never stored or logged.
  * Re-minting overwrites the verifier, so an earlier secret stops verifying.
  */
-export async function mintBreakGlassSecret(ownerDb: Database, nodeId: string): Promise<string> {
-  return (await mintBreakGlassKey(ownerDb, nodeId)).secret;
+export async function mintBreakGlassSecret(
+  handles: RecoveryKeyHandles,
+  nodeId: string,
+): Promise<string> {
+  return (await mintBreakGlassKey(handles, nodeId)).secret;
 }
 
 /** Every server key name this node's packs recorded, and the key in force. */
@@ -32,30 +43,42 @@ export function takenKeyNames(
   return taken;
 }
 
+/**
+ * A fresh secret, its verifier and a name no key in force or earlier pack has used. Writes
+ * nothing, so a caller can save it inside its own node transaction.
+ */
+export async function chooseBreakGlassKey(
+  venue: Database | Transaction,
+  node: NodeDatabase | NodeTransaction,
+  nodeId: string,
+): Promise<{ secret: string; verifier: string; name: string }> {
+  const secret = generatePassword();
+  const name = newBreakGlassKeyName(
+    new Date().toISOString().slice(0, 10),
+    takenKeyNames(await readRecoveryKeyName(node, nodeId), await readRecoveryPacks(venue, nodeId)),
+  );
+  return { secret, verifier: hashSecret(secret), name };
+}
+
+/** Refuses `deployment.not_stamped` on a venue.db no environment has claimed. */
 export async function mintBreakGlassKey(
-  ownerDb: Database,
+  handles: RecoveryKeyHandles,
   nodeId: string,
 ): Promise<{ secret: string; name: string }> {
-  const secret = generatePassword();
-  const verifier = hashSecret(secret);
-  const name = await withTransaction(ownerDb, async (tx) => {
-    const previous = await readBreakGlassKeyName(tx, nodeId);
-    const next = newBreakGlassKeyName(
-      new Date().toISOString().slice(0, 10),
-      takenKeyNames(previous, await readRecoveryPacks(tx, nodeId)),
-    );
-    await setBreakGlassVerifierTx(tx, nodeId, verifier, next);
-    return next;
+  await requireStamp(handles.venue);
+  return withNodeTransaction(handles.node, async (tx) => {
+    const key = await chooseBreakGlassKey(handles.venue, tx, nodeId);
+    await setRecoveryKeyTx(tx, nodeId, key.verifier, key.name);
+    return { secret: key.secret, name: key.name };
   });
-  return { secret, name };
 }
 
 /** `false`, never a throw, for a node with no verifier. */
 export async function verifyBreakGlass(
-  appDb: Database,
+  node: NodeDatabase,
   nodeId: string,
   secret: string,
 ): Promise<boolean> {
-  const verifier = await readBreakGlassVerifier(appDb, nodeId);
+  const verifier = await readRecoveryKeyVerifier(node, nodeId);
   return verifier !== null && (await verifySecretAsync(secret, verifier));
 }

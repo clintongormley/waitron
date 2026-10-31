@@ -1,7 +1,7 @@
 import "./errors.js";
 import { open, type FileHandle } from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
-import type { Database, Transaction } from "@waitron/db";
+import type { Database, NodeDatabase, Transaction } from "@waitron/db";
 import { AppError, isUuid } from "@waitron/shared";
 import {
   withPreparedModuleOperations,
@@ -138,6 +138,7 @@ export function createRecoveryRestoreRunner(
 export async function withRecoveryModuleOperation<T>(
   context: {
     readonly db: Database;
+    readonly nodeDb: NodeDatabase;
     readonly node: ProvisionedNode;
     readonly modules: readonly WaitronModule[];
   },
@@ -161,7 +162,7 @@ export async function withRecoveryModuleOperation<T>(
   const { input, secret } = operation;
   let collected: ModuleOperations = new Map();
   return withRecoveryKeyOperation(
-    { db, nodeId: targetNodeId },
+    { db, node: context.nodeDb, nodeId: targetNodeId },
     binding,
     secret,
     (tx) => run(tx, collected),

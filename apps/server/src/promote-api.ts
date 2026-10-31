@@ -2,7 +2,7 @@ import "./errors.js";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
-import { withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import {
   authorizeManager,
   checkManagerPassword,
@@ -34,6 +34,8 @@ export interface PromoteRunResult {
 
 export interface PromoteApiDeps {
   appDb: Database;
+  /** This box's node.db, which holds the recovery-key check. */
+  nodeDb: NodeDatabase;
   /** This node's id — whose break-glass verifier is checked. */
   nodeId: string;
   /** Unlocks a stored authenticator secret, so an admin who has one can sign in. */
@@ -137,6 +139,7 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
         const result = await withPromotionModuleOperation(
           {
             db: deps.appDb,
+            node: deps.nodeDb,
             nodeId: deps.nodeId,
             credentialKeyRing: deps.credentialKeyRing,
             modules: deps.modules ?? [],
@@ -151,7 +154,7 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
       // A present break-glass secret is authoritative: a wrong one is refused here, never downgraded
       // to the login path.
       if (typeof body.breakGlass === "string") {
-        if (!(await verifyBreakGlass(deps.appDb, deps.nodeId, body.breakGlass))) {
+        if (!(await verifyBreakGlass(deps.nodeDb, deps.nodeId, body.breakGlass))) {
           throw new AppError("promotion.break_glass_invalid", {});
         }
       } else if (

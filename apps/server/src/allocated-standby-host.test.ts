@@ -299,10 +299,10 @@ async function promote(held: Awaited<ReturnType<typeof reserve>>, key: string, c
       log: () => {},
       persistTradingEnv: async () => {},
       modules,
-      withModuleOperations: ({ db, node }, run) => {
+      withModuleOperations: ({ db, nodeDb, node }, run) => {
         let prepared: ModuleOperations;
         return withRecoveryKeyOperation(
-          { db, nodeId: node.nodeId },
+          { db, node: nodeDb, nodeId: node.nodeId },
           binding,
           key,
           (tx) => run(tx, prepared),
@@ -349,7 +349,10 @@ it("reserves and adopts without an active SIF or series, then opens all purposes
   expect(await primary.db.select().from(registroSif)).toEqual(primaryBefore);
   expect(await primary.db.select().from(fiscalAllocations)).toEqual(allocationsBefore);
   await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror");
-  const key = await mintBreakGlassSecret(spare.db, held.standby.nodeId);
+  const key = await mintBreakGlassSecret(
+    { venue: spare.db, node: spare.node },
+    held.standby.nodeId,
+  );
   const result = await promote(held, key);
   expect(result.alreadyPrimary).toBe(false);
   const live = await liveTarget(held.standby.nodeId);
@@ -389,7 +392,10 @@ it("retains a dormant spare when independent current consumption is absent at ta
   const held = await reserve();
   await establish(held);
   await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror");
-  const key = await mintBreakGlassSecret(spare.db, held.standby.nodeId);
+  const key = await mintBreakGlassSecret(
+    { venue: spare.db, node: spare.node },
+    held.standby.nodeId,
+  );
   const reservation = await spare.db.select().from(fiscalReservations);
   await expect(promote(held, key, false)).rejects.toMatchObject({
     code: "sif.allocation_invalid",
@@ -404,7 +410,10 @@ it("retains the dormant reservation and all fiscal rows after a refused membersh
   const held = await reserve();
   await establish(held);
   await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror");
-  const key = await mintBreakGlassSecret(spare.db, held.standby.nodeId);
+  const key = await mintBreakGlassSecret(
+    { venue: spare.db, node: spare.node },
+    held.standby.nodeId,
+  );
   const reservation = await spare.db.select().from(fiscalReservations);
   await spare.db.execute(
     sql`create trigger refuse_chart before insert on node_membership begin select raise(abort, 'test chart refusal'); end`,

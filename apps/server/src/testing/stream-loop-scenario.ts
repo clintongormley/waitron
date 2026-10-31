@@ -308,7 +308,10 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         ),
         { db: seeding.venue, modules: ALL_MODULES },
       );
-      nodeSecret = await mintBreakGlassSecret(seeding.venue, venue.nodeId);
+      nodeSecret = await mintBreakGlassSecret(
+        { venue: seeding.venue, node: seeding.node },
+        venue.nodeId,
+      );
       await establishNodeIdentity({ ownerDb: seeding.venue, ring }, venue.nodeId);
       await seedTermZeroMembership(
         { db: seeding.venue, ring },

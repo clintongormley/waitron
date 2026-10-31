@@ -400,7 +400,7 @@ async function seedMirrorIdentity(
 describe("historical promote: mirror → primary, in-process, restart-into-primary", () => {
   it("exposes promoteMirrorToPrimary, promotes, and persists identity without a series cache", async () => {
     const seed = await seedMirrorIdentity(mirrorDb, mirrorNode);
-    const secret = await mintBreakGlassSecret(mirrorDb, seed.nodeId);
+    const secret = await mintBreakGlassSecret({ venue: mirrorDb, node: mirrorNode }, seed.nodeId);
     const port = await freePort();
     // Its own state dir, so the rewritten `trading.env` can be read back.
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-mirror-state-"));
@@ -435,6 +435,7 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
           withPromotionModuleOperation(
             {
               db: context.db,
+              node: context.nodeDb,
               nodeId: seed.nodeId,
               credentialKeyRing: TOTP_KEY_RING,
               modules: ALL_MODULES,
@@ -490,7 +491,7 @@ describe("a mirror's promote and the backup room note", () => {
   it("is refused while the note cannot be deleted, and deletes it before promoting and before the restart", async () => {
     const [venueDir, db, node] = await migratedVenue();
     const seed = await seedMirrorIdentity(db, node);
-    const secret = await mintBreakGlassSecret(db, seed.nodeId);
+    const secret = await mintBreakGlassSecret({ venue: db, node }, seed.nodeId);
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-note-state-"));
     const note = join(stateDir, BACKUP_ROOM_NOTE_FILE);
@@ -528,6 +529,7 @@ describe("a mirror's promote and the backup room note", () => {
           return withPromotionModuleOperation(
             {
               db: context.db,
+              node: context.nodeDb,
               nodeId: seed.nodeId,
               credentialKeyRing: TOTP_KEY_RING,
               modules: ALL_MODULES,
@@ -566,7 +568,7 @@ describe("a mirror's promote and the backup room note", () => {
   it("restarts once and logs the failure when the note cannot be deleted after promoting", async () => {
     const [venueDir, db, node] = await migratedVenue();
     const seed = await seedMirrorIdentity(db, node);
-    const secret = await mintBreakGlassSecret(db, seed.nodeId);
+    const secret = await mintBreakGlassSecret({ venue: db, node }, seed.nodeId);
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-note-after-"));
     const note = join(stateDir, BACKUP_ROOM_NOTE_FILE);
@@ -599,6 +601,7 @@ describe("a mirror's promote and the backup room note", () => {
             return withPromotionModuleOperation(
               {
                 db: context.db,
+                node: context.nodeDb,
                 nodeId: seed.nodeId,
                 credentialKeyRing: TOTP_KEY_RING,
                 modules: ALL_MODULES,

@@ -180,6 +180,7 @@ it.each(["archive", "stream"] as const)(
     try {
       await runRestoreHooks({
         db: copy.venue,
+        nodeDb: copy.node,
         node: f.node,
         modules: ALL_MODULES,
         log: () => {},

@@ -3,13 +3,7 @@ import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  deployment,
-  invoiceSeries,
-  nodeRoles,
-  withTransaction,
-  type Transaction,
-} from "@waitron/db";
+import { deployment, invoiceSeries, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { managementSessions, persons } from "@waitron/identity";
 import { locationId } from "@waitron/shared";
@@ -147,7 +141,7 @@ beforeEach(async () => {
   await suite.db
     .insert(invoiceSeries)
     .values(bases.map((base) => ({ ...base, nodeId: node.nodeId })));
-  secret = await mintBreakGlassSecret(suite.db, node.nodeId);
+  secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
 });
 
 async function restore(paths: { custodianPath: string; confirmationPath: string }, rotate = false) {
@@ -163,10 +157,11 @@ async function restore(paths: { custodianPath: string; confirmationPath: string 
           run: (ready: ModuleOperationInput) => Promise<T>,
         ) {
           return configured.prepare(operation, async (ready) => {
-            if (rotate) await mintBreakGlassSecret(suite.db, node.nodeId);
+            if (rotate)
+              await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
             else
               await withTransaction(suite.db, (tx) =>
-                tx.update(nodeRoles).set({ breakGlassKeyName: "source-collected-before-lock" }),
+                tx.update(deployment).set({ environment: "preproduction" }),
               );
             return run(ready);
           });
@@ -185,6 +180,7 @@ async function restore(paths: { custodianPath: string; confirmationPath: string 
   };
   return runRestoreHooks({
     db: suite.db,
+    nodeDb: suite.node,
     node,
     modules: [module],
     log: () => {},
@@ -258,6 +254,7 @@ it("uses the fiscal restore hook with node-key authentication without recreating
     };
     const result = await runRestoreHooks({
       db: suite.db,
+      nodeDb: suite.node,
       node,
       modules: [module],
       log: () => {},

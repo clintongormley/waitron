@@ -150,7 +150,7 @@ beforeAll(async () => {
     personId = person!.id;
   });
   await stampDeployment(suite.db, "preproduction");
-  nodeSecret = await mintBreakGlassSecret(suite.db, ids.node);
+  nodeSecret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, ids.node);
   await seedFiscalRecord(suite.db);
   for (const at of ["2026-10-01T09:00:00Z", "2026-10-01T13:00:00Z"]) {
     await suite.db.transaction((tx) =>

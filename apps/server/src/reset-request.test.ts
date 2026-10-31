@@ -100,7 +100,7 @@ async function halfAdoptedBox(): Promise<{
       boxCaPem: "pem",
       originNodeId: PRIMARY_NODE_ID,
     });
-    await mintBreakGlassSecret(store.venue, NODE_ID);
+    await mintBreakGlassSecret({ venue: store.venue, node: store.node }, NODE_ID);
   } finally {
     await store.close();
   }

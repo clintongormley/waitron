@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import { CORE_MIGRATIONS, locations, nodes, stampDeployment, tenants } from "@waitron/db";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { generateNodeKeyPair } from "@waitron/membership";
@@ -50,7 +51,9 @@ vi.mock("./recovery-backup-preview.js", async (original) => {
   };
 });
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+});
 const NODE = "d0000000-0000-4000-8000-000000000001";
 const LOCATION = "d0000000-0000-4000-8000-000000000002";
 const POINT = "047bacd4-df70-4881-a835-c6dd75ae7ecf";
@@ -79,7 +82,7 @@ beforeEach(async () => {
     operationDescription: "Restaurant",
   });
   await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Selected node" });
-  key = await mintBreakGlassKey(suite.db, NODE);
+  key = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, NODE);
   database = join(scratch, "selected.db");
   await suite.db.archiveTo(database);
   entries = [
@@ -340,7 +343,7 @@ it("authenticates the selected backup before revealing its private preview, reta
   const selected = await adapter.openFirstSetupBackupSource(archive(), deps());
   try {
     const before = await readFile(selected.copy.databasePath);
-    const replacement = await mintBreakGlassKey(suite.db, NODE);
+    const replacement = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, NODE);
     await expect(
       adapter.authenticatedFirstSetupBackupPreview(
         selected,
@@ -503,7 +506,7 @@ it("does not disclose a private preview when the selected database's node key ha
 it("passes only the selected copy's original node identity across asynchronous proof", async () => {
   const other = "d0000000-0000-4000-8000-000000000003";
   await suite.db.insert(nodes).values({ id: other, locationId: LOCATION, name: "Another node" });
-  await mintBreakGlassKey(suite.db, other);
+  await mintBreakGlassKey({ venue: suite.db, node: suite.node }, other);
   await suite.db.archiveTo(database);
   const bytes = encryptArtifact(
     packArchive([...entries, { name: "db.dump", bytes: await readFile(database) }]),

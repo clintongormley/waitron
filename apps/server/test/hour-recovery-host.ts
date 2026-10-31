@@ -115,7 +115,7 @@ beforeEach(async () => {
   }));
   await seedTenants(suite.db);
   await stampDeployment(suite.db, "preproduction");
-  key = await mintBreakGlassKey(suite.db, node.nodeId);
+  key = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, node.nodeId);
   value = null;
   const first = { ...binding, action: "setup", eventId: "original" };
   const setup = createHourPreparation({
@@ -222,6 +222,7 @@ export async function host() {
     node,
     secret: key.secret,
     database: () => suite.db,
+    nodeDatabase: () => suite.node,
     selected,
     readRecoveryFacts: async () => facts,
   };

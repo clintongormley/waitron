@@ -2,13 +2,7 @@ import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  deployment,
-  invoiceSeries,
-  nodeRoles,
-  withTransaction,
-  type Transaction,
-} from "@waitron/db";
+import { deployment, invoiceSeries, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { managementSessions, persons } from "@waitron/identity";
 import { locationId } from "@waitron/shared";
@@ -145,7 +139,7 @@ beforeEach(async () => {
   await suite.db
     .insert(invoiceSeries)
     .values(bases.map((base) => ({ ...base, nodeId: node.nodeId })));
-  secret = await mintBreakGlassSecret(suite.db, node.nodeId);
+  secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
 });
 
 async function recover(paths: { custodianPath: string; confirmationPath: string }, rotate = false) {
@@ -156,7 +150,7 @@ async function recover(paths: { custodianPath: string; confirmationPath: string 
   let activate!: (tx: Transaction, target: typeof node) => Promise<unknown>;
   let writerCommitted = false;
   return withRecoveryKeyOperation(
-    { db: suite.db, nodeId: node.nodeId },
+    { db: suite.db, node: suite.node, nodeId: node.nodeId },
     binding,
     secret,
     async (tx, authority) => {
@@ -169,10 +163,11 @@ async function recover(paths: { custodianPath: string; confirmationPath: string 
         { binding, authority, input },
         async (request) => {
           const receipt = await source(request);
-          if (rotate) await mintBreakGlassSecret(suite.db, node.nodeId);
+          if (rotate)
+            await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
           else
             await withTransaction(suite.db, (tx) =>
-              tx.update(nodeRoles).set({ breakGlassKeyName: "outside-file-collection" }),
+              tx.update(deployment).set({ environment: "preproduction" }),
             );
           writerCommitted = true;
           return receipt;

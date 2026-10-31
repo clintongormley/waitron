@@ -159,7 +159,11 @@ export interface MirrorPromoteDeps extends PromoteDeps {
 }
 
 export type PromotionOperationRunner = (
-  context: { readonly db: Database; readonly node: ProvisionedNode },
+  context: {
+    readonly db: Database;
+    readonly nodeDb: NodeDatabase;
+    readonly node: ProvisionedNode;
+  },
   run: (tx: Transaction, operations: ModuleOperations) => Promise<string>,
 ) => Promise<string>;
 
@@ -250,7 +254,7 @@ export async function promoteMirrorToPrimary(
           "promote",
           (ready) => withTransaction(deps.db, (tx) => run(tx, ready)),
         )
-      : await deps.withModuleOperations({ db: deps.db, node }, run);
+      : await deps.withModuleOperations({ db: deps.db, nodeDb: deps.node, node }, run);
 
   // venue.db is saved first and node.db follows, as two transactions: the role lives in its own file.
   const roleWritten = await writePrimaryRole(deps).then(

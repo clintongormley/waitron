@@ -252,7 +252,10 @@ async function buildArtifact(older: boolean, artifact: string): Promise<void> {
   const store = await openVenueDatabase(baselineDir);
   try {
     await seedFiscalRegistro(store.venue);
-    artifactSecrets.set(artifact, await mintBreakGlassSecret(store.venue, F.nodeId));
+    artifactSecrets.set(
+      artifact,
+      await mintBreakGlassSecret({ venue: store.venue, node: store.node }, F.nodeId),
+    );
     await seedImage(store.venue);
     const head = await store.venue
       .select({ secuencia: cadenas.secuencia, ultimaHuella: cadenas.ultimaHuella })

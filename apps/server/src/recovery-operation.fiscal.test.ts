@@ -202,7 +202,7 @@ async function promote(
   suppliedAllocation: unknown = allocation,
 ) {
   const result = await withRecoveryKeyOperation(
-    { db: suite.db, nodeId: target.nodeId },
+    { db: suite.db, node: suite.node, nodeId: target.nodeId },
     binding,
     recoveryKey,
     async (tx, authority) => {
@@ -271,7 +271,7 @@ beforeEach(async () => {
       requiredBases: bases,
     }),
   );
-  recoveryKey = await mintBreakGlassSecret(suite.db, target.nodeId);
+  recoveryKey = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, target.nodeId);
 });
 
 describe("recovery-key fiscal attribution", () => {
@@ -407,9 +407,9 @@ describe("real mirror promotion with a dormant fiscal seat", () => {
         log: () => {},
         persistTradingEnv: async () => {},
         modules: [module],
-        withModuleOperations: ({ db, node }, run) =>
+        withModuleOperations: ({ db, nodeDb, node }, run) =>
           withRecoveryKeyOperation(
-            { db, nodeId: node.nodeId },
+            { db, node: nodeDb, nodeId: node.nodeId },
             binding,
             recoveryKey,
             (tx, authority) =>

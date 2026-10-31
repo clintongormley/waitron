@@ -8,11 +8,11 @@ import {
   invoiceSeries,
   locations,
   nodes,
-  readBreakGlassVerifier,
   setNodePublicKey,
   stampDeployment,
   withTransaction,
 } from "@waitron/db";
+import { readRecoveryKeyVerifier } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { verifySecretAsync } from "@waitron/identity";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
@@ -95,7 +95,7 @@ async function seedVenue(): Promise<void> {
     ].map((series) => ({ ...series, nodeId: node.nodeId })),
   );
   await setNodePublicKey(suite.db, node.nodeId, "SIGNER_PUBLIC_KEY");
-  await mintBreakGlassSecret(suite.db, node.nodeId);
+  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
   const ring = loadKeyRing(KEY_ENV);
   await withTransaction(suite.db, async (tx) => {
     await putCredential(tx, ring, {
@@ -237,7 +237,7 @@ it("makes a pack over the real TLS listener, drawn with the production font, tha
 it("with the box ticked, the real fiscal module draws a new server key that the pack carries, changing no series counter and no evidence file, and logging neither key nor the session", async () => {
   await seedVenue();
   await suite.db.update(invoiceSeries).set({ nextNumber: 123 });
-  const oldKey = await mintBreakGlassSecret(suite.db, node.nodeId);
+  const oldKey = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
   const { token } = await openManagementSession(suite.db, "admin");
   const cookie = `waitron_management_session=${token}`;
 
@@ -314,7 +314,7 @@ it("with the box ticked, the real fiscal module draws a new server key that the 
     }
     await server.close();
     server = undefined;
-    const verifier = (await readBreakGlassVerifier(suite.db, node.nodeId))!;
+    const verifier = (await readRecoveryKeyVerifier(suite.node, node.nodeId))!;
     expect(await verifySecretAsync(carried, verifier)).toBe(true);
     expect(await verifySecretAsync(oldKey, verifier)).toBe(false);
     expect(

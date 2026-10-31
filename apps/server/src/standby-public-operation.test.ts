@@ -110,7 +110,7 @@ beforeEach(async () => {
           await withTransaction(suite.db, (tx) =>
             tx.update(locations).set({ name: "Source collected" }),
           );
-          if (replaceKey) await mintBreakGlassSecret(suite.db, TARGET);
+          if (replaceKey) await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TARGET);
           return run({ ...operation, input: { current: "independent" } });
         },
       },
@@ -160,6 +160,7 @@ async function promotionApp() {
   const app = new Hono();
   mountPromoteApi(app, {
     appDb: suite.db,
+    nodeDb: suite.node,
     nodeId: TARGET,
     credentialKeyRing: TOTP_KEY_RING,
     modules,
@@ -234,7 +235,7 @@ it.each(["account", "key"])(
     const credentials =
       method === "account"
         ? { personId: ADMIN, password: PASSWORD }
-        : { breakGlass: await mintBreakGlassSecret(suite.db, TARGET) };
+        : { breakGlass: await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TARGET) };
     const response = await post(app, "/management-api/promote", promoteBody(credentials));
     expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
     expect(await response.json()).toEqual({ alreadyPrimary: false, restarting: true });
@@ -274,7 +275,7 @@ it("reserves an opaque dormant identity through the public bundle route after re
 });
 it("refuses a node key replaced during outside collection without activating or changing role", async () => {
   const app = await promotionApp();
-  const key = await mintBreakGlassSecret(suite.db, TARGET);
+  const key = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TARGET);
   replaceKey = true;
   const response = await post(app, "/management-api/promote", promoteBody({ breakGlass: key }));
   expect(response.status).toBe(401);
@@ -314,7 +315,7 @@ it("does not consult outside evidence when the account password is wrong", async
 });
 it("does not consult outside evidence when the node key is wrong, even with valid account credentials", async () => {
   const app = await promotionApp();
-  await mintBreakGlassSecret(suite.db, TARGET);
+  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TARGET);
   const response = await post(
     app,
     "/management-api/promote",
@@ -382,7 +383,7 @@ it("refuses reservation evidence for a module the enabled set does not reserve",
 });
 it("returns the committed promotion result after a lost response without consulting outside evidence again", async () => {
   const app = await promotionApp();
-  const key = await mintBreakGlassSecret(suite.db, TARGET);
+  const key = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TARGET);
   const body = promoteBody({ breakGlass: key });
   const first = await post(app, "/management-api/promote", body);
   expect(first.status).toBe(200);
@@ -406,13 +407,18 @@ it("refuses a promotion runner redirected to another node before collecting evid
   const app = new Hono();
   mountPromoteApi(app, {
     appDb: suite.db,
+    nodeDb: suite.node,
     nodeId: TARGET,
     modules,
     credentialKeyRing: TOTP_KEY_RING,
     async run(_attestation, runner) {
       expect(runner).toBeDefined();
       await runner!(
-        { db: suite.db, node: { nodeId: PRIMARY as never, locationId: LOCATION as never } },
+        {
+          db: suite.db,
+          nodeDb: suite.node,
+          node: { nodeId: PRIMARY as never, locationId: LOCATION as never },
+        },
         async (tx) => {
           await tx
             .insert(invoiceSeries)

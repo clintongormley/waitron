@@ -11,6 +11,7 @@ import {
   openVenueDatabase,
   stampDeployment,
 } from "@waitron/db";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   readOperationAuthority,
@@ -33,7 +34,9 @@ import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
 import * as operations from "./recovery-module-operation.js";
 const modules = vi.hoisted(() => [] as WaitronModule[]);
 vi.mock("./modules.js", () => ({ ALL_MODULES: modules }));
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+});
 const NODE = "d0000000-0000-4000-8000-000000000001";
 const LOCATION = "d0000000-0000-4000-8000-000000000002";
 const request = {
@@ -102,7 +105,7 @@ beforeEach(async () => {
     { nodeId: NODE, code: "A", purpose: "standard" },
     { nodeId: NODE, code: "FF", purpose: "full" },
   ]);
-  nodeKey = await mintBreakGlassSecret(suite.db, NODE);
+  nodeKey = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
   root = await mkdtemp(join(tmpdir(), "restore-public-input-"));
   stateDir = join(root, "state");
   await mkdir(stateDir);
@@ -185,7 +188,7 @@ it("constructs a detached restore runner and authenticates only against the plac
   const runner = pending.createRecoveryRestoreRunner(modules, submitted, nodeKey);
   submitted.binding.eventId = "changed";
   submitted.input.signed = "changed";
-  await mintBreakGlassSecret(suite.db, NODE);
+  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
   await restoreFromArtifactFile({
     ...target(),
     artifactPath: archivePath,
@@ -487,7 +490,7 @@ it.each(["archive", "stream"] as const)(
             nodeRecoverySecret: nodeKey,
           },
     );
-    const replacementKey = await mintBreakGlassSecret(suite.db, NODE);
+    const replacementKey = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
     const log = vi.fn();
     await expect(
       runStagedRestore(

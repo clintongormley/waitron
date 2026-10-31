@@ -142,11 +142,16 @@ export interface RestoreHookResult {
 // Authentication is reconstructed by the trusted host, never deserialised from a backup or marker.
 export interface RestoreOperationRunner {
   (
-    context: { readonly db: Database; readonly node: ProvisionedNode },
+    context: {
+      readonly db: Database;
+      readonly nodeDb: NodeDatabase;
+      readonly node: ProvisionedNode;
+    },
     run: (tx: Transaction, operations: ModuleOperations) => Promise<RestoreHookResult>,
   ): Promise<RestoreHookResult>;
   checkBeforePlacement?(context: {
     readonly db: Database;
+    readonly nodeDb: NodeDatabase;
     readonly node: ProvisionedNode;
     readonly sourceId: string | undefined;
   }): Promise<void>;
@@ -395,6 +400,7 @@ async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps)
     if (name !== null) log("info", "restore.recovery_key_selected", { name });
     await runRestoreHooks({
       db: opened.db,
+      nodeDb: opened.node,
       modules: deps.modules,
       node,
       log,
@@ -447,6 +453,7 @@ export async function writeValidated(
       try {
         await check({
           db: opened.db,
+          nodeDb: opened.node,
           node: await resolveArtifactNode(opened.db, validated.secretEntries),
           sourceId: validated.sourceId,
         });
@@ -864,6 +871,7 @@ function wrapHookError(module: string, err: unknown): unknown {
  */
 export async function runRestoreHooks(args: {
   db: Database;
+  nodeDb: NodeDatabase;
   modules: readonly WaitronModule[];
   node: ProvisionedNode;
   log: Logger;
@@ -955,7 +963,7 @@ export async function runRestoreHooks(args: {
         "restore",
         (ready) => withTransaction(args.db, (tx) => run(tx, ready)),
       )
-    : args.withModuleOperations({ db: args.db, node }, run);
+    : args.withModuleOperations({ db: args.db, nodeDb: args.nodeDb, node }, run);
 }
 
 /**

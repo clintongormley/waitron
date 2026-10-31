@@ -59,7 +59,7 @@ it.each(["private-material", "originals", "target-verifier", "dispose"] as const
             const target = await openVenueDatabase(f.record.target.target.venueDir);
             try {
               await import("./break-glass.js").then((m) =>
-                m.mintBreakGlassKey(target.venue, node.nodeId),
+                m.mintBreakGlassKey({ venue: target.venue, node: target.node }, node.nodeId),
               );
             } finally {
               await target.close();
@@ -132,7 +132,9 @@ it("a target key revoked after resume proof cannot rewrite evidence or publish s
   const target = f.record.target.target;
   const db = await openVenueDatabase(target.venueDir);
   try {
-    await import("./break-glass.js").then((m) => m.mintBreakGlassKey(db.venue, node.nodeId));
+    await import("./break-glass.js").then((m) =>
+      m.mintBreakGlassKey({ venue: db.venue, node: db.node }, node.nodeId),
+    );
   } finally {
     await db.close();
   }

@@ -12,8 +12,6 @@ import { loadKeyRing, putCredential } from "@waitron/credentials";
 import {
   insertRecoveryPack,
   locations,
-  readBreakGlassKeyName,
-  readBreakGlassVerifier,
   readRecoveryPacks,
   setNodePublicKey,
   stampDeployment,
@@ -24,6 +22,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons, verifySecretAsync } from "@waitron/identity";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { readRecoveryKeyName, readRecoveryKeyVerifier } from "@waitron/node-db";
 import type { ProvisionedNode, WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { PART_WORDS, readRecoveryPackPdf, type RecoveryPackPage } from "@waitron/recovery-pack";
@@ -102,7 +101,7 @@ beforeEach(async () => {
   const nodeId = await seedNode(suite.db, locationId(location!.id));
   node = { nodeId, locationId: locationId(location!.id) };
   await setNodePublicKey(suite.db, nodeId, "SIGNER_PUBLIC_KEY");
-  keyInForce = await mintBreakGlassKey(suite.db, nodeId);
+  keyInForce = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, nodeId);
   await withTransaction(suite.db, async (tx) => {
     await putCredential(tx, RING, {
       purpose: STREAM_PURPOSE,
@@ -145,6 +144,7 @@ function fixture(
     app,
     {
       db: suite.db,
+      nodeDb: suite.node,
       rpId: "box.test",
       origin: "https://box.test",
       keyRing: TOTP_KEY_RING,
@@ -300,7 +300,7 @@ describe("the make route's refusals", () => {
     expect(response.status).toBe(401);
     expect((await codeOf(response)).code).toBe("password.invalid");
     expect(await packs()).toEqual([]);
-    expect(await readBreakGlassKeyName(suite.db, node.nodeId)).toBe(keyInForce.name);
+    expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(keyInForce.name);
   });
 
   it.each([
@@ -323,7 +323,7 @@ describe("the make route's refusals", () => {
       expect(response.status).toBe(status);
       expect((await codeOf(response)).code).toBe(code);
       expect(await packs()).toEqual([]);
-      expect(await readBreakGlassKeyName(suite.db, node.nodeId)).toBe(keyInForce.name);
+      expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(keyInForce.name);
     },
   );
 
@@ -345,7 +345,7 @@ describe("the make route's refusals", () => {
         who === "unknown" ? "management_session.required" : "person.suspended",
       );
       expect(await packs()).toEqual([]);
-      expect(await readBreakGlassKeyName(suite.db, node.nodeId)).toBe(keyInForce.name);
+      expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(keyInForce.name);
     },
   );
 
@@ -372,7 +372,7 @@ describe("the make route's refusals", () => {
     expect(response.status).toBe(403);
     expect((await codeOf(response)).code).toBe("authorization.not_permitted");
     expect(await packs()).toEqual([]);
-    expect(await readBreakGlassKeyName(suite.db, node.nodeId)).toBe(keyInForce.name);
+    expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(keyInForce.name);
   });
 });
 
@@ -423,8 +423,8 @@ describe("a made pack", () => {
     const carried = (file.serverKey as { nodeKey: { name: string; secret: string } }).nodeKey;
     expect(carried.name).toBe(file.serverKeyName);
     expect(carried.name).toMatch(/^2026-10-30 · [34679ACDEFHJKMNPQRTUVWXY]{4}$/);
-    expect(await readBreakGlassKeyName(suite.db, node.nodeId)).toBe(carried.name);
-    const verifier = (await readBreakGlassVerifier(suite.db, node.nodeId))!;
+    expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(carried.name);
+    const verifier = (await readRecoveryKeyVerifier(suite.node, node.nodeId))!;
     expect(await verifySecretAsync(carried.secret, verifier)).toBe(true);
     expect(await verifySecretAsync(keyInForce.secret, verifier)).toBe(false);
     const [record] = await packs();
@@ -473,7 +473,7 @@ describe("a made pack", () => {
       const refusing: Seat = async () => {
         throw new AppError("sif.allocation_invalid", { reason: "history_invalid" });
       };
-      const verifier = await readBreakGlassVerifier(suite.db, node.nodeId);
+      const verifier = await readRecoveryKeyVerifier(suite.node, node.nodeId);
       const response = await fixture({ seat: refusing }).make(ticked);
       expect(response.status).toBe(200);
       expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("failed");
@@ -481,8 +481,8 @@ describe("a made pack", () => {
       const text = await pdfText(bytes);
       expect(text.includes("The server key was not replaced.")).toBe(ticked);
       expect(text).toContain("still works");
-      expect(await readBreakGlassVerifier(suite.db, node.nodeId)).toBe(verifier);
-      expect(await readBreakGlassKeyName(suite.db, node.nodeId)).toBe(keyInForce.name);
+      expect(await readRecoveryKeyVerifier(suite.node, node.nodeId)).toBe(verifier);
+      expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(keyInForce.name);
       const [record] = await packs();
       expect(record!.parts[2]).toEqual({
         part: "server-key",
@@ -498,7 +498,7 @@ describe("a made pack", () => {
     const scratch = await mkdtemp(join(tmpdir(), "pack-evidence-"));
     try {
       await writeFile(join(scratch, "module-preparation-state.json"), "{not valid JSON");
-      const verifier = await readBreakGlassVerifier(suite.db, node.nodeId);
+      const verifier = await readRecoveryKeyVerifier(suite.node, node.nodeId);
       const response = await fixture({
         evidence: (module) =>
           readRecoveryDocumentEvidence({ stateDir: scratch, venueDir: scratch }, module),
@@ -507,8 +507,8 @@ describe("a made pack", () => {
       expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("failed");
       const text = await pdfText(await response.arrayBuffer());
       expect(text).toContain("The server key was not replaced.");
-      expect(await readBreakGlassVerifier(suite.db, node.nodeId)).toBe(verifier);
-      expect(await readBreakGlassKeyName(suite.db, node.nodeId)).toBe(keyInForce.name);
+      expect(await readRecoveryKeyVerifier(suite.node, node.nodeId)).toBe(verifier);
+      expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(keyInForce.name);
       expect((await packs())[0]!.parts.map((p) => [p.part, p.state])).toEqual([
         ["bucket", "included"],
         ["archives", "included"],
@@ -560,20 +560,18 @@ describe("a made pack", () => {
     expect(await pdfText(await response.arrayBuffer())).toContain(
       "That is a fault in Waitron. A new pack will fail here the same way.",
     );
-    expect(await readBreakGlassKeyName(suite.db, node.nodeId)).toBe(keyInForce.name);
+    expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(keyInForce.name);
     const [record] = await packs();
     expect(record!.parts.map((p) => p.state)).toEqual(["included", "included", "failed"]);
     expect(record!.parts[2]).toMatchObject({ keyName: keyInForce.name, carriedKey: false });
   });
 
   it("with no key in force and the box ticked, fails the page and writes no key", async () => {
-    await suite.db.execute(
-      sql`update node_roles set break_glass_verifier = null, break_glass_key_name = null`,
-    );
+    suite.node.run(sql`delete from node_recovery_key`);
     const response = await fixture().make(true);
     expect(response.status).toBe(200);
     expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("failed");
-    expect(await readBreakGlassVerifier(suite.db, node.nodeId)).toBeNull();
+    expect(await readRecoveryKeyVerifier(suite.node, node.nodeId)).toBeNull();
     const [record] = await packs();
     expect(record!.parts[2]).toEqual({ part: "server-key", state: "failed", carriedKey: false });
   });
@@ -594,7 +592,7 @@ describe("a made pack", () => {
     const file = await readRecoveryPackPdf(new Uint8Array(await response.clone().arrayBuffer()));
     expect(file.serverKeyHeldBy).toBeNull();
     expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("unchanged");
-    expect(await readBreakGlassKeyName(suite.db, node.nodeId)).toBe(keyInForce.name);
+    expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(keyInForce.name);
     const [record] = await packs();
     expect(record!.number).toBe(2);
     expect(record!.parts[2]).toEqual({ part: "server-key", state: "absent" });
@@ -677,7 +675,7 @@ describe("a made pack", () => {
   });
 
   it("a pack that cannot be drawn writes no record and keeps the key", async () => {
-    const verifier = await readBreakGlassVerifier(suite.db, node.nodeId);
+    const verifier = await readRecoveryKeyVerifier(suite.node, node.nodeId);
     const response = await fixture({
       loadFont: async () => {
         throw new Error("font missing");
@@ -685,8 +683,8 @@ describe("a made pack", () => {
     }).make(true);
     expect(response.status).toBe(500);
     expect(await packs()).toEqual([]);
-    expect(await readBreakGlassVerifier(suite.db, node.nodeId)).toBe(verifier);
-    expect(await readBreakGlassKeyName(suite.db, node.nodeId)).toBe(keyInForce.name);
+    expect(await readRecoveryKeyVerifier(suite.node, node.nodeId)).toBe(verifier);
+    expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(keyInForce.name);
   });
 
   it("makes two packs asked for at once one after the other, the later one's key in force", async () => {
@@ -714,11 +712,11 @@ describe("a made pack", () => {
     );
     const later = files.find((file) => file.number === 2)!;
     const carried = (later.serverKey as { nodeKey: { name: string; secret: string } }).nodeKey;
-    expect(await readBreakGlassKeyName(suite.db, node.nodeId)).toBe(carried.name);
+    expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(carried.name);
     expect(
       await verifySecretAsync(
         carried.secret,
-        (await readBreakGlassVerifier(suite.db, node.nodeId))!,
+        (await readRecoveryKeyVerifier(suite.node, node.nodeId))!,
       ),
     ).toBe(true);
   });
@@ -965,7 +963,7 @@ describe("the status route", () => {
     const [record] = await packs();
     expect(record).toMatchObject({ receivedAt: null });
     expect(record!.parts[2]).toMatchObject({ carriedKey: true });
-    expect(await readBreakGlassKeyName(suite.db, node.nodeId)).toBe(record!.parts[2]!.keyName);
+    expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(record!.parts[2]!.keyName);
     expect(await read(f)).toMatchObject({
       upToDate: false,
       unreceived: { number: 1, holdsCurrentServerKey: true },
@@ -982,6 +980,30 @@ describe("the status route", () => {
       upToDate: true,
       unreceived: null,
       keep: [{ number: 2, why: "server_key" }],
+    });
+  });
+
+  it("a key replacement whose verifier save fails keeps the old key working and reports the new pack out of date", async () => {
+    const f = fixture();
+    suite.node.run(
+      sql`create trigger refuse_recovery_key before update on node_recovery_key begin select raise(abort, 'recovery key save refused'); end`,
+    );
+    try {
+      const response = await f.make(true);
+      expect(response.status).toBe(500);
+    } finally {
+      suite.node.run(sql`drop trigger refuse_recovery_key`);
+    }
+    const [record] = await packs();
+    expect(record!.parts[2]).toMatchObject({ carriedKey: true });
+    expect(record!.parts[2]!.keyName).not.toBe(keyInForce.name);
+    expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(keyInForce.name);
+    const verifier = (await readRecoveryKeyVerifier(suite.node, node.nodeId))!;
+    expect(await verifySecretAsync(keyInForce.secret, verifier)).toBe(true);
+    await f.received(1);
+    expect(await read(f)).toMatchObject({
+      upToDate: false,
+      reasons: [{ part: "server-key", kind: "key_replaced" }],
     });
   });
 

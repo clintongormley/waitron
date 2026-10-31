@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { locations, readDeploymentEnvironment, stampDeployment, tenants } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { readMirrorLink, readNodeMode } from "@waitron/node-db";
+import { readMirrorLink, readNodeMode, readRecoveryKeyName } from "@waitron/node-db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { isEnabled, type ModuleConfig } from "@waitron/module";
 import { isAppError } from "@waitron/shared";
@@ -162,7 +162,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(persistedModules).toHaveLength(1);
     expect(isEnabled(persistedModules[0]!, ALL_MODULES[0]!.name)).toBe(true);
     expect(result.breakGlassSecret).toMatch(/^[A-Za-z0-9_-]{20,}$/);
-    expect(await verifyBreakGlass(suite.db, ownNodeId, result.breakGlassSecret)).toBe(true);
+    expect(await verifyBreakGlass(suite.node, ownNodeId, result.breakGlassSecret)).toBe(true);
   });
 
   it("leaves no mirror role behind when its link cannot be written", async () => {
@@ -190,14 +190,14 @@ describe("adoptFromPrimary (mirror adopt)", () => {
       REQ,
       NO_HOOKS,
     );
-    const stored = await suite.db.execute<Record<string, unknown>>(
-      sql`select * from node_roles where node_id = ${ownNodeId}`,
+    expect(result).toHaveProperty(
+      "breakGlassKeyName",
+      await readRecoveryKeyName(suite.node, ownNodeId),
     );
-    expect(result).toHaveProperty("breakGlassKeyName", stored.rows[0]!.break_glass_key_name);
     expect((result as unknown as { breakGlassKeyName: string }).breakGlassKeyName).toMatch(
       /^\d{4}-\d{2}-\d{2} · [34679ACDEFHJKMNPQRTUVWXY]{4}$/,
     );
-    expect(await verifyBreakGlass(suite.db, ownNodeId, result.breakGlassSecret)).toBe(true);
+    expect(await verifyBreakGlass(suite.node, ownNodeId, result.breakGlassSecret)).toBe(true);
   });
 
   it("writes the pending-adoption latch (dormant identity for the boot finish worker)", async () => {

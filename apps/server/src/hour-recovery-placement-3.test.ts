@@ -234,6 +234,7 @@ describe("selected-hour admission before archive placement", () => {
       expect(selected.identity).toBe("0CNSP");
       await runRestoreHooks({
         db: suite.db,
+        nodeDb: suite.node,
         node,
         modules: newer.modules,
         log: () => {},

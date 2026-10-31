@@ -18,7 +18,7 @@ it.each(["archive", "stream"] as const)(
   async (kind) => {
     f = await stagedHourRestore(suite, kind, "emergency-offline-restore");
     const before = f.journal();
-    await mintBreakGlassSecret(suite.db, TENANT_A.nodeId);
+    await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TENANT_A.nodeId);
     const log = vi.fn();
     await expect(f.run(log)).resolves.toBe(true);
     const rows = await f.snapshot();

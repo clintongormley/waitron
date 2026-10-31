@@ -12,6 +12,7 @@ import {
   withTransaction,
   lockVenueDatabase,
   type Database,
+  type NodeDatabase,
 } from "@waitron/db";
 import type { OperationBinding, OperationClient, WaitronModule } from "@waitron/module";
 import {
@@ -416,7 +417,12 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       assertSnapshotRecoveryTarget(snapshot.verification, currentBackupVerificationTarget());
     }
   };
-  const scopes = new AsyncLocalStorage<{ hold: FirstSetupHold; db: Database; placing?: true }>();
+  const scopes = new AsyncLocalStorage<{
+    hold: FirstSetupHold;
+    db: Database;
+    nodeDb: NodeDatabase;
+    placing?: true;
+  }>();
   let expiry: NodeJS.Timeout | undefined;
   const drop = async () => {
     const old = active;
@@ -682,6 +688,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       secret: entry.request.nodeRecoverySecret,
       selected: entry.session.preview,
       database: () => scopes.getStore()?.db ?? ownerRequired(),
+      nodeDatabase: () => scopes.getStore()?.nodeDb ?? ownerRequired(),
       readRecoveryFacts: async (binding, db) => {
         await recheck(entry);
         if (entry.sourceReopened && scopes.getStore()?.placing !== true)
@@ -1244,7 +1251,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
           const service = await preparation(entry);
           const store = await openVenueDatabase(entry.working!);
           try {
-            const result = await scopes.run({ hold, db: store.venue }, () =>
+            const result = await scopes.run({ hold, db: store.venue, nodeDb: store.node }, () =>
               service.prepare(proposal, client),
             );
             await recheck(entry);
@@ -1371,78 +1378,81 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
           }
           const store = await openVenueDatabase(entry.working!);
           try {
-            await scopes.run({ hold, db: store.venue, placing: true }, async () => {
-              const runner = entry.preparation!.runner(
-                input,
-                entry.resumed ? undefined : { refresh: true },
-              );
-              const check = runner.checkBeforePlacement;
-              runner.checkBeforePlacement = async (context) => {
-                if (!entry.resumed) await emptyTarget(entry.record!, entry.cloudState);
-                await check?.(context);
-              };
-              const placement = {
-                ...target,
-                stagingDir: dirname(entry.selected.copy.databasePath),
-                modules: options.modules,
-                migrationsRoot: options.sources.migrationsRoot,
-                environment: options.environment,
-                log: options.log,
-                rebuildSource: entry.rebuildSource,
-                withModuleOperations: runner,
-                ...(entry.resumed ? { resumeOperation: entry.session.binding } : {}),
-              };
-              if (entry.cloudState !== undefined && !entry.resumed) {
-                const cloud = await cloudFor(entry.session.recoveryId);
-                await cloud.client.restore(async (request) => {
-                  if (!isDeepStrictEqual(request, entry.selected.cloudRequest)) conflict();
-                  await recheck(entry);
-                  await saveCloud(entry, target.stateDir);
-                  const checkTarget = runner.checkBeforePlacement;
-                  runner.checkBeforePlacement = async (context) => {
-                    await saveCloud(entry, target.stateDir);
-                    await checkTarget?.(context);
-                  };
-                  await restoreFromArtifact({
-                    ...placement,
-                    ...request,
-                    snapshotRequestKey: entry.cloudState!.publicKey,
-                  });
-                }, entry.cloudState.pointId!);
-                entry.cloudState = { ...entry.cloudState, phase: "staged" };
-              } else if (entry.cloudState === undefined)
-                await writeValidated(entry.selected.copy, placement);
-              if (entry.cloudState !== undefined) {
-                const cloud = await cloudFor(entry.session.recoveryId);
-                await cloud.client.reconcileRestored(
-                  { requestId: entry.cloudState.requestId, pointId: entry.cloudState.pointId! },
-                  async () => {
-                    await admitCloud(entry);
-                    if (entry.resumed) {
-                      await evidence(entry, false, true);
-                      await writeValidated(entry.selected.copy, placement);
-                    }
-                    const db = await openVenueDatabase(target.venueDir);
-                    try {
-                      await withTransaction(db.venue, async (tx) =>
-                        assertCommitted(
-                          tx,
-                          await resolveArtifactNode(tx, entry.selected.copy.secretEntries),
-                          entry.session.binding,
-                        ),
-                      );
-                    } finally {
-                      await db.close();
-                    }
-                  },
+            await scopes.run(
+              { hold, db: store.venue, nodeDb: store.node, placing: true },
+              async () => {
+                const runner = entry.preparation!.runner(
+                  input,
+                  entry.resumed ? undefined : { refresh: true },
                 );
-                entry.cloudState = {
-                  ...entry.cloudState,
-                  phase: entry.cloudState.phase === "reported" ? "reported" : "restored",
+                const check = runner.checkBeforePlacement;
+                runner.checkBeforePlacement = async (context) => {
+                  if (!entry.resumed) await emptyTarget(entry.record!, entry.cloudState);
+                  await check?.(context);
                 };
-                await saveCloud(entry, target.stateDir);
-              }
-            });
+                const placement = {
+                  ...target,
+                  stagingDir: dirname(entry.selected.copy.databasePath),
+                  modules: options.modules,
+                  migrationsRoot: options.sources.migrationsRoot,
+                  environment: options.environment,
+                  log: options.log,
+                  rebuildSource: entry.rebuildSource,
+                  withModuleOperations: runner,
+                  ...(entry.resumed ? { resumeOperation: entry.session.binding } : {}),
+                };
+                if (entry.cloudState !== undefined && !entry.resumed) {
+                  const cloud = await cloudFor(entry.session.recoveryId);
+                  await cloud.client.restore(async (request) => {
+                    if (!isDeepStrictEqual(request, entry.selected.cloudRequest)) conflict();
+                    await recheck(entry);
+                    await saveCloud(entry, target.stateDir);
+                    const checkTarget = runner.checkBeforePlacement;
+                    runner.checkBeforePlacement = async (context) => {
+                      await saveCloud(entry, target.stateDir);
+                      await checkTarget?.(context);
+                    };
+                    await restoreFromArtifact({
+                      ...placement,
+                      ...request,
+                      snapshotRequestKey: entry.cloudState!.publicKey,
+                    });
+                  }, entry.cloudState.pointId!);
+                  entry.cloudState = { ...entry.cloudState, phase: "staged" };
+                } else if (entry.cloudState === undefined)
+                  await writeValidated(entry.selected.copy, placement);
+                if (entry.cloudState !== undefined) {
+                  const cloud = await cloudFor(entry.session.recoveryId);
+                  await cloud.client.reconcileRestored(
+                    { requestId: entry.cloudState.requestId, pointId: entry.cloudState.pointId! },
+                    async () => {
+                      await admitCloud(entry);
+                      if (entry.resumed) {
+                        await evidence(entry, false, true);
+                        await writeValidated(entry.selected.copy, placement);
+                      }
+                      const db = await openVenueDatabase(target.venueDir);
+                      try {
+                        await withTransaction(db.venue, async (tx) =>
+                          assertCommitted(
+                            tx,
+                            await resolveArtifactNode(tx, entry.selected.copy.secretEntries),
+                            entry.session.binding,
+                          ),
+                        );
+                      } finally {
+                        await db.close();
+                      }
+                    },
+                  );
+                  entry.cloudState = {
+                    ...entry.cloudState,
+                    phase: entry.cloudState.phase === "reported" ? "reported" : "restored",
+                  };
+                  await saveCloud(entry, target.stateDir);
+                }
+              },
+            );
           } finally {
             await store.close();
           }

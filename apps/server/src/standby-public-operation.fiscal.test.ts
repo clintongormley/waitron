@@ -304,6 +304,7 @@ async function promote(held: Awaited<ReturnType<typeof reserve>>, key: string, c
   const app = new Hono();
   mountPromoteApi(app, {
     appDb: spare.db,
+    nodeDb: spare.node,
     nodeId: held.standby.nodeId,
     modules,
     credentialKeyRing: TOTP_KEY_RING,
@@ -356,7 +357,10 @@ it("consumes signed public reservation and takeover evidence through both HTTP r
   await establish(held);
   expect(await liveTarget(held.standby.nodeId)).toEqual({ sif: [], series: [], allocations: [] });
   await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror");
-  const key = await mintBreakGlassSecret(spare.db, held.standby.nodeId);
+  const key = await mintBreakGlassSecret(
+    { venue: spare.db, node: spare.node },
+    held.standby.nodeId,
+  );
   const response = await promote(held, key);
   expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
   const live = await liveTarget(held.standby.nodeId);
@@ -381,7 +385,10 @@ it("refuses absent current outside consumption through HTTP and retains the dorm
   const held = await reserve();
   await establish(held);
   await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror");
-  const key = await mintBreakGlassSecret(spare.db, held.standby.nodeId);
+  const key = await mintBreakGlassSecret(
+    { venue: spare.db, node: spare.node },
+    held.standby.nodeId,
+  );
   const reservation = await spare.db.select().from(fiscalReservations);
   const response = await promote(held, key, false);
   expect(response.status).toBe(400);

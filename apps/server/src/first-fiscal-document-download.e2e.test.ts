@@ -411,7 +411,7 @@ it.each(["en", "es"] as const)(
         };
         await expect(
           withRecoveryKeyAuthority(
-            { db: selected.venue, nodeId: decoded.nodeKey.nodeId },
+            { db: selected.venue, node: selected.node, nodeId: decoded.nodeKey.nodeId },
             binding,
             "wrong-key",
             async () => true,
@@ -419,7 +419,7 @@ it.each(["en", "es"] as const)(
         ).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
         await expect(
           withRecoveryKeyAuthority(
-            { db: selected.venue, nodeId: decoded.nodeKey.nodeId },
+            { db: selected.venue, node: selected.node, nodeId: decoded.nodeKey.nodeId },
             binding,
             await recovered(),
             async (_authority, commit) =>

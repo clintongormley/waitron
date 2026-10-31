@@ -7,6 +7,7 @@ import {
   stampDeployment,
   withTransaction,
 } from "@waitron/db";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { newBreakGlassKeyName } from "@waitron/provisioning";
 import { mintBreakGlassKey, verifyBreakGlass } from "./break-glass.js";
@@ -18,7 +19,9 @@ vi.mock("node:crypto", async (original) => {
 
 const drawCodeIndex = vi.mocked(randomInt as (max: number) => number);
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+});
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 beforeEach(async () => {
@@ -34,24 +37,27 @@ afterEach(() => {
 });
 
 it("stores the UTC issue day and a four-character code independently of the secret", async () => {
-  const key = await mintBreakGlassKey(suite.db, NODE);
+  const key = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, NODE);
   expect(key.name).toMatch(/^2026-10-15 · [34679ACDEFHJKMNPQRTUVWXY]{4}$/);
   expect(await readBreakGlassKeyName(suite.db, NODE)).toBe(key.name);
-  expect(await verifyBreakGlass(suite.db, NODE, key.secret)).toBe(true);
-  expect(await verifyBreakGlass(suite.db, NODE, key.name)).toBe(false);
+  expect(await verifyBreakGlass(suite.node, NODE, key.secret)).toBe(true);
+  expect(await verifyBreakGlass(suite.node, NODE, key.name)).toBe(false);
 });
 
 it("uses the next issue day across midnight without changing a previously stored name", async () => {
-  const first = await mintBreakGlassKey(suite.db, NODE);
+  const first = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, NODE);
   vi.setSystemTime(new Date("2026-10-16T00:00:00.000Z"));
-  const second = await mintBreakGlassKey(suite.db, "dddddddd-dddd-4ddd-8ddd-dddddddddddd");
+  const second = await mintBreakGlassKey(
+    { venue: suite.db, node: suite.node },
+    "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  );
   expect(second.name).toMatch(/^2026-10-16 · [34679ACDEFHJKMNPQRTUVWXY]{4}$/);
   expect(await readBreakGlassKeyName(suite.db, NODE)).toBe(first.name);
 });
 
 it("draws another code when a replacement would reuse the current paper name", async () => {
   drawCodeIndex.mockImplementation(() => 0);
-  const original = await mintBreakGlassKey(suite.db, NODE);
+  const original = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, NODE);
   expect(original.name).toBe("2026-10-15 · 3333");
   drawCodeIndex
     .mockReturnValueOnce(0)
@@ -62,11 +68,11 @@ it("draws another code when a replacement would reuse the current paper name", a
     .mockReturnValueOnce(1)
     .mockReturnValueOnce(1)
     .mockReturnValueOnce(1);
-  const replacement = await mintBreakGlassKey(suite.db, NODE);
+  const replacement = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, NODE);
   expect(replacement.name).toBe("2026-10-15 · 4444");
   expect(await readBreakGlassKeyName(suite.db, NODE)).toBe(replacement.name);
-  expect(await verifyBreakGlass(suite.db, NODE, original.secret)).toBe(false);
-  expect(await verifyBreakGlass(suite.db, NODE, replacement.secret)).toBe(true);
+  expect(await verifyBreakGlass(suite.node, NODE, original.secret)).toBe(false);
+  expect(await verifyBreakGlass(suite.node, NODE, replacement.secret)).toBe(true);
 });
 
 it("draws another code when a new key would reuse a name this node's packs recorded", async () => {
@@ -90,7 +96,7 @@ it("draws another code when a new key would reuse a name this node's packs recor
     .mockReturnValueOnce(1)
     .mockReturnValueOnce(1)
     .mockReturnValueOnce(1);
-  const key = await mintBreakGlassKey(suite.db, NODE);
+  const key = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, NODE);
   expect(key.name).toBe("2026-10-15 · 4444");
   expect(await readBreakGlassKeyName(suite.db, NODE)).toBe("2026-10-15 · 4444");
 });

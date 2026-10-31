@@ -346,7 +346,7 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
   it("admin login → 200 restarting; restart into primary; sells + chains on its own reserved SIF; does NOT file", async () => {
     const seed = await seedMirror(db.main, stores.main.node);
     const waterOffer = await seedSaleVenue(db.main, seed.nodeId);
-    await mintBreakGlassSecret(db.main, seed.nodeId); // an adopted mirror always has a verifier
+    await mintBreakGlassSecret({ venue: db.main, node: stores.main.node }, seed.nodeId); // an adopted mirror always has a verifier
 
     const mirrorPort = await freePort();
     const mirrorBase = `http://127.0.0.1:${mirrorPort}`;
@@ -514,7 +514,10 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
 
   it("break-glass secret → 200 promoted (no login)", async () => {
     const seed = await seedMirror(db.breakGlass, stores.breakGlass.node);
-    const breakGlass = await mintBreakGlassSecret(db.breakGlass, seed.nodeId);
+    const breakGlass = await mintBreakGlassSecret(
+      { venue: db.breakGlass, node: stores.breakGlass.node },
+      seed.nodeId,
+    );
     const keyFixture = allocationFixture({
       node: { nodeId: brandNodeId(seed.nodeId), locationId: brandLocationId(MIRROR_LOCATION_ID) },
       primary: {
@@ -587,6 +590,7 @@ describe("read-only-gate exemption for the promote POST — proven by deletion",
     // No case here reaches the break-glass check, so the node id is a placeholder.
     mountPromoteApi(app, {
       appDb: db.main,
+      nodeDb: stores.main.node,
       nodeId: "gate-only",
       run: alwaysRun,
       credentialKeyRing: TOTP_KEY_RING,

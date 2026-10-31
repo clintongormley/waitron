@@ -395,13 +395,16 @@ describe("opaque authenticated standby carriers", () => {
       });
       await activateSeries(tx, node);
     });
-    const key = await mintBreakGlassSecret(suite.db, TARGET);
+    const key = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TARGET);
     const result = await promoteMirrorToPrimary(
       {
         ...deps,
-        withModuleOperations: ({ db, node }, run) =>
-          withRecoveryKeyOperation({ db, nodeId: node.nodeId }, scope, key, (tx, authority) =>
-            run(tx, operations(authority, scope)),
+        withModuleOperations: ({ db, nodeDb, node }, run) =>
+          withRecoveryKeyOperation(
+            { db, node: nodeDb, nodeId: node.nodeId },
+            scope,
+            key,
+            (tx, authority) => run(tx, operations(authority, scope)),
           ),
       },
       { oldNodeNeutralised: true },
@@ -417,15 +420,15 @@ describe("opaque authenticated standby carriers", () => {
       entered = true;
       await activateSeries(tx, node);
     });
-    const key = await mintBreakGlassSecret(suite.db, TARGET);
+    const key = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TARGET);
     await expect(
       promoteMirrorToPrimary(
         {
           ...deps,
-          withModuleOperations: async ({ db, node }, run) => {
-            await mintBreakGlassSecret(db, node.nodeId);
+          withModuleOperations: async ({ db, nodeDb, node }, run) => {
+            await mintBreakGlassSecret({ venue: db, node: nodeDb }, node.nodeId);
             return withRecoveryKeyOperation(
-              { db, nodeId: node.nodeId },
+              { db, node: nodeDb, nodeId: node.nodeId },
               scope,
               key,
               (tx, authority) => run(tx, operations(authority, scope)),

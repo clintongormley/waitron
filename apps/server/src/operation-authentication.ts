@@ -1,9 +1,10 @@
 import "./errors.js";
 import { AppError } from "@waitron/shared";
 import {
-  readBreakGlassVerifier,
+  withNodeTransaction,
   withTransaction,
   type Database,
+  type NodeDatabase,
   type Transaction,
 } from "@waitron/db";
 import {
@@ -20,11 +21,12 @@ import {
   type OperationAuthority,
   type OperationBinding,
 } from "@waitron/module";
+import { readRecoveryKeyVerifier } from "@waitron/node-db";
 import { inTurn } from "./attempt-turns.js";
 import { isUuid } from "./till-session.js";
 
 export async function withRecoveryKeyOperation<T>(
-  deps: { readonly db: Database; readonly nodeId: string },
+  deps: { readonly db: Database; readonly node: NodeDatabase; readonly nodeId: string },
   operation: OperationBinding,
   secret: unknown,
   run: (tx: Transaction, authority: OperationAuthority) => Promise<T>,
@@ -37,7 +39,7 @@ export async function withRecoveryKeyOperation<T>(
 }
 
 export async function withRecoveryKeyAuthority<T>(
-  deps: { readonly db: Database; readonly nodeId: string },
+  deps: { readonly db: Database; readonly node: NodeDatabase; readonly nodeId: string },
   operation: OperationBinding,
   secret: unknown,
   run: (
@@ -57,7 +59,7 @@ export async function withRecoveryKeyAuthority<T>(
     !["restore", "promote"].includes(binding.action)
   )
     return refuse();
-  const verifier = await readBreakGlassVerifier(deps.db, targetNodeId);
+  const verifier = await readRecoveryKeyVerifier(deps.node, targetNodeId);
   if (verifier === null || !(await verifySecretAsync(secret, verifier))) return refuse();
   return withOperationAuthority(
     binding,
@@ -68,13 +70,16 @@ export async function withRecoveryKeyAuthority<T>(
       };
       const commit = async <R>(body: (tx: Transaction) => Promise<R>): Promise<R> => {
         authorise();
-        return withTransaction(deps.db, async (tx) => {
-          authorise();
-          if ((await readBreakGlassVerifier(tx, targetNodeId)) !== verifier) return refuse();
-          const result = await body(tx);
-          authorise();
-          return result;
-        });
+        // node.db's lock is taken outside venue.db's, so the key cannot change before this commits.
+        return withNodeTransaction(deps.node, (node) =>
+          withTransaction(deps.db, async (tx) => {
+            authorise();
+            if ((await readRecoveryKeyVerifier(node, targetNodeId)) !== verifier) return refuse();
+            const result = await body(tx);
+            authorise();
+            return result;
+          }),
+        );
       };
       return run(authority, commit);
     },

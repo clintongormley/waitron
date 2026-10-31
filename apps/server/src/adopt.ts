@@ -155,7 +155,10 @@ export async function adoptFromPrimary(
     accountKey: bundle.accountKey,
   });
   // Returned exactly once and never logged; only its verifier is stored.
-  const key = await mintBreakGlassKey(deps.ownerDb, standby.nodeId);
+  const key = await mintBreakGlassKey(
+    { venue: deps.ownerDb, node: deps.ownerNode },
+    standby.nodeId,
+  );
 
   return { breakGlassSecret: key.secret, breakGlassKeyName: key.name };
 }

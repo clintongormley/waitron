@@ -49,7 +49,7 @@ beforeEach(async () => {
       numeroInstalacion: "P000001",
     }),
   );
-  secret = await mintBreakGlassSecret(suite.db, node.nodeId);
+  secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
 });
 afterEach(async () => {
   vi.unstubAllEnvs();
@@ -72,6 +72,7 @@ it("production restore runner refuses a signed paper input even with its correct
   const before = await rows();
   const pending = runRestoreHooks({
     db: suite.db,
+    nodeDb: suite.node,
     modules: ALL_MODULES,
     node,
     log: () => {},
@@ -224,13 +225,14 @@ it.each(["recovery key", "administrator"])(
       withPromotionModuleOperation(
         {
           db: suite.db,
+          node: suite.node,
           nodeId: node.nodeId,
           credentialKeyRing: TOTP_KEY_RING,
           modules: ALL_MODULES,
         },
         { binding, input },
         recoveryKey ? { breakGlass: secret } : { personId: ADMIN, password: PASSWORD },
-        (runner) => runner({ db: suite.db, node }, activate),
+        (runner) => runner({ db: suite.db, nodeDb: suite.node, node }, activate),
       ),
     ).rejects.toMatchObject({
       code: "sif.allocation_invalid",

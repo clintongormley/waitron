@@ -68,7 +68,10 @@ describe("business-day timeline through cold restore and reset", () => {
     try {
       const dump = join(root, "copy.db");
       await stampDeployment(suite.db, "preproduction");
-      const secret = await mintBreakGlassSecret(suite.db, venue.cfg.nodeId);
+      const secret = await mintBreakGlassSecret(
+        { venue: suite.db, node: suite.node },
+        venue.cfg.nodeId,
+      );
       const series = await suite.db.select().from(invoiceSeries);
       const fixture = allocationFixture({
         node: { nodeId: nodeId(venue.cfg.nodeId), locationId: venue.cfg.locationId },

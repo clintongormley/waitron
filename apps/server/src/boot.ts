@@ -2719,6 +2719,7 @@ async function bootServer(
     app,
     {
       db,
+      nodeDb: store.node,
       node: tradingContext,
       venueId: tradingContext.locationId,
       modules: setsToMigrate,
@@ -2808,6 +2809,7 @@ async function bootServer(
     app,
     {
       db,
+      nodeDb: store.node,
       rpId: config.managementRpId,
       origin: config.managementOrigin,
       keyRing: totpKeyRing,
@@ -2973,6 +2975,7 @@ async function bootServer(
     app,
     {
       appDb: db,
+      nodeDb: store.node,
       nodeId: tradingContext.nodeId,
       credentialKeyRing: totpKeyRing,
       modules: setsToMigrate,
@@ -2981,6 +2984,7 @@ async function bootServer(
       nodePreparation: createNodeOperationPreparation({
         testClock: seams.testClock,
         db,
+        nodeDb: store.node,
         node: { nodeId: tradingContext.nodeId, locationId: tradingContext.locationId },
         modules: enabledModules(ALL_MODULES, moduleConfig),
         credentialKeyRing: totpKeyRing,

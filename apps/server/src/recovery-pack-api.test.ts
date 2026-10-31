@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import * as identity from "@waitron/identity";
 import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, stampDeployment, withTransaction } from "@waitron/db";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
@@ -10,7 +11,9 @@ import { nodeId, locationId } from "@waitron/shared";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { mountRecoveryPackApi } from "./recovery-pack-api.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+});
 const node = {
   nodeId: nodeId("cccccccc-cccc-4ccc-8ccc-cccccccccccc"),
   locationId: locationId("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
@@ -23,7 +26,7 @@ afterEach(() => vi.restoreAllMocks());
 beforeEach(async () => {
   logs.length = 0;
   await stampDeployment(suite.db, "preproduction");
-  secret = await mintBreakGlassSecret(suite.db, node.nodeId);
+  secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
   await withTransaction(suite.db, async (tx) => {
     for (const role of ["manager", "staff"] as const) {
       const [person] = await tx
@@ -52,6 +55,7 @@ function app(failing = false) {
     instance,
     {
       db: suite.db,
+      nodeDb: suite.node,
       node,
       venueId: "venue-one",
       modules: [module],

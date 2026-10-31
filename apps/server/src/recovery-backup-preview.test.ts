@@ -18,6 +18,7 @@ import {
   tenants,
   stampDeployment,
 } from "@waitron/db";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { encryptArtifact } from "./artifact-cipher.js";
@@ -44,7 +45,9 @@ vi.mock("@hono/node-server", async () => {
 
 const { startServer, httpPort } = ephemeralServerFixture();
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+});
 const NODE = "d0000000-0000-4000-8000-000000000001";
 const LOCATION = "d0000000-0000-4000-8000-000000000002";
 let scratch: string;
@@ -80,7 +83,7 @@ beforeEach(async () => {
     operationDescription: "Restaurant",
   });
   await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Old node" });
-  await mintBreakGlassSecret(suite.db, NODE);
+  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
   oldName = await readBreakGlassKeyName(suite.db, NODE);
   const database = join(scratch, "selected.db");
   await suite.db.archiveTo(database);
@@ -138,7 +141,7 @@ function args(key = "archive-key-separate") {
 }
 
 it("reads the selected copy's node-key name after the live box has replaced its key", async () => {
-  await mintBreakGlassSecret(suite.db, NODE);
+  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
   expect(await readBreakGlassKeyName(suite.db, NODE)).not.toBe(oldName);
   expect(await previewRecoveryArchive(args())).toEqual({
     sourceId: createHash("sha256").update(artifact).digest("hex"),
@@ -187,7 +190,7 @@ it("refuses a wrong archive encryption key without treating it as the node crede
 });
 
 it("the real setup listener previews the selected copy without restarting or publishing its identity", async () => {
-  await mintBreakGlassSecret(suite.db, NODE);
+  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
   const stateDir = join(scratch, "replacement");
   await copyMigrationsRoot(join(scratch, "migrations"));
   const configuredPort = await occupiedPort();
@@ -270,7 +273,7 @@ it("reviews the downloaded bucket key before explicitly staging its selected byt
   );
   const database = join(scratch, "bucket-copy.db");
   await suite.db.archiveTo(database);
-  await mintBreakGlassSecret(suite.db, NODE);
+  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
   const liveName = await readBreakGlassKeyName(suite.db, NODE);
   const stateDir = join(scratch, "bucket-preview");
   const preview = (

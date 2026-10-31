@@ -45,6 +45,7 @@ function appWith(run: () => Promise<PromoteRunResult>): Hono {
   const app = new Hono();
   mountPromoteApi(app, {
     appDb: suite.db,
+    nodeDb: suite.node,
     nodeId: NODE,
     credentialKeyRing: TOTP_KEY_RING,
     run,

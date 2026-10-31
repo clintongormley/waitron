@@ -1,5 +1,5 @@
 import "./errors.js";
-import { withTransaction, type Database, type Transaction } from "@waitron/db";
+import { withTransaction, type Database, type NodeDatabase, type Transaction } from "@waitron/db";
 import type { TotpKeyRing } from "@waitron/identity";
 import {
   withPreparedModuleOperations,
@@ -17,6 +17,8 @@ import type { PromotionOperationRunner } from "./promote.js";
 export async function withPromotionModuleOperation<T>(
   deps: {
     readonly db: Database;
+    /** This box's node.db, which holds the recovery-key check. */
+    readonly node: NodeDatabase;
     readonly nodeId: string;
     readonly credentialKeyRing: TotpKeyRing;
     readonly modules: readonly WaitronModule[];
@@ -64,7 +66,7 @@ export async function withPromotionModuleOperation<T>(
 
   if (typeof credentials.breakGlass === "string") {
     return withRecoveryKeyAuthority(
-      { db, nodeId },
+      { db, node: deps.node, nodeId },
       binding,
       credentials.breakGlass,
       (authority, commit) => scopedRun(authority, commit),

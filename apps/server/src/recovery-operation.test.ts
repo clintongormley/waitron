@@ -5,6 +5,7 @@ import {
   setBreakGlassVerifierTx,
   stampDeployment,
 } from "@waitron/db";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashSecret, IDENTITY_MIGRATIONS, managementSessions, persons } from "@waitron/identity";
 import {
@@ -20,7 +21,9 @@ vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
 );
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+});
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const binding = {
   module: "test-regime",
@@ -33,7 +36,7 @@ let key: string;
 
 beforeEach(async () => {
   await stampDeployment(suite.db, "preproduction");
-  key = await mintBreakGlassSecret(suite.db, NODE);
+  key = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
 });
 
 function perform<T>(
@@ -42,7 +45,7 @@ function perform<T>(
   scope: OperationBinding = binding,
 ) {
   return operations.withRecoveryKeyOperation(
-    { db: suite.db, nodeId: NODE },
+    { db: suite.db, node: suite.node, nodeId: NODE },
     scope,
     secret,
     (_tx, authority) => run(authority),
@@ -81,7 +84,7 @@ describe("scoped recovery-key authority", () => {
       let entered = false;
       await expect(
         operations.withRecoveryKeyOperation(
-          { db: suite.db, nodeId: NODE },
+          { db: suite.db, node: suite.node, nodeId: NODE },
           binding,
           secret,
           async () => {
@@ -133,7 +136,7 @@ describe("scoped recovery-key authority", () => {
     let held: unknown;
     const observed = await writerBesideRequest(suite.db, () =>
       operations.withRecoveryKeyOperation(
-        { db: suite.db, nodeId: NODE },
+        { db: suite.db, node: suite.node, nodeId: NODE },
         binding,
         key,
         async (tx, authority) => {
@@ -149,7 +152,7 @@ describe("scoped recovery-key authority", () => {
     expect(readOperationAuthority(held, binding)).toBeUndefined();
     await expect(
       operations.withRecoveryKeyOperation(
-        { db: suite.db, nodeId: NODE },
+        { db: suite.db, node: suite.node, nodeId: NODE },
         binding,
         key,
         async (tx, authority) => {

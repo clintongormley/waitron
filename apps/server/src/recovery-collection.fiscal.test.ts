@@ -1,11 +1,5 @@
 import { beforeEach, expect, it } from "vitest";
-import {
-  deployment,
-  invoiceSeries,
-  nodeRoles,
-  withTransaction,
-  type Transaction,
-} from "@waitron/db";
+import { deployment, invoiceSeries, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { managementSessions, persons } from "@waitron/identity";
 import { readOperationAuthority } from "@waitron/module";
@@ -42,7 +36,7 @@ beforeEach(async () => {
     { nodeId: node.nodeId, code: "FF", purpose: "full" },
     { nodeId: node.nodeId, code: "R", purpose: "rectificative" },
   ]);
-  secret = await mintBreakGlassSecret(suite.db, node.nodeId);
+  secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
 });
 
 it("authenticates the real node key, collects outside the write lock and activates all purposes in the host transaction", async () => {
@@ -80,14 +74,14 @@ it("authenticates the real node key, collects outside the write lock and activat
   let activate!: (tx: Transaction, target: typeof node) => Promise<ActivationResult>;
   let writerCommitted = false;
   const result = await withRecoveryKeyOperation(
-    { db: suite.db, nodeId: node.nodeId },
+    { db: suite.db, node: suite.node, nodeId: node.nodeId },
     binding,
     secret,
     async (tx, authority) => {
       expect(writerCommitted).toBe(true);
       expect(readOperationAuthority(authority, binding)?.operatorId).toEqual(operator);
       const active = await activate(tx, node);
-      await tx.update(nodeRoles).set({ breakGlassKeyName: "local change" });
+      await tx.update(deployment).set({ environment: "preproduction" });
       return active;
     },
     (authority, commit) =>
@@ -96,7 +90,7 @@ it("authenticates the real node key, collects outside the write lock and activat
         async (request) => {
           expect(request).toEqual({ binding, operatorId: operator });
           await withTransaction(suite.db, async (tx) => {
-            await tx.update(nodeRoles).set({ breakGlassKeyName: "outside collection writer" });
+            await tx.update(deployment).set({ environment: "preproduction" });
           });
           writerCommitted = true;
           return {

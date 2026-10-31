@@ -6,6 +6,7 @@ import {
   readBreakGlassVerifier,
   readBreakGlassKeyName,
   type Database,
+  type NodeDatabase,
   type Transaction,
   withTransaction,
 } from "@waitron/db";
@@ -45,6 +46,8 @@ export function createNodeOperationPreparation(options: {
   stateDir: string;
   venueDir: string;
   db: Database;
+  /** This box's node.db, which holds the recovery-key check. */
+  nodeDb: NodeDatabase;
   node: ProvisionedNode;
   modules: readonly WaitronModule[];
   credentialKeyRing?: TotpKeyRing;
@@ -145,7 +148,7 @@ export function createNodeOperationPreparation(options: {
       "breakGlass" in heldCredentials
     )
       return withRecoveryKeyAuthority(
-        { db: options.db, nodeId: node.nodeId },
+        { db: options.db, node: options.nodeDb, nodeId: node.nodeId },
         binding,
         heldCredentials.breakGlass,
         authenticated,

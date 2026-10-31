@@ -1,11 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, isNull } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, IDENTITY_MIGRATIONS, managementSessions, persons } from "@waitron/identity";
 import { readOperationAuthority, type OperationAuthority } from "@waitron/module";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { generateSync } from "otplib";
-import { withAuthenticatedOperation } from "./operation-authentication.js";
+import { mintBreakGlassSecret } from "./break-glass.js";
+import {
+  withAuthenticatedOperation,
+  withRecoveryKeyOperation,
+} from "./operation-authentication.js";
 import { enrolAuthenticator, TOTP_KEY_RING, wrongTotpCode } from "./testing/authenticator.js";
 import { whileChangingOnLockRequest, writerBesideRequest } from "./testing/watched-scrypt.js";
 
@@ -13,7 +18,9 @@ vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
 );
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+});
 const ADMIN = "a0000000-0000-4000-8000-000000000001";
 const OTHER = "a0000000-0000-4000-8000-000000000002";
 const PASSWORD = "correct horse";
@@ -240,5 +247,46 @@ describe("host-issued authority after fresh operator authentication", () => {
     expect(
       await suite.db.select().from(managementSessions).where(isNull(managementSessions.endedAt)),
     ).toEqual([]);
+  });
+});
+
+describe("a recovery key's authority", () => {
+  const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+  const recovery = { ...binding, action: "restore", targetNodeId: NODE };
+  const handles = () => ({ venue: suite.db, node: suite.node });
+
+  beforeEach(() => stampDeployment(suite.db, "preproduction"));
+
+  async function waitingWrite(replace: boolean): Promise<string> {
+    const secret = await mintBreakGlassSecret(handles(), NODE);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let arrived!: () => void;
+    const waiting = new Promise<void>((resolve) => (arrived = resolve));
+    const result = withRecoveryKeyOperation(
+      { db: suite.db, node: suite.node, nodeId: NODE },
+      recovery,
+      secret,
+      async () => "committed",
+      async (_authority, commit) => {
+        arrived();
+        await gate;
+        return commit();
+      },
+    );
+    await waiting;
+    if (replace) await mintBreakGlassSecret(handles(), NODE);
+    release();
+    return result;
+  }
+
+  it("a recovery key replaced while an authorised write waits is refused", async () => {
+    await expect(waitingWrite(true)).rejects.toMatchObject({
+      code: "promotion.break_glass_invalid",
+    });
+  });
+
+  it("commits the waiting write when the key is not replaced", async () => {
+    expect(await waitingWrite(false)).toBe("committed");
   });
 });

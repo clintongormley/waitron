@@ -177,7 +177,7 @@ beforeEach(async () => {
   await suite.db.update(invoiceSeries).set({ nextNumber: 123 });
   await establishNodeIdentity({ ownerDb: suite.db, ring }, standby.nodeId);
   await setNodeMode({ venue: suite.db, node: suite.node }, standby.nodeId, "mirror");
-  key = await mintBreakGlassKey(suite.db, standby.nodeId);
+  key = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, standby.nodeId);
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
 });
 afterEach(async () => {
@@ -191,6 +191,7 @@ async function service(modules = ALL_MODULES.filter((module) => module.name === 
     stateDir: join(root, "state"),
     venueDir: join(root, "venue"),
     db: suite.db,
+    nodeDb: suite.node,
     node: standby,
     modules,
     credentialKeyRing: TOTP_KEY_RING,
@@ -467,6 +468,7 @@ it("never counts a browser on the box itself as the promotion's second clock", a
     const app = new Hono();
     mountPromoteApi(app, {
       appDb: suite.db,
+      nodeDb: suite.node,
       nodeId: standby.nodeId,
       credentialKeyRing: TOTP_KEY_RING,
       nodePreparation: s,
@@ -521,6 +523,7 @@ it("serves clock, selection and authenticated promotion through the management r
   const app = new Hono();
   mountPromoteApi(app, {
     appDb: suite.db,
+    nodeDb: suite.node,
     nodeId: standby.nodeId,
     credentialKeyRing: TOTP_KEY_RING,
     modules: ALL_MODULES.filter((module) => module.name === binding.module),
@@ -672,6 +675,7 @@ it("a key-only operation service refuses administrator credentials without a cre
     stateDir: join(root, "state"),
     venueDir: join(root, "venue"),
     db: suite.db,
+    nodeDb: suite.node,
     node: standby,
     modules: ALL_MODULES,
     coordinator: createFirstSetupCoordinator(),
@@ -693,7 +697,7 @@ it("invalidates an earlier comparison when the named recovery key changes", asyn
   const s = await service();
   await admit(s);
   await compare(s);
-  key = await mintBreakGlassKey(suite.db, standby.nodeId);
+  key = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, standby.nodeId);
   await expect(
     s.prepare(
       binding,
@@ -961,7 +965,11 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
     coordinator: createFirstSetupCoordinator(),
     environment: {},
   };
-  const reserving = createNodeOperationPreparation({ ...options, db: suite.db });
+  const reserving = createNodeOperationPreparation({
+    ...options,
+    db: suite.db,
+    nodeDb: suite.node,
+  });
   let state: unknown;
   await reserving.withOperation(
     { binding: held, input: { kind: "hour-dormant", version: 1 } },
@@ -1018,7 +1026,7 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
     series: await spare.db.select().from(invoiceSeries),
     sif: await spare.db.select().from(registroSif),
   };
-  const s = createNodeOperationPreparation({ ...options, db: spare.db });
+  const s = createNodeOperationPreparation({ ...options, db: spare.db, nodeDb: spare.node });
   const operation = { binding: { ...held, action: "establish" }, input: state };
   const endorsement = endorseKey(
     identity.nodeId,
@@ -1183,6 +1191,7 @@ it.each(["database", "node"])(
           runner(
             {
               db: fault === "database" ? spare.db : suite.db,
+              nodeDb: fault === "database" ? spare.node : suite.node,
               node: fault === "node" ? primary : standby,
             },
             async () => "unexpected",
@@ -1258,7 +1267,7 @@ it("refuses a recovery key rotated while a comparison is in flight", async () =>
   const before = await readFile(join(root, "state/module-preparation-state.json"), "utf8");
   const pending = compare(s);
   await started;
-  key = await mintBreakGlassKey(suite.db, standby.nodeId);
+  key = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, standby.nodeId);
   const refused = expect(pending).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
   release();
   await refused;

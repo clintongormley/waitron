@@ -102,7 +102,7 @@ export async function authenticatedFirstSetupBackupPreview(
     try {
       if (!(await readBreakGlassKeyName(database.venue, node.nodeId))?.trim()) refuse();
       await withRecoveryKeyAuthority(
-        { db: database.venue, nodeId: node.nodeId },
+        { db: database.venue, node: database.node, nodeId: node.nodeId },
         held,
         secret,
         async () => {},

@@ -422,6 +422,7 @@ export function useBackupVerificationFixture() {
       logical: logicalDatabase(databasePath),
       corrupt,
       db: suite.db,
+      node: suite.node,
     };
   }
   return { create };

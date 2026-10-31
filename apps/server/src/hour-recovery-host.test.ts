@@ -72,6 +72,7 @@ it("persists a recovery hour before the real configured restore runner activates
   const old = await suite.db.select().from(invoiceSeries);
   await runRestoreHooks({
     db: suite.db,
+    nodeDb: suite.node,
     node,
     modules: f.configured,
     log: () => {},
@@ -141,6 +142,7 @@ it("replays the exact restore after reading the now-committed database history",
   );
   await runRestoreHooks({
     db: suite.db,
+    nodeDb: suite.node,
     node,
     modules: f.configured,
     log: () => {},
@@ -151,6 +153,7 @@ it("replays the exact restore after reading the now-committed database history",
   f.facts.history = [await withTransaction(suite.db, (tx) => readHourHistory(tx, "preproduction"))];
   await runRestoreHooks({
     db: suite.db,
+    nodeDb: suite.node,
     node,
     modules: f.configured,
     log: () => {},
@@ -220,6 +223,7 @@ it("binds durable host admission to the selected source and refuses a different 
     node,
     secret: key.secret,
     database: () => suite.db,
+    nodeDatabase: () => suite.node,
     selected: {
       sourceId: "different-artifact",
       createdAt: "2026-10-16T11:40:00Z",
@@ -291,6 +295,7 @@ it("requires a real committed result when the host reports that replay is possib
   await expect(
     runRestoreHooks({
       db: suite.db,
+      nodeDb: suite.node,
       node,
       modules: f.configured,
       log: () => {},
@@ -432,6 +437,7 @@ it("admits recovery from the real validated archive preview with its public spen
   expect(outcome.identity).toBe("0CNVJ");
   await runRestoreHooks({
     db: suite.db,
+    nodeDb: suite.node,
     node,
     modules: service.modules,
     log: () => {},
@@ -449,6 +455,7 @@ it("finishes an already committed restore after restart without selecting or com
   const selected = (await first.selectPastWaits()) as { input: unknown };
   await runRestoreHooks({
     db: suite.db,
+    nodeDb: suite.node,
     node,
     modules: first.configured,
     log: () => {},
@@ -460,6 +467,7 @@ it("finishes an already committed restore after restart without selecting or com
   external.internet.mockClear();
   await runRestoreHooks({
     db: suite.db,
+    nodeDb: suite.node,
     node,
     modules: next.configured,
     log: () => {},
@@ -486,6 +494,7 @@ describe("the database supplied by the placement runner", () => {
     await expect(
       runRestoreHooks({
         db: placed.db,
+        nodeDb: placed.node,
         node,
         modules: f.configured,
         log: () => {},
@@ -503,7 +512,7 @@ it("refuses preparation through a configured module after its source binding cha
   const contribution = f.configured.find((module) => module.name === binding.module)!.operations!;
   await expect(
     withRecoveryKeyAuthority(
-      { db: suite.db, nodeId: node.nodeId },
+      { db: suite.db, node: suite.node, nodeId: node.nodeId },
       other,
       key.secret,
       (authority) =>
@@ -646,6 +655,7 @@ describe("module-owned recovery facts from the actual database", () => {
     expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
     await runRestoreHooks({
       db: suite.db,
+      nodeDb: suite.node,
       node,
       modules: f.service.modules,
       log: () => {},
@@ -679,6 +689,7 @@ describe("module-owned recovery facts from the actual database", () => {
     };
     await runRestoreHooks({
       db: suite.db,
+      nodeDb: suite.node,
       node,
       modules: first.service.modules,
       log: () => {},
@@ -689,6 +700,7 @@ describe("module-owned recovery facts from the actual database", () => {
     external.internet.mockClear();
     await runRestoreHooks({
       db: suite.db,
+      nodeDb: suite.node,
       node,
       modules: next.service.modules,
       log: () => {},
@@ -810,6 +822,7 @@ describe("a backup whose newest record and creation time are near or past the cl
     });
     await runRestoreHooks({
       db: suite.db,
+      nodeDb: suite.node,
       node,
       modules: f.configured,
       log: () => {},
