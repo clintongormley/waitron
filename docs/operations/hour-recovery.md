@@ -29,29 +29,20 @@ other venues so that only one fresh setup or recovery runs at a time.
 
 ## Recover while first setup is blocked
 
-On the interrupted-setup repair page, choose **Recover from backup**. This is separate from the
-ordinary Restore page: it authenticates the selected copy before showing its private preview and
-keeps the old attempt and database files separately. You do not need the old setup password to
-prove access to an independently authenticated backup.
+On the interrupted-setup repair page, choose **Recover from backup**, tick "Delete the old attempt
+and recover from a backup." (with the venue database missing, "Nothing was filed to AEAT and nothing
+was sold.") and choose **Recover from backup** again. The box deletes the failed setup exactly as
+Start again does, and restarts. Press **Reconnect**: the page opens "Join or recover an existing
+restaurant". Choose the copy there, then follow [Check the selected copy](#check-the-selected-copy)
+above and [Make the new series](#make-the-new-series) below. If the page is reloaded before
+Reconnect, it opens its first screen; if that asks "Is this page secure?", press **Continue to
+setup**, then choose **Join or recover**.
 
-Choose an archive, bucket copy or supported Cloud copy. Supply its named node recovery key,
-and its archive key or source credentials where applicable. Choose a recovery pack that holds the server key, such as the pack setup made, or an older recovery sheet, or enter the grouped key printed on either. Cloud approval is separate from this key;
-production Cloud recovery remains unavailable through the current client.
-
-After **Open backup**, check the authenticated details and use the module's recovery controls.
-The key still needs to pass the current history and clock checks. Keep the former box stopped,
-coordinate with the other venues and follow any wait before selecting the series.
-
-Opening a backup pauses ordinary setup even if its key is refused. Retry recovery on this page,
-or restart the box to return to ordinary setup. Going back or refreshing the page does not resume it.
-
-Keep the recovery page open, and able to reach the box, until the recovery finishes. The recovery
-stops if the box restarts, or within five minutes of leaving the page or closing its tab. If it had
-saved progress, the repair page then shows it as stopped and does not offer **Recover from backup**
-beside it; **Start again** deletes it. Do not erase a retained operation
-by hand to make another source fit. The bilingual [backup recovery guide](../../apps/server/src/guide/en/backup-recovery.md)
-walks through the controls. It is served with the other guides during normal operation; the
-repair-only listener does not link to or serve those guides.
+Recover from backup is not offered where Start again is not, including when the setup's own record
+cannot be read or carries a mark that needs repair. The bilingual
+[backup recovery guide](../../apps/server/src/guide/en/backup-recovery.md) walks through the
+controls. It is served with the other guides during normal operation; the repair-only listener does
+not link to or serve those guides.
 
 ## Make the new series
 

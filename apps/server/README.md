@@ -48,7 +48,8 @@ error as it starts, not silently.
 If your first setup is interrupted, direct and supervised startup can serve a restricted recovery
 API before ordinary database opens or staged restore/reset work. It offers inspection
 (`GET /setup-api/first-setup/resolution`), ownership recovery with the setup password, recovery from
-a backup (under `/setup-api/first-setup/resolution/backup/`), Start again and publication-only
+a backup (under `/setup-api/first-setup/resolution/backup/`), which the setup page no longer starts
+(slice 4 of A1131bc removes it), Start again and publication-only
 Finish (`apps/server/src/setup-first-fiscal-api.ts`, `setup-first-backup-api.ts`). Start again runs
 over HTTPS only: it deletes the interrupted attempt, keeping no record of the invoice series names
 it chose, and ends the process so its supervisor starts it again.
