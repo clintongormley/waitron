@@ -7,7 +7,7 @@ import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import { setLocale, t as say } from "./i18n/t.js";
 import { shellEn } from "./i18n/strings/shell.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
-import { initial } from "../test/first-setup-browser.js";
+import { initial, venue } from "../test/first-setup-browser.js";
 import {
   click,
   missingDatabaseFixture,
@@ -362,10 +362,24 @@ it("Cancel after Recover beside a stopped recovery draws the on-load line again,
 
 /** A box that restarts after the wipe: unreachable while `down`, then answering no setup once wiped. */
 function restartingBox() {
-  const box = { down: false, wiped: false, claimedAgain: false };
+  const box = {
+    down: false,
+    wiped: false,
+    claimedAgain: false,
+    inspectionDown: false,
+    offeringsDown: false,
+  };
   return {
     box,
     options: {
+      intercept: (path: string) => {
+        if (box.offeringsDown && path.endsWith("/offerings")) {
+          box.offeringsDown = false;
+          return Promise.reject(new TypeError("network unavailable"));
+        }
+        if (box.inspectionDown && path.endsWith("/resolution"))
+          return Promise.reject(new TypeError("Failed to fetch"));
+      },
       startAgain: () => {
         box.wiped = true;
         return Response.json({ restarting: true });
@@ -509,4 +523,94 @@ it("from Join or recover, Restore from backup opens the fresh-box restore screen
   await expect.poll(() => q(app, "screen-restore")).not.toBeNull();
   expect(oldRecoveryMounted(app)).toBe(false);
   expect(requests.some((r) => OLD_RECOVERY_ROUTE.test(r.path))).toBe(false);
+});
+
+it("a Reconnect that finds the setup claimed and then cannot read it still forgets the choice", async () => {
+  const { box, options } = restartingBox();
+  const { app } = await wipeFixture(options);
+  await confirmWipe(app, "recover");
+  box.claimedAgain = true;
+  box.inspectionDown = true;
+  await click(app, "reconnect-first");
+  await expect.poll(() => q<WtButton>(app, "reconnect-first")?.disabled).toBe(false);
+  await settled(app);
+  expect(q(app, "screen-role")).toBeNull();
+  box.claimedAgain = false;
+  box.inspectionDown = false;
+  await click(app, "reconnect-first");
+  await expect.poll(() => q(app, "screen-first-owner")).toBeNull();
+  expect(q(app, "screen-venue")).not.toBeNull();
+});
+
+/** From the setup choice screen, a Live venue whose offerings read fails, then Reconnect. */
+async function failedOfferingReconnect(app: SetupApp, box: { offeringsDown: boolean }) {
+  await expect.poll(() => q(app, "screen-mode")).not.toBeNull();
+  const emit = (name: string, detail?: unknown) =>
+    app
+      .shadowRoot!.querySelector("main")!
+      .dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
+  box.offeringsDown = true;
+  emit("setup-patch", { patch: { mode: "live", venue } });
+  emit("setup-goto", { screen: "venue" });
+  await expect.poll(() => q(app, "screen-venue")).not.toBeNull();
+  emit("setup-advance");
+  await expect.poll(() => q(app, "reconnect-first")).not.toBeNull();
+  await settled(app);
+  await click(app, "reconnect-first");
+  await expect.poll(() => q(app, "screen-first-owner")).toBeNull();
+}
+
+it("the choice is used once: after Start again's landing, a Reconnect after a failed offering opens the venue screen", async () => {
+  const { box, options } = restartingBox();
+  const { app } = await wipeFixture(options);
+  await confirmWipe(app, "start-again");
+  await click(app, "reconnect-first");
+  await failedOfferingReconnect(app, box);
+  expect(q(app, "screen-venue")).not.toBeNull();
+  expect(q(app, "screen-mode")).toBeNull();
+});
+
+it("taking the page off the screen forgets the choice: put back, Reconnect opens the venue screen", async () => {
+  const { options } = restartingBox();
+  const { app } = await wipeFixture(options);
+  await confirmWipe(app, "recover");
+  const host = app.parentElement!;
+  app.remove();
+  host.append(app);
+  await expect.poll(() => q(app, "reconnect-first")).not.toBeNull();
+  await click(app, "reconnect-first");
+  await expect.poll(() => q(app, "screen-first-owner")).toBeNull();
+  expect(q(app, "screen-venue")).not.toBeNull();
+  expect(q(app, "screen-role")).toBeNull();
+});
+
+it("after setup.start_again_incomplete, a Reconnect that finds the setup claimed again forgets the choice", async () => {
+  const { box, options } = restartingBox();
+  const { app } = await wipeFixture({
+    ...options,
+    startAgain: () => {
+      box.wiped = true;
+      return Response.json(
+        { error: { code: "setup.start_again_incomplete", params: {} } },
+        { status: 409 },
+      );
+    },
+  });
+  await click(app, "recover-backup");
+  await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
+  await userEvent.click(tick(app));
+  await click(app, "confirm-recover");
+  await expect
+    .poll(() => formErrors(app))
+    .toContain(shellEn["shell.first_setup.start_again_incomplete"]);
+  await settled(app);
+  box.claimedAgain = true;
+  await click(app, "reconnect-first");
+  await expect.poll(() => q<WtButton>(app, "reconnect-first")?.disabled).toBe(false);
+  await settled(app);
+  expect(q(app, "screen-role")).toBeNull();
+  box.claimedAgain = false;
+  await click(app, "reconnect-first");
+  await expect.poll(() => q(app, "screen-first-owner")).toBeNull();
+  expect(q(app, "screen-venue")).not.toBeNull();
 });

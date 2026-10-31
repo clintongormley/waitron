@@ -69,12 +69,16 @@ export async function wipeFixture(
     status?: (path: string, headers: Headers) => Response | undefined;
     locale?: "en-GB" | "es-ES";
     theme?: "light" | "dark";
+    /** Answers any request before the fixture's own answers, when it returns a response. */
+    intercept?: NonNullable<Parameters<typeof wizardApi>[0]>["intercept"];
   } = {},
 ) {
   let inspections = 0;
   const fixture = wizardApi({
     claimed: true,
-    intercept(path, _body, headers) {
+    intercept(path, body, headers) {
+      const custom = options.intercept?.(path, body, headers);
+      if (custom !== undefined) return custom;
       if (path.endsWith("/first-setup/status")) {
         const answer = options.status?.(path, headers);
         if (answer !== undefined) return answer;

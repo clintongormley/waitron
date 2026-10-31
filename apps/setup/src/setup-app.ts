@@ -1148,6 +1148,7 @@ export class SetupApp extends LitElement {
         throw error;
       inspect = true;
     }
+    if (inspect || session.recoveryRequired || session.state) this.#afterWipe = undefined;
     if ((inspect || session.recoveryRequired) && !session.state) {
       const inspection = await this.api.inspectFirstSetupResolution();
       const activity = await this.#readActivity();
@@ -1479,7 +1480,7 @@ export class SetupApp extends LitElement {
       this.#firstSession = undefined;
     } catch (error) {
       if (!current()) return;
-      // The box has asked for its own restart, and the start finishes the deletion.
+      // The box has asked for its own restart, and the start tries to finish the deletion.
       if ((error as { code?: unknown })?.code === "setup.start_again_incomplete")
         this.#afterWipe = this.firstWipeKind;
       const refusal = wipeRefusal(error);
