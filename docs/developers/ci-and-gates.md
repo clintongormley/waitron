@@ -706,17 +706,22 @@ include waiting to be loaded (above). It warns and never fails the job.
 Set `WAITRON_TEST_TRACE_FILES` to comma-separated paths relative to the package,
 matching the reporter's file names exactly. Selected files emit `[file-progress]
 detail` JSON lines at collection completion, case start/end and hook start/end.
-Each line includes the project, phase and monotonic timestamp; case and hook
-lines also name their test or suite. Names are JSON-escaped so an embedded newline
-cannot masquerade as another file-progress line. An unset or empty selector emits
-no detail lines. Existing file start/end lines still feed the outer deadline's
-unfinished-file report.
+Each detail line includes the file, phase and monotonic timestamp. The file label
+includes the project when it has a name. Case lines name the test; hook lines name
+their test or suite when one is available, so a whole-file hook may have no name.
+Names are JSON-escaped so an embedded newline cannot masquerade as another
+file-progress line. An unset or empty selector emits no detail lines. Existing file
+start/end lines still feed the outer deadline's unfinished-file report.
 
 The dashboard shard selects A1230's three unfinished files and sets `DEBUG=pw:api`
 for Playwright's API log. This records reported phases and browser API calls; it
 does not sample a blocked renderer's JavaScript stack. Read the last event for
-each file alongside the last browser call before assigning a cause. A1230's
-historical CI wait remains unknown; see the [open investigation](../backlog/ci.md#a1230-dashboard-shard-1s-blocked-operation-is-unknown).
+each file alongside the last browser call before assigning a cause. A hook that
+throws can emit `hook-start` without `hook-end`. Check later events before treating
+that unmatched start as a stall: in the native Vitest fixture used for the
+31 October 2026 retrospective review, the throwing `beforeEach` was followed by
+`afterEach` and a failed `case-end`. A1230's historical CI wait remains unknown;
+see the [open investigation](../backlog/ci.md#a1230-dashboard-shard-1s-blocked-operation-is-unknown).
 
 Run `pnpm exec vitest run scripts/vitest-file-progress.test.mjs` for selector,
 collection, case and hook output checks. Existing reporter checks retain the
