@@ -2436,7 +2436,7 @@ describe("the readers' status reads", () => {
 
 describe("who carries each card reader, and its equipment label", () => {
   const READER_ID = "7d2c9a10-5b3e-4f61-8a2d-1c0e9b8a7f65";
-  const carried: ReaderRow = { ...READERS[0]!, id: READER_ID, name: "Terraza" };
+  const carried: ReaderRow = { ...READERS[0]!, id: READER_ID, name: "Terrace" };
 
   it("names the device carrying each reader and who is signed in on it", async () => {
     const { el } = await mount(
@@ -2445,7 +2445,7 @@ describe("who carries each card reader, and its equipment label", () => {
         listReaderHolders: vi.fn().mockResolvedValue([
           {
             readerId: READER_ID,
-            holder: { deviceId: "d2", deviceName: "Móvil 2", personName: "Ana" },
+            holder: { deviceId: "d2", deviceName: "Mobile 2", personName: "Ana" },
             paymentInProgressDeviceIds: [],
           },
         ]),
@@ -2461,7 +2461,7 @@ describe("who carries each card reader, and its equipment label", () => {
     };
     expect(await holderOf(READER_ID)).toBe(
       `${t("payments.reader_holder")}: ${t("equipment.holder_with_person")
-        .replace("{device}", "Móvil 2")
+        .replace("{device}", "Mobile 2")
         .replace("{person}", "Ana")}`,
     );
     expect(await holderOf("r-1")).toBe(
@@ -2482,7 +2482,7 @@ describe("who carries each card reader, and its equipment label", () => {
       q(el, "dashboard-equipment-label")!.shadowRoot!.querySelector(selector)!.textContent!.trim();
     const code = formatEquipmentCode("reader", READER_ID);
     expect(inLabel("[data-test=equipment-label-code]")).toBe(code);
-    expect(inLabel("[data-test=equipment-label-name]")).toBe("Terraza");
+    expect(inLabel("[data-test=equipment-label-name]")).toBe("Terrace");
     expect(await decodeQrImage((label() as HTMLImageElement).src)).toBe(code);
   });
 });
