@@ -185,8 +185,8 @@ export const ALERT_MESSAGES: Readonly<
     variants: {
       unverified: {
         mode: "replace",
-        en: "The box asked to move its clock from {before:minute} to {after:minute} ({direction:clock_step_direction} {stepMs:duration}), but could not confirm the change took. Check the box's clock on the Box status page.",
-        es: "El equipo pidió mover su reloj de {before:minute} a {after:minute} ({direction:clock_step_direction} {stepMs:duration}), pero no ha podido confirmar que el cambio se aplicara. Comprueba la hora del equipo en Estado del equipo.",
+        en: "The box tried to set its clock but could not confirm the change took. Its clock read {before:minute} before and {after:minute} after ({direction:clock_step_direction} {stepMs:duration}). Check the box's clock on the Box status page.",
+        es: "El equipo intentó poner su reloj, pero no ha podido confirmar que el cambio se aplicara. Su reloj marcaba {before:minute} antes y {after:minute} después ({direction:clock_step_direction} {stepMs:duration}). Comprueba la hora del equipo en Estado del equipo.",
       },
       byStaff: {
         mode: "replace",
@@ -532,8 +532,6 @@ export const ALERT_WORDS: Readonly<
       es: "El reloj del equipo no se mantiene en hora. Comprueba su fecha y hora en Estado del equipo.",
     },
   },
-  // What confirmed the box's clock when payments restarted, by the `confirmedBy` param of
-  // `clock.behind_chain_restarted`.
   // `clock.corrected`'s direction; the reloj (masculine) is what moved, in Spanish.
   clock_step_direction: {
     words: {
@@ -542,6 +540,8 @@ export const ALERT_WORDS: Readonly<
     },
     otherwise: { en: "moved", es: "cambiado" },
   },
+  // What confirmed the box's clock when payments restarted, by the `confirmedBy` param of
+  // `clock.behind_chain_restarted`.
   clock_confirmed_by: {
     words: {
       authority: { en: "the tax agency's time", es: "la hora de Hacienda" },

@@ -414,6 +414,15 @@ describe("a step of the box's clock during a payment stop", () => {
   });
 });
 
+it("names no record when the after reading is exactly a minute behind the latest record", async () => {
+  await sale(T);
+  await step(request(T - M));
+
+  const [row] = await rows();
+  expect(row).toMatchObject({ registroId: null, recordAt: null });
+  expect(incidentsOf("clock.behind_chain_restarted")).toEqual([]);
+});
+
 describe("a step of the box's clock with no payment stop", () => {
   it("writes a row naming no check and no record when nothing stops and no check is open", async () => {
     await sale(R - 5 * M);
@@ -455,6 +464,29 @@ describe("a step of the box's clock with no payment stop", () => {
     expect(row!.checkId).toBe(checkId);
     expect(row!.registroId).toBeNull();
     expect(count("clock_checks")).toBe(1);
+  });
+
+  it("with a check still open, names the latest record when an administrator steps the clock back past it", async () => {
+    await sale(T);
+    const checkId = await openCheck(R);
+    const before = T + 5 * M;
+    const A = T - H;
+    await step(
+      request(A, {
+        before: reading(before),
+        source: "admin",
+        admin: LUIS,
+        witnesses: [],
+        stepMs: A - before,
+      }),
+    );
+
+    const [row] = await rows();
+    expect(row).toMatchObject({ checkId, recordAt: new Date(T) });
+    expect(row!.registroId).not.toBeNull();
+    expect(incidentsOf("clock.behind_chain_restarted").map((i) => i.params)).toMatchObject([
+      { confirmedBy: "admin", person: "Luis", clockAt: iso(A), lastRecordAt: iso(T) },
+    ]);
   });
 
   it("records an unusable clock's step with no check, no record named and nothing listed, leaving an open check open", async () => {
@@ -522,4 +554,16 @@ it("marks the open clock.corrected handled by the system when a second step is r
   expect(corrected[0]).toMatchObject({ acknowledged_at: iso(second), acknowledged_by: null });
   expect(corrected[1]).toMatchObject({ acknowledged_at: null });
   expect(corrected[1]!.params).toMatchObject({ after: iso(second) });
+});
+
+it("never marks the open clock.corrected handled before it was detected, when a second step goes back", async () => {
+  await sale(R - 5 * M);
+  const first = R + H;
+  await step(request(first));
+  const second = first - 30 * M;
+  await step(request(second, { before: reading(first + M), stepMs: second - first - M }));
+
+  const corrected = incidentsOf("clock.corrected");
+  expect(corrected[0]).toMatchObject({ acknowledged_at: iso(first) });
+  expect(corrected[1]).toMatchObject({ acknowledged_at: null });
 });
