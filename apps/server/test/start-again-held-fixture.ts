@@ -262,7 +262,7 @@ const noConfirmations = (f: Held) =>
   });
 
 /** A held setup with its venue.db gone, and the modules.json activation wrote, which the missing path refuses. */
-async function missingHeldDatabase() {
+async function missingHeldDatabase(): Promise<Held & { service: undefined }> {
   const f = await heldSetup({ recovery: false });
   for (const name of ["venue.db", "venue.db-wal", "venue.db-shm"])
     await rm(join(f.roots.venueDir, name), { force: true });
