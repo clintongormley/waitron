@@ -22,21 +22,21 @@ export const BOX_EMAIL_WORDS = {
   "clock.unusable": {
     en: {
       subject: "{venue}: sales can't be recorded because the box's clock is wrong",
-      text: "The box at {venue} has its clock set before 28 October 2024, so no sale can be recorded for the tax agency until the clock is right. Connect the box to the internet; if its clock does not correct itself, ask whoever installed the box to set it.",
+      text: "The box at {venue} has its clock set before 28 October 2024, so no sale can be recorded for the tax agency until the clock is right. With the internet the box puts it right by itself. Otherwise an administrator can set it from their own phone or computer on the Box status page (in the dashboard, Settings → Box status); if the box has just started, any staff member can do it from a till with “Check the time”.",
     },
     es: {
       subject: "{venue}: no se pueden registrar ventas porque la hora del equipo es incorrecta",
-      text: "El equipo de {venue} tiene la hora puesta antes del 28 de octubre de 2024, así que no se puede registrar ninguna venta en Hacienda hasta que la hora sea correcta. Conecta el equipo a internet; si la hora no se corrige sola, pide a quien instaló el equipo que la ponga.",
+      text: "El equipo de {venue} tiene la hora puesta antes del 28 de octubre de 2024, así que no se puede registrar ninguna venta en Hacienda hasta que la hora sea correcta. Con internet, el equipo la corrige solo. Si no, un administrador puede ponerla en hora desde su propio móvil u ordenador en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo); si el equipo acaba de arrancar, cualquier empleado puede hacerlo desde una caja con «Comprobar la hora».",
     },
   },
   "clock.behind_chain": {
     en: {
       subject: "Payments stopped at {venue}: the box's clock reads earlier than its last sale",
-      text: "The box's clock ({clockAt}) reads earlier than its last recorded sale ({lastRecordAt}). Since then no device can take payment. Orders can still be taken and sent to the kitchen. What to do: • If the box's clock is wrong (usual after a power cut): connect the box to the internet so it corrects itself, or call whoever installed it. • If you think the box's clock is right: look at the Box status page (in the dashboard, Settings → Box status), where an administrator can confirm the clock with their own phone; with the internet or two tills switched on, the box does it by itself.",
+      text: "The box's clock ({clockAt}) reads earlier than its last recorded sale ({lastRecordAt}). Since then no device can take payment. Orders can still be taken and sent to the kitchen. What to do: • If the box's clock is wrong (usual after a power cut): with the internet the box puts it right by itself; otherwise an administrator can set it from their own phone or computer on the Box status page (in the dashboard, Settings → Box status), and if the box has just started any staff member can do it from a till with “Check the time”. • If you think the box's clock is right: an administrator can confirm it on the same page; with the internet the box does it by itself, and so do two tills that agree with it — except just after a start, when a staff member confirms it from a till with “Check the time”.",
     },
     es: {
       subject: "No se puede cobrar en {venue}: la hora del equipo es anterior a la última venta",
-      text: "La hora del equipo ({clockAt}) es anterior a la última venta registrada ({lastRecordAt}). Desde entonces ningún dispositivo puede cobrar. Se pueden seguir tomando pedidos y enviándolos a cocina. Qué hacer: • Si la hora del equipo está mal (lo normal tras un corte de luz): conecta el equipo a internet para que la corrija, o llama a quien lo instaló. • Si crees que la hora del equipo es correcta: mira Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo), donde un administrador puede confirmar la hora con su propio móvil; con internet o dos cajas encendidas, el equipo lo hace solo.",
+      text: "La hora del equipo ({clockAt}) es anterior a la última venta registrada ({lastRecordAt}). Desde entonces ningún dispositivo puede cobrar. Se pueden seguir tomando pedidos y enviándolos a cocina. Qué hacer: • Si la hora del equipo está mal (lo normal tras un corte de luz): con internet, el equipo la corrige solo; si no, un administrador puede ponerla en hora desde su propio móvil u ordenador en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo), y si el equipo acaba de arrancar cualquier empleado puede hacerlo desde una caja con «Comprobar la hora». • Si crees que la hora del equipo es correcta: un administrador puede confirmarla en esa misma página; con internet, el equipo lo hace solo, y también dos cajas que coincidan con él, salvo justo después de arrancar, cuando un empleado la confirma desde una caja con «Comprobar la hora».",
     },
   },
 } as const satisfies Record<string, Record<"en" | "es", { subject: string; text: string }>>;

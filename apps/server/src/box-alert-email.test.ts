@@ -67,6 +67,21 @@ describe("boxEmailMessage", () => {
   });
 });
 
+describe("the clock stop emails", () => {
+  it.each(["clock.unusable", "clock.behind_chain"] as const)(
+    "%s sends nobody to whoever installed the box, and names the pages and button that fix it",
+    (code) => {
+      const { en, es } = BOX_EMAIL_WORDS[code];
+      expect(en.text).not.toMatch(/install/i);
+      expect(es.text).not.toMatch(/instal/i);
+      expect(en.text).toContain("Settings → Box status");
+      expect(es.text).toContain("Ajustes → Estado del equipo");
+      expect(en.text).toContain("“Check the time”");
+      expect(es.text).toContain("«Comprobar la hora»");
+    },
+  );
+});
+
 describe("boxEmailMessage for a clock stop", () => {
   const PARAMS = {
     clockAt: "2025-03-14T08:12:00.000Z",
@@ -79,7 +94,7 @@ describe("boxEmailMessage for a clock stop", () => {
     expect(boxEmailMessage("clock.behind_chain", "en", "Corner Bistro", PARAMS)).toEqual({
       subject:
         "Payments stopped at Corner Bistro: the box's clock reads earlier than its last sale",
-      text: "The box's clock (14/03/2025 09:12) reads earlier than its last recorded sale (18/10/2026 23:40). Since then no device can take payment. Orders can still be taken and sent to the kitchen. What to do: • If the box's clock is wrong (usual after a power cut): connect the box to the internet so it corrects itself, or call whoever installed it. • If you think the box's clock is right: look at the Box status page (in the dashboard, Settings → Box status), where an administrator can confirm the clock with their own phone; with the internet or two tills switched on, the box does it by itself.",
+      text: "The box's clock (14/03/2025 09:12) reads earlier than its last recorded sale (18/10/2026 23:40). Since then no device can take payment. Orders can still be taken and sent to the kitchen. What to do: • If the box's clock is wrong (usual after a power cut): with the internet the box puts it right by itself; otherwise an administrator can set it from their own phone or computer on the Box status page (in the dashboard, Settings → Box status), and if the box has just started any staff member can do it from a till with “Check the time”. • If you think the box's clock is right: an administrator can confirm it on the same page; with the internet the box does it by itself, and so do two tills that agree with it — except just after a start, when a staff member confirms it from a till with “Check the time”.",
     });
   });
 

@@ -3619,7 +3619,7 @@ export const en = {
   "box_status.clock.synced": "Kept in time over the internet",
   "box_status.clock.not_synced": "Not kept in time over the internet",
   "box_status.clock.behind_chain_fix":
-    "Connect the box to the internet so it can correct its clock, or call whoever installed it.",
+    "With the internet the box corrects its clock by itself; otherwise an administrator can use “Check with this device's time”.",
   "box_status.clock.admin.open": "Check with this device's time",
   "box_status.clock.admin.times": "The box's clock says {box}. This device says {device}.",
   "box_status.clock.admin.agree": "They agree. Confirm that the box's clock is right?",
@@ -7389,7 +7389,7 @@ export const es: Record<StringKey, string> = {
   "box_status.clock.synced": "Se pone en hora por internet",
   "box_status.clock.not_synced": "No se pone en hora por internet",
   "box_status.clock.behind_chain_fix":
-    "Conecta el equipo a internet para que corrija la hora, o llama a quien lo instaló.",
+    "Con internet, el equipo corrige la hora solo; si no, un administrador puede usar «Comprobar con la hora de este dispositivo».",
   "box_status.clock.admin.open": "Comprobar con la hora de este dispositivo",
   "box_status.clock.admin.times":
     "El reloj del equipo marca {box}. Este dispositivo marca {device}.",

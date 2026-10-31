@@ -641,6 +641,17 @@ describe("payments stopped while the box's clock reads behind its last sale", ()
   });
 });
 
+describe("the stop's advice on the Clock row", () => {
+  it.each([
+    ["en", /install/i],
+    ["es", /instal/i],
+  ] as const)("names the administrator's check, not the installer (%s)", (locale, installer) => {
+    setLocale(locale);
+    expect(t("box_status.clock.behind_chain_fix")).toContain(t("box_status.clock.admin.open"));
+    expect(t("box_status.clock.behind_chain_fix")).not.toMatch(installer);
+  });
+});
+
 describe("the Clock row while payments are stopped for the clock", () => {
   const CLOCK_BEHIND = notice("clock.behind_chain", "error", {
     clockAt: "2025-03-14T09:12:00.000Z",

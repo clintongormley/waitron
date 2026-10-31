@@ -440,6 +440,20 @@ it("never says the payments check may not look at a payment again", () => {
   }
 });
 
+describe("the box's clock set before the earliest date", () => {
+  it.each([
+    ["en", "en-GB", /install/i],
+    ["es", "es-ES", /instal/i],
+  ] as const)(
+    "points %s readers at the Box status page, not the installer",
+    (lang, locale, installer) => {
+      const text = ALERT_MESSAGES["clock.unusable"]![lang];
+      expect(text).toContain(t("nav.box_status", locale));
+      expect(text).not.toMatch(installer);
+    },
+  );
+});
+
 describe("the box's clock reading behind its last sale", () => {
   const params = { clockAt: "2025-03-14T09:12:00.000Z", lastRecordAt: "2026-10-22T19:43:00.000Z" };
 

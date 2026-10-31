@@ -2622,6 +2622,20 @@ src/box-alert-email.duty.test.ts`; `memory_pressure | grep free`, then `pnpm --f
 @waitron/dashboard exec vitest run src/i18n/alerts.test.ts`; `pnpm exec vitest run
 scripts/alert-codes.test.ts`.
 
+### Task 13b's departures (2026-10-31)
+
+- **English quotes the till's button as “Check the time”**, as Task 13a's till strings do (not «…»,
+  which the plan's words used); Spanish keeps «Comprobar la hora».
+- **The Box status page's own Clock-row advice changed too** (`box_status.clock.behind_chain_fix`,
+  `apps/dashboard/src/i18n/strings.ts`), which still said "call whoever installed it": it now reads
+  "With the internet the box corrects its clock by itself; otherwise an administrator can use “Check
+  with this device's time”." Its new case is in `box-status-rows.test.ts`. The guides
+  (`apps/server/src/guide/{en,es}/box-status.md`, the Clock row's quoted words and "call whoever
+  installed the box: the box has no page for setting its clock") are this plan's guide task's to
+  rewrite.
+- **The email cases test for `install`/`instal` as a stem**, so "installer" is caught as well as
+  "installed".
+
 ### Task 14: Backups pruned safely across a step
 
 **Goal.** Decision 11 for `pruneBackend` (`apps/server/src/backup-sweep.ts:327-351`), which today
