@@ -526,7 +526,12 @@ Filled from the job's log by the lead; each row gives the run's URL and the prin
    host's own limit ends a stuck set first and the client reads its answer or the closed
    connection; round 2, minor 2); a missing socket, a refusal, a malformed reply or a timeout
    answers `{ available: false, reason }`, never a throw. A timed-out set is still verified by the
-   correction (decision 6): the clock may have moved.
+   correction (decision 6): the clock may have moved. **Built (Task 5 review):** a connection that
+   breaks, or closes with no answer, after the request was sent answers `lost`, not `missing`; Task
+   10 treats `lost` exactly as `timeout` (verified, `verified: false` when the clock did not move to
+   the target), and only `missing` means nothing was asked of the host. `missing` carries the
+   socket error's code as `detail`; a requester is sent with non-ASCII escaped and refused unsent
+   over 512 bytes.
 5. **The time service is watched.** `checkTimeHealth` reads `clockStatus()` instead of running
    `timedatectl` itself, keeping its answer's shape (`synced`, `source`, `warn`): `source:
    "timedatectl"` stays true, since the host reads `timedatectl`. Both `/api/box/health` and
