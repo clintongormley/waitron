@@ -63,13 +63,13 @@ async function openBillFor(
     .leftJoin(workingOrders, eq(workingOrders.id, parties.mainBillId))
     .where(eq(parties.id, partyId));
   if (party?.state !== "open") throw new AppError("party.not_open", { partyId });
-  // Task 6c removes this refusal with its party-main-bill.test.ts rewrite.
+  // Task 6c removes this.
   if (party.mainBillId !== null && (party.billStatus !== "open" || party.billPartyId !== partyId))
     throw new AppError("tab.not_open", { tabId: party.mainBillId });
   const open = await firstOpenBillOf(tx, partyId);
   if (open !== null) return open;
   const billId = await insertPartyBill(tx, cfg, partyId);
-  // Task 6c removes this main-bill write with its party-main-bill.test.ts rewrite.
+  // Task 6c removes this.
   await setMainBill(tx, partyId, billId);
   if (revisionMoved !== true) await bumpPartyRevision(tx, partyId);
   return billId;

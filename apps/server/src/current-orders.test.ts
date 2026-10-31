@@ -79,6 +79,7 @@ import { deviceRequestCfg } from "./testing/session-device.js";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { createCourse } from "./kitchen.js";
 import { deleteCourse } from "./course-delete.js";
+import { insertPartyBill } from "./parties.js";
 
 // The release reminder (spec §4 "Remind staff to release the next group"; plan D11), its snooze,
 // and the Current orders read a waiter serves from (spec §4; D8, D18, D19).
@@ -289,10 +290,11 @@ async function group(
   partyId: string,
   release: GroupRelease,
   lines: GroupLine[],
+  billId?: string,
 ): Promise<{ id: string; lineIds: string[] }> {
   const command = await args(partyId);
   const { groups } = await inTx((tx) =>
-    submitGroups(tx, v.cfg, partyId, { ...command, groups: [{ release, lines }] }),
+    submitGroups(tx, v.cfg, partyId, { ...command, billId, groups: [{ release, lines }] }),
   );
   return { id: groups[0]!.id, lineIds: groups[0]!.lineIds };
 }
@@ -1296,12 +1298,19 @@ describe("readCurrentOrders (spec §4)", () => {
       lines: [],
       tender: { method: "cash", amount: "18.00" },
     });
-    const mains = await group(v, s.partyId, "hold", [
-      {
-        ...line(v, "steak"),
-        extras: [{ listId: v.extrasListId, picks: [{ productId: v.sauceId, quantity: 1 }] }],
-      },
-    ]);
+    const laterBill = await inTx((tx) => insertPartyBill(tx, v.cfg, s.partyId));
+    const mains = await group(
+      v,
+      s.partyId,
+      "hold",
+      [
+        {
+          ...line(v, "steak"),
+          extras: [{ listId: v.extrasListId, picks: [{ productId: v.sauceId, quantity: 1 }] }],
+        },
+      ],
+      laterBill,
+    );
     const laterTab = (await linesByName(s.partyId)).find((l) => l.name === "steak")!.workingOrderId;
     expect(laterTab).not.toBe(s.tabId);
     await inTx((tx) => addTabRound(tx, v.cfg, laterTab, [line(v, "flan")]));

@@ -684,7 +684,9 @@ task's red run; a red assertion not on this list that is not kind B/R/W/S/F unde
 | `apps/server/src/adjustments-report.test.ts:123`, `attendance-draft-events.test.ts:59`, `:96`, `till-api.drafts.test.ts:183` (read `parties.mainBillId` to find the party's bill) | S | `firstOpenBillOf(tx, partyId)` (Task 6a); every `expect` identical | §3.4 | 6c |
 | `apps/server/src/tabs.test.ts:1069` (`party: objectContaining({ mainBillId: tabId })`) | W | `openingBillId: tabId` | D7 | 6c |
 | `apps/server/src/party-main-bill.test.ts` (all main-bill cases, `:75-226`, `:235-285`, `:343-466`) | B | rewritten case by case: seating opens Bill 1 named in `openingBillId`; a send names its bill; after paying, `createPartyBill` makes the next bill; a send to a paid/other/stale bill refuses with rows compared before/after (kept); every non-main-bill case unchanged; `:157` and `:356-358` keep "moves the party revision once" | §3.4, Review focus 4 | 6c |
-| Cases in any group-submit/draft-command user that go red at Task 6a because the main bill was null while another open bill existed (the old helper made a new bill; the new one picks the existing lowest-numbered open bill) | S | the case names the bill the old helper would have made: its setup calls `insertPartyBill` and passes that id; every `expect` byte-identical | D1, I5 | 6a |
+| Cases in any group-submit/draft-command user whose sent bill changes at Task 6a (red or not) because the main bill was null while another open bill existed (the old helper made a new bill; the new one picks the existing lowest-numbered open bill) | S | the case names the bill the old helper would have made: its setup calls `insertPartyBill` and passes that id; every `expect` byte-identical | D1, I5 | 6a |
+| `apps/server/src/current-orders.test.ts:1279` ("…across a paid bill, a split one and a later one": its mains, sent with no bill after the first bill was paid, landed on the split bill, so the case read two bills, not three) | S | the setup makes the later bill with `insertPartyBill` and sends the mains to it (the file's `group()` helper gains an optional `billId`); every `expect` byte-identical | D1, I5; Task 6a review I1 | 6a |
+| The seven `expect((await partyRow(…)).mainBillId).toBe(<the bill the helper made>)` assertions that rest on Task 6a's kept `setMainBill`: `parties.test.ts:662`, `:767`; `party-move-bill.test.ts:774`, `:1218`; `party-table-actions.test.ts:682` (two cases), `:1181` | B | decided at Task 6c (the review offers, as an example: the order's bill is the party's, open, and numbered next after the party's existing bills, read with `numbersOf`) | §3.4; Task 6a review M3 | 6c |
 | `apps/server/src/party-bill-actions.test.ts:690`, `:736` (merge keeps/moves the main bill) | B | the explicit merge's surviving bill keeps its number; no main bill | §3.4 | 6b |
 | `apps/server/src/parties.test.ts`, `till-api.parties.test.ts:807-821`, and any `TableParty`/floor whole-shape pin | W | `mainBillId` → `openingBillId` | D7 | 6c |
 | `scripts/behavioural-triggers.test.ts` `EXPECTED_TRIGGERS` (`:158-159`) and `describe("working_orders_release_main_bill")` (`:1544-1590`) | **W, B, Q5 item 3** | the two names leave the list; the describe becomes "the main bill is gone": `parties` has no `main_bill_id` column (`pragma_table_info`) and no trigger's SQL names `main_bill` (`sqlite_master`) | §3.4 | 7 |
@@ -1203,10 +1205,12 @@ party's `firstOpenBillOf` read instead of `parties.mainBillId`); `testing/draft-
 
 **The one behaviour difference, and what it does to tests.** When the main bill is null but the
 party still has an open bill (after the main bill moved away or was presented), the old helper
-made a NEW bill; the new one picks the existing lowest-numbered open bill. A case that goes red
-for that reason is re-expressed (kind S, its own Changed-checks row with file:line): its setup
-calls `insertPartyBill` and passes that id, which is exactly what the old helper did, and every
-`expect` stays byte-identical. A red case for any other reason is a stop.
+made a NEW bill; the new one picks the existing lowest-numbered open bill. Any case whose sent
+bill changes for that reason, whether or not it goes red, is re-expressed (kind S, its own
+Changed-checks row with file:line): its setup calls `insertPartyBill` and passes that id, which is
+exactly what the old helper did, and every `expect` stays byte-identical. A red case for any other reason is a stop. The one such case,
+`current-orders.test.ts:1279`, stayed green; the Task 6a review found it with a logging probe at
+the helper's choice points, not by a red run.
 
 - [x] Case `A803 fixtures:` in `apps/server/src/testing/party-bill-of.test.ts`: "names the
       lowest-numbered open bill, skipping paid and presented ones", "names none for a party whose
