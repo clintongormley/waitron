@@ -861,10 +861,10 @@ describe("device-profiles-screen printer lists", () => {
   }
 
   const venuePrinters = [
-    printer("pr1", "Barra"),
-    printer("pr2", "Cocina"),
-    printer("pr3", "Terraza"),
-    printer("pr4", "Vieja", false),
+    printer("pr1", "Bar"),
+    printer("pr2", "Kitchen"),
+    printer("pr3", "Terrace"),
+    printer("pr4", "Old", false),
   ];
 
   const listedProfile: DeviceProfile = {
@@ -920,9 +920,9 @@ describe("device-profiles-screen printer lists", () => {
       "pr3",
     ]);
     expect(switches(el, "receipt-printers").map((s) => s.label)).toEqual([
-      "Cocina",
-      "Barra",
-      "Terraza",
+      "Kitchen",
+      "Bar",
+      "Terrace",
     ]);
   });
 
@@ -974,10 +974,10 @@ describe("device-profiles-screen printer lists", () => {
     expect(button("receipt-printers-up-pr3")).toBeNull();
     // Each button names the printer it moves.
     expect(button("receipt-printers-up-pr1")!.getAttribute("aria-label")).toBe(
-      `${t("device_profiles.move_up")} Barra`,
+      `${t("device_profiles.move_up")} Bar`,
     );
     expect(button("receipt-printers-down-pr2")!.getAttribute("aria-label")).toBe(
-      `${t("device_profiles.move_down")} Cocina`,
+      `${t("device_profiles.move_down")} Kitchen`,
     );
   });
 
@@ -988,7 +988,7 @@ describe("device-profiles-screen printer lists", () => {
     });
     const slip = switches(el, "payment-slip-printers");
     expect(slip.map((s) => s.dataset.printerId)).toEqual(["pr4", "pr3", "pr1", "pr2"]);
-    expect(slip[0]!.label).toBe("Vieja (Deshabilitada)");
+    expect(slip[0]!.label).toBe("Old (Deshabilitada)");
     expect(switches(el, "receipt-printers").map((s) => s.dataset.printerId)).not.toContain("pr4");
     await expectSaveQuiet(el);
     rename(el);
