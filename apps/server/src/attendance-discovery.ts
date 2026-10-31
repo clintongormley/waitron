@@ -1,6 +1,6 @@
 import "./errors.js";
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, sql, type SQL } from "drizzle-orm";
 import { billPayments, type Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError, businessDayAt, businessDayBounds } from "@waitron/shared";
@@ -11,7 +11,7 @@ import {
   enqueueAttendanceDay,
   retireObsoleteRotaQuestions,
   processAttendanceDay,
-  timeEntries,
+  readLatestLiveEntry,
   type AttendanceDay,
   type AttendanceDayResult,
 } from "@waitron/workforce";
@@ -28,25 +28,7 @@ export async function reconcileAttendanceBeforeClock(
 ): Promise<void> {
   const state = await readTillClockState(tx, scope, at);
   if (state.state === "out" || state.activeLocationId !== scope.locationId) return;
-  const [start] = await tx
-    .select({ eventAt: timeEntries.eventAt })
-    .from(timeEntries)
-    .where(
-      and(
-        eq(timeEntries.personId, scope.personId),
-        sql`(${timeEntries.entryKind} = 'in' or (${timeEntries.entryKind} = 'correction'
-        and ${timeEntries.correctionStatus} = 'approved' and ${timeEntries.correctsEntryId} is null
-        and ${timeEntries.missingEntryKind} = 'in'))`,
-      ),
-    )
-    .orderBy(
-      desc(timeEntries.eventAt),
-      desc(timeEntries.recordedAt),
-      desc(timeEntries.nodeId),
-      desc(timeEntries.sequenceNo),
-      desc(timeEntries.id),
-    )
-    .limit(1);
+  const start = await readLatestLiveEntry(tx, scope.personId, { kind: "in" });
   if (!start) return;
   const clock = await readLocationClock(tx, scope.locationId);
   const businessDay = businessDayAt(clock, new Date(start.eventAt));
