@@ -463,7 +463,8 @@ until A977).
   stays selected, with the QR caption taken from the existing fiscal invoice fixture. The demo
   seed itself is A972's; script-suite test fixtures belong to A976 below. Low priority; A977
   cannot scan `apps/*/scripts` until the remaining demos and test-fixture cleanup land.
-- **A976 — remaining test-venue defaults.** The bill, party, boot, stream and clock fixtures
+- **A976 — remaining test-venue defaults.** Menu-period rule samples use English names.
+  The bill, party, boot, stream and clock fixtures
   listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
   still need English defaults, as do the split-extras venue's operation description and the
   adjustment venue's Spanish staff dish names, legal name and operation description.
@@ -587,6 +588,8 @@ until A977).
   Venue-service API-client zone samples use English names; request bodies and refusal checks remain.
   Routing-grid equal-name and ordinary hierarchy samples use English labels; explicit accent,
   natural-order and search fixtures and the Spanish locale check remain.
+  Menu-period rule samples use English names; whitespace trimming, invalid-name refusals,
+  weekday validation and overnight ranges retain their checks.
   Catalogue stored-name-key samples use English dish and template names; accented folding,
   variant renaming, batch boundaries and clash checks stay.
   Catalogue pricing samples use English dish and modifier text; pricing checks retain
@@ -820,6 +823,8 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   Venue-service API-client zone samples use English names; request bodies and refusal checks remain.
   Routing-grid equal-name and ordinary hierarchy samples use English labels; explicit accent,
   natural-order and search fixtures and the Spanish locale check remain.
+  Menu-period rule samples use English names; whitespace trimming, invalid-name refusals,
+  weekday validation and overnight ranges retain their checks.
   Catalogue stored-name-key samples use English dish and template names; accented folding,
   variant renaming, batch boundaries and clash checks stay.
   Catalogue pricing samples use English dish and modifier text; pricing checks retain

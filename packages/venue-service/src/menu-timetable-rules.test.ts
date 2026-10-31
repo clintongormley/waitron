@@ -3,9 +3,9 @@ import { menuPeriodName, parseMenuWeek as parseWeek } from "./menu-timetable-rul
 import { parseServiceDay } from "./service-day.js";
 import type { MenuSlot } from "./menu-timetable-types.js";
 
-const MANANAS = "11111111-1111-4111-8111-111111111111";
-const MADRUGADA = "22222222-2222-4222-8222-222222222222";
-const slot = (startsAt: string, endsAt: string, periodId = MANANAS): MenuSlot => ({
+const MORNING = "11111111-1111-4111-8111-111111111111";
+const EARLY_MORNING = "22222222-2222-4222-8222-222222222222";
+const slot = (startsAt: string, endsAt: string, periodId = MORNING): MenuSlot => ({
   periodId,
   startsAt,
   endsAt,
@@ -25,7 +25,7 @@ describe("a whole menu week", () => {
   });
 
   it("keeps overnight ranges inside their own business weekdays, Sunday into Monday included", () => {
-    const friday = slot("22:00", "02:00", MADRUGADA);
+    const friday = slot("22:00", "02:00", EARLY_MORNING);
     expect(parseMenuWeek(week({ 5: [friday], 6: [slot("01:00", "03:00")] })).slots[6]).toEqual([
       slot("01:00", "03:00"),
     ]);
@@ -61,7 +61,7 @@ describe("a whole menu week", () => {
 
 describe("a named period's name", () => {
   it("is trimmed, and a blank one is refused", () => {
-    expect(menuPeriodName("  Mañanas ")).toBe("Mañanas");
+    expect(menuPeriodName("  Mornings ")).toBe("Mornings");
     expect(() => menuPeriodName("   ")).toThrow(expect.objectContaining(invalid("name")));
     expect(() => menuPeriodName(7)).toThrow(expect.objectContaining(invalid("name")));
   });
