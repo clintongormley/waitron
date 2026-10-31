@@ -13,11 +13,13 @@ import type {
 import "@waitron/fiscal";
 import { authorizeManager } from "@waitron/identity";
 import {
+  codeOf,
   createErrorBoundary,
   readRawJsonBody,
   requireManagementSession,
 } from "@waitron/server-kit";
 import { AppError, diskFullIn, isUuid } from "@waitron/shared";
+import type { ClockSetRefusal, clockCorrection } from "./clock-correction.js";
 import {
   displayNameOf,
   readMisdatedEpisode,
@@ -52,6 +54,9 @@ export interface BoxHealthApiDeps {
     readBoot: () => BootReading;
     requestFromBox?: (c: Context) => boolean;
     devMode: boolean;
+    /** With a seat that records a step, mounts `POST /api/box/clock-set`; the confirmation takes
+     * its one-at-a-time turn. */
+    correction?: Pick<ReturnType<typeof clockCorrection>, "inTurn" | "set" | "steps">;
   };
 }
 
@@ -62,6 +67,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "clock.confirm_refused": 409,
   "clock.check_expired": 400,
+  "clock.set_refused": 409,
+  "clock.set_failed": 502,
   "clock.unusable": 409,
   "management.request_invalid": 400,
   "alert.not_found": 404,
@@ -117,8 +124,9 @@ async function requiredNameOf(tx: Transaction, personId: string): Promise<string
 }
 
 /** `GET /api/box/health`, `POST /api/box/free-space`, `GET /api/box/clock-misdated` and its
- * `/handled` and `/:incidentId/download`, all `system.manage`; `POST /api/box/clock-challenge`
- * and `POST /api/box/clock-confirm`, both `person.admin` and refused on the box itself. */
+ * `/handled` and `/:incidentId/download`, all `system.manage`; `POST /api/box/clock-challenge`,
+ * `POST /api/box/clock-confirm` and `POST /api/box/clock-set`, all `person.admin` and refused on
+ * the box itself. */
 export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger): void {
   const readRun = createErrorBoundary(STATUS, "box-health.failed");
   const freeRun = createErrorBoundary(STATUS, "box-free-space.failed");
@@ -243,61 +251,67 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
     steady: clockConfirm.steady,
     wall: () => clockConfirm.clock.now().instant.getTime(),
   });
-  // An administrator confirms the box's clock against a clock that is not the box's.
-  const refuseOnTheBox = (c: Context) => {
+  // An administrator confirms or sets the box's clock against a clock that is not the box's.
+  const refuseOnTheBox = (c: Context, code: "clock.confirm_refused" | "clock.set_refused") => {
     if (!clockConfirm.devMode && (clockConfirm.requestFromBox ?? requestFromBox)(c))
-      throw new AppError("clock.confirm_refused", { reason: "same_machine" });
+      throw new AppError(code, { reason: "same_machine" });
   };
   const authorizeAdmin = (tx: Transaction, sessionId: string) =>
     authorizeManager(tx, { managementSessionId: sessionId, permission: "person.admin" });
   const challengeRun = createErrorBoundary(STATUS, "box-clock-challenge.failed");
   app.post("/api/box/clock-challenge", (c) =>
     challengeRun(c, log, async () => {
-      refuseOnTheBox(c);
+      refuseOnTheBox(c, "clock.confirm_refused");
       const sessionId = requireManagementSession(c);
       await withTransaction(deps.db, (tx) => authorizeAdmin(tx, sessionId));
       const { challengeId, boxAt } = challenges.issue(sessionId);
       return c.json({ challengeId, boxAt: new Date(boxAt).toISOString() }, 200);
     }),
   );
+  const correction = clockConfirm.correction;
+  // Taken around the whole transaction, never inside it: a set in the turn waits for the write
+  // lock a transaction holds.
+  const inTurn = correction?.inTurn ?? (<T>(fn: () => Promise<T>) => fn());
   const confirmRun = createErrorBoundary(STATUS, "box-clock-confirm.failed");
   app.post("/api/box/clock-confirm", (c) =>
     confirmRun(c, log, async () => {
-      refuseOnTheBox(c);
+      refuseOnTheBox(c, "clock.confirm_refused");
       const sessionId = requireManagementSession(c);
       const { challengeId, deviceAt } = confirmBody(await readRawJsonBody<unknown>(c));
-      const confirmation = await withTransaction(deps.db, async (tx) => {
-        const { authorizedBy } = await authorizeAdmin(tx, sessionId);
-        // Before the reading: a witness noted after it would be left out as taken after it.
-        const witnesses = clockConfirm.witnesses();
-        const { instant, offsetMinutes } = clockConfirm.clock.now();
-        // Taken at the reading, so the round trip ends there on the steady clock.
-        const challenge = challenges.take(sessionId, challengeId);
-        if (challenge === null) throw new AppError("clock.check_expired", {});
-        const personName = await requiredNameOf(tx, authorizedBy);
-        // The device read its clock somewhere in the round trip: the box's time is taken at its
-        // midpoint, give or take half of it, counted back from this reading rather than from the
-        // challenge's, so a step of the box's clock since the challenge is compared too.
-        const halfMs = challenge.elapsedMs / 2;
-        const answer = await confirmClockStop(tx, {
-          reading: { instant, offsetMinutes },
-          boot: clockConfirm.readBoot(),
-          witnesses,
-          nodeId: clockConfirm.nodeId,
-          admin: {
-            personId: authorizedBy,
-            personName,
-            reading: {
-              boxAt: new Date(Math.round(instant.getTime() - halfMs)).toISOString(),
-              witnessAt: new Date(deviceAt).toISOString(),
-              uncertaintyMs: Math.ceil(halfMs),
+      const confirmation = await inTurn(() =>
+        withTransaction(deps.db, async (tx) => {
+          const { authorizedBy } = await authorizeAdmin(tx, sessionId);
+          // Before the reading: a witness noted after it would be left out as taken after it.
+          const witnesses = clockConfirm.witnesses();
+          const { instant, offsetMinutes } = clockConfirm.clock.now();
+          // Taken at the reading, so the round trip ends there on the steady clock.
+          const challenge = challenges.take(sessionId, challengeId);
+          if (challenge === null) throw new AppError("clock.check_expired", {});
+          const personName = await requiredNameOf(tx, authorizedBy);
+          // The device read its clock somewhere in the round trip: the box's time is taken at its
+          // midpoint, give or take half of it, counted back from this reading rather than from the
+          // challenge's, so a step of the box's clock since the challenge is compared too.
+          const halfMs = challenge.elapsedMs / 2;
+          const answer = await confirmClockStop(tx, {
+            reading: { instant, offsetMinutes },
+            boot: clockConfirm.readBoot(),
+            witnesses,
+            nodeId: clockConfirm.nodeId,
+            admin: {
+              personId: authorizedBy,
+              personName,
+              reading: {
+                boxAt: new Date(Math.round(instant.getTime() - halfMs)).toISOString(),
+                witnessAt: new Date(deviceAt).toISOString(),
+                uncertaintyMs: Math.ceil(halfMs),
+              },
             },
-          },
-        });
-        if (answer.confirmation === null)
-          throw new AppError("clock.confirm_refused", { reason: "not_stopped" });
-        return answer.confirmation;
-      });
+          });
+          if (answer.confirmation === null)
+            throw new AppError("clock.confirm_refused", { reason: "not_stopped" });
+          return answer.confirmation;
+        }),
+      );
       clockConfirm.clearWitnesses();
       return c.json(
         {
@@ -309,4 +323,73 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
       );
     }),
   );
+  if (correction === undefined || clockConfirm.backend.confirmClockStep === undefined) return;
+  const backend = clockConfirm.backend;
+  const setRun = createErrorBoundary(STATUS, "box-clock-set.failed");
+  app.post("/api/box/clock-set", (c) =>
+    setRun(c, log, async () => {
+      refuseOnTheBox(c, "clock.set_refused");
+      const sessionId = requireManagementSession(c);
+      const { authorizedBy, personName } = await withTransaction(deps.db, async (tx) => {
+        const { authorizedBy } = await authorizeAdmin(tx, sessionId);
+        return { authorizedBy, personName: await requiredNameOf(tx, authorizedBy) };
+      });
+      const { challengeId, deviceAt } = confirmBody(await readRawJsonBody<unknown>(c));
+      const witnesses = clockConfirm.witnesses();
+      const stepsSeen = correction.steps();
+      const reading = clockConfirm.clock.now();
+      const steadyMs = clockConfirm.steady();
+      const challenge = challenges.take(sessionId, challengeId);
+      if (challenge === null) throw new AppError("clock.check_expired", {});
+      // The device read its clock at the round trip's midpoint, give or take half of it.
+      const halfMs = challenge.elapsedMs / 2;
+      const boxAtMs = reading.instant.getTime() - halfMs;
+      const answer = await correction.set({
+        reason: unusableAt(backend, reading) ? "unusable" : "behind_chain",
+        source: "admin",
+        offsetMs: Math.round(deviceAt - boxAtMs),
+        measuredAt: { wallMs: boxAtMs, monoMs: steadyMs - halfMs },
+        stepsSeen,
+        witnesses,
+        admin: {
+          personId: authorizedBy,
+          personName,
+          reading: {
+            boxAt: new Date(Math.round(boxAtMs)).toISOString(),
+            witnessAt: new Date(deviceAt).toISOString(),
+            uncertaintyMs: Math.ceil(halfMs),
+          },
+        },
+        requester: { source: "admin", person: authorizedBy },
+      });
+      if (!answer.set) throw setRefusal(answer.reason);
+      return c.json(
+        {
+          confirmationId: answer.confirmationId,
+          stepMs: answer.stepMs,
+          confirmedAt: answer.confirmedAt,
+        },
+        200,
+      );
+    }),
+  );
+}
+
+function unusableAt(backend: FiscalBackend, reading: ReturnType<TrustedClock["now"]>): boolean {
+  try {
+    backend.assertRecordableAt(reading);
+    return false;
+  } catch (error) {
+    if (codeOf(error) === "clock.unusable") return true;
+    throw error;
+  }
+}
+
+function setRefusal(reason: ClockSetRefusal): Error {
+  if (reason === "refused" || reason === "unverified")
+    return new AppError("clock.set_failed", { reason });
+  // Only a till's admission check answers these, and an administrator's set passes none.
+  if (reason === "not_admitted" || reason === "not_start_up" || reason === "authority_pending")
+    return new Error(`an administrator's set was refused ${reason}`);
+  return new AppError("clock.set_refused", { reason });
 }

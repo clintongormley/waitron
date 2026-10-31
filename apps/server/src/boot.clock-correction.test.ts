@@ -62,7 +62,7 @@ const migrations = migrationOptionsFor(manifestSets(), null);
 const suite = useVenueDb({ migrations });
 
 describe("the running server's clock correction", () => {
-  it("is handed to the watch, has it as an anchor, and a set clears the clock-service caches", async () => {
+  it("is handed to the watch and the set route, has the watch as an anchor, and a set clears the clock-service caches", async () => {
     let statusReads = 0;
     const host: BoxHostClient = {
       clockStatus: async () => {
@@ -146,6 +146,17 @@ describe("the running server's clock correction", () => {
       await reanchor();
       expect((await alerts()).status).toBe(200);
       expect(statusReads).toBe(cached + 2);
+
+      // Mounted only when boot hands the routes its correction; this request comes from the box.
+      const set = await fetch(`http://127.0.0.1:${httpPort()}/api/box/clock-set`, {
+        method: "POST",
+        headers: { cookie: venue.managerCookie, "content-type": "application/json" },
+        body: "{}",
+      });
+      expect({ status: set.status, body: await set.json() }).toEqual({
+        status: 409,
+        body: { error: { code: "clock.set_refused", params: { reason: "same_machine" } } },
+      });
     } finally {
       if (server !== undefined) await server.close();
       if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
