@@ -426,6 +426,14 @@ hides. Left open by A798-B slice 8 (#2012).
 
 ## Decisions and deliberate limits
 
+- **The IPP polling-clock fixture observes server connections, not the next agent pause (A1251,
+  #2092).** Keep the exact 295 ms first-query assertion. In disposable probes, adding one
+  `setImmediate` turn after the agent reads a job reply made both cases report 300 ms; five turns
+  made their real-time wait expire. Delaying every server reply by 4 ms passed both cases.
+  These probes changed the poller; they do not establish the cause of the historical CI failure.
+  If you add a wait to that continuation, coordinate the fixture with it rather than widening
+  the boundary assertion.
+
 - **The floor suites' fixed till-API clock keeps the system clock's time-zone offset (A1117,
   #2100).** `{ ...v.clock, now: () => ({ ...v.clock.now(), instant: NOW }) }` changes only the
   instant, so on the review machine it reported an offset of 60 minutes where Madrid on 10 October
