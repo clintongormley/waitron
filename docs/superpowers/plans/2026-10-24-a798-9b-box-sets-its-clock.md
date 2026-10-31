@@ -243,7 +243,7 @@ files, each check's state) into the ledger before going on.
    then their clock-out at the second location is refused and a repeat clock-in there is accepted
    and written, so the record gains clock-ins with no clock-out between them, and a retime does not
    change what the till reads. It needs two locations on one box. The lead's ruling (e), re-put to
-   the owner in `questions.md`.
+   the owner in `questions.md`. *(Owner, 2026-11-01: "Clock ins should not be per location, but per venue." The chain and the clocked-in state become one per venue, which removes this case; re-keying the chain is item A1268, queued after this slice because it changes the working-time record's chain key. Until A1268 lands, the case stands as described.)*
 8. **New in revision 4, cost corrected in revision 5: "start-up" is this server's start, a restart
    included.** A stop counts as found at start-up when it holds from the moment the server process
    starts and no reader of the stop has seen it end since; the first look (or till read) that finds
@@ -2938,6 +2938,7 @@ clamped monotonic per chain only (`:63-64`), and an implicit row number is not k
 a restore. So the record can gain a clock-in with no clock-out before it, and a legal clock-out at B is
 refused, in that window; a manager's retime does not change the reading, since the state read
 leaves retimes out. Task 19 adds the backlog line; the owner FYI list carries it as FYI 7.
+*(Owner, 2026-11-01: "Clock ins should not be per location, but per venue." The chain and the clocked-in state become one per venue, which removes this case; re-keying the chain is item A1268, queued after this slice because it changes the working-time record's chain key. Until A1268 lands, the case stands as described.)*
 
 **Files.** Modify `packages/workforce/src/record-reads.ts` (`readLatestLiveEntries`, whose only
 caller is `currentState` — `/usr/bin/grep -rn readLatestLiveEntries packages apps
@@ -3293,7 +3294,8 @@ task.
 2. New entries: B3 keeps or migrates 9b's clock requests and requester (the lead's ruling (a),
    pointing at the B3 paragraph Task 18 writes); the box's certificate issued under a clock wrongly
    ahead (Task 15); the hours read, the end-of-day pass and the correction check after a
-   backward step, and the accepted cross-chain case (Task 15a, ruling (e)); the stream's
+   backward step, and A1268 (one working-time chain per venue, the owner's 2026-11-01 answer, which
+   removes Task 15a's cross-chain case); the stream's
    pruning measured by the bucket's own times (Task 15); anything else Task 15 accepted
    that a later slice must revisit; and, from revision 4: a clock wrong forward at start (or wrong
    backward by less than the gap to the last sale) asks nobody until slice 9c's start check
@@ -3375,7 +3377,8 @@ follows the ruling.
 4. **(d) Tills and handhelds are not signed out.** Only a dashboard session ends, and only when
    its `lastSeenAt` is more than `IDLE_TIMEOUT_MS` ahead of the new clock (FYI 6, Task 15). It
    stays an owner FYI default in that form.
-5. **(e) Task 15a's cross-chain case is accepted** with a backlog line and owner FYI 7: no order
+5. **(e) Task 15a's cross-chain case is accepted** for this slice; the owner answered on 2026-11-01
+   that clock-ins are per venue, and item A1268 re-keys the chain (FYI 7). As first written, with a backlog line and owner FYI 7: no order
    across a person's chains survives a step (Task 15a, "Accepted residual"), and the case needs two
    locations on one node plus a move inside the step's window. *(Corrected 2026-10-31: the ruling
    said nothing recorded is wrong, only the state the till shows; Task 15a's review ran the case
