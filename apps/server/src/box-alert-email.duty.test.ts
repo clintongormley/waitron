@@ -231,6 +231,55 @@ describe("startBoxEmailDuty for the box setting its clock", () => {
     expect(d.context).toHaveBeenCalledTimes(2);
   });
 
+  it("tries a handled step's failed send again on the next check", async () => {
+    const d = duty();
+    d.state.recipients = [BEN];
+    d.send.mockImplementationOnce(async () => "unknown");
+    d.handle.remember(FIRST_STEP);
+    await d.tick();
+    await d.tick();
+    await d.tick();
+    expect(d.sent()).toEqual([clockEmail(FIRST_STEP, BEN), clockEmail(FIRST_STEP, BEN)]);
+  });
+
+  it("ends a handled step's email for a manager whose address was refused outright", async () => {
+    const d = duty();
+    d.state.recipients = [ANA, BEN];
+    d.send.mockImplementation(async ({ recipient }) =>
+      recipient === BEN.email ? "rejected" : "sent",
+    );
+    d.handle.remember(FIRST_STEP);
+    d.handle.remember(SECOND_STEP);
+    for (let i = 0; i < 4; i++) await d.tick();
+    expect(d.sent()).toEqual([
+      clockEmail(FIRST_STEP, ANA),
+      clockEmail(FIRST_STEP, BEN),
+      clockEmail(SECOND_STEP, ANA),
+      clockEmail(SECOND_STEP, BEN),
+    ]);
+    expect(d.context).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps trying a refused address while the step's alert stays open", async () => {
+    const d = duty();
+    d.state.recipients = [BEN];
+    d.send.mockImplementationOnce(async () => "rejected");
+    d.state.incidents = [FIRST_STEP];
+    await d.tick();
+    await d.tick();
+    expect(d.sent()).toEqual([clockEmail(FIRST_STEP, BEN), clockEmail(FIRST_STEP, BEN)]);
+  });
+
+  it("ends a step's email once it has reached everyone and the alert is handled", async () => {
+    const d = duty();
+    d.state.incidents = [FIRST_STEP];
+    await d.tick();
+    d.state.incidents = [];
+    for (let i = 0; i < 3; i++) await d.tick();
+    expect(d.sent()).toEqual([clockEmail(FIRST_STEP, ANA), clockEmail(FIRST_STEP, BEN)]);
+    expect(d.context).toHaveBeenCalledTimes(2);
+  });
+
   it("drops a remembered step after its no-recipients line when there is no one to email", async () => {
     const d = duty();
     d.state.recipients = [];

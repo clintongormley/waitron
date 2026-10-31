@@ -132,20 +132,22 @@ function wordsFor(
     ).replaceAll("{duration}", () =>
       formatDuration(params?.["stepMs"], language === "es" ? "es-ES" : "en-GB"),
     );
-    const person = params?.["person"];
+    const name = params?.["person"];
+    const person = typeof name === "string" ? name : "—";
+    const source = params?.["source"];
     let subject: string = words.subject;
     let template: string = words.authority;
     if (params?.["unverified"] === true) {
       subject = words.unverifiedSubject;
       template = words.unverified;
-    } else if (params?.["byStaff"] === true && typeof person === "string") {
-      const device = params["device"];
+    } else if (source === "staff") {
+      const device = params?.["device"];
       const till =
         typeof device === "string"
           ? words.namedTill.replaceAll("{device}", () => device)
           : words.unnamedTill;
       template = words.staff.replaceAll("{till}", () => till).replaceAll("{person}", () => person);
-    } else if (params?.["byAdmin"] === true && typeof person === "string") {
+    } else if (source === "admin") {
       template = words.admin.replaceAll("{person}", () => person);
     }
     return { subject, text: template.replaceAll("{step}", () => step) };
@@ -237,8 +239,8 @@ interface Episode {
   readonly owner?: string;
   /** Set for an open alert's episode, which lasts while the alert stays open. */
   readonly incident?: true;
-  /** Set for a `clock.corrected` alert's episode, which also lasts, once the alert is handled,
-   * until every manager has been sent it. */
+  /** Set for a `clock.corrected` alert's episode, which also lasts once the alert is handled, until
+   * `deliver` finds nothing left worth trying. */
   readonly untilSent?: true;
   /** The params of the notice that began the episode, kept for its whole length. */
   readonly params?: Readonly<Record<string, unknown>>;
@@ -255,7 +257,8 @@ function recipientKey(recipient: ManagerEmailRecipient): string {
  * last finished. `stop` resolves once a database read in flight has finished; nothing is read or
  * sent after it. `remember` begins an alert's episode with no read, for an alert that may be
  * handled before the next check reads it: the box's own clock step, whose next step marks it
- * handled. A restart before it is sent loses that email; the alert stays in the bell. */
+ * handled. A restart loses the email of an alert already handled and not yet sent; the alert stays
+ * in the bell. */
 export function startBoxEmailDuty(deps: {
   disk: Pick<DiskFullState, "since">;
   space: Pick<FreeSpaceState, "current">;
@@ -319,8 +322,8 @@ export function startBoxEmailDuty(deps: {
     deps.log("warn", event, { code: episode.code });
   }
 
-  /** True once nothing is left to send this episode: every manager has it, there is none, or email
-   * is not set up. */
+  /** True once nothing is left worth trying for a handled alert: every manager has it or had their
+   * address refused outright, there is none, or email is not set up. */
   async function deliver(
     episode: Episode,
     ctx: BoxEmailContext,
@@ -339,6 +342,7 @@ export function startBoxEmailDuty(deps: {
       sayOnce(episode, "box_email.not_configured");
       return true;
     }
+    let finished = true;
     for (const recipient of pending) {
       if (stopped) return false;
       let outcome: TextEmailOutcome;
@@ -357,13 +361,14 @@ export function startBoxEmailDuty(deps: {
         deps.log("info", "box_email.sent", { code: episode.code });
         continue;
       }
+      if (outcome !== "rejected") finished = false;
       const logged = episode.logged.get(key) ?? new Set<TextEmailOutcome>();
       episode.logged.set(key, logged);
       if (logged.has(outcome)) continue;
       logged.add(outcome);
       deps.log("warn", "box_email.send_failed", { code: episode.code, outcome });
     }
-    return pending.every((recipient) => episode.sentTo.has(recipientKey(recipient)));
+    return finished;
   }
 
   async function check(): Promise<void> {
