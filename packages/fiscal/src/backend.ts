@@ -255,6 +255,13 @@ export interface ClockStepRequest {
   nodeId: string;
 }
 
+/** What a step recorded: its confirmation row, null when unverified, and its `clock.corrected`
+ * alert, null when an unverified step moved the clock by a second or less. */
+export interface ClockStepRecorded {
+  confirmation: ClockConfirmation | null;
+  corrected: { id: string; params: Readonly<Record<string, unknown>> } | null;
+}
+
 export interface ClockConfirmation {
   id: string;
   seq: number;
@@ -397,12 +404,9 @@ export interface FiscalBackend {
 
   /** Records a step of the box's clock: one confirmation row when the step was verified (closing
    * the stop's check and, when the clock still reads behind the latest record, lifting the stop
-   * from the after reading), and `clock.corrected` either way. Absent when the regime never stops
+   * from the after reading), and `clock.corrected` either way, answering both. Absent when the regime never stops
    * a clock. */
-  confirmClockStep?(
-    tx: Transaction,
-    input: ClockStepRequest,
-  ): Promise<{ confirmation: ClockConfirmation | null }>;
+  confirmClockStep?(tx: Transaction, input: ClockStepRequest): Promise<ClockStepRecorded>;
 
   /** Records when a stop began: opens a check while the stop holds and none is open, and answers
    * the open one; null, and nothing written, while there is no stop. */
