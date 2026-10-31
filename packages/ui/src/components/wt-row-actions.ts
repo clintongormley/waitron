@@ -146,20 +146,23 @@ export class WtRowActions extends LitElement {
   }
 
   /** Caps the popup's height to `room`. A list cut short is cut through the middle of an action, so
-   * the half that shows says the list goes on even where no scrollbar is drawn. False, with no cap,
-   * when `room` cannot show one whole action and half of the next. */
+   * the half that shows says the list goes on even where no scrollbar is drawn. False, capped to the
+   * window less 8px above and below, when `room` cannot show one whole action and half of the next. */
   private capBelow(room: number): boolean {
     const popup = this.popup;
     popup.style.maxHeight = `${Math.max(0, room)}px`;
     if (popup.scrollHeight <= popup.clientHeight) return true;
+    const rows = this.rows();
+    if (rows.length === 0) return true;
     const contentTop = popup.getBoundingClientRect().top + popup.clientTop - popup.scrollTop;
-    const middles = this.rows().map((row) => {
+    if (rows.at(-1)!.getBoundingClientRect().bottom - contentTop <= popup.clientHeight) return true;
+    const middles = rows.map((row) => {
       const box = row.getBoundingClientRect();
       return box.top + box.height / 2 - contentTop;
     });
     const shown = middles.filter((middle) => middle <= popup.clientHeight);
     if (shown.length < 2) {
-      popup.style.maxHeight = "";
+      popup.style.maxHeight = `${Math.max(0, innerHeight - 16)}px`;
       return false;
     }
     popup.style.maxHeight = `${room - (popup.clientHeight - Math.max(...shown))}px`;

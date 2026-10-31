@@ -575,12 +575,23 @@ describe("opens-below", () => {
     await page.viewport(600, 400);
     try {
       const { el, trigger, popup } = await longMenu(5);
-      el.style.setProperty("inset-block-start", "300px");
+      el.style.setProperty("inset-block-start", "200px");
       el.show();
       const box = popup.getBoundingClientRect();
       expect(box.bottom).toBeCloseTo(innerHeight - 8, 0);
       expect(box.top).toBeLessThan(trigger.getBoundingClientRect().bottom);
       expect(popup.style.maxHeight).toBe("");
+      el.hide();
+
+      // At the same trigger, the room under it shows more than one action and a half.
+      el.opensBelow = true;
+      await el.updateComplete;
+      el.show();
+      expect(popup.getBoundingClientRect().top).toBeCloseTo(
+        trigger.getBoundingClientRect().bottom,
+        0,
+      );
+      expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
     } finally {
       await page.viewport(1280, 900);
     }
@@ -597,6 +608,80 @@ describe("opens-below", () => {
     const box = popup.getBoundingClientRect();
     expect(box.height).toBeCloseTo(natural, 0);
     expect(box.top).toBeCloseTo(trigger.getBoundingClientRect().bottom, 0);
+  });
+
+  it("a list whose last action already ends inside the room is not cut short", async () => {
+    await page.viewport(600, 400);
+    try {
+      const { el, trigger, popup, edit, remove } = await mountActions();
+      el.style.setProperty("position", "fixed");
+      el.style.setProperty("inset-block-start", "8px");
+      el.opensBelow = true;
+      await el.updateComplete;
+      el.show();
+      const natural = popup.getBoundingClientRect().height;
+      el.hide();
+      const height = trigger.getBoundingClientRect().height;
+      el.style.setProperty("inset-block-start", `${innerHeight - 8 - natural + 1 - height}px`);
+      el.show();
+
+      expect(popup.getBoundingClientRect().top).toBeCloseTo(
+        trigger.getBoundingClientRect().bottom,
+        0,
+      );
+      const cut = cutOf(popup);
+      for (const action of [edit, remove]) {
+        expect(action.getBoundingClientRect().bottom).toBeLessThanOrEqual(cut + 0.5);
+      }
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
+  it("a list taller than the window, moved up to fit, is capped to the window and scrolls", async () => {
+    await page.viewport(600, 400);
+    try {
+      const { el, popup, actions, picked } = await longMenu(15);
+      el.opensBelow = true;
+      await el.updateComplete;
+      el.style.setProperty("inset-block-start", "350px");
+      el.show();
+      const box = popup.getBoundingClientRect();
+      expect(box.top).toBeCloseTo(8, 0);
+      expect(box.bottom).toBeCloseTo(innerHeight - 8, 0);
+      expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
+      await userEvent.click(actions.at(-1)!);
+      expect(picked).toEqual(["Action 15"]);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
+  it("a list of no actions it can find still opens under its trigger, capped to the room", async () => {
+    await page.viewport(600, 400);
+    try {
+      const el = (await mount("<wt-row-actions opens-below></wt-row-actions>")) as WtRowActions;
+      el.style.setProperty("position", "fixed");
+      el.style.setProperty("inset-block-start", "48px");
+      const rows = Array.from({ length: 15 }, (_, index) => {
+        const row = document.createElement("div");
+        row.textContent = `Row ${index + 1}`;
+        row.style.setProperty("padding-block", "var(--wt-space-3)");
+        return row;
+      });
+      el.append(...rows);
+      await el.updateComplete;
+      el.show();
+
+      const trigger = el.shadowRoot!.querySelector("button")!;
+      const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+      const box = popup.getBoundingClientRect();
+      expect(box.top).toBeCloseTo(trigger.getBoundingClientRect().bottom, 0);
+      expect(box.bottom).toBeCloseTo(innerHeight - 8, 0);
+      expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
+    } finally {
+      await page.viewport(1280, 900);
+    }
   });
 
   /** The popup's visible bottom edge: where its scrolling area stops showing content. */
@@ -696,7 +781,7 @@ describe("opens-below", () => {
         } else {
           expect(box.top).toBeLessThan(anchor.bottom);
           expect(box.bottom).toBeCloseTo(innerHeight - 8, 0);
-          expect(popup.style.maxHeight).toBe("");
+          expect(popup.style.maxHeight).toBe(`${innerHeight - 16}px`);
           expect(popup.scrollHeight).toBeLessThanOrEqual(popup.clientHeight);
         }
       } finally {
@@ -725,7 +810,7 @@ describe("opens-below", () => {
       expect(popup.getBoundingClientRect().top).toBeLessThan(
         trigger.getBoundingClientRect().bottom,
       );
-      expect(popup.style.maxHeight).toBe("");
+      expect(popup.style.maxHeight).toBe(`${innerHeight - 16}px`);
     } finally {
       await page.viewport(1280, 900);
     }

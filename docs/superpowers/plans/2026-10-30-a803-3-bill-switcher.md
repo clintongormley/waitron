@@ -2657,6 +2657,38 @@ asserts its pattern occurs once, ran the named cases, and put the file back the 
 | --- | --- | --- | --- | --- |
 | `packages/ui/src/components/wt-row-actions.test.ts` "a menu taller than the room under its trigger opens under it…" (the `box.bottom` line) | B | `box.bottom` close to `innerHeight - 8` → at most `innerHeight - 8` (+0.5) and less than one action's pitch above it; the new "cut through the middle of an action" case pins where in that band, to 1px. The old exact edge is the picture review I1 asked to change | review I1 | 10 fix review |
 
+#### Second fix review (task-10-fix2.md)
+
+Same method as above: foreground, `AI_AGENT`/`CLAUDECODE` unset, free memory 56%; each control
+changed one line by a script that asserts its pattern occurs once, ran `wt-row-actions.test.ts`,
+and put the saved copy back (`cmp`, no difference).
+
+- **m1, the "without it" case no longer told the two modes apart.** The trigger moved from 300px to
+  200px (600×400, 7 actions); the same case now also turns `opens-below` on at that trigger and
+  expects the popup under it, scrolling. Control (`opens-below` turned on for the plain half too):
+  fails, `expected 372 to be close to 392`.
+- **m2, a list 1px too tall lost half of its last action.** `capBelow` now keeps the cap at the room
+  when the last drawn action already ends inside it. New case "a list whose last action already
+  ends inside the room is not cut short" (two actions, room 1px under their natural height). RED:
+  `expected 384 to be less than or equal to 362.5`. Control (that skip deleted): fails the same way.
+- **m4, the fallback drew a list taller than the window off its bottom.** The move-up fallback now
+  caps the height at the window less 16px, and a menu with no `button`, `a[href]` or `wt-button` to
+  find keeps the cap at the room. New cases "a list taller than the window, moved up to fit, is
+  capped to the window and scrolls" (RED: `expected 838 to be close to 392`) and "a list of no
+  actions it can find still opens under its trigger, capped to the room" (RED: `expected 8 to be
+  close to 92`). Controls: the window cap set back to `""` fails the first case and the two below;
+  the no-actions return deleted fails the second. `design-system.md`'s `opens-below` clause now
+  names the window cap. Changed assertions: "with room under the trigger for less than that…" and
+  "hidden actions do not count…" expected `maxHeight` `""` in the fallback → `${innerHeight - 16}px`
+  (review m4).
+- **m3, `#layerOpen` counts manual popovers and misses ones outside the screen.** Left as it is: no
+  manual popover sits in the screen's tree today.
+- **Runs (GREEN).** `packages/ui` `wt-row-actions.test.ts` + `.a11y.test.ts`: `Test Files 2 passed
+  (2)`, `Tests 89 passed (89)`. `till-table-order-screen.table-menu.test.ts`: `Tests 31 passed
+  (31)`. Every `till-shell*.test.ts`: `Test Files 15 passed (15)`, `Tests 383 passed (383)`. `pnpm
+  --filter @waitron/ui typecheck` and `pnpm --filter @waitron/till typecheck` exit 0; `pnpm exec
+  prettier --check` and `pnpm exec eslint` on the two changed source files exit 0.
+
 ## Task 11b: app tests and helpers that opened the drawer (≈55 calls)
 
 **Files.** `till-app-parties.test.ts` (25 sites), `till-app-adjustments.test.ts`,
