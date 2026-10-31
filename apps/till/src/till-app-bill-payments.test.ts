@@ -4251,8 +4251,6 @@ describe("till-app: the owner's split after a contribution", () => {
       emit(floor(el), "open-table", { tableId: "t4", seated: true });
       await flush(el);
       const screen = tableOrder(el);
-      screen.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-      await flush(el);
       return screen;
     })();
     expect(back.orderId).toBe("wo-4");
@@ -4372,8 +4370,6 @@ describe("till-app: a guest leaving early pays for a held dish", () => {
     await press(el, "[data-pay-close]");
     await expect.poll(() => dialog(el)).toBeNull();
     const order = tableOrder(el);
-    await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-    await flush(el);
     const dish = await openSentDish(order, tiramisu.id, "held");
     expect(text(dish.querySelector("[data-sent-line-status]"))).toBe(t("table.group_held"));
     expect(text(dish.querySelector("[data-line-paid]"))).toBe(t("bill_pay.paid"));

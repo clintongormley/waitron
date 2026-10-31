@@ -10292,8 +10292,6 @@ describe("till-app", () => {
           askSaleDeadEnds,
         });
         const screen = await toTableOrder(el, openTable);
-        screen.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-        await flush(el);
         const tender = screen.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
         expect(tender).not.toBeNull();
         tender.shadowRoot!.querySelector<HTMLElement>(".pay")!.click();

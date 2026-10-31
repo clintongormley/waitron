@@ -4,6 +4,7 @@ import {
   row,
   orderGroup,
 } from "./screens/till-table-order-screen.current-orders.test-helpers.js";
+import { switchToBill } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
@@ -10414,9 +10415,7 @@ describe("held-line move editing authority", () => {
   });
   async function chooseSourceBill(el: TillApp, order: TillTableOrderScreen) {
     expect(order.shadowRoot!.querySelector('[data-move-line="other-line"]')).toBeNull();
-    await userEvent.click(
-      order.shadowRoot!.querySelector<HTMLElement>('[data-bill="wo-7"] [data-take-payment]')!,
-    );
+    await switchToBill(order, "wo-7");
     await flush(el, 6);
     expect(tableOrder(el)!.orderId).toBe("wo-7");
   }
@@ -10473,8 +10472,6 @@ describe("held-line move editing authority", () => {
     async (formFactor) => {
       const write = vi.fn().mockResolvedValue({ revision: 4 });
       const { el, order } = await opening(write, formFactor);
-      order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-      await flush(el);
       await chooseSourceBill(el, order);
       expect(order.shadowRoot!.querySelector('[data-move-line="other-line"]')).toBeNull();
       emit(order, "move-group-line", detail());
@@ -10541,8 +10538,6 @@ describe("held-line move editing authority", () => {
   it("refuses a retained move command whose captured source observation changed", async () => {
     const write = vi.fn().mockResolvedValue({ revision: 4 });
     const { el, order } = await opening(write);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await flush(el);
     await chooseSourceBill(el, order);
     const opened = detail();
     const refreshed = await server.listDrafts("v1");

@@ -1270,8 +1270,6 @@ describe("the counter's basket hold stays on the counter", () => {
       seated: true,
     });
     await flush(el);
-    tableScreen(el).shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await flush(el);
     const tablePay = tableScreen(el)
       .shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!
       .shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(".pay")!;

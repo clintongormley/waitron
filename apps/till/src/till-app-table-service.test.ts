@@ -1534,8 +1534,6 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       getTabLines,
       updateOrderLine: vi.fn().mockResolvedValue({ revision: 8, party: null }),
     });
-    screen.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await screen.updateComplete;
     emit(screen, "change-line", {
       lineNo: 5,
       lineName: "Burger",
@@ -2872,9 +2870,7 @@ describe("till-app table ordering: the guests the receipt prints", () => {
       getPartyBills: vi.fn().mockResolvedValue(bills),
       collectOrder: vi.fn().mockResolvedValue(saleResult),
     });
-    const screen = await toTableOrder(el);
-    screen.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await flush(el);
+    await toTableOrder(el);
     return el;
   }
 

@@ -3,6 +3,10 @@ import type { TillSentOrders } from "./widgets/sent-orders.js";
 import type { FinishTableResolution } from "./api/finish-table-types.js";
 import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import { openDraftLine } from "./screens/till-table-order-screen.test-helpers.js";
+import {
+  openTableMenu,
+  switchToBill,
+} from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
@@ -453,10 +457,6 @@ const tableOrder = (el: TillApp) =>
 const banner = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>(".error");
 async function heldGroupsList(el: TillApp) {
   const order = tableOrder(el)!;
-  if (order.shadowRoot!.querySelector("[data-drawer]") !== null) {
-    await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-    await flush(el);
-  }
   const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
   if (review?.checkVisibility()) {
     await userEvent.click(review);
@@ -2879,8 +2879,6 @@ describe("A803 name bill", () => {
     await flush(el);
     expect(tableOrder(el)!.orderId).toBe("wo-check");
     const screen = tableOrder(el)!.shadowRoot!;
-    screen.querySelector<HTMLElement>("[data-open-drawer]")?.click();
-    await flush(el);
     screen.querySelector<HTMLElement>("[data-move-split]")!.click();
     await flush(el);
     screen.querySelector<HTMLElement>('[data-action="name-bill"]')!.click();
@@ -5361,7 +5359,10 @@ describe("till-app: the bill request", () => {
       { signal: expect.any(AbortSignal) },
     );
     expect(await requestedOnScreen(el)).toBe(false);
-    expect((await drawer(el)).querySelector("[data-request-bill]")).not.toBeNull();
+    await openTableMenu(tableOrder(el)!);
+    expect(
+      tableOrder(el)!.shadowRoot!.querySelector("[data-table-menu] [data-request-bill]"),
+    ).not.toBeNull();
   });
 
   it("sends a request that got no answer again under the same submission id, and a new press under a new one", async () => {
@@ -6661,10 +6662,7 @@ describe("till-app: the order's groups", () => {
     }
 
     async function openGroups(el: TillApp): Promise<TillTableOrderScreen> {
-      const order = await openMesa(el);
-      order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-      await flush(el);
-      return order;
+      return openMesa(el);
     }
 
     async function press(el: TillApp, selector: string): Promise<void> {
@@ -6674,10 +6672,6 @@ describe("till-app: the order's groups", () => {
 
     async function openSent(el: TillApp) {
       const order = tableOrder(el)!;
-      if (order.shadowRoot!.querySelector("[data-drawer]") !== null) {
-        await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-        await flush(el);
-      }
       const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
       if (review?.checkVisibility()) {
         await userEvent.click(review);
@@ -6711,19 +6705,10 @@ describe("till-app: the order's groups", () => {
       return more;
     }
 
-    async function reopenDrawer(el: TillApp) {
-      const order = tableOrder(el)!;
-      if (order.shadowRoot!.querySelector("[data-drawer]") === null) {
-        await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-        await flush(el);
-      }
-    }
-
     async function reorderFromSent(el: TillApp, id: string, direction: "earlier" | "later") {
       const more = await groupMenu(el, id);
       await userEvent.click(more.querySelector<HTMLElement>(`[data-group-${direction}]`)!);
       await flush(el);
-      await reopenDrawer(el);
     }
 
     async function requestHeldMove(
@@ -6764,7 +6749,6 @@ describe("till-app: the order's groups", () => {
       await fireFromSent(el, "g3");
       expect(server.fireGroup).not.toHaveBeenCalled();
       await press(el, "[data-fire-confirm]");
-      await reopenDrawer(el);
 
       expect(server.fireGroup.mock.calls).toEqual([
         ["v1", "g3", command(3), { signal: expect.any(AbortSignal) }],
@@ -6945,7 +6929,6 @@ describe("till-app: the order's groups", () => {
 
       await fireFromSent(el, "g3");
       await press(el, "[data-fire-confirm]");
-      await reopenDrawer(el);
 
       expect(server.fireGroup).toHaveBeenCalledOnce();
       expect(server.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
@@ -7075,7 +7058,6 @@ describe("till-app: the order's groups", () => {
       up.click();
       up.click();
       await flush(el);
-      await reopenDrawer(el);
 
       expect(server.reorderGroups.mock.calls).toEqual([["v1", ["g2", "g4", "g3"], command(3)]]);
       expect(banner(el)).toBeNull();
@@ -7142,9 +7124,6 @@ describe("till-app: the order's groups", () => {
           await flush(el);
           emit(shell(el), "open-table", { tableId: "t4", seated: true });
           await flush(el);
-          const order = handheldOrder(el)!;
-          order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-          await flush(el);
           return handheldOrder(el)!;
         },
       ],
@@ -7161,7 +7140,6 @@ describe("till-app: the order's groups", () => {
         const { el } = await mountApp({ ...server, ...over });
         const order = await open(el);
         await groupMenu(el, "g4");
-        await reopenDrawer(el);
         const disabled = () => {
           const panel = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
           return [
@@ -7181,7 +7159,6 @@ describe("till-app: the order's groups", () => {
         const more = await groupMenu(el, "g2");
         await userEvent.click(more.querySelector<HTMLElement>("[data-group-later]")!);
         await flush(el);
-        await reopenDrawer(el);
         expect(disabled()).toEqual([true, true, true]);
 
         answer();
@@ -7760,8 +7737,6 @@ describe("till-app: submitting the draft", () => {
     expect(toast(el)!.getAttribute("close-label")).toBe(t("table.submitted_close"));
 
     emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
-    await flush(el);
-    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await flush(el);
     expect(
       tableOrder(el)!.groups.map(({ displayNumber, state }) => ({
@@ -9608,13 +9583,9 @@ describe("till-app: Current orders", () => {
       moveLinesToGroup,
     });
     let order = await openMesa(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await flush(el);
 
     expect(order.shadowRoot!.querySelector('[data-move-line="line-9"]')).toBeNull();
-    await userEvent.click(
-      order.shadowRoot!.querySelector<HTMLElement>('[data-bill="wo-check"] [data-take-payment]')!,
-    );
+    await switchToBill(order, "wo-check");
     await flush(el);
     order = tableOrder(el)!;
     expect(order.orderId).toBe("wo-check");
@@ -11089,10 +11060,6 @@ describe("till-app: Split a table retains the guests prompt observation", () => 
 
   async function prompt(el: TillApp, billId = "wo-check") {
     const order = tableOrder(el)!;
-    if (order.shadowRoot!.querySelector("[data-move-split]") === null) {
-      await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-      await flush(el);
-    }
     for (const selector of [
       "[data-move-split]",
       '[data-action="split-table"]',
@@ -11435,10 +11402,6 @@ describe("till-app: table relocation editing observations", () => {
   /** Picks Mesa 7 for `verb` through the screen, which asks no bill question. */
   async function relocationPrompt(el: TillApp, verb: string): Promise<void> {
     const order = tableOrder(el)!;
-    if (order.shadowRoot!.querySelector("[data-move-split]") === null) {
-      await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-      await flush(el);
-    }
     for (const selector of ["[data-move-split]", `[data-action="${verb}"]`, '[data-target="t7"]']) {
       await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>(selector)!);
       await flush(el);

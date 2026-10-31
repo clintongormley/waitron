@@ -942,8 +942,6 @@ describe("an unanswered presented payment on a handheld", () => {
     emit(floor(el), "open-table", { tableId: "t4", seated: true });
     await flush(el);
     const order = tableOrder(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")?.click();
-    await flush(el);
     await showBillFooter(order);
     await pressPaySheet(el, order);
   }

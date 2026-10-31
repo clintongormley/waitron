@@ -2699,9 +2699,76 @@ other file `rg -l data-open-drawer apps/till/src apps/till/test` names outside `
 only; a helper `openTableMenu(el)` / `openBillSwitcher(el)` in `apps/till/test/` if three or more
 files need it. Sites that read what only the drawer holds stay for 11c, as in 11a.
 
-- [ ] Re-point each file, running it before and after; GREEN: the same files unfiltered;
+- [x] Re-point each file, running it before and after; GREEN: the same files unfiltered;
       `rg -n 'data-open-drawer' apps/till` prints only the 11c sites; till typecheck.
-- [ ] Commit: "Till app tests reach bills and actions through the switcher and the ⋮".
+- [x] Commit: "Till app tests reach bills and actions through the switcher and the ⋮".
+
+### Task 11b as built (2026-10-31)
+
+Runs in the foreground with `AI_AGENT`/`CLAUDECODE` unset; free memory 55–58% before each browser
+run. File names below drop the `till-app` prefix (`.test.ts` is `till-app.test.ts`); lines are at
+this task's commit unless written "was :N" (a line at `d217cb3f7` that this task deleted).
+
+- **Before** (`d217cb3f7`, the eight app files in one run): `Test Files 8 passed (8)`,
+  `Tests 3087 passed (3087)`: `-parties` 623, `-adjustments` 200, `-bill-payments` 245, `-drafts`
+  432, `-table-service` 144, `.test.ts` 1122, `-menu-refresh` 77, `-handheld-pay` 244.
+- **After** (the same command): `Test Files 8 passed (8)`, `Tests 3087 passed (3087)`, every file's
+  count equal to its count before, exit 0. `pnpm --filter @waitron/till typecheck` exit 0;
+  `pnpm exec prettier --check` and `pnpm exec eslint` on the nine changed files exit 0.
+- **Helper.** `switchToBill(el, workingOrderId)` added to
+  `screens/till-table-order-screen.bill-switcher.test-helpers.ts`: it expects the switcher's list
+  closed, taps the switcher, expects the list open, then taps the bill's `[data-switch-bill]` row.
+  Two files use it, so it sits beside `openTableMenu`, not under `apps/till/test/`.
+- **Why the switcher row is the same behaviour as the drawer's Take payment.** In
+  `till-app.ts` the screen's `take-payment` and `switch-bill` events both go to `#onSwitchBill`,
+  which reads only `detail.workingOrderId`. Both re-pointed sites used Take payment only to put
+  another bill on screen, and each still checks `orderId` afterwards with the same value.
+- **Not re-pointed: `screens/till-paid-view.test.ts`.** Its `open-drawer` is the cash drawer
+  (`action.open_drawer`), not the Tab drawer; it never reaches `[data-open-drawer]`.
+- **STOP:** none. No money, VAT, permission or filing check changed; the one value check moved is
+  `[data-request-bill]` present, from the drawer to the ⋮.
+- **Deletion control.** `-parties.test.ts:9588` changed to `switchToBill(order, "wo-4")` (the bill
+  already on screen): `-t 'retained held-line command uses the source bill after switching'`
+  printed `AssertionError: expected 'wo-4' to be 'wo-check'` at `:9591`, `Tests 1 failed | 622
+  skipped (623)`; the file put back from a saved copy (`cmp` equal).
+
+| Test | Kind | Before → after | Source | Task |
+| --- | --- | --- | --- | --- |
+| `-drafts.test.ts:10418` (`chooseSourceBill`, used by "the retained move command carries only the source bill…" and "refuses a retained move command whose captured source observation changed") | R | the drawer row's `[data-bill="wo-7"] [data-take-payment]` → `switchToBill(order, "wo-7")`; `orderId` `toBe("wo-7")` and the `[data-move-line]` null check unchanged | D4 (bills in the switcher) | 11b |
+| `-parties.test.ts:9588` ("the retained held-line command uses the source bill after switching to it") | R | the drawer row's `[data-bill="wo-check"] [data-take-payment]` → `switchToBill(order, "wo-check")`; `orderId` `toBe("wo-check")` and both `[data-move-line]` null checks unchanged | D4 | 11b |
+| `-parties.test.ts:5362-5365` (bill request cancelled: Mark bill requested offered again) | R | `(await drawer(el)).querySelector("[data-request-bill]")` not null → `openTableMenu`, then `[data-table-menu] [data-request-bill]` not null; the chip check before it (`requestedOnScreen`) stays on the drawer (11c) | D4 | 11b |
+| `-adjustments.test.ts:4781-4789` (combined Comp of one extra, 8 rows of locale × theme × width) | R | the drawer opened by `openTable4` and `[data-drawer]` holding no `[data-comp-line], [data-discount-line]` → `openTableMenu`, the screen's whole shadow root holding none (11a M1); the screenshot element `[data-drawer]` → `[data-table-menu]` (file `a773-comp-table-menu-…`); the drawer's close → `closeTableMenu` | D4 | 11b |
+| `-adjustments.test.ts` `openTable4` (was `:328-329`), was `:1043` (reopened table before `requestComp`), was `:2182-2183` (a close of the drawer `openTable4` opened) | S | drawer opened (or closed) before checks that read nothing in it → removed; every `expect` byte-identical | the drawer holds none of it | 11b |
+| `-bill-payments.test.ts` was `:4254-4255` (table reopened before `[data-bill-payments]` is read), was `:4375-4376` (a close of the drawer `openTable` opened, before `openSentDish`) | S | removed; every `expect` byte-identical | the drawer holds none of it | 11b |
+| `-drafts.test.ts` was `:10476-10477`, `:10544-10545` (before `chooseSourceBill`) | S | removed; every `expect` byte-identical | the drawer holds none of it | 11b |
+| `-table-service.test.ts` was `:1537-1538` (before `change-line`), was `:2876-2877` (`openTableWith`, before the pay card's guests stepper; its unused `screen` went with it) | S | removed; every `expect` byte-identical | the drawer holds none of it | 11b |
+| `.test.ts` was `:10295-10296` (before the table's cash tender), `-menu-refresh.test.ts` was `:1273-1274` (before the table's Pay), `-handheld-pay.test.ts` was `:945-946` (`signInAgainAndReopen`, before the bill's Pay) | S | removed; every `expect` byte-identical | the drawer holds none of it | 11b |
+| `-parties.test.ts` was `:2882-2883` (another bill's naming window: the ⋮ is tapped next), `openGroups` (was `:6665-6666`), the 2-wide handheld mount of "%s disables the group controls…" (was `:7146-7147`), "files the spec's five groups…" (was `:7764-7765`, before `groups` and `[data-sent-unread]`) | S | drawer opened before checks that read nothing in it → removed; every `expect` byte-identical | the drawer holds none of it | 11b |
+| `-parties.test.ts` `reopenDrawer` (was `:6714-6720`) and its six calls; the close-if-open in `heldGroupsList` (was `:456-459`) and in `openSent` (was `:6677-6680`) | S | removed: every caller is in "the order's groups", where nothing opens the drawer once `openGroups` no longer does; every `expect` byte-identical | the drawer holds none of it | 11b |
+| `-parties.test.ts` `prompt` (was `:11092-11095`) and `relocationPrompt` (was `:11438-11441`) | S | an open-if-`[data-move-split]`-missing branch that never ran (the ⋮ carries `data-move-split` whenever the screen draws) → removed; every `expect` byte-identical | — | 11b |
+
+**Left for 11c** (each reads what only the drawer holds until then; `rg -n 'data-open-drawer'
+apps/till` prints these and the screen-test sites 11a left):
+
+- `-parties.test.ts:911`, `:941`, `:989`, `:1055`, `:1072`, `:1096`, `:1203`, `:1287`, `:1317`,
+  `:1358`: each opens the drawer for `figures(el)` (`:783`), which reads the drawer's bill row
+  (`[data-bill="wo-4"]`'s `[data-bill-total]` and `[data-bill-state]`) and the table's still-to-pay
+  (`[data-party-outstanding]`). The switcher's row shows the bill's amount in a different form and
+  no still-to-pay, so no byte-identical twin exists before 11c puts still-to-pay in the foot.
+- `-parties.test.ts:2785`: `billNameShown` (`:2711`) reads the drawer row's `.bill-name`
+  ("4 · Bill 1 · Clint"); the switcher's row label is `billLabel`, not that text.
+- `-parties.test.ts:5233`: lists the drawer's `[data-bill]` rows after a split-off bill is left
+  and reopened.
+- `-parties.test.ts:5300` (`drawer`, used by `requestedOnScreen`): the bill-requested chip,
+  `[data-chip='bill-requested']`, which only the drawer draws (`:5332`, `:5347`, `:5361`, `:5455`).
+- `-parties.test.ts:9693` (`openDeparture`): the Finish table refusal's Record unpaid departure,
+  `[data-finish-refusal] [data-record-departure]`.
+- `-parties.test.ts:10296` (`pressCancelCredit`): Cancel and credit on another bill's row,
+  `[data-bill="wo-check"] [data-cancel-credit]`.
+- `apps/till/test/bill-pay-app.ts:398` (`openTable`): its callers read the drawer:
+  `-bill-payments.test.ts:572` (`[data-invoice-choice]`), `:3045-3047` (the `[data-bill]` rows'
+  `[data-bill-total]`), `-handheld-pay.test.ts:3401`, `:3510` (`[data-finish-refusal]`). Moving
+  the open into those cases would add drawer sites rather than remove them, so it stays whole.
 
 ## Task 11c: the Tab button and drawer go (≈55 calls)
 

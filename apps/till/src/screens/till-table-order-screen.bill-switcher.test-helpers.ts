@@ -68,6 +68,27 @@ export async function closeTableMenu(el: TillTableOrderScreen): Promise<void> {
   expect(tableMenuIsOpen(el)).toBe(false);
 }
 
+const billSwitcher = (el: TillTableOrderScreen) =>
+  el.shadowRoot!.querySelector("[data-bill-switcher]")!;
+
+const billSwitcherIsOpen = (el: TillTableOrderScreen) =>
+  billSwitcher(el).shadowRoot!.querySelector("[popover]")?.matches(":popover-open") ?? false;
+
+/** Opens the bill switcher, failing unless its list opens, and taps the bill's row. */
+export async function switchToBill(
+  el: TillTableOrderScreen,
+  workingOrderId: string,
+): Promise<void> {
+  expect(billSwitcherIsOpen(el)).toBe(false);
+  await userEvent.click(billSwitcher(el).shadowRoot!.querySelector<HTMLElement>("button")!);
+  await el.updateComplete;
+  expect(billSwitcherIsOpen(el)).toBe(true);
+  await userEvent.click(
+    billSwitcher(el).querySelector<HTMLElement>(`[data-switch-bill="${workingOrderId}"]`)!,
+  );
+  await el.updateComplete;
+}
+
 /** The text of the ⋮'s list and the bill switcher together. */
 export const tableMenuAndSwitcherText = (el: TillTableOrderScreen): string =>
   [...el.shadowRoot!.querySelectorAll("[data-table-menu], [data-bill-switcher]")]
