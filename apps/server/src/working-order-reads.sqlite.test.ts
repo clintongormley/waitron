@@ -47,14 +47,14 @@ beforeAll(async () => {
   const locationId = randomUUID();
   await db.insert(locations).values({
     id: locationId,
-    name: "Barra",
+    name: "Counter",
     invoiceLocales: [LOCALE],
-    operationDescription: "Venta en establecimiento",
+    operationDescription: "In-store sales",
   });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   [{ id: stationId }] = await db
     .insert(kitchenStations)
-    .values({ locationId, name: "Cocina", isDefault: true })
+    .values({ locationId, name: "Kitchen", isDefault: true })
     .returning({ id: kitchenStations.id });
 
   const orderId = randomUUID();
@@ -100,7 +100,7 @@ beforeAll(async () => {
   tableId = randomUUID();
   await db
     .insert(diningTables)
-    .values({ id: tableId, locationId, zoneId: zone!.id, label: "Mesa 1" });
+    .values({ id: tableId, locationId, zoneId: zone!.id, label: "Table 1" });
   await db.insert(floorTodayTables).values({ tableId: tableId });
   await db.insert(partyTables).values({ partyId: party!.id, tableId });
 
@@ -156,7 +156,7 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
     });
     expect(table).toMatchObject({
       id: tableId,
-      label: "Mesa 1",
+      label: "Table 1",
       state: "open-tab",
       hasOpenTab: true,
       pendingToServe: 1,
@@ -184,7 +184,7 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
     expect(orders).toHaveLength(1);
     // Opened in this suite's own setup, so the floored minute count is 0.
     expect(orders[0]!.openedMinutes).toBe(0);
-    expect(orders[0]!.tableLabel).toBe("Mesa 1");
+    expect(orders[0]!.tableLabel).toBe("Table 1");
   });
 
   it("omits a made-here drink from kitchen and floor reads while retaining the burger", async () => {

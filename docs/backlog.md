@@ -6151,6 +6151,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Native allergy, kitchen-note and bill-identity suites use English sample location names.
   Payment-slip table labels and print-preview plain samples use English; translated receipt
   wording and accented-character samples remain.
+  Native server floor-annotation and kitchen/floor read-model suites use English location,
+  operation, station, table and contact samples; their Spanish locale keys remain.
   Other helpers and screen expectations remain. Low priority.
   [Detail](backlog/architecture.md#a976-finish-the-servers-english-test-venue-defaults).
 
