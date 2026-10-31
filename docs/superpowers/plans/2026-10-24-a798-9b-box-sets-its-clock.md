@@ -3217,13 +3217,25 @@ Revision 4 changes none of these rulings. It carries out the owner's answer of 2
   status (`host_unavailable`, `synchronised`); then, for a person, `witnessed` and `agrees`. So
   `stale` and the till's refusals ask the host nothing at all, and `witnessed` and `agrees` are
   answered only once the host is known to be available and unsynchronised, as decision 10 orders
-  them. During `clock.unusable`, `witnessed` is any AEAT reading among the store's witnesses.
+  them. During `clock.unusable`, `witnessed` is an AEAT reading among the store's witnesses whose
+  box time is itself before 28-10-2024: the store keeps AEAT's disagreements until a usable
+  reading ends the stop proper, so one kept from before the clock went back was not taken during
+  this stop (review I2). `stale` is judged again after the host's status and the anchors, just
+  before the target is computed, since those waits leave time for a step by the time service.
 - **A set the host did not confirm is never verified**: a timeout or a lost connection is
-  recorded with `verified: false` even when the clock reached the target (Task 10's test text;
-  decision 4's "verified" means the step is measured, not trusted). The seat is asked for nothing,
+  recorded with `verified: false` even when the clock reached the target. This follows Task 10's
+  test text and overrides decision 4's parenthesis ("`verified: false` when the clock did not move
+  to the target"); it errs the safe way, since an unverified step writes no row and lifts no stop. The seat is asked for nothing,
   and the witness store is kept, when the clock moved by a second or less, whatever the host
   answered; the set then answers `refused`. A verified set whose row is pending answers
-  `confirmationId: null`.
+  `confirmationId: null`. When the boot-time clock cannot be read (`bootReader` answers NaN),
+  the step is measured against the steady clock instead, so a real step is never taken for an
+  unmoved clock (review M1).
+- **No set while a step's row is pending** (review I1): the pending row is not in the database,
+  so the stop still reads as holding, and a second set's row written first would be judged
+  against a check the first step's row should have closed. A set answers `pending_disproofs`
+  until `writePending()`, which now takes the turn, has written every kept row. An email duty
+  that throws is logged, never turned into a second write of the row.
 - **The step counter's deletion control is its own case**: in the two-together case the first
   set moves the fake wall clock, so the wall-against-steady check also refuses the second; the
   counter is proved by "refuses an offset measured before a step the correction made", which

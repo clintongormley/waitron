@@ -580,8 +580,9 @@ describe("the clock.corrected a step answers", () => {
       request(first + 2 * H, { before: reading(first + M), stepMs: H }),
     );
 
-    const [open] = openCorrected();
-    expect(corrected?.id).toBe(open!.id);
+    const open = openCorrected();
+    expect(open).toHaveLength(1);
+    expect(corrected?.id).toBe(open[0]!.id);
   });
 
   it("answers none when the clock moved by no more than a second", async () => {

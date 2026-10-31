@@ -404,8 +404,8 @@ export interface FiscalBackend {
 
   /** Records a step of the box's clock: one confirmation row when the step was verified (closing
    * the stop's check and, when the clock still reads behind the latest record, lifting the stop
-   * from the after reading), and `clock.corrected` either way, answering both. Absent when the regime never stops
-   * a clock. */
+   * from the after reading), and `clock.corrected` for a verified step or an unverified one of
+   * more than a second, answering both. Absent when the regime never stops a clock. */
   confirmClockStep?(tx: Transaction, input: ClockStepRequest): Promise<ClockStepRecorded>;
 
   /** Records when a stop began: opens a check while the stop holds and none is open, and answers
