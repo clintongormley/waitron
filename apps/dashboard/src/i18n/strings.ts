@@ -3629,6 +3629,23 @@ export const en = {
     "This screen is the box itself, so its clock is the box's own. Confirm from your phone or another computer.",
   "box_status.clock.admin.refused.not_stopped":
     "There is nothing left to confirm. See the Clock row.",
+  "box_status.clock.admin.set.question":
+    "The box's clock says {box}. Your device says {device}. Use your device's time?",
+  "box_status.clock.admin.set.confirm": "Use this time",
+  "box_status.clock.admin.set.done": "The box's clock is set.",
+  "box_status.clock.admin.set.sign_in_again": "Sign in again to go on.",
+  "box_status.clock.admin.set.refused.synchronised":
+    "The box keeps its clock in time over the internet and says it is right, so it does not take a time from a device. If your device's time is right, check the box's internet connection.",
+  "box_status.clock.admin.set.refused.witnessed":
+    "The box has the tax agency's time, so it confirms or sets its clock from that time itself, not from a device's. If a try fails, it tries again later.",
+  "box_status.clock.admin.set.refused.stale":
+    "The box's clock changed while this was being checked. Read the time again.",
+  "box_status.clock.admin.set.refused.host_unavailable":
+    "This box cannot set its own clock: the part of the box that does that is not answering. If the box can reach the internet, its time service may still put the clock right by itself. Once the box's clock is within a minute of your device's, you can confirm it here.",
+  "box_status.clock.admin.set.refused.target_invalid":
+    "Your device's date is not one the box can take. Check your device's date and time.",
+  "box_status.clock.admin.set.refused.pending_disproofs":
+    "The box is still recording what it found after an earlier change of its clock. Try again in a minute.",
   "box_status.clock_check_help_label": "What this check does",
   "box_status.clock_check_help":
     "Compares the box's clock with this device's. If they are within a minute of each other, you can confirm that the box's clock is right, and payments restart if they are stopped. Check that this device shows the right time first. It does not work on the box's own screen.",
@@ -7374,6 +7391,23 @@ export const es: Record<StringKey, string> = {
   "box_status.clock.admin.refused.same_machine":
     "Esta pantalla es el propio equipo, así que su hora es la del equipo. Confírmalo desde tu móvil o desde otro ordenador.",
   "box_status.clock.admin.refused.not_stopped": "No queda nada que confirmar. Mira la fila Reloj.",
+  "box_status.clock.admin.set.question":
+    "El reloj del equipo marca {box}. Tu dispositivo marca {device}. ¿Usar la hora de tu dispositivo?",
+  "box_status.clock.admin.set.confirm": "Usar esta hora",
+  "box_status.clock.admin.set.done": "El equipo ya está en hora.",
+  "box_status.clock.admin.set.sign_in_again": "Vuelve a iniciar sesión para seguir.",
+  "box_status.clock.admin.set.refused.synchronised":
+    "El equipo se pone en hora por internet y dice que su hora es correcta, así que no toma la hora de un dispositivo. Si la hora de tu dispositivo es correcta, comprueba la conexión a internet del equipo.",
+  "box_status.clock.admin.set.refused.witnessed":
+    "El equipo tiene la hora de la Agencia Tributaria, así que confirma o corrige su reloj con esa hora por sí mismo, no con la de un dispositivo. Si un intento falla, vuelve a intentarlo más tarde.",
+  "box_status.clock.admin.set.refused.stale":
+    "El reloj del equipo ha cambiado mientras se comprobaba. Vuelve a leer la hora.",
+  "box_status.clock.admin.set.refused.host_unavailable":
+    "Este equipo no puede poner su propio reloj en hora: la parte del equipo que lo hace no responde. Si el equipo tiene conexión a internet, puede que su servicio de hora aún corrija el reloj por sí solo. Cuando el reloj del equipo esté a menos de un minuto del de tu dispositivo, podrás confirmarlo aquí.",
+  "box_status.clock.admin.set.refused.target_invalid":
+    "La fecha de tu dispositivo no es una que el equipo pueda tomar. Comprueba la fecha y la hora de tu dispositivo.",
+  "box_status.clock.admin.set.refused.pending_disproofs":
+    "El equipo aún está registrando lo que encontró tras un cambio anterior de su reloj. Vuelve a intentarlo dentro de un minuto.",
   "box_status.clock_check_help_label": "Qué hace esta comprobación",
   "box_status.clock_check_help":
     "Compara la hora del equipo con la de este dispositivo. Si están a menos de un minuto, puedes confirmar que la hora del equipo es correcta, y los cobros se reanudan si estaban parados. Comprueba antes que este dispositivo tiene la hora bien. No funciona en la pantalla del propio equipo.",

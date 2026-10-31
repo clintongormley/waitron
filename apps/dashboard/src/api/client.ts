@@ -1908,6 +1908,13 @@ export interface ClockConfirmView {
   confirmedAt: string;
 }
 
+/** LOCAL copy of `POST /api/box/clock-set`'s answer (`apps/server/src/box-health-api.ts`). */
+export interface ClockSetView {
+  confirmationId: string;
+  stepMs: number;
+  confirmedAt: string;
+}
+
 /** LOCAL copy of the server's `FreedSpace` (`apps/server/src/free-space-now.ts`). */
 export interface FreedSpaceView {
   freedBytes: number;
@@ -4594,6 +4601,11 @@ export class DashboardApi {
   /** `deviceAt` is this device's clock in milliseconds since the epoch. */
   clockConfirm(input: { challengeId: string; deviceAt: number }): Promise<ClockConfirmView> {
     return this.#request<ClockConfirmView>("/api/box/clock-confirm", "POST", input);
+  }
+
+  /** Asks the box to set its clock to this device's; `deviceAt` as for `clockConfirm`. */
+  clockSet(input: { challengeId: string; deviceAt: number }): Promise<ClockSetView> {
+    return this.#request<ClockSetView>("/api/box/clock-set", "POST", input);
   }
 
   freeBoxSpace(): Promise<FreedSpaceView> {
