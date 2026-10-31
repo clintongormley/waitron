@@ -268,6 +268,7 @@ it("names only registered word lists in its word-list slots, variants and words 
               m[1] !== "date" &&
               m[1] !== "bytes" &&
               m[1] !== "minute" &&
+              m[1] !== "duration" &&
               !Object.hasOwn(ALERT_WORDS, m[1]!),
           )
           .map((m) => `${code}: ${m[0]}`),
