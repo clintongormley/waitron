@@ -59,6 +59,7 @@ function watched(initial: { uptimeS: number | null; perfMs: number; uptimeText?:
     store: {
       noteAuthority: vi.fn(),
       witnesses: vi.fn(() => []),
+      forSetting: vi.fn(() => []),
       takeNewAuthority: vi.fn(() => []),
       endStop: vi.fn(),
       clear: vi.fn(),

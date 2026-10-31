@@ -97,7 +97,16 @@ function harness(
     nodeId: "node-1",
     read: options.read ?? (async (fn) => fn(TX)),
     transaction: options.transaction ?? (async (fn) => fn(TX)),
-    ...(options.correction === undefined ? {} : { correction: options.correction }),
+    ...(options.correction === undefined
+      ? {}
+      : {
+          correction: {
+            set: async () => ({ set: false as const, reason: "synchronised" as const }),
+            steps: () => 0,
+            writePending: async () => {},
+            ...options.correction,
+          },
+        }),
     filesRecords: () => false,
     isPrimary: () => true,
     intervalMs: CLOCK_WATCH_MS,
