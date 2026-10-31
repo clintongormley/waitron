@@ -47,12 +47,14 @@ export const CLOCK_CONFIRMED_BY_WORDS = {
     authority: "the tax agency's time",
     devices: "two tills or handhelds",
     admin: "an administrator",
+    staff: "a staff member on a till",
     otherwise: "a check recorded on the box",
   },
   es: {
     authority: "la hora de Hacienda",
     devices: "dos cajas o terminales",
     admin: "un administrador",
+    staff: "un empleado en una caja",
     otherwise: "una comprobación anotada en el equipo",
   },
 } as const satisfies Record<"en" | "es", Record<string, string>>;

@@ -27,6 +27,7 @@ const SOURCE_WORD = {
   authority: "authority",
   devices: "devices",
   admin: "admin",
+  staff: "staff",
   elapsed: "otherwise",
 } as const satisfies Record<ClockConfirmationSource, keyof (typeof CLOCK_CONFIRMED_BY_WORDS)["en"]>;
 

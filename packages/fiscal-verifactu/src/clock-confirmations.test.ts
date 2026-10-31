@@ -261,6 +261,29 @@ describe("clock_confirmations", () => {
     expect(await countOf("clock_confirmations")).toBe(1);
   });
 
+  it("keeps a staff member's confirmation naming a person, with a backward step", async () => {
+    const { nodeId } = await seedPendingEnvios(suite.db, { count: 0 });
+    await insertConfirmation(nodeId, 1, { source: "staff", personId: PERSON, stepMs: -90_000 });
+    const { rows } = await suite.db.execute<{ source: string; person_id: string; step_ms: number }>(
+      sql`select source, person_id, step_ms from clock_confirmations`,
+    );
+    expect(rows.map((row) => ({ ...row, step_ms: Number(row.step_ms) }))).toEqual([
+      { source: "staff", person_id: PERSON, step_ms: -90_000 },
+    ]);
+  });
+
+  it("refuses a staff member's confirmation naming no person", async () => {
+    const { nodeId } = await seedPendingEnvios(suite.db, { count: 0 });
+    const error = await captureError(() =>
+      insertConfirmation(nodeId, 1, { source: "staff", personId: null }),
+    );
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(checkFailed(error, "clock_confirmations_person_ck")).toBe(true);
+    expect(await countOf("clock_confirmations")).toBe(0);
+    await insertConfirmation(nodeId, 1, { source: "admin", personId: PERSON });
+    expect(await countOf("clock_confirmations")).toBe(1);
+  });
+
   it("refuses a record without its record_at", async () => {
     const { nodeId, registroIds } = await seedPendingEnvios(suite.db, { count: 1 });
     const error = await captureError(() =>

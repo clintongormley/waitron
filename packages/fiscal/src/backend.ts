@@ -181,7 +181,7 @@ export interface ClockBehindLatestRecord {
  * it, or a confirmation already covers the reading. */
 export type ClockStopProof = "none" | "contrary" | "ready" | "confirmed";
 
-export type ClockConfirmationSource = "authority" | "devices" | "admin" | "elapsed";
+export type ClockConfirmationSource = "authority" | "devices" | "admin" | "staff" | "elapsed";
 
 /** A clock reading more than a minute earlier than the latest record, what the witnesses say about
  * it, and the confirmation that covers it if one does. */
