@@ -625,12 +625,12 @@ until A977).
   product, variant, kitchen, options-list, label and extras-list names to what it creates; it
   keeps the customer names and descriptions it gives under `es`, `fr` and other language keys,
   its `es-ES` locale and the operation description "Venta". The full-manifest suite
-  (`apps/server/src/catalogue-api.full-manifest.test.ts`) and the setup API suite
-  (`apps/server/src/setup-api.test.ts`) give English location, administrator, category, product,
-  section, series-code, zone and department names to what they create; they keep their `es-ES`
-  locale and their Spanish street addresses; the full-manifest suite keeps the operation
-  description "Venta en establecimiento" and the setup suite its administrator's real names
-  "Ana Maria" "Lopez Garcia".
+  (`apps/server/src/catalogue-api.full-manifest.test.ts`) gives its location, administrator,
+  category, product and section English names, and keeps its `es-ES` locale, its Spanish street
+  address and the operation description "Venta en establecimiento". The setup API suite
+  (`apps/server/src/setup-api.test.ts`) uses English location, administrator, product,
+  series-code, zone and department samples, and keeps its `es-ES` locale, its Spanish addresses
+  and the administrator's personal name "Ana Maria" "Lopez Garcia".
   Other helpers and screen fixtures remain.
   Keep existing behavioral assertions. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's
@@ -930,12 +930,12 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   product, variant, kitchen, options-list, label and extras-list names to what it creates; it
   keeps the customer names and descriptions it gives under `es`, `fr` and other language keys,
   its `es-ES` locale and the operation description "Venta". The full-manifest suite
-  (`apps/server/src/catalogue-api.full-manifest.test.ts`) and the setup API suite
-  (`apps/server/src/setup-api.test.ts`) give English location, administrator, category, product,
-  section, series-code, zone and department names to what they create; they keep their `es-ES`
-  locale and their Spanish street addresses; the full-manifest suite keeps the operation
-  description "Venta en establecimiento" and the setup suite its administrator's real names
-  "Ana Maria" "Lopez Garcia".
+  (`apps/server/src/catalogue-api.full-manifest.test.ts`) gives its location, administrator,
+  category, product and section English names, and keeps its `es-ES` locale, its Spanish street
+  address and the operation description "Venta en establecimiento". The setup API suite
+  (`apps/server/src/setup-api.test.ts`) uses English location, administrator, product,
+  series-code, zone and department samples, and keeps its `es-ES` locale, its Spanish addresses
+  and the administrator's personal name "Ana Maria" "Lopez Garcia".
   Other helpers and screen expectations remain.
   Continue package by package from A977's list; keep accent-sensitive
   combobox searches and filename samples, deliberate multilingual metadata and printing’s accented
