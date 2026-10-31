@@ -121,11 +121,8 @@ const IMAGE_REFERENCE_TRIGGERS = [
  * Every behavioural trigger the migrations create, pinned by name: those of
  * `0001_behavioural_triggers.sql` (SQLite has no `BEFORE INSERT OR UPDATE`, so a rule covering more
  * than one event is split and the suffix names the event), the `products_*` names of
- * `0004_variant_one_level.sql` and `0047_product_ordering_check.sql`, the
- * `working_orders_release_main_bill*` names of
- * `0038_main_bill_release.sql` (both re-created by
- * `0045_recreate_triggers_after_rebuild.sql`), and the `bill_payment*` names of
- * `0024_bill_payment_triggers.sql`. A later migration that RECREATES a table drops its triggers
+ * `0004_variant_one_level.sql` and `0047_product_ordering_check.sql`, and the `bill_payment*`
+ * names of `0024_bill_payment_triggers.sql`. A later migration that RECREATES a table drops its triggers
  * silently — the `products_*` ones on `products` — and
  * this list is what notices.
  */
@@ -155,8 +152,6 @@ const EXPECTED_TRIGGERS = [
   "working_orders_recipient_identity_insert",
   "working_orders_recipient_identity_update",
   "sales_recipient_identity_insert",
-  "working_orders_release_main_bill",
-  "working_orders_release_main_bill_on_move",
   "tender_refunds_guard_update",
   "tender_refunds_no_delete",
 ];
@@ -1541,53 +1536,22 @@ describe("working_order_lines_check_locales_update and its variant twin once a v
   });
 });
 
-describe("working_orders_release_main_bill", () => {
-  const mainBillOf = (party) =>
-    connection.prepare(`select main_bill_id from parties where id = ?`).get(party).main_bill_id;
-  // Set inside each case rather than in `seed`, so the seed does not depend on the column.
-  const nameMainBill = (party, bill) =>
-    connection.exec(`update parties set main_bill_id = '${bill}' where id = '${party}'`);
-
-  it("clears the main bill when it moves from open to settled", () => {
-    nameMainBill("party-main-settles", "wo-main-settles");
-    connection.exec(
-      `update working_orders set status = 'settled', settled_at = '${STAMP}' ` +
-        `where id = 'wo-main-settles'`,
-    );
-    expect(mainBillOf("party-main-settles")).toBeNull();
+describe("the main bill is gone", () => {
+  it("leaves parties with no main_bill_id column", () => {
+    const columns = connection
+      .prepare(`select name from pragma_table_info('parties')`)
+      .all()
+      .map((row) => row.name);
+    expect(columns).toContain("id");
+    expect(columns).not.toContain("main_bill_id");
   });
 
-  it("clears the main bill when it moves from open to placed", () => {
-    nameMainBill("party-main-places", "wo-main-places");
-    connection.exec(`update working_orders set status = 'placed' where id = 'wo-main-places'`);
-    expect(mainBillOf("party-main-places")).toBeNull();
-  });
-
-  it("clears the main bill on the old party when the bill moves to another party", () => {
-    nameMainBill("party-main-moves", "wo-main-moves");
-    nameMainBill("party-main-destination", "wo-main-destination");
-    connection.exec(
-      `update working_orders set party_id = 'party-main-destination' where id = 'wo-main-moves'`,
-    );
-    expect(mainBillOf("party-main-moves")).toBeNull();
-    expect(mainBillOf("party-main-destination")).toBe("wo-main-destination");
-  });
-
-  it("leaves the main bill set when the bill changes only its revision", () => {
-    nameMainBill("party-main-revision", "wo-main-revision");
-    connection.exec(
-      `update working_orders set revision = revision + 1 where id = 'wo-main-revision'`,
-    );
-    expect(mainBillOf("party-main-revision")).toBe("wo-main-revision");
-  });
-
-  it("leaves the main bill set when ANOTHER bill of the party moves to another party", () => {
-    nameMainBill("party-main-other", "wo-main-other");
-    connection.exec(
-      `update working_orders set party_id = 'party-main-destination' ` +
-        `where id = 'wo-main-other-split'`,
-    );
-    expect(mainBillOf("party-main-other")).toBe("wo-main-other");
+  it("leaves no trigger whose SQL names main_bill", () => {
+    const naming = connection
+      .prepare(`select name from sqlite_master where type = 'trigger' and sql like '%main_bill%'`)
+      .all()
+      .map((row) => row.name);
+    expect(naming).toEqual([]);
   });
 });
 

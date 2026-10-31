@@ -1450,15 +1450,28 @@ Prose: `packages/db/README.md:88-95` (a dated sentence that the triggers and col
 the new files); `docs/developers/conventions-data.md:3512-3513` list gains the new custom file
 (and its date in the dated list `:3570`).
 
-- [ ] Write the behavioural-triggers describe's new case first ("the main bill is gone": no
+- [x] Write the behavioural-triggers describe's new case first ("the main bill is gone": no
       `main_bill_id` in `pragma_table_info('parties')`, no trigger whose `sql` contains `main_bill`).
-- [ ] RED: `pnpm exec vitest run scripts/behavioural-triggers.test.ts -t 'main bill'` — fails on the
+- [x] RED: `pnpm exec vitest run scripts/behavioural-triggers.test.ts -t 'main bill'` — fails on the
       column still present.
-- [ ] Generate both migrations; apply exactly the Q5 items 3–5 changes, no other edit to those files.
-- [ ] Retire the `mainOf` reads of `party-bill-actions.test.ts`'s `A803 no main bill (writers):`
+      (Run: 2 failed, 366 skipped: `expected [ 'id', 'guest_count', 'state', …(10) ] to not include
+      'main_bill_id'`, and the trigger case received the two `working_orders_release_main_bill*`
+      names. This red run is also the case's deletion control: the same file with the migrations
+      not yet written.)
+- [x] Generate both migrations; apply exactly the Q5 items 3–5 changes, no other edit to those files.
+      (drizzle-kit picked `0201_retire_main_bill_triggers.sql` (custom, two `DROP TRIGGER`s; its
+      snapshot equals `0200`'s once `id`/`prevId` are removed, checked) and
+      `0202_retire_main_bill.sql`: `__new_parties` create, copy, `DROP TABLE parties`, rename, and
+      `parties_merged_into_idx` re-created; no other table. Journal times increase. Without the
+      `RESETS` row, `migration-upgrade` failed at `core/0202`: "Failed to run the query 'DROP TABLE
+      `parties`;'" caused by "FOREIGN KEY constraint failed". A scratch run (deleted) on a database
+      migrated to `0200`: a closed party named by a `party_tables` row, or by a settled
+      `working_orders` bill, is refused with the same two messages; a closed party with no child row
+      migrates (control). The Madrid adapter failed 2 of 2 before its three lines.)
+- [x] Retire the `mainOf` reads of `party-bill-actions.test.ts`'s `A803 no main bill (writers):`
       exactly as its row says (Q5, deleted checks); the "the main bill is gone" case above is what
       holds their guarantee from here.
-- [ ] GREEN: S (all three commands; `migration-upgrade` with its new `RESETS` row; record the
+- [x] GREEN: S (all three commands; `migration-upgrade` with its new `RESETS` row; record the
       refusal text from its own output, and confirm it is the `DROP TABLE parties` foreign-key
       refusal on a box with a closed party too, review-1 minor 7); H2; F; Filing;
       `pnpm --filter @waitron/server exec vitest run scripts/demo-seed/seed.madrid-baseline.test.ts src/canvas-retirement-upgrade.test.ts`;
@@ -1468,7 +1481,14 @@ the new files); `docs/developers/conventions-data.md:3512-3513` list gains the n
       checks, kept) and `simplified-limit.test.ts`'s local `mainBill` (a name for Bill 1 in its
       `twoBills` helper; it reads no column); `git diff a90f4f87b -- scripts apps/server/scripts`
       matches Q5 items 3–5 and nothing else.
-- [ ] Commit: "Drop the main bill column and its triggers (venue reset needed)". Body: the rebuild
+      (Run: S 558, 4040 and 34 passed; H2 20; F 267; Filing 67, both unchanged from HEAD; Madrid,
+      canvas-retirement-upgrade and party-bill-actions 72; db `parties.test.ts` 12, and the 12 db
+      test files naming `parties` 287; the 190 server test files naming `parties`, in three chunks,
+      2193, 2678 and 2641 passed; every exit 0. Server, db and till typecheck clean; prettier and
+      eslint clean on the changed files; F/H2 diff from `a90f4f87b` 0 bytes. **Departure:** the
+      `rg` also prints the README's older `0038` sentence (history, kept) and the Madrid adapter's
+      two filter lines (Q5 item 5 itself).)
+- [x] Commit: "Drop the main bill column and its triggers (venue reset needed)". Body: the rebuild
       and why the triggers go first; the children of `parties` and that the rebuild fails on any box
       that has ever seated a party; the `RESETS` row; no data migration (pre-live); built on Owner
       question 5's default.

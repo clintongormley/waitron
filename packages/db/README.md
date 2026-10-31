@@ -87,7 +87,9 @@ as `parties_clear_table_status`; SQLite rewrites `visit_id` to `party_id` in
 `parties_clear_table_status` (core `0180_drop_table_status_trigger.sql`) with the table and column it
 served. `0038_main_bill_release.sql` adds two triggers on
 `working_orders` that clear `parties.main_bill_id` when that bill leaves `open` or leaves the party
-(to another party or to the counter). `0042_placed_bill_moves.sql` re-creates
+(to another party or to the counter). **2026-10-31:** A803 slice 3 drops both triggers
+(`0201_retire_main_bill_triggers.sql`) and then the column (`0202_retire_main_bill.sql`, a rebuild
+of `parties`). `0042_placed_bill_moves.sql` re-creates
 `working_orders_enforce_transition` and `working_order_lines_require_open_parent_update`, each with
 an exception for a placed bill: its row may change its party, delivery table and revision, and its
 lines their kitchen group. `0043_drop_triggers_before_rebuild.sql` and

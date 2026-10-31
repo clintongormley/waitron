@@ -130,6 +130,9 @@ for (const locale of ["en", "es"] as const) {
           ...columns.map((name) => ({ name, type: "TEXT", notnull: 0, dflt_value: null, pk: 0 })),
         );
       }
+      const parties = expected[phase].tables.parties!;
+      parties.columns = parties.columns.filter((column) => column.name !== "main_bill_id");
+      parties.foreignKeys = parties.foreignKeys.filter((key) => key.from !== "main_bill_id");
       expected[phase].tables.webauthn_challenges!.columns.push({
         name: "purpose",
         type: "TEXT",

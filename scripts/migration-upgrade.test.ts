@@ -438,6 +438,11 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "core/0044_drop_table_bill_pointer": {
     refused: ["DROP TABLE `dining_tables`", "FOREIGN KEY constraint failed"],
   },
+  // Rebuilds `parties` without `main_bill_id`; every venue that has seated a party needs a reset
+  // (A803 slice 3).
+  "core/0202_retire_main_bill": {
+    refused: ["DROP TABLE `parties`", "FOREIGN KEY constraint failed"],
+  },
   // Rebuilds `dining_tables` without `status_id`; every venue needs a reset (A757 slice 2).
   "core/0181_retire_table_service_statuses": {
     refused: ["DROP TABLE `dining_tables`", "FOREIGN KEY constraint failed"],

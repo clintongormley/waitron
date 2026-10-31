@@ -1,5 +1,4 @@
 import { sql } from "drizzle-orm";
-import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { check, foreignKey, index, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
 import {
   count,
@@ -15,7 +14,6 @@ import {
   tsString,
 } from "./columns.js";
 import { diningTables } from "./dining-tables.js";
-import { workingOrders } from "./orders.js";
 
 export const partyState = enumType(["open", "closed"]);
 
@@ -45,9 +43,6 @@ export const parties = table(
     mergedIntoPartyId: id("merged_into_party_id"),
     billRequestedAt: tsString("bill_requested_at"),
     name: label("name"),
-    // The party's main bill. Two triggers on working_orders clear it when that bill leaves `open`
-    // or leaves the party (to another party or to the counter) (`0038_main_bill_release.sql`).
-    mainBillId: id("main_bill_id").references((): AnySQLiteColumn => workingOrders.id),
     revision: count("revision").notNull().default(0),
     tableNames: labelList("table_names"),
   },

@@ -1279,10 +1279,7 @@ describe("two tills at once", () => {
   });
 });
 
-describe("A803 no main bill (writers):", () => {
-  /** The party's `main_bill_id` as stored; the column stays until A803 slice 3 Task 7. */
-  const mainOf = async (partyId: string) => (await partyRow(v, partyId)).mainBillId;
-
+describe("A803 table actions (writers):", () => {
   async function moveTo(billId: string, to: MoveTarget) {
     const own = (await billRow(v, billId)).partyId!;
     const target = "tableId" in to ? await partyAt(v, to.tableId) : null;
@@ -1301,7 +1298,6 @@ describe("A803 no main bill (writers):", () => {
     const seated = await seat(v, await v.table(label));
     await orderForParty(v, seated.partyId, ["Burger"]);
     await placeByHand(v, seated.tabId);
-    expect(await mainOf(seated.partyId)).toBeNull();
     return seated;
   }
 
@@ -1315,26 +1311,16 @@ describe("A803 no main bill (writers):", () => {
     return { ...seated, second };
   }
 
-  it("Merge bills leaves the party with no main bill when Bill 1 is merged away", async () => {
-    const { partyId, main, second } = await twoBills("Mesa nomain merge");
-    expect(await mainOf(partyId)).toBeNull();
-
-    await merge(partyId, second, main);
-
-    expect(await mainOf(partyId)).toBeNull();
-  });
-
-  it("Move this bill to a free table names no main bill on the new party", async () => {
+  it("Move this bill to a free table", async () => {
     const { second } = await twoBills("Mesa nomain move free");
     const free = await v.table("Mesa nomain move free to");
 
     const { partyId } = await moveTo(second, { tableId: free });
 
     expect(partyId).not.toBeNull();
-    expect(await mainOf(partyId!)).toBeNull();
   });
 
-  it("Move this bill onto a seated party with no main bill leaves it with none", async () => {
+  it("Move this bill onto a seated party", async () => {
     const { second } = await twoBills("Mesa nomain move seated");
     const there = await presentedParty("Mesa nomain move seated to");
     const table = (await activeTablesOf(v, there.partyId))[0]!;
@@ -1342,10 +1328,9 @@ describe("A803 no main bill (writers):", () => {
     const result = await moveTo(second, { tableId: table });
 
     expect(result.partyId).toBe(there.partyId);
-    expect(await mainOf(there.partyId)).toBeNull();
   });
 
-  it("Join a seated table leaves the joining party with no main bill", async () => {
+  it("Join a seated table", async () => {
     const joiner = await presentedParty("Mesa nomain join from");
     const held = await seat(v, await v.table("Mesa nomain join held"));
     const heldTable = (await activeTablesOf(v, held.partyId))[0]!;
@@ -1358,23 +1343,20 @@ describe("A803 no main bill (writers):", () => {
     const result = await inTx(v, (tx) => joinTables(tx, v.cfg, joiner.partyId, heldTable, joining));
 
     expect(result.billIds).toContain(held.tabId);
-    expect(await mainOf(joiner.partyId)).toBeNull();
   });
 
-  it("Join a free table, for a party with no bill, names no main bill on the bill it is given", async () => {
+  it("Join a free table, for a party with no bill, gives it one bill", async () => {
     const { partyId, tabId } = await seat(v, await v.table("Mesa nomain join empty"));
     await moveTo(tabId, { counter: { zoneId: null } });
-    expect(await mainOf(partyId)).toBeNull();
     const free = await v.table("Mesa nomain join empty to");
     const joining = await commandFor(v, partyId);
 
     const result = await inTx(v, (tx) => joinTables(tx, v.cfg, partyId, free, joining));
 
     expect(result.billIds).toHaveLength(1);
-    expect(await mainOf(partyId)).toBeNull();
   });
 
-  it("Split a table taking an open bill names no main bill on the new party, and the staying party keeps its own bill", async () => {
+  it("Split a table taking an open bill leaves the staying party its own bill", async () => {
     const { partyId, tabId, second } = await atTwoTables("Mesa nomain split bill");
     await orderForParty(v, partyId, ["Burger", "Vino"]);
     const taken = await splitOff(partyId, tabId, [2]);
@@ -1383,31 +1365,25 @@ describe("A803 no main bill (writers):", () => {
     const result = await inTx(v, (tx) => splitTable(tx, v.cfg, partyId, second, taken, splitting));
 
     expect(result.billId).toBe(taken);
-    expect(await mainOf(result.partyId)).toBeNull();
-    expect(await mainOf(partyId)).toBeNull();
     expect(await openingBillOfParty(v, partyId)).toBe(tabId);
   });
 
-  it("Split a table with no bill names no main bill on the new party's empty bill", async () => {
+  it("Split a table with no bill gives the new party an empty bill", async () => {
     const { partyId, tabId, second } = await atTwoTables("Mesa nomain split none");
     const splitting = await commandFor(v, partyId);
 
     const result = await inTx(v, (tx) => splitTable(tx, v.cfg, partyId, second, null, splitting));
 
     expect((await billRow(v, result.billId)).partyId).toBe(result.partyId);
-    expect(await mainOf(result.partyId)).toBeNull();
-    expect(await mainOf(partyId)).toBeNull();
     expect(await openingBillOfParty(v, partyId)).toBe(tabId);
   });
 
-  it("Split a table taking the staying party's only bill names no main bill on the bill it is given", async () => {
+  it("Split a table taking the staying party's only bill", async () => {
     const { partyId, tabId, second } = await atTwoTables("Mesa nomain split last");
     const splitting = await commandFor(v, partyId);
 
     const result = await inTx(v, (tx) => splitTable(tx, v.cfg, partyId, second, tabId, splitting));
 
     expect(result.billId).toBe(tabId);
-    expect(await mainOf(result.partyId)).toBeNull();
-    expect(await mainOf(partyId)).toBeNull();
   });
 });
