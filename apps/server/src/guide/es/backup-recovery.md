@@ -2,63 +2,50 @@
 
 ## Si se interrumpió la primera configuración {#interrupted-setup}
 
-Si la página de reparación no permite continuar, elige **Recuperar desde una copia**. Puedes usar
-esta opción aunque no se pueda comprobar la contraseña anterior. Necesitas la clave de recuperación
-del nodo indicada en la copia elegida. El intento anterior y sus archivos se conservan en sus propias
-carpetas; abrir una copia no da acceso a esos registros locales.
+Si la página de reparación no permite continuar tu configuración, ofrece **Empezar de nuevo** y
+**Recuperar desde una copia**. Las dos borran de la misma manera la configuración que se detuvo a
+medias, y **Recuperar desde una copia** lleva después a la restauración que usa un equipo nuevo.
+Ninguna pide contraseña: cualquiera que pueda abrir la página de reparación puede usarlas, y puede
+ver lo que la página muestra al pulsar una. Cuando eliges una, el equipo comprueba lo que borraría
+y la página lo muestra.
 
-Usa la conexión segura del equipo. Si el navegador no confía en ella, elige primero **Configurar
-conexión segura** en la página de reparación. **Comprobar de nuevo** vuelve a leer la conexión
-sin repararla. **Detener** finaliza este intento; puedes cerrar la pestaña o comprobar de nuevo.
-Si la reparación sigue fallando, detente aquí. Esta página no puede reparar todos los archivos
-de certificados guardados ni sustituir un certificado instalado por separado. Para uno instalado
-por separado, comprueba la dirección HTTPS del servidor y detente si muestra un aviso. Si tu
-dispositivo bloquea la instalación del certificado, usa uno del local que la permita. Introduce
-contraseñas y claves de recuperación solo cuando HTTPS se abra sin avisos.
+Cuando eliges **Empezar de nuevo**, la página muestra «Empezar de nuevo borra lo que se introdujo en
+la configuración que se detuvo a medias. No se envió ninguna factura a la AEAT.», y lo borra todo
+cuando marcas «Borrar el intento anterior y empezar de nuevo.» y vuelves a elegir **Empezar de
+nuevo**. Cuando eliges **Recuperar desde una copia**, muestra «Recuperar desde una copia primero
+borra lo que se introdujo en la configuración que se detuvo a medias. No se envió ninguna factura a
+la AEAT. Después eliges la copia.», y lo borra todo cuando marcas «Borrar el intento anterior y
+recuperar desde una copia.» y vuelves a elegir **Recuperar desde una copia**.
 
-Apaga la caja anterior y coordínate con los otros locales: solo una persona debe recuperar este contribuyente a la vez.
+Si la página dice que falta la base de datos de configuración, cualquiera de las dos muestra hasta
+dónde llegó la configuración según su propio registro, no dice «No se envió ninguna factura a la
+AEAT.», y lo borra todo cuando marcas «No se envió nada a la AEAT ni se vendió nada.» y vuelves a
+pulsar el mismo botón. Si parte de la base de datos de configuración no se puede leer, la página
+dice «El proceso de configuración anterior no tuvo éxito.» y no dice «No se envió ninguna factura a
+la AEAT.», porque puede que el equipo no haya podido comprobar si esa base de datos tiene facturas.
+Empezar de nuevo y Recuperar desde una copia la borran igualmente.
 
-Mientras hay una recuperación desde una copia en curso en otro dispositivo, la página de reparación
-lo indica, con cuándo empezó y cuándo tuvo actividad por última vez. Hasta que se detenga, la página
-solo ofrece **Reconectar** y **Configurar conexión segura**, y lo vuelve a comprobar sola. Una
-recuperación cuenta como en curso mientras alguno de sus pasos está en marcha y durante los cinco
-minutos siguientes a su última actividad. Esos cinco minutos terminan antes si la recuperación falla
-o el equipo se reinicia.
+No se ofrece ninguna de las dos, y la página dice por qué con las mismas palabras para ambas, si la
+configuración ya guardó los ajustes con los que vende el equipo (continúa con tu contraseña de
+configuración para terminarla), si la configuración ya terminó, o si la base de datos de
+configuración tiene una factura u otro registro que Waitron nunca borra. Si el equipo no puede
+confirmar que borrar la configuración sea seguro, la página lo indica y no ofrece ninguna. Eso
+incluye una configuración cuyo propio registro no se puede leer o lleva una marca que necesita
+reparación: entonces la única salida es reinstalar Waitron, salvo que la configuración aún no
+hubiera guardado nada; en ese caso **Continuar con tu contraseña de configuración** repara el
+registro y sigue.
 
-Si una recuperación desde una copia empezó y no terminó, **Empezar de nuevo** la borra junto con la
-configuración interrumpida. Empezar de nuevo no pide contraseña: cualquiera que pueda abrir la
-página de reparación puede usarlo, y puede ver lo que la página muestra al pulsarlo. Cuando eliges
-**Empezar de nuevo**, el equipo comprueba lo que borraría y la página lo muestra, con la
-recuperación detenida si la hay. Cuando la página muestra una recuperación detenida, no ofrece
-**Recuperar desde una copia** junto a ella.
+Cuando se ha borrado la configuración, el equipo se reinicia. Después de **Recuperar desde una
+copia**, **Reconectar** abre «Unirse a un restaurante existente o recuperarlo», donde eliges
+**Restaurar una copia de seguridad** o **Restaurar desde mi bucket**, como en un equipo nuevo;
+restaurar necesita la clave de la propia copia y la clave de recuperación de su nodo. Después de
+**Empezar de nuevo**, **Reconectar** abre «Configura este servidor Waitron», donde eliges cómo
+configurar este equipo. Si se recarga la página antes de pulsar **Reconectar**, no recuerda cuál
+elegiste y abre su primera pantalla. Si esa pantalla pregunta «¿Es segura esta página?», pulsa
+**Continuar con la configuración**; después, para restaurar, elige **Unirse o recuperar**.
 
-Si la página dice que falta la base de datos de configuración, Empezar de nuevo muestra hasta dónde
-llegó la configuración según su propio registro, y lo borra todo cuando marcas «No se envió nada a
-la AEAT ni se vendió nada.» y vuelves a elegir **Empezar de nuevo**. Si no, muestra «Empezar de
-nuevo borra lo que se introdujo en la configuración que se detuvo a medias. No se envió ninguna
-factura a la AEAT.», y lo borra todo cuando marcas «Borrar el intento anterior y empezar de nuevo.»
-y vuelves a elegir **Empezar de nuevo**. Si parte de la base de datos de configuración no se puede
-leer, la página dice «El proceso de configuración anterior no tuvo éxito.» y no dice «No se envió
-ninguna factura a la AEAT.», porque puede que el equipo no haya podido comprobar si esa base de
-datos tiene facturas. Empezar de nuevo la borra igualmente.
-
-Empezar de nuevo no se ofrece, y la página dice por qué, si la configuración ya guardó los ajustes
-con los que vende el equipo (continúa con tu contraseña de configuración para terminarla), si la
-configuración ya terminó, o si la base de datos de configuración tiene una factura u otro registro
-que Waitron nunca borra. Si el equipo no puede confirmar que borrar la configuración sea seguro, la
-página lo indica y no lo ofrece.
-
-Si esa recuperación usaba una copia de Cloud, su aprobación en Waitron Cloud se cierra sola en menos
-de una hora desde que se dio. Hasta entonces, Waitron Cloud no puede aprobar otra recuperación para
-el local de este equipo.
-
-Si la página dice que «Empezar de nuevo» no ha terminado, recárgala para ver lo que falta. Si el
-equipo se está reiniciando, espera a que responda.
-
-Si la recuperación llenó el disco del equipo, «Empezar de nuevo» sigue funcionando: el equipo guarda
-unos 8 MB de su disco en reserva, y cede ese espacio para poder quitar la recuperación. Si ni eso
-basta, la página dice que el disco está lleno. Cuando la página puede saberlo, dice si reiniciar el
-equipo puede liberar espacio.
+Si la página dice «Borrado interrumpido», después de **Empezar de nuevo** o de **Recuperar desde una
+copia**, recárgala para continuar.
 
 Si un «Empezar de nuevo» se interrumpió y después el equipo encuentra archivos que «Empezar de
 nuevo» no creó, como un local copiado desde una copia de seguridad, el equipo no arranca. Si su
@@ -74,37 +61,73 @@ la página dice que «Empezar de nuevo» estaba apartando archivos y no ha termi
 **Reintentar un arranque normal** para terminar de moverlos; después el equipo empieza una
 configuración inicial nueva.
 
+Usa la conexión segura del equipo. Si el navegador no confía en ella, elige primero **Configurar
+conexión segura** en la página de reparación. **Comprobar de nuevo** vuelve a leer la conexión
+sin repararla. **Detener** finaliza este intento; puedes cerrar la pestaña o comprobar de nuevo.
+Si la reparación sigue fallando, detente aquí. Esta página no puede reparar todos los archivos
+de certificados guardados ni sustituir un certificado instalado por separado. Para uno instalado
+por separado, comprueba la dirección HTTPS del servidor y detente si muestra un aviso. Si tu
+dispositivo bloquea la instalación del certificado, usa uno del local que la permita. Introduce
+contraseñas y claves de recuperación solo cuando HTTPS se abra sin avisos.
+
+Apaga la caja anterior y coordínate con los otros locales: solo una persona debe recuperar este contribuyente a la vez.
+
+Los párrafos siguientes describen una recuperación desde una copia iniciada en la página de
+reparación antes de esta versión de Waitron, que ya no la inicia ahí.
+
+Mientras hay una recuperación desde una copia en curso en otro dispositivo, la página de reparación
+lo indica, con cuándo empezó y cuándo tuvo actividad por última vez. Hasta que se detenga, la página
+solo ofrece **Reconectar** y **Configurar conexión segura**, y lo vuelve a comprobar sola. Una
+recuperación cuenta como en curso mientras alguno de sus pasos está en marcha y durante los cinco
+minutos siguientes a su última actividad. Esos cinco minutos terminan antes si la recuperación falla
+o el equipo se reinicia.
+
+Si una recuperación desde una copia empezó y no terminó, **Empezar de nuevo** o **Recuperar desde
+una copia** la borra junto con la configuración interrumpida, y la página muestra la recuperación
+detenida al pulsar cualquiera de las dos.
+
+Si esa recuperación usaba una copia de Cloud, su aprobación en Waitron Cloud se cierra sola en menos
+de una hora desde que se dio. Hasta entonces, Waitron Cloud no puede aprobar otra recuperación para
+el local de este equipo.
+
+Si la recuperación llenó el disco del equipo, «Empezar de nuevo» sigue funcionando: el equipo guarda
+unos 8 MB de su disco en reserva, y cede ese espacio para poder quitar la recuperación. Si ni eso
+basta, la página dice que el disco está lleno. Cuando la página puede saberlo, dice si reiniciar el
+equipo puede liberar espacio.
+
 ## Elige tu copia {#source}
 
-Elige **Archivo de copia**, **Copia del bucket** o **Copia de Cloud** y el entorno correspondiente.
-Para un archivo, selecciónalo e introduce su clave. Para una copia del bucket, elige tu paquete de
-recuperación o el archivo del kit de recuperación, o pega el kit. La página lee el código de la copia
-del bucket del archivo adjunto dentro del PDF, no del texto impreso, y solo envía ese código. Si el
-paquete se hizo antes de que el equipo tuviera copia en el bucket, el PDF no es un paquete de
-recuperación de Waitron o el archivo adjunto del paquete está dañado o se modificó después de
-hacerse, la página lo dice bajo el campo y conserva lo que había.
-Para Cloud, pide la aprobación, apruébala en Cloud y compruébala aquí. La recuperación de Cloud
-requiere un servicio compatible; esta opción no habilita la recuperación de Cloud en producción.
+En «Unirse a un restaurante existente o recuperarlo», elige **Restaurar una copia de seguridad**
+para un archivo de copia, o **Restaurar desde mi bucket** para la copia continua de tu propio bucket
+de almacenamiento. Para una copia de Waitron Cloud, elige **Restaurar una copia de seguridad** y
+después **Restaurar desde Waitron Cloud**.
 
-La clave del archivo, las credenciales del bucket y la aprobación de Cloud dan acceso a una copia.
-También necesitas la clave de recuperación de su nodo para identificarte. Mantén separados producción
-y preproducción.
+Para un archivo de copia, elígelo en **Archivo de copia de seguridad**, introduce la clave que lo
+abre en **Clave de recuperación** y elige su **Entorno de la copia**. Para tu bucket, elige tu
+paquete de recuperación o archivo del kit en **Paquete de recuperación o archivo del kit**, o pega
+el kit en **Kit de recuperación**, y elige el **Entorno** en el que funcionaba la caja anterior. Si
+el paquete se hizo antes de que el equipo tuviera copia en el bucket, no es un paquete de
+recuperación de Waitron o está dañado o se modificó después de hacerse, la página lo dice bajo el
+campo. Para Waitron Cloud, elige **Iniciar la recuperación desde Cloud**, introduce el código que
+muestra la página en tu cuenta de Waitron Cloud (**Abrir Waitron Cloud**) y después elige
+**Comprobar la aprobación**. La recuperación de Cloud requiere un servicio compatible.
+
+Después elige **Revisar copia**. La página muestra la copia elegida: su origen, el negocio, el
+local, la fecha, el nodo y la clave de recuperación del nodo. Compruébalos antes de continuar.
+Mantén separados producción y preproducción.
+
+La clave de la copia, el kit del bucket y la aprobación de Cloud dan acceso a una copia. También
+necesitas la clave de recuperación de su nodo para identificarte.
 
 ## Identifícate ante la copia elegida {#proof}
 
-En **PDF de recuperación**, elige tu paquete de recuperación, o un PDF de recuperación anterior, que
-tenga la clave del servidor de esta copia; o escribe la clave agrupada impresa en él en **Clave de
-recuperación**. Si el paquete no tiene la clave del servidor, la página lo dice y, cuando el paquete
-lo registra, indica el paquete o el nombre de la clave que hay que buscar. Un paquete o una hoja con
-una clave del servidor más nueva puede no abrir una copia anterior.
-
-Confirma que la caja anterior seguirá desconectada y que eres la única persona recuperando este
-contribuyente. Elige **Abrir copia**. Solo después de aceptar la clave, la página muestra el
-contribuyente, el local, la fecha y el nombre de la clave de la copia. Compruébalos antes de continuar.
-
-Abrir una copia pausa la configuración normal aunque se rechace la clave. Puedes reintentar aquí
-la recuperación. Para volver a la configuración normal, reinicia el equipo; volver atrás o recargar
-la página no la reanuda.
+Bajo la revisión, en «Recuperar esta caja», elige en **PDF de recuperación** tu paquete de
+recuperación, o un PDF de recuperación anterior, que tenga la clave del servidor de esta copia; o
+escribe la clave agrupada impresa en él en **Clave de recuperación**. Si el paquete no tiene la
+clave del servidor, la página lo dice y, cuando el paquete lo registra, indica el paquete o el
+nombre de la clave que hay que buscar. Un paquete o una hoja con una clave del servidor más nueva
+puede no abrir una copia anterior. Marca «La caja anterior está apagada y seguirá desconectada.» y
+«Soy la única persona recuperando este contribuyente, en todos sus locales.».
 
 Si **Copias** no puede confirmar la clave guardada, conserva tanto la clave anterior como la que
 acabas de guardar. Al cambiar una clave, aún puedes copiar o descargar ambas claves mostradas
@@ -138,29 +161,32 @@ equipo. Conserva las claves de recuperación y las copias existentes si el recha
 
 ## Crea las nuevas series {#series}
 
-Usa los controles bajo los datos autenticados. Vuelve a introducir la clave correspondiente, confirma
-las condiciones de recuperación y elige **Comparar relojes**. Sigue las instrucciones sobre relojes
-y esperas; no hay ningún código de instalación que escribir. Elige **Recuperar** cuando se hayan
-elegido las nuevas series.
+Elige **Comparar relojes**. Sigue las instrucciones sobre relojes y esperas; no hay ningún código de
+instalación que escribir. Elige **Crear las series** cuando la página lo permita; después muestra el
+nombre de las nuevas series. Marca la confirmación que muestra la página —«Confirmo que ningún otro
+servidor en funcionamiento tiene datos más recientes del restaurante.» para un archivo de copia o
+una copia del bucket (para una copia del bucket, también «Este es mi negocio. Restáuralo en este
+servidor.»), o «Confirmo que el servidor anterior y los demás servidores que queden están
+detenidos, y acepto perder los cambios posteriores a esta instantánea.» para una copia de Waitron
+Cloud— y elige **Restaurar la copia**, **Restaurar desde mi bucket** o **Restaurar esta
+instantánea**.
 
 Si la copia tiene ventas con una fecha posterior en más de un minuto a la hora del equipo, el equipo
 deja de cobrar al terminar la recuperación hasta que su reloj las alcance o se confirme su hora: consulta
 [Cuando se paran los cobros por la hora](box-status.md#clock-behind).
 
 Una clave que abre la copia no evita las comprobaciones del historial y del reloj. Si la comprobación
-del reloj lo impide, resuelve la causa e inténtalo de nuevo. No borres a mano los archivos del
-intento conservado ni edites sus registros de recuperación.
+del reloj lo impide, resuelve la causa e inténtalo de nuevo.
 
 ## Si una recuperación se interrumpe {#resume}
 
-Mientras la página de recuperación siga abierta y pueda conectar con el equipo, continúa donde lo
-dejaste. La recuperación se detiene si el equipo se reinicia. Salir de la página o cerrar su pestaña
-también la detiene, en menos de cinco minutos. Si la recuperación ya había guardado progreso, la
-página de reparación la muestra entonces como detenida y no ofrece **Recuperar desde una copia**
-junto a ella; **Empezar de nuevo** la borra, como se explica más arriba. Si no, vuelve a abrir la
-copia.
-Si la recuperación ya está guardada, reconecta con el equipo en lugar de volver a identificarte o colocarla.
+Hasta que eliges el botón de restaurar, la página conserva lo que introdujiste solo mientras sigue
+abierta. Cambiar el archivo, la clave o el entorno descarta lo que comprobó, y al recargar se abre
+la primera pantalla de la página; desde ahí elige **Unirse o recuperar** y empieza de nuevo la
+restauración. Si el equipo rechaza la restauración, la página vuelve al formulario y tienes que
+introducir de nuevo la clave de recuperación del nodo.
 
-Cambiar el origen o el entorno vacía los controles autenticados de la página. No borra la operación
-guardada ni elige otra copia para ella. Después de **Recuperación guardada**, reconecta con el equipo.
-Si el resultado es incierto, conserva los archivos e investiga antes de iniciar otra recuperación.
+Cuando eliges el botón de restaurar, la página dice «Configurando este servidor» y te pide que la
+mantengas abierta. El equipo guarda la solicitud y se reinicia. Si se detiene después de guardar la
+solicitud, el siguiente arranque la ejecuta; si se detiene mientras escribe la copia en su sitio,
+cada arranque siguiente la vuelve a ejecutar.

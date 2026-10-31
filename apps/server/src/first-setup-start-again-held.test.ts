@@ -19,6 +19,7 @@ import {
   writeStartAgainMarker,
   readStartAgainMarker,
   resolveFirstSetupBackupWorkspace,
+  assertFirstSetupBackupBootTarget,
   type StartAgainSummary,
 } from "@waitron/provisioning";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu/src/schema/registros.js";
@@ -779,6 +780,48 @@ it("control: the same fresh-box restore beside a held setup database that was no
   });
   expect((await diskSnapshot(f.roots)).venue).toEqual(venue);
   expect(await exists(join(f.roots.stateDir, "trading.env"))).toBe(false);
+}, 180_000);
+
+const hourAfterWipe = async (f: Held) =>
+  (await recoverySelectPastWaits(clock, createSelectedRecoveryPreparation(f.archive.options), {
+    onBox: false,
+  })) as { input: unknown };
+
+it("a missing setup database, wiped, then the fresh-box restore writes into the usual folders", async () => {
+  const f = await missingHeldDatabase();
+  await startAgainMissing(f);
+  await stageFreshRestore(f, { ...f.archive, outcome: await hourAfterWipe(f) });
+  await expect(runStagedRestore(f.archive.restore)).resolves.toBe(true);
+  expect(await exists(join(f.roots.venueDir, "venue.db"))).toBe(true);
+  expect(await exists(join(f.roots.stateDir, "trading.env"))).toBe(true);
+  for (const dir of [f.roots.venueDir, f.roots.stateDir])
+    expect(await exists(join(dir, "first-setup-resolutions"))).toBe(false);
+  expect((await resolveFirstSetupBackupWorkspace(f.roots)).kind).toBe("absent");
+}, 180_000);
+
+it("control: the same fresh-box restore beside a missing setup database that was not wiped is refused, and places nothing", async () => {
+  const f = await missingHeldDatabase();
+  await stageFreshRestore(f);
+  const venue = (await diskSnapshot(f.roots)).venue;
+  await expect(runStagedRestore(f.archive.restore)).rejects.toMatchObject({
+    code: expect.stringMatching(/^setup\.attempt_(conflict|uncertain)$/),
+  });
+  expect((await diskSnapshot(f.roots)).venue).toEqual(venue);
+  expect(await exists(join(f.roots.stateDir, "trading.env"))).toBe(false);
+}, 180_000);
+
+it("a held setup database beside a stopped recovery, wiped (discarding the recovery), then the fresh-box restore writes into the usual folders", async () => {
+  const f = await heldSetup();
+  await (await askStartAgain(f)).run();
+  await stageFreshRestore(f, { ...f.archive, outcome: await hourAfterWipe(f) });
+  await expect(runStagedRestore(f.archive.restore)).resolves.toBe(true);
+  expect(await exists(join(f.roots.venueDir, "venue.db"))).toBe(true);
+  expect(await exists(join(f.roots.stateDir, "trading.env"))).toBe(true);
+  expect(await exists(join(f.roots.venueDir, "first-setup-resolutions"))).toBe(false);
+  // Start again keeps the discarded recovery's record folder in the state folder.
+  expect(await exists(join(f.roots.stateDir, "first-setup-resolutions"))).toBe(true);
+  expect((await resolveFirstSetupBackupWorkspace(f.roots)).kind).toBe("absent");
+  await expect(assertFirstSetupBackupBootTarget(f.roots)).resolves.toBeUndefined();
 }, 180_000);
 
 it("a power cut during a held wipe with no recovery: the next start finishes the deletion", async () => {

@@ -80,7 +80,6 @@ const setupLocale = (): "en" | "es" => (currentLocale().startsWith("es") ? "es" 
 /** The wizard's screens, shown one at a time from in-memory state, never a URL route. */
 export type Screen =
   | "first-owner"
-  | "first-backup"
   | "first-setup"
   | "connection"
   | "role"
@@ -669,6 +668,7 @@ export class SetupApp extends LitElement {
     this.firstRetireConfirmed = false;
     this.firstRestarting = false;
     this.#closeWipe();
+    this.#afterWipe = undefined;
     this.firstWipeError = undefined;
     this.#stopActivityWatch();
     this.firstActivity = undefined;
@@ -988,15 +988,7 @@ export class SetupApp extends LitElement {
     const navigate = () => {
       if (!this.isConnected || this.screen !== origin || (owner && !owner.isConnected)) return;
       const finished = this.leave.coordinator.request({
-        scopes:
-          origin === "first-backup"
-            ? "all"
-            : [
-                ...(owner ? [owner] : []),
-                ...(origin === "first-owner" && destination === "first-backup"
-                  ? [this.#firstPasswordOwner]
-                  : []),
-              ],
+        scopes: owner ? [owner] : [],
         reason: "navigation",
         proceed: () => {
           if (!this.isConnected || this.screen !== origin || (owner && !owner.isConnected)) return;
@@ -1114,6 +1106,10 @@ export class SetupApp extends LitElement {
   @state() private firstRestarting = false;
   /** What Start again's confirmation shows; the send stops if the box's summary differs from it. */
   @state() private firstWipeSummary?: StartAgainSummary;
+  /** Which button the person last pressed: it picks the words drawn; both send the same request. */
+  @state() private firstWipeKind: "start-again" | "recover" = "start-again";
+  /** Which wipe the box restarted for, so Reconnect opens that choice's first screen; a reload forgets it. */
+  #afterWipe?: "start-again" | "recover";
   /** Start again's reads failed beside a stopped recovery: the page offers Check again. */
   @state() private firstWipeUnread = false;
   @state() private firstWipeError?: Message;
@@ -1152,6 +1148,7 @@ export class SetupApp extends LitElement {
         throw error;
       inspect = true;
     }
+    if (inspect || session.recoveryRequired || session.state) this.#afterWipe = undefined;
     if ((inspect || session.recoveryRequired) && !session.state) {
       const inspection = await this.api.inspectFirstSetupResolution();
       const activity = await this.#readActivity();
@@ -1383,11 +1380,12 @@ export class SetupApp extends LitElement {
     this.firstRecoveryUnsettled = false;
   }
   /**
-   * Start again: the confirmation is drawn from what the box says now, read with no password, never
-   * from what the page read before.
+   * Start again or Recover from backup: the confirmation is drawn from what the box says now, read
+   * with no password, never from what the page read before.
    */
-  async #openWipeConfirmation(): Promise<void> {
+  async #openWipeConfirmation(kind: "start-again" | "recover"): Promise<void> {
     if (this.firstOwnerBusy) return;
+    this.firstWipeKind = kind;
     const generation = ++this.#firstGeneration;
     const current = () => this.isConnected && generation === this.#firstGeneration;
     this.firstOwnerBusy = true;
@@ -1462,7 +1460,7 @@ export class SetupApp extends LitElement {
     const el = this.shadowRoot?.querySelector<HTMLElement>(`[data-test="${name}"]`);
     (el?.shadowRoot?.querySelector<HTMLElement>("button") ?? el)?.focus();
   }
-  async #startAgainFirstSetup(): Promise<void> {
+  async #sendWipeFirstSetup(): Promise<void> {
     const shown = this.firstWipeSummary;
     const inspection = this.firstInspection;
     if (this.firstOwnerBusy || !this.firstRetireConfirmed || !shown || !inspection) return;
@@ -1470,6 +1468,9 @@ export class SetupApp extends LitElement {
     const current = () => this.isConnected && generation === this.#firstGeneration;
     this.firstOwnerBusy = true;
     this.firstWipeError = undefined;
+    // Forgotten below only on a refusal the page names; after any other failure the box may have
+    // deleted the setup with no answer reaching here.
+    this.#afterWipe = this.firstWipeKind;
     try {
       await sendWipe(this.api, this.#firstResolutionSnapshot(), inspection.database, shown);
       if (!current()) return;
@@ -1481,16 +1482,17 @@ export class SetupApp extends LitElement {
       this.#firstSession = undefined;
     } catch (error) {
       if (!current()) return;
+      const code = (error as { code?: unknown })?.code;
       const refusal = wipeRefusal(error);
+      if (refusal !== undefined || code === "setup.attempt_conflict") this.#afterWipe = undefined;
       // The summary showed no kept records, and an attempt conflict here means the summary or the
       // inspection changed after the page read them.
-      if (
-        refusal === "kept-records" ||
-        (error as { code?: unknown })?.code === "setup.attempt_conflict"
-      ) {
+      if (refusal === "kept-records" || code === "setup.attempt_conflict") {
         this.#closeWipe();
         this.firstWipeError = () => initialOwnerStrings[setupLocale()].heldChanged;
-        void this.#focusAfterUpdate("start-again");
+        void this.#focusAfterUpdate(
+          this.firstWipeKind === "recover" ? "recover-backup" : "start-again",
+        );
       } else if (refusal !== undefined) {
         this.#closeWipe();
         this.firstStartAgainRefused = refusal;
@@ -1531,6 +1533,8 @@ export class SetupApp extends LitElement {
           throw error;
         inspect = true;
       }
+      const unclaimed = !inspect && !session.state && !session.recoveryRequired;
+      if (!unclaimed) this.#afterWipe = undefined;
       if ((inspect || session.recoveryRequired) && !session.state) {
         const inspection = await this.api.inspectFirstSetupResolution();
         const activity = await this.#readActivity();
@@ -1545,11 +1549,17 @@ export class SetupApp extends LitElement {
         this.#watchActivity();
       }
       if (!this.isConnected || generation !== this.#firstGeneration) return;
-      if (!inspect && !session.state && !session.recoveryRequired) {
+      if (unclaimed) {
         await session.dispose();
         if (!this.isConnected || generation !== this.#firstGeneration) return;
         this.#firstSession = undefined;
-        this.screen = "venue";
+        this.screen =
+          this.#afterWipe === "recover"
+            ? "role"
+            : this.#afterWipe === "start-again"
+              ? "mode"
+              : "venue";
+        this.#afterWipe = undefined;
       }
     } catch (error) {
       if (this.isConnected && generation === this.#firstGeneration)
@@ -2395,7 +2405,7 @@ export class SetupApp extends LitElement {
       data-test="start-again"
       variant="secondary"
       ?disabled=${this.firstOwnerBusy || !offered || unsettled}
-      @click=${() => void this.#openWipeConfirmation()}
+      @click=${() => void this.#openWipeConfirmation("start-again")}
       >${t.startAgain}</wt-button
     >`;
     const stoppedBlock = (
@@ -2405,9 +2415,8 @@ export class SetupApp extends LitElement {
         lastActiveSource?: "memory" | "saved-step";
         cloud?: boolean;
       },
-      refused = false,
+      started: string,
     ) => {
-      const started = refused ? t.recoveryStoppedRefused : t.recoveryStopped;
       return html`<div data-test="recovery-stopped">
         <p>${started.replace("{started}", shownAt(recovery.startedAt))}</p>
         <p>${lastActive(recovery.lastActiveAt, recovery.lastActiveSource)}</p>
@@ -2431,17 +2440,13 @@ export class SetupApp extends LitElement {
         this.#firstPasswordScope?.changed();
       }}
     ></wt-input>`;
-    // Disabled where the page says a recovery's records cannot be read: the box refuses a new
-    // recovery beside a journal it cannot read.
-    const recoverBackup = (unreadable: boolean) =>
-      html`<wt-button
-        data-test="recover-backup"
-        variant="secondary"
-        ?disabled=${this.firstOwnerBusy || unreadable}
-        @click=${(event: Event) =>
-          dispatchSetupGoto(event.currentTarget as HTMLElement, "first-backup")}
-        >${t.recoverBackup}</wt-button
-      >`;
+    const recoverBackup = html`<wt-button
+      data-test="recover-backup"
+      variant="secondary"
+      ?disabled=${this.firstOwnerBusy || !offered || unsettled}
+      @click=${() => void this.#openWipeConfirmation("recover")}
+      >${t.recoverBackup}</wt-button
+    >`;
     const cancelStartAgain = html`<wt-button
       slot="cancel"
       data-test="cancel-start-again"
@@ -2451,6 +2456,9 @@ export class SetupApp extends LitElement {
       >${t.cancel}</wt-button
     >`;
     const stoppedShown = missing ? undefined : summary?.recovery;
+    const recovering = confirmOpen && this.firstWipeKind === "recover";
+    const stoppedWords =
+      this.firstWipeKind === "recover" ? t.recoveryStoppedRecover : t.recoveryStopped;
     const startAgainConfirm = !confirmOpen
       ? nothing
       : html`${
@@ -2462,10 +2470,16 @@ export class SetupApp extends LitElement {
               ? html`<p data-test="setup-database-unreadable">${t.setupDatabaseUnreadable}</p>`
               : nothing
           }
-          <p data-test="start-again-deletes">
-            ${noInvoiceFound ? `${t.heldLost} ${t.noInvoiceSent}` : t.heldLost}
-          </p>
-          ${stoppedShown ? stoppedBlock(stoppedShown) : nothing}
+          ${
+            recovering
+              ? html`<p data-test="recover-deletes">
+                  ${noInvoiceFound ? `${t.recoverDeletes} ${t.noInvoiceSent} ${t.recoverThen}` : `${t.recoverDeletes} ${t.recoverThen}`}
+                </p>`
+              : html`<p data-test="start-again-deletes">
+                  ${noInvoiceFound ? `${t.heldLost} ${t.noInvoiceSent}` : t.heldLost}
+                </p>`
+          }
+          ${stoppedShown ? stoppedBlock(stoppedShown, stoppedWords) : nothing}
           <label
             ><input
               data-test="retire-confirmed"
@@ -2476,16 +2490,16 @@ export class SetupApp extends LitElement {
               @change=${(event: Event) => {
                 this.firstRetireConfirmed = (event.currentTarget as HTMLInputElement).checked;
               }}
-            />${missing ? t.missingConfirm : t.retireConfirmed}</label
+            />${missing ? t.missingConfirm : recovering ? t.retireRecover : t.retireConfirmed}</label
           >
           <wt-form-actions .error=${this.firstWipeError?.() ?? ""}>
             ${cancelStartAgain}
             <wt-button
-              data-test="confirm-start-again"
+              data-test=${recovering ? "confirm-recover" : "confirm-start-again"}
               variant=${this.firstRetireConfirmed || this.firstOwnerBusy ? "danger" : "secondary"}
               ?disabled=${!this.firstRetireConfirmed || this.firstOwnerBusy}
-              @click=${() => void this.#startAgainFirstSetup()}
-              >${t.startAgain}</wt-button
+              @click=${() => void this.#sendWipeFirstSetup()}
+              >${recovering ? t.recoverBackup : t.startAgain}</wt-button
             >
           </wt-form-actions>`;
     const wipeError =
@@ -2535,7 +2549,7 @@ export class SetupApp extends LitElement {
       ${
         inspection && !this.firstRestarting && !offersNothing
           ? this.firstWipeUnread
-            ? html`${stoppedHere ? stoppedBlock(stoppedHere) : nothing}${
+            ? html`${stoppedHere ? stoppedBlock(stoppedHere, stoppedWords) : nothing}${
                   unsettled
                     ? html`<p data-test="recovery-unreadable">${t.recoveryUnreadable}</p>`
                     : nothing
@@ -2546,7 +2560,7 @@ export class SetupApp extends LitElement {
                     data-test="check-again"
                     variant="secondary"
                     ?disabled=${this.firstOwnerBusy}
-                    @click=${() => void this.#openWipeConfirmation()}
+                    @click=${() => void this.#openWipeConfirmation(this.firstWipeKind)}
                     >${t.checkAgain}</wt-button
                   >
                 </wt-form-actions>`
@@ -2565,32 +2579,38 @@ export class SetupApp extends LitElement {
                   </ul>
                   ${
                     stopped
-                      ? stoppedBlock(stopped)
+                      ? stoppedBlock(stopped, stoppedWords)
                       : this.firstBackupPhase === "uncertain"
                         ? html`<p data-test="recovery-unreadable">${t.recoveryUnreadable}</p>`
-                        : html`<p>${t.missingBackup}</p>`
+                        : offersStartAgain && !recovering
+                          ? html`<p>${t.missingBackup}</p>`
+                          : nothing
                   }
                   <div class="missing-actions" data-test="missing-actions">
-                    ${stopped ? nothing : recoverBackup(this.firstBackupPhase === "uncertain")}${offersStartAgain && !confirmOpen ? startAgain : nothing}
+                    ${offersStartAgain && !recovering ? recoverBackup : nothing}${offersStartAgain && !confirmOpen ? startAgain : nothing}
                   </div>
                   ${startAgainConfirm} ${wipeError}`
               : html`${
                   stoppedHere && !confirmOpen
-                    ? stoppedBlock(stoppedHere, refused !== undefined)
+                    ? stoppedBlock(
+                        stoppedHere,
+                        refused !== undefined ? t.recoveryStoppedRefused : t.recoveryStopped,
+                      )
                     : nothing
                 }${
                   unsettled
                     ? html`<p data-test="recovery-unreadable">${t.recoveryUnreadable}</p>`
                     : nothing
                 }${refused === undefined && !confirmOpen ? startAgain : nothing}
-                ${refusal} ${startAgainConfirm} ${stoppedHere ? nothing : recoverBackup(unsettled)}
+                ${refusal} ${startAgainConfirm}
+                ${refused === undefined && !recovering ? recoverBackup : nothing}
                 ${
                   unsettled
                     ? html`<wt-button
                         data-test="check-again"
                         variant="secondary"
                         ?disabled=${this.firstOwnerBusy}
-                        @click=${() => void this.#openWipeConfirmation()}
+                        @click=${() => void this.#openWipeConfirmation(this.firstWipeKind)}
                         >${t.checkAgain}</wt-button
                       >`
                     : nothing
@@ -2647,12 +2667,6 @@ export class SetupApp extends LitElement {
   #renderScreen(): TemplateResult {
     const firstSession = this.#firstSession;
     switch (this.screen) {
-      case "first-backup":
-        return html`<setup-first-backup
-          data-test="screen-first-backup"
-          .api=${this.api}
-          .inspection=${this.firstInspection}
-        ></setup-first-backup>`;
       case "first-owner":
         return this.#renderFirstOwner();
       case "first-setup":

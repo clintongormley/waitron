@@ -49,12 +49,13 @@ it("asks before discarding the interrupted password draft and restores its nativ
   expect(requests.some((r) => /\/(recover|start-again|provision)$/.test(r.path))).toBe(false);
 });
 
-it("asks before leaving an entered setup password for backup recovery", async () => {
+it("Recover from backup opens its confirmation in place, keeping an entered setup password, with no leave warning", async () => {
   const { api } = wizardApi({
     claimed: true,
     intercept(path) {
       if (path.endsWith("/backup/status"))
         return Response.json({ phase: "unstarted", proofRequired: true });
+      if (path.endsWith("/start-again/summary")) return Response.json({ reached: "claimed" });
     },
   });
   const { el } = await mountWidget<SetupApp>("setup-app", { api });
@@ -66,32 +67,15 @@ it("asks before leaving an entered setup password for backup recovery", async ()
   const button = el.shadowRoot!.querySelector<HTMLElement>("[data-test=recover-backup]")!;
   await userEvent.click(button.shadowRoot!.querySelector("button")!);
   await expect
-    .poll(
-      () =>
-        el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("wt-unsaved-changes")!.open,
-    )
-    .toBe(true);
-  expect(el.shadowRoot!.querySelector("setup-first-backup")).toBeNull();
-  el.shadowRoot!.querySelector("wt-unsaved-changes")!.dispatchEvent(
-    new CustomEvent("wt-unsaved-choice", {
-      detail: { decision: "discard" },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  await expect.poll(() => el.shadowRoot!.querySelector("setup-first-backup")).not.toBeNull();
-  const repair = el.shadowRoot!.querySelector("setup-first-backup")!;
-  repair.dispatchEvent(
-    new CustomEvent("setup-goto", {
-      detail: { screen: "first-owner" },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  await expect
-    .poll(() => el.shadowRoot!.querySelector("[data-test=resume-password]"))
+    .poll(() => el.shadowRoot!.querySelector("[data-test=recover-deletes]"))
     .not.toBeNull();
-  const restored = el.shadowRoot!.querySelector<WtInput>("[data-test=resume-password]")!;
-  await restored.updateComplete;
-  expect(restored.shadowRoot!.querySelector<HTMLInputElement>("input")!.value).toBe("");
+  expect(
+    el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("wt-unsaved-changes")!.open,
+  ).toBe(false);
+  expect(el.shadowRoot!.querySelector("setup-first-backup")).toBeNull();
+  const kept = el.shadowRoot!.querySelector<WtInput>("[data-test=resume-password]")!;
+  await kept.updateComplete;
+  expect(kept.shadowRoot!.querySelector<HTMLInputElement>("input")!.value).toBe(
+    "private repair draft",
+  );
 });

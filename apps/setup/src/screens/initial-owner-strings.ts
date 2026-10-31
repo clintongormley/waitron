@@ -22,6 +22,8 @@ export const initialOwnerStrings = {
     recoveryStopped:
       "A recovery from backup started on {started} and did not finish. Start again deletes it.",
     recoveryStoppedRefused: "A recovery from backup started on {started} and did not finish.",
+    recoveryStoppedRecover:
+      "The previous recovery from backup started on {started} did not complete.",
     recoveryStoppedCloud:
       "Its approval in Waitron Cloud closes by itself within an hour of when it was given. Until then, Waitron Cloud cannot approve a new recovery for this box's venue.",
     recoveryUnreadable: "This box found a recovery from backup whose records cannot be read.",
@@ -41,6 +43,10 @@ export const initialOwnerStrings = {
     restarting: "The old attempt is deleted. Reconnect to continue.",
     heldLost: "Start again deletes what was entered in the setup that stopped part way.",
     noInvoiceSent: "No invoice was sent to AEAT.",
+    recoverDeletes:
+      "Recover from backup first deletes what was entered in the setup that stopped part way.",
+    recoverThen: "Then you choose the backup.",
+    retireRecover: "Delete the old attempt and recover from a backup.",
     heldChanged: "The setup changed after this page read it. Try again.",
     keptFault:
       "The setup database holds records that Waitron never deletes. An unfinished setup should hold none, so this is a fault in Waitron. Deleting this setup is not offered. Reconnect keeps everything as it is.",
@@ -88,6 +94,8 @@ export const initialOwnerStrings = {
     recoveryStopped:
       "Una recuperación desde una copia, iniciada el {started}, no terminó. Empezar de nuevo la borra.",
     recoveryStoppedRefused: "Una recuperación desde una copia, iniciada el {started}, no terminó.",
+    recoveryStoppedRecover:
+      "La recuperación anterior desde una copia, iniciada el {started}, no se completó.",
     recoveryStoppedCloud:
       "Su aprobación en Waitron Cloud se cierra sola en menos de una hora desde que se dio. Hasta entonces, Waitron Cloud no puede aprobar otra recuperación para el local de este equipo.",
     recoveryUnreadable:
@@ -112,6 +120,10 @@ export const initialOwnerStrings = {
     heldLost:
       "Empezar de nuevo borra lo que se introdujo en la configuración que se detuvo a medias.",
     noInvoiceSent: "No se envió ninguna factura a la AEAT.",
+    recoverDeletes:
+      "Recuperar desde una copia primero borra lo que se introdujo en la configuración que se detuvo a medias.",
+    recoverThen: "Después eliges la copia.",
+    retireRecover: "Borrar el intento anterior y recuperar desde una copia.",
     heldChanged:
       "La configuración cambió después de que esta página la leyera. Inténtalo otra vez.",
     keptFault:

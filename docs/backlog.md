@@ -571,7 +571,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   holds "disk". [Detail](backlog/setup.md#a-boot-tests-disk-assertion-reads-the-checkouts-path)
 
 - **A discarded recovery whose files cannot be deleted brings the repair page back after each Start again.**
-  Each press answers "Start again has not finished" and restarts the box. Left open by A1042.
+  Each press answers "Deletion interrupted" and restarts the box. Left open by A1042.
   [Detail](backlog/setup.md#a-discarded-recovery-whose-files-cannot-be-deleted-brings-the-repair-page-back-after-each-start-again).
 
 - **A1142: a cut-off Start again beside found files the Move cannot handle gets only the explanation.**
@@ -620,7 +620,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   [Detail](backlog/setup.md#a-waitron-cloud-recovery-whose-download-takes-more-than-30-seconds-may-be-refused-its-series-name)
 
 - **A1131c: Recover from backup first wipes the failed setup, and Start again's page drops the item counts**
-  Slice 2 (one wipe, no password) landed; slices 3 and 4 are still to come.
+  Slices 2 and 3 landed; slice 4 (deleting the old recovery code, including the old routes' `open`)
+  is still to come.
   [Detail](backlog/setup.md#a1131c-recover-from-backup-first-wipes-the-failed-setup-and-start-agains-page-drops-the-item-counts).
 
 - **A1131: Start again beside a recovery record that cannot be read, with the setup database missing.**
@@ -639,6 +640,18 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A developer note still counts four requests in the Start-again flow.** Left open by A1131bc
   slice 2.
   [Detail](backlog/setup.md#a-developer-note-still-counts-four-requests-in-the-start-again-flow)
+
+- **No Recover from backup when the setup's own record cannot be read or needs repair.** The only
+  way out is a reinstall, unless the setup had saved nothing yet. Left open by A1131bc slice 3.
+  [Detail](backlog/setup.md#no-recover-from-backup-when-the-setups-own-record-cannot-be-read-or-needs-repair)
+
+- **The bucket and Waitron Cloud restores have not been run after Start again's deletion.** Left
+  open by A1131bc slice 3.
+  [Detail](backlog/setup.md#the-bucket-and-waitron-cloud-restores-have-not-been-run-after-start-agains-deletion)
+
+- **"The saved setup cannot be read. Contact support."** sends the person to somebody else. Left
+  open by A1131bc slice 3.
+  [Detail](backlog/setup.md#the-saved-setup-cannot-be-read-contact-support)
 
 - **Bound certificate password-derivation work before opening a file.** PKCS#12 files choose their
   own derivation cost; setup and certificate renewal currently pass it to the synchronous opener.

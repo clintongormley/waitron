@@ -1,29 +1,33 @@
 import { afterEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { WtButton } from "@waitron/ui";
-import type { SetupApp } from "./setup-app.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import { setLocale } from "./i18n/t.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import { shellEn } from "./i18n/strings/shell.js";
-import type {
-  BackupRepairActivity,
-  BackupRepairStatus,
-  FirstSetupInspection,
-  StartAgainConfirm,
-  StartAgainSummary,
-} from "./api/first-setup-types.js";
-import { initial, wizardApi } from "../test/first-setup-browser.js";
+import type { BackupRepairActivity } from "./api/first-setup-types.js";
+import { initial } from "../test/first-setup-browser.js";
 import {
   click,
-  damagedSummary,
   namedSummary,
   q,
   stoppedActivity,
   stoppedSummary,
 } from "../test/missing-database-browser.js";
 import { refusedCause, settled } from "../test/held-database-browser.js";
-import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
+import {
+  OWNER_HEADER,
+  cases,
+  confirmation,
+  fieldsIn,
+  formErrors,
+  sends,
+  summaryReads,
+  t,
+  text,
+  wipeFixture,
+} from "../test/wipe-browser.js";
+import { cleanupWidgets } from "./widgets/test-helpers.js";
 
 afterEach(async () => {
   cleanupWidgets();
@@ -31,147 +35,6 @@ afterEach(async () => {
   sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY);
   await navigator.locks.request(`waitron:first-setup:attempt:${initial.attemptId}`, () => {});
 });
-
-const t = initialOwnerStrings.en;
-const text = (app: SetupApp) => app.shadowRoot!.textContent!;
-// A form's error is drawn inside wt-form-actions' own shadow root, out of reach of text(app).
-const formErrors = (app: SetupApp) =>
-  [...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions")].map(
-    (f) => f.error,
-  );
-const OWNER_HEADER = "X-Waitron-Setup-Owner";
-/** The confirmation's own elements: its first line through the actions holding its Confirm. */
-const confirmation = (app: SetupApp) => {
-  const confirm = q(app, "confirm-start-again")!.closest("wt-form-actions")!;
-  const first =
-    q(app, "recovery-record-damaged") ??
-    q(app, "setup-database-unreadable") ??
-    q(app, "start-again-deletes")!;
-  const elements: Element[] = [];
-  for (let el: Element | null = first; el; el = el.nextElementSibling) {
-    elements.push(el);
-    if (el === confirm) return elements;
-  }
-  throw new Error("the confirmation's Confirm does not follow its first line");
-};
-const fieldsIn = (elements: Element[]) =>
-  elements.flatMap((el) => [
-    ...(el.matches("wt-input, input:not([type=checkbox])") ? [el] : []),
-    ...el.querySelectorAll("wt-input, input:not([type=checkbox])"),
-  ]);
-
-async function wipeFixture(
-  options: {
-    inspection?: Partial<FirstSetupInspection>;
-    /** Merged into each inspection read after `inspection`, counted from 0. */
-    inspectionAt?: (read: number) => Partial<FirstSetupInspection>;
-    activity?: BackupRepairActivity | null | (() => BackupRepairActivity | null);
-    summary?: () => Response | Promise<Response>;
-    startAgain?: () => Response;
-    backupPhase?: BackupRepairStatus["phase"];
-  } = {},
-) {
-  let inspections = 0;
-  const fixture = wizardApi({
-    claimed: true,
-    intercept(path) {
-      if (path.endsWith("/backup/activity"))
-        return Response.json({
-          activity:
-            typeof options.activity === "function"
-              ? options.activity()
-              : (options.activity ?? null),
-        });
-      if (path.endsWith("/backup/status"))
-        return Response.json({
-          phase: options.backupPhase ?? "unstarted",
-          proofRequired: true,
-        } satisfies BackupRepairStatus);
-      if (path.endsWith("/start-again/summary"))
-        return options.summary?.() ?? Response.json(namedSummary);
-      if (path.endsWith("/resolution/start-again"))
-        return options.startAgain?.() ?? Response.json({ restarting: true });
-      if (path.endsWith("/resolution"))
-        return Response.json({
-          version: 2,
-          inspectionId: "a".repeat(64),
-          pair: "valid",
-          database: "occupied",
-          emptyDatabase: false,
-          password: "checkable",
-          revision: 1,
-          ownerGeneration: 1,
-          repairEligible: false,
-          artifacts: [],
-          ...options.inspection,
-          ...options.inspectionAt?.(inspections++),
-        } satisfies FirstSetupInspection);
-    },
-  });
-  const { el: app } = await mountWidget<SetupApp>("setup-app", {
-    api: fixture.api,
-    browserLanguages: ["en-GB"],
-  });
-  await expect.poll(() => q(app, "start-again")).not.toBeNull();
-  await settled(app);
-  return { app, ...fixture };
-}
-type Sent = { path: string; body: unknown; headers: Headers };
-const summaryReads = (requests: Sent[]) =>
-  requests.filter((r) => r.path.endsWith("/start-again/summary"));
-const sends = (requests: Sent[]) =>
-  requests.filter((r) => r.path.endsWith("/resolution/start-again"));
-
-const cases: {
-  name: string;
-  inspection: Partial<FirstSetupInspection>;
-  activity: BackupRepairActivity | null;
-  summary: StartAgainSummary;
-  sent: StartAgainConfirm;
-}[] = [
-  {
-    name: "an empty unused setup database",
-    inspection: { database: "no-venue-rows", emptyDatabase: true },
-    activity: null,
-    summary: { reached: "claimed" },
-    sent: {},
-  },
-  {
-    name: "a setup database holding records, with no stopped recovery",
-    inspection: { database: "occupied" },
-    activity: null,
-    summary: namedSummary,
-    sent: {},
-  },
-  {
-    name: "a setup database holding records beside a stopped recovery",
-    inspection: { database: "occupied" },
-    activity: stoppedActivity,
-    summary: stoppedSummary,
-    sent: { confirmRecoveryDiscard: { shown: stoppedSummary } },
-  },
-  {
-    name: "a damaged recovery-key record",
-    inspection: { database: "occupied" },
-    activity: null,
-    summary: damagedSummary,
-    sent: { recoveryRecordDamagedShown: true },
-  },
-  {
-    name: "a missing setup database",
-    inspection: { database: "missing" },
-    activity: null,
-    summary: namedSummary,
-    sent: { confirmMissingDatabase: { nothingFiledOrSold: true, shown: namedSummary } },
-  },
-  {
-    name: "a setup database the box cannot read all of",
-    inspection: { database: "occupied" },
-    activity: null,
-    summary: { ...namedSummary, databaseUnreadable: true },
-    sent: { confirmUnreadableDatabase: { shown: { ...namedSummary, databaseUnreadable: true } } },
-  },
-];
 
 for (const c of cases)
   it(`${c.name}: Start again asks for no password, reads the summary with no owner tab, and sends what was shown`, async () => {

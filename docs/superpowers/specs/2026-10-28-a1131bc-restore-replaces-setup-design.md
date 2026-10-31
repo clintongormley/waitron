@@ -5,6 +5,13 @@
 > `module-evidence/` check is moot; §9d's sentence is replaced by the owner's "The previous setup
 > process was unsuccessful." (OQ-B, 2026-10-30); §9b's help line ("This box will not use this setup's
 > invoice series names again.") has nothing behind it since A1206 and is for slice 3 to drop.
+>
+> 2026-10-31, slice 3 plan: §1 step 3's "as today" for Start again was false — Reconnect opened the
+> details form with no mode chosen (plan E1); slice 3 lands Start again on the "Set up this Waitron
+> server" choice screen and Recover from backup on "Join or recover"; the choice is held in the
+> page's memory, so a reload opens the page's first screen, which on a box with its own certificate
+> file asks "Is this page secure?" first (plan D5, D6, OQ2); §7's `box-folders.ts` was deleted by
+> A1206; Recover from backup is offered beside a stopped old recovery (plan OQ1).
 
 # A1131b and A1131c: Recover from backup first deletes the failed setup, then restores into the box's usual folders
 

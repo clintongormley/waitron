@@ -125,12 +125,14 @@ choose **Cancel**.
 When the venue database is missing, the box cannot check whether the attempt filed anything to
 AEAT or made a sale, and the repair page does not offer **Continue**. Pressing **Start again**
 says so, lists what the attempt's own record says it reached — whether it did not start, started
-or finished activation — and offers **Recover from backup** there too, unless a backup recovery
-has stopped (below). Start again then asks you to tick "Nothing was filed to AEAT and nothing was
+or finished activation — and offers **Recover from backup** there too. Start again then asks you to tick "Nothing was filed to AEAT and nothing was
 sold." If the setup already finished, the box refuses instead, with "This setup already finished,
 so deleting it is not offered. Reconnect to check the saved result." If the attempt's
 recovery-key record is damaged, the page also says "This setup's recovery-key record is damaged and
 cannot be read." above what Start again deletes, and you can still choose **Cancel**.
+
+The page no longer starts a recovery from backup itself; the next two paragraphs describe one
+begun on the repair page before this version of Waitron.
 
 While a backup recovery is running on another device, the repair page says so, with when it
 started and when it was last active, and offers only **Reconnect** and **Set up secure
@@ -140,9 +142,10 @@ box keeps them in memory only, so a restart ends them too (`runningInMemory` in
 `apps/server/src/first-setup-backup-recovery.ts`).
 
 Once a backup recovery has stopped, the repair page says it started and did not finish and that
-Start again deletes it, and offers no **Recover from backup** beside it. With the venue database
-missing, the page shows this once **Start again** is pressed, and Start again deletes the recovery
-with the attempt after the missing-database confirmation above. With the venue database present,
+Start again deletes it. **Recover from backup** is offered beside it too, and in its confirmation the
+stopped recovery's line reads "The previous recovery from backup started on … did not complete." With the venue database
+missing, the page shows this once **Start again** or **Recover from backup** is pressed, and either
+deletes the recovery with the attempt after the missing-database confirmation above. With the venue database present,
 the page shows the stopped recovery beside **Start again**, within the limits above. Start again
 then reads the recovery's details again, shows them, and deletes the recovery with the attempt
 once you tick "Delete the old attempt and start again." Before it deletes anything, the box writes
@@ -154,14 +157,20 @@ by itself within an hour of when it was given, and that until then Cloud cannot 
 recovery for this box's venue.
 
 Start again keeps the discarded recovery's journal records and its lock files, and deletes the
-rest. If a file cannot be deleted, or the disk fills part-way through, the page says "Start again
-has not finished. Reload this page to see what is left to do. If the box is restarting, wait until
-it answers.", the box restarts, and the next start tries the deletion again. With the venue
-database missing, a recovery whose records cannot be read is reported as such, and Start again is
-not offered beside it.
+rest. If a file cannot be deleted, or the disk fills part-way through, the page says "Deletion
+interrupted. Reload the page to continue.", the box restarts, and the next start tries the deletion again. With the venue
+database missing, a recovery whose records cannot be read is reported as such, and neither Start
+again nor Recover from backup is offered beside it.
 
-For an authenticated archive, bucket or supported Cloud copy, choose **Recover from backup**
-and follow the [repair recovery procedure](hour-recovery.md#recover-while-first-setup-is-blocked).
+**Recover from backup** is offered wherever Start again is, asks for no password either, is
+refused in the same cases, and runs the same deletion. Its confirmation says "Recover from backup
+first deletes what was entered in the setup that stopped part way. No invoice was sent to AEAT.
+Then you choose the backup." After the box restarts, **Reconnect** opens "Join or recover an
+existing restaurant", where the [ordinary restore](hour-recovery.md) takes an archive, bucket or
+supported Cloud copy, as on a new box. After Start again, **Reconnect** opens "Set up this Waitron
+server" instead. A reload before Reconnect forgets which was chosen and opens the page's first
+screen; if that asks "Is this page secure?", press **Continue to setup**, then choose **Join or
+recover**.
 Secure-connection repair is available:
 choose **Set up secure connection** on the repair page and follow the
 [connection repair procedure](../../apps/server/README.md#repairing-the-secure-connection).

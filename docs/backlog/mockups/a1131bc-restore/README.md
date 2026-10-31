@@ -15,3 +15,7 @@ restaurant" screen, which does not change, so it has no picture.
 | [2-recover-confirm.png](2-recover-confirm.png) ([dark](2-recover-confirm-dark.png), [Spanish](2-recover-confirm-es.png)) | Recover from backup on the repair page: confirming deletes the setup before any backup is chosen (design §9b) |
 | [3-refused-fault.png](3-refused-fault.png) ([dark](3-refused-fault-dark.png)) | Either button, when the setup database holds a record Waitron never deletes: neither is offered (design §9c, §1a) |
 | [4-unreadable-setup.png](4-unreadable-setup.png) ([dark](4-unreadable-setup-dark.png)) | Question 2's answer A, approved 2026-10-29: a setup database the box cannot read (design §9d) |
+
+2026-10-31, A1131bc slice 3: the help line in pictures 1 and 2 is not drawn (A1206 removed what it
+described); the page also draws Recover from backup beside Start again's confirmation, which
+picture 1 leaves out.

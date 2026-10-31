@@ -324,13 +324,13 @@ it.each(locales)(
 );
 
 it.each(["selected", "uncertain"] as const)(
-  "offers no Start again in the ask while a backup recovery's journal reports %s",
+  "offers neither Start again nor Recover from backup in the ask while a backup recovery's journal reports %s",
   async (backupPhase) => {
     const { app, requests } = await missingDatabaseFixture({ backupPhase });
     await openMissing(app);
     expect(app.shadowRoot!.textContent).toContain(initialOwnerStrings.en.missingAsk);
-    expect(q(app, "recover-backup")).not.toBeNull();
-    expect(q<WtButton>(app, "recover-backup")!.disabled).toBe(backupPhase === "uncertain");
+    expect(q(app, "recover-backup")).toBeNull();
+    expect(app.shadowRoot!.textContent).not.toContain(initialOwnerStrings.en.missingBackup);
     expect(q(app, "start-again")).toBeNull();
     expect(q(app, "recover-backup-note")).toBeNull();
     expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
@@ -354,7 +354,7 @@ it.each(["prepared", "placement-started", "restored"] as const)(
 );
 
 it.each(["prepared", "placement-started", "restored"] as const)(
-  "once a backup recovery reported %s has stopped, the ask offers Start again and no Recover from backup",
+  "once a backup recovery reported %s has stopped, the ask offers Start again, with Recover from backup beside its confirmation",
   async (phase) => {
     const { app, requests } = await missingDatabaseFixture({
       backupPhase: phase,
@@ -365,7 +365,7 @@ it.each(["prepared", "placement-started", "restored"] as const)(
     await openMissing(app);
     expect(app.shadowRoot!.textContent).toContain(initialOwnerStrings.en.missingAsk);
     expect(q(app, "confirm-start-again")).not.toBeNull();
-    expect(q(app, "recover-backup")).toBeNull();
+    expect(q<WtButton>(app, "recover-backup")!.disabled).toBe(false);
     expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
   },
 );
@@ -573,7 +573,7 @@ it("offers Start again at once for a recovery that failed, and its confirmation 
   expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
   await openMissing(app);
   expect(q(app, "confirm-start-again")).not.toBeNull();
-  expect(q(app, "recover-backup")).toBeNull();
+  expect(q(app, "recover-backup")).not.toBeNull();
 });
 
 it.each(locales)(
@@ -598,7 +598,7 @@ it.each(locales)(
     const actions = q(app, "missing-actions")!;
     expect(
       [...actions.querySelectorAll("wt-button")].map((b) => b.getAttribute("data-test")),
-    ).toEqual([]);
+    ).toEqual(["recover-backup"]);
     expect(
       q<HTMLInputElement>(app, "retire-confirmed")!.closest("label")!.textContent!.trim(),
     ).toBe(t.missingConfirm);
@@ -678,15 +678,9 @@ it.each(locales)(
     const t = initialOwnerStrings[locale];
     expect(q(app, "recovery-unreadable")!.textContent!.trim()).toBe(t.recoveryUnreadable);
     expect(app.shadowRoot!.textContent).toContain(t.missingAsk);
-    expect(q(app, "recover-backup")).not.toBeNull();
+    expect(q(app, "recover-backup")).toBeNull();
     expect(q(app, "start-again")).toBeNull();
-    // A new recovery beside an unreadable journal is refused by the box.
-    expect(q<WtButton>(app, "recover-backup")!.disabled).toBe(true);
     expect(app.shadowRoot!.textContent).not.toContain(t.missingBackup);
-    expect(
-      q(app, "recovery-unreadable")!.compareDocumentPosition(q(app, "recover-backup")!) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
   },
 );
 

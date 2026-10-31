@@ -785,6 +785,8 @@ here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is create
   credentials it needs. Keep unrelated local records opaque and retain their files. A key that
   opens the backup does not replace fiscal history admission. Follow
   [repair recovery](../operations/hour-recovery.md#recover-while-first-setup-is-blocked).
+  (2026-10-31, A1131bc slice 3: a new recovery no longer keeps the failed setup's files; Recover from
+  backup deletes the setup first, then uses the ordinary restore. The anchor now describes that.)
 
 - **Pre-squash certificate metadata (A889).** Until a pre-A795 test box is reset under
   [A760](../operations/a760-migration-squash.md), reinstall its certificate through the

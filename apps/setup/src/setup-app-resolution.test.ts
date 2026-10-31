@@ -134,6 +134,28 @@ it("Start again's confirmation words are the design's, in English and Spanish", 
   );
   expect(en.noInvoiceSent).toBe("No invoice was sent to AEAT.");
   expect(es.noInvoiceSent).toBe("No se envió ninguna factura a la AEAT.");
+  expect(en.recoverDeletes).toBe(
+    "Recover from backup first deletes what was entered in the setup that stopped part way.",
+  );
+  expect(es.recoverDeletes).toBe(
+    "Recuperar desde una copia primero borra lo que se introdujo en la configuración que se detuvo a medias.",
+  );
+  expect(en.recoverThen).toBe("Then you choose the backup.");
+  expect(es.recoverThen).toBe("Después eliges la copia.");
+  expect(`${en.recoverDeletes} ${en.noInvoiceSent} ${en.recoverThen}`).toBe(
+    "Recover from backup first deletes what was entered in the setup that stopped part way. No invoice was sent to AEAT. Then you choose the backup.",
+  );
+  expect(`${es.recoverDeletes} ${es.noInvoiceSent} ${es.recoverThen}`).toBe(
+    "Recuperar desde una copia primero borra lo que se introdujo en la configuración que se detuvo a medias. No se envió ninguna factura a la AEAT. Después eliges la copia.",
+  );
+  expect(en.retireRecover).toBe("Delete the old attempt and recover from a backup.");
+  expect(es.retireRecover).toBe("Borrar el intento anterior y recuperar desde una copia.");
+  expect(en.recoveryStoppedRecover).toBe(
+    "The previous recovery from backup started on {started} did not complete.",
+  );
+  expect(es.recoveryStoppedRecover).toBe(
+    "La recuperación anterior desde una copia, iniciada el {started}, no se completó.",
+  );
   for (const strings of [en, es])
     for (const key of [
       "heldNoInvoices",
@@ -607,36 +629,16 @@ it.each(["en-GB", "es-ES"])(
   },
 );
 
-it.each(["checkable", "uncheckable"] as const)(
-  "opens independent backup repair with an %s setup password and no normal restore preview",
-  async (check) => {
-    const { app, requests } = await mount({
-      inspection: { password: check, database: "unknown", emptyDatabase: false },
-      intercept(path) {
-        if (path.endsWith("/backup/status"))
-          return Response.json({ phase: "unstarted", proofRequired: true });
-      },
-    });
-    const recover = q<WtButton>(app, "recover-backup");
-    expect(recover).not.toBeNull();
-    await userEvent.click(recover.shadowRoot!.querySelector("button")!);
-    await expect.poll(() => app.shadowRoot!.querySelector("setup-first-backup")).not.toBeNull();
-    expect(
-      requests.some((request) => /\/(recover|restore|preview|claim|provision)$/.test(request.path)),
-    ).toBe(false);
-    const repair = app.shadowRoot!.querySelector<HTMLElement & { inspection: unknown }>(
-      "setup-first-backup",
-    )!;
-    expect(repair.inspection).toEqual({
-      ...inspection,
-      password: check,
-      database: "unknown",
-      emptyDatabase: false,
-    });
-  },
-);
-
 const shellText = (locale: string) => (locale.startsWith("es") ? shellEs : shellEn);
+
+it("the unfinished-deletion message is the owner's words, in English and Spanish", () => {
+  expect(shellEn["shell.first_setup.start_again_incomplete"]).toBe(
+    "Deletion interrupted. Reload the page to continue.",
+  );
+  expect(shellEs["shell.first_setup.start_again_incomplete"]).toBe(
+    "Borrado interrumpido. Recarga la página para continuar.",
+  );
+});
 
 it.each([
   ["setup.start_again_incomplete", "shell.first_setup.start_again_incomplete", "en-GB"],
@@ -1169,10 +1171,10 @@ it("with the database present, while a recovery runs, no Start again, password o
   expect(requests.some((r) => /\/(recover|start-again|summary)$/.test(r.path))).toBe(false);
 });
 
-it("with the database present, Recover from backup is not offered beside a stopped recovery", async () => {
+it("with the database present, Recover from backup is offered beside a stopped recovery", async () => {
   const { app } = await stoppedPresent();
   expect(q(app, "recovery-stopped")).not.toBeNull();
-  expect(app.shadowRoot!.querySelector("[data-test=recover-backup]")).toBeNull();
+  expect(q<WtButton>(app, "recover-backup").disabled).toBe(false);
   expect(q<WtButton>(app, "start-again").disabled).toBe(false);
 });
 
@@ -1334,8 +1336,9 @@ it("with the database present, Cancel after a failed summary read returns to the
     .toBe(false);
   expect(stoppedLines(app)[0]).toBe(t.recoveryStopped.replace("{started}", "25 Oct 2026, 14:35"));
   expect(q(app, "resume")).not.toBeNull();
-  for (const name of ["abandon-attempt", "check-again", "recover-backup", "confirm-start-again"])
+  for (const name of ["abandon-attempt", "check-again", "confirm-start-again"])
     expect(app.shadowRoot!.querySelector(`[data-test=${name}]`), name).toBeNull();
+  expect(q<WtButton>(app, "recover-backup").disabled).toBe(false);
   expect(formErrors(app)).toEqual([""]);
   expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner).toBeUndefined();
 

@@ -409,8 +409,9 @@ phone width (`apps/setup/src/setup-app.ts`, the first-owner screen).
 ## Close a discarded recovery's Cloud approval from the box
 
 Left open by A1042. Show the saved link and code beside the repair page's stopped line, so the
-person can close the approval in Waitron Cloud. Today the box shows that link and code only on its
-Cloud wait screen (`apps/setup/src/screens/first-setup-backup-screen.ts`), and the box's Cloud
+person can close the approval in Waitron Cloud. The box no longer shows that link and code anywhere: its only
+place was the old recovery's Cloud wait screen (`apps/setup/src/screens/first-setup-backup-screen.ts`),
+which the repair page stopped opening in A1131b/c slice 3, and the box's Cloud
 client has no action that closes an approval (`apps/server/src/cloud-recovery.ts`: `start`,
 `status`, `info`, `read`, `restored`). Cloud closes the approval by itself an hour after it was
 given, and refuses a new one for that venue until then (Waitron Cloud at 4eed93d6:
@@ -453,8 +454,8 @@ stage does, and let the page promise it.
 ## A resume can use the room the spare file gave
 
 After the repair host deletes the spare beside a stopped recovery, a resume of that recovery could
-use the freed room: the page does not offer **Recover from backup** beside a stopped recovery, but
-the server's `open` accepts its id (`apps/server/src/first-setup-backup-recovery.ts`, `open`); and a
+use the freed room: since A1131bc slice 3 the page's Recover from backup discards a stopped recovery
+rather than resuming it, but the server's `open` accepts its id (`apps/server/src/first-setup-backup-recovery.ts`, `open`); and a
 release on a plain read while an idle, unsealed setup session can still continue lets that session
 use the room too. Also: a recovery that fails before its `placement-started` record counts as running
 for up to its 5-minute lease, so the repair host releases nothing until the lease lapses. All read,
@@ -494,14 +495,14 @@ in a copy at another path and on `main`.
 ## A discarded recovery whose files cannot be deleted brings the repair page back after each Start again
 
 - **A discarded recovery whose files cannot be deleted brings the repair page back after each Start
-  again.** Each press answers "Start again has not finished" and restarts the box. A1098 lets the
+  again.** Each press answers "Deletion interrupted" and restarts the box. A1098 lets the
   person keep or move aside files the box did not create after a cut-off Start again; a file the
   box created that cannot be deleted stays a manual loop. Left open by A1042.
   [Detail](setup.md#a-discarded-recovery-whose-files-cannot-be-deleted-brings-the-repair-page-back-after-each-start-again)
 
 Left open by A1042. When a file in a discarded recovery cannot be deleted, each Start again answers
-"Start again has not finished. Reload this page to see what is left to do. If the box is
-restarting, wait until it answers." and restarts the box. The next start logs
+"Deletion interrupted. Reload the page to continue." (A1042's run below saw the earlier words,
+"Start again has not finished…") and restarts the box. The next start logs
 `setup.recovery_cleanup_refused`, leaves the files, and brings the repair page back, so the person
 can only press Start again again. Run by A1042's U7d review with the restored database made
 undeletable (`chflags uchg`), through the real route and the next start: each press restarted the
@@ -755,10 +756,41 @@ after a reload during the box's wait (read, not run: `#select(true)` in `first-h
   four slices. Slice 1 (Start again's words without counts) landed as #2230. Slice 2 (one wipe with
   no password, plan `docs/superpowers/plans/2026-10-29-a1131bc-slice2-one-wipe-no-password.md`)
   takes the counts off the wire, offers Start again beside a held setup database with or without a
-  stopped recovery, and deletes a setup database it cannot fully read. Slices 3 and 4 (Recover from
-  backup as the wipe, then the fresh-box restore) are still to come.
+  stopped recovery, and deletes a setup database it cannot fully read. Slice 3 (plan
+  `docs/superpowers/plans/2026-10-31-a1131bc-slice3-recover-is-wipe.md`) makes Recover from backup run the same
+  deletion, after which Reconnect opens "Join or recover an existing restaurant" and the new-box
+  restore; Start again now lands on "Set up this Waitron server". Slice 4 (deleting the old
+  recovery code, including the old routes' `open`) is still to come.
+
+## No Recover from backup when the setup's own record cannot be read or needs repair
+
+- **No Recover from backup when the setup's own record cannot be read or needs repair.** Since
+  A1131bc slice 3, Recover from backup is drawn disabled wherever Start again is disabled, including a setup
+  record whose password cannot be checked and one whose claim mark needs repair; before, it opened
+  the old recovery in both. The only way out is then a reinstall, unless the setup had saved nothing
+  yet (Continue with the setup password repairs the mark only for a present, empty setup database
+  with nothing else left behind: `repairEligible`, `packages/provisioning/src/first-setup-owner.ts`).
+  Left open by A1131bc slice 3 (plan, N2).
+
+## The bucket and Waitron Cloud restores have not been run after Start again's deletion
+
+- **The bucket and Waitron Cloud restores have not been run after Start again's deletion.** A1131bc
+  slice 3's server tests run the backup-file restore after the deletion (with the setup database
+  missing, and beside a stopped recovery); the bucket and Cloud routes were not run on that path.
+  Left open by A1131bc slice 3 (plan, N5).
+
+## "The saved setup cannot be read. Contact support."
+
+- **"The saved setup cannot be read. Contact support."** (`shell.first_setup.attempt_invalid`,
+  `apps/setup/src/i18n/strings/shell.ts`) sends the person to somebody else, against the refusal rule
+  in `CLAUDE.md` §3. Wanted: say what happened and what each choice does. The words date from C42
+  (#837, 2026-09-29). Noticed while planning A1131bc slice 3, not changed there.
 
 ## Decisions and deliberate limits
+
+- **A reload between the deletion and Reconnect forgets which button was pressed (A1131bc slice 3,
+  plan OQ2's default).** The page keeps the choice in memory only, so after a reload it opens its
+  first screen, and the person chooses **Join or recover** there to restore.
 
 **DECIDED (owner, 2026-10-29 ~10:38; A1206): Start again keeps no record of the names it
 deletes.** The owner: "I think we must remove this concept of storing the used series name on
@@ -823,7 +855,8 @@ minute, a sale is then refused by the clock-behind stop, and a confirmation list
 - **DECIDED (owner, 2026-10-28 ~15:25–15:40; A1131bc design revised 2026-10-29, not yet built):
   Recover from backup first wipes the failed setup, then restores.** (2026-10-29, A1206: the
   never-reuse note is retired, so the wipe adds nothing first.) (2026-10-30, A1131bc slice 2: Start
-  again's half is built; Recover from backup's is slices 3–4.) Someone who only
+  again's half is built; Recover from backup's is slices 3–4.) (2026-10-31, A1131bc slice 3: Recover
+  from backup's half is built; slice 4 deletes the old recovery code.) Someone who only
   opens a backup to look has still chosen to discard the setup. Wiping a failed setup needs no proof
   beyond reaching the repair page ("If you have access to the box you can reinstall it"); restoring
   needs the backup's own secrets. The design applies the same rule to Start again, which runs the same
