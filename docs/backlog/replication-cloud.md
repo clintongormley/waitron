@@ -508,7 +508,11 @@ mirror's copy was found (not exhaustive). [Design §7.2](../superpowers/specs/20
 
 The owner approved the second revision on 2026-10-22 at about 02:40; the amendment adds his
 03:12 direction. Slice 4a landed as [#1990](https://github.com/clintongormley/waitron/pull/1990) on
-2026-10-24. Slices 3a onwards are still open; slice 3a's plan is next.
+2026-10-24. Slices 3a onwards are still open. Slice 3a's
+[plan](../superpowers/plans/2026-10-31-a947-3a-node-db.md) is written; the build waits for the
+owner's answers to its two questions: whether the box's role may be saved a moment after the
+switch's fiscal save, and whether a spare checks the main box's certificate fingerprint before it
+receives the venue's keys.
 
 The owner, 2026-10-21: "For go live I want one box with failover to another
 local box." The [design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md) re-cuts

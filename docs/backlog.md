@@ -5620,7 +5620,8 @@ outstanding on code that exists.
 
 - **A947. Go-live on two local boxes.** The owner approved the revised design; slice 4a landed as
   [#1990](https://github.com/clintongormley/waitron/pull/1990) on 2026-10-24. Slices 3a onwards
-  are still open; slice 3a's plan is next. [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
+  are still open. Slice 3a's [plan](superpowers/plans/2026-10-31-a947-3a-node-db.md) is written
+  and waits on the owner's two questions in it. [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
 
 The membership, promotion and rejoin arc remains in the tree. What remains, largest first:
 
