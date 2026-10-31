@@ -740,7 +740,7 @@ wipe_box() {
     rm_volume waitron_state
   else
     # Empty state except tls/, keeping the CA + leaf so an already-trusting phone needs no new step,
-    # and except the confirmation records of who confirmed a Start again, the records of each Keep
+    # and except the confirmation records of each Start again, the records of each Keep
     # or Move choice, and the files a Move set aside. Only --all removes them.
     # Same container shape as the trading.env read above, and `--entrypoint` for the same reason.
     docker compose -f "$WAITRON_DIR/compose.yml" run --rm --no-deps -T \

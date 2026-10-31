@@ -457,7 +457,7 @@ missing-database path is not one that page expects (`#readMissingAsk`, called fr
 
 State: Saved setup/owner data cannot be parsed or checked, or a protected read fails. Corruption and filesystem errors are not proved to be bug-only. Receipt: `packages/provisioning/src/durable-host-json.ts:15`; `packages/provisioning/src/first-setup-owner.ts:131`; `apps/setup/src/setup-app.ts:200`.
 
-Route: Missing: a next step for each place above. A1042 (S7l) lets Start again go ahead past a damaged recovery-key record, after a warning; it does not change these words. Since A1206 (2026-10-29) Start again no longer reads the attempt's series names, so a damaged record of them neither refuses nor warns; a damaged setup record or claim marker (A1158), an unreadable present database (A1159) and the database-present case in A1161 still refuse.
+Route: Missing: a next step for each place above. A1042 (S7l) lets Start again go ahead past a damaged recovery-key record, after a warning; it does not change these words. Since A1206 (2026-10-29) Start again no longer reads the attempt's series names, so a damaged record of them neither refuses nor warns; a damaged setup record or claim marker (A1158), the setup databases A1159 lists and the database-present case in A1161 still refuse.
 
 ### `shell.operation_conflict`
 
@@ -703,20 +703,32 @@ changes take their required review and existing protected-writer approvals.
 
 Left open by A1099. When an abandoned first setup's own record (`state/first-setup.json`) or its
 claim marker (`venue/first-setup-claim.json`) is damaged, Start again is refused before any warning
-can be shown: `setup.owner_required` at the password step with the venue database missing, and
-`setup.attempt_conflict` with it present (A1099 plan, PROBE 2/3, re-run on `b8a06f203`). Wanted: the
-same kind of warned way out A1042 gives a damaged recovery-key record.
+can be shown. With the venue database present the box refuses `setup.attempt_conflict` (A1099 plan,
+PROBE 2/3, re-run on `b8a06f203`). With it missing, since A1131bc slice 2 the box reads no revision,
+the page offers no Start again and says it cannot confirm that deleting is safe (read, not run:
+`wipeOffered`, `apps/setup/src/setup-app.ts`), and the summary and
+Start again sent with the page's last revision both answer `setup.attempt_conflict` and change
+nothing (a scratch case on the slice's branch, 2026-10-31, not committed). Continue's password step
+is `setup.owner_required` there, as before. Wanted: the same kind of warned way out A1042 gives a
+damaged recovery-key record.
 
-#### A1159: a venue database that is present but cannot be read refuses setup.not_ready
+#### A1159: some setup databases the box cannot read still refuse Start again
 
-Left open by A1099. An unreadable `venue.db` with the file present refuses `setup.not_ready`
-(`apps/server/src/first-setup-resolution.ts`, the unreadable-database refusal). It could be treated
-as missing, so that the missing-database Start again applies, with its warning.
+Left open by A1099. Since A1131bc slice 2 a present `venue.db` the box finds damaged (SQLite code 11
+or 26, or a table a reader expects missing) is deleted after the page says "The previous setup
+process was unsuccessful.". These still refuse `setup.not_ready`, which the page draws as "cannot
+confirm that deleting this setup is safe" (plan, N1):
+
+- a `venue.db` the box may not open, or one over 128 MiB;
+- a damaged read while a `-journal` file sits beside the database;
+- a present `venue.db` with a hot rollback journal beside it, damaged or not;
+- a missing `venue.db` with `state/trading.env` saved;
+- a damaged `node.db`.
 
 #### A1161: with the database present, a public record or documents file still dead-ends Start again
 
-Left open by A1099 (plan difference D-4, owner point 2). With the venue database present, Start
-again is allowed only for a provably unused attempt, and that proof refuses `setup.not_ready`
+Left open by A1099 (plan difference D-4, owner point 2). With the venue database present and
+holding no venue rows, Start again needs a provably unused attempt, and that proof refuses `setup.not_ready`
 whenever a public fiscal record (`state/module-operation-public.json`) or an unexpected
 fiscal-documents file exists, damaged or intact (`firstSetupUnusedAssignment` in
 `apps/server/src/first-setup-unused-assignment.ts` and `noOtherHistory` in

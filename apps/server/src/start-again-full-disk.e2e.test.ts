@@ -255,7 +255,6 @@ it("in the held state, with the box's spare file, the summary answers and Start 
   expect(realpathSync(f.roots.venueDir).startsWith(`${process.env.TMPDIR}/`)).toBe(true);
   vi.mocked(backupEntry.firstSetupBackupRecoveryFor).mockReturnValue(f.service);
   const spare = join(f.roots.stateDir, SPARE_SPACE_FILE);
-  // The box's own size: the password step copies the setup database, which needs more than 1 MiB.
   await writeFile(spare, Buffer.alloc(SPARE_SPACE_BYTES, 1));
   const entry = await resolveFirstSetupEntry(
     f.roots,

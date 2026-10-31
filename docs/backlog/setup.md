@@ -632,17 +632,21 @@ first and then uses the fresh-box restore, which writes into the usual folders a
 folder, so this case cannot arise on a box set up after it. Its slice 4 deletes the old recovery-folder
 code, and a box that still has one is reinstalled (the pre-live rule, CLAUDE.md §3).
 
-## On a full disk, the repair page's password step needs room for a whole copy of the setup database
+## On a full disk, Start again's summary may need room for a copy of the setup database
 
-The password step keeps a copy of the setup database, encoded as text, before it changes anything
-(`captureFirstSetupOriginals`, `packages/provisioning/src/first-setup-resolution-inspection.ts`,
-since A679). On a full disk that copy has only the box's spare file (8 MiB) to use. A setup database
-of 3,579,904 bytes passed (`apps/server/src/start-again-full-disk.e2e.test.ts`, the held case); one
-whose encoded copy needs more than the spare is believed to answer 507 `storage.disk_full` at the
-password step (not run). A1131 makes such a database more likely on this page: Start again is now
-offered beside a stopped recovery when the setup database holds records. Wanted: measure the
-largest setup database an unfinished setup can leave, and either keep the copy within the spare or
-say on the full-disk page what to do.
+Start again no longer goes through the password step (A1131bc slice 2). Its summary reads the setup
+database in place, and copies it to a scratch folder only when a `-journal` file, or a `-wal` file
+holding pages, sits beside it (`readSetupDatabase`, `apps/server/src/first-setup-database-holdings.ts`;
+read, not run on a full disk). Continue's password step still keeps a whole copy, encoded as text
+(`captureFirstSetupOriginals`, `packages/provisioning/src/first-setup-resolution-inspection.ts`). On
+a full disk either copy has only the box's spare file (8 MiB) to use, and the box gives the spare up
+before a Start-again step only when a stopped recovery is to be discarded
+(`releaseSpareBeforeStartAgain`, `apps/server/src/spare-space.ts`). So beside a held setup database
+with no recovery, which this slice newly offers, the summary and Start again answer 507
+`storage.disk_full` on a full disk and delete nothing (`apps/server/src/start-again-full-disk.e2e.test.ts`,
+the held case with no recovery). Wanted: give the spare up for every Start again the page offers,
+measure the largest setup database an unfinished setup can leave, and either keep a copy within the
+spare or say on the full-disk page what to do.
 
 ## A stale signed-in setup tab's activation request is not refused while a Waitron Cloud recovery waits
 
@@ -725,14 +729,25 @@ after a reload during the box's wait (read, not run: `#select(true)` in `first-h
 
 ## The Start again summary's `setup.not_ready` carries no cause.
 
-- **The Start again summary's `setup.not_ready` carries no cause.** With the venue database present
-  and a stopped backup recovery, the summary refuses `setup.not_ready` wherever Start again would
-  (`apps/server/src/first-setup-start-again-backup-discard.test.ts`, "with the database present and
-  a stopped recovery, the summary refuses setup.not_ready when %s, as Start again would"). The setup
-  page has no words for that code there, so it shows "This box could not read the details of the
-  recovery from backup. Check again." (`#presentReadsFailed`, `apps/setup/src/setup-app.ts`), and
-  Check again gets the same refusal while nothing changes on the box. Wanted: a cause of its own
-  from the server and words for it. Left open by A1206.
+- **The Start again summary's `setup.not_ready` carries no cause.** Since A1131bc slice 2 the page
+  draws "This box cannot confirm that deleting this setup is safe, so it is not offered. Reconnect
+  keeps everything as it is." for it, and only the box's log line names the reason. Wanted: words for
+  each cause a person could act on. Left open by A1206.
+
+## Start again over plain HTTP says only that deleting is not safe
+
+- **Start again over plain HTTP says only that deleting is not safe.** The box answers
+  `setup.owner_required` over HTTP, and since A1131bc slice 2 the page draws "This box cannot
+  confirm that deleting this setup is safe…" for it beside the "Set up secure connection" link.
+  Wanted: words saying a secure connection is needed. Left open by A1131bc slice 2 (plan, D13, N5).
+
+## A developer note still counts four requests in the Start-again flow
+
+- **A developer note still counts four requests in the Start-again flow.**
+  `docs/developers/conventions-data.md` ("The repair host before the four requests of the
+  Start-again flow") is still true of the spare release, which covers the four `START_AGAIN_ROUTES`
+  (`apps/server/src/setup-first-fiscal-api.ts`), but since A1131bc slice 2 Start again's flow uses
+  three of them: `/recover` is Continue's alone. Reword it. Left open by A1131bc slice 2 (plan, N4).
 
 ## A1131c: Recover from backup first wipes the failed setup, and Start again's page drops the item counts
 
@@ -743,17 +758,12 @@ after a reload during the box's wait (read, not run: `#select(true)` in `first-h
   record, saved trading settings and a finished setup stay. Designed with A1131 below
   (`docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md`). Approved by the
   owner on 2026-10-29, both questions answered A: anyone who can open the repair page may delete a
-  failed setup, and a setup whose database cannot be read may be deleted, with the safety margin
-  taken from when it last saved anything. Being built in the spec's four slices. Slice 1 (Start
-  again's words without counts, plan
-  `docs/superpowers/plans/2026-10-29-a1131bc-slice1-start-again-words.md`) landed as #2230: the
-  confirmation no longer shows the counts; the refusal for an invoice or a never-deleted record
-  still lists them, and the counts still travel between the page and the box and are stored in the
-  confirmation record, until slice 2 removes them. Slice 2 also corrects the three lines that say the
-  confirmation record holds, or the confirmation is of, what the page showed
-  (`docs/operations/first-live-fiscal-setup.md`, `deploy/README.md` ("what the repair page showed
-  them") and `apps/server/README.md`).
-  Slices 2 to 4 are still to come.
+  failed setup, and a setup whose database cannot be read may be deleted. Being built in the spec's
+  four slices. Slice 1 (Start again's words without counts) landed as #2230. Slice 2 (one wipe with
+  no password, plan `docs/superpowers/plans/2026-10-29-a1131bc-slice2-one-wipe-no-password.md`)
+  takes the counts off the wire, offers Start again beside a held setup database with or without a
+  stopped recovery, and deletes a setup database it cannot fully read. Slices 3 and 4 (Recover from
+  backup as the wipe, then the fresh-box restore) are still to come.
 
 ## Decisions and deliberate limits
 
@@ -827,11 +837,18 @@ minute, a sale is then refused by the clock-behind stop, and a confirmation list
 - **DECIDED (owner, 2026-10-26): beside a stopped recovery, Start again is offered even when the
   setup database holds records; the page says what is there and what is lost.** (2026-10-29, A1131bc
   slice 1: the confirmation no longer counts what is there; it says what Start again deletes and
-  that no invoice was sent.)
+  that no invoice was sent.) (2026-10-30, A1131bc slice 2: offered without a stopped recovery and
+  without a password.)
 - **Built with it, to respect the owner's fiscal stop (A1131 part 1; awaiting the owner's
   confirmation in the PR):** Start again does not go ahead when the database holds an invoice or another
   row Waitron never deletes (said to be a fault), when the setup saved its trading settings, or
   when it finished.
+- **DECIDED (owner, 2026-10-29 ~11:00): "Yes. Start again can delete the failed setup dB."** —
+  a setup database the box cannot fully read. Built in A1131bc slice 2: damage is SQLite's code 11
+  or 26, or a table a reader expects missing; the box still refuses when the readable part shows a
+  record Waitron never deletes, and keeps refusing as unsafe a database it may not open or over
+  128 MiB, a damaged read beside a `-journal` file, a present database with a hot journal beside it,
+  and a damaged `node.db` (plan, D3, N1, N2).
 
 **DECIDED (owner, 2026-10-26 ~15:45; built as A1130): a renewal from the open backup recovery page
 extends the recovery session's 15 minutes.** The page renews every 30 seconds while it is open
@@ -882,7 +899,8 @@ so after the setup password and the missing-database confirmation; with it prese
 password and the discard confirmation, and only for an empty, never-activated attempt
 (`startAgainFirstSetup`, `apps/server/src/first-setup-resolution.ts`). A1042. (2026-10-28, A1131:
 a database that holds records goes too, unless it holds a row Waitron never deletes, the setup saved
-its trading settings, or it finished.)
+its trading settings, or it finished.) (2026-10-30, A1131bc slice 2: offered without a stopped
+recovery and without a password.)
 
 **DECIDED (owner, 2026-10-17): setup, and the demo, start only for a country that has a country
 pack.** A country without one is not offered at all, so no venue is set up against settings no pack

@@ -24,18 +24,25 @@ up secure connection**, and it checks again by itself. A recovery counts as runn
 its steps is in progress and for five minutes after its last activity. Those five minutes end early
 if the recovery fails or the box restarts.
 
-If a recovery from backup started and did not finish, the repair page says so, and **Start again**
-deletes it along with the interrupted setup. The page does not offer **Recover from backup** beside
-it. If the page says the setup database is missing, it shows the stopped recovery after you enter
-the administrator password you chose during setup, and Start again deletes it once you tick
-"Nothing was filed to AEAT and nothing was sold." and choose **Start again** once more. Otherwise
-the page shows **Start again** beside the stopped recovery. Start again then asks for the
-administrator password and shows the recovery again, with "Start again deletes what was entered in
-the setup that stopped part way. No invoice was sent to AEAT." It deletes it all once you tick
-"Delete the old attempt and start again." and choose **Start again** once more. Start again is not
-offered if the setup already saved the settings the box trades with. If the database holds an
-invoice or another item Waitron never deletes, the page says so after you enter the password, and
-Start again does not go ahead.
+If a recovery from backup started and did not finish, **Start again** deletes it along with the
+interrupted setup. Start again asks for no password: anyone who can open the repair page can use
+it, and can see what the page shows when it is pressed. When you choose **Start again**, the box
+checks what it would delete and the page shows it, with the stopped recovery if there is one. Once
+the page shows a stopped recovery, it does not offer **Recover from backup** beside it.
+
+If the page says the setup database is missing, Start again shows what the setup's own record says
+it reached, and deletes it all once you tick "Nothing was filed to AEAT and nothing was sold." and
+choose **Start again** once more. Otherwise it shows "Start again deletes what was entered in the
+setup that stopped part way. No invoice was sent to AEAT.", and deletes it all once you tick
+"Delete the old attempt and start again." and choose **Start again** once more. If part of the
+setup database cannot be read, the page says "The previous setup process was unsuccessful." and
+leaves out "No invoice was sent to AEAT.", because the box may not have been able to check that
+database for invoices. Start again still deletes it.
+
+Start again is not offered, and the page says why, if the setup already saved the settings the box
+sells with (continue with your setup password to finish it), if the setup already finished, or if
+the setup database holds an invoice or another record Waitron never deletes. If the box cannot
+confirm that deleting the setup is safe, the page says so and does not offer it.
 
 If that recovery used a Waitron Cloud copy, its approval in Waitron Cloud closes by itself within an
 hour of when it was given. Until then, Waitron Cloud cannot approve a new recovery for this box's
