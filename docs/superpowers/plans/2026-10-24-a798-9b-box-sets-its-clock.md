@@ -3269,3 +3269,18 @@ Revision 4 changes none of these rulings. It carries out the owner's answer of 2
   deletion control fails.
 - **`reanchor` clearing the hold when its write fails** has its own deletion control (clear it
   only on success → the reanchor-fails case sees no jump).
+
+### Task 11's per-task review, folded (2026-10-31)
+
+- **A stopped watch refuses a set it cannot guard** (review I2): after `stop()`, `stepComing` and
+  `reanchor` throw while a disagreeing AEAT reading is left unrecorded, so the correction refuses
+  the set (`pending_disproofs`) or keeps the row pending rather than writing a lift that reading
+  would disprove. With nothing unrecorded they still answer success.
+- **`reanchor`'s reset of the jump comparison has its own case** (review I1): a forward set with no
+  look during it, then one look, records no jump; deleting the reset fails it.
+- **The hold lasts until `reanchor`'s write is done** (review M3): a look during that write records
+  no jump; clearing the hold first fails it.
+- **`forSetting()`'s freshness filter on agreeing readings has its own case** (review M4), read
+  before `witnesses()` could prune them.
+- **For Task 11a** (review): the watch's `correction` dependency widens from `{ inTurn }` to also
+  take `set`, `steps` and `writePending`.
