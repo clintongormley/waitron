@@ -1232,6 +1232,11 @@ EDITED to pass and is not on this list is a STOP, unless the spec changes what i
     one, written at the review fold, selects 115 files, all three among them:
     `git ls-files 'apps/*.test.ts' 'packages/*.test.ts' | xargs /usr/bin/grep -l 'useFakeTimers\|setSystemTime' | xargs /usr/bin/grep -il 'session\|passkey'`.
     Task 15.
+17. *(Added while building Task 15a, 2026-10-31.)* `packages/workforce/src/index.test.ts:81`
+    ("exports exactly the intended names", the package's whole export list): gains
+    `"readLatestLiveEntry"`, the read Task 15a exports for Task 15b. Every existing name is
+    unchanged; the owner's standing rule lets a whole-shape pin gain the key a new export adds.
+    Task 15a.
 
 **Must pass unedited:** `packages/fiscal-verifactu/src/write-path.e2e.test.ts` (the golden huella),
 `inmutabilidad.test.ts`, `apps/server/src/boot.box-health.test.ts:209-224` ("caches the clock check

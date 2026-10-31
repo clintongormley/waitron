@@ -79,6 +79,7 @@ describe("the public surface", () => {
         "readManagerHours",
         "reconcileAttendanceResponses",
         "projectTimeRecord",
+        "readLatestLiveEntry",
         "summarisePeriod",
         "dailyContractedTargetMinutes",
         "localWallClock",
