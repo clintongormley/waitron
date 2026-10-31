@@ -18,7 +18,7 @@ import type { Logger } from "./logger.js";
 const VERIFY_MS = 2_000;
 /** How far the wall clock may move against the steady clock before a measured offset is stale. */
 const STALE_MS = 1_000;
-/** A step this small is the clock's own drift: the clock did not move. */
+/** A step this small is treated as the clock not having moved. */
 const MOVED_MS = 1_000;
 const EARLIEST_TARGET_MS = Date.UTC(2024, 9, 28);
 const LATEST_TARGET_MS = Date.UTC(2100, 0, 1);
@@ -68,8 +68,8 @@ export type ClockSetAnswer =
   | { set: true; confirmationId: string | null; stepMs: number }
   | { set: false; reason: ClockSetRefusal };
 
-/** Sets the box's clock during a stop (decisions 6–8 of the 9b plan), one set at a time: judges
- * the stop again, asks the host, verifies the step on the boot-time clock and records it. */
+/** Sets the box's clock during a stop, one set at a time: judges the stop again, asks the host,
+ * verifies the step on the boot-time clock and records it. */
 export function clockCorrection(deps: {
   host: BoxHostClient;
   backend: Pick<FiscalBackend, "confirmClockStep" | "clockStopState" | "assertRecordableAt">;
@@ -92,7 +92,8 @@ export function clockCorrection(deps: {
    * the write lock a set in the turn waits for. */
   inTurn<T>(fn: () => Promise<T>): Promise<T>;
   set(input: ClockSetInput): Promise<ClockSetAnswer>;
-  /** Writes the rows of steps that could not be written when they happened, oldest first. */
+  /** Writes, in the turn and oldest first, the rows of steps that could not be written when they
+   * happened. No set is made while one is pending, so they are always the latest steps. */
   writePending(): Promise<void>;
 } {
   const wall = deps.wall ?? (() => Date.now());
@@ -130,10 +131,16 @@ export function clockCorrection(deps: {
   ): Promise<{ stopped: boolean; authoritySpoke: boolean }> {
     const at = reading();
     if (reason === "unusable") {
-      const stopped = unusable(at);
+      // The store keeps AEAT's disagreements until a usable reading ends the stop, so one taken
+      // before the clock read a date before 28-10-2024 was not taken during this stop.
       return {
-        stopped,
-        authoritySpoke: deps.store.witnesses().some((witness) => witness.kind === "authority"),
+        stopped: unusable(at),
+        authoritySpoke: deps.store
+          .witnesses()
+          .some(
+            (witness) =>
+              witness.kind === "authority" && Date.parse(witness.boxAt) < EARLIEST_TARGET_MS,
+          ),
       };
     }
     if (deps.backend.clockStopState === undefined) return { stopped: false, authoritySpoke: false };
@@ -164,13 +171,19 @@ export function clockCorrection(deps: {
     return ok;
   }
 
+  /** Throws only when the row was not written. */
   async function write(request: ClockStepRequest): Promise<string | null> {
     if (deps.backend.confirmClockStep === undefined) return null;
     const { confirmation, corrected } = await deps.transaction((tx) =>
       deps.backend.confirmClockStep!(tx, request),
     );
-    if (corrected !== null)
-      deps.onCorrected?.({ id: corrected.id, code: "clock.corrected", params: corrected.params });
+    if (corrected !== null) {
+      try {
+        deps.onCorrected?.({ id: corrected.id, code: "clock.corrected", params: corrected.params });
+      } catch (error) {
+        deps.log("warn", "clock_correction.email_failed", { errorCode: codeOf(error) });
+      }
+    }
     return confirmation?.id ?? null;
   }
 
@@ -182,11 +195,16 @@ export function clockCorrection(deps: {
     });
   }
 
-  async function setInTurn(input: ClockSetInput): Promise<ClockSetAnswer> {
+  function stale(input: ClockSetInput): boolean {
     const sinceWall = wall() - input.measuredAt.wallMs;
     const sinceSteady = monotonic() - input.measuredAt.monoMs;
-    if (input.stepsSeen !== steps || !(Math.abs(sinceWall - sinceSteady) <= STALE_MS))
-      return { set: false, reason: "stale" };
+    return input.stepsSeen !== steps || !(Math.abs(sinceWall - sinceSteady) <= STALE_MS);
+  }
+
+  async function setInTurn(input: ClockSetInput): Promise<ClockSetAnswer> {
+    // A later step's row written before an earlier one's would be judged against the wrong check.
+    if (pending.length > 0) return { set: false, reason: "pending_disproofs" };
+    if (stale(input)) return { set: false, reason: "stale" };
     const planned = wall() + input.offsetMs;
     if (!(planned >= EARLIEST_TARGET_MS && planned < LATEST_TARGET_MS))
       return { set: false, reason: "target_invalid" };
@@ -217,16 +235,25 @@ export function clockCorrection(deps: {
       }
     }
 
+    // The waits for the host's status and the anchors leave time for a step by the time service.
+    if (stale(input)) {
+      await reanchorAll();
+      return { set: false, reason: "stale" };
+    }
+
     const wallBefore = wall();
+    const monoBefore = monotonic();
     const bootBefore = deps.boot.readBoot();
     const before = reading();
     const targetMs = wallBefore + input.offsetMs;
     steps++;
     const answer = await deps.host.setClock({ targetMs, requester: input.requester });
     const wallAfter = wall();
+    const monoAfter = monotonic();
     const bootAfter = deps.boot.readBoot();
     const after = reading();
-    const bootElapsed = bootAfter.ms - bootBefore.ms;
+    const bootDifference = bootAfter.ms - bootBefore.ms;
+    const bootElapsed = Number.isFinite(bootDifference) ? bootDifference : monoAfter - monoBefore;
     const stepMs = wallAfter - wallBefore - bootElapsed;
     // A host that did not answer may still have moved the clock, but never confirmed it.
     const verified =
@@ -273,11 +300,12 @@ export function clockCorrection(deps: {
     steps: () => steps,
     inTurn,
     set: (input) => inTurn(() => setInTurn(input)),
-    writePending: async () => {
-      while (pending.length > 0) {
-        await write(pending[0]!);
-        pending.shift();
-      }
-    },
+    writePending: () =>
+      inTurn(async () => {
+        while (pending.length > 0) {
+          await write(pending[0]!);
+          pending.shift();
+        }
+      }),
   };
 }
