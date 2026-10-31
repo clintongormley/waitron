@@ -26,8 +26,13 @@ where nothing on the venue's network could lift it** (design §4.9 h).
 4. **Only the Veri\*Factu module stops** (design decision 16 stands).
 5. **Where the box cannot correct its clock, a check is an alert, not a stop**: when the host service
    does not answer (a box upgraded without re-running the install, a host without systemd), a start
-   or change check raises `clock.sync_off` (`unreachable`) telling the operator to re-run the
-   install, and selling goes on (round 1, I4.2).
+   or change check raises `clock.sync_off` (`unreachable`), and selling goes on (round 1, I4.2).
+   *(Changed 2026-10-31 by slice 9b's plan, its decision 13: the alert's words give no install
+   instruction — the box's operator has no terminal, and CLAUDE.md §3's refusal rule forbids
+   sending them to whoever installed the box — a deliberate deviation from design §4.9 h.2's
+   "`clock.sync_off` says to re-run the install". The words say what happened and that, if the box
+   can reach the internet, its own time service may still put the clock right; the install line
+   lives in `deploy/README.md` only. 9c's full plan inherits 9b's words.)*
 6. **When AEAT disagrees and the box cannot set its clock** (synchronised, or no host service), an
    administrator's confirmation still closes a 9c check; AEAT's disagreement is kept in the proof
    and raises `clock.disagrees` (round 1, I4.1).
