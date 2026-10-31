@@ -2882,8 +2882,9 @@ two tills on their own (two tills that agree with the box can still restart paym
 running, slice 9, but not just after a start, decision 18);
 that while the box is running a clock stop alerts the administrators; a new section `{#clock-service}` on the time service,
 `clock.sync_off`'s reasons and decision 13's words for `unreachable` (no install instruction);
-"Emails about the box" (`{#emails}`) gains the clock-change email and its limit (a restart before
-it is sent loses it for a change already handled); the sign-in note of FYI 6 (only a dashboard
+"Emails about the box" (`{#emails}`) gains the clock-change email and its limits (a restart before
+it is sent loses it for a change already handled; once the change is handled, a manager whose
+address the mail server refused outright is not tried again — Task 9's review); the sign-in note of FYI 6 (only a dashboard
 session; a step of more than half an hour either way ends it, and a smaller forward step shortens
 its idle time by the step; tills stay signed in); and the backup hold's limit (Task 14: only
 steps the box made). `apps/server/src/guide/{en,es}/till-notices.md`: the `{#notices}` section
@@ -3175,3 +3176,21 @@ Revision 4 changes none of these rulings. It carries out the owner's answer of 2
   the method it lacks; no assertion changed).
 - `INCIDENT_EMAIL_CODES` has no whole-list assertion in `apps/server/src` (the plan's grep printed
   nothing), so there is no changed test check 5.
+
+### Task 9's per-task review, folded (2026-10-31)
+
+- **A handled `clock.corrected` email ends for a manager whose address was refused outright**
+  (`rejected`), as well as for one who has it (the lead's ruling on review finding I1): decision 9
+  said "until every recipient has been sent it", and a permanently refused address would have kept
+  every handled step in memory, re-sent each minute, until a restart. An `unknown` outcome is
+  still tried again; while the alert stays open, a refused address is still tried again, as for
+  every other code. Task 16's guide states the limit.
+- Cases added for two exits the review's mutations showed untested: a handled step's failed send
+  is tried again; a step that reached everyone ends once its alert is handled (the email settings
+  are read no more). Also a database case: `readOpenEmailedIncidents` reads an open
+  `clock.corrected` and no handled one.
+- **The email chooses its words by `source`, not by `byAdmin`/`byStaff`**, writing "—" for a
+  missing name as the bell does, so no person's step can ever be worded as the tax agency's.
+- Comments narrowed: the restart limit applies only to an alert already handled (an open one is
+  read again after a restart); the episode ends when nothing is left worth trying.
+- Not changed: the review's M7 (the guide half "assigned to no task") — Task 16 already names it.

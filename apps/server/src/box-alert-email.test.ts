@@ -383,6 +383,14 @@ describe("boxEmailMessage for the box setting its clock", () => {
     });
   });
 
+  it("words a person's step as theirs even without their name, never as the tax agency's", () => {
+    for (const source of ["admin", "staff"]) {
+      const text = message("en", { ...STEP, source, person: null }).text;
+      expect(text).not.toContain("tax agency");
+      expect(text).toContain("—");
+    }
+  });
+
   it("words a step of exactly one day and one of 400 days", () => {
     expect(message("en", { ...STEP, stepMs: DAY }).text).toContain("moved forward 1 day, from");
     expect(message("en", { ...STEP, stepMs: 400 * DAY }).text).toContain(
@@ -491,6 +499,31 @@ describe("readOpenEmailedIncidents", () => {
       { code: "clock.records_misdated", params: { at: "2026-10-22T09:31:00.000Z" } },
     ]);
     expect(open.every(({ id }) => typeof id === "string" && id !== "")).toBe(true);
+  });
+});
+
+describe("readOpenEmailedIncidents for the box setting its clock", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+
+  it("reads an open clock.corrected alert and no handled one", async () => {
+    const row = (detectedAt: string, acknowledgedAt: string | null) => ({
+      source: "dashboard" as const,
+      code: "clock.corrected",
+      params: { at: detectedAt },
+      severity: "warning" as const,
+      detectedAt,
+      acknowledgedAt,
+    });
+    await suite.db
+      .insert(incidents)
+      .values([
+        row("2026-10-22T09:30:00.000Z", "2026-10-22T09:31:00.000Z"),
+        row("2026-10-22T09:31:00.000Z", null),
+      ]);
+    const open = await readOpenEmailedIncidents(suite.db);
+    expect(open.map(({ code, params }) => ({ code, params }))).toEqual([
+      { code: "clock.corrected", params: { at: "2026-10-22T09:31:00.000Z" } },
+    ]);
   });
 });
 
