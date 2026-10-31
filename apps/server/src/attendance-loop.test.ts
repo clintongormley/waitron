@@ -281,8 +281,6 @@ describe("attendance duty pass", () => {
   });
 });
 
-// The audit table's attendance row (A798-B slice 9b, Task 15): a shift running at 09:00 on 7 January
-// while the pass's clock reads 400 days off, then the right time again.
 describe("a running shift across a clock days off", () => {
   const DAY_MS = 24 * 60 * 60 * 1000;
   const working = async () => {

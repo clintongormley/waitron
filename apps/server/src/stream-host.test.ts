@@ -20,7 +20,6 @@ import {
   type SpawnFn,
   type StreamStatus,
 } from "@waitron/stream";
-import type { SupervisorDeps } from "@waitron/stream";
 import { FakeLitestream, type FakeChild } from "@waitron/stream/testing/fake-litestream.js";
 import { SwitchableStore } from "@waitron/stream/testing/switchable-store.js";
 import {
@@ -32,19 +31,6 @@ import {
 } from "./stream-host.js";
 import { omitStoredStreamField } from "./testing/old-stream-credential.js";
 import { pauseListingPrefix } from "./testing/stream-pause-scenario.js";
-
-// The real supervisor, recording what each one was built with.
-const built = vi.hoisted(() => ({ deps: [] as SupervisorDeps[] }));
-vi.mock("@waitron/stream", async (original) => {
-  const stream = await original<typeof import("@waitron/stream")>();
-  class RecordingSupervisor extends stream.StreamSupervisor {
-    constructor(deps: SupervisorDeps) {
-      super(deps);
-      built.deps.push(deps);
-    }
-  }
-  return { ...stream, StreamSupervisor: RecordingSupervisor };
-});
 
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xd).toString("base64"),
@@ -643,55 +629,6 @@ describe("the live copy's wiring", () => {
       // supervisor. The fake Litestream puts nothing on the commit path, so this does NOT show a sale
       // keeping its normal time against the real binary. The 1,000 ms bound catches a write that
       // takes a second or more; one that never finishes is caught by the test's timeout instead.
-      describe("old generations across a step of the clock", () => {
-        const STEP = { confirmedAt: "2026-10-12T08:00:00.000Z", stepMs: -90_000 };
-        const heldBy = async (overrides: Partial<StreamHostDeps>) => {
-          const rt = runtime({
-            spawn: new FakeLitestream().spawn,
-            store: new SwitchableStore(() => new Date()),
-            ...overrides,
-          });
-          try {
-            await rt.start();
-            await vi.waitFor(() => expect(rt.status().state).toBe("opening"), { timeout: 10_000 });
-            return built.deps.at(-1)!.pruneHeld;
-          } finally {
-            await rt.stop();
-          }
-        };
-
-        it("holds them for the week after the box's latest step, by the clock the prune reads", async () => {
-          const held = (await heldBy({ latestClockStep: async () => STEP }))!;
-          expect(await held(new Date("2026-10-12T08:00:00.000Z"))).toBe(true);
-          expect(await held(new Date("2026-10-19T07:59:59.999Z"))).toBe(true);
-          expect(await held(new Date("2026-10-19T08:00:00.000Z"))).toBe(false);
-          // A step dated more than a minute ahead holds nothing, or a clock put back after it would
-          // keep every generation until it caught up.
-          expect(await held(new Date("2026-10-12T07:58:59.999Z"))).toBe(false);
-          expect(await held(new Date("2026-10-12T07:59:00.000Z"))).toBe(true);
-        });
-
-        it("holds nothing when the box has made no step", async () => {
-          const held = (await heldBy({ latestClockStep: async () => null }))!;
-          expect(await held(new Date("2026-10-12T08:00:00.000Z"))).toBe(false);
-        });
-
-        it("passes on a step it cannot read, so the supervisor keeps them", async () => {
-          const held = (await heldBy({
-            latestClockStep: async () => {
-              throw new Error("the step could not be read");
-            },
-          }))!;
-          await expect(held(new Date("2026-10-12T08:00:00.000Z"))).rejects.toThrow(
-            "the step could not be read",
-          );
-        });
-
-        it("holds nothing without a step read", async () => {
-          expect(await heldBy({})).toBeUndefined();
-        });
-      });
-
       it("returns from start() at once while the bucket never answers, and hears every commit", async () => {
         db.run(sql`create table if not exists stream_probe (n integer)`);
         const store = new SwitchableStore(() => new Date());

@@ -2,7 +2,7 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import {
   IDLE_TIMEOUT_MS,
@@ -128,19 +128,27 @@ describe("management session lifecycle", () => {
 
   describe("a last-seen time ahead of the clock, as a backward clock step leaves it", () => {
     const aheadBy = (ms: number) => new Date(Date.now() + ms).toISOString();
+    // Frozen, so each boundary is exact however long the transactions between stamp and read take.
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-31T12:00:00.000Z"));
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
 
     it("throws management_session.expired once last-seen is more than the idle timeout ahead", async () => {
       const personId = await seedPerson(suite.db, "manager");
       const session = await run((tx) => startManagementSession(tx, { personId }));
-      await run((tx) => tx.execute(agedTo(aheadBy(IDLE_TIMEOUT_MS + 1_000), session.token)));
+      await run((tx) => tx.execute(agedTo(aheadBy(IDLE_TIMEOUT_MS + 1), session.token)));
       const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.token)));
       expect(code).toBe("management_session.expired");
     });
 
-    it("accepts a last-seen just inside the idle timeout ahead", async () => {
+    it("accepts a last-seen exactly the idle timeout ahead", async () => {
       const personId = await seedPerson(suite.db, "manager");
       const session = await run((tx) => startManagementSession(tx, { personId }));
-      await run((tx) => tx.execute(agedTo(aheadBy(IDLE_TIMEOUT_MS - 1_000), session.token)));
+      await run((tx) => tx.execute(agedTo(aheadBy(IDLE_TIMEOUT_MS), session.token)));
       const resolved = await run((tx) => resolveManagementSession(tx, session.token));
       expect(resolved.personId).toBe(personId);
     });

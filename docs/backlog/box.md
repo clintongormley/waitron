@@ -1472,15 +1472,6 @@ wrong clock. The note is written when backup settings load (`backup-supervisor.t
 clock steps, so carrying the step means a new note field and a rewrite on every step. Left open by
 A798-B slice 9b, Task 14a.
 
-## The live copy ages old generations by the box's clock.
-
-After a step the box makes to its clock, old generations in the bucket are kept for a week
-(`StreamHost`'s hold over the supervisor's daily prune). A box left a week on a clock set wrongly
-forward then prunes against it. Ageing generations by the bucket's own times (the live generation's
-newest `lastModified`) would remove that limit, but changes what
-`packages/stream/src/generations.test.ts` checks (old generations pruned beside an old live one).
-Left open by A798-B slice 9b, Task 15.
-
 ## Closing a pay period trusts the box's clock.
 
 `closePayPeriod` (`packages/workforce/src/pay-period-close.ts`) refuses `pay_period.not_due` until

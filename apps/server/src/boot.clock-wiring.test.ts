@@ -18,7 +18,6 @@ import { AppError, jobOrigin } from "@waitron/shared";
 import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { type BackupSupervisorDeps } from "./backup-supervisor.js";
-import { type StreamHostDeps } from "./stream-host.js";
 import { createBackupRoomHooks } from "./backup-deletion-alert.js";
 import { startFreeSpaceWatch } from "./free-space-watch.js";
 import { recordStartDeletions } from "./start-backup-room-record.js";
@@ -42,20 +41,7 @@ const clocks = vi.hoisted(() => ({
   supervisor: undefined as
     { current(): { retention?: { count: number; days: number } } } | undefined,
   order: [] as string[],
-  stream: undefined as StreamHostDeps | undefined,
 }));
-vi.mock("./stream-host.js", async (original) => {
-  const actual = await original<typeof import("./stream-host.js")>();
-  return {
-    ...actual,
-    StreamHost: class extends actual.StreamHost {
-      constructor(deps: StreamHostDeps) {
-        super(deps);
-        clocks.stream = deps;
-      }
-    },
-  };
-});
 vi.mock("./backup-supervisor.js", async (original) => {
   const actual = await original<typeof import("./backup-supervisor.js")>();
   return {
@@ -286,8 +272,6 @@ describe("boot's authority clock wiring", () => {
         confirmedAt: "2026-10-12T08:00:00.000Z",
         stepMs: -90_000,
       });
-      // The live copy keeps its old generations across the same step.
-      expect(clocks.stream!.latestClockStep).toBe(clocks.archive!.latestClockStep);
       // Before the first backup run, which could raise the same alert for its own deletions.
       expect(recordStartDeletions).toHaveBeenCalledOnce();
       expect(vi.mocked(recordStartDeletions).mock.calls[0]![0]).toMatchObject({

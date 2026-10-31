@@ -118,11 +118,6 @@ export interface SupervisorDeps {
   onCommit(listener: () => void): () => void;
   /** Shared by every supervisor one process starts for this venue; see `SentPointers`. */
   sentPointers: SentPointers;
-  /**
-   * True while old generations must be kept whatever `now` says, as after a step of the clock; a
-   * throw keeps them too. Absent: never held.
-   */
-  pruneHeld?: (now: Date) => Promise<boolean>;
 }
 
 /** How often, while streaming, the side file is measured. */
@@ -281,6 +276,8 @@ export class StreamSupervisor {
   #newestUploadAt: Date | null = null;
   /** The bucket's clock minus {@link SupervisorDeps.monotonic}'s reading. */
   #skewMs = 0;
+  /** False while {@link #skewMs} is this box's time of day standing in for the bucket's. */
+  #bucketClockRead = false;
   #lastProbeAt = 0;
   #lastClassifyAt = Number.NEGATIVE_INFINITY;
   /** Numbers each bucket check the stream starts, so a late answer can tell a newer one began. */
@@ -711,12 +708,16 @@ export class StreamSupervisor {
   ): Promise<void> {
     const steady = (started.steady + ended.steady) / 2;
     this.#skewMs = (started.wall + ended.wall) / 2 - steady;
+    this.#bucketClockRead = false;
     const key = markerKey(this.#deps.venueId, generation);
     try {
       const offset = await bucketClockOffset(this.#store, key, started.steady, ended.steady, {
         signal,
       });
-      if (offset !== null) this.#skewMs = offset;
+      if (offset !== null) {
+        this.#skewMs = offset;
+        this.#bucketClockRead = true;
+      }
     } catch (error) {
       signal.throwIfAborted();
       this.#deps.log("warn", "stream.freshness_unreadable", failureFields(error));
@@ -814,23 +815,22 @@ export class StreamSupervisor {
 
   /**
    * Deletes this venue's generations older than a week, never `live`, at most once a day. Litestream
-   * tidies only the generation it writes. Not awaited: a bucket that never answers must
-   * not hold the tick, which is where the side-file limit is checked. One prune at a time.
+   * tidies only the generation it writes. Ages are the bucket's own times measured against the
+   * bucket's clock, so a step or a wrong setting of this box's clock deletes nothing early or late;
+   * nothing is pruned until the bucket's clock has been read. Not awaited: a bucket that never
+   * answers must not hold the tick, which is where the side-file limit is checked. One prune at a
+   * time.
    */
   #pruneDaily(live: string, signal: AbortSignal): void {
-    const now = this.#deps.now();
-    if (this.#pruning || now.getTime() - this.#lastPruneAt < PRUNE_EVERY_MS) return;
-    this.#lastPruneAt = now.getTime();
+    const steady = this.#monotonic();
+    if (!this.#bucketClockRead) return;
+    if (this.#pruning || steady - this.#lastPruneAt < PRUNE_EVERY_MS) return;
+    this.#lastPruneAt = steady;
     this.#pruning = true;
-    void Promise.resolve()
-      .then(() => this.#deps.pruneHeld?.(now) ?? false)
-      .then((held) =>
-        held
-          ? []
-          : pruneGenerations(this.#store, this.#deps.venueId, live, now, PRUNE_WINDOW_MS, {
-              signal,
-            }),
-      )
+    const bucketNow = new Date(steady + this.#skewMs);
+    void pruneGenerations(this.#store, this.#deps.venueId, live, bucketNow, PRUNE_WINDOW_MS, {
+      signal,
+    })
       .then((deleted) => {
         if (deleted.length > 0) {
           this.#deps.log("info", "stream.generations_pruned", { count: deleted.length });

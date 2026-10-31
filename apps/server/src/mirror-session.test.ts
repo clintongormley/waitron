@@ -263,6 +263,24 @@ describe("mirror ambient viewer session", () => {
     expect(await isEnded(db)).toBe(false);
   });
 
+  it("on a mirror, the keepalive re-stamps a last_seen_at left hours ahead by a backward clock step, so the viewer still resolves", async () => {
+    const token = await ensureMirrorViewer(db);
+    const aheadSeenAt = new Date(Date.now() + 2 * 60 * 60_000).toISOString();
+    await withTransaction(db, (tx) =>
+      tx.execute(
+        sql`update management_sessions set last_seen_at = ${aheadSeenAt}
+            where id = ${MIRROR_VIEWER_SESSION_ID}`,
+      ),
+    );
+
+    const res = await driveOnce(db, token);
+
+    expect(res.status).toBe(200);
+    expect(new Date(await readLastSeen(db)).getTime()).toBeLessThanOrEqual(Date.now());
+    const resolved = await withTransaction(db, (tx) => resolveManagementSession(tx, token));
+    expect(resolved).toMatchObject({ personId: MIRROR_VIEWER_PERSON_ID, role: "admin" });
+  });
+
   it("endMirrorViewer ends the viewer's session, and a later ensureMirrorViewer revives it", async () => {
     const kept = await ensureMirrorViewer(db);
     await endMirrorViewer(db);

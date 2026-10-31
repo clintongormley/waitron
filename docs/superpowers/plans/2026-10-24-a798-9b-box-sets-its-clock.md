@@ -1219,13 +1219,16 @@ EDITED to pass and is not on this list is a STOP, unless the spec changes what i
     manifest count by one more. The comment at `:67-68` stays true. No assertion changes. Task 8-0.
 16. *(Added while building Task 15, 2026-10-31.)* `packages/adjustments/src/routes.test.ts:948`
     (`nowIs`, behind the three "reads the venue's current business day at …" cases) and
-    `apps/server/src/boot.clock-wiring.test.ts:184` (after its `setSystemTime`): each signs its
+    `apps/server/src/boot.clock-wiring.test.ts:170` (after its `setSystemTime`): each signs its
     people in at today's real time, then moves `Date` back weeks — a backward step past the idle
     timeout, which Task 15's management-session rule now ends (`management_session.expired`, the
     401 the boot case printed). Each gains one statement re-stamping `management_sessions.last_seen_at`
     at the moved clock, as if they had signed in then. No assertion changes. Found by running every
-    `apps/`/`packages/` test file that fakes `Date` and touches a session (the grep is in Task 15's
-    commit); only these two failed. Task 15.
+    `apps/`/`packages/` test file that fakes `Date` and touches a session; only these two failed.
+    The build did not save its command; this one, written at the review fold, selects 115 files,
+    both of these among them:
+    `git ls-files 'apps/*.test.ts' 'packages/*.test.ts' | xargs /usr/bin/grep -l 'useFakeTimers\|setSystemTime' | xargs /usr/bin/grep -il 'session\|passkey'`.
+    Task 15.
 
 **Must pass unedited:** `packages/fiscal-verifactu/src/write-path.e2e.test.ts` (the golden huella),
 `inmutabilidad.test.ts`, `apps/server/src/boot.box-health.test.ts:209-224` ("caches the clock check
@@ -3016,6 +3019,21 @@ since they were read, not run):
   snapshot interval ahead is due.
 - **Content suggestion jobs** (`apps/server/src/content-suggestion-runner.ts:170`): a job created
   more than its lifetime ahead ends expired.
+- *(Added from Task 15's review.)* **The backup schedule** (`apps/server/src/backup-sweep.ts:430-452`):
+  the wait for the next fire works out `fireAt` once, before the wait, so after a step back it
+  sleeps until the new clock reaches the old `fireAt`. Recompute it when it lies more than one
+  interval ahead of now. Test in `backup-sweep.test.ts`: a step back 400 days during the wait →
+  the next archive is taken within an interval; a run with no step as the control.
+- *(Added from Task 15's review.)* **Invoice deliveries** (`apps/server/src/invoice-delivery.ts:229`,
+  `:253-256`): a `next_attempt_at` more than the longest retry wait ahead is due; a `claimed_at`
+  ahead of now by more than the claim's 60 seconds lapses.
+- *(Added from Task 15's review.)* **Print-job lease** (`packages/printing/src/runtime.ts:55-62`): a
+  `claimed_at` ahead of now by more than the lease lapses, so the job is claimed again.
+- *(Added from Task 15's review.)* **PIN throttle** (`packages/identity/src/pin-throttle.ts:89-96`,
+  `:118-122`, in memory): an entry whose last failure is ahead of now by more than the longest wait
+  counts as lapsed.
+- The greps behind the audit do not find `nowIso()` cutoffs or SQL comparisons; before building,
+  grep `nowIso()` in non-test source and add any further site of this shape here.
 
 Each gets the failing case first, its control just inside the limit, and a deletion control. If a
 site's stored length cannot be known, or a fix would change what an existing test checks, add it
@@ -3027,11 +3045,21 @@ run src/write-path.e2e.test.ts inmutabilidad`.
 
 ### Task 15's departures and notes (2026-10-31)
 
-- The hold is built in `StreamHost` from a `latestClockStep` read (the same function boot hands the
-  backups), not by boot passing a `pruneHeld` closure: `StreamHost` builds every supervisor, and its
-  test can read what each was built with. The window reuses `clockStepHold` with
-  `PRUNE_WINDOW_MS`, so a step dated more than a minute ahead holds nothing, as for backups.
-- A throw from the step read keeps the generations (logged `stream.prune_failed`).
+- **Stream generations: no hold; the prune reads the bucket's clock** (Task 15's review, I2). The
+  hold first built here guarded a case the real store cannot produce: S3 stamps `lastModified` by
+  the bucket's clock (`packages/stream/src/s3-store.ts:210`), so a step of the box's clock does not
+  make generations look older. The real exposure was a box clock wrongly a week ahead, which
+  deleted every old generation at once with no step recorded. The supervisor now passes
+  `pruneGenerations` the bucket's time (its steady clock plus the measured `#skewMs`), runs the
+  daily prune by the steady clock, and prunes nothing while the bucket's clock has not been read
+  (the marker listing failed or did not show the marker). `generations.test.ts` is unchanged:
+  `pruneGenerations` already takes `now`. The `pruneHeld` dependency, its `StreamHost` and boot
+  wiring and their tests are gone; the backlog line about the limit is deleted. Not tested: a
+  later generation whose marker cannot be read after an earlier one's could (the flag resets at
+  each measurement; read, not run).
+- **A mirror's viewer** (review I1): the keepalive also re-stamps a last-seen time ahead of the
+  clock, or the two-sided idle rule refused the viewer after a backward step of more than 30
+  minutes, until a restart.
 - Management sessions: two existing fixtures signed in at the real clock and then moved `Date` back
   weeks; "Changed test checks" entry 16.
 - The attendance row was written from the test the plan named; it showed no deleted entry and no
