@@ -268,12 +268,12 @@ elección, como con qué cuenta juntar, se abre junto al pedido, y **Atrás** la
 
 Unir una mesa, o mover clientes a otra, conserva todas las cuentas: las que llegan toman los
 siguientes números del grupo que las recibe. Para juntar dos cuentas, usa **Juntar cuentas**. Si
-otra caja junta la cuenta que tienes en pantalla con otra, o la mueve a otra mesa, tu pantalla pasa
-a otra de las cuentas de la mesa, si queda alguna, y lo indica, por ejemplo **Cuenta 2 ya no está en
-esta mesa. Ahora se muestra Cuenta 1.** Los platos que habías añadido a la cuenta que se fue y no
-habías enviado no pasan a la cuenta que ahora se muestra: aparecen bajo **Tus cambios no se han
-guardado.**, con **Descartar cambios** y **Actualizar el pedido**. Una cuenta cobrada en otra caja
-sigue en tu pantalla, marcada como **Pagada**.
+otra caja junta la cuenta que tienes en pantalla con otra, o la mueve a otra mesa, tu pantalla pasa,
+en unos 15 segundos como mucho, a otra de las cuentas de la mesa, si queda alguna, y lo indica, por
+ejemplo **Cuenta 2 ya no está en esta mesa. Ahora se muestra Cuenta 1.** Los platos que habías
+añadido a la cuenta que se fue y no habías enviado no pasan a la cuenta que ahora se muestra:
+aparecen bajo **Tus cambios no se han guardado.**, con **Descartar cambios** y **Actualizar el
+pedido**. Una cuenta cobrada en otra caja sigue en tu pantalla, marcada como **Pagada**.
 
 Debajo del pedido, el pie muestra el **Total** de esta cuenta, después **Pendiente de pago en la
 mesa** para todas las cuentas de la mesa, y luego las formas de cobrar esta cuenta: **Efectivo** y

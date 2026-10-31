@@ -1991,7 +1991,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   ticket/receipt grouping, has landed. What it leaves open is A1191–A1202, A1217 and the store limit under
   _Modules, data and code health_. Slice 2, named bills that keep their number at the table, has
   landed; it leaves open A1235–A1238. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
-  main bill, has landed (#PR); it leaves open A1256, A1258 and A1261–A1265. Remaining slices: one
+  main bill, has landed (#PR); it leaves open A1256, A1258, A1261 and A1263–A1266. Remaining slices: one
   picker for Move dishes and Split a table, including waiting courses; pre-bills after asesor S2
   (A446). One payment pays one bill. Station modes, pass naming and grouped cross-bill
   firing wait for pending A773-2, independently of S2. New Spanish wording requires approval
@@ -2057,18 +2057,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   the till a way in, offer it from the ⋮ for a paid bill. If the owner instead picks "show it
   quiet and explain on tap", that needs a new sentence in English and Spanish first.
 
-- **A1262. An open bill holding a payment still offers Transfer items and Merge bills in the ⋮
-  (left open by A803 slice 3, #PR).** The server refuses both for a bill with any payment
-  (`bill.payments_received`, through `requireUntouchedPair` in
-  `apps/server/src/bill-actions.ts`), so the waiter picks a bill and is then refused (by reading,
-  not run). Hide both
-  for such a bill, as the LOOK fix F5 hid them for paid and presented bills
-  (`apps/till/src/screens/till-table-order-screen.ts`); Split by item stays, as the server takes it.
-
 - **A1263. Switching profile after only viewing another person's draft would say "draft
   replaced" (left open by A803 slice 3, #PR).** `#switchProfile` in `apps/till/src/till-app.ts`
   reads a taken-over answer as a lost change even when this till had nothing of its own to save.
-  The LOOK fix F3 stopped this at six other leave points by checking `DraftSync.ownEditWaiting`
+  The LOOK fix F3 stopped this at seven other leave points by checking `DraftSync.ownEditWaiting`
   first; this one was found by reading, not run.
 
 - **A1264. A bill another till merged or moved away is noticed only on the 15-second timer (left
@@ -2085,6 +2077,17 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Decide whether the list gets shorter (fewer items, or tighter rows) or the table section comes
   first. Pictures `x-t1-menu-open`, `k5-*` in the LOOK's folder
   (`~/waitron-campaign-c/a803-3-shots/`, not in the repository).
+
+- **A1266. A payment window stays on a bill another till moved or merged away, and an unanswered
+  card payment's view leaves this till's screen (left open by A803 slice 3, #PR).** Since the LOOK
+  fix F1 the table screen moves off such a bill, but its payment window (`bill-pay` in
+  `apps/till/src/till-app.ts`, which follows `billPaying.billId`) stays open on the gone bill, and a
+  payment taken there is refused (`requireOpenBill` in `apps/server/src/bill-payments.ts`,
+  `working_order.not_open`). Seen in the LOOK fix review (its probe C). By reading, not run: if
+  another till moves a bill whose card payment has no answer yet, the pay area's confirmation view
+  (`#unansweredWholePayments`, keyed by the bill on screen) is no longer drawn on this till once its
+  screen moves. Decide whether the window closes or follows the screen, and keep an unanswered card
+  payment's view reachable.
 
 - **A1193. Choosing which portions of a grouped row an action takes, and Fire now on a grouped
   row (left open by A803 slice 1, D14 and D31).** Actions on a row take a count, never chosen
