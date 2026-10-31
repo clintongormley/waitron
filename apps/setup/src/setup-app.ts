@@ -80,7 +80,6 @@ const setupLocale = (): "en" | "es" => (currentLocale().startsWith("es") ? "es" 
 /** The wizard's screens, shown one at a time from in-memory state, never a URL route. */
 export type Screen =
   | "first-owner"
-  | "first-backup"
   | "first-setup"
   | "connection"
   | "role"
@@ -988,15 +987,7 @@ export class SetupApp extends LitElement {
     const navigate = () => {
       if (!this.isConnected || this.screen !== origin || (owner && !owner.isConnected)) return;
       const finished = this.leave.coordinator.request({
-        scopes:
-          origin === "first-backup"
-            ? "all"
-            : [
-                ...(owner ? [owner] : []),
-                ...(origin === "first-owner" && destination === "first-backup"
-                  ? [this.#firstPasswordOwner]
-                  : []),
-              ],
+        scopes: owner ? [owner] : [],
         reason: "navigation",
         proceed: () => {
           if (!this.isConnected || this.screen !== origin || (owner && !owner.isConnected)) return;
@@ -1493,7 +1484,9 @@ export class SetupApp extends LitElement {
       ) {
         this.#closeWipe();
         this.firstWipeError = () => initialOwnerStrings[setupLocale()].heldChanged;
-        void this.#focusAfterUpdate("start-again");
+        void this.#focusAfterUpdate(
+          this.firstWipeKind === "recover" ? "recover-backup" : "start-again",
+        );
       } else if (refusal !== undefined) {
         this.#closeWipe();
         this.firstStartAgainRefused = refusal;
@@ -2408,9 +2401,8 @@ export class SetupApp extends LitElement {
         lastActiveSource?: "memory" | "saved-step";
         cloud?: boolean;
       },
-      refused = false,
+      started: string,
     ) => {
-      const started = refused ? t.recoveryStoppedRefused : t.recoveryStopped;
       return html`<div data-test="recovery-stopped">
         <p>${started.replace("{started}", shownAt(recovery.startedAt))}</p>
         <p>${lastActive(recovery.lastActiveAt, recovery.lastActiveSource)}</p>
@@ -2434,16 +2426,13 @@ export class SetupApp extends LitElement {
         this.#firstPasswordScope?.changed();
       }}
     ></wt-input>`;
-    // Disabled where the page says a recovery's records cannot be read: the box refuses a new
-    // recovery beside a journal it cannot read.
-    const recoverBackup = (unreadable: boolean) =>
-      html`<wt-button
-        data-test="recover-backup"
-        variant="secondary"
-        ?disabled=${this.firstOwnerBusy || unreadable}
-        @click=${() => void this.#openWipeConfirmation("recover")}
-        >${t.recoverBackup}</wt-button
-      >`;
+    const recoverBackup = html`<wt-button
+      data-test="recover-backup"
+      variant="secondary"
+      ?disabled=${this.firstOwnerBusy || !offered || unsettled}
+      @click=${() => void this.#openWipeConfirmation("recover")}
+      >${t.recoverBackup}</wt-button
+    >`;
     const cancelStartAgain = html`<wt-button
       slot="cancel"
       data-test="cancel-start-again"
@@ -2454,6 +2443,8 @@ export class SetupApp extends LitElement {
     >`;
     const stoppedShown = missing ? undefined : summary?.recovery;
     const recovering = confirmOpen && this.firstWipeKind === "recover";
+    const stoppedWords =
+      this.firstWipeKind === "recover" ? t.recoveryStoppedRecover : t.recoveryStopped;
     const startAgainConfirm = !confirmOpen
       ? nothing
       : html`${
@@ -2474,7 +2465,7 @@ export class SetupApp extends LitElement {
                   ${noInvoiceFound ? `${t.heldLost} ${t.noInvoiceSent}` : t.heldLost}
                 </p>`
           }
-          ${stoppedShown ? stoppedBlock(stoppedShown) : nothing}
+          ${stoppedShown ? stoppedBlock(stoppedShown, stoppedWords) : nothing}
           <label
             ><input
               data-test="retire-confirmed"
@@ -2544,7 +2535,7 @@ export class SetupApp extends LitElement {
       ${
         inspection && !this.firstRestarting && !offersNothing
           ? this.firstWipeUnread
-            ? html`${stoppedHere ? stoppedBlock(stoppedHere) : nothing}${
+            ? html`${stoppedHere ? stoppedBlock(stoppedHere, stoppedWords) : nothing}${
                   unsettled
                     ? html`<p data-test="recovery-unreadable">${t.recoveryUnreadable}</p>`
                     : nothing
@@ -2555,7 +2546,7 @@ export class SetupApp extends LitElement {
                     data-test="check-again"
                     variant="secondary"
                     ?disabled=${this.firstOwnerBusy}
-                    @click=${() => void this.#openWipeConfirmation("start-again")}
+                    @click=${() => void this.#openWipeConfirmation(this.firstWipeKind)}
                     >${t.checkAgain}</wt-button
                   >
                 </wt-form-actions>`
@@ -2574,34 +2565,38 @@ export class SetupApp extends LitElement {
                   </ul>
                   ${
                     stopped
-                      ? stoppedBlock(stopped)
+                      ? stoppedBlock(stopped, stoppedWords)
                       : this.firstBackupPhase === "uncertain"
                         ? html`<p data-test="recovery-unreadable">${t.recoveryUnreadable}</p>`
-                        : recovering
-                          ? nothing
-                          : html`<p>${t.missingBackup}</p>`
+                        : offersStartAgain && !recovering
+                          ? html`<p>${t.missingBackup}</p>`
+                          : nothing
                   }
                   <div class="missing-actions" data-test="missing-actions">
-                    ${stopped || recovering ? nothing : recoverBackup(this.firstBackupPhase === "uncertain")}${offersStartAgain && !confirmOpen ? startAgain : nothing}
+                    ${offersStartAgain && !recovering ? recoverBackup : nothing}${offersStartAgain && !confirmOpen ? startAgain : nothing}
                   </div>
                   ${startAgainConfirm} ${wipeError}`
               : html`${
                   stoppedHere && !confirmOpen
-                    ? stoppedBlock(stoppedHere, refused !== undefined)
+                    ? stoppedBlock(
+                        stoppedHere,
+                        refused !== undefined ? t.recoveryStoppedRefused : t.recoveryStopped,
+                      )
                     : nothing
                 }${
                   unsettled
                     ? html`<p data-test="recovery-unreadable">${t.recoveryUnreadable}</p>`
                     : nothing
                 }${refused === undefined && !confirmOpen ? startAgain : nothing}
-                ${refusal} ${startAgainConfirm} ${stoppedHere ? nothing : recoverBackup(unsettled)}
+                ${refusal} ${startAgainConfirm}
+                ${refused === undefined && !recovering ? recoverBackup : nothing}
                 ${
                   unsettled
                     ? html`<wt-button
                         data-test="check-again"
                         variant="secondary"
                         ?disabled=${this.firstOwnerBusy}
-                        @click=${() => void this.#openWipeConfirmation("start-again")}
+                        @click=${() => void this.#openWipeConfirmation(this.firstWipeKind)}
                         >${t.checkAgain}</wt-button
                       >`
                     : nothing
@@ -2658,12 +2653,6 @@ export class SetupApp extends LitElement {
   #renderScreen(): TemplateResult {
     const firstSession = this.#firstSession;
     switch (this.screen) {
-      case "first-backup":
-        return html`<setup-first-backup
-          data-test="screen-first-backup"
-          .api=${this.api}
-          .inspection=${this.firstInspection}
-        ></setup-first-backup>`;
       case "first-owner":
         return this.#renderFirstOwner();
       case "first-setup":
