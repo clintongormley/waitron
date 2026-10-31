@@ -6146,6 +6146,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **A976. Finish the server's English test-venue defaults.**
   Venue-service API-client zone, ordinary routing-grid hierarchy and menu-period rule samples
   use English names; remaining fixtures are listed in the detail.
+  The kitchen-note upgrade fixture uses an English operation description.
   Other helpers and screen expectations remain. Low priority.
   [Detail](backlog/architecture.md#a976-finish-the-servers-english-test-venue-defaults).
 
