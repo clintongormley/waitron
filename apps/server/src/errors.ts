@@ -1419,11 +1419,12 @@ declare module "@waitron/shared" {
      * running but not synchronised (`unsynchronised`), or the box's clock service did not answer in
      * production (`unreachable`). Built as data by the clock-sync alert source, never thrown. */
     "clock.sync_off": { reason: "off" | "stopped" | "unsynchronised" | "unreachable" };
-    /** The box did not set its clock from an administrator's device, and asked its host nothing:
-     * the request came from the box itself, no stop holds, the host service did not answer, the
-     * time service says the clock is synchronised, AEAT has spoken during the stop, the device is
-     * within a minute of the box, the device's time was measured before a step of the box's clock,
-     * the time would be before 28-10-2024, or the clock watch could not first record its readings. */
+    /** The box did not set its clock from an administrator's device, and asked its host to set
+     * nothing: the request came from the box itself, no stop holds, the host service did not
+     * answer, the time service says the clock is synchronised, AEAT has spoken during the stop, the
+     * device is within a minute of the box, the device's time was measured before a step of the
+     * box's clock, the time would be before 28-10-2024 or from 2100 on (`target_invalid`), or the
+     * readings taken before an earlier step are not yet recorded (`pending_disproofs`). */
     "clock.set_refused": {
       reason:
         | "same_machine"
@@ -1436,9 +1437,9 @@ declare module "@waitron/shared" {
         | "target_invalid"
         | "pending_disproofs";
     };
-    /** The box asked its host to set the clock: `refused`, the clock did not move (the host
-     * refused, or did not answer); `unverified`, it moved, but the box could not confirm it landed
-     * where it was asked to. */
+    /** The box asked its host to set the clock: `refused`, the clock moved by a second or less;
+     * `unverified`, it moved further, but the box could not confirm it landed where it was asked
+     * to. */
     "clock.set_failed": { reason: "refused" | "unverified" };
     /** A restored box's first start (a certificate for this machine, the next membership term)
      * failed, so the box sells but does not copy to the bucket. Built as data by

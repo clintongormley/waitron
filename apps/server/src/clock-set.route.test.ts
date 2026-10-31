@@ -321,10 +321,11 @@ function confirmationRow(id: string) {
     reason: string;
     check_id: string | null;
     step_ms: number;
+    proof: string;
   }>(
-    sql`select source, person_id, reason, check_id, step_ms from clock_confirmations where id = ${id}`,
+    sql`select source, person_id, reason, check_id, step_ms, proof from clock_confirmations where id = ${id}`,
   );
-  return row!;
+  return { ...row!, proof: JSON.parse(row!.proof) as Record<string, unknown> };
 }
 
 function correctedParams(confirmationId: string): Record<string, unknown> | undefined {
@@ -439,16 +440,18 @@ it("sets the clock from the administrator's device when only two devices disagre
   expect(box.host.sets).toEqual([
     { targetMs: box.behind + 10 * MINUTE, requester: { source: "admin", person: mario.id } },
   ]);
+  // Only the administrator's device set the clock; the devices that disagreed did not.
   expect(confirmationRow(answer.json.confirmationId as string)).toMatchObject({
     source: "admin",
     person_id: mario.id,
+    proof: { authority: null, devices: [], admin: { uncertaintyMs: 0 } },
   });
 });
 
 it("measures the device against the box's time at the middle of the challenge's round trip", async () => {
   const box = await stoppedBox(10 * MINUTE);
   const asked = await ask(box, mario.cookie);
-  box.setSteady(2_000);
+  box.setSteady(4_000);
 
   const answer = await setWith(box, mario.cookie, {
     challengeId: asked.json.challengeId,
@@ -456,7 +459,7 @@ it("measures the device against the box's time at the middle of the challenge's 
   });
 
   expect(answer.status).toBe(200);
-  expect(box.host.sets.map((set) => set.targetMs)).toEqual([box.behind + 10 * MINUTE + 1_000]);
+  expect(box.host.sets.map((set) => set.targetMs)).toEqual([box.behind + 10 * MINUTE + 2_000]);
 });
 
 it("refuses a device within a minute of the box: confirm instead", async () => {
@@ -570,6 +573,8 @@ it("sets the clock a day on from an administrator's device, records who, and lif
 it("sets a clock that reads a date before 28-10-2024, as that stop", async () => {
   const box = await stoppedBox(10 * MINUTE);
   const trueTime = latest().at.getTime();
+  // Kept from the stop before this one: not taken during it, and not what sets the clock.
+  noteAuthority(box, 10 * MINUTE);
   box.setClock(Date.UTC(2020, 0, 1, 12));
 
   const answer = await useDevice(box, mario.cookie, trueTime - boxTime(box));
@@ -579,6 +584,7 @@ it("sets a clock that reads a date before 28-10-2024, as that stop", async () =>
     source: "admin",
     reason: "unusable",
     check_id: null,
+    proof: { authority: null, devices: [] },
   });
   expect(boxTime(box)).toBe(trueTime);
 });
