@@ -12,13 +12,12 @@ import {
   readStandardSeriesId,
   stampDeployment,
   tenants,
-  writeMirrorConfig,
   writeNodeMembership,
   type Database,
   type NodeDatabase,
   type VenueDatabase,
 } from "@waitron/db";
-import { setNodeMode, setSingletonRole } from "@waitron/node-db";
+import { setNodeMode, setSingletonRole, writeMirrorLink } from "@waitron/node-db";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { loadKeyRing } from "@waitron/credentials";
 import type {
@@ -224,7 +223,7 @@ async function seedMirrorIdentity(db: Database, node: NodeDatabase): Promise<{ n
   };
   await writeNodeMembership(db, held);
 
-  await writeMirrorConfig(db, standby.nodeId, {
+  await writeMirrorLink(node, standby.nodeId, {
     relayUrl: "https://127.0.0.1:1/",
     boxHostname: "box.test",
     boxCaPem: "unused-ca-pem",

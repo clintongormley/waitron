@@ -3,15 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import {
-  locations,
-  readDeploymentEnvironment,
-  readMirrorConfig,
-  stampDeployment,
-  tenants,
-} from "@waitron/db";
+import { locations, readDeploymentEnvironment, stampDeployment, tenants } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { readNodeMode } from "@waitron/node-db";
+import { readMirrorLink, readNodeMode } from "@waitron/node-db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { isEnabled, type ModuleConfig } from "@waitron/module";
 import { isAppError } from "@waitron/shared";
@@ -150,7 +144,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(await readDeploymentEnvironment(suite.db)).toBe("preproduction");
     const ownNodeId = persistedTrading[0]!.nodeId;
     expect((await readNodeMode(suite.node, ownNodeId)).mode).toBe("mirror");
-    const cfg = (await readMirrorConfig(suite.db, ownNodeId))!;
+    const cfg = (await readMirrorLink(suite.node, ownNodeId))!;
     expect(cfg.relayUrl).toBe("https://relay.test:9000/");
     expect(cfg.originNodeId).toBe(DESIGNATED.nodeId);
 

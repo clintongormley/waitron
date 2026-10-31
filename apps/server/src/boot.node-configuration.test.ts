@@ -12,9 +12,8 @@ import {
   stampDeployment,
   tenants,
   withTransaction,
-  writeMirrorConfig,
 } from "@waitron/db";
-import { setNodeMode } from "@waitron/node-db";
+import { setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { stringToCents } from "@waitron/shared";
@@ -336,7 +335,7 @@ it.each(["mirror", "primary"] as const)(
     await stampDeployment(source.db, "preproduction");
     if (mode === "mirror") {
       await setNodeMode({ venue: source.db, node: source.node }, NODE, "mirror");
-      await writeMirrorConfig(source.db, NODE, {
+      await writeMirrorLink(source.node, NODE, {
         relayUrl: "http://127.0.0.1:1/",
         boxHostname: "origin-box.local",
         boxCaPem: mintSelfSignedServerCert({

@@ -9,10 +9,9 @@ import {
   stampDeployment,
   withNodeTransaction,
   withTransaction,
-  writeMirrorConfig,
   writeNodeMembership,
 } from "@waitron/db";
-import { setNodeMode, setSingletonRoleTx } from "@waitron/node-db";
+import { setNodeMode, setSingletonRoleTx, writeMirrorLink } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
@@ -270,7 +269,7 @@ for (const enabled of [true, false]) {
           await stampDeployment(suite.db, "preproduction");
           if (mode === "mirror") {
             await setNodeMode({ venue: suite.db, node: suite.node }, f.venue.cfg.nodeId, "mirror");
-            await writeMirrorConfig(suite.db, f.venue.cfg.nodeId, {
+            await writeMirrorLink(suite.node, f.venue.cfg.nodeId, {
               relayUrl: "https://127.0.0.1:1/",
               boxHostname: "box.test",
               boxCaPem: "unused",

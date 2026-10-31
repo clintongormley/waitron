@@ -55,7 +55,6 @@ import {
   persistNodeMembershipIfNewer,
   readMembershipTrustSet,
   readNodeMembership,
-  readMirrorConfig,
   openVenueDatabase,
   withTransaction,
   applicationVersion,
@@ -63,7 +62,7 @@ import {
   type Database,
   type SingletonRole,
 } from "@waitron/db";
-import { readNodeMode, setSingletonRole } from "@waitron/node-db";
+import { readMirrorLink, readNodeMode, setSingletonRole } from "@waitron/node-db";
 import { credentialProvisioned, loadKeyRing, tenantCredentials } from "@waitron/credentials";
 import { registerModulePermissions, withPassiveManagementRead } from "@waitron/identity";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
@@ -1591,7 +1590,7 @@ async function bootServer(
   // so a persisted superseding document flows into the `fenced` demote. An unreachable peer lets
   // boot proceed as primary: the MVP's accepted window. Demote-only: it can never self-promote.
   if (initialAxes.mode !== "mirror") {
-    const peer = await readMirrorConfig(db, config.node.nodeId);
+    const peer = await readMirrorLink(store.node, config.node.nodeId);
     if (peer !== null) {
       const [trustSet, held] = await Promise.all([
         readMembershipTrustSet(db),
@@ -1600,7 +1599,7 @@ async function bootServer(
       await reconcileMembershipOnBoot({
         held,
         nodeId: config.node.nodeId,
-        // `mirror_config` is owner-written trusted config, so no SSRF screen.
+        // The mirror link is owner-written trusted config, so no SSRF screen.
         peerUrl: `${peer.relayUrl.replace(/\/+$/, "")}/management-api/membership`,
         fetchPeerMembership: fetchPeerMembershipDocument,
         // Persist-if-accepted, so a newer verified chart is held even when it does not fence this node.
@@ -1723,11 +1722,11 @@ async function bootServer(
   // every WRITE path.
   let dataNodeId: string = config.node.nodeId;
   if (isMirror) {
-    const loaded = await readMirrorConfig(db, config.node.nodeId);
+    const loaded = await readMirrorLink(store.node, config.node.nodeId);
     if (loaded === null) {
       throw new AppError("server.config_invalid", {
-        variable: "mirror_config",
-        reason: "mirror_requires_mirror_config",
+        variable: "node_mirror_link",
+        reason: "mirror_requires_mirror_link",
       });
     }
     dataNodeId = loaded.originNodeId;

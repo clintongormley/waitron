@@ -9,13 +9,8 @@ import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  CORE_MIGRATIONS,
-  stampDeployment,
-  writeMirrorConfig,
-  writeNodeMembership,
-} from "@waitron/db";
-import { setNodeMode } from "@waitron/node-db";
+import { CORE_MIGRATIONS, stampDeployment, writeNodeMembership } from "@waitron/db";
+import { setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { Hono } from "hono";
 import { locationId, nodeId } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -244,7 +239,7 @@ describe("read-only real boot clocking", () => {
       await stampDeployment(suite.db, "preproduction");
       if (mode === "mirror") {
         await setNodeMode({ venue: suite.db, node: suite.node }, venue.cfg.nodeId, "mirror");
-        await writeMirrorConfig(suite.db, venue.cfg.nodeId, {
+        await writeMirrorLink(suite.node, venue.cfg.nodeId, {
           relayUrl: "https://127.0.0.1:1/",
           boxHostname: "box.test",
           boxCaPem: "unused",

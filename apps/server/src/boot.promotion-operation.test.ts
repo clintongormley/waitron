@@ -3,15 +3,8 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
-import {
-  invoiceSeries,
-  locations,
-  nodes,
-  stampDeployment,
-  tenants,
-  writeMirrorConfig,
-} from "@waitron/db";
-import { readNodeMode, setNodeMode } from "@waitron/node-db";
+import { invoiceSeries, locations, nodes, stampDeployment, tenants } from "@waitron/db";
+import { readNodeMode, setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons, hashPassword } from "@waitron/identity";
 import { loadKeyRing } from "@waitron/credentials";
@@ -125,7 +118,7 @@ it.each(["account", "key"])(
       .values({ id: ADMIN, displayName: "Administrator", role: "admin", passwordHash: HASH });
     await stampDeployment(suite.db, "preproduction");
     await setNodeMode({ venue: suite.db, node: suite.node }, NODE, "mirror");
-    await writeMirrorConfig(suite.db, NODE, {
+    await writeMirrorLink(suite.node, NODE, {
       relayUrl: "https://127.0.0.1:1/",
       boxHostname: "box.test",
       boxCaPem: "unused-ca",

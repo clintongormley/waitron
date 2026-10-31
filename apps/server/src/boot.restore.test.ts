@@ -14,14 +14,13 @@ import {
   nodeSealedState,
   openVenueDatabase,
   readNodeMembership,
-  writeMirrorConfig,
   writeNodeMembership,
   stampDeployment,
   withTransaction,
   type Database,
   type VenueDatabase,
 } from "@waitron/db";
-import { setNodeMode } from "@waitron/node-db";
+import { setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
@@ -441,7 +440,7 @@ describe("startServer, against a migrated venue directory", () => {
         );
       const [port, deadPeerPort] = await freePorts(2);
       if (withPeer) {
-        await writeMirrorConfig(db, TILL_ENV.WAITRON_NODE_ID, {
+        await writeMirrorLink(venue.store.node, TILL_ENV.WAITRON_NODE_ID, {
           relayUrl: `http://127.0.0.1:${deadPeerPort}`,
           boxHostname: "waitron.local",
           boxCaPem: "unused",

@@ -10,9 +10,8 @@ import {
   stampDeployment,
   tenants,
   withTransaction,
-  writeMirrorConfig,
 } from "@waitron/db";
-import { readNodeMode, setNodeMode } from "@waitron/node-db";
+import { readNodeMode, setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
 import { createFirstSetupCoordinator, readModulePreparationHistory } from "@waitron/provisioning";
@@ -726,7 +725,7 @@ it("the real mirror boot serves preparation over verified HTTPS and promotes the
   const s = await service();
   await admit(s);
   const stateDir = join(root, "state");
-  await writeMirrorConfig(suite.db, standby.nodeId, {
+  await writeMirrorLink(suite.node, standby.nodeId, {
     relayUrl: "https://127.0.0.1:1/",
     boxHostname: "box.test",
     boxCaPem: "unused-ca",
@@ -826,7 +825,7 @@ it.each(["key", "manager"])(
       { onBox: true },
     )) as { input: unknown };
     expect(selected).toMatchObject({ identity: "0CNQR" });
-    await writeMirrorConfig(suite.db, standby.nodeId, {
+    await writeMirrorLink(suite.node, standby.nodeId, {
       relayUrl: "https://127.0.0.1:1/",
       boxHostname: "box.test",
       boxCaPem: "unused-ca",

@@ -1,11 +1,11 @@
 import {
   readDeploymentEnvironment,
   stampDeployment,
-  writeMirrorConfig,
+  withNodeTransaction,
   type Database,
   type NodeDatabase,
 } from "@waitron/db";
-import { setNodeMode } from "@waitron/node-db";
+import { setNodeModeTx, writeMirrorLinkTx } from "@waitron/node-db";
 import {
   assertNoForeignTenant,
   assertNoOperationalVenue,
@@ -45,10 +45,10 @@ export interface AdoptHooks {
 }
 
 export interface AdoptDeps {
-  /** Writes `deployment` and `mirror_config`. Nothing in the engine refuses these writes;
-   * `scripts/write-path-tables.test.ts` is what keeps them in named files. */
+  /** Writes `deployment`. Nothing in the engine refuses this write;
+   * `scripts/write-path-tables.test.ts` is what keeps it in named files. */
   ownerDb: Database;
-  /** This box's node.db, where its role is written. */
+  /** This box's node.db, where its role and its mirror link are written. */
   ownerNode: NodeDatabase;
   /** Sends the standby identity so the primary can reserve and endorse it. The fetcher, not this
    * orchestrator, throws `mirror.bundle_fetch_failed`. */
@@ -77,7 +77,7 @@ export interface AdoptDeps {
  * no SIF, so it forks no fiscal chain; the reserved standby identity stays dormant.
  *
  * Every refusal `adoptFromPrimary` raises itself runs before any write to this node, and
- * `stampDeployment` precedes `setNodeMode` because a node's role may be written only to a
+ * `stampDeployment` precedes the node.db write because a node's role may be written only to a
  * stamped database. The caller restarts the box.
  */
 export async function adoptFromPrimary(
@@ -125,13 +125,16 @@ export async function adoptFromPrimary(
   assertAdoptionModules(enabledModules(ALL_MODULES, moduleConfig));
   await hooks.beforeFirstWrite();
   await stampDeployment(deps.ownerDb, bundle.environment);
-  await setNodeMode({ venue: deps.ownerDb, node: deps.ownerNode }, standby.nodeId, "mirror");
-  await writeMirrorConfig(deps.ownerDb, standby.nodeId, {
-    relayUrl: bundle.relayUrl,
-    boxHostname: bundle.boxHostname,
-    boxCaPem: bundle.boxCaPem,
-    // The PRIMARY's id, which the venue's rows carry, not the standby's own.
-    originNodeId: designated.nodeId,
+  // The role and the link are written together, so node.db never holds a mirror with no link.
+  await withNodeTransaction(deps.ownerNode, async (tx) => {
+    await setNodeModeTx(tx, standby.nodeId, "mirror");
+    await writeMirrorLinkTx(tx, standby.nodeId, {
+      relayUrl: bundle.relayUrl,
+      boxHostname: bundle.boxHostname,
+      boxCaPem: bundle.boxCaPem,
+      // The PRIMARY's id, which the venue's rows carry, not the standby's own.
+      originNodeId: designated.nodeId,
+    });
   });
   // Unconditional, even `{}`, so a re-adopt overwrites.
   await deps.persistModuleConfig(moduleConfig);

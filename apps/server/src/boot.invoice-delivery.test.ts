@@ -16,9 +16,8 @@ import {
   tenants,
   withTransaction,
   workingOrders,
-  writeMirrorConfig,
 } from "@waitron/db";
-import { setNodeMode, setSingletonRole } from "@waitron/node-db";
+import { setNodeMode, setSingletonRole, writeMirrorLink } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { departmentReceipts, departments } from "@waitron/venue-service";
 import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -324,7 +323,7 @@ describe("invoice delivery recovery at trading boot", () => {
   it("leaves inherited delivery claims unchanged when the trading node is read-only", async () => {
     const ctx = await fixture();
     await setNodeMode({ venue: suite.db, node: suite.node }, ctx.node, "mirror");
-    await writeMirrorConfig(suite.db, ctx.node, {
+    await writeMirrorLink(suite.node, ctx.node, {
       relayUrl: `http://127.0.0.1:${ctx.deadPeerPort}`,
       boxHostname: "waitron.local",
       boxCaPem: "unused",
@@ -670,7 +669,7 @@ describe("invoice email worker at trading boot", () => {
     try {
       const email = await queuedEmail(ctx, smtp.smtp);
       await setNodeMode({ venue: suite.db, node: suite.node }, ctx.node, "mirror");
-      await writeMirrorConfig(suite.db, ctx.node, {
+      await writeMirrorLink(suite.node, ctx.node, {
         relayUrl: `http://127.0.0.1:${ctx.deadPeerPort}`,
         boxHostname: "waitron.local",
         boxCaPem: "unused",

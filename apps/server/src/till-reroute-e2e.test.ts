@@ -13,11 +13,10 @@ import {
   stampDeployment,
   tenants,
   workingOrders,
-  writeMirrorConfig,
   type Database,
   type VenueDatabase,
 } from "@waitron/db";
-import { setNodeMode, setSingletonRole } from "@waitron/node-db";
+import { setNodeMode, setSingletonRole, writeMirrorLink } from "@waitron/node-db";
 import { hashPin, hashSecret, persons } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
@@ -265,7 +264,7 @@ beforeAll(async () => {
   await stampDeployment(a, "preproduction");
   await stampDeployment(b, "preproduction");
   await setNodeMode({ venue: b, node: storeB.node }, NODE_B, "mirror");
-  await writeMirrorConfig(b, NODE_B, {
+  await writeMirrorLink(storeB.node, NODE_B, {
     relayUrl: "http://127.0.0.1:1/",
     boxHostname: "reroute-box.local",
     boxCaPem: mintSelfSignedServerCert({

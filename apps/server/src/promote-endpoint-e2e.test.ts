@@ -16,13 +16,12 @@ import {
   stampDeployment,
   tenants,
   withTransaction,
-  writeMirrorConfig,
   writeNodeMembership,
   type Database,
   type NodeDatabase,
   type VenueDatabase,
 } from "@waitron/db";
-import { readNodeMode, setNodeMode } from "@waitron/node-db";
+import { readNodeMode, setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { loadKeyRing } from "@waitron/credentials";
 import { hashPassword, hashPin, hashSecret, persons } from "@waitron/identity";
 import {
@@ -185,7 +184,7 @@ async function seedMirror(
   };
   await writeNodeMembership(admin, held);
 
-  await writeMirrorConfig(admin, standby.nodeId, {
+  await writeMirrorLink(node, standby.nodeId, {
     relayUrl: "https://127.0.0.1:1/",
     boxHostname: "box.test",
     boxCaPem: "unused-ca-pem",

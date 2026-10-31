@@ -7,6 +7,8 @@ export {
   nodeRecoveryKey,
   nodeSigningKey,
 } from "./schema/index.js";
+export { readMirrorLink, writeMirrorLink, writeMirrorLinkTx } from "./mirror-link.js";
+export type { MirrorConnection } from "./mirror-link.js";
 export {
   readNodeMode,
   setNodeMode,

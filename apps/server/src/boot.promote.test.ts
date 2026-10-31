@@ -16,13 +16,12 @@ import {
   stampDeployment,
   tenants,
   withTransaction,
-  writeMirrorConfig,
   writeNodeMembership,
   type Database,
   type NodeDatabase,
   type VenueDatabase,
 } from "@waitron/db";
-import { readNodeMode, setNodeMode, setSingletonRole } from "@waitron/node-db";
+import { readNodeMode, setNodeMode, setSingletonRole, writeMirrorLink } from "@waitron/node-db";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import type { Endorsement, SignedMembershipDocument } from "@waitron/membership";
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
@@ -385,7 +384,7 @@ async function seedMirrorIdentity(
   };
   await writeNodeMembership(db, held);
 
-  await writeMirrorConfig(db, standby.nodeId, {
+  await writeMirrorLink(node, standby.nodeId, {
     relayUrl: "https://127.0.0.1:1/",
     boxHostname: "box.test",
     boxCaPem: "unused-ca-pem",

@@ -14,11 +14,10 @@ import {
   stampDeployment,
   tenants,
   withTransaction,
-  writeMirrorConfig,
   type Database,
   type VenueDatabase,
 } from "@waitron/db";
-import { readNodeMode, setNodeMode } from "@waitron/node-db";
+import { readNodeMode, setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { persons, resolveManagementSession } from "@waitron/identity";
 import { strFromU8, unzipSync } from "fflate";
 import { drain } from "@waitron/fiscal-verifactu";
@@ -39,10 +38,10 @@ vi.mock("@hono/node-server", async () => {
 
 const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
-// Mirror-mode server boot. A mirror reads its origin, relay and CA from `mirror_config`. Four venue
+// Mirror-mode server boot. A mirror reads its origin, relay and CA from node.db's `node_mirror_link`. Four venue
 // directories: `mirror` (read-only, refuses writes); `primary`, the same identity booted as primary —
 // the control that the mirror's absences are real; `noConfig`, mirror-stamped with no
-// `mirror_config` row, which must refuse to boot; and `adopting`, which holds no venue rows.
+// `node_mirror_link` row, which must refuse to boot; and `adopting`, which holds no venue rows.
 // Nothing is reset between tests, and the four directories never meet.
 const VENUES = ["mirror", "primary", "noConfig", "adopting"] as const;
 type VenueName = (typeof VENUES)[number];
@@ -164,7 +163,7 @@ beforeAll(async () => {
   );
 
   // `noConfig` deliberately gets none.
-  await writeMirrorConfig(db.mirror, TILL_ENV.WAITRON_NODE_ID, {
+  await writeMirrorLink(stores.mirror.node, TILL_ENV.WAITRON_NODE_ID, {
     relayUrl: MIRROR_RELAY_URL,
     boxHostname: MIRROR_BOX_HOSTNAME,
     boxCaPem: BOX_CA_PEM,
@@ -491,7 +490,7 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
     await expect(fetch(`${base}/api/node`)).rejects.toThrow();
   }, 60_000);
 
-  it("refuses a mirror boot that has no mirror_config row (a mirror REQUIRES its DB connection config)", async () => {
+  it("refuses a mirror boot that has no node_mirror_link row (a mirror REQUIRES its DB connection config)", async () => {
     let caught: unknown;
     try {
       await startServer({
@@ -506,8 +505,8 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
     expect(isAppError(caught)).toBe(true);
     expect(isAppError(caught) && caught.code).toBe("server.config_invalid");
     expect(isAppError(caught) && caught.params).toEqual({
-      variable: "mirror_config",
-      reason: "mirror_requires_mirror_config",
+      variable: "node_mirror_link",
+      reason: "mirror_requires_mirror_link",
     });
   }, 60_000);
 

@@ -16,13 +16,12 @@ import {
   readNodeMembership,
   stampDeployment,
   tenants,
-  writeMirrorConfig,
   writeNodeMembership,
   type Database,
   type NodeDatabase,
   type VenueDatabase,
 } from "@waitron/db";
-import { readNodeMode } from "@waitron/node-db";
+import { readNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
@@ -217,7 +216,7 @@ describe("returned-box membership reconciliation at boot", () => {
   it("a reachable peer holding a higher-term fencing chart sends the returned box read-only — it cannot sell", async () => {
     await seedHeldChart(supersededDb, 1);
     const peer = await startPeer(peerFencingChart(2));
-    await writeMirrorConfig(supersededDb, TILL_ENV.WAITRON_NODE_ID, {
+    await writeMirrorLink(supersededNode, TILL_ENV.WAITRON_NODE_ID, {
       relayUrl: peer.url,
       boxHostname: "box.local",
       boxCaPem: BOX_CA_PEM,
@@ -260,7 +259,7 @@ describe("returned-box membership reconciliation at boot", () => {
   // the restore must not move the term before the peer's chart is read, or the fencing chart reads
   // as not newer and two nodes sell.
   it("a restored box that the peer fences adopts the fence and leaves its first start for later", async () => {
-    const [venueDir, db] = await migratedVenue();
+    const [venueDir, db, nodeDb] = await migratedVenue();
     await seed(db);
     await stampDeployment(db, "preproduction");
     // This node can sign, so a first start that ran would move the term.
@@ -270,7 +269,7 @@ describe("returned-box membership reconciliation at boot", () => {
     );
     await seedHeldChart(db, 1);
     const peer = await startPeer(peerFencingChart(2));
-    await writeMirrorConfig(db, TILL_ENV.WAITRON_NODE_ID, {
+    await writeMirrorLink(nodeDb, TILL_ENV.WAITRON_NODE_ID, {
       relayUrl: peer.url,
       boxHostname: "box.local",
       boxCaPem: BOX_CA_PEM,
@@ -346,7 +345,7 @@ describe("returned-box membership reconciliation at boot", () => {
         }),
       );
       const peer = await startPeer(peerFencingChart(2));
-      await writeMirrorConfig(db, TILL_ENV.WAITRON_NODE_ID, {
+      await writeMirrorLink(nodeDb, TILL_ENV.WAITRON_NODE_ID, {
         relayUrl: peer.url,
         boxHostname: "box.local",
         boxCaPem: BOX_CA_PEM,
@@ -403,7 +402,7 @@ describe("returned-box membership reconciliation at boot", () => {
   it("an UNREACHABLE peer leaves the returned box PRIMARY — it proceeds and accepts sales (prove-by-deletion)", async () => {
     await seedHeldChart(proceedsDb, 1);
     const [deadPort, port] = await freePorts(2);
-    await writeMirrorConfig(proceedsDb, TILL_ENV.WAITRON_NODE_ID, {
+    await writeMirrorLink(proceedsNode, TILL_ENV.WAITRON_NODE_ID, {
       relayUrl: `http://127.0.0.1:${deadPort}/`,
       boxHostname: "box.local",
       boxCaPem: BOX_CA_PEM,
