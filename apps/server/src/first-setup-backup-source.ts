@@ -77,6 +77,7 @@ export async function authenticatedFirstSetupBackupPreview(
   const copy = {
     ...selected.copy,
     manifest: structuredClone(selected.copy.manifest),
+    nodeDump: Uint8Array.from(selected.copy.nodeDump),
     secretEntries: selected.copy.secretEntries.map((entry) => ({
       name: entry.name,
       bytes: Uint8Array.from(entry.bytes),

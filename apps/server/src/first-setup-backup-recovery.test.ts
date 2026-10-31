@@ -314,6 +314,31 @@ it("a staged copy whose node copy changed after the preview is refused as a conf
   expect(await f.workspace.read()).toEqual([]);
 });
 
+it("a copy whose in-memory node copy changed after the preview is refused as a conflict", async () => {
+  const f = await fixture();
+  const real = (await vi.importActual<typeof sources>("./first-setup-backup-source.js"))
+    .openFirstSetupBackupSource;
+  let copy: Awaited<ReturnType<typeof real>> | undefined;
+  vi.spyOn(sources, "openFirstSetupBackupSource").mockImplementation(async (...args) => {
+    copy = await real(...args);
+    return copy;
+  });
+  const original = f.host.resolution.withVenueExclusion;
+  let turns = 0;
+  f.host.resolution.withVenueExclusion = (run) =>
+    original(async () => {
+      if (++turns === 2) {
+        const bytes = copy!.copy.nodeDump;
+        bytes[bytes.length - 1] = bytes[bytes.length - 1]! ^ 1;
+      }
+      return run();
+    });
+  await expect(recovery(f.options).open(f.request, { onBox: false })).rejects.toMatchObject({
+    code: "setup.attempt_conflict",
+  });
+  expect(await f.workspace.read()).toEqual([]);
+});
+
 it("valid backup proof discloses only that backup while preserving a different local node and taxpayer", async () => {
   const f = await fixture();
   const localNode = "e0000000-0000-4000-8000-000000000001";
