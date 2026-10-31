@@ -1540,6 +1540,34 @@ The existing shard-count check in `scripts/ci-workflow.test.mjs` now pins twenty
 It reads workflow text; the duration sequencer's tree-walk guard still does not
 prove which files Vitest executes or that the estimates are fresh.
 
+### Refresh after the held-setup suites grew
+
+A1252 (31 October 2026) keeps twenty shards. On the newest ten successful main
+runs that executed server tests, shard 7 took 239–552 seconds and shard 3 took
+201–337 seconds. The latest three runs (`41174582937`, `41174680766`,
+`41175259965`) measured `first-setup-start-again-held.test.ts` at 489–499 seconds
+and `first-setup-database-holdings.test.ts` at 249–288 seconds. Neither file was
+in the committed duration table. Repacking other files cannot shorten a single
+file that already exceeds the job target.
+
+The first slice splits only the holdings-reader cases into the original suite
+and its `-damage` and `-ledger` siblings, with unchanged shared helpers and hooks
+in `apps/server/test/setup-holdings-fixture.ts`. All 35 test declarations retain
+their parameter tables, assertions and timeouts. Hosted PR run `41190126243`
+measured these three suites at 77.8, 97.4 and 46.8 seconds respectively.
+
+The held-setup file still needs splitting after A1131's recovery work in PR #2335
+lands. Its measured duration is included in the table, but moving that whole file
+does not bring its shard down to four minutes. Keep this remaining split and
+three subsequent main-run observations open in the backlog.
+
+The refresh uses ordinary server-shard logs from the newest six successful main
+runs that actually ran them: `41175259965`, `41174680766`, `41174582937`,
+`41174376178`, `41170107932` and `41169670010`. Feed only `test-server (N)` logs
+to `scripts/test-durations.mjs`, since other packages use the same file-progress
+format and can reuse relative file names. The three split entries use the hosted
+measurements above; the other entries retain the six-main medians.
+
 ### The server's shards: sixteen, packed by measured duration
 
 The following A938 measurements describe the earlier sixteen-shard layout. The current

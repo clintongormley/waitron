@@ -5821,6 +5821,14 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **`apps/server/src/invoice-pdf.test.ts` took 162 s on one CI run**
   [Detail](backlog/ci.md#the-invoice-pdf-test-took-162-s-on-one-ci-run).
 
+- **A1252. Split the held-setup suite after A1131's recovery work lands.**
+  PR #2335 adds cases to the same file; preserve those checks when splitting it.
+  Its latest measured main times were 489–499 seconds, so refreshing the table
+  and splitting the holdings reader cannot bring every shard to four minutes.
+  After the remaining split, qualify three main runs that execute every server
+  shard; each job should take at most about 4.5 minutes, or name the slow suite
+  and its cause. [Method](developers/ci-and-gates.md#refresh-after-the-held-setup-suites-grew).
+
 - **The server's duration table needs a staleness warning.** Flag missing files and
   shards over four minutes from CI measurements; refreshing the table remains manual.
   [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
