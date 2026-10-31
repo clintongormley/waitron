@@ -2,6 +2,7 @@ import { and, eq, sql, type SQL } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
 import { readOrigin } from "@waitron/shared";
 import { timeEntries } from "./schema/time-entries.js";
+import { workforceChains } from "./schema/workforce-chains.js";
 import type { TimeEntryRecord } from "./projection.js";
 import type { Period } from "./projection.js";
 import { AppError } from "@waitron/shared";
@@ -85,43 +86,42 @@ export async function readRecordedEntries(
  * The entry that decides a person's clock state. A chain is one node and one location, and within
  * it a later position is a later write whatever the box's clock said, so each chain's latest direct
  * entry is taken by `sequence_no`; event times are compared only across chains, and against an
- * approved missing-entry correction, which a manager dates rather than the clock. While the clock
- * only moves forward this is the latest entry by `compareEvents`; after a backward step it is still
- * the last one written. Retimes are left out, as the hours projection applies those.
+ * approved missing-entry correction, whose time the person requesting it chose. While the clock
+ * only moves forward this is the latest entry by `compareEvents`. After a backward step it is the
+ * last one written within each chain; across chains a later-dated entry written before the step
+ * still wins (plan 2026-10-24-a798-9b, Task 15a, "Accepted residual"). Retimes are left out, as the
+ * hours projection applies those.
  */
 export async function readLatestLiveEntry(
   tx: Transaction,
   personId: string,
   options: { kind?: "in" } = {},
 ): Promise<TimeEntryRecord | undefined> {
-  const directKinds =
+  const directKind = (column: SQL) =>
     options.kind === undefined
-      ? sql`${timeEntries.entryKind} in ('in','out','break_start','break_end')`
-      : sql`${timeEntries.entryKind} = ${options.kind}`;
+      ? sql`${column} in ('in','out','break_start','break_end')`
+      : sql`${column} = ${options.kind}`;
   const missingKind = (column: SQL) =>
     options.kind === undefined ? sql`${column} is not null` : sql`${column} = ${options.kind}`;
-  const heads = tx
-    .select({
-      nodeId: timeEntries.nodeId,
-      locationId: timeEntries.locationId,
-      sequenceNo: sql<number>`max(${timeEntries.sequenceNo})`.as("head_sequence_no"),
-    })
-    .from(timeEntries)
-    .where(and(eq(timeEntries.personId, personId), directKinds))
-    .groupBy(timeEntries.nodeId, timeEntries.locationId)
-    .as("heads");
-  const direct = await tx
+  const heads = await tx
     .select({ entry: timeEntries })
-    .from(timeEntries)
+    .from(workforceChains)
     .innerJoin(
-      heads,
-      and(
-        eq(timeEntries.nodeId, heads.nodeId),
-        eq(timeEntries.locationId, heads.locationId),
-        eq(timeEntries.sequenceNo, heads.sequenceNo),
+      timeEntries,
+      eq(
+        timeEntries.id,
+        sql`(select head.id from time_entries head where head.person_id = ${personId}
+          and head.node_id = ${workforceChains.nodeId} and head.location_id = ${workforceChains.locationId}
+          and ${directKind(sql`head.entry_kind`)} order by head.sequence_no desc limit 1)`,
       ),
     );
-  // Keep the full latest instant: the recording tuple resolves simultaneous corrections.
+  const direct = heads
+    .map((r) => recordFromRow(r.entry))
+    .sort(compareEvents)
+    .at(-1);
+  // A correction decides only if it sorts after `direct`, so none dated before it is read. Keep the
+  // full latest instant: the recording tuple resolves simultaneous corrections.
+  const since = direct === undefined ? sql`` : sql`and recent.event_at >= ${direct.eventAt}`;
   const corrections = await tx
     .select()
     .from(timeEntries)
@@ -129,11 +129,11 @@ export async function readLatestLiveEntry(
       and(
         eq(timeEntries.personId, personId),
         sql`${timeEntries.entryKind} = 'correction' and ${timeEntries.correctionStatus} = 'approved' and ${timeEntries.correctsEntryId} is null and ${missingKind(sql`${timeEntries.missingEntryKind}`)}`,
-        sql`${timeEntries.eventAt} = (select max(recent.event_at) from time_entries recent where recent.person_id = ${personId}
+        sql`${timeEntries.eventAt} = (select max(recent.event_at) from time_entries recent where recent.person_id = ${personId} ${since}
       and recent.entry_kind = 'correction' and recent.correction_status = 'approved' and recent.corrects_entry_id is null and ${missingKind(sql`recent.missing_entry_kind`)})`,
       ),
     );
-  return liveClockEntries([...direct.map((r) => r.entry), ...corrections].map(recordFromRow))
+  return liveClockEntries([...(direct ? [direct] : []), ...corrections.map(recordFromRow)])
     .sort(compareEvents)
     .at(-1);
 }

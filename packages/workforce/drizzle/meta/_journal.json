@@ -78,6 +78,13 @@
       "when": 1792913884427,
       "tag": "0010_personal_data_person_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1793486353019,
+      "tag": "0011_person_chain_index",
+      "breakpoints": true
     }
   ]
 }

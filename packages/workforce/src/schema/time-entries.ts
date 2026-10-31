@@ -162,6 +162,8 @@ export const timeEntries = table(
       or (${t.authorKind} in ('worker','manager') and ${t.recordedByPersonId} is not null), 0)`,
     ),
     index("time_entries_person_event_idx").on(t.personId, t.eventAt),
+    // A person's latest entry in each chain, which decides their clock state (`readLatestLiveEntry`).
+    index("time_entries_person_chain_idx").on(t.personId, t.nodeId, t.locationId, t.sequenceNo),
     index("time_entries_corrects_entry_idx").on(t.correctsEntryId),
     // ±14h, the wall-offset domain `sales` uses.
     check("time_entries_event_offset_ck", sql`${t.eventOffsetMinutes} between -840 and 840`),

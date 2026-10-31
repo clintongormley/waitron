@@ -10,6 +10,7 @@ import { WorkforceBackend, type ClockEventInput } from "./clocking.js";
 import { readLatestLiveEntry } from "./record-reads.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { seedEmployment, seedLocation, seedPerson } from "../test/fixtures.js";
+import { planningEveryStatement } from "../test/query-plans.js";
 
 const backend = new WorkforceBackend();
 const origin = jobOrigin("dashboard");
@@ -68,7 +69,9 @@ async function rowCount(personId: string): Promise<number> {
 
 async function latest(personId: string, kind?: "in") {
   const entry = await run((tx) => readLatestLiveEntry(tx, personId, kind ? { kind } : undefined));
-  return entry && { kind: entry.entryKind, at: new Date(entry.eventAt).toISOString().slice(11, 16) };
+  return (
+    entry && { kind: entry.entryKind, at: new Date(entry.eventAt).toISOString().slice(11, 16) }
+  );
 }
 
 async function missing(personId: string, kind: "in" | "out", time: string): Promise<void> {
@@ -180,5 +183,65 @@ describe("clocking across a backward step of the box's clock", () => {
     await missing(p, "out", "12:00");
     await run((tx) => backend.clockIn(tx, at(p, "13:00")));
     expect(await latest(p)).toEqual({ kind: "in", at: "13:00" });
+  });
+
+  it("reads approved missing clock-ins for kind in and skips missing clock-outs", async () => {
+    const p = await worker("kind in corrections");
+    await run((tx) => backend.clockIn(tx, at(p, "09:00")));
+    await run((tx) => backend.clockOut(tx, at(p, "12:00")));
+    await missing(p, "in", "13:00");
+    await missing(p, "out", "14:00");
+    expect(await latest(p, "in")).toEqual({ kind: "in", at: "13:00" });
+    expect(await latest(p)).toEqual({ kind: "out", at: "14:00" });
+  });
+
+  it("keeps a chain per node as well as per location", async () => {
+    const p = await worker("two nodes");
+    const second = await seedNode(suite.db, brandLocationId(locationId));
+    await run((tx) => backend.clockIn(tx, at(p, "09:00")));
+    await run((tx) => backend.clockOut(tx, at(p, "12:00")));
+    await run((tx) => backend.clockIn(tx, { ...at(p, "13:00"), nodeId: second }));
+    expect(await latest(p)).toEqual({ kind: "in", at: "13:00" });
+  });
+
+  // The plan's accepted residual (Task 15a, the lead's ruling (e)): times are still compared
+  // across chains, so a move of location within a backward step reads the other chain's later
+  // entry until real time passes it, and the clock actions follow that reading.
+  it("still reads another location's later-dated entry after a step, as the plan accepts", async () => {
+    const p = await worker("residual");
+    const a = await seedLocation(suite.db);
+    const b = await seedLocation(suite.db);
+    await run((tx) => backend.clockIn(tx, at(p, "21:00", a)));
+    await run((tx) => backend.clockOut(tx, at(p, "21:10", a)));
+    // The clock is stepped back an hour.
+    await run((tx) => backend.clockIn(tx, at(p, "20:15", b)));
+    expect(await latest(p)).toEqual({ kind: "out", at: "21:10" });
+    expect(await rejection(() => run((tx) => backend.clockOut(tx, at(p, "20:40", b))))).toBe(
+      "attendance.no_open_entry",
+    );
+    await run((tx) => backend.clockIn(tx, at(p, "20:45", b)));
+    expect(await rowCount(p)).toBe(4);
+  });
+
+  // This read runs on every clock action while the venue's write lock is held, and a person's
+  // entries grow for as long as they work there.
+  it("finds the deciding entry through indexes, never reading the person's whole history", async () => {
+    const p = await worker("planned");
+    const other = await seedLocation(suite.db);
+    await run((tx) => backend.clockIn(tx, at(p, "09:00")));
+    await run((tx) => backend.clockOut(tx, at(p, "12:00")));
+    await run((tx) => backend.clockIn(tx, at(p, "13:00", other)));
+    await missing(p, "out", "17:00");
+    for (const kind of [undefined, "in"] as const) {
+      const plans = await run(async (tx) => {
+        const { recording, statements } = planningEveryStatement(tx);
+        await readLatestLiveEntry(recording, p, kind ? { kind } : undefined);
+        return statements.flatMap((statement) => statement.plan());
+      });
+      expect(plans.filter((line) => /TEMP B-TREE|\(person_id=\?\)$/.test(line))).toEqual([]);
+      expect(
+        plans.filter((line) => line.startsWith("SCAN") && !/^SCAN workforce_chains\b/.test(line)),
+      ).toEqual([]);
+    }
   });
 });

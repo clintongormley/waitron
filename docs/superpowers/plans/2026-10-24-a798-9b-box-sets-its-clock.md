@@ -238,9 +238,12 @@ files, each check's state) into the ledger before going on.
    ruling (d). So the staff member who confirms a till's time stays signed in on that till.
 7. **New, for the plan review:** after a backward step, a person who clocked out at one location
    and then clocks in at ANOTHER location within the step's window reads as clocked out on the
-   till until real time passes their earlier clock-out (Task 15a, "Accepted residual"). What they
-   clocked is recorded correctly; only the state the till shows is wrong, and a manager can retime
-   the entry. It needs two locations on one box. The lead's ruling (e).
+   till until real time passes their earlier clock-out (Task 15a, "Accepted residual"). *(Corrected
+   2026-10-31 by Task 15a's review, which ran it: not only the till's display is wrong.)* Until
+   then their clock-out at the second location is refused and a repeat clock-in there is accepted
+   and written, so the record gains clock-ins with no clock-out between them, and a retime does not
+   change what the till reads. It needs two locations on one box. The lead's ruling (e), re-put to
+   the owner in `questions.md`.
 8. **New in revision 4, cost corrected in revision 5: "start-up" is this server's start, a restart
    included.** A stop counts as found at start-up when it holds from the moment the server process
    starts and no reader of the stop has seen it end since; the first look (or till read) that finds
@@ -1152,6 +1155,18 @@ EDITED to pass and is not on this list is a STOP, unless the spec changes what i
    run 2026-10-31, printed this file and `recovery-surface.test.ts`, whose lines are about a
    different page and are not touched.)
 
+18. *(Added while building Task 15a, 2026-10-31; the lead's ruling under Task 15a's STOP.)*
+    `packages/workforce/src/record-read-budget.test.ts:152` and `:174` ("keeps simultaneous live
+    events and ignores the later acknowledgment when deciding clock state"): an automatic clock-out
+    and a clock-in both at 10:00 in one chain. Today's read takes every live entry at the latest
+    instant, so it read both rows (`toBe(2)`); Task 15a's read takes each chain's latest direct
+    entry by position, which is the clock-in, so it reads one (`toBe(1)`). The case's behaviour
+    checks — the next clock-in refused `attendance.already_open`, the chain verifying — are
+    unedited and pass; its name now says the events are ordered by chain position. The STOP is for
+    a rule that changes what a workforce suite sees happen; this one changes only how many rows the
+    read fetches, so the lead rules it a changed check, and the pull request names it for the owner.
+    Task 15a.
+
 **Whole-shape lists gaining entries** (the owner's standing exception of 2026-09-27):
 2. `packages/fiscal-verifactu/src/alerts.test.ts:10-11` (`FISCAL_ALERTS` `toEqual`) gains the
    `clock.corrected` claim. Task 8.
@@ -1190,6 +1205,12 @@ EDITED to pass and is not on this list is a STOP, unless the spec changes what i
    gave the till's clock marker its own owner, so a failing clock read never marks the box's
    storage notices unavailable. Both existing owners keep their values and order. CI run
    41202806427 (`test-server (19)`) is where it failed.
+
+17. *(Added while building Task 15a, 2026-10-31.)* `packages/workforce/src/index.test.ts:81`
+    ("exports exactly the intended names", the package's whole export list): gains
+    `"readLatestLiveEntry"`, the read Task 15a exports for Task 15b. Every existing name is
+    unchanged; the owner's standing rule lets a whole-shape pin gain the key a new export adds.
+    Task 15a.
 
 **Fixtures only, no assertion changed:**
 6. `apps/server/src/box-status.route.test.ts:120` and
@@ -1232,22 +1253,6 @@ EDITED to pass and is not on this list is a STOP, unless the spec changes what i
     one, written at the review fold, selects 115 files, all three among them:
     `git ls-files 'apps/*.test.ts' 'packages/*.test.ts' | xargs /usr/bin/grep -l 'useFakeTimers\|setSystemTime' | xargs /usr/bin/grep -il 'session\|passkey'`.
     Task 15.
-17. *(Added while building Task 15a, 2026-10-31.)* `packages/workforce/src/index.test.ts:81`
-    ("exports exactly the intended names", the package's whole export list): gains
-    `"readLatestLiveEntry"`, the read Task 15a exports for Task 15b. Every existing name is
-    unchanged; the owner's standing rule lets a whole-shape pin gain the key a new export adds.
-    Task 15a.
-18. *(Added while building Task 15a, 2026-10-31; the lead's ruling under Task 15a's STOP.)*
-    `packages/workforce/src/record-read-budget.test.ts:152` and `:174` ("keeps simultaneous live
-    events and ignores the later acknowledgment when deciding clock state"): an automatic clock-out
-    and a clock-in both at 10:00 in one chain. Today's read takes every live entry at the latest
-    instant, so it read both rows (`toBe(2)`); Task 15a's read takes each chain's latest direct
-    entry by position, which is the clock-in, so it reads one (`toBe(1)`). The case's behaviour
-    checks — the next clock-in refused `attendance.already_open`, the chain verifying — are
-    unedited and pass; its name now says the events are ordered by chain position. The STOP is for
-    a rule that changes what a workforce suite sees happen; this one changes only how many rows the
-    read fetches, so the lead rules it a changed check, and the pull request names it for the owner.
-    Task 15a.
 
 **Must pass unedited:** `packages/fiscal-verifactu/src/write-path.e2e.test.ts` (the golden huella),
 `inmutabilidad.test.ts`, `apps/server/src/boot.box-health.test.ts:209-224` ("caches the clock check
@@ -2924,12 +2929,15 @@ below tries the retime.
 chains, so it can mislead after a backward step when the person moved location within it: in at A
 at 21:00 and out at A at 21:10, the clock stepped back an hour, in at B at 20:15 → A's latest is the
 `out` at 21:10, B's is the `in` at 20:15, and the person reads `out` while working at B until real
-time passes 21:10 — up to the step's size. It needs two locations on one node and a move within the
+time passes 21:10 — up to the step's size. *(Corrected 2026-10-31, Task 15a's review, run and
+pinned by the residual case in `clocking-step.test.ts`:)* in that window a clock-out at B is
+refused `attendance.no_open_entry` and a further clock-in at B is accepted and written. It needs two locations on one node and a move within the
 step. No order across chains is immune to a step: `time_entries.id` is a random id
 (`packages/workforce/src/schema/time-entries.ts:50`, `$defaultFn(newId)`), `recorded_at` is
 clamped monotonic per chain only (`:63-64`), and an implicit row number is not kept by a vacuum or
-a restore. Nothing recorded is wrong in that window — only the state the till shows — and a manager
-can retime the entry. Task 19 adds the backlog line; the owner FYI list carries it as FYI 7.
+a restore. So the record can gain a clock-in with no clock-out before it, and a legal clock-out at B is
+refused, in that window; a manager's retime does not change the reading, since the state read
+leaves retimes out. Task 19 adds the backlog line; the owner FYI list carries it as FYI 7.
 
 **Files.** Modify `packages/workforce/src/record-reads.ts` (`readLatestLiveEntries`, whose only
 caller is `currentState` — `/usr/bin/grep -rn readLatestLiveEntries packages apps
@@ -2975,6 +2983,28 @@ every clocking route reads.
   the stepped case and, through the `kind` filter, the ordinary-day control fail; order by
   `sequence_no` across chains → the two-location control fails; no corrections → the later
   missing clock-out control fails).
+
+### Task 15a's per-task review, folded (2026-10-31)
+
+Review C0/I3/M4 (`~/waitron-campaign-b/a798-9b/t15a/review.md`):
+- **I1, the read's cost.** The first build grouped all of a person's direct entries and looked for
+  corrections over their whole history; the review measured about 9 ms at 5,000 entries against
+  0.05 ms before, inside the write lock. Now: one lookup per chain from `workforce_chains`, through
+  a new index `time_entries_person_chain_idx (person_id, node_id, location_id, sequence_no)` (one
+  workforce migration, an index only), and corrections read only from the deciding entry's time on.
+  A new case reads each statement's query plan: no temporary sort, no search keyed by the person
+  alone, no scan except of `workforce_chains` (one row per node and location). The A10 line in
+  `docs/backlog/workforce.md` is brought up to date.
+- **I2, the residual is worse than ruling (e) said.** Run: in at A 21:00, out at A 21:10, step back
+  an hour, in at B 20:15 → a clock-out at B is refused and a further clock-in at B is written. FYI
+  7, ruling (e) and "Accepted residual" now say so, a case pins it, and the question goes back to
+  the owner in `questions.md`. The build carries on: this pull request is parked for the owner.
+- **I3, M1:** cases for `kind: "in"` over corrections and for two nodes writing one location.
+- **M2:** the doc comment no longer says a manager dates a correction. The first commit's message
+  says the person "could not clock in again until real time passed 21:00"; under the old read they
+  could not clock in again without first writing another clock-out dated after 21:00.
+- **M3:** entries 17 and 18 moved to their right headings. **M4:** the fold's deletion controls ran
+  in a throwaway worktree.
 
 ### Task 15b: The till reads the same state
 
@@ -3342,8 +3372,11 @@ follows the ruling.
    stays an owner FYI default in that form.
 5. **(e) Task 15a's cross-chain case is accepted** with a backlog line and owner FYI 7: no order
    across a person's chains survives a step (Task 15a, "Accepted residual"), and the case needs two
-   locations on one node plus a move inside the step's window; nothing recorded is wrong, only
-   the state the till shows until real time passes the earlier entry.
+   locations on one node plus a move inside the step's window. *(Corrected 2026-10-31: the ruling
+   said nothing recorded is wrong, only the state the till shows; Task 15a's review ran the case
+   and found a clock-out at the new location refused and a repeat clock-in written, until real time
+   passes the earlier entry. The ruling stands for the build with that consequence stated, and is
+   re-put to the owner in `questions.md`.)*
 
 Revision 5 adds two, on the fresh-context review of revision 4: **(R1)** while the start-up window
 is open, two agreeing devices do not lift the stop by themselves (decision 18); **(R2)** a staff
