@@ -555,6 +555,8 @@ State: This screen catches unrecognised refusals as backupRepairStrings.failed (
 
 Route: Existing: archive, bucket and Cloud source choices. Missing: retain a safe refusal category and name an applicable source/image/administrator action. Do not prescribe reinstalling over recorded sales.
 
+_2026-10-31, A1131b/c slice 3: the setup page no longer opens this screen, so these words are no longer shown; the entry records the earlier tree._
+
 ### Passkey sign-in
 
 Message: `passkey.verification_failed`. Fix: [sign-in](#sign-in).
@@ -679,6 +681,7 @@ The public connection guide's retry defect is recorded above. The source search 
 The backup guide already says to inspect the failed step and preserve retained files
 (`apps/server/src/guide/en/backup-recovery.md:43`). Guide prose, planned recovery screens and
 library functions do not by themselves establish a callable self-service remedy.
+(2026-10-31, A1131b/c slice 3: the guide no longer carries the retained-files line.)
 
 Provider support references in the Payments page are separate: the page asks for provider-confirmed
 transaction evidence (`apps/dashboard/src/i18n/strings.ts:2506` and `:2526`). They are not an

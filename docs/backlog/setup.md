@@ -409,8 +409,9 @@ phone width (`apps/setup/src/setup-app.ts`, the first-owner screen).
 ## Close a discarded recovery's Cloud approval from the box
 
 Left open by A1042. Show the saved link and code beside the repair page's stopped line, so the
-person can close the approval in Waitron Cloud. Today the box shows that link and code only on its
-Cloud wait screen (`apps/setup/src/screens/first-setup-backup-screen.ts`), and the box's Cloud
+person can close the approval in Waitron Cloud. The box no longer shows that link and code anywhere: its only
+place was the old recovery's Cloud wait screen (`apps/setup/src/screens/first-setup-backup-screen.ts`),
+which the repair page stopped opening in A1131b/c slice 3, and the box's Cloud
 client has no action that closes an approval (`apps/server/src/cloud-recovery.ts`: `start`,
 `status`, `info`, `read`, `restored`). Cloud closes the approval by itself an hour after it was
 given, and refuses a new one for that venue until then (Waitron Cloud at 4eed93d6:

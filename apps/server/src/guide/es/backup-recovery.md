@@ -44,6 +44,23 @@ configurar este equipo. Si se recarga la página antes de pulsar **Reconectar**,
 elegiste y abre su primera pantalla. Si esa pantalla pregunta «¿Es segura esta página?», pulsa
 **Continuar con la configuración**; después, para restaurar, elige **Unirse o recuperar**.
 
+Si la página dice que «Empezar de nuevo» no ha terminado, recárgala para ver lo que falta. Si el
+equipo se está reiniciando, espera a que responda.
+
+Si un «Empezar de nuevo» se interrumpió y después el equipo encuentra archivos que «Empezar de
+nuevo» no creó, como un local copiado desde una copia de seguridad, el equipo no arranca. Si su
+página muestra los archivos, también pide, con la conexión segura del equipo, la contraseña de
+administrador que elegiste al configurar. **Conservarlo todo y parar** deja los archivos como están, y la página sigue
+hasta que se reinstale Waitron. **Apartar estos archivos y terminar «Empezar de nuevo»** mueve los
+archivos, sin cambios, a una carpeta nueva del equipo y termina «Empezar de nuevo»; después el
+equipo empieza una configuración inicial nueva. Si se añaden, quitan o modifican archivos después de abrir la página,
+el equipo rechaza la elección y no cambia nada: pulsa **Reintentar un arranque normal** para verlos
+de nuevo. A partir de la sexta contraseña incorrecta, la página te hace esperar antes del siguiente
+intento, nunca más de 15 minutos, y cada 15 minutos sin una contraseña incorrecta se perdona una. Si
+la página dice que «Empezar de nuevo» estaba apartando archivos y no ha terminado, pulsa
+**Reintentar un arranque normal** para terminar de moverlos; después el equipo empieza una
+configuración inicial nueva.
+
 Usa la conexión segura del equipo. Si el navegador no confía en ella, elige primero **Configurar
 conexión segura** en la página de reparación. **Comprobar de nuevo** vuelve a leer la conexión
 sin repararla. **Detener** finaliza este intento; puedes cerrar la pestaña o comprobar de nuevo.
@@ -73,27 +90,10 @@ Si esa recuperación usaba una copia de Cloud, su aprobación en Waitron Cloud s
 de una hora desde que se dio. Hasta entonces, Waitron Cloud no puede aprobar otra recuperación para
 el local de este equipo.
 
-Si la página dice que «Empezar de nuevo» no ha terminado, recárgala para ver lo que falta. Si el
-equipo se está reiniciando, espera a que responda.
-
 Si la recuperación llenó el disco del equipo, «Empezar de nuevo» sigue funcionando: el equipo guarda
 unos 8 MB de su disco en reserva, y cede ese espacio para poder quitar la recuperación. Si ni eso
 basta, la página dice que el disco está lleno. Cuando la página puede saberlo, dice si reiniciar el
 equipo puede liberar espacio.
-
-Si un «Empezar de nuevo» se interrumpió y después el equipo encuentra archivos que «Empezar de
-nuevo» no creó, como un local copiado desde una copia de seguridad, el equipo no arranca. Si su
-página muestra los archivos, también pide, con la conexión segura del equipo, la contraseña de
-administrador que elegiste al configurar. **Conservarlo todo y parar** deja los archivos como están, y la página sigue
-hasta que se reinstale Waitron. **Apartar estos archivos y terminar «Empezar de nuevo»** mueve los
-archivos, sin cambios, a una carpeta nueva del equipo y termina «Empezar de nuevo»; después el
-equipo empieza una configuración inicial nueva. Si se añaden, quitan o modifican archivos después de abrir la página,
-el equipo rechaza la elección y no cambia nada: pulsa **Reintentar un arranque normal** para verlos
-de nuevo. A partir de la sexta contraseña incorrecta, la página te hace esperar antes del siguiente
-intento, nunca más de 15 minutos, y cada 15 minutos sin una contraseña incorrecta se perdona una. Si
-la página dice que «Empezar de nuevo» estaba apartando archivos y no ha terminado, pulsa
-**Reintentar un arranque normal** para terminar de moverlos; después el equipo empieza una
-configuración inicial nueva.
 
 ## Elige tu copia {#source}
 

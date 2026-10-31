@@ -1,4 +1,5 @@
 import { expect } from "vitest";
+import "../src/setup-app.js";
 import type { SetupApp } from "../src/setup-app.js";
 import { initialOwnerStrings } from "../src/screens/initial-owner-strings.js";
 import type {

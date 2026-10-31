@@ -39,6 +39,21 @@ this box. If the page is reloaded before you press **Reconnect**, it does not re
 chose and opens its first screen. If that screen asks "Is this page secure?", press **Continue to
 setup**; then, to restore, choose **Join or recover**.
 
+If the page says that Start again has not finished, reload it to see what is left to do. If the box
+is restarting, wait until it answers.
+
+If a Start again was cut off and the box then finds files that Start again did not create, such as
+a venue copied from a backup, the box does not start. If its page lists the files, it also asks,
+over the box's secure connection, for the administrator password you chose during setup. **Keep everything
+and stop** leaves the files as they are, and the page then stays until Waitron is reinstalled.
+**Move these files aside and finish Start again** moves the files, unchanged, into a new folder on
+the box and finishes Start again; the box then starts a new first setup. If files are added, removed or
+written to after the page opens, the box refuses the choice and changes nothing: press **Retry a normal boot** to
+see them again. From the sixth wrong password on, the page makes you wait before the next try,
+never more than 15 minutes, and each 15 minutes without a wrong password forgives one. If the page
+says that Start again was moving files aside and has not finished, press **Retry a normal boot** to
+finish moving them; the box then starts a new first setup.
+
 Use the box's secure connection. If your browser does not trust it, choose **Set up secure
 connection** on the repair page first. **Check again** rereads the connection without running
 a repair. **Stop** ends this attempt; you can close the tab or check again. If repair keeps
@@ -67,24 +82,9 @@ If that recovery used a Waitron Cloud copy, its approval in Waitron Cloud closes
 hour of when it was given. Until then, Waitron Cloud cannot approve a new recovery for this box's
 venue.
 
-If the page says that Start again has not finished, reload it to see what is left to do. If the box
-is restarting, wait until it answers.
-
 If the recovery filled the box's disk, Start again still works: the box keeps about 8 MB of its disk
 spare, and gives that space up so it can delete the recovery. If even that is not enough, the page
 says the disk is full. Where the page can tell, it says whether restarting the box can free space.
-
-If a Start again was cut off and the box then finds files that Start again did not create, such as
-a venue copied from a backup, the box does not start. If its page lists the files, it also asks,
-over the box's secure connection, for the administrator password you chose during setup. **Keep everything
-and stop** leaves the files as they are, and the page then stays until Waitron is reinstalled.
-**Move these files aside and finish Start again** moves the files, unchanged, into a new folder on
-the box and finishes Start again; the box then starts a new first setup. If files are added, removed or
-written to after the page opens, the box refuses the choice and changes nothing: press **Retry a normal boot** to
-see them again. From the sixth wrong password on, the page makes you wait before the next try,
-never more than 15 minutes, and each 15 minutes without a wrong password forgives one. If the page
-says that Start again was moving files aside and has not finished, press **Retry a normal boot** to
-finish moving them; the box then starts a new first setup.
 
 ## Choose your copy {#source}
 

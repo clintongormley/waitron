@@ -131,6 +131,9 @@ so deleting it is not offered. Reconnect to check the saved result." If the atte
 recovery-key record is damaged, the page also says "This setup's recovery-key record is damaged and
 cannot be read." above what Start again deletes, and you can still choose **Cancel**.
 
+The page no longer starts a recovery from backup itself; the next two paragraphs describe one
+begun on the repair page before this version of Waitron.
+
 While a backup recovery is running on another device, the repair page says so, with when it
 started and when it was last active, and offers only **Reconnect** and **Set up secure
 connection** until it stops. It counts as running while one of its steps is in progress and for
@@ -141,8 +144,8 @@ box keeps them in memory only, so a restart ends them too (`runningInMemory` in
 Once a backup recovery has stopped, the repair page says it started and did not finish and that
 Start again deletes it. **Recover from backup** is offered beside it too, and its confirmation says
 instead that Recover from backup deletes it first. With the venue database
-missing, the page shows this once **Start again** is pressed, and Start again deletes the recovery
-with the attempt after the missing-database confirmation above. With the venue database present,
+missing, the page shows this once **Start again** or **Recover from backup** is pressed, and either
+deletes the recovery with the attempt after the missing-database confirmation above. With the venue database present,
 the page shows the stopped recovery beside **Start again**, within the limits above. Start again
 then reads the recovery's details again, shows them, and deletes the recovery with the attempt
 once you tick "Delete the old attempt and start again." Before it deletes anything, the box writes

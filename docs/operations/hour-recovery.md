@@ -87,9 +87,7 @@ Cloud restore page is a new restore and starts a new 90 to 150 seconds: it makes
 event each time it opens (`apps/setup/src/screens/recovery-copy.ts` mounts the page with no
 binding, and `apps/setup/src/screens/recovery-allocation.ts` then uses
 `eventId: crypto.randomUUID()`), and the box keeps each event's wait apart
-(`packages/fiscal-verifactu/src/hour-selection.ts`, `sameEvent`). A restore from a backup during
-setup returns to the same restore when reopened: the server reuses the binding it stored
-(`apps/server/src/first-setup-backup-recovery.ts`, `before.record?.binding ?? …`; read, not run). No test reloads a
+(`packages/fiscal-verifactu/src/hour-selection.ts`, `sameEvent`). No test reloads a
 restore page end to end. What the page shows when it cannot go
 ahead, and what it asks for:
 
