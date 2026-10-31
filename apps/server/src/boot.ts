@@ -2667,6 +2667,7 @@ async function bootServer(
         readBoot: boxBoot.readBoot,
         requestFromBox: seams.requestFromBox,
         devMode: config.devMode,
+        correction,
       },
     },
     log,
