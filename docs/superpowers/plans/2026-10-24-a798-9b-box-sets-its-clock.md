@@ -136,6 +136,11 @@ files, each check's state) into the ledger before going on.
    `IDLE_TIMEOUT_MS` and `CHALLENGE_TTL_MS`, a passkey challenge's, plus stored `expires_at`
    columns of one-off links, enrolments and sign-in states — none a staff session's). The lead's
    ruling (d).
+7. **New, for the plan review:** after a backward step, a person who clocked out at one location
+   and then clocks in at ANOTHER location within the step's window reads as clocked out on the
+   till until real time passes their earlier clock-out (Task 15a, "Accepted residual"). What they
+   clocked is recorded correctly; only the state the till shows is wrong, and a manager can retime
+   the entry. It needs two locations on one box. The lead's ruling (e).
 
 ## Owner question — text for questions.md
 
@@ -1629,14 +1634,16 @@ retimed to before the clock-out every other correction for that person is refuse
 `correction.invalid` `unmatched_out`; the retime itself puts the entries back in order. The test
 below tries the retime.
 
-**Open for the lead (found in the 2026-10-31 fold; not decided here).** Step 2 still compares
-times across chains, so it can mislead after a backward step when the person moved location within
-it: in at A at 21:00 and out at A at 21:10, the clock stepped back an hour, in at B at 20:15 → A's
-latest is the `out` at 21:10, B's is the `in` at 20:15, and the person reads `out` while working at
-B, until real time passes 21:10 — up to the step's size, which may be days. This needs two
-locations on one node and a move within the step. Before the build starts the lead either accepts
-it with a backlog line and a reason, or names an order across chains that a step cannot move; the
-build does not start Task 15a until it is decided.
+**Accepted residual (the lead's ruling (e), 2026-10-31).** Step 2 still compares times across
+chains, so it can mislead after a backward step when the person moved location within it: in at A
+at 21:00 and out at A at 21:10, the clock stepped back an hour, in at B at 20:15 → A's latest is the
+`out` at 21:10, B's is the `in` at 20:15, and the person reads `out` while working at B until real
+time passes 21:10 — up to the step's size. It needs two locations on one node and a move within the
+step. No order across chains is immune to a step: `time_entries.id` is a random id
+(`packages/workforce/src/schema/time-entries.ts:50`, `$defaultFn(newId)`), `recorded_at` is
+clamped monotonic per chain only (`:63-64`), and an implicit row number is not kept by a vacuum or
+a restore. Nothing recorded is wrong in that window — only the state the till shows — and a manager
+can retime the entry. Task 19 adds the backlog line; the owner FYI list carries it as FYI 7.
 
 **Files.** Modify `packages/workforce/src/record-reads.ts` (`readLatestLiveEntries`, whose only
 caller is `currentState` — `/usr/bin/grep -rn readLatestLiveEntries packages apps
@@ -1790,7 +1797,7 @@ task.
 2. New entries: B3 keeps or migrates 9b's clock requests and requester (the lead's ruling (a),
    pointing at the B3 paragraph Task 18 writes); the box's certificate issued under a clock wrongly
    ahead (Task 15); the hours read, the end-of-day pass and the correction check after a
-   backward step, and the cross-chain case if the lead accepts it (Task 15a); the stream's
+   backward step, and the accepted cross-chain case (Task 15a, ruling (e)); the stream's
    pruning measured by the bucket's own times (Task 15); anything else Task 15 accepted
    that a later slice must revisit.
 3. This plan's status line: built, parked, the pull request's number. (The measurement workflow
@@ -1832,7 +1839,8 @@ the `witnessed` check, the `held` window, the backoff; name the failing test.
 
 ## The lead's rulings (2026-10-31)
 
-The fresh review of revision 1 left four points open; the lead ruled on each, and the build
+The fresh review of revision 1 left four points open, and the narrow check of its fold a fifth;
+the lead ruled on each, and the build
 follows the ruling.
 
 1. **(a) B3's host.** 9b ships the shell handler: a host installed by `waitron.sh` has no Node,
@@ -1849,3 +1857,7 @@ follows the ruling.
 4. **(d) Tills and handhelds are not signed out.** Only a dashboard session ends, and only when
    its `lastSeenAt` is more than `IDLE_TIMEOUT_MS` ahead of the new clock (FYI 6, Task 15). It
    stays an owner FYI default in that form.
+5. **(e) Task 15a's cross-chain case is accepted** with a backlog line and owner FYI 7: no order
+   across a person's chains survives a step (Task 15a, "Accepted residual"), and the case needs two
+   locations on one node plus a move inside the step's window; nothing recorded is wrong, only
+   the state the till shows until real time passes the earlier entry.
