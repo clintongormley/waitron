@@ -1,9 +1,11 @@
 import { afterEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
+import type { LitElement } from "lit";
 import type { WtButton } from "@waitron/ui";
 import type { SetupApp } from "./setup-app.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
-import { setLocale } from "./i18n/t.js";
+import { setLocale, t as say } from "./i18n/t.js";
+import { shellEn } from "./i18n/strings/shell.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import { initial } from "../test/first-setup-browser.js";
 import {
@@ -356,4 +358,155 @@ it("Cancel after Recover beside a stopped recovery draws the on-load line again,
   await expect.poll(() => q(app, "start-again-deletes")).not.toBeNull();
   expect(q(app, "recover-deletes")).toBeNull();
   expect(stoppedLines(app)[0]).toBe(t.recoveryStopped.replace("{started}", shownTimes.en.started));
+});
+
+/** A box that restarts after the wipe: unreachable while `down`, then answering no setup once wiped. */
+function restartingBox() {
+  const box = { down: false, wiped: false, claimedAgain: false };
+  return {
+    box,
+    options: {
+      startAgain: () => {
+        box.wiped = true;
+        return Response.json({ restarting: true });
+      },
+      status: () => {
+        if (box.down) throw new TypeError("Failed to fetch");
+        return box.wiped && !box.claimedAgain ? Response.json({ claimed: false }) : undefined;
+      },
+    },
+  };
+}
+async function confirmWipe(
+  app: SetupApp,
+  kind: "recover" | "start-again",
+  restarting: string = t.restarting,
+) {
+  await click(app, kind === "recover" ? "recover-backup" : "start-again");
+  await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
+  await userEvent.click(tick(app));
+  await click(app, kind === "recover" ? "confirm-recover" : "confirm-start-again");
+  await expect.poll(() => text(app)).toContain(restarting);
+}
+const otherScreens = ["screen-first-owner", "screen-venue", "screen-mode"];
+
+for (const [locale, lang] of locales)
+  it(`after Recover from backup's wipe, Reconnect opens Join or recover (${locale})`, async () => {
+    const { options } = restartingBox();
+    const { app } = await wipeFixture(options);
+    setLocale(locale);
+    await app.updateComplete;
+    await confirmWipe(app, "recover", initialOwnerStrings[lang].restarting);
+    await click(app, "reconnect-first");
+    await expect.poll(() => q(app, "screen-role")).not.toBeNull();
+    await q<LitElement>(app, "screen-role")!.updateComplete;
+    expect(q(app, "screen-role")!.shadowRoot!.querySelector("h1")!.textContent).toBe(
+      say("role.heading", locale),
+    );
+    for (const name of otherScreens) expect(q(app, name), name).toBeNull();
+    expect(oldRecoveryMounted(app)).toBe(false);
+  });
+
+it("Reconnect while the box is still restarting keeps the choice, and the next Reconnect opens Join or recover", async () => {
+  const { box, options } = restartingBox();
+  const { app } = await wipeFixture(options);
+  await confirmWipe(app, "recover");
+  box.down = true;
+  await click(app, "reconnect-first");
+  await expect.poll(() => q<WtButton>(app, "reconnect-first")?.disabled).toBe(false);
+  await settled(app);
+  expect(q(app, "screen-first-owner")).not.toBeNull();
+  expect(q(app, "screen-role")).toBeNull();
+  box.down = false;
+  await click(app, "reconnect-first");
+  await expect.poll(() => q(app, "screen-role")).not.toBeNull();
+});
+
+it("a Reconnect that finds a setup claimed again draws the repair page, not Join or recover, and forgets the choice", async () => {
+  const { box, options } = restartingBox();
+  const { app } = await wipeFixture(options);
+  await confirmWipe(app, "recover");
+  box.claimedAgain = true;
+  await click(app, "reconnect-first");
+  await expect.poll(() => q<WtButton>(app, "reconnect-first")?.disabled).toBe(false);
+  await settled(app);
+  expect(q(app, "screen-first-owner")).not.toBeNull();
+  expect(q(app, "screen-role")).toBeNull();
+  box.claimedAgain = false;
+  await click(app, "reconnect-first");
+  await expect.poll(() => q(app, "screen-first-owner")).toBeNull();
+  expect(q(app, "screen-role")).toBeNull();
+});
+
+it("after Start again's wipe, Reconnect opens the setup choice screen", async () => {
+  const { options } = restartingBox();
+  const { app } = await wipeFixture(options);
+  await confirmWipe(app, "start-again");
+  await click(app, "reconnect-first");
+  await expect.poll(() => q(app, "screen-mode")).not.toBeNull();
+  expect(q(app, "screen-venue")).toBeNull();
+  expect(q(app, "screen-role")).toBeNull();
+});
+
+it("beside a stopped recovery, after Recover, a failed summary read and Check again, the wipe's Reconnect still opens Join or recover", async () => {
+  const { options } = restartingBox();
+  let reads = 0;
+  const { app } = await wipeFixture({
+    ...options,
+    activity: stoppedActivity,
+    summary: () =>
+      reads++ === 0
+        ? Response.json({ error: { code: "server.internal", params: {} } }, { status: 500 })
+        : Response.json(stoppedSummary),
+  });
+  await click(app, "recover-backup");
+  await expect.poll(() => q(app, "check-again")).not.toBeNull();
+  await settled(app);
+  await click(app, "check-again");
+  await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
+  await userEvent.click(tick(app));
+  await click(app, "confirm-recover");
+  await expect.poll(() => text(app)).toContain(t.restarting);
+  await click(app, "reconnect-first");
+  await expect.poll(() => q(app, "screen-role")).not.toBeNull();
+});
+
+it("a Recover send answered setup.start_again_incomplete keeps the choice: Reconnect, once the box answers no setup, opens Join or recover", async () => {
+  const { box, options } = restartingBox();
+  const { app } = await wipeFixture({
+    ...options,
+    startAgain: () => {
+      box.wiped = true;
+      return Response.json(
+        { error: { code: "setup.start_again_incomplete", params: {} } },
+        { status: 409 },
+      );
+    },
+  });
+  await click(app, "recover-backup");
+  await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
+  await userEvent.click(tick(app));
+  await click(app, "confirm-recover");
+  await expect
+    .poll(() => formErrors(app))
+    .toContain(shellEn["shell.first_setup.start_again_incomplete"]);
+  await settled(app);
+  await click(app, "reconnect-first");
+  await expect.poll(() => q(app, "screen-role")).not.toBeNull();
+});
+
+it("from Join or recover, Restore from backup opens the fresh-box restore screen, and nothing went to the old recovery's routes", async () => {
+  const { options } = restartingBox();
+  const { app, requests } = await wipeFixture(options);
+  await confirmWipe(app, "recover");
+  expect(oldRecoveryMounted(app)).toBe(false);
+  await click(app, "reconnect-first");
+  await expect.poll(() => q(app, "screen-role")).not.toBeNull();
+  const role = q<LitElement>(app, "screen-role")!;
+  await role.updateComplete;
+  const choose = role.shadowRoot!.querySelector<WtButton>("[data-test=choose-restore]")!;
+  await userEvent.click(choose.shadowRoot!.querySelector("button")!);
+  await expect.poll(() => q(app, "screen-restore")).not.toBeNull();
+  expect(oldRecoveryMounted(app)).toBe(false);
+  expect(requests.some((r) => OLD_RECOVERY_ROUTE.test(r.path))).toBe(false);
 });

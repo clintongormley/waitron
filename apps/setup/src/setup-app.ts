@@ -668,6 +668,7 @@ export class SetupApp extends LitElement {
     this.firstRetireConfirmed = false;
     this.firstRestarting = false;
     this.#closeWipe();
+    this.#afterWipe = undefined;
     this.firstWipeError = undefined;
     this.#stopActivityWatch();
     this.firstActivity = undefined;
@@ -1107,6 +1108,8 @@ export class SetupApp extends LitElement {
   @state() private firstWipeSummary?: StartAgainSummary;
   /** Which button the person last pressed: it picks the words drawn; both send the same request. */
   @state() private firstWipeKind: "start-again" | "recover" = "start-again";
+  /** Which wipe the box restarted for, so Reconnect opens that choice's first screen; a reload forgets it. */
+  #afterWipe?: "start-again" | "recover";
   /** Start again's reads failed beside a stopped recovery: the page offers Check again. */
   @state() private firstWipeUnread = false;
   @state() private firstWipeError?: Message;
@@ -1467,6 +1470,7 @@ export class SetupApp extends LitElement {
     try {
       await sendWipe(this.api, this.#firstResolutionSnapshot(), inspection.database, shown);
       if (!current()) return;
+      this.#afterWipe = this.firstWipeKind;
       this.#closeWipe();
       this.firstRestarting = true;
       this.firstOwnerPassword = "";
@@ -1475,6 +1479,9 @@ export class SetupApp extends LitElement {
       this.#firstSession = undefined;
     } catch (error) {
       if (!current()) return;
+      // The box has asked for its own restart, and the start finishes the deletion.
+      if ((error as { code?: unknown })?.code === "setup.start_again_incomplete")
+        this.#afterWipe = this.firstWipeKind;
       const refusal = wipeRefusal(error);
       // The summary showed no kept records, and an attempt conflict here means the summary or the
       // inspection changed after the page read them.
@@ -1527,6 +1534,8 @@ export class SetupApp extends LitElement {
           throw error;
         inspect = true;
       }
+      const unclaimed = !inspect && !session.state && !session.recoveryRequired;
+      if (!unclaimed) this.#afterWipe = undefined;
       if ((inspect || session.recoveryRequired) && !session.state) {
         const inspection = await this.api.inspectFirstSetupResolution();
         const activity = await this.#readActivity();
@@ -1541,11 +1550,17 @@ export class SetupApp extends LitElement {
         this.#watchActivity();
       }
       if (!this.isConnected || generation !== this.#firstGeneration) return;
-      if (!inspect && !session.state && !session.recoveryRequired) {
+      if (unclaimed) {
         await session.dispose();
         if (!this.isConnected || generation !== this.#firstGeneration) return;
         this.#firstSession = undefined;
-        this.screen = "venue";
+        this.screen =
+          this.#afterWipe === "recover"
+            ? "role"
+            : this.#afterWipe === "start-again"
+              ? "mode"
+              : "venue";
+        this.#afterWipe = undefined;
       }
     } catch (error) {
       if (this.isConnected && generation === this.#firstGeneration)
