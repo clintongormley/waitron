@@ -5767,6 +5767,14 @@ For package distribution and the four-minute target, use the
   not qualify the concurrent path. The standalone parties suite also reaches its local
   deadline; the cause is unknown. [Detail](backlog/ci.md#local-multi-file-till-browser-interruption).
 
+- **A1089. Investigate the certificate child's lifecycle failures on main.**
+  The normal-success case returned `interrupted/unavailable` instead of `completed` in
+  [run 41195102945](https://github.com/clintongormley/waitron/actions/runs/41195102945/job/124522873238)
+  (`fiscal-certificate-diagnosis-process.test.ts:64`). A different case's next attempt was
+  refused in [run 41032398364](https://github.com/clintongormley/waitron/actions/runs/41032398364/job/123986726025)
+  (`:107`). Reproduce both and retain process/pipe diagnostics before changing the runner;
+  neither cause is established. A passing re-run does not close this investigation.
+
 - **A1089 merge read-back: server coverage upload timed out.**
   [Detail](backlog/ci.md#a1089-merge-read-back-server-coverage-upload-timed-out).
 
@@ -5839,13 +5847,11 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **`apps/server/src/invoice-pdf.test.ts` took 162 s on one CI run**
   [Detail](backlog/ci.md#the-invoice-pdf-test-took-162-s-on-one-ci-run).
 
-- **A1252. Split the held-setup suite after A1131's recovery work lands.**
-  PR #2335 (landed 2026-10-31) added cases to the same file; preserve those checks when splitting it.
-  Its latest measured main times were 489–499 seconds, so refreshing the table
-  and splitting the holdings reader cannot bring every shard to four minutes.
-  After the remaining split, qualify three main runs that execute every server
-  shard; each job should take at most about 4.5 minutes, or name the slow suite
-  and its cause. [Method](developers/ci-and-gates.md#refresh-after-the-held-setup-suites-grew).
+- **A1252. Qualify three main runs after splitting the held-setup suite.**
+  The split retains A1131's three fresh-box restore cases from PR #2335.
+  Read three later main runs that execute every server shard; each job should
+  take at most about 4.5 minutes, or name the slow suite and its cause.
+  [Method](developers/ci-and-gates.md#refresh-after-the-held-setup-suites-grew).
 
 - **The server's duration table needs a staleness warning.** Flag missing files and
   shards over four minutes from CI measurements; refreshing the table remains manual.
