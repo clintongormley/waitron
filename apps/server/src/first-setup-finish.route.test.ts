@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import { randomBytes } from "node:crypto";
 import { readFile, rm, stat, symlink } from "node:fs/promises";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { Agent } from "undici";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
@@ -557,6 +558,41 @@ it("publication refuses a symlinked reserved node database before opening anothe
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ error: { code: "setup.attempt_uncertain" } });
     expect(await readFile(outside)).toEqual(before);
+    await expect(stat(join(f.stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
+  } finally {
+    await f.dispose();
+  }
+});
+
+it("publication refuses a missing reserved node database and creates none", async () => {
+  const f = await fixture(true);
+  try {
+    const owner = await f.recover();
+    for (const name of ["node.db", "node.db-wal", "node.db-shm"])
+      await rm(join(f.venueDir, name), { force: true });
+    const response = await f.post("finish", { ...(await f.snapshot()), publication }, owner);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "setup.attempt_uncertain" } });
+    await expect(stat(join(f.venueDir, "node.db"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(join(f.stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
+  } finally {
+    await f.dispose();
+  }
+});
+
+it("publication refuses a reserved node database without the recovery-key table", async () => {
+  const f = await fixture(true);
+  try {
+    const owner = await f.recover();
+    const node = new DatabaseSync(join(f.venueDir, "node.db"));
+    try {
+      node.exec("drop table node_recovery_key");
+    } finally {
+      node.close();
+    }
+    const response = await f.post("finish", { ...(await f.snapshot()), publication }, owner);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "setup.attempt_uncertain" } });
     await expect(stat(join(f.stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
   } finally {
     await f.dispose();
