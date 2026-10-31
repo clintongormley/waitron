@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { ArchiveReadBudget, readArchiveStateFile } from "./archive-read-budget.js";
 import { collectStateParts } from "./archive-entries.js";
+import { stubNodeSnapshot } from "./testing/node-copy.js";
 import { collectModuleNonDbState } from "./backup-sources.js";
 import { collectOptionalStateFiles } from "./backup-optional-state.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
@@ -84,7 +85,10 @@ it("shares the bound across required and optional state before accepting a sched
   await large.truncate(ARCHIVE_MAX_METADATA_BYTES);
   await large.close();
   await expect(
-    collectStateParts({ stateDir: dir, modules: [], resolvers: {} }, new ArchiveReadBudget()),
+    collectStateParts(
+      { stateDir: dir, modules: [], resolvers: {}, snapshotNode: stubNodeSnapshot },
+      new ArchiveReadBudget(),
+    ),
   ).rejects.toMatchObject(refusal("metadata_too_large"));
 });
 it("bounds module state and optional state while retaining small legitimate bytes", async () => {
