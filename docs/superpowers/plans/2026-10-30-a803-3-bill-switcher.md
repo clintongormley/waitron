@@ -412,6 +412,13 @@ Every other word the new controls show is an approved string (D10).
 - **D15 Server list order by number (folds A1232, `docs/backlog.md:2025-2030`).**
   `readBillsOfParties` orders by stored number (null last), then id, instead of opening order
   (`parties.ts:684`); action answers list ids in that order.
+  - **D15 addendum (Task 5 review I1; driver's decision 2026-10-31, the most conservative reading;
+    an owner choice in the PR).** A departure issues its invoices in opening order; the list's
+    number order does not reach invoicing. `recordUnpaidDeparture` re-sorts the list once, at its
+    top, by opened time, order number, then id (the order `readBillsOfParties` had before Task 5),
+    so its refusals (`firstUnfired`, `holding`), pricing, invoice numbers and chain records, and
+    every later per-bill write all read that one sorted list. The test pins the invoice order only
+    (`unpaid-departure.test.ts` "A803 departure order: …").
 - **D16 The foot: totals, then Pay (review-1 I8; amendment 4; Owner question 7).** On main the
   table screen's foot (`#orderSummary`, `till-table-order-screen.ts:2481-2497`) holds: this bill's
   total; **Comp the bill** (`#billAdjust`, `data-discount-bill`, `:2231-2251`); then the pay section
@@ -627,7 +634,8 @@ task's red run; a red assertion not on this list that is not kind B/R/W/S/F unde
 | `apps/server/src/party-table-actions.test.ts` `:315`, `:977`, `:1328`, `:1550` (combine/join merges main bills, `mergedInto`) | B | every bill stays separate, numbered by slice 2's rule | §3.4 bullet 2 | 3a |
 | `party-table-actions.test.ts` `:349`, `:366`, `:383`, `:641`, `:659`, `:1004` (which main bill survives) | B | main-bill assertions → each bill's party, status and number | §3.4 | 3a (bills), 6b (`mainBillId`) |
 | `party-table-actions.test.ts:1101`, `:1124`, `:1138`, `:1183` (split takes chosen bill as main; new empty main bill; presented; `party.main_bill_stays`) | B | chosen bill moves with its number 1 at the new party; no bill chosen → one empty bill created (D1); choosing the bill that was main succeeds | §3.4, master plan "now allowing any eligible bill" | 4a |
-| `party-table-actions.test.ts:709-713` (opening order `[ana, luis, second]`) | B | number order `[luis, ana, second]` | A1232 (`docs/backlog.md:2025-2030`), D15 | 5 |
+| `party-table-actions.test.ts:709-713` (opening order `[ana, luis, second]`) | B | number order `[luis, ana, second]`; as built, each tuple also gained its `billNumber` | A1232 (`docs/backlog.md:2025-2030`), D15 | 5 |
+| `parties.test.ts:1127` (merged parties), `bill-identities.test.ts:781` (and its retitle), `bill-identities.test.ts:833` (an abandoned bill) | B (found at Task 5's red run) | `parties.test.ts:1127`: abandoned tab first → last, each tuple gaining its `billNumber`; `bill-identities.test.ts:781`: `[anaSecond 2, luis 1]` → `[luis 1, anaSecond 2]`, retitled from "… while the list keeps its opening order" to "… and is listed after the party's own Bill 1"; `:833`: the abandoned bill moves from second to last | A1232 (`docs/backlog.md:2025-2030`), D15 | 5 |
 | `apps/server/src/order-drafts.db.test.ts` `merge()` helper `:3418-3427` and its users `:3460`, `:3530-3547`, `:3551`, `:3586`, `:3613`, `:4480` | B | joins keep both bills; Sam's `billNumber` stays 2 only if the receiving party's own bill stays 1 — confirm at red | §3.4 | 3a |
 | `order-drafts.db.test.ts:1048` (draft goes to its bill while another is main) | B | same assertion, "while another bill has a lower number" | §3.4 | 6c |
 | `apps/server/src/table-actions.refund-pending.test.ts:248` (main bills merge, `merged: true`), `:194`, `:223` (`it.each` over merge/separate) | B | merge row → separate | §3.4 | 3a |
@@ -1171,8 +1179,13 @@ last, then `workingOrderId`, after reading identities `:689-`); tests `parties.t
       two pins in `parties.test.ts` and `party-table-actions.test.ts`); nulls sorted first → the
       merged-parties pin and `bill-identities.test.ts:820` fail, with `:838` (a bill with no
       identity row) as well. The id tie-break was not given a control: none of the four changed
-      pins or the new case lists two bills with one number. `unpaid-departure.ts` issues a departing party's invoices in this list's order, so
-      they now follow bill number; its suite passed unchanged. A1232 deleted from the backlog;
+      pins or the new case lists two bills with one number. `unpaid-departure.ts` issued a departing party's invoices in this list's order, so
+      they followed bill number; its suite did not tell the two orders apart (it passed under
+      both). The review fix (D15 addendum) keeps a departure's invoices in opening order and pins
+      it with `unpaid-departure.test.ts` "A803 departure order: invoices the bill opened first
+      first, when its bill number is the higher one", and gives the id tie-break a control with
+      `bill-identities.test.ts` "A803 bill order: two abandoned bills are listed last, in id
+      order, not in the order they were opened". A1232 deleted from the backlog;
       the till's `shownBills` still sorts the same way, now redundantly.)
 - [x] Commit: "List a party's bills in number order on the server".
 

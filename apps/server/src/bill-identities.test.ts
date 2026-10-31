@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { billEditStates, captureError, parties, workingOrders } from "@waitron/db";
@@ -832,6 +832,39 @@ describe("A803 bill list", () => {
       [seated.bills[0], 1, null, "open"],
       [counter, 3, null, "open"],
       [seated.bills[1], null, null, "abandoned"],
+    ]);
+  });
+
+  it("A803 bill order: two abandoned bills are listed last, in id order, not in the order they were opened", async () => {
+    const seated = await tableWithBills("L6b", 3);
+    const [lowerId, higherId] = [seated.bills[1]!, seated.bills[2]!].sort();
+    await inTx(v, async (tx) => {
+      await tx
+        .update(workingOrders)
+        .set({ openedAt: "2026-01-01T00:00:01.000Z" })
+        .where(eq(workingOrders.id, lowerId!));
+      await tx
+        .update(workingOrders)
+        .set({ openedAt: "2026-01-01T00:00:00.000Z" })
+        .where(eq(workingOrders.id, higherId!));
+    });
+    const first = await commandFor(v, seated.partyId);
+    await inTx(v, (tx) => mergeBills(tx, v.cfg, seated.bills[0]!, seated.bills[1]!, first));
+    const second = await commandFor(v, seated.partyId);
+    await inTx(v, (tx) => mergeBills(tx, v.cfg, seated.bills[0]!, seated.bills[2]!, second));
+    const opened = await inTx(v, (tx) =>
+      tx
+        .select({ id: workingOrders.id })
+        .from(workingOrders)
+        .where(inArray(workingOrders.id, [lowerId!, higherId!]))
+        .orderBy(asc(workingOrders.openedAt)),
+    );
+    expect(opened.map((row) => row.id)).toEqual([higherId, lowerId]);
+
+    expect(await listOf(seated.partyId)).toEqual([
+      [seated.bills[0], 1, null, "open"],
+      [lowerId, null, null, "abandoned"],
+      [higherId, null, null, "abandoned"],
     ]);
   });
 

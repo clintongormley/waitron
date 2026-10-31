@@ -1594,6 +1594,54 @@ describe("a merged party", () => {
     expect(await tableHeldBy(ana.tableId)).toBeNull();
     expect(await tableHeldBy(luis.tableId)).toBeNull();
   });
+
+  it("A803 departure order: invoices the bill opened first first, when its bill number is the higher one", async () => {
+    const ana = await seatedWith(venue, "Botella tinto");
+    const luis = await seatedWith(venue, "Pulpo");
+    const joined = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/parties/${luis.partyId}/join`,
+      {
+        tableId: ana.tableId,
+        expectedEdits: await inTx(venue, (tx) =>
+          partyBillEditsForTest(tx, [luis.partyId, ana.partyId]),
+        ),
+        expectedPartyRevision: revisionOf(luis.partyId),
+        otherPartyId: ana.partyId,
+        expectedOtherPartyRevision: revisionOf(ana.partyId),
+      },
+    );
+    expect(joined.status).toBe(200);
+    const listed = await send(venue.app, venue.cookie, "GET", `/api/parties/${luis.partyId}/bills`);
+    expect(listed.status).toBe(200);
+    const numberOf = (billId: string) =>
+      (listed.json as unknown as { workingOrderId: string; billNumber: number | null }[]).find(
+        (bill) => bill.workingOrderId === billId,
+      )!.billNumber;
+    expect([numberOf(luis.tabId), numberOf(ana.tabId)]).toEqual([1, 2]);
+
+    const answer = await depart(luis.partyId, {
+      expectedPartyRevision: revisionOf(luis.partyId),
+      reason: REASON,
+    });
+
+    expect(answer.status).toBe(200);
+    const filed = (billId: string) => {
+      const [row] = venue.db.all<{ number: number; num: string; previous: string | null }>(sql`
+        select s.invoice_number as number, r.num_serie_factura as num,
+          r.anterior_num_serie_factura as previous
+        from sales s join registros_facturacion r on r.sale_id = s.id
+        where s.working_order_id = ${billId}
+      `);
+      return row!;
+    };
+    const first = filed(ana.tabId);
+    const second = filed(luis.tabId);
+    expect(second.number).toBe(first.number + 1);
+    expect(second.previous).toBe(first.num);
+  });
 });
 
 describe("the guests its invoice's receipts print", () => {
