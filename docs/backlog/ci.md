@@ -241,6 +241,34 @@ assertion and every unrelated check. The Spanish branch still used the catalogue
 main when checked on 31 October 2026. The retained screenshots show the intended wording; the
 failing control concerns what the test catches.
 
+## A1251: archive-settings advice needs its own condition
+
+The retrospective review of [PR #2068](https://github.com/clintongormley/waitron/pull/2068)
+found that both backup-recovery guides put scheduled-backup reconfiguration under **Prove access
+to the selected backup**. The paragraph immediately follows advice to stop changing keys and leave
+without another submission, but starts unconditionally with opening Backups and choosing settings
+again. Say that it applies when scheduled backups are off because their saved settings cannot be
+used. Keep that choice separate from proving access to a selected copy or responding to an
+unconfirmed key. The paragraph still has that placement and opening on 1 November 2026; this is
+an editorial finding, not an observed failed recovery. Preserve the existing section and link checks.
+
+The same PR's four browser cases check the action name in both languages, but only English checks
+leaving without applying and the absence of a support referral. Removing the Spanish leave choice
+and substituting a support referral left all four cases passing in the reviewed checkout. Repeating
+the control with current main's alert text in that checkout also passed all four cases; the matching
+English fault failed its semantic check. The original four-case group is unchanged on main.
+Reproduce with
+`pnpm --filter @waitron/dashboard exec vitest run src/screens/backup-screen.test.ts -t 'A1089 unreadable archive settings choices'`.
+Add independent Spanish checks for both promises while retaining the action-name checks and the
+existing refusal, corrected-apply and no-write assertions.
+
+An older, separate wording mismatch remains in `apps/dashboard/src/i18n/codes.ts`:
+`backup.archive_settings_invalid` tells you to save again on Backups, while the shown action is
+**Turn on backups** and you are already on that page. The English wording entered in
+[PR #1628](https://github.com/clintongormley/waitron/pull/1628), before #2068, and remains on main.
+Align the inline instruction with the available action when reworking this refusal; preserve its
+cause and the distinction between a failed write and a successful write whose reload failed.
+
 ## A1251: qualify artifact-upload retries after a step timeout
 
 Before treating artifact-upload retries as qualified for stalled connections, run a bounded

@@ -5735,6 +5735,9 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   teardown. Strengthen the Spanish exhausted-cleanup check so restoring the installer referral
   fails it. [Setup cleanup](backlog/ci.md#a1251-setup-test-cleanup-after-a-listener-readiness-refusal),
   [Spanish cleanup guidance](backlog/ci.md#a1251-spanish-exhausted-cleanup-test-checks-mapping-only).
+  Give the archive-settings advice its own condition so it does not follow a failed key check as
+  another recovery step. Strengthen its Spanish checks to reject a support referral and require
+  leaving without applying. [Archive settings findings](backlog/ci.md#a1251-archive-settings-advice-needs-its-own-condition).
 
 - **A1251: qualify artifact-upload retries after a step timeout.**
   Check the first attempt's recorded outcome and whether its retry runs; the existing collision
