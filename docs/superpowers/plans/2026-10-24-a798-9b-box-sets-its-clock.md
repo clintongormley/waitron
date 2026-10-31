@@ -3004,7 +3004,12 @@ Review C0/I3/M4 (`~/waitron-campaign-b/a798-9b/t15a/review.md`):
   says the person "could not clock in again until real time passed 21:00"; under the old read they
   could not clock in again without first writing another clock-out dated after 21:00.
 - **M3:** entries 17 and 18 moved to their right headings. **M4:** the fold's deletion controls ran
-  in a throwaway worktree.
+  in a throwaway worktree (`~/waitron-campaign-b/a798-9b/t15a/mutate2.py`, results `mutate3.out`):
+  unbounded corrections, the kind ignored in the latest-time subquery, a chain keyed by location
+  alone, the index removed, and each chain's head taken by time each fail a named case. One
+  survives: ignoring the kind in the corrections' outer filter. It matters only when a missing
+  clock-in and a missing clock-out share one time with the clock-out written later, and the
+  correction check refuses that pair (`correction.invalid`, tried while writing the case).
 
 ### Task 15b: The till reads the same state
 

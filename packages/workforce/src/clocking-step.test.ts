@@ -239,6 +239,9 @@ describe("clocking across a backward step of the box's clock", () => {
         return statements.flatMap((statement) => statement.plan());
       });
       expect(plans.filter((line) => /TEMP B-TREE|\(person_id=\?\)$/.test(line))).toEqual([]);
+      expect(plans).toContain(
+        "SEARCH head USING INDEX time_entries_person_chain_idx (person_id=? AND node_id=? AND location_id=?)",
+      );
       expect(
         plans.filter((line) => line.startsWith("SCAN") && !/^SCAN workforce_chains\b/.test(line)),
       ).toEqual([]);
