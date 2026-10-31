@@ -9,6 +9,10 @@ Backlog entry: `docs/backlog.md` "A582" and
 Pictures: `docs/backlog/mockups/a582-help-mode/` (drawn in HTML with the apps' colour tokens, not
 screenshots; 02 also in dark, `-dark.png`).
 
+2026-10-31: all five slices are built; the A582 backlog entry and its detail were deleted, and
+what they left open is now A1244 to A1249 in `docs/backlog.md` (A921 and A739's payment help
+already had their own entries).
+
 2026-10-18: slice 3 put the guides in `apps/server/src/guide/<language>/`, not `docs/guide/`; its plan's decision 1 says why.
 
 **Decided (owner, 2026-10-18), each as recommended in §9:**

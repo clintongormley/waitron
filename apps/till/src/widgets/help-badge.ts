@@ -26,3 +26,14 @@ export const helpAnchorStyles = css`
     position: relative;
   }
 `;
+
+/** On the kitchen boards a part marked `.help-inset` keeps its badge inside its trailing edge, so a
+ * full-width or right-aligned part's badge cannot make a phone-width screen scroll sideways. */
+export const kitchenHelpStyles = [
+  helpAnchorStyles,
+  css`
+    .help-inset > wt-help-tooltip {
+      margin-inline-end: 0;
+    }
+  `,
+];

@@ -94,8 +94,6 @@ Everything not listed here needs more spec work first.
    (_Modules, data and code health_). Its revised design awaits agreement.
 3. **A664 — archive or delete a venue's old data once it no longer has to be kept** (_Data
    protection and legal compliance_). Adviser agreement, build and verification remain open.
-4. **A582 — help mode: a "?" in the top bar marks everything that has help** (_Users, sign-in and
-   the dashboard shell_).
 
 **A802 — correct part of a paid invoice** (_Fiscal records, invoices and the asesor_) has a
 [design approved on 2026-10-21](superpowers/specs/2026-10-20-a802-partial-paid-invoice-correction-design.md)
@@ -1933,6 +1931,23 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   `device_zones.order_in_zone` (`apps/till/src/i18n/strings.ts`, English "Park, send or cancel…")
   reads «Retén, envía o cancela este pedido…», while parking is «aparcar» everywhere else
   (`held.title` «Pedidos aparcados»). Proposed: «Aparca, envía o cancela…».
+
+- **A1249. `till-shell` does not clear its guide when it is removed (left open by A582 slice 4b,
+  #1911).** The guide sheet closes on lock only because a lock draws a new shell; on a kitchen
+  screen it also closes when help goes off after two idle minutes.
+
+- **A1250. The pass marks a late order in the brand colour where the station board marks it amber
+  (question for the owner).** A late card's edge is `--wt-color-warning` on the station board
+  (`apps/till/src/widgets/station-queue.ts`, `.ticket.age-warm`) and `--wt-color-primary` on the
+  pass (`apps/till/src/screens/till-expo-screen.ts`, `.order.age-warm`); both then turn red. Should
+  the pass use amber too? The help texts describe each as it is today.
+
+- **A1253. A help badge on a button in the brand colour reads as part of the button (question for
+  the owner, A582 slice 5's look check).** The pass's first Course ready / Group ready keeps its
+  badge inside its top corner, and both are filled with the brand colour, so the badge's lower half
+  disappears into the button (shots `pass-1280-*-help-on.png` in `~/waitron-campaign/a582-5-shots/`). Slice 4's
+  Send all badge has the same clash, less of it because it hangs outside. One answer: a thin ring
+  of page colour round every badge in `wt-help-tooltip`, which changes every badge.
 
 - **A921. On a narrow till, should the person's name give room to the tab strip? (question for the
   owner, left open by A582 slice 4a).** Since 4a the till's bar has the Help switch before the
@@ -4195,8 +4210,27 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   phone width (owner, 2026-10-17: keep as a check).**
   [Detail](backlog/dashboard.md#a625-check-whether-a-row-menu-still-wraps-its-two-word-items-after-the-window-is-resized-to-phone-width-owner-2026-10-17-keep-as-a-check)
 
-- **A582. Help mode: a "?" in the top bar marks everything that has help (owner 2026-10-13)** — approved; kitchen screens and monitors, payment help after A739, and the remaining shared-help follow-ups stay open.
-  [Detail](backlog/dashboard.md#a582-help-mode-a--in-the-top-bar-marks-everything-that-has-help-owner-2026-10-13)
+- **A1244. `wt-help-tooltip` is not in the tap-target and focus guard's set (left open by A582
+  slice 2a, #1848).** A throwaway check showed it would fail the guard's focus check
+  (`packages/ui/src/tap-target-and-focus.test.ts`), because focus on the element does not pass to
+  its inner button. Decide whether it should delegate focus, then add it to the set.
+
+- **A1245. Help on a link option in a menu (left open by A582 slice 2b, #1851).** `wt-menu-row`
+  supports a `wt-button` option only; a link inside it would lose the look `wt-row-actions` gives a
+  link (`::slotted(a[href])` styles only a direct child). No menu needs it yet.
+
+- **A1246. The guide renderer's limits (left open by A582 slice 3, #1871).**
+  `apps/server/src/guide-markdown.ts` renders the small subset the guides use, refuses the other
+  shapes it checks for, and lets the rest through unrefused. It takes `escapeHtml` from
+  `recovery-surface.ts`, so it loads that module's imports too; moving `escapeHtml` to a file of its
+  own would end that (a reviewer called it optional).
+
+- **A1247. Help badges that cannot link to the guide (left open by A582 slice 3, #1871).** A
+  `wt-data-table` column badge, a `wt-tabs` item's badge and a `wt-menu-row` badge cannot carry a
+  guide link, and Products' VAT and Availability badges have none.
+
+- **A1248. The failed-start recovery page does not serve the guides (left open by A582 slice 3,
+  #1871).** It is started from `apps/server/src/node-entry.ts`, outside `bootServer`.
 
 - **`wt-combobox` without a search box never exposes `aria-required`**
   [Detail](backlog/dashboard.md#wt-combobox-without-a-search-box-never-exposes-aria-required)

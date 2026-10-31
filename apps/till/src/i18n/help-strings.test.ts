@@ -127,3 +127,27 @@ describe("the floor's help on service steps", () => {
     });
   }
 });
+
+describe("the kitchen board's help", () => {
+  for (const [language, help, words] of [
+    ["English", helpEn, en],
+    ["Spanish", helpEs, es],
+  ] as const) {
+    it(`the kitchen help texts name the board's buttons and flags by their own words (${language})`, () => {
+      expect(help["help.kitchen.card"]).toContain(words["station.whole_ticket"]);
+      expect(help["help.kitchen.notices"]).toContain(words["station.notice.acknowledge"]);
+      expect(help["help.kitchen.columns"]).toContain(words["station.columns"]);
+    });
+  }
+});
+
+describe("the pass's help", () => {
+  for (const [language, help, words] of [
+    ["English", helpEn, en],
+    ["Spanish", helpEs, es],
+  ] as const) {
+    it(`the pass card's help names the Forgotten flag by its own word (${language})`, () => {
+      expect(help["help.pass.card"]).toContain(words["expo.item_forgotten"]);
+    });
+  }
+});

@@ -4531,7 +4531,7 @@ describe("the board's header row and hidden columns", () => {
         ? "lead"
         : child.matches("[data-kitchen-counts]")
           ? "counts"
-          : child.matches("[data-columns-open]")
+          : child.matches(":has(> [data-columns-open])")
             ? "columns"
             : child.tagName,
     );

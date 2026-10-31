@@ -18,6 +18,7 @@ import {
 import { countText, currentLocale, t } from "../i18n/t.js";
 import { type HelpKey, helpBadgeLabel, helpText } from "../i18n/help-strings.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
+import { HelpIdleController } from "../state/help-idle.js";
 import type { FormFactor } from "../layout.js";
 import {
   builtInScreensFor,
@@ -89,6 +90,15 @@ export class TillShell extends LitElement {
     super();
     new LocaleChangeController(this);
     new ThemeChoiceController(this);
+    // A kitchen screen never waits at the lock screen, so help and a guide left open go after two
+    // idle minutes.
+    new HelpIdleController(this, {
+      applies: () => this.#drawsCorner(),
+      onIdle: () => {
+        this.guideHref = "";
+        this.#guideBadge = undefined;
+      },
+    });
     // A handheld refits with no step back, since its bar draws the logo only while no step is
     // taken; a counter measures its room again. An error is heard here because a box failing a
     // logo already reported failed changes no state that would refit.
@@ -954,6 +964,14 @@ export class TillShell extends LitElement {
       : nothing;
   }
 
+  #barless(): boolean {
+    return this.kiosk || this.formFactor === "kds";
+  }
+
+  #drawsCorner(): boolean {
+    return this.#barless() && this.loadLocales !== undefined;
+  }
+
   #helpSwitch(): TemplateResult {
     return html`<wt-help-switch
       data-test="help-switch"
@@ -1392,9 +1410,11 @@ export class TillShell extends LitElement {
     return html`
       <div class="shell">
         ${
-          this.kiosk || this.formFactor === "kds"
-            ? this.loadLocales !== undefined
-              ? html`<div class="language-corner">${themeChooser()}${this.#chooser()}</div>`
+          this.#barless()
+            ? this.#drawsCorner()
+              ? html`<div class="language-corner">
+                  ${this.#helpSwitch()}${themeChooser()}${this.#chooser()}
+                </div>`
               : nothing
             : html`
                 <header class=${this.phone ? "head phone" : "head"}>

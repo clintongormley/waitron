@@ -134,10 +134,10 @@ many cards the column holds, to collapse it to a narrow strip that keeps its nam
 (**Ready · 3**); tap it again to open it. The screen remembers which columns are collapsed, for each
 station, even after it restarts. Tap a dish to move it on one step, or tap
 the card's heading to move the card on: only the dishes holding it back move, so a dish already
-further on stays where it is. The band along a card's top turns from green to amber to red as it
-waits, by the station's late flags, and a forgotten card's band pulses; it holds still on a device
-set to reduce motion. A card whose dishes are all held is dashed, shows no minutes and waits under
-**Waiting** until the waiter [requests cooking](kitchen-service.md#request-cooking).
+further on stays where it is. A card's top edge turns from green to amber as it waits, then its
+whole border red, by the station's late flags, and a forgotten card's border pulses; it holds still
+on a device set to reduce motion. A card whose dishes are all held is dashed, shows no minutes and
+waits under **Waiting** until the waiter [requests cooking](kitchen-service.md#request-cooking).
 
 The first column, **Overview**, lists each dish waiting or being made with how many, so you can see
 at a glance how many of each to start. After a **+** it shows how many more are held
@@ -165,6 +165,21 @@ the window. A hidden column's cards still count in the row. With every column hi
 Each card carries its order's kitchen note and any printing problem. On a till, a card also offers
 **Reprint**, and **Collect** once its order is paid and waiting to be collected; a kitchen screen
 that nobody signs in on shows neither.
+
+## Get help on a kitchen screen {#kitchen-help}
+
+Tap **?** at the top right of a kitchen screen, before the theme and language buttons, to turn help
+on. **?** marks then show on the first card and on **Columns** of each board, on **Changes to
+orders** while there are changes to read, and on **Merged** or **Stacked** on a screen with more
+than one station. On the pass they show on the first order card and on the first **Course ready** or
+**Group ready**; a pass monitor marks only its first order card. Tap a mark to read a short note
+about that part; some notes link to this guide. The rest of the screen works as usual while help is
+on.
+
+Help goes off by itself two minutes after the screen was last touched, and a guide page opened from
+a note closes with it. Tap **?** again to turn it off sooner. A till's **Kitchen** and **Pass**
+screens show the same marks, apart from **Merged** and **Stacked**; there help goes off when the till
+locks.
 
 ## Identical dishes share a row {#identical-dishes}
 

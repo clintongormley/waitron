@@ -97,6 +97,34 @@ describe.each(looks)("till-shell's Help switch a11y (%s theme, %s)", (theme, loc
   );
 });
 
+describe.each(looks)("till-shell's kitchen corner a11y (%s theme, %s)", (theme, locale) => {
+  it.each([1280, 390])("a kitchen screen at %ipx, help off and on", (width) =>
+    inLocale(locale, async () => {
+      await page.viewport(width, 844);
+      for (const on of [false, true]) {
+        cleanupWidgets();
+        setHelpMode(on);
+        const { el, host } = await mountWidget<TillShell>(
+          "till-shell",
+          { formFactor: "kds", loadLocales },
+          theme,
+        );
+        await frame();
+        await frame();
+        await el.updateComplete;
+        const help = el.shadowRoot!.querySelector<HTMLElement & LitElement>(
+          '.language-corner > [data-test="help-switch"]',
+        )!;
+        await help.updateComplete;
+        expect(help.shadowRoot!.querySelector("button")!.getAttribute("aria-pressed")).toBe(
+          on ? "true" : "false",
+        );
+        await expectNoA11yViolations(host);
+      }
+    }),
+  );
+});
+
 describe.each(looks)(
   "till-shell's language choices in More a11y (%s theme, %s)",
   (theme, locale) => {

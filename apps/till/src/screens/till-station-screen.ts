@@ -9,6 +9,7 @@ import {
 } from "lit";
 import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
 import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
+import { helpBadge, kitchenHelpStyles } from "../widgets/help-badge.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { UrlStateController, baseStyles } from "@waitron/ui";
 import { tillPath } from "../navigation.js";
@@ -115,6 +116,7 @@ export class TillStationScreen extends LitElement {
     baseStyles,
     segmentedOptionStyles,
     unavailableStyles,
+    kitchenHelpStyles,
     css`
       :host {
         display: block;
@@ -427,6 +429,19 @@ export class TillStationScreen extends LitElement {
     } catch {
       return false;
     }
+  }
+
+  #mergeToggle(): TemplateResult {
+    const label = this.merged ? t("station.view_stacked") : t("station.view_merged");
+    return html`<span class="help-anchor"
+      ><wt-button
+        class="merge-toggle"
+        data-merge-toggle
+        variant="secondary"
+        @click=${() => this.#toggleMerged()}
+        >${label}</wt-button
+      >${helpBadge("help.kitchen.merge", label)}</span
+    >`;
   }
 
   #toggleMerged(): void {
@@ -772,8 +787,6 @@ export class TillStationScreen extends LitElement {
     }
   }
 
-  /** `kitchen_notice.not_found` means another screen at this station acknowledged it first: the
-   * notice is gone either way, so the row goes rather than an error showing. */
   async #onAcknowledgeNotice(event: Event): Promise<void> {
     event.stopPropagation();
     const { noticeId } = (event as CustomEvent<{ noticeId: string }>).detail;
@@ -1108,18 +1121,7 @@ export class TillStationScreen extends LitElement {
               </header>`
         }
         <div class="actions">
-          ${
-            opts.showMerge === true
-              ? html`<wt-button
-                  class="merge-toggle"
-                  data-merge-toggle
-                  variant="secondary"
-                  @click=${() => this.#toggleMerged()}
-                >
-                  ${this.merged ? t("station.view_stacked") : t("station.view_merged")}
-                </wt-button>`
-              : nothing
-          }
+          ${opts.showMerge === true ? this.#mergeToggle() : nothing}
           <p class="stale" role="status" ?data-stale=${this.stale}>
             ${
               this.stale

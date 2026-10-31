@@ -152,10 +152,10 @@ cabecera de una columna, que muestra cuántas tarjetas tiene, para plegarla en u
 que conserva su nombre y su número (**Listo · 3**); tócala otra vez para abrirla. La pantalla
 recuerda qué columnas están plegadas, en cada estación, incluso después de reiniciarse. Toca un
 plato para avanzarlo un paso, o toca la cabecera de la tarjeta para avanzar la tarjeta: solo avanzan
-los platos que la retienen, así que un plato que ya va más adelante se queda donde está. La franja
-de la parte superior de una tarjeta pasa de verde a ámbar y a rojo mientras espera, según los avisos
-de demora de la estación, y la franja de una tarjeta olvidada late; en un dispositivo configurado
-para reducir el movimiento se queda quieta. Una tarjeta cuyos platos están todos en espera tiene el
+los platos que la retienen, así que un plato que ya va más adelante se queda donde está. El borde
+superior de una tarjeta pasa de verde a ámbar mientras espera, y después todo el borde a rojo, según
+los avisos de demora de la estación, y el borde de una tarjeta olvidada late; en un dispositivo
+configurado para reducir el movimiento se queda quieto. Una tarjeta cuyos platos están todos en espera tiene el
 borde discontinuo, no muestra minutos y espera en **Esperando** hasta que el camarero [pida la
 preparación](kitchen-service.md#request-cooking).
 
@@ -189,6 +189,21 @@ Cada tarjeta lleva la nota para cocina de su pedido y cualquier problema de impr
 terminal, una tarjeta ofrece además **Reimprimir**, y **Entregar** cuando su pedido está pagado y
 pendiente de recoger; una pantalla de cocina en la que nadie inicia sesión no muestra ninguno de los
 dos.
+
+## Ayuda en la pantalla de cocina {#kitchen-help}
+
+Toca **?** arriba a la derecha de una pantalla de cocina, antes de los botones de tema e idioma,
+para activar la ayuda. Aparecen marcas **?** en la primera tarjeta y en **Columnas** de cada
+tablero, en **Cambios en los pedidos** mientras haya cambios por leer, y en **Todo junto** o **Por
+estación** en una pantalla con más de una estación. En el pase aparecen en la primera tarjeta de
+pedido y en el primer **Curso listo** o **Grupo listo**; un monitor del pase solo marca su primera
+tarjeta de pedido. Toca una marca para leer una nota breve sobre esa parte; algunas notas enlazan
+con esta guía. El resto de la pantalla funciona como siempre mientras la ayuda está activa.
+
+La ayuda se desactiva sola dos minutos después de la última vez que se tocó la pantalla, y una
+página de la guía abierta desde una nota se cierra con ella. Toca **?** otra vez para desactivarla
+antes. Las pantallas **Cocina** y **Pase** de un terminal muestran las mismas marcas, salvo **Todo
+junto** y **Por estación**; allí la ayuda se desactiva cuando el terminal se bloquea.
 
 ## Los platos iguales comparten fila {#identical-dishes}
 
