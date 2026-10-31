@@ -24,7 +24,12 @@ const MANIFEST_DIR = dirname(fileURLToPath(import.meta.url));
  */
 export interface VenueMigrationOptions extends MigrationOptions {
   readonly appendOnlyTables?: readonly string[];
+  /** Which of the node's two files the set is applied to. Absent means `venue.db`. */
+  readonly database?: MigrationDatabase;
 }
+
+/** The two database files a node keeps: `venue.db`, shared with the venue, and its own `node.db`. */
+export type MigrationDatabase = "venue" | "node";
 
 /**
  * Where one migration set's SQL lives. What a module DESCRIPTOR declares — everything a caller
@@ -35,6 +40,8 @@ export interface MigrationSetSource {
   table: string;
   /** Source folder, relative to this package — used when running from source (tests, dev). */
   from: string;
+  /** Which of the node's two files the set is applied to. Absent means `venue.db`. */
+  database?: MigrationDatabase;
 }
 
 export interface MigrationSet extends MigrationSetSource {
@@ -117,6 +124,11 @@ export function migrationOptionsFor(
 ): VenueMigrationOptions[] {
   return sets.map((set) => {
     const migrationsFolder = resolveExistingMigrationsFolder(set, root);
-    return { migrationsFolder, migrationsTable: set.table, appendOnlyTables: set.appendOnlyTables };
+    return {
+      migrationsFolder,
+      migrationsTable: set.table,
+      appendOnlyTables: set.appendOnlyTables,
+      ...(set.database === undefined ? {} : { database: set.database }),
+    };
   });
 }

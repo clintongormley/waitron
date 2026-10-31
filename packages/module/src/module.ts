@@ -1640,8 +1640,9 @@ export interface WaitronModule {
     readonly modules?: Readonly<Record<string, string>>;
   };
   readonly tier: "mandatory" | "provision-only" | "toggleable";
-  /** The SOURCE half only: append-only table names come from `classification`, and
-   * `orderedMigrationSets` joins the two into a `MigrationSet`. */
+  /** The SOURCE half only, including the file the set is applied to (`database`): append-only
+   * table names come from `classification`, and `orderedMigrationSets` joins the two into a
+   * `MigrationSet`. */
   readonly migrations: MigrationSetSource;
 
   /** Every table this module's migrations create, classified `ledger`/`state`/`local` (meanings on

@@ -28,11 +28,11 @@ const LOCK_FILE = "migrations.lock";
 const LOCK_WAIT_MS = 120_000;
 
 /**
- * Applies every set in order to the venue file under `directory`.
+ * Applies every set in order under `directory`, each to the file its `database` names: `node.db`
+ * for a set marked `"node"`, `venue.db` for every other set.
  *
- * Every set goes to the VENUE file, and `node.db` stays empty (#548).
- *
- * It also installs the append-only triggers, set by set, from each set's `appendOnlyTables`, which a
+ * It also installs the append-only triggers on `venue.db`, set by set, from each venue set's
+ * `appendOnlyTables`, which a
  * `migrationOptionsFor(...)` result carries. A caller that hands over no `appendOnlyTables` gets a
  * migrated database with no triggers on it (`scripts/apply-migrations-callers.test.ts`).
  *
@@ -67,11 +67,14 @@ async function migrateEverySet(
     // `requires` (`orderedMigrationSets`, which refuses a missing dependency or a cycle). Core must
     // come before media, whose triggers are on core's `products`.
     for (const set of options) {
-      await runSet(store.venue, set);
-      await assertSetApplied(store.venue, set);
+      const db = set.database === "node" ? store.node : store.venue;
+      await runSet(db, set);
+      await assertSetApplied(db, set);
       // Inside the loop, not once at the end, so a set already migrated is protected even when a
       // LATER set aborts the run.
-      installAppendOnlyTriggers(store.venue, set.appendOnlyTables ?? []);
+      if (set.database !== "node") {
+        installAppendOnlyTriggers(store.venue, set.appendOnlyTables ?? []);
+      }
     }
   } finally {
     await store.close();
