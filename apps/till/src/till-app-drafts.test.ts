@@ -4909,6 +4909,23 @@ describe("till-app: other people's drafts and taking one over", () => {
     expect(api.submitDraft).not.toHaveBeenCalled();
   });
 
+  it("still says the change was not saved when the waiter leaves a bill taken over from under an edit", async () => {
+    const { el } = await mountApp();
+    await openAs(el, SAM, "Sam");
+    await tap(el, "Flan");
+    savedBy(ALEX, "Alex", "offer-beer");
+    window.dispatchEvent(new Event("focus"));
+    await flush(el, 6);
+    expect(retainedCandidate(el)?.lines.map((line) => line.product.name)).toEqual(["Flan"]);
+
+    await back(el);
+
+    expect(api.saveDraft).not.toHaveBeenCalled();
+    expect(banner(el)!.textContent).toBe(
+      "Alex has taken over this order. Your last change was not saved.",
+    );
+  });
+
   it("shows a known takeover refusal without saving or merging the retained candidate", async () => {
     const { el } = await mountApp({
       takeOverDraft: vi.fn().mockRejectedValue({ code: "party.not_open", status: 409 }),

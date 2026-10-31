@@ -2915,6 +2915,67 @@ describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a
     },
   );
 
+  /** The dialog open on Bill 1 with a 40.00 cash contribution typed, then `owner`'s saved one-dish
+   * draft read in by the window's focus read. */
+  async function dialogThenDraft(owner: [string, string]) {
+    const { el } = await mountApp();
+    const order = await openTable(el);
+    await showBillFooter(order);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    drafts.drafts.push(savedDraft(...owner));
+    window.dispatchEvent(new Event("focus"));
+    await expect.poll(() => tableOrder(el).draftStore?.lineCount, { timeout: 10_000 }).toBe(1);
+    expect(dialog(el)).not.toBeNull();
+    return el;
+  }
+
+  it("starts no preview when the waiter's own dish arrives while the dialog is open", async () => {
+    const el = await dialogThenDraft(["p1", "Ana"]);
+    expect(tableOrder(el).shadowRoot!.querySelector("[data-take-over]")).toBeNull();
+    const previews = vi.mocked(api.previewBillPayment).mock.calls.length;
+
+    await press(el, "[data-pay-continue]");
+
+    expect(vi.mocked(api.previewBillPayment).mock.calls.length).toBe(previews);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(`4 · Bill 1. ${t("bill_pay.unsent")}`);
+  });
+
+  it("starts no preview while only another person's draft holds dishes", async () => {
+    const el = await dialogThenDraft(["p2", "Luis"]);
+    const store = tableOrder(el).draftStore!;
+    // The sync draws another person's draft into the store as well; emptying the store leaves
+    // their draft as the only unsent dishes the dialog can read.
+    store.loadFrom(store.id, []);
+    await flush(el);
+    expect(store.lineCount).toBe(0);
+    expect(tableOrder(el).shadowRoot!.querySelector('[data-take-over="draft-p2"]')).not.toBeNull();
+    const previews = vi.mocked(api.previewBillPayment).mock.calls.length;
+
+    await press(el, "[data-pay-continue]");
+
+    expect(vi.mocked(api.previewBillPayment).mock.calls.length).toBe(previews);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(`4 · Bill 1. ${t("bill_pay.unsent")}`);
+  });
+
+  it("takes down the dialog's unsent sentence once another person's dishes are read away", async () => {
+    const el = await dialogThenDraft(["p2", "Luis"]);
+    await press(el, "[data-pay-continue]");
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(`4 · Bill 1. ${t("bill_pay.unsent")}`);
+
+    drafts.drafts.splice(0);
+    window.dispatchEvent(new Event("focus"));
+    await expect
+      .poll(() => tableOrder(el).shadowRoot!.querySelector("[data-take-over]"), {
+        timeout: 10_000,
+      })
+      .toBeNull();
+    await flush(el);
+
+    expect(inDialog(el, "wt-form-actions")!.error).toBe("");
+  });
+
   it("leaves another bill's Pay quiet while a payment on Bill 1 has no answer", async () => {
     const { el, order } = await heldWithUnsent(
       {
@@ -2943,6 +3004,93 @@ describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a
     expect(text(shown.shadowRoot!.querySelector("[data-pay-unsent]"))).toBe(
       `Bill 2. ${t("bill_pay.unsent")}`,
     );
+  });
+
+  const banner = (el: TillApp) => el.shadowRoot!.querySelector(".error");
+
+  it.each(["back", "floor"] as const)(
+    "says no take-over and saves nothing after only viewing another person's draft and tapping the quiet Cash (leaving by %s)",
+    async (way) => {
+      drafts.drafts.push(savedDraft("p2", "Luis"));
+      const otherTable: TableState = {
+        ...mesa({ id: "v2", openingBillId: "wo-9", tableIds: ["t5"] }),
+        id: "t5",
+        label: "5",
+        shortName: "5",
+      };
+      const { el } = await mountApp({
+        getTablesState: vi
+          .fn()
+          .mockResolvedValue([mesa({ unsentDrafts: [unsentEntry("p2", "Luis")] }), otherTable]),
+        getPartyBills: vi.fn(async (partyId: string) => [
+          partyId === "v2" ? billOf({ workingOrderId: "wo-9", partyId }) : billOf(),
+        ]),
+      });
+      const order = await openTable(el);
+      await showBillFooter(order);
+      expect(order.shadowRoot!.querySelector('[data-take-over="draft-p2"]')).not.toBeNull();
+      const saves = vi.mocked(api.saveDraft).mock.calls.length;
+      await userEvent.click(await cashButton(order));
+      await order.updateComplete;
+      expect(text(order.shadowRoot!.querySelector("[data-pay-unsent]"))).toBe(
+        `Bill 1. ${t("bill_pay.unsent")}`,
+      );
+
+      if (way === "back") order.shadowRoot!.querySelector<HTMLElement>("[data-back]")!.click();
+      else emit(shell(el), "screen-select", { screen: "floor" });
+      await flush(el);
+
+      expect(text(banner(el))).toBe("");
+      emit(floor(el), "open-table", { tableId: "t5", seated: true });
+      await flush(el);
+      expect(tableOrder(el).party?.id).toBe("v2");
+      expect(text(banner(el))).toBe("");
+      expect(vi.mocked(api.saveDraft).mock.calls.length).toBe(saves);
+    },
+  );
+
+  it("opens the party's other table from another person's draft with no take-over said and nothing saved", async () => {
+    drafts.drafts.push(savedDraft("p2", "Luis"));
+    const joined = { unsentDrafts: [unsentEntry("p2", "Luis")], tableIds: ["t4", "t5"] };
+    const { el } = await mountApp({
+      getTablesState: vi
+        .fn()
+        .mockResolvedValue([
+          mesa(joined),
+          { ...mesa(joined), id: "t5", label: "5", shortName: "5" },
+        ]),
+    });
+    const order = await openTable(el);
+    expect(order.shadowRoot!.querySelector('[data-take-over="draft-p2"]')).not.toBeNull();
+    const saves = vi.mocked(api.saveDraft).mock.calls.length;
+
+    order.shadowRoot!.querySelector<HTMLElement>("[data-back]")!.click();
+    await flush(el);
+    emit(floor(el), "open-table", { tableId: "t5", seated: true });
+    await flush(el);
+
+    expect(tableOrder(el).party?.id).toBe("v1");
+    expect(text(banner(el))).toBe("");
+    expect(vi.mocked(api.saveDraft).mock.calls.length).toBe(saves);
+  });
+
+  it("leaves another person's draft for another bill with no take-over said and nothing saved", async () => {
+    drafts.drafts.push(savedDraft("p2", "Luis"));
+    const { el } = await mountApp({
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([billOf(), billOf({ workingOrderId: "wo-5", billNumber: 2 })]),
+    });
+    const order = await openTable(el);
+    expect(order.shadowRoot!.querySelector('[data-take-over="draft-p2"]')).not.toBeNull();
+    const saves = vi.mocked(api.saveDraft).mock.calls.length;
+
+    emit(order, "switch-bill", { workingOrderId: "wo-5" });
+    await flush(el);
+
+    expect(tableOrder(el).orderId).toBe("wo-5");
+    expect(text(banner(el))).toBe("");
+    expect(vi.mocked(api.saveDraft).mock.calls.length).toBe(saves);
   });
 });
 

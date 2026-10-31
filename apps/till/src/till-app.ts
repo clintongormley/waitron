@@ -755,6 +755,12 @@ function stepDoneError(error: unknown): CounterError {
     : tableWriteError(error);
 }
 
+/** Another person holding the bill refuses every save, but a till leaving it with no edit of its
+ * own waiting lost nothing. */
+function lostNothing(saved: DraftSaveOutcome, ownEditWaiting: boolean): boolean {
+  return !ownEditWaiting && typeof saved === "object" && saved.refused === "draft.taken_over";
+}
+
 function draftRefusalError({ refused, ownerName }: DraftRefused, unsent = false): CounterError {
   if (refused === "draft.taken_over")
     return unsent ? { takenOver: ownerName ?? "", unsent } : { takenOver: ownerName ?? "" };
@@ -4146,6 +4152,13 @@ export class TillApp extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues): void {
+    const paying = this.billPaying;
+    if (
+      paying?.refusal != null &&
+      paying.refusal === this.#unsentSaid &&
+      !this.#unsentOnScreen(paying.billId)
+    )
+      this.billPaying = { ...paying, refusal: null };
     // A sheet shows only the notices of taps made while it is open, and the toast does not repeat
     // them once it closes.
     const sheetOpen = this.#paySheetOpen();
@@ -10650,7 +10663,7 @@ export class TillApp extends LitElement {
     if (leftOrder || (wasLoadingOrder && !this.#orderScreenShown())) this.#orderVisit++;
     if (!wasShowingOrder && this.#tableCatalogueActive()) this.#shownOnVisit = this.#orderVisit;
     const session = this.#operatorSession;
-    const flushed = leftOrder ? this.#flushDraft() : Promise.resolve();
+    const flushed = leftOrder ? this.#flushDraft(true) : Promise.resolve();
     if (this.#tabNeedsFloorData(tab)) {
       void flushed.then(async () => {
         if (session !== this.#operatorSession) return;
@@ -10780,6 +10793,7 @@ export class TillApp extends LitElement {
       return;
     }
     const session = this.#operatorSession;
+    const ownEditWaiting = sync.ownEditWaiting;
     const tableId = this.activeTableId;
     if (tableId !== undefined) {
       const record = {
@@ -10797,7 +10811,12 @@ export class TillApp extends LitElement {
           this.#unsavedDrafts.set(sync.partyId, sync);
         if (session === this.#operatorSession) this.#settleReleased(sync, saved);
         sync.drop();
-        if (session !== this.#operatorSession || saved === "saved") return;
+        if (
+          session !== this.#operatorSession ||
+          saved === "saved" ||
+          lostNothing(saved, ownEditWaiting)
+        )
+          return;
         if (saved === "failed") {
           if (this.errorKey === undefined) this.errorKey = "table.draft_save_failed";
         } else if (saved.refused !== "session.required") this.errorKey = draftRefusalError(saved);
@@ -10881,7 +10900,7 @@ export class TillApp extends LitElement {
         leaving.partyId !== this.#openingFloor(fromBar).find((row) => row.id === tableId)?.party?.id
       )
         this.#releaseDraft(leaving);
-      else if (this.#draftReady) await this.#flushDraft();
+      else if (this.#draftReady) await this.#flushDraft(true);
       if (abandoned() || session !== this.#operatorSession) return;
       await this.#openTable(
         tableId,
@@ -11619,11 +11638,13 @@ export class TillApp extends LitElement {
 
   /** At a point the person leaves the draft: an edit no save reached is said, unless the operator
    * session has ended by the time the save answers, since the next person may have signed in. */
-  async #flushDraft(): Promise<boolean> {
+  async #flushDraft(leaving = false): Promise<boolean> {
     const sync = this.#draftSync;
     if (sync === undefined) return true;
     const session = this.#operatorSession;
+    const ownEditWaiting = sync.ownEditWaiting;
     const saved = await sync.flush();
+    if (leaving && lostNothing(saved, ownEditWaiting)) return true;
     if (
       saved !== "saved" &&
       (saved === "failed" || saved.refused !== "session.required") &&
@@ -11643,7 +11664,7 @@ export class TillApp extends LitElement {
     )
       return;
     const session = this.#operatorSession;
-    if (sync.partyId === this.orderParty?.id && this.#draftReady && !(await this.#flushDraft()))
+    if (sync.partyId === this.orderParty?.id && this.#draftReady && !(await this.#flushDraft(true)))
       return;
     if (this.#draftSync !== sync) return;
     const party = this.orderParty?.id;
@@ -16941,7 +16962,7 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     const visit = this.#orderVisit;
     const billId = this.activeTabId;
-    if (this.#draftReady && !(await this.#flushDraft())) return false;
+    if (this.#draftReady && !(await this.#flushDraft(true))) return false;
     return (
       session === this.#operatorSession && visit === this.#orderVisit && billId === this.activeTabId
     );
@@ -17979,9 +18000,13 @@ export class TillApp extends LitElement {
     if (open.surface !== "table" || !this.#unsentOnScreen(open.billId)) return false;
     const refusal = refusalOf({ code: "bill.unsent_dishes", billId: open.billId }, false);
     refusal.billLabel = this.#paymentBillLabel(open.billId);
+    this.#unsentSaid = refusal;
     this.billPaying = { ...open, refusal };
     return true;
   }
+
+  /** The dialog's unsent sentence {@link #refusedUnsent} put up, taken down as the screen's is. */
+  #unsentSaid?: PayRefusal;
 
   /** The till's own error, as the dialog shows it over the banner it covers. */
   #saidInDialog(): PayRefusal | null {
@@ -18624,7 +18649,7 @@ export class TillApp extends LitElement {
     this.#orderVisit++;
     this.cancelOffer = null;
     const session = this.#operatorSession;
-    const flushed = this.#flushDraft();
+    const flushed = this.#flushDraft(true);
     this.#clearErrorKeepingLateChange();
     this.#popDrill();
     void flushed.then(() => (session !== this.#operatorSession ? undefined : this.#refreshFloor()));

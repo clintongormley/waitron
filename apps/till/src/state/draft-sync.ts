@@ -494,6 +494,11 @@ export class DraftSync {
     return this.#saving;
   }
 
+  /** An edit of this till's own not yet saved: waiting, out, or kept as the candidate. */
+  get ownEditWaiting(): boolean {
+    return this.#unsaved || this.#saving || this.candidate !== null;
+  }
+
   /** The saved ids of the lines at `positions`, or null while the store holds edits not saved. */
   lineIds(positions: readonly number[]): string[] | null {
     if (this.#unsaved || this.#lineIds.length !== this.store.lineCount) return null;
