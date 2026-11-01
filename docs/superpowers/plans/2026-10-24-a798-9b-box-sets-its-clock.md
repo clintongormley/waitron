@@ -1180,6 +1180,14 @@ EDITED to pass and is not on this list is a STOP, unless the spec changes what i
     No assertion changes; with these values the four files' 96 tests pass on the code before
     Task 15c-1, in a throwaway worktree (`~/waitron-campaign-b/a798-9b/t15c1/old-code.out`; the
     per-task review reran it with the committed suite). Task 15c-1.
+20. *(Added while building Task 15c-4, 2026-11-01; the lead's ruling.)* The re-sweep cases'
+    duty asked for a re-sweep a day ahead without declaring it, which Task 15c-4's rule now reads
+    as left from a backward step and runs at once: every `FakeDuty` in
+    `packages/scheduler/src/resweep.test.ts` becomes a `ResweepingDuty` that declares
+    `longestResweepMs` of one day (the furthest re-sweep the file asks for, `TOMORROW` − `NOW`), as
+    a duty that re-sweeps now must (`PeriodDuty.longestResweepMs`; the one real duty,
+    `reconcilerAsDuty`, declares the day it asks for, pinned in `reconcile-duty.test.ts`). No
+    assertion changes; the extra field is ignored by the code before Task 15c-4. Task 15c-4.
 
 **Whole-shape lists gaining entries** (the owner's standing exception of 2026-09-27):
 2. `packages/fiscal-verifactu/src/alerts.test.ts:10-11` (`FISCAL_ALERTS` `toEqual`) gains the

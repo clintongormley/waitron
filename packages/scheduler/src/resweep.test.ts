@@ -11,6 +11,11 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 
 const NOW = new Date("2026-07-25T04:00:00Z");
 const TOMORROW = new Date("2026-07-26T04:00:00Z");
+
+/** Declares the furthest re-sweep these cases ask for, as a duty that re-sweeps must. */
+class ResweepingDuty extends FakeDuty {
+  readonly longestResweepMs = TOMORROW.getTime() - NOW.getTime();
+}
 const HORIZON_START = new Date("2026-06-01T00:00:00Z");
 const DUTY = "test.duty";
 
@@ -32,7 +37,7 @@ function snapshotOf(): Promise<LedgerSnapshot> {
 
 describe("resweepAfter", () => {
   it("enqueues the next generation of the SAME period, due when asked", async () => {
-    const duty = new FakeDuty(DUTY, () =>
+    const duty = new ResweepingDuty(DUTY, () =>
       Promise.resolve({ summary: { gated: 1 }, resweepAfter: TOMORROW }),
     );
     await runDue(deps([duty]), NOW);
@@ -48,7 +53,7 @@ describe("resweepAfter", () => {
   // exist, so on its own it reports the next day boundary; `soon` is earlier than that boundary.
   it("reports the re-sweep it just enqueued as the next due time", async () => {
     const soon = new Date("2026-07-25T05:00:00Z");
-    const duty = new FakeDuty(DUTY, () => Promise.resolve({ summary: {}, resweepAfter: soon }));
+    const duty = new ResweepingDuty(DUTY, () => Promise.resolve({ summary: {}, resweepAfter: soon }));
     const result = await runDue(deps([duty]), NOW);
     expect(result.nextDueAt).toEqual(soon);
   });
@@ -57,7 +62,7 @@ describe("resweepAfter", () => {
   // transaction, has already enqueued a successor, so the guard refuses ours.
   it("does not report a re-sweep time for a successor the guard refused", async () => {
     const soon = new Date("2026-07-25T05:00:00Z");
-    const duty = new FakeDuty(DUTY, async (call) => {
+    const duty = new ResweepingDuty(DUTY, async (call) => {
       await withTransaction(suite.db, (tx) =>
         tx.insert(scheduledRuns).values({
           duty: DUTY,
@@ -84,7 +89,7 @@ describe("resweepAfter", () => {
 
   // Without this the period would never be re-derived: it has no gap.
   it("runs the same period again once its due time arrives", async () => {
-    const duty = new FakeDuty(DUTY, (_call, index) =>
+    const duty = new ResweepingDuty(DUTY, (_call, index) =>
       Promise.resolve(index === 0 ? { summary: {}, resweepAfter: TOMORROW } : { summary: {} }),
     );
     await runDue(deps([duty]), NOW);
@@ -98,7 +103,7 @@ describe("resweepAfter", () => {
   });
 
   it("does not re-run the period before its due time", async () => {
-    const duty = new FakeDuty(DUTY, () => Promise.resolve({ summary: {}, resweepAfter: TOMORROW }));
+    const duty = new ResweepingDuty(DUTY, () => Promise.resolve({ summary: {}, resweepAfter: TOMORROW }));
     await runDue(deps([duty]), NOW);
     const soon = await runDue(deps([duty]), new Date("2026-07-25T05:00:00Z"));
     expect(soon.ran).toEqual([]);
@@ -107,7 +112,7 @@ describe("resweepAfter", () => {
   it("keeps the chain linear — one unresolved finding cannot fan out", async () => {
     // Each tick completes its own row before enqueueing the next, so the guard never refuses here;
     // store.test.ts covers the refusal.
-    const duty = new FakeDuty(DUTY, (call) =>
+    const duty = new ResweepingDuty(DUTY, (call) =>
       Promise.resolve({ summary: {}, resweepAfter: new Date(call.now.getTime() + 60_000) }),
     );
     let at = NOW;
@@ -124,7 +129,7 @@ describe("resweepAfter", () => {
     // A re-sweep is EXPLICIT work, so the gap horizon must not bury it. Seeded by hand below the
     // horizon, which no gap derivation would reach.
     const old = new Date("2026-04-20T00:00:00Z");
-    const duty = new FakeDuty(DUTY, () => Promise.resolve({ summary: {} }));
+    const duty = new ResweepingDuty(DUTY, () => Promise.resolve({ summary: {} }));
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(scheduledRuns).values({
         duty: DUTY,
@@ -145,7 +150,7 @@ describe("resweepAfter", () => {
   // The reclaiming runner leaves the row `succeeded` before the stale attempt completes, so the
   // store's own non-terminal guard would let a successor through; only the fence's result stops it.
   it("does not enqueue a successor off a completion the ownership fence rejected", async () => {
-    const duty = new FakeDuty(DUTY, async (call) => {
+    const duty = new ResweepingDuty(DUTY, async (call) => {
       const snapshot = await snapshotOf();
       const row = snapshot.rows.find(
         (r) => new Date(r.periodFrom).getTime() === call.period.from.getTime(),
