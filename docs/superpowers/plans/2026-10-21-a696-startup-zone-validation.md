@@ -294,7 +294,7 @@ to the design and the resumed integration checks. It does not qualify live provi
 | §3: restricted repair | 3/7–9/18: missing/invalid classification, permission, preview, atomic confirmation, response-before-restart and duty unwind | Server `venue-zone-repair.test.ts`, `venue-zone-repair-api.test.ts`, `boot.failed-start.test.ts`, `zone-restored-boot.test.ts`; dashboard repair/unsaved/a11y/app/code suites: 544 passed during integration. Staff sign-in extension: 4 passed, eight actual captures. |
 | §4: every saved-zone writer | 1–3/14: explicit ES/GB country lists, planner, direct apply, independent bundle/request checks, reuse and script inserts | Shared `time-zone.test.ts`, country-es/GB tests, country-packs `registry.test.ts`, provisioning `venue-plan.test.ts`, `venue-apply.e2e.test.ts`, `configuration-transfer.boundaries.test.ts`; server `configuration-transfer.clock.test.ts` and `zone-script-callers.test.ts`. Original controls are in Tasks 1–3/14; package-wide current-head CI remains required. |
 | §5: issue time versus existing facts | 4/10–14/17/18: fresh finalization clock, pinned preparation clock, replay before reading, old records/QR facts and recovery identities | Server `till-sale-integrated.test.ts`, bill issuance/replay tests, `zone-preservation.test.ts`, `zone-preservation.restore.test.ts`, `zone-restore-entry.test.ts`; fiscal-verifactu `completed-recovery-zone.test.ts` and `void-issue-clock.test.ts`. Resumed adapter checks: 22 passed; restore/clock run: 11 passed. |
-| §6: calendar and caller coverage | 10–19: walk-up, held, placed, zero-due, manual/integrated/offline, recovered capture, deferred collection, worker/retry/attestation, save/edit/split/adjustment, unpaid departure, cancellation, core F1/F3/R5/void/emergency, readiness and scripts | `zone-process-matrix.test.ts`: 18 parent cases passed under separate UTC/Madrid processes. Each process runs whole-order 39, bill 35, auto-issue 7, core-only 11, readiness 1, scripts 11 and core-only emergency 10 selected owning cases, retaining their assertions. Ten chronological real-cash vectors assert exact instant/date/offset/generation/hash/history across midnight and both DST transitions. |
+| §6: calendar and caller coverage | 10–19: walk-up, held, placed, zero-due, manual/integrated/offline, recovered capture, deferred collection, worker/retry/attestation, save/edit/split/adjustment, unpaid departure, cancellation, core F1/F3/R5/void/emergency, readiness and scripts | `zone-process-matrix*.test.ts` (split 1 November): 18 parent cases passed under separate UTC/Madrid processes. Each process runs whole-order 39, bill 35, auto-issue 7, core-only 11, readiness 1, scripts 11 and core-only emergency 10 selected owning cases, retaining their assertions. Ten chronological real-cash vectors assert exact instant/date/offset/generation/hash/history across midnight and both DST transitions. |
 | §7: executable failure controls | All task controls, especially 17–19 | Task 17's missing/duplicate/count/vector/family controls and Task 18's duty/restart/write omissions remain recorded above. Task 19's three independent omissions fail and restored candidate passes. No provider call is inferred solely from a downstream append refusal. |
 
 The scripts family covers installed Demo refusal before catalogue/sales, backdated seed offsets,
@@ -422,3 +422,34 @@ reuse36, CLI68, seven server suites150, and promotion5 pass. The first combined 
 No unhandled SQL error remains in the final payment test output. Exact red/green/history/omission
 logs are retained in Lane E `receipts/a696-resume-20261101/`. A fresh normal push hook and
 current-head CI remain required; the sole766-second review is retained for these bounded fixes.
+
+
+### Matrix CI budget, 1 November
+
+Exact-head CI `41301269139` and licence `41301269111` pass at `241dca6b1`:
+79 successful CI jobs, two deliberate skips, all coverage merges and shared mutation aggregate.
+The actual server1 log proves the 18-case process matrix ran, but that single file took348.4s.
+The initial tree-only shard predictions omitted CI's complete selection and were wrong; only
+the actual server1 log is used as its execution receipt.
+
+The matrix now registers the same cases through a test-only helper in
+`src/testing/zone-process-matrix.ts`, in five `src/zone-process-matrix*.test.ts` files.
+Whole-order/calendar, bill payment, core/auto-issue, readiness/scripts, and emergency/child controls
+can be scheduled separately. Both process zones, all seven family rows/counts, all ten calendar
+vectors and all14expectexpressions remain identical. The child runner and production code are
+unchanged. No coverage exclusion or test deadline changes. The current focused command is
+`pnpm --filter @waitron/server exec vitest run src/zone-process-matrix`; Task17's old single-file
+command above records the pre-split run and now selects only the emergency/child controls.
+
+The new local run passes18cases/5files in72.93s, largest file65.7s. The earlier complete local
+matrix took220.99s. These are local runs without coverage, not hosted timing qualification.
+The existing duration extraction script supplies the five initial local measurements; every
+other committed duration entry is retained. Hosted CI must qualify the new arrangement.
+Focused sequencer/duration suites pass33cases. AST receipts compare the complete original
+assertion expressions and both literal fixture arrays; they do not substitute for execution.
+Repeat installed controls after moving the assertions: missing vector reports9instead of10;
+using the process offset in the real issue-clock boundary produces the wrong Madrid midnight
+and Canary evening generation literals. A wrong family count must still fail its literal count.
+Exact control exits, restored result and disposable checkout cleanup are in the campaign ledger.
+The sole766-second review remains applicable to this assertion-preserving test subdivision;
+normal hook and fresh exact-head CI remain required before owner handoff.
