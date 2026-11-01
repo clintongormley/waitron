@@ -4443,9 +4443,9 @@ chain (for the clock-in read, a clock-in). The clocking routes (`currentState`, 
 state (`apps/server/src/till-clock-state.ts`) and the attendance reconcile's clock-in
 (`apps/server/src/attendance-discovery.ts`) all read it, so after a step back a person can clock out
 and in again and the till agrees. While the clock only moves forward and no correction is dated
-ahead of it, it answers what the old read did. A move between two locations on one node inside the
-step reads right, as both entries are in the node's one chain. Still open (A1268): the hours read,
-the end-of-day pass and the correction check order by time.
+ahead of it, it answers what the old read did. Each node's chain holds every one of a person's
+entries on that node, and the entries carry no location. Still open (A1268 part 2): the hours
+read, the end-of-day pass and the correction check order by time.
 Guards: `packages/workforce/src/clocking-step.test.ts`, `apps/server/src/till-clock-step.test.ts`.
 
 **The start-up window** (`apps/server/src/clock-start-up.ts`). The owner's rule (2026-10-31): when

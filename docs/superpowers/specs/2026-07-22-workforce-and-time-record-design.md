@@ -280,8 +280,8 @@ step. The distributed picture appears only in the multi-till + separate-server t
 > promotion — ingest continues on whichever node is primary, and the location's history is read
 > across the per-node chains rather than from one. See the swap design §4.4.
 
-> **2026-11-01 — one chain per node (A1268 PR 1).** The chain is keyed by `node_id` alone; each
-> entry keeps its own `location_id`. See
+> **2026-11-01 — working time is per venue (A1268).** One chain per node; clock entries and
+> pay-period closures store no location, and neither hash includes one. See
 > `docs/superpowers/specs/2026-11-01-a1268-clock-ins-per-venue-design.md`.
 
 **Escalation (deferred — trigger: the published RD demands capture-window cryptographic
