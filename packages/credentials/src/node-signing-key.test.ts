@@ -1,16 +1,26 @@
 import { generateKeyPairSync } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withNodeTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  locations,
+  readMembershipTrustSet,
+  setNodePublicKey,
+  withNodeTransaction,
+} from "@waitron/db";
 import { NODE_MIGRATIONS, nodeSigningKey } from "@waitron/node-db";
 import { hasCode } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { aadFor, seal } from "./cipher.js";
 import { loadKeyRing } from "./keyring.js";
 import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
 import {
+  establishNodeSigningKey,
   nodeSigningPublicKey,
   openNodeSigningKeyRow,
+  readNodeIdentity,
   readNodeSigningKey,
   sealNodeSigningKeyTx,
 } from "./node-signing-key.js";
@@ -145,6 +155,93 @@ describe("the box's signing key in node.db", () => {
     const error = await captured(() => readNodeSigningKey(suite.node, RING_V1, NODE));
     expect(hasCode(error, "credentials.malformed_payload")).toBe(true);
     expect(error.params).toEqual({ purpose: "membership.node_key" });
+  });
+});
+
+describe("establishing the box's signing key", () => {
+  const suite = useVenueDb({
+    resetPerTest: false,
+    migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
+    timeoutMs: 60_000,
+  });
+
+  async function freshNode() {
+    await seedTenant(suite.db);
+    const [loc] = await suite.db
+      .insert(locations)
+      .values({
+        name: "Barra",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Venta en establecimiento",
+      })
+      .returning({ id: locations.id });
+    return seedNode(suite.db, brandLocationId(loc!.id));
+  }
+
+  it("makes and seals a key, then stamps its public half on the node's row", async () => {
+    const nodeId = await freshNode();
+    await establishNodeSigningKey(suite.db, suite.node, RING_V1, nodeId);
+    const privateKey = await readNodeSigningKey(suite.node, RING_V1, nodeId);
+    expect(privateKey).not.toBeNull();
+    expect((await readMembershipTrustSet(suite.db))[nodeId]).toBe(
+      nodeSigningPublicKey(privateKey!),
+    );
+  });
+
+  it("stamps a key already sealed, and keeps it on a second run", async () => {
+    const nodeId = await freshNode();
+    await withNodeTransaction(suite.node, (tx) =>
+      sealNodeSigningKeyTx(tx, RING_V1, nodeId, PRIVATE_KEY),
+    );
+    await establishNodeSigningKey(suite.db, suite.node, RING_V1, nodeId);
+    await establishNodeSigningKey(suite.db, suite.node, RING_V1, nodeId);
+    expect(await readNodeSigningKey(suite.node, RING_V1, nodeId)).toBe(PRIVATE_KEY);
+    expect((await readMembershipTrustSet(suite.db))[nodeId]).toBe(PUBLIC_KEY);
+  });
+
+  it("refuses node.identity_mismatch when the venue names a different public key", async () => {
+    const nodeId = await freshNode();
+    await withNodeTransaction(suite.node, (tx) =>
+      sealNodeSigningKeyTx(tx, RING_V1, nodeId, PRIVATE_KEY),
+    );
+    const foreign = generateKeyPairSync("ed25519")
+      .publicKey.export({ format: "der", type: "spki" })
+      .toString("base64");
+    await setNodePublicKey(suite.db, nodeId, foreign);
+    const error = await captured(() =>
+      establishNodeSigningKey(suite.db, suite.node, RING_V1, nodeId),
+    );
+    expect(hasCode(error, "node.identity_mismatch")).toBe(true);
+    expect((await readMembershipTrustSet(suite.db))[nodeId]).toBe(foreign);
+    expect(await readNodeSigningKey(suite.node, RING_V1, nodeId)).toBe(PRIVATE_KEY);
+  });
+
+  it("stamps nothing in venue.db when node.db refuses to seal the key", async () => {
+    const nodeId = await freshNode();
+    suite.node.run(
+      sql.raw(`create trigger refuse_signing_key before insert on node_signing_key
+        begin select raise(abort, 'refused by test'); end`),
+    );
+    try {
+      await expect(establishNodeSigningKey(suite.db, suite.node, RING_V1, nodeId)).rejects.toThrow(
+        "refused by test",
+      );
+      expect((await readMembershipTrustSet(suite.db))[nodeId]).toBeUndefined();
+    } finally {
+      suite.node.run(sql`drop trigger if exists refuse_signing_key`);
+    }
+  });
+
+  it("reads the venue's trust set beside this box's private key, null before one is made", async () => {
+    const nodeId = await freshNode();
+    expect(await readNodeIdentity(suite.db, suite.node, RING_V1, nodeId)).toEqual({
+      trust: await readMembershipTrustSet(suite.db),
+      privateKey: null,
+    });
+    await establishNodeSigningKey(suite.db, suite.node, RING_V1, nodeId);
+    const own = await readNodeIdentity(suite.db, suite.node, RING_V1, nodeId);
+    expect(own.privateKey).toBe(await readNodeSigningKey(suite.node, RING_V1, nodeId));
+    expect(own.trust[nodeId]).toBe(nodeSigningPublicKey(own.privateKey!));
   });
 });
 

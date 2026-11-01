@@ -23,8 +23,10 @@ export {
 export type { CredentialMeta, CredentialRef, CredentialRowMeta, RotationResult } from "./store.js";
 
 export {
+  establishNodeSigningKey,
   nodeSigningPublicKey,
   openNodeSigningKeyRow,
+  readNodeIdentity,
   readNodeSigningKey,
   sealNodeSigningKeyTx,
 } from "./node-signing-key.js";

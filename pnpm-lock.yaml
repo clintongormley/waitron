@@ -914,6 +914,9 @@ importers:
       '@waitron/db':
         specifier: workspace:*
         version: link:../db
+      '@waitron/membership':
+        specifier: workspace:*
+        version: link:../membership
       '@waitron/node-db':
         specifier: workspace:*
         version: link:../node-db

@@ -3,19 +3,15 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseEnv, isDeepStrictEqual } from "node:util";
 import {
+  establishNodeSigningKey,
   loadKeyRing,
-  nodeSigningPublicKey,
   putCredential,
-  readNodeSigningKey,
-  sealNodeSigningKeyTx,
+  readNodeIdentity,
 } from "@waitron/credentials";
 import {
   applicationVersion,
-  readMembershipTrustSet,
   readNodeMembershipRow,
-  setNodePublicKeyTx,
   stampDeployment,
-  withNodeTransaction,
   withTransaction,
   writeNodeMembership,
   type Database,
@@ -23,7 +19,6 @@ import {
 } from "@waitron/db";
 import {
   buildNextMembershipDocument,
-  generateNodeKeyPair,
   isMembershipDocument,
   signBytes,
   verifyBytes,
@@ -190,10 +185,6 @@ export function createFirstSetupCommandDeployment(options: {
         throw new AppError("setup.not_ready", {});
       }
       const config = selection.config;
-      const identity = async (nodeId: string) => ({
-        trust: await readMembershipTrustSet(db),
-        privateKey: await readNodeSigningKey(node, ring, nodeId),
-      });
       const digest = firstSetupPublicationDigest(state, settings);
       publication = { digest, settings, ring };
       return {
@@ -208,22 +199,10 @@ export function createFirstSetupCommandDeployment(options: {
             );
           },
           publishIdentity: async (result, current) => {
-            let own = await identity(result.nodeId);
+            let own = await readNodeIdentity(db, node, ring, result.nodeId);
             if (own.trust[result.nodeId] === undefined) {
-              // node.db is saved before venue.db, as everywhere a signing key is first made (here,
-              // the server's node identity and adopt): a stamped public key with no private key
-              // behind it could never sign as this box.
-              const sealed = await withNodeTransaction(node, async (tx) => {
-                const held = await readNodeSigningKey(tx, ring, result.nodeId);
-                if (held !== null) return held;
-                const generated = generateNodeKeyPair().privateKey;
-                await sealNodeSigningKeyTx(tx, ring, result.nodeId, generated);
-                return generated;
-              });
-              await withTransaction(db, (tx) =>
-                setNodePublicKeyTx(tx, result.nodeId, nodeSigningPublicKey(sealed)),
-              );
-              own = await identity(result.nodeId);
+              await establishNodeSigningKey(db, node, ring, result.nodeId);
+              own = await readNodeIdentity(db, node, ring, result.nodeId);
             }
             const publicKey = own.trust[result.nodeId];
             const privateKey = own.privateKey;

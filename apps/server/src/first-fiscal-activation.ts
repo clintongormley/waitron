@@ -1,4 +1,4 @@
-import { readMembershipTrustSet, readNodeMembershipRow, withTransaction } from "@waitron/db";
+import { readNodeMembershipRow, withTransaction } from "@waitron/db";
 import { initialSetupFor } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import {
@@ -23,7 +23,7 @@ import {
   verifyBytes,
   verifyMembershipDocument,
 } from "@waitron/membership";
-import { putCredential, readNodeSigningKey } from "@waitron/credentials";
+import { putCredential, readNodeIdentity } from "@waitron/credentials";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import "./errors.js";
 
@@ -228,10 +228,7 @@ export async function publishCheckedFirstFiscal(
         await host.publishSelection(current);
       },
       publishIdentity: async (result, state) => {
-        const identity = async () => ({
-          trust: await readMembershipTrustSet(deps.db!),
-          privateKey: await readNodeSigningKey(deps.node!, deps.ring!, result.nodeId),
-        });
+        const identity = () => readNodeIdentity(deps.db!, deps.node!, deps.ring!, result.nodeId);
         let own = await identity();
         // Establishing reuses a key already sealed, so a run interrupted between the two saves
         // finishes stamping it.

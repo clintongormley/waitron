@@ -2,11 +2,17 @@ import { createPrivateKey, createPublicKey } from "node:crypto";
 import { eq } from "drizzle-orm";
 import {
   now,
+  readMembershipTrustSet,
+  readNodePublicKeyTx,
+  setNodePublicKeyTx,
   tableExists,
   withNodeTransaction,
+  withTransaction,
+  type Database,
   type NodeDatabase,
   type NodeTransaction,
 } from "@waitron/db";
+import { generateNodeKeyPair, type TrustSet } from "@waitron/membership";
 import { nodeSigningKey } from "@waitron/node-db";
 import { AppError } from "@waitron/shared";
 import { aadFor, open, seal, type SealedRow } from "./cipher.js";
@@ -110,6 +116,54 @@ export async function readNodeSigningKey(
 ): Promise<string | null> {
   const row = await readRow(node, nodeId);
   return row === null ? null : openNodeSigningKeyRow(row, ring, nodeId);
+}
+
+/**
+ * Give the box its signing key: reuse the private key `node.db` holds for `nodeId`, or make and
+ * seal one, then stamp its public half on `nodes.public_key`, the trust anchor
+ * `readMembershipTrustSet` reads. A re-run after an interruption between the two saves stamps the
+ * key already sealed. Refuses `node.identity_mismatch` when the venue already names a different
+ * key. Run it only after the node's row exists: `setNodePublicKeyTx` is an update with no
+ * row-count check, so an early call seals the key and stamps nothing, without error.
+ *
+ * `ownerDb` is named so because `nodes` is one of the tables `scripts/write-path-tables.json` lists.
+ */
+export async function establishNodeSigningKey(
+  ownerDb: Database,
+  node: NodeDatabase,
+  ring: KeyRing,
+  nodeId: string,
+): Promise<void> {
+  // node.db is saved before venue.db: a stamped public key with no private key behind it could
+  // never sign as this box.
+  const privateKey = await withNodeTransaction(node, async (tx) => {
+    const sealed = await readNodeSigningKey(tx, ring, nodeId);
+    if (sealed !== null) return sealed;
+    const generated = generateNodeKeyPair().privateKey;
+    await sealNodeSigningKeyTx(tx, ring, nodeId, generated);
+    return generated;
+  });
+  const publicKey = nodeSigningPublicKey(privateKey);
+  await withTransaction(ownerDb, async (tx) => {
+    const stamped = await readNodePublicKeyTx(tx, nodeId);
+    // Only a fault in Waitron produces this: the venue names a key this box never sealed.
+    if (stamped !== null && stamped !== publicKey) throw new AppError("node.identity_mismatch", {});
+    await setNodePublicKeyTx(tx, nodeId, publicKey);
+  });
+}
+
+/** The venue's membership trust set beside this box's private signing key (`null` when none is
+ * sealed for `nodeId`). */
+export async function readNodeIdentity(
+  ownerDb: Database,
+  node: NodeDatabase,
+  ring: KeyRing,
+  nodeId: string,
+): Promise<{ trust: TrustSet; privateKey: string | null }> {
+  return {
+    trust: await readMembershipTrustSet(ownerDb),
+    privateKey: await readNodeSigningKey(node, ring, nodeId),
+  };
 }
 
 /** The base64 SPKI public half of a base64 PKCS8 private key. */
