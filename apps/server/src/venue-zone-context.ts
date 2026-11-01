@@ -12,6 +12,7 @@ import {
   businessDayAt,
   businessDayBounds,
   classifyTimeZone,
+  classifySavedTimeZone,
   timeZoneOffsetMinutes,
   type BusinessDayClock,
   type SavedTimeZone,
@@ -61,7 +62,7 @@ export async function readZoneContext(tx: Transaction, scope: IssueScope): Promi
     locationId: node.locationId,
     ...tenant,
     province: location.province,
-    savedZone: classifyTimeZone(location.timeZone),
+    savedZone: classifySavedTimeZone(location.timeZone),
     clock: {
       timeZone: location.timeZone,
       dayCutover: storedCutover(location.dayCutover),

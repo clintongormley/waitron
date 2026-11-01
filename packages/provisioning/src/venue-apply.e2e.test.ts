@@ -309,24 +309,27 @@ describe("direct action country zone preflight", () => {
     });
   });
 
-  it("refuses an invalid saved zone before reuse conversion without repairing it", async () => {
-    const actions = planVenue(request(), []);
-    const venue = await applyDirectVenue(actions, { db: suite.db, modules: [] });
-    await withTransaction(suite.db, async (tx) => {
-      await tx.execute(
-        sql`update locations set time_zone = 'Invalid/Zone' where id = ${venue.locationId}`,
+  it.each(["Invalid/Zone", " Europe/Madrid", "Europe/Madrid "])(
+    "refuses saved %j before reuse conversion without repairing it",
+    async (timeZone) => {
+      const actions = planVenue(request(), []);
+      const venue = await applyDirectVenue(actions, { db: suite.db, modules: [] });
+      await withTransaction(suite.db, async (tx) => {
+        await tx.execute(
+          sql`update locations set time_zone = ${timeZone} where id = ${venue.locationId}`,
+        );
+      });
+      const before = (await suite.db.execute(sql`select * from locations`)).rows;
+      const refusal = await applyDirectVenue(actions, { db: suite.db, modules: [] }).catch(
+        (error: unknown) => error,
       );
-    });
-    const before = (await suite.db.execute(sql`select * from locations`)).rows;
-    const refusal = await applyDirectVenue(actions, { db: suite.db, modules: [] }).catch(
-      (error: unknown) => error,
-    );
-    expect((await suite.db.execute(sql`select * from locations`)).rows).toEqual(before);
-    expect(refusal).toMatchObject({
-      code: "venue.time_zone_invalid",
-      params: { reason: "invalid" },
-    });
-  });
+      expect((await suite.db.execute(sql`select * from locations`)).rows).toEqual(before);
+      expect(refusal).toMatchObject({
+        code: "venue.time_zone_invalid",
+        params: { reason: "invalid" },
+      });
+    },
+  );
 
   it("normalizes a direct action without mutating its caller", async () => {
     const actions = planVenue(request(), []);

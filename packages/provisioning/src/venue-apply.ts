@@ -17,7 +17,7 @@ import { foldForUniqueness, persons, startManagementSession } from "@waitron/ide
 import { createDeviceProfile, listDeviceProfiles } from "@waitron/layouts";
 import {
   AppError,
-  classifyTimeZone,
+  classifySavedTimeZone,
   businessDayAt,
   cutoverForBusinessDay,
   locationId as brandLocationId,
@@ -127,7 +127,7 @@ export async function applyVenue(
   const requireSavedZones = async (db: Database | Transaction): Promise<void> => {
     const saved = await db.select({ timeZone: locations.timeZone }).from(locations);
     for (const row of saved) {
-      const zone = classifyTimeZone(row.timeZone);
+      const zone = classifySavedTimeZone(row.timeZone);
       if (zone.kind !== "valid") {
         throw new AppError("venue.time_zone_invalid", { reason: zone.kind });
       }

@@ -97,3 +97,29 @@ describe("timeZoneOffsetMinutes", () => {
     expect(() => shared.timeZoneOffsetMinutes("Europe/Madrid", new Date(0))).toThrow(failure);
   });
 });
+
+describe("classifySavedTimeZone", () => {
+  it.each([undefined, null, "", "   "])("classifies saved %j as missing", (value) => {
+    expect(shared.classifySavedTimeZone(value)).toStrictEqual({ kind: "missing" });
+  });
+  it.each([" Europe/Madrid", "Europe/Madrid ", "Invalid/Zone", "+02:00", 0, false, [], {}])(
+    "rejects saved %j without normalizing it",
+    (value) => {
+      expect(shared.classifySavedTimeZone(value)).toStrictEqual({ kind: "invalid" });
+    },
+  );
+  it.each([
+    ["Europe/Madrid", "Europe/Madrid"],
+    ["US/Eastern", "America/New_York"],
+    ["UTC", "UTC"],
+  ])("accepts the runtime-readable saved %s", (value, timeZone) => {
+    expect(shared.classifySavedTimeZone(value)).toStrictEqual({ kind: "valid", timeZone });
+  });
+  it("propagates an unexpected runtime failure for a saved name", () => {
+    const failure = new Error("formatter unavailable");
+    vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function () {
+      throw failure;
+    });
+    expect(() => shared.classifySavedTimeZone("Europe/Madrid")).toThrow(failure);
+  });
+});

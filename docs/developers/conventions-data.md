@@ -5655,3 +5655,26 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 - **The node owns the fiscal identity, chain and invoice series; a till is a cash register.**
   Guard: `scripts/no-till-as-issuer.test.ts`, weaker than its name: reads text; misses the same idea
   under another word (terminal, device, caja) and in prose. Limits: [conventions-data.md](conventions-data.md#the-node-owns-fiscal-identity).
+
+
+## Saved-zone validity uses the stored spelling
+
+A696's 1 November whole-branch review found that the input classifier trimmed a saved zone before
+admitting it. Other readers passed the raw column to Intl. A saved `" Europe/Madrid"` or
+`"Europe/Madrid "` therefore admitted ordinary boot duties but was ineligible for repair.
+The real boot/context/confirmation command first failed six new cases; the direct fiscal caller
+resolved instead of refusing two cases. Provisioning reuse reached `business_day.clock_invalid`
+instead of its zone preflight refusal. These experiments reproduce the boundary mismatch without
+asserting that every raw reader was exercised.
+
+`classifyTimeZone` continues normalizing new input, including the original padded-input case.
+`classifySavedTimeZone` asks the runtime about the stored spelling. Raw context, fiscal clocks,
+provisioning reuse, completed recovery packs and recovery comparison consume the latter; request,
+candidate and country-list inputs retain normalization. Missing blanks, runtime-supported aliases
+and unexpected runtime failures retain their separate outcomes. Repair stores an explicitly chosen
+canonical name; old raw rows are not silently rewritten. The focused shared, boot, repair,
+provisioning and recovery tests retain legitimate controls as well as the padded refusals.
+
+The admission check is not a universal audit of every timezone consumer or boot duty. The boot
+suite names the duties it observes. Raw readers beyond these exercised paths remain outside that
+receipt. Commands, red/green logs and full review are in Lane E `receipts/a696-resume-20261101/`.

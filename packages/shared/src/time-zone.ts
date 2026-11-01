@@ -4,10 +4,19 @@ export type SavedTimeZone =
   { kind: "missing" } | { kind: "invalid" } | { kind: "valid"; timeZone: string };
 
 export function classifyTimeZone(value: unknown): SavedTimeZone {
+  return classify(value, true);
+}
+
+export function classifySavedTimeZone(value: unknown): SavedTimeZone {
+  return classify(value, false);
+}
+
+function classify(value: unknown, normalize: boolean): SavedTimeZone {
   if (value === null || value === undefined) return { kind: "missing" };
   if (typeof value !== "string") return { kind: "invalid" };
-  const name = value.trim();
-  if (name === "") return { kind: "missing" };
+  const trimmed = value.trim();
+  if (trimmed === "") return { kind: "missing" };
+  const name = normalize ? trimmed : value;
   if (/^[+-]/.test(name)) return { kind: "invalid" };
   let formatter: Intl.DateTimeFormat;
   try {

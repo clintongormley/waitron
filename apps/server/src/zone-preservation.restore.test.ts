@@ -27,11 +27,12 @@ import { runRestore } from "./restore-command.js";
 it.each(["archive", "bucket"] as const)(
   "%s entry preserves old identities and first-drain payloads before the next saved-zone issue",
   async (kind) => {
+    vi.setSystemTime(new Date("2026-10-15T12:00:00Z"));
     await recoveryInvoices();
     const [standard] = await suite.db
       .select()
       .from(invoiceSeries)
-      .where(eq(invoiceSeries.code, "A-06RB"));
+      .where(eq(invoiceSeries.code, "A-0CNNY"));
     const source = {
       ...steadyClock,
       now: () => ({

@@ -34,6 +34,8 @@ for (const locale of ["en", "es"] as const)
   it.each([
     ["", "12:00", "UTC"],
     ["Not/A_Zone", "12:00", "UTC"],
+    [" Europe/Madrid", "12:00", "UTC"],
+    ["Europe/Madrid ", "12:00", "UTC"],
     ["+02:00", "12:00", "UTC"],
     ["UTC", "12:00", "UTC"],
     ["Europe/Madrid", "14:00", "CEST"],

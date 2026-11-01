@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, draftScopeFor, focusFirstInvalid, type DraftScope } from "@waitron/ui";
-import { classifyTimeZone } from "@waitron/shared";
+import { classifySavedTimeZone } from "@waitron/shared";
 import type {
   ModuleRecoveryCredentials,
   SetupContribution,
@@ -341,7 +341,7 @@ export class RecoveryHourEntry extends LitElement {
   override render() {
     const en = this.locale === "en";
     const words = en ? strings.en : strings.es;
-    const zone = classifyTimeZone(this.context.selection.timeZone);
+    const zone = classifySavedTimeZone(this.context.selection.timeZone);
     const displayZone = zone.kind === "valid" ? zone.timeZone : "UTC";
     const format = (ms: number) =>
       dateTimeFormat(en ? "en" : "es", displayZone, {

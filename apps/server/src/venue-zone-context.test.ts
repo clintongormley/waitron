@@ -63,6 +63,17 @@ const retained = () => ({
 });
 
 describe("raw saved zone context", () => {
+  it.each([" Europe/Madrid", "Europe/Madrid "])(
+    "keeps unreadable saved %j eligible for repair without changing it",
+    async (timeZone) => {
+      await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, scope.locationId));
+      const before = retained();
+      const context = await read();
+      expect(context.savedZone).toEqual({ kind: "invalid" });
+      expect(context.clock.timeZone).toBe(timeZone);
+      expect(retained()).toEqual(before);
+    },
+  );
   it("reads an invalid zone and absent revision without ordinary detail or reporting reads", async () => {
     const ordinary = vi
       .spyOn(details, "readVenueDetails")

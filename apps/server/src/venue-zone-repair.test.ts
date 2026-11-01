@@ -77,6 +77,26 @@ const snapshot = () => ({
 });
 
 describe("atomic unusable-zone confirmation", () => {
+  it.each([" Europe/Madrid", "Europe/Madrid "])(
+    "repairs unreadable saved %j using an explicitly normalized choice",
+    async (timeZone) => {
+      await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, scope.locationId));
+      expect(await read()).toMatchObject({ category: "invalid", eligible: true });
+      const before = snapshot();
+      expect(await confirm({ ...body, timeZone: " Europe/Madrid " })).toEqual({
+        repaired: true,
+        clockRevision: 1,
+        admission: "restart_required",
+      });
+      const after = snapshot();
+      expect(after.locations).toEqual(
+        before.locations.map((row) => ({ ...row, time_zone: "Europe/Madrid" })),
+      );
+      expect(after.cutovers).toEqual(before.cutovers);
+      expect(after.orders).toEqual(before.orders);
+      expect(after.incidents).toHaveLength(1);
+    },
+  );
   it("commits only the canonical zone, revision one and one immediately handled warning", async () => {
     await suite.db.insert(locationDayCutoverChanges).values([
       { locationId: scope.locationId, effectiveBusinessDay: "2026-09-01", dayCutover: "05:00:00" },

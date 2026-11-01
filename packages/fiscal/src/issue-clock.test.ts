@@ -59,6 +59,8 @@ describe("writing location zone", () => {
     ["", "missing"],
     ["  ", "missing"],
     ["Invalid/Zone", "invalid"],
+    [" Europe/Madrid", "invalid"],
+    ["Europe/Madrid ", "invalid"],
     ["+02:00", "invalid"],
   ])("refuses saved %j before reading the source clock or writing", async (timeZone, reason) => {
     await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, scope.locationId!));

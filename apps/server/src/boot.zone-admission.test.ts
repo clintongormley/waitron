@@ -330,7 +330,7 @@ describe("startup zone admission", () => {
     expect(runAttendanceLoop).toHaveBeenCalledOnce();
     expect(runInvoiceEmailLoop).toHaveBeenCalledOnce();
   });
-  it.each(["", "Invalid/Zone?secret=must-not-escape"])(
+  it.each(["", "Invalid/Zone?secret=must-not-escape", " Europe/Madrid", "Europe/Madrid "])(
     "boots %j into narrow authentication without ordinary loaders or duties",
     async (zone) => {
       await rawZone(zone);

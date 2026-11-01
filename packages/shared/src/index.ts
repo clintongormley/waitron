@@ -261,5 +261,5 @@ export { compareStationNames } from "./station-names.js";
 
 export { CALENDAR_COLOURS, type CalendarColour } from "./calendar-colours.js";
 
-export { classifyTimeZone, timeZoneOffsetMinutes } from "./time-zone.js";
+export { classifyTimeZone, classifySavedTimeZone, timeZoneOffsetMinutes } from "./time-zone.js";
 export type { SavedTimeZone } from "./time-zone.js";
