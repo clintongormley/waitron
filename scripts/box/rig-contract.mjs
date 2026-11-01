@@ -304,7 +304,8 @@ export async function loadLedger(run) {
  * Recording states intent, not ownership. Refused here: a second record of one resource; a loop
  * whose image is not an image this run recorded; and an image or pid file path that already
  * exists, because cleanup removes or reads it. A mount's folder must exist before its step, so it
- * is not refused for existing. Called while holding the staging-file lock.
+ * is not refused for existing. Each boot records its own pid file path, and each mount its own
+ * target folder. Called while holding the staging-file lock.
  * @param {readonly RigResource[]} resources @param {NonNullable<ReturnType<typeof resourceShape>>} shape
  */
 async function checkNew(resources, shape) {
@@ -317,8 +318,9 @@ async function checkNew(resources, shape) {
   if (recorded(resource.kind, kind.field)) throw rigError("resource-duplicate");
   if (resource.kind === "loop" && !recorded("image", "path"))
     throw rigError("loop-image-unrecorded");
-  // A process running as this user can still create the path after this check and before the
-  // step; cleanup would then remove or read a file the run did not create.
+  // A process running as this user can still create the path after this check: before the step,
+  // or at any time before cleanup if the step never makes it. Cleanup would then remove or read a
+  // file the run did not create.
   if (kind.file && (await lstatIfPresent(path)) !== null) throw rigError("resource-exists");
 }
 
@@ -365,8 +367,7 @@ async function appendToLedger(run, shape) {
 const turns = new Map();
 
 /**
- * Durably records the resource, then runs step. step never runs if recording fails, and recording
- * refuses what cleanup could not safely undo (see checkNew). Calls on one
+ * Durably records the resource, then runs step. step never runs if recording fails. Calls on one
  * run folder take turns in this process; the staging file keeps other processes out.
  * step runs after the turn ends, so it may record its own sub-resources.
  * @template T @param {RigRun} run @param {RigResource} resource @param {() => T | Promise<T>} step @returns {Promise<T>}

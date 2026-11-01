@@ -426,7 +426,7 @@ export async function createRun(runDir);
  * @typedef {{kind:'image', path:string}
  *   | {kind:'loop', image:string}       loop devices are found by their recorded backing image, never named by id
  *   | {kind:'mount', target:string}
- *   | {kind:'vm', pidFile:string}} RigResource   every path absolute, normalised, strictly inside runDir, with no part named ledger.json or ledger.json.next in any letter case
+ *   | {kind:'vm', pidFile:string}} RigResource   every path absolute, normalised, strictly inside runDir, with no part named ledger.json or ledger.json.next compared lower-cased
  * @typedef {{action:'stop-vm', pidFile:string}|{action:'unmount', target:string}
  *   |{action:'detach-loops', image:string}|{action:'remove-file', path:string}} CleanupStep
  * @typedef {CleanupStep & { reason: string }} FailedStep   reason: the refusal's reason, or adapter-failed
@@ -455,14 +455,14 @@ export async function runCleanup(run, adapter);
 
 Only then does the turn end and `step` run, outside the turn. A step may therefore record its own sub-resources without deadlocking.
 
-**`loadLedger` refuses with `ledger-invalid`** when `ledger.json` is a symlink, missing, or not a regular file (it is opened with `O_NONBLOCK`, so a FIFO is refused rather than waited on), when the bytes are not canonical, when `runDir` differs from the folder being read, on an unknown kind or key, when a path has a part named like the ledger or its staging file in any letter case, or when any path is outside `runDir` or under `/dev/`.
+**`loadLedger` refuses with `ledger-invalid`** when `ledger.json` is a symlink, missing, or not a regular file (it is opened with `O_NONBLOCK`, so a FIFO is refused rather than waited on), when the bytes are not canonical, when `runDir` differs from the folder being read, on an unknown kind or key, when a path has a part named like the ledger or its staging file compared lower-cased, or when any path is outside `runDir` or under `/dev/`.
 
 **Stopping a VM.** The real `CleanupAdapter` (Linux) must check that a VM's process is the one this run started before stopping it, and that a mount at a recorded target is the one this run made before unmounting it. That belongs to the Linux pull request.
 
 Contract notes from the per-task review (2026-11-01):
 - **Run checks.** `withRecorded`, `loadLedger` and `runCleanup` check the run as text first (`run-invalid`, then Task 2's `run-dir-*` reasons), then `lstat` the run folder: anything but a real folder whose `dev:ino` equals `rootId` is `run-dir-replaced`.
 - **Symlinks on the way.** A resource path reached through an existing symlink is refused when recorded (`resource-through-symlink`); at cleanup that step fails without reaching the adapter. A path with any part named `ledger.json` or `ledger.json.next`, compared lower-cased, is refused as `resource-outside-run` before any file call, because a case-insensitive file system opens `LEDGER.JSON` as the ledger. At cleanup, a step whose path has the device and inode of the ledger or its staging file (a hard link, or a name the lower-casing misses) fails as `resource-is-ledger` without reaching the adapter.
-- **Recording is not ownership.** Inside the turn, holding the staging-file lock, `withRecorded` refuses a resource the ledger already holds (`resource-duplicate`), a loop whose image is not a recorded image (`loop-image-unrecorded`), and an image or pid file path that already exists in any form (`resource-exists`), because cleanup removes or reads it. A mount's folder must exist before its step, so it is not refused for existing. A process running as the same user can still create a path between that check and the step. At cleanup, an image or pid file path that exists but is not a regular file fails as `resource-not-file` without reaching the adapter.
+- **Recording is not ownership.** Inside the turn, holding the staging-file lock, `withRecorded` refuses a resource the ledger already holds (`resource-duplicate`), a loop whose image is not a recorded image (`loop-image-unrecorded`), and an image or pid file path that already exists in any form (`resource-exists`), because cleanup removes or reads it. A mount's folder must exist before its step, so it is not refused for existing. Each boot records its own pid file path, and each mount its own target folder. A process running as this user can still create the path after this check: before the step, or at any time before cleanup if the step never makes it. Cleanup would then remove or read a file the run did not create. At cleanup, an image or pid file path that exists but is not a regular file fails as `resource-not-file` without reaching the adapter.
 - **Cleanup takes no plan.** `runCleanup(run, adapter)` loads the ledger and re-checks the run folder and each path before every step; `planCleanup` stays pure and refuses unknown or inherited kinds.
 - **Across processes.** The append opens `ledger.json.next` with `wx` before reading the ledger, so the staging file is the lock: a second process is refused `ledger-busy`, and a staging file left by a crash refuses every later record until removed. `runCleanup` never removes it; it reports it as a failed `remove-file` with reason `ledger-busy`.
 - **A ledger naming another run's `runId`** is refused as `run-dir-replaced`.
@@ -475,7 +475,7 @@ Contract notes from the per-task review (2026-11-01):
 | `run-invalid` | The run record is not exactly `{ runDir, rootId, runId }` with text values. |
 | `run-dir-replaced` | The run folder is gone, has another `dev:ino`, its ledger names another `runId`, or it is a symlink at the final folder flush. |
 | `resource-invalid` | Not a known kind with exactly its one path field, as text. |
-| `resource-outside-run` | The path is not absolute, normal and strictly inside the run folder, holds a NUL, or has a part named `ledger.json` or `ledger.json.next` in any letter case. |
+| `resource-outside-run` | The path is not absolute, normal and strictly inside the run folder, holds a NUL, or has a part named `ledger.json` or `ledger.json.next` compared lower-cased. |
 | `resource-through-symlink` | A symlink or a file on the way to the path, or the path itself a symlink. |
 | `resource-duplicate` | The ledger already holds this kind and path. |
 | `loop-image-unrecorded` | A loop whose image is not a recorded image. |
