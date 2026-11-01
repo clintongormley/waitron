@@ -373,7 +373,8 @@ ejemplo **El reloj del equipo se puso con la hora del dispositivo de Ana: adelan
 horas, de 2026-10-21 18:40 a 2026-10-23 21:40.**, y el equipo envía un
 [correo](box-status.md#emails) a las personas que gestionan el sistema. Cuando el equipo puso su
 reloj pero no pudo confirmar que el cambio se aplicara, el aviso lo dice y te pide que compruebes
-la hora del equipo en esta página.
+la hora del equipo en esta página. Si el equipo no puede anotar el cambio en ese momento (por ejemplo, con el disco lleno) y se
+reinicia antes de poder hacerlo, ese cambio no tiene aviso ni correo.
 
 ## Justo después de un arranque {#clock-at-start}
 

@@ -453,7 +453,7 @@ describe("the step not yet written, for the backups' hold", () => {
     expect(h.correction.unwrittenStep()).toBeNull();
   });
 
-  it("is null, with every anchor re-anchored, when the host client throws and the clock did not move", async () => {
+  it("is null, with the anchor re-anchored, when the host client throws and the clock did not move", async () => {
     const h = harness({ host: "throws" });
     expect(await h.correction.set(aeat(h))).toEqual({ set: false, reason: "refused" });
     expect(h.correction.unwrittenStep()).toBeNull();

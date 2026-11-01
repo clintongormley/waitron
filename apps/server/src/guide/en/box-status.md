@@ -352,7 +352,8 @@ the time before and after and how far the clock moved, for example **The box's c
 Ana's device: moved forward 2 days and 3 hours, from 2026-10-21 18:40 to 2026-10-23 21:40.**, and the box
 [emails](box-status.md#emails) the people who manage the system. When the box set its clock but
 could not confirm the change took, the alert says so and asks you to check the box's clock on this
-page.
+page. If the box cannot write the change down at once (a full disk, for example) and restarts before
+it can, that change has no alert and no email.
 
 ## Just after a start {#clock-at-start}
 
