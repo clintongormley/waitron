@@ -1014,10 +1014,17 @@ other-device cookies with a valid PIN session and order body. Each answers
 still answers. The profile-action and profile-zone fixtures now carry their enrolled device
 cookie alongside the session cookie, with their existing assertions preserved.
 
-Finish the routes that check a tender or print capability separately, and the routes whose
-profile check happens inside the write transaction. Give each a refusing request and a valid
-device control. The complete item still needs both dashboard exception controls, the full
-route remap, branch review and current-head CI before publication.
+**Further implementation checkpoint, 2026-11-01:** the payment, bill-refund and settled-tender
+refund routes now require matching request-device proof. So do receipt and payment-slip actions,
+sale, transaction and refund reprints, and manual drawer opening. The expanded HTTP suite drives
+real payments, refunds and queued printer/drawer jobs with matching-device controls. The existing
+profile-denied sale and drawer cases retain their refusal codes. A Disable injected when the bill
+payment body is read still reaches the existing `session.required` check without writing a payment.
+
+Finish invoice-delivery actions, including the original receipt retry, and audit the current
+routes whose profile check happens inside the write transaction. Give each a refusing request and
+a valid device control. The dashboard reprint and invoice-delivery suites still pass without a
+device cookie. Complete the route remap, branch review and current-head CI before publication.
 
 Still separate: a maintained route-to-profile-action table with a guard that walks the routes,
 and printer identity (the design's sub-project C). Handheld actions follow the profile, not the

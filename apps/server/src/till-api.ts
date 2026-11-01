@@ -209,6 +209,7 @@ import {
   clearSessionCookie,
   isUuid,
   readSessionToken,
+  assertRequestDevice,
   requireSession,
   assertStillSignedIn,
   setSessionCookie,
@@ -1791,6 +1792,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       // the profile lacks; both before the zone, so a profile that cannot sell is told so.
       assertTakesTender(session.device, tillTenderKind(body.tender));
       assertProfileAction(session.device, "take-orders");
+      await assertRequestDevice(deps, c, session);
       const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
       await gateZones(
         deps,
@@ -1833,6 +1835,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const device = session.device;
       assertTakesTender(device, "reader-card");
       assertProfileAction(device, "take-orders");
+      await assertRequestDevice(deps, c, session);
       const body = await readJsonBody<IntegratedPayRequest>(c);
       // Screened before the provider guard, so a malformed body is a 400 whatever the card config.
       requireUuidParam(body.id, "WorkingOrderId");
@@ -2619,6 +2622,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         const session = await requireSession(deps, c);
         const cfg = requestCfg(deps.cfg, session);
         await assertDeviceCapability(deps, c, "print-receipt", action, session.device);
+        await assertRequestDevice(deps, c, session);
         const id = requireUuidId(c.req.param("id"), "working_order.not_found");
         await gateZones(deps, session, [{ orderId: id }]);
         if (action === "receipt")
@@ -2641,6 +2645,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const cfg = requestCfg(deps.cfg, session);
       await assertDeviceCapability(deps, c, "print-receipt", "reprint", session.device);
+      await assertRequestDevice(deps, c, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       await gateZones(deps, session, [{ orderId: id }]);
       const { language } = await readJsonBody<{ language?: unknown }>(c);
@@ -2676,6 +2681,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const device = session.device;
       await assertDeviceCapability(deps, c, "open-cash-drawer", "drawer_open", device);
+      await assertRequestDevice(deps, c, session);
       const body = await readJsonBody<{ override?: { personId?: unknown; pin?: unknown } }>(c);
       const attempts = overridePinAttempts(pinThrottle, session.deviceId);
       const toCheck = await drawerOverrideToCheck(deps.db, sessionId, body);
@@ -2723,6 +2729,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       }
       const guestCount = readGuestCountChoice(body.guestCount);
       assertTakesTender(session.device, tillTenderKind(body.tender));
+      await assertRequestDevice(deps, c, session);
       const result = await collectOrder(
         {
           db: deps.db,

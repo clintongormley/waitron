@@ -3392,16 +3392,20 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     );
   });
 
-  it("voids a line of a bill with no payments for a session sent with no device cookie", async () => {
+  it("requires device proof to void a line of a bill with no payments", async () => {
     const billId = await tabWith("Chuletón", "Tarta");
-
-    const voided = await request(
+    const body = await cancelBody(suite.db, billId, 2);
+    const refused = await request(
       "POST",
       `/api/working-orders/${billId}/adjustments`,
-      await cancelBody(suite.db, billId, 2),
+      body,
       venue.sessionCookie,
     );
+    expect(refused.status).toBe(401);
+    expect(refused.json).toMatchObject({ code: "device.unauthorized" });
+    expect(await lineTotals(billId)).toEqual(["25.00", "18.00"]);
 
+    const voided = await request("POST", `/api/working-orders/${billId}/adjustments`, body);
     expect(voided.status).toBe(200);
     expect(await lineTotals(billId)).toEqual(["25.00"]);
   });

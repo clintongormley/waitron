@@ -26,7 +26,7 @@ import {
 import type { Run, TillApiDeps } from "./till-api.js";
 import { sendingCfg } from "./made-here.js";
 import { requestCfg } from "./request-config.js";
-import { isUuid, requireSession } from "./till-session.js";
+import { assertRequestDevice, isUuid, requireSession } from "./till-session.js";
 import "./errors.js";
 import { gateZones } from "./zone-access.js";
 
@@ -229,6 +229,7 @@ export function mountBillPaymentsApi(
   app.post("/api/working-orders/:id/payments", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { permission: "sale.take_payment" });
+      await assertRequestDevice(deps, c, session);
       const { personId, sessionId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const id = requireBillParam(c.req.param("id"));
@@ -298,6 +299,7 @@ export function mountBillPaymentsApi(
       // The tender the payment was taken with, as a payment of it would need.
       const tender = await refundTender(deps.db, id, paymentId);
       assertTakesTender(session.device, tender);
+      await assertRequestDevice(deps, c, session);
       const refund = parseRefund(asObject(await readRawJsonBody<unknown>(c)));
       const saleCfg = sendingCfg(cfg, c, session.device);
       return c.json(

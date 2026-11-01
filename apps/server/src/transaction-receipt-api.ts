@@ -8,7 +8,7 @@ import type { Logger } from "./logger.js";
 import { enqueueReceiptCopy, resolveReceiptPrinter } from "./receipt-print.js";
 import { requestCfg } from "./request-config.js";
 import type { Run, TillApiDeps } from "./till-api.js";
-import { requireSession } from "./till-session.js";
+import { assertRequestDevice, requireSession } from "./till-session.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import { readOfferedReceiptLanguages } from "./venue-locale.js";
 import { checkZones } from "./zone-access.js";
@@ -44,6 +44,7 @@ export function mountTransactionReceiptApi(
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       await assertDeviceCapability(deps, c, "print-receipt", "reprint", session.device);
+      await assertRequestDevice(deps, c, session);
       const id = parsedId(c.req.param("saleId"));
       const { language } = await readJsonBody<{ language?: unknown }>(c);
       if (language !== undefined && typeof language !== "string")

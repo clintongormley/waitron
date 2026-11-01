@@ -34,7 +34,7 @@ import {
 } from "./tender-refund-sends.js";
 import type { TenderRefundRequest } from "./tender-refund-types.js";
 import { overridePinAttempts, parseOverrideField, STATUS, type TillApiDeps } from "./till-api.js";
-import { assertStillSignedIn, requireSession } from "./till-session.js";
+import { assertRequestDevice, assertStillSignedIn, requireSession } from "./till-session.js";
 import { assertSubjectZones } from "./zone-access.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import { enqueuePrintJob } from "@waitron/printing";
@@ -160,6 +160,7 @@ export function mountTenderRefundApi(
   app.post("/api/transactions/:saleId/refunds", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);
+      await assertRequestDevice(deps, c, session);
       const cfg = requestCfg(deps.cfg, session),
         id = pathId(c.req.param("saleId"), "sale");
       const req = parseRequest(asObject(await readRawJsonBody<unknown>(c)));
@@ -202,6 +203,7 @@ export function mountTenderRefundApi(
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       await assertDeviceCapability(deps, c, "print-receipt", "reprint", session.device);
+      await assertRequestDevice(deps, c, session);
       const cfg = requestCfg(deps.cfg, session),
         id = pathId(c.req.param("refundId"), "refund");
       const body = asObject(await readRawJsonBody<unknown>(c));
@@ -240,6 +242,7 @@ export function mountTenderRefundApi(
   app.post("/api/tender-refunds/:refundId/retry", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);
+      await assertRequestDevice(deps, c, session);
       const cfg = requestCfg(deps.cfg, session),
         id = pathId(c.req.param("refundId"), "refund");
       const override = overrideOf(asObject(await readRawJsonBody<unknown>(c)));

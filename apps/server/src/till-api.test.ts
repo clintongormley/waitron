@@ -5,7 +5,7 @@ import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   deviceProfiles,
   floorZones,
@@ -144,7 +144,7 @@ let aguaOfferId: string;
 let hiddenAguaOfferId: string;
 // An enrolled `till` device's cookie, which a happy-path place/sale call carries to reach the
 // route body.
-let tillDeviceCookie: string;
+let sessionDeviceCookie: string;
 // The device `openSession` opens Ana's shift on: at the venue, allowed every capability.
 let sessionDeviceId: string;
 
@@ -279,18 +279,14 @@ const suite = useVenueDb({
     aguaOfferId = offerId;
     hiddenAguaOfferId = hiddenOfferId;
     cfg = makeCfg(venueId, nodeId);
-    sessionDeviceId = await seedSessionDevice(db, cfg);
+    const sessionProfile = await seedDeviceProfile(db, "Session device profile", [
+      ...CAPABILITY_FLAGS,
+    ]);
+    const sessionDevice = await enrolTillDevice(db, sessionProfile);
+    sessionDeviceId = sessionDevice.deviceId;
+    sessionDeviceCookie = sessionDevice.cookie;
   },
 });
-
-let saleTillProfiles = 0;
-async function enrolSaleTillDevice(): Promise<void> {
-  saleTillProfiles += 1;
-  const profileId = await seedDeviceProfile(suite.db, `Sale till profile ${saleTillProfiles}`, [
-    "take-cash",
-  ]);
-  tillDeviceCookie = await enrolTillDeviceCookie(suite.db, profileId);
-}
 
 /** A collecting logger for asserting the structured lines the routes emit. */
 function collect(
@@ -2386,7 +2382,10 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
 
     const res = await app.request("/api/pay", {
       method: "POST",
-      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
+      headers: {
+        "content-type": "application/json",
+        cookie: `${SESSION_COOKIE}=${token}; ${sessionDeviceCookie}`,
+      },
       body: JSON.stringify({
         id: randomUUID(),
         lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
@@ -2407,7 +2406,10 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
 
     const res = await app.request("/api/pay", {
       method: "POST",
-      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
+      headers: {
+        "content-type": "application/json",
+        cookie: `${SESSION_COOKIE}=${token}; ${sessionDeviceCookie}`,
+      },
       body: JSON.stringify({
         id: "not-a-uuid",
         lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
@@ -2592,7 +2594,10 @@ describe("malformed zone ids and simulation outcomes on the sale routes", () => 
     const token = await openSession(suite.db);
     const res = await app.request("/api/sales", {
       method: "POST",
-      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
+      headers: {
+        "content-type": "application/json",
+        cookie: `${SESSION_COOKIE}=${token}; ${sessionDeviceCookie}`,
+      },
       body: JSON.stringify({
         lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
         tender: { method: "cash", amount: "10.00" },
@@ -2611,7 +2616,10 @@ describe("malformed zone ids and simulation outcomes on the sale routes", () => 
     const token = await openSession(suite.db);
     const res = await app.request("/api/pay", {
       method: "POST",
-      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
+      headers: {
+        "content-type": "application/json",
+        cookie: `${SESSION_COOKIE}=${token}; ${sessionDeviceCookie}`,
+      },
       body: JSON.stringify({
         id: randomUUID(),
         lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
@@ -2635,7 +2643,10 @@ describe("malformed zone ids and simulation outcomes on the sale routes", () => 
     const pay = (simulationOutcome: string) =>
       app.request("/api/pay", {
         method: "POST",
-        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE}=${token}; ${sessionDeviceCookie}`,
+        },
         body: JSON.stringify({
           id: randomUUID(),
           lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
@@ -2681,7 +2692,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
   ])("refuses a %s held label save without changing the order", async (state, code, status) => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
     const id = randomUUID();
     await park(app, cookie, {
       id,
@@ -2710,7 +2721,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
   it("saves only a held order label and retains its stored lines", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
     const id = randomUUID();
     await park(app, cookie, {
       id,
@@ -2815,7 +2826,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
   it("POST parks an order as the session's device and returns { id, orderNumber }", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
     const id = randomUUID();
 
     const res = await park(app, cookie, {
@@ -2848,7 +2859,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
   it("POST prices an allowed menu offer and rejects an offer outside the selected zone", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
 
     const allowedId = randomUUID();
     const allowed = await app.request("/api/working-orders", {
@@ -2889,7 +2900,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
   it("POST refuses a line naming only a product id", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
 
     const res = await app.request("/api/working-orders", {
       method: "POST",
@@ -2909,7 +2920,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
   it("POST with a malformed id is 400 shared.invalid_id, not an opaque 500 (the 7b park sibling)", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
 
     // Park is the one route where the client MINTS the working-order id that becomes the PK; the
     // route screen refuses a malformed one 400. The non-empty basket clears parkOrder's empty-basket
@@ -2927,7 +2938,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
   it("PUT /:id/lines/:lineNo on a counter order names no party in its answer", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
     const id = randomUUID();
     expect(
       (await park(app, cookie, { id, lines: [{ menuItemId: aguaOfferId, quantity: "1" }] })).status,
@@ -2946,7 +2957,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
   it("GET lists it, GET/:id retrieves its lines, PUT edits it, DELETE abandons it", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
     const id = randomUUID();
 
     const parked = await park(app, cookie, {
@@ -3042,7 +3053,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
   it("GET /:id of an unknown id is 404 working_order.not_found", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
     const res = await app.request(`/api/working-orders/${randomUUID()}`, { headers: { cookie } });
     expect(res.status).toBe(404);
     expect(await res.json()).toMatchObject({ error: { code: "working_order.not_found" } });
@@ -3051,7 +3062,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
   it("PUT of an abandoned (terminal) order is 409 working_order.not_open", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
     const id = randomUUID();
     await park(app, cookie, { id, lines: [{ menuItemId: aguaOfferId, quantity: "1" }] });
     await app.request(`/api/working-orders/${id}`, { method: "DELETE", headers: { cookie } });
@@ -3072,7 +3083,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
   it("GET /:id with a malformed id is 404 working_order.not_found, not an opaque 500", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
 
     const res = await app.request("/api/working-orders/not-a-uuid", { headers: { cookie } });
     expect(res.status).toBe(404);
@@ -3084,7 +3095,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
   it("PUT /:id with a malformed id is 409 working_order.not_open, not an opaque 500", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
 
     // A well-formed body, so the refusal comes from the id screen, not the body parse.
     const res = await app.request("/api/working-orders/not-a-uuid", {
@@ -3101,7 +3112,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
   it("DELETE /:id with a malformed id is 409 working_order.not_open, not an opaque 500", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
 
     const res = await app.request("/api/working-orders/not-a-uuid", {
       method: "DELETE",
@@ -3118,11 +3129,10 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
 // never dispatch into the fiscal backend and these routes are testable hermetically. `collectOrder`'s
 // fiscal happy path needs a real backend and lives in `till-api.fiscal-sale-paths.test.ts`.
 describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
-  beforeEach(enrolSaleTillDevice);
   it("POST places an open order (open → placed), fires a ticket item at queued, and returns { id, status }", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
     const id = randomUUID();
     await park(app, cookie, {
       id,
@@ -3132,7 +3142,7 @@ describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
 
     const placed = await app.request(`/api/working-orders/${id}/place`, {
       method: "POST",
-      headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
+      headers: { cookie: `${cookie}; ${sessionDeviceCookie}` },
     });
     expect(placed.status).toBe(200);
     // `prepay` files nothing at placing — just the bare transition result.
@@ -3154,17 +3164,17 @@ describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
   it("POST repeats the original placed result when the first place already committed", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
     const id = randomUUID();
     await park(app, cookie, { id, lines: [{ menuItemId: aguaOfferId, quantity: "1" }] });
     await app.request(`/api/working-orders/${id}/place`, {
       method: "POST",
-      headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
+      headers: { cookie: `${cookie}; ${sessionDeviceCookie}` },
     });
 
     const rePlace = await app.request(`/api/working-orders/${id}/place`, {
       method: "POST",
-      headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
+      headers: { cookie: `${cookie}; ${sessionDeviceCookie}` },
     });
     expect(rePlace.status).toBe(200);
     expect(await rePlace.json()).toEqual({ id, status: "placed" });
@@ -3173,7 +3183,7 @@ describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
   it("POST with a malformed id is 409 working_order.not_open, not an opaque 500 (the 7b isUuid follow-up)", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
 
     // The route's `isUuid` screen refuses "not-a-uuid" before any query.
     const res = await app.request("/api/working-orders/not-a-uuid/place", {
@@ -3194,7 +3204,7 @@ describe("/api/working-orders/:id/prep (Mode-P send-to-prep, KDS-1 ticket model)
   it("POST on a still-OPEN (parked, unpaid) order is refused 409 working_order.not_settled, nothing fired", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
     const id = randomUUID();
     await park(app, cookie, {
       id,
@@ -3222,7 +3232,7 @@ describe("/api/working-orders/:id/prep (Mode-P send-to-prep, KDS-1 ticket model)
   it("POST with a malformed id is 409 working_order.not_settled, not an opaque 500", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
 
     const res = await app.request("/api/working-orders/not-a-uuid/prep", {
       method: "POST",
@@ -3240,7 +3250,6 @@ describe("/api/working-orders/:id/prep (Mode-P send-to-prep, KDS-1 ticket model)
 // /api/ticket-items/:id/advance, POST /api/orders/:id/stations/:sid/advance. Under this suite's
 // `prepay` cfg, `placeOrder`'s fire seeds ticket items with no fiscal write.
 describe("KDS-1 station-display operate routes", () => {
-  beforeEach(enrolSaleTillDevice);
   /** The seeded default station "Cocina", read back through `GET /api/stations` (the picker's own read). */
   async function defaultStation(
     app: Hono,
@@ -3259,7 +3268,7 @@ describe("KDS-1 station-display operate routes", () => {
     await park(app, cookie, { id, lines: [{ menuItemId: aguaOfferId, quantity: "1" }], label });
     await app.request(`/api/working-orders/${id}/place`, {
       method: "POST",
-      headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
+      headers: { cookie: `${cookie}; ${sessionDeviceCookie}` },
     });
     return id;
   }
@@ -3267,7 +3276,7 @@ describe("KDS-1 station-display operate routes", () => {
   it("a session lists stations, reads a station's queue, bumps a ticket item, and the queue reflects it", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
     const id = await placeFired(app, cookie, "Mesa 8");
 
     // 1. List stations → the seeded default "Cocina".
@@ -3332,7 +3341,7 @@ describe("KDS-1 station-display operate routes", () => {
   it("a queued item bumped straight to ready (skipping preparing) is refused 409 ticket.invalid_transition", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
     const id = await placeFired(app, cookie);
     const cocina = await defaultStation(app, cookie);
     const q = await app.request(`/api/stations/${cocina.id}/queue`, { headers: { cookie } });
@@ -3356,7 +3365,7 @@ describe("KDS-1 station-display operate routes", () => {
   it("POST /api/ticket-items/:id/advance with a malformed id is 409 ticket.invalid_transition, not a 500", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
     const res = await app.request("/api/ticket-items/not-a-uuid/advance", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
@@ -3371,7 +3380,7 @@ describe("KDS-1 station-display operate routes", () => {
   it("POST /api/ticket-items/:id/advance with a garbage or missing `to` is 409 ticket.invalid_transition, not a 500", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
     const id = await placeFired(app, cookie);
     const cocina = await defaultStation(app, cookie);
     const q = await app.request(`/api/stations/${cocina.id}/queue`, { headers: { cookie } });
@@ -3450,7 +3459,7 @@ describe("KDS-1 station-display operate routes", () => {
   it("a dish moved to another station is refused 403 device.forbidden_station when bumped from its old station's view, and stays as it was", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
     const id = await placeFired(app, cookie);
     const cocina = await defaultStation(app, cookie);
     const grill = await seedKitchenStation(suite.db, {
@@ -3497,7 +3506,7 @@ describe("KDS-1 station-display operate routes", () => {
   it("POST /api/ticket-items/:id/advance with a missing or malformed `stationId` is 400 management.request_invalid", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
     const id = await placeFired(app, cookie);
     const item = await firedItem(id);
     for (const body of [
@@ -3522,7 +3531,7 @@ describe("KDS-1 station-display operate routes", () => {
   it("GET /api/stations/:id/queue with a malformed id is 404 station.not_found, not a 500", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
     const res = await app.request("/api/stations/not-a-uuid/queue", { headers: { cookie } });
     expect(res.status).toBe(404);
     expect(await res.json()).toMatchObject({
@@ -3533,7 +3542,7 @@ describe("KDS-1 station-display operate routes", () => {
   it("POST /api/orders/:id/stations/:sid/advance bumps the WHOLE ticket; a bad `to` is 400; a malformed id a 200 no-op", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
     // Two lines → two ticket items at the default station, so the whole-ticket bump moves both together.
     const id = randomUUID();
     await park(app, cookie, {
@@ -3546,7 +3555,7 @@ describe("KDS-1 station-display operate routes", () => {
     });
     await app.request(`/api/working-orders/${id}/place`, {
       method: "POST",
-      headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
+      headers: { cookie: `${cookie}; ${sessionDeviceCookie}` },
     });
     const cocina = await defaultStation(app, cookie);
 
@@ -3584,7 +3593,7 @@ describe("KDS-1 station-display operate routes", () => {
   it("a station's queue carries its unacknowledged kitchen notices, and acknowledging one clears it", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
     const id = randomUUID();
     await park(app, cookie, {
       id,
@@ -3600,7 +3609,7 @@ describe("KDS-1 station-display operate routes", () => {
     );
     await app.request(`/api/working-orders/${id}/place`, {
       method: "POST",
-      headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
+      headers: { cookie: `${cookie}; ${sessionDeviceCookie}` },
     });
     const cocina = await defaultStation(app, cookie);
     // A notice as a void of that line records it.
@@ -3692,7 +3701,7 @@ describe("/api/working-orders/:id/collect (malformed id — the fiscal happy pat
   it("POST with a malformed id is 409 working_order.not_placed BEFORE any fiscal dispatch, not an opaque 500", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
 
     // The stub `backend: {} as FiscalBackend` would throw (a non-AppError → opaque 500) the moment
     // `collectOrder` tried to use it — this 409, not a 500, is the witness that the `isUuid` screen
@@ -3710,16 +3719,15 @@ describe("/api/working-orders/:id/collect (malformed id — the fiscal happy pat
 });
 
 describe("/api/working-orders/:id/cancel", () => {
-  beforeEach(enrolSaleTillDevice);
   it("POST cancels a PLACED order (placed → abandoned) given a reason", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
     const id = randomUUID();
     await park(app, cookie, { id, lines: [{ menuItemId: aguaOfferId, quantity: "1" }] });
     await app.request(`/api/working-orders/${id}/place`, {
       method: "POST",
-      headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
+      headers: { cookie: `${cookie}; ${sessionDeviceCookie}` },
     });
 
     const cancel = await app.request(`/api/working-orders/${id}/cancel`, {
@@ -3739,12 +3747,12 @@ describe("/api/working-orders/:id/cancel", () => {
   it("POST with an empty reason is 400 working_order.reason_required, changing nothing", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
     const id = randomUUID();
     await park(app, cookie, { id, lines: [{ menuItemId: aguaOfferId, quantity: "1" }] });
     await app.request(`/api/working-orders/${id}/place`, {
       method: "POST",
-      headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
+      headers: { cookie: `${cookie}; ${sessionDeviceCookie}` },
     });
 
     const cancel = await app.request(`/api/working-orders/${id}/cancel`, {
@@ -3765,7 +3773,7 @@ describe("/api/working-orders/:id/cancel", () => {
   it("POST with a malformed id is 409 working_order.not_placed, not an opaque 500", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
 
     const res = await app.request("/api/working-orders/not-a-uuid/cancel", {
       method: "POST",
@@ -3820,7 +3828,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
   it("lists zones, marks a line served (2→1) and unmarks it (1→2), surfacing zoneId + pendingToServe in the state read", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
 
     // Seed one active floor zone in the till's own venue. `GET /api/zones` must read it back, and
     // the table-create must accept it, so those two paths — not this insert — are under test. This
@@ -3957,7 +3965,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
   it("served POST with a malformed :id is 409 party.not_open, not an opaque 500", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
 
     // The route refuses a non-UUID :id with the SAME code a closed or absent party gets.
     const res = await mark(app, cookie, "not-a-uuid", "served", [
@@ -3972,7 +3980,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
   it("served POST with items that are not a list of string lineId and quantity is 400 management.request_invalid, not an opaque 500", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
 
     // A REAL party with a line, so only the body's shape can refuse.
     const tab = await tabZone();
@@ -4012,7 +4020,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
   it("served POST naming a line that is not on the party's bills is 404 group.not_found", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
 
     // A real party with one line, then a mark of a line id that names nothing — and one that is no
     // UUID at all: the command's own guard, not a route screen.
@@ -4043,7 +4051,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
   it("served POST on a well-formed id that names no OPEN party is 409 party.not_open (the command's own guard)", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
 
     // A valid uuid naming no party: clears the route's isUuid screen and reaches the command, which
     // finds no open party.
@@ -4190,7 +4198,7 @@ async function modifierOfferFixture() {
   ];
   const app = new Hono();
   mountTillApi(app, deps(suite.db), collect([]));
-  const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${tillDeviceCookie}`;
+  const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
   const headers = { "content-type": "application/json", cookie };
   return {
     ...data,
@@ -4626,7 +4634,7 @@ describe("sale-policy order flow routes", () => {
     async (zoneOverride) => {
       const app = new Hono();
       mountTillApi(app, deps(suite.db), collect([]));
-      const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+      const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
       const zone = await withTransaction(suite.db, async (tx) => {
         const department = await createDepartment(tx, cfg, {
           name: `Counter flow ${randomUUID()}`,
@@ -4673,7 +4681,7 @@ describe("sale-policy order flow routes", () => {
     async ({ start, paidWhen, want, sends }) => {
       const app = new Hono();
       mountTillApi(app, deps(suite.db), collect([]));
-      const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+      const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
       const zoneId = await withTransaction(suite.db, async (tx) => {
         const department = await createDepartment(tx, cfg, {
           name: `Pay flow ${randomUUID()}`,

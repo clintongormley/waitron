@@ -135,8 +135,7 @@ export async function requireSession(
     row = await check(deps.db, false);
   }
   if (options.action !== undefined) {
-    const proven = await requireDevice(deps, c);
-    if (proven.deviceId !== row.deviceId) throw new AppError("device.unauthorized", {});
+    await assertRequestDevice(deps, c, row);
   }
   return {
     personId: row.personId,
@@ -144,6 +143,15 @@ export async function requireSession(
     deviceId: brandDeviceId(row.deviceId),
     device: toDeviceBinding(row.deviceId, row),
   };
+}
+
+export async function assertRequestDevice(
+  deps: { db: Database; devMode?: boolean },
+  c: Context,
+  session: { deviceId: string },
+): Promise<void> {
+  const proven = await requireDevice(deps, c);
+  if (proven.deviceId !== session.deviceId) throw new AppError("device.unauthorized", {});
 }
 
 /** Inside a write's own transaction: `sessionId` is still `personId`'s open session on `deviceId`
