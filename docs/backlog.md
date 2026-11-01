@@ -144,7 +144,7 @@ come after the list above:
   (Overview, the first kitchen column, counting each dish to make with the held after a +; below
   the width its columns need, a kitchen board shows them as tabs; a late card's tab, and its
   collapsed column, carry a red bar) landed in #2144, from the build plan's slice 9c. What is left of
-  A797: slices 10–11, now that A803's slice 3 has landed (#PR), and 12b after A773-2, which builds the pass's
+  A797: slices 10–11, now that A803's slice 3 has landed (#2360), and 12b after A773-2, which builds the pass's
   part: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [mockups](backlog/mockups/a797-device-screens/).
@@ -1991,7 +1991,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   ticket/receipt grouping, has landed. What it leaves open is A1191–A1202, A1217 and the store limit under
   _Modules, data and code health_. Slice 2, named bills that keep their number at the table, has
   landed; it leaves open A1235–A1238. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
-  main bill, has landed (#PR); it leaves open A1256, A1258, A1261, A1263–A1267 and A1269. Remaining slices: one
+  main bill, has landed (#2360); it leaves open A1256, A1258, A1261, A1263–A1267 and A1269. Remaining slices: one
   picker for Move dishes and Split a table, including waiting courses; pre-bills after asesor S2
   (A446). One payment pays one bill. Station modes, pass naming and grouped cross-bill
   firing wait for pending A773-2, independently of S2. New Spanish wording requires approval
@@ -2052,19 +2052,19 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   name rather than a till string. Believed to predate the slice; not run on main.
 
 - **A1261. A full invoice for a bill already paid, from the table's ⋮ (left open by A803 slice 3,
-  Owner question 2, #PR).** As built, the ⋮ offers Full invoice only for a bill still to pay and
+  Owner question 2, #2360).** As built, the ⋮ offers Full invoice only for a bill still to pay and
   not yet invoiced; for a paid bill it is a correction, which A802 has not built. Once A802 gives
   the till a way in, offer it from the ⋮ for a paid bill. If the owner instead picks "show it
   quiet and explain on tap", that needs a new sentence in English and Spanish first.
 
 - **A1263. Switching profile after only viewing another person's draft would say "draft
-  replaced" (left open by A803 slice 3, #PR).** `#switchProfile` in `apps/till/src/till-app.ts`
+  replaced" (left open by A803 slice 3, #2360).** `#switchProfile` in `apps/till/src/till-app.ts`
   reads a taken-over answer as a lost change even when this till had nothing of its own to save.
   The LOOK fix F3 stopped this at seven other leave points by checking `DraftSync.ownEditWaiting`
   first; this one was found by reading, not run.
 
 - **A1264. A bill another till merged or moved away is noticed only on the 15-second timer (left
-  open by A803 slice 3, #PR).** The till has no push from the server. Since the LOOK fix F1 it
+  open by A803 slice 3, #2360).** The till has no push from the server. Since the LOOK fix F1 it
   re-reads the party's bills on its draft timer and after a refused save; a window focus, or the
   page becoming visible again, re-reads the draft but not the bills (by reading, not run), so the
   screen can keep the gone bill for up to 15 seconds after the till is picked up. Re-read the
@@ -2079,7 +2079,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   (`~/waitron-campaign-c/a803-3-shots/`, not in the repository).
 
 - **A1266. A payment window stays on a bill another till moved or merged away, and an unanswered
-  card payment's view leaves this till's screen (left open by A803 slice 3, #PR).** Since the LOOK
+  card payment's view leaves this till's screen (left open by A803 slice 3, #2360).** Since the LOOK
   fix F1 the table screen moves off such a bill, but its payment window (`bill-pay` in
   `apps/till/src/till-app.ts`, which follows `billPaying.billId`) stays open on the gone bill, and a
   payment taken there is refused (`requireOpenBill` in `apps/server/src/bill-payments.ts`,
@@ -2090,7 +2090,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   payment's view reachable.
 
 - **A1267. A dish typed on a bill another till merged or moved away is kept nowhere a waiter can
-  see when no bill is left to show (left open by A803 slice 3, #PR).** The till moves the screen
+  see when no bill is left to show (left open by A803 slice 3, #2360).** The till moves the screen
   off such a bill and offers its unsaved lines for review on the bill it now shows
   (`#followBillsRead` and `#carryCandidate` in `apps/till/src/till-app.ts`). With no bill left, or
   when the bill now shown already holds lines kept for review, the lines stay under the gone bill,
@@ -2469,7 +2469,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   The payment-window build still needs A790 Cut A and its complete live Cut B, plus G4/path
   releases. Preserve A948's enabled F1 paths in every environment; F2-to-F3 replacement remains
   A556. The remaining payment-window implementation and runtime acceptance stay open.
-  At a table, A803 slice 3 (#PR) left the wide screen's pay controls (Cash, Card, the pay ways,
+  At a table, A803 slice 3 (#2360) left the wide screen's pay controls (Cash, Card, the pay ways,
   the bill's Full invoice and receipt language) in the foot under the totals; this window puts
   them behind one Pay button, as a handheld already has (its D16, Owner question 7).
   [Four-case boards](backlog/mockups/a739-owner-receipt-flow/README.md),
@@ -2528,7 +2528,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   (`till-tender-pay`) and the bill's smaller one (`#billChoices`,
   `apps/till/src/screens/till-table-order-screen.ts`), both drawn since A231 (#1256). While full
   invoices are switched off neither is drawn (A741), so the question is for when they are on.
-  A803 slice 3 (#PR) draws only the bill's own at a table, its Owner question 3's default; the
+  A803 slice 3 (#2360) draws only the bill's own at a table, its Owner question 3's default; the
   counter keeps the panel's. **Next action:** owner to pick between the two pictures:
   [the bill's own, as built](backlog/mockups/a803-bills-and-tables/slice3-q3-full-invoice-bill-button.png)
   and [the payment panel's](backlog/mockups/a803-bills-and-tables/slice3-q3-full-invoice-pay-panel-button.png).
