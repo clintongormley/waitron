@@ -51,7 +51,7 @@ describe.each(["light", "dark"] as const)("till-join-with-dialog a11y (%s theme)
               state: "open",
               name: "Ana",
               displayName: "Ana",
-              mainBillId: null,
+              openingBillId: null,
               outstanding: "0.00",
               billCount: 1,
               tableIds: ["t4"],

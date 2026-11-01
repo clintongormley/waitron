@@ -880,6 +880,86 @@ describe("GET /api/parties/:id/bills", () => {
   });
 });
 
+describe("A803 create bill route: POST /api/parties/:id/bills", () => {
+  async function billsOf(partyId: string) {
+    return withTransaction(suite.db, (tx) =>
+      tx
+        .select({ id: workingOrders.id, status: workingOrders.status })
+        .from(workingOrders)
+        .where(eq(workingOrders.partyId, partyId)),
+    );
+  }
+
+  it("makes an empty bill and answers its id and the party's new revision", async () => {
+    const { partyId, tabId, revision } = await seat();
+    const res = await post(`/api/parties/${partyId}/bills`, { expectedPartyRevision: revision });
+    expect(res.status).toBe(200);
+    const answer = (await res.json()) as { billId: string; revision: number };
+    expect(answer).toEqual({ billId: expect.any(String), revision: revision + 1 });
+    expect(answer.billId).not.toBe(tabId);
+    expect(await partyRow(partyId)).toMatchObject({ revision: revision + 1 });
+    const bills = await billsOf(partyId);
+    expect(bills).toHaveLength(2);
+    expect(bills).toContainEqual({ id: answer.billId, status: "open" });
+    const [identity] = await withTransaction(suite.db, (tx) =>
+      tx
+        .select({ number: billIdentities.number })
+        .from(billIdentities)
+        .where(eq(billIdentities.workingOrderId, answer.billId)),
+    );
+    expect(identity).toEqual({ number: 2 });
+  });
+
+  it("answers 409 party.out_of_date for a stale revision, making no bill", async () => {
+    const { partyId, tabId, revision } = await seat();
+    const res = await post(`/api/parties/${partyId}/bills`, {
+      expectedPartyRevision: revision + 2,
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "party.out_of_date", params: { partyId, revision } },
+    });
+    expect(await billsOf(partyId)).toEqual([{ id: tabId, status: "open" }]);
+    expect(await partyRow(partyId)).toMatchObject({ revision });
+  });
+
+  it.each([undefined, -1, 1.5, "0", null])(
+    "refuses the revision %j as a bad field, making no bill",
+    async (expectedPartyRevision) => {
+      const { partyId, tabId, revision } = await seat();
+      const res = await post(`/api/parties/${partyId}/bills`, { expectedPartyRevision });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "expectedPartyRevision" } },
+      });
+      expect(await billsOf(partyId)).toEqual([{ id: tabId, status: "open" }]);
+      expect(await partyRow(partyId)).toMatchObject({ revision });
+    },
+  );
+
+  it("answers 409 party.not_open for a malformed or unknown party", async () => {
+    for (const id of ["not-a-uuid", randomUUID()]) {
+      const res = await post(`/api/parties/${id}/bills`, { expectedPartyRevision: 0 });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({
+        error: { code: "party.not_open", params: { partyId: id } },
+      });
+    }
+  });
+
+  it("401s without a session, making no bill", async () => {
+    const { partyId, tabId, revision } = await seat();
+    const res = await post(
+      `/api/parties/${partyId}/bills`,
+      { expectedPartyRevision: revision },
+      false,
+    );
+    expect(res.status).toBe(401);
+    expect(await billsOf(partyId)).toEqual([{ id: tabId, status: "open" }]);
+    expect(await partyRow(partyId)).toMatchObject({ revision });
+  });
+});
+
 describe("the tab routes are gone", () => {
   /** Each old tab route, sent to party `a`'s bill with a body it once took. */
   const ROUTES: {

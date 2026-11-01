@@ -1024,7 +1024,7 @@ describe("a floor read started before the metadata re-read and answering after i
       party({
         id: "v7",
         revision: 9,
-        mainBillId: "wo-7",
+        openingBillId: "wo-7",
         tableIds: ["t7"],
         unsentDrafts: [
           {

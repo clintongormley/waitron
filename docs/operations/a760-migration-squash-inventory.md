@@ -128,6 +128,8 @@ The raw final database carries 25 core and 15 media manual triggers; no other se
 
 **2026-10-19 (A757 slice 2):** `parties_clear_table_status` was dropped by core 0180; a squash leaves it out.
 
+**2026-10-31 (A803 slice 3):** `working_orders_release_main_bill` and `working_orders_release_main_bill_on_move` were dropped by core 0201, and `parties.main_bill_id` by core 0202; a squash leaves them out.
+
 ### Expression indexes
 
 These five expressions survive. All five are represented in head snapshots, so they are not manual-only additions. They still need explicit attention: preserve the complete expression, collation/order and partial `WHERE`, and compare `pragma_index_xinfo` plus stored SQL. Generate fresh rather than rebuilding a table; if the generator changes the spelling or column order, the preservation pass aligns its SQL with the old fresh object without editing snapshots. Do not add a second migration for an expression.

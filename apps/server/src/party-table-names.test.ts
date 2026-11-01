@@ -130,7 +130,6 @@ describe("a closing party keeps its table names", () => {
     await inTx(v, (tx) =>
       joinTables(tx, v.cfg, a.partyId, t2, {
         ...sent,
-        bills: "separate",
         otherPartyId: b.partyId,
         expectedOtherPartyRevision: b.revision,
       }),

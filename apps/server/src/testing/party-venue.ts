@@ -309,9 +309,7 @@ export async function nextMillisecond(): Promise<void> {
 export async function join(v: PartyVenue, partyId: string, tableId: string): Promise<void> {
   await nextMillisecond();
   const sent = await commandFor(v, partyId);
-  await inTx(v, (tx) =>
-    joinTables(tx, v.cfg, partyId, tableId, { ...sent, bills: "merge", otherPartyId: null }),
-  );
+  await inTx(v, (tx) => joinTables(tx, v.cfg, partyId, tableId, { ...sent, otherPartyId: null }));
 }
 
 /** Names the party, as the till's rename does. */
@@ -324,6 +322,17 @@ export async function nameParty(v: HasDb, partyId: string, name: string): Promis
 export async function floorRow(v: Pick<PartyVenue, "db" | "cfg">, tableId: string) {
   const rows = await inTx(v, (tx) => listTablesWithState(tx, v.cfg));
   return rows.find((row) => row.id === tableId)!;
+}
+
+/** The bill the floor opens the party's tables on (`TableParty.openingBillId`). */
+export async function openingBillOfParty(
+  v: Pick<PartyVenue, "db" | "cfg">,
+  partyId: string,
+): Promise<string | null> {
+  const rows = await inTx(v, (tx) => listTablesWithState(tx, v.cfg));
+  const row = rows.find((candidate) => candidate.party?.id === partyId);
+  if (row === undefined) throw new Error(`no table on the floor holds party ${partyId}`);
+  return row.party!.openingBillId;
 }
 
 /** Pays the bill in cash in one go, sending `guestCount` when one is given. */

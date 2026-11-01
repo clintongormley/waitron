@@ -7,6 +7,10 @@ import { setLocale } from "../i18n/t.js";
 import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { PartyBill, TabLine, TableParty } from "../api/client.js";
+import {
+  closeTableMenu,
+  openTableMenu,
+} from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const party: TableParty = {
   kitchenNote: { scope: { partyId: "v1" }, note: null, revision: 0, ownerRevision: 4 },
@@ -16,7 +20,7 @@ const party: TableParty = {
   state: "open",
   name: "Ana",
   displayName: "Ana",
-  mainBillId: "wo-4",
+  openingBillId: "wo-4",
   outstanding: "27.00",
   billCount: 1,
   tableIds: ["t4"],
@@ -141,11 +145,9 @@ describe.each(["light", "dark"] as const)(
         },
         theme,
       );
-      el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-      await el.updateComplete;
+      await openTableMenu(el);
       expect(el.shadowRoot!.querySelector('[data-cancel-line="4"]')).toBeNull();
-      el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-      await el.updateComplete;
+      await closeTableMenu(el);
       await openSentDish(el, "l1");
       expect(el.shadowRoot!.querySelector("[data-sent-line-dialog]")!.textContent).toContain(
         "Queso",

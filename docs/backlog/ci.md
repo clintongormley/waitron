@@ -887,6 +887,8 @@ the saved-view and detached-control paths before changing code or tests; neither
 is established, and a passing retry is not a repair. Lane G retains the logs and captures
 under `resume-a669-land-20261020-090825`.
 
+On 2026-10-31 the same detached split click failed again — `till-app-drafts.test.ts` "keeps the source and pending edit when the save before a split fails", in a 66-file local till run on feat/a803-3-bill-switcher (432 of 432 passed when that file ran alone).
+
 
 ## Decide whether browser tests stop replacing modules (A943 follow-up)
 

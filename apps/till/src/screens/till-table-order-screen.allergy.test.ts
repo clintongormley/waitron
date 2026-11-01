@@ -25,7 +25,7 @@ const party: TableParty = {
   state: "open",
   name: null,
   displayName: "4",
-  mainBillId: "wo-4",
+  openingBillId: "wo-4",
   outstanding: "0.00",
   billCount: 2,
   tableIds: ["table"],
@@ -134,9 +134,10 @@ it("offers Allergies first in Actions even before an answer or dish exists", asy
   await resized(el);
   const events: Event[] = [];
   el.addEventListener("edit-party-allergy", (event) => events.push(event));
-  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
   await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!);
-  const controls = el.shadowRoot!.querySelectorAll<HTMLElement>("[data-action-menu] [data-action]");
+  const controls = el.shadowRoot!.querySelectorAll<HTMLElement>(
+    "[data-table-menu-table] [data-action]",
+  );
   expect(controls[0]!.dataset.action).toBe("allergy");
   await userEvent.click(controls[0]!);
   expect(events).toHaveLength(1);

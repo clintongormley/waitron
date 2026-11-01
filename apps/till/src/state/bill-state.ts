@@ -30,6 +30,34 @@ export function shownBills(bills: readonly PartyBill[]): PartyBill[] {
     );
 }
 
+/**
+ * The bill to show of `bills`, the party's bills as last read: `kept`, the bill on screen, while it
+ * is still shown; else the lowest-numbered bill still owing; else the lowest-numbered shown bill;
+ * none when no bill is shown. Abandoned bills are never chosen.
+ */
+export function billToShow(
+  kept: string | undefined,
+  bills: readonly PartyBill[],
+): string | undefined {
+  const shown = shownBills(bills);
+  return (shown.find((bill) => bill.workingOrderId === kept) ?? shown.find(owing) ?? shown[0])
+    ?.workingOrderId;
+}
+
+/** "Bill 2", or "Bill" for a bill stored with no number. */
+export function billNumberLabel(bill: Pick<PartyBill, "billNumber">): string {
+  return bill.billNumber === null
+    ? t("floor.unsent_bill_unnumbered")
+    : fill(t("floor.unsent_bill"), { n: String(bill.billNumber) });
+}
+
+/** A bill's short label: "Bill 2", or "Bill 2 · Clint" when it has a name; "Bill" for a bill stored
+ * with no number. */
+export function billLabel(bill: Pick<PartyBill, "billNumber" | "billName">): string {
+  const label = billNumberLabel(bill);
+  return bill.billName === null ? label : `${label} · ${bill.billName}`;
+}
+
 /** A bill's name under the party's display name: its stored number, and its own name if it has one. */
 export function billName(
   partyName: string,

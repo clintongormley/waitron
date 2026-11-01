@@ -9,6 +9,7 @@ import { current, groups, now } from "./till-table-order-screen.current-orders.t
 import { storedDish, storedExtra } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 import { beer, flan, mount, resized } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
+import { switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(async () => {
   setLocale("en");
@@ -196,7 +197,7 @@ it.each([
     const { el, draft } = await open();
     const activate = await prepare(el, "move");
     if (change === "api") el.api = {} as TillTableOrderScreen["api"];
-    if (change === "party") el.party = { id: "other" } as TillTableOrderScreen["party"];
+    if (change === "party") el.party = { ...switcherParty, id: "other" };
     if (change === "bill") el.orderId = "other";
     if (change === "visit") el.serviceVisit++;
     if (change === "revision") el.currentOrders = { ...current(), revision: 8 };

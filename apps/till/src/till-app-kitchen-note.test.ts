@@ -2,7 +2,13 @@ import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { cleanupWidgets, mountWidget, servedMenus, draftServer } from "./widgets/test-helpers.js";
+import {
+  floorPartyBills,
+  cleanupWidgets,
+  mountWidget,
+  servedMenus,
+  draftServer,
+} from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
 import { codeMessage } from "./i18n/codes.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
@@ -894,7 +900,7 @@ const tableParty = (note = partyNote): TableParty & { kitchenNote: typeof partyN
   state: "open",
   name: null,
   displayName: "Four",
-  mainBillId: "bill-table",
+  openingBillId: "bill-table",
   outstanding: "0.00",
   billCount: 1,
   tableIds: ["table-four"],
@@ -930,8 +936,8 @@ async function mountedTable(
 ) {
   const server = draftServer();
   server.bills.add("bill-table");
-  if (initialParty?.mainBillId !== null && initialParty?.mainBillId !== undefined)
-    server.bills.add(initialParty.mainBillId);
+  if (initialParty?.openingBillId !== null && initialParty?.openingBillId !== undefined)
+    server.bills.add(initialParty.openingBillId);
   const el = await mounted(
     {
       getTill: vi.fn().mockResolvedValue({ ...till, formFactor }),
@@ -940,7 +946,7 @@ async function mountedTable(
         .mockResolvedValue({ deviceId: "till-dev", name: "Till 1", formFactor }),
       getTablesState: vi.fn().mockResolvedValue([tableRow(initialParty)]),
       getTabLines: vi.fn().mockResolvedValue({ revision: 0, lines: [] }),
-      getPartyBills: vi.fn().mockResolvedValue([]),
+      getPartyBills: floorPartyBills(),
       listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [], printProblems: [] }),
       listDrafts: server.listDrafts,
       saveDraft: server.saveDraft,
@@ -1289,8 +1295,8 @@ it("rereads a stale party note and keeps the current line draft", async () => {
   expect(tableScreen(el).draftStore).toBe(store);
   expect(tableHeading(el).shadowRoot!.querySelector("wt-dialog")).toBeNull();
 });
-it("saves a party note when settlement left no main bill", async () => {
-  const party = { ...tableParty(), mainBillId: null };
+it("saves a party note when the floor names no bill for the party", async () => {
+  const party = { ...tableParty(), openingBillId: null };
   const { el } = await mountedTable({}, party);
   expect(tableScreen(el).orderId).toBeUndefined();
   await editTable(el, "Together");
@@ -1482,7 +1488,7 @@ it("keeps the second party after the first party's note save returns", async () 
     ...tableParty(),
     id: "party-second",
     tableIds: ["table-second"],
-    mainBillId: "bill-second",
+    openingBillId: "bill-second",
     revision: 1,
     kitchenNote: {
       scope: { partyId: "party-second" },

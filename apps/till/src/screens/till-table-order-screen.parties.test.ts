@@ -17,7 +17,7 @@ const party: TableParty = {
   state: "open",
   name: "Ana",
   displayName: "Ana",
-  mainBillId: "wo-check",
+  openingBillId: "wo-check",
   outstanding: "30.00",
   billCount: 2,
   tableIds: ["t4"],
@@ -102,15 +102,32 @@ async function mountScreen(over: Partial<TillTableOrderScreen> = {}) {
     bills: [paidTab, check, abandoned],
     ...over,
   });
-  el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-  await el.updateComplete;
   return el;
 }
 
-const bills = (el: TillTableOrderScreen) =>
-  el.shadowRoot!.querySelector<HTMLElement>("[data-bills]")!;
-const bill = (el: TillTableOrderScreen, id: string) =>
-  bills(el).querySelector<HTMLElement>(`[data-bill="${id}"]`);
+const shadow = (el: TillTableOrderScreen) => el.shadowRoot!;
+/** A bill's row in the bill switcher. */
+const row = (el: TillTableOrderScreen, id: string) =>
+  el.shadowRoot!.querySelector<HTMLElement>(`[data-bill-switcher] [data-switch-bill="${id}"]`);
+const rowText = (el: TillTableOrderScreen, id: string, part: "label" | "owes") =>
+  row(el, id)!.querySelector(`.bill-row-${part}`)!.textContent!.trim();
+const paid = () => `${t("table.bill_paid")} ✓`;
+
+/** The bill-requested chip, read where the table screen draws it: the status pin's details. */
+async function requestedChip(el: TillTableOrderScreen): Promise<HTMLElement | null> {
+  const status = shadow(el).querySelector<HTMLElement & { updateComplete: Promise<boolean> }>(
+    "till-table-status",
+  )!;
+  status.shadowRoot!.querySelector<HTMLElement>("[data-status-pin]")!.click();
+  await status.updateComplete;
+  const sheet = status.shadowRoot!.querySelector<
+    HTMLElement & { updateComplete: Promise<boolean> }
+  >("till-table-details-sheet")!;
+  await sheet.updateComplete;
+  return sheet.shadowRoot!.querySelector<HTMLElement>("[data-chip='bill-requested']");
+}
+const menu = (el: TillTableOrderScreen) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!;
 
 function capture(el: TillTableOrderScreen, type: string): unknown[] {
   const seen: unknown[] = [];
@@ -125,30 +142,20 @@ afterEach(() => {
 });
 
 describe("till-table-order-screen: the party's bills", () => {
-  it("lists every bill with what it came to and what is still to pay, and the table's total", async () => {
+  it("lists every bill with what it still owes, and the foot what is still to pay at the table", async () => {
     const el = await mountScreen();
 
-    expect(bills(el).querySelectorAll("[data-bill]")).toHaveLength(2);
-    const paid = bill(el, "wo-tab")!;
-    expect(paid.querySelector("[data-bill-total]")!.textContent).toBe(money("14.00"));
-    expect(paid.querySelector("[data-bill-state]")!.textContent).toBe(t("table.bill_paid"));
-    const open = bill(el, "wo-check")!;
-    expect(open.querySelector("[data-bill-total]")!.textContent).toBe(money("30.00"));
-    expect(open.querySelector("[data-bill-state]")!.textContent).toBe(
-      t("table.bill_to_pay").replace("{amount}", money("30.00")),
-    );
-    expect(bills(el).querySelector("[data-party-outstanding]")!.textContent).toBe(money("30.00"));
+    expect(shadow(el).querySelectorAll("[data-switch-bill]")).toHaveLength(2);
+    expect(rowText(el, "wo-tab", "owes")).toBe(paid());
+    expect(rowText(el, "wo-check", "owes")).toBe(money("30.00"));
+    expect(shadow(el).querySelector("[data-party-outstanding]")!.textContent).toBe(money("30.00"));
   });
 
-  it("names each bill after the party, with the number it holds", async () => {
+  it("names each bill by the number it holds", async () => {
     const el = await mountScreen();
 
-    expect(bill(el, "wo-tab")!.querySelector(".bill-name")!.textContent!.trim()).toBe(
-      t("table.bill_of").replace("{party}", "Ana").replace("{n}", "1"),
-    );
-    expect(bill(el, "wo-check")!.querySelector(".bill-name")!.textContent!.trim()).toBe(
-      t("table.bill_of").replace("{party}", "Ana").replace("{n}", "2"),
-    );
+    expect(rowText(el, "wo-tab", "label")).toBe(t("floor.unsent_bill").replace("{n}", "1"));
+    expect(rowText(el, "wo-check", "label")).toBe(t("floor.unsent_bill").replace("{n}", "2"));
   });
 
   it("A803 bill names: lists bills by the number each holds and adds the name staff gave one", async () => {
@@ -160,73 +167,76 @@ describe("till-table-order-screen: the party's bills", () => {
     });
 
     expect(
-      [...bills(el).querySelectorAll(".bill-name")].map((name) => name.textContent!.trim()),
+      [...shadow(el).querySelectorAll("[data-switch-bill] .bill-row-label")].map((name) =>
+        name.textContent!.trim(),
+      ),
     ).toEqual([
-      t("table.bill_of").replace("{party}", "Ana").replace("{n}", "1"),
-      t("table.bill_of_named")
-        .replace("{party}", "Ana")
-        .replace("{n}", "2")
-        .replace("{name}", "Clint"),
+      t("floor.unsent_bill").replace("{n}", "1"),
+      `${t("floor.unsent_bill").replace("{n}", "2")} · Clint`,
     ]);
   });
 
-  it("names an unnamed party's bills after its tables, and never after a bill's own label", async () => {
+  it("names an unnamed party's bills by number, and never after a bill's own label", async () => {
     const el = await mountScreen({
       party: { ...party, name: null, displayName: "Mesa 4, 5" },
       bills: [paidTab, { ...check, label: "Mesa 4" }],
     });
 
-    expect(bill(el, "wo-check")!.querySelector(".bill-name")!.textContent!.trim()).toBe(
-      t("table.bill_of").replace("{party}", "Mesa 4, 5").replace("{n}", "2"),
-    );
+    expect(rowText(el, "wo-check", "label")).toBe(t("floor.unsent_bill").replace("{n}", "2"));
   });
 
   it.each(["en", "es"] as const)("shows no New orders tag on any bill in %s", async (locale) => {
     setLocale(locale);
     const el = await mountScreen();
 
-    expect(bill(el, "wo-check")!.querySelector("[data-bill-main]")).toBeNull();
-    expect(bill(el, "wo-tab")!.querySelector("[data-bill-main]")).toBeNull();
-    expect(bills(el).textContent).not.toContain(locale === "en" ? "New orders" : "Pedidos nuevos");
+    expect(row(el, "wo-check")!.querySelector("[data-bill-main]")).toBeNull();
+    expect(row(el, "wo-tab")!.querySelector("[data-bill-main]")).toBeNull();
+    expect(shadow(el).querySelector("[data-bill-switcher]")!.textContent).not.toContain(
+      locale === "en" ? "New orders" : "Pedidos nuevos",
+    );
   });
 
   it("marks no bill when the party has no main bill until its next order", async () => {
-    const el = await mountScreen({ party: { ...party, mainBillId: null } });
+    const el = await mountScreen({ party: { ...party, openingBillId: null } });
 
-    expect(bills(el).querySelector("[data-bill-main]")).toBeNull();
+    expect(shadow(el).querySelector("[data-bill-main]")).toBeNull();
   });
 
   it("leaves out a bill that was abandoned, which nobody pays", async () => {
     const el = await mountScreen();
 
-    expect(bill(el, "wo-gone")).toBeNull();
+    expect(row(el, "wo-gone")).toBeNull();
   });
 
   it("offers a copy of a paid bill's receipt", async () => {
     const el = await mountScreen();
     const asked = capture(el, "reprint-bill");
 
-    bill(el, "wo-tab")!.querySelector<HTMLElement>("[data-bill-receipt]")!.click();
+    menu(el).querySelector<HTMLElement>("[data-bill-receipt]")!.click();
 
     expect(asked).toEqual([{ workingOrderId: "wo-tab" }]);
-    expect(bill(el, "wo-check")!.querySelector("[data-bill-receipt]")).toBeNull();
+    el.orderId = "wo-check";
+    await el.updateComplete;
+    expect(menu(el).querySelector("[data-bill-receipt]")).toBeNull();
   });
 
   it("offers to take payment for another unpaid bill of the party", async () => {
     const el = await mountScreen();
-    const asked = capture(el, "take-payment");
+    const asked = capture(el, "switch-bill");
 
-    bill(el, "wo-check")!.querySelector<HTMLElement>("[data-take-payment]")!.click();
+    row(el, "wo-check")!.click();
+    row(el, "wo-tab")!.click();
 
     expect(asked).toEqual([{ workingOrderId: "wo-check" }]);
-    expect(bill(el, "wo-tab")!.querySelector("[data-take-payment]")).toBeNull();
   });
 
   it("marks the bill on screen and offers no payment for it, since the charge below takes it", async () => {
     const el = await mountScreen({ orderId: "wo-check", lines: [wine] });
+    const asked = capture(el, "switch-bill");
 
-    expect(bill(el, "wo-check")!.getAttribute("aria-current")).toBe("true");
-    expect(bill(el, "wo-check")!.querySelector("[data-take-payment]")).toBeNull();
+    expect(row(el, "wo-check")!.getAttribute("aria-checked")).toBe("true");
+    row(el, "wo-check")!.click();
+    expect(asked).toEqual([]);
     expect(el.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
   });
 
@@ -236,10 +246,10 @@ describe("till-table-order-screen: the party's bills", () => {
     expect(el.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
   });
 
-  it("shows no bills section for a tab that belongs to no party", async () => {
+  it("shows no bill switcher for a tab that belongs to no party", async () => {
     const el = await mountScreen({ party: null, bills: [] });
 
-    expect(el.shadowRoot!.querySelector("[data-bills]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-bill-switcher]")).toBeNull();
     expect(el.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
   });
 });
@@ -255,9 +265,9 @@ describe("till-table-order-screen: paying a bill by its state", () => {
 
   it("offers Take payment for a presented bill of the party", async () => {
     const el = await mountScreen({ bills: [paidTab, placed] });
-    const asked = capture(el, "take-payment");
+    const asked = capture(el, "switch-bill");
 
-    bill(el, "wo-placed")!.querySelector<HTMLElement>("[data-take-payment]")!.click();
+    row(el, "wo-placed")!.click();
 
     expect(asked).toEqual([{ workingOrderId: "wo-placed" }]);
   });
@@ -310,10 +320,10 @@ describe("till-table-order-screen: Cancel and credit", () => {
   };
 
   it("offers to cancel and credit a bill whose invoice was issued and nothing is paid", async () => {
-    const el = await mountScreen({ bills: [paidTab, invoiced] });
+    const el = await mountScreen({ orderId: "wo-invoiced", bills: [paidTab, invoiced] });
     const asked = capture(el, "cancel-credit-bill");
 
-    const action = bill(el, "wo-invoiced")!.querySelector<HTMLElement>("[data-cancel-credit]")!;
+    const action = menu(el).querySelector<HTMLElement>("[data-cancel-credit]")!;
     expect(action.textContent!.trim()).toBe(t("cancel_credit.action"));
     action.click();
 
@@ -326,9 +336,10 @@ describe("till-table-order-screen: Cancel and credit", () => {
     ["a presented bill with no invoice yet", { ...invoiced, receiptAvailable: false }],
     ["a presented bill holding a payment", { ...invoiced, hasPayments: true }],
   ])("offers no cancel on %s", async (_, shown) => {
-    const el = await mountScreen({ bills: [paidTab, shown] });
+    const el = await mountScreen({ orderId: "wo-invoiced", bills: [paidTab, shown] });
 
-    expect(bill(el, "wo-invoiced")!.querySelector("[data-cancel-credit]")).toBeNull();
+    expect(menu(el).querySelector("[data-table-menu-bill]")).not.toBeNull();
+    expect(menu(el).querySelector("[data-cancel-credit]")).toBeNull();
   });
 });
 
@@ -356,10 +367,10 @@ describe("till-table-order-screen: the bill request", () => {
     const el = await mountScreen({ tables: [floorRow(false)] });
     const asked = capture(el, "request-bill");
 
-    const action = bills(el).querySelector<HTMLElement>("[data-request-bill]")!;
+    const action = menu(el).querySelector<HTMLElement>("[data-request-bill]")!;
     expect(action.textContent!.trim()).toBe("Mark bill requested for Ana");
-    expect(bills(el).querySelector("[data-chip='bill-requested']")).toBeNull();
-    expect(bills(el).querySelector("[data-cancel-bill-request]")).toBeNull();
+    expect(await requestedChip(el)).toBeNull();
+    expect(menu(el).querySelector("[data-cancel-bill-request]")).toBeNull();
     action.click();
 
     expect(asked).toEqual([{ requested: true }]);
@@ -369,11 +380,9 @@ describe("till-table-order-screen: the bill request", () => {
     const el = await mountScreen({ tables: [floorRow(true)] });
     const asked = capture(el, "request-bill");
 
-    expect(bills(el).querySelector("[data-chip='bill-requested']")!.textContent!.trim()).toBe(
-      "Bill requested",
-    );
-    expect(bills(el).querySelector("[data-request-bill]")).toBeNull();
-    const cancel = bills(el).querySelector<HTMLElement>("[data-cancel-bill-request]")!;
+    expect((await requestedChip(el))!.textContent!.trim()).toBe("Bill requested");
+    expect(menu(el).querySelector("[data-request-bill]")).toBeNull();
+    const cancel = menu(el).querySelector<HTMLElement>("[data-cancel-bill-request]")!;
     expect(cancel.textContent!.trim()).toBe("Cancel the bill request for Ana");
     cancel.click();
 
@@ -384,7 +393,7 @@ describe("till-table-order-screen: the bill request", () => {
     const asking = await mountScreen({ tables: [floorRow(false)], groupCommandBusy: true });
     const cancelling = await mountScreen({ tables: [floorRow(true)], groupCommandBusy: true });
     const disabled = (el: TillTableOrderScreen, selector: string) =>
-      bills(el).querySelector<HTMLElement & { disabled: boolean }>(selector)!.disabled;
+      menu(el).querySelector<HTMLElement & { disabled: boolean }>(selector)!.disabled;
 
     expect(disabled(asking, "[data-request-bill]")).toBe(true);
     expect(disabled(cancelling, "[data-cancel-bill-request]")).toBe(true);
@@ -395,13 +404,11 @@ describe("till-table-order-screen: the bill request", () => {
     const asking = await mountScreen({ tables: [floorRow(false)] });
     const cancelling = await mountScreen({ tables: [floorRow(true)] });
 
-    expect(bills(asking).querySelector("[data-request-bill]")!.textContent!.trim()).toBe(
+    expect(menu(asking).querySelector("[data-request-bill]")!.textContent!.trim()).toBe(
       "Marcar cuenta pedida para Ana",
     );
-    expect(
-      bills(cancelling).querySelector("[data-chip='bill-requested']")!.textContent!.trim(),
-    ).toBe("Cuenta pedida");
-    expect(bills(cancelling).querySelector("[data-cancel-bill-request]")!.textContent!.trim()).toBe(
+    expect((await requestedChip(cancelling))!.textContent!.trim()).toBe("Cuenta pedida");
+    expect(menu(cancelling).querySelector("[data-cancel-bill-request]")!.textContent!.trim()).toBe(
       "Anular la petición de cuenta de Ana",
     );
   });
@@ -412,7 +419,7 @@ describe("till-table-order-screen: Finish table", () => {
     const el = await mountScreen();
     const asked = capture(el, "finish-table");
 
-    bills(el).querySelector<HTMLElement>("[data-finish-table]")!.click();
+    menu(el).querySelector<HTMLElement>("[data-finish-table]")!.click();
 
     expect(asked).toHaveLength(1);
   });
@@ -421,7 +428,7 @@ describe("till-table-order-screen: Finish table", () => {
     const el = await mountScreen({ finishRefused: true });
     const asked = capture(el, "take-payment");
 
-    const refusal = bills(el).querySelector<HTMLElement>("[data-finish-refusal]")!;
+    const refusal = shadow(el).querySelector<HTMLElement>("[data-finish-refusal]")!;
     expect(refusal.getAttribute("role")).toBe("alert");
     expect(refusal.textContent).toContain(codeMessage("party.bill_outstanding"));
     refusal.querySelector<HTMLElement>("[data-take-payment]")!.click();
@@ -434,19 +441,17 @@ describe("till-table-order-screen: Finish table", () => {
     const el = await mountScreen({ finishRefused: true, bills: [paidTab, placed] });
     const asked = capture(el, "take-payment");
 
-    const refusal = bills(el).querySelector<HTMLElement>("[data-finish-refusal]")!;
+    const refusal = shadow(el).querySelector<HTMLElement>("[data-finish-refusal]")!;
     refusal.querySelector<HTMLElement>("[data-take-payment]")!.click();
 
     expect(asked).toEqual([{ workingOrderId: "wo-check" }]);
-    expect(bill(el, "wo-check")!.querySelector("[data-bill-state]")!.textContent).toBe(
-      t("table.bill_to_pay").replace("{amount}", money("30.00")),
-    );
+    expect(rowText(el, "wo-check", "owes")).toBe(money("30.00"));
   });
 
   it("offers no Take payment beside the refusal when every bill is paid or abandoned", async () => {
     const el = await mountScreen({ finishRefused: true, bills: [paidTab, abandoned] });
 
-    const refusal = bills(el).querySelector<HTMLElement>("[data-finish-refusal]")!;
+    const refusal = shadow(el).querySelector<HTMLElement>("[data-finish-refusal]")!;
     expect(refusal.textContent).toContain(codeMessage("party.bill_outstanding"));
     expect(refusal.querySelector("[data-take-payment]")).toBeNull();
   });
@@ -462,7 +467,7 @@ describe("till-table-order-screen: Finish table", () => {
     });
     const asked = capture(el, "take-payment");
 
-    bills(el).querySelector<HTMLElement>("[data-finish-refusal] [data-take-payment]")!.click();
+    shadow(el).querySelector<HTMLElement>("[data-finish-refusal] [data-take-payment]")!.click();
 
     expect(asked).toEqual([{ workingOrderId: "wo-tab" }]);
   });
@@ -471,7 +476,7 @@ describe("till-table-order-screen: Finish table", () => {
     const el = await mountScreen({ finishRefused: true, orderId: "wo-check" });
     const asked = capture(el, "take-payment");
 
-    bills(el).querySelector<HTMLElement>("[data-finish-refusal] [data-take-payment]")!.click();
+    shadow(el).querySelector<HTMLElement>("[data-finish-refusal] [data-take-payment]")!.click();
 
     expect(asked).toEqual([{ workingOrderId: "wo-check" }]);
   });
@@ -480,7 +485,7 @@ describe("till-table-order-screen: Finish table", () => {
     const el = await mountScreen({ finishRefused: true });
     const asked = capture(el, "record-unpaid-departure");
 
-    const refusal = bills(el).querySelector<HTMLElement>("[data-finish-refusal]")!;
+    const refusal = shadow(el).querySelector<HTMLElement>("[data-finish-refusal]")!;
     const actions = [...refusal.querySelectorAll<HTMLElement>("wt-button")];
     expect(actions.map((button) => button.textContent!.trim())).toEqual([
       t("table.take_payment"),
@@ -495,12 +500,12 @@ describe("till-table-order-screen: Finish table", () => {
   it("offers no Record unpaid departure when no bill it shows is unpaid", async () => {
     const el = await mountScreen({ finishRefused: true, bills: [paidTab, abandoned] });
 
-    expect(bills(el).querySelector("[data-finish-refusal] [data-record-departure]")).toBeNull();
+    expect(shadow(el).querySelector("[data-finish-refusal] [data-record-departure]")).toBeNull();
   });
 
   it("shows no refusal until Finish has been refused", async () => {
     const el = await mountScreen();
 
-    expect(bills(el).querySelector("[data-finish-refusal]")).toBeNull();
+    expect(shadow(el).querySelector("[data-finish-refusal]")).toBeNull();
   });
 });

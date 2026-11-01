@@ -136,7 +136,6 @@ export async function joinMergeMembers(
       expectedEdits.push(await readBillEditState(tx, billId));
     await joinTables(tx, cfg, partyId, member, {
       expectedEdits,
-      bills: "merge",
       expectedPartyRevision: await partyRevision(tx, partyId),
       operatorId,
       otherPartyId: null,

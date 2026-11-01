@@ -35,7 +35,7 @@ describe("A669 allergy client", () => {
     const abort = new AbortController();
     const revisions = { partyId: null, otherPartyId: null, expectedEdits: [expectedEdit] };
     expect(
-      await api.previewBillMoveAllergy("bill-1", { tableId: "table-1" }, "separate", revisions, {
+      await api.previewBillMoveAllergy("bill-1", { tableId: "table-1" }, revisions, {
         signal: abort.signal,
       }),
     ).toEqual(result);
@@ -49,14 +49,13 @@ describe("A669 allergy client", () => {
     expect(request.credentials).toBe("include");
     expect(JSON.parse(request.body)).toEqual({
       to: { tableId: "table-1" },
-      bills: "separate",
       partyId: null,
       otherPartyId: null,
       expectedEdits: [expectedEdit],
     });
   });
   it("keeps the allergy move packet with its original id, destination and editor observations", async () => {
-    const result = { partyId: "party-1", billId: "bill-1", merged: false };
+    const result = { partyId: "party-1", billId: "bill-1" };
     const fetcher = vi
       .fn()
       .mockImplementation(
@@ -73,15 +72,14 @@ describe("A669 allergy client", () => {
     };
     const abort = new AbortController();
     expect(
-      await api.moveBill("bill-1", { tableId: "table-1" }, "merge", revisions, packet, {
+      await api.moveBill("bill-1", { tableId: "table-1" }, revisions, packet, {
         signal: abort.signal,
       }),
     ).toEqual(result);
     expect(fetcher.mock.calls[0]![1].signal).toBe(abort.signal);
-    await api.moveBill("bill-1", { tableId: "table-1" }, "merge", revisions, packet);
+    await api.moveBill("bill-1", { tableId: "table-1" }, revisions, packet);
     const expected = {
       to: { tableId: "table-1" },
-      bills: "merge",
       partyId: null,
       otherPartyId: "party-1",
       expectedOtherPartyRevision: 8,

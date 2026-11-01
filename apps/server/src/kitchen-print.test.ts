@@ -2642,7 +2642,6 @@ describe("the party's name on a kitchen ticket", () => {
     const expectedOtherPartyRevision = await revisionOf(v, luis.partyId);
     await inTx(v, (tx) =>
       moveGuests(tx, v.cfg, ana.partyId, table72, {
-        bills: "merge",
         expectedPartyRevision,
         otherPartyId: luis.partyId,
         expectedOtherPartyRevision,

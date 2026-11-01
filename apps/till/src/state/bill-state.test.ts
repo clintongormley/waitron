@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { PartyBill } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
-import { billName, shownBills } from "./bill-state.js";
+import { billLabel, billName, billToShow, shownBills } from "./bill-state.js";
 
 afterEach(() => setLocale("en"));
 
@@ -90,5 +90,57 @@ describe("A803 bill names", () => {
       bill({ workingOrderId: "wo-y", billNumber: 2 }),
     ]);
     expect(shown.map((row) => row.workingOrderId)).toEqual(["wo-y", "wo-z"]);
+  });
+});
+
+describe("A803 billLabel", () => {
+  it.each([
+    ["en", "Bill 2", "Bill 2 · Clint", "Bill", "Bill · Clint"],
+    ["es", "Cuenta 2", "Cuenta 2 · Clint", "Cuenta", "Cuenta · Clint"],
+  ])(
+    "in %s, names a bill by its number, then its name, or by the word alone with no number",
+    (locale, numbered, named, unnumbered, unnumberedNamed) => {
+      setLocale(locale);
+      expect(billLabel(bill({ billNumber: 2 }))).toBe(numbered);
+      expect(billLabel(bill({ billNumber: 2, billName: "Clint" }))).toBe(named);
+      expect(billLabel(bill({ billNumber: null }))).toBe(unnumbered);
+      expect(billLabel(bill({ billNumber: null, billName: "Clint" }))).toBe(unnumberedNamed);
+    },
+  );
+});
+
+describe("billToShow", () => {
+  const one = bill({
+    workingOrderId: "wo-1",
+    billNumber: 1,
+    status: "settled",
+    outstanding: "0.00",
+  });
+  const two = bill({ workingOrderId: "wo-2", billNumber: 2, status: "placed" });
+  const three = bill({ workingOrderId: "wo-3", billNumber: 3 });
+  const dropped = bill({ workingOrderId: "wo-0", billNumber: null, status: "abandoned" });
+  // Read in an order that is not the number order, so a pick by position would differ.
+  const read = [three, dropped, two, one];
+
+  it("keeps the bill on screen while the read still holds it, paid or not", () => {
+    expect(billToShow("wo-3", read)).toBe("wo-3");
+    expect(billToShow("wo-1", read)).toBe("wo-1");
+  });
+
+  it("else takes the lowest-numbered bill still owing, skipping a paid Bill 1", () => {
+    expect(billToShow("wo-9", read)).toBe("wo-2");
+    expect(billToShow(undefined, read)).toBe("wo-2");
+  });
+
+  it("else the lowest-numbered shown bill, never an abandoned one", () => {
+    const paidTwo = { ...two, status: "settled" as const, outstanding: "0.00" };
+    const paidThree = { ...three, status: "settled" as const, outstanding: "0.00" };
+    expect(billToShow(undefined, [paidThree, dropped, paidTwo, one])).toBe("wo-1");
+    expect(billToShow("wo-0", [paidThree, dropped, paidTwo])).toBe("wo-2");
+  });
+
+  it("none when no bill is shown", () => {
+    expect(billToShow("wo-1", [])).toBeUndefined();
+    expect(billToShow("wo-0", [dropped])).toBeUndefined();
   });
 });

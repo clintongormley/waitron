@@ -1066,7 +1066,7 @@ describe("listTablesWithState (occupancy)", () => {
     expect(busy[0]).toMatchObject({
       state: "open-tab",
       hasOpenTab: true,
-      party: expect.objectContaining({ mainBillId: tabId }),
+      party: expect.objectContaining({ openingBillId: tabId }),
       tabLineCount: 1,
       tabTotal: "3.00",
       pendingDeliveries: 0,

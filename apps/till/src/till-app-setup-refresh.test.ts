@@ -3,6 +3,7 @@ import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import {
+  floorPartyBills,
   cleanupWidgets,
   draftServer,
   mountWidget,
@@ -162,7 +163,7 @@ function party(over: Partial<TableParty> = {}): TableParty {
     state: "open",
     name: null,
     displayName: "4",
-    mainBillId: "wo-4",
+    openingBillId: "wo-4",
     outstanding: "0.00",
     billCount: 1,
     tableIds: ["t4"],
@@ -196,11 +197,11 @@ const table4 = table("t4", "4", party());
 const table7 = table(
   "t7",
   "7",
-  party({ id: "v7", revision: 9, mainBillId: "wo-7", tableIds: ["t7"] }),
+  party({ id: "v7", revision: 9, openingBillId: "wo-7", tableIds: ["t7"] }),
 );
 
 const table9 = {
-  ...table("t9", "9", party({ id: "v9", mainBillId: "wo-9", tableIds: ["t9"] })),
+  ...table("t9", "9", party({ id: "v9", openingBillId: "wo-9", tableIds: ["t9"] })),
   zoneId: "z2",
 };
 
@@ -280,7 +281,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
       payments: [],
       paidLines: [],
     })),
-    getPartyBills: vi.fn().mockResolvedValue([]),
+    getPartyBills: floorPartyBills(),
     getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [], printProblems: [] }),
     submitGroups: vi.fn().mockRejectedValue(new Error("the table no longer sends groups inline")),

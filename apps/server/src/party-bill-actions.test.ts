@@ -38,6 +38,8 @@ import {
   nameParty,
   order,
   orderForParty,
+  partyAt,
+  openingBillOfParty,
   partyRow,
   pay,
   placeByHand,
@@ -48,10 +50,12 @@ import {
 } from "./testing/party-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
-import { joinTables, moveGuests } from "./testing/table-action-fixture.js";
+import { joinTables, moveGuests, splitTable } from "./testing/table-action-fixture.js";
+import { moveBill, type MoveTarget } from "./testing/move-bill-fixture.js";
 import { overridePinAttempts } from "./till-api.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { numbersOf } from "./testing/bill-identities.js";
 
 // Split, merge and transfer between a party's bills (table actions plan, Task 5; spec §7, §9, §15).
 // `resetPerTest: false`: the venue is provisioned once in `setup`, and each case seats its own tables.
@@ -200,7 +204,7 @@ async function refundInFull(billId: string, paymentId: string): Promise<void> {
   );
 }
 
-/** A party at a fresh table whose main bill holds a Burger and whose second bill holds a Vino. */
+/** A party at a fresh table whose Bill 1 holds a Burger and whose Bill 2 holds a Vino. */
 async function twoBills(label: string): Promise<{ partyId: string; main: string; second: string }> {
   const { partyId, tabId } = await seat(v, await v.table(label));
   await orderForParty(v, partyId, ["Burger", "Vino"]);
@@ -257,7 +261,7 @@ describe("split a bill", () => {
         vat: l.vatClass,
       })),
     ).toEqual([{ name: "Agua", price: 200, vat: "general" }]);
-    expect((await partyRow(v, partyId)).mainBillId).toBe(tabId);
+    expect(await openingBillOfParty(v, partyId)).toBe(tabId);
     expect(await activeTablesOf(v, partyId)).toEqual([mesa4]);
   });
 
@@ -725,20 +729,28 @@ describe("merge bills", () => {
     expect(await activeTablesOf(v, partyId)).toEqual(tablesBefore);
     expect(tablesBefore).toEqual([mesa]);
     const party = await partyRow(v, partyId);
-    expect({ mainBillId: party.mainBillId, revision: party.revision }).toEqual({
-      mainBillId: tabId,
+    expect({
+      openingBillId: await openingBillOfParty(v, partyId),
+      revision: party.revision,
+    }).toEqual({
+      openingBillId: tabId,
       revision: revision + 1,
     });
     expect(await paymentsOf(tabId)).toEqual([]);
     expect(await paymentsOf(second)).toEqual([]);
   });
 
-  it("makes the bill merged into the main bill when the main bill is merged away", async () => {
+  it("keeps the bill merged into as Bill 2, and the table opens on it, when Bill 1 is merged away", async () => {
     const { partyId, main, second } = await twoBills("Mesa 21");
 
     await merge(partyId, second, main);
 
-    expect((await partyRow(v, partyId)).mainBillId).toBe(second);
+    expect(await openingBillOfParty(v, partyId)).toBe(second);
+    expect(await numbersOf(v, partyId)).toEqual([
+      [main, 1, null],
+      [second, 2, null],
+    ]);
+    expect((await billRow(v, second)).status).toBe("open");
     expect((await billRow(v, main)).status).toBe("abandoned");
     expect((await linesOf(v, second)).map((l) => l.name)).toEqual(["Vino", "Burger"]);
   });
@@ -864,9 +876,12 @@ describe("transfer items", () => {
     expect(burger!.groupId).not.toBeNull();
     expect((await linesOf(v, second)).map((l) => l.name)).toEqual(["Vino", "Burger"]);
     const party = await partyRow(v, partyId);
-    expect({ revision: party.revision, mainBillId: party.mainBillId }).toEqual({
+    expect({
+      revision: party.revision,
+      openingBillId: await openingBillOfParty(v, partyId),
+    }).toEqual({
       revision: revision + 1,
-      mainBillId: tabId,
+      openingBillId: tabId,
     });
     expect(await activeTablesOf(v, partyId)).toEqual([mesa]);
   });
@@ -946,7 +961,7 @@ describe("requireUntouched", () => {
 
 describe("bills of two service modes", () => {
   /**
-   * A party whose main bill (Agua) takes the counter zone's `prepay` mode, by a direct retarget of
+   * A party whose Bill 1 (Agua) takes the counter zone's `prepay` mode, by a direct retarget of
    * its service context, while its second bill (Burger, already fired to the kitchen) stays
    * `table_tab`.
    */
@@ -1056,7 +1071,7 @@ describe("sent work moved between a party's bills at two of its tables", () => {
   }
 
   /**
-   * A party at `label` whose main bill has `burgers` Burgers sent to the kitchen and whose second
+   * A party at `label` whose Bill 1 has `burgers` Burgers sent to the kitchen and whose second
    * bill holds a sent Vino, which has then moved to `Patio label` and joined a second table. The
    * printer is at the station of `watched`'s work.
    */
@@ -1081,14 +1096,10 @@ describe("sent work moved between a party's bills at two of its tables", () => {
     const printerId = await printerFor(watched === "main" ? main : second);
     const patio = await v.table(`Patio ${label}`);
     const moving = await commandFor(v, partyId);
-    await inTx(v, (tx) =>
-      moveGuests(tx, v.cfg, partyId, patio, { ...moving, bills: "merge", otherPartyId: null }),
-    );
+    await inTx(v, (tx) => moveGuests(tx, v.cfg, partyId, patio, { ...moving, otherPartyId: null }));
     const terraza = await v.table(`Terraza ${label}`);
     const sent = await commandFor(v, partyId);
-    await inTx(v, (tx) =>
-      joinTables(tx, v.cfg, partyId, terraza, { ...sent, bills: "merge", otherPartyId: null }),
-    );
+    await inTx(v, (tx) => joinTables(tx, v.cfg, partyId, terraza, { ...sent, otherPartyId: null }));
     // The control: this printer does print the MOVED slips the move makes.
     const control = await printedBy(printerId);
     expect(control.length).toBeGreaterThan(0);
@@ -1213,7 +1224,6 @@ describe("two tills at once", () => {
     await order(v, other.tabId, "Paella");
     // Joining party one's table combines it into the other, taking its open second bill with it.
     const sent = {
-      bills: "merge" as const,
       expectedPartyRevision: await revisionOf(v, other.partyId),
       otherPartyId: one.partyId,
       expectedOtherPartyRevision: await revisionOf(v, one.partyId),
@@ -1266,5 +1276,114 @@ describe("two tills at once", () => {
       params: { partyId, revision: read.expectedPartyRevision },
     });
     expect(await snapshot(partyId, [second])).toEqual(before);
+  });
+});
+
+describe("A803 table actions (writers):", () => {
+  async function moveTo(billId: string, to: MoveTarget) {
+    const own = (await billRow(v, billId)).partyId!;
+    const target = "tableId" in to ? await partyAt(v, to.tableId) : null;
+    const options = {
+      operatorId: OPERATOR,
+      expectedPartyRevision: await revisionOf(v, own),
+      ...(target === null
+        ? {}
+        : { otherPartyId: target, expectedOtherPartyRevision: await revisionOf(v, target) }),
+    };
+    return inTx(v, (tx) => moveBill(tx, v.cfg, billId, to, options));
+  }
+
+  /** A seated party whose only bill is presented. */
+  async function presentedParty(label: string) {
+    const seated = await seat(v, await v.table(label));
+    await orderForParty(v, seated.partyId, ["Burger"]);
+    await placeByHand(v, seated.tabId);
+    return seated;
+  }
+
+  /** A party at two tables, its second table joined free. */
+  async function atTwoTables(label: string) {
+    const first = await v.table(`${label} 1`);
+    const second = await v.table(`${label} 2`);
+    const seated = await seat(v, first);
+    const joining = await commandFor(v, seated.partyId);
+    await inTx(v, (tx) => joinTables(tx, v.cfg, seated.partyId, second, joining));
+    return { ...seated, second };
+  }
+
+  it("Move this bill to a free table", async () => {
+    const { second } = await twoBills("Table move free");
+    const free = await v.table("Table move free to");
+
+    const { partyId } = await moveTo(second, { tableId: free });
+
+    expect(partyId).not.toBeNull();
+  });
+
+  it("Move this bill onto a seated party", async () => {
+    const { second } = await twoBills("Table move seated");
+    const there = await presentedParty("Table move seated to");
+    const table = (await activeTablesOf(v, there.partyId))[0]!;
+
+    const result = await moveTo(second, { tableId: table });
+
+    expect(result.partyId).toBe(there.partyId);
+  });
+
+  it("Join a seated table", async () => {
+    const joiner = await presentedParty("Table join from");
+    const held = await seat(v, await v.table("Table join held"));
+    const heldTable = (await activeTablesOf(v, held.partyId))[0]!;
+    const joining = {
+      ...(await commandFor(v, joiner.partyId)),
+      otherPartyId: held.partyId,
+      expectedOtherPartyRevision: await revisionOf(v, held.partyId),
+    };
+
+    const result = await inTx(v, (tx) => joinTables(tx, v.cfg, joiner.partyId, heldTable, joining));
+
+    expect(result.billIds).toContain(held.tabId);
+  });
+
+  it("Join a free table, for a party with no bill, gives it one bill", async () => {
+    const { partyId, tabId } = await seat(v, await v.table("Table join empty"));
+    await moveTo(tabId, { counter: { zoneId: null } });
+    const free = await v.table("Table join empty to");
+    const joining = await commandFor(v, partyId);
+
+    const result = await inTx(v, (tx) => joinTables(tx, v.cfg, partyId, free, joining));
+
+    expect(result.billIds).toHaveLength(1);
+  });
+
+  it("Split a table taking an open bill leaves the staying party its own bill", async () => {
+    const { partyId, tabId, second } = await atTwoTables("Table split bill");
+    await orderForParty(v, partyId, ["Burger", "Vino"]);
+    const taken = await splitOff(partyId, tabId, [2]);
+    const splitting = await commandFor(v, partyId);
+
+    const result = await inTx(v, (tx) => splitTable(tx, v.cfg, partyId, second, taken, splitting));
+
+    expect(result.billId).toBe(taken);
+    expect(await openingBillOfParty(v, partyId)).toBe(tabId);
+  });
+
+  it("Split a table with no bill gives the new party an empty bill", async () => {
+    const { partyId, tabId, second } = await atTwoTables("Table split none");
+    const splitting = await commandFor(v, partyId);
+
+    const result = await inTx(v, (tx) => splitTable(tx, v.cfg, partyId, second, null, splitting));
+
+    expect((await billRow(v, result.billId)).partyId).toBe(result.partyId);
+    expect(await openingBillOfParty(v, partyId)).toBe(tabId);
+  });
+
+  it("Split a table taking the staying party's only bill", async () => {
+    const { partyId, tabId, second } = await atTwoTables("Table split last");
+    const splitting = await commandFor(v, partyId);
+
+    const result = await inTx(v, (tx) => splitTable(tx, v.cfg, partyId, second, tabId, splitting));
+
+    expect(result.billId).toBe(tabId);
   });
 });

@@ -504,15 +504,23 @@ describe("permanent group numbers on kitchen work", () => {
       .groups[0]!;
     const b = (await submit(v, from.partyId, [{ release: "hold", lines: [line(v, "steak")] }]))
       .groups[0]!;
-    await inTx((tx) =>
-      joinTables(tx, v.cfg, into.partyId, from.tableId, {
-        bills: "merge",
+    await inTx(async (tx) => {
+      await joinTables(tx, v.cfg, into.partyId, from.tableId, {
         expectedPartyRevision: 1,
         otherPartyId: from.partyId,
         expectedOtherPartyRevision: 1,
         operatorId: ALEX,
-      }),
-    );
+      });
+      const [party] = await tx
+        .select({ revision: parties.revision })
+        .from(parties)
+        .where(eq(parties.id, into.partyId));
+      await mergeBills(tx, v.cfg, into.tabId, from.tabId, {
+        partyId: into.partyId,
+        expectedPartyRevision: party!.revision,
+        operatorId: ALEX,
+      });
+    });
     await db
       .update(diningTables)
       .set({ label: "Terrace 9" })
@@ -563,7 +571,6 @@ describe("permanent group numbers on kitchen work", () => {
       .groups[0]!;
     await inTx((tx) =>
       joinTables(tx, v.cfg, into.partyId, from.tableId, {
-        bills: "merge",
         expectedPartyRevision: 0,
         otherPartyId: from.partyId,
         expectedOtherPartyRevision: 1,
@@ -2241,7 +2248,7 @@ async function billOfNoParty(
       v.cfg,
       tabId,
       { counter: { zoneId: null } },
-      { ...(await billCommand(partyId)), bills: "separate", partyId },
+      { ...(await billCommand(partyId)), partyId },
     ),
   );
   return tabId;
@@ -2317,7 +2324,7 @@ describe("a line leaving its party", () => {
         v.cfg,
         billId,
         { counter: { zoneId: null } },
-        { ...(await billCommand(s.partyId)), bills: "separate", partyId: s.partyId },
+        { ...(await billCommand(s.partyId)), partyId: s.partyId },
       ),
     );
 
@@ -2374,14 +2381,24 @@ describe("merging two bills (D2)", () => {
     // The source's held groups no longer sit in the order they were made.
     await reorder(from.partyId, [from.desserts, from.warm, from.mains]);
     const command = {
-      bills: "merge" as const,
       expectedPartyRevision: await revisionOf(into.partyId),
       otherPartyId: from.partyId,
       expectedOtherPartyRevision: await revisionOf(from.partyId),
       operatorId: ALEX,
     };
 
-    await inTx((tx) => joinTables(tx, v.cfg, into.partyId, from.tableId, command));
+    await inTx(async (tx) => {
+      await joinTables(tx, v.cfg, into.partyId, from.tableId, command);
+      const [party] = await tx
+        .select({ revision: parties.revision })
+        .from(parties)
+        .where(eq(parties.id, into.partyId));
+      await mergeBills(tx, v.cfg, into.tabId, from.tabId, {
+        partyId: into.partyId,
+        expectedPartyRevision: party!.revision,
+        operatorId: ALEX,
+      });
+    });
 
     const { groups } = await groupsOf(into.partyId);
     expect(groups.map((group) => [group.id, group.position, group.state])).toEqual([

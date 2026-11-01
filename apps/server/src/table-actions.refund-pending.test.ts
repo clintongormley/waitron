@@ -184,7 +184,7 @@ describe("a pending card refund and the table actions", () => {
     });
 
     expect(joined.status).toBe(200);
-    expect(joined.json).toEqual({ partyId: ana.partyId, mainBillId: ana.tabId, merged: false });
+    expect(joined.json).toEqual({ partyId: ana.partyId, billIds: [ana.tabId] });
     const after = await charges(ana.tabId);
     expect(after).toEqual(before);
     expectPendingFigures(after);
@@ -208,7 +208,7 @@ describe("a pending card refund and the table actions", () => {
       });
 
       expect(joined.status).toBe(200);
-      expect(joined.json).toEqual({ partyId: ana.partyId, mainBillId: ana.tabId, merged: false });
+      expect(joined.json).toEqual({ partyId: ana.partyId, billIds: [ana.tabId, luis.tabId] });
       const after = await charges(ana.tabId);
       expect(after).toEqual(before);
       expectPendingFigures(after);
@@ -236,7 +236,7 @@ describe("a pending card refund and the table actions", () => {
       });
 
       expect(joined.status).toBe(200);
-      expect(joined.json).toEqual({ partyId: luis.partyId, mainBillId: luis.tabId, merged: false });
+      expect(joined.json).toEqual({ partyId: luis.partyId, billIds: [luis.tabId, ana.tabId] });
       expect(partyOfBill(ana.tabId)).toBe(luis.partyId);
       const after = await charges(ana.tabId);
       expect(after).toEqual(before);
@@ -245,7 +245,7 @@ describe("a pending card refund and the table actions", () => {
     },
   );
 
-  it("has its table joined while another bill holds the refund: the main bills merge, the refund's bill does not change", async () => {
+  it("has its table joined while another bill holds the refund: every bill stays its own, the refund's bill does not change", async () => {
     const ana = await seatedWith(venue, "Caña", "Pulpo", "Croquetas", "Croquetas");
     const splitBill = await post(`/api/bills/${ana.tabId}/split`, {
       transfers: [{ lineNo: 2 }, { lineNo: 3 }, { lineNo: 4 }],
@@ -260,19 +260,24 @@ describe("a pending card refund and the table actions", () => {
 
     const joined = await post(`/api/parties/${luis.partyId}/join`, {
       tableId: ana.tableId,
-      bills: "merge",
       expectedPartyRevision: revisionOf(luis.partyId),
       otherPartyId: ana.partyId,
       expectedOtherPartyRevision: revisionOf(ana.partyId),
     });
 
     expect(joined.status).toBe(200);
-    expect(joined.json).toEqual({ partyId: luis.partyId, mainBillId: luis.tabId, merged: true });
-    expect((await charges(luis.tabId)).bill).toMatchObject({
-      status: "open",
-      total: "6.00",
-      outstanding: "6.00",
+    expect(joined.json).toEqual({
+      partyId: luis.partyId,
+      billIds: [luis.tabId, ana.tabId, billId],
     });
+    for (const kept of [luis.tabId, ana.tabId]) {
+      expect((await charges(kept)).bill).toMatchObject({
+        status: "open",
+        total: "3.00",
+        outstanding: "3.00",
+      });
+      expect(partyOfBill(kept)).toBe(luis.partyId);
+    }
     expect(partyOfBill(billId)).toBe(luis.partyId);
     expect(await charges(billId)).toEqual(before);
     await expectLocked(billId);
@@ -328,7 +333,7 @@ describe("a pending card refund and the table actions", () => {
     });
 
     expect(split.status).toBe(200);
-    expect(split.json.mainBillId).toBe(billId);
+    expect(split.json).toEqual({ partyId: expect.any(String), billId });
     expect(partyOfBill(billId)).toBe(split.json.partyId);
     const after = await charges(billId);
     expect(after).toEqual(before);

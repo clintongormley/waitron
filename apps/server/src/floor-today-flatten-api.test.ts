@@ -24,6 +24,7 @@ import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import {
   activeTablesOf,
+  billRow,
   counterOrder,
   inTx,
   order,
@@ -123,7 +124,6 @@ async function joinMerging(
     moving: string;
     target: string;
     side: "left" | "right";
-    bills?: "merge" | "separate";
     otherPartyId?: string;
   },
 ): Promise<Response> {
@@ -137,7 +137,6 @@ async function joinMerging(
   const body = {
     zoneRevision: await readRevision(args.tableId),
     tableId: args.tableId,
-    bills: args.bills ?? "merge",
     expectedPartyRevision: await revisionOf(v, partyId),
     ...other,
     merge: { moving: args.moving, target: args.target, side: args.side, seats: 12 },
@@ -369,7 +368,7 @@ describe("guests pass to a joined table's tables when it is pushed into a group"
     expect(await placeOf(table.c5!)).toEqual({ x: 46, y: 0 });
   });
 
-  it("guests at both, Bar pushed onto Long table, bills kept separate: a moved notice for Long table's bill only, as Bar's keeps Bar and its name", async () => {
+  it("guests at both, Bar pushed onto Long table: a moved notice for Long table's bill only, as Bar's keeps Bar and its name", async () => {
     const { table } = await LONG_TABLE();
     const atLong = await seat(v, table.long!);
     const atBar = await seat(v, table.bar!);
@@ -382,7 +381,6 @@ describe("guests pass to a joined table's tables when it is pushed into a group"
         moving: table.bar!,
         target: table.long!,
         side: "left",
-        bills: "separate",
         otherPartyId: atBar.partyId,
       }),
     );
@@ -462,7 +460,7 @@ describe("guests pass to a joined table's tables when it is pushed into a group"
     ]);
   });
 
-  it("guests with food at both, Bar pushed onto Long table, bills merged: a moved notice for each dish, Bar's on the bill it merged into, as it is on another order", async () => {
+  it("guests with food at both, Bar pushed onto Long table: no bill merges, and only Long table's dish gets a moved notice, on its own bill", async () => {
     const { table } = await LONG_TABLE();
     const atLong = await seat(v, table.long!);
     const atBar = await seat(v, table.bar!);
@@ -475,7 +473,6 @@ describe("guests pass to a joined table's tables when it is pushed into a group"
         moving: table.bar!,
         target: table.long!,
         side: "left",
-        bills: "merge",
         otherPartyId: atBar.partyId,
       }),
     );
@@ -484,14 +481,14 @@ describe("guests pass to a joined table's tables when it is pushed into a group"
     const notices = await noticesOn([atLong.tabId, atBar.tabId]);
     const byBill = (a: { working_order_id: string }, b: { working_order_id: string }) =>
       a.working_order_id.localeCompare(b.working_order_id);
-    // Bar's bill merged into Long table's, so its notice is filed on the merged bill.
     expect(notices.sort(byBill)).toEqual([
       { working_order_id: atLong.tabId, kind: "moved", moved_to: four },
-      { working_order_id: atLong.tabId, kind: "moved", moved_to: four },
     ]);
+    expect(await activeTablesOf(v, atLong.partyId)).toContain(table.bar!);
+    expect((await billRow(v, atBar.tabId)).status).toBe("open");
   });
 
-  it("guests at both, food at Long table only, Bar pushed onto Long table, bills merged: one moved notice", async () => {
+  it("guests at both, food at Long table only, Bar pushed onto Long table: one moved notice, on Long table's own bill", async () => {
     const { table } = await LONG_TABLE();
     const atLong = await seat(v, table.long!);
     const atBar = await seat(v, table.bar!);
@@ -503,18 +500,18 @@ describe("guests pass to a joined table's tables when it is pushed into a group"
         moving: table.bar!,
         target: table.long!,
         side: "left",
-        bills: "merge",
         otherPartyId: atLong.partyId,
       }),
     );
 
     expect(await noticesOn([atLong.tabId, atBar.tabId])).toEqual([
       {
-        working_order_id: atBar.tabId,
+        working_order_id: atLong.tabId,
         kind: "moved",
         moved_to: await namesOf(table.bar!, table.c3!, table.c4!, table.c5!),
       },
     ]);
+    expect((await billRow(v, atLong.tabId)).status).toBe("open");
   });
 
   it("guests at Long table, Window table pushed onto it: the party's tables read Counter 3, 4, 5, 6, 7", async () => {
@@ -543,7 +540,7 @@ describe("guests pass to a joined table's tables when it is pushed into a group"
 });
 
 describe("a till join without a merge", () => {
-  it("guests at Long table joining Bar, whose party has food, bills merged: a moved notice for Bar's dish, on the bill it merged into", async () => {
+  it("guests at Long table joining Bar, whose party has food: no bill merges, so no moved notice", async () => {
     const { table } = await LONG_TABLE();
     const atLong = await seat(v, table.long!);
     const atBar = await seat(v, table.bar!);
@@ -558,7 +555,6 @@ describe("a till join without a merge", () => {
           body: JSON.stringify(
             await observedTableActionBody(v.db, `/api/parties/${atLong.partyId}/join`, {
               tableId: table.bar!,
-              bills: "merge",
               expectedPartyRevision: await revisionOf(v, atLong.partyId),
               otherPartyId: atBar.partyId,
               expectedOtherPartyRevision: await revisionOf(v, atBar.partyId),
@@ -568,12 +564,7 @@ describe("a till join without a merge", () => {
       ),
     );
 
-    expect(await noticesOn([atLong.tabId, atBar.tabId])).toEqual([
-      {
-        working_order_id: atLong.tabId,
-        kind: "moved",
-        moved_to: await namesOf(table.long!, table.bar!),
-      },
-    ]);
+    expect(await noticesOn([atLong.tabId, atBar.tabId])).toEqual([]);
+    expect((await billRow(v, atBar.tabId)).status).toBe("open");
   });
 });

@@ -14,11 +14,11 @@ import {
   floorTodayJoinTables,
   floorTodaySplitParts,
   floorTodayTables,
-  parties,
   partyTables,
+  workingOrders,
 } from "@waitron/db";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, ne } from "drizzle-orm";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
@@ -198,7 +198,7 @@ describe("a join that merges", () => {
     expect((await mergeOf(v, b!))?.seats).toBe(6);
   });
 
-  it("two seated tables combine, keeping the bills apart when asked, and merge", async () => {
+  it("two seated tables combine, keeping both bills open, and the tables merge", async () => {
     const { a, b } = await tables({ key: "a", x: 0 }, { key: "b", x: 20 });
     const p = await seat(a!);
     const q = await seat(b!);
@@ -206,7 +206,6 @@ describe("a join that merges", () => {
     const answer = (await ok(
       join(q, {
         tableId: a,
-        bills: "separate",
         expectedPartyRevision: await revision(q),
         otherPartyId: p,
         expectedOtherPartyRevision: await revision(p),
@@ -686,11 +685,16 @@ describe("a party change that changes a room answers its revision", () => {
     return { today, split, joins, joinTables, parties };
   }
 
-  async function mainBill(partyId: string): Promise<string | null> {
-    const [row] = await inTx(v, (tx) =>
-      tx.select({ mainBillId: parties.mainBillId }).from(parties).where(eq(parties.id, partyId)),
+  /** The party's one bill that is not abandoned; these cases each leave a party one. */
+  async function onlyBill(partyId: string): Promise<string> {
+    const rows = await inTx(v, (tx) =>
+      tx
+        .select({ id: workingOrders.id })
+        .from(workingOrders)
+        .where(and(eq(workingOrders.partyId, partyId), ne(workingOrders.status, "abandoned"))),
     );
-    return row!.mainBillId;
+    expect(rows).toHaveLength(1);
+    return rows[0]!.id;
   }
 
   it("a join with a merge answers the room's new revision", async () => {
@@ -711,8 +715,7 @@ describe("a party change that changes a room answers its revision", () => {
 
     expect(answer).toEqual({
       partyId: p,
-      mainBillId: await mainBill(p),
-      merged: false,
+      billIds: [await onlyBill(p)],
       zoneRevisions: { [zoneId]: read + 1 },
     });
     expect((await zoneRevisionOf(v, zoneId))!).toBe(read + 1);
@@ -915,7 +918,7 @@ describe("a party change that changes a room answers its revision", () => {
       join(p, { tableId: b, expectedPartyRevision: await revision(p), otherPartyId: null }),
     );
 
-    expect(answer).toEqual({ partyId: p, mainBillId: await mainBill(p), merged: false });
+    expect(answer).toEqual({ partyId: p, billIds: [await onlyBill(p)] });
     expect((await zoneRevisionOf(v, zoneId))!).toBe(read);
     expect(await holders(a, b, c)).toEqual([p, p, null]);
   });
@@ -937,8 +940,7 @@ describe("a party change that changes a room answers its revision", () => {
 
     expect(answer).toEqual({
       partyId: p,
-      mainBillId: await mainBill(p),
-      merged: false,
+      billIds: [await onlyBill(p)],
       zoneRevisions: { [zoneId]: read + 1 },
     });
     expect(await mergeOf(v, a)).toBeNull();
@@ -966,11 +968,11 @@ describe("a party change that changes a room answers its revision", () => {
         billId: null,
         expectedPartyRevision: await revision(p),
       }),
-    )) as { partyId: string; mainBillId: string | null };
+    )) as { partyId: string; billId: string };
 
     expect(split).toEqual({
       partyId: split.partyId,
-      mainBillId: await mainBill(split.partyId),
+      billId: await onlyBill(split.partyId),
       zoneRevisions: { [zoneId]: read + 1 },
     });
     expect(split.partyId).not.toBe(p);

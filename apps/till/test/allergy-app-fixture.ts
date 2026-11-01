@@ -4,7 +4,12 @@ import { userEvent } from "vitest/browser";
 import type { AllergySendTarget, PartyAllergyRead } from "@waitron/module";
 import { deviceZonesFixture } from "./device-zones.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
-import { draftServer, mountWidget, type DraftServer } from "../src/widgets/test-helpers.js";
+import {
+  floorPartyBills,
+  draftServer,
+  mountWidget,
+  type DraftServer,
+} from "../src/widgets/test-helpers.js";
 import { TillApp } from "../src/till-app.js";
 import type { TillLockScreen } from "../src/screens/till-lock-screen.js";
 import type { TillFloorScreen } from "../src/screens/till-floor-screen.js";
@@ -130,7 +135,7 @@ export function party(over: Partial<TableParty> = {}): TableParty {
     state: "open",
     name: null,
     displayName: "4",
-    mainBillId: "wo-4",
+    openingBillId: "wo-4",
     outstanding: "0.00",
     billCount: 1,
     tableIds: ["t4"],
@@ -164,7 +169,7 @@ export const table4 = table("t4", "4", party());
 export const table7 = table(
   "t7",
   "7",
-  party({ id: "v7", revision: 9, mainBillId: "wo-7", tableIds: ["t7"] }),
+  party({ id: "v7", revision: 9, openingBillId: "wo-7", tableIds: ["t7"] }),
 );
 
 export const drillFormFactor: FormFactor = "till";
@@ -245,7 +250,7 @@ export function stubApi(overrides: Record<string, unknown> = {}) {
       payments: [],
       paidLines: [],
     })),
-    getPartyBills: vi.fn().mockResolvedValue([]),
+    getPartyBills: floorPartyBills(),
     getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [], printProblems: [] }),
     readCurrentOrders: vi.fn().mockResolvedValue({

@@ -112,6 +112,7 @@ import {
  * | POST /api/parties/:id/finish, /bill-request, /move, /join, /split-table | take-orders  | take-orders           |
  * | POST /api/parties/:id/service-steps/:stepId/done | take-orders | take-orders |
  * | PUT /api/parties/:id/name                                 | take-orders                | take-orders           |
+ * | POST /api/parties/:id/bills                               | take-orders                | take-orders           |
  * | PUT /api/bills/:id/name                                   | take-orders                | take-orders           |
  * | PUT /api/parties/:id/guests                               | take-orders                | take-orders           |
  * | POST /api/parties/:id/groups, /groups/move, /groups/split-line, /groups/fire-line; PUT /groups/order | take-orders            | take-orders           |
@@ -432,6 +433,7 @@ const ROUTES: readonly Row[] = [
   ordering("POST", `/api/parties/${id}/bill-request`),
   ordering("POST", `/api/parties/${id}/service-steps/${id}/done`),
   ordering("PUT", `/api/parties/${id}/name`),
+  ordering("POST", `/api/parties/${id}/bills`),
   ordering("PUT", `/api/bills/${id}/name`),
   ordering("PUT", `/api/parties/${id}/guests`),
   ordering("POST", `/api/parties/${id}/move`),

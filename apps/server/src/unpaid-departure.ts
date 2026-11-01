@@ -1,6 +1,7 @@
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
-import { nowIso, unpaidDepartures } from "@waitron/db";
+import { inArray } from "drizzle-orm";
+import { nowIso, unpaidDepartures, workingOrders } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { TrustedClock, FiscalBackend } from "@waitron/fiscal";
 import { authorize } from "@waitron/identity";
@@ -14,6 +15,7 @@ import {
   readBillsOfParties,
   requirePartyClosingEdits,
 } from "./parties.js";
+import type { FamilyBill } from "./parties.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { readIssuedSales } from "./sale-due.js";
 import type { Logger } from "./logger.js";
@@ -83,7 +85,7 @@ export async function recordUnpaidDeparture(
   await checkAndBumpParty(tx, partyId, req.expectedPartyRevision, "open");
   await requirePartyClosingEdits(tx, partyId, operator.personId, req.expectedEdits);
 
-  const bills = (await readBillsOfParties(tx, [partyId])).get(partyId)!;
+  const bills = await inOpeningOrder(tx, (await readBillsOfParties(tx, [partyId])).get(partyId)!);
   const owing = bills.filter(billOwes);
   if (owing.length === 0) {
     throw new AppError("unpaid_departure.nothing_outstanding", { partyId });
@@ -182,6 +184,25 @@ export async function recordUnpaidDeparture(
     req.expectedEdits,
   );
   return { ...closed, departures };
+}
+
+/**
+ * `bills` in the order they were opened; a departure's invoices follow it, not the list's
+ * bill-number order (plan D15 addendum).
+ */
+async function inOpeningOrder(tx: Transaction, bills: FamilyBill[]): Promise<FamilyBill[]> {
+  const opened = await tx
+    .select({ id: workingOrders.id })
+    .from(workingOrders)
+    .where(
+      inArray(
+        workingOrders.id,
+        bills.map((bill) => bill.workingOrderId),
+      ),
+    )
+    .orderBy(workingOrders.openedAt, workingOrders.orderNumber, workingOrders.id);
+  const rank = new Map(opened.map((row, index) => [row.id, index]));
+  return [...bills].sort((a, b) => rank.get(a.workingOrderId)! - rank.get(b.workingOrderId)!);
 }
 
 /** One `unpaid_departures` row for each of `departing`, at what its invoice owes in `due`. */

@@ -320,7 +320,7 @@ describe("the card reader on a bill whose every line was given away", () => {
         venue.cfg,
         partyBill,
         { tableId: table.id },
-        { bills: "merge", operatorId: venue.operatorId },
+        { operatorId: venue.operatorId },
       );
     });
     const [moved] = await inTx(venue, (tx) =>

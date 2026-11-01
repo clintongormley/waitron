@@ -528,7 +528,6 @@ describe("guests at a joined table that is split", () => {
     const { table } = await LONG_PLUS_BAR();
     const guests = await seat(v, table.long!);
     const joining = {
-      bills: "merge" as const,
       expectedPartyRevision: await revisionOf(v, guests.partyId),
       operatorId: OPERATOR,
     };

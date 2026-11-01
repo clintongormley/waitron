@@ -275,7 +275,6 @@ describe("releaseHeldWorkOf", () => {
       await combineParties(tx, venue.cfg, {
         from: seated.partyId,
         into: p.partyId,
-        bills: "separate",
         tables: "join",
         operatorId: venue.staffId,
       });
@@ -584,7 +583,6 @@ describe("moveSettledBillToCounter", () => {
           { counter: { zoneId: null } },
           {
             expectedEdits: [await readBillEditState(tx, p.billId)],
-            bills: "separate",
             expectedPartyRevision: await partyRevision(p.partyId),
             partyId: p.partyId,
             operatorId: venue.staffId,

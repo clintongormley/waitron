@@ -391,7 +391,6 @@ describe("finishing paid food service", () => {
       combineParties(tx, venue.cfg, {
         from: other.partyId,
         into: p.partyId,
-        bills: "separate",
         tables: "join",
         operatorId: venue.staffId,
       }),

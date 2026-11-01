@@ -1091,7 +1091,6 @@ export const en = {
   "table.title": "Table order",
   "table.back": "Back to floor",
   "table.loading": "Loading…",
-  "table.open_drawer": "Tab",
   "table.pending_title": "To serve",
   "table.sent_title": "Sent",
   "table.sent_counts": "{ready} ready · {firing} firing · {held} held · {served} served",
@@ -1231,6 +1230,7 @@ export const en = {
     "The server did not answer your change to {line}. Open its table and check whether it was saved.",
   // Table actions
   "table.actions_title": "Table actions",
+  "table.whole_table": "Whole table",
   "table.action_move_guests": "Move guests",
   "table.action_join": "Join a table",
   "table.action_merge_bills": "Merge bills",
@@ -1249,12 +1249,6 @@ export const en = {
   "table.join_heading": "Join a table to {party}:",
   "table.held_by": "Seated: {party}",
   "table.this_party": "These guests",
-  "table.combine_scope": "{from} joins {into}",
-  "table.bills_question": "Merge their main bills into one, or keep them as separate bills?",
-  "table.bills_merge": "Merge the bills",
-  "table.bills_separate": "Keep separate bills",
-  "table.bills_kept_separate":
-    "The bills were kept separate: they are merged only when both parties have a main bill, neither has been presented, is being paid or has a payment on it, and both are served the same way",
   "table.bills_served_differently":
     "These bills are served in different ways, so items cannot move between them",
   "table.split_table_heading": "Split a table off {party}:",
@@ -1388,6 +1382,12 @@ export const en = {
   "table.taking_over": "Taking over the order…",
   "table.take_over_sent": "This order has just been sent. Here is the table as it is now.",
   "table.take_over_gone": "This order is no longer on this table. Here is the table as it is now.",
+  "table.bill_gone": "{gone} is no longer at this table. Now showing {shown}.",
+  "table.bill_gone_none": "{gone} is no longer at this table.",
+  "table.bill_gone_unnumbered": "That bill is no longer at this table. Now showing {shown}.",
+  "table.bill_gone_unnumbered_none": "That bill is no longer at this table.",
+  "table.bill_count": "{bill} · {count} bills",
+  "table.new_bill": "+ New bill",
   // Errors
   "pin.invalid": "Wrong PIN, try again",
   "pin.throttled": "Too many wrong PINs. Wait a moment, then try again",
@@ -1496,9 +1496,6 @@ export const en = {
   "table.cancel_bill_request": "Cancel the bill request for {party}",
   "table.action_move_bill": "Move this bill",
   "table.move_bill_heading": "Move {bill} to:",
-  "table.move_bill_scope": "{bill} to {into}",
-  "table.bill_move_question":
-    "Merge this bill into their main bill, or keep it as a separate bill?",
   "table.to_counter": "The counter",
   "held.move_to_table": "Move to table",
   "held.no_tables": "The floor lists no tables to move it to",
@@ -2873,7 +2870,6 @@ export const es: Record<StringKey, string> = {
   "table.title": "Comanda",
   "table.back": "Volver a la sala",
   "table.loading": "Cargando…",
-  "table.open_drawer": "Cuenta",
   "table.pending_title": "Pendiente de servir",
   "table.sent_title": "Enviado",
   "table.sent_counts":
@@ -3010,6 +3006,7 @@ export const es: Record<StringKey, string> = {
   "table.change_unconfirmed_no_table":
     "El servidor no ha respondido a tu cambio en {line}. Abre su mesa y comprueba si se ha guardado.",
   "table.actions_title": "Acciones de mesa",
+  "table.whole_table": "Toda la mesa",
   "table.action_move_guests": "Mover clientes",
   "table.action_join": "Unir una mesa",
   "table.action_merge_bills": "Juntar cuentas",
@@ -3028,12 +3025,6 @@ export const es: Record<StringKey, string> = {
   "table.join_heading": "Unir una mesa a {party}:",
   "table.held_by": "Ocupada: {party}",
   "table.this_party": "Estos clientes",
-  "table.combine_scope": "{from} se une a {into}",
-  "table.bills_question": "¿Juntar sus cuentas principales en una o mantenerlas separadas?",
-  "table.bills_merge": "Juntar las cuentas",
-  "table.bills_separate": "Mantener cuentas separadas",
-  "table.bills_kept_separate":
-    "Las cuentas se han mantenido separadas: solo se juntan si los dos grupos de clientes tienen cuenta principal, ninguna se ha presentado, se está cobrando ni tiene pagos, y las dos se sirven de la misma forma",
   "table.bills_served_differently":
     "Estas cuentas se sirven de forma distinta, así que los artículos no pueden pasar de una a otra",
   "table.split_table_heading": "Separar una mesa de {party}:",
@@ -3167,6 +3158,12 @@ export const es: Record<StringKey, string> = {
   "table.taking_over": "Tomando el pedido…",
   "table.take_over_sent": "Este pedido se acaba de enviar. Así está ahora la mesa.",
   "table.take_over_gone": "Este pedido ya no está en esta mesa. Así está ahora la mesa.",
+  "table.bill_gone": "{gone} ya no está en esta mesa. Ahora se muestra {shown}.",
+  "table.bill_gone_none": "{gone} ya no está en esta mesa.",
+  "table.bill_gone_unnumbered": "Esa cuenta ya no está en esta mesa. Ahora se muestra {shown}.",
+  "table.bill_gone_unnumbered_none": "Esa cuenta ya no está en esta mesa.",
+  "table.bill_count": "{bill} · {count} cuentas",
+  "table.new_bill": "+ Cuenta nueva",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "pin.throttled": "Demasiados PIN incorrectos. Espera un momento y vuelve a intentarlo",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",
@@ -3269,9 +3266,6 @@ export const es: Record<StringKey, string> = {
   "table.cancel_bill_request": "Anular la petición de cuenta de {party}",
   "table.action_move_bill": "Mover esta cuenta",
   "table.move_bill_heading": "Mover {bill} a:",
-  "table.move_bill_scope": "{bill} a {into}",
-  "table.bill_move_question":
-    "¿Juntar esta cuenta con su cuenta principal o mantenerla como una cuenta aparte?",
   "table.to_counter": "El mostrador",
   "held.move_to_table": "Pasar a mesa",
   "held.no_tables": "El plano no tiene mesas a las que pasarlo",

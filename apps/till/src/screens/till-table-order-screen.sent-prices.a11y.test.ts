@@ -9,6 +9,7 @@ import { dish, extra, recorded } from "./till-table-order-screen.sent-prices.tes
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import type { WtDialog } from "@waitron/ui";
+import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 afterEach(async () => {
   cleanupWidgets();
@@ -19,7 +20,7 @@ afterEach(async () => {
 describe.each(["en", "es"] as const)("Served prices %s", (locale) => {
   describe.each(["light", "dark"] as const)("%s", (theme) => {
     it.each([390, 1280])(
-      "keeps original prices readable and the drawer free of Served duplicates at %i",
+      "keeps original prices readable and the table menu free of Served duplicates at %i",
       async (width) => {
         setLocale(locale);
         await page.viewport(width, 1200);
@@ -87,12 +88,9 @@ describe.each(["en", "es"] as const)("Served prices %s", (locale) => {
         );
         await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-sent-line-close]")!);
         await closed;
-        await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-        await el.updateComplete;
-        expect(
-          el.shadowRoot!.querySelector("[data-drawer] .served, [data-drawer] .served-line"),
-        ).toBeNull();
-        el.shadowRoot!.querySelector<HTMLElement>("[data-drawer]")!.scrollIntoView({
+        await openTableMenu(el);
+        expect(el.shadowRoot!.querySelector(".served, .served-line")).toBeNull();
+        el.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!.scrollIntoView({
           block: "center",
         });
         await expectNoA11yViolations(host);

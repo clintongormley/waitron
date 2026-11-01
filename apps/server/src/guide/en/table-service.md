@@ -7,6 +7,12 @@ enter their identifier, legal name and complete address before its final payment
 saved choice lets the bill grow above the simplified-invoice limit. Paying the table bill in full
 issues the invoice; recording an unpaid departure also issues it, leaving the amount unpaid.
 
+**Full invoice** is in the bill's payment area below the order, and in the **⋮** menu under the
+bill's name; both open the same form for the bill on screen. Neither is offered once the bill is
+paid or an invoice has been issued for it. Turning a paid bill into a full invoice would correct an
+invoice already issued, and Waitron does not offer that correction yet. Once a customer is chosen,
+their name and identifier show under the payment area's **Full invoice**.
+
 Choose **Spanish tax ID** for a NIF, NIE or CIF. For a passport or another accepted document,
 choose its actual **Identifier type**, **Issuing country** and **Document number**. Enter the
 number as written. A passport is accepted with a Spanish address too; the issuing country
@@ -223,22 +229,78 @@ venue cannot share a short name, whatever the capitals: if Save says "Terrace 1 
 type another, such as "Tb1". **Add tables** shows the short names it will give, and lets you type
 them when you choose custom names; **Add joined table** asks for one.
 
+## Switch bills {#bill-switcher}
+
+Guests often pay separately: two couples at one table, or one guest who pays for their own drinks.
+Each of them gets a bill of their own at the table. The bill switcher, at the top of the table
+screen, says which bill is on screen, such as **Bill 1 · €38.50**, or **Bill 2 · 3 bills · Clint
+· €54.00** when the table has three. It is there even when the table has one bill, so a second bill is
+always one tap away.
+
+Tap the switcher to list the table's bills in number order. Each row shows the bill's number and
+name, what it still owes or **Paid ✓**, and a line such as **Ana has an unsent order: 3 items** for
+each person with dishes on that bill not yet sent. Choose a row to put that bill on screen. A paid
+bill opens too, so you can name it or, when it has a receipt, print a copy, but it takes no new
+dishes. **+ New bill** is always last in the list: it starts a new, empty bill at the table and puts
+it on screen.
+
+Everything else you do at the table is in the **⋮** menu beside the switcher, in two parts. The
+first, headed with the bill on screen, such as **Bill 2 · Clint**, acts on that bill alone: **Name
+this bill**, **Split by item**, **Transfer items**, **Merge bills**, **Move this bill**, **Comp the
+bill**, **Full invoice**, **Receipt copy** and **Cancel and credit**, each when it applies to the
+bill. The second, **Whole table**, acts on everyone at the table: **Allergies**, **Name the party**,
+**Guests**, **Mark bill requested for …** with the party's name (once requested, **Cancel the bill
+request for …**), **Split a table** (when the party sits at more than one table), **Join a table**,
+**Move guests** and **Finish table**. An action that needs a choice, such as which bill to merge
+with, opens beside the order, and **Back** closes it.
+
+Joining a table, or moving guests onto one, keeps every bill: the bills that arrive take the
+receiving party's next numbers. To put two bills together, use **Merge bills**. If another till
+merges the bill on your screen into another bill, or moves it to another table, your screen
+switches, within about 15 seconds, to another of the table's bills, when one is left, and says so,
+such as **Bill 2 is no longer at this table. Now showing Bill 1.** Dishes you had added to the bill
+that went and not sent are not moved onto the bill now shown: they are listed under **Your changes
+have not been saved.**, with **Discard changes** and **Update the order**. A bill paid on another
+till stays on your screen, marked **Paid**.
+
+Below the order, the foot shows this bill's **Total**, then **Still to pay at this table** for all
+of the table's bills, then the ways to pay this bill: **Cash** and **Card**, **Pay items**,
+**Contribute** and **Split equally**, the bill's **Full invoice** and, when the venue offers more
+than one receipt language, the language its receipt will print in. Once part of the bill is paid,
+**Part of this bill is already paid: take the rest as a bill payment** takes the place of **Cash**
+and **Card**. On a handheld, one **Pay** button takes the place of **Cash**, **Card** and the
+ways to pay, except on a presented bill that is already partly paid. The foot has no **Park**: a
+table's bill already waits at its table.
+
+Waitron takes no payment for a bill with dishes not yet sent. While the bill on screen has dishes in
+your **Unsent order**, or another person's unsent dishes for it are shown with their **Take over
+draft** button, the buttons that start a payment look quiet. They still respond: a tap starts no
+payment and says why, such as **Bill 1. Send or remove the unsent dishes before paying.** Send or
+remove your own dishes. For someone else's, tap **Take over draft** first, then send or remove them.
+Unsent dishes on another bill at the table do not hold this one back. If a payment of this bill was
+sent and got no answer, the pay buttons other than **Cash** and **Card** still reopen it, so you can
+find out whether it went through; that window takes no new payment while the dishes are unsent.
+
+If you choose **Finish table** while a bill is still unpaid, the till says **A bill for this table
+is still unpaid. Take payment before finishing the table** above the foot. **Take payment** puts an
+unpaid bill on screen so you can take its payment, and **Record unpaid departure** records that the
+guests left without paying.
+
 ## Name a bill {#bill-names}
 
-A party's bills are numbered, and the till shows each one with the party's name, its number and any
-name you give it, such as **4 · Bill 2 · Clint**. To name the bill on screen, for example after the
-guest paying it, open **Table actions**, choose **Name this bill**, type up to 40 characters and
-choose **Save**. Empty the field to remove the name. **Name the party**, just above it, names the
-whole party instead. If someone else has dishes on the bill that are not sent yet, take over their
-order first.
+A party's bills are numbered, and the till shows each one with its number and any name you give it,
+such as **Bill 2 · Clint**, in some places with the party's name in front, such as **4 · Bill 2 ·
+Clint**. To name the bill on screen, for example after the guest paying it, open the **⋮** menu,
+choose **Name this bill**, type up to 40 characters and choose **Save**. Empty the field to remove
+the name. **Name the party**, under **Whole table** in the same menu, names the whole party instead.
+If someone else has dishes on the bill that are not sent yet, take over their order first.
 
 A bill keeps its number for as long as it stays with the party. Merging one bill into another leaves
 a gap: merge Bill 2 into Bill 1 and Bills 1 and 3 remain. A bill that arrives from another table or
-from the counter takes the party's next number, and so do the bills of a table you join, except a
-bill that **Merge the bills** folds into this party's main bill. A table split off with a bill starts
-again at Bill 1, and so does a table seated again after its party finishes. A bill keeps its name
-when it moves, including to the counter, where it has no number. You can name a bill only at a
-table. The name is not printed on kitchen tickets or receipts.
+from the counter takes the party's next number, and so do the bills of a table you join. A table
+split off with a bill starts again at Bill 1, and so does a table seated again after its party
+finishes. A bill keeps its name when it moves, including to the counter, where it has no number. You
+can name a bill only at a table. The name is not printed on kitchen tickets or receipts.
 
 ## See which tables have food ready {#ready-bar}
 

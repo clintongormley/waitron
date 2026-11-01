@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
 import type { TillCourse } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
@@ -12,6 +11,7 @@ import {
 import { storedDish, storedExtra } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 import { openSentDish } from "./till-table-order-screen.sent.test-helpers.js";
 import { mount } from "./till-table-order-screen.test-helpers.js";
+import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const course: TillCourse = {
   id: "dessert",
@@ -148,7 +148,7 @@ describe("course information after sending", () => {
 });
 
 it.each(["held", "fired", "served"] as const)(
-  "opening the drawer cannot edit a %s dish's recorded course",
+  "opening the table menu cannot edit a %s dish's recorded course",
   async (kind) => {
     const { el } = await mount({
       courses: [course],
@@ -164,10 +164,10 @@ it.each(["held", "fired", "served"] as const)(
     });
     const changed: Event[] = [];
     el.addEventListener("set-line-course", (event) => changed.push(event));
-    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-    await el.updateComplete;
-    const drawer = el.shadowRoot!.querySelector<HTMLElement>("[data-drawer]")!;
-    expect(drawer.querySelector("[data-line-course], [data-line-course-static]")).toBeNull();
+    await openTableMenu(el);
+    expect(
+      el.shadowRoot!.querySelector("[data-line-course], [data-line-course-static]"),
+    ).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-sent-course]")?.textContent?.trim()).toBe(
       "Dessert $& $'",
     );

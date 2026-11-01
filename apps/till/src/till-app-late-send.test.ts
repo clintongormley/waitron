@@ -214,7 +214,7 @@ const table = {
     revision: 1,
     guestCount: 2,
     state: "open" as const,
-    mainBillId: "wo-7",
+    openingBillId: "wo-7",
     outstanding: "0.00",
     billCount: 1,
     tableIds: ["t2"],

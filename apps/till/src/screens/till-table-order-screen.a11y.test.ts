@@ -36,6 +36,11 @@ import type {
   AdjustmentReason,
 } from "../api/client.js";
 import type { TillMenuBrowser } from "../widgets/menu-browser.js";
+import {
+  closeTableMenu,
+  openBillSwitcher,
+  openTableMenu,
+} from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const products: TillProduct[] = [
   {
@@ -135,7 +140,7 @@ const party: TableParty = {
   state: "open",
   name: "Ana",
   displayName: "Ana",
-  mainBillId: "wo-2",
+  openingBillId: "wo-2",
   outstanding: "30.00",
   billCount: 2,
   tableIds: ["t4"],
@@ -185,7 +190,7 @@ async function openReview(el: TillTableOrderScreen): Promise<void> {
 }
 
 describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s theme)", (theme) => {
-  it("has no violations with the round grid, the per-line course picker and the open tab drawer", async () => {
+  it("has no violations with the round grid, the per-line course picker and the open table menu", async () => {
     const { el, host } = await mountWidget<TillTableOrderScreen>(
       "till-table-order-screen",
       { products, menus, lines, courses, ...{ fireControl: "waiter" }, orderId: "wo-1" },
@@ -195,10 +200,8 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     el.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!
       .shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!
       .click();
-    // Open the drawer so the full subtree — the Servido ticks, tab total, the reused
-    // pay widget and the status picker — is included in the scan, not just the grid.
-    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await el.updateComplete;
+    // Open the ⋮ so its list is included in the scan, not just the grid.
+    await openTableMenu(el);
     await openReview(el);
     // The reused basket re-renders on its OWN store subscription (a separate Lit update cycle), and its
     // freshly-created remove `wt-button`s render their inner focusable `<button>` on a following tick — so
@@ -211,9 +214,9 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations with a child extras row in the drawer", async () => {
-    // The child row is painted muted and a size down from its dish, so its contrast against the
-    // drawer surface is its own state — the scan above, which has no child row, cannot see it.
+  it("has no violations with a child extras row", async () => {
+    // The child row is painted muted and a size down from its dish, so its contrast is its own
+    // state — the scan above, which has no child row, cannot see it.
     const childLine: TabLine = {
       changesAfterSending: null,
       stationId: null,
@@ -240,8 +243,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       { products, lines: [...lines, childLine], courses, orderId: "wo-1" },
       theme,
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await el.updateComplete;
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
     await expectNoA11yViolations(host);
@@ -323,8 +324,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
         { products: dishes, lines: lineList, orderId: "wo-1", revision: 4 },
         theme,
       );
-      mounted.el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-      await mounted.el.updateComplete;
       return mounted;
     }
 
@@ -366,8 +365,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       ]);
       el.draftStore = draft;
       await el.updateComplete;
-      el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-      await el.updateComplete;
       const picker = await openDraftLine(el, 0);
       expect(picker.shadowRoot!.querySelector("#label-list-cooked-label-rare")).not.toBeNull();
       expect(
@@ -398,7 +395,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
   });
 
   it.each([false, true])(
-    "has no violations in the party's bills with Finish refused: %s",
+    "has no violations with the party's bills in the switcher, and Finish refused: %s",
     async (finishRefused) => {
       const { el, host } = await mountWidget<TillTableOrderScreen>(
         "till-table-order-screen",
@@ -412,13 +409,14 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
         },
         theme,
       );
-      el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-      await el.updateComplete;
+      await openBillSwitcher(el);
+      // The scan must include the refusal when it is shown.
+      expect(el.shadowRoot!.querySelector("[data-finish-refusal]") !== null).toBe(finishRefused);
       await expectNoA11yViolations(host);
     },
   );
 
-  it("has no violations in the party's bills with the bill requested", async () => {
+  it("has no violations with the bill requested, in the table menu and the status pin's details", async () => {
     const asked: TableState = {
       id: "t4",
       label: "Mesa 4",
@@ -441,9 +439,23 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       { products, lines: [], orderId: "wo-1", party, bills: partyBills, tables: [asked] },
       theme,
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-cancel-bill-request]")).not.toBeNull();
+    await openTableMenu(el);
+    expect(
+      el.shadowRoot!.querySelector("[data-table-menu] [data-cancel-bill-request]"),
+    ).not.toBeNull();
+    await expectNoA11yViolations(host);
+    await closeTableMenu(el);
+    // The bill-requested chip is drawn in the status pin's details.
+    const status = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<boolean> }>(
+      "till-table-status",
+    )!;
+    status.shadowRoot!.querySelector<HTMLElement>("[data-status-pin]")!.click();
+    await status.updateComplete;
+    const sheet = status.shadowRoot!.querySelector<
+      HTMLElement & { updateComplete: Promise<boolean> }
+    >("till-table-details-sheet")!;
+    await sheet.updateComplete;
+    expect(sheet.shadowRoot!.querySelector("[data-chip='bill-requested']")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
@@ -624,8 +636,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
         },
         theme,
       );
-      mounted.el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-      await mounted.el.updateComplete;
       return mounted;
     }
 
@@ -639,7 +649,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
 
     it("has no violations in New order Move with a recalled source", async () => {
       const { el, host } = await withGroups();
-      el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
       const draft = new DraftStore();
       draft.loadFrom("recalled", [
         {
@@ -762,8 +771,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       },
       theme,
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await el.updateComplete;
     if (el.shadowRoot!.querySelector("[data-bill-payments]") === null)
       throw new Error("the scan must include the bill-payments sentence");
     await expectNoA11yViolations(host);
@@ -790,8 +797,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       },
       theme,
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>('[data-action="merge"]')!.click();
@@ -822,8 +827,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       },
       theme,
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>('[data-action="transfer"]')!.click();
@@ -881,8 +884,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
         theme,
       );
       const { el } = mounted;
-      el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-      await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
       await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>(`[data-action="${action}"]`)!.click();
@@ -897,15 +898,19 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations in the bill choice over the table screen", async () => {
+    it("has no violations once Move guests picks a seated table, which draws no bill choice", async () => {
       const { el, host } = await toAction("move");
+      let sent = 0;
+      el.addEventListener("move-guests", () => sent++);
       el.shadowRoot!.querySelector<HTMLElement>('[data-target="t7"]')!.click();
       await el.updateComplete;
-      const dialog = el.shadowRoot!.querySelector<
-        HTMLElement & { updateComplete: Promise<unknown> }
-      >("till-bill-choice-dialog");
-      if (dialog === null) throw new Error("the scan must include the bill choice");
-      await dialog.updateComplete;
+      if (sent !== 1) throw new Error("picking the seated table must send at once");
+      if (
+        [...el.shadowRoot!.querySelectorAll("*")].some((node) =>
+          /^till-.+-dialog$/.test(node.localName),
+        )
+      )
+        throw new Error("no bill choice may be drawn");
       await expectNoA11yViolations(host);
     });
 
@@ -918,15 +923,19 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations in the bill choice for a bill moving to a seated table", async () => {
+    it("has no violations once a bill is moved to a seated table, which draws no bill choice", async () => {
       const { el, host } = await toAction("move-bill", "wo-2");
+      let sent = 0;
+      el.addEventListener("move-bill", () => sent++);
       el.shadowRoot!.querySelector<HTMLElement>('[data-target="t7"]')!.click();
       await el.updateComplete;
-      const dialog = el.shadowRoot!.querySelector<
-        HTMLElement & { updateComplete: Promise<unknown> }
-      >("till-bill-choice-dialog");
-      if (dialog === null) throw new Error("the scan must include the bill choice");
-      await dialog.updateComplete;
+      if (sent !== 1) throw new Error("picking the seated table must send at once");
+      if (
+        [...el.shadowRoot!.querySelectorAll("*")].some((node) =>
+          /^till-.+-dialog$/.test(node.localName),
+        )
+      )
+        throw new Error("no bill choice may be drawn");
       await expectNoA11yViolations(host);
     });
 
@@ -950,8 +959,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       { products: [...products, weightProduct], lines: splitLines, orderId: "wo-1" },
       theme,
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>('[data-action="split"]')!.click();
@@ -976,8 +983,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       { products, lines: portions, orderId: "wo-1" },
       theme,
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>('[data-action="split"]')!.click();
@@ -998,8 +1003,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       { products: [...products, weightProduct], lines: splitLines, orderId: "wo-1" },
       theme,
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>('[data-action="split"]')!.click();

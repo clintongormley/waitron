@@ -397,7 +397,6 @@ describe("effective kitchen headings", () => {
           operatorId: OPERATOR,
           partyId: p.partyId,
           otherPartyId: null,
-          bills: "separate",
         },
       ),
     );
@@ -421,7 +420,6 @@ describe("effective kitchen headings", () => {
         ...command,
         otherPartyId: source.partyId,
         expectedOtherPartyRevision,
-        bills: "separate",
       }),
     );
     const changed = (await v.db.select().from(kitchenNotices)).filter(
@@ -467,7 +465,6 @@ describe("effective kitchen headings", () => {
         { tableId },
         {
           operatorId: OPERATOR,
-          bills: "separate",
           partyId: null,
           otherPartyId: null,
           submissionId: randomUUID(),
@@ -494,7 +491,6 @@ describe("effective kitchen headings", () => {
         ...command,
         otherPartyId: p.partyId,
         expectedOtherPartyRevision,
-        bills: "separate",
       }),
     );
     await set({ partyId: target.partyId }, "New time");

@@ -162,6 +162,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/parties/:id/bill-request                      | party                  | refuses POST /api/parties/:id/bill-request           |
  * | POST /api/parties/:id/service-steps/:stepId/done | party; step's table | refuses POST /api/parties/:id/service-steps/:stepId/done (party); service-step-done.test.ts: "refuses a step found on a table in a zone the profile may not serve" (table) |
  * | PUT  /api/parties/:id/name                              | party                  | refuses PUT /api/parties/:id/name                    |
+ * | POST /api/parties/:id/bills                             | party                  | refuses POST /api/parties/:id/bills                  |
  * | PUT  /api/parties/:id/guests                            | party                  | refuses PUT /api/parties/:id/guests                  |
  * | POST /api/parties/:id/move, /join                       | party; body table      | refuses POST /api/parties/:id/<move|join> (party), (table) |
  * | POST /api/parties/:id/split-table                       | party                  | refuses POST /api/parties/:id/split-table            |
@@ -938,6 +939,13 @@ const ROUTES: readonly Row[] = [
     deliTableZone,
   ],
   [
+    "POST /api/parties/:id/bills",
+    "POST",
+    (x) => `/api/parties/${x.deliParty}/bills`,
+    () => ({ expectedPartyRevision: 0 }),
+    deliTableZone,
+  ],
+  [
     "PUT /api/bills/:id/name",
     "PUT",
     (x) => `/api/bills/${x.deliTab}/name`,
@@ -1478,7 +1486,6 @@ describe("naming a paid bill a merged party kept", () => {
     const survivorRevision = await revisionOf(v, survivor.partyId);
     await inTx(v, (tx) =>
       moveGuests(tx, v.cfg, source.partyId, deliTable, {
-        bills: "separate",
         operatorId: OPERATOR,
         expectedPartyRevision: sourceRevision,
         otherPartyId: survivor.partyId,

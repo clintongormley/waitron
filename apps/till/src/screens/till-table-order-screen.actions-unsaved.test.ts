@@ -15,7 +15,7 @@ const party: TableParty = {
   state: "open",
   name: "Ana",
   displayName: "Ana",
-  mainBillId: "main",
+  openingBillId: "main",
   outstanding: "12.00",
   billCount: 2,
   tableIds: ["t1", "t2"],
@@ -92,6 +92,8 @@ class ActionsLeaveApp extends LitElement {
         @transfer-lines=${this.accept}
         @split-table=${this.accept}
         @merge-bills=${this.accept}
+        @switch-bill=${this.accept}
+        @new-bill=${this.accept}
       ></till-table-order-screen
       >${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
   }
@@ -116,8 +118,10 @@ async function mount(verb: "split" | "transfer" | "split-table" | "merge" = "spl
   const { el: app } = await mountWidget<ActionsLeaveApp>("actions-leave-test-app", {});
   const screen = app.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
   await screen.updateComplete;
-  await click(screen, "[data-open-drawer]");
-  await click(screen, "[data-move-split]");
+  screen
+    .shadowRoot!.querySelector("[data-move-split]")!
+    .shadowRoot!.querySelector<HTMLElement>("button")!
+    .click();
   await click(screen, `[data-action="${verb}"]`);
   return { app, screen };
 }
@@ -149,7 +153,7 @@ it("Back retains split quantities until Discard without dispatching a split", as
   await click(screen, "[data-action-back]");
   await answer(app, "discard");
   await expect
-    .poll(() => screen.shadowRoot!.querySelector("[data-action-menu]") !== null)
+    .poll(() => screen.shadowRoot!.querySelector("[data-action-panel]") === null)
     .toBe(true);
   expect(app.commands).toEqual([]);
   expect(screen.lines).toEqual(lines);
@@ -165,7 +169,7 @@ it("reverting split membership clears protection; clean Back asks nothing", asyn
   expect(unload()).toBe(false);
   await click(screen, "[data-action-back]");
   await expect
-    .poll(() => screen.shadowRoot!.querySelector("[data-action-menu]") !== null)
+    .poll(() => screen.shadowRoot!.querySelector("[data-action-panel]") === null)
     .toBe(true);
   expect((await question(app)).open).toBe(false);
 });
@@ -441,4 +445,96 @@ it("departed action-menu controls cannot replace a staged split", async () => {
   expect(screen.shadowRoot!.querySelector("till-party-name-dialog")).toBeNull();
   expect(unload()).toBe(true);
   expect(app.commands).toEqual([]);
+});
+it("A803 single menu: another ⋮ item asks before leaving staged split quantities", async () => {
+  const { app, screen } = await mount();
+  await click(screen, '[data-split-line="1"]');
+  await click(screen, '[data-split-dec="1"]');
+  expect(unload()).toBe(true);
+  await click(screen, '[data-table-menu] [data-action="merge"]');
+  expect((await question(app)).open).toBe(true);
+  await answer(app, "keep");
+  expect(screen.shadowRoot!.querySelector("[data-split-lines]")).not.toBeNull();
+  expect(screen.shadowRoot!.querySelector('[data-split-count="1"]')!.textContent).toBe("3");
+  await click(screen, '[data-table-menu] [data-action="merge"]');
+  await answer(app, "discard");
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("[data-target-picker]") !== null)
+    .toBe(true);
+  expect(screen.shadowRoot!.querySelector("[data-split-lines]")).toBeNull();
+  expect(unload()).toBe(false);
+  expect(app.commands).toEqual([]);
+});
+it("A803 single menu: a ⋮ item's old Discard answer does not replace a step opened since", async () => {
+  const { app, screen } = await mount();
+  await click(screen, '[data-split-line="1"]');
+  await click(screen, '[data-table-menu] [data-action="merge"]');
+  const q = await question(app);
+  expect(q.open).toBe(true);
+  const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
+  await click(screen, "[data-split-confirm]");
+  await expect.poll(() => q.open).toBe(false);
+  await click(screen, '[data-table-menu] [data-action="split"]');
+  await click(screen, '[data-split-line="2"]');
+  oldDiscard.click();
+  await screen.updateComplete;
+  expect(selected(screen, "split", 2)).toBe("true");
+  expect(screen.shadowRoot!.querySelector("[data-target-picker]")).toBeNull();
+  expect(app.commands).toHaveLength(1);
+});
+
+it.each([
+  ["another bill", '[data-switch-bill="other"]', "switch-bill", { workingOrderId: "other" }],
+  ["+ New bill", "[data-new-bill]", "new-bill", {}],
+])(
+  "A803 switcher: choosing %s asks before leaving staged split quantities",
+  async (_, selector, type, detail) => {
+    const { app, screen } = await mount();
+    await click(screen, '[data-split-line="1"]');
+    await click(screen, '[data-split-dec="1"]');
+    expect(unload()).toBe(true);
+    await click(screen, `[data-bill-switcher] ${selector}`);
+    expect((await question(app)).open).toBe(true);
+    expect(app.commands).toEqual([]);
+    await answer(app, "keep");
+    expect(app.commands).toEqual([]);
+    expect(screen.shadowRoot!.querySelector("[data-split-lines]")).not.toBeNull();
+    expect(screen.shadowRoot!.querySelector('[data-split-count="1"]')!.textContent).toBe("3");
+    expect(unload()).toBe(true);
+    await click(screen, `[data-bill-switcher] ${selector}`);
+    await answer(app, "discard");
+    await expect.poll(() => app.commands).toEqual([{ type, detail }]);
+    expect(app.protectionAtSubmit).toEqual([false]);
+    expect(screen.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
+    expect(unload()).toBe(false);
+  },
+);
+it.each([
+  ['[data-switch-bill="other"]', "switch-bill", { workingOrderId: "other" }],
+  ["[data-new-bill]", "new-bill", {}],
+])(
+  "A803 switcher: %s with Split by item open and nothing chosen sends at once, asking nothing",
+  async (selector, type, detail) => {
+    const { app, screen } = await mount();
+    await click(screen, `[data-bill-switcher] ${selector}`);
+    await expect.poll(() => app.commands).toEqual([{ type, detail }]);
+    expect(screen.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
+    expect((await question(app)).open).toBe(false);
+  },
+);
+it("A803 switcher: an old Discard answer from the switcher does not replace a step opened since", async () => {
+  const { app, screen } = await mount();
+  await click(screen, '[data-split-line="1"]');
+  await click(screen, '[data-bill-switcher] [data-switch-bill="other"]');
+  const q = await question(app);
+  expect(q.open).toBe(true);
+  const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
+  await click(screen, "[data-split-confirm]");
+  await expect.poll(() => q.open).toBe(false);
+  await click(screen, '[data-table-menu] [data-action="split"]');
+  await click(screen, '[data-split-line="2"]');
+  oldDiscard.click();
+  await screen.updateComplete;
+  expect(selected(screen, "split", 2)).toBe("true");
+  expect(app.commands.map((command) => command.type)).toEqual(["split-lines"]);
 });

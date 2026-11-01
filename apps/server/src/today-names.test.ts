@@ -171,7 +171,6 @@ async function pushOnto(partyId: string, moving: string, target: string, seats: 
   await post(`/api/parties/${partyId}/join`, {
     zoneRevision: await readRevision(moving),
     tableId: moving,
-    bills: "merge",
     expectedPartyRevision: await revisionOf(v, partyId),
     expectedEdits: await inTx(v, (tx) => partyBillEditsForTest(tx, [partyId])),
     otherPartyId: null,
@@ -414,7 +413,7 @@ describe("a group renamed for today, in the copies bills store", () => {
         v.cfg,
         second,
         { counter: { zoneId: null } },
-        { bills: "merge", operatorId: OPERATOR, expectedPartyRevision },
+        { operatorId: OPERATOR, expectedPartyRevision },
       ),
     );
     expect((await billRow(v, second)).label).toBe(name);
@@ -897,7 +896,6 @@ describe("the till's Join pushing a table onto a group, as the kitchen sees it",
       post(`/api/parties/${guests.partyId}/join`, {
         zoneRevision: await readRevision(table.c6!),
         tableId: table.c6!,
-        bills: "merge",
         expectedPartyRevision: await revisionOf(v, guests.partyId),
         expectedEdits: await inTx(v, (tx) => partyBillEditsForTest(tx, [guests.partyId])),
         otherPartyId: null,

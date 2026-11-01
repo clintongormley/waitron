@@ -1,6 +1,6 @@
 import { css, html, nothing, type TemplateResult } from "lit";
 import { partyTablesName } from "@waitron/shared";
-import { fill, t } from "../i18n/t.js";
+import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { needsMovingToday, shownName, shownUnder } from "../state/floor-today.js";
 import type { TableActionRevisions, TableParty, TableState } from "../api/client.js";
@@ -78,10 +78,6 @@ export function partyScope(party: TableParty, tables: readonly TableState[]): st
     : t("table.party_scope")
         .replace("{name}", () => party.name!)
         .replace("{tables}", () => labels);
-}
-
-export function moveBillScope(bill: string, into: string): string {
-  return fill(t("table.move_bill_scope"), { bill, into });
 }
 
 /** One table a person may name, with its condition. A table that needs clearing or moving is

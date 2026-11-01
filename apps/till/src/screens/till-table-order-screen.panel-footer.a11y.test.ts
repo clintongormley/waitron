@@ -10,6 +10,10 @@ import {
   footerBill,
   mountFooter,
 } from "./till-table-order-screen.panel-footer.test-helpers.js";
+import {
+  closeTableMenu,
+  openTableMenu,
+} from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 afterEach(async () => {
   cleanupWidgets();
@@ -50,8 +54,7 @@ describe.each(["en", "es"] as const)("the bill footer in %s", (locale) => {
           expect(q("[data-drawer]")).toBeNull();
           const footer = q("[data-bill-actions]")!;
           const summary = q("[data-order-summary]")!;
-          const discount = q("[data-discount-bill]")!;
-          expect(discount.textContent).toContain(t("table.discount_bill"));
+          expect(footer.querySelector("[data-discount-bill]")).toBeNull();
           expect(summary.getBoundingClientRect().bottom).toBeLessThanOrEqual(
             footer.getBoundingClientRect().top,
           );
@@ -66,9 +69,8 @@ describe.each(["en", "es"] as const)("the bill footer in %s", (locale) => {
                 ];
               })();
           for (const control of [
-            discount,
             ...controls,
-            q("[data-choose-bill-invoice]")!,
+            q("[data-choose-bill-invoice]:not([data-table-menu] *)")!,
             q("[data-choose-bill-language]")!,
           ]) {
             expect(control.checkVisibility()).toBe(true);
@@ -83,6 +85,15 @@ describe.each(["en", "es"] as const)("the bill footer in %s", (locale) => {
             element: q("[data-draft-pane]")!,
             path: `__screenshots__/a773-footer-${partial ? "partial" : "whole"}-${locale}-${theme}-${width}.png`,
           });
+          await openTableMenu(el);
+          const discount = q("[data-table-menu] [data-discount-bill]")!;
+          expect(discount.textContent).toContain(t("table.discount_bill"));
+          expect(discount.checkVisibility()).toBe(true);
+          const rect = discount.getBoundingClientRect();
+          expect(rect.height).toBeGreaterThanOrEqual(44);
+          expect(rect.left).toBeGreaterThanOrEqual(0);
+          expect(rect.right).toBeLessThanOrEqual(width);
+          if (partial) await closeTableMenu(el);
           const events: CustomEvent[] = [];
           el.addEventListener(partial ? "bill-pay" : "adjust", (event) =>
             events.push(event as CustomEvent),

@@ -25,7 +25,11 @@ import {
   servedMenus,
 } from "../widgets/test-helpers.js";
 import { openDraftLine, resized } from "./till-table-order-screen.test-helpers.js";
-import { TillTableOrderScreen, type AdjustDetail } from "./till-table-order-screen.js";
+import {
+  TillTableOrderScreen,
+  type AdjustDetail,
+  type TableRelocationOpenDetail,
+} from "./till-table-order-screen.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type {
@@ -47,6 +51,10 @@ import type { TillMenuBrowser } from "../widgets/menu-browser.js";
 import type { TillBasket } from "../widgets/basket.js";
 import type { TillModifierPicker } from "../widgets/modifier-picker.js";
 import type { TillTenderPay } from "../widgets/tender-pay.js";
+import {
+  openTableMenu,
+  tableMenuAndSwitcherText,
+} from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const coffee: TillProduct = {
   id: "cafe",
@@ -173,9 +181,37 @@ const grid = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;
 const tender = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
-async function openDrawer(el: TillTableOrderScreen): Promise<void> {
-  el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-  await el.updateComplete;
+/** Whether the ⋮'s list is open. */
+const tableMenuOpen = (el: TillTableOrderScreen) =>
+  el
+    .shadowRoot!.querySelector("[data-table-menu]")!
+    .shadowRoot!.querySelector("[popover]")!
+    .matches(":popover-open");
+/** One portion, so the Sent summary's quantities equal its line count, as the Tab badge's did. */
+const onePortionUnserved: TabLine = { ...pendingLine, quantity: "1.000" };
+/** The service read listing `lines` ungrouped, so Sent draws them and its summary. */
+const sentRows = (lines: TabLine[]) =>
+  current({
+    groups: [],
+    reminder: null,
+    ungrouped: lines.map((line) =>
+      currentRow(line.id, "Café", line.quantity, {
+        lineNo: line.lineNo,
+        servedAt: line.servedAt,
+        servedQuantity: line.servedAt === null ? "0.000" : line.quantity,
+        netAmount: grossOf(line.unitPriceGross, line.quantity),
+      }),
+    ),
+  });
+const sentCounts = (ready: number, firing: number, held: number, served: number) =>
+  t("table.sent_counts")
+    .replace("{ready}", String(ready))
+    .replace("{firing}", String(firing))
+    .replace("{held}", String(held))
+    .replace("{served}", String(served));
+async function sentSummary(el: TillTableOrderScreen): Promise<string | null | undefined> {
+  return (await sentPanelFor(el)).shadowRoot!.querySelector("[data-sent-panel] .summary")
+    ?.textContent;
 }
 
 async function sentFallbackFor(el: TillTableOrderScreen): Promise<HTMLElement> {
@@ -348,7 +384,7 @@ const anaParty: TableParty = {
   state: "open",
   name: "Ana",
   displayName: "Ana",
-  mainBillId: "wo-4",
+  openingBillId: "wo-4",
   outstanding: "44.00",
   billCount: 5,
   tableIds: ["t4"],
@@ -371,7 +407,7 @@ const bill = (over: Partial<PartyBill>): PartyBill => ({
   receiptAvailable: false,
   ...over,
 });
-/** The party's main bill, and a bill split off it, both untouched. */
+/** The bill made at seating, and a bill split off it, both untouched. */
 const tabBill = bill({});
 const checkBill = bill({
   workingOrderId: "wo-check",
@@ -526,45 +562,66 @@ describe("till-table-order-screen", () => {
       expect(action.hasAttribute("disabled")).toBe(false);
   });
 
-  it("keeps the tab drawer closed until its handle is tapped", async () => {
+  it("A803 to serve: the Sent summary counts what is still to serve, with no Tab badge", async () => {
+    const unserved = onePortionUnserved;
+    const { el } = await mount({
+      orderId: "wo-4",
+      lines: [unserved, servedLine],
+      currentOrders: sentRows([unserved, servedLine]),
+    });
+    expect(el.shadowRoot!.querySelector(".head-actions .badge, .drawer-handle")).toBeNull();
+    expect(await sentSummary(el)).toBe(sentCounts(0, 1, 0, 1));
+
+    const servedNow = { ...unserved, servedAt: servedLine.servedAt };
+    el.lines = [servedNow, servedLine];
+    el.currentOrders = sentRows([servedNow, servedLine]);
+    await el.updateComplete;
+    expect(await sentSummary(el)).toBe(sentCounts(0, 0, 0, 2));
+  });
+
+  it("draws no Tab drawer or handle", async () => {
     const { el } = await mount({ lines: [pendingLine] });
     expect(el.shadowRoot!.querySelector("[data-drawer]")).toBeNull();
-    await openDrawer(el);
-    expect(el.shadowRoot!.querySelector("[data-drawer]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector(".drawer-handle")).toBeNull();
   });
 
-  it("badges the drawer handle with the pending-to-serve count", async () => {
-    const { el } = await mount({ lines: [pendingLine, servedLine] });
-    // One un-served line ⇒ badge reads 1 (the served line does not count).
-    expect(el.shadowRoot!.querySelector("[data-pending-badge]")!.textContent).toContain("1");
+  it("counts the dishes still to serve in the Sent summary", async () => {
+    const { el } = await mount({
+      orderId: "wo-4",
+      lines: [onePortionUnserved, servedLine],
+      currentOrders: sentRows([onePortionUnserved, servedLine]),
+    });
+    // One un-served line ⇒ 1 firing (the served line does not count).
+    expect(await sentSummary(el)).toBe(sentCounts(0, 1, 0, 1));
   });
 
-  it("names the drawer handle by what it draws, its word and its pending count", async () => {
-    const { el } = await mount({ lines: [pendingLine, servedLine] });
-    const handle = el
-      .shadowRoot!.querySelector("[data-open-drawer]")!
-      .shadowRoot!.querySelector("button")!;
+  it("names the Sent toggle by its title and its counts", async () => {
+    const { el } = await mount({
+      orderId: "wo-4",
+      lines: [onePortionUnserved, servedLine],
+      currentOrders: sentRows([onePortionUnserved, servedLine]),
+    });
+    const toggle = (await sentPanelFor(el)).shadowRoot!.querySelector("[data-sent-toggle]")!;
     await expect
-      .element(page.elementLocator(handle))
-      .toHaveAccessibleName(`${t("table.open_drawer")} 1`);
+      .element(page.elementLocator(toggle))
+      .toHaveAccessibleName(`${t("table.sent_title")} ${sentCounts(0, 1, 0, 1)}`);
   });
 
-  it("hides the badge and duplicate To serve card after the last pending dish is served", async () => {
+  it("hides the duplicate To serve card after the last pending dish is served", async () => {
     const { el } = await mount({ lines: [pendingLine, servedLine] });
-    await openDrawer(el);
+    await openTableMenu(el);
     expect(el.shadowRoot!.querySelector(".pending-line")).toBeNull();
     expect((await sentFallbackFor(el)).querySelectorAll("[data-sent-fallback-line]")).toHaveLength(
       2,
     );
     el.lines = [{ ...pendingLine, servedAt: servedLine.servedAt }, servedLine];
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-pending-badge]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-drawer] .pending")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".pending")).toBeNull();
     const fallback = await sentFallbackFor(el);
     expect(fallback.querySelectorAll("[data-sent-fallback-line]")).toHaveLength(2);
   });
 
-  it("keeps serving in Sent and removes the duplicate Served drawer list", async () => {
+  it("keeps serving in Sent, with no duplicate Served list anywhere on the screen", async () => {
     const { el } = await mount({
       orderId: "wo-4",
       lines: [pendingLine, servedLine],
@@ -592,7 +649,6 @@ describe("till-table-order-screen", () => {
     );
     dialog.closeAfter("saved");
     await closed;
-    await openDrawer(el);
     expect(el.shadowRoot!.querySelectorAll(".pending-line")).toHaveLength(0);
     expect(el.shadowRoot!.querySelector(".served-line, [data-serve]")).toBeNull();
     expect(el.shadowRoot!.textContent).not.toContain(t("table.pending_title"));
@@ -613,9 +669,9 @@ describe("till-table-order-screen", () => {
 
   it("shows the tab total from the LOCKED add-time prices (never a catalogue recompute)", async () => {
     const { el } = await mount({ lines: [pendingLine, servedLine] });
-    await openDrawer(el);
+    await openTableMenu(el);
     // 2 × 1.50 + 1 × 1.50 = 4.50, summed at money scale from the locked unit prices.
-    expect(el.shadowRoot!.querySelector("[data-tab-total]")!.textContent).toContain(
+    expect(el.shadowRoot!.querySelector("[data-order-total]")!.textContent).toContain(
       formatMoney("4.50", currentLocale()),
     );
   });
@@ -630,7 +686,6 @@ describe("till-table-order-screen", () => {
 
   it("emits pay-tab with the tender when the embedded pay widget confirms, and does NOT leak confirm-payment", async () => {
     const { el } = await mount({ lines: [pendingLine] });
-    await openDrawer(el);
     let payTab: CustomEvent | undefined;
     let leaked = false;
     el.addEventListener("pay-tab", (e) => (payTab = e as CustomEvent));
@@ -651,15 +706,14 @@ describe("till-table-order-screen", () => {
 
   it("hides the pay section when settlement is disabled (an order-only handheld)", async () => {
     const { el } = await mount({ lines: [pendingLine], canSettle: false });
-    await openDrawer(el);
+    await openTableMenu(el);
     expect(el.shadowRoot!.querySelector("section.pay")).toBeNull();
     // The total row stays visible — the waiter can see the tab total, just can't take payment.
-    expect(el.shadowRoot!.querySelector("[data-tab-total]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-order-total]")).not.toBeNull();
   });
 
   it("shows the pay section by default (canSettle unset ⇒ the counter/fixed till still pays)", async () => {
     const { el } = await mount({ lines: [pendingLine] });
-    await openDrawer(el);
     expect(el.shadowRoot!.querySelector("section.pay")).not.toBeNull();
   });
 
@@ -667,7 +721,6 @@ describe("till-table-order-screen", () => {
     // The table-order screen threads no `cashOnly`/`cardProvider`, so the embedded pay widget offers
     // BOTH tenders — cash and the manual (datáfono) card.
     const { el } = await mount({ lines: [pendingLine], canSettle: true });
-    await openDrawer(el);
     const widget = tender(el);
     await widget.updateComplete;
     expect(widget.shadowRoot!.querySelector(".pay-card")).not.toBeNull();
@@ -680,7 +733,6 @@ describe("till-table-order-screen", () => {
     "draws the pay card's Cash and Card $variant on a bill with $bill",
     async ({ lines, variant }) => {
       const { el } = await mount({ lines });
-      await openDrawer(el);
       const widget = tender(el);
       await widget.updateComplete;
       expect(
@@ -691,35 +743,36 @@ describe("till-table-order-screen", () => {
     },
   );
 
-  it("swallows a Hold (park-order) from the embedded pay widget — a tab cannot be parked", async () => {
+  it("draws no Hold in the embedded pay widget — a tab cannot be parked", async () => {
     const { el } = await mount({ lines: [pendingLine] });
-    await openDrawer(el);
-    let leaked = false;
-    el.addEventListener("park-order", () => (leaked = true));
-    tender(el).dispatchEvent(
-      new CustomEvent("park-order", { detail: {}, bubbles: true, composed: true }),
-    );
-    expect(leaked).toBe(false);
+    const widget = tender(el);
+    await widget.updateComplete;
+    expect(widget.shadowRoot!.querySelector(".pay")).not.toBeNull();
+    expect(widget.shadowRoot!.querySelector(".hold")).toBeNull();
+    expect(widget.shadowRoot!.textContent).not.toContain(t("action.hold"));
   });
 
   it("has no Status section", async () => {
     const { el } = await mount({ lines: [pendingLine] });
-    await openDrawer(el);
-    expect(el.shadowRoot!.querySelector("[data-drawer]")).not.toBeNull();
+    await openTableMenu(el);
+    expect(tableMenuOpen(el)).toBe(true);
     expect(el.shadowRoot!.querySelector("section.status")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-status-clear]")).toBeNull();
   });
 
   it("renders an ENABLED Table actions trigger that opens the action menu (TS-3/TS-4)", async () => {
     const { el } = await mount({ lines: [pendingLine] });
-    await openDrawer(el);
     const trigger = el.shadowRoot!.querySelector("[data-move-split]")!;
-    expect(trigger.textContent).toContain(t("table.actions_title"));
+    const button = trigger.shadowRoot!.querySelector("button")!;
+    expect(trigger.getAttribute("label")).toContain(t("table.actions_title"));
     expect(trigger.hasAttribute("disabled")).toBe(false);
-    expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
-    (trigger as HTMLElement).click();
+    expect(button.disabled).toBe(false);
+    expect(button.getAttribute("aria-disabled")).not.toBe("true");
+    expect(trigger.closest("[inert]")).toBeNull();
+    expect(tableMenuOpen(el)).toBe(false);
+    button.click();
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-action-menu]")).not.toBeNull();
+    expect(tableMenuOpen(el)).toBe(true);
   });
 
   it("emits a composed, bubbling back-to-floor event from the back control", async () => {
@@ -732,11 +785,11 @@ describe("till-table-order-screen", () => {
     expect(captured!.bubbles).toBe(true);
   });
 
-  it("suppresses its own header + Back when embedded, keeping the drawer handle", async () => {
+  it("suppresses its own header + Back when embedded, keeping the table menu", async () => {
     const { el } = await mount({ embedded: true });
     expect(el.shadowRoot!.querySelector("header.head")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-back]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-open-drawer]")).not.toBeNull(); // body function stays
+    expect(el.shadowRoot!.querySelector("[data-table-menu]")).not.toBeNull(); // body function stays
   });
 
   it("renders its header + Back when standalone (default)", async () => {
@@ -745,18 +798,18 @@ describe("till-table-order-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-back]")).not.toBeNull();
   });
 
-  it("handles an empty tab: no badge or duplicate To serve card, zero total", async () => {
-    const { el } = await mount({ lines: [] });
-    await openDrawer(el);
-    expect(el.shadowRoot!.querySelector("[data-pending-badge]")).toBeNull();
-    const text = el.shadowRoot!.querySelector("[data-drawer]")!.textContent ?? "";
+  it("handles an empty tab: no Sent counts or duplicate To serve card, zero total", async () => {
+    const { el } = await mount({ orderId: "wo-4", lines: [], currentOrders: sentRows([]) });
+    await openTableMenu(el);
+    expect(await sentSummary(el)).toBeUndefined();
+    const text = tableMenuAndSwitcherText(el);
     expect(text).not.toContain(t("table.none_pending"));
     expect(text).not.toContain(t("table.pending_title"));
-    expect(el.shadowRoot!.querySelector("[data-drawer] .pending")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".pending")).toBeNull();
     expect(el.shadowRoot!.querySelector(".served")).toBeNull();
     const panel = await sentPanelFor(el);
     expect(panel.shadowRoot!.querySelector("[data-sent-panel]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-tab-total]")!.textContent).toContain(
+    expect(el.shadowRoot!.querySelector("[data-order-total]")!.textContent).toContain(
       formatMoney("0.00", currentLocale()),
     );
   });
@@ -1573,7 +1626,7 @@ describe("till-table-order-screen", () => {
     parentProductId: null,
   };
 
-  describe("the party's groups in the Tab drawer", () => {
+  describe("the party's groups in the Sent panel", () => {
     const at = "2026-09-27T10:00:00.000Z";
     /** A dish line of this bill in group `groupId`, held (never sent) unless `fired`. */
     function dishLine(
@@ -1649,7 +1702,6 @@ describe("till-table-order-screen", () => {
 
     async function mountGroups(over: Partial<TillTableOrderScreen> = {}) {
       const mounted = await mount({ lines: tabLines, groups, orderId: "wo-4", ...over });
-      await openDrawer(mounted.el);
       return mounted;
     }
 
@@ -2437,7 +2489,6 @@ describe("till-table-order-screen", () => {
 
   it("shows a saved dish's course read-only, with editing available only in recalled New order", async () => {
     const { el } = await mount({ lines: [heldLine], courses });
-    await openDrawer(el);
     expect(el.shadowRoot!.querySelector('[data-line-course="3"]')).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-sent-course]")!.textContent!.trim()).toBe("Postres");
     const recalled = await recalledCourse();
@@ -2568,7 +2619,6 @@ describe("till-table-order-screen", () => {
       orderId: "wo-4",
       billEdit: expectedEdit,
     });
-    await openDrawer(el);
     const changed: CustomEvent[] = [];
     const sent: CustomEvent[] = [];
     el.addEventListener("set-line-course", (e) => changed.push(e as CustomEvent));
@@ -2634,7 +2684,6 @@ describe("till-table-order-screen", () => {
 
   it("renders no course control at all when the venue has no courses", async () => {
     const { el } = await mount({ lines: [heldLine], courses: [] });
-    await openDrawer(el);
     expect(el.shadowRoot!.querySelector('[data-line-course="3"]')).toBeNull();
     expect(el.shadowRoot!.querySelector('[data-line-course-static="3"]')).toBeNull();
   });
@@ -2676,7 +2725,6 @@ describe("till-table-order-screen", () => {
       async (state) => {
         const held = { ...pendingLine, firedAt: null, sentAt: null, state, groupId: "g-held" };
         const { el } = await mount({ lines: [held], groups: [orderGroup("g-held", "held")] });
-        await openDrawer(el);
         const recall = await recallControl(el, 1);
         expect(recall).not.toBeNull();
         let captured: CustomEvent | undefined;
@@ -2690,7 +2738,6 @@ describe("till-table-order-screen", () => {
 
     it("offers Recall for a sent dish that needs no kitchen preparation", async () => {
       const { el } = await mount({ lines: [{ ...pendingLine, firedAt: null, state: null }] });
-      await openDrawer(el);
       expect(await recallControl(el, 1)).not.toBeNull();
     });
 
@@ -2710,7 +2757,6 @@ describe("till-table-order-screen", () => {
           ],
           groups: [orderGroup("g-held", "held")],
         });
-        await openDrawer(el);
         expect(await recallControl(el, 1)).toBeNull();
       },
     );
@@ -2721,7 +2767,6 @@ describe("till-table-order-screen", () => {
         bills: [bill({ status })],
         lines: [pendingLine],
       });
-      await openDrawer(el);
       expect(await recallControl(el, 1)).toBeNull();
     });
 
@@ -2731,7 +2776,6 @@ describe("till-table-order-screen", () => {
         const { el } = await mount({
           lines: [pendingLine, { ...childLine, firedAt: pendingLine.firedAt, state }],
         });
-        await openDrawer(el);
         expect(await recallControl(el, 1)).toBeNull();
         expect(await recallControl(el, 2)).toBeNull();
       },
@@ -2749,7 +2793,6 @@ describe("till-table-order-screen", () => {
             reminder: null,
           }),
         });
-        await openDrawer(el);
         expect(await recallControl(el, 1)).toBeNull();
       },
     );
@@ -2770,13 +2813,11 @@ describe("till-table-order-screen", () => {
           reminder: null,
         }),
       });
-      await openDrawer(el);
       expect(await recallControl(el, 1)).not.toBeNull();
     });
 
     it("disables Recall while another party command is in flight", async () => {
       const { el } = await mount({ lines: [pendingLine] });
-      await openDrawer(el);
       const recall = (await recallControl(el, 1))!;
       const captured: CustomEvent[] = [];
       el.addEventListener("recall-lines", (event) => captured.push(event as CustomEvent));
@@ -2789,7 +2830,6 @@ describe("till-table-order-screen", () => {
 
     it("keeps extras without separate actions and offers Void on their dish in Sent", async () => {
       const { el } = await mount({ lines: [pendingLine, childLine], courses });
-      await openDrawer(el);
       expect(await recallControl(el, 1)).not.toBeNull();
       expect(el.shadowRoot!.querySelector('[data-send-line="2"]')).toBeNull();
       expect(await recallControl(el, 2)).toBeNull();
@@ -2813,7 +2853,6 @@ describe("till-table-order-screen", () => {
         state: "queued",
       };
       const { el } = await mount({ lines: [dish, chips], courses });
-      await openDrawer(el);
       expect(el.shadowRoot!.querySelector('[data-cancel-line="1"]')).toBeNull();
       expect(await voidControl(el, 1)).not.toBeNull();
       expect(el.shadowRoot!.querySelector('[data-cancel-line="2"]')).toBeNull();
@@ -2833,9 +2872,8 @@ describe("till-table-order-screen", () => {
       expect(parseFloat(child.fontSize)).toBeLessThan(parseFloat(dish.fontSize));
     });
 
-    it("fires a held dish through Sent More without a duplicate drawer Send", async () => {
+    it("fires a held dish through Sent More, with no direct Send anywhere on the screen", async () => {
       const { el } = await mount({ lines: [heldLine], courses });
-      await openDrawer(el);
       expect(el.shadowRoot!.querySelector('[data-send-line="3"]')).toBeNull();
       expect(await recallControl(el, 3)).toBeNull();
       expect(el.shadowRoot!.querySelector('[data-cancel-line="3"]')).toBeNull();
@@ -2888,7 +2926,6 @@ describe("till-table-order-screen", () => {
     it("renders NO Send on a PARENT line with no ticket item (firedAt null, state null)", async () => {
       const ticketlessParent: TabLine = { ...heldLine, lineNo: 4, state: null };
       const { el } = await mount({ lines: [ticketlessParent], courses });
-      await openDrawer(el);
       expect(el.shadowRoot!.querySelector('[data-send-line="4"]')).toBeNull();
       expect(await recallControl(el, 4)).toBeNull();
       expect(el.shadowRoot!.querySelector('[data-cancel-line="4"]')).toBeNull();
@@ -2933,10 +2970,10 @@ describe("till-table-order-screen", () => {
           await panel.updateComplete;
         }
       }
-      await openDrawer(el);
+      await openTableMenu(el);
       expect(el.shadowRoot!.querySelector('[data-send-line="3"]')).toBeNull();
       expect(panel.shadowRoot!.querySelector('[data-group-fire="g-held"]')).not.toBeNull();
-      expect(el.shadowRoot!.querySelector('[data-drawer] [data-group-fire="g-held"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-group-fire="g-held"]')).toBeNull();
     });
 
     it("sends a recalled source through New order when its old group has fired", async () => {
@@ -2951,7 +2988,6 @@ describe("till-table-order-screen", () => {
         groups: [orderGroup("g-fired", "fired")],
         courses,
       });
-      await openDrawer(el);
       expect(el.shadowRoot!.querySelector('[data-send-line="3"]')).toBeNull();
       const draft = grid(el).store;
       draft.appendLines([
@@ -2983,7 +3019,6 @@ describe("till-table-order-screen", () => {
     it("shows Recall on a FIRED, queued line and emits recall-lines { lineNos: [lineNo] }", async () => {
       // pendingLine: firedAt set + state queued ⇒ recallable (not yet started).
       const { el } = await mount({ lines: [pendingLine], courses });
-      await openDrawer(el);
       const recall = await recallControl(el, 1);
       expect(recall).not.toBeNull();
       expect(el.shadowRoot!.querySelector('[data-send-line="1"]')).toBeNull();
@@ -2999,7 +3034,6 @@ describe("till-table-order-screen", () => {
 
     it("offers Void in Sent for a started line and preserves the app cancellation target", async () => {
       const { el } = await mount({ lines: [preparingLine], courses });
-      await openDrawer(el);
       const cancel = await voidControl(el, 1);
       expect(cancel).not.toBeNull();
       expect(el.shadowRoot!.querySelector('[data-send-line="1"]')).toBeNull();
@@ -3021,7 +3055,6 @@ describe("till-table-order-screen", () => {
 
     it("offers Void rather than Recall in Sent for a ready line", async () => {
       const { el } = await mount({ lines: [readyLine], courses });
-      await openDrawer(el);
       expect(await voidControl(el, 1)).not.toBeNull();
       expect(await recallControl(el, 1)).toBeNull();
     });
@@ -3266,7 +3299,6 @@ describe("till-table-order-screen", () => {
         ),
       ]);
       await el.updateComplete;
-      if (el.shadowRoot!.querySelector("[data-drawer]") !== null) await openDrawer(el);
       const picker = await openDraftLine(el, 0);
       const addNote = picker.shadowRoot!.querySelector<HTMLElement>(".add-note");
       if (addNote !== null) {
@@ -3300,10 +3332,9 @@ describe("till-table-order-screen", () => {
     }
 
     it.each([burgerLine, recalledLine])(
-      "keeps sent line $lineNo read-only in the drawer instead of opening a direct Change editor",
+      "keeps sent line $lineNo read-only on the screen instead of opening a direct Change editor",
       async (line) => {
         const { el } = await mountLines([line]);
-        await openDrawer(el);
         expect(lineAction(el, "change", line.lineNo)).toBeNull();
         expect(el.shadowRoot!.querySelector(".change-editor")).toBeNull();
       },
@@ -3311,7 +3342,6 @@ describe("till-table-order-screen", () => {
 
     it("offers queued Recall and Void in Sent without a direct Change editor", async () => {
       const { el } = await mountLines([burgerLine]);
-      await openDrawer(el);
       expect(lineAction(el, "change", 5)).toBeNull();
       expect(await recallControl(el, 5)).not.toBeNull();
       expect(el.shadowRoot!.querySelector("[data-sent-line-void]")).not.toBeNull();
@@ -3320,7 +3350,6 @@ describe("till-table-order-screen", () => {
 
     it("keeps recalled and no-route sent rows read-only, whether or not released", async () => {
       const { el } = await mountLines([recalledLine, noRouteLine, unreleasedNoRouteLine]);
-      await openDrawer(el);
       expect(lineAction(el, "change", 6)).toBeNull();
       expect(lineAction(el, "send", 6)).toBeNull();
       expect(lineAction(el, "change", 7)).toBeNull();
@@ -3329,7 +3358,6 @@ describe("till-table-order-screen", () => {
 
     it("offers Void in Sent on a recalled line without direct Send or Change", async () => {
       const { el } = await mountLines([recalledLine]);
-      await openDrawer(el);
       expect(await voidControl(el, 6)).not.toBeNull();
       expect(lineAction(el, "send", 6)).toBeNull();
       expect(lineAction(el, "change", 6)).toBeNull();
@@ -3337,7 +3365,6 @@ describe("till-table-order-screen", () => {
 
     it("closes the recalled line editor when the app switches the bill and its New order", async () => {
       const { el } = await mountLines([burgerLine], { orderId: "wo-7" });
-      await openDrawer(el);
       await openChange(el, 5);
       el.orderId = "wo-9";
       el.draftStore = new DraftStore();
@@ -3347,7 +3374,6 @@ describe("till-table-order-screen", () => {
 
     it("offers Void without Change or Recall on a line the kitchen has started", async () => {
       const { el } = await mountLines([preparingBurger, readyBurger]);
-      await openDrawer(el);
       for (const lineNo of [9, 10]) {
         expect(await voidControl(el, lineNo)).not.toBeNull();
         expect(lineAction(el, "change", lineNo)).toBeNull();
@@ -3357,7 +3383,6 @@ describe("till-table-order-screen", () => {
 
     it("offers no Change on an extras row, nor on a held line that was never sent", async () => {
       const { el } = await mountLines([burgerLine, cheeseChild, neverSentLine]);
-      await openDrawer(el);
       expect(lineAction(el, "change", 11)).toBeNull();
       expect(lineAction(el, "change", 12)).toBeNull();
       expect(lineAction(el, "send", 12)).toBeNull();
@@ -3367,7 +3392,6 @@ describe("till-table-order-screen", () => {
       const gone: TabLine = { ...burgerLine, productId: "gone", menuItemId: "menu-item-gone" };
       const unnamed: TabLine = { ...burgerLine, lineNo: 6, productId: null, menuItemId: null };
       const { el } = await mountLines([gone, unnamed]);
-      await openDrawer(el);
       expect(lineAction(el, "change", 5)).toBeNull();
       expect(await recallControl(el, 5)).not.toBeNull();
       expect(lineAction(el, "change", 6)).toBeNull();
@@ -3380,7 +3404,6 @@ describe("till-table-order-screen", () => {
           changesAfterSending: "never" as const,
         })),
       );
-      await openDrawer(el);
       for (const lineNo of [5, 6, 9]) {
         expect(lineAction(el, "change", lineNo)).toBeNull();
         expect(await recallControl(el, lineNo)).toBeNull();
@@ -3391,7 +3414,6 @@ describe("till-table-order-screen", () => {
 
     it("opens the note editor on a dish with no choices; saving updates the source-backed New order", async () => {
       const { el } = await mountLines([burgerLine], { revision: 7 });
-      await openDrawer(el);
       const picker = await openChange(el, 5);
       expect(
         picker.shadowRoot!.querySelector<HTMLElement & { heading: string }>("wt-modal")!.heading,
@@ -3436,12 +3458,6 @@ describe("till-table-order-screen", () => {
               };
               const { el } = await mountLines([burgerLine], { revision: 7, billEdit: opened });
               el.parentElement!.setAttribute("data-theme", theme);
-              await userEvent.click(
-                page.elementLocator(
-                  el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!,
-                ),
-              );
-              await el.updateComplete;
               const picker = await openChange(el, 5);
               await userEvent.fill(
                 page.elementLocator(noteBox(picker)),
@@ -3476,7 +3492,6 @@ describe("till-table-order-screen", () => {
       const { el } = await mountLines([burgerLine], { revision: 7 });
       Object.assign(el, { billEdit: opened });
       await el.updateComplete;
-      await openDrawer(el);
       const picker = await openChange(el, 5);
       Object.assign(el, { billEdit: { ...opened, editorVersion: 9 } });
       await el.updateComplete;
@@ -3491,7 +3506,6 @@ describe("till-table-order-screen", () => {
 
     it("keeps a recalled edit attached to its source through a bill revision refresh", async () => {
       const { el } = await mountLines([burgerLine], { revision: 7 });
-      await openDrawer(el);
       const picker = await openChange(el, 5);
       el.revision = 8;
       await el.updateComplete;
@@ -3524,7 +3538,6 @@ describe("till-table-order-screen", () => {
       // Two cheeses per burger on a line of two burgers.
       const child: TabLine = { ...cheeseChild, quantity: "4.000" };
       const { el } = await mount({ products: [dish], lines: [line, child], revision: 3 });
-      await openDrawer(el);
       const picker = await openChange(el, 5);
 
       expect(noteBox(picker).value).toBe("sin sal");
@@ -3569,7 +3582,6 @@ describe("till-table-order-screen", () => {
         lines: [{ ...burgerLine, quantity: "2.000" }, child],
         revision: 3,
       });
-      await openDrawer(el);
       const picker = await openChange(el, 5);
       expect(
         picker
@@ -3609,7 +3621,6 @@ describe("till-table-order-screen", () => {
 
       it("a note-only change leaves the line's answers out, so the server keeps both", async () => {
         const { el } = await mountWithdrawn();
-        await openDrawer(el);
         const picker = await openChange(el, 5);
         await typeNote(picker, "sin sal");
         const seen = captureChange(el);
@@ -3620,7 +3631,6 @@ describe("till-table-order-screen", () => {
 
       it("an answer changed and changed back is compared by value: Save is disabled and sends nothing", async () => {
         const { el } = await mountWithdrawn();
-        await openDrawer(el);
         const picker = await openChange(el, 5);
         const before = saved(el);
         await pickLabel(picker, "label-medium");
@@ -3641,7 +3651,6 @@ describe("till-table-order-screen", () => {
        * a deliberate change of answers replaces the set with the offered lists' answers alone. */
       it("a changed answer sends the offered lists' answers, which replace the set", async () => {
         const { el } = await mountWithdrawn();
-        await openDrawer(el);
         const picker = await openChange(el, 5);
         await pickLabel(picker, "label-medium");
         const seen = captureChange(el);
@@ -3658,7 +3667,6 @@ describe("till-table-order-screen", () => {
       const dish: TillProduct = { ...burger, offeredModifiers: [extrasList] };
       const withdrawn: TabLine = { ...cheeseChild, listId: "list-withdrawn" };
       const { el } = await mount({ products: [dish], lines: [burgerLine, withdrawn] });
-      await openDrawer(el);
       const picker = await openChange(el, 5);
       expect(picker.shadowRoot!.querySelector(".refusal")!.textContent).toContain("Queso");
       expect(
@@ -3673,7 +3681,6 @@ describe("till-table-order-screen", () => {
         lines: [{ ...burgerLine, optionSnapshots: [] }, cheeseChild],
         revision: 1,
       });
-      await openDrawer(el);
       const picker = await openChange(el, 5);
       picker
         .shadowRoot!.querySelector<HTMLInputElement>("#label-list-cooked-label-medium")!
@@ -3705,7 +3712,6 @@ describe("till-table-order-screen", () => {
         lines: [{ ...burgerLine, optionSnapshots: [] }],
         revision: 1,
       });
-      await openDrawer(el);
       const picker = await openChange(el, 5);
       picker
         .shadowRoot!.querySelector<HTMLInputElement>("#label-list-cooked-label-medium")!
@@ -3721,7 +3727,6 @@ describe("till-table-order-screen", () => {
     it("sends an empty extras set when every pick is taken off, so the server removes them", async () => {
       const dish: TillProduct = { ...burger, offeredModifiers: [extrasList] };
       const { el } = await mount({ products: [dish], lines: [burgerLine, cheeseChild] });
-      await openDrawer(el);
       const picker = await openChange(el, 5);
       picker
         .shadowRoot!.querySelector<HTMLElement>('[data-test="pick-list-extras-p-cheese-dec"]')!
@@ -3738,7 +3743,6 @@ describe("till-table-order-screen", () => {
         products: [dish],
         lines: [burgerLine, { ...cheeseChild, listId: null }],
       });
-      await openDrawer(el);
       const picker = await openChange(el, 5);
       expect(
         picker.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(".confirm")!.disabled,
@@ -3756,7 +3760,6 @@ describe("till-table-order-screen", () => {
         products: [lunch, dinner],
         lines: [{ ...burgerLine, menuItemId: null }],
       });
-      await openDrawer(el);
       const picker = await openChange(el, 5);
       expect(picker.shadowRoot!.querySelector("#label-list-cooked-label-rare")).toBeNull();
       expect(el.draftStore!.lines[0]!.source!.line.menuItemId).toBeNull();
@@ -3765,7 +3768,6 @@ describe("till-table-order-screen", () => {
 
     it("sends a cleared note as null, which removes it", async () => {
       const { el } = await mountLines([{ ...burgerLine, note: "sin sal" }], { revision: 2 });
-      await openDrawer(el);
       const picker = await openChange(el, 5);
       const seen = captureChange(el);
       await typeNote(picker, "");
@@ -3801,7 +3803,6 @@ describe("till-table-order-screen", () => {
         unitPriceGross: "11.00",
       };
       const { el } = await mount({ products: [withVariants], lines: [variantLine], revision: 1 });
-      await openDrawer(el);
       const picker = await openChange(el, 5);
       expect(
         picker.shadowRoot!.querySelector<HTMLElement & { heading: string }>("wt-modal")!.heading,
@@ -3821,7 +3822,6 @@ describe("till-table-order-screen", () => {
 
     it("closing the editor changes nothing", async () => {
       const { el } = await mountLines([burgerLine]);
-      await openDrawer(el);
       const picker = await openChange(el, 5);
       const before = saved(el);
       const seen = captureChange(el);
@@ -3867,7 +3867,6 @@ describe("till-table-order-screen", () => {
 
       it("lets the dialog cancel one of them, at one unit's price", async () => {
         const { el } = await mountLines([pair]);
-        await openDrawer(el);
         const { target } = await acceptCancelOffer(el, 5);
         expect(target).toEqual({
           lineId: "line-5",
@@ -3881,7 +3880,6 @@ describe("till-table-order-screen", () => {
 
       it("keeps the started wording, and one at a time, when the kitchen has started the pair", async () => {
         const { el } = await mountLines([{ ...pair, state: "preparing" }]);
-        await openDrawer(el);
         const { target } = await acceptCancelOffer(el, 5);
         expect(target.started).toBe(true);
         expect(target.unitTotal).toBe("9.50");
@@ -3889,7 +3887,6 @@ describe("till-table-order-screen", () => {
 
       it("does not offer one at a time on a line of one", async () => {
         const { el } = await mountLines([burgerLine]);
-        await openDrawer(el);
         const { target } = await acceptCancelOffer(el, 5);
         expect(target.quantity).toBe("1");
         expect(target.unitTotal).toBeNull();
@@ -3906,7 +3903,6 @@ describe("till-table-order-screen", () => {
           state: "preparing",
         };
         const { el } = await mountLines([weighed]);
-        await openDrawer(el);
         const { target } = await acceptCancelOffer(el, 5);
         expect(target.unitTotal).toBeNull();
       });
@@ -3924,7 +3920,6 @@ describe("till-table-order-screen", () => {
 
       it("opens nothing when the line the app offers Cancel for is no longer on the tab", async () => {
         const { el } = await mountLines([preparingBurger]);
-        await openDrawer(el);
         const seen = captureCancel(el);
         let taken: Event | undefined;
         el.addEventListener("cancel-offer-taken", (e) => (taken = e));
@@ -3937,7 +3932,6 @@ describe("till-table-order-screen", () => {
 
       it("opens Cancel on the line the app offers it for after a refused change", async () => {
         const { el } = await mountLines([preparingBurger]);
-        await openDrawer(el);
         const seen = captureCancel(el);
         el.cancelOffer = 9;
         await el.updateComplete;
@@ -3981,10 +3975,10 @@ describe("till-table-order-screen", () => {
       expect(el.orderId).toBe("wo-check");
     });
 
-    it("does not fall back to the main bill for an addition on a split bill", async () => {
+    it("does not move an addition on a split bill to the bill the floor names", async () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-check", courses });
       await ringCafe(el);
-      el.party = { ...anaParty, mainBillId: "wo-part" };
+      el.party = { ...anaParty, openingBillId: "wo-part" };
       await el.updateComplete;
       await assertOwnSend(el, grid(el).store);
       expect(el.orderId).toBe("wo-check");
@@ -4015,9 +4009,9 @@ describe("till-table-order-screen", () => {
       await assertOwnSend(el, grid(el).store);
     });
 
-    it("does not invent a new bill when the party has no main bill", async () => {
+    it("does not invent a new bill when the floor names no bill for the party", async () => {
       const { el } = await mount({
-        party: { ...anaParty, mainBillId: null },
+        party: { ...anaParty, openingBillId: null },
         bills: [{ ...paidBill, billNumber: 1 }, checkBill],
         orderId: "wo-check",
         courses,
@@ -4077,44 +4071,44 @@ describe("till-table-order-screen", () => {
       expect(el.orderId).toBe("wo-check");
     });
 
-    it("does not follow a main-bill refresh away from its current store", async () => {
+    it("does not follow a change of the bill the floor names away from its current store", async () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-4", courses });
       await ringCafe(el);
       const own = grid(el).store;
-      el.party = { ...anaParty, mainBillId: "wo-check" };
+      el.party = { ...anaParty, openingBillId: "wo-check" };
       el.bills = [tabBill, checkBill, partlyPaidBill];
       await el.updateComplete;
       await assertOwnSend(el, own);
       expect(el.orderId).toBe("wo-4");
     });
 
-    it("sends to the current main bill through its own store without a bill override", async () => {
+    it("sends to the bill the floor names through its own store without a bill override", async () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-4", courses });
       await ringCafe(el);
       await assertOwnSend(el, grid(el).store);
       expect(el.orderId).toBe("wo-4");
     });
 
-    it("keeps the former main bill's store after another bill becomes main", async () => {
+    it("keeps the bill on screen's store after the floor names another bill", async () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-4", courses });
       await ringCafe(el);
       const own = grid(el).store;
-      el.party = { ...anaParty, mainBillId: "wo-check" };
+      el.party = { ...anaParty, openingBillId: "wo-check" };
       await el.updateComplete;
       await assertOwnSend(el, own);
       expect(el.orderId).toBe("wo-4");
     });
 
-    it("does not switch stores when another device creates the party's main bill", async () => {
+    it("does not switch stores when another device makes the bill the floor names", async () => {
       const { el } = await mount({
-        party: { ...anaParty, mainBillId: null },
+        party: { ...anaParty, openingBillId: null },
         bills: [{ ...paidBill, billNumber: 1 }, checkBill],
         orderId: "wo-check",
         courses,
       });
       await ringCafe(el);
       const own = grid(el).store;
-      el.party = { ...anaParty, mainBillId: "wo-4" };
+      el.party = { ...anaParty, openingBillId: "wo-4" };
       el.bills = [{ ...paidBill, billNumber: 1 }, checkBill, { ...tabBill, billNumber: 3 }];
       await el.updateComplete;
       await assertOwnSend(el, own);
@@ -4152,7 +4146,7 @@ describe("till-table-order-screen", () => {
       >("till-table-status");
       expect(status!.party).toBe(p1);
       expect(status!.tables).toBe(tables);
-      expect(status!.nextElementSibling!.hasAttribute("data-open-drawer")).toBe(true);
+      expect(status!.nextElementSibling!.hasAttribute("data-bill-switcher")).toBe(true);
     });
 
     it("on a phone-wide screen in Spanish, a long status pin keeps each head button on one line", async () => {
@@ -4188,7 +4182,7 @@ describe("till-table-order-screen", () => {
           }
           return most;
         };
-        const tab = actions.querySelector<HTMLElement>("[data-open-drawer]")!;
+        const tab = actions.querySelector<HTMLElement>("[data-bill-switcher]")!;
         const back = actions.querySelector<HTMLElement>("[data-back]")!;
         expect([pin, tab, back].map(linesOf)).toEqual([1, 1, 1]);
         const pinBox = pin.getBoundingClientRect();
@@ -4201,8 +4195,9 @@ describe("till-table-order-screen", () => {
     });
 
     async function toMenu(el: TillTableOrderScreen): Promise<void> {
-      await openDrawer(el);
-      el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
+      el.shadowRoot!.querySelector("[data-move-split]")!
+        .shadowRoot!.querySelector<HTMLElement>("button")!
+        .click();
       await el.updateComplete;
     }
     const click = (el: TillTableOrderScreen, selector: string) =>
@@ -4231,12 +4226,15 @@ describe("till-table-order-screen", () => {
     it("shows all five action verbs with Split enabled and a Back control", async () => {
       const { el } = await mount({ lines: [pendingLine], tables: [] });
       await toMenu(el);
+      const menu = el.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!;
       for (const verb of ["move", "join", "merge", "transfer"]) {
-        expect(el.shadowRoot!.querySelector(`[data-action="${verb}"]`)).not.toBeNull();
+        expect(menu.querySelector(`[data-action="${verb}"]`)).not.toBeNull();
       }
-      const split = el.shadowRoot!.querySelector(`[data-action="split"]`)!;
+      const split = menu.querySelector(`[data-action="split"]`)!;
       expect(split.hasAttribute("disabled")).toBe(false);
-      expect(el.shadowRoot!.querySelector("[data-action-back]")).not.toBeNull();
+      menu.shadowRoot!.querySelector<HTMLElement>("button")!.click();
+      await el.updateComplete;
+      expect(tableMenuOpen(el)).toBe(false);
     });
 
     it("split → line selection → dispatches split-lines with whole-line entries", async () => {
@@ -4264,7 +4262,7 @@ describe("till-table-order-screen", () => {
       expect(captured!.composed).toBe(true);
       expect(captured!.bubbles).toBe(true);
       expect(captured!.detail).toEqual({ transfers: [{ lineNo: 1 }, { lineNo: 2 }] });
-      expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
     });
 
     it("says on the native button, the element a screen reader announces, whether a split line is picked", async () => {
@@ -4696,7 +4694,7 @@ describe("till-table-order-screen", () => {
         revision: 9,
         name: "Luis",
         displayName: "Luis",
-        mainBillId: "wo-7",
+        openingBillId: "wo-7",
         tableIds: ["t7"],
       };
       const held = (id: string, label: string, party: TableParty) =>
@@ -4715,7 +4713,9 @@ describe("till-table-order-screen", () => {
     const target = (el: TillTableOrderScreen, id: string) =>
       el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(`[data-target="${id}"]`);
     const billChoice = (el: TillTableOrderScreen) =>
-      el.shadowRoot!.querySelector<HTMLElement & { scope: string }>("till-bill-choice-dialog");
+      [...el.shadowRoot!.querySelectorAll("*")].find((node) =>
+        /^till-.+-dialog$/.test(node.localName),
+      ) ?? null;
     function heard(el: TillTableOrderScreen, type: string): unknown[] {
       const details: unknown[] = [];
       el.addEventListener(type, (event) => {
@@ -4724,6 +4724,64 @@ describe("till-table-order-screen", () => {
       });
       return details;
     }
+
+    describe("A803 no merge question", () => {
+      const anyDialog = (el: TillTableOrderScreen) =>
+        billChoice(el) ?? el.shadowRoot!.querySelector("wt-dialog[open], dialog[open]");
+
+      it("Move guests onto a seated table dispatches at once, with no bills and no dialog", async () => {
+        const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables(true) });
+        const moved = heard(el, "move-guests");
+        await toMenu(el);
+        click(el, '[data-action="move"]');
+        await el.updateComplete;
+        click(el, '[data-target="t7"]');
+        await el.updateComplete;
+
+        expect(moved).toEqual([{ toTableId: "t7", prompt: expect.any(Object) }]);
+        expect(anyDialog(el)).toBeNull();
+        expect(el.shadowRoot!.querySelector("[data-target-picker]")).toBeNull();
+      });
+
+      it("Join a seated table dispatches at once, with no bills and no dialog", async () => {
+        const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
+        const joined = heard(el, "join-tables");
+        await toMenu(el);
+        click(el, '[data-action="join"]');
+        await el.updateComplete;
+        click(el, '[data-target="t7"]');
+        await el.updateComplete;
+
+        expect(joined).toEqual([{ tableId: "t7", prompt: expect.any(Object) }]);
+        expect(anyDialog(el)).toBeNull();
+      });
+
+      it("Move this bill to a seated table, a free one or the counter dispatches at once, with no bills and no dialog", async () => {
+        const { el } = await mount({
+          lines: [pendingLine],
+          orderId: "wo-check",
+          ...partyTables(),
+          bills: partyBills().bills,
+        });
+        const moved = heard(el, "move-bill");
+        await toMenu(el);
+        for (const [index, id] of ["t7", "t9", "counter"].entries()) {
+          if (index > 0) click(el, "[data-move-split]");
+          await el.updateComplete;
+          click(el, '[data-action="move-bill"]');
+          await el.updateComplete;
+          target(el, id)!.click();
+          await el.updateComplete;
+          expect(anyDialog(el)).toBeNull();
+        }
+
+        expect(moved).toEqual([
+          { to: { tableId: "t7", seated: { id: "v7", revision: 9 } }, prompt: expect.any(Object) },
+          { to: { tableId: "t9", seated: null }, prompt: expect.any(Object) },
+          { to: { counter: true }, prompt: expect.any(Object) },
+        ]);
+      });
+    });
 
     describe("Move this bill", () => {
       /** Ana's second bill on screen, at Mesa 4, with the floor around her. */
@@ -4784,33 +4842,22 @@ describe("till-table-order-screen", () => {
         await el.updateComplete;
 
         expect(moved).toEqual([
-          { to: { counter: true }, bills: "merge", prompt: expect.any(Object) },
-          { to: { tableId: "t9", seated: null }, bills: "merge", prompt: expect.any(Object) },
+          { to: { counter: true }, prompt: expect.any(Object) },
+          { to: { tableId: "t9", seated: null }, prompt: expect.any(Object) },
         ]);
         expect(billChoice(el)).toBeNull();
       });
 
-      it("asks about the bills first at a table another party holds, naming the bill and where it goes", async () => {
+      it("moves the bill at once to a table another party holds, asking nothing, naming who was seated there", async () => {
         const { el } = await mount(onCheck());
         const moved = heard(el, "move-bill");
         await toMoveBill(el);
         target(el, "t7")!.click();
         await el.updateComplete;
 
-        const dialog = billChoice(el)!;
-        expect(moved).toEqual([]);
-        expect(dialog.scope).toBe(
-          t("table.move_bill_scope").replace("{bill}", scope).replace("{into}", "Luis (Mesa 7)"),
-        );
-        await (dialog as unknown as { updateComplete: Promise<unknown> }).updateComplete;
-        expect(dialog.shadowRoot!.textContent).toContain(t("table.bill_move_question"));
-        dialog.shadowRoot!.querySelector<HTMLElement>("[data-bills-separate]")!.click();
-        await el.updateComplete;
-
         expect(moved).toEqual([
           {
             to: { tableId: "t7", seated: { id: "v7", revision: 9 } },
-            bills: "separate",
             prompt: expect.any(Object),
           },
         ]);
@@ -4823,18 +4870,24 @@ describe("till-table-order-screen", () => {
           bills: [tabBill, { ...checkBill, billName: "{into}" }, paidBill],
         });
         await toMoveBill(el);
-        target(el, "t7")!.click();
-        await el.updateComplete;
 
-        expect(billChoice(el)!.scope).toBe("Ana · Bill 2 · {into} to Luis (Mesa 7)");
+        expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
+          t("table.move_bill_heading").replace("{bill}", () => "Ana · Bill 2 · {into}"),
+        );
       });
 
-      it("sends the party the bill choice names, though the floor read since seats another there", async () => {
+      it("sends the party the picker showed, though the floor read since seats another there", async () => {
         const { el } = await mount(onCheck());
         const moved = heard(el, "move-bill");
+        let ready: (() => void) | undefined;
+        el.addEventListener("table-relocation-open", (event) => {
+          event.preventDefault();
+          ready = (event as CustomEvent<TableRelocationOpenDetail>).detail.ready;
+        });
         await toMoveBill(el);
         target(el, "t7")!.click();
         await el.updateComplete;
+        expect(moved).toEqual([]);
         el.tables = el.tables.map((table) =>
           table.id === "t7"
             ? {
@@ -4850,31 +4903,31 @@ describe("till-table-order-screen", () => {
             : table,
         );
         await el.updateComplete;
-
-        const dialog = billChoice(el)!;
-        expect(dialog.scope).toBe(
-          t("table.move_bill_scope").replace("{bill}", scope).replace("{into}", "Luis (Mesa 7)"),
-        );
-        await (dialog as unknown as { updateComplete: Promise<unknown> }).updateComplete;
-        dialog.shadowRoot!.querySelector<HTMLElement>("[data-bills-merge]")!.click();
+        ready!();
         await el.updateComplete;
 
         expect(moved).toEqual([
           {
             to: { tableId: "t7", seated: { id: "v7", revision: 9 } },
-            bills: "merge",
             prompt: expect.any(Object),
           },
         ]);
       });
 
-      it("sends nothing when the bill choice is cancelled", async () => {
+      it("sends nothing when the waiter goes back before the move is ready to send", async () => {
         const { el } = await mount(onCheck());
         const moved = heard(el, "move-bill");
+        let ready: (() => void) | undefined;
+        el.addEventListener("table-relocation-open", (event) => {
+          event.preventDefault();
+          ready = (event as CustomEvent<TableRelocationOpenDetail>).detail.ready;
+        });
         await toMoveBill(el);
         target(el, "t7")!.click();
         await el.updateComplete;
-        billChoice(el)!.shadowRoot!.querySelector<HTMLElement>("[data-bills-cancel]")!.click();
+        click(el, "[data-action-back]");
+        await el.updateComplete;
+        ready!();
         await el.updateComplete;
 
         expect(moved).toEqual([]);
@@ -4959,7 +5012,7 @@ describe("till-table-order-screen", () => {
       );
     });
 
-    it("Move guests to a free table dispatches move-guests { toTableId, bills } at once and closes", async () => {
+    it("Move guests to a free table dispatches move-guests { toTableId } at once and closes", async () => {
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
       const moved = heard(el, "move-guests");
       await toMenu(el);
@@ -4969,13 +5022,13 @@ describe("till-table-order-screen", () => {
       click(el, '[data-target="t9"]');
       await el.updateComplete;
 
-      expect(moved).toEqual([{ toTableId: "t9", bills: "merge", prompt: expect.any(Object) }]);
+      expect(moved).toEqual([{ toTableId: "t9", prompt: expect.any(Object) }]);
       expect(billChoice(el)).toBeNull();
-      expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-move-split]")).not.toBeNull();
     });
 
-    it("Move guests to a seated table asks about the bills first, stating who joins whom, and sends the choice", async () => {
+    it("Move guests to a seated table asks nothing about the bills and sends at once", async () => {
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables(true) });
       const moved = heard(el, "move-guests");
       await toMenu(el);
@@ -4985,27 +5038,12 @@ describe("till-table-order-screen", () => {
       click(el, '[data-target="t7"]');
       await el.updateComplete;
 
-      expect(moved).toEqual([]);
-      expect(billChoice(el)!.scope).toBe(
-        t("table.combine_scope")
-          .replace("{from}", "Ana (Mesa 4, 5)")
-          .replace("{into}", "Luis (Mesa 7)"),
-      );
-      billChoice(el)!.dispatchEvent(
-        new CustomEvent("bill-choice-confirm", {
-          detail: { bills: "separate" },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-      await el.updateComplete;
-
-      expect(moved).toEqual([{ toTableId: "t7", bills: "separate", prompt: expect.any(Object) }]);
+      expect(moved).toEqual([{ toTableId: "t7", prompt: expect.any(Object) }]);
       expect(billChoice(el)).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-move-split]")).not.toBeNull();
     });
 
-    it("cancelling the bill choice sends nothing and leaves the table list open", async () => {
+    it("picking a seated table offers no bill choice and closes the table list", async () => {
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
       const moved = heard(el, "move-guests");
       await toMenu(el);
@@ -5014,17 +5052,12 @@ describe("till-table-order-screen", () => {
       click(el, '[data-target="t7"]');
       await el.updateComplete;
 
-      billChoice(el)!.dispatchEvent(
-        new CustomEvent("bill-choice-cancel", { bubbles: true, composed: true }),
-      );
-      await el.updateComplete;
-
-      expect(moved).toEqual([]);
+      expect(moved).toEqual([{ toTableId: "t7", prompt: expect.any(Object) }]);
       expect(billChoice(el)).toBeNull();
-      expect(el.shadowRoot!.querySelector("[data-target-picker]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-target-picker]")).toBeNull();
     });
 
-    it("Join a table to a seated table asks with the other party joining this one, and dispatches join-tables", async () => {
+    it("Join a table to a seated table asks nothing about the bills, and dispatches join-tables", async () => {
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
       const joined = heard(el, "join-tables");
       await toMenu(el);
@@ -5042,23 +5075,11 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
       click(el, '[data-target="t7"]');
       await el.updateComplete;
-      expect(billChoice(el)!.scope).toBe(
-        t("table.combine_scope")
-          .replace("{from}", "Luis (Mesa 7)")
-          .replace("{into}", "Ana (Mesa 4)"),
-      );
-      billChoice(el)!.dispatchEvent(
-        new CustomEvent("bill-choice-confirm", {
-          detail: { bills: "merge" },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-      await el.updateComplete;
+      expect(billChoice(el)).toBeNull();
 
       expect(joined).toEqual([
-        { tableId: "t9", bills: "merge", prompt: expect.any(Object) },
-        { tableId: "t7", bills: "merge", prompt: expect.any(Object) },
+        { tableId: "t9", prompt: expect.any(Object) },
+        { tableId: "t7", prompt: expect.any(Object) },
       ]);
     });
 
@@ -5079,7 +5100,7 @@ describe("till-table-order-screen", () => {
       click(el, '[data-target="t5"]');
       await el.updateComplete;
       expect(billChoice(el)).toBeNull();
-      expect(moved).toEqual([{ toTableId: "t5", bills: "merge", prompt: expect.any(Object) }]);
+      expect(moved).toEqual([{ toTableId: "t5", prompt: expect.any(Object) }]);
     });
 
     it("Join a table offers only tables in the party's service zone; Move guests still offers every zone", async () => {
@@ -5393,7 +5414,7 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
     }
 
-    it("Split a table picks one of the party's tables, then one of its open or presented bills other than the main one, or none", async () => {
+    it("Split a table picks one of the party's tables, then any of its open or presented bills, the one on screen included, or none", async () => {
       const { el } = await mount({
         lines: [pendingLine],
         orderId: "wo-4",
@@ -5416,7 +5437,7 @@ describe("till-table-order-screen", () => {
           .replace("{table}", "Mesa 5")
           .replace("{party}", "Ana (Mesa 4, 5)"),
       );
-      expect(targetIds(el)).toEqual(["wo-check", "wo-placed", "wo-part", "none"]);
+      expect(targetIds(el)).toEqual(["wo-4", "wo-check", "wo-placed", "wo-part", "none"]);
       expect(target(el, "none")!.textContent!.trim()).toBe(t("table.split_no_bill"));
       click(el, '[data-target="wo-check"]');
       await el.updateComplete;
@@ -5602,7 +5623,7 @@ describe("till-table-order-screen", () => {
       expect(targetIds(el)).toEqual(["t4", "t5"]);
       click(el, "[data-action-back]");
       await el.updateComplete;
-      expect(el.shadowRoot!.querySelector("[data-action-menu]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
     });
 
     /** Split a table's guests window, open after picking table `tableId` and then bill `billId`. */
@@ -5977,22 +5998,20 @@ describe("till-table-order-screen", () => {
           }),
         );
 
-      it("offers Name this bill, right after Name the party, for the bill on screen at a table", async () => {
+      it("offers Name this bill, first under the bill on screen, for the bill on screen at a table", async () => {
         const { el } = await mount(onCheck());
         await toMenu(el);
 
         const action = el.shadowRoot!.querySelector('[data-action="name-bill"]')!;
         expect(action.textContent!.trim()).toBe(t("table.action_name_bill"));
-        expect(el.shadowRoot!.querySelector('[data-action="name"]')!.nextElementSibling).toBe(
-          action,
-        );
+        expect(el.shadowRoot!.querySelector("[data-table-menu-bill] wt-button")).toBe(action);
       });
 
       it("does not offer Name this bill for a counter order", async () => {
         const { el } = await mount({ ...onCheck(), party: null });
         await toMenu(el);
 
-        expect(el.shadowRoot!.querySelector("[data-action-menu]")).not.toBeNull();
+        expect(el.shadowRoot!.querySelector("[data-table-menu]")).not.toBeNull();
         expect(el.shadowRoot!.querySelector('[data-action="name-bill"]')).toBeNull();
       });
 
@@ -6018,7 +6037,7 @@ describe("till-table-order-screen", () => {
         expect(dialog.value).toBe("Desserts");
         expect(dialog.savedValue).toBe("Desserts");
         expect(dialog.refusal).toBe("");
-        expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+        expect(tableMenuOpen(el)).toBe(false);
       });
 
       it("opens an unnamed bill's window empty", async () => {
@@ -6258,7 +6277,7 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
       expect(captured!.composed).toBe(true);
       expect(captured!.detail).toEqual({ fromBillId: "wo-check" });
-      expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
     });
 
     it("offers neither merge nor transfer a bill holding a pending payment, though it still owes its total", async () => {
@@ -6411,7 +6430,7 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
       expect(captured!.composed).toBe(true);
       expect(captured!.detail).toEqual({ toBillId: "wo-check", transfers: [{ lineNo: 1 }] });
-      expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
     });
 
     it("says on the native button, the element a screen reader announces, whether a transfer line is picked", async () => {
@@ -6457,7 +6476,7 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector("[data-transfer-lines]")).not.toBeNull();
     });
 
-    it("offers Split on a bill split off before, as on the main bill", async () => {
+    it("offers Split on a bill split off before, as on Bill 1", async () => {
       const { el } = await mount({ ...partyBills(), lines: [pendingLine], orderId: "wo-check" });
       await toMenu(el);
       let captured: CustomEvent | undefined;
@@ -6473,7 +6492,7 @@ describe("till-table-order-screen", () => {
       expect(captured!.detail).toEqual({ transfers: [{ lineNo: 1 }] });
     });
 
-    it("merges into the bill on screen from the main bill when the bill on screen was split off", async () => {
+    it("merges into the bill on screen from Bill 1 when the bill on screen was split off", async () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-check" });
       await toMenu(el);
       click(el, '[data-action="merge"]');
@@ -6701,21 +6720,16 @@ describe("till-table-order-screen", () => {
       );
     });
 
-    it("Back from the menu closes; Back from a picker returns to the menu", async () => {
+    it("Back from a picker closes it", async () => {
       const free = tableState({ id: "t9", state: "free" });
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-7", tables: [free] });
       await toMenu(el);
-      // Into the move picker, then Back → the menu again.
       click(el, '[data-action="move"]');
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector("[data-target-picker]")).not.toBeNull();
       click(el, "[data-action-back]");
       await el.updateComplete;
-      expect(el.shadowRoot!.querySelector("[data-action-menu]")).not.toBeNull();
-      // Back from the menu closes the flow.
-      click(el, "[data-action-back]");
-      await el.updateComplete;
-      expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-move-split]")).not.toBeNull();
     });
 
@@ -6730,7 +6744,7 @@ describe("till-table-order-screen", () => {
       el.orderId = "wo-9";
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector("[data-target-picker]")).toBeNull();
-      expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-move-split]")).not.toBeNull();
     });
   });
@@ -7129,12 +7143,19 @@ describe("closed department ordering", () => {
       expect(el.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
       expect(el.shadowRoot!.querySelector("till-menu-switcher")).toBeNull();
       expect(draft.lines.map((line) => [line.product.id, line.quantity])).toEqual([["cafe", "2"]]);
-      await openDrawer(el);
       const payment = el.shadowRoot!.querySelector<HTMLElement>('[data-open-bill-pay="items"]')!;
       expect(payment).not.toBeNull();
       const paid = vi.fn();
       el.addEventListener("bill-pay", paid);
       payment.click();
+      await el.updateComplete;
+      expect(paid).not.toHaveBeenCalled();
+      expect(el.shadowRoot!.querySelector("[data-pay-unsent]")!.textContent).toContain(
+        t("bill_pay.unsent"),
+      );
+      draft.clear();
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>('[data-open-bill-pay="items"]')!.click();
       expect(paid).toHaveBeenCalledOnce();
       el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
       await el.updateComplete;

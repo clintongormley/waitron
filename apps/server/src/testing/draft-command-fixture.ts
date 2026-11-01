@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import {
   orderDrafts,
-  parties,
   workingOrderLines,
   withTransaction,
   type Database,
@@ -19,6 +18,7 @@ import {
 } from "../order-drafts.js";
 import type { AttendanceRecorder } from "../attendance-capture.js";
 import type { TradingContext } from "../trading-context.js";
+import { firstOpenBillOf } from "./party-bill-of.js";
 
 // Content fixtures consume a draft; command-contract cases call the public writers directly.
 export async function saveDraftForTest(
@@ -140,11 +140,7 @@ export async function observedDraftCommandBody(
     }
     if (billId === undefined || !isUuid(billId)) {
       const partyId = /^\/api\/parties\/([^/]+)/.exec(path)?.[1];
-      const [party] = await tx
-        .select({ billId: parties.mainBillId })
-        .from(parties)
-        .where(eq(parties.id, partyId?.toLowerCase() ?? ""));
-      billId = party?.billId ?? undefined;
+      billId = (await firstOpenBillOf(tx, partyId?.toLowerCase() ?? "")) ?? undefined;
     }
     if (billId === undefined || !isUuid(billId)) return ask;
     billId = billId.toLowerCase();

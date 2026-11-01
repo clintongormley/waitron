@@ -134,6 +134,7 @@ import {
 import type { LineExtras, OrderLinePatch, TicketState, OrderAttendance } from "./working-order.js";
 import { listStationsToday } from "./kitchen.js";
 import {
+  createPartyBill,
   partyFamily,
   holderOf,
   markTableCleared,
@@ -603,7 +604,6 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "unpaid_departure.nothing_outstanding": 409,
   "unpaid_departure.unfired_dishes": 409,
   "unpaid_departure.bill_holds_payment": 409,
-  "party.main_bill_stays": 409,
   "submission.id_reused": 409,
   "draft.taken_over": 409,
   "draft.already_submitted": 409,
@@ -878,13 +878,6 @@ function requireMoveTarget(value: unknown): MoveTarget {
   throw invalid("to");
 }
 
-/** A bill choice as a body carries it: merge by default, else `"separate"`. */
-function requireBillChoice(bills: unknown): "merge" | "separate" {
-  if (bills === undefined) return "merge";
-  if (bills !== "merge" && bills !== "separate") throw invalid("bills");
-  return bills;
-}
-
 /** The party the till read at the target table, and its revision, as a body carries them. */
 function otherPartyRead(body: Record<string, unknown>): OtherPartyRead {
   const read: OtherPartyRead = {};
@@ -902,15 +895,13 @@ function otherPartyRead(body: Record<string, unknown>): OtherPartyRead {
 }
 
 /**
- * A move's command: {@link billCommand}'s, with `partyId: null` for a bill read with no party, the
- * bill choice, and the party read at the target table.
+ * A move's command: {@link billCommand}'s, with `partyId: null` for a bill read with no party, and
+ * the party read at the target table.
  */
 function moveCommand(personId: string, body: Record<string, unknown>): MoveBillOptions {
   const { partyId, ...rest } = body;
-  const bills = requireBillChoice(body.bills);
   const command: MoveBillOptions = {
     ...billCommand(personId, partyId === null ? rest : body),
-    bills,
     expectedEdits: parseBillEditExpecteds(body.expectedEdits),
   };
   if (partyId === null) command.partyId = null;
@@ -923,13 +914,10 @@ function moveCommand(personId: string, body: Record<string, unknown>): MoveBillO
 }
 
 /**
- * A table action's command: the path party's revision, the bill choice and the party read at the
- * target table.
+ * A table action's command: the path party's revision and the party read at the target table.
  */
 function tableActionCommand(personId: string, body: Record<string, unknown>): TableActionOptions {
-  const bills = requireBillChoice(body.bills);
   return {
-    bills,
     expectedPartyRevision: requireRevision(body.expectedPartyRevision, "expectedPartyRevision"),
     operatorId: personId,
     ...otherPartyRead(body),
@@ -2859,7 +2847,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             expectedEdits: [
               { billId: seated.tabId, editorVersion: 0, draftId: null, draftRevision: null },
             ],
-            bills: "merge",
             expectedPartyRevision: await partyRevision(tx, seated.partyId),
             operatorId: personId,
             otherPartyId: null,
@@ -3081,16 +3068,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           const check = sent === undefined ? undefined : { tableId, sent };
           return movingRooms(tx, deps.cfg, [...heldBefore, tableId], check, async () => {
             const actAndMerge = async (slipsLater?: SlipsLater) => {
-              const acted = await act(
-                tx,
-                sendCfg,
-                partyId,
-                tableId,
-                { ...command, slipsLater },
-                deps.attendance === undefined
-                  ? undefined
-                  : { recorder: deps.attendance, clock: deps.clock },
-              );
+              const acted = await act(tx, sendCfg, partyId, tableId, { ...command, slipsLater });
               await joinMergeMembers(tx, sendCfg, acted.partyId, tableId, personId, slipsLater);
               if (merge !== null) {
                 const held = merge.moving === tableId ? merge.target : merge.moving;
@@ -3172,6 +3150,25 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         );
       });
       return c.json(result);
+    }),
+  );
+
+  app.post("/api/parties/:id/bills", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const cfg = requestCfg(deps.cfg, session);
+      const partyId = requirePartyParam(c.req.param("id")).toLowerCase();
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const expectedPartyRevision = requireRevision(
+        body.expectedPartyRevision,
+        "expectedPartyRevision",
+      );
+      const created = await withTransaction(deps.db, async (tx) => {
+        await catchUpFloor(tx);
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return createPartyBill(tx, cfg, partyId, { expectedPartyRevision });
+      });
+      return c.json(created);
     }),
   );
 

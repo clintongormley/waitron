@@ -96,10 +96,9 @@ export async function mergeBills(
 export async function mergeCheckedBills(
   tx: Transaction,
   cfg: TradingContext,
-  partyId: string,
   into: string,
   from: string,
-  known: Omit<Parameters<typeof checked>[5], "expectedEdits"> & {
+  known: Omit<Parameters<typeof checked>[4], "expectedEdits"> & {
     expectedEdits?: BillEditExpected[];
   },
 ) {
@@ -107,7 +106,7 @@ export async function mergeCheckedBills(
   if (known.expectedEdits === undefined)
     for (const id of [...new Set([into, from])].sort())
       expectedEdits.push(await readBillEditState(tx, id));
-  return checked(tx, cfg, partyId, into, from, {
+  return checked(tx, cfg, into, from, {
     ...known,
     expectedEdits: known.expectedEdits ?? expectedEdits,
   });

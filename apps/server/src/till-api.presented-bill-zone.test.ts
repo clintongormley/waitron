@@ -167,7 +167,7 @@ async function indoorContext() {
   return { zoneId: indoor, departmentId: indoorDepartment, serviceMode: context.serviceMode };
 }
 
-/** Ana's party on the terrace, with `names` split off her main bill and presented. */
+/** Ana's party on the terrace, with `names` split off the bill made at her seating and presented. */
 async function presentedSplit(...names: string[]) {
   const ana = await seatedWith(venue, "Caña", ...names);
   const split = await post(
@@ -203,7 +203,6 @@ function moveBill(billId: string, tableId: string) {
     ...(holder === undefined
       ? { otherPartyId: null }
       : { otherPartyId: holder, expectedOtherPartyRevision: revisionOf(holder) }),
-    bills: "separate",
   });
 }
 
@@ -236,7 +235,7 @@ describe("a presented bill moving with its party", () => {
     expect(await statusOf(venue, presented)).toBe("settled");
   });
 
-  it("moves the open main bill with it as before, while a settled bill keeps the zone it was paid in", async () => {
+  it("moves the open bill made at seating with it, while a settled bill keeps the zone it was paid in", async () => {
     const { ana, presented } = await presentedSplit("Tarta");
     expect((await payInCash(presented, "18.00")).status).toBe(200);
     expect(await statusOf(venue, presented)).toBe("settled");

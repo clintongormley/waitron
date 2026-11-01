@@ -94,9 +94,7 @@ describe("a part still in a joined table", () => {
     const { partyId } = await seat(v, table.bar!);
     const sent = await commandFor(v, partyId);
     await expect(
-      inTx(v, (tx) =>
-        moveGuests(tx, v.cfg, partyId, table.c3!, { ...sent, bills: "merge", otherPartyId: null }),
-      ),
+      inTx(v, (tx) => moveGuests(tx, v.cfg, partyId, table.c3!, { ...sent, otherPartyId: null })),
     ).rejects.toMatchObject(inJoinedTable(table.c3!));
     expect(await activeTablesOf(v, partyId)).toEqual([table.bar!]);
     expect(await partyAt(v, table.c3!)).toBeNull();
@@ -107,13 +105,7 @@ describe("a part still in a joined table", () => {
     const orderId = await counterOrder(v, "Flan");
     await expect(
       inTx(v, (tx) =>
-        moveBill(
-          tx,
-          v.cfg,
-          orderId,
-          { tableId: table.c3! },
-          { bills: "merge", operatorId: OPERATOR },
-        ),
+        moveBill(tx, v.cfg, orderId, { tableId: table.c3! }, { operatorId: OPERATOR }),
       ),
     ).rejects.toMatchObject(inJoinedTable(table.c3!));
     expect((await billRow(v, orderId)).partyId).toBeNull();

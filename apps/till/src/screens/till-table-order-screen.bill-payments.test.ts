@@ -1,5 +1,4 @@
 import { openSentDish } from "./till-table-order-screen.sent.test-helpers.js";
-import { userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { decimal, formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -28,7 +27,7 @@ const party: TableParty = {
   state: "open",
   name: null,
   displayName: "4",
-  mainBillId: "wo-4",
+  openingBillId: "wo-4",
   outstanding: "45.00",
   billCount: 1,
   tableIds: ["t4"],
@@ -52,6 +51,17 @@ const untouched: PartyBill = {
   receiptAvailable: false,
 };
 const partlyPaid: PartyBill = { ...untouched, outstanding: "39.00", hasPayments: true };
+
+const chosen: PartyBill = {
+  ...partlyPaid,
+  invoiceType: "F1",
+  recipient: {
+    taxId: "B12345674",
+    legalName: "Cliente SL",
+    address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+    countryCode: "ES",
+  },
+};
 
 function line(over: Partial<TabLine>): TabLine {
   return {
@@ -106,8 +116,6 @@ async function mountScreen(over: Partial<TillTableOrderScreen> = {}) {
     bills: [untouched],
     ...over,
   });
-  el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-  await el.updateComplete;
   return el;
 }
 
@@ -158,29 +166,13 @@ describe("till-table-order-screen: the ways to pay part of a bill", () => {
     });
     const asked = capture<{ workingOrderId: string; revision: number }>(el, "choose-bill-invoice");
 
-    const button = el.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]");
+    const button = el.shadowRoot!.querySelector<HTMLElement>(
+      "[data-choose-bill-invoice]:not([data-table-menu] *)",
+    );
     expect(text(button)).toBe(t("invoice.full"));
-    await press(el, "[data-choose-bill-invoice]");
+    await press(el, "[data-choose-bill-invoice]:not([data-table-menu] *)");
 
     expect(asked).toEqual([{ workingOrderId: "wo-4", revision: 0 }]);
-  });
-
-  it("shows a saved full-invoice choice and customer on an unissued bill", async () => {
-    const chosen: PartyBill = {
-      ...partlyPaid,
-      invoiceType: "F1",
-      recipient: {
-        taxId: "B12345674",
-        legalName: "Cliente SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
-        countryCode: "ES",
-      },
-    };
-    const el = await mountScreen({ bills: [chosen], billBalance: balance() });
-
-    expect(text(el.shadowRoot!.querySelector('[data-bill="wo-4"] [data-invoice-choice]'))).toBe(
-      `${t("invoice.full")} · Cliente SL · B12345674`,
-    );
   });
 
   it.each([
@@ -200,6 +192,69 @@ describe("till-table-order-screen: the ways to pay part of a bill", () => {
       expect(asked).toEqual([{ way, lines: offeredLines }]);
     },
   );
+
+  it("shows a saved full-invoice customer under the foot's Full invoice button", async () => {
+    const el = await mountScreen({ bills: [chosen], billBalance: balance(), fullInvoices: true });
+
+    const line = el.shadowRoot!.querySelector("[data-bill-payments] [data-invoice-choice]");
+    expect(text(line)).toBe("Cliente SL · B12345674");
+    expect(
+      line!.previousElementSibling?.querySelector("[data-choose-bill-invoice]"),
+    ).not.toBeNull();
+  });
+
+  it("shows no customer under Full invoice for a bill with no saved full-invoice choice", async () => {
+    const el = await mountScreen({
+      bills: [partlyPaid],
+      billBalance: balance(),
+      fullInvoices: true,
+    });
+
+    expect(
+      el.shadowRoot!.querySelector("[data-choose-bill-invoice]:not([data-table-menu] *)"),
+    ).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-invoice-choice]")).toBeNull();
+  });
+
+  it("shows no customer once a bill is paid, where Full invoice is not offered", async () => {
+    const el = await mountScreen({
+      bills: [{ ...chosen, status: "settled", outstanding: "0.00", receiptAvailable: true }],
+      fullInvoices: true,
+    });
+
+    expect(el.shadowRoot!.querySelector("[data-invoice-choice]")).toBeNull();
+  });
+
+  it("shows the saved full-invoice customer of the bill on screen only, following a bill switch and a fresh bills read", async () => {
+    const other: PartyBill = { ...chosen, workingOrderId: "wo-5", billNumber: 2 };
+    const el = await mountScreen({
+      bills: [partlyPaid, other],
+      billBalance: balance(),
+      fullInvoices: true,
+    });
+    expect(el.shadowRoot!.querySelector("[data-invoice-choice]")).toBeNull();
+
+    el.orderId = "wo-5";
+    await el.updateComplete;
+    expect(text(el.shadowRoot!.querySelector("[data-invoice-choice]"))).toBe(
+      "Cliente SL · B12345674",
+    );
+
+    el.bills = [partlyPaid, { ...other, invoiceType: "F2", recipient: null }];
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-invoice-choice]")).toBeNull();
+  });
+
+  it("shows no saved customer while full invoices are off, even with the receipt language offered", async () => {
+    const el = await mountScreen({
+      bills: [chosen],
+      billBalance: balance(),
+      receiptLanguages: ["es-ES", "ca-ES"],
+    });
+
+    expect(el.shadowRoot!.querySelector("[data-choose-bill-language]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-invoice-choice]")).toBeNull();
+  });
 
   it("opens a contribution of what a partly paid bill still owes from the sentence saying to take the rest", async () => {
     const el = await mountScreen({ bills: [partlyPaid], billBalance: balance() });
@@ -258,10 +313,24 @@ describe("till-table-order-screen: Pay on a handheld (A796 default 2)", () => {
       money("39.00"),
     );
     expect(el.shadowRoot!.querySelector("[data-bill-received]")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-choose-bill-invoice]")).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector("[data-choose-bill-invoice]:not([data-table-menu] *)"),
+    ).not.toBeNull();
     expect(el.shadowRoot!.querySelectorAll("[data-pay-sheet]")).toHaveLength(1);
     expect(el.shadowRoot!.querySelector("[data-pay-rest]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-open-bill-pay]")).toBeNull();
+  });
+
+  it("shows an open bill's saved full-invoice customer under the handheld's Full invoice button", async () => {
+    const el = await mountScreen({
+      handheld: true,
+      bills: [{ ...untouched, invoiceType: "F1", recipient: chosen.recipient }],
+      fullInvoices: true,
+    });
+
+    expect(text(el.shadowRoot!.querySelector("[data-invoice-choice]"))).toBe(
+      "Cliente SL · B12345674",
+    );
   });
 
   it("draws one Pay for a presented bill, which asks for the presented bill's sheet", async () => {
@@ -450,8 +519,6 @@ describe("till-table-order-screen: items already paid for", () => {
       }),
     });
 
-    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-    await el.updateComplete;
     const dialog = await openSentDish(el, "line-3", "held");
     expect(text(dialog.querySelector("[data-sent-line-status]"))).toBe(t("table.group_held"));
     expect(text(dialog.querySelector("[data-line-paid]"))).toBe(t("bill_pay.paid"));
@@ -478,9 +545,10 @@ describe("till-table-order-screen: a bill's receipt language", () => {
 
     const button = languageButton(el)!;
     expect(text(button)).toBe("Receipt: Catalan");
-    expect(el.shadowRoot!.querySelector("[data-choose-bill-invoice]")!.nextElementSibling).toBe(
-      button,
-    );
+    expect(
+      el.shadowRoot!.querySelector("[data-choose-bill-invoice]:not([data-table-menu] *)")!
+        .nextElementSibling,
+    ).toBe(button);
     await press(el, "[data-choose-bill-language]");
 
     expect(asked).toEqual([{ workingOrderId: "wo-4", revision: 5 }]);
@@ -514,7 +582,7 @@ describe("till-table-order-screen: a bill's receipt language", () => {
   it("draws the language button as quiet as the invoice action, and holds it while the till is busy", async () => {
     const el = await mountScreen({ receiptLanguages: offered, fullInvoices: true });
     const invoice = el.shadowRoot!.querySelector<HTMLElement & { variant: string }>(
-      "[data-choose-bill-invoice]",
+      "[data-choose-bill-invoice]:not([data-table-menu] *)",
     )!;
 
     expect(languageButton(el)!.variant).toBe(invoice.variant);
@@ -534,7 +602,9 @@ describe("till-table-order-screen: a bill's receipt language", () => {
   it("offers no language button when one receipt language is offered", async () => {
     const el = await mountScreen({ receiptLanguages: ["es-ES"], fullInvoices: true });
 
-    expect(el.shadowRoot!.querySelector("[data-choose-bill-invoice]")).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector("[data-choose-bill-invoice]:not([data-table-menu] *)"),
+    ).not.toBeNull();
     expect(languageButton(el)).toBeNull();
   });
 

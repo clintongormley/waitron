@@ -32,6 +32,7 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { joinTables, moveGuests } from "./testing/table-action-fixture.js";
+import { mergeBills } from "./testing/bill-action-fixture.js";
 import { partyRevisionOfOrder } from "./parties.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
@@ -212,7 +213,6 @@ async function tableAction(billId: string, otherBillId?: string) {
   return {
     partyId: party.id,
     options: {
-      bills: "merge" as const,
       expectedPartyRevision: party.revision,
       otherPartyId: other?.id ?? null,
       ...(other === null ? {} : { expectedOtherPartyRevision: other.revision }),
@@ -305,10 +305,16 @@ describe("parties combined, bills merged → one registro (H2)", () => {
     const intoTab = await openTabOn(cfg, tInto, [{ productId: cafe.id, quantity: "1" }]);
     const fromTab = await openTabOn(cfg, tFrom, [{ productId: agua.id, quantity: "1" }]);
 
-    // fromTab's guests move to intoTab's table: their party combines and the two bills merge.
+    // fromTab's guests move to intoTab's table: their party combines, and staff merge the bills.
     const move = await tableAction(fromTab, intoTab);
     await withTransaction(suite.db, async (tx) => {
       await moveGuests(tx, cfg, move.partyId, tInto, move.options);
+      const into = (await partyRevisionOfOrder(tx, intoTab))!;
+      await mergeBills(tx, cfg, intoTab, fromTab, {
+        partyId: into.id,
+        expectedPartyRevision: into.revision,
+        operatorId: move.options.operatorId,
+      });
     });
 
     // fromTab is abandoned and files nothing — never reaches settled, so no double-file.
@@ -341,6 +347,12 @@ describe("tables joined across parties, bills merged → one bill covering both 
     const join = await tableAction(intoTab, fromTab);
     await withTransaction(suite.db, async (tx) => {
       await joinTables(tx, cfg, join.partyId, tFrom, join.options);
+      const into = (await partyRevisionOfOrder(tx, intoTab))!;
+      await mergeBills(tx, cfg, intoTab, fromTab, {
+        partyId: into.id,
+        expectedPartyRevision: into.revision,
+        operatorId: join.options.operatorId,
+      });
     });
     expect(await partyAtTable(tFrom)).toBe(join.partyId);
     expect(await partyAtTable(tInto)).toBe(join.partyId);
@@ -352,5 +364,9 @@ describe("tables joined across parties, bills merged → one bill covering both 
     });
     expect(await saleCount(intoTab)).toBe(1); // one bill for both tables
     expect(await saleCount(fromTab)).toBe(0); // the abandoned source files nothing
+    expect(await orderState(fromTab)).toMatchObject({ status: "abandoned" });
+    expect(await registroCount(intoTab)).toBe(1);
+    expect(await registroCount(fromTab)).toBe(0);
+    expect(await filedSaleTotal(intoTab)).toBe("3.50"); // café 1.50 + agua 2.00
   });
 });

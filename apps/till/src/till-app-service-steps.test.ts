@@ -55,7 +55,7 @@ function seated(signals: TableState["signals"]): TableState {
       state: "open",
       name: null,
       displayName: "T9",
-      mainBillId: null,
+      openingBillId: null,
       outstanding: "0.00",
       billCount: 1,
       tableIds: ["t9"],

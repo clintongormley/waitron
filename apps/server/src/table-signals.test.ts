@@ -888,7 +888,6 @@ describe("the floor's attention signals", () => {
     await order(v, into.tabId, "Agua");
     const joining = {
       ...(await commandFor(v, into.partyId)),
-      bills: "separate" as const,
       otherPartyId: from.partyId,
       expectedOtherPartyRevision: await revisionOf(v, from.partyId),
     };
@@ -1179,7 +1178,7 @@ describe("the counter's tab list", () => {
     await nameParty(v, partyId, "Ana");
     await order(v, tabId, "Burger", "Caña");
     const counterBill = await split(v, partyId, tabId, [2]);
-    const moving = { ...(await commandFor(v, partyId)), bills: "separate" as const, partyId };
+    const moving = { ...(await commandFor(v, partyId)), partyId };
     await inTx(v, (tx) =>
       moveBill(tx, v.cfg, counterBill, { counter: { zoneId: v.counter.zoneId } }, moving),
     );
@@ -1286,7 +1285,6 @@ describe("a bill request", () => {
     await pay(v, from.tabId, "3.00");
     const joining = {
       ...(await commandFor(v, into.partyId)),
-      bills: "separate" as const,
       otherPartyId: from.partyId,
       expectedOtherPartyRevision: await revisionOf(v, from.partyId),
     };

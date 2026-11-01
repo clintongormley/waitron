@@ -41,6 +41,7 @@ import {
   equipmentWith,
   SECOND_READER,
   lock,
+  mesa,
   money,
   offers,
   paymentOf,
@@ -61,6 +62,8 @@ import {
   till,
   type,
 } from "../test/bill-pay-app.js";
+import { openTableMenu } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
+import { resized } from "./screens/till-table-order-screen.test-helpers.js";
 
 let api: TillApi;
 
@@ -254,7 +257,7 @@ describe("till-app: paying a table from a handheld", () => {
     const order = await openPhoneTable(el);
 
     expect(inOrder(order, "[data-bill-payments] .amount")).not.toBeNull();
-    expect(inOrder(order, "[data-choose-bill-invoice]")).not.toBeNull();
+    expect(inOrder(order, "[data-choose-bill-invoice]:not([data-table-menu] *)")).not.toBeNull();
     expect(order.shadowRoot!.querySelectorAll("[data-pay-sheet]")).toHaveLength(1);
     expect(inOrder(order, "[data-pay-rest]")).toBeNull();
     expect(inOrder(order, "[data-open-bill-pay]")).toBeNull();
@@ -307,6 +310,54 @@ describe("a presented bill on a handheld", () => {
     emit(presented(el)!, "presented-pay", detail);
     await flush(el);
   }
+
+  it("a sheet opened before another person's dish was read collects nothing", async () => {
+    const { el } = await openPresented();
+    drafts.drafts.push({
+      id: "draft-luis",
+      partyId: "v1",
+      billId: "wo-4",
+      ownerId: "p2",
+      ownerName: "Luis",
+      revision: 3,
+      takenOverFrom: null,
+      lines: [
+        {
+          slot: 0,
+          joinGroupId: null,
+          afterGroupId: null,
+          id: "draft-line-1",
+          sourceLineId: null,
+          source: null,
+          menuItemId: "menu-item-cafe-0",
+          variantId: null,
+          menuVersionId: null,
+          options: [],
+          extras: [],
+          note: null,
+          quantity: "1",
+          courseId: null,
+          makeAt: "switched-off",
+          noMerge: false,
+          unavailable: false,
+        },
+      ],
+    });
+    window.dispatchEvent(new Event("focus"));
+    await expect
+      .poll(() => tableOrder(el).shadowRoot!.querySelector('[data-take-over="draft-luis"]'), {
+        timeout: 10_000,
+      })
+      .not.toBeNull();
+    expect(presented(el)).not.toBeNull();
+
+    await payFromSheet(el, { method: "cash", tendered: "150.00", guestCount: 3 });
+
+    expect(vi.mocked(api.collectOrder)).not.toHaveBeenCalled();
+    expect(text(el.shadowRoot!.querySelector('p.error[role="alert"]'))).toContain(
+      "Luis has taken over this order.",
+    );
+  });
 
   it("Pay opens the presented bill's sheet on its whole amount and reads the equipment again", async () => {
     const { el, stubs, readsBefore } = await openPresented();
@@ -942,8 +993,6 @@ describe("an unanswered presented payment on a handheld", () => {
     emit(floor(el), "open-table", { tableId: "t4", seated: true });
     await flush(el);
     const order = tableOrder(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")?.click();
-    await flush(el);
     await showBillFooter(order);
     await pressPaySheet(el, order);
   }
@@ -5402,5 +5451,59 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
       await flush(el);
       expect(pay).toHaveBeenCalledOnce();
     });
+  });
+});
+
+describe("till-app: Finish table refused from the ⋮ on a handheld opened from the floor", () => {
+  it("shows the refusal, its Take payment and its Record unpaid departure in the window at 390x844", async () => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(390, 844);
+    try {
+      const { el } = await mountApp(
+        onPhone({
+          getTablesState: vi
+            .fn()
+            .mockResolvedValue([mesa({ outstanding: "148.50", billCount: 2 })]),
+          getPartyBills: vi.fn().mockResolvedValue([
+            billOf(),
+            billOf({
+              workingOrderId: "wo-5",
+              billNumber: 2,
+              total: "28.50",
+              outstanding: "28.50",
+            }),
+          ]),
+          finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
+        }),
+      );
+      const order = await openTable(el);
+      await resized(order);
+      expect(order.shadowRoot!.querySelector("[data-draft-pane]")!.checkVisibility()).toBe(false);
+
+      await openTableMenu(order);
+      await userEvent.click(inOrder(order, "[data-table-menu] [data-finish-table]")!);
+      await flush(el);
+
+      expect(vi.mocked(api.finishTable)).toHaveBeenCalledTimes(1);
+      const refusal = inOrder(order, "[data-finish-refusal]")!;
+      expect(refusal).not.toBeNull();
+      expect(refusal.checkVisibility()).toBe(true);
+      expect(text(refusal.querySelector("span"))).toBe(codeMessage("party.bill_outstanding"));
+      expect(inOrder(order, "[data-finish-refusal] [data-take-payment]")!.checkVisibility()).toBe(
+        true,
+      );
+      expect(
+        inOrder(order, "[data-finish-refusal] [data-record-departure]")!.checkVisibility(),
+      ).toBe(true);
+      await expect
+        .poll(() => {
+          const box = refusal.getBoundingClientRect();
+          // scrollIntoView leaves the box's fractional offset, under a pixel past the edge.
+          return box.top >= 0 && Math.round(box.bottom) <= innerHeight;
+        })
+        .toBe(true);
+    } finally {
+      await page.viewport(viewport.width, viewport.height);
+    }
   });
 });

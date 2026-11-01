@@ -5,7 +5,7 @@ import type { Transaction } from "@waitron/db";
 import { thousandthsToDecimal } from "@waitron/shared";
 import { writePartyAllergy } from "@waitron/venue-service";
 import { splitBill } from "./bill-action-fixture.js";
-import { partyRevisionOfOrder, setMainBill } from "../parties.js";
+import { partyRevisionOfOrder } from "../parties.js";
 import type { OriginConfig, TradingContext } from "../trading-context.js";
 import {
   fireLines,
@@ -38,7 +38,6 @@ export async function openPartyTab(
   const opened = await openTab(tx, cfg, { ...req, partyId: party!.id });
   await tx.insert(partyTables).values({ partyId: party!.id, tableId: req.tableId });
   await writePartyAllergy(tx, party!.id, { answer: "none", guests: [] }, OPERATOR);
-  await setMainBill(tx, party!.id, opened.tabId);
   return { ...opened, partyId: party!.id };
 }
 

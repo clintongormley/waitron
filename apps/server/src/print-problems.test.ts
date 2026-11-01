@@ -55,7 +55,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import { JOBS_WAITING_MS } from "./print-job-trouble.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import "./errors.js";
-import { splitBill } from "./testing/bill-action-fixture.js";
+import { mergeBills as mergeBillsCommand, splitBill } from "./testing/bill-action-fixture.js";
 import { joinTables } from "./testing/table-action-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { cancelLine } from "./testing/cancel-line.js";
@@ -1316,7 +1316,8 @@ describe("a printing problem a Reprint would print nothing for", () => {
 describe("a printing problem whose dishes move to another bill", () => {
   /**
    * The dish, or `quantity` of it, goes from `from`'s bill onto `to`'s as items reach another party:
-   * split onto a new bill, which then moves to `to`'s table and merges into its main bill.
+   * split onto a new bill, which then moves to `to`'s table as a bill of its own and is merged
+   * into `to`'s bill by Merge bills.
    */
   async function transferDish(v: Venue, from: Seated, to: Seated, dish: Dish, quantity?: string) {
     const lineNo = await lineNoOf(from.tabId, dish);
@@ -1326,23 +1327,32 @@ describe("a printing problem whose dishes move to another bill", () => {
         operatorId: ALEX,
       }),
     );
-    const moved = await inTx(async (tx) =>
-      moveBill(
+    const moved = await inTx(async (tx) => {
+      const result = await moveBill(
         tx,
         v.cfg,
         billId,
         { tableId: to.tableId },
         {
-          bills: "merge",
           partyId: from.partyId,
           expectedPartyRevision: (await command(from.partyId)).expectedPartyRevision,
           otherPartyId: to.partyId,
           expectedOtherPartyRevision: (await command(to.partyId)).expectedPartyRevision,
           operatorId: ALEX,
         },
-      ),
-    );
-    expect(moved).toEqual({ partyId: to.partyId, billId: to.tabId, merged: true });
+      );
+      const [party] = await tx
+        .select({ revision: parties.revision })
+        .from(parties)
+        .where(eq(parties.id, to.partyId));
+      await mergeBillsCommand(tx, v.cfg, to.tabId, billId, {
+        partyId: to.partyId,
+        expectedPartyRevision: party!.revision,
+        operatorId: ALEX,
+      });
+      return result;
+    });
+    expect(moved).toEqual({ partyId: to.partyId, billId });
   }
 
   it("shows a failed ticket on the check its dish was split off to, and clears it by the check's Reprint", async () => {
@@ -1791,22 +1801,30 @@ async function reprintPrinted(v: Venue, orderId: string): Promise<void> {
 
 /**
  * Merge `source`'s bill into `destination`'s: `destination`'s party joins `source`'s table, which
- * combines the parties and merges their main bills.
+ * combines the parties and keeps both bills, then Merge bills merges them in the same transaction.
  */
 async function mergeBills(v: Venue, source: Seated, destination: Seated): Promise<void> {
   const merge = {
-    bills: "merge" as const,
     expectedPartyRevision: (await command(destination.partyId)).expectedPartyRevision,
     otherPartyId: source.partyId,
     expectedOtherPartyRevision: (await command(source.partyId)).expectedPartyRevision,
     operatorId: ALEX,
   };
-  const result = await inTx((tx) =>
-    joinTables(tx, v.cfg, destination.partyId, source.tableId, merge),
-  );
+  const result = await inTx(async (tx) => {
+    const joined = await joinTables(tx, v.cfg, destination.partyId, source.tableId, merge);
+    const [party] = await tx
+      .select({ revision: parties.revision })
+      .from(parties)
+      .where(eq(parties.id, destination.partyId));
+    await mergeBillsCommand(tx, v.cfg, destination.tabId, source.tabId, {
+      partyId: destination.partyId,
+      expectedPartyRevision: party!.revision,
+      operatorId: ALEX,
+    });
+    return joined;
+  });
   expect(result).toEqual({
     partyId: destination.partyId,
-    mainBillId: destination.tabId,
-    merged: true,
+    billIds: [destination.tabId, source.tabId],
   });
 }

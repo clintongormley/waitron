@@ -9,6 +9,7 @@ import {
   floorTodayJoins,
   kitchenStations,
   locations,
+  parties,
   printJobs,
   ticketItems,
   withTransaction,
@@ -67,6 +68,25 @@ import { joinTables, moveGuests, splitTable } from "./testing/table-action-fixtu
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { mergeBills, splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { enqueueCorrectionSlips, reprintOrderTickets } from "./kitchen-print.js";
+
+/** Merge bills of `from` into `into` at `partyId`, in the caller's transaction, as staff do. */
+async function mergeInTx(
+  tx: Transaction,
+  v: PartyVenue,
+  partyId: string,
+  into: string,
+  from: string,
+) {
+  const [party] = await tx
+    .select({ revision: parties.revision })
+    .from(parties)
+    .where(eq(parties.id, partyId));
+  return mergeBills(tx, v.cfg, into, from, {
+    partyId,
+    expectedPartyRevision: party!.revision,
+    operatorId: OPERATOR,
+  });
+}
 
 const LOCALE = "es-ES";
 const suite = useVenueDb({
@@ -449,7 +469,7 @@ describe("a table action tells the kitchen of every bill of the party", () => {
     const before = await noticesOf([tabId, checkId]);
 
     await inTx(v, (tx) =>
-      moveGuests(tx, v.cfg, partyId, mesa9, { ...command, bills: "merge", otherPartyId: null }),
+      moveGuests(tx, v.cfg, partyId, mesa9, { ...command, otherPartyId: null }),
     );
 
     const notices = (await noticesOf([tabId, checkId])).slice(before.length);
@@ -474,15 +494,15 @@ describe("a table action tells the kitchen of every bill of the party", () => {
     const before = await noticesOf([ana.tabId, checkId, other.tabId]);
     await nextMillisecond();
 
-    await inTx(v, (tx) =>
-      joinTables(tx, v.cfg, ana.partyId, mesa7, {
-        bills: "merge",
+    await inTx(v, async (tx) => {
+      await joinTables(tx, v.cfg, ana.partyId, mesa7, {
         expectedPartyRevision,
         otherPartyId: other.partyId,
         expectedOtherPartyRevision,
         operatorId: OPERATOR,
-      }),
-    );
+      });
+      await mergeInTx(tx, v, ana.partyId, ana.tabId, other.tabId);
+    });
 
     expect(await noticesOf([ana.tabId, checkId, other.tabId])).toEqual([
       ...before,
@@ -490,7 +510,7 @@ describe("a table action tells the kitchen of every bill of the party", () => {
     ]);
   });
 
-  it("tells the kitchen of the main bill of the party taken in, which merges, and nothing of its kept bill, which keeps its table and its name", async () => {
+  it("tells the kitchen nothing of the bills of the party taken in, which all stay their own and keep their table and name", async () => {
     const v = await setupPartyVenue(db);
     const mesa4 = await v.table("Mesa 4");
     const mesa7 = await v.table("Mesa 7");
@@ -506,7 +526,6 @@ describe("a table action tells the kitchen of every bill of the party", () => {
 
     await inTx(v, (tx) =>
       joinTables(tx, v.cfg, ana.partyId, mesa7, {
-        bills: "merge",
         expectedPartyRevision,
         otherPartyId: other.partyId,
         expectedOtherPartyRevision,
@@ -514,10 +533,9 @@ describe("a table action tells the kitchen of every bill of the party", () => {
       }),
     );
 
-    expect(await noticesOf([ana.tabId, other.tabId, otherCheckId])).toEqual([
-      ...before,
-      { workingOrderId: ana.tabId, kind: "moved", lineName: "FLAN", movedTo: "Mesa 4, 7" },
-    ]);
+    expect(await noticesOf([ana.tabId, other.tabId, otherCheckId])).toEqual(before);
+    for (const kept of [other.tabId, otherCheckId])
+      expect(await billRow(v, kept)).toMatchObject({ status: "open", partyId: ana.partyId });
   });
 });
 
@@ -600,7 +618,7 @@ describe("a MOVED slip per order per station", () => {
     const command = await commandFor(v, partyId);
 
     await inTx(v, (tx) =>
-      moveGuests(tx, v.cfg, partyId, mesa12, { ...command, bills: "merge", otherPartyId: null }),
+      moveGuests(tx, v.cfg, partyId, mesa12, { ...command, otherPartyId: null }),
     );
 
     const slip = (orderNumber: number, dishes: string[], station: string) => [
@@ -640,7 +658,7 @@ describe("a MOVED slip per order per station", () => {
     const command = await commandFor(v, partyId);
 
     await inTx(v, (tx) =>
-      moveGuests(tx, v.cfg, partyId, mesa16, { ...command, bills: "merge", otherPartyId: null }),
+      moveGuests(tx, v.cfg, partyId, mesa16, { ...command, otherPartyId: null }),
     );
 
     const slips = (await printedBy(grill)).slice(before).map((text) => text.split("\n"));
@@ -678,7 +696,7 @@ describe("a MOVED slip per order per station", () => {
         v.cfg,
         second,
         { counter: { zoneId: v.counter.zoneId } },
-        { bills: "merge", operatorId: OPERATOR, expectedPartyRevision },
+        { operatorId: OPERATOR, expectedPartyRevision },
       ),
     );
 
@@ -712,7 +730,6 @@ describe("a MOVED slip per order per station", () => {
 
     await inTx(v, (tx) =>
       moveGuests(tx, v.cfg, ana.partyId, mesa22, {
-        bills: "merge",
         expectedPartyRevision,
         otherPartyId: luis.partyId,
         expectedOtherPartyRevision,
@@ -798,7 +815,7 @@ describe("when a MOVED slip prints: a table or a place name lost (§3)", () => {
         v.cfg,
         second,
         { tableId: mesa78 },
-        { bills: "merge", operatorId: OPERATOR, expectedPartyRevision },
+        { operatorId: OPERATOR, expectedPartyRevision },
       ),
     );
 
@@ -843,7 +860,7 @@ function movedSlip(station: string, orderLine: string, from: string, to: string,
 }
 
 describe("when a MOVED slip prints: the dishes are on an order with another number (§3 (c))", () => {
-  it("a join of another party's table, bills merging, prints the merged-in order's dishes from Mesa 74 to Mesa 73, 74, and nothing for the surviving order (row 7)", async () => {
+  it("a join of another party's table prints nothing, every order keeping its number; Merge bills afterwards prints the merged-in order's dishes at Mesa 73, 74, and nothing for the surviving order (row 7)", async () => {
     const v = await setupPartyVenue(db);
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
     const mesa73 = await v.table("Mesa 73");
@@ -860,7 +877,6 @@ describe("when a MOVED slip prints: the dishes are on an order with another numb
 
     await inTx(v, (tx) =>
       joinTables(tx, v.cfg, ana.partyId, mesa74, {
-        bills: "merge",
         expectedPartyRevision,
         otherPartyId: luis.partyId,
         expectedOtherPartyRevision,
@@ -868,11 +884,16 @@ describe("when a MOVED slip prints: the dishes are on an order with another numb
       }),
     );
 
+    expect(await slipsSince(grill, before)).toEqual([]);
+    expect(await numbersOf([ana.tabId, luis.tabId])).toEqual(numbers);
+
+    await inTx(v, (tx) => mergeInTx(tx, v, ana.partyId, ana.tabId, luis.tabId));
+
     expect(await slipsSince(grill, before)).toEqual([
       movedSlip(
         "Grill",
         `Pedido ${numbers.get(luis.tabId)} -> ${numbers.get(ana.tabId)}`,
-        "Mesa 74",
+        "Mesa 73, 74",
         "Mesa 73, 74",
         ["1.000 x PAELLA"],
       ),
@@ -995,7 +1016,7 @@ describe("when a MOVED slip prints: the dishes are on an order with another numb
         v.cfg,
         counter,
         { counter: { zoneId: null } },
-        { bills: "merge", operatorId: OPERATOR, expectedPartyRevision },
+        { operatorId: OPERATOR, expectedPartyRevision },
       ),
     );
     const before = (await printedBy(grill)).length;
@@ -1051,7 +1072,7 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
     const command = await commandFor(v, partyId);
 
     await inTx(v, (tx) =>
-      moveGuests(tx, v.cfg, partyId, mesa112, { ...command, bills: "merge", otherPartyId: null }),
+      moveGuests(tx, v.cfg, partyId, mesa112, { ...command, otherPartyId: null }),
     );
 
     expect(await slipsSince(grill, before)).toEqual([
@@ -1104,7 +1125,7 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
     const command = await commandFor(v, partyId);
 
     await inTx(v, (tx) =>
-      moveGuests(tx, v.cfg, partyId, mesa122, { ...command, bills: "merge", otherPartyId: null }),
+      moveGuests(tx, v.cfg, partyId, mesa122, { ...command, otherPartyId: null }),
     );
 
     expect(await slipsSince(kitchen, before.kitchen)).toEqual([
@@ -1153,7 +1174,7 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
     const command = await commandFor(v, partyId);
 
     await inTx(v, (tx) =>
-      moveGuests(tx, v.cfg, partyId, mesa119, { ...command, bills: "merge", otherPartyId: null }),
+      moveGuests(tx, v.cfg, partyId, mesa119, { ...command, otherPartyId: null }),
     );
 
     expect(await slipsSince(grill, before)).toEqual([
@@ -1179,7 +1200,7 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
     const command = await commandFor(v, partyId);
 
     await inTx(v, (tx) =>
-      moveGuests(tx, v.cfg, partyId, mesa114, { ...command, bills: "merge", otherPartyId: null }),
+      moveGuests(tx, v.cfg, partyId, mesa114, { ...command, otherPartyId: null }),
     );
 
     expect(await slipsSince(grill, before)).toEqual([
@@ -1302,7 +1323,7 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
     const command = await commandFor(v, partyId);
 
     await inTx(v, (tx) =>
-      moveGuests(tx, v.cfg, partyId, mesa122, { ...command, bills: "merge", otherPartyId: null }),
+      moveGuests(tx, v.cfg, partyId, mesa122, { ...command, otherPartyId: null }),
     );
 
     expect(await slipsSince(grill, before)).toEqual([
@@ -1331,7 +1352,7 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
     const command = await commandFor(v, partyId);
 
     await inTx(v, (tx) =>
-      moveGuests(tx, v.cfg, partyId, mesa124, { ...command, bills: "merge", otherPartyId: null }),
+      moveGuests(tx, v.cfg, partyId, mesa124, { ...command, otherPartyId: null }),
     );
 
     expect(await slipsSince(grill, before)).toEqual([
@@ -1359,7 +1380,7 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
     const command = await commandFor(v, partyId);
 
     await inTx(v, (tx) =>
-      moveGuests(tx, v.cfg, partyId, mesa126, { ...command, bills: "merge", otherPartyId: null }),
+      moveGuests(tx, v.cfg, partyId, mesa126, { ...command, otherPartyId: null }),
     );
 
     expect(await slipsSince(grill, before)).toEqual([
@@ -1384,7 +1405,7 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
     const command = await commandFor(v, partyId);
 
     await inTx(v, (tx) =>
-      moveGuests(tx, v.cfg, partyId, mesa128, { ...command, bills: "merge", otherPartyId: null }),
+      moveGuests(tx, v.cfg, partyId, mesa128, { ...command, otherPartyId: null }),
     );
 
     expect((await slipsSince(grill, before)).map(dishLines)).toEqual([
@@ -1447,7 +1468,7 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
     const command = await commandFor(v, partyId);
 
     await inTx(v, (tx) =>
-      moveGuests(tx, v.cfg, partyId, mesa130, { ...command, bills: "merge", otherPartyId: null }),
+      moveGuests(tx, v.cfg, partyId, mesa130, { ...command, otherPartyId: null }),
     );
 
     expect((await slipsSince(cocina, 0)).map(dishLines)).toEqual([
@@ -1481,7 +1502,7 @@ describe("a station's print-MOVED-slips choice", () => {
     const command = await commandFor(v, partyId);
 
     await inTx(v, (tx) =>
-      moveGuests(tx, v.cfg, partyId, mesa22, { ...command, bills: "merge", otherPartyId: null }),
+      moveGuests(tx, v.cfg, partyId, mesa22, { ...command, otherPartyId: null }),
     );
 
     return { v, grill, tabId, slips: (await printedBy(grill)).slice(printed) };
@@ -1582,7 +1603,7 @@ describe("a prep station's own print-MOVED-slips choice", () => {
     const command = await commandFor(v, partyId);
 
     await inTx(v, (tx) =>
-      moveGuests(tx, v.cfg, partyId, mesa32, { ...command, bills: "merge", otherPartyId: null }),
+      moveGuests(tx, v.cfg, partyId, mesa32, { ...command, otherPartyId: null }),
     );
 
     return {

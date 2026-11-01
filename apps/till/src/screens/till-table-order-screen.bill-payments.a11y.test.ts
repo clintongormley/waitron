@@ -6,6 +6,7 @@ import { setLocale } from "../i18n/t.js";
 import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { BillBalance, PartyBill, TabLine, TableParty } from "../api/client.js";
+import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("es-ES"));
 afterEach(cleanupWidgets);
@@ -18,7 +19,7 @@ const party: TableParty = {
   state: "open",
   name: null,
   displayName: "4",
-  mainBillId: "wo-4",
+  openingBillId: "wo-4",
   outstanding: "39.00",
   billCount: 1,
   tableIds: ["t4"],
@@ -107,8 +108,6 @@ async function mountHandheld(
     },
     theme,
   );
-  mounted.el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-  await mounted.el.updateComplete;
   if (mounted.el.shadowRoot!.querySelector("[data-pay-sheet]") === null)
     throw new Error("the scan must include the handheld's Pay button");
   return mounted;
@@ -121,7 +120,8 @@ describe.each(["light", "dark"] as const)(
       ["an untouched bill", { ...bill, hasPayments: false }, null],
       ["a partly paid bill", bill, balance],
     ] as const)("has no violations for %s", async (_case, shownBill, billBalance) => {
-      const { host } = await mountHandheld(theme, shownBill, billBalance);
+      const { el, host } = await mountHandheld(theme, shownBill, billBalance);
+      await openTableMenu(el);
       await expectNoA11yViolations(host);
     });
   },
@@ -143,11 +143,14 @@ describe("till-table-order-screen handheld Pay button look", () => {
             await userEvent.click(review);
             await el.updateComplete;
           }
-          const drawer = el.shadowRoot!.querySelector<HTMLElement>("[data-drawer]")!;
+          // The bill switcher is painted in the surface colour the drawer was.
+          const switcher = el
+            .shadowRoot!.querySelector("[data-bill-switcher]")!
+            .shadowRoot!.querySelector<HTMLElement>('[part~="trigger"]')!;
           const pay = el.shadowRoot!.querySelector<HTMLElement>("section.pay")!;
           expect(pay.getBoundingClientRect().width).toBeGreaterThan(0);
           expect(pay.scrollWidth).toBeLessThanOrEqual(pay.clientWidth);
-          backgrounds[theme] = getComputedStyle(drawer).backgroundColor;
+          backgrounds[theme] = getComputedStyle(switcher).backgroundColor;
           // The pay section sits below the fold at phone width; the viewport capture shows it.
           pay.scrollIntoView({ block: "end" });
           await page.screenshot({
@@ -193,8 +196,7 @@ describe.each(["light", "dark"] as const)(
         },
         theme,
       );
-      el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-      await el.updateComplete;
+      await openTableMenu(el);
       if (el.shadowRoot!.querySelector("[data-open-bill-pay]") === null)
         throw new Error("the scan must include the ways to pay");
       await expectNoA11yViolations(host);

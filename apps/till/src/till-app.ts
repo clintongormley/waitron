@@ -12,7 +12,7 @@ import {
   type AllergyFieldRefusal,
 } from "./widgets/party-allergy-dialog.js";
 import type { BillEditExpected, BillUnsent, LateSend, Tender } from "./api/client.js";
-import { billUnsentOf, billUnsentText } from "./state/bill-unsent.js";
+import { billHasUnsent, billUnsentOf, billUnsentText } from "./state/bill-unsent.js";
 import {
   endedPeriodOf,
   isLateSendManagerRefusal,
@@ -81,6 +81,7 @@ import {
   countText,
   currentLocale,
   differentPeopleText,
+  fill,
   named,
   overLimitText,
   setLocale,
@@ -303,7 +304,14 @@ import type {
   SplitTableDetail,
 } from "./screens/till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
-import { billName, owing, paidInPart, shownBills } from "./state/bill-state.js";
+import {
+  billLabel,
+  billName,
+  billToShow,
+  owing,
+  paidInPart,
+  shownBills,
+} from "./state/bill-state.js";
 import { foldRetrievedPortions, portionWireLines } from "./state/counter-portion-rows.js";
 import { billRequestOf } from "./state/table-signals.js";
 import {
@@ -611,7 +619,6 @@ const TABLE_REFUSALS = new Set([
   "table.already_in_party",
   "table.inactive",
   "table.in_joined_table",
-  "party.main_bill_stays",
   "service_zone.join_mismatch",
   "service_zone.mode_incompatible",
   "group.held_leaves_party",
@@ -639,6 +646,10 @@ const TABLE_REFUSALS = new Set([
   "clock.behind_chain",
   "menu_period.ended",
 ]);
+
+/** A draft save naming a bill that has left its party's open bills: merged away (`tab.not_open`) or
+ * moved to another table (`bill.other_party`). */
+const BILL_LEFT_REFUSALS: ReadonlySet<string> = new Set(["tab.not_open", "bill.other_party"]);
 
 /** Refusals about the money already on a bill: after one, the party's bills and the shown bill's
  * payments are read again, so the screen shows what the bill now holds. */
@@ -693,12 +704,6 @@ const PRESENTED_CARD_REFUSALS = {
   timeout: "card_timeout",
 } as const;
 
-/** The bill a seated party opens on when it has no main bill: its first unpaid, else its latest. */
-function billToOpen(bills: readonly PartyBill[]): string | undefined {
-  const unpaid = bills.find(owing);
-  return (unpaid ?? bills.at(-1))?.workingOrderId;
-}
-
 /** The tables a seat holds: each one it named, with every member of that table's merge. */
 function seatedTables(tables: readonly TableState[], named: readonly string[]): string[] {
   const held = new Set<string>();
@@ -752,6 +757,12 @@ function stepDoneError(error: unknown): CounterError {
   return typeof code === "string" && STEP_DONE_REFUSALS.has(code)
     ? { code }
     : tableWriteError(error);
+}
+
+/** Another person holding the bill refuses every save, but a till leaving it with no edit of its
+ * own waiting lost nothing. */
+function lostNothing(saved: DraftSaveOutcome, ownEditWaiting: boolean): boolean {
+  return !ownEditWaiting && typeof saved === "object" && saved.refused === "draft.taken_over";
 }
 
 function draftRefusalError({ refused, ownerName }: DraftRefused, unsent = false): CounterError {
@@ -1420,13 +1431,21 @@ interface Sent {
   opens: number;
 }
 
+interface OwnBillsHold {
+  take: () => void;
+  release: () => void;
+}
+
 /** A read of the party's bills: the party it was for (null when there was none), the bills (null
  * when the read failed), and its generation, current until a later read starts or
  * {@link #forgetParty} clears the order. */
 interface ReadBills {
+  /** The read's number; -1 for a read not made, which no read's number can equal. */
   read: number;
   partyId: string | null;
   bills: PartyBill[] | null;
+  /** A background read not made, or set aside, because of this till's own change to the bills. */
+  setAside?: true;
 }
 
 function errorText(
@@ -2900,6 +2919,28 @@ export class TillApp extends LitElement {
   #tabLinesRead = 0;
   /** The same for the party's bills. */
   #partyBillsRead = 0;
+  /** Bills reads numbered up to this were sent before this till learned of the bill it chose to
+   * show ({@link #chooseBill}), so a bill missing from one of them has not gone. */
+  #billChosenRead = 0;
+  /** Set when Split a table took the bill on screen, the bills read after it failed, and no bill known
+   * before it stayed: the next successful bills read for this party on this visit shows
+   * {@link billToShow}'s choice ({@link #followBillsRead}) and ends the wait, even when it lists no
+   * bill. */
+  #billAfterSplit?: { partyId: string; visit: number };
+  /** This till's own merges, moves and splits holding the window ({@link #ownBillsChange}), and how
+   * many times one has taken it: a background bills read neither starts while one holds it nor
+   * counts if one took it while the read was out, so it cannot say the bill this till itself moved
+   * has gone. */
+  #ownBillsChanges = 0;
+  #ownBillsStarted = 0;
+  /** A refused save whose bills read was not made, or set aside, for this till's own change: it is
+   * followed once no own change holds the window. */
+  #leftBillWaiting?: { sync: DraftSync; refusal: DraftRefused };
+  /** Drafts dropped because their bill left the party ({@link #followBillsRead}), and whether their
+   * unsaved lines are kept for review on the bill now shown. */
+  readonly #leftBillDrafts = new WeakMap<DraftSync, boolean>();
+  /** The bill chosen last in the switcher while the draft's save before showing it is out. */
+  #switchTo: string | undefined;
   /** Numbers each read of the party's groups as it starts; {@link #printProblemsShown} is the number
    * of the read whose printing problems are on screen, so an answer from a read that started before
    * it is dropped and a read that ends without an answer drops nothing. */
@@ -3046,6 +3087,10 @@ export class TillApp extends LitElement {
   @state() private activeTabId?: string;
   /** The table id of that tab. */
   @state() private activeTableId?: string;
+  /** What the order screen says once the bill on screen has left the party's bills (D11). */
+  @state() private billGone: string | null = null;
+  /** Parties whose + New bill this till has sent and not yet had answered. */
+  @state() private newBillsOut: ReadonlySet<string> = new Set();
   /** The open tab's lines at their locked add-time prices; a tab does not re-price. */
   @state() private tabLines: TabLine[] = [];
   /** The revision {@link tabLines} was read at. */
@@ -3454,6 +3499,9 @@ export class TillApp extends LitElement {
     revision: number;
     partyId: string;
     session: number;
+    /** What opened the window: the ⋮, or the pay area's Full invoice. */
+    opener?: HTMLElement;
+    screen?: HTMLElement;
   };
   private invoiceRecipientSaving = false;
   #invoiceRecipientLifetime = {};
@@ -4133,6 +4181,13 @@ export class TillApp extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues): void {
+    const paying = this.billPaying;
+    if (
+      paying?.refusal != null &&
+      paying.refusal === this.#unsentSaid &&
+      !this.#unsentOnScreen(paying.billId)
+    )
+      this.billPaying = { ...paying, refusal: null };
     // A sheet shows only the notices of taps made while it is open, and the toast does not repeat
     // them once it closes.
     const sheetOpen = this.#paySheetOpen();
@@ -6750,7 +6805,10 @@ export class TillApp extends LitElement {
     });
   }
 
+  /** There is one question window: a question still waiting when another opens gets `null`, the
+   * answer Cancel gives, or its caller would wait for good. */
   #openDeadEnds(answer: DeadEndAnswer, allowRemove: boolean): Promise<DeadEndsDecision | null> {
+    this.#resolveDeadEnds?.(null);
     return new Promise((resolve) => {
       this.#resolveDeadEnds = resolve;
       this.deadEndsQuestion = { answer, allowRemove };
@@ -7716,8 +7774,8 @@ export class TillApp extends LitElement {
           this.orderParty?.id === row.partyId
         ) {
           if (this.#tableOrderTabKey() !== undefined) this.#popDrill();
-          await this.#onTakePayment(
-            new CustomEvent("take-payment", { detail: { workingOrderId: row.workingOrderId } }),
+          await this.#onSwitchBill(
+            new CustomEvent("switch-bill", { detail: { workingOrderId: row.workingOrderId } }),
           );
         }
         return;
@@ -10637,7 +10695,7 @@ export class TillApp extends LitElement {
     if (leftOrder || (wasLoadingOrder && !this.#orderScreenShown())) this.#orderVisit++;
     if (!wasShowingOrder && this.#tableCatalogueActive()) this.#shownOnVisit = this.#orderVisit;
     const session = this.#operatorSession;
-    const flushed = leftOrder ? this.#flushDraft() : Promise.resolve();
+    const flushed = leftOrder ? this.#flushDraft(true) : Promise.resolve();
     if (this.#tabNeedsFloorData(tab)) {
       void flushed.then(async () => {
         if (session !== this.#operatorSession) return;
@@ -10735,8 +10793,8 @@ export class TillApp extends LitElement {
       this.orderParty = { ...party, kitchenNote: latest.kitchenNote };
   }
 
-  /** A free table seats a party with the guest count given; a seated one resumes its party
-   * ({@link billToOpen}). */
+  /** A free table seats a party with the guest count given; a seated one resumes its party on the
+   * bill the floor names, checked against the party's bills ({@link #followBillsRead}). */
   async #onOpenTable(
     event: Event,
     left: () => boolean = () => false,
@@ -10767,6 +10825,7 @@ export class TillApp extends LitElement {
       return;
     }
     const session = this.#operatorSession;
+    const ownEditWaiting = sync.ownEditWaiting;
     const tableId = this.activeTableId;
     if (tableId !== undefined) {
       const record = {
@@ -10784,7 +10843,12 @@ export class TillApp extends LitElement {
           this.#unsavedDrafts.set(sync.partyId, sync);
         if (session === this.#operatorSession) this.#settleReleased(sync, saved);
         sync.drop();
-        if (session !== this.#operatorSession || saved === "saved") return;
+        if (
+          session !== this.#operatorSession ||
+          saved === "saved" ||
+          lostNothing(saved, ownEditWaiting)
+        )
+          return;
         if (saved === "failed") {
           if (this.errorKey === undefined) this.errorKey = "table.draft_save_failed";
         } else if (saved.refused !== "session.required") this.errorKey = draftRefusalError(saved);
@@ -10868,7 +10932,7 @@ export class TillApp extends LitElement {
         leaving.partyId !== this.#openingFloor(fromBar).find((row) => row.id === tableId)?.party?.id
       )
         this.#releaseDraft(leaving);
-      else if (this.#draftReady) await this.#flushDraft();
+      else if (this.#draftReady) await this.#flushDraft(true);
       if (abandoned() || session !== this.#operatorSession) return;
       await this.#openTable(
         tableId,
@@ -10996,26 +11060,21 @@ export class TillApp extends LitElement {
       this.billNameRefusal = null;
       this.guestsRefusal = null;
       this.splitRefusal = null;
+      this.billGone = null;
       this.reprintSent = [];
       if (guestCount === undefined) {
         this.orderParty = table?.party ?? null;
-        const main = this.orderParty?.mainBillId ?? null;
-        const billsRead = main === null && this.orderParty !== null;
-        this.activeTabId = main ?? undefined;
-        if (billsRead) {
-          const read = await this.#loadPartyBills();
-          if (left() || session !== this.#operatorSession || this.#openClaimed > offerRequest)
-            return;
-          this.activeTabId = billToOpen(read.bills ?? []);
-        }
+        this.activeTabId = this.orderParty?.openingBillId ?? undefined;
         await this.#savesOutFor(this.orderParty?.id);
         if (left() || session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
-        const [, opened] = await Promise.all([
-          billsRead ? this.#loadTabLines() : this.#loadLinesAndBills(),
+        const [[, bills], opened] = await Promise.all([
+          this.#loadLinesAndBills(undefined, false),
           this.#openDraft(session),
         ]);
         if (left() || session !== this.#operatorSession) return;
         this.#showDraft(opened);
+        if (this.#openClaimed > offerRequest) return;
+        await this.#followBillsRead(bills, [], true);
       } else {
         try {
           const note = carried?.note;
@@ -11034,7 +11093,7 @@ export class TillApp extends LitElement {
           // only here.
           if (session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
           this.activeTableId = tableId;
-          this.activeTabId = tabId;
+          this.#chooseBill(tabId);
           this.orderParty = {
             id: partyId,
             revision,
@@ -11042,7 +11101,7 @@ export class TillApp extends LitElement {
             state: "open",
             name: null,
             displayName: table === undefined ? "" : shownUnder(table),
-            mainBillId: tabId,
+            openingBillId: tabId,
             outstanding: "0.00",
             billCount: 1,
             tableIds: seatedTables(this.tables, [tableId, ...(withTableIds ?? [])]),
@@ -11552,10 +11611,53 @@ export class TillApp extends LitElement {
   #scheduleBillDraftRefresh(): void {
     clearTimeout(this.#billDraftTimer);
     this.#billDraftTimer = setTimeout(() => {
-      void this.#refreshBillDraft().finally(() => {
+      void Promise.all([this.#refreshBillDraft(), this.#rereadBillsOnTimer()]).finally(() => {
         if (this.isConnected && this.#draftSync !== undefined) this.#scheduleBillDraftRefresh();
       });
     }, 15_000);
+  }
+
+  /** The till has no push from the server, so another till merging or moving the bill on screen away
+   * (D11 rule 3) is seen only by a bills read; the draft's timer makes one. */
+  async #rereadBillsOnTimer(): Promise<void> {
+    const sync = this.#draftSync;
+    if (
+      sync === undefined ||
+      sync.partyId !== this.orderParty?.id ||
+      !this.#tableCatalogueActive() ||
+      this.operatorName === "" ||
+      document.hidden
+    )
+      return;
+    await this.#loadPartyBills(undefined, true, true);
+  }
+
+  /** Holds the window for this till's own change to the bills while `run` is under way. Move this
+   * bill lets go of it around its dead-end check, question included (`release`, then `take`), and
+   * the hold lapses {@link TABLE_REQUEST_LIMIT_MS} after it is taken, so neither a question left on
+   * screen nor a request with no answer keeps the background bills read away for good. */
+  async #ownBillsChange(run: (hold: OwnBillsHold) => Promise<void>): Promise<void> {
+    let held = false;
+    let lapse: ReturnType<typeof setTimeout> | undefined;
+    const release = () => {
+      if (!held) return;
+      held = false;
+      clearTimeout(lapse);
+      if (--this.#ownBillsChanges === 0) this.#followWaitingLeftBill();
+    };
+    const take = () => {
+      if (held) return;
+      held = true;
+      this.#ownBillsChanges++;
+      this.#ownBillsStarted++;
+      lapse = setTimeout(release, TABLE_REQUEST_LIMIT_MS);
+    };
+    take();
+    try {
+      await run({ take, release });
+    } finally {
+      release();
+    }
   }
 
   async #refreshBillDraft(): Promise<void> {
@@ -11611,14 +11713,17 @@ export class TillApp extends LitElement {
 
   /** At a point the person leaves the draft: an edit no save reached is said, unless the operator
    * session has ended by the time the save answers, since the next person may have signed in. */
-  async #flushDraft(): Promise<boolean> {
+  async #flushDraft(leaving = false): Promise<boolean> {
     const sync = this.#draftSync;
     if (sync === undefined) return true;
     const session = this.#operatorSession;
+    const ownEditWaiting = sync.ownEditWaiting;
     const saved = await sync.flush();
+    if (leaving && lostNothing(saved, ownEditWaiting)) return true;
     if (
       saved !== "saved" &&
-      (saved === "failed" || saved.refused !== "session.required") &&
+      (saved === "failed" ||
+        (saved.refused !== "session.required" && !this.#billLeft(sync, saved))) &&
       session === this.#operatorSession &&
       sync === this.#draftSync
     )
@@ -11635,7 +11740,7 @@ export class TillApp extends LitElement {
     )
       return;
     const session = this.#operatorSession;
-    if (sync.partyId === this.orderParty?.id && this.#draftReady && !(await this.#flushDraft()))
+    if (sync.partyId === this.orderParty?.id && this.#draftReady && !(await this.#flushDraft(true)))
       return;
     if (this.#draftSync !== sync) return;
     const party = this.orderParty?.id;
@@ -11652,10 +11757,55 @@ export class TillApp extends LitElement {
       return;
     }
     if (sync !== this.#draftSync || refusal.refused === "session.required") return;
+    if (this.#billLeft(sync, refusal)) {
+      void this.#followLeftBill(sync, refusal);
+      return;
+    }
     this.errorKey = draftRefusalError(refusal);
     const zoneId = this.#tableZoneId;
     if (refusal.refused === "product.not_sold_separately" && zoneId !== undefined)
       void this.#reloadTableOffers(zoneId);
+  }
+
+  #billLeft(sync: DraftSync, { refused }: DraftRefused): boolean {
+    return (
+      BILL_LEFT_REFUSALS.has(refused) &&
+      sync.billId === this.activeTabId &&
+      sync.partyId === this.orderParty?.id
+    );
+  }
+
+  /** The refusal may be the first sign that another till merged or moved the bill on screen: the
+   * bills read lets {@link #followBillsRead} move the screen and keep the unsaved lines for review.
+   * A read that still shows the bill, or fails, says the refusal instead; one set aside for this
+   * till's own change to the bills waits for that change to end. A draft the read drops whose lines
+   * could not be kept for review says the refusal too. */
+  async #followLeftBill(sync: DraftSync, refusal: DraftRefused): Promise<void> {
+    const { setAside } = await this.#loadPartyBills(undefined, true, true);
+    if (setAside !== undefined) {
+      this.#leftBillWaiting = { sync, refusal };
+      if (this.#ownBillsChanges === 0) this.#followWaitingLeftBill();
+      return;
+    }
+    if (
+      (sync === this.#draftSync && sync.billId === this.activeTabId) ||
+      this.#leftBillDrafts.get(sync) === false
+    )
+      this.errorKey = draftRefusalError(refusal);
+  }
+
+  #followWaitingLeftBill(): void {
+    const waiting = this.#leftBillWaiting;
+    this.#leftBillWaiting = undefined;
+    if (waiting === undefined) return;
+    if (waiting.sync !== this.#draftSync) {
+      // As when the own change's refusal handling read the bills itself and dropped this draft.
+      if (this.#leftBillDrafts.get(waiting.sync) === false)
+        this.errorKey = draftRefusalError(waiting.refusal);
+      return;
+    }
+    if (this.#billLeft(waiting.sync, waiting.refusal))
+      void this.#followLeftBill(waiting.sync, waiting.refusal);
   }
 
   #otherDrafts(shown: WorkingOrderStore | null): readonly OtherDraft[] {
@@ -11759,32 +11909,139 @@ export class TillApp extends LitElement {
     await this.#loadLinesAndBills();
   }
 
-  async #loadLinesAndBills(balance?: BillBalance): Promise<[void, ReadBills]> {
-    return Promise.all([this.#loadTabLines(), this.#loadPartyBills(balance)]);
+  async #loadLinesAndBills(balance?: BillBalance, follow = true): Promise<[void, ReadBills]> {
+    return Promise.all([this.#loadTabLines(), this.#loadPartyBills(balance, follow)]);
   }
 
-  /** A failed read leaves the list empty rather than showing another party's bills. A read
-   * overtaken by a later one leaves the list alone, and only its generation, compared with
-   * {@link #partyBillsRead}, tells a caller so. */
-  async #loadPartyBills(balance?: BillBalance): Promise<ReadBills> {
-    const read = ++this.#partyBillsRead;
+  /** A failed read leaves the list empty rather than showing another party's bills, unless it is a
+   * `background` read (a check that the bill on screen is still there, not a read after this
+   * till's own change to the bills), which keeps the last list read. A read overtaken by a later
+   * one leaves the list alone, and only its generation, compared with {@link #partyBillsRead},
+   * tells a caller so. Unless `follow` is false, a read that no longer shows the bill on screen
+   * moves the screen off it ({@link #followBillsRead}); a caller choosing the bill itself passes
+   * false. */
+  async #loadPartyBills(
+    balance?: BillBalance,
+    follow = true,
+    background = false,
+  ): Promise<ReadBills> {
     const party = this.orderParty;
+    if (background && this.#ownBillsChanges > 0)
+      return {
+        read: -1,
+        partyId: party?.id ?? null,
+        bills: null,
+        setAside: true,
+      };
+    const read = ++this.#partyBillsRead;
+    const started = this.#ownBillsStarted;
     if (party === null) {
       this.partyBills = [];
       return { read, partyId: null, bills: [] };
     }
     try {
       const bills = await this.api.getPartyBills(party.id);
+      if (background && started !== this.#ownBillsStarted)
+        return { read, partyId: party.id, bills: null, setAside: true };
+      const answer = { read, partyId: party.id, bills };
       if (read === this.#partyBillsRead) {
+        const before = this.partyBills;
         this.partyBills = bills;
         this.#syncDraftBillStatus();
         void this.#loadBillBalance(balance);
+        if (follow) await this.#followBillsRead(answer, before);
       }
-      return { read, partyId: party.id, bills };
+      return answer;
     } catch {
-      if (read === this.#partyBillsRead) this.partyBills = [];
+      if (read === this.#partyBillsRead && !background) this.partyBills = [];
       return { read, partyId: party.id, bills: null };
     }
+  }
+
+  /**
+   * D11 rule 3: the bills just read for the order's party no longer show the bill on screen (another
+   * till merged it away or moved it, or the floor named a bill already gone), so the screen shows
+   * {@link billToShow}'s choice and says so, or, with no bill left, says that alone and offers no
+   * New order; no bill is made. Nothing is written to the bill that went: lines typed on it and not
+   * saved are kept for the waiter to review on the bill now shown. On `opening`, a party the floor
+   * named no bill for takes the rule's choice with nothing said, as does a party waiting on
+   * {@link #billAfterSplit}.
+   */
+  async #followBillsRead(
+    answer: ReadBills,
+    before: readonly PartyBill[],
+    opening = false,
+  ): Promise<void> {
+    const { read, partyId, bills } = answer;
+    if (
+      bills === null ||
+      read !== this.#partyBillsRead ||
+      read <= this.#billChosenRead ||
+      partyId === null ||
+      partyId !== this.orderParty?.id
+    )
+      return;
+    const gone = this.activeTabId;
+    const next = billToShow(gone, bills);
+    const afterSplit =
+      gone === undefined &&
+      this.#billAfterSplit?.partyId === partyId &&
+      this.#billAfterSplit.visit === this.#orderVisit;
+    if (gone === undefined) this.#billAfterSplit = undefined;
+    if (next === gone || (gone === undefined && !opening && !afterSplit)) return;
+    const session = this.#operatorSession;
+    const sync = this.#draftSync;
+    this.activeTabId = next;
+    this.#billAfterSplit = undefined;
+    if (gone !== undefined) {
+      const was = [...bills, ...before].find((bill) => bill.workingOrderId === gone);
+      const numbered = was !== undefined && was.billNumber !== null;
+      const shown = bills.find((bill) => bill.workingOrderId === next);
+      const key =
+        shown === undefined
+          ? numbered
+            ? "table.bill_gone_none"
+            : "table.bill_gone_unnumbered_none"
+          : numbered
+            ? "table.bill_gone"
+            : "table.bill_gone_unnumbered";
+      this.billGone = fill(t(key), {
+        gone: numbered ? billLabel(was) : "",
+        shown: shown === undefined ? "" : billLabel(shown),
+      });
+      if (sync !== undefined && sync.billId === gone) {
+        this.#dropDraft();
+        this.#leftBillDrafts.set(
+          sync,
+          next !== undefined && this.#carryCandidate(sync.personId, gone, next),
+        );
+      }
+    }
+    await this.#loadTabLines();
+    if (
+      next === undefined ||
+      session !== this.#operatorSession ||
+      this.activeTabId !== next ||
+      this.#draftSync?.billId === next
+    )
+      return;
+    this.#showDraft(await this.#openDraft(session));
+  }
+
+  /** The unsaved lines a dropped draft kept for `from`, offered for review on `to` instead, unless
+   * `to` already holds lines kept for review; answers whether they were moved. */
+  #carryCandidate(personId: string, from: string, to: string): boolean {
+    const fromKey = JSON.stringify([personId, from]);
+    const toKey = JSON.stringify([personId, to]);
+    const kept = this.#draftCandidates.get(fromKey);
+    if (kept === undefined || this.#draftCandidates.has(toKey)) return false;
+    this.#draftCandidates.delete(fromKey);
+    this.#draftCandidates.set(toKey, {
+      ...kept,
+      billId: to,
+      base: { billId: to, editorVersion: 0, draftId: null, draftRevision: null },
+    });
+    return true;
   }
 
   /** The balance of the bill on screen when its party's bills say it holds a payment; none
@@ -12079,8 +12336,8 @@ export class TillApp extends LitElement {
       await this.#retakePartyFromFloor();
       if (!live()) return;
       const now = this.tables.find((row) => row.id === tableId)?.party;
-      const landed = billId ?? now?.mainBillId ?? null;
-      if (landed !== null && now?.id === partyId && onSentTable()) this.#followDraft(tabId, landed);
+      if (billId !== undefined && now?.id === partyId && onSentTable())
+        this.#followDraft(tabId, billId);
     } else if (typeof followUp === "object" && this.activeTabId === tabId) {
       await this.#reloadTables();
       if (!live()) return;
@@ -12327,6 +12584,8 @@ export class TillApp extends LitElement {
           (await this.#recoverDraftTargets(sync, live))
         )
           return;
+        if (saved !== "failed" && BILL_LEFT_REFUSALS.has(saved.refused)) return;
+        if (saved === "failed" && this.#leftBillDrafts.get(sync) === true) return;
         this.errorKey = saved === "failed" ? "table.error" : draftRefusalError(saved);
         return;
       }
@@ -12459,7 +12718,7 @@ export class TillApp extends LitElement {
    * operator is still on the first; the floor has already been read after the send. */
   #followDraft(sentTo: string, landedOn: string): void {
     if (landedOn === sentTo || this.activeTabId !== sentTo) return;
-    this.activeTabId = landedOn;
+    this.#chooseBill(landedOn);
     this.#rememberOrderParty();
   }
 
@@ -14764,13 +15023,11 @@ export class TillApp extends LitElement {
   }
 
   async #onMoveGuests(event: Event): Promise<void> {
-    const { toTableId, bills, prompt } = (
-      event as CustomEvent<{ toTableId: string; bills: "merge" | "separate"; prompt?: object }>
-    ).detail;
+    const { toTableId, prompt } = (event as CustomEvent<{ toTableId: string; prompt?: object }>)
+      .detail;
     const party = this.orderParty;
     if (party === null) return;
     const sent = this.#sentNow();
-    const visit = this.#orderVisit;
     this.errorKey = undefined;
     const asked = await (prompt === undefined
       ? this.#relocationEdits(
@@ -14790,7 +15047,7 @@ export class TillApp extends LitElement {
       !this.#hasLeftParty(asked.source.partyId, asked.source.sent);
     let result: TableActionResult;
     try {
-      result = await asked.source.api.moveGuests(party.id, toTableId, bills, revisions);
+      result = await asked.source.api.moveGuests(party.id, toTableId, revisions);
     } catch (error) {
       if (!live()) return;
       await this.#onRelocationRefusal(error, live);
@@ -14803,22 +15060,28 @@ export class TillApp extends LitElement {
     if (!live()) return;
     this.activeTableId = toTableId;
     this.#rememberOrderParty();
-    const followed = this.orderParty?.id;
-    if (result.partyId !== party.id) {
-      if (result.mainBillId !== null) this.activeTabId = result.mainBillId;
-      else {
-        const { bills: read } = await this.#loadPartyBills();
-        if (this.#hasLeftParty(followed, sent)) return;
-        this.activeTabId = billToOpen(read ?? []);
-      }
-    }
-    await this.#loadLinesAndBills();
-    if (this.#hasLeftParty(followed, sent) || this.#leftSince(visit)) return;
-    this.#sayBillsKeptApart(revisions, bills, result);
+    await this.#followActionBills(result.billIds, sent);
   }
 
-  async #onMoveBill(event: Event): Promise<void> {
-    const { to, bills, prompt } = (event as CustomEvent<MoveBillDetail>).detail;
+  /** After this till's Move guests or Join, the screen keeps its bill while the answer's `billIds`
+   * hold it, and reads lines and bills together; otherwise it reads the party's bills first and
+   * shows {@link billToShow}'s choice, else the answer's first bill. */
+  async #followActionBills(billIds: readonly string[], sent: Sent): Promise<void> {
+    const followed = this.orderParty?.id;
+    const kept = this.activeTabId;
+    this.billGone = null;
+    if (kept !== undefined && billIds.includes(kept)) {
+      await this.#loadLinesAndBills();
+      return;
+    }
+    const { bills: read } = await this.#loadPartyBills(undefined, false);
+    if (this.#hasLeftParty(followed, sent)) return;
+    this.#chooseBill(billToShow(kept, read ?? []) ?? billIds[0]);
+    await this.#loadLinesAndBills();
+  }
+
+  async #onMoveBill(event: Event, hold?: OwnBillsHold): Promise<void> {
+    const { to, prompt } = (event as CustomEvent<MoveBillDetail>).detail;
     const billId = this.activeTabId;
     const party = this.orderParty;
     if (billId === undefined || party === null) return;
@@ -14841,25 +15104,23 @@ export class TillApp extends LitElement {
         const zoneId = toTable
           ? this.tables.find((table) => table.id === to.tableId)?.zoneId
           : this.counterServiceZoneId;
-        if (
-          !(await this.#askStoredDeadEnds(
-            billId,
-            {
-              api: asked.source.api,
-              expectedEdit: asked.source.expectedEdits.find((edit) => edit.billId === billId)!,
-              current: () => this.#billCompositionUnchanged(asked.source),
-            },
-            zoneId || undefined,
-          ))
-        )
-          return;
+        hold?.release();
+        const proceed = await this.#askStoredDeadEnds(
+          billId,
+          {
+            api: asked.source.api,
+            expectedEdit: asked.source.expectedEdits.find((edit) => edit.billId === billId)!,
+            current: () => this.#billCompositionUnchanged(asked.source),
+          },
+          zoneId || undefined,
+        ).finally(() => hold?.take());
+        if (!proceed) return;
         if (!this.#billCompositionUnchanged(asked.source)) return;
         result = await asked.source.api.moveBill(
           billId,
           toTable
             ? { tableId: to.tableId }
             : { counter: { zoneId: this.counterServiceZoneId || null } },
-          bills,
           revisions,
         );
         break;
@@ -14881,24 +15142,18 @@ export class TillApp extends LitElement {
     const floorRead = await this.#refreshFloor();
     if (!live() || this.#hasLeftOrder(billId, visit)) return;
     if (floorRead) this.#rememberOrderParty();
-    const { bills: read } = await this.#loadPartyBills();
+    const known = this.partyBills;
+    const { bills: read } = await this.#loadPartyBills(undefined, false);
     if (this.#hasLeftOrder(billId, visit)) return;
-    const next = this.#billAfterMove(billId, read);
+    // D11 rule 2: the rule's choice among the bills left, else back to the floor.
+    const next = billToShow(
+      undefined,
+      (read ?? known).filter((bill) => bill.workingOrderId !== billId),
+    );
+    this.billGone = null;
     if (next === undefined) this.#leaveTable();
-    else this.activeTabId = next;
-    this.#sayBillsKeptApart(revisions, bills, result);
+    else this.#chooseBill(next);
     if (next !== undefined) await this.#loadTabLines();
-  }
-
-  /** The party's bill to show once `moved` has left it: its main bill while that is still among
-   * its bills, else {@link billToOpen}'s; none when the party has no bill left, or its bills could
-   * not be read and it has no other main bill. */
-  #billAfterMove(moved: string, read: PartyBill[] | null): string | undefined {
-    const main = this.orderParty?.mainBillId ?? undefined;
-    if (read === null) return main === moved ? undefined : main;
-    const left = read.filter((bill) => bill.workingOrderId !== moved);
-    if (left.some((bill) => bill.workingOrderId === main)) return main;
-    return billToOpen(left);
   }
 
   readonly #heldRelocationPrompts = new WeakMap<object, Promise<CounterRelocation | null>>();
@@ -14965,10 +15220,7 @@ export class TillApp extends LitElement {
     ></till-party-allergy-dialog>`;
   }
 
-  async #moveCounterWithAllergy(
-    asked: CounterRelocation,
-    bills: "merge" | "separate",
-  ): Promise<boolean> {
+  async #moveCounterWithAllergy(asked: CounterRelocation): Promise<boolean> {
     if (this.#moveAllergyOpening || this.allergyDialog) return false;
     const opening = { asked, controller: new AbortController() };
     this.#moveAllergyOpening = opening;
@@ -14981,13 +15233,9 @@ export class TillApp extends LitElement {
     const read = async () => {
       const view = await this.#allergyRequest(
         (signal) =>
-          asked.api.previewBillMoveAllergy(
-            asked.orderId,
-            { tableId: asked.tableId },
-            bills,
-            revisions(),
-            { signal },
-          ),
+          asked.api.previewBillMoveAllergy(asked.orderId, { tableId: asked.tableId }, revisions(), {
+            signal,
+          }),
         opening.controller.signal,
       );
       if (
@@ -15055,14 +15303,9 @@ export class TillApp extends LitElement {
             (signal) =>
               this.#resend(
                 (attempt) =>
-                  asked.api.moveBill(
-                    asked.orderId,
-                    { tableId: asked.tableId },
-                    bills,
-                    observed,
-                    packet,
-                    { signal: attempt },
-                  ),
+                  asked.api.moveBill(asked.orderId, { tableId: asked.tableId }, observed, packet, {
+                    signal: attempt,
+                  }),
                 signal,
                 current,
               ),
@@ -15229,8 +15472,7 @@ export class TillApp extends LitElement {
     retried = false,
     original?: CounterRelocation,
   ): Promise<void> {
-    const { orderId, tableId, seated, bills, prompt } = (event as CustomEvent<MoveHeldOrderDetail>)
-      .detail;
+    const { orderId, tableId, seated, prompt } = (event as CustomEvent<MoveHeldOrderDetail>).detail;
     const asked =
       original ??
       (await (prompt === undefined
@@ -15257,7 +15499,7 @@ export class TillApp extends LitElement {
       )
         return;
       if (!live()) return;
-      if (!(await this.#moveCounterWithAllergy(asked, bills))) return;
+      if (!(await this.#moveCounterWithAllergy(asked))) return;
       if (!live()) return;
     } catch (error) {
       if (!live()) return;
@@ -15281,13 +15523,10 @@ export class TillApp extends LitElement {
   }
 
   async #onJoinTables(event: Event): Promise<void> {
-    const { tableId, bills, prompt } = (
-      event as CustomEvent<{ tableId: string; bills: "merge" | "separate"; prompt?: object }>
-    ).detail;
+    const { tableId, prompt } = (event as CustomEvent<{ tableId: string; prompt?: object }>).detail;
     const party = this.orderParty;
     if (party === null) return;
     const sent = this.#sentNow();
-    const visit = this.#orderVisit;
     this.errorKey = undefined;
     const asked = await (prompt === undefined
       ? this.#relocationEdits(
@@ -15307,7 +15546,7 @@ export class TillApp extends LitElement {
       !this.#hasLeftParty(asked.source.partyId, asked.source.sent);
     let result: TableActionResult;
     try {
-      result = await asked.source.api.joinTables(party.id, tableId, bills, revisions);
+      result = await asked.source.api.joinTables(party.id, tableId, revisions);
     } catch (error) {
       if (!live()) return;
       await this.#onRelocationRefusal(error, live);
@@ -15316,19 +15555,9 @@ export class TillApp extends LitElement {
     if (!live()) return;
     await this.#refreshBillDraft();
     if (!live()) return;
-    await this.#reloadOrder();
-    if (this.#hasLeftParty(result.partyId, sent) || this.#leftSince(visit)) return;
-    this.#sayBillsKeptApart(revisions, bills, result);
-  }
-
-  #sayBillsKeptApart(
-    revisions: { otherPartyId?: string | null },
-    bills: "merge" | "separate",
-    result: { merged: boolean },
-  ): void {
-    const combined = typeof revisions.otherPartyId === "string";
-    if (combined && bills === "merge" && !result.merged)
-      this.errorKey = "table.bills_kept_separate";
+    await this.#reloadTables();
+    this.#rememberOrderParty();
+    await this.#followActionBills(result.billIds, sent);
   }
 
   // Refreshing the view cannot replace the bill observation a guests dialog opened with.
@@ -15399,12 +15628,18 @@ export class TillApp extends LitElement {
     if (!live()) return;
     this.#rememberOrderParty();
     if (billId !== null && this.activeTabId === billId) {
-      const main = this.orderParty?.mainBillId ?? null;
-      if (main !== null) this.activeTabId = main;
+      const known = this.partyBills;
+      const { bills: read } = await this.#loadPartyBills(undefined, false);
+      if (!live()) return;
+      this.billGone = null;
+      const next = billToShow(
+        undefined,
+        read ?? known.filter((bill) => bill.workingOrderId !== billId),
+      );
+      if (next !== undefined) this.#chooseBill(next);
       else {
-        const { bills: read } = await this.#loadPartyBills();
-        if (!live()) return;
-        this.activeTabId = billToOpen(read ?? []);
+        this.activeTabId = undefined;
+        if (read === null) this.#billAfterSplit = { partyId: party.id, visit: this.#orderVisit };
       }
     }
     await this.#loadLinesAndBills();
@@ -15717,7 +15952,9 @@ export class TillApp extends LitElement {
     if (asked === null || !this.#billCompositionUnchanged(asked)) return;
     if (
       confirmed === undefined &&
-      (await this.#askDifferentPeople(() => this.#onTransferLines(event, asked)))
+      (await this.#askDifferentPeople(() =>
+        this.#ownBillsChange(() => this.#onTransferLines(event, asked)),
+      ))
     )
       return;
     if (!this.#billCompositionUnchanged(asked)) return;
@@ -15745,7 +15982,9 @@ export class TillApp extends LitElement {
     if (asked === null || !this.#billCompositionUnchanged(asked)) return;
     if (
       confirmed === undefined &&
-      (await this.#askDifferentPeople(() => this.#onSplitLines(event, asked)))
+      (await this.#askDifferentPeople(() =>
+        this.#ownBillsChange(() => this.#onSplitLines(event, asked)),
+      ))
     )
       return;
     if (!this.#billCompositionUnchanged(asked)) return;
@@ -15756,7 +15995,7 @@ export class TillApp extends LitElement {
         expectedEdit: asked.expectedEdits[0]!,
       });
       if (!this.#billCompositionCurrent(asked)) return;
-      this.activeTabId = split.billId;
+      this.#chooseBill(split.billId);
     } catch (error) {
       if (!this.#billCompositionCurrent(asked)) return;
       const code = (error as { code?: string }).code;
@@ -16867,21 +17106,81 @@ export class TillApp extends LitElement {
     return bill === undefined ? undefined : billName(this.orderParty?.displayName ?? "", bill);
   }
 
-  async #onTakePayment(event: Event): Promise<void> {
-    const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
+  /** Saves the draft of the bill on screen, then shows the bill chosen last, unless the waiter left
+   * the table or the bill on screen changed while the save was out. */
+  async #onSwitchBill(event: Event): Promise<void> {
+    this.#switchTo = (event as CustomEvent<{ workingOrderId: string }>).detail.workingOrderId;
+    if (!(await this.#flushBeforeSwitch())) return;
+    const chosen = this.#switchTo;
+    this.#switchTo = undefined;
+    if (chosen === undefined) return;
+    this.#showBill(chosen);
+    await this.#loadTabLines();
+  }
+
+  async #flushBeforeSwitch(): Promise<boolean> {
     const session = this.#operatorSession;
     const visit = this.#orderVisit;
     const billId = this.activeTabId;
-    if (this.#draftReady && !(await this.#flushDraft())) return;
-    if (
-      session !== this.#operatorSession ||
-      visit !== this.#orderVisit ||
-      billId !== this.activeTabId
-    )
-      return;
+    if (this.#draftReady && !(await this.#flushDraft(true))) return false;
+    return (
+      session === this.#operatorSession && visit === this.#orderVisit && billId === this.activeTabId
+    );
+  }
+
+  #showBill(workingOrderId: string): void {
     this.errorKey = undefined;
     this.finishRefused = false;
-    this.activeTabId = workingOrderId;
+    this.billGone = null;
+    this.#chooseBill(workingOrderId);
+  }
+
+  /** Shows `billId` as this till's own choice. A bill the shown bills list holds came from a read no
+   * later than any read still followed; any other (a seat's, a split's, + New bill's, an answer's)
+   * is unknown to every bills read sent so far. */
+  #chooseBill(billId: string): void {
+    this.activeTabId = billId;
+    this.#billChosenRead = this.partyBills.some((bill) => bill.workingOrderId === billId)
+      ? 0
+      : this.#partyBillsRead;
+  }
+
+  /** + New bill: one empty bill on the party, asked for at the revision the screen shows. A refusal
+   * (another till changed the party first) is said as every party command's is, and the screen
+   * stays on its bill; nothing is asked again by itself, and a tap while one is out does nothing. */
+  async #onNewBill(): Promise<void> {
+    const party = this.orderParty;
+    if (party === null || this.newBillsOut.has(party.id)) return;
+    this.newBillsOut = new Set([...this.newBillsOut, party.id]);
+    try {
+      await this.#askForNewBill(party);
+    } finally {
+      this.newBillsOut = new Set([...this.newBillsOut].filter((id) => id !== party.id));
+    }
+  }
+
+  /** The new bill is shown only while the bill on screen is still the one + New bill was tapped
+   * on; a bill the waiter chose since stays, and the bills read lists the new one beside it. A
+   * failed bills read leaves the new bill shown and says the table could not be read again. */
+  async #askForNewBill(party: TableParty): Promise<void> {
+    const visit = this.#orderVisit;
+    const live = () => visit === this.#orderVisit && this.orderParty?.id === party.id;
+    if (!(await this.#flushBeforeSwitch()) || !live()) return;
+    const tappedOn = this.activeTabId;
+    this.errorKey = undefined;
+    let created: { billId: string; revision: number };
+    try {
+      created = await this.api.createPartyBill(party.id, this.orderParty!.revision);
+    } catch (error) {
+      if (live()) await this.#onTableRefusal(error, live);
+      return;
+    }
+    this.#notePartyRevision(party.id, created.revision);
+    if (!live()) return;
+    const { read, bills } = await this.#loadPartyBills(undefined, false);
+    if (!live() || this.activeTabId !== tappedOn) return;
+    this.#showBill(created.billId);
+    if (bills === null && read === this.#partyBillsRead) this.errorKey = "table.reread_failed";
     await this.#loadTabLines();
   }
 
@@ -16950,6 +17249,15 @@ export class TillApp extends LitElement {
     if (bill?.revision !== revision || partyId === undefined) return;
     const expectedEdit = this.#billChoiceEdit(workingOrderId);
     if (expectedEdit === null) return;
+    const screen = event
+      .composedPath()
+      .find(
+        (node): node is HTMLElement =>
+          node instanceof HTMLElement && node.localName === "till-table-order-screen",
+      );
+    // The screen sends the event, not the control, so the control is taken from the screen's focus
+    // where the tap put it there; otherwise focus goes back to the ⋮ (#returnInvoiceFocus).
+    const tapped = screen?.shadowRoot?.activeElement;
     const target = {
       orderId: workingOrderId,
       revision,
@@ -16957,6 +17265,10 @@ export class TillApp extends LitElement {
       session: this.#operatorSession,
       expectedEdit,
       api: this.api,
+      opener:
+        tapped?.closest<HTMLElement>("[data-table-menu]") ??
+        (tapped?.hasAttribute("data-choose-bill-invoice") ? (tapped as HTMLElement) : undefined),
+      screen,
     };
     this.invoiceRecipientBill = target;
     this.invoiceRecipientOrderId = undefined;
@@ -16998,7 +17310,10 @@ export class TillApp extends LitElement {
       this.invoiceRecipientOpen = !close;
       this.invoiceRecipientRefusal = "";
       this.invoiceRecipientRefusalField = "";
-      if (close) this.invoiceRecipientBill = undefined;
+      if (close) {
+        this.invoiceRecipientBill = undefined;
+        this.#returnInvoiceFocus(bill);
+      }
       if (this.orderParty?.id === bill.partyId) {
         const refreshed = await this.#loadPartyBills();
         if (
@@ -17040,6 +17355,20 @@ export class TillApp extends LitElement {
     } finally {
       if (this.#invoiceRecipientLifetime === lifetime) this.invoiceRecipientSaving = false;
     }
+  }
+
+  /** The control that opened the window is disabled while its delivery read runs, so the browser
+   * has nothing to hand focus back to; it goes to that control, else to the ⋮. */
+  #returnInvoiceFocus(bill: NonNullable<TillApp["invoiceRecipientBill"]>): void {
+    const { opener, screen, session } = bill;
+    if (screen === undefined) return;
+    void this.updateComplete.then(() => {
+      if (session !== this.#operatorSession || !screen.isConnected) return;
+      const root = screen.shadowRoot!;
+      if (opener?.isConnected) opener.focus();
+      if (opener === undefined || root.activeElement !== opener)
+        root.querySelector<HTMLElement>("[data-table-menu]")?.focus();
+    });
   }
 
   async #onReprintBill(event: Event): Promise<void> {
@@ -17818,6 +18147,36 @@ export class TillApp extends LitElement {
     return true;
   }
 
+  /** The screen's quiet-Pay rule for `billId`, while it is the bill on screen. */
+  #unsentOnScreen(billId: string): boolean {
+    if (billId !== this.activeTabId) return false;
+    const draft = this.tableOpening ? null : this.#tableDraft();
+    return billHasUnsent(draft, this.#otherDrafts(draft));
+  }
+
+  /** True, after the dialog says why, when the bill on screen has an unsent dish: no new payment
+   * starts from the dialog then, as none does from the screen's quiet Pay, however long the
+   * dialog has been open. Answering a payment already sent is not new. */
+  #refusedUnsent(open: BillPaying): boolean {
+    if (open.surface !== "table" || !this.#unsentOnScreen(open.billId)) return false;
+    const refusal = refusalOf({ code: "bill.unsent_dishes", billId: open.billId }, false);
+    refusal.billLabel = this.#paymentBillLabel(open.billId);
+    this.#unsentSaid = refusal;
+    this.billPaying = { ...open, refusal };
+    return true;
+  }
+
+  /** The dialog's unsent sentence {@link #refusedUnsent} put up, taken down as the screen's is. */
+  #unsentSaid?: PayRefusal;
+
+  /** The till's own error, as the dialog shows it over the banner it covers. */
+  #saidInDialog(): PayRefusal | null {
+    const error = this.errorKey;
+    if (error === undefined) return null;
+    const said = errorText(error, this.tableMenus, this.tables);
+    return typeof said === "string" ? { code: "draft_unsaved", text: said } : null;
+  }
+
   async #onBillPayPreview(event: Event): Promise<void> {
     const asked = (event as CustomEvent<PayRequest>).detail;
     // The dialog's events come only while it is open. A press while a request is out is dropped.
@@ -17828,8 +18187,15 @@ export class TillApp extends LitElement {
       this.billPaying = { ...open, ...pending.shown, refusal: { code: "network" } };
       return;
     }
+    if (this.#refusedUnsent(open)) return;
     this.billPaying = { ...open, refusal: null, taken: null, refunded: null, busy: true };
     try {
+      // A dialog reopened on a held payment was opened without saving the New order.
+      if (open.surface === "table" && !(await this.#flushDraft())) {
+        const now = this.#billPayingNow(open.id);
+        if (now !== null) this.billPaying = { ...now, busy: false, refusal: this.#saidInDialog() };
+        return;
+      }
       const expectedEdit =
         open.surface === "counter" ? null : this.#draftSync?.expectedEditFor(open.billId);
       if (expectedEdit === undefined || (open.surface === "table" && expectedEdit === null))
@@ -17896,6 +18262,7 @@ export class TillApp extends LitElement {
               expectedEdit: open.expectedEdit,
             }),
           };
+    if (previous?.unconfirmed !== true && this.#refusedUnsent(open)) return;
     const turn = (this.#paymentSends.get(key) ?? 0) + 1;
     this.#paymentSends.set(key, turn);
     this.billPaying = { ...open, refusal: null, taken: null, refunded: null, busy: true };
@@ -18443,7 +18810,7 @@ export class TillApp extends LitElement {
     this.#orderVisit++;
     this.cancelOffer = null;
     const session = this.#operatorSession;
-    const flushed = this.#flushDraft();
+    const flushed = this.#flushDraft(true);
     this.#clearErrorKeepingLateChange();
     this.#popDrill();
     void flushed.then(() => (session !== this.#operatorSession ? undefined : this.#refreshFloor()));
@@ -18724,6 +19091,8 @@ export class TillApp extends LitElement {
       .draftStore=${draft}
       .otherDrafts=${this.#otherDrafts(draft)}
       .retainedDraft=${draft === this.#draftSync?.store ? this.#draftSync.candidate : null}
+      .billGone=${this.billGone}
+      .newBillBusy=${this.orderParty !== null && this.newBillsOut.has(this.orderParty.id)}
       .candidateReviewAllowed=${this.#draftSync?.billStatus === "open" && (this.#draftSync.edit?.editorId === null || this.#draftSync?.edit?.editorId === this.operatorPersonId)}
       .candidateReviewBusy=${this.resolvingDraftCandidate === this.#draftSync}
       .takeOversAnswered=${this.takeOversAnswered}
@@ -18736,6 +19105,7 @@ export class TillApp extends LitElement {
       .fullInvoices=${this.fullInvoices}
       .billBalance=${this.billBalance}
       .paymentConfirmation=${this.activeTabId === undefined ? undefined : this.#unansweredWholePayments.get(this.activeTabId)}
+      .billPaymentHeld=${this.activeTabId !== undefined && this.#billPaymentHeld(this.activeTabId)}
       .finishRefused=${this.finishRefused}
       .nameRefusal=${this.nameRefusal}
       .billNameRefusal=${this.billNameRefusal}
@@ -18860,6 +19230,8 @@ export class TillApp extends LitElement {
           .draftStore=${draft}
           .otherDrafts=${this.#otherDrafts(draft)}
           .retainedDraft=${draft === this.#draftSync?.store ? this.#draftSync.candidate : null}
+          .billGone=${this.billGone}
+          .newBillBusy=${this.orderParty !== null && this.newBillsOut.has(this.orderParty.id)}
           .candidateReviewAllowed=${this.#draftSync?.billStatus === "open" && (this.#draftSync.edit?.editorId === null || this.#draftSync?.edit?.editorId === this.operatorPersonId)}
           .candidateReviewBusy=${this.resolvingDraftCandidate === this.#draftSync}
           .takeOversAnswered=${this.takeOversAnswered}
@@ -18872,6 +19244,7 @@ export class TillApp extends LitElement {
           .fullInvoices=${this.fullInvoices}
           .billBalance=${this.billBalance}
           .paymentConfirmation=${this.activeTabId === undefined ? undefined : this.#unansweredWholePayments.get(this.activeTabId)}
+          .billPaymentHeld=${this.activeTabId !== undefined && this.#billPaymentHeld(this.activeTabId)}
           .finishRefused=${this.finishRefused}
           .nameRefusal=${this.nameRefusal}
           .billNameRefusal=${this.billNameRefusal}
@@ -19205,8 +19578,9 @@ export class TillApp extends LitElement {
         @change-line=${(event: Event) => void this.#onChangeLine(event)}
         @cancel-offer-taken=${() => (this.cancelOffer = null)}
         @table-relocation-open=${(event: Event) => void this.#onRelocationOpen(event)}
-        @move-guests=${(event: Event) => void this.#onMoveGuests(event)}
-        @move-bill=${(event: Event) => void this.#onMoveBill(event)}
+        @move-guests=${(event: Event) => void this.#ownBillsChange(() => this.#onMoveGuests(event))}
+        @move-bill=${(event: Event) =>
+          void this.#ownBillsChange((hold) => this.#onMoveBill(event, hold))}
         @held-relocation-open=${(event: Event) => void this.#onHeldRelocationOpen(event)}
         @move-held-order-open=${() => {
           this.#onFloorRefresh();
@@ -19224,20 +19598,22 @@ export class TillApp extends LitElement {
             );
           } else void this.#onMoveHeldOrder(event);
         }}
-        @join-tables=${(event: Event) => void this.#onJoinTables(event)}
+        @join-tables=${(event: Event) => void this.#ownBillsChange(() => this.#onJoinTables(event))}
         @split-table-open=${(event: Event) => this.#onSplitTableOpen(event)}
-        @split-table=${(event: Event) => void this.#onSplitTable(event)}
+        @split-table=${(event: Event) => void this.#ownBillsChange(() => this.#onSplitTable(event))}
         @name-party=${(event: Event) => void this.#onNameParty(event)}
         @name-bill=${(event: Event) => void this.#onNameBill(event)}
         @guests-party=${(event: Event) => void this.#onGuestsParty(event)}
-        @merge-bills=${(event: Event) => void this.#onMergeBills(event)}
-        @transfer-lines=${(event: Event) => void this.#onTransferLines(event)}
-        @split-lines=${(event: Event) => void this.#onSplitLines(event)}
+        @merge-bills=${(event: Event) => void this.#ownBillsChange(() => this.#onMergeBills(event))}
+        @transfer-lines=${(event: Event) => void this.#ownBillsChange(() => this.#onTransferLines(event))}
+        @split-lines=${(event: Event) => void this.#ownBillsChange(() => this.#onSplitLines(event))}
         @finish-table=${() => void this.#onFinishTable()}
         @record-unpaid-departure=${() => this.#onRecordUnpaidDeparture()}
         @cancel-credit-bill=${(event: Event) => this.#onCancelCreditBill(event)}
         @request-bill=${(event: Event) => void this.#onRequestBill(event)}
-        @take-payment=${(event: Event) => void this.#onTakePayment(event)}
+        @take-payment=${(event: Event) => void this.#onSwitchBill(event)}
+        @switch-bill=${(event: Event) => void this.#onSwitchBill(event)}
+        @new-bill=${() => void this.#onNewBill()}
         @reprint-bill=${(event: Event) => void this.#onReprintBill(event)}
         @reprint-kitchen-tickets=${(event: Event) => void this.#onReprintKitchenTickets(event)}
         @mark-cleared=${(event: Event) => void this.#onMarkCleared(event)}
@@ -19485,6 +19861,8 @@ export class TillApp extends LitElement {
                   this.invoiceRecipientOrderId = undefined;
                 }}
                 @invoice-recipient-cancel=${() => {
+                  if (this.invoiceRecipientBill !== undefined)
+                    this.#returnInvoiceFocus(this.invoiceRecipientBill);
                   this.invoiceRecipientOpen = false;
                   this.invoiceRecipientOrderId = undefined;
                   this.invoiceRecipientBill = undefined;

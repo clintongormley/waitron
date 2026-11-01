@@ -410,7 +410,6 @@ describe("what a removed table's delete waits on", () => {
         combineParties(tx, v.cfg, {
           from: ana.partyId,
           into: luis.partyId,
-          bills: "merge",
           tables,
           operatorId: OPERATOR,
         }),

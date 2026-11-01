@@ -69,7 +69,6 @@ describe("orderWatchZones", () => {
     await inTx(v, async (tx) =>
       moveGuests(tx, v.cfg, partyId, inside, {
         ...sent,
-        bills: "separate",
         otherPartyId: null,
       }),
     );
@@ -98,7 +97,6 @@ describe("orderWatchZones", () => {
     await inTx(v, (tx) =>
       joinTables(tx, v.cfg, survivor.partyId, oldTable, {
         ...sent,
-        bills: "separate",
         otherPartyId: merged.partyId,
         expectedOtherPartyRevision: other.expectedPartyRevision,
       }),
@@ -107,7 +105,6 @@ describe("orderWatchZones", () => {
     await inTx(v, (tx) =>
       moveGuests(tx, v.cfg, survivor.partyId, indoorTable, {
         ...moved,
-        bills: "separate",
         otherPartyId: null,
       }),
     );

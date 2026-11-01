@@ -34,7 +34,7 @@ function party(over: Partial<TableParty> = {}): TableParty {
     state: "open",
     name: null,
     displayName: "Table 2",
-    mainBillId: "wo-2",
+    openingBillId: "wo-2",
     outstanding: "20.00",
     billCount: 1,
     tableIds: ["t2"],

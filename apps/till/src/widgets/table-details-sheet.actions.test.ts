@@ -33,7 +33,7 @@ const party: TableParty = {
   state: "open",
   name: null,
   displayName: "1",
-  mainBillId: null,
+  openingBillId: null,
   outstanding: "0.00",
   billCount: 1,
   tableIds: ["t1"],

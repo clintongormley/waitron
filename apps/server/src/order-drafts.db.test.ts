@@ -1,5 +1,6 @@
 import { readBillEditState } from "./bill-editing.js";
 import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
+import { firstOpenBillOf } from "./testing/party-bill-of.js";
 import {
   saveDraftForTest as saveDraft,
   takeOverDraftForTest as takeOverDraft,
@@ -1045,7 +1046,7 @@ describe("draft bill ownership", () => {
     );
   });
 
-  it("sends to the draft's recorded bill even while another bill is main", async () => {
+  it("sends to the draft's recorded bill even while another bill has a lower number", async () => {
     const v = await setupVenue();
     const { partyId, tabId } = await seated(v);
     const billId = await otherBill(v, partyId, tabId);
@@ -1055,11 +1056,10 @@ describe("draft bill ownership", () => {
     ]);
     expect(sent.tabId).toBe(billId);
     expect((await tabLines(partyId)).map(({ workingOrderId }) => workingOrderId)).toEqual([billId]);
-    const [party] = await db.select().from(parties).where(eq(parties.id, partyId));
-    expect(party!.mainBillId).toBe(tabId);
+    expect(await withTransaction(db, (tx) => firstOpenBillOf(tx, partyId))).toBe(tabId);
   });
 
-  it("refuses a legacy draft without a bill instead of interpreting it as the main bill", async () => {
+  it("refuses a legacy draft without a bill", async () => {
     const v = await setupVenue();
     const { partyId, tabId } = await seated(v);
     const draft = await onBill(v, partyId, tabId);
@@ -3415,16 +3415,29 @@ describe("pricing (D9)", () => {
   });
 });
 
-/** `into` joins `from`'s table, combining the parties and merging their bills, as the till does. */
+/**
+ * `into` joins `from`'s table, combining the parties, and Merge bills then merges `from`'s bill
+ * into `into`'s in the same transaction, as staff do.
+ */
 async function merge(v: Venue, into: Seated, from: Seated, operatorId: string): Promise<void> {
   const command = {
-    bills: "merge" as const,
     expectedPartyRevision: await partyRevision(into.partyId),
     otherPartyId: from.partyId,
     expectedOtherPartyRevision: await partyRevision(from.partyId),
     operatorId,
   };
-  await inTx((tx) => joinTables(tx, v.cfg, into.partyId, from.tableId, command));
+  await inTx(async (tx) => {
+    await joinTables(tx, v.cfg, into.partyId, from.tableId, command);
+    const [party] = await tx
+      .select({ revision: parties.revision })
+      .from(parties)
+      .where(eq(parties.id, into.partyId));
+    await mergeBills(tx, v.cfg, into.tabId, from.tabId, {
+      partyId: into.partyId,
+      expectedPartyRevision: party!.revision,
+      operatorId,
+    });
+  });
 }
 
 async function openOwnersOn(partyId: string): Promise<string[]> {
@@ -3436,7 +3449,7 @@ async function openOwnersOn(partyId: string): Promise<string[]> {
 }
 
 describe("merging parties (D2)", () => {
-  it("keeps the same owner's drafts separate when the joined tables keep separate bills", async () => {
+  it("keeps the same owner's drafts separate when tables are joined", async () => {
     const v = await setupVenue();
     const into = await seated(v);
     const from = await seated(v, "Mesa 7");
@@ -3444,7 +3457,6 @@ describe("merging parties (D2)", () => {
     const incoming = await save(v, from.partyId, ALEX, null, 0, [item(v, "fish", { slot: 1 })]);
     await inTx((tx) =>
       joinTables(tx, v.cfg, into.partyId, from.tableId, {
-        bills: "separate",
         expectedPartyRevision: 0,
         otherPartyId: from.partyId,
         expectedOtherPartyRevision: 0,
@@ -3457,7 +3469,7 @@ describe("merging parties (D2)", () => {
     expect(await storedLines(incoming.id)).toHaveLength(1);
   });
 
-  it("merges the main bills after explicit takeover, retaining every row and the separate bill", async () => {
+  it("merges the two tables' Bill 1s after explicit takeover, retaining every row and the separate bill", async () => {
     const v = await setupVenue();
     const table4 = await seated(v);
     const table5 = await seated(v, "Mesa 5");
@@ -3502,10 +3514,10 @@ describe("merging parties (D2)", () => {
     expect(await draftsOf(v, table5.partyId)).toEqual([]);
 
     expect(await draftRow(alexOn5.id)).toMatchObject({
-      partyId: table5.partyId,
+      partyId: table4.partyId,
       state: "discarded",
       ownerId: ALEX,
-      revision: alexOn5.revision + 1,
+      revision: alexOn5.revision + 2,
     });
     expect(await storedLines(alexOn5.id)).toEqual([]);
     expect(await eventsOf(alexOn5.id)).toEqual([
@@ -3539,7 +3551,7 @@ describe("merging parties (D2)", () => {
       },
       {
         billId: samOn5.billId,
-        billNumber: 2,
+        billNumber: 3,
         ownerId: SAM,
         ownerName: "Sam",
         savedAt: await savedAtOf(samOn5.id),
@@ -3565,7 +3577,7 @@ describe("merging parties (D2)", () => {
       [table5.partyId, samOn5, SAM, "party.not_open"],
       [table4.partyId, samOn5, SAM, "draft.out_of_date"],
       [table5.partyId, alexOn5, ALEX, "party.not_open"],
-      [table4.partyId, alexOn5, ALEX, "draft.not_found"],
+      [table4.partyId, alexOn5, ALEX, "draft.out_of_date"],
       [table4.partyId, alexOn4, ALEX, "draft.out_of_date"],
     ] as const) {
       await refusedWritingNothing(
@@ -3642,7 +3654,7 @@ describe("a retried submission of a draft a merge moved or discarded", () => {
         ),
       {
         code: "draft.out_of_date",
-        params: { draftId: samOn5.id, revision: samOn5.revision + 2 },
+        params: { draftId: samOn5.id, revision: samOn5.revision + 3 },
       },
     );
   });
@@ -3856,7 +3868,6 @@ it("A669 keeps separately assigned identical dishes when joining two drafts of t
     joinTables(tx, v.cfg, a.partyId, b.tableId, {
       expectedPartyRevision: await partyRevision(a.partyId),
       operatorId: ALEX,
-      bills: "separate",
       otherPartyId: b.partyId,
       expectedOtherPartyRevision: await partyRevision(b.partyId),
     }),
@@ -4589,7 +4600,6 @@ describe("source-backed draft foundations", () => {
         if (destination === "split table")
           await inTx(async (tx) =>
             joinTables(tx, v.cfg, from.partyId, tableId, {
-              bills: "separate",
               operatorId: SAM,
               expectedPartyRevision: await partyRevision(from.partyId),
               otherPartyId: null,
@@ -4614,7 +4624,6 @@ describe("source-backed draft foundations", () => {
                 billId,
                 { tableId },
                 {
-                  bills: "separate",
                   operatorId: SAM,
                   partyId: from.partyId,
                   expectedPartyRevision: await partyRevision(from.partyId),
@@ -4713,7 +4722,6 @@ describe("source-backed draft foundations", () => {
     const ticksBefore = (await inTx((tx) => readPartyAllergy(tx, moving.from.partyId))).ticks;
     await inTx(async (tx) =>
       joinTables(tx, v.cfg, target.partyId, moving.from.tableId, {
-        bills: "separate",
         operatorId: SAM,
         expectedPartyRevision: await partyRevision(target.partyId),
         otherPartyId: moving.from.partyId,
@@ -4762,7 +4770,6 @@ describe("source-backed draft foundations", () => {
       if (destination === "split table")
         await inTx(async (tx) =>
           joinTables(tx, v.cfg, moving.from.partyId, tableId, {
-            bills: "separate",
             operatorId: SAM,
             expectedPartyRevision: await partyRevision(moving.from.partyId),
             otherPartyId: null,
@@ -4782,7 +4789,6 @@ describe("source-backed draft foundations", () => {
                   moving.billId,
                   { tableId },
                   {
-                    bills: "separate",
                     operatorId: SAM,
                     partyId: moving.from.partyId,
                     expectedPartyRevision: await partyRevision(moving.from.partyId),
@@ -4813,7 +4819,6 @@ describe("source-backed draft foundations", () => {
       if (destination === "split table")
         await inTx(async (tx) =>
           joinTables(tx, v.cfg, moving.from.partyId, tableId, {
-            bills: "separate",
             operatorId: SAM,
             expectedPartyRevision: await partyRevision(moving.from.partyId),
             otherPartyId: null,
@@ -4841,7 +4846,6 @@ describe("source-backed draft foundations", () => {
                     moving.billId,
                     { tableId },
                     {
-                      bills: "separate",
                       operatorId: SAM,
                       partyId: moving.from.partyId,
                       expectedPartyRevision: await partyRevision(moving.from.partyId),
@@ -4860,11 +4864,13 @@ describe("source-backed draft foundations", () => {
     },
   );
 
-  it("moving a bill into a merged bill absorbs its draft once and retains its original party history", async () => {
+  it("moving a bill to a seated party keeps the arriving bill and its draft separate from the party's own", async () => {
     const v = await setupVenue();
     const moving = await movingFamily(v, "held");
     const target = await seated(v, "Receiving table");
     const own = await billDraft(v, target.partyId, target.tabId);
+    const freshBefore = await storedLines(moving.draft.id);
+    const ownBefore = await draftRow(own.id);
     const result = await inTx(async (tx) =>
       moveBill(
         tx,
@@ -4872,7 +4878,6 @@ describe("source-backed draft foundations", () => {
         moving.billId,
         { tableId: target.tableId },
         {
-          bills: "merge",
           operatorId: ALEX,
           partyId: moving.from.partyId,
           expectedPartyRevision: await partyRevision(moving.from.partyId),
@@ -4881,30 +4886,31 @@ describe("source-backed draft foundations", () => {
         },
       ),
     );
-    expect(result).toEqual({ partyId: target.partyId, billId: target.tabId, merged: true });
+    expect(result).toEqual({ partyId: target.partyId, billId: moving.billId });
     expect(await draftRow(moving.draft.id)).toMatchObject({
-      state: "discarded",
-      revision: 1,
-      partyId: moving.from.partyId,
-      billId: target.tabId,
-    });
-    expect(await draftRow(own.id)).toMatchObject({
       state: "open",
       revision: 1,
       partyId: target.partyId,
+      billId: moving.billId,
+    });
+    expect(await draftRow(own.id)).toEqual(ownBefore);
+    expect(ownBefore).toMatchObject({
+      state: "open",
+      partyId: target.partyId,
       billId: target.tabId,
     });
+    expect(await storedLines(moving.draft.id)).toEqual(freshBefore);
     const reads = await draftsOf(v, target.partyId);
-    expect(reads).toHaveLength(1);
-    expect(reads[0]!.lines.map((line) => line.id)).toEqual([
-      ...lineIds(own),
+    expect(reads).toHaveLength(2);
+    expect(reads.find((row) => row.id === own.id)!.lines).toEqual(own.lines);
+    expect(reads.find((row) => row.id === moving.draft.id)!.lines.map((line) => line.id)).toEqual([
       ...lineIds(moving.draft),
       moving.id,
     ]);
-    expect(reads[0]!.lines[4]).toMatchObject({
+    expect(reads.find((row) => row.id === moving.draft.id)!.lines[2]).toMatchObject({
       sourceLineId: moving.parentId,
       source: { netAmount: "12.50" },
-      slot: 3,
+      slot: 2,
       afterGroupId: moving.groupId,
     });
     expect(await draftsOf(v, moving.from.partyId)).toEqual([]);

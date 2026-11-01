@@ -1078,6 +1078,39 @@ The off track is `--wt-color-border` (`packages/ui/src/components/wt-switch.ts:7
   copy use them; each component's own tests and mutation score must hold.
 
 
+## A1256. A `wt-row-actions` menu of `role="menu"` items has no arrow keys, and choosing an item drops focus to the page (found in A803 slice 3's Task 9 review, 2026-10-31).
+
+`packages/ui/src/components/wt-row-actions.ts` opens its list on Enter but leaves focus on the
+  trigger; ArrowDown does nothing; Tab reaches the items; Escape closes and puts focus back on the
+  trigger; choosing an item with Enter or a click closes the list and leaves focus on `body`; the
+  trigger carries no `aria-haspopup`. The till's bill switcher and counter-zone menu
+  (`apps/till/src/screens/table-bill-controls.ts`, `apps/till/src/widgets/till-shell.ts`) both
+  slot a `role="menu"` list into it, which tells a screen reader to expect arrow keys. Measured by
+  the A803 slice 3 Task 9 review's key probe on the mounted table screen (`userEvent.keyboard`:
+  Enter, ArrowDown, Tab, Tab, Escape, then Enter and a click on a row, reading
+  `document.activeElement` after each). Fix in the primitive, once: put focus back on the trigger
+  after an item closes the list, and, when the slotted content is a `role="menu"`, add arrow-key
+  movement and `aria-haspopup="menu"` as `packages/ui/src/menu-popover.ts` does for the language
+  and theme choosers (A781 is the shared-helper half of this).
+
+  The till's bill switcher has the same fault (A803 slice 3's LOOK, finding F6,
+  `~/waitron-campaign-c/a803-3-look-report.md`, outside the repository): Enter on the switcher
+  opens it with focus left on the trigger, ArrowDown does nothing though the list is
+  `role="menu"` with `menuitemradio` rows, and Enter on "Bill 2" showed Bill 2 with focus on
+  `<body>`, not back on the switcher.
+
+
+## A1258. An open `wt-row-actions` menu is not placed again when the window is resized or rotated (found in A803 slice 3's Task 10 fix review, 2026-10-31).
+
+`packages/ui/src/components/wt-row-actions.ts` places its popup when it opens and again when the
+  popup's own size changes (its `ResizeObserver`), and a window resize does not change that size.
+  Measured by the A803 slice 3 Task 10 fix review's probes (15 items, trigger at 58–102 px): shrunk
+  from 1024×768 to 1024×500 while open, the popup kept its place and ran past the window's bottom,
+  with and without `opens-below`; rotated to 768×1024, the table screen's ⋮ kept its old height cap.
+  Fix in the primitive, once: while open, call `positionPopup()` on `resize` of `window` (or
+  `visualViewport`), and remove the listener when it closes.
+
+
 ## The box's trust page and the favicon still follow the device's setting, not the Theme choice (left open by A681).
 
 The trust page (`apps/server/src/trust-page.ts`, its logo in

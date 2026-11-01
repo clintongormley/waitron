@@ -308,14 +308,34 @@ describe("existing service in a closed zone", () => {
     expect(answer.status).toBe(200);
     expect(answer.json).toMatchObject({
       partyId: expect.any(String),
-      mainBillId: expect.any(String),
+      billId: expect.any(String),
     });
     expect(
       await suite.db
         .select({ status: workingOrders.status })
         .from(workingOrders)
-        .where(eq(workingOrders.id, answer.json.mainBillId as string)),
+        .where(eq(workingOrders.id, answer.json.billId as string)),
     ).toEqual([{ status: "open" }]);
+  });
+
+  it("makes a new empty bill for a seated party without admitting a new service", async () => {
+    const v = await venue();
+    const seated = await seat(v);
+    at("23:45");
+    const answer = await request(v, "POST", `/api/parties/${seated.partyId}/bills`, {
+      expectedPartyRevision: seated.revision,
+    });
+    expect(answer.status).toBe(200);
+    expect(answer.json).toMatchObject({
+      billId: expect.any(String),
+      revision: seated.revision + 1,
+    });
+    expect(
+      await suite.db
+        .select({ status: workingOrders.status, partyId: workingOrders.partyId })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, answer.json.billId as string)),
+    ).toEqual([{ status: "open", partyId: seated.partyId }]);
   });
 
   it.each(["first order", "handheld draft"])(
@@ -324,7 +344,6 @@ describe("existing service in a closed zone", () => {
       const v = await venue();
       const seated = await seat(v);
       await withTransaction(suite.db, async (tx) => {
-        await tx.update(parties).set({ mainBillId: null }).where(eq(parties.id, seated.partyId));
         if (kind === "first order") {
           await tx.delete(billIdentities).where(eq(billIdentities.workingOrderId, seated.tabId));
           await tx.delete(workingOrders).where(eq(workingOrders.id, seated.tabId));
@@ -378,11 +397,12 @@ describe("existing service in a closed zone", () => {
           : refused(v),
       );
       expect(await orderRows()).toEqual(before);
-      const [after] = await suite.db
-        .select({ mainBillId: parties.mainBillId })
-        .from(parties)
-        .where(eq(parties.id, seated.partyId));
-      expect(after).toEqual({ mainBillId: null });
+      expect(
+        await suite.db
+          .select({ id: workingOrders.id })
+          .from(workingOrders)
+          .where(eq(workingOrders.partyId, seated.partyId)),
+      ).toEqual(kind === "first order" ? [] : [{ id: seated.tabId }]);
       if (draft !== undefined)
         expect((await request(v, "GET", `/api/parties/${seated.partyId}/drafts`)).json).toEqual({
           drafts: [draft],
@@ -456,7 +476,6 @@ describe("moving into closed zones", () => {
           expectedPartyRevision: source.revision,
           otherPartyId: holder?.partyId ?? null,
           ...(holder ? { expectedOtherPartyRevision: holder.revision } : {}),
-          bills: "separate",
         }),
       ).toEqual(refused(v));
       expect(await moveRows()).toEqual(before);
@@ -471,7 +490,6 @@ describe("moving into closed zones", () => {
       const destination = holder ?? (await freeTable(v, v.zoneId));
       if (target === "no bill" || target === "held table without a bill")
         await withTransaction(suite.db, async (tx) => {
-          await tx.update(parties).set({ mainBillId: null }).where(eq(parties.id, source.partyId));
           await tx.delete(billIdentities).where(eq(billIdentities.workingOrderId, source.tabId));
           await tx.delete(workingOrders).where(eq(workingOrders.id, source.tabId));
         });
@@ -483,7 +501,6 @@ describe("moving into closed zones", () => {
           expectedPartyRevision: source.revision,
           otherPartyId: holder?.partyId ?? null,
           ...(holder ? { expectedOtherPartyRevision: holder.revision } : {}),
-          bills: "separate",
         }),
       ).toEqual(refused(v));
       expect(await moveRows()).toEqual(before);

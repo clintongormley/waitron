@@ -1,7 +1,7 @@
 import { parties, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { isUuid } from "@waitron/shared";
+import { AppError, isUuid } from "@waitron/shared";
 import { readBillEditState } from "../bill-editing.js";
 import type { AllergyPatch } from "@waitron/module";
 import { enqueueKitchenAllergyChanges } from "../kitchen-allergy.js";
@@ -16,7 +16,8 @@ import {
 import { applyPartyAllergyPatch, assertPartyAllergyAnswered } from "../party-allergy.js";
 import { insertTabRound, priceTabRound } from "../working-order.js";
 import type { BillEditExpected } from "../order-drafts.js";
-import { partyMainBill } from "../parties.js";
+import { bumpPartyRevision, insertPartyBill } from "../parties.js";
+import { firstOpenBillOf } from "./party-bill-of.js";
 import type { OriginConfig } from "../trading-context.js";
 import type { OrderAttendance } from "../working-order.js";
 import type { AttendanceRecorder } from "../attendance-capture.js";
@@ -31,8 +32,30 @@ async function observation(
   billId: string | undefined,
   revisionMoved?: boolean,
 ): Promise<BillEditExpected> {
-  const id = billId ?? (await partyMainBill(tx, cfg, partyId, revisionMoved ? "moved" : "move"));
+  const id = billId ?? (await openBillFor(tx, cfg, partyId, revisionMoved));
   return readBillEditState(tx, id.toLowerCase());
+}
+
+/**
+ * The bill a round sent without one lands on: the party's lowest-numbered open bill, else a new
+ * one, which moves the party's revision unless the caller's command moves it.
+ */
+async function openBillFor(
+  tx: Transaction,
+  cfg: OriginConfig,
+  partyId: string,
+  revisionMoved: boolean | undefined,
+): Promise<string> {
+  const [party] = await tx
+    .select({ state: parties.state })
+    .from(parties)
+    .where(eq(parties.id, partyId));
+  if (party?.state !== "open") throw new AppError("party.not_open", { partyId });
+  const open = await firstOpenBillOf(tx, partyId);
+  if (open !== null) return open;
+  const billId = await insertPartyBill(tx, cfg, partyId);
+  if (revisionMoved !== true) await bumpPartyRevision(tx, partyId);
+  return billId;
 }
 
 // Content fixtures capture the first request's observation and keep it on completed retries.
@@ -143,15 +166,14 @@ export async function observedGroupSubmitBody(
   const key = `${match[1]}:${ask.submissionId}`;
   let expectedEdit = cache.get(key);
   if (expectedEdit === undefined) {
-    const [party] = await db
-      .select({ billId: parties.mainBillId })
-      .from(parties)
-      .where(eq(parties.id, match[1]!));
-    const id =
-      typeof ask.billId === "string" && isUuid(ask.billId)
-        ? ask.billId
-        : (party?.billId ?? randomUUID());
-    expectedEdit = await withTransaction(db, (tx) => readBillEditState(tx, id));
+    const partyId = match[1]!;
+    expectedEdit = await withTransaction(db, async (tx) => {
+      const id =
+        typeof ask.billId === "string" && isUuid(ask.billId)
+          ? ask.billId
+          : ((await firstOpenBillOf(tx, partyId)) ?? randomUUID());
+      return readBillEditState(tx, id);
+    });
     cache.set(key, expectedEdit);
   }
   return { expectedEdit, ...ask };

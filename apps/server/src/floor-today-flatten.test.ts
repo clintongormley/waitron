@@ -427,8 +427,8 @@ describe("Split a table and the floor-wide reset on a flattened group", () => {
 
     expect(await partyAt(v, table.c5!)).toBe(split.partyId);
     expect(split.partyId).not.toBe(partyId);
-    expect(split.mainBillId).not.toBeNull();
-    expect(await billsOfParty(v, split.partyId)).toEqual([split.mainBillId]);
+    expect(split.billId).not.toBeNull();
+    expect(await billsOfParty(v, split.partyId)).toEqual([split.billId]);
     expect(sorted(await activeTablesOf(v, partyId))).toEqual(
       sorted([table.bar!, table.c3!, table.c4!]),
     );

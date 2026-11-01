@@ -192,7 +192,7 @@ const openTable: TableState = {
     state: "open",
     name: null,
     displayName: "2",
-    mainBillId: "wo-7",
+    openingBillId: "wo-7",
     outstanding: "12.00",
     billCount: 1,
     tableIds: ["t2"],
@@ -520,8 +520,8 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     sendLines: vi.fn().mockResolvedValue(undefined),
     recallLines: vi.fn().mockResolvedValue(undefined),
     ...adjustmentStubs(),
-    moveGuests: vi.fn().mockResolvedValue({ partyId: "v-2", mainBillId: "wo-7", merged: false }),
-    joinTables: vi.fn().mockResolvedValue({ partyId: "v-2", mainBillId: "wo-7", merged: false }),
+    moveGuests: vi.fn().mockResolvedValue({ partyId: "v-2", billIds: ["wo-7"] }),
+    joinTables: vi.fn().mockResolvedValue({ partyId: "v-2", billIds: ["wo-7"] }),
     mergeBills: vi.fn().mockResolvedValue(undefined),
     transferItems: vi.fn().mockResolvedValue(undefined),
     splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
@@ -833,6 +833,50 @@ describe("till-app", () => {
       null,
     );
     expect(order).toEqual(["ask", "pay"]);
+  });
+
+  it("a counter routing question that a second question replaces settles as cancelled, and nothing is sent for it", async () => {
+    const askSaleDeadEnds = vi.fn(async () => ({
+      sends: true,
+      deadEnds: [
+        {
+          key: "0",
+          name: "Café",
+          quantity: "1",
+          stationId: "bar",
+          stationName: "Bar",
+          why: "closed" as const,
+        },
+      ],
+      stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+    }));
+    const recordSale = vi.fn(async () => saleResult);
+    const { el } = await mountApp({ askSaleDeadEnds, recordSale });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "1");
+    await flush(el);
+    const first = vi.fn();
+    const second = vi.fn();
+    emit(tenderPay(el), "check-before-tender", { resolve: first });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-dead-ends-dialog")).not.toBeNull();
+    emit(tenderPay(el), "check-before-tender", { resolve: second });
+    await flush(el);
+
+    expect(askSaleDeadEnds).toHaveBeenCalledTimes(2);
+    expect(first).toHaveBeenCalledExactlyOnceWith(false);
+    expect(second).not.toHaveBeenCalled();
+    expect(c.store.lines.map((line) => line.makeAt)).toEqual([undefined]);
+    expect(el.shadowRoot!.querySelector("till-dead-ends-dialog")).not.toBeNull();
+    const dialog = el.shadowRoot!.querySelector("till-dead-ends-dialog")!;
+    const cancelled = new Promise((done) =>
+      dialog.addEventListener("dead-ends-cancel", done, { once: true }),
+    );
+    dialog.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!.click();
+    await cancelled;
+    await flush(el);
+    expect(second).toHaveBeenCalledExactlyOnceWith(false);
+    expect(recordSale).not.toHaveBeenCalled();
   });
 
   it("holds an integrated card charge until its counter routing question is answered", async () => {
@@ -9149,7 +9193,7 @@ describe("till-app", () => {
       await flush(el);
 
       // An occupied table already has a tab — no seatTable call, just the transition. The screen
-      // points at the RESUMED party's main bill, not a new one.
+      // opens on the bill the floor names for the RESUMED party, not a new one.
       expect(seatTable).not.toHaveBeenCalled();
       // The table-order drill overlays the still-mounted floor tab.
       expect(floor(el)).not.toBeNull();
@@ -9296,13 +9340,13 @@ describe("till-app", () => {
           ...openTable,
           id: "table-a",
           zoneId: "zone-a",
-          party: { ...openTable.party!, id: "party-a", mainBillId: "order-a" },
+          party: { ...openTable.party!, id: "party-a", openingBillId: "order-a" },
         };
         const tableB = {
           ...openTable,
           id: "table-b",
           zoneId: "zone-b",
-          party: { ...openTable.party!, id: "party-b", mainBillId: "order-b" },
+          party: { ...openTable.party!, id: "party-b", openingBillId: "order-b" },
         };
         const offersA = fixtureOffers({
           menus: [{ id: "menu-a", name: "Menu A", isDefault: true }],
@@ -9897,9 +9941,7 @@ describe("till-app", () => {
 
       // ── Move / join / merge / transfer table actions ──────────────────────────────────
       it("move-guests moves the party then reloads the floor (staying on the screen)", async () => {
-        const moveGuests = vi
-          .fn()
-          .mockResolvedValue({ partyId: "v-2", mainBillId: "wo-7", merged: false });
+        const moveGuests = vi.fn().mockResolvedValue({ partyId: "v-2", billIds: ["wo-7"] });
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
         const { el } = await mountApp({
           getTablesState,
@@ -9911,10 +9953,10 @@ describe("till-app", () => {
         // One floor load reached the screen (entering the floor).
         expect(getTablesState).toHaveBeenCalledTimes(1);
 
-        emit(screen, "move-guests", { toTableId: "t9", bills: "merge" });
+        emit(screen, "move-guests", { toTableId: "t9" });
         await flush(el);
 
-        expect(moveGuests).toHaveBeenCalledWith("v-2", "t9", "merge", {
+        expect(moveGuests).toHaveBeenCalledWith("v-2", "t9", {
           expectedPartyRevision: 3,
           otherPartyId: null,
           expectedEdits: [{ billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null }],
@@ -9925,9 +9967,7 @@ describe("till-app", () => {
       });
 
       it("join-tables adds a table to the party then reloads the floor", async () => {
-        const joinTables = vi
-          .fn()
-          .mockResolvedValue({ partyId: "v-2", mainBillId: "wo-7", merged: false });
+        const joinTables = vi.fn().mockResolvedValue({ partyId: "v-2", billIds: ["wo-7"] });
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
         const { el } = await mountApp({
           getTablesState,
@@ -9938,10 +9978,10 @@ describe("till-app", () => {
         const screen = await toTableOrder(el, openTable);
         expect(getTablesState).toHaveBeenCalledTimes(1);
 
-        emit(screen, "join-tables", { tableId: "t9", bills: "merge" });
+        emit(screen, "join-tables", { tableId: "t9" });
         await flush(el);
 
-        expect(joinTables).toHaveBeenCalledWith("v-2", "t9", "merge", {
+        expect(joinTables).toHaveBeenCalledWith("v-2", "t9", {
           expectedPartyRevision: 3,
           otherPartyId: null,
           expectedEdits: [{ billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null }],
@@ -9958,7 +9998,7 @@ describe("till-app", () => {
         });
         const screen = await toTableOrder(el, openTable);
 
-        emit(screen, "join-tables", { tableId: "t9", bills: "merge" });
+        emit(screen, "join-tables", { tableId: "t9" });
         await flush(el);
 
         expect(tableOrder(el)).not.toBeNull();
@@ -10104,7 +10144,11 @@ describe("till-app", () => {
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines,
           splitBill,
-          getPartyBills: vi.fn().mockResolvedValue([smallPartyBill]),
+          getPartyBills: vi.fn(async () =>
+            splitBill.mock.calls.length === 0
+              ? [smallPartyBill]
+              : [smallPartyBill, { ...smallPartyBill, workingOrderId: "wo-check", billNumber: 2 }],
+          ),
           recordSale,
           reprint,
         });
@@ -10233,7 +10277,7 @@ describe("till-app", () => {
           moveGuests: vi.fn().mockRejectedValue({ code: "table.needs_clearing" }),
         });
         const screen = await toTableOrder(el, openTable);
-        emit(screen, "move-guests", { toTableId: "t9", bills: "merge" });
+        emit(screen, "move-guests", { toTableId: "t9" });
         await flush(el);
         expect(tableOrder(el)).not.toBeNull();
         expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(
@@ -10292,8 +10336,6 @@ describe("till-app", () => {
           askSaleDeadEnds,
         });
         const screen = await toTableOrder(el, openTable);
-        screen.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-        await flush(el);
         const tender = screen.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
         expect(tender).not.toBeNull();
         tender.shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
@@ -17323,7 +17365,6 @@ function counterMovePreview() {
     async (
       billId: string,
       to: { tableId: string },
-      _bills: string,
       revisions: { otherPartyId?: string | null; expectedOtherPartyRevision?: number },
     ) => ({
       billId,
@@ -17360,7 +17401,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     state: "open" as const,
     name: "Luis",
     displayName: "Luis",
-    mainBillId: "wo-7",
+    openingBillId: "wo-7",
     outstanding: "12.00",
     billCount: 1,
     tableIds: ["t7"],
@@ -17391,7 +17432,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       listWorkingOrders: vi.fn().mockResolvedValue([counterOrder]),
       getTablesState: vi.fn().mockResolvedValue([mesa7, mesa9]),
       previewBillMoveAllergy: counterMovePreview(),
-      moveBill: vi.fn().mockResolvedValue({ partyId: "v-new", billId: "wo-12", merged: false }),
+      moveBill: vi.fn().mockResolvedValue({ partyId: "v-new", billId: "wo-12" }),
       getFindBill: vi.fn().mockResolvedValue({
         ...billRow({ workingOrderId: "wo-12", partyId: null }),
         edit: {
@@ -17431,7 +17472,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     return { ...mounted, c };
   }
 
-  it("counter relocation keeps the destination observations shown before native confirmation", async () => {
+  it("counter relocation sends at once the destination observations read when the table is picked", async () => {
     const { el } = await counterWith();
     const held = heldList(el);
     await userEvent.click(held.shadowRoot!.querySelector<HTMLElement>(".move")!);
@@ -17439,16 +17480,10 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     await userEvent.click(held.shadowRoot!.querySelector<HTMLElement>('[data-target="t7"]')!);
     await flush(el);
     expect(currentApi.listDrafts).toHaveBeenCalledWith("v7", { signal: expect.any(AbortSignal) });
-    const choice = held.shadowRoot!.querySelector<HTMLElement>("till-bill-choice-dialog")!;
-    expect(choice).not.toBeNull();
-    vi.mocked(currentApi.listDrafts).mockResolvedValue({ drafts: [], billEdits: [] });
-    await userEvent.click(choice.shadowRoot!.querySelector<HTMLElement>("[data-bills-separate]")!);
-    await flush(el);
     await answerCounterMoveIfAsked(el);
     expect(currentApi.moveBill).toHaveBeenCalledWith(
       "wo-12",
       { tableId: "t7" },
-      "separate",
       {
         partyId: null,
         otherPartyId: "v7",
@@ -17474,14 +17509,14 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
           }),
       ),
     });
-    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
     await flush(el);
     await answerCounterMoveIfAsked(el);
     expect(currentApi.moveBill).toHaveBeenCalledOnce();
     const reads = vi.mocked(currentApi.listWorkingOrders).mock.calls.length;
     el.api = { ...currentApi } as unknown as TillApi;
     await flush(el);
-    answer({ partyId: "v-new", billId: "wo-12", merged: false });
+    answer({ partyId: "v-new", billId: "wo-12" });
     await flush(el);
     expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(reads);
     expect(toast(el).open).toBe(false);
@@ -17500,7 +17535,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       const { el, c } = await counterWith({
         [phase === "read" ? "getFindBill" : "moveBill"]: delayed,
       });
-      emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+      emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
       await flush(el);
       await answerCounterMoveIfAsked(el);
       expect(delayed).toHaveBeenCalledOnce();
@@ -17519,7 +17554,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
                 draftRevision: null,
               },
             }
-          : { partyId: "v-new", billId: "wo-12", merged: false },
+          : { partyId: "v-new", billId: "wo-12" },
       );
       await flush(el);
       expect(currentApi.moveBill).toHaveBeenCalledTimes(phase === "read" ? 0 : 1);
@@ -17571,14 +17606,12 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       orderId: "wo-12",
       tableId: "t7",
       seated: { id: "v7", revision: 9 },
-      bills: "separate",
     });
     await flush(el);
     await answerCounterMoveIfAsked(el);
     expect(currentApi.moveBill).toHaveBeenCalledWith(
       "wo-12",
       { tableId: "t7" },
-      "separate",
       {
         partyId: null,
         otherPartyId: "v7",
@@ -17601,7 +17634,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
         edit: null,
       }),
     });
-    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
     await flush(el);
     await answerCounterMoveIfAsked(el);
     expect(currentApi.moveBill).not.toHaveBeenCalled();
@@ -17617,7 +17650,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
         }),
     );
     const { el, c } = await counterWith({ getFindBill });
-    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
     await flush(el);
     await answerCounterMoveIfAsked(el);
     expect(getFindBill).toHaveBeenCalledOnce();
@@ -17637,11 +17670,11 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
   });
 
   it("does not reload held orders when a move to a table answers after sign-out", async () => {
-    let answer!: (result: { partyId: string; billId: string; merged: boolean }) => void;
+    let answer!: (result: { partyId: string; billId: string }) => void;
     const { el, c } = await counterWith({
       moveBill: vi.fn(() => new Promise((resolve) => (answer = resolve))),
     });
-    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
     await flush(el);
     await answerCounterMoveIfAsked(el);
     expect(currentApi.moveBill).toHaveBeenCalledOnce();
@@ -17650,7 +17683,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     await flush(el);
     await discardMoveDraftIfAsked(el);
     const heldReads = vi.mocked(currentApi.listWorkingOrders).mock.calls.length;
-    answer({ partyId: "v-new", billId: "wo-12", merged: false });
+    answer({ partyId: "v-new", billId: "wo-12" });
     await flush(el);
 
     expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(heldReads);
@@ -17663,7 +17696,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       askOrderDeadEnds: vi.fn(() => new Promise((resolve) => (answer = resolve))),
       moveBill,
     });
-    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
     await flush(el);
     await answerCounterMoveIfAsked(el);
     expect(currentApi.askOrderDeadEnds).toHaveBeenCalledOnce();
@@ -17686,7 +17719,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       () => new Promise((resolve) => (answerFloor = resolve)),
     );
 
-    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
     await flush(el);
     await answerCounterMoveIfAsked(el);
     expect(currentApi.getTablesState).toHaveBeenCalled();
@@ -17718,13 +17751,11 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       stations: [{ id: "kitchen", name: "Kitchen", open: true }],
     });
     const setMakeAt = vi.fn().mockResolvedValue({ revision: 4 });
-    const moveBill = vi
-      .fn()
-      .mockResolvedValue({ partyId: "v-new", billId: "wo-12", merged: false });
+    const moveBill = vi.fn().mockResolvedValue({ partyId: "v-new", billId: "wo-12" });
     const { el, c } = await counterWith({ askOrderDeadEnds, setMakeAt, moveBill });
     emit(c, "move-held-order-open", { orderId: "wo-12" });
     await flush(el);
-    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
     await flush(el);
     await answerCounterMoveIfAsked(el);
     expect(askOrderDeadEnds).toHaveBeenCalledWith("wo-12", "z1");
@@ -17770,12 +17801,12 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     const moveBill = vi
       .fn()
       .mockRejectedValueOnce({ code: "station.no_replacement" })
-      .mockResolvedValue({ partyId: "v-new", billId: "wo-12", merged: false });
+      .mockResolvedValue({ partyId: "v-new", billId: "wo-12" });
     const setMakeAt = vi.fn().mockResolvedValue({ revision: 4 });
     const { el, c } = await counterWith({ askOrderDeadEnds, moveBill, setMakeAt });
     emit(c, "move-held-order-open", { orderId: "wo-12" });
     await flush(el);
-    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
     await flush(el);
     await answerCounterMoveIfAsked(el);
     expect(moveBill).toHaveBeenCalledOnce();
@@ -17892,14 +17923,13 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     await flush(el);
     const heldReads = vi.mocked(currentApi.listWorkingOrders).mock.calls.length;
 
-    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
     await flush(el);
     await answerCounterMoveIfAsked(el);
 
     expect(currentApi.moveBill).toHaveBeenCalledWith(
       "wo-12",
       { tableId: "t9" },
-      "merge",
       {
         partyId: null,
         otherPartyId: null,
@@ -17941,7 +17971,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     emit(c, "move-held-order-open", { orderId: "wo-12" });
     await flush(el);
 
-    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
     await flush(el);
     await answerCounterMoveIfAsked(el);
 
@@ -17959,7 +17989,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     emit(c, "move-held-order-open", { orderId: "wo-12" });
     await flush(el);
 
-    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
     await flush(el);
     await answerCounterMoveIfAsked(el);
 
@@ -17977,7 +18007,6 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       orderId: "wo-12",
       tableId: "t7",
       seated: { id: "v7", revision: 9 },
-      bills: "separate",
     });
     await flush(el);
     await answerCounterMoveIfAsked(el);
@@ -17985,7 +18014,6 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     expect(currentApi.moveBill).toHaveBeenCalledWith(
       "wo-12",
       { tableId: "t7" },
-      "separate",
       {
         partyId: null,
         otherPartyId: "v7",
@@ -18002,7 +18030,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     expect(toast(el).message).toBe(t("counter.moved_to_table").replace("{table}", "Mesa 7"));
   });
 
-  it("sends the party the bill choice named, though the floor read since seats another there", async () => {
+  it("sends the party the waiter picked, though the floor read since seats another there", async () => {
     const pedro = { ...luisParty, id: "v8", revision: 2, name: "Pedro", displayName: "Pedro" };
     const { el, c } = await counterWith({
       getTablesState: vi.fn().mockResolvedValue([{ ...mesa7, party: pedro }, mesa9]),
@@ -18015,7 +18043,6 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       orderId: "wo-12",
       tableId: "t7",
       seated: { id: "v7", revision: 9 },
-      bills: "merge",
     });
     await flush(el);
     await answerCounterMoveIfAsked(el);
@@ -18023,7 +18050,6 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     expect(currentApi.moveBill).toHaveBeenCalledWith(
       "wo-12",
       { tableId: "t7" },
-      "merge",
       {
         partyId: null,
         otherPartyId: "v7",
@@ -18063,7 +18089,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
         .mockRejectedValue(new TypeError("Failed to fetch")),
     });
 
-    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
     await flush(el);
     await answerCounterMoveIfAsked(el);
 
@@ -18098,7 +18124,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     emit(c, "move-held-order-open", { orderId: "wo-12" });
     await flush(el);
 
-    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
     await flush(el);
     await answerCounterMoveIfAsked(el);
 
@@ -18112,7 +18138,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     await el.updateComplete;
     const id = c.store.id;
 
-    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
     await flush(el);
     await answerCounterMoveIfAsked(el);
 
@@ -18126,7 +18152,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       const { el, c } = await counterWith({ moveBill: vi.fn().mockRejectedValue({ code }) });
       const heldReads = vi.mocked(currentApi.listWorkingOrders).mock.calls.length;
 
-      emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+      emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
       await flush(el);
       await answerCounterMoveIfAsked(el);
 
@@ -18142,7 +18168,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     });
     const heldReads = vi.mocked(currentApi.listWorkingOrders).mock.calls.length;
 
-    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
     await flush(el);
     await answerCounterMoveIfAsked(el);
 
@@ -18168,7 +18194,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     emit(c, "move-held-order-open", { orderId: "wo-12" });
     await flush(el);
 
-    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
     await flush(el);
     await answerCounterMoveIfAsked(el);
 
@@ -21882,9 +21908,7 @@ describe("W69 held move basket protection", () => {
           .mockResolvedValue([{ ...freeTable, id: "t9", label: "Mesa 9", shortName: "Mesa 9" }]),
         askOrderDeadEnds: vi.fn().mockResolvedValue({ sends: false, deadEnds: [] }),
         previewBillMoveAllergy: counterMovePreview(),
-        moveBill: vi
-          .fn()
-          .mockResolvedValue({ partyId: "party-new", billId: "wo-1", merged: false }),
+        moveBill: vi.fn().mockResolvedValue({ partyId: "party-new", billId: "wo-1" }),
         getFindBill: vi.fn(async (id: string) => ({
           ...billRow({ workingOrderId: id, partyId: null }),
           edit: {
@@ -21907,7 +21931,7 @@ describe("W69 held move basket protection", () => {
     return { el, c };
   }
   function move(c: TillCounterScreen, orderId = "wo-1") {
-    emit(c, "move-held-order", { orderId, tableId: "t9", seated: null, bills: "merge" });
+    emit(c, "move-held-order", { orderId, tableId: "t9", seated: null });
   }
   function warning(el: TillApp) {
     return el.shadowRoot!.querySelector("wt-unsaved-changes")!;
@@ -21949,7 +21973,6 @@ describe("W69 held move basket protection", () => {
     expect(currentApi.moveBill).toHaveBeenCalledExactlyOnceWith(
       "wo-1",
       { tableId: "t9" },
-      "merge",
       {
         partyId: null,
         otherPartyId: null,
@@ -22007,7 +22030,7 @@ describe("W69 held move basket protection", () => {
     expect(unloadCancelled()).toBe(true);
   });
   it("a pending move cannot clear a later local basket edit", async () => {
-    let release!: (value: { partyId: string; billId: string; merged: boolean }) => void;
+    let release!: (value: { partyId: string; billId: string }) => void;
     const { el, c } = await loaded({
       moveBill: vi.fn(() => new Promise((resolve) => (release = resolve))),
     });
@@ -22016,7 +22039,7 @@ describe("W69 held move basket protection", () => {
     await answerCounterMoveIfAsked(el);
     await expect.poll(() => currentApi.moveBill).toHaveBeenCalledOnce();
     c.store.label = "Typed during move";
-    release({ partyId: "party-new", billId: "wo-1", merged: false });
+    release({ partyId: "party-new", billId: "wo-1" });
     await flush(el);
     expect(c.store.id).toBe("wo-1");
     expect(c.store.label).toBe("Typed during move");
@@ -22024,7 +22047,7 @@ describe("W69 held move basket protection", () => {
     expect(unloadCancelled()).toBe(true);
   });
   it("a pending move cannot clear a newly loaded copy with the same id and values", async () => {
-    let release!: (value: { partyId: string; billId: string; merged: boolean }) => void;
+    let release!: (value: { partyId: string; billId: string }) => void;
     const { el, c } = await loaded({
       moveBill: vi.fn(() => new Promise((resolve) => (release = resolve))),
     });
@@ -22033,7 +22056,7 @@ describe("W69 held move basket protection", () => {
     await answerCounterMoveIfAsked(el);
     await expect.poll(() => currentApi.moveBill).toHaveBeenCalledOnce();
     c.store.loadFrom("wo-1", [...c.store.lines], "Mesa 4", 3);
-    release({ partyId: "party-new", billId: "wo-1", merged: false });
+    release({ partyId: "party-new", billId: "wo-1" });
     await flush(el);
     expect(c.store.id).toBe("wo-1");
     expect(c.store.label).toBe("Mesa 4");
@@ -22126,7 +22149,6 @@ describe("W69 held move basket protection", () => {
             expect(currentApi.moveBill).toHaveBeenCalledWith(
               "other-held",
               { tableId: "t9" },
-              "merge",
               {
                 partyId: null,
                 otherPartyId: null,

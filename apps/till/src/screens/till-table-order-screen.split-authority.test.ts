@@ -7,6 +7,7 @@ import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { storedDish, storedExtra } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 import { beer, mount } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
+import { switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
@@ -81,7 +82,7 @@ for (const kind of ["split", "source", "fold"] as const) {
       if (change === "draftRevision") el.billEdit = { ...observation, draftRevision: 5 };
       if (change === "missing") el.billEdit = null;
       if (change === "api") el.api = {} as typeof el.api;
-      if (change === "party") el.party = { id: "other" } as typeof el.party;
+      if (change === "party") el.party = { ...switcherParty, id: "other" };
       if (change === "bill") el.orderId = "other";
       if (change === "visit") el.serviceVisit++;
       if (change === "busy") el.busy = true;

@@ -896,8 +896,7 @@ Open:
   other, which the database accepts) is named by the bill's own label; whether any till action
   can make such a loop was not checked. `partyFamilies`, the reverse lookup of `partySurvivors`,
   stayed in `apps/server/src/parties.ts`, while `partySurvivors` is in
-  `packages/db/src/party-table-labels.ts`. `party.main_bill_stays`'s till wording says "the table
-  has other unpaid bills", which Split a table choosing the main bill need not satisfy. Left by
+  `packages/db/src/party-table-labels.ts`. Left by
   #906's review: `computeOverdueOrders` is the one report function that reads its own node's
   location rather than being handed one (adding `locationId` to `OverdueOrdersInput` was
   suggested, not done); no case pins what a correction slip prints for a counter order delivered
@@ -917,8 +916,7 @@ Open:
   have the move set the wrong table on the new party; the suggested fix is to count only table
   opens started in the current operator session; not queued. The till sends `otherPartyId: null`
   when its floor does not list the target table at all (a failed floor read empties the list); a
-  table another party holds is then refused as out of date, never combined. On a 390 px phone the
-  bill choice's buttons wrap ("Keep separate bills" on three lines).
+  table another party holds is then refused as out of date, never combined.
 - **Open, from C84's review (#913):** when a void or line change gets no answer,
   `#rereadAmounts()` can put on screen what the party still owes, taken from its bills after its
   own floor read failed, while the revision on screen stays where it was. A later floor read that
@@ -2210,7 +2208,10 @@ money in flight, since a move changes no amount (plan P19). Stated at its site i
 - **"Ready" and "Fired N min ago" on the table screen stay as built (owner, 2026-10-17).** They
   were the service plan's default (Task 5, #750).
 - **A child extras row in the Tab drawer stays on its own indented, muted, smaller line (owner,
-  2026-10-17)**, matching A738's approved order layout.
+  2026-10-17)**, matching A738's approved order layout. (2026-11-01: the Tab drawer is gone since
+  A803 slice 3; a child extras row is now drawn on its own muted, smaller line in `till-sent-orders`
+  (`apps/till/src/widgets/sent-orders.ts`), and indented as well in the table screen's fallback list
+  while `currentOrders` is null (`#sentFallback`, `apps/till/src/screens/till-table-order-screen.ts`).)
 - **Void works on every bill, split or not (owner, 2026-10-17, withdrawing the 2026-09-26 decision
   that a split check gets no Void).** It follows A758's cancel rules; the server already allows it.
 - **A home-page shortcut whose target a newly read menu version lacks disappears with no notice

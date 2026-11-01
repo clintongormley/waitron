@@ -265,7 +265,6 @@ describe("a finished party's dishes are checked against its family's bills' zone
       combineParties(tx, venue.cfg, {
         from: merged.partyId,
         into: survivor.partyId,
-        bills: "separate",
         tables: "join",
         operatorId: venue.staffId,
       }),
@@ -299,7 +298,6 @@ describe("a finished party's dishes are checked against its family's bills' zone
       combineParties(tx, venue.cfg, {
         from: joining.partyId,
         into: p.partyId,
-        bills: "separate",
         tables: "join",
         operatorId: venue.staffId,
       }),

@@ -157,7 +157,7 @@ const party = {
   guestCount: 3,
   name: null,
   displayName: "5, 6",
-  mainBillId: null,
+  openingBillId: null,
   billCount: 2,
   tableIds: ["t5", "t6"],
   unsentDrafts: [],

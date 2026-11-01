@@ -4,13 +4,16 @@ import { cleanupWidgets } from "../widgets/test-helpers.js";
 import type { TillTenderPay } from "../widgets/tender-pay.js";
 import { DraftStore } from "../state/draft-sync.js";
 import { setLocale, t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import { beer, resized } from "./till-table-order-screen.test-helpers.js";
 import {
   footerBalance,
   footerBill,
+  footerParty,
   mountFooter,
 } from "./till-table-order-screen.panel-footer.test-helpers.js";
+import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(async () => {
   setLocale("en");
@@ -28,7 +31,7 @@ function capture(el: TillTableOrderScreen, name: string) {
 
 describe("the bill actions below Sent and New order", () => {
   it.each([true, false])(
-    "offers payment and Discount without opening the drawer (draft %s)",
+    "offers payment in the foot and Discount in the ⋮, without opening the drawer (draft %s)",
     async (editable) => {
       const { el } = await mountFooter({ draftStore: editable ? new DraftStore() : null });
       await resized(el);
@@ -37,18 +40,19 @@ describe("the bill actions below Sent and New order", () => {
       expect(footer!.checkVisibility()).toBe(true);
       expect(q(el, "[data-drawer]")).toBeNull();
       const summary = q(el, "[data-order-summary]")!;
-      const discount = q(el, "[data-discount-bill]")!;
       const pay = q(el, "till-tender-pay")!;
       expect(summary).not.toBeNull();
-      expect(discount).not.toBeNull();
       expect(pay).not.toBeNull();
       expect(summary.textContent).toContain("€10.00");
       expect(
         summary.compareDocumentPosition(footer!) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
-      expect(discount.checkVisibility()).toBe(true);
       expect(pay.checkVisibility()).toBe(true);
-      expect(discount.compareDocumentPosition(pay) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(footer!.querySelector("[data-discount-bill]")).toBeNull();
+      await openTableMenu(el);
+      const discount = q(el, "[data-table-menu] [data-discount-bill]")!;
+      expect(discount).not.toBeNull();
+      expect(discount.checkVisibility()).toBe(true);
       expect(el.shadowRoot!.querySelectorAll("till-tender-pay")).toHaveLength(1);
     },
   );
@@ -61,7 +65,8 @@ describe("the bill actions below Sent and New order", () => {
     expect(q(el, "[data-bill-actions]")).not.toBeNull();
     expect(q(el, "[data-order-total]")!.textContent!.trim()).toBe("€16.00");
     const events = capture(el, "adjust");
-    await userEvent.click(q(el, "[data-discount-bill]")!);
+    await openTableMenu(el);
+    await userEvent.click(q(el, "[data-table-menu] [data-discount-bill]")!);
     expect(events.map((event) => event.detail)).toEqual([
       {
         kind: "discount",
@@ -82,7 +87,8 @@ describe("the bill actions below Sent and New order", () => {
     await resized(el);
     expect(q(el, "[data-bill-actions]")).not.toBeNull();
     expect(q(el, "till-tender-pay, .pay, [data-open-bill-pay]")).toBeNull();
-    expect(q(el, "[data-discount-bill]")!.checkVisibility()).toBe(true);
+    await openTableMenu(el);
+    expect(q(el, "[data-table-menu] [data-discount-bill]")!.checkVisibility()).toBe(true);
     expect(q(el, "[data-order-total]")!.textContent!.trim()).toBe("€10.00");
   });
 
@@ -104,7 +110,7 @@ describe("the bill actions below Sent and New order", () => {
     },
   );
 
-  it("keeps one payment widget and its open cash flow when the drawer opens and closes", async () => {
+  it("keeps one payment widget and its open cash flow when a step of the table menu opens and closes", async () => {
     const { el } = await mountFooter();
     await resized(el);
     expect(q(el, "[data-bill-actions]")).not.toBeNull();
@@ -114,23 +120,27 @@ describe("the bill actions below Sent and New order", () => {
     await tender.updateComplete;
     expect(tender.shadowRoot!.querySelector(".tendered")).not.toBeNull();
     for (const open of [true, false]) {
-      await userEvent.click(q(el, "[data-open-drawer]")!);
+      if (open) {
+        await openTableMenu(el);
+        await userEvent.click(q(el, '[data-table-menu] [data-action="move"]')!);
+      } else await userEvent.click(q(el, "[data-action-panel] [data-action-back]")!);
       await el.updateComplete;
-      expect(q(el, "[data-drawer]") !== null).toBe(open);
+      expect(q(el, "[data-action-panel]") !== null).toBe(open);
       expect(el.shadowRoot!.querySelectorAll("till-tender-pay")).toHaveLength(1);
       expect(q(el, "till-tender-pay")).toBe(tender);
       expect(tender.shadowRoot!.querySelector(".tendered")).not.toBeNull();
-      expect(q(el, "[data-drawer] [data-discount-bill], [data-drawer] .pay")).toBeNull();
+      expect(
+        q(el, "[data-action-panel] [data-discount-bill], [data-action-panel] .pay"),
+      ).toBeNull();
     }
   });
 
-  it("forwards only the bill payment event and swallows a counter Hold from the relocated widget", async () => {
+  it("forwards only the bill payment event, and the relocated widget draws no Hold", async () => {
     const { el } = await mountFooter();
     expect(q(el, "[data-bill-actions]")).not.toBeNull();
-    const tender = q(el, "till-tender-pay")!;
+    const tender = el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
     const payments = capture(el, "pay-tab");
     const counter = capture(el, "confirm-payment");
-    const holds = capture(el, "park-order");
     tender.dispatchEvent(
       new CustomEvent("confirm-payment", {
         detail: { method: "cash", amount: "12.00", guestCount: 3 },
@@ -138,15 +148,15 @@ describe("the bill actions below Sent and New order", () => {
         composed: true,
       }),
     );
-    tender.dispatchEvent(
-      new CustomEvent("park-order", { detail: {}, bubbles: true, composed: true }),
-    );
     expect(payments.map((event) => event.detail)).toEqual([
       { method: "cash", amount: "12.00", guestCount: 3 },
     ]);
     expect(payments[0]!.bubbles && payments[0]!.composed).toBe(true);
     expect(counter).toEqual([]);
-    expect(holds).toEqual([]);
+    await tender.updateComplete;
+    expect(tender.shadowRoot!.querySelector(".pay")).not.toBeNull();
+    expect(tender.shadowRoot!.querySelector(".hold")).toBeNull();
+    expect(tender.shadowRoot!.textContent).not.toContain(t("action.hold"));
   });
 
   it("offers the existing partial-payment path below the total, with the received and remaining amounts", async () => {
@@ -180,7 +190,7 @@ describe("the bill actions below Sent and New order", () => {
         ],
       },
     ]);
-    await userEvent.click(q(el, "[data-choose-bill-invoice]")!);
+    await userEvent.click(q(el, "[data-choose-bill-invoice]:not([data-table-menu] *)")!);
     expect(invoices.map((event) => event.detail)).toEqual([
       { workingOrderId: "wo-4", revision: 7 },
     ]);
@@ -223,6 +233,648 @@ describe("the bill actions below Sent and New order", () => {
     el.orderId = "wo-4";
     await el.updateComplete;
     expect(q(el, "till-tender-pay")).not.toBeNull();
-    expect(q(el, "[data-discount-bill]")!.textContent).toContain(t("table.discount_bill"));
+    await openTableMenu(el);
+    expect(q(el, "[data-table-menu] [data-discount-bill]")!.textContent).toContain(
+      t("table.discount_bill"),
+    );
+  });
+});
+
+describe("A803 no tab panel", () => {
+  const twoBills = {
+    party: { ...footerParty, outstanding: "38.50", billCount: 2 },
+    bills: [
+      footerBill,
+      {
+        ...footerBill,
+        workingOrderId: "wo-5",
+        billNumber: 2,
+        total: "28.50",
+        outstanding: "28.50",
+      },
+    ],
+  };
+
+  it.each([
+    [1280, 1100],
+    [1024, 768],
+    [390, 844],
+  ])("draws no Tab button or drawer at %ix%i", async (width, height) => {
+    await page.viewport(width, height);
+    const { el } = await mountFooter(twoBills);
+    await resized(el);
+    const head = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".head-actions > *")];
+    expect(
+      head.map((node) =>
+        node.hasAttribute("data-bill-switcher")
+          ? "switcher"
+          : node.hasAttribute("data-table-menu")
+            ? "menu"
+            : node.hasAttribute("data-back")
+              ? "back"
+              : node.localName,
+      ),
+    ).toEqual(["till-table-status", "switcher", "menu", "back"]);
+    expect(head.map((node) => node.textContent!.replace(/\s+/g, " ").trim())).not.toContain("Tab");
+    expect(q(el, ".drawer-handle, .badge, [data-drawer]")).toBeNull();
+  });
+
+  it("shows this bill's total, then what is still to pay at the whole table", async () => {
+    const { el } = await mountFooter(twoBills);
+    await resized(el);
+    const total = q(el, "[data-order-total]")!;
+    const still = q(el, "[data-party-outstanding]")!;
+    expect(total.textContent!.trim()).toBe("€10.00");
+    expect(still.checkVisibility()).toBe(true);
+    expect(still.textContent!.trim()).toBe("€38.50");
+    expect(q(el, "[data-party-outstanding-row]")!.textContent).toContain(t("table.still_to_pay"));
+    expect(total.compareDocumentPosition(still) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      still.compareDocumentPosition(q(el, "[data-bill-actions]")!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  // The till reads no lines for a bill that is not open (`tab.not_open`), so the bills read is
+  // all it has of this bill's total.
+  it.each([
+    ["presented", { status: "placed", outstanding: "7.80" }],
+    ["paid", { status: "settled", outstanding: "0.00" }],
+  ] as const)(
+    "shows a %s bill's own total, read with no lines, beside what the table still owes",
+    async (_, state) => {
+      const { el } = await mountFooter({
+        party: { ...footerParty, outstanding: "7.80" },
+        bills: [{ ...footerBill, ...state, total: "7.80" }],
+        lines: [],
+      });
+      await resized(el);
+      expect(q(el, "[data-order-total]")!.textContent!.trim()).toBe("€7.80");
+      expect(q(el, "[data-party-outstanding]")!.textContent!.trim()).toBe("€7.80");
+    },
+  );
+
+  it("shows no table still-to-pay for an order that belongs to no party", async () => {
+    const { el } = await mountFooter({ party: null, bills: [] });
+    await resized(el);
+    expect(q(el, "[data-order-total]")).not.toBeNull();
+    expect(q(el, "[data-party-outstanding]")).toBeNull();
+  });
+
+  it.each([
+    [1024, 768],
+    [390, 844],
+  ])(
+    "shows Finish table's refusal above the foot at %ix%i, where the ⋮'s Finish table was tapped",
+    async (width, height) => {
+      await page.viewport(width, height);
+      const { el } = await mountFooter(twoBills);
+      await resized(el);
+      el.addEventListener("finish-table", () => {
+        el.finishRefused = true;
+      });
+      const payments = capture(el, "take-payment");
+      await openTableMenu(el);
+      await userEvent.click(q(el, "[data-table-menu] [data-finish-table]")!);
+      await el.updateComplete;
+
+      const refusal = q(el, "[data-finish-refusal]")!;
+      expect(refusal).not.toBeNull();
+      expect(refusal.checkVisibility()).toBe(true);
+      expect(refusal.getAttribute("role")).toBe("alert");
+      expect(refusal.textContent).toContain(codeMessage("party.bill_outstanding"));
+      await expect
+        .poll(() => {
+          const box = refusal.getBoundingClientRect();
+          return box.top >= 0 && box.bottom <= innerHeight;
+        })
+        .toBe(true);
+      expect(
+        refusal.compareDocumentPosition(q(el, "[data-order-summary]")!) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      const take = q(el, "[data-finish-refusal] [data-take-payment]")!;
+      const record = q(el, "[data-finish-refusal] [data-record-departure]")!;
+      expect(take.checkVisibility()).toBe(true);
+      expect(record.checkVisibility()).toBe(true);
+      const departures = capture(el, "record-unpaid-departure");
+      await userEvent.click(record);
+      expect(departures).toHaveLength(1);
+      await userEvent.click(take);
+      expect(payments.map((event) => event.detail)).toEqual([{ workingOrderId: "wo-5" }]);
+    },
+  );
+
+  it("shows Move guests' table picker in the side column, and Back closes it", async () => {
+    const { el } = await mountFooter(twoBills);
+    await resized(el);
+    expect(q(el, "[data-action-panel]")).toBeNull();
+    await openTableMenu(el);
+    await userEvent.click(q(el, '[data-table-menu] [data-action="move"]')!);
+    await el.updateComplete;
+    const panel = q(el, "[data-action-panel]")!;
+    expect(panel.parentElement!.classList.contains("layout")).toBe(true);
+    expect(panel.querySelector("[data-target-picker]")!.checkVisibility()).toBe(true);
+    await userEvent.click(panel.querySelector<HTMLElement>("[data-action-back]")!);
+    await el.updateComplete;
+    expect(q(el, "[data-action-panel]")).toBeNull();
+  });
+});
+
+describe("A803 pay scope", () => {
+  const twoBills = {
+    party: { ...footerParty, outstanding: "38.50", billCount: 2 },
+    bills: [
+      footerBill,
+      {
+        ...footerBill,
+        workingOrderId: "wo-5",
+        billNumber: 2,
+        total: "28.50",
+        outstanding: "28.50",
+      },
+    ],
+    fullInvoices: true,
+  };
+  const partPaid = {
+    ...twoBills,
+    bills: [{ ...footerBill, hasPayments: true, outstanding: "8.00" }, twoBills.bills[1]!],
+    billBalance: footerBalance,
+  };
+  const unsentDraft = (billId: string) => ({
+    billId,
+    billNumber: billId === "wo-4" ? 1 : 2,
+    ownerId: "p-ana",
+    ownerName: "Ana",
+    lineCount: 1,
+    savedAt: "2026-10-31T10:00:00.000Z",
+  });
+  const withUnsent = () => {
+    const draft = new DraftStore();
+    draft.appendLines([{ product: beer, quantity: "1" }]);
+    return draft;
+  };
+
+  /** What the foot draws, in screen order, outside the ⋮; the pay card's own buttons by class. */
+  async function footParts(el: TillTableOrderScreen): Promise<string[]> {
+    const tender = el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay");
+    await tender?.updateComplete;
+    const nodes = el.shadowRoot!.querySelectorAll<HTMLElement>(
+      "[data-order-total], [data-party-outstanding-row], [data-bill-payments] > .amount, [data-bill-actions] till-tender-pay, [data-bill-actions] wt-button",
+    );
+    return [...nodes].flatMap((node) => {
+      if (node.matches("[data-order-total]")) return ["total"];
+      if (node.matches("[data-party-outstanding-row]")) return ["table still to pay"];
+      if (node.matches(".amount")) return ["bill still to pay"];
+      if (node.localName === "till-tender-pay")
+        return [...node.shadowRoot!.querySelectorAll<HTMLElement>("wt-button")].map(
+          (button) =>
+            `tender ${button.className || button.getAttributeNames().find((name) => name.startsWith("data-"))}`,
+        );
+      if (node.closest("till-tender-pay")) return [];
+      const hook = node.getAttributeNames().find((name) => name.startsWith("data-"))!;
+      const value = node.getAttribute(hook);
+      return [value ? `${hook}=${value}` : hook];
+    });
+  }
+
+  const ways = [
+    "data-open-bill-pay=items",
+    "data-open-bill-pay=contribution",
+    "data-open-bill-pay=share",
+  ];
+
+  it("draws, for an open owing bill, the totals, then Cash and Card, this bill's Full invoice and the pay ways", async () => {
+    const { el } = await mountFooter(twoBills);
+    await resized(el);
+    expect(await footParts(el)).toEqual([
+      "total",
+      "table still to pay",
+      "tender pay",
+      "tender pay-card",
+      "data-choose-bill-invoice",
+      ...ways,
+    ]);
+    expect(q(el, "[data-discount-bill]:not([data-table-menu] *)")).toBeNull();
+  });
+
+  it("adds the bill's receipt language when two receipt languages are offered", async () => {
+    const { el } = await mountFooter({ ...twoBills, receiptLanguages: ["es-ES", "en-GB"] });
+    await resized(el);
+    expect(await footParts(el)).toEqual([
+      "total",
+      "table still to pay",
+      "tender pay",
+      "tender pay-card",
+      "data-choose-bill-invoice",
+      "data-choose-bill-language",
+      ...ways,
+    ]);
+  });
+
+  it("draws, for a part-paid bill, the totals, what it still owes, Pay the rest, its choices and the pay ways", async () => {
+    const { el } = await mountFooter(partPaid);
+    await resized(el);
+    expect(await footParts(el)).toEqual([
+      "total",
+      "table still to pay",
+      "bill still to pay",
+      "data-pay-rest",
+      "data-choose-bill-invoice",
+      ...ways,
+    ]);
+  });
+
+  it("draws, on a handheld, the totals, one Pay and the bill's choices", async () => {
+    const { el } = await mountFooter({ ...twoBills, handheld: true });
+    await resized(el);
+    expect(await footParts(el)).toEqual([
+      "total",
+      "table still to pay",
+      "data-pay-sheet",
+      "data-choose-bill-invoice",
+    ]);
+  });
+
+  it("offers one Full invoice on the payment step, and none for a presented bill with an invoice number", async () => {
+    const { el } = await mountFooter(twoBills);
+    await resized(el);
+    expect(
+      el.shadowRoot!.querySelectorAll("[data-choose-bill-invoice]:not([data-table-menu] *)"),
+    ).toHaveLength(1);
+    const tender = el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
+    await tender.updateComplete;
+    expect(tender.shadowRoot!.querySelector("[data-full-invoice]")).toBeNull();
+
+    el.bills = [{ ...footerBill, status: "placed", invoiceNumber: "F-0001" }, twoBills.bills[1]!];
+    el.receiptLanguages = ["es-ES", "en-GB"];
+    await el.updateComplete;
+    expect(q(el, "[data-choose-bill-invoice]")).toBeNull();
+    expect(q(el, "[data-choose-bill-language]:not([data-table-menu] *)")).not.toBeNull();
+    expect(q(el, "till-tender-pay")).not.toBeNull();
+  });
+
+  describe("quiet Pay while this bill has unsent dishes", () => {
+    const sentence = "Bill 1. Send or remove the unsent dishes before paying.";
+    const othersDraft = (lines = withUnsent().lines) => ({
+      id: "d-ana",
+      revision: 1,
+      ownerName: "Ana",
+      takenFromYou: false,
+      lines,
+    });
+
+    beforeEach(async () => {
+      await page.viewport(1024, 768);
+    });
+
+    /** The foot, which a narrow screen with a New order shows on its Review view. */
+    async function showFoot(el: TillTableOrderScreen): Promise<void> {
+      await resized(el);
+      const review = q(el, "[data-review-open]");
+      if (review?.checkVisibility()) {
+        await userEvent.click(review);
+        await el.updateComplete;
+      }
+    }
+
+    const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+
+    async function expectQuiet(
+      el: TillTableOrderScreen,
+      controls: () => HTMLElement[],
+      text = sentence,
+    ): Promise<void> {
+      const started = ["pay-tab", "bill-pay", "pay-presented", "confirm-payment"].map((name) =>
+        capture(el, name),
+      );
+      const shown = controls();
+      expect(shown.length).toBeGreaterThan(0);
+      for (const [index, control] of shown.entries()) {
+        expect(control.getAttribute("variant")).toBe("secondary");
+        expect(control.hasAttribute("disabled")).toBe(false);
+        expect((control as HTMLElement & { disabled?: boolean }).disabled ?? false).toBe(false);
+        // Tapped at the window's bottom edge, as after scrolling down a long bill.
+        controls()[index]!.scrollIntoView({ block: "end" });
+        await frame();
+        await userEvent.click(controls()[index]!);
+        await el.updateComplete;
+        await frame();
+        const alert = q(el, "[data-pay-unsent]")!;
+        expect(alert.getAttribute("role")).toBe("alert");
+        expect(alert.checkVisibility()).toBe(true);
+        const box = alert.getBoundingClientRect();
+        expect(box.top).toBeGreaterThanOrEqual(0);
+        expect(Math.floor(box.bottom)).toBeLessThanOrEqual(innerHeight);
+        expect(alert.textContent!.trim()).toBe(text);
+        expect(alert.closest(".pay")).not.toBeNull();
+        const tender = el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay");
+        await tender?.updateComplete;
+        if (tender) expect(tender.shadowRoot!.querySelector(".pay-card")).not.toBeNull();
+      }
+      expect(started.flat()).toEqual([]);
+      const tender = el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay");
+      expect(tender?.shadowRoot!.querySelector(".tendered") ?? null).toBeNull();
+    }
+
+    async function tenderButtons(el: TillTableOrderScreen): Promise<() => HTMLElement[]> {
+      const tender = el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
+      await tender.updateComplete;
+      return () => [
+        tender.shadowRoot!.querySelector<HTMLElement>(".pay")!,
+        tender.shadowRoot!.querySelector<HTMLElement>(".pay-card")!,
+        ...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-open-bill-pay]"),
+      ];
+    }
+
+    it.each([
+      [1024, 768],
+      [390, 844],
+    ])(
+      "keeps Cash, Card and the pay ways quiet but tappable for a dish in this bill's New order (%i×%i)",
+      async (width, height) => {
+        await page.viewport(width, height);
+        const { el } = await mountFooter({ ...twoBills, draftStore: withUnsent() });
+        await showFoot(el);
+        expect(q(el, "[data-pay-unsent]")).toBeNull();
+        await expectQuiet(el, await tenderButtons(el));
+        expect(el.shadowRoot!.querySelectorAll("[data-open-bill-pay]")).toHaveLength(3);
+      },
+    );
+
+    it("keeps Pay the rest quiet on a part-paid bill", async () => {
+      const { el } = await mountFooter({ ...partPaid, draftStore: withUnsent() });
+      await resized(el);
+      await expectQuiet(el, () => [
+        q(el, "[data-pay-rest]")!,
+        ...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-open-bill-pay]"),
+      ]);
+    });
+
+    it("keeps a handheld's Pay quiet", async () => {
+      await page.viewport(390, 844);
+      const { el } = await mountFooter({ ...twoBills, handheld: true, draftStore: withUnsent() });
+      await showFoot(el);
+      await expectQuiet(el, () => [q(el, "[data-pay-sheet]")!]);
+    });
+
+    it("is quiet for another person's unsent dishes on this bill, and offers their Take over", async () => {
+      const { el } = await mountFooter({
+        ...twoBills,
+        party: { ...twoBills.party, unsentDrafts: [unsentDraft("wo-4")] },
+        otherDrafts: [othersDraft()],
+      });
+      await resized(el);
+      await expectQuiet(el, await tenderButtons(el));
+      expect(q(el, '[data-take-over="d-ana"]')!.checkVisibility()).toBe(true);
+    });
+
+    it("is not quiet when the unsent dishes are on Bill 2 only", async () => {
+      const { el } = await mountFooter({
+        ...twoBills,
+        party: { ...twoBills.party, unsentDrafts: [unsentDraft("wo-5")] },
+      });
+      await resized(el);
+      const tender = el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
+      await tender.updateComplete;
+      const cash = tender.shadowRoot!.querySelector<HTMLElement>(".pay")!;
+      expect(cash.getAttribute("variant")).toBe("primary");
+      expect(tender.shadowRoot!.querySelector(".pay-card")!.getAttribute("variant")).toBe(
+        "primary",
+      );
+      const payments = capture(el, "bill-pay");
+      await userEvent.click(q(el, '[data-open-bill-pay="items"]')!);
+      expect(payments).toHaveLength(1);
+      await userEvent.click(cash);
+      await tender.updateComplete;
+      expect(tender.shadowRoot!.querySelector(".tendered")).not.toBeNull();
+      expect(q(el, "[data-pay-unsent]")).toBeNull();
+    });
+
+    it("is not quiet for a handheld's unanswered whole payment of a presented bill, which it recovers", async () => {
+      const { el } = await mountFooter({
+        ...twoBills,
+        handheld: true,
+        party: { ...twoBills.party, unsentDrafts: [unsentDraft("wo-4")] },
+        otherDrafts: [othersDraft()],
+        bills: [{ ...footerBill, status: "placed" }, twoBills.bills[1]!],
+        paymentConfirmation: {
+          tender: { method: "cash" as const, amount: "12.00" },
+          outstanding: "10.00",
+          guestCount: 3,
+        },
+      });
+      await resized(el);
+      const presented = capture(el, "pay-presented");
+      const pay = q(el, "[data-pay-sheet]")!;
+      expect(pay.getAttribute("variant")).toBe("primary");
+      await userEvent.click(pay);
+      expect(presented.map((event) => event.detail)).toEqual([{ workingOrderId: "wo-4" }]);
+      expect(q(el, "[data-pay-unsent]")).toBeNull();
+    });
+
+    it("lets the pay ways reopen a bill payment held on this bill, while Cash and Card stay quiet", async () => {
+      const { el } = await mountFooter({
+        ...twoBills,
+        draftStore: withUnsent(),
+        billPaymentHeld: true,
+      });
+      await resized(el);
+      const tender = el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
+      await tender.updateComplete;
+      await expectQuiet(el, () => [
+        tender.shadowRoot!.querySelector<HTMLElement>(".pay")!,
+        tender.shadowRoot!.querySelector<HTMLElement>(".pay-card")!,
+      ]);
+      const payments = capture(el, "bill-pay");
+      for (const way of ["items", "contribution", "share"]) {
+        await userEvent.click(q(el, `[data-open-bill-pay="${way}"]`)!);
+        await el.updateComplete;
+        expect(q(el, "[data-pay-unsent]")).toBeNull();
+      }
+      expect(payments.map((event) => event.detail.way)).toEqual(["items", "contribution", "share"]);
+    });
+
+    it("lets Pay the rest reopen a bill payment held on a part-paid bill", async () => {
+      const { el } = await mountFooter({
+        ...partPaid,
+        draftStore: withUnsent(),
+        billPaymentHeld: true,
+      });
+      await resized(el);
+      const payments = capture(el, "bill-pay");
+      const rest = q(el, "[data-pay-rest]")!;
+      expect(rest.getAttribute("variant")).toBe("primary");
+      await userEvent.click(rest);
+      await el.updateComplete;
+      expect(payments.map((event) => [event.detail.way, event.detail.amount])).toEqual([
+        ["contribution", "8.00"],
+      ]);
+      expect(q(el, "[data-pay-unsent]")).toBeNull();
+    });
+
+    it.each([
+      ["an open", "open", "bill-pay"],
+      ["a presented", "placed", "pay-presented"],
+    ] as const)(
+      "lets a handheld's Pay on %s bill reopen a bill payment held on it",
+      async (_bill, status, event) => {
+        await page.viewport(390, 844);
+        const { el } = await mountFooter({
+          ...twoBills,
+          handheld: true,
+          bills: [{ ...footerBill, status }, twoBills.bills[1]!],
+          draftStore: withUnsent(),
+          billPaymentHeld: true,
+        });
+        await showFoot(el);
+        const sent = capture(el, event);
+        const pay = q(el, "[data-pay-sheet]")!;
+        expect(pay.getAttribute("variant")).toBe("primary");
+        await userEvent.click(pay);
+        await el.updateComplete;
+        expect(sent).toHaveLength(1);
+        expect(q(el, "[data-pay-unsent]")).toBeNull();
+      },
+    );
+
+    it("draws no Pay that starts a bill payment on a handheld's open bill while a whole payment of it has no answer", async () => {
+      await page.viewport(390, 844);
+      const { el } = await mountFooter({
+        ...twoBills,
+        handheld: true,
+        draftStore: withUnsent(),
+        paymentConfirmation: {
+          tender: { method: "cash" as const, amount: "12.00" },
+          outstanding: "10.00",
+          guestCount: 3,
+        },
+      });
+      await showFoot(el);
+      expect(q(el, "[data-pay-sheet]")).toBeNull();
+      expect(q(el, "[data-open-bill-pay]")).toBeNull();
+      expect(q(el, "[data-pay-rest]")).toBeNull();
+      const tender = el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
+      await tender.updateComplete;
+      expect(tender.shadowRoot!.querySelector(".pay")).toBeNull();
+      expect(tender.shadowRoot!.querySelector(".pay-card")).toBeNull();
+      expect(tender.shadowRoot!.querySelector(".confirm")).not.toBeNull();
+    });
+
+    async function expectPayable(el: TillTableOrderScreen): Promise<void> {
+      const tender = el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
+      await tender.updateComplete;
+      expect(tender.shadowRoot!.querySelector(".pay")!.getAttribute("variant")).toBe("primary");
+      expect(tender.shadowRoot!.querySelector(".pay-card")!.getAttribute("variant")).toBe(
+        "primary",
+      );
+      const payments = capture(el, "bill-pay");
+      await userEvent.click(q(el, '[data-open-bill-pay="items"]')!);
+      await el.updateComplete;
+      expect(payments).toHaveLength(1);
+      expect(q(el, "[data-pay-unsent]")).toBeNull();
+    }
+
+    it("is not quiet for an unsent-draft entry of this bill when no draft of it with dishes is on the screen", async () => {
+      const { el } = await mountFooter({
+        ...twoBills,
+        party: { ...twoBills.party, unsentDrafts: [unsentDraft("wo-4")] },
+        otherDrafts: [othersDraft([])],
+      });
+      await resized(el);
+      await expectPayable(el);
+    });
+
+    it("stops being quiet, and clears the sentence, when the other person's draft is read again without dishes", async () => {
+      const { el } = await mountFooter({ ...twoBills, otherDrafts: [othersDraft()] });
+      await resized(el);
+      await userEvent.click((await tenderButtons(el))()[0]!);
+      await el.updateComplete;
+      expect(q(el, "[data-pay-unsent]")).not.toBeNull();
+      el.otherDrafts = [];
+      await el.updateComplete;
+      expect(q(el, "[data-pay-unsent]")).toBeNull();
+      await expectPayable(el);
+    });
+
+    it("is not quiet while the bill's draft could not be read, as no unsent dish is on the screen to act on", async () => {
+      const { el } = await mountFooter({
+        ...twoBills,
+        draftStore: null,
+        party: { ...twoBills.party, unsentDrafts: [unsentDraft("wo-4")] },
+        otherDrafts: [othersDraft()],
+      });
+      await resized(el);
+      expect(q(el, "[data-take-over]")).toBeNull();
+      await expectPayable(el);
+    });
+
+    it("keeps a cash payment begun before the dishes appeared from being confirmed", async () => {
+      const draft = new DraftStore();
+      const { el } = await mountFooter({ ...twoBills, draftStore: draft });
+      await resized(el);
+      const started = ["pay-tab", "confirm-payment"].map((name) => capture(el, name));
+      const tender = el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
+      await tender.updateComplete;
+      await userEvent.click(tender.shadowRoot!.querySelector<HTMLElement>(".pay")!);
+      await tender.updateComplete;
+      const pad = tender.shadowRoot!.querySelector("till-numeric-pad")!;
+      await (pad as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      for (const key of ["2", "0"]) {
+        pad.shadowRoot!.querySelector<HTMLElement>(`[data-key="${key}"]`)!.click();
+        await tender.updateComplete;
+      }
+      draft.appendLines([{ product: beer, quantity: "1" }]);
+      await el.updateComplete;
+      await tender.updateComplete;
+      const confirm = tender.shadowRoot!.querySelector<HTMLElement>(".confirm")!;
+      expect(confirm.getAttribute("variant")).toBe("secondary");
+      expect(confirm.hasAttribute("disabled")).toBe(false);
+      await userEvent.click(confirm);
+      await el.updateComplete;
+      expect(started.flat()).toEqual([]);
+      expect(q(el, "[data-pay-unsent]")!.textContent!.trim()).toBe(sentence);
+      expect(tender.shadowRoot!.querySelector(".confirm")).not.toBeNull();
+    });
+
+    it("says it in Spanish", async () => {
+      setLocale("es");
+      try {
+        const { el } = await mountFooter({ ...twoBills, draftStore: withUnsent() });
+        await resized(el);
+        await expectQuiet(
+          el,
+          await tenderButtons(el),
+          "Cuenta 1. Envía o quita los platos sin enviar antes de cobrar.",
+        );
+      } finally {
+        setLocale("en");
+      }
+    });
+
+    it("clears the sentence when another bill is shown, and when this bill's dishes are sent", async () => {
+      const draft = withUnsent();
+      const { el } = await mountFooter({ ...twoBills, draftStore: draft });
+      await resized(el);
+      await userEvent.click((await tenderButtons(el))()[0]!);
+      await el.updateComplete;
+      expect(q(el, "[data-pay-unsent]")).not.toBeNull();
+      el.orderId = "wo-5";
+      await el.updateComplete;
+      expect(q(el, "[data-pay-unsent]")).toBeNull();
+      el.orderId = "wo-4";
+      await el.updateComplete;
+      expect(q(el, "[data-pay-unsent]")).toBeNull();
+
+      await userEvent.click((await tenderButtons(el))()[1]!);
+      await el.updateComplete;
+      expect(q(el, "[data-pay-unsent]")).not.toBeNull();
+      draft.clear();
+      await el.updateComplete;
+      expect(q(el, "[data-pay-unsent]")).toBeNull();
+      const tender = el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
+      await tender.updateComplete;
+      expect(tender.shadowRoot!.querySelector(".pay")!.getAttribute("variant")).toBe("primary");
+    });
   });
 });

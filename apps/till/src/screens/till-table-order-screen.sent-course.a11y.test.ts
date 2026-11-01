@@ -14,6 +14,10 @@ import {
 import { storedDish } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 import { resized } from "./till-table-order-screen.test-helpers.js";
 import "../till-app.js";
+import {
+  closeTableMenu,
+  openTableMenu,
+} from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 afterEach(async () => {
   cleanupWidgets();
@@ -57,18 +61,14 @@ describe.each(["en", "es"] as const)("Sent course in %s", (locale) => {
       );
       host.style.width = "100%";
       await resized(el);
-      const drawerToggle = el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!;
-      await userEvent.click(drawerToggle);
-      await el.updateComplete;
+      await openTableMenu(el);
       expect(
-        el.shadowRoot!.querySelector(
-          "[data-drawer] [data-line-course], [data-drawer] [data-line-course-static]",
-        ),
+        el.shadowRoot!.querySelector("[data-line-course], [data-line-course-static]"),
       ).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-group-up], [data-group-down]")).toBeNull();
       expect(
         el.shadowRoot!.querySelector(
-          "[data-drawer] [data-group-fire], [data-drawer] [data-serve-group], [data-drawer] [data-serve-row], [data-drawer] [data-unserve-row]",
+          "[data-table-menu] [data-group-fire], [data-table-menu] [data-serve-group], [data-table-menu] [data-serve-row], [data-table-menu] [data-unserve-row]",
         ),
       ).toBeNull();
       await expectNoA11yViolations(host);
@@ -76,8 +76,7 @@ describe.each(["en", "es"] as const)("Sent course in %s", (locale) => {
         element: el,
         path: `__screenshots__/a773-course-drawer-${locale}-${theme}-${width}.png`,
       });
-      await userEvent.click(drawerToggle);
-      await el.updateComplete;
+      await closeTableMenu(el);
       const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
       await panel.updateComplete;
       for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {

@@ -21,6 +21,10 @@ import {
   sentFallbackFor,
 } from "./screens/till-table-order-screen.sent.test-helpers.js";
 import { current, row } from "./screens/till-table-order-screen.current-orders.test-helpers.js";
+import {
+  closeTableMenu,
+  openTableMenu,
+} from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
@@ -66,7 +70,7 @@ const party: TableParty = {
   state: "open",
   name: null,
   displayName: "4",
-  mainBillId: "wo-4",
+  openingBillId: "wo-4",
   outstanding: "30.00",
   billCount: 1,
   tableIds: ["t4"],
@@ -324,10 +328,7 @@ async function openTable4(el: TillApp, locale?: string): Promise<TillTableOrderS
   await flush(el);
   emit(floor(el), "open-table", { tableId: "t4", seated: true });
   await flush(el);
-  const order = tableOrder(el);
-  order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-  await flush(el);
-  return order;
+  return tableOrder(el);
 }
 
 async function press(el: TillApp, target: HTMLElement): Promise<void> {
@@ -495,7 +496,11 @@ describe("till-app: giving away a dish", () => {
   it("discounts the whole bill", async () => {
     const { el } = await mountApp();
     const order = await openTable4(el);
-    await press(el, order.shadowRoot!.querySelector<HTMLElement>("[data-discount-bill]")!);
+    await openTableMenu(order);
+    await press(
+      el,
+      order.shadowRoot!.querySelector<HTMLElement>("[data-table-menu] [data-discount-bill]")!,
+    );
     await chooseReason(el, "Complaint");
     const input = inDialog(el, 'wt-input[name="percent"]').shadowRoot!.querySelector("input")!;
     input.value = "10";
@@ -690,7 +695,11 @@ describe("till-app: a bill changed on another device", () => {
       previewAdjustment: vi.fn().mockRejectedValue({ code: "working_order.out_of_date" }),
     });
     const order = await openTable4(el);
-    await press(el, order.shadowRoot!.querySelector<HTMLElement>("[data-discount-bill]")!);
+    await openTableMenu(order);
+    await press(
+      el,
+      order.shadowRoot!.querySelector<HTMLElement>("[data-table-menu] [data-discount-bill]")!,
+    );
     await chooseReason(el, "Complaint");
     const input = inDialog(el, 'wt-input[name="percent"]').shadowRoot!.querySelector("input")!;
     input.value = "10";
@@ -1030,7 +1039,6 @@ describe("till-app: answers that arrive after the flow moved on", () => {
     emit(floor(el), "open-table", { tableId: "t4", seated: true });
     await flush(el);
     const reopened = tableOrder(el);
-    await press(el, reopened.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
     await requestComp(el, reopened, 1);
     answer.resolve({ adjustmentIds: ["a-1"], revision: 7, party: null });
     await flush(el);
@@ -2169,8 +2177,6 @@ describe("till-app: service cancellation consent", () => {
       });
       const { el } = await mountApp(methods);
       const order = await openTable4(el);
-      await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-      await order.updateComplete;
       order.style.width = "1280px";
       await new Promise((resolve) => requestAnimationFrame(resolve));
       await new Promise((resolve) => requestAnimationFrame(resolve));
@@ -4770,15 +4776,15 @@ it.each([
     host.style.width = "100%";
     const order = await openTable4(el, locale === "es" ? "es-ES" : "en-GB");
     expect(currentLocale().startsWith(locale)).toBe(true);
-    const drawer = order.shadowRoot!.querySelector<HTMLElement>("[data-drawer]")!;
-    expect(drawer.querySelector("[data-comp-line], [data-discount-line]")).toBeNull();
+    await openTableMenu(order);
+    const menu = order.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!;
+    expect(order.shadowRoot!.querySelector("[data-comp-line], [data-discount-line]")).toBeNull();
     expect(window.innerWidth).toBe(width);
     await page.screenshot({
-      element: drawer,
-      path: `__screenshots__/a773-comp-drawer-${locale}-${theme}-${width}.png`,
+      element: menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!,
+      path: `__screenshots__/a773-comp-table-menu-${locale}-${theme}-${width}.png`,
     });
-    await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-    await order.updateComplete;
+    await closeTableMenu(order);
     if (width < 1280) {
       await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!);
       await order.updateComplete;

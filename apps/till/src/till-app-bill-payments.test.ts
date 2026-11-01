@@ -1,4 +1,5 @@
 import { openSentDish } from "./screens/till-table-order-screen.sent.test-helpers.js";
+import { openTableMenu } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
 import type { TillFindBillDialog } from "./widgets/find-bill-dialog.js";
 import {
@@ -57,6 +58,7 @@ import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
+import type { TillTenderPay } from "./widgets/tender-pay.js";
 import type { TillBillRefundDialog } from "./widgets/bill-refund-dialog.js";
 import type { TillSupervisorOverrideDialog } from "./widgets/supervisor-override-dialog.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
@@ -70,6 +72,7 @@ import type {
   BillRefundResult,
   BillRefundView,
   CurrentOrders,
+  Draft,
   HeldOrderSummary,
   OrderGroup,
   PartyBill,
@@ -552,7 +555,11 @@ describe("till-app: the three ways to pay part of a bill", () => {
     const { el } = await mountApp({ ...fullInvoicesOn(), getPartyBills, setOrderInvoiceChoice });
     const order = await openTable(el);
 
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
     const dialog = el.shadowRoot!.querySelector("till-invoice-recipient-dialog");
     expect(dialog).not.toBeNull();
@@ -576,7 +583,11 @@ describe("till-app: the three ways to pay part of a bill", () => {
     const setOrderInvoiceChoice = vi.fn().mockResolvedValue({ revision: 8 });
     const { el } = await mountApp({ ...fullInvoicesOn(), getPartyBills, setOrderInvoiceChoice });
     const order = await openTable(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
 
     emit(
@@ -609,7 +620,11 @@ describe("till-app: the three ways to pay part of a bill", () => {
       .mockResolvedValueOnce({ revision: 1 });
     const { el } = await mountApp({ ...fullInvoicesOn(), setOrderInvoiceChoice });
     const order = await openTable(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
     const form = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
     for (const [name, value] of [
@@ -665,7 +680,11 @@ describe("till-app: the three ways to pay part of a bill", () => {
     });
     const { el } = await mountApp({ ...fullInvoicesOn(), setOrderInvoiceChoice });
     const order = await openTable(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
 
     emit(
@@ -713,7 +732,11 @@ describe("till-app: the three ways to pay part of a bill", () => {
       .mockResolvedValue({ revision: 9 });
     const { el } = await mountApp({ ...fullInvoicesOn(), setOrderInvoiceChoice });
     const order = await openTable(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
     const form = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
     for (const [name, value] of [
@@ -781,7 +804,11 @@ describe("till-app: the three ways to pay part of a bill", () => {
         getPartyBills,
       });
       const order = await openTable(el);
-      order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+      order
+        .shadowRoot!.querySelector<HTMLElement>(
+          "[data-choose-bill-invoice]:not([data-table-menu] *)",
+        )!
+        .click();
       await flush(el);
       const form = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
       const name = form.shadowRoot!.querySelector("wt-input[name=legalName]")!;
@@ -1134,6 +1161,196 @@ describe("till-app: the three ways to pay part of a bill", () => {
       entry: "manual",
       submissionId: expect.any(String),
     });
+  });
+});
+
+describe("A803 invoice entry: the ⋮ and the payment step open one Full invoice editor", () => {
+  const recipient = {
+    taxId: "12345678Z",
+    legalName: "Ana García",
+    address: "1 Main Street, 28013 Madrid, Madrid",
+    countryCode: "ES",
+  };
+
+  /** Opens the table, taps the Full invoice `selector` names, confirms a recipient, and answers
+   * what was sent. */
+  async function chooseFrom(selector: string): Promise<unknown[][]> {
+    const getPartyBills = vi.fn().mockResolvedValue([billOf({ revision: 7 })]);
+    const setOrderInvoiceChoice = vi.fn().mockResolvedValue({ revision: 8 });
+    const { el } = await mountApp({ ...fullInvoicesOn(), getPartyBills, setOrderInvoiceChoice });
+    const order = await openTable(el);
+
+    order.shadowRoot!.querySelector<HTMLElement>(selector)!.click();
+    await flush(el);
+    const dialog = el.shadowRoot!.querySelector("till-invoice-recipient-dialog");
+    expect(dialog).not.toBeNull();
+    emit(dialog!, "invoice-recipient-confirm", { invoiceType: "F1", recipient });
+    await flush(el);
+    cleanupWidgets();
+    return setOrderInvoiceChoice.mock.calls;
+  }
+
+  it("the ⋮'s Full invoice and the payment step's write the same bill at the same revision", async () => {
+    const fromMenu = await chooseFrom("[data-table-menu] [data-choose-bill-invoice]");
+    const fromPayStep = await chooseFrom(".bill-choices [data-choose-bill-invoice]");
+
+    expect(fromMenu).toEqual([
+      [
+        "wo-4",
+        {
+          expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          revision: 7,
+          invoiceType: "F1",
+          recipient,
+        },
+      ],
+    ]);
+    expect(fromPayStep).toEqual(fromMenu);
+  });
+
+  it("a paid bill offers no Full invoice and sends no invoice request", async () => {
+    const getPartyBills = vi
+      .fn()
+      .mockResolvedValue([
+        billOf({ revision: 7, status: "settled", outstanding: "0.00", receiptAvailable: true }),
+      ]);
+    const setOrderInvoiceChoice = vi.fn().mockResolvedValue({ revision: 8 });
+    const { el } = await mountApp({ ...fullInvoicesOn(), getPartyBills, setOrderInvoiceChoice });
+    const order = await openTable(el);
+
+    expect(order.shadowRoot!.querySelector("[data-table-menu] [data-bill-receipt]")).not.toBeNull();
+    expect(order.shadowRoot!.querySelector("[data-choose-bill-invoice]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+    expect(setOrderInvoiceChoice).not.toHaveBeenCalled();
+    expect(api.getInvoiceDeliveryOptions).not.toHaveBeenCalled();
+  });
+});
+
+describe("A803 LOOK F2: the foot of a bill that is not open", () => {
+  it.each([
+    ["presented", { status: "placed", outstanding: "7.80" }],
+    ["paid", { status: "settled", outstanding: "0.00" }],
+  ] as const)(
+    "shows a %s bill's total from the bills read when its lines are refused",
+    async (_, state) => {
+      const getTabLines = vi.fn().mockRejectedValue({ code: "tab.not_open" });
+      const { el } = await mountApp({
+        getPartyBills: vi.fn().mockResolvedValue([billOf({ ...state, total: "7.80" })]),
+        getTabLines,
+      });
+      const order = await openTable(el);
+      await showBillFooter(order);
+
+      expect(getTabLines).toHaveBeenCalledWith("wo-4");
+      expect(text(order.shadowRoot!.querySelector("[data-order-total]"))).toBe(money("7.80"));
+    },
+  );
+});
+
+describe("A803 LOOK F7: focus goes back to what opened Full invoice", () => {
+  const recipient = {
+    taxId: "12345678Z",
+    legalName: "Ana García",
+    address: "1 Main Street, 28013 Madrid, Madrid",
+    countryCode: "ES",
+  };
+  const MENU = "[data-table-menu]";
+  const PAY_AREA = ".bill-choices [data-choose-bill-invoice]";
+
+  /** Focus is on `host` or inside it: `host` is on the chain of focused elements that runs
+   * through every shadow root. */
+  function focusedOn(host: Element): boolean {
+    for (let at = document.activeElement; at !== null; at = at.shadowRoot?.activeElement ?? null)
+      if (at === host) return true;
+    return false;
+  }
+
+  /** Opens the table and taps Full invoice from the ⋮ or the pay area, as a waiter would. The
+   * delivery read answers a task later, as over a network, so the screen is busy meanwhile. */
+  async function openFrom(from: "menu" | "pay") {
+    const getPartyBills = vi.fn().mockResolvedValue([billOf({ revision: 7 })]);
+    const setOrderInvoiceChoice = vi.fn().mockResolvedValue({ revision: 8 });
+    const getInvoiceDeliveryOptions = vi.fn(
+      () => new Promise((resolve) => setTimeout(() => resolve({ invoicePrinter: null }), 50)),
+    );
+    const { el } = await mountApp({
+      ...fullInvoicesOn(),
+      getPartyBills,
+      setOrderInvoiceChoice,
+      getInvoiceDeliveryOptions,
+    });
+    const order = await openTable(el);
+    await showBillFooter(order);
+    if (from === "menu") {
+      await openTableMenu(order);
+      await userEvent.click(
+        order.shadowRoot!.querySelector<HTMLElement>(`${MENU} [data-choose-bill-invoice]`)!,
+      );
+    } else {
+      await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>(PAY_AREA)!);
+    }
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).not.toBeNull(),
+    );
+    await flush(el);
+    const dialog = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+    expect(dialog).not.toBeNull();
+    expect(focusedOn(dialog)).toBe(true);
+    return { el, order, dialog, setOrderInvoiceChoice };
+  }
+
+  async function save(el: TillApp, dialog: Element): Promise<void> {
+    emit(dialog, "invoice-recipient-confirm", { invoiceType: "F1", recipient });
+    await flush(el);
+  }
+
+  async function cancel(el: TillApp, dialog: Element): Promise<void> {
+    const button = [...dialog.shadowRoot!.querySelectorAll<HTMLElement>("wt-button")].find(
+      (each) => text(each) === t("action.cancel"),
+    )!;
+    await userEvent.click(button);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull(),
+    );
+    await flush(el);
+  }
+
+  it.each([
+    ["saving", save],
+    ["Cancel", cancel],
+  ] as const)("after %s from the ⋮, focus is on the ⋮", async (_, close) => {
+    const { el, order, dialog } = await openFrom("menu");
+
+    await close(el, dialog);
+
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+    expect(focusedOn(order.shadowRoot!.querySelector(MENU)!)).toBe(true);
+  });
+
+  it.each([
+    ["saving", save],
+    ["Cancel", cancel],
+  ] as const)("after %s from the pay area, focus is on its Full invoice", async (_, close) => {
+    const { el, order, dialog } = await openFrom("pay");
+
+    await close(el, dialog);
+
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+    expect(focusedOn(order.shadowRoot!.querySelector(PAY_AREA)!)).toBe(true);
+  });
+
+  it("after saving from the pay area, focus is on the ⋮ when that Full invoice has gone", async () => {
+    const { el, order, dialog, setOrderInvoiceChoice } = await openFrom("pay");
+    setOrderInvoiceChoice.mockImplementation(async () => {
+      order.fullInvoices = false;
+      await order.updateComplete;
+      return { revision: 8 };
+    });
+
+    await save(el, dialog);
+
+    expect(order.shadowRoot!.querySelector(PAY_AREA)).toBeNull();
+    expect(focusedOn(order.shadowRoot!.querySelector(MENU)!)).toBe(true);
   });
 });
 
@@ -2349,6 +2566,530 @@ describe("till-app: a bill payment still out holds the bill (A796 default 7)", (
   });
 });
 
+describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a sent payment reachable", () => {
+  /** A saved draft of the bill on screen, one dish, owned by `ownerId`. */
+  function savedDraft(ownerId: string, ownerName: string): Draft {
+    return {
+      id: `draft-${ownerId}`,
+      partyId: "v1",
+      billId: "wo-4",
+      ownerId,
+      ownerName,
+      revision: 3,
+      takenOverFrom: null,
+      lines: [
+        {
+          slot: 0,
+          joinGroupId: null,
+          afterGroupId: null,
+          id: `draft-line-${ownerId}`,
+          sourceLineId: null,
+          source: null,
+          menuItemId: "menu-item-cafe-0",
+          variantId: null,
+          menuVersionId: null,
+          options: [],
+          extras: [],
+          note: null,
+          quantity: "1",
+          courseId: null,
+          makeAt: "switched-off",
+          noMerge: false,
+          unavailable: false,
+        },
+      ],
+    };
+  }
+  const unsentEntry = (ownerId: string, ownerName: string) => ({
+    billId: "wo-4",
+    billNumber: 1,
+    ownerId,
+    ownerName,
+    lineCount: 1,
+    savedAt: "2026-10-31T10:00:00.000Z",
+  });
+
+  async function cashButton(order: TillTableOrderScreen): Promise<HTMLElement> {
+    const tender = order.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
+    await tender.updateComplete;
+    return tender.shadowRoot!.querySelector<HTMLElement>(".pay")!;
+  }
+
+  async function reopenTable(el: TillApp): Promise<TillTableOrderScreen> {
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    emit(floor(el), "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    const order = tableOrder(el);
+    await showBillFooter(order);
+    return order;
+  }
+
+  it("Pay items reopens a part payment that got no answer while another person's unsent dish is on the bill; Cash stays quiet", async () => {
+    const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({ takeBillPayment });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await expect
+      .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
+      .toBe(t("bill_pay.unconfirmed"));
+    emit(dialog(el)!, "bill-pay-close");
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+    drafts.drafts.push(savedDraft("p2", "Luis"));
+    vi.mocked(api.getTablesState).mockResolvedValue([
+      mesa({ unsentDrafts: [unsentEntry("p2", "Luis")] }),
+    ]);
+
+    const order = await reopenTable(el);
+    expect(order.shadowRoot!.querySelector('[data-take-over="draft-p2"]')).not.toBeNull();
+    const cash = await cashButton(order);
+    expect(cash.getAttribute("variant")).toBe("secondary");
+    await userEvent.click(cash);
+    await order.updateComplete;
+    expect(text(order.shadowRoot!.querySelector("[data-pay-unsent]"))).toBe(
+      `Bill 1. ${t("bill_pay.unsent")}`,
+    );
+
+    const sends = takeBillPayment.mock.calls.length;
+    await userEvent.click(
+      order.shadowRoot!.querySelector<HTMLElement>('[data-open-bill-pay="items"]')!,
+    );
+    await flush(el);
+    await expect.poll(() => dialog(el)?.confirmationLocked, { timeout: 10_000 }).toBe(true);
+    expect(text(inDialog(el, "[data-pay-confirm]"))).toBe(t("bill_pay.recheck"));
+    expect(order.shadowRoot!.querySelector("[data-pay-unsent]")).toBeNull();
+    expect(takeBillPayment).toHaveBeenCalledTimes(sends);
+    expect(api.recordSale).not.toHaveBeenCalled();
+  });
+
+  it("is not quiet once the waiter removes their own unsent dish, with no floor read", async () => {
+    drafts.drafts.push(savedDraft("p1", "Ana"));
+    const { el } = await mountApp({
+      getTablesState: vi
+        .fn()
+        .mockResolvedValue([mesa({ unsentDrafts: [unsentEntry("p1", "Ana")] })]),
+    });
+    const order = await openTable(el);
+    await showBillFooter(order);
+    expect(order.draftStore!.lineCount).toBe(1);
+    expect((await cashButton(order)).getAttribute("variant")).toBe("secondary");
+    const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
+
+    order.draftStore!.removeLine(0);
+    await flush(el);
+
+    expect(order.party!.unsentDrafts).toHaveLength(1);
+    expect((await cashButton(order)).getAttribute("variant")).toBe("primary");
+    await openDialog(el, "items");
+    expect(dialog(el)).not.toBeNull();
+    expect(order.shadowRoot!.querySelector("[data-pay-unsent]")).toBeNull();
+    expect(vi.mocked(api.getTablesState).mock.calls.length).toBe(floorReads);
+  });
+
+  it("is not quiet after the fifteen-second draft read finds another device's dishes gone", async () => {
+    drafts.drafts.push(savedDraft("p2", "Luis"));
+    const { el } = await mountApp({
+      getTablesState: vi
+        .fn()
+        .mockResolvedValue([mesa({ unsentDrafts: [unsentEntry("p2", "Luis")] })]),
+    });
+    const order = await openTable(el);
+    await showBillFooter(order);
+    expect(order.shadowRoot!.querySelector('[data-take-over="draft-p2"]')).not.toBeNull();
+    expect((await cashButton(order)).getAttribute("variant")).toBe("secondary");
+    const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
+
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      el.api = { ...api } as unknown as TillApi;
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+      drafts.drafts.splice(0);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await el.updateComplete;
+    } finally {
+      vi.useRealTimers();
+    }
+    await flush(el);
+
+    expect(tableOrder(el).shadowRoot!.querySelector("[data-take-over]")).toBeNull();
+    expect((await cashButton(tableOrder(el))).getAttribute("variant")).toBe("primary");
+    expect(vi.mocked(api.getTablesState).mock.calls.length).toBe(floorReads);
+  });
+
+  /** A 40.00 cash contribution sent with no answer on Bill 1 and its dialog closed, then the table
+   * opened again with `owner`'s saved one-dish draft of `billId`. */
+  async function heldWithUnsent(
+    overrides: Record<string, unknown> = {},
+    owner: [string, string] = ["p2", "Luis"],
+    billId = "wo-4",
+  ) {
+    const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({ takeBillPayment, ...overrides });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await expect
+      .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
+      .toBe(t("bill_pay.unconfirmed"));
+    emit(dialog(el)!, "bill-pay-close");
+    await flush(el);
+    drafts.drafts.push({ ...savedDraft(...owner), billId });
+    vi.mocked(api.getTablesState).mockResolvedValue([
+      mesa({
+        unsentDrafts: [{ ...unsentEntry(...owner), billId, billNumber: billId === "wo-4" ? 1 : 2 }],
+      }),
+    ]);
+    const order = await reopenTable(el);
+    return { el, order, takeBillPayment };
+  }
+
+  /** The held payment shown by a balance read as `state` on another device. */
+  const answeredElsewhere = (state: BillPaymentView["state"]) =>
+    balanceOf({
+      payments: [
+        paymentOf({
+          submissionId: sent()[0]!.submissionId,
+          applied: "40.00",
+          tendered: "50.00",
+          change: "10.00",
+          state,
+        }),
+      ],
+    });
+
+  it("takes no new payment from a reopened payment that Check again finds declined while the bill has unsent dishes", async () => {
+    const { el, order, takeBillPayment } = await heldWithUnsent();
+    await userEvent.click(
+      order.shadowRoot!.querySelector<HTMLElement>('[data-open-bill-pay="items"]')!,
+    );
+    await flush(el);
+    await expect.poll(() => dialog(el)?.confirmationLocked, { timeout: 10_000 }).toBe(true);
+    takeBillPayment.mockResolvedValueOnce({
+      ...takenOf({ applied: "40.00" }, {}),
+      outcome: "declined",
+    });
+    await press(el, "[data-pay-confirm]");
+    await expect.poll(() => dialog(el)?.confirmationLocked, { timeout: 10_000 }).toBe(false);
+    expect(text(inDialog(el, "[data-pay-confirm]"))).toBe(t("bill_pay.take"));
+    const original = sent()[0]!.submissionId;
+    const sends = sent().length;
+    expect(sent().every((request) => request.submissionId === original)).toBe(true);
+
+    await press(el, "[data-pay-confirm]");
+
+    expect(sent().length).toBe(sends);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(`4 · Bill 1. ${t("bill_pay.unsent")}`);
+    expect(api.recordSale).not.toHaveBeenCalled();
+  });
+
+  it.each(["declined", "received"] as const)(
+    "starts no new preview from a reopened payment another device answered %s while the bill has unsent dishes",
+    async (state) => {
+      let answered = false;
+      const { el, order } = await heldWithUnsent({
+        getBillBalance: vi.fn(async () => (answered ? answeredElsewhere(state) : balanceOf())),
+      });
+      expect(order.billPaymentHeld).toBe(true);
+      answered = true;
+      await userEvent.click(
+        order.shadowRoot!.querySelector<HTMLElement>('[data-open-bill-pay="contribution"]')!,
+      );
+      await flush(el);
+      await expect
+        .poll(() => inDialog(el, "[data-pay-continue]") !== null, { timeout: 10_000 })
+        .toBe(true);
+      expect(dialog(el)!.confirmationLocked).toBe(false);
+      const previews = vi.mocked(api.previewBillPayment).mock.calls.length;
+      await type(el, "amount", "10");
+      await type(el, "tendered", "10");
+
+      await press(el, "[data-pay-continue]");
+
+      expect(vi.mocked(api.previewBillPayment).mock.calls.length).toBe(previews);
+      expect(inDialog(el, "wt-form-actions")!.error).toBe(`4 · Bill 1. ${t("bill_pay.unsent")}`);
+    },
+  );
+
+  it("saves the waiter's own removal before a new preview from a reopened payment", async () => {
+    let answered = false;
+    let savedAtPreview: number | undefined;
+    const { el, order } = await heldWithUnsent(
+      {
+        getBillBalance: vi.fn(async () => (answered ? answeredElsewhere("declined") : balanceOf())),
+        previewBillPayment: vi.fn(async () => {
+          savedAtPreview = drafts.drafts
+            .filter((draft) => draft.billId === "wo-4")
+            .flatMap((draft) => draft.lines).length;
+          return cash("10.00", "0.00");
+        }),
+      },
+      ["p1", "Ana"],
+    );
+    expect(order.draftStore!.lineCount).toBe(1);
+    answered = true;
+    await userEvent.click(
+      order.shadowRoot!.querySelector<HTMLElement>('[data-open-bill-pay="contribution"]')!,
+    );
+    await flush(el);
+    await expect
+      .poll(() => inDialog(el, "[data-pay-continue]") !== null, { timeout: 10_000 })
+      .toBe(true);
+    await type(el, "amount", "10");
+    await type(el, "tendered", "10");
+    order.draftStore!.removeLine(0);
+
+    await press(el, "[data-pay-continue]");
+
+    await expect.poll(() => savedAtPreview, { timeout: 10_000 }).toBeDefined();
+    expect(savedAtPreview).toBe(0);
+  });
+
+  it("says in the dialog that the waiter's removal was not saved, and asks for no preview", async () => {
+    let answered = false;
+    const { el, order } = await heldWithUnsent(
+      {
+        getBillBalance: vi.fn(async () => (answered ? answeredElsewhere("declined") : balanceOf())),
+      },
+      ["p1", "Ana"],
+    );
+    answered = true;
+    await userEvent.click(
+      order.shadowRoot!.querySelector<HTMLElement>('[data-open-bill-pay="contribution"]')!,
+    );
+    await flush(el);
+    await expect
+      .poll(() => inDialog(el, "[data-pay-continue]") !== null, { timeout: 10_000 })
+      .toBe(true);
+    await type(el, "amount", "10");
+    await type(el, "tendered", "10");
+    const previews = vi.mocked(api.previewBillPayment).mock.calls.length;
+    vi.mocked(api.saveDraft).mockRejectedValue(new TypeError("Failed to fetch"));
+    order.draftStore!.removeLine(0);
+
+    await press(el, "[data-pay-continue]");
+
+    await expect
+      .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
+      .toBe(t("table.draft_save_failed"));
+    expect(vi.mocked(api.previewBillPayment).mock.calls.length).toBe(previews);
+  });
+
+  it.each(["continue", "take"] as const)(
+    "starts no payment from a dialog opened before another person's dishes were read (%s)",
+    async (step) => {
+      const { el } = await mountApp();
+      const order = await openTable(el);
+      await showBillFooter(order);
+      await openDialog(el, "contribution");
+      await type(el, "amount", "40");
+      await type(el, "tendered", "50");
+      if (step === "take") await press(el, "[data-pay-continue]");
+      const previews = vi.mocked(api.previewBillPayment).mock.calls.length;
+      drafts.drafts.push(savedDraft("p2", "Luis"));
+      window.dispatchEvent(new Event("focus"));
+      await expect
+        .poll(() => tableOrder(el).shadowRoot!.querySelector('[data-take-over="draft-p2"]'), {
+          timeout: 10_000,
+        })
+        .not.toBeNull();
+      expect(dialog(el)).not.toBeNull();
+
+      await press(el, step === "take" ? "[data-pay-confirm]" : "[data-pay-continue]");
+
+      expect(vi.mocked(api.previewBillPayment).mock.calls.length).toBe(previews);
+      expect(api.takeBillPayment).not.toHaveBeenCalled();
+      expect(inDialog(el, "wt-form-actions")!.error).toBe(`4 · Bill 1. ${t("bill_pay.unsent")}`);
+    },
+  );
+
+  /** The dialog open on Bill 1 with a 40.00 cash contribution typed, then `owner`'s saved one-dish
+   * draft read in by the window's focus read. */
+  async function dialogThenDraft(owner: [string, string]) {
+    const { el } = await mountApp();
+    const order = await openTable(el);
+    await showBillFooter(order);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    drafts.drafts.push(savedDraft(...owner));
+    window.dispatchEvent(new Event("focus"));
+    await expect.poll(() => tableOrder(el).draftStore?.lineCount, { timeout: 10_000 }).toBe(1);
+    expect(dialog(el)).not.toBeNull();
+    return el;
+  }
+
+  it("starts no preview when the waiter's own dish arrives while the dialog is open", async () => {
+    const el = await dialogThenDraft(["p1", "Ana"]);
+    expect(tableOrder(el).shadowRoot!.querySelector("[data-take-over]")).toBeNull();
+    const previews = vi.mocked(api.previewBillPayment).mock.calls.length;
+
+    await press(el, "[data-pay-continue]");
+
+    expect(vi.mocked(api.previewBillPayment).mock.calls.length).toBe(previews);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(`4 · Bill 1. ${t("bill_pay.unsent")}`);
+  });
+
+  it("starts no preview while only another person's draft holds dishes", async () => {
+    const el = await dialogThenDraft(["p2", "Luis"]);
+    const store = tableOrder(el).draftStore!;
+    // The sync draws another person's draft into the store as well; emptying the store leaves
+    // their draft as the only unsent dishes the dialog can read.
+    store.loadFrom(store.id, []);
+    await flush(el);
+    expect(store.lineCount).toBe(0);
+    expect(tableOrder(el).shadowRoot!.querySelector('[data-take-over="draft-p2"]')).not.toBeNull();
+    const previews = vi.mocked(api.previewBillPayment).mock.calls.length;
+
+    await press(el, "[data-pay-continue]");
+
+    expect(vi.mocked(api.previewBillPayment).mock.calls.length).toBe(previews);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(`4 · Bill 1. ${t("bill_pay.unsent")}`);
+  });
+
+  it("takes down the dialog's unsent sentence once another person's dishes are read away", async () => {
+    const el = await dialogThenDraft(["p2", "Luis"]);
+    await press(el, "[data-pay-continue]");
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(`4 · Bill 1. ${t("bill_pay.unsent")}`);
+
+    drafts.drafts.splice(0);
+    window.dispatchEvent(new Event("focus"));
+    await expect
+      .poll(() => tableOrder(el).shadowRoot!.querySelector("[data-take-over]"), {
+        timeout: 10_000,
+      })
+      .toBeNull();
+    await flush(el);
+
+    expect(inDialog(el, "wt-form-actions")!.error).toBe("");
+  });
+
+  it("leaves another bill's Pay quiet while a payment on Bill 1 has no answer", async () => {
+    const { el, order } = await heldWithUnsent(
+      {
+        getPartyBills: vi
+          .fn()
+          .mockResolvedValue([billOf(), billOf({ workingOrderId: "wo-5", billNumber: 2 })]),
+      },
+      ["p2", "Luis"],
+      "wo-5",
+    );
+    expect(order.billPaymentHeld).toBe(true);
+
+    emit(order, "switch-bill", { workingOrderId: "wo-5" });
+    await flush(el);
+
+    const shown = tableOrder(el);
+    await showBillFooter(shown);
+    expect(shown.orderId).toBe("wo-5");
+    expect(shown.billPaymentHeld).toBe(false);
+    expect((await cashButton(shown)).getAttribute("variant")).toBe("secondary");
+    await userEvent.click(
+      shown.shadowRoot!.querySelector<HTMLElement>('[data-open-bill-pay="items"]')!,
+    );
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+    expect(text(shown.shadowRoot!.querySelector("[data-pay-unsent]"))).toBe(
+      `Bill 2. ${t("bill_pay.unsent")}`,
+    );
+  });
+
+  const banner = (el: TillApp) => el.shadowRoot!.querySelector(".error");
+
+  it.each(["back", "floor"] as const)(
+    "says no take-over and saves nothing after only viewing another person's draft and tapping the quiet Cash (leaving by %s)",
+    async (way) => {
+      drafts.drafts.push(savedDraft("p2", "Luis"));
+      const otherTable: TableState = {
+        ...mesa({ id: "v2", openingBillId: "wo-9", tableIds: ["t5"] }),
+        id: "t5",
+        label: "5",
+        shortName: "5",
+      };
+      const { el } = await mountApp({
+        getTablesState: vi
+          .fn()
+          .mockResolvedValue([mesa({ unsentDrafts: [unsentEntry("p2", "Luis")] }), otherTable]),
+        getPartyBills: vi.fn(async (partyId: string) => [
+          partyId === "v2" ? billOf({ workingOrderId: "wo-9", partyId }) : billOf(),
+        ]),
+      });
+      const order = await openTable(el);
+      await showBillFooter(order);
+      expect(order.shadowRoot!.querySelector('[data-take-over="draft-p2"]')).not.toBeNull();
+      const saves = vi.mocked(api.saveDraft).mock.calls.length;
+      await userEvent.click(await cashButton(order));
+      await order.updateComplete;
+      expect(text(order.shadowRoot!.querySelector("[data-pay-unsent]"))).toBe(
+        `Bill 1. ${t("bill_pay.unsent")}`,
+      );
+
+      if (way === "back") order.shadowRoot!.querySelector<HTMLElement>("[data-back]")!.click();
+      else emit(shell(el), "screen-select", { screen: "floor" });
+      await flush(el);
+
+      expect(text(banner(el))).toBe("");
+      emit(floor(el), "open-table", { tableId: "t5", seated: true });
+      await flush(el);
+      expect(tableOrder(el).party?.id).toBe("v2");
+      expect(text(banner(el))).toBe("");
+      expect(vi.mocked(api.saveDraft).mock.calls.length).toBe(saves);
+    },
+  );
+
+  it("opens the party's other table from another person's draft with no take-over said and nothing saved", async () => {
+    drafts.drafts.push(savedDraft("p2", "Luis"));
+    const joined = { unsentDrafts: [unsentEntry("p2", "Luis")], tableIds: ["t4", "t5"] };
+    const { el } = await mountApp({
+      getTablesState: vi
+        .fn()
+        .mockResolvedValue([
+          mesa(joined),
+          { ...mesa(joined), id: "t5", label: "5", shortName: "5" },
+        ]),
+    });
+    const order = await openTable(el);
+    expect(order.shadowRoot!.querySelector('[data-take-over="draft-p2"]')).not.toBeNull();
+    const saves = vi.mocked(api.saveDraft).mock.calls.length;
+
+    order.shadowRoot!.querySelector<HTMLElement>("[data-back]")!.click();
+    await flush(el);
+    emit(floor(el), "open-table", { tableId: "t5", seated: true });
+    await flush(el);
+
+    expect(tableOrder(el).party?.id).toBe("v1");
+    expect(text(banner(el))).toBe("");
+    expect(vi.mocked(api.saveDraft).mock.calls.length).toBe(saves);
+  });
+
+  it("leaves another person's draft for another bill with no take-over said and nothing saved", async () => {
+    drafts.drafts.push(savedDraft("p2", "Luis"));
+    const { el } = await mountApp({
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([billOf(), billOf({ workingOrderId: "wo-5", billNumber: 2 })]),
+    });
+    const order = await openTable(el);
+    expect(order.shadowRoot!.querySelector('[data-take-over="draft-p2"]')).not.toBeNull();
+    const saves = vi.mocked(api.saveDraft).mock.calls.length;
+
+    emit(order, "switch-bill", { workingOrderId: "wo-5" });
+    await flush(el);
+
+    expect(tableOrder(el).orderId).toBe("wo-5");
+    expect(text(banner(el))).toBe("");
+    expect(vi.mocked(api.saveDraft).mock.calls.length).toBe(saves);
+  });
+});
+
 describe("till-app: a balance read that shows the held payment (A796 default 7)", () => {
   // The read that does not show the payment changes nothing: A773's "A773 an unanswered partial
   // payment remains the only request across operator changes" pins it.
@@ -2955,10 +3696,13 @@ describe("till-app: a change refused on a bill that holds money", () => {
   const heldMoney = balanceOf({ received: "50.00", outstanding: "70.00", payments: [paymentOf()] });
   const banner = (el: TillApp) =>
     el.shadowRoot!.querySelector<HTMLElement>('p.error[role="alert"]');
+  /** The bill switcher's rows: each bill, and what it owes. */
   const listed = (order: TillTableOrderScreen) =>
-    [...order.shadowRoot!.querySelectorAll<HTMLElement>("[data-bill]")].map((row) => ({
-      bill: row.dataset.bill,
-      total: text(row.querySelector("[data-bill-total]")),
+    [
+      ...order.shadowRoot!.querySelectorAll<HTMLElement>("[data-bill-switcher] [data-switch-bill]"),
+    ].map((row) => ({
+      bill: row.dataset.switchBill,
+      owes: text(row.querySelector(".bill-row-owes")),
     }));
 
   /** The table open on the partly paid bill, with how often each read had run by then. */
@@ -3017,8 +3761,8 @@ describe("till-app: a change refused on a bill that holds money", () => {
     ).toBe(codeMessage("product.unavailable"));
     expectReadAgain(reads);
     expect(listed(tableOrder(el))).toEqual([
-      { bill: "wo-4", total: money("120.00") },
-      { bill: "wo-9", total: money("12.00") },
+      { bill: "wo-4", owes: money("70.00") },
+      { bill: "wo-9", owes: money("12.00") },
     ]);
   });
 
@@ -3035,8 +3779,8 @@ describe("till-app: a change refused on a bill that holds money", () => {
     expect(mergeBills).toHaveBeenCalledOnce();
     expect(text(banner(el))).toBe(codeMessage("bill.payments_received"));
     expect(before).toEqual([
-      { bill: "wo-4", total: money("120.00") },
-      { bill: "wo-9", total: money("12.00") },
+      { bill: "wo-4", owes: money("70.00") },
+      { bill: "wo-9", owes: money("12.00") },
     ]);
     expect(listed(tableOrder(el))).toEqual(before);
     expectReadAgain({ bills: reads.bills, balance: reads.balance });
@@ -4165,8 +4909,6 @@ describe("till-app: the owner's split after a contribution", () => {
       emit(floor(el), "open-table", { tableId: "t4", seated: true });
       await flush(el);
       const screen = tableOrder(el);
-      screen.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-      await flush(el);
       return screen;
     })();
     expect(back.orderId).toBe("wo-4");
@@ -4286,8 +5028,6 @@ describe("till-app: a guest leaving early pays for a held dish", () => {
     await press(el, "[data-pay-close]");
     await expect.poll(() => dialog(el)).toBeNull();
     const order = tableOrder(el);
-    await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-    await flush(el);
     const dish = await openSentDish(order, tiramisu.id, "held");
     expect(text(dish.querySelector("[data-sent-line-status]"))).toBe(t("table.group_held"));
     expect(text(dish.querySelector("[data-line-paid]"))).toBe(t("bill_pay.paid"));
@@ -6301,7 +7041,11 @@ describe("till-app: a bill's full invoice offers A4 on the device's invoice prin
     });
     const order = await openTable(el);
 
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
     const dialog = recipientDialog(el)!;
     expect(getInvoiceDeliveryOptions).toHaveBeenCalledOnce();
@@ -6339,7 +7083,11 @@ describe("till-app: a bill's full invoice offers A4 on the device's invoice prin
       getPartyBills,
     });
     const order = await openTable(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
     const dialog = recipientDialog(el)!;
     expect(dialog.savedDelivery).toEqual({ medium: "a4", pagePrinterId: "pp-office" });
@@ -6372,7 +7120,11 @@ describe("till-app: a bill's full invoice offers A4 on the device's invoice prin
       getPartyBills,
     });
     const order = await openTable(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
     const dialog = recipientDialog(el)!;
     const email = () =>
@@ -6406,7 +7158,11 @@ describe("till-app: a bill's full invoice offers A4 on the device's invoice prin
     const getInvoiceDeliveryOptions = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     const { el } = await mountApp({ ...fullInvoicesOn(), getInvoiceDeliveryOptions });
     const order = await openTable(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
     const dialog = recipientDialog(el)!;
     expect(dialog.deliveryOptions).toBeNull();
@@ -6427,7 +7183,11 @@ describe("till-app: a bill's full invoice offers A4 on the device's invoice prin
       getPartyBills,
     });
     const order = await openTable(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
     const choice = {
       invoiceType: "F1",
@@ -6477,7 +7237,11 @@ describe("till-app: a bill's full invoice offers A4 on the device's invoice prin
     );
     const { el } = await mountApp({ ...fullInvoicesOn(), getInvoiceDeliveryOptions });
     const order = await openTable(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
     expect(recipientDialog(el)).toBeNull();
     emit(order, "logout");
@@ -6537,7 +7301,11 @@ describe("till-app: a bill's full invoice keeps its saved delivery and re-reads 
       getPartyBills,
     });
     const order = await openTable(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
     await fillAndSave(el, "Ana García López");
     expect(setOrderInvoiceChoice).toHaveBeenCalledWith("wo-4", {
@@ -6566,7 +7334,11 @@ describe("till-app: a bill's full invoice keeps its saved delivery and re-reads 
       getPartyBills,
     });
     const order = await openTable(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
     const form = recipientDialog(el)!;
     const field = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
@@ -6606,7 +7378,11 @@ describe("till-app: a bill's full invoice keeps its saved delivery and re-reads 
       getPartyBills,
     });
     const order = await openTable(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
     await flush(el);
     await fillAndSave(el);
     const form = recipientDialog(el)!;
@@ -6630,7 +7406,7 @@ describe("till-app: a bill's full invoice keeps its saved delivery and re-reads 
     const order = await openTable(el);
     const button = () =>
       order.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-        "[data-choose-bill-invoice]",
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
       )!;
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {

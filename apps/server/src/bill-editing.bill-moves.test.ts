@@ -115,7 +115,6 @@ async function move(
   into: Awaited<ReturnType<typeof party>>,
   billId: string,
   expectedEdits: BillEditExpected[],
-  bills: "merge" | "separate" = "separate",
 ) {
   const rows = await venue.db
     .select()
@@ -133,7 +132,6 @@ async function move(
         otherPartyId: into.partyId,
         expectedOtherPartyRevision: rows.find((p) => p.id === into.partyId)!.revision,
         operatorId: venue.operatorId,
-        bills,
         expectedEdits,
       },
     ),
@@ -237,16 +235,47 @@ describe("moving one bill compares only that bill and the complete destination",
     });
     expect((await billEdits(into.tabId))[0]).toEqual(expected.find((e) => e.billId === into.tabId));
   });
-  it("refuses a merge even with a common foreign editor", async () => {
+  it("keeps two bills with a common foreign editor apart when one moves to the other's party, and Merge bills still refuses them", async () => {
     const from = await party(),
       into = await party();
-    await save(from.partyId, from.tabId, venue.adminId);
+    const moving = await save(from.partyId, from.tabId, venue.adminId);
     await save(into.partyId, into.tabId, venue.adminId);
     const expected = await billEdits(from.tabId, into.tabId);
+    const staying = expected.find((e) => e.billId === into.tabId)!;
+    expect(await move(from, into, from.tabId, expected)).toEqual({
+      partyId: into.partyId,
+      billId: from.tabId,
+    });
+    expect((await billEdits(from.tabId))[0]).toEqual({
+      ...moving.edit,
+      editorVersion: 2,
+      draftRevision: 1,
+    });
+    expect((await billEdits(into.tabId))[0]).toEqual(staying);
+    const [draft] = await venue.db
+      .select()
+      .from(orderDrafts)
+      .where(eq(orderDrafts.id, moving.draft!.id));
+    expect(draft).toMatchObject({
+      partyId: into.partyId,
+      billId: from.tabId,
+      ownerId: venue.adminId,
+      state: "open",
+    });
+    const after = await billEdits(from.tabId, into.tabId);
+    const [row] = await venue.db.select().from(parties).where(eq(parties.id, into.partyId));
     await refused(
-      () => move(from, into, from.tabId, expected, "merge"),
+      () =>
+        inTx(venue, (tx) =>
+          mergeBills(tx, venue.cfg, into.tabId, from.tabId, {
+            partyId: into.partyId,
+            expectedPartyRevision: row!.revision,
+            operatorId: venue.operatorId,
+            expectedEdits: after,
+          }),
+        ),
       "draft.taken_over",
-      conflict(expected[0]!, expected),
+      conflict(after[0]!, after),
     );
   });
 });
@@ -260,7 +289,6 @@ describe("split a table carries only its moved bill editor", () => {
     const own = await venue.db.select().from(parties).where(eq(parties.id, from.partyId));
     await inTx(venue, (tx) =>
       joinTables(tx, venue.cfg, from.partyId, free.id, {
-        bills: "separate",
         operatorId: venue.operatorId,
         otherPartyId: null,
         expectedPartyRevision: own[0]!.revision,
@@ -610,7 +638,6 @@ describe("bill move HTTP boundaries require observed edits and use the authentic
           ? `/api/parties/${from.partyId}/split-table`
           : `/api/bills/${from.tabId}/${action}`;
       const body = {
-        bills: "separate",
         partyId: from.partyId,
         expectedPartyRevision: from.revision,
         to: { tableId: into.tableId },
@@ -638,7 +665,6 @@ describe("bill move HTTP boundaries require observed edits and use the authentic
     const before = await allRows();
     expect(
       await send(venue.app, venue.cookie, "POST", `/api/bills/${from.tabId}/move`, {
-        bills: "separate",
         partyId: from.partyId,
         expectedPartyRevision: from.revision,
         to: { tableId: into.tableId },

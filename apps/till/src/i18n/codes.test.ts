@@ -320,17 +320,11 @@ it("says a table needs clearing, and that a table has gone, in both languages", 
 });
 
 it("words the refusals a bill move to a table or away from its party can meet, in both languages", () => {
-  for (const code of ["party.main_bill_stays", "table.already_in_party", "table.inactive"]) {
+  for (const code of ["table.already_in_party", "table.inactive"]) {
     for (const locale of ["en", "es"]) {
       expect(codeMessage(code, locale)).not.toBe(codeMessage("some.unmapped_code", locale));
     }
   }
-  expect(codeMessage("party.main_bill_stays", "en")).toBe(
-    "This is the table's main bill, and the table has other unpaid bills. Move the other bills first, or merge them into this one",
-  );
-  expect(codeMessage("party.main_bill_stays", "es")).toBe(
-    "Es la cuenta principal de la mesa, y la mesa tiene otras cuentas sin pagar. Mueve antes las otras cuentas o júntalas con esta",
-  );
   expect(codeMessage("table.already_in_party", "en")).toBe(
     "Those guests already have that table. Choose another table",
   );

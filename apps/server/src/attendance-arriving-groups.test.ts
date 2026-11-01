@@ -81,7 +81,6 @@ async function prepare(action: Action) {
       joinTables(tx, v.cfg, source.partyId, free, {
         expectedPartyRevision: source.revision,
         operatorId: v.adminId,
-        bills: "separate",
         otherPartyId: null,
       }),
     );
@@ -120,7 +119,6 @@ function command(app: Hono, action: Action, p: Awaited<ReturnType<typeof prepare
   return send(app, v.cookie, "POST", `/api/bills/${p.billId}/move`, {
     ...spoofed,
     to: { tableId: p.tableId },
-    bills: "separate",
     expectedPartyRevision: p.revision,
     ...(p.destination === null
       ? {}

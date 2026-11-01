@@ -509,6 +509,349 @@ test("a menu at the bottom of the screen lifts its popup to exactly 8px above th
   expect(edge.popup.top).toBeLessThan(edge.trigger.bottom);
 });
 
+describe("opens-below", () => {
+  async function longMenu(count: number) {
+    const { el, trigger, popup } = await mountActions();
+    el.style.setProperty("position", "fixed");
+    el.style.setProperty("inset-inline-start", "40%");
+    el.style.setProperty("inset-block-start", "48px");
+    const picked: string[] = [];
+    const actions = Array.from({ length: count }, (_, index) => {
+      const action = document.createElement("wt-button");
+      action.textContent = `Action ${index + 1}`;
+      action.addEventListener("click", () => picked.push(action.textContent!));
+      return action;
+    });
+    el.append(...actions);
+    await Promise.all(actions.map((action) => action.updateComplete));
+    return { el, trigger, popup, actions, picked };
+  }
+
+  it("a menu taller than the room under its trigger opens under it, fits the window and scrolls its last action into reach", async () => {
+    await page.viewport(600, 400);
+    try {
+      const { el, trigger, popup, actions, picked } = await longMenu(15);
+      el.opensBelow = true;
+      await el.updateComplete;
+      await userEvent.click(trigger);
+
+      const box = popup.getBoundingClientRect();
+      const anchor = trigger.getBoundingClientRect();
+      expect(box.top).toBeCloseTo(anchor.bottom, 0);
+      // Rounded down to cut through an action's middle: less than one action's pitch above the edge.
+      const pitch =
+        actions[1]!.getBoundingClientRect().top - actions[0]!.getBoundingClientRect().top;
+      expect(box.bottom).toBeLessThanOrEqual(innerHeight - 8 + 0.5);
+      expect(box.bottom).toBeGreaterThan(innerHeight - 8 - pitch);
+      expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
+      const last = actions.at(-1)!;
+      await userEvent.click(last);
+      expect(picked).toEqual(["Action 15"]);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
+  it("does not open over its own trigger, so a second tap there reaches the trigger, not an action", async () => {
+    await page.viewport(600, 400);
+    try {
+      const { el, trigger, popup } = await longMenu(15);
+      el.opensBelow = true;
+      await el.updateComplete;
+      el.show();
+      const anchor = trigger.getBoundingClientRect();
+      const hit = document.elementFromPoint(
+        anchor.left + anchor.width / 2,
+        anchor.top + anchor.height / 2,
+      );
+      expect(hit).toBe(el);
+      expect(popup.getBoundingClientRect().top).toBeGreaterThanOrEqual(anchor.bottom - 0.5);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
+  it("without it, the same menu still moves up to fit, over its trigger", async () => {
+    await page.viewport(600, 400);
+    try {
+      const { el, trigger, popup } = await longMenu(5);
+      el.style.setProperty("inset-block-start", "200px");
+      el.show();
+      const box = popup.getBoundingClientRect();
+      expect(box.bottom).toBeCloseTo(innerHeight - 8, 0);
+      expect(box.top).toBeLessThan(trigger.getBoundingClientRect().bottom);
+      expect(popup.style.maxHeight).toBe("");
+      el.hide();
+
+      // At the same trigger, the room under it shows more than one action and a half.
+      el.opensBelow = true;
+      await el.updateComplete;
+      el.show();
+      expect(popup.getBoundingClientRect().top).toBeCloseTo(
+        trigger.getBoundingClientRect().bottom,
+        0,
+      );
+      expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
+  it("leaves a menu that fits under its trigger at its own height", async () => {
+    const { el, trigger, popup } = await longMenu(2);
+    el.show();
+    const natural = popup.getBoundingClientRect().height;
+    el.hide();
+    el.opensBelow = true;
+    await el.updateComplete;
+    el.show();
+    const box = popup.getBoundingClientRect();
+    expect(box.height).toBeCloseTo(natural, 0);
+    expect(box.top).toBeCloseTo(trigger.getBoundingClientRect().bottom, 0);
+  });
+
+  it("a list whose last action already ends inside the room is not cut short", async () => {
+    await page.viewport(600, 400);
+    try {
+      const { el, trigger, popup, edit, remove } = await mountActions();
+      el.style.setProperty("position", "fixed");
+      el.style.setProperty("inset-block-start", "8px");
+      el.opensBelow = true;
+      await el.updateComplete;
+      el.show();
+      const natural = popup.getBoundingClientRect().height;
+      el.hide();
+      const height = trigger.getBoundingClientRect().height;
+      el.style.setProperty("inset-block-start", `${innerHeight - 8 - natural + 1 - height}px`);
+      el.show();
+
+      expect(popup.getBoundingClientRect().top).toBeCloseTo(
+        trigger.getBoundingClientRect().bottom,
+        0,
+      );
+      const cut = cutOf(popup);
+      for (const action of [edit, remove]) {
+        expect(action.getBoundingClientRect().bottom).toBeLessThanOrEqual(cut + 0.5);
+      }
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
+  it("a list taller than the window, moved up to fit, is capped to the window and scrolls", async () => {
+    await page.viewport(600, 400);
+    try {
+      const { el, popup, actions, picked } = await longMenu(15);
+      el.opensBelow = true;
+      await el.updateComplete;
+      el.style.setProperty("inset-block-start", "350px");
+      el.show();
+      const box = popup.getBoundingClientRect();
+      expect(box.top).toBeCloseTo(8, 0);
+      expect(box.bottom).toBeCloseTo(innerHeight - 8, 0);
+      expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
+      await userEvent.click(actions.at(-1)!);
+      expect(picked).toEqual(["Action 15"]);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
+  it("a list of no actions it can find still opens under its trigger, capped to the room", async () => {
+    await page.viewport(600, 400);
+    try {
+      const el = (await mount("<wt-row-actions opens-below></wt-row-actions>")) as WtRowActions;
+      el.style.setProperty("position", "fixed");
+      el.style.setProperty("inset-block-start", "48px");
+      const rows = Array.from({ length: 15 }, (_, index) => {
+        const row = document.createElement("div");
+        row.textContent = `Row ${index + 1}`;
+        row.style.setProperty("padding-block", "var(--wt-space-3)");
+        return row;
+      });
+      el.append(...rows);
+      await el.updateComplete;
+      el.show();
+
+      const trigger = el.shadowRoot!.querySelector("button")!;
+      const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+      const box = popup.getBoundingClientRect();
+      expect(box.top).toBeCloseTo(trigger.getBoundingClientRect().bottom, 0);
+      expect(box.bottom).toBeCloseTo(innerHeight - 8, 0);
+      expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
+  /** The popup's visible bottom edge: where its scrolling area stops showing content. */
+  const cutOf = (popup: HTMLElement) =>
+    popup.getBoundingClientRect().top + popup.clientTop + popup.clientHeight;
+
+  it("a list cut short is cut through the middle of an action, so the half that shows says there is more", async () => {
+    await page.viewport(600, 400);
+    try {
+      const { el, popup } = await longMenu(15);
+      const actions = [...el.querySelectorAll("wt-button")];
+      el.opensBelow = true;
+      await el.updateComplete;
+      for (let top = 40; top <= 130; top += 7) {
+        el.style.setProperty("inset-block-start", `${top}px`);
+        el.show();
+        const cut = cutOf(popup);
+        const middles = actions.map((action) => {
+          const box = action.getBoundingClientRect();
+          return box.top + box.height / 2;
+        });
+        expect(
+          Math.min(...middles.map((middle) => Math.abs(middle - cut))),
+          `trigger top ${top}px`,
+        ).toBeLessThanOrEqual(1);
+        expect(popup.getBoundingClientRect().bottom).toBeLessThanOrEqual(innerHeight - 8 + 0.5);
+        el.hide();
+      }
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
+  it("actions inside a slotted group are cut through the middle too", async () => {
+    await page.viewport(600, 400);
+    try {
+      const el = (await mount("<wt-row-actions opens-below></wt-row-actions>")) as WtRowActions;
+      el.style.setProperty("position", "fixed");
+      el.style.setProperty("inset-block-start", "48px");
+      const group = document.createElement("div");
+      group.setAttribute("role", "group");
+      group.style.setProperty("display", "grid");
+      const actions = Array.from({ length: 15 }, (_, index) => {
+        const action = document.createElement("wt-button");
+        action.textContent = `Action ${index + 1}`;
+        return action;
+      });
+      group.append(...actions);
+      el.append(group);
+      await Promise.all(actions.map((action) => action.updateComplete));
+      el.show();
+
+      const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+      const cut = cutOf(popup);
+      const middles = actions.map((action) => {
+        const box = action.getBoundingClientRect();
+        return box.top + box.height / 2;
+      });
+      expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
+      expect(Math.min(...middles.map((middle) => Math.abs(middle - cut)))).toBeLessThanOrEqual(1);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
+  /** How far under its top a popup must reach to show one whole action and half of the next. */
+  async function roomForOneAndAHalf(el: WtRowActions, popup: HTMLElement) {
+    el.style.setProperty("inset-block-start", "8px");
+    el.show();
+    const second = el.querySelectorAll("wt-button")[1]!.getBoundingClientRect();
+    const need = second.top + second.height / 2 - popup.getBoundingClientRect().top;
+    el.hide();
+    return need;
+  }
+
+  it.each([
+    ["one whole action and half the next fits", 2, true],
+    ["less than that", -2, false],
+  ])(
+    "with room under the trigger for %s, it opens there or moves up to fit",
+    async (_name, spare, opensUnder) => {
+      await page.viewport(600, 400);
+      try {
+        const { el, trigger, popup } = await longMenu(5);
+        el.opensBelow = true;
+        await el.updateComplete;
+        const need = await roomForOneAndAHalf(el, popup);
+        const height = trigger.getBoundingClientRect().height;
+        el.style.setProperty("inset-block-start", `${innerHeight - 8 - need - spare - height}px`);
+        el.show();
+
+        const box = popup.getBoundingClientRect();
+        const anchor = trigger.getBoundingClientRect();
+        if (opensUnder) {
+          expect(box.top).toBeCloseTo(anchor.bottom, 0);
+          expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
+        } else {
+          expect(box.top).toBeLessThan(anchor.bottom);
+          expect(box.bottom).toBeCloseTo(innerHeight - 8, 0);
+          expect(popup.style.maxHeight).toBe(`${innerHeight - 16}px`);
+          expect(popup.scrollHeight).toBeLessThanOrEqual(popup.clientHeight);
+        }
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    },
+  );
+
+  it("hidden actions do not count toward the one action and a half the room must show", async () => {
+    await page.viewport(600, 400);
+    try {
+      const { el, trigger, popup } = await longMenu(5);
+      el.opensBelow = true;
+      await el.updateComplete;
+      const need = await roomForOneAndAHalf(el, popup);
+      const height = trigger.getBoundingClientRect().height;
+      el.style.setProperty("inset-block-start", `${innerHeight - 8 - need + 2 - height}px`);
+      const hidden = Array.from({ length: 3 }, () => {
+        const action = document.createElement("wt-button");
+        action.hidden = true;
+        return action;
+      });
+      el.prepend(...hidden);
+      el.show();
+
+      expect(popup.getBoundingClientRect().top).toBeLessThan(
+        trigger.getBoundingClientRect().bottom,
+      );
+      expect(popup.style.maxHeight).toBe(`${innerHeight - 16}px`);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
+  it("a trigger at the window's bottom edge moves the list up to fit, whole", async () => {
+    await page.viewport(600, 400);
+    try {
+      const { el, trigger, popup } = await longMenu(5);
+      el.opensBelow = true;
+      await el.updateComplete;
+      el.style.setProperty("inset-block-start", "350px");
+      el.show();
+      const box = popup.getBoundingClientRect();
+      expect(box.bottom).toBeCloseTo(innerHeight - 8, 0);
+      expect(box.top).toBeLessThan(trigger.getBoundingClientRect().bottom);
+      expect(popup.scrollHeight).toBeLessThanOrEqual(popup.clientHeight);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
+  it("turned off, the next open drops the height it capped", async () => {
+    await page.viewport(600, 400);
+    try {
+      const { el, popup } = await longMenu(15);
+      el.opensBelow = true;
+      await el.updateComplete;
+      el.show();
+      expect(popup.style.maxHeight).not.toBe("");
+      el.hide();
+      el.opensBelow = false;
+      await el.updateComplete;
+      el.show();
+      expect(popup.style.maxHeight).toBe("");
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+});
+
 test("Escape that closes the menu goes no further, so a dialog around it stays open", async () => {
   const { el, host, popup } = await mountActions();
   el.show();

@@ -91,6 +91,9 @@ export class WtRowActions extends LitElement {
   @property() iconSize: WtIconSize = "md";
   /** The trigger edge the popup lines up with; "end" suits a menu at the trailing edge. */
   @property() align: "start" | "end" = "start";
+  /** Opens the popup under the trigger and scrolls what does not fit, rather than moving it up over
+   * the trigger, where a second tap would land on an action. */
+  @property({ type: Boolean, attribute: "opens-below" }) opensBelow = false;
   @state() private expanded = false;
   @query("button") private trigger!: HTMLButtonElement;
   @query("[popover]") private popup!: HTMLElement;
@@ -132,10 +135,50 @@ export class WtRowActions extends LitElement {
 
   private positionPopup(): void {
     const anchor = this.trigger.getBoundingClientRect();
+    if (!this.opensBelow) this.popup.style.maxHeight = "";
+    const below = this.opensBelow && this.capBelow(innerHeight - anchor.bottom - 8);
     const popup = this.popup.getBoundingClientRect();
     const desiredLeft = this.align === "end" ? anchor.right - popup.width : anchor.left;
     this.popup.style.left = `${Math.max(8, Math.min(desiredLeft, innerWidth - popup.width - 8))}px`;
-    this.popup.style.top = `${Math.max(8, Math.min(anchor.bottom, innerHeight - popup.height - 8))}px`;
+    this.popup.style.top = below
+      ? `${anchor.bottom}px`
+      : `${Math.max(8, Math.min(anchor.bottom, innerHeight - popup.height - 8))}px`;
+  }
+
+  /** Caps the popup's height to `room`. A list cut short is cut through the middle of an action, so
+   * the half that shows says the list goes on even where no scrollbar is drawn. False, capped to the
+   * window less 8px above and below, when `room` cannot show one whole action and half of the next. */
+  private capBelow(room: number): boolean {
+    const popup = this.popup;
+    popup.style.maxHeight = `${Math.max(0, room)}px`;
+    if (popup.scrollHeight <= popup.clientHeight) return true;
+    const rows = this.rows();
+    if (rows.length === 0) return true;
+    const contentTop = popup.getBoundingClientRect().top + popup.clientTop - popup.scrollTop;
+    if (rows.at(-1)!.getBoundingClientRect().bottom - contentTop <= popup.clientHeight) return true;
+    const middles = rows.map((row) => {
+      const box = row.getBoundingClientRect();
+      return box.top + box.height / 2 - contentTop;
+    });
+    const shown = middles.filter((middle) => middle <= popup.clientHeight);
+    if (shown.length < 2) {
+      popup.style.maxHeight = `${Math.max(0, innerHeight - 16)}px`;
+      return false;
+    }
+    popup.style.maxHeight = `${room - (popup.clientHeight - Math.max(...shown))}px`;
+    return true;
+  }
+
+  /** The menu's drawn actions, slotted directly or inside a slotted group. */
+  private rows(): Element[] {
+    const selector = "button, a[href], wt-button";
+    return this.popup
+      .querySelector("slot")!
+      .assignedElements({ flatten: true })
+      .flatMap((element) =>
+        element.matches(selector) ? [element] : [...element.querySelectorAll(selector)],
+      )
+      .filter((row) => row.getBoundingClientRect().height > 0);
   }
 
   // Judged while capturing, before the action's own listeners: a real click runs microtasks after

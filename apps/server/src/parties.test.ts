@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -30,6 +30,7 @@ import {
   inTx,
   order,
   orderForParty,
+  openingBillOfParty,
   partyRow,
   pay,
   placeByHand,
@@ -91,34 +92,42 @@ async function membershipsOf(partyId: string) {
 async function join(cfg: DeviceRequestConfig, partyId: string, tableId: string): Promise<void> {
   const command = await commandFor(suite, partyId);
   await inTx(suite, (tx) =>
-    joinTables(tx, cfg, partyId, tableId, { ...command, bills: "merge", otherPartyId: null }),
+    joinTables(tx, cfg, partyId, tableId, { ...command, otherPartyId: null }),
   );
 }
 
 /**
- * Combines party `from` into `into`, merging their main bills: `into` joins `from`'s table, whose
- * tables then join `into`; or, with `guestsMove`, `from`'s guests move to `into`'s table and
- * leave theirs.
+ * Combines party `from` into `into`: `into` joins `from`'s table, whose tables then join `into`;
+ * or, with `guestsMove`, `from`'s guests move to `into`'s table and leave theirs. Merge bills then
+ * merges `from`'s tab into `into`'s in the same transaction, as staff do.
  */
 async function merge(
   cfg: DeviceRequestConfig,
-  into: { partyId: string; tableId: string },
-  from: { partyId: string; tableId: string },
+  into: { partyId: string; tableId: string; tabId: string },
+  from: { partyId: string; tableId: string; tabId: string },
   guestsMove = false,
 ): Promise<void> {
   const [mover, holder] = guestsMove ? [from, into] : [into, from];
   const options = {
-    bills: "merge" as const,
     expectedPartyRevision: await revisionOf(suite, mover.partyId),
     otherPartyId: holder.partyId,
     expectedOtherPartyRevision: await revisionOf(suite, holder.partyId),
     operatorId: OPERATOR,
   };
-  await inTx(suite, (tx) =>
-    guestsMove
+  await inTx(suite, async (tx) => {
+    await (guestsMove
       ? moveGuests(tx, cfg, mover.partyId, holder.tableId, options)
-      : joinTables(tx, cfg, mover.partyId, holder.tableId, options),
-  );
+      : joinTables(tx, cfg, mover.partyId, holder.tableId, options));
+    const [party] = await tx
+      .select({ revision: parties.revision })
+      .from(parties)
+      .where(eq(parties.id, into.partyId));
+    await mergeBills(tx, cfg, into.tabId, from.tabId, {
+      partyId: into.partyId,
+      expectedPartyRevision: party!.revision,
+      operatorId: OPERATOR,
+    });
+  });
 }
 
 async function partyIdOf(orderId: string): Promise<string | null> {
@@ -651,7 +660,8 @@ describe("joined tables (Mesa 4 and Mesa 5)", () => {
       expect(await inTx(suite, (tx) => partyForTable(tx, table))).toMatchObject({ partyId });
     }
     expect(await partyIdOf(dessertTab)).toBe(partyId);
-    expect((await partyRow(suite, partyId)).mainBillId).toBe(dessertTab);
+    expect(await statusOf(suite, dessertTab)).toBe("open");
+    expect(await openingBillOfParty(venue, partyId)).toBe(dessertTab);
   });
 
   it("lets the next party at either table see no earlier bill once the party finishes", async () => {
@@ -690,7 +700,7 @@ describe("joined tables (Mesa 4 and Mesa 5)", () => {
     const command = await commandFor(suite, partyId);
 
     await inTx(suite, (tx) =>
-      moveGuests(tx, venue.cfg, partyId, mesa7, { ...command, bills: "merge", otherPartyId: null }),
+      moveGuests(tx, venue.cfg, partyId, mesa7, { ...command, otherPartyId: null }),
     );
 
     const memberships = await membershipsOf(partyId);
@@ -701,7 +711,7 @@ describe("joined tables (Mesa 4 and Mesa 5)", () => {
       expect(await inTx(suite, (tx) => partyForTable(tx, table))).toBeNull();
       expect((await floorRow(venue, table)).state).toBe("free");
     }
-    expect((await partyRow(suite, partyId)).mainBillId).toBe(tabId);
+    expect(await openingBillOfParty(venue, partyId)).toBe(tabId);
   });
 });
 
@@ -724,7 +734,7 @@ describe("a paid party (paying changes no table of the party)", () => {
     );
 
     await inTx(suite, (tx) =>
-      moveGuests(tx, venue.cfg, partyId, mesa7, { ...command, bills: "merge", otherPartyId: null }),
+      moveGuests(tx, venue.cfg, partyId, mesa7, { ...command, otherPartyId: null }),
     );
 
     expect(await inTx(suite, (tx) => partyForTable(tx, mesa4))).toBeNull();
@@ -745,7 +755,7 @@ describe("a paid party (paying changes no table of the party)", () => {
     const command = await commandFor(suite, partyId);
 
     await inTx(suite, (tx) =>
-      joinTables(tx, venue.cfg, partyId, mesa5, { ...command, bills: "merge", otherPartyId: null }),
+      joinTables(tx, venue.cfg, partyId, mesa5, { ...command, otherPartyId: null }),
     );
 
     for (const table of [mesa4, mesa5]) {
@@ -756,7 +766,8 @@ describe("a paid party (paying changes no table of the party)", () => {
     }
     const { tabId: dessertTab } = await orderForParty(venue, partyId, ["Flan"]);
     expect(await partyIdOf(dessertTab)).toBe(partyId);
-    expect((await partyRow(suite, partyId)).mainBillId).toBe(dessertTab);
+    expect(await statusOf(suite, dessertTab)).toBe("open");
+    expect(await openingBillOfParty(venue, partyId)).toBe(dessertTab);
   });
 });
 
@@ -796,7 +807,6 @@ describe("stale moves", () => {
       name: "move guests",
       run: (p, tx, stale) =>
         moveGuests(tx, p.venue.cfg, p.a.partyId, p.mesa7, {
-          bills: "merge",
           expectedPartyRevision: stale.a,
           otherPartyId: null,
           operatorId: OPERATOR,
@@ -806,7 +816,6 @@ describe("stale moves", () => {
       name: "join",
       run: (p, tx, stale) =>
         joinTables(tx, p.venue.cfg, p.a.partyId, p.mesa5, {
-          bills: "merge",
           expectedPartyRevision: stale.a,
           otherPartyId: null,
           operatorId: OPERATOR,
@@ -816,7 +825,6 @@ describe("stale moves", () => {
       name: "combine",
       run: (p, tx, stale) =>
         joinTables(tx, p.venue.cfg, p.a.partyId, p.mesa6, {
-          bills: "merge",
           expectedPartyRevision: stale.a,
           otherPartyId: p.b.partyId,
           expectedOtherPartyRevision: stale.b,
@@ -937,7 +945,6 @@ describe("stale moves", () => {
     const error = await captureError(() =>
       inTx(suite, (tx) =>
         joinTables(tx, p.venue.cfg, p.a.partyId, p.mesa6, {
-          bills: "merge",
           expectedPartyRevision: 0,
           otherPartyId: p.b.partyId,
           operatorId: OPERATOR,
@@ -1120,13 +1127,20 @@ describe("merged parties keep their bills", () => {
     const bills = await inTx(suite, (tx) => readPartyBills(tx, t.partyId));
 
     expect(
-      bills.map((b) => [b.workingOrderId, b.partyId, b.status, b.total, b.outstanding]),
+      bills.map((b) => [
+        b.workingOrderId,
+        b.partyId,
+        b.status,
+        b.total,
+        b.outstanding,
+        b.billNumber,
+      ]),
     ).toEqual([
       // The open tab and the presented bill moved to T when the parties combined (P13).
-      [s.tabId, t.partyId, "abandoned", "0.00", "0.00"],
-      [settledId, s.partyId, "settled", "20.00", "0.00"],
-      [placedId, t.partyId, "placed", "15.00", "15.00"],
-      [t.tabId, t.partyId, "open", "30.00", "30.00"],
+      [t.tabId, t.partyId, "open", "30.00", "30.00", 1],
+      [settledId, s.partyId, "settled", "20.00", "0.00", 3],
+      [placedId, t.partyId, "placed", "15.00", "15.00", 4],
+      [s.tabId, t.partyId, "abandoned", "0.00", "0.00", null],
     ]);
     expect(bills.find((b) => b.workingOrderId === settledId)!.receiptAvailable).toBe(true);
   });
@@ -1252,7 +1266,6 @@ describe("a merged party's invoiced bill, collected at the till (spec §12 item 
 
     const joined = await send(venue.app, venue.cookie, "POST", `/api/parties/${t.partyId}/join`, {
       tableId: s.tableId,
-      bills: "merge",
       expectedEdits: await inTx(suite, (tx) => partyBillEditsForTest(tx, [s.partyId, t.partyId])),
       expectedPartyRevision: await revisionOf(suite, t.partyId),
       otherPartyId: s.partyId,
@@ -1279,7 +1292,7 @@ describe("a merged party's invoiced bill, collected at the till (spec §12 item 
       recipient: null,
       partyId: t.partyId,
       label: null,
-      billNumber: 2,
+      billNumber: 3,
       billName: null,
       status: "placed",
       total: "18.00",
@@ -1783,5 +1796,37 @@ describe("money received against a bill before its invoice", () => {
       finishTable(tx, { partyId, expectedPartyRevision: revision, operatorId: OPERATOR }),
     );
     expect(await statusOf(suite, tabId)).toBe("abandoned");
+  });
+});
+
+describe("A803 bill order:", () => {
+  it("a party whose Bill 2 was opened before its Bill 1 arrived lists Bill 1 first", async () => {
+    const venue = await setupPartyVenue(suite.db);
+    const mesa4 = await venue.table("Mesa 4");
+    const mesa5 = await venue.table("Mesa 5");
+    const early = await seat(venue, mesa4);
+    await order(venue, early.tabId, "Vino");
+    const late = await seat(venue, mesa5);
+    await order(venue, late.tabId, "Agua");
+    const moving = {
+      expectedPartyRevision: await revisionOf(suite, early.partyId),
+      otherPartyId: late.partyId,
+      expectedOtherPartyRevision: await revisionOf(suite, late.partyId),
+      operatorId: OPERATOR,
+    };
+    await inTx(suite, (tx) => moveGuests(tx, venue.cfg, early.partyId, mesa5, moving));
+    const opened = await suite.db
+      .select({ id: workingOrders.id })
+      .from(workingOrders)
+      .where(inArray(workingOrders.id, [early.tabId, late.tabId]))
+      .orderBy(workingOrders.openedAt, workingOrders.orderNumber, workingOrders.id);
+    expect(opened.map((row) => row.id)).toEqual([early.tabId, late.tabId]);
+
+    const bills = await inTx(suite, (tx) => readPartyBills(tx, late.partyId));
+
+    expect(bills.map((b) => [b.workingOrderId, b.partyId, b.billNumber])).toEqual([
+      [late.tabId, late.partyId, 1],
+      [early.tabId, late.partyId, 2],
+    ]);
   });
 });

@@ -13,6 +13,8 @@ import type {
   BillDraftSnapshot,
   DraftTakeover,
   PartyDraftSnapshot,
+  PartyBill,
+  TableState,
   GroupLine,
   GroupRelease,
   SubmittedDraft,
@@ -777,3 +779,103 @@ export const BUSY_COUNTER: Partial<TillShell> = {
 };
 
 export const COUNTER_LOGO = png(120, 40);
+
+/** One bill of a seated party as `GET /api/parties/:id/bills` answers it: open, unnamed, no
+ * payment, owing `outstanding`. */
+export function partyBillOf(
+  partyId: string,
+  workingOrderId: string,
+  billNumber = 1,
+  over: Partial<PartyBill> = {},
+): PartyBill {
+  const outstanding = over.outstanding ?? "0.00";
+  return {
+    workingOrderId,
+    revision: 1,
+    invoiceType: "F2",
+    recipient: null,
+    partyId,
+    label: null,
+    billNumber,
+    billName: null,
+    status: "open",
+    total: outstanding,
+    outstanding,
+    hasPayments: false,
+    receiptAvailable: false,
+    ...over,
+  };
+}
+
+function mountedFloor(): Mock | undefined {
+  return mountedApi()?.getTablesState;
+}
+
+function mountedApi(): Record<string, Mock | undefined> | undefined {
+  const till = document.querySelector("till-app") as {
+    api?: Record<string, Mock | undefined>;
+  } | null;
+  return till?.api;
+}
+
+/** What `mock` has answered so far: its fulfilled results only, never one still held. */
+function fulfilled(mock: Mock | undefined): unknown[] {
+  return (mock?.mock.settledResults ?? []).flatMap((result) =>
+    result.type === "fulfilled" ? [result.value] : [],
+  );
+}
+
+/**
+ * A bills read that answers what a server holding the floor would: for a party, the bill a seat
+ * created for it (a fulfilled `seatTable` or `seatAtTables` answer of the mounted `till-app`'s api,
+ * its `tabId`) as Bill 1, then the bill the floor answers name for it (`openingBillId`), then each
+ * of `more(partyId)`, numbered in that order, all open. With one bill it owes the floor row's
+ * `outstanding`; with several, each owes `0.00`, as the fake does not split the amount.
+ * It reads what `floor()`'s mock has answered so far, by default the mounted `till-app`'s
+ * `getTablesState`, and never calls it or waits on it; a party neither seated nor on the floor has
+ * no bills. Floor answers naming two different bills for one party describe a state this fake
+ * cannot hold (the earlier bill paid or gone), so it fails the test with an uncaught error: give
+ * such a case its own bills read.
+ */
+export function floorPartyBills(
+  floor: () => Mock | undefined = mountedFloor,
+  more: (partyId: string) => readonly string[] = () => [],
+): Mock {
+  return vi.fn(async (partyId: string): Promise<PartyBill[]> => {
+    const api = mountedApi();
+    const seated = [...fulfilled(api?.seatTable), ...fulfilled(api?.seatAtTables)].flatMap(
+      (answer) => {
+        const seat = answer as { partyId?: string; tabId?: string } | null;
+        return seat?.partyId === partyId && typeof seat.tabId === "string" ? [seat.tabId] : [];
+      },
+    );
+    let named: string | null = null;
+    let party: TableState["party"] = null;
+    for (const answer of fulfilled(floor())) {
+      if (!Array.isArray(answer)) continue;
+      const row = (answer as TableState[]).find((table) => table.party?.id === partyId)?.party;
+      if (row == null) continue;
+      party = row;
+      if (row.openingBillId == null) continue;
+      if (named !== null && named !== row.openingBillId) {
+        const error = new Error(
+          `floorPartyBills: the floor named ${named} and then ${row.openingBillId} for party ${partyId}; give this case its own bills read`,
+        );
+        queueMicrotask(() => {
+          throw error;
+        });
+        throw error;
+      }
+      named = row.openingBillId;
+    }
+    const ids = [...new Set([...seated, ...(named === null ? [] : [named]), ...more(partyId)])];
+    return ids.map((id, at) =>
+      partyBillOf(
+        partyId,
+        id,
+        at + 1,
+        ids.length === 1 && party ? { outstanding: party.outstanding } : {},
+      ),
+    );
+  });
+}

@@ -504,7 +504,6 @@ describe("what moves, ends or keeps today's name", () => {
       await moveGuests(tx, v.cfg, partyId, toTableId, {
         expectedPartyRevision: await partyRevision(tx, partyId),
         operatorId: OPERATOR,
-        bills: "merge",
         otherPartyId: null,
       });
     });

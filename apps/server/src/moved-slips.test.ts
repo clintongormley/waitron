@@ -7,7 +7,7 @@ import { floorTodayJoins, floorTodayTables } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { kitchenNotices } from "@waitron/venue-service";
 import { writeMerge } from "./floor-today-merges.js";
-import { withMovedSlips, type MovedSlipsReach, type SlipsLater } from "./moved-slips.js";
+import { withMovedSlips, type MovedSlipsReach } from "./moved-slips.js";
 import { inTx, order, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 import { mergeOf, plannedZone, todayRow } from "./testing/floor-today-venue.js";
 import "./errors.js";
@@ -93,19 +93,14 @@ describe("withMovedSlips", () => {
     expect(await noticesOn([tabId])).toEqual([]);
   });
 
-  it("an inner call given the outer's slips writes into them and leaves the telling to the outer, once", async () => {
+  it("an inner call given the outer's slips leaves the telling to the outer, once", async () => {
     const { tableId, partyId, tabId } = await partyWithBurger();
     const name = suffixed("Window");
-    const notABill = randomUUID();
-    const into = randomUUID();
-    let outer: SlipsLater | undefined;
 
     const answer = await inTx(v, (tx) =>
       withMovedSlips(tx, v.cfg, { parties: [partyId] }, async (slips) => {
-        outer = slips;
         return withMovedSlips(tx, v.cfg, { later: slips }, async (inner) => {
           expect(inner).toBe(slips);
-          inner.mergedInto.set(notABill, into);
           await renameToday(tx, tableId, name);
           return "inner's answer";
         });
@@ -113,7 +108,6 @@ describe("withMovedSlips", () => {
     );
 
     expect(answer).toBe("inner's answer");
-    expect(outer!.mergedInto.get(notABill)).toBe(into);
     expect(await noticesOn([tabId])).toEqual([
       { workingOrderId: tabId, kind: "moved", movedTo: name },
     ]);

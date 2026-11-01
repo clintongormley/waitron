@@ -857,7 +857,6 @@ describe("a joined table the reset leaves in one of today's groups", () => {
     const answer = await send("POST", `/api/parties/${z.partyId}/join`, {
       zoneRevision: await zoneRevisionOf(v, z.zoneId),
       tableId: z.stool,
-      bills: "merge",
       expectedPartyRevision: await revisionOf(v, z.partyId),
       otherPartyId: null,
       merge: { moving: z.stool, target: z.long, side: "right", seats: 14 },

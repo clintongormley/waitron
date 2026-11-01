@@ -6,12 +6,13 @@ import type { TillSentOrders } from "../widgets/sent-orders.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { current, groups, now } from "./till-table-order-screen.current-orders.test-helpers.js";
 import { mount, resized } from "./till-table-order-screen.test-helpers.js";
+import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
 it.each([390, 1280])(
-  "reorders from Sent alone at %s px, including when the bill drawer opens",
+  "reorders from Sent alone at %s px, including when the table menu opens",
   async (width) => {
     const { el } = await mount({ orderId: "wo-4", groups, currentOrders: current(), now });
     el.style.width = `${width}px`;
@@ -38,9 +39,13 @@ it.each([390, 1280])(
     await userEvent.click(menu.querySelector<HTMLElement>("[data-group-later]")!);
     expect(reorders.map((event) => event.detail)).toEqual([{ heldGroupIds: ["g4", "g3"] }]);
     expect(reorders[0]!.bubbles && reorders[0]!.composed).toBe(true);
-    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-drawer]")).not.toBeNull();
+    await openTableMenu(el);
+    expect(
+      el
+        .shadowRoot!.querySelector("[data-table-menu]")!
+        .shadowRoot!.querySelector("[popover]")!
+        .matches(":popover-open"),
+    ).toBe(true);
     expect(el.shadowRoot!.querySelector("[data-group-up], [data-group-down]")).toBeNull();
   },
 );

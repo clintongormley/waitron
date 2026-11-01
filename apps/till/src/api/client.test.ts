@@ -2597,12 +2597,12 @@ describe("TillApi", () => {
 
   // --- Table actions on a party (/api/parties/:id/<verb>) and bill actions (/api/bills/:id/<verb>) ---
 
-  it("moveGuests POSTs the target table, the bill choice and both parties read to the party's /move route", async () => {
-    const answer = { partyId: "v7", mainBillId: "wo-7", merged: true };
+  it("moveGuests POSTs the target table and both parties read to the party's /move route", async () => {
+    const answer = { partyId: "v7", billIds: ["wo-7", "wo-1"] };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
 
     await expect(
-      new TillApi("", fetchStub).moveGuests("v1", "tbl-7", "merge", {
+      new TillApi("", fetchStub).moveGuests("v1", "tbl-7", {
         expectedPartyRevision: 3,
         otherPartyId: "v7",
         expectedOtherPartyRevision: 9,
@@ -2621,7 +2621,6 @@ describe("TillApi", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           toTableId: "tbl-7",
-          bills: "merge",
           expectedPartyRevision: 3,
           otherPartyId: "v7",
           expectedOtherPartyRevision: 9,
@@ -2634,20 +2633,24 @@ describe("TillApi", () => {
     );
   });
 
-  it("moveBill POSTs where the bill goes, the bill choice and the parties read to the bill's /move route, and answers the move", async () => {
-    const answer = { partyId: "v7", billId: "wo-check", merged: false };
+  it("moveBill POSTs where the bill goes and the parties read to the bill's /move route, and answers the move", async () => {
+    const answer = { partyId: "v7", billId: "wo-check" };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
 
     await expect(
-      new TillApi("", fetchStub).moveBill("wo-check", { tableId: "tbl-7" }, "separate", {
-        expectedPartyRevision: 3,
-        partyId: "v1",
-        otherPartyId: "v7",
-        expectedOtherPartyRevision: 9,
-        expectedEdits: [
-          { billId: "wo-check", editorVersion: 4, draftId: null, draftRevision: null },
-        ],
-      }),
+      new TillApi("", fetchStub).moveBill(
+        "wo-check",
+        { tableId: "tbl-7" },
+        {
+          expectedPartyRevision: 3,
+          partyId: "v1",
+          otherPartyId: "v7",
+          expectedOtherPartyRevision: 9,
+          expectedEdits: [
+            { billId: "wo-check", editorVersion: 4, draftId: null, draftRevision: null },
+          ],
+        },
+      ),
     ).resolves.toEqual(answer);
 
     expect(fetchStub).toHaveBeenCalledWith(
@@ -2658,7 +2661,6 @@ describe("TillApi", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           to: { tableId: "tbl-7" },
-          bills: "separate",
           expectedPartyRevision: 3,
           partyId: "v1",
           otherPartyId: "v7",
@@ -2674,20 +2676,23 @@ describe("TillApi", () => {
   it("moveBill sends a counter order read with no party, to a table read free, as partyId and otherPartyId null", async () => {
     const fetchStub = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ partyId: "v-new", billId: "wo-12", merged: false }));
+      .mockResolvedValue(jsonResponse({ partyId: "v-new", billId: "wo-12" }));
 
-    await new TillApi("", fetchStub).moveBill("wo-12", { tableId: "tbl-9" }, "merge", {
-      partyId: null,
-      otherPartyId: null,
-      expectedEdits: [{ billId: "wo-12", editorVersion: 8, draftId: null, draftRevision: null }],
-    });
+    await new TillApi("", fetchStub).moveBill(
+      "wo-12",
+      { tableId: "tbl-9" },
+      {
+        partyId: null,
+        otherPartyId: null,
+        expectedEdits: [{ billId: "wo-12", editorVersion: 8, draftId: null, draftRevision: null }],
+      },
+    );
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/bills/wo-12/move",
       expect.objectContaining({
         body: JSON.stringify({
           to: { tableId: "tbl-9" },
-          bills: "merge",
           partyId: null,
           otherPartyId: null,
           expectedEdits: [
@@ -2699,28 +2704,33 @@ describe("TillApi", () => {
   });
 
   it("moveBill sends a move to the counter with the counter's zone, or null", async () => {
-    const fetchStub = vi.fn(async () =>
-      jsonResponse({ partyId: null, billId: "wo-4", merged: false }),
-    );
+    const fetchStub = vi.fn(async () => jsonResponse({ partyId: null, billId: "wo-4" }));
     const api = new TillApi("", fetchStub);
 
-    await api.moveBill("wo-4", { counter: { zoneId: "z-bar" } }, "merge", {
-      expectedPartyRevision: 3,
-      partyId: "v1",
-      expectedEdits: [{ billId: "wo-4", editorVersion: 6, draftId: null, draftRevision: null }],
-    });
-    await api.moveBill("wo-4", { counter: { zoneId: null } }, "merge", {
-      expectedPartyRevision: 3,
-      partyId: "v1",
-      expectedEdits: [{ billId: "wo-4", editorVersion: 6, draftId: null, draftRevision: null }],
-    });
+    await api.moveBill(
+      "wo-4",
+      { counter: { zoneId: "z-bar" } },
+      {
+        expectedPartyRevision: 3,
+        partyId: "v1",
+        expectedEdits: [{ billId: "wo-4", editorVersion: 6, draftId: null, draftRevision: null }],
+      },
+    );
+    await api.moveBill(
+      "wo-4",
+      { counter: { zoneId: null } },
+      {
+        expectedPartyRevision: 3,
+        partyId: "v1",
+        expectedEdits: [{ billId: "wo-4", editorVersion: 6, draftId: null, draftRevision: null }],
+      },
+    );
 
     const bodies = fetchStub.mock.calls.map((call) =>
       JSON.parse((call as unknown as [string, RequestInit])[1].body as string),
     );
     expect(bodies[0]).toEqual({
       to: { counter: { zoneId: "z-bar" } },
-      bills: "merge",
       expectedPartyRevision: 3,
       partyId: "v1",
       expectedEdits: [{ billId: "wo-4", editorVersion: 6, draftId: null, draftRevision: null }],
@@ -2731,30 +2741,39 @@ describe("TillApi", () => {
   });
 
   it("moveBill rejects with the server's code and params", async () => {
-    const fetchStub = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({ error: { code: "party.main_bill_stays", params: { partyId: "v1" } } }),
-          { status: 409, headers: { "content-type": "application/json" } },
-        ),
-      );
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: { code: "group.held_leaves_party", params: { tabId: "wo-4", lineNo: 2 } },
+        }),
+        { status: 409, headers: { "content-type": "application/json" } },
+      ),
+    );
 
     await expect(
-      new TillApi("", fetchStub).moveBill("wo-4", { counter: { zoneId: null } }, "merge", {
-        expectedPartyRevision: 3,
-        partyId: "v1",
-        expectedEdits: [{ billId: "wo-4", editorVersion: 6, draftId: null, draftRevision: null }],
-      }),
-    ).rejects.toEqual({ code: "party.main_bill_stays", partyId: "v1", status: 409 });
+      new TillApi("", fetchStub).moveBill(
+        "wo-4",
+        { counter: { zoneId: null } },
+        {
+          expectedPartyRevision: 3,
+          partyId: "v1",
+          expectedEdits: [{ billId: "wo-4", editorVersion: 6, draftId: null, draftRevision: null }],
+        },
+      ),
+    ).rejects.toEqual({
+      code: "group.held_leaves_party",
+      tabId: "wo-4",
+      lineNo: 2,
+      status: 409,
+    });
   });
 
-  it("joinTables POSTs the table, the bill choice and a table read free as otherPartyId null to the party's /join route", async () => {
-    const answer = { partyId: "v1", mainBillId: "wo-4", merged: false };
+  it("joinTables POSTs the table and a table read free as otherPartyId null to the party's /join route", async () => {
+    const answer = { partyId: "v1", billIds: ["wo-4"] };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
 
     await expect(
-      new TillApi("", fetchStub).joinTables("v1", "tbl-9", "separate", {
+      new TillApi("", fetchStub).joinTables("v1", "tbl-9", {
         expectedPartyRevision: 3,
         otherPartyId: null,
         expectedEdits: [{ billId: "wo-4", editorVersion: 2, draftId: null, draftRevision: null }],
@@ -2769,7 +2788,6 @@ describe("TillApi", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           tableId: "tbl-9",
-          bills: "separate",
           expectedPartyRevision: 3,
           otherPartyId: null,
           expectedEdits: [{ billId: "wo-4", editorVersion: 2, draftId: null, draftRevision: null }],
@@ -2779,7 +2797,7 @@ describe("TillApi", () => {
   });
 
   it("joinTables sends a merge only when it is given", async () => {
-    const answer = { partyId: "v1", mainBillId: "wo-4", merged: false };
+    const answer = { partyId: "v1", billIds: ["wo-4"] };
     const fetchStub = vi.fn(async () => jsonResponse(answer));
     const api = new TillApi("", fetchStub);
     const revisions = {
@@ -2789,7 +2807,7 @@ describe("TillApi", () => {
     };
 
     await expect(
-      api.joinTables("v1", "tbl-9", "merge", revisions, {
+      api.joinTables("v1", "tbl-9", revisions, {
         moving: "tbl-9",
         target: "tbl-1",
         side: "left",
@@ -2797,13 +2815,13 @@ describe("TillApi", () => {
         zoneRevision: 4,
       }),
     ).resolves.toEqual(answer);
-    await api.joinTables("v1", "tbl-9", "merge", revisions, {
+    await api.joinTables("v1", "tbl-9", revisions, {
       moving: "tbl-1",
       target: "tbl-9",
       side: "top",
       zoneRevision: 5,
     });
-    await api.joinTables("v1", "tbl-9", "separate", revisions);
+    await api.joinTables("v1", "tbl-9", revisions);
 
     const bodies = fetchStub.mock.calls.map(
       (call) => JSON.parse(String((call as unknown as [string, RequestInit])[1].body)) as unknown,
@@ -2811,7 +2829,6 @@ describe("TillApi", () => {
     expect(bodies).toEqual([
       {
         tableId: "tbl-9",
-        bills: "merge",
         expectedPartyRevision: 3,
         otherPartyId: null,
         expectedEdits: [{ billId: "wo-4", editorVersion: 2, draftId: null, draftRevision: null }],
@@ -2820,7 +2837,6 @@ describe("TillApi", () => {
       },
       {
         tableId: "tbl-9",
-        bills: "merge",
         expectedPartyRevision: 3,
         otherPartyId: null,
         expectedEdits: [{ billId: "wo-4", editorVersion: 2, draftId: null, draftRevision: null }],
@@ -2829,7 +2845,6 @@ describe("TillApi", () => {
       },
       {
         tableId: "tbl-9",
-        bills: "separate",
         expectedPartyRevision: 3,
         otherPartyId: null,
         expectedEdits: [{ billId: "wo-4", editorVersion: 2, draftId: null, draftRevision: null }],
@@ -2993,8 +3008,7 @@ describe("TillApi", () => {
   it("joinTables sends a merge's room revision beside the merge, and returns the rooms' revisions", async () => {
     const answer = {
       partyId: "v1",
-      mainBillId: "wo-4",
-      merged: true,
+      billIds: ["wo-4"],
       zoneRevisions: { z1: 5 },
     };
     const fetchStub = vi.fn(async () => jsonResponse(answer));
@@ -3004,7 +3018,6 @@ describe("TillApi", () => {
       api.joinTables(
         "v1",
         "tbl-9",
-        "merge",
         {
           expectedPartyRevision: 3,
           otherPartyId: null,
@@ -3017,7 +3030,6 @@ describe("TillApi", () => {
     const [, init] = fetchStub.mock.calls[0] as unknown as [string, RequestInit];
     expect(JSON.parse(String(init.body))).toEqual({
       tableId: "tbl-9",
-      bills: "merge",
       expectedPartyRevision: 3,
       otherPartyId: null,
       expectedEdits: [{ billId: "wo-4", editorVersion: 2, draftId: null, draftRevision: null }],
@@ -3027,7 +3039,7 @@ describe("TillApi", () => {
   });
 
   it("splitTable POSTs the table, the chosen bill or null, and the revision to the party's /split-table route", async () => {
-    const answer = { partyId: "v-new", mainBillId: null };
+    const answer = { partyId: "v-new", billId: "wo-check" };
     const fetchStub = vi.fn(async () => jsonResponse(answer));
     const api = new TillApi("", fetchStub);
 
@@ -3068,7 +3080,7 @@ describe("TillApi", () => {
   });
 
   it("splitTable sends each side's guest count as the body's guestCounts when given one", async () => {
-    const fetchStub = vi.fn(async () => jsonResponse({ partyId: "v-new", mainBillId: null }));
+    const fetchStub = vi.fn(async () => jsonResponse({ partyId: "v-new", billId: "wo-13" }));
     const api = new TillApi("", fetchStub);
 
     await api.splitTable("v1", "tbl-4", null, 3, [], { staying: 3, leaving: null });
@@ -4502,14 +4514,13 @@ describe("TillApi: a seated party", () => {
     [
       "moveGuests",
       (api: TillApi) =>
-        api.moveGuests("v1", "tbl-9", "merge", {
+        api.moveGuests("v1", "tbl-9", {
           expectedPartyRevision: 3,
           expectedEdits: [{ billId: "wo-1", editorVersion: 2, draftId: null, draftRevision: null }],
         }),
       "/api/parties/v1/move",
       {
         toTableId: "tbl-9",
-        bills: "merge",
         expectedPartyRevision: 3,
         expectedEdits: [{ billId: "wo-1", editorVersion: 2, draftId: null, draftRevision: null }],
       },
@@ -4517,14 +4528,13 @@ describe("TillApi: a seated party", () => {
     [
       "joinTables",
       (api: TillApi) =>
-        api.joinTables("v1", "tbl-9", "merge", {
+        api.joinTables("v1", "tbl-9", {
           expectedPartyRevision: 3,
           expectedEdits: [{ billId: "wo-1", editorVersion: 2, draftId: null, draftRevision: null }],
         }),
       "/api/parties/v1/join",
       {
         tableId: "tbl-9",
-        bills: "merge",
         expectedPartyRevision: 3,
         expectedEdits: [{ billId: "wo-1", editorVersion: 2, draftId: null, draftRevision: null }],
       },
@@ -5812,6 +5822,116 @@ describe("a late-send confirmation on a request", () => {
       const body = JSON.parse(fetchStub.mock.calls[0]![1].body) as Record<string, unknown>;
       if (lateSend === undefined) expect(Object.keys(body)).not.toContain("lateSend");
       else expect(body.lateSend).toEqual(lateSend);
+    });
+  });
+});
+
+describe("A803 action results", () => {
+  const edits = [{ billId: "wo-1", editorVersion: 2, draftId: null, draftRevision: null }];
+  const bodyOf = (fetchStub: ReturnType<typeof vi.fn>, call = 0): unknown =>
+    JSON.parse(String((fetchStub.mock.calls[call] as unknown as [string, RequestInit])[1].body));
+
+  it("moveGuests sends no bills key, and answers the party's bill ids", async () => {
+    const answer = { partyId: "v7", billIds: ["wo-7", "wo-1"] };
+    const fetchStub = vi.fn(async () => jsonResponse(answer));
+
+    await expect(
+      new TillApi("", fetchStub).moveGuests("v1", "tbl-7", {
+        expectedPartyRevision: 3,
+        otherPartyId: "v7",
+        expectedOtherPartyRevision: 9,
+        expectedEdits: edits,
+      }),
+    ).resolves.toEqual(answer);
+    expect((fetchStub.mock.calls[0] as unknown as [string])[0]).toBe("/api/parties/v1/move");
+    expect(bodyOf(fetchStub)).toEqual({
+      toTableId: "tbl-7",
+      expectedPartyRevision: 3,
+      otherPartyId: "v7",
+      expectedOtherPartyRevision: 9,
+      expectedEdits: edits,
+    });
+  });
+
+  it("joinTables sends no bills key with or without a merge, and answers the bill ids and the rooms' revisions", async () => {
+    const answer = { partyId: "v1", billIds: ["wo-1", "wo-7"], zoneRevisions: { z1: 5 } };
+    const fetchStub = vi.fn(async () => jsonResponse(answer));
+    const api = new TillApi("", fetchStub);
+    const revisions = { expectedPartyRevision: 3, otherPartyId: null, expectedEdits: edits };
+
+    await expect(api.joinTables("v1", "tbl-9", revisions)).resolves.toEqual(answer);
+    await api.joinTables("v1", "tbl-9", revisions, {
+      moving: "tbl-9",
+      target: "tbl-1",
+      side: "left",
+      zoneRevision: 4,
+    });
+
+    expect(bodyOf(fetchStub, 0)).toEqual({ tableId: "tbl-9", ...revisions });
+    expect(bodyOf(fetchStub, 1)).toEqual({
+      tableId: "tbl-9",
+      ...revisions,
+      merge: { moving: "tbl-9", target: "tbl-1", side: "left" },
+      zoneRevision: 4,
+    });
+  });
+
+  it("moveBill and its allergy preview send no bills key, and the move answers the party and the bill", async () => {
+    const answer = { partyId: "v7", billId: "wo-check" };
+    const fetchStub = vi.fn(async (url: RequestInfo | URL) =>
+      jsonResponse(String(url).endsWith("/allergy-preview") ? { kind: "none" } : answer),
+    );
+    const api = new TillApi("", fetchStub);
+    const revisions = {
+      expectedPartyRevision: 3,
+      partyId: "v1",
+      otherPartyId: "v7",
+      expectedOtherPartyRevision: 9,
+      expectedEdits: edits,
+    };
+
+    await expect(api.moveBill("wo-check", { tableId: "tbl-7" }, revisions)).resolves.toEqual(
+      answer,
+    );
+    await api.previewBillMoveAllergy("wo-check", { tableId: "tbl-7" }, revisions);
+
+    expect(bodyOf(fetchStub, 0)).toEqual({ to: { tableId: "tbl-7" }, ...revisions });
+    expect(bodyOf(fetchStub, 1)).toEqual({ to: { tableId: "tbl-7" }, ...revisions });
+  });
+
+  it("splitTable answers the leaving party and the bill it took", async () => {
+    const answer = { partyId: "v-new", billId: "wo-12" };
+    const fetchStub = vi.fn(async () => jsonResponse(answer));
+
+    await expect(
+      new TillApi("", fetchStub).splitTable("v1", "tbl-5", null, 3, []),
+    ).resolves.toEqual(answer);
+  });
+
+  it("createPartyBill POSTs the party's revision to the party's /bills route and answers the new bill and revision", async () => {
+    const answer = { billId: "wo-new", revision: 5 };
+    const fetchStub = vi.fn(async () => jsonResponse(answer));
+
+    await expect(new TillApi("", fetchStub).createPartyBill("v1", 4)).resolves.toEqual(answer);
+    expect(fetchStub).toHaveBeenCalledExactlyOnceWith(
+      "/api/parties/v1/bills",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ expectedPartyRevision: 4 }),
+      }),
+    );
+  });
+
+  it("createPartyBill surfaces a stale revision as party.out_of_date", async () => {
+    const fetchStub = vi.fn(async () =>
+      jsonResponse({ error: { code: "party.out_of_date" } }, 409),
+    );
+
+    await expect(new TillApi("", fetchStub).createPartyBill("v1", 4)).rejects.toMatchObject({
+      code: "party.out_of_date",
+      status: 409,
     });
   });
 });

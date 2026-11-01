@@ -15,6 +15,11 @@ import type { TillSentOrders } from "../widgets/sent-orders.js";
 import type { WtDialog } from "@waitron/ui";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import "./till-table-order-screen.js";
+import {
+  closeTableMenu,
+  openTableMenu,
+  tableMenuAndSwitcherText,
+} from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const dish = {
   ...storedDish,
@@ -30,7 +35,7 @@ afterEach(async () => {
   await page.viewport(1280, 900);
 });
 
-describe.each(["en", "es"] as const)("populated table drawer in %s", (locale) => {
+describe.each(["en", "es"] as const)("table menu with sent dishes in %s", (locale) => {
   describe.each(["light", "dark"] as const)("%s", (theme) => {
     it.each([390, 1280])(
       "keeps dish details and Void in Sent, with no duplicate list at %i",
@@ -80,22 +85,29 @@ describe.each(["en", "es"] as const)("populated table drawer in %s", (locale) =>
         await resized(el);
         expect(window.innerWidth).toBe(width);
         const q = (selector: string) => el.shadowRoot!.querySelector<HTMLElement>(selector)!;
-        await userEvent.click(q("[data-open-drawer]"));
-        await el.updateComplete;
-        const drawer = q("[data-drawer]");
-        expect(drawer.checkVisibility()).toBe(true);
-        expect(
-          drawer.querySelector(".pending, .pending-line, .served-line, [data-cancel-line]"),
-        ).toBeNull();
-        expect(drawer.textContent).not.toContain(t("table.pending_title"));
-        expect(q("[data-tab-total]").textContent).toContain(formatMoney("10.00", currentLocale()));
-        expect(q("[data-pending-badge]").textContent).toBe("2");
+        await openTableMenu(el);
+        const menu = q("[data-table-menu]");
+        expect(menu.checkVisibility()).toBe(true);
+        expect(q(".pending, .pending-line, .served-line, [data-cancel-line]")).toBeNull();
+        expect(tableMenuAndSwitcherText(el)).not.toContain(t("table.pending_title"));
+        expect(q("[data-order-total]").textContent).toContain(
+          formatMoney("10.00", currentLocale()),
+        );
+        const sent = q("till-sent-orders") as TillSentOrders;
+        await sent.updateComplete;
+        // Two still to serve: the dish's two portions (the Tab badge counted it and its extra).
+        expect(sent.shadowRoot!.querySelector("[data-sent-panel] .summary")!.textContent).toBe(
+          t("table.sent_counts")
+            .replace("{ready}", "0")
+            .replace("{firing}", "2")
+            .replace("{held}", "0")
+            .replace("{served}", "1"),
+        );
         await expectNoA11yViolations(host);
         await page.screenshot({
           path: `__screenshots__/a773-populated-drawer-${locale}-${theme}-${width}.png`,
         });
-        await userEvent.click(q("[data-open-drawer]"));
-        await el.updateComplete;
+        await closeTableMenu(el);
         if (q("[data-draft-pane]").hidden) {
           await userEvent.click(q("[data-review-open]"));
           await el.updateComplete;

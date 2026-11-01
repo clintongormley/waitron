@@ -452,7 +452,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
     state: "open",
     name: "Luis",
     displayName: "Luis",
-    mainBillId: "wo-7",
+    openingBillId: "wo-7",
     outstanding: "12.00",
     billCount: 1,
     tableIds: ["t7"],
@@ -480,10 +480,6 @@ describe("till-held-orders: moving a counter order to a table", () => {
     );
   const target = (el: TillHeldOrders, id: string) =>
     el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(`[data-target="${id}"]`);
-  const billChoice = (el: TillHeldOrders) =>
-    el.shadowRoot!.querySelector<
-      HTMLElement & { scope: string; question: string; updateComplete: Promise<unknown> }
-    >("till-bill-choice-dialog");
   function heard(el: TillHeldOrders, type: string): unknown[] {
     const details: unknown[] = [];
     el.addEventListener(type, (event) => {
@@ -583,7 +579,6 @@ describe("till-held-orders: moving a counter order to a table", () => {
           orderId: labeledOrder.id,
           tableId: "free-dining",
           seated: null,
-          bills: "merge",
         },
       ]);
     },
@@ -724,11 +719,12 @@ describe("till-held-orders: moving a counter order to a table", () => {
     expect(picker(el)!.textContent).toContain(t("held.no_tables"));
   });
 
-  it("qualifies the bill choice before opening and ignores readiness after cancelling the picker", async () => {
+  it("sends a seated table's move only once ready, and ignores readiness after cancelling the picker", async () => {
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
       orders: [labeledOrder],
       tables,
     });
+    const moved = heard(el, "move-held-order");
     let ready!: () => void;
     let prompt!: object;
     el.addEventListener("held-relocation-open", (raw) => {
@@ -740,29 +736,23 @@ describe("till-held-orders: moving a counter order to a table", () => {
     await openPicker(el);
     target(el, "t7")!.click();
     await el.updateComplete;
-    expect(billChoice(el)).toBeNull();
+    expect(moved).toEqual([]);
     expect(ready).toBeTypeOf("function");
     el.shadowRoot!.querySelector<HTMLElement>("[data-picker-cancel]")!.click();
     await el.updateComplete;
     ready();
     await el.updateComplete;
-    expect(billChoice(el)).toBeNull();
+    expect(moved).toEqual([]);
     await openPicker(el);
     target(el, "t7")!.click();
     await el.updateComplete;
     ready();
-    await el.updateComplete;
-    const moved = heard(el, "move-held-order");
-    const choice = billChoice(el)!;
-    await choice.updateComplete;
-    choice.shadowRoot!.querySelector<HTMLElement>("[data-bills-separate]")!.click();
     await el.updateComplete;
     expect(moved).toEqual([
       {
         orderId: "wo-1",
         tableId: "t7",
         seated: { id: "v7", revision: 9 },
-        bills: "separate",
         prompt,
       },
     ]);
@@ -781,11 +771,11 @@ describe("till-held-orders: moving a counter order to a table", () => {
     target(el, "t9")!.click();
     await el.updateComplete;
 
-    expect(moved).toEqual([{ orderId: "wo-1", tableId: "t9", seated: null, bills: "merge" }]);
+    expect(moved).toEqual([{ orderId: "wo-1", tableId: "t9", seated: null }]);
     expect(picker(el)).toBeNull();
   });
 
-  it("asks about the bills first at a seated table, naming the order and where it goes", async () => {
+  it("moves the order to a seated table at once, sending who the picker showed seated there", async () => {
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
       orders: [labeledOrder],
       tables,
@@ -795,48 +785,37 @@ describe("till-held-orders: moving a counter order to a table", () => {
 
     target(el, "t7")!.click();
     await el.updateComplete;
-    const dialog = billChoice(el)!;
-    await dialog.updateComplete;
 
+    expect(moved).toEqual([{ orderId: "wo-1", tableId: "t7", seated: { id: "v7", revision: 9 } }]);
+    expect(picker(el)).toBeNull();
+  });
+
+  it("sends the party the picker showed once ready, though the floor read since seats another there", async () => {
+    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+      orders: [labeledOrder],
+      tables,
+    });
+    const moved = heard(el, "move-held-order");
+    let ready!: () => void;
+    let prompt!: object;
+    el.addEventListener("held-relocation-open", (raw) => {
+      const event = raw as CustomEvent<{ ready: () => void; prompt: object }>;
+      event.preventDefault();
+      ready = event.detail.ready;
+      prompt = event.detail.prompt;
+    });
+    await openPicker(el);
+    target(el, "t7")!.click();
+    await el.updateComplete;
     expect(moved).toEqual([]);
-    expect(picker(el)).toBeNull();
-    expect(dialog.scope).toBe(
-      t("table.move_bill_scope").replace("{bill}", "#5 Mesa 4").replace("{into}", "Luis (Mesa 7)"),
-    );
-    expect(dialog.question).toBe(t("table.bill_move_question"));
-    dialog.shadowRoot!.querySelector<HTMLElement>("[data-bills-separate]")!.click();
-    await el.updateComplete;
-
-    expect(moved).toEqual([
-      { orderId: "wo-1", tableId: "t7", seated: { id: "v7", revision: 9 }, bills: "separate" },
-    ]);
-    expect(billChoice(el)).toBeNull();
-    expect(picker(el)).toBeNull();
-  });
-
-  it("sends the party the bill choice names, though the floor read since seats another there", async () => {
-    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-      orders: [labeledOrder],
-      tables,
-    });
-    const moved = heard(el, "move-held-order");
-    await openPicker(el);
-    target(el, "t7")!.click();
-    await el.updateComplete;
     const pedro = { ...luis, id: "v8", revision: 2, name: "Pedro", displayName: "Pedro" };
     el.tables = [{ ...tables[0]!, party: pedro }, tables[1]!, tables[2]!];
     await el.updateComplete;
-    const dialog = billChoice(el)!;
-    await dialog.updateComplete;
-
-    expect(dialog.scope).toBe(
-      t("table.move_bill_scope").replace("{bill}", "#5 Mesa 4").replace("{into}", "Luis (Mesa 7)"),
-    );
-    dialog.shadowRoot!.querySelector<HTMLElement>("[data-bills-merge]")!.click();
+    ready();
     await el.updateComplete;
 
     expect(moved).toEqual([
-      { orderId: "wo-1", tableId: "t7", seated: { id: "v7", revision: 9 }, bills: "merge" },
+      { orderId: "wo-1", tableId: "t7", seated: { id: "v7", revision: 9 }, prompt },
     ]);
   });
 
@@ -855,42 +834,44 @@ describe("till-held-orders: moving a counter order to a table", () => {
     expect(moved).toEqual([]);
   });
 
-  it("names a seated party with no name by the tables the floor lists for it", async () => {
-    const unnamed = { ...luis, name: null, displayName: "Mesa 7", tableIds: ["t7", "t-gone"] };
-    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
-      orders: [labeledOrder],
-      tables: [{ ...tables[0]!, party: unnamed }, tables[2]!],
-    });
-    await openPicker(el);
-    target(el, "t7")!.click();
-    await el.updateComplete;
-
-    expect(billChoice(el)!.scope).toBe(
-      t("table.move_bill_scope").replace("{bill}", "#5 Mesa 4").replace("{into}", "Mesa 7"),
-    );
-  });
-
-  it("goes back to the tables when the bill choice is cancelled, and Cancel there sends nothing", async () => {
+  it("Cancel in the list of tables closes it and sends nothing", async () => {
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
       orders: [labeledOrder],
       tables,
     });
     const moved = heard(el, "move-held-order");
     await openPicker(el);
-    target(el, "t7")!.click();
-    await el.updateComplete;
-    await billChoice(el)!.updateComplete;
-
-    billChoice(el)!.shadowRoot!.querySelector<HTMLElement>("[data-bills-cancel]")!.click();
-    await el.updateComplete;
-    expect(billChoice(el)).toBeNull();
-    expect(picker(el)).not.toBeNull();
 
     el.shadowRoot!.querySelector<HTMLElement>("[data-picker-cancel]")!.click();
     await el.updateComplete;
 
     expect(picker(el)).toBeNull();
     expect(moved).toEqual([]);
+  });
+
+  describe("A803 no merge question", () => {
+    const dialogs = (el: TillHeldOrders) =>
+      [...el.shadowRoot!.querySelectorAll("*")]
+        .map((node) => node.localName)
+        .filter((name) => /^till-.+-dialog$/.test(name));
+
+    it("moves the order to a seated table at once, sending no bills and drawing no dialog", async () => {
+      const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+        orders: [labeledOrder],
+        tables,
+      });
+      const moved = heard(el, "move-held-order");
+      await openPicker(el);
+
+      target(el, "t7")!.click();
+      await el.updateComplete;
+
+      expect(moved).toEqual([
+        { orderId: "wo-1", tableId: "t7", seated: { id: "v7", revision: 9 } },
+      ]);
+      expect(picker(el)).toBeNull();
+      expect(dialogs(el)).toEqual([]);
+    });
   });
 });
 

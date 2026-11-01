@@ -11,10 +11,8 @@ import type { TradingContext } from "./trading-context.js";
 // Function declarations and types only: this module sits in import loops, so top-level code
 // calling an import could run first.
 
-/** Set by a caller that tells the kitchen itself once its work is done: each bill merged away is recorded, by the bill it merged into. */
-export interface SlipsLater {
-  mergedInto: Map<string, string>;
-}
+/** Set by a caller that tells the kitchen itself once its work is done. */
+export type SlipsLater = object;
 
 /**
  * Whose sent work a write may move: the parties at `tables` (and the orders delivered to them),
@@ -40,9 +38,9 @@ export async function withMovedSlips<T>(
 ): Promise<T> {
   if (reach !== null && "later" in reach) return write(reach.later);
   const before = reach === null ? null : await sentWorkIn(tx, reach);
-  const slips: SlipsLater = { mergedInto: new Map() };
+  const slips: SlipsLater = {};
   const result = await write(slips);
-  if (before !== null) await enqueueMovedSlipsFor(tx, cfg, before, slips.mergedInto);
+  if (before !== null) await enqueueMovedSlipsFor(tx, cfg, before);
   return result;
 }
 

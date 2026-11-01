@@ -301,6 +301,13 @@ export class TillTenderPay extends LitElement {
   /** The receipt languages staff may choose from; the button shows only when there are several. */
   @property({ attribute: false }) receiptLanguages: string[] = [];
   @property({ type: Boolean }) fullInvoices = false;
+  /** False at a table, whose orders are not parked: no Hold. */
+  @property({ type: Boolean }) parks = true;
+  /** False at a table, where the bill's own Full invoice is drawn instead of this one. */
+  @property({ type: Boolean }) invoices = true;
+  /** Cash and Card are drawn quiet but stay enabled; a tap dispatches `pay-quiet-tap` and starts
+   * nothing, so the screen can say why. */
+  @property({ type: Boolean }) payQuiet = false;
   /** The language this order's receipt prints in. */
   @property() receiptLanguage = "";
   @property({ type: Boolean }) asksGuests = false;
@@ -903,7 +910,18 @@ export class TillTenderPay extends LitElement {
   }
 
   #tenderVariant(): "primary" | "secondary" {
-    return this.held || (!this.busy && this.store.lineCount === 0) ? "secondary" : "primary";
+    return this.payQuiet || this.held || (!this.busy && this.store.lineCount === 0)
+      ? "secondary"
+      : "primary";
+  }
+
+  /** True, after telling the screen, when the tap must start nothing. */
+  #quietTap(): boolean {
+    if (!this.payQuiet) return false;
+    this.dispatchEvent(
+      new CustomEvent("pay-quiet-tap", { detail: {}, bubbles: true, composed: true }),
+    );
+    return true;
   }
 
   #renderCardButton(disabled: boolean) {
@@ -913,7 +931,9 @@ export class TillTenderPay extends LitElement {
         variant=${this.#tenderVariant()}
         size="md"
         ?disabled=${disabled || (this.tipAttempted && this.#tipInvalid()) || this.#guestsHeld()}
-        @click=${() => this.#onCardTap()}
+        @click=${() => {
+          if (!this.#quietTap()) this.#onCardTap();
+        }}
       >
         ${t("tender.card")}
       </wt-button>
@@ -933,7 +953,9 @@ export class TillTenderPay extends LitElement {
           variant=${this.#tenderVariant()}
           size="md"
           ?disabled=${disabled || this.#guestsHeld()}
-          @click=${() => this.#startPaying()}
+          @click=${() => {
+            if (!this.#quietTap()) this.#startPaying();
+          }}
         >
           ${t("tender.cash")}
         </wt-button>
@@ -943,7 +965,7 @@ export class TillTenderPay extends LitElement {
   }
 
   #renderInvoiceButton(disabled: boolean) {
-    if (!this.fullInvoices) return nothing;
+    if (!this.fullInvoices || !this.invoices) return nothing;
     return html`<wt-button
       data-full-invoice
       variant="secondary"
@@ -1024,17 +1046,21 @@ export class TillTenderPay extends LitElement {
             : nothing
         }
         ${this.#renderInvoiceButton(disabled)}
-        <span class="help-anchor"
-          ><wt-button
-            class="hold"
-            variant="secondary"
-            size="md"
-            ?disabled=${disabled}
-            @click=${() => this.#startHolding()}
-          >
-            ${t("action.hold")} </wt-button
-          >${helpBadge("help.counter.park", t("action.hold"))}</span
-        >
+        ${
+          this.parks
+            ? html`<span class="help-anchor"
+                ><wt-button
+                  class="hold"
+                  variant="secondary"
+                  size="md"
+                  ?disabled=${disabled}
+                  @click=${() => this.#startHolding()}
+                >
+                  ${t("action.hold")} </wt-button
+                >${helpBadge("help.counter.park", t("action.hold"))}</span
+              >`
+            : nothing
+        }
         ${this.#renderReceiptLanguageButton(disabled)}
       </div>
     `;
@@ -1343,10 +1369,12 @@ export class TillTenderPay extends LitElement {
       <div class="actions">
         <wt-button
           class="confirm"
-          variant="primary"
+          variant=${this.payQuiet ? "secondary" : "primary"}
           size="lg"
           ?disabled=${this.busy}
-          @click=${() => this.#confirmCard()}
+          @click=${() => {
+            if (!this.#quietTap()) this.#confirmCard();
+          }}
         >
           ${t("action.confirm_payment")}
         </wt-button>
@@ -1392,10 +1420,12 @@ export class TillTenderPay extends LitElement {
       <div class="actions">
         <wt-button
           class="confirm"
-          variant="primary"
+          variant=${this.payQuiet ? "secondary" : "primary"}
           size="lg"
           ?disabled=${short || this.busy}
-          @click=${() => this.#confirm()}
+          @click=${() => {
+            if (!this.#quietTap()) this.#confirm();
+          }}
         >
           ${t("action.confirm_payment")}
         </wt-button>

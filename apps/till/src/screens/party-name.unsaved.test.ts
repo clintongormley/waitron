@@ -18,7 +18,7 @@ class PartyNameHost extends LitElement {
           state: "open",
           name: "Ana",
           displayName: "Ana",
-          mainBillId: "wo-4",
+          openingBillId: "wo-4",
           outstanding: "0.00",
           billCount: 1,
           tableIds: [],

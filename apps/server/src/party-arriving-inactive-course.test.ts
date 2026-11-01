@@ -73,7 +73,6 @@ describe("arriving dishes whose course no longer holds them", () => {
           source.tabId,
           { tableId },
           {
-            bills: "separate",
             operatorId: OPERATOR,
             expectedPartyRevision: source.revision,
             otherPartyId: target.partyId,

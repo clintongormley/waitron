@@ -72,13 +72,14 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { finishTable, seatTable } from "./testing/party-close-fixture.js";
 import { listTablesWithState, markGroupServed, markServed } from "./working-order.js";
 import "./errors.js";
-import { splitBill } from "./testing/bill-action-fixture.js";
+import { mergeBills, splitBill } from "./testing/bill-action-fixture.js";
 import { joinTables } from "./testing/table-action-fixture.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { createCourse } from "./kitchen.js";
 import { deleteCourse } from "./course-delete.js";
+import { insertPartyBill } from "./parties.js";
 
 // The release reminder (spec §4 "Remind staff to release the next group"; plan D11), its snooze,
 // and the Current orders read a waiter serves from (spec §4; D8, D18, D19).
@@ -289,10 +290,11 @@ async function group(
   partyId: string,
   release: GroupRelease,
   lines: GroupLine[],
+  billId?: string,
 ): Promise<{ id: string; lineIds: string[] }> {
   const command = await args(partyId);
   const { groups } = await inTx((tx) =>
-    submitGroups(tx, v.cfg, partyId, { ...command, groups: [{ release, lines }] }),
+    submitGroups(tx, v.cfg, partyId, { ...command, billId, groups: [{ release, lines }] }),
   );
   return { id: groups[0]!.id, lineIds: groups[0]!.lineIds };
 }
@@ -605,7 +607,6 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
     const bHeld = await group(v, b.partyId, "hold", [line(v, "water")]);
     await at(T(15), () => snooze(v, b.partyId, bHeld.id, 5));
     const command = {
-      bills: "merge" as const,
       expectedPartyRevision: await revisionOf(a.partyId),
       otherPartyId: b.partyId,
       expectedOtherPartyRevision: await revisionOf(b.partyId),
@@ -1059,7 +1060,6 @@ describe("unsnoozeReminder (D8, D11, D19)", () => {
     const bHeld = await group(v, b.partyId, "hold", [line(v, "water")]);
     await at(T(15), () => snooze(v, b.partyId, bHeld.id, 5));
     const command = {
-      bills: "merge" as const,
       expectedPartyRevision: await revisionOf(a.partyId),
       otherPartyId: b.partyId,
       expectedOtherPartyRevision: await revisionOf(b.partyId),
@@ -1298,12 +1298,19 @@ describe("readCurrentOrders (spec §4)", () => {
       lines: [],
       tender: { method: "cash", amount: "18.00" },
     });
-    const mains = await group(v, s.partyId, "hold", [
-      {
-        ...line(v, "steak"),
-        extras: [{ listId: v.extrasListId, picks: [{ productId: v.sauceId, quantity: 1 }] }],
-      },
-    ]);
+    const laterBill = await inTx((tx) => insertPartyBill(tx, v.cfg, s.partyId));
+    const mains = await group(
+      v,
+      s.partyId,
+      "hold",
+      [
+        {
+          ...line(v, "steak"),
+          extras: [{ listId: v.extrasListId, picks: [{ productId: v.sauceId, quantity: 1 }] }],
+        },
+      ],
+      laterBill,
+    );
     const laterTab = (await linesByName(s.partyId)).find((l) => l.name === "steak")!.workingOrderId;
     expect(laterTab).not.toBe(s.tabId);
     await inTx((tx) => addTabRound(tx, v.cfg, laterTab, [line(v, "flan")]));
@@ -1550,13 +1557,23 @@ describe("a party another was merged into", () => {
     const bNext = (await linesByName(b.partyId)).find((l) => l.name === "water")!.workingOrderId;
     expect(bNext).not.toBe(b.tabId);
     const command = {
-      bills: "merge" as const,
       expectedPartyRevision: await revisionOf(a.partyId),
       otherPartyId: b.partyId,
       expectedOtherPartyRevision: await revisionOf(b.partyId),
       operatorId: ALEX,
     };
-    await inTx((tx) => joinTables(tx, v.cfg, a.partyId, b.tableId, command));
+    await inTx(async (tx) => {
+      await joinTables(tx, v.cfg, a.partyId, b.tableId, command);
+      const [party] = await tx
+        .select({ revision: parties.revision })
+        .from(parties)
+        .where(eq(parties.id, a.partyId));
+      await mergeBills(tx, v.cfg, a.tabId, bNext, {
+        partyId: a.partyId,
+        expectedPartyRevision: party!.revision,
+        operatorId: ALEX,
+      });
+    });
 
     const read = await currentOrders(a.partyId);
 

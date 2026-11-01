@@ -241,7 +241,6 @@ async function combine(into: Table, from: Table) {
     combineParties(tx, venue.cfg, {
       from: from.partyId,
       into: into.partyId,
-      bills: "separate",
       tables: "join",
       operatorId: venue.staffId,
     }),

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { billEditStates, captureError, parties, workingOrders } from "@waitron/db";
@@ -35,6 +35,7 @@ import {
   inTx,
   order,
   orderForParty,
+  openingBillOfParty,
   partyRow,
   partyAt,
   pay,
@@ -164,11 +165,11 @@ describe("A803 bill numbers: created", () => {
     await everyPartyBillNumbered();
   });
 
-  it("a main bill given to a party whose bills are all paid takes the next number, not Bill 1 again", async () => {
+  it("a bill made for a party whose bills are all paid takes the next number, not Bill 1 again", async () => {
     const { partyId, tabId } = await seat(v, await v.table("N4"));
     await order(v, tabId, "Burger");
     await pay(v, tabId, "12.00");
-    expect((await partyRow(v, partyId)).mainBillId).toBeNull();
+    expect(await openingBillOfParty(v, partyId)).toBe(tabId);
 
     const { tabId: next } = await orderForParty(v, partyId, ["Agua"]);
 
@@ -257,7 +258,6 @@ async function moveTo(
   const own = (await billRow(v, billId)).partyId;
   const target = "tableId" in to ? await partyAt(v, to.tableId) : null;
   const options: MoveBillOptions = {
-    bills: "separate",
     operatorId: OPERATOR,
     ...(own === null ? {} : { expectedPartyRevision: await revisionOf(v, own) }),
     ...(target === null || target === own
@@ -311,36 +311,40 @@ describe("A803 bill numbers: move bill", () => {
     await everyPartyBillNumbered();
   });
 
-  it("a bill moved with Merge the bills takes no number there, so the next new bill there is Bill 2, and its old table still never gives its old number again", async () => {
+  it("a bill moved to another party's table still arrives as its own bill with the next number, so the next new bill there is Bill 3, and its old table still never gives its old number again", async () => {
     const from = await tableWithBills("M3", 2);
     const to = await seat(v, await v.table("M3 to"));
     await order(v, to.tabId, "Agua");
     const toTable = (await activeTablesOf(v, to.partyId))[0]!;
 
-    const moved = await moveTo(from.bills[1]!, { tableId: toTable }, { bills: "merge" });
+    const moved = await moveTo(from.bills[1]!, { tableId: toTable });
 
-    expect(moved).toMatchObject({ merged: true, billId: to.tabId });
-    expect(await allocationsOf(v, to.partyId)).toEqual([[1, to.tabId]]);
+    expect(moved).toEqual({ partyId: to.partyId, billId: from.bills[1] });
+    expect(await allocationsOf(v, to.partyId)).toEqual([
+      [1, to.tabId],
+      [2, from.bills[1]],
+    ]);
     const next = await split(v, to.partyId, to.tabId, [1]);
     expect(await numbersOf(v, to.partyId)).toEqual([
       [to.tabId, 1, null],
-      [next, 2, null],
+      [from.bills[1], 2, null],
+      [next, 3, null],
     ]);
     const third = await split(v, from.partyId, from.tabId, [2]);
     expect((await numbersOf(v, from.partyId)).at(-1)).toEqual([third, 3, null]);
     await everyPartyBillNumbered();
   });
 
-  it("a bill moved with Merge the bills to a table whose main bill is presented stays separate and takes that table's next number", async () => {
+  it("a bill moved to a table whose Bill 1 is presented stays separate and takes that table's next number", async () => {
     const from = await tableWithBills("M3b", 2);
     const to = await seat(v, await v.table("M3b to"));
     await order(v, to.tabId, "Agua");
     await placeByHand(v, to.tabId);
     const toTable = (await activeTablesOf(v, to.partyId))[0]!;
 
-    const moved = await moveTo(from.bills[1]!, { tableId: toTable }, { bills: "merge" });
+    const moved = await moveTo(from.bills[1]!, { tableId: toTable });
 
-    expect(moved).toMatchObject({ merged: false, billId: from.bills[1] });
+    expect(moved).toEqual({ partyId: to.partyId, billId: from.bills[1] });
     expect(await numbersOf(v, to.partyId)).toEqual([
       [to.tabId, 1, null],
       [from.bills[1], 2, null],
@@ -434,7 +438,6 @@ describe("A803 bill numbers: move bill", () => {
     };
 
     const options: MoveBillOptions = {
-      bills: "separate",
       operatorId: OPERATOR,
       otherPartyId: to.partyId,
       expectedOtherPartyRevision: await revisionOf(v, to.partyId),
@@ -473,13 +476,8 @@ describe("A803 bill numbers: move bill", () => {
   });
 });
 
-async function tableOptions(
-  partyId: string,
-  other?: string,
-  bills: "merge" | "separate" = "separate",
-) {
+async function tableOptions(partyId: string, other?: string) {
   return {
-    bills,
     expectedPartyRevision: await revisionOf(v, partyId),
     ...(other === undefined
       ? {}
@@ -527,7 +525,7 @@ describe("A803 bill numbers: tables", () => {
       [tabId, 1, null],
       [second, 2, null],
     ]);
-    expect(await numbersOf(v, leaving.partyId)).toEqual([[leaving.mainBillId, 1, null]]);
+    expect(await numbersOf(v, leaving.partyId)).toEqual([[leaving.billId, 1, null]]);
     await everyPartyBillNumbered();
   });
 
@@ -592,20 +590,24 @@ describe("A803 bill numbers: tables", () => {
     await everyPartyBillNumbered();
   });
 
-  it("joining with Merge the bills: the incoming main bill merges and takes no number, and the other incoming bills take the next numbers with no gap", async () => {
+  it("joining another party: no bill merges, and every incoming bill takes the next numbers with no gap", async () => {
     const ours = await seat(v, await v.table("S6 ours"));
     await order(v, ours.tabId, "Agua");
     const theirs = await tableWithBills("S6 theirs", 2);
     const theirTable = (await activeTablesOf(v, theirs.partyId))[0]!;
-    const options = await tableOptions(ours.partyId, theirs.partyId, "merge");
+    const options = await tableOptions(ours.partyId, theirs.partyId);
 
     const result = await inTx(v, (tx) => joinTables(tx, v.cfg, ours.partyId, theirTable, options));
 
-    expect(result.merged).toBe(true);
-    expect(await statusOf(v, theirs.tabId)).toBe("abandoned");
+    expect(result).toEqual({
+      partyId: ours.partyId,
+      billIds: [ours.tabId, theirs.bills[0], theirs.bills[1]],
+    });
+    expect(await statusOf(v, theirs.tabId)).toBe("open");
     expect(await numbersOf(v, ours.partyId)).toEqual([
       [ours.tabId, 1, null],
-      [theirs.bills[1], 2, null],
+      [theirs.bills[0], 2, null],
+      [theirs.bills[1], 3, null],
     ]);
     await everyPartyBillNumbered();
   });
@@ -637,7 +639,7 @@ describe("A803 bill numbers: tables", () => {
 
     const leaving = await inTx(v, (tx) => splitTable(tx, v.cfg, partyId, t1, third, command));
 
-    expect(leaving.mainBillId).toBeNull();
+    expect(leaving).toEqual({ partyId: leaving.partyId, billId: third });
     expect(await numbersOf(v, leaving.partyId)).toEqual([[third, 1, null]]);
     expect(await numbersOf(v, partyId)).toEqual([
       [tabId, 1, null],
@@ -767,7 +769,7 @@ describe("A803 bill list", () => {
     ]);
   });
 
-  it("a bill that arrived shows its new number while the list keeps its opening order", async () => {
+  it("a bill that arrived shows its new number and is listed after the party's own Bill 1", async () => {
     const ana = await seat(v, await v.table("L3 ana"));
     await order(v, ana.tabId, "Agua", "Flan");
     const anaSecond = await split(v, ana.partyId, ana.tabId, [1]);
@@ -778,8 +780,8 @@ describe("A803 bill list", () => {
     await moveTo(anaSecond, { tableId: luisTable });
 
     expect(await listOf(luis.partyId)).toEqual([
-      [anaSecond, 2, null, "open"],
       [luis.tabId, 1, null, "open"],
+      [anaSecond, 2, null, "open"],
     ]);
   });
 
@@ -804,35 +806,66 @@ describe("A803 bill list", () => {
     const ours = await tableWithBills("L5 ours", 2);
     const theirs = await tableWithBills("L5 theirs", 3);
     const theirTable = (await activeTablesOf(v, theirs.partyId))[0]!;
-    const options = await tableOptions(ours.partyId, theirs.partyId, "merge");
+    const options = await tableOptions(ours.partyId, theirs.partyId);
 
     await inTx(v, (tx) => joinTables(tx, v.cfg, ours.partyId, theirTable, options));
 
     const list = await listOf(ours.partyId);
-    expect(list.filter(([, , , status]) => status === "abandoned")).toEqual([
-      [theirs.tabId, null, null, "abandoned"],
-    ]);
+    expect(list.filter(([, , , status]) => status === "abandoned")).toEqual([]);
     const numbers = list
       .filter(([, , , status]) => status !== "abandoned")
       .map(([, number]) => number);
-    expect([...numbers].sort((a, b) => a! - b!)).toEqual([1, 2, 3, 4]);
+    expect([...numbers].sort((a, b) => a! - b!)).toEqual([1, 2, 3, 4, 5]);
   });
 
-  it("an abandoned bill is listed with billNumber null, including a counter order merged into a table's main bill on arrival, which has no row", async () => {
+  it("an abandoned bill is listed with billNumber null, and a counter order moved to the table is listed with the next number", async () => {
     const seated = await tableWithBills("L6", 2);
     const command = await commandFor(v, seated.partyId);
     await inTx(v, (tx) => mergeBills(tx, v.cfg, seated.bills[0]!, seated.bills[1]!, command));
     const counter = await counterOrder(v, "Burger");
     const table = (await activeTablesOf(v, seated.partyId))[0]!;
-    await moveTo(counter, { tableId: table }, { bills: "merge" });
-    expect((await billNumberTables(v)).identities.map((row) => row.workingOrderId)).not.toContain(
+    await moveTo(counter, { tableId: table });
+    expect((await billNumberTables(v)).identities.map((row) => row.workingOrderId)).toContain(
       counter,
     );
 
     expect(await listOf(seated.partyId)).toEqual([
       [seated.bills[0], 1, null, "open"],
+      [counter, 3, null, "open"],
       [seated.bills[1], null, null, "abandoned"],
-      [counter, null, null, "abandoned"],
+    ]);
+  });
+
+  it("A803 bill order: two abandoned bills are listed last, in id order, not in the order they were opened", async () => {
+    const seated = await tableWithBills("L6b", 3);
+    const [lowerId, higherId] = [seated.bills[1]!, seated.bills[2]!].sort();
+    await inTx(v, async (tx) => {
+      await tx
+        .update(workingOrders)
+        .set({ openedAt: "2026-01-01T00:00:01.000Z" })
+        .where(eq(workingOrders.id, lowerId!));
+      await tx
+        .update(workingOrders)
+        .set({ openedAt: "2026-01-01T00:00:00.000Z" })
+        .where(eq(workingOrders.id, higherId!));
+    });
+    const first = await commandFor(v, seated.partyId);
+    await inTx(v, (tx) => mergeBills(tx, v.cfg, seated.bills[0]!, seated.bills[1]!, first));
+    const second = await commandFor(v, seated.partyId);
+    await inTx(v, (tx) => mergeBills(tx, v.cfg, seated.bills[0]!, seated.bills[2]!, second));
+    const opened = await inTx(v, (tx) =>
+      tx
+        .select({ id: workingOrders.id })
+        .from(workingOrders)
+        .where(inArray(workingOrders.id, [lowerId!, higherId!]))
+        .orderBy(asc(workingOrders.openedAt)),
+    );
+    expect(opened.map((row) => row.id)).toEqual([higherId, lowerId]);
+
+    expect(await listOf(seated.partyId)).toEqual([
+      [seated.bills[0], 1, null, "open"],
+      [lowerId, null, null, "abandoned"],
+      [higherId, null, null, "abandoned"],
     ]);
   });
 

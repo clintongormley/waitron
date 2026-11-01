@@ -57,7 +57,7 @@ function party(id: string, tableIds: string[]): TableParty {
     state: "open",
     name: null,
     displayName: tableIds.join("+"),
-    mainBillId: null,
+    openingBillId: null,
     outstanding: "0.00",
     billCount: 1,
     tableIds,
@@ -176,7 +176,7 @@ describe("dropAction", () => {
     });
   });
 
-  it("two seated tables join into the target's party, after the bill choice", () => {
+  it("two seated tables join into the target's party", () => {
     const p = party("P", ["b"]);
     const q = party("Q", ["a"]);
     const atA = table("a", "4", { ...seatedBy(q), today: today({ placement: place(0, 0) }) });

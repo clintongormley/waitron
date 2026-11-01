@@ -32,6 +32,7 @@ import {
   steak,
   cake,
 } from "./till-table-order-screen.current-orders.test-helpers.js";
+import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
@@ -55,10 +56,7 @@ function bill(workingOrderId: string, status: PartyBill["status"]): PartyBill {
 }
 
 async function mountCurrent(over: Partial<TillTableOrderScreen> = {}) {
-  const mounted = await mount({ groups, currentOrders: current(), now, ...over });
-  mounted.el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-  await mounted.el.updateComplete;
-  return mounted;
+  return mount({ groups, currentOrders: current(), now, ...over });
 }
 
 async function mountSent(over: Partial<TillTableOrderScreen> & { fireControl?: string } = {}) {
@@ -625,14 +623,13 @@ describe("Current orders and Sent service", () => {
 describe("the release reminder in Sent", () => {
   const reminder = (el: TillTableOrderScreen) => sq(el, "[data-group-reminder]");
 
-  it("keeps a due reminder only in Sent when the bill drawer is open", async () => {
+  it("keeps a due reminder only in Sent when the table menu is open", async () => {
     const { el } = await mountSent();
-    q(el, "[data-open-drawer]")!.click();
-    await el.updateComplete;
+    await openTableMenu(el);
     expect(sq(el, "[data-reminder-snooze]")).not.toBeNull();
     expect(sq(el, "[data-reminder-fire]")).not.toBeNull();
-    expect(q(el, "[data-drawer] [data-reminder-snooze]")).toBeNull();
-    expect(q(el, "[data-drawer] [data-reminder-fire]")).toBeNull();
+    expect(q(el, "[data-reminder-snooze]")).toBeNull();
+    expect(q(el, "[data-reminder-fire]")).toBeNull();
   });
 
   it("offers Snooze and Fire on the group once its reminder is due", async () => {
