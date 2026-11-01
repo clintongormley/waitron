@@ -337,6 +337,19 @@ describe("the PIN throttle across a backward clock step", () => {
     expect(caught(() => throttle.check(DEVICE, "newcomer"))).toBeUndefined();
   });
 
+  it("answers as check would for a pair stamped far ahead in a full slot whose sweep stops short of it", () => {
+    let now = 0;
+    const throttle = createPinThrottle({ now: () => now });
+    throttle.recordFailure(DEVICE, "live"); // the oldest entry, and not idle: the sweeps stop here
+    now = 100_000;
+    throttle.recordFailure(DEVICE, PERSON);
+    for (let i = 2; i < PIN_THROTTLE_MAX_KEYS_PER_SLOT; i++)
+      throttle.recordFailure(DEVICE, `p-${i}`);
+    now = 1_000; // a step back: PERSON and every p-i are 99 seconds ahead, lapsed; the slot is full
+    expect(throttle.wouldRefuse(DEVICE, PERSON)).toBe(false);
+    expect(caught(() => throttle.check(DEVICE, PERSON))).toBeUndefined();
+  });
+
   it("sweeps past a pair stamped a little ahead of the clock rather than stopping at it", () => {
     let now = 30_000;
     const throttle = createPinThrottle({ now: () => now });

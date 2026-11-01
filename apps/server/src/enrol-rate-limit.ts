@@ -31,7 +31,8 @@ export interface EnrolRateLimiter {
   /**
    * Record one enrol attempt. Throws `device.join_rate_limited` (→ HTTP 429) when this window has
    * already seen {@link ENROL_RATE_MAX} allowed attempts; otherwise returns, having counted this one.
-   * The first call after {@link ENROL_RATE_WINDOW_MS} elapses opens a fresh window and resets the count.
+   * The first call after {@link ENROL_RATE_WINDOW_MS} elapses, or after a backward clock step, opens a
+   * fresh window and resets the count.
    */
   check(): void;
 }

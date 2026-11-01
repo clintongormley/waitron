@@ -3215,9 +3215,13 @@ any writer leaves past the limits used here, and no gate reset on a clock that n
 ### Task 15c-2's notes (2026-11-01)
 
 - **The rule as written, with no allowance for a small step.** A link, Google state or enrolment
-  whose expiry lies even one millisecond further ahead than its lifetime is refused, so a step back
-  of a few seconds refuses a link issued in the minutes before it; the person asks for a new one.
-  The two limiters reopen their window on any backward step. Both err towards refusing a
+  whose expiry lies even one millisecond further ahead than its lifetime is refused. Its expiry is
+  its issue time plus that lifetime, so it is refused only while it was issued ahead of the clock:
+  one issued within the step's length before a step is refused until the clock reaches its issue
+  time again, and one issued earlier is unaffected (the per-task review's run, a 5-second step:
+  `~/waitron-campaign-b/a798-9b/t15c2/rev/scratch/link-step.out`). After the audit's 400-day step
+  such a link is never usable again in practice. The two limiters reopen their window on any
+  backward step. Both err towards refusing a
   credential or relaxing a flood guard for one window, never towards keeping either for the
   step's length.
 - **The email-change code's own expiry has no ceiling.** It is written in the same insert as the
@@ -3232,10 +3236,36 @@ any writer leaves past the limits used here, and no gate reset on a clock that n
   (`pin-throttle.ts`'s header). The rule is shared as `pinThrottleIdle`; the password throttle's
   forgotten-address counters follow it too. A backward step breaks the order the sweeps rely on, so
   they pass over an entry stamped ahead rather than stopping at it, and the password throttle's
-  `begin` and `wouldRefuse` judge their own entry instead of trusting the sweep to have removed it.
-  A sweep can still stop at a live entry with an idle one behind it, until the entries stamped
-  before the step have gone idle or been used again — by reasoning, not a run, at most the idle
-  time plus the longest wait (16 minutes). That only delays freeing room.
+  `begin` now judges its own entry, as its `wouldRefuse` already did, instead of trusting the sweep
+  to have removed it. A sweep can still stop at a live entry with an idle one behind it, which only
+  delays freeing room, and the code before this task did the same. Measured by the per-task review
+  (`~/waitron-campaign-b/a798-9b/t15c2/rev/scratch/sweep-pin.out`): a 14-minute step held a full
+  PIN slot's room until 28.85 minutes after it, about the step's length plus the idle time; steps of
+  16, 20 and 60 minutes held none, since every entry still held is then more than a minute ahead
+  and dropped when a sweep reaches it.
+
+### Task 15c-2's per-task review, folded (2026-11-01)
+
+Review C0/I2/M9 (`~/waitron-campaign-b/a798-9b/t15c2/review.md`). The reviewer ran the identity and
+provisioning packages and 14 `apps/server` suites (978 tests), found no change on a clock that never
+moved and no sign-in limit of the same shape left out, and reran the lead's 22 controls.
+- **I1, I2:** two sentences in the notes above were disproved by the reviewer's runs and are
+  rewritten from those runs.
+- **M3:** `wouldRefuse` in the PIN throttle answered "refuse" where `check` admits, for a pair whose
+  own entry, stamped far ahead, sat in a full slot behind a live entry the count stops at. `check`
+  drops that entry first, which alone frees a place, so `wouldRefuse` now answers no for a pair
+  with an idle entry (new case in `pin-throttle.test.ts`). The only effect had been a PIN checked
+  later, under the write lock.
+- **M4, M5:** the two sweeps gain a case at their exact limit (a state or link expiring exactly its
+  lifetime ahead survives the next sweep), and the enrolment's just-inside case moves from a minute
+  to five seconds inside.
+- **M6, M7:** the enrol limiter's doc comment and the Google audit row are corrected.
+- **M1, M8, M9, M2 (commit 4a6b041a2's message, kept for the pull request's text):** each new
+  refusing case failed on the old code, while its controls pass on both; controls 15 and 22 fail
+  only with the cases added after `mutate.out` was taken (`mutate2.out`, `mutate3.out`); the opening
+  sentence should read "further ahead than a stated limit — its lifetime, the longest wait, or for
+  the two limiters any amount"; and only `begin` in the password throttle is new in judging its own
+  entry.
 
 ### Task 15's departures and notes (2026-10-31)
 

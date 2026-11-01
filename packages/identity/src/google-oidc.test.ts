@@ -150,6 +150,13 @@ describe("Google OpenID Connect state stored before a backward clock step", () =
     expect(claimed.mode).toBe("login");
   });
 
+  it("keeps a state whose expiry is exactly its ten minutes ahead when the next ceremony begins", async () => {
+    const first = await run((tx) => beginGoogleLogin(tx, { ...config, now: NOW }));
+    await run((tx) => beginGoogleLogin(tx, { ...config, now: NOW }));
+    const claimed = await run((tx) => claimGoogleState(tx, { state: first.state, now: NOW }));
+    expect(claimed.mode).toBe("login");
+  });
+
   it("sweeps a state stamped beyond its ten minutes when the next ceremony begins, as it sweeps an expired one", async () => {
     await run((tx) => beginGoogleLogin(tx, { ...config, now: later(400 * DAY_MS) }));
     const ceiling = later(10 * 60 * 1000).toISOString();

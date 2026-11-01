@@ -845,6 +845,6 @@ describe("an authenticator enrolment begun before a backward clock step", () => 
   });
 
   it("finishes an enrolment whose expiry lies just inside its ten minutes", async () => {
-    expect(await finishWithExpiry(TEN_MINUTES_MS - 60_000)).toBe("accepted");
+    expect(await finishWithExpiry(TEN_MINUTES_MS - 5_000)).toBe("accepted");
   });
 });

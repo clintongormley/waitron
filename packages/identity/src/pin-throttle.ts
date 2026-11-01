@@ -147,6 +147,8 @@ export function createPinThrottle(opts: PinThrottleOptions = {}): PinThrottle {
       const t = now();
       const entry = entries.get(entryKey(slot, personId));
       if (entry !== undefined && !isIdle(entry, t)) return t < entry.unlockAt;
+      // `check` drops this pair's idle entry first, which alone frees a place in its slot.
+      if (entry !== undefined) return false;
       // A new pair: refused only while its slot is full once `check` has swept the idle entries.
       let idleInSlot = 0;
       for (const kept of entries.values()) {

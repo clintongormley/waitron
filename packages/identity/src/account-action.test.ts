@@ -1086,6 +1086,21 @@ describe("an account action issued before a backward clock step", () => {
     ).resolves.toBe("step-changed@x.com");
   });
 
+  it("retires, rather than deletes, a link whose expiry is exactly its lifetime ahead when the next one is issued", async () => {
+    const { personId, issued } = await issueReset("step-history-at@x.com", NOW);
+    const next = await run((tx) =>
+      issueAccountAction(tx, { personId, purpose: "password_reset", now: NOW }),
+    );
+    const rows = await suite.db.execute<{ id: string; used_at: string | null }>(
+      sql`select id, used_at from management_account_actions
+          where person_id = ${personId} and purpose = 'password_reset' order by used_at is null, id`,
+    );
+    expect(rows.rows).toEqual([
+      { id: issued.id, used_at: NOW.toISOString() },
+      { id: next.id, used_at: null },
+    ]);
+  });
+
   it("deletes a link stamped beyond its lifetime when the next one is issued, as it deletes an expired one", async () => {
     const { personId, issued } = await issueReset("step-history@x.com", later(400 * DAY_MS));
     const next = await run((tx) =>
