@@ -2083,7 +2083,7 @@ describe("keeping recovery keys after an unconfirmed change", () => {
             expect(alertText(el)).toContain("no puede diagnosticar el conflicto de configuración");
             expect(alertText(el)).toContain("ni confirmar qué clave abre una copia");
             expect(alertText(el)).not.toMatch(
-              /pide|administrador|inténtalo de nuevo|vuelve a intentarlo/i,
+              /pide|administrador|contacta|soporte|inténtalo de nuevo|vuelve a intentarlo/i,
             );
           }
           const newDownload = q(el, "[data-test=download-key]") as HTMLAnchorElement;
