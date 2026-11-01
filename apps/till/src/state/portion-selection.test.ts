@@ -286,6 +286,21 @@ describe("A803 selection:", () => {
     expect(sorted(tidied)).toEqual(["c2", "c3"]);
   });
 
+  it("a pick left on a paid dish does not lower another row's limit: €15.00 with the €5.00 Caña paid and picked leaves room for both Bravas", () => {
+    const lines = [
+      dish("c1", 1, "Caña", "5.00"),
+      dish("b2", 2, "Bravas", "5.00"),
+      dish("b3", 3, "Bravas", "5.00"),
+    ];
+    const paid = balance("15.00", "5.00", [{ lineId: "c1", lineNo: 1, paidQuantity: "1.000" }]);
+
+    const [caña, bravas] = rowsOf(lines, paid, new Set(["c1"]));
+
+    expect(caña!.blocked).toEqual({ reason: "paid" });
+    expect(bravas!.limit).toBe(2);
+    expect(bravas!.blocked).toBeNull();
+  });
+
   it("tidyPicks keeps a ticked row of four to the two the re-read floor allows", () => {
     const lines = fourCañas();
     const before = rowsOf(lines);
