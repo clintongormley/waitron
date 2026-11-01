@@ -29,6 +29,7 @@ import {
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
+import { tableSnapshot } from "./testing/table-snapshot.js";
 import { persistEvictionOrThrow, retireSelf, type RetireDeps } from "./retire.js";
 
 const RING: KeyRing = loadKeyRing({
@@ -222,6 +223,18 @@ describe("retireSelf", () => {
     expect(isAppError(err) && err.code).toBe("membership.held_untrusted");
     expect(isAppError(err) && err.params).toEqual({ reason: "untrusted_signer" });
     expect((await readNodeMembership(db))?.body.term).toBe(3);
+  });
+
+  it("refuses a held chart whose body is not a membership chart with reason malformed, writing nothing", async () => {
+    const { deps, nodeId } = await fencedNode();
+    const doc = { ...strangerSigned(fencedBody(nodeId)), body: { term: 3 } };
+    await writeNodeMembership(db, doc as unknown as SignedMembershipDocument);
+    const before = [await tableSnapshot(db), await tableSnapshot(suite.node)];
+
+    const err = await captureError(() => retireSelf(deps(noopLog)));
+    expect(isAppError(err) && err.code).toBe("membership.held_untrusted");
+    expect(isAppError(err) && err.params).toEqual({ reason: "malformed" });
+    expect([await tableSnapshot(db), await tableSnapshot(suite.node)]).toEqual(before);
   });
 });
 

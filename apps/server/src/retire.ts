@@ -15,7 +15,7 @@ import {
 } from "@waitron/membership";
 import type { KeyRing } from "@waitron/credentials";
 import { mintNextMembershipDocument } from "./membership-mint.js";
-import { assertHeldDocumentTrusted } from "./membership-trust.js";
+import { assertHeldDocumentReadable, assertHeldDocumentTrusted } from "./membership-trust.js";
 import type { Logger } from "./logger.js";
 
 export interface RetireDeps {
@@ -41,6 +41,7 @@ export interface RetireResult {
  */
 export async function retireSelf(deps: RetireDeps): Promise<RetireResult> {
   const held = await readNodeMembership(deps.appDb);
+  assertHeldDocumentReadable(held);
   const selfStanding = held === null ? undefined : standingOf(held, deps.nodeId);
 
   // Already left: no re-mint, so a re-run never bumps the term, and no carrier gate.

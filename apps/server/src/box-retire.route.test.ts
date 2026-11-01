@@ -18,6 +18,7 @@ import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountManagementApi } from "./management-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { tableSnapshot } from "./testing/table-snapshot.js";
 
 // Exercise route authorization, refusal-to-status mapping and success responses over a migrated
 // venue database. Retirement semantics are covered by retire.test.ts.
@@ -240,6 +241,34 @@ describe("POST /api/box/retire", () => {
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: { code: "membership.held_untrusted" } });
     expect((await readNodeMembership(suite.db))?.body.term).toBe(5);
+  });
+
+  it("409 membership.held_untrusted, writing nothing, when the held chart's body is not a membership chart", async () => {
+    const body = { term: 5 };
+    await writeNodeMembership(suite.db, {
+      signerNodeId: CARRIER_NODE_ID,
+      signature: signDocumentBody(body as never, generateNodeKeyPair().privateKey),
+      endorsements: [],
+      body,
+    } as unknown as SignedMembershipDocument);
+    // The login's session row changes on every request; nothing else may.
+    const before = [
+      await tableSnapshot(suite.db, ["management_sessions"]),
+      await tableSnapshot(suite.node),
+    ];
+    const app = buildApp(nodeId);
+    const res = await app.request("/api/box/retire", {
+      method: "POST",
+      headers: { cookie: managerCookie },
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "membership.held_untrusted", params: { reason: "malformed" } },
+    });
+    expect([
+      await tableSnapshot(suite.db, ["management_sessions"]),
+      await tableSnapshot(suite.node),
+    ]).toEqual(before);
   });
 
   it("200 evicts a fenced node with a carrier and flips self to evicted", async () => {

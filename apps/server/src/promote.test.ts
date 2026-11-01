@@ -42,6 +42,7 @@ import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./res
 import { sealAdoptedStandbyKey } from "./testing/adopted-standby-key.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { singletonPass } from "./singleton-pass.js";
+import { tableSnapshot } from "./testing/table-snapshot.js";
 import { DRAIN_DUTY } from "./pass.js";
 import {
   commitMirrorPromotionTx,
@@ -145,6 +146,12 @@ function heldTermThreeDoc(
       ...extra,
     ],
   });
+}
+
+/** A signed chart whose body was rewritten to one with no `nodes` list, as an outside edit leaves it. */
+function unreadableChart(nodeId: string, signerNodeId: string): SignedMembershipDocument {
+  const doc = heldTermThreeDoc(nodeId, signerNodeId);
+  return { ...doc, body: { term: 3 } } as unknown as SignedMembershipDocument;
 }
 
 // A fenced node has the same `(primary, secondary)` axis pair as a healthy local secondary, so only
@@ -491,6 +498,18 @@ describe("promoteLocalSecondaryToPrimary", () => {
     expect(isAppError(error) && error.params).toEqual({ reason: "untrusted_signer" });
     expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("secondary");
     expect((await readNodeMembership(db))?.body.term).toBe(3);
+  });
+
+  it("refuses a held chart whose body is not a membership chart with reason malformed, writing nothing", async () => {
+    const { db, deps, nodeId } = await localSecondary();
+    await writeNodeMembership(db, unreadableChart(nodeId, "unpinned-old-node"));
+    const before = [await tableSnapshot(db), await tableSnapshot(suite.node)];
+    const error = await captureError(() =>
+      promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
+    );
+    expect(isAppError(error) && error.code).toBe("membership.held_untrusted");
+    expect(isAppError(error) && error.params).toEqual({ reason: "malformed" });
+    expect([await tableSnapshot(db), await tableSnapshot(suite.node)]).toEqual(before);
   });
 });
 
@@ -977,6 +996,20 @@ describe("promoteMirrorToPrimary", () => {
     expect(persist).not.toHaveBeenCalled();
     expect((await readNodeMembership(db))?.body.term).toBe(3);
     expect((await readNodeMode(suite.node, nodeId)).mode).toBe("mirror");
+  });
+
+  it("refuses a held chart whose body is not a membership chart with reason malformed, writing nothing", async () => {
+    const { db, deps, nodeId } = await mirror();
+    await writeNodeMembership(db, unreadableChart(nodeId, "unpinned-old-primary"));
+    const before = [await tableSnapshot(db), await tableSnapshot(suite.node)];
+    const persist = vi.fn(async () => {});
+    const err = await captureError(() =>
+      promoteMirrorToPrimary(deps(noopLog, persist), { oldNodeNeutralised: true }),
+    );
+    expect(isAppError(err) && err.code).toBe("membership.held_untrusted");
+    expect(isAppError(err) && err.params).toEqual({ reason: "malformed" });
+    expect(persist).not.toHaveBeenCalled();
+    expect([await tableSnapshot(db), await tableSnapshot(suite.node)]).toEqual(before);
   });
 
   it("reports a held term of -1 when the refused membership write leaves no chart held at all", async () => {

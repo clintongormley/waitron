@@ -15,6 +15,8 @@ import { CREDENTIALS_MIGRATIONS, loadKeyRing, type KeyRing } from "@waitron/cred
 import {
   endorseKey,
   generateNodeKeyPair,
+  MAX_NODES,
+  MAX_REVOKED,
   signDocumentBody,
   type Endorsement,
   type MembershipDocumentBody,
@@ -22,7 +24,11 @@ import {
 } from "@waitron/membership";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
-import { assertHeldDocumentTrusted, readStoredTrustSet } from "./membership-trust.js";
+import {
+  assertHeldDocumentReadable,
+  assertHeldDocumentTrusted,
+  readStoredTrustSet,
+} from "./membership-trust.js";
 
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xd).toString("base64"),
@@ -166,3 +172,68 @@ describe("the held document's check against the keys this box stores", () => {
     expect(isAppError(error) && error.params).toEqual({ reason: "malformed" });
   });
 });
+
+describe("the held document's readability check", () => {
+  const node = (nodeId: string) => ({ nodeId, contactUrl: "", standing: "serving-secondary" });
+  const withBody = (body: unknown) =>
+    ({ ...signed(MAIN_ID, MAIN.privateKey), body }) as unknown as SignedMembershipDocument;
+
+  it.each<[string, unknown]>([
+    ["a document that is not an object", 5],
+    ["a body that is a list", withBody([])],
+    ["a body with no nodes list", withBody({ term: 3 })],
+    ["a term that is text", withBody({ term: "3", nodes: [] })],
+    ["a term that is a fraction", withBody({ term: 1.5, nodes: [] })],
+    ["a negative term", withBody({ term: -1, nodes: [] })],
+    ["a node that is not an object", withBody({ term: 3, nodes: [null] })],
+    ["a node with no text id", withBody({ term: 3, nodes: [{ ...node("a"), nodeId: 1 }] })],
+    [
+      "a node with no text address",
+      withBody({ term: 3, nodes: [{ ...node("a"), contactUrl: 1 }] }),
+    ],
+    ["a node with no text standing", withBody({ term: 3, nodes: [{ ...node("a"), standing: 1 }] })],
+    [
+      "more than MAX_NODES nodes",
+      withBody({ term: 3, nodes: Array.from({ length: MAX_NODES + 1 }, (_, i) => node(`n${i}`)) }),
+    ],
+    ["a cleared list that is text", withBody({ term: 3, nodes: [], revoked: "gone" })],
+    ["a cleared id that is not text", withBody({ term: 3, nodes: [], revoked: [1] })],
+    [
+      "more than MAX_REVOKED cleared ids",
+      withBody({ term: 3, nodes: [], revoked: Array.from({ length: MAX_REVOKED + 1 }, String) }),
+    ],
+  ])("refuses %s with reason malformed", (_, held) => {
+    const error = captureSync(() => assertHeldDocumentReadable(held as SignedMembershipDocument));
+    expect(isAppError(error) && error.code).toBe("membership.held_untrusted");
+    expect(isAppError(error) && error.params).toEqual({ reason: "malformed" });
+  });
+
+  it.each<[string, unknown]>([
+    ["no document", null],
+    [
+      "MAX_NODES nodes and MAX_REVOKED cleared ids",
+      withBody({
+        term: 0,
+        nodes: Array.from({ length: MAX_NODES }, (_, i) => node(`n${i}`)),
+        revoked: Array.from({ length: MAX_REVOKED }, String),
+      }),
+    ],
+    ["a cleared id named twice", withBody({ term: 3, nodes: [node("a")], revoked: ["g", "g"] })],
+    [
+      "a node with a field beyond its three",
+      withBody({ term: 3, nodes: [{ ...node("a"), x: 1 }] }),
+    ],
+    ["a body with a field beyond its own", withBody({ term: 3, nodes: [], note: "x" })],
+  ])("passes %s to the checks after it", (_, held) => {
+    expect(() => assertHeldDocumentReadable(held as SignedMembershipDocument)).not.toThrow();
+  });
+});
+
+function captureSync(run: () => void): unknown {
+  try {
+    run();
+  } catch (error) {
+    return error;
+  }
+  throw new Error("expected a refusal");
+}

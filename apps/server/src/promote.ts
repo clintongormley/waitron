@@ -35,7 +35,7 @@ import {
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { refreshDeploymentHolders, type DeploymentHolders } from "./deployment-holders.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
-import { assertHeldDocumentTrusted } from "./membership-trust.js";
+import { assertHeldDocumentReadable, assertHeldDocumentTrusted } from "./membership-trust.js";
 import { finishPromotedRole } from "./promoted-role.js";
 import type { Logger } from "./logger.js";
 
@@ -71,9 +71,11 @@ export function assertFenced(attestation: FenceAttestation): void {
  * Refuses a node its own held document marks fenced (`sell-only`/`evicted`): it was superseded, and
  * promoting it in place would resume submitter duties on a superseded chain, two submitters under
  * one NIF. A fenced node returns via wipe-and-restore. Throws before any state change. Distinct from
- * `assertFenced`, which checks the operator's attestation about the OLD node.
+ * `assertFenced`, which checks the operator's attestation about the OLD node. A held document too
+ * broken to read is refused `membership.held_untrusted` first.
  */
 export function assertNotFenced(held: SignedMembershipDocument | null, nodeId: string): void {
+  assertHeldDocumentReadable(held);
   const standing = held === null ? undefined : standingOf(held, nodeId);
   if (isFencedStanding(standing)) {
     throw new AppError("promotion.node_fenced", { standing });

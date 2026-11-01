@@ -4,6 +4,8 @@ import type { KeyRing } from "@waitron/credentials";
 import { nodeSigningPublicKey } from "@waitron/credentials";
 import { readPinnedPrimaryKey } from "@waitron/node-db";
 import {
+  MAX_NODES,
+  MAX_REVOKED,
   verifyDocumentSigner,
   type SignedMembershipDocument,
   type TrustSet,
@@ -50,4 +52,41 @@ export async function assertHeldDocumentTrusted(
   const verdict = verifyDocumentSigner(held, await readStoredTrustSet(deps));
   if (verdict.trusted) return;
   throw new AppError("membership.held_untrusted", { reason: verdict.reason });
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+function isReadableNode(v: unknown): boolean {
+  return (
+    isRecord(v) &&
+    typeof v.nodeId === "string" &&
+    typeof v.contactUrl === "string" &&
+    typeof v.standing === "string"
+  );
+}
+
+function isReadableChart(held: unknown): boolean {
+  if (!isRecord(held) || !isRecord(held.body)) return false;
+  const { term, nodes, revoked } = held.body;
+  if (typeof term !== "number" || !Number.isInteger(term) || term < 0) return false;
+  if (!Array.isArray(nodes) || nodes.length > MAX_NODES || !nodes.every(isReadableNode))
+    return false;
+  if (revoked === undefined) return true;
+  return (
+    Array.isArray(revoked) &&
+    revoked.length <= MAX_REVOKED &&
+    revoked.every((id) => typeof id === "string")
+  );
+}
+
+/**
+ * Refuses a held chart whose body cannot be read as a membership chart (`reason: "malformed"`),
+ * before anything reads it. Duplicate ids and fields beyond the declared ones still pass, so a chart
+ * a stored key signed keeps the code the checks after this one give it.
+ */
+export function assertHeldDocumentReadable(held: SignedMembershipDocument | null): void {
+  if (held === null || isReadableChart(held)) return;
+  throw new AppError("membership.held_untrusted", { reason: "malformed" });
 }
