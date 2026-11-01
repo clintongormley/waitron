@@ -17,8 +17,8 @@ const VENUE_DIR_VARIABLE = "WAITRON_VENUE_DIR";
  * for the directory it serves. There is no `WAITRON_STATE_DIR` fallback: that default lives in
  * `apps/server`, and a package cannot import an app.
  *
- * The vault is in the venue file; the node file holds only the box's signing key, which `rotate`
- * re-seals.
+ * The vault is in the venue file; a node handle also type-checks there, so `bin.test.ts`'s set/list
+ * round trip is what holds it. `rotate` also re-seals the signing key in the node file.
  */
 export async function runBin(argv: string[], env: NodeJS.ProcessEnv, io: CliIo): Promise<number> {
   const venueDir = env[VENUE_DIR_VARIABLE];

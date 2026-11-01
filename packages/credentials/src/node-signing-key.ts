@@ -101,8 +101,8 @@ async function readRow(
   return row ?? null;
 }
 
-/** This node's private signing key, or `null` only when it has no row; a row that will not open
- * throws as {@link openNodeSigningKeyRow} does. */
+/** This node's private signing key, or `null` when the table is absent or has no row for that node
+ * id; a row that will not open throws as {@link openNodeSigningKeyRow} does. */
 export async function readNodeSigningKey(
   node: NodeDatabase | NodeTransaction,
   ring: KeyRing,
@@ -132,6 +132,8 @@ export async function rotateNodeSigningKeys(
 ): Promise<{ rotated: number; alreadyCurrent: number }> {
   const result = { rotated: 0, alreadyCurrent: 0 };
   if (!(await tableExists(node, "node_signing_key"))) return result;
+  // Every row, not only this box's: a re-key must leave nothing on the old key, and each row still
+  // opens only under its own node id.
   const rows = await node
     .select({ nodeId: nodeSigningKey.nodeId, keyVersion: nodeSigningKey.keyVersion })
     .from(nodeSigningKey);

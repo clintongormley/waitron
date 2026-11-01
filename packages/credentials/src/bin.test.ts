@@ -1,6 +1,6 @@
-// Runs the entry point against a real migrated venue directory. Both handles `openVenueDatabase`
-// returns are one type, `Database`, so passing the node handle where the venue one belongs
-// compiles; the `set`/`list` round trip below is what holds the vault to the venue file.
+// Runs the entry point against a real migrated venue directory. The node handle's type extends
+// `Database`, so passing it where the venue handle belongs compiles; the round trip below is what
+// holds the vault to the venue file.
 import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";

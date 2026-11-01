@@ -254,8 +254,8 @@ export interface RotationResult {
  * row and stop, until the purpose is re-provisioned. Kept deliberately: re-sealing a payload the
  * package would now refuse is its own trap.
  *
- * Given `node`, the box's signing key in `node.db` is re-sealed too, after the vault, and counted
- * in the same result.
+ * Given `node`, every row in its `node_signing_key` table is re-sealed too, after the vault, and
+ * counted in the same result.
  */
 export async function rotateCredentials(
   db: Database,
