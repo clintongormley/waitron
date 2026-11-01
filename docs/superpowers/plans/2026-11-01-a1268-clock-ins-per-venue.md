@@ -26,8 +26,9 @@ Lit (till, dashboard).
 review thread (https://github.com/clintongormley/waitron/pull/2375#discussion_r4436001488) holds
 the PR until this revision is built; the reply names both hash changes.
 
-**Review:** plan revision 2 has had the writer's self-review only. A fresh-context plan review runs
-before Task 0.
+**Review:** a fresh-context review of revision 2 (`5d56d88c4a`) found no Critical, five Important
+and four Minor findings; all are folded here after checking each against the code, with one
+deletion control corrected (Task 4a; the reviewer's control does not touch session pairing).
 
 **Out of scope:** part 2 (design §4, pairing by write order after a backward clock step), with its
 own plan later; everything in "What A1268 leaves to A1301".
@@ -44,7 +45,7 @@ own plan later; everything in "What A1268 leaves to A1301".
 - **Nothing new is built on locations** (lane B queue, owner ~14:55): no new `location_id` column,
   `locationId` parameter, per-location view, rule, setting, fixture or translation. Where a business
   day is needed, read the box's location the way the code reads it today (`readLocationClock` with
-  the configured location).
+  the configured location). The one exception is open question 1's argument, flagged there.
 - **Tests:** an assertion changes only where a design decision changes what it checks, and every
   such change is in "Test checks this plan changes". An assertion that must change and is not in
   the table gets a row naming its decision; if no decision covers it, STOP. Golden and fiscal tests
@@ -90,10 +91,10 @@ No error code is added, renamed or removed, so `scripts/alert-codes.test.ts` and
    chain from 1. Task 3.
 4. **A shift begun on one node and ended on another.** Expected: one session, paired, counted once
    in the hours, the end-of-day pass, the closure snapshot and the export; the till does not
-   refuse the clock-out. Tasks 4, 7.
+   refuse the clock-out. Tasks 4a, 4b, 7.
 5. **A manager's proposal and its approval after the location leaves correction items.** Expected:
-   the worker's prompt shows the place of the command that proposed it; approving writes the
-   command row with that same place. Task 4, open question 1.
+   the worker's prompt shows the box's configured location; approving writes the command row with
+   that location. Task 4b, open question 1.
 
 ---
 
@@ -244,8 +245,20 @@ through the repo's own store (`useVenueDb`, `runMigrations`, `installAppendOnlyT
   (`attendance-response-commands.ts:191-194,274`). Every production request and proposal is
   written by an attendance command (`git grep -n -E 'requestCorrection|proposeCorrection' --
   'apps/**/*.ts' 'packages/**/*.ts' ':!*.test.ts'` prints only `clocking.ts`'s wrappers,
-  `corrections.ts` and `apps/server/test/attendance-export-fixture.ts`), and that command's row
-  holds a location. Open question 1.
+  `corrections.ts` and `apps/server/test/attendance-export-fixture.ts`). The two routes that run
+  attendance commands and read the inbox already hold the box's configured location
+  (`deps.cfg.locationId`; `ManagementAttendanceApiDeps.cfg`, `apps/server/src/management-attendance-api.ts:36`;
+  `TillAttendanceApiDeps.cfg`, `apps/server/src/till-attendance-api.ts:48`), and `readPersonHours`
+  receives the route's location as `input.locationId` (`hours-reads.ts:23`). Open question 1.
+- **Session pairing across nodes is already per person.** `projectWorkSessions` groups by person
+  only (`groupByPerson`, `projection.ts:130-138`) and sorts each person's events by time before
+  pairing, so a clock-in on one node and a clock-out on another pair today wherever the location
+  matches. `sameSubject` (`effective-entries.ts:17`) is not used in session pairing: it decides
+  whether a correction or answer applies to its target (`effective-entries.ts:28,42,87`,
+  `record-projection.ts:20`, `attendance-responses.ts:54,148`). The existing case "reprojects the
+  later recorded_at approved correction when two chains correct one target"
+  (`corrections.test.ts:280`) applies corrections written on two other nodes to an entry on the
+  setup node.
 - **Guides:** nothing to change. `grep -rn -i -E 'workplace|centro de trabajo|referencia del
   centro|chain position|posición en la cadena' apps/server/src/guide` printed nothing.
 - **Developer docs** describing per-location working time: only the paragraph the branch already
@@ -265,12 +278,14 @@ through the repo's own store (`useVenueDb`, `runMigrations`, `installAppendOnlyT
 
 1. **Where does a correction item's place come from, now that the item has no location?** It is
    needed for the worker's proposal prompt (place name and time zone) and for the required
-   `location_id` of an item's approve, decline, accept or disagree command row. Default: from the
-   request or propose command whose `entryIds` include the item's first request — that command row
-   keeps its own `location_id` until A1301 S22. An item no command wrote (only the test-facing
-   `WorkforceBackend.requestCorrection`/`proposeCorrection` write one) gets no proposal prompt, and
-   a command on it is refused `attendance.invalid` `location_missing`, as today's code does when it
-   finds no location. Alternative for the watcher: drop the column's requirement in A1268.
+   `location_id` of an item's approve, decline, accept or disagree command row. Default (the lead,
+   2026-11-01): the box's configured location, which the routes already hold
+   (`deps.cfg.locationId`) and which `readPersonHours` already receives as `input.locationId`. The
+   routes hand it to `readAttendanceInbox` and `executeAttendanceCommand` as an argument; no lookup
+   from an item to its command and no new refusal. That argument is a location parameter on two
+   functions that had none, carrying a value the callers already hold — flagged against the
+   queue's "no new `locationId` parameter" rule for the watcher. A1301 S1 (`venueLocationId`) and
+   S22 (dropping the column) replace it. Alternative: drop the column's requirement in A1268.
 2. **Who may read their own attendance at a location other than the box's?** Today: anyone with a
    clock entry or a question there (`attendance-own-scope.ts`). Default: anyone with a question
    there; the clock-entry evidence goes, because entries name no location.
@@ -288,10 +303,10 @@ closure's location; the rest is A1301's.
 | Piece | A1268 | A1301 |
 |---|---|---|
 | `time_entries.location_id`, its foreign key, the append input's location, `LocationId` in the entry hash, `time_entries_location_chain_idx` | removes (Tasks 1, 3) | nothing |
-| `time_entries_response_subject_fk`, the person-and-entry key, `sameSubject`'s location half | re-keys to (entry, person) (Tasks 3, 4) | nothing |
+| `time_entries_response_subject_fk`, the person-and-entry key, `sameSubject`'s location half | re-keys to (entry, person) (Tasks 3, 4a) | nothing |
 | The three `attendance_questions` keys to an entry | re-keys to (entry, person) (Task 3) | nothing |
 | `pay_period_closures.location_id`, its keys, the closure hash's location, `closureScope` | removes (Tasks 2, 3) | nothing |
-| Sessions, correction items, closure views, hours, end-of-day pairing by location | removes (Task 4) | nothing |
+| Sessions, correction items, closure views, hours, end-of-day pairing by location | removes (Tasks 4a, 4b) | nothing |
 | The till's other-location refusal, `activeLocationId`, `clock.other_location` | removes (Tasks 7, 9) | nothing |
 | The export's skip note and its "Workplace reference" column | removes (Task 6) | nothing |
 | The export's workplace NAME, read from `locations` by the input's location | kept | S14 |
@@ -325,15 +340,25 @@ another adds a row before editing.
 | 3 | `src/chain.test.ts` | "keeps one chain per node across locations" (:115) | second location continues at 2 | "keeps one chain per node": a second person's entry on the node continues at 2 | D1 |
 | 3 | `scripts/schema-constraints.test.ts` | FK list | rows `time_entries(location_id)->locations`, `workforce_chains(location_id)->locations` | both deleted (the second may already be gone on the branch) | D1 |
 | 3 | `scripts/migration-upgrade.test.ts` | `RESETS` | — | entry for `workforce/0013_working_time_per_venue` (receipt above) | D2 |
-| 4 | `src/record-closures.test.ts` | "does not invent an amendment for unchanged or unrelated records" (:153) | `elsewhere` entries reuse ids at "other-venue" | own ids and times outside the session; same assertions (revision 1's plan review ran it: the reused ids collide once the location filter goes) | D6 |
-| 4 | `src/automatic-entries.test.ts` | cases refusing an automatic close because the open entry or latest entry is at another location *(read)* | `attendance.not_pending` | deleted | D4 |
-| 4 | `src/correction-lifecycle.test.ts` | "rechecks other locations before approving…" (:64), "accepts a separate-location missing session…" (:86) | second location in the fixture | without it; checks unchanged, names lose "location" | fixture |
-| 4 | `src/attendance-reads.test.ts` | :274 "retains historical locations…", :312 manager queue "only the selected location", :364, :388, :443, :576 *(read)* | entries and items scoped by location | locations come from questions and commands only; the queue lists the venue's items; entries are the person's at the venue | D4, open question 1 |
-| 4 | same | "keeps a worker request as history while a manager proposal is a prompt…" | prompt `locationId` from the item | the same value, now from the proposing command | open question 1 |
-| 4 | `src/end-of-day.test.ts` | "excludes another person, another location and both sides of the business-day window" (:83) | another location's entries excluded | the other-location ENTRY part deleted; another location's FACT still excluded (facts keep their location) | D7 |
-| 4 | `src/scheduling.test.ts` | "scopes to the queried location — another location's published shifts and entries do not leak in" (:948) | other location's entries excluded | the entries half deleted; shifts half unchanged | D4 |
-| 4 | `src/hours-reads.test.ts` | "never leaks another person or location through own open/pending/history/closures" (:419) | other-location entries and closures hidden | the location half for entries and closures deleted; person half and question half unchanged | D4, D6 |
-| 4 | `src/record-reads.test.ts` | "keeps split shifts and two locations scoped without another worker's entries" (:220) | per-location scoping | split shifts and other-worker scoping only | D4 |
+| 3 | `src/attendance-response-migration.test.ts` | "adds only the empty receipt table and retains legal rows, heads, questions and attempted mail byte for byte" (:171) | runs the whole workforce set; heads compared without `location_id` (branch edit, :258) | runs only up to main's `0011`; heads compared whole again | D2 (the full set now refuses this venue) |
+| 3 | `src/chain.test.ts` | raw inserts at :194, :211, :269 | name `location_id` | without it | fixture |
+| 3 | `src/migrations.test.ts` | raw `time_entries` inserts at :131, :147, :196, :208, :226, :241, :256 | name `location_id` | without it | fixture |
+| 3 | `src/restore-continuation.test.ts` | raw insert at :79 | names `location_id` | without it | fixture |
+| 3 | `src/record-migration.test.ts` | "stores an explicit automatic author…" insert at :143 (after the full set) | names `location_id` | without it; the old-schema inserts at :84, :98 stay | fixture |
+| 3 | `src/corrections.test.ts` | raw insert at :77 | names `location_id` | without it | fixture |
+| 3 | `src/record-schema.test.ts` | raw inserts at :56 (`time_entries`) and :180 (`pay_period_closures`) | name `location_id` | without it | fixture |
+| 3 | `src/backup-verification.test.ts` | raw SQL at :283 (closures `where … location_id`), :380 and :386 (`time_entries` updates by location) | select by location | by node and position only | fixture (D1, D6) |
+| 3 | `src/clocking-step.test.ts` | "reads the latest entry when the person moved location (control)" (:157), its select at :164-169 | reads `location_id, sequence_no` | reads `sequence_no`; the case's fate is the Task 5 row | fixture |
+| 4a | `src/record-closures.test.ts` | "does not invent an amendment for unchanged or unrelated records" (:153) | `elsewhere` entries reuse ids at "other-venue" | own ids and times outside the session; same assertions (revision 1's plan review ran it: the reused ids collide once the location filter goes) | D6 |
+| 4a | `src/automatic-entries.test.ts` | cases refusing an automatic close because the open entry or latest entry is at another location *(read)* | `attendance.not_pending` | deleted | D4 |
+| 4a | `src/correction-lifecycle.test.ts` | "rechecks other locations before approving…" (:64), "accepts a separate-location missing session…" (:86) | second location in the fixture | without it; checks unchanged, names lose "location" | fixture |
+| 4b | `src/attendance-reads.test.ts` | :274 "retains historical locations…", :312 manager queue "only the selected location", :364, :388, :443, :576 *(read)* | entries and items scoped by location | locations come from questions and commands only; the queue lists the venue's items; entries are the person's at the venue | D4, open question 1 |
+| 4b | same | "keeps a worker request as history while a manager proposal is a prompt…" | prompt `locationId` from the item | the box's configured location passed in (the same value in this test) *(read)* | open question 1 |
+| 4b | `src/attendance-reads.test.ts`, `src/attendance-response-commands.test.ts`, `src/attendance-responses.test.ts`, `src/hours-reads.test.ts` *(read)* | calls of `readAttendanceInbox` / `executeAttendanceCommand` | no place argument | the test's location passed | fixture (open question 1) |
+| 4b | `src/end-of-day.test.ts` | "excludes another person, another location and both sides of the business-day window" (:83) | another location's entries excluded | the other-location ENTRY part deleted; another location's FACT still excluded (facts keep their location) | D7 |
+| 4a | `src/scheduling.test.ts` | "scopes to the queried location — another location's published shifts and entries do not leak in" (:948) | other location's entries excluded | the entries half deleted; shifts half unchanged | D4 |
+| 4b | `src/hours-reads.test.ts` | "never leaks another person or location through own open/pending/history/closures" (:419) | other-location entries and closures hidden | the location half for entries and closures deleted; person half and question half unchanged | D4, D6 |
+| 4a | `src/record-reads.test.ts` | "keeps split shifts and two locations scoped without another worker's entries" (:220) | per-location scoping | split shifts and other-worker scoping only | D4 |
 | 5 | every workforce test the typecheck reports | — | literals carry `locationId` on entries, appends, clock inputs, sessions, items, closures | without it | fixture |
 | 5 | `src/clocking-step.test.ts` | "reads the clock-in at another location written after a step" (:282), "reads the latest entry when the person moved location (control)" (:157) | locations A and B | one place; if a case then repeats another case's check, it is deleted (say which) | D1 |
 | 6 | `packages/workforce-es/src/record-export.test.ts` | "explains that a chain position counts its node's entries at every location" (:480) | the note | deleted | D8 |
@@ -359,8 +384,11 @@ another adds a row before editing.
 - [ ] **Step 1:** In the branch worktree: `git fetch origin && git rebase origin/main`. Expected
   conflicts are in docs only (`docs/superpowers/plans/2026-11-01-a1268-clock-ins-per-venue.md`,
   `docs/superpowers/specs/2026-11-01-a1268-clock-ins-per-venue-design.md`, `docs/backlog.md`,
-  `docs/backlog/box.md`). For each, take main's file (`git checkout origin/main -- <path>`; Task 10
-  redoes the branch's docs). A code conflict: STOP and report.
+  `docs/backlog/box.md`). This revision of the design and plan is published to `main` docs-only
+  before the build starts, so main's copy is the current one: for each conflict take main's file
+  (`git checkout origin/main -- <path>`; Task 10 redoes the branch's other docs). Check first that
+  `git log origin/main -1 -- docs/superpowers/plans/2026-11-01-a1268-clock-ins-per-venue.md` is
+  the revision-2 commit; if it is not, STOP. A code conflict: STOP and report.
 - [ ] **Step 2:** `pnpm install`, then
   `pnpm --filter @waitron/workforce exec vitest run src/chain.test.ts src/chain-per-node-migration.test.ts src/backup-verification.test.ts`.
   Expected: all pass (read the `Tests` count).
@@ -399,10 +427,14 @@ test `chain-hash.test.ts`, plus fixtures typecheck reports.
   (`hash_mismatch` against the hand-built hash).
 - [ ] **Step 2:** In `computeClosureHash` delete `row.locationId` (:123); in `verifyPayPeriodClosures`
   delete the `row.locationId !== previous.locationId` link check (:153); in `canonicalEntry` and
-  `canonicalSession` delete `locationId` (:17, :57) and the session sort's location tie-break
-  (:83). The types still carry the field until Task 3; only the hashed bytes change here.
-- [ ] **Step 3:** `pnpm --filter @waitron/workforce exec vitest run src/pay-period-chain.test.ts src/pay-period-closure.test.ts src/record-closures.test.ts src/backup-verification.test.ts`.
-  Expected: all pass.
+  `canonicalSession` delete `locationId` (:17, :57). `canonicalSession` is declared to return
+  `WorkSession` (:54), which still has `locationId` until Task 4a, so its return type becomes
+  `Omit<WorkSession, "locationId">` and the typecheck stays clean in this task. The session sort
+  (:79-84) replaces its location tie-break with `endedAt`, since the hashed bytes change anyway:
+  `compare(a.personId, b.personId) || compare(a.startedAt, b.startedAt) || compare(a.endedAt, b.endedAt)`.
+  The types still carry the field; only the hashed bytes change here.
+- [ ] **Step 3:** `pnpm --filter @waitron/workforce typecheck && pnpm --filter @waitron/workforce exec vitest run src/pay-period-chain.test.ts src/pay-period-closure.test.ts src/record-closures.test.ts src/backup-verification.test.ts`.
+  Expected: exit 0; all pass.
 - [ ] **Step 4: Deletion control:** put `row.locationId` back into the hashed array → the hand-built
   hash case fails. Revert.
 - [ ] **Step 5: Commit** — "The pay-period closure hash no longer includes a location".
@@ -410,8 +442,8 @@ test `chain-hash.test.ts`, plus fixtures typecheck reports.
 ## Task 3: The schema, the migration and the chain layer (D1, D2, D6)
 
 The column goes, so everything that names `timeEntries.locationId` or `payPeriodClosures.locationId`
-in the chain layer changes here. This task ends with its own files green; the readers Task 4 lists
-do not typecheck until Task 4 (cleanly red, stated in the ledger).
+in the chain layer changes here. This task ends with its own files green; the readers Tasks 4a and
+4b list do not typecheck until those tasks (cleanly red, stated in the ledger).
 
 **Files:**
 - Create: `packages/workforce/src/working-time-per-venue-migration.test.ts`; delete
@@ -428,21 +460,30 @@ do not typecheck until Task 4 (cleanly red, stated in the ledger).
   `pay-period-reads.ts` (`readClosures({ period })`), `backup-verification.ts` (`closureScope` is the
   node; no `location_id` decoded), `classification.ts` comment if it names a location.
 - Tests: `migrations.test.ts`, `index.test.ts`, `personal-data.coverage.test.ts`,
-  `backup-verification.test.ts`, `pay-period-closure.test.ts`, `chain.test.ts` (table rows for
+  `backup-verification.test.ts`, `pay-period-closure.test.ts`, `chain.test.ts`,
+  `attendance-response-migration.test.ts`, and the raw-SQL fixtures Step 5b lists (table rows for
   Task 3); `scripts/schema-constraints.test.ts`, `scripts/migration-upgrade.test.ts`.
+- `packages/workforce/package.json`: `@waitron/migrations` as a devDependency, for the migration
+  test's `applyMigrations`. No loop: `@waitron/migrations` depends on `@waitron/db`,
+  `@waitron/shared`, `@waitron/store` and `drizzle-orm` only (`packages/migrations/package.json`);
+  `scripts/workspace-cycles.test.ts` confirms it in Step 6.
 
 - [ ] **Step 1: Failing tests.**
   - `working-time-per-venue-migration.test.ts`, built on the truncated-journal pattern the branch's
     `chain-per-node-migration.test.ts` uses, with the folder holding main's `0000`–`0011`
     (`journal.entries.slice(0, 12)`) and `appendOnlyTables: ["time_entries", "pay_period_closures"]`.
-    Rows by raw `insert`. Each case in its own `describe` with its own `useVenueDb`:
-    (a) "migrates a venue with no working-time rows and keeps its append-only triggers": after
-    `removeChangeFeed`, `runMigrations(db, WORKFORCE_MIGRATIONS)` and
-    `installAppendOnlyTriggers(db, [...])`, `pragma table_info(time_entries)` and
+    Each case uses its own venue folder (`mkdtemp`), not `useVenueDb`, the way
+    `apps/server/src/printing-retirement-upgrade.test.ts` does: `applyMigrations(dir, [CORE,
+    IDENTITY, the truncated workforce set])`, rows by raw `insert` through `openVenueDatabase(dir)`
+    (closed again before migrating), then `applyMigrations(dir, [CORE, IDENTITY,
+    { ...WORKFORCE_MIGRATIONS, appendOnlyTables }])` — the real path, which removes the change feed
+    and reinstalls the append-only triggers itself. (a) "migrates a venue with no working-time rows
+    and keeps its append-only triggers": it resolves; `pragma table_info(time_entries)` and
     `(pay_period_closures)` name no `location_id`, no `__new_%` table is left, and the four
     append-only triggers exist; (b) "refuses a venue that recorded a clock entry and changes
-    nothing": two entries and their head; `engineErrorMessage(error)` contains `FOREIGN KEY
-    constraint failed`; both tables' rows and the `location_id` column are as before; (c) "refuses a
+    nothing": two entries and their head; it rejects with `migrations.apply_failed` whose cause
+    names `DROP TABLE` and, below it, `FOREIGN KEY constraint failed`; both tables' rows and the
+    `location_id` column are as before; (c) "refuses a
     venue holding an attendance question with a reminder email": a missing-times question and its
     `attendance_mail` row, no entries; refused the same way, rows unchanged. Then an
     `appendToChain(tx, { nodeId }, { personId, entryKind: "in", … })` after (a) gets
@@ -487,51 +528,104 @@ do not typecheck until Task 4 (cleanly red, stated in the ledger).
   (one may already be gone) and add the `RESETS` entry in `scripts/migration-upgrade.test.ts`
   exactly as the rehearsal section quotes it, with a one-line comment: "Rebuilds the working-time
   tables without a location; every venue that recorded working time needs a reset (A1268)."
+- [ ] **Step 5a: `attendance-response-migration.test.ts`** (:171, "adds only the empty receipt
+  table and retains legal rows, heads, questions and attempted mail byte for byte"). It seeds
+  entries, a chain head, a question and a reminder email at journal `0000`–`0007`, then runs the
+  whole workforce set, which now meets `0013` and is refused `FOREIGN KEY constraint failed`
+  (the rehearsal's refused cases). Run it only up to main's `0011` (a second truncated folder,
+  `journal.entries.slice(0, 12)`), so it still checks that `0008` adds only the receipt table, and
+  revert the branch's `delete head.location_id` edit (:258): up to `0011` the head keeps its
+  `location_id`.
+- [ ] **Step 5b: Raw-SQL fixtures the typecheck cannot see.** Run
+  `git grep -n location_id -- 'packages/workforce/src/*.test.ts'` and read every hit on
+  `time_entries`, `pay_period_closures` or `workforce_chains`. An insert, update or select on the
+  migrated schema drops the column; one on an older schema (a truncated journal, e.g.
+  `record-migration.test.ts:84,98` at `0000`–`0003`) stays. Expected hits on the branch, each a
+  table row: `chain.test.ts:194,211,269`; `migrations.test.ts:131,147,196,208,226,241,256`;
+  `restore-continuation.test.ts:79`; `record-migration.test.ts:143` (after the full set);
+  `corrections.test.ts:77`; `record-schema.test.ts:56` (`time_entries`) and `:180`
+  (`pay_period_closures`); `backup-verification.test.ts:283,380,386`; `clocking-step.test.ts:164-169`.
+  The `roster_versions` and `shifts` hits are A1301's.
 - [ ] **Step 6: Run.**
-  `pnpm --filter @waitron/workforce exec vitest run src/working-time-per-venue-migration.test.ts src/pay-period-closure.test.ts src/pay-period-chain.test.ts src/chain.test.ts src/chain.concurrency.test.ts src/backup-verification.test.ts src/migrations.test.ts src/index.test.ts src/personal-data.coverage.test.ts src/restore-continuation.test.ts src/record-migration.test.ts src/attendance-response-migration.test.ts`
-  (expected: all pass, after the Task 3 table rows), then the guard suites (expected: all pass,
-  `migration-upgrade` about a minute). `pnpm --filter @waitron/workforce typecheck` reports errors
-  only in the files Task 4 lists and in test files (Task 5); record the list in the ledger.
+  `pnpm --filter @waitron/workforce exec vitest run src/working-time-per-venue-migration.test.ts src/pay-period-closure.test.ts src/pay-period-chain.test.ts src/chain.test.ts src/chain.concurrency.test.ts src/backup-verification.test.ts src/migrations.test.ts src/index.test.ts src/personal-data.coverage.test.ts src/restore-continuation.test.ts src/record-migration.test.ts src/attendance-response-migration.test.ts src/record-schema.test.ts src/corrections.test.ts`
+  (expected: these pass once the Task 3 table rows are made, except cases that depend on the
+  readers Task 4a and 4b change, which are listed in the ledger as red with the reader that fixes
+  them), then the guard suites, `pnpm exec vitest run scripts/workspace-cycles.test.ts` and
+  `pnpm --filter @waitron/server exec vitest run src/printing-retirement-upgrade.test.ts`
+  (it applies every set to an old venue and expects core's refusal first; the new workforce steps
+  must not change which set refuses). Expected: all pass, `migration-upgrade` about a minute. `pnpm --filter @waitron/workforce typecheck` reports errors
+  only in the files Tasks 4a and 4b list and in test files (Task 5); record the list in the ledger.
 - [ ] **Step 7: Deletion controls,** each reverted: remove the `RESETS` entry → `migration-upgrade`
   fails at the new step; make `closureScope` `[node_id, period_start]` → the "verifies a node's
   closures as one chain" case fails.
 - [ ] **Step 8: Commit** — "Clock entries and pay-period closures no longer store a location".
 
-## Task 4: The readers and the remaining types in the workforce package (D3, D4, D6, D7)
+## Task 4a: Pairing, corrections and records per person (D4, D6)
 
-**Files** (source only; tests in the table's Task 4 rows):
-`effective-entries.ts` (`sameSubject` is the person), `projection.ts` (`WorkSession.locationId`
-deleted), `record-period.ts` (the key is the person), `record-projection.ts` (closure views: no
-location filter or sort), `record-reads.ts` (`readTimeRecord`'s query is `{ period, personId? }`;
-without a person it is the venue's record), `clocking.ts` (`ClockEventInput` loses `locationId`;
-`getPlannedVsActual` reads the venue's entries, shifts still by location), `corrections.ts` (the
-missing-entry input is `{ personId, missingEntryKind }`, no `assertLocationExists`; the
-comparisons at :136, :161, :166, :180, :232 go), `automatic-entries.ts` (`AutomaticCloseInput`
-loses `locationId`; :49-55's location checks go; reads by person; closures by period),
-`end-of-day.ts` (subjects, `effective`, `intervals`, `breaks` and `canClose` lose the location;
-facts and questions keep `day.locationId`), `attendance-contract.ts` (`CorrectionItem.locationId`
-deleted), `attendance-responses.ts` (:94, :132), `attendance-reads.ts` (entry filters by person and
-window; `ownLocations` from questions and commands; proposal prompt place from its command — open
-question 1), `attendance-question-responses.ts` (:34, :44, :51), `attendance-response-commands.ts`
-(the item's place from its command; :231 and :246 lose the location), `hours-reads.ts` (entries
-and record by person; closures by period; items unfiltered by location; prompts still by the
-question's location).
+**Files** (source only; tests in the table's Task 4a rows): `effective-entries.ts` (`sameSubject`
+is the person), `projection.ts` (`WorkSession.locationId` deleted; Task 2's
+`Omit<WorkSession, "locationId">` goes back to `WorkSession`), `record-period.ts` (the key is the
+person), `record-projection.ts` (closure views: no location filter or sort), `record-reads.ts`
+(`readTimeRecord`'s query is `{ period, personId? }`; without a person it is the venue's record),
+`corrections.ts` (the missing-entry input is `{ personId, missingEntryKind }`, no
+`assertLocationExists`; the comparisons at :136, :161, :166, :180, :232 go), `automatic-entries.ts`
+(`AutomaticCloseInput` loses `locationId`; :49-55's location checks go; reads by person; closures
+by period), `clocking.ts` (`ClockEventInput` loses `locationId`; `getPlannedVsActual` reads the
+venue's entries, shifts still by location).
 
-- [ ] **Step 1: Failing tests.** Make the Task 4 table rows' changes. Add
-  `attendance-response-commands.test.ts` "approves a proposal and writes the command at its
-  proposing command's place": propose (with `locationId`), then approve; the approve command row's
-  `location_id` equals the propose row's. Run those files. Expected: FAIL on the new and flipped
-  cases (and on typecheck, until Step 2).
+- [ ] **Step 1: Failing tests.** Make the Task 4a table rows' changes and run those files.
+  Expected: FAIL on the flipped cases, and the typecheck fails until Step 2.
+- [ ] **Step 2: Implement** the Files list.
+- [ ] **Step 3: Run** `pnpm --filter @waitron/workforce typecheck` (expected: errors only in Task
+  4b's files and in test files) and the Task 4a rows' files plus `src/projection.test.ts
+  src/record-projection.test.ts src/record-reads.test.ts src/record-closures.test.ts
+  src/corrections.test.ts src/correction-lifecycle.test.ts src/automatic-entries.test.ts
+  src/planned-vs-actual.test.ts src/scheduling.test.ts src/pay-period-closure.test.ts`. Expected:
+  all pass. A case that fails only because a fixture still names a location the code no longer has
+  — a raw SQL column, or a drizzle `values` key — is fixed here, with a table row, not deferred to
+  Task 5; any other failure: add a row naming its decision, or STOP.
+- [ ] **Step 4: Commit** — "Pair sessions and apply corrections per person at the venue".
+
+## Task 4b: The end-of-day pass, attendance reads and hours per venue (D4, D7)
+
+**Files** (source only; tests in the table's Task 4b rows): `end-of-day.ts` (subjects, `effective`,
+`intervals`, `breaks` and `canClose` lose the location; facts and questions keep
+`day.locationId`), `attendance-contract.ts` (`CorrectionItem.locationId` deleted),
+`attendance-responses.ts` (:94, :132), `attendance-reads.ts` (entry filters by person and window;
+`ownLocations` from questions only, plus the place passed in; a proposal prompt's place is the
+place passed in — open question 1), `attendance-question-responses.ts` (:34, :44, :51),
+`attendance-response-commands.ts` (an item command's `location_id` is the configured location
+passed in on its input — open question 1; :231 and :246 lose the location), `hours-reads.ts`
+(entries and record by person; closures by period; items unfiltered by location; prompts still by
+the question's location; passes `input.locationId` to `readAttendanceInbox`).
+
+- [ ] **Step 1: Failing tests.** Make the Task 4b table rows' changes. Add, in
+  `hours-reads.test.ts` (or a new `cross-node-session.test.ts` if the three reads need different
+  set-ups), "counts a shift clocked in on one node and out on another once": a clock-in written on
+  node A and a clock-out on node B for one person in one business day → `readPersonHours` has one
+  session with its worked minutes, `closePayPeriod` for the period freezes that one session, and
+  `processAttendanceDay` (the end-of-day pass) raises no missing-times question for it and appends
+  no automatic clock-out. This is a control for D4 rather than a flip — pairing is already per
+  person ("Session pairing across nodes is already per person" above) — so it passes once Step 2
+  compiles. Workforce tests that call `readAttendanceInbox` or `executeAttendanceCommand` pass the
+  test's own location as the new argument in this task (a table row), since at runtime a missing
+  argument leaves a proposal prompt without a place. Run those files. Expected: FAIL on the flipped
+  cases, and the typecheck fails until Step 2.
 - [ ] **Step 2: Implement** the Files list.
 - [ ] **Step 3: Run** `pnpm --filter @waitron/workforce typecheck` (expected: errors only in test
   files, which Task 5 sweeps) and `pnpm --filter @waitron/workforce exec vitest run` (whole
-  package). Expected: every case passes except ones failing only because a fixture still passes a
-  location the code now ignores — none should fail at runtime for that reason; any that does, add
-  a row or STOP.
-- [ ] **Step 4: Deletion controls,** each reverted: put `a.locationId === b.locationId` back into
-  `sameSubject` → a correction-lifecycle or attendance-reads case fails (name it in the ledger);
-  take the place from the item instead of the command → the new approve case fails.
-- [ ] **Step 5: Commit** — "Pair, correct and close working time per person at the venue".
+  package). Expected: all pass, with the same rule as Task 4a Step 3 for a fixture that still
+  names a location.
+- [ ] **Step 4: Deletion controls,** each reverted:
+  - key `groupByPerson` (`projection.ts:130`) by person and node → the new cross-node case fails
+    on its hours and closure checks;
+  - add `a.nodeId === b.nodeId` to `sameSubject` → `corrections.test.ts` "reprojects the later
+    recorded_at approved correction when two chains correct one target" (:280) fails, because a
+    correction written on another node stops applying to its target. (`sameSubject` decides which
+    corrections and answers apply, not how sessions pair, so it is not the control for the new
+    case; the location half of it compares two absent values after Task 3 and cannot be a control
+    at all.)
+- [ ] **Step 5: Commit** — "Run the end-of-day pass, attendance reads and hours per venue".
 
 ## Task 5: The workforce tests carry no location
 
@@ -585,7 +679,9 @@ endpoint from workforce_chains`; the clock page drops `and location_id = …` an
 `${scan.locationId} as locationId`), `attendance-facts.ts` (clock facts drop the location filter and
 take `${day.locationId}` as their location), `attendance-own-scope.ts` (the entry lookup :13-18
 goes — open question 2), `personal-data-time-record.ts` (the days read drops the location filter);
-anything else `pnpm --filter @waitron/server typecheck` reports in source files.
+`management-attendance-api.ts` and `till-attendance-api.ts` (pass `deps.cfg.locationId` to
+`readAttendanceInbox` and on `executeAttendanceCommand`'s input — open question 1); anything else
+`pnpm --filter @waitron/server typecheck` reports in source files.
 
 - [ ] **Step 1: Failing tests.** Make the Task 7 table rows' changes. The rewritten
   `till-clock-api.test.ts:92` case: an open shift written on another node; the till's node writes
@@ -598,7 +694,7 @@ anything else `pnpm --filter @waitron/server typecheck` reports in source files.
   `reconcileAttendanceBeforeClock` returns `null` and an `attendance_day_work` row exists for
   yesterday. Two of these are controls rather than flips: once entries carry no location, the old
   refusal and the old early return have nothing to compare, so what fails first is the server's
-  typecheck against Tasks 3–4. Run
+  typecheck against Tasks 3–4b. Run
   `pnpm --filter @waitron/server exec vitest run src/till-clock-api.test.ts src/till-clock-state.test.ts src/till-clock-step.test.ts src/attendance-discovery.test.ts src/personal-data-time-record.test.ts`.
   Expected: FAIL (the server does not compile against Task 3–4 yet, or the new cases fail).
 - [ ] **Step 2: Implement** the Files list.
@@ -710,25 +806,31 @@ deleted in English and Spanish), `apps/till/test/clock-app.ts`; `apps/dashboard/
   this release holds the same rows, so restoring it is expected to meet the same refusal (not run);
   discloses that the migration rebuilds `time_entries` and `pay_period_closures`
   (append-only; triggers reinstalled by the set's install) plus `attendance_questions` and
-  `workforce_chains`, and that it is two generations and why.
+  `workforce_chains`, and that it is two generations and why. It also says, so the owner's "no
+  note" decision is made knowing it: an export filtered to one person still lists only that
+  person's entries, so its "Chain position" column can skip numbers, as it could before (design
+  §2); the export carries no note saying so.
 - [ ] Then `/finish-branch` with this plan's path. Risk triggers: a migration and a cross-package
   contract (`TimeEntryRecord`, `CorrectionItem`, `TillClockState`), so the full path and two Codex
   reviews. Reply on the review thread naming both hash changes, the column removal and the export
-  change, then resolve it.
+  change — including that a one-person export's chain positions can still skip numbers with no
+  note — then resolve it.
 
 ---
 
 ## Self-review notes
 
 - **Owner decisions → tasks.** No location on entries (column, append input, hash): Tasks 1, 3, 5.
-  Sessions per venue: Task 4. Corrections and confirmations by person and entry (D5 gone): Tasks 3
-  (keys), 4 (code). Closures per venue, one chain per node, hash without location, verification by
+  Sessions per venue: Task 4a, with the cross-node control in 4b. Corrections and confirmations
+  by person and entry (D5 gone): Tasks 3 (keys), 4a (code). Closures per venue, one chain per node, hash without location, verification by
   node: Tasks 2, 3. Export per venue, no skip note, no workplace columns, opening table names the
   venue once: Task 6. End-of-day and attendance per venue on the box location's business day:
-  Tasks 4, 7. Device admission untouched: Task 7 leaves `admit`. Reset named in the PR's first
+  Tasks 4b, 7. Device admission untouched: Task 7 leaves `admit`. Reset named in the PR's first
   line: "Before the PR is merged".
-- **Nothing new on locations:** no task adds a location column, parameter, view, rule, setting,
-  fixture or translation; open question 1's place comes from an existing column.
+- **Nothing new on locations:** no task adds a location column, view, rule, setting, fixture or
+  translation. One parameter is the exception: open question 1 passes the configured location the
+  routes already hold into `readAttendanceInbox` and `executeAttendanceCommand`, flagged for the
+  watcher against the no-new-parameter rule.
 - **Names used across tasks:** `time_entries_person_entry_uq` (T3), `ChainKey { nodeId }`,
   `readTimeRecord({ period, personId? })` (T3–T4), `closePayPeriod({ nodeId, period, … })` (T3),
   `readClosures({ period })` (T3).

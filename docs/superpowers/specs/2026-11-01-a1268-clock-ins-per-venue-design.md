@@ -95,7 +95,10 @@ clock-ins at the venue. Which devices a box admits (`admit`) is unchanged.
 is a person's clock-in followed by their next clock-out, whichever device or node wrote each. There
 is no per-location view of working time: nothing filters or groups entries, sessions or correction
 items by location. A correction or confirmation is tied to the entry it answers by the entry and
-the person only. This takes in what revision 1 kept as D5.
+the person only. This takes in what revision 1 kept as D5. Where the attendance tables still need
+a place for a correction item — a manager's proposal shown to the worker, and the required
+`location_id` of an approve, decline, accept or disagree command — it is the box's configured
+location, which the server routes already hold (plan, open question 1).
 
 **D5.** Removed in revision 2 (see D4).
 
