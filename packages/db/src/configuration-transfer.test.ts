@@ -273,6 +273,12 @@ describe("CORE_CONFIGURATION_TRANSFER", () => {
     expect(CORE_CONFIGURATION_TRANSFER.afterImport).toBe(storeTableShortNameKeys);
   });
 
+  it("A773 phases: a station's pass waiting is never carried", () => {
+    expect(
+      CORE_CONFIGURATION_TRANSFER.tables.find((table) => table.name === "kitchen_stations")?.omit,
+    ).toEqual(["waits_for_pass"]);
+  });
+
   it("leaves a deleted printer behind and never carries its poll credential", () => {
     expect(CORE_CONFIGURATION_TRANSFER.tables.find((table) => table.name === "printers")).toEqual({
       name: "printers",

@@ -63,6 +63,8 @@ export const ticketItems = table(
     /* v8 ignore stop */
     // NULL = HELD: the item cannot advance until it is fired.
     firedAt: tsString("fired_at"),
+    requestedAt: tsString("requested_at"),
+    passControlled: flag("pass_controlled").notNull().default(false),
     awayAt: tsString("away_at"),
     stationChosenAt: tsString("station_chosen_at"),
     // Explicit "leave to finish" survives disabling; an earlier manual station choice does not.

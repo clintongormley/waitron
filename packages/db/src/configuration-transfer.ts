@@ -67,6 +67,7 @@ export const CORE_CONFIGURATION_TRANSFER = {
       name: "kitchen_stations",
       leaveBehindWhenFalse: "active",
       locationColumns: ["location_id"],
+      omit: ["waits_for_pass"],
     },
     { name: "kitchen_courses", locationColumns: ["location_id"], leaveBehindWhenFalse: "active" },
     { name: "categories" },

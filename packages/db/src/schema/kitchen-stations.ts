@@ -38,6 +38,7 @@ export const kitchenStations = table(
       .$type<ChangesAfterSending>()
       .notNull()
       .default("held-or-waiting"),
+    waitsForPass: flag("waits_for_pass").notNull().default(false),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [

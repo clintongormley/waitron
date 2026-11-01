@@ -1,10 +1,23 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
-import { count, enumCheck, enumType, id, json, newId, nowIso, table, tsString } from "./columns.js";
+import {
+  count,
+  enumCheck,
+  enumType,
+  id,
+  json,
+  label,
+  newId,
+  nowIso,
+  table,
+  tsString,
+} from "./columns.js";
 import { devices } from "./devices.js";
 import { parties } from "./parties.js";
 
 export const orderGroupState = enumType(["held", "fired", "removed"]);
+
+export type OrderGroupRequestKind = "new_order" | "next_course" | "added";
 
 /**
  * One group of a party's order, released to the kitchen together (`apps/server/src/order-groups.ts`).
@@ -33,6 +46,11 @@ export const orderGroups = table(
     remindAt: tsString("remind_at"),
     // When this group's advance HOLD ticket was queued for a printer; null if none was.
     holdPrintedAt: tsString("hold_printed_at"),
+    // The writers' `OrderGroupRequestKind` refuses another value; a CHECK would rebuild this table.
+    requestKind: label("request_kind")
+      .$type<OrderGroupRequestKind>()
+      .notNull()
+      .default("new_order"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
