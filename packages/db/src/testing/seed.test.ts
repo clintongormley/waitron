@@ -111,6 +111,7 @@ describe("seedVenue", () => {
 
   it("seedVenue refuses a second venue", async () => {
     await seedVenue(db);
+    expect((await readVenue(db)).name).toBe("Test venue");
     const existing = await venueLocationId(db);
     await expect(seedVenue(db)).rejects.toThrow(existing);
   });
@@ -124,8 +125,7 @@ describe("seedNode", () => {
   });
 
   it("inserts one node for the tenant + location and returns its id", async () => {
-    // seedNode takes the location as given, so build it first: a node FKs it, and
-    // there is deliberately no seedLocation helper.
+    // seedNode takes the location as given, so build it first: a node FKs it.
     await seedTenant(db);
     const [loc] = await db
       .insert(locations)
@@ -141,6 +141,20 @@ describe("seedNode", () => {
       sql`select count(*) as n from nodes where id = ${node} and location_id = ${location}`,
     );
     expect((result.rows[0] as { n: number }).n).toBe(1);
+  });
+
+  it("seedNode with an explicit location puts the node there, not at the venue", async () => {
+    await seedVenue(db);
+    const [second] = await db
+      .insert(locations)
+      .values({ name: "Second", invoiceLocales: ["es"], operationDescription: "Restaurant" })
+      .returning({ id: locations.id });
+    const node = await seedNode(db, brandLocationId(second!.id));
+    const [row] = await db
+      .select({ locationId: nodes.locationId })
+      .from(nodes)
+      .where(eq(nodes.id, node));
+    expect(row!.locationId).toBe(second!.id);
   });
 
   it("seedNode with no location puts the node at the venue", async () => {
@@ -264,6 +278,20 @@ describe("seedDevice", () => {
       })
       .from(deviceProfiles);
     expect(profiles).toEqual([{ formFactor: "phone-portrait", capabilities: ["take-cash"] }]);
+  });
+
+  it("seedDevice with an explicit locationId puts the device there, not at the venue", async () => {
+    await seedVenue(db);
+    const [second] = await db
+      .insert(locations)
+      .values({ name: "Second", invoiceLocales: ["es"], operationDescription: "Restaurant" })
+      .returning({ id: locations.id });
+    const { deviceId } = await seedDevice(db, { locationId: second!.id });
+    const [row] = await db
+      .select({ locationId: devices.locationId })
+      .from(devices)
+      .where(eq(devices.id, deviceId));
+    expect(row!.locationId).toBe(second!.id);
   });
 
   it("seedDevice with no locationId puts the device at the venue", async () => {

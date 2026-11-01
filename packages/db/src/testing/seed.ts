@@ -77,8 +77,8 @@ export async function seedKitchenStation(
 
 let deviceCounter = 0;
 
-/** Pairs one active device at `locationId` (the venue when omitted), on `profileId` or on a new profile of `formFactor` (till
- * by default). */
+/** Pairs one active device at `locationId` (the venue when omitted), on `profileId` or on a new
+ * profile of `formFactor` (till by default). */
 export async function seedDevice(
   db: Database,
   opts: {
