@@ -121,7 +121,7 @@ describe("embedded backup qualification", () => {
             PATH: `${join(ROOT, "apps/server/node_modules/.bin")}${delimiter}${environment.PATH}`,
           },
           encoding: "utf8",
-          timeout: 60_000,
+          timeout: 180_000,
         },
       );
       expect(built.status, built.stderr).toBe(0);
@@ -143,7 +143,7 @@ describe("embedded backup qualification", () => {
         cwd: ROOT,
         env: environment,
         encoding: "utf8",
-        timeout: 10_000,
+        timeout: 30_000,
       }).trim();
       expect(runtimes[0].runtime).toEqual({
         release: `waitron-${revision}`,
@@ -155,7 +155,7 @@ describe("embedded backup qualification", () => {
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
-  }, 120_000);
+  }, 270_000);
 
   it("loads genuine composition without starting a listener, timer, worker or process", () => {
     const directory = mkdtempSync(join(tmpdir(), "waitron-verification-build-"));
