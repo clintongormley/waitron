@@ -178,6 +178,45 @@ packages are deprecated. Left behind by the esbuild upgrade (#439, 2026-09-19).
 
 ## Decisions and deliberate limits
 
+### Hono router security qualification, 1 November 2026
+
+Hono 4.13.16 replaces 4.13.14 in all ten declaring manifests and the lockfile.
+`apps/server/src/router-boundary.test.ts` sends real HTTPS requests through setup boot.
+On 4.13.14, `/management-api/%0A`, `%0D`, `%E2%80%A8` and `%E2%80%A9` return a plain
+404 without the request identifier, build header or `node.reset` refusal. A normal missing
+path keeps all three. With 4.13.16, both the normal and encoded paths keep them.
+
+The same file sends real HTTP requests through the till API. A clock read without a session
+returns `401 session.required`; a signed-in read returns `200` and `state: "out"`.
+Malformed clock POSTs return 404 with request identification, and the signed-in state stays
+`out`. These requests did not demonstrate a protected action or data disclosure through the
+router defect. This isolated till app selected TrieRouter and passed on both dependency
+versions; it is a compatibility control. These requests do not establish safety for every route.
+
+Read the 4.13.14, 4.13.15 and 4.13.16 release notes before repeating the upgrade.
+The publisher's five advisory ranges end at 4.13.15 or exclude 4.13.16, making 4.13.16
+their first patched release. The complete publisher advisory list was also checked on
+1 November 2026. Two older publisher ranges omit their upper bounds; their normalized
+GitHub entries bound them below 4.12.2 and 4.10.2 respectively. This is a dated review of
+published ranges, not a guarantee about future advisories.
+
+The production TypeScript scan of `apps/` and `packages/` found no imports of `hono/mount`,
+`hono/validator`, `hono/css` or `hono/csrf`. The `.mount()` call in `boot.ts` invokes Waitron's
+module contribution, not Hono's mount helper. This is source evidence about consumers;
+those unused helper paths were not exercised in Waitron. The default router defect is the
+one reproduced here.
+
+| Source | Source words | What they establish |
+| --- | --- | --- |
+| [Router advisory](https://github.com/honojs/hono/security/advisories/GHSA-h7mg-cq63-vhpq) | “without any wildcard middleware” | Encoded line terminators can bypass wildcard middleware in affected releases through 4.13.15; 4.13.16 is patched. |
+| [Mount advisory](https://github.com/honojs/hono/security/advisories/GHSA-4m76-xfj5-7975) | “remove the mount prefix” | Hono's forwarding helpers have a separate path-scoped middleware bypass, fixed in 4.13.16. |
+| [Form advisory](https://github.com/honojs/hono/security/advisories/GHSA-4h7h-rv7c-7m2v) | “another legal parameter” | Extra multipart parameters can cause the form validator to see an empty object through 4.13.15. |
+| [CSS advisory](https://github.com/honojs/hono/security/advisories/GHSA-3gg2-335m-rxc6) | “Interpolated string values are escaped one at a time” | A closing style tag split across values can escape the earlier protection through 4.13.15. |
+| [CSRF advisory](https://github.com/honojs/hono/security/advisories/GHSA-46wx-v44x-9hh2) | “content type `text/ping`” | Hyperlink auditing can skip that middleware's origin check before 4.13.16. |
+| [Older language advisory](https://github.com/advisories/GHSA-xh87-mx6m-69f3) | “>= 4.12.0, < 4.12.2” | The normalized range supplies the missing upper bound. |
+| [Older CORS advisory](https://github.com/advisories/GHSA-m732-5p4w-x69g) | “>= 1.1.0, < 4.10.2” | The normalized range supplies the missing upper bound. |
+| [4.13.16 release](https://github.com/honojs/hono/releases/tag/v4.13.16) | “This release includes fixes” | The release lists all five security fixes and the JWT signature/header tightening. |
+
 **Vitest-family ignore qualification (owner, 2026-10-17).** Keep this open until Dependabot's next
 Vitest-family pull request shows whether A779's ignore holds, then close it
 (`docs/developers/workflow-guide.md` → Dependabot pull requests). #1179, opened before A779's ignore,
@@ -244,25 +283,3 @@ the actual build. Which other installed packages are affected remains unverified
   of the output. A file snapshot would fail with a readable diff; whether this repo wants
   snapshot files at all is an owner decision. Left behind by the till QR library upgrade
   (qrcode-generator 1 -> 2, 2026-09-20).
-
-
-## A1304: Hono router security qualification
-
-A1302's review found a newer security release outside its assigned 4.13.13 to 4.13.14 range.
-At main `0160250f67ce6968deff3c6ce2169ed65558d0ba`, `git show origin/main:pnpm-lock.yaml`
-names Hono 4.13.13; A1302's candidate names 4.13.14. Both fall in the publisher's affected range.
-This establishes an affected dependency version, not a demonstrated authentication bypass in Waitron.
-
-**Next action:** read the intervening 4.13.15 and 4.13.16 releases, update the dependency, and
-exercise Waitron's wildcard middleware with distinguishing refusing and accepting requests.
-Trace the gates in `apps/server/src/boot.ts`, `setup-api.ts`, `setup-spa.ts` and `till-api.ts`.
-The default router and wildcard registrations are present; whether a protected Waitron action
-can be reached without its gate remains unverified. Hono's own `mount()` is a separate path
-from Waitron's module contribution method of the same name. Review the other four advisories
-in the release against their actual consumers, rather than assuming all five affect Waitron.
-
-| Source | Source words | What they establish |
-| --- | --- | --- |
-| [Publisher's router advisory](https://github.com/honojs/hono/security/advisories/GHSA-h7mg-cq63-vhpq), read 1 November 2026 | “>= 4.1.4, <= 4.13.15”; “4.13.16” | Affected and patched dependency ranges. |
-| [Same advisory](https://github.com/honojs/hono/security/advisories/GHSA-h7mg-cq63-vhpq) | “without any wildcard middleware” | The encoded-line-terminator case reaches the not-found handler without those middleware checks. |
-| [4.13.16 release](https://github.com/honojs/hono/releases/tag/v4.13.16), read 1 November 2026 | “This release includes fixes” | The release lists router, mount, form validator, CSS helper and CSRF fixes. Actual Waitron exposure needs the consumer checks above. |
