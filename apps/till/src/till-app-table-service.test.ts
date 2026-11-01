@@ -3495,6 +3495,18 @@ describe("A803 action results: the bill on screen after a table action", () => {
     expect(tableOrder(el)!.orderId).toBeUndefined();
   });
 
+  it("Split a table's wait for the staying party's new bill ends at the first successful bills read, even one listing no bill: a bill read later is not chosen", async () => {
+    const reads: (PartyBill[] | Error)[] = [new TypeError("Failed to fetch"), []];
+    const { el } = await splitOffOnlyBill(reads);
+    expect(reads).toHaveLength(1);
+    expect(tableOrder(el)!.orderId).toBeUndefined();
+
+    reads.splice(0, reads.length, [partyBill("wo-9", "v-2", 3)]);
+    await nameParty(el, "Ana");
+    expect(tableOrder(el)!.bills.map((bill) => bill.workingOrderId)).toEqual(["wo-9"]);
+    expect(tableOrder(el)!.orderId).toBeUndefined();
+  });
+
   it("Split a table's wait for the staying party's new bill ends when the waiter leaves the table: on a later visit to the party with no bill, a bill read later is not chosen", async () => {
     const reads: (PartyBill[] | Error)[] = [
       new TypeError("Failed to fetch"),

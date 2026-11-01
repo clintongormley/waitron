@@ -2923,8 +2923,9 @@ export class TillApp extends LitElement {
    * show ({@link #chooseBill}), so a bill missing from one of them has not gone. */
   #billChosenRead = 0;
   /** Set when Split a table took the bill on screen, the bills read after it failed, and no bill known
-   * before it stayed: the next bills read for this party on this visit that lists a bill shows
-   * {@link billToShow}'s choice ({@link #followBillsRead}). */
+   * before it stayed: the next successful bills read for this party on this visit shows
+   * {@link billToShow}'s choice ({@link #followBillsRead}) and ends the wait, even when it lists no
+   * bill. */
   #billAfterSplit?: { partyId: string; visit: number };
   /** This till's own merges, moves and splits holding the window ({@link #ownBillsChange}), and how
    * many times one has taken it: a background bills read neither starts while one holds it nor
@@ -11986,6 +11987,7 @@ export class TillApp extends LitElement {
       gone === undefined &&
       this.#billAfterSplit?.partyId === partyId &&
       this.#billAfterSplit.visit === this.#orderVisit;
+    if (gone === undefined) this.#billAfterSplit = undefined;
     if (next === gone || (gone === undefined && !opening && !afterSplit)) return;
     const session = this.#operatorSession;
     const sync = this.#draftSync;
