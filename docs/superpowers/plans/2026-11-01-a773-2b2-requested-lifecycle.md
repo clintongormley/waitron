@@ -234,6 +234,10 @@ D1–D20 are the slice plan's and bind unchanged. These are B2's, dated 2026-11-
   own `initiatedCourseIds` already does (`:2241-2243`). The difference is reachable only when one
   edit deletes the course's last Requested record and adds a dish to that course; B2.2b case 4
   measures it first, and the change lands only if that case goes red (see the case).
+  **Measured (2026-11-02, Task 2.2 review I1, run E3):** case 4 never reads `firedCourseIds`. On a
+  party the edit's new dish goes into a new fired group, so its `release` is true before the course
+  term is reached; emptying `firedCourseIds` left all four cases green. The case pins `fireLines`'
+  own course rule instead, and `firedCourseIds` is left on `firedAt`.
 
 - **D24 Draft recall of a Requested dish needs no change.** Today it prints nothing for it (no
   RECALLED: `draft-recall.ts:351-359` keeps `firedAt !== null`; no HOLD CANCELLED: the group is
@@ -410,6 +414,27 @@ D1–D20 are the slice plan's and bind unchanged. These are B2's, dated 2026-11-
   dish was served whole" red; loosening it to any served quantity turns "refuses a bill whose
   waiting dish was served only in part" red; dropping the request-time condition turns the
   recalled pin red.
+
+- **D42 Raising a Requested whole-portion dish adds copies that follow their station** (2026-11-02,
+  driver's answer to Task 2.2 review Important 2). A Requested dish has nothing released, so an
+  edit that raises its quantity takes the "free" path, and a whole portion rises by copies of
+  itself. The copies took `kitchenStateOf(parent)`, which answered "hold" for any line with a
+  kitchen item, so a Fire now burger raised from 1 to 2 gained a held copy inside its fired group,
+  which the till could not serve (D21). Under D22 (an edit keeps each
+  kitchen item's phase, and added units are new kitchen work) and the slice plan's D2 and D19,
+  `kitchenStateOf` now answers "fire" for a line whose item is initiated. The copy then goes
+  through `requestStamps` like a dish newly fired in a fired group: Requested at the edit's time at
+  a waiting station (B1 Task 4's rule for edit-added extras), released at one that does not wait,
+  never held. The same change reaches units added beside an adjusted Requested line (the "joins"
+  path), which now arrive Requested in the line's fired group instead of held. A held or recalled
+  item still answers "hold". With no station waiting nothing changes: a released dish is raised
+  through the "raise" path, which never reads `kitchenStateOf`. Receipts:
+  `kitchen-request.edit.test.ts` "raises a waiting burger by a waiting copy…" and "…by a released
+  copy once Grill has stopped waiting" failed before the change (the copy had both stamps null)
+  and pass after; "with no station waiting, raises a fired burger by a released burger and a
+  Grill ticket" passed both before and after; `adjustments-apply.test.ts` "sends the Burger added
+  to a comped waiting one as waiting too…" pins the "joins" path. Control: `kitchenStateOf` back
+  to "hold" for every item turns all three of those red.
 
 ## Departures from the outline and the master plan
 

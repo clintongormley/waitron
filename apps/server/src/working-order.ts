@@ -5551,11 +5551,12 @@ interface EditableOrder {
 
 /**
  * What a line the kitchen has not fired is waiting for, in {@link EditableOrder.newWork}'s terms: a
- * held or recalled item waits to be sent; a line with no item was released when it was stamped sent,
- * waits in its held group when it has one, and is otherwise a line nothing has sent.
+ * Requested item was sent by the waiter; a held or recalled item waits to be sent; a line with no
+ * item was released when it was stamped sent, waits in its held group when it has one, and is
+ * otherwise a line nothing has sent.
  */
 function kitchenStateOf(line: EditableLine): EditableOrder["newWork"] {
-  if (line.ticket !== null) return "hold";
+  if (line.ticket !== null) return initiatedAt(line.ticket) === null ? "hold" : "fire";
   if (line.sentAt !== null) return "fire";
   return line.groupId === null ? "none" : "hold";
 }

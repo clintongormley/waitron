@@ -13,6 +13,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { addTabRound, updateHeldOrder, updateOrderLine } from "./testing/order-writer-fixture.js";
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { OPERATOR } from "./testing/party-venue.js";
@@ -85,6 +86,7 @@ async function items(tx: Transaction, orderId: string) {
       requestedAt: ticketItems.requestedAt,
       firedAt: ticketItems.firedAt,
       passControlled: ticketItems.passControlled,
+      groupId: workingOrderLines.groupId,
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
@@ -98,6 +100,45 @@ async function slips(tx: Transaction, printerId: string) {
       .from(printJobs)
       .where(eq(printJobs.printerId, printerId))
   ).map((job) => decodeTicket(job.payload));
+}
+
+async function placeFireNow(tx: Transaction, venue: Venue, lines: ReturnType<typeof line>[]) {
+  return placeGroups(tx, venue.cfg, venue.party.partyId, {
+    operatorId: OPERATOR,
+    groups: [{ lines, release: "fire" }],
+  });
+}
+
+async function lineNoOf(tx: Transaction, lineId: string) {
+  return (
+    await tx
+      .select({ lineNo: workingOrderLines.lineNo })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.id, lineId))
+  )[0]!.lineNo;
+}
+
+async function allSlips(tx: Transaction, venue: Venue) {
+  const out: Record<string, string[]> = {};
+  for (const [name, id] of Object.entries(venue.printers)) out[name] = await slips(tx, id);
+  return out;
+}
+
+/** Fire now one burger, raise it from 1 to 2 at LATER, and return its items before and after. */
+async function raisedBurger(tx: Transaction, venue: Venue) {
+  await placeFireNow(tx, venue, [line(venue, "burger")]);
+  const [before] = await items(tx, venue.party.tabId);
+  const printedBefore = await allSlips(tx, venue);
+  vi.setSystemTime(new Date(LATER));
+  await edit(tx, venue, await lineNoOf(tx, before!.lineId), { quantity: "2" });
+  const after = await items(tx, venue.party.tabId);
+  return {
+    before: before!,
+    kept: after.find((row) => row.id === before!.id),
+    added: after.filter((row) => row.id !== before!.id),
+    printedBefore,
+    printedAfter: await allSlips(tx, venue),
+  };
 }
 
 describe("A773 requested lifecycle: edit", () => {
@@ -191,7 +232,7 @@ describe("A773 requested lifecycle: edit", () => {
     });
   });
 
-  it("requests a new dish an edit adds to a course whose last requested dish it removes", async () => {
+  it("puts a party edit's new dish in a new fired group as Requested, even when the edit removes its course's last Requested dish", async () => {
     const venue = await setupSplitExtrasVenue();
     const id = venue.party.tabId;
     const { starters, mains } = await withTransaction(db, async (tx) => {
@@ -232,6 +273,116 @@ describe("A773 requested lifecycle: edit", () => {
         passControlled: true,
       });
       expect(added.requestedAt).not.toBeNull();
+    });
+  });
+
+  it("raises a waiting burger by a waiting copy at the edit's time, in its fired group, printing nothing", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      await setStationsWaitForPass(tx, true, [venue.stations.grill]);
+      const { before, kept, added, printedBefore, printedAfter } = await raisedBurger(tx, venue);
+      expect(before).toMatchObject({ requestedAt: AT, firedAt: null, passControlled: true });
+      expect(before.groupId).not.toBeNull();
+      expect(kept).toEqual(before);
+      expect(added).toEqual([
+        expect.objectContaining({
+          productId: venue.products.burger,
+          stationId: venue.stations.grill,
+          groupId: before.groupId,
+          requestedAt: LATER,
+          firedAt: null,
+          passControlled: true,
+        }),
+      ]);
+      expect(printedAfter).toEqual(printedBefore);
+    });
+  });
+
+  it("with no station waiting, raises a fired burger by a released burger and a Grill ticket", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      const { before, kept, added, printedBefore, printedAfter } = await raisedBurger(tx, venue);
+      expect(before).toMatchObject({ requestedAt: AT, firedAt: AT, passControlled: false });
+      expect(kept).toEqual(before);
+      expect(added).toEqual([
+        expect.objectContaining({
+          productId: venue.products.burger,
+          stationId: venue.stations.grill,
+          requestedAt: LATER,
+          firedAt: LATER,
+          passControlled: false,
+        }),
+      ]);
+      expect(added[0]!.groupId).not.toBeNull();
+      const newGrill = printedAfter.grill!.slice(printedBefore.grill!.length);
+      expect(newGrill).toHaveLength(1);
+      expect(newGrill[0]).toContain("x BURG");
+      expect(newGrill[0]).not.toContain("HOLD");
+      for (const name of ["fryer", "kitchen", "bar"])
+        expect(printedAfter[name]).toEqual(printedBefore[name]);
+    });
+  });
+
+  it("raises a waiting burger by a released copy once Grill has stopped waiting", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      await setStationsWaitForPass(tx, true, [venue.stations.grill]);
+      await placeFireNow(tx, venue, [line(venue, "burger")]);
+      await setStationsWaitForPass(tx, false, [venue.stations.grill]);
+      const [before] = await items(tx, venue.party.tabId);
+      expect(before).toMatchObject({ requestedAt: AT, firedAt: null });
+      const grillBefore = (await slips(tx, venue.printers.grill)).length;
+      vi.setSystemTime(new Date(LATER));
+      await edit(tx, venue, await lineNoOf(tx, before!.lineId), { quantity: "2" });
+      const after = await items(tx, venue.party.tabId);
+      expect(after.find((row) => row.id === before!.id)).toEqual(before);
+      expect(after.filter((row) => row.id !== before!.id)).toEqual([
+        expect.objectContaining({
+          groupId: before!.groupId,
+          requestedAt: LATER,
+          firedAt: LATER,
+          passControlled: false,
+        }),
+      ]);
+      const newGrill = (await slips(tx, venue.printers.grill)).slice(grillBefore);
+      expect(newGrill).toHaveLength(1);
+      expect(newGrill[0]).toContain("x BURG");
+    });
+  });
+
+  it("sends new extras an edit adds by their own station, not the dish's phase", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    const id = venue.party.tabId;
+    await withTransaction(db, async (tx) => {
+      await addTabRound(tx, venue.cfg, id, [line(venue, "burger")]);
+      const [burgerBefore] = await items(tx, id);
+      expect(burgerBefore).toMatchObject({ requestedAt: AT, firedAt: AT });
+      await setStationsWaitForPass(tx, true, [venue.stations.fryer]);
+      vi.setSystemTime(new Date(LATER));
+      await edit(tx, venue, 1, {
+        extras: [
+          {
+            listId: venue.lists.burger,
+            picks: [{ productId: venue.products.chips, quantity: 1 }],
+          },
+        ],
+      });
+      const after = await items(tx, id);
+      expect(after.find((row) => row.productId === venue.products.burger)).toMatchObject({
+        requestedAt: LATER,
+        firedAt: LATER,
+        passControlled: false,
+      });
+      expect(after.find((row) => row.productId === venue.products.chips)).toMatchObject({
+        stationId: venue.stations.fryer,
+        requestedAt: LATER,
+        firedAt: null,
+        passControlled: true,
+      });
     });
   });
 });

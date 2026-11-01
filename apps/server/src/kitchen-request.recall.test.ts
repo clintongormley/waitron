@@ -20,7 +20,7 @@ import { kitchenNotices, setRoutingCell } from "@waitron/venue-service";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { setChangesAfterSending } from "./testing/changes-after-sending.js";
-import { placeGroups } from "./testing/group-submit-fixture.js";
+import { placeGroupedRound, placeGroups } from "./testing/group-submit-fixture.js";
 import { OPERATOR } from "./testing/party-venue.js";
 import { readBillEditState } from "./bill-editing.js";
 import { recallToDraft } from "./draft-recall.js";
@@ -154,13 +154,27 @@ describe("A773 requested lifecycle: recall", () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       await setStationsWaitForPass(tx, true, [venue.stations.grill]);
-      await placeFireNow(tx, venue, [dish(venue, "burger")]);
+      await placeGroupedRound(
+        tx,
+        venue.cfg,
+        venue.party,
+        { lines: [dish(venue, "burger")], release: "fire" },
+        OPERATOR,
+        {
+          party: {
+            answer: "allergies",
+            guests: [{ who: "Window seat", allergens: { milk: {} }, note: null }],
+          },
+          ticks: [{ line: { kind: "submitted", groupIndex: 0, lineIndex: 0 }, guestIndex: 0 }],
+        },
+      );
       const burger = await lineOf(tx, venue, "burger");
       expect(await itemsOf(tx, burger.id)).toEqual([
         expect.objectContaining(requestedAtGrill(venue, AT)),
       ]);
       const before = await frozen(tx);
       const allergyBefore = await VENUE_SERVICE.readPartyAllergy(tx, venue.party.partyId);
+      expect(allergyBefore.ticks).toEqual([expect.objectContaining({ workingLineId: burger.id })]);
       const counts = await jobCounts(tx, venue);
 
       const recalled = await recall(tx, venue, burger.id);

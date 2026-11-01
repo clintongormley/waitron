@@ -1300,6 +1300,46 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
     expect((await placeOf(billId, 3)).items).toEqual([{ firedAt: expect.any(String) }]);
   });
 
+  it("sends the Burger added to a comped waiting one as waiting too, in its fired group, printing nothing", async () => {
+    const stationIds = (
+      await inTx(venue, (tx) => tx.select({ id: kitchenStations.id }).from(kitchenStations))
+    ).map((row) => row.id);
+    await inTx(venue, (tx) => setStationsWaitForPass(tx, true, stationIds));
+    try {
+      const { billId } = await bill([{ name: "Burger" }], { release: "fire" });
+      const waiting = await inTx(venue, (tx) =>
+        tx
+          .select({ requestedAt: ticketItems.requestedAt, firedAt: ticketItems.firedAt })
+          .from(ticketItems)
+          .where(eq(ticketItems.workingOrderId, billId)),
+      );
+      expect(waiting).toEqual([{ requestedAt: expect.any(String), firedAt: null }]);
+      await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp" });
+      const jobsBefore = await inTx(venue, (tx) => tx.select().from(printJobs));
+
+      await raise(billId, 1, "2");
+
+      const comped = await placeOf(billId, 1);
+      const added = await rowsWhere(billId, 2);
+      expect(added[0]!.groupId).toBe(comped.groupId);
+      expect(
+        await inTx(venue, (tx) =>
+          tx
+            .select({
+              requestedAt: ticketItems.requestedAt,
+              firedAt: ticketItems.firedAt,
+              passControlled: ticketItems.passControlled,
+            })
+            .from(ticketItems)
+            .where(eq(ticketItems.workingOrderLineId, added[0]!.id)),
+        ),
+      ).toEqual([{ requestedAt: expect.any(String), firedAt: null, passControlled: true }]);
+      expect(await inTx(venue, (tx) => tx.select().from(printJobs))).toEqual(jobsBefore);
+    } finally {
+      await inTx(venue, (tx) => setStationsWaitForPass(tx, false, stationIds));
+    }
+  });
+
   it("corrects the queued HOLD ticket with +1, as a raise of a line nobody adjusted does", async () => {
     await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }));
     try {
