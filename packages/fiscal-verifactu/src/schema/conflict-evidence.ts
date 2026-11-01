@@ -1,30 +1,13 @@
 import { sql } from "drizzle-orm";
 import { check, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { count, enumCheck, enumType, id, json, newId, table, ts } from "@waitron/db";
-import type { RespuestaLinea } from "@waitron/verifactu";
 import { filingCases } from "./filing-cases.js";
 import { registrosFacturacion } from "./registros.js";
 
-export const conflictCause = enumType(["fiscal.huella_divergente", "fiscal.duplicado_anulado"]);
-export type ConflictCause = (typeof fiscalConflictEvidence.$inferSelect)["cause"];
+import { CONFLICT_CAUSES, type ConflictEvidence } from "../conflict-types.js";
+export type { ConflictCause, ConflictComparison, ConflictEvidence } from "../conflict-types.js";
 
-export type ConflictComparison =
-  | { kind: "annulled" }
-  | {
-      kind: "lookup-mismatch";
-      storedFingerprint: string;
-      storedSystem: {
-        taxId: string | null;
-        softwareId: string | null;
-        installation: string | null;
-      } | null;
-    };
-
-export interface ConflictEvidence {
-  line: RespuestaLinea;
-  csv: string | null;
-  comparison: ConflictComparison;
-}
+export const conflictCause = enumType(CONFLICT_CAUSES);
 
 export const fiscalConflictEvidence = table(
   "fiscal_conflict_evidence",

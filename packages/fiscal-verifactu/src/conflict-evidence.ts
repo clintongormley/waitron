@@ -17,20 +17,8 @@ export type {
   ConflictEvidence,
 } from "./schema/conflict-evidence.js";
 
-export interface ConflictRef {
-  registroId: string;
-  caseId: string;
-  sifId: string;
-}
-
-export interface ActiveConflict extends ConflictRef {
-  installationIdentity: string;
-  invoiceIdentity: string;
-  observedAt: string;
-  evidence: ConflictEvidence | null;
-  cause: ConflictCause;
-  evidenceId: string | null;
-}
+export type { ConflictRef, ActiveConflict } from "./conflict-types.js";
+import type { ActiveConflict } from "./conflict-types.js";
 
 export async function assertNoActiveConflict(tx: Transaction, nodeId: string): Promise<void> {
   if ((await readActiveConflicts(tx, nodeId)).length !== 0) {

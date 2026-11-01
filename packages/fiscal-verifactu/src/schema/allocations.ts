@@ -3,15 +3,8 @@ import { id, json, label, nodes, now, table, ts } from "@waitron/db";
 import type { FiscalAllocation, RecoveryApproval } from "../allocation-envelope.js";
 import { registroSif } from "./sif.js";
 
-export interface ActivationResult {
-  readonly activationEventId: string;
-  readonly sifId: string;
-  readonly series: readonly {
-    readonly id: string;
-    readonly code: string;
-    readonly purpose: string;
-  }[];
-}
+export type { ActivationResult } from "../allocation-types.js";
+import type { ActivationResult } from "../allocation-types.js";
 
 // This is local evidence of a committed activation; outside consumption remains authoritative.
 export const fiscalAllocations = table(

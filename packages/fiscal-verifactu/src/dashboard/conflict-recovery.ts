@@ -17,14 +17,14 @@ import {
   type ConflictRecoveryString,
 } from "./conflict-recovery-strings.js";
 import { ConflictRecoveryClient } from "./conflict-recovery-client.js";
-import type { ActiveConflict, ConflictRef } from "../conflict-evidence.js";
+import type { ActiveConflict, ConflictRef } from "../conflict-types.js";
 import {
   parseConflictRequest,
   type ConflictCommand,
   type ConflictResult,
   type ConflictPreparationResult,
 } from "../conflict-recovery-contract.js";
-import type { ActivationResult } from "../schema/allocations.js";
+import type { ActivationResult } from "../allocation-types.js";
 
 @customElement("vf-conflict-recovery")
 export class ConflictRecovery extends LitElement {

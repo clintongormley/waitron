@@ -1,8 +1,8 @@
-import type { FiscalAllocation, RecoveryApproval } from "./allocation-envelope.js";
-import type { ActivationResult } from "./schema/allocations.js";
-import type { ActiveConflict, ConflictRef } from "./conflict-evidence.js";
+import type { FiscalAllocation, RecoveryApproval } from "./allocation-types.js";
+import type { ActivationResult } from "./allocation-types.js";
+import type { ActiveConflict, ConflictRef } from "./conflict-types.js";
 import type { HourClockDecision } from "./hour-clock.js";
-import type { SetupBrowserClockSample } from "./hour-setup-clock.js";
+import type { SetupBrowserClockSample } from "./hour-clock.js";
 import { parseAllocationOperator } from "./allocation-operator.js";
 
 export interface ConflictAllocationInput {

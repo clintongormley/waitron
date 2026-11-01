@@ -1,3 +1,7 @@
+export interface SetupBrowserClockSample {
+  readonly challengeId: string;
+  readonly instantMs: number;
+}
 export type HourClockSource = "box" | "browser" | "internet";
 // Intervals use this server process's monotonic clock; sample the box after comparisons finish.
 export type HourClockObservation =
