@@ -901,7 +901,7 @@ A Node script using the TypeScript compiler API (the root's `typescript`, versio
 nodes, then splicing source text so formatting outside each edit is untouched; `prettier --write`
 tidies afterwards. Exports `transformSource(path, source) → { output, edits, left }` for its test and
 a `main(argv)`: `node scripts/a1301-seed-codemod.mjs [--write] <file…>`; without `--write` it prints
-the report and writes nothing. It reads `.ts` and `.mjs` files. It is a `.mjs` under `scripts/`, so
+the report and writes nothing. It reads `.ts` and `.mjs` files (and treats `.js`/`.cjs` as JavaScript too). It is a `.mjs` under `scripts/`, so
 the root project measures its coverage at 98/98/98/95 (`vitest.config.ts` `include:
 ["scripts/**/*.mjs", …]`) and the pre-push hook runs it with the root guards: its test must reach
 every branch.
@@ -915,21 +915,22 @@ file and the file is reported):
    optionally ending `.returning(…)` or `.onConflictDoNothing(…)` — as an expression statement, or as
    `const [B] = await <chain>` → `await seedVenue(R, {…})` with `id` dropped and `catalogueId`
    renamed `defaultCatalogueId` (no second argument when nothing is left).
-   - `id: X` where `X` is a module-level `const X = <expression>`: if `X` still has references after
-     rules 2–4, the declaration becomes `let X: string;` and `X = await venueLocationId(R);` is
+   - `id: X` where `X` is a module-level `const X = <literal>`: if `X` still has references after
+     rules 2–4, the declaration becomes `let X: string;` (`let X;` in a JavaScript file) and `X = await venueLocationId(R);` is
      inserted after the `seedVenue` statement; if it has none, the declaration is deleted.
    - `const [B] = …`: kept only if `B` has no reference left after rules 2–4 (the statement becomes
      plain `await seedVenue(…)`); otherwise reported.
 2. **Nodes.** `seedNode(R, A)` → `seedNode(R)`, only when `A` names the one seeded location: the
-   insert's `id: X` constant (bare or in a brand call), or `B.id` of its `const [B] = …returning()`
-   with no projection. Any other argument (a literal, a property of a fixture, an imported value)
-   is reported and left. The same test applies to rules 3 and 4's `locationId`.
+   identifier the insert writes as `id: X` (bare or in a brand call; `X` declared once in the file
+   and never reassigned after the insert), or `B.id` of its `const [B] = …returning()` with no
+   projection. Any other argument (a literal, a property of a fixture, a value other than the
+   insert's own id) is reported and left. The same test applies to rules 3 and 4's `locationId`.
 3. **Devices.** `seedDevice(R, { locationId: A, …rest })` (also shorthand `{ locationId }`) →
    `seedDevice(R, { …rest })`, or `seedDevice(R)` when nothing is left.
 4. **Orders.** `await R.insert(workingOrders).values({ …, locationId: A, … })` — one object literal,
    `workingOrders` or `schema.workingOrders` — as an expression statement → `await seedWorkingOrder(R, {…rest})`;
    as `const [B] = await <chain>.returning(…)` → `const B = await seedWorkingOrder(R, {…rest})`,
-   and a `!` written directly on `B` is dropped. A `.returning({…})` projection is rewritten only
+   and a `!` on a use of `B` after the statement, in its block and not redeclared, is dropped. A `.returning({…})` projection is rewritten only
    when every key is its column's own name and `B` is read only through those keys.
 5. **Imports.** Adds `seedVenue`/`seedWorkingOrder` to the file's existing seed import, or a new one
    (`@waitron/db/testing/seed.js` outside `packages/db`; the relative `testing/seed.js` path inside
@@ -948,6 +949,8 @@ file and the file is reported):
 - a `const [B]` whose `B` is still referenced;
 - an `id:` that is not a module-level `const`, or whose initializer is not a literal;
 - a location argument that does not name the seeded location (rule 2's test);
+- a `locations` or `workingOrders` insert in a shape the rules do not cover (an order without a
+  `locationId` key among them);
 - a `locations` insert inside a helper function or loop, or of a row count the codemod cannot
   read: every location rule is skipped for that file;
 - an id constant that can be read before the statement that now assigns it (at module load, or in
@@ -975,6 +978,16 @@ file and the file is reported):
 - A second location row: the first row goes through `seedVenue`; the second stays a raw insert, and
   calls that use it keep their explicit location argument. The schema slice that drops that table's
   `location_id` deletes the case.
+- A location argument that does not name the seeded location: read what it holds. The venue →
+  drop it by hand; a second location → the recipe above.
+- An order read through a projection the full row does not reproduce: switch the reads to the
+  row's own column names and use `seedWorkingOrder`, or keep the raw insert and take its
+  `locationId` from `venueLocationId`.
+- An id constant whose initializer is not a literal, or that is read before the seed assigns it:
+  replace its reads with `await venueLocationId(R)` placed after `seedVenue`, keeping any side
+  effect the initializer had.
+- An upgrade test: move it onto the helpers by hand only if it still passes at its migration point
+  (the three in `packages/db` do); otherwise its location row stays a raw insert.
 - A test whose purpose is the `locations` table or its side tables (the invoice-locales check, the
   change feed's `locations` source, the business-day side tables, `location_catalogues`) is left
   whole: S23 replaces those tables.
@@ -987,7 +1000,7 @@ file and the file is reported):
 
 - [ ] **Step 1: Write the failing tests** in `seed.test.ts` (its `afterEach` already empties the
   tables; add `working_orders`):
-  - "seedVenue writes the taxpayer and the one venue": after `seedVenue(db, { name: "Casa", timeZone: "Atlantic/Canary" })`,
+  - "seedVenue writes the taxpayer and the one venue": after `seedVenue(db, { name: "House", timeZone: "Atlantic/Canary" })`,
     `readTenant` is non-null and `readVenue(db)` `toEqual`s the defaults plus the two overrides.
   - "seedVenue refuses a second venue": a second call rejects with a message naming the existing row.
   - "seedNode with no location puts the node at the venue": the node's `location_id` equals
