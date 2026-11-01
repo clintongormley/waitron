@@ -1161,6 +1161,19 @@ C's campaign notes, not in the repository.
   station while the group is still held (Task 4's dated paragraph). Decide the mapping where the
   pass first reads those extras.
 - **B2.6:** `releaseHeld`'s count now includes Requested lines; nothing reads it yet.
+- **B3, beside master Contract 8:** a held item rerouted from a closed station and then made
+  Requested raises `route.released_at_closed_station` at the request, whose words say the dishes
+  "went to" the closed station; the reroute also sets its `queued_at`, which D2 says a Requested
+  item keeps as written; and its old station is kept only in memory, so the pass's release cannot
+  print "From Grill". Decide all three: when the alert fires, what `queued_at` the reroute leaves,
+  and how the release learns the old station. `rerouteHeldAtRelease` runs before
+  `requestHeldItems` in both `releaseHeld` and `sendLines`.
+- **B3:** `apps/server/src/kitchen-allergy.ts` reads `firedAt` in three places (search
+  `firedAt`); the consumer audit gives the file to B1 with "notices B3", and B1 changed only its
+  callers. B3.4's allergy notice at the release reads them.
+- **B4:** the till's `screens/till-table-order-screen.current-orders.test-helpers.ts` and
+  `screens/till-table-order-screen.sent-fallback.test-helpers.ts` build kitchen fixtures from
+  `firedAt` and sit outside `test/`, so the audit's fixtures row does not name them.
 - **B3:** a party whose fired dishes were all cancelled or moved, or whose first submission was
   all held, gets `added` on its next fire. Before the pass shows "New order" or "Added", ask the
   owner what counts as a table's first send (with Owner question 1's copy sheet).
