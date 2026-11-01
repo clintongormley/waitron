@@ -45,7 +45,7 @@ own plan later; everything in "What A1268 leaves to A1301".
 - **Nothing new is built on locations** (lane B queue, owner ~14:55): no new `location_id` column,
   `locationId` parameter, per-location view, rule, setting, fixture or translation. Where a business
   day is needed, read the box's location the way the code reads it today (`readLocationClock` with
-  the configured location). The one exception is open question 1's argument, flagged there.
+  the configured location). Open question 1 adds no location argument (watcher, 2026-11-01 ~17:05).
 - **Tests:** an assertion changes only where a design decision changes what it checks, and every
   such change is in "Test checks this plan changes". An assertion that must change and is not in
   the table gets a row naming its decision; if no decision covers it, STOP. Golden and fiscal tests
@@ -93,8 +93,9 @@ No error code is added, renamed or removed, so `scripts/alert-codes.test.ts` and
    in the hours, the end-of-day pass, the closure snapshot and the export; the till does not
    refuse the clock-out. Tasks 4a, 4b, 7.
 5. **A manager's proposal and its approval after the location leaves correction items.** Expected:
-   the worker's prompt shows the box's configured location; approving writes the command row with
-   that location. Task 4b, open question 1.
+   the worker's prompt shows the venue's name and time zone, read by A1301 S1's `readVenue`; the
+   approve, decline, accept or disagree command row stores no location (`location_id` null), while
+   a command answering a question keeps that question's location. Task 4b, open question 1.
 
 ---
 
@@ -254,7 +255,26 @@ through the repo's own store (`useVenueDb`, `runMigrations`, `installAppendOnlyT
   `management-attendance-api.ts:107` and `till-attendance-api.ts:152`), which
   `assertOwnAttendanceLocation` lets differ from `deps.cfg.locationId`
   (`attendance-own-scope.ts:12-28`). The till's `ownItem` helper (`till-attendance-api.ts:108`)
-  reads the inbox and has no `deps`. Open question 1.
+  reads the inbox and has no `deps`. Open question 1 settles both places without a location
+  argument.
+- **What reads a command row's location** (`git grep -n -E '(c|cmd|command|row)\.locationId' --
+  packages/workforce/src apps/server/src ':!*.test.ts'`, then read): `answerForQuestion` matches a
+  question's commands on question, person and the question's location
+  (`attendance-question-responses.ts:20-24`); `projectCorrectionItems` compares a command's location
+  with its request entries' (`attendance-responses.ts:94`, which Task 4b deletes); the two server
+  hits (`management-attendance-api.ts:154`, `till-attendance-api.ts:255`) read the incoming
+  request's `locationId`, not a stored row. Nothing has a foreign key INTO
+  `attendance_response_commands` (`git grep -n attendanceResponseCommands --
+  packages/workforce/src/schema/` names only its own file and the index), and its one outgoing
+  composite key, `attendance_response_commands_question_fk` (question_id, person_id, location_id) →
+  `attendance_questions` (`schema/attendance-responses.ts:40-48`), is only checked when all three
+  columns hold a value (SQLite skips a composite key with a null part). The table is classified
+  `state`, not append-only (`classification.ts:28-40`).
+- **No location-free reader of the venue's name and time zone is on main today.** A696's
+  `readVenueTimeZone(db, { locationId })` (`apps/server/src/venue-time-zone.ts:14`) takes a location
+  and lives in the server, which workforce cannot import. A1301 S1 adds `readVenue(tx)` and the
+  interim `venueLocationId(tx)` to `@waitron/db` (A1301 plan, "S1 — The venue accessor"), which
+  workforce already depends on; lane A is building S1 now (lane A queue, watcher ~17:50).
 - **Session pairing across nodes is already per person.** `projectWorkSessions` groups by person
   only (`groupByPerson`, `projection.ts:130-138`) and sorts each person's events by time before
   pairing, so a clock-in on one node and a clock-out on another pair today wherever the location
@@ -281,18 +301,28 @@ through the repo's own store (`useVenueDb`, `runMigrations`, `installAppendOnlyT
 
 ## Open questions (each has a default the build uses)
 
-1. **Where does a correction item's place come from, now that the item has no location?** It is
-   needed for the worker's proposal prompt (place name and time zone) and for the required
-   `location_id` of an item's approve, decline, accept or disagree command row. Default (the lead,
-   2026-11-01): the box's configured location, which the routes already hold
-   (`deps.cfg.locationId`) — not the request's location that `readPersonHours` receives as
-   `input.locationId`, which may differ. The routes hand the configured location to
-   `readAttendanceInbox` and `executeAttendanceCommand` as an argument, and to `readPersonHours`
-   and `readManagerHours` as a separate input field used only for their inbox call; the till's
-   `ownItem` helper takes it as an argument too. No lookup from an item to its command and no new
-   refusal. That argument is a location parameter on functions that had none, carrying a value the callers already hold — flagged against the
-   queue's "no new `locationId` parameter" rule for the watcher. A1301 S1 (`venueLocationId`) and
-   S22 (dropping the column) replace it. Alternative: drop the column's requirement in A1268.
+1. **Where does a correction item's place come from, now that the item has no location?**
+   Decided by the watcher (2026-11-01 ~17:05), against the plan's first default of passing the
+   box's configured location in as a new argument, which is refused because nothing new is built on
+   locations. Two places needed one:
+   - **The worker's proposal prompt** (name and time zone) takes them from the VENUE:
+     `readVenue(tx)` (`name`, `timeZone`), and the prompt's `locationId` from `venueLocationId(tx)`,
+     both A1301 S1's (`packages/db/src/venue.ts`). `readAttendanceInbox` reads them only when it
+     builds at least one proposal prompt, and adds that place to the inbox's `locations` list as an
+     entry's location was added before, so every prompt's place is in the list. No new argument, no
+     new refusal in A1268: the two refusals `readVenue` and `venueLocationId` throw for no venue or a
+     second one (`venue.not_found`, `provisioning.second_venue`) are S1's. `AttendancePrompt.locationId`
+     itself is A1301 S13's to remove. **Task 4b waits for S1 on main**; Tasks 3 and 4a do not.
+   - **The command row's `location_id`** stops being required: Task 3's schema drops `.notNull()`
+     from `attendanceResponseCommands.locationId` (the key to `locations` stays), and Task 4b writes
+     `question?.locationId ?? null`. A command answering a question keeps the question's location,
+     because `attendance_response_commands_question_fk` checks nothing when a part is null (survey
+     above); every other command (a request or proposal with no question, approve, decline, accept,
+     disagree) writes null. The `location_missing` refusal goes; the `question_location` check runs
+     only for a command answering a question. `AttendanceResponseReceipt.locationId` becomes
+     `string | null`. A1301 S22 drops the column.
+   The routes (`management-attendance-api.ts`, `till-attendance-api.ts`), `ownItem`,
+   `readPersonHours` and `readManagerHours` gain no parameter for this.
 2. **Who may read their own attendance at a location other than the box's?** Today: anyone with a
    clock entry or a question there (`attendance-own-scope.ts`). Default: anyone with a question
    there; the clock-entry evidence goes, because entries name no location.
@@ -317,7 +347,9 @@ closure's location; the rest is A1301's.
 | The till's other-location refusal, `activeLocationId`, `clock.other_location` | removes (Tasks 7, 9) | nothing |
 | The export's skip note and its "Workplace reference" column | removes (Task 6) | nothing |
 | The export's workplace NAME, read from `locations` by the input's location | kept | S14 |
-| `location_id` on `attendance_day_work`, `attendance_source_state`, `attendance_operation_facts`, `attendance_questions`, `attendance_response_commands`, and their keys among themselves | kept: the processing scope, compared with no entry | S22 |
+| `location_id` on `attendance_day_work`, `attendance_source_state`, `attendance_operation_facts`, `attendance_questions`, and their keys among themselves | kept: the processing scope, compared with no entry | S22 |
+| `attendance_response_commands.location_id` | optional; written only for a command answering a question (open question 1) | S22 |
+| `AttendancePrompt.locationId`; a proposal prompt's from `venueLocationId(tx)` | kept | S13 |
 | The `locationId` the hours, attendance, queue, day and export routes take, the clients that send it, the dashboard location picker | kept (open question 3) | S13, S15 |
 | Business day from the box's location (`readLocationClock`) | kept | S13 |
 | Rosters, shifts, templates, convenio, device admission | untouched | S12, S13, S20, S22 |
@@ -360,8 +392,9 @@ another adds a row before editing.
 | 4a | `src/automatic-entries.test.ts` | cases refusing an automatic close because the open entry or latest entry is at another location *(read)* | `attendance.not_pending` | deleted | D4 |
 | 4a | `src/correction-lifecycle.test.ts` | "rechecks other locations before approving…" (:64), "accepts a separate-location missing session…" (:86) | second location in the fixture | without it; checks unchanged, names lose "location" | fixture |
 | 4b | `src/attendance-reads.test.ts` | :274 "retains historical locations…", :312 manager queue "only the selected location", :364, :388, :443, :576 *(read)* | entries and items scoped by location | locations come from questions and commands only; the queue lists the venue's items; entries are the person's at the venue | D4, open question 1 |
-| 4b | same | "keeps a worker request as history while a manager proposal is a prompt…" | prompt `locationId` from the item | the box's configured location passed in (the same value in this test) *(read)* | open question 1 |
-| 4b | `src/attendance-reads.test.ts` (:69, :81), `src/attendance-response-commands.test.ts` (:195, :778), `src/hours-reads.test.ts` (:71, plus its `readPersonHours` inputs) | calls of `readAttendanceInbox` / `executeAttendanceCommand` / `readPersonHours` | no configured-location argument | the test's location passed; no assertion changed | fixture (open question 1) |
+| 4b | same | "keeps a worker request as history while a manager proposal is a prompt…" | prompt `locationId`, name and time zone from the item | from the venue (`venueLocationId`, `readVenue`; the same values when the test seeds one location) *(read)* | open question 1 |
+| 4b | `src/attendance-response-commands.test.ts`, `src/attendance-reads.test.ts` *(read)* | stored command rows' `locationId` for item decisions and question-free requests or proposals | the item's or the payload's location | `null`; a command answering a question keeps the question's | open question 1 |
+| 4b | workforce tests that build a proposal prompt with two or more `locations` rows *(found by the run)* | a second location in the fixture | `readVenue` refuses `provisioning.second_venue` | one location; checks unchanged, unless the case exists to prove two locations, which then gets its own row naming D4 | fixture (open question 1) |
 | 4b | `src/end-of-day.test.ts` | "excludes another person, another location and both sides of the business-day window" (:83) | another location's entries excluded | the other-location ENTRY part deleted; another location's FACT still excluded (facts keep their location) | D7 |
 | 4a | `src/scheduling.test.ts` | "scopes to the queried location — another location's published shifts and entries do not leak in" (:948) | other location's entries excluded | the entries half deleted; shifts half unchanged | D4 |
 | 4b | `src/hours-reads.test.ts` | "never leaks another person or location through own open/pending/history/closures" (:419) | other-location entries and closures hidden | the location half for entries and closures deleted; person half and question half unchanged | D4, D6 |
@@ -377,7 +410,7 @@ another adds a row before editing.
 | 7 | `src/attendance-discovery.test.ts` | "reads a location's clock entries through an index on location, node and position" (:362) | plans use `time_entries_location_chain_idx` | "reads each node's clock entries by position": no `SCAN time_entries`; the page read uses `time_entries_chain_position_uq` | D7 |
 | 7 | `src/personal-data-time-record.test.ts` | "builds no files for a person whose only entries are at another location" (:254) | no files | deleted: entries have no location | D4 |
 | 7 | `src/management-hours-api.test.ts:392`, `src/till-attendance-api.test.ts:317`, `src/till-hours-api.test.ts:146`, `src/attendance-export-api.test.ts:224` | "historically recorded" workplace admitted by an entry there | admitted | admitted only by a question there *(read)* | open question 2 |
-| 7 | `src/attendance-email-worker.test.ts` (:203, :211), `src/management-attendance-api.test.ts` (:90, :175), `src/management-hours-api.test.ts` (:91), `src/till-attendance-api.test.ts` (:99, :742) | direct calls of `readAttendanceInbox` / `executeAttendanceCommand` | no configured-location argument | the test's configured location passed; no assertion changed | fixture (open question 1) |
+| 7 | server tests that build a proposal prompt with two or more `locations` rows *(found by the run)* | a second location in the fixture | `readVenue` refuses `provisioning.second_venue` | one location; checks unchanged, unless the case exists to prove two locations, which then gets its own row naming D4 | fixture (open question 1) |
 | 8 | every server test the typecheck reports, `apps/server/test/attendance-export-fixture.ts` | — | `locationId` on clock inputs, entries, closes | without | fixture |
 | 8 | `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts` | "preserves every Madrid seed row (en/es)" | captured shapes | adjustments: drop `location_id` and its keys from `time_entries`, `pay_period_closures`, `workforce_chains`; drop the `location_id` parts of `attendance_questions`' three keys to `time_entries` | D1, D6 |
 | 9 | `apps/till/src/widgets/till-shell.test.ts` | "unknown or another-location clock state offers Retry or an explanation and disables clock writes (%s)" (:122) | `"another-venue"` case: disabled, `clock.other_location` | the `null` case stays; the other-location case deleted | D3 |
@@ -487,7 +520,8 @@ in the chain layer changes here. This task ends with its own files green; the re
     { ...WORKFORCE_MIGRATIONS, appendOnlyTables }])` — the real path, which removes the change feed
     and reinstalls the append-only triggers itself. (a) "migrates a venue with no working-time rows
     and keeps its append-only triggers": it resolves; `pragma table_info(time_entries)` and
-    `(pay_period_closures)` name no `location_id`, no `__new_%` table is left, and the four
+    `(pay_period_closures)` name no `location_id`, `pragma table_info(attendance_response_commands)`
+    shows `location_id` with `notnull` 0, no `__new_%` table is left, and the four
     append-only triggers exist; (b) "refuses a venue that recorded a clock entry and changes
     nothing": two entries and their head; it rejects with `migrations.apply_failed` whose cause
     names `DROP TABLE` and, below it, `FOREIGN KEY constraint failed`; both tables' rows and the
@@ -508,14 +542,15 @@ in the chain layer changes here. This task ends with its own files green; the re
   `time_entries_response_subject_fk` on (respondsToEntryId, personId) → (id, personId); drop the
   `locations` import. Closures: drop `locationId`, keys on (nodeId, sequenceNo) and
   (periodStart, periodEnd). `attendance.ts`: the open, automatic and resolution keys on
-  (x, personId) → (timeEntries.id, timeEntries.personId). Rewrite the comments that name a location
-  (`time-entries.ts` :53-54, :86, :93, :165-167 on the branch).
+  (x, personId) → (timeEntries.id, timeEntries.personId). `attendance-responses.ts`:
+  `locationId` loses `.notNull()` and keeps its key to `locations` (open question 1). Rewrite the
+  comments that name a location (`time-entries.ts` :53-54, :86, :93, :165-167 on the branch).
 - [ ] **Step 3: Regenerate the migrations.** From `packages/workforce`:
   ```bash
   SAVE=$(mktemp -d)
-  cp src/schema/time-entries.ts src/schema/pay-period-closures.ts src/schema/attendance.ts src/schema/workforce-chains.ts "$SAVE/"
+  cp src/schema/time-entries.ts src/schema/pay-period-closures.ts src/schema/attendance.ts src/schema/attendance-responses.ts src/schema/workforce-chains.ts "$SAVE/"
   rm -rf drizzle && git checkout origin/main -- drizzle
-  git checkout origin/main -- src/schema/time-entries.ts src/schema/pay-period-closures.ts src/schema/attendance.ts src/schema/workforce-chains.ts
+  git checkout origin/main -- src/schema/time-entries.ts src/schema/pay-period-closures.ts src/schema/attendance.ts src/schema/attendance-responses.ts src/schema/workforce-chains.ts
   # add one line after time_entries_subject_identity_uq in src/schema/time-entries.ts:
   #   uniqueIndex("time_entries_person_entry_uq").on(t.id, t.personId),
   pnpm db:generate --name time_entries_person_entry_key
@@ -523,10 +558,13 @@ in the chain layer changes here. This task ends with its own files green; the re
   pnpm db:generate --name working_time_per_venue
   ```
   Expected: `drizzle/0012_time_entries_person_entry_key.sql` is the one `CREATE UNIQUE INDEX`;
-  `/usr/bin/grep -o '__new_[a-z_]*' drizzle/0013_working_time_per_venue.sql | uniq` prints
-  `__new_attendance_questions`, `__new_pay_period_closures`, `__new_time_entries`,
-  `__new_workforce_chains` in that order; `/usr/bin/grep -c 'ALTER TABLE .* ADD' drizzle/0013_working_time_per_venue.sql` prints `0`.
-  Any other shape: STOP and report. `git status` shows the branch's `0012_workforce_chain_per_node`
+  `/usr/bin/grep -o '__new_[a-z_]*' drizzle/0013_working_time_per_venue.sql | sort -u` prints
+  exactly `__new_attendance_questions`, `__new_attendance_response_commands`,
+  `__new_pay_period_closures`, `__new_time_entries` and `__new_workforce_chains` (the rehearsal
+  before open question 1's change printed the other four, in the order questions, closures,
+  entries, chains; record where drizzle puts the commands table);
+  `/usr/bin/grep -c 'ALTER TABLE .* ADD' drizzle/0013_working_time_per_venue.sql` prints `0`.
+  Any other set, or a second generation needed for the commands table: STOP and report. `git status` shows the branch's `0012_workforce_chain_per_node`
   files deleted.
 - [ ] **Step 4: The chain layer.** Make the Files list's changes. `ChainKey` stays `{ nodeId }`.
   `closePayPeriod`'s input is `{ nodeId, period, clock, now, ruleset, origin }`; its replay and
@@ -600,13 +638,19 @@ venue's entries, shifts still by location).
 `intervals`, `breaks` and `canClose` lose the location; facts and questions keep
 `day.locationId`), `attendance-contract.ts` (`CorrectionItem.locationId` deleted),
 `attendance-responses.ts` (:94, :132), `attendance-reads.ts` (entry filters by person and window;
-`ownLocations` from questions only, plus the place passed in; a proposal prompt's place is the
-place passed in — open question 1), `attendance-question-responses.ts` (:34, :44, :51),
-`attendance-response-commands.ts` (an item command's `location_id` is the configured location
-passed in on its input — open question 1; :231 and :246 lose the location), `hours-reads.ts`
-(entries and record by person; closures by period; items unfiltered by location; prompts still by
-the question's location; `readPersonHours` and `readManagerHours` take the configured location
-as their own input field and hand that, never `input.locationId`, to `readAttendanceInbox`).
+`ownLocations` from questions only; a proposal prompt's place is the venue's, read with
+`readVenue` and `venueLocationId` only when a proposal prompt is built, and added to `locations` —
+open question 1), `attendance-question-responses.ts` (:34, :44, :51),
+`attendance-response-commands.ts` (`locationId` is `question?.locationId ?? null`; the
+`location_missing` refusal goes; the `question_location` check only with a question; :231 and :246
+lose the location — open question 1), `attendance-contract.ts`'s `AttendanceResponseReceipt`
+(`locationId: string | null`), `hours-reads.ts` (entries and record by person; closures by period;
+items unfiltered by location; prompts still by the question's location; no new input field).
+
+**Before Step 1:** A1301 S1 must be on main (`git log origin/main --oneline -- packages/db/src/venue.ts`
+prints a commit). Rebase onto it (`pnpm install`, then the Task 3 and 4a runs again). If it is not
+there, end at Task 4a's commit with the ledger saying so and write `## WATCHER-NEEDED: A1268 — Task
+4b waits for A1301 S1 (readVenue) on main` in `questions.md`; do not build a stand-in reader.
 
 - [ ] **Step 1: Failing tests.** Make the Task 4b table rows' changes. Add, in
   `hours-reads.test.ts` (or a new `cross-node-session.test.ts` if the three reads need different
@@ -616,9 +660,11 @@ as their own input field and hand that, never `input.locationId`, to `readAttend
   `processAttendanceDay` (the end-of-day pass) raises no missing-times question for it and appends
   no automatic clock-out. This is a control for D4 rather than a flip — pairing is already per
   person ("Session pairing across nodes is already per person" above) — so it passes once Step 2
-  compiles. Workforce tests that call `readAttendanceInbox` or `executeAttendanceCommand` pass the
-  test's own location as the new argument in this task (a table row), since at runtime a missing
-  argument leaves a proposal prompt without a place. Run those files. Expected: FAIL on the flipped
+  compiles. Add, in `attendance-response-commands.test.ts`, "stores no location on an approval of
+  a manager's proposal and keeps the question's on an answer": a proposal and its approval leave
+  both command rows' `location_id` null, and a missing-times answer's row holds its question's
+  location (the first part fails before Step 2: today both rows hold the item's location). Run
+  those files. Expected: FAIL on the flipped
   cases, and the typecheck fails until Step 2.
 - [ ] **Step 2: Implement** the Files list.
 - [ ] **Step 3: Run** `pnpm --filter @waitron/workforce typecheck` (expected: errors only in test
@@ -688,11 +734,8 @@ endpoint from workforce_chains`; the clock page drops `and location_id = …` an
 `${scan.locationId} as locationId`), `attendance-facts.ts` (clock facts drop the location filter and
 take `${day.locationId}` as their location), `attendance-own-scope.ts` (the entry lookup :13-18
 goes — open question 2), `personal-data-time-record.ts` (the days read drops the location filter);
-`management-attendance-api.ts` and `till-attendance-api.ts` (pass `deps.cfg.locationId` to
-`readAttendanceInbox`, on `executeAttendanceCommand`'s input, and as the configured-location field
-of `readPersonHours` and `readManagerHours`; `ownItem`, `till-attendance-api.ts:108`, which has no
-`deps`, takes it as an argument from its callers — open question 1); anything else
-`pnpm --filter @waitron/server typecheck` reports in source files.
+`management-attendance-api.ts` and `till-attendance-api.ts` gain no argument for open question 1;
+anything else `pnpm --filter @waitron/server typecheck` reports in source files.
 
 - [ ] **Step 1: Failing tests.** Make the Task 7 table rows' changes. The rewritten
   `till-clock-api.test.ts:92` case: an open shift written on another node; the till's node writes
@@ -839,9 +882,8 @@ deleted in English and Spanish), `apps/till/test/clock-app.ts`; `apps/dashboard/
   Tasks 4b, 7. Device admission untouched: Task 7 leaves `admit`. Reset named in the PR's first
   line: "Before the PR is merged".
 - **Nothing new on locations:** no task adds a location column, view, rule, setting, fixture or
-  translation. One parameter is the exception: open question 1 passes the configured location the
-  routes already hold into `readAttendanceInbox` and `executeAttendanceCommand`, flagged for the
-  watcher against the no-new-parameter rule.
+  translation, and no location parameter: open question 1 takes the proposal prompt's place from
+  the venue (A1301 S1) and stops requiring the command row's location (watcher, 2026-11-01 ~17:05).
 - **Names used across tasks:** `time_entries_person_entry_uq` (T3), `ChainKey { nodeId }`,
   `readTimeRecord({ period, personId? })` (T3–T4), `closePayPeriod({ nodeId, period, … })` (T3),
   `readClosures({ period })` (T3).
