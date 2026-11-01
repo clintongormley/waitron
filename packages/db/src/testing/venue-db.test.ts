@@ -1,4 +1,5 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -124,6 +125,52 @@ describe("resetPerTest: false", () => {
 
   it("still has it in the next test", () => {
     expect(count(suite.db, "tenants")).toBe(1);
+  });
+});
+
+/**
+ * A one-migration set of its own, written at collection time because `useVenueDb` reads its options
+ * then.
+ */
+function probeNodeSet(): string {
+  const folder = mkdtempSync(join(tmpdir(), "waitron-node-set-"));
+  mkdirSync(join(folder, "meta"));
+  writeFileSync(join(folder, "0000_node.sql"), "create table probe_node (id text primary key)");
+  writeFileSync(
+    join(folder, "meta", "_journal.json"),
+    JSON.stringify({
+      version: "7",
+      dialect: "sqlite",
+      entries: [
+        { idx: 0, version: "6", when: 1_000_000_000_000, tag: "0000_node", breakpoints: true },
+      ],
+    }),
+  );
+  return folder;
+}
+
+describe("a node set", () => {
+  const folder = probeNodeSet();
+  const suite = useVenueDb({
+    migrations: [
+      { migrationsFolder: folder, migrationsTable: "__drizzle_migrations_probe", database: "node" },
+    ],
+  });
+  afterAll(() => rmSync(folder, { recursive: true, force: true }));
+
+  it("applies a node set to the node handle and empties its tables after each test", () => {
+    suite.node.run(sql`insert into probe_node (id) values ('a')`);
+    expect(count(suite.node, "probe_node")).toBe(1);
+    expect(suite.db.all(sql`select name from sqlite_master where name = 'probe_node'`)).toEqual([]);
+  });
+
+  it("emptied the node table the previous test wrote", () => {
+    expect(count(suite.node, "probe_node")).toBe(0);
+    expect(count(suite.node, "__drizzle_migrations_probe")).toBe(1);
+  });
+
+  it("hands back the store's own node file", () => {
+    expect(where(suite.node)).toBe(join(dirname(where(suite.db)), "node.db"));
   });
 });
 

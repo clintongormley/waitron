@@ -10,15 +10,14 @@ import {
   nodes,
   openVenueDatabase,
   readStandardSeriesId,
-  setDeploymentMode,
-  setSingletonRole,
   stampDeployment,
   tenants,
-  writeMirrorConfig,
   writeNodeMembership,
   type Database,
+  type NodeDatabase,
   type VenueDatabase,
 } from "@waitron/db";
+import { setNodeMode, setSingletonRole, writeMirrorLink } from "@waitron/node-db";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { loadKeyRing } from "@waitron/credentials";
 import type {
@@ -107,6 +106,8 @@ let appVenueDir: string;
 let mirrorVenueDir: string;
 let appDb: Database;
 let mirrorDb: Database;
+let appNode: NodeDatabase;
+let mirrorNode: NodeDatabase;
 const openStores: VenueDatabase[] = [];
 
 /** `readNodeMembership` does not verify the signature, so a placeholder is fine. */
@@ -124,7 +125,7 @@ function selfDoc(standing: "sell-only" | "serving-primary"): SignedMembershipDoc
 }
 
 /** Includes a node identity, so a promote has a key to sign with. */
-async function seedTillIdentity(db: Database): Promise<void> {
+async function seedTillIdentity(db: Database, node: NodeDatabase): Promise<void> {
   // `onConflictDoNothing` is untargeted: nothing here reads the result.
   await db
     .insert(tenants)
@@ -157,11 +158,11 @@ async function seedTillIdentity(db: Database): Promise<void> {
       role: "admin",
     })
     .onConflictDoNothing();
-  await establishNodeIdentity({ ownerDb: db, ring: RING }, TILL_ENV.WAITRON_NODE_ID);
+  await establishNodeIdentity({ ownerDb: db, node, ring: RING }, TILL_ENV.WAITRON_NODE_ID);
 }
 
 /** A mirror holding its own dormant identity. */
-async function seedMirrorIdentity(db: Database): Promise<{ nodeId: string }> {
+async function seedMirrorIdentity(db: Database, node: NodeDatabase): Promise<{ nodeId: string }> {
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90222222H", legalName: "Promote Endpoint Cloud SL" })
@@ -186,7 +187,7 @@ async function seedMirrorIdentity(db: Database): Promise<{ nodeId: string }> {
     signature: "endorsement-sig",
   };
   await establishReservedStandbyIdentity(
-    { ownerDb: db, ring: RING },
+    { ownerDb: db },
     {
       locationId: MIRROR_LOCATION_ID,
       standby,
@@ -222,7 +223,7 @@ async function seedMirrorIdentity(db: Database): Promise<{ nodeId: string }> {
   };
   await writeNodeMembership(db, held);
 
-  await writeMirrorConfig(db, standby.nodeId, {
+  await writeMirrorLink(node, standby.nodeId, {
     relayUrl: "https://127.0.0.1:1/",
     boxHostname: "box.test",
     boxCaPem: "unused-ca-pem",
@@ -230,19 +231,19 @@ async function seedMirrorIdentity(db: Database): Promise<{ nodeId: string }> {
   });
 
   await stampDeployment(db, "production");
-  await setDeploymentMode(db, standby.nodeId, "mirror");
+  await setNodeMode({ venue: db, node }, standby.nodeId, "mirror");
   // Throws if the seed left no reserved standard series.
   await readStandardSeriesId(db, standby.nodeId);
   return { nodeId: standby.nodeId };
 }
 
 /** Migrated here, not by boot, because the identity rows have to exist before boot reads them. */
-async function migratedVenue(): Promise<[string, Database]> {
+async function migratedVenue(): Promise<[string, Database, NodeDatabase]> {
   const directory = await mkdtemp(join(tmpdir(), "waitron-promote-endpoint-venue-"));
   await applyMigrations(directory, migrationOptionsFor(manifestSets(), null));
   const store = await openVenueDatabase(directory);
   openStores.push(store);
-  return [directory, store.venue];
+  return [directory, store.venue, store.node];
 }
 
 beforeAll(async () => {
@@ -254,10 +255,10 @@ beforeAll(async () => {
     });
   }
 
-  [appVenueDir, appDb] = await migratedVenue();
-  [mirrorVenueDir, mirrorDb] = await migratedVenue();
-  await seedTillIdentity(appDb);
-  // No `node_roles` row: `readDeploymentAxes` reads it as ('primary', 'primary').
+  [appVenueDir, appDb, appNode] = await migratedVenue();
+  [mirrorVenueDir, mirrorDb, mirrorNode] = await migratedVenue();
+  await seedTillIdentity(appDb, appNode);
+  // No `node_mode` row: `readNodeMode` reads it as ('primary', 'primary').
   await stampDeployment(appDb, "production");
 }, 180_000);
 
@@ -290,7 +291,7 @@ async function postPromote(base: string, body: unknown): Promise<Response> {
 
 describe("boot promote endpoint: mounted on both modes, exempt from the read-only gate", () => {
   it("a MIRROR serves the endpoint: a credential-less POST reaches the handler (401), not a gated 403 or 404", async () => {
-    const seed = await seedMirrorIdentity(mirrorDb);
+    const seed = await seedMirrorIdentity(mirrorDb, mirrorNode);
     const port = await freePort();
 
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-endpoint-mirror-state-"));
@@ -330,7 +331,7 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
   }, 60_000);
 
   it("an unfenced PRIMARY serves the endpoint and returns alreadyPrimary with a valid admin login", async () => {
-    await setSingletonRole(appDb, TILL_ENV.WAITRON_NODE_ID, "primary");
+    await setSingletonRole({ venue: appDb, node: appNode }, TILL_ENV.WAITRON_NODE_ID, "primary");
     await writeNodeMembership(appDb, selfDoc("serving-primary"));
     const port = await freePort();
 
@@ -353,7 +354,7 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
 
   it("a FENCED node returns promotion.node_fenced (409), not a lying alreadyPrimary or a 403/404", async () => {
     // A held document marking this node sell-only: boot demotes it and mounts the read-only gate.
-    await setSingletonRole(appDb, TILL_ENV.WAITRON_NODE_ID, "primary");
+    await setSingletonRole({ venue: appDb, node: appNode }, TILL_ENV.WAITRON_NODE_ID, "primary");
     await writeNodeMembership(appDb, selfDoc("sell-only"));
     const port = await freePort();
 

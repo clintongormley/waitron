@@ -234,6 +234,7 @@ describe("selected-hour admission before archive placement", () => {
       expect(selected.identity).toBe("0CNSP");
       await runRestoreHooks({
         db: suite.db,
+        nodeDb: suite.node,
         node,
         modules: newer.modules,
         log: () => {},
@@ -350,6 +351,7 @@ describe("selected-hour admission before archive placement", () => {
       await establishNodeIdentity(
         {
           ownerDb: suite.db,
+          node: suite.node,
           ring: loadKeyRing({
             WAITRON_CREDENTIALS_KEY: credentialKey,
             WAITRON_CREDENTIALS_KEY_VERSION: "1",

@@ -7,7 +7,13 @@ import { join } from "node:path";
  * `RECOVERY_FILES` (`state-secrets.ts`), a missing one is skipped, never
  * `recovery.state_incomplete`.
  */
-export const OPTIONAL_BACKUP_STATE = ["backup.env", "modules.json"] as const;
+export const OPTIONAL_BACKUP_STATE = [
+  "backup.env",
+  "modules.json",
+  // Written only on a box that joined another (`writeVenueAuthority`); a main box has none.
+  "tls/venue-ca.crt",
+  "tls/venue-ca.key",
+] as const;
 
 /** Skips only a missing file; any other read error rethrows rather than shipping a short archive. */
 export async function collectOptionalStateFiles(

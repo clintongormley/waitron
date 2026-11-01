@@ -9,15 +9,16 @@ import {
   locations,
   openVenueDatabase,
   readDeploymentEnvironment,
-  readMirrorConfig,
-  setDeploymentMode,
   stampDeployment,
   tenants,
-  writeMirrorConfig,
 } from "@waitron/db";
+import { readMirrorLink, setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
+import { loadKeyRing } from "@waitron/credentials";
+import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
 import { adoptFromPrimary, type AdoptHooks, type AdoptRequest } from "./adopt.js";
+import { writeCredentialsRing } from "./box-secrets.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { parseEnvFile } from "./env-file.js";
 import { PENDING_ADOPTION_FILE, type PendingAdoption } from "./finish-adoption.js";
@@ -46,6 +47,7 @@ const ADOPT_BODY = JSON.stringify({
   credential: { personId: "88888888-8888-8888-8888-888888888888", password: "a-password" },
 });
 
+const PRIMARY_KEYS = generateNodeKeyPair();
 const BUNDLE: MirrorBundle = {
   designated: {
     locationId: "33333333-3333-4333-8333-333333333333",
@@ -63,14 +65,17 @@ const BUNDLE: MirrorBundle = {
       "fiscal-verifactu": { nif: "90000001K", idSistemaInformatico: "WS", numeroInstalacion: 7 },
     },
     series: [{ code: "SA-7", purpose: "standard" }],
-    endorsement: {
-      nodeId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-      publicKey: "STANDBY_PUB",
-      endorsedBy: PRIMARY_NODE_ID,
-      signature: "SIG",
-    },
+    endorsement: endorseKey(
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "STANDBY_PUB",
+      PRIMARY_NODE_ID,
+      PRIMARY_KEYS.privateKey,
+    ),
   },
   moduleOverrides: {},
+  primaryPublicKey: PRIMARY_KEYS.publicKey,
+  credentialsRing: { key: Buffer.alloc(32, 6).toString("base64"), version: 1 },
+  boxCaKeyPem: "-----BEGIN PRIVATE KEY-----\nfake\n-----END PRIVATE KEY-----\n",
 };
 
 const dirs: string[] = [];
@@ -95,14 +100,14 @@ async function halfAdoptedBox(): Promise<{
   const store = await openVenueDatabase(venueDir);
   try {
     await stampDeployment(store.venue, "preproduction");
-    await setDeploymentMode(store.venue, NODE_ID, "mirror");
-    await writeMirrorConfig(store.venue, NODE_ID, {
+    await setNodeMode({ venue: store.venue, node: store.node }, NODE_ID, "mirror");
+    await writeMirrorLink(store.node, NODE_ID, {
       relayUrl: "https://relay.example",
       boxHostname: "waitron.local",
       boxCaPem: "pem",
       originNodeId: PRIMARY_NODE_ID,
     });
-    await mintBreakGlassSecret(store.venue, NODE_ID);
+    await mintBreakGlassSecret({ venue: store.venue, node: store.node }, NODE_ID);
   } finally {
     await store.close();
   }
@@ -112,6 +117,11 @@ async function halfAdoptedBox(): Promise<{
   await writeFile(join(stateDir, PENDING_ADOPTION_FILE), "{}");
   await mkdir(join(stateDir, "tls"));
   await writeFile(join(stateDir, "tls", "ca.crt"), "ca");
+  await writeFile(join(stateDir, "tls", "venue-ca.crt"), "venue ca");
+  await writeFile(join(stateDir, "tls", "venue-ca.key"), "venue ca key");
+  // A join stopped between writing the working copies and renaming them leaves these.
+  await writeFile(join(stateDir, "tls", "venue-ca.crt.tmp"), "venue ca");
+  await writeFile(join(stateDir, "tls", "venue-ca.key.tmp"), "venue ca key");
   await writeFile(join(stateDir, "secrets.env"), "S=1\n");
   await writeFile(join(stateDir, "backup.env"), "B=1\n");
 
@@ -141,6 +151,10 @@ async function snapshot(stateDir: string): Promise<string[]> {
     PENDING_ADOPTION_FILE,
     "setup-operation.json",
     "trading.env",
+    "tls/venue-ca.crt",
+    "tls/venue-ca.key",
+    "tls/venue-ca.crt.tmp",
+    "tls/venue-ca.key.tmp",
   ];
   return Promise.all(
     paths.map(async (path) => {
@@ -214,6 +228,10 @@ describe("runStagedReset", () => {
       PENDING_ADOPTION_FILE,
       "setup-operation.json",
       "reset-request.json",
+      "tls/venue-ca.crt",
+      "tls/venue-ca.key",
+      "tls/venue-ca.crt.tmp",
+      "tls/venue-ca.key.tmp",
     ]) {
       expect(existsSync(join(stateDir, gone)), gone).toBe(false);
     }
@@ -226,9 +244,9 @@ describe("runStagedReset", () => {
     const store = await openVenueDatabase(venueDir);
     try {
       expect(await readDeploymentEnvironment(store.venue)).toBeNull();
-      expect(await readMirrorConfig(store.venue, NODE_ID)).toBeNull();
-      const roles = await store.venue.execute<{ n: number }>(
-        sql`select count(*) as n from node_roles`,
+      expect(await readMirrorLink(store.node, NODE_ID)).toBeNull();
+      const roles = await store.node.execute<{ n: number }>(
+        sql`select count(*) as n from node_mode`,
       );
       expect(roles.rows[0]?.n).toBe(0);
     } finally {
@@ -252,9 +270,25 @@ describe("runStagedReset", () => {
         adoptFromPrimary(
           {
             ownerDb: store.venue,
+            ownerNode: store.node,
+            ring: loadKeyRing({
+              WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
+              WAITRON_CREDENTIALS_KEY_VERSION: "1",
+            }),
             fetchBundle: async (_url, _credential, standby) => {
               standbyNodeId = standby.nodeId;
-              return BUNDLE;
+              return {
+                ...BUNDLE,
+                reservedIdentity: {
+                  ...BUNDLE.reservedIdentity,
+                  endorsement: endorseKey(
+                    standby.nodeId,
+                    standby.publicKey,
+                    PRIMARY_NODE_ID,
+                    PRIMARY_KEYS.privateKey,
+                  ),
+                },
+              };
             },
             advertisedOrigin: "https://standby.example",
             environment: "preproduction",
@@ -264,6 +298,7 @@ describe("runStagedReset", () => {
             persistModuleConfig: async (config) => {
               await writeModuleConfig(stateDir, config);
             },
+            persistCredentialsRing: (ring) => writeCredentialsRing(stateDir, ring),
             stateDir,
             database: venueDir,
           },
@@ -287,7 +322,7 @@ describe("runStagedReset", () => {
       expect(pending.locationId).toBe(BUNDLE.designated.locationId);
       expect(pending.standby.nodeId).toBe(standbyNodeId);
       expect(pending.originNodeId).toBe(PRIMARY_NODE_ID);
-      expect(await readMirrorConfig(store.venue, standbyNodeId!)).toMatchObject({
+      expect(await readMirrorLink(store.node, standbyNodeId!)).toMatchObject({
         originNodeId: PRIMARY_NODE_ID,
       });
     } finally {

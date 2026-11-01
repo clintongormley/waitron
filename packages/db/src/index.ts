@@ -16,6 +16,8 @@ export {
 } from "./venue-holder-identity.js";
 export type {
   Database,
+  NodeDatabase,
+  NodeTransaction,
   OpenVenueOptions,
   Schema,
   Transaction,
@@ -37,7 +39,7 @@ export {
   savedPart,
   stillJoinedPart,
 } from "./joined-parts.js";
-export type { MigrationOptions } from "./migrate.js";
+export type { MigrationDatabase, MigrationOptions } from "./migrate.js";
 export { claimRows } from "./job-claim.js";
 export type { ClaimSpec } from "./job-claim.js";
 // The column vocabulary. Another package reaches it only through this barrel (CLAUDE.md §3), and
@@ -218,22 +220,12 @@ export type { IncidentSeverity } from "./schema/incidents.js";
 export {
   deploymentEnvironmentFor,
   deploymentTableExists,
-  readBreakGlassVerifier,
-  readBreakGlassKeyName,
-  readDeploymentAxes,
   readDeploymentEnvironment,
-  readDeploymentMode,
-  readSingletonRole,
-  setBreakGlassVerifierTx,
-  setDeploymentMode,
-  setDeploymentModeTx,
-  setSingletonRole,
-  setSingletonRoleTx,
+  requireStamp,
   stampDeployment,
 } from "./deployment.js";
 export type { DeploymentEnvironment, DeploymentMode, SingletonRole } from "./deployment.js";
 export * from "./schema/deployment.js";
-export * from "./schema/node-roles.js";
 export * from "./schema/node-sealed-state.js";
 export * from "./schema/recovery-packs.js";
 export {
@@ -246,8 +238,6 @@ export {
 export type { RecoveryPackPartRecord, RecoveryPackRecord } from "./recovery-packs.js";
 export { membershipRemovals } from "./schema/membership-removals.js";
 export { membershipClearances } from "./schema/membership-clearances.js";
-export { readMirrorConfig, writeMirrorConfig } from "./mirror-config.js";
-export type { MirrorConnection } from "./mirror-config.js";
 export {
   persistNodeMembershipIfNewer,
   persistNodeMembershipIfNewerTx,
@@ -296,7 +286,7 @@ export {
   type BillParty,
   type TableNames,
 } from "./party-table-labels.js";
-export { withTransaction } from "./tenancy.js";
+export { withNodeTransaction, withTransaction } from "./tenancy.js";
 export { isRefusal, isUniqueViolation } from "./unique-violation.js";
 export {
   checkFailed,

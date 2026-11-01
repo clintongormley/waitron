@@ -1,6 +1,11 @@
 import "./errors.js";
 import { AppError } from "@waitron/shared";
-import { persistNodeMembershipIfNewer, readNodeMembership, type Database } from "@waitron/db";
+import {
+  persistNodeMembershipIfNewer,
+  readNodeMembership,
+  type Database,
+  type NodeDatabase,
+} from "@waitron/db";
 import {
   evictNode,
   isFencedStanding,
@@ -10,10 +15,12 @@ import {
 } from "@waitron/membership";
 import type { KeyRing } from "@waitron/credentials";
 import { mintNextMembershipDocument } from "./membership-mint.js";
+import { assertHeldDocumentReadable } from "./membership-trust.js";
 import type { Logger } from "./logger.js";
 
 export interface RetireDeps {
   readonly appDb: Database;
+  readonly node: NodeDatabase;
   /** Unseals this node's identity private key to sign the minted document. */
   readonly ring: KeyRing;
   /** The departing node: the one that becomes `evicted`, and the document's signer. */
@@ -30,10 +37,11 @@ export interface RetireResult {
 /**
  * A fenced (`sell-only`) node evicts itself with a document signed by its own key, persisted
  * term-guarded. Every gate throws before any write and the document is signed in memory before the
- * persist, so a refusal or a signing failure leaves the node exactly as it was.
+ * persist.
  */
 export async function retireSelf(deps: RetireDeps): Promise<RetireResult> {
   const held = await readNodeMembership(deps.appDb);
+  assertHeldDocumentReadable(held);
   const selfStanding = held === null ? undefined : standingOf(held, deps.nodeId);
 
   // Already left: no re-mint, so a re-run never bumps the term, and no carrier gate.
@@ -52,11 +60,12 @@ export async function retireSelf(deps: RetireDeps): Promise<RetireResult> {
   }
 
   const document = await mintNextMembershipDocument(
-    { db: deps.appDb, ring: deps.ring },
+    { db: deps.appDb, node: deps.node, ring: deps.ring },
     {
       heldDocument: held,
       nodes: evictNode(held!.body.nodes, deps.nodeId),
       signerNodeId: deps.nodeId,
+      verifyHeld: "stored-keys",
     },
   );
 

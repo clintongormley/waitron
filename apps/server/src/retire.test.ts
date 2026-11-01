@@ -13,17 +13,23 @@ import {
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, type KeyRing } from "@waitron/credentials";
 import {
   endorseKey,
   generateNodeKeyPair,
+  signDocumentBody,
   verifyMembershipDocument,
+  type MembershipDocumentBody,
   type MembershipNode,
   type NodeStanding,
   type SignedMembershipDocument,
 } from "@waitron/membership";
-import { establishNodeIdentity } from "./node-identity.js";
+import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
+import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+import { pinMainBoxKey } from "./testing/pinned-main-box.js";
+import { tableSnapshot } from "./testing/table-snapshot.js";
 import { persistEvictionOrThrow, retireSelf, type RetireDeps } from "./retire.js";
 
 const RING: KeyRing = loadKeyRing({
@@ -34,11 +40,16 @@ const RING: KeyRing = loadKeyRing({
 const noopLog: RetireDeps["log"] = () => {};
 
 const CARRIER_ID = "carrier-1";
+const CARRIER_KEY = generateNodeKeyPair();
+const N1_KEY = generateNodeKeyPair();
+
+// Each fenced node's own signing key, so a chart it signed itself is signed with the key it holds.
+const ownKeys = new Map<string, string>();
 
 // Two cases depend on `useVenueDb`'s default per-test reset: each expects no chart held, and would
 // otherwise read the chart an earlier case wrote.
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 
@@ -65,14 +76,16 @@ async function fencedNode(): Promise<{
     })
     .returning({ id: locations.id });
   const nodeId = await seedNode(db, brandLocationId(loc!.id));
-  await establishNodeIdentity({ ownerDb: db, ring: RING }, nodeId);
+  await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, nodeId);
+  ownKeys.set(nodeId, await readNodeIdentityKey(suite.node, RING, nodeId));
+  await pinMainBoxKey(suite.node, nodeId, { nodeId: CARRIER_ID, publicKey: CARRIER_KEY.publicKey });
   return {
     nodeId,
-    deps: (log) => ({ appDb: db, ring: RING, nodeId, log }),
+    deps: (log) => ({ appDb: db, node: suite.node, ring: RING, nodeId, log }),
   };
 }
 
-// retire reads only the term and node standings; it never verifies the held signature.
+// Signed by the carrier, whose key every fenced node pins, or with no carrier by the node itself.
 function heldDoc(
   nodeId: string,
   selfStanding: NodeStanding,
@@ -86,10 +99,12 @@ function heldDoc(
   if (carrier) {
     nodes.push({ nodeId: carrierId, contactUrl: "https://carrier", standing: "serving-primary" });
   }
+  const signerNodeId = carrier ? carrierId : nodeId;
+  const privateKey = carrier ? CARRIER_KEY.privateKey : ownKeys.get(nodeId)!;
   return {
     body: { term, nodes },
-    signerNodeId: carrier ? carrierId : nodeId,
-    signature: "held-placeholder-sig",
+    signerNodeId,
+    signature: signDocumentBody({ term, nodes }, privateKey),
     endorsements: [],
   };
 }
@@ -177,15 +192,79 @@ describe("retireSelf", () => {
     expect(held?.body.term).toBe(3); // no write
     expect(held!.body.nodes.find((n) => n.nodeId === nodeId)?.standing).toBe("sell-only");
   });
+
+  it("refuses to sign over a held document no stored key vouches for, writing nothing", async () => {
+    const { deps, nodeId } = await fencedNode();
+    await writeNodeMembership(db, strangerSigned(fencedBody(nodeId)));
+
+    const err = await captureError(() => retireSelf(deps(noopLog)));
+    expect(isAppError(err) && err.code).toBe("membership.held_untrusted");
+    expect(isAppError(err) && err.params).toEqual({ reason: "untrusted_signer" });
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+  });
+
+  it("still refuses a malformed held document signed by a key no stored key vouches for", async () => {
+    const { deps, nodeId } = await fencedNode();
+    const body = { ...fencedBody(nodeId), revoked: ["gone", "gone"] };
+    await writeNodeMembership(db, strangerSigned(body));
+
+    const err = await captureError(() => retireSelf(deps(noopLog)));
+    expect(isAppError(err) && err.code).toBe("membership.held_untrusted");
+    expect(isAppError(err) && err.params).toEqual({ reason: "untrusted_signer" });
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+  });
+
+  it("refuses a held document no stored key vouches for that carries an unsigned field beside its body", async () => {
+    const { deps, nodeId } = await fencedNode();
+    const doc = { ...strangerSigned(fencedBody(nodeId)), note: "x" };
+    await writeNodeMembership(db, doc as SignedMembershipDocument);
+
+    const err = await captureError(() => retireSelf(deps(noopLog)));
+    expect(isAppError(err) && err.code).toBe("membership.held_untrusted");
+    expect(isAppError(err) && err.params).toEqual({ reason: "untrusted_signer" });
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+  });
+
+  it("refuses a held chart whose body is not a membership chart with reason malformed, writing nothing", async () => {
+    const { deps, nodeId } = await fencedNode();
+    const doc = { ...strangerSigned(fencedBody(nodeId)), body: { term: 3 } };
+    await writeNodeMembership(db, doc as unknown as SignedMembershipDocument);
+    const before = [await tableSnapshot(db), await tableSnapshot(suite.node)];
+
+    const err = await captureError(() => retireSelf(deps(noopLog)));
+    expect(isAppError(err) && err.code).toBe("membership.held_untrusted");
+    expect(isAppError(err) && err.params).toEqual({ reason: "malformed" });
+    expect([await tableSnapshot(db), await tableSnapshot(suite.node)]).toEqual(before);
+  });
 });
 
-function docAtTerm(term: number, nodeId: string): SignedMembershipDocument {
+const STRANGER_KEY = generateNodeKeyPair();
+
+function fencedBody(nodeId: string): MembershipDocumentBody {
   return {
-    body: { term, nodes: [{ nodeId, contactUrl: "", standing: "evicted" }] },
-    signerNodeId: nodeId,
-    signature: "placeholder-sig",
+    term: 3,
+    nodes: [
+      { nodeId, contactUrl: "", standing: "sell-only" },
+      { nodeId: CARRIER_ID, contactUrl: "https://carrier", standing: "serving-primary" },
+    ],
+  };
+}
+
+function strangerSigned(body: MembershipDocumentBody): SignedMembershipDocument {
+  return {
+    body,
+    signerNodeId: "stranger",
+    signature: signDocumentBody(body, STRANGER_KEY.privateKey),
     endorsements: [],
   };
+}
+
+function docAtTerm(term: number, nodeId: string): SignedMembershipDocument {
+  return signedMembershipDoc(term, {
+    signerNodeId: nodeId,
+    keyPair: N1_KEY,
+    nodes: [{ nodeId, contactUrl: "", standing: "evicted" }],
+  });
 }
 
 describe("persistEvictionOrThrow", () => {

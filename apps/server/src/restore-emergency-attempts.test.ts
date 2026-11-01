@@ -16,7 +16,7 @@ afterEach(async () => {
 it.each(["archive", "stream"] as const)(
   "retains the %s hour intent before publishing trading settings",
   async (kind) => {
-    f = await stagedHourRestore(suite.db, kind, "emergency-offline-restore");
+    f = await stagedHourRestore(suite, kind, "emergency-offline-restore");
     const retained = f.journal();
     await expect(f.run()).resolves.toBe(true);
     expect(JSON.parse(retained).revisions.at(-1).value.entries.at(-1)).toMatchObject({
@@ -39,7 +39,7 @@ it.each(["archive", "stream"] as const)(
 it.each(["archive", "stream"] as const)(
   "keeps the committed %s activation when trading publication fails and finishes without reallocation",
   async (kind) => {
-    f = await stagedHourRestore(suite.db, kind, "emergency-offline-restore");
+    f = await stagedHourRestore(suite, kind, "emergency-offline-restore");
     const retained = f.journal();
     const trading = join(f.stateDir, "trading.env");
     await expect(
@@ -63,7 +63,7 @@ it.each(["archive", "stream"] as const)(
   },
 );
 it("retains the selected hour after a real hook transaction rolls back", async () => {
-  f = await stagedHourRestore(suite.db, "archive", "emergency-offline-restore");
+  f = await stagedHourRestore(suite, "archive", "emergency-offline-restore");
   const retained = f.journal();
   await expect(
     f.run((_level, event, fields) => {
@@ -97,7 +97,7 @@ it("retains the selected hour after a real hook transaction rolls back", async (
 it.each(["archive", "stream"] as const)(
   "retains readable %s intent before activation and commits before trading settings",
   async (kind) => {
-    f = await stagedHourRestore(suite.db, kind, "emergency-offline-restore");
+    f = await stagedHourRestore(suite, kind, "emergency-offline-restore");
     const retained = f.journal();
     let seen = false;
     await f.run((_level, event, fields) => {
@@ -129,7 +129,7 @@ it.each(["archive", "stream"] as const)(
 it.each(["archive", "stream"] as const)(
   "refuses %s trading publication when another restored credential cannot be retained",
   async (kind) => {
-    f = await stagedHourRestore(suite.db, kind, "emergency-offline-restore");
+    f = await stagedHourRestore(suite, kind, "emergency-offline-restore");
     const retained = f.journal();
     const credential = join(f.stateDir, "credentials.key");
     await expect(

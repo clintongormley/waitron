@@ -8,6 +8,7 @@ import type {
   MembershipNode,
   NodeStanding,
   SignedMembershipDocument,
+  SignerVerdict,
   TrustSet,
   VerifyResult,
 } from "./types.js";
@@ -27,6 +28,28 @@ export const MAX_NODES = 8;
 
 /** Revoked ids do not count toward MAX_NODES. */
 export const MAX_REVOKED = 256;
+
+// The deepest and the largest body a well-formed chart can have: the body, a list, an entry; and
+// every value in the largest one. They bound a body read whatever its shape.
+const MAX_BODY_DEPTH = 3;
+const MAX_BODY_VALUES = 3 + MAX_NODES * 4 + 1 + MAX_REVOKED;
+
+function withinChartBounds(body: Record<string, unknown>): boolean {
+  if (Array.isArray(body.nodes) && body.nodes.length > MAX_NODES) return false;
+  if (Array.isArray(body.revoked) && body.revoked.length > MAX_REVOKED) return false;
+  let values = 0;
+  const fits = (v: unknown, depth: number): boolean => {
+    values += 1;
+    if (values > MAX_BODY_VALUES) return false;
+    if (v === null || typeof v !== "object") return true;
+    if (depth > MAX_BODY_DEPTH) return false;
+    for (const child of Array.isArray(v) ? v : Object.values(v)) {
+      if (!fits(child, depth + 1)) return false;
+    }
+    return true;
+  };
+  return fits(body, 1);
+}
 
 export function signDocumentBody(body: MembershipDocumentBody, signerPrivateKey: string): string {
   // signerNodeId is deliberately NOT signed: it only selects the key, and the signature must verify
@@ -105,20 +128,68 @@ export function verifyMembershipDocument(
   if (!isMembershipDocument(doc)) return { valid: false, reason: "malformed" };
   const removed = fencedOutNodeIds(held);
   if (removed.has(doc.signerNodeId)) return { valid: false, reason: "signer_removed" };
-  const signerKey = resolveSignerKey(doc.signerNodeId, doc.endorsements, trustSet, held, removed);
-  if (signerKey === null) {
-    return {
-      valid: false,
-      reason: doc.endorsements.length > 0 ? "endorsement_invalid" : "untrusted_signer",
-    };
-  }
-  if (!verifyBytes(bodyMessage(doc.body), doc.signature, signerKey)) {
-    return { valid: false, reason: "bad_signature" };
-  }
+  const verdict = signerVerdict(doc, trustSet, held, removed);
+  if (!verdict.trusted) return { valid: false, reason: verdict.reason };
   return {
     valid: true,
     term: doc.body.term,
     signerNodeId: doc.signerNodeId,
     nodes: doc.body.nodes,
   };
+}
+
+/**
+ * Whether a key `trustSet` vouches for signed this document, whatever else is wrong with its shape:
+ * `verifyMembershipDocument` answers `malformed` before it looks at the signer, which cannot tell a
+ * malformed chart this box signed from one a stranger did. A document too broken to name a signer
+ * or to be verified, or whose body is larger or deeper than any chart's, answers `malformed`. An
+ * endorsement is read by its four fields alone, and one without four text fields is skipped, which
+ * can only withhold trust.
+ */
+export function verifyDocumentSigner(doc: unknown, trustSet: TrustSet): SignerVerdict {
+  return signerVerdict(doc, trustSet, null, new Set());
+}
+
+/** `held` and `removed` narrow what an endorsement can vouch for, as in `resolveSignerKey`. */
+function signerVerdict(
+  doc: unknown,
+  trustSet: TrustSet,
+  held: SignedMembershipDocument | null,
+  removed: ReadonlySet<string>,
+): SignerVerdict {
+  if (!isRecord(doc)) return { trusted: false, reason: "malformed" };
+  const { signerNodeId, signature, body, endorsements } = doc;
+  if (typeof signerNodeId !== "string" || typeof signature !== "string")
+    return { trusted: false, reason: "malformed" };
+  if (!isRecord(body) || Array.isArray(body) || !withinChartBounds(body))
+    return { trusted: false, reason: "malformed" };
+  if (!Array.isArray(endorsements) || endorsements.length > MAX_ENDORSEMENTS)
+    return { trusted: false, reason: "malformed" };
+  const readable = endorsements.flatMap((e: unknown): Endorsement[] =>
+    isRecord(e) &&
+    typeof e.nodeId === "string" &&
+    typeof e.publicKey === "string" &&
+    typeof e.endorsedBy === "string" &&
+    typeof e.signature === "string"
+      ? [
+          {
+            nodeId: e.nodeId,
+            publicKey: e.publicKey,
+            endorsedBy: e.endorsedBy,
+            signature: e.signature,
+          },
+        ]
+      : [],
+  );
+  const signerKey = resolveSignerKey(signerNodeId, readable, trustSet, held, removed);
+  if (signerKey === null) {
+    return {
+      trusted: false,
+      reason: endorsements.length > 0 ? "endorsement_invalid" : "untrusted_signer",
+    };
+  }
+  if (!verifyBytes(bodyMessage(body as unknown as MembershipDocumentBody), signature, signerKey)) {
+    return { trusted: false, reason: "bad_signature" };
+  }
+  return { trusted: true, signerNodeId };
 }

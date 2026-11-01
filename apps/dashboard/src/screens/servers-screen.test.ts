@@ -2,7 +2,11 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
-import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import {
+  expectBreaksOnlyAfterColons,
+  expectRowMenusOnScreen,
+  formMessageOf,
+} from "@waitron/ui/src/test-helpers.js";
 import "./servers-screen.js";
 import type { ServersScreen } from "./servers-screen.js";
 import type { DashboardApi, ServerListing } from "../api/client.js";
@@ -16,8 +20,12 @@ const FORMER = "33333333-3333-4333-8333-333333333333";
 const REMOVED = "44444444-4444-4444-8444-444444444444";
 const BLANK = "55555555-5555-4555-8555-555555555555";
 
+const FINGERPRINT =
+  "3F:A1:9C:0B:7E:22:D4:51:88:6A:E0:13:BC:47:F9:2D:65:0E:A8:31:DC:74:5B:96:C2:0F:E7:38:41:AD:9B:16";
+
 const listing: ServerListing = {
   term: 3,
+  authorityFingerprint: FINGERPRINT,
   nodes: [
     {
       nodeId: SELF,
@@ -56,6 +64,7 @@ const listing: ServerListing = {
 
 const afterRemoval: ServerListing = {
   term: 4,
+  authorityFingerprint: FINGERPRINT,
   nodes: listing.nodes.map((n) =>
     n.nodeId === STANDBY ? { ...n, standing: "evicted", removable: false, canClear: true } : n,
   ),
@@ -135,6 +144,57 @@ afterEach(() => {
 });
 
 describe("servers screen list", () => {
+  it("shows this box's authority fingerprint, the one a joining spare asks the person to compare", async () => {
+    const el = await mount();
+    const line = el.shadowRoot!.querySelector("[data-test=authority-fingerprint]")!;
+    expect(line.textContent!.replace(/\s+/g, " ").trim()).toBe(
+      `This server's public certificate fingerprint: ${FINGERPRINT}`,
+    );
+    const probe = document.createElement("span");
+    probe.style.fontFamily = "var(--wt-font-family-mono)";
+    el.shadowRoot!.append(probe);
+    const mono = getComputedStyle(probe).fontFamily;
+    probe.remove();
+    expect(getComputedStyle(line.querySelector("[data-test=fingerprint-value]")!).fontFamily).toBe(
+      mono,
+    );
+  });
+
+  it.each([1280, 390])(
+    "breaks the fingerprint only after a colon, keeping its text (%ipx)",
+    async (width) => {
+      await page.viewport(width, 900);
+      try {
+        const el = await mount();
+        const value = el.shadowRoot!.querySelector<HTMLElement>("[data-test=fingerprint-value]")!;
+        expect(value.textContent).toBe(FINGERPRINT);
+        expectBreaksOnlyAfterColons(value, width === 390);
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    },
+  );
+
+  it("names the fingerprint in Spanish", async () => {
+    setLocale("es-ES");
+    const el = await mount();
+    expect(
+      el
+        .shadowRoot!.querySelector("[data-test=authority-fingerprint]")!
+        .textContent!.replace(/\s+/g, " ")
+        .trim(),
+    ).toBe(`Huella del certificado público de este servidor: ${FINGERPRINT}`);
+  });
+
+  it("shows no fingerprint line when this box serves no authority", async () => {
+    const el = await mount(
+      stubApi({
+        listServers: vi.fn().mockResolvedValue({ ...listing, authorityFingerprint: null }),
+      }),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=authority-fingerprint]")).toBeNull();
+  });
+
   it("names each machine's role in words and marks which one is this server", async () => {
     const el = await mount();
     expect(inTable(el, `role-${SELF}`)!.textContent!.trim()).toBe(t("servers.standing.primary"));
@@ -227,7 +287,11 @@ describe("servers screen list", () => {
 
   it("shows the empty message when this server holds no list", async () => {
     const el = await mount(
-      stubApi({ listServers: vi.fn().mockResolvedValue({ term: null, nodes: [] }) }),
+      stubApi({
+        listServers: vi
+          .fn()
+          .mockResolvedValue({ term: null, authorityFingerprint: null, nodes: [] }),
+      }),
     );
     expect(tableRoot(el).textContent).toContain(t("servers.empty"));
   });
@@ -284,6 +348,7 @@ describe("servers screen list", () => {
   it("names a removable machine with no address by its short id, on the row menu and in the confirmation", async () => {
     const withBlank: ServerListing = {
       term: 3,
+      authorityFingerprint: FINGERPRINT,
       nodes: [
         ...listing.nodes,
         {
@@ -309,6 +374,7 @@ describe("servers screen list", () => {
   it("says why nothing can be removed when this server is not the primary", async () => {
     const onStandby: ServerListing = {
       term: 3,
+      authorityFingerprint: FINGERPRINT,
       nodes: listing.nodes.map((n) => ({
         ...n,
         isSelf: n.nodeId === STANDBY,
@@ -325,6 +391,7 @@ describe("servers screen list", () => {
   it("says the same when no listed machine is this server", async () => {
     const notListed: ServerListing = {
       term: 3,
+      authorityFingerprint: FINGERPRINT,
       nodes: listing.nodes.map((n) => ({ ...n, isSelf: false, removable: false, canClear: false })),
     };
     const el = await mount(stubApi({ listServers: vi.fn().mockResolvedValue(notListed) }));
@@ -337,7 +404,11 @@ describe("servers screen list", () => {
     cleanupWidgets();
     // `listServers` answers an empty list whenever no chart is held, primary or not.
     const empty = await mount(
-      stubApi({ listServers: vi.fn().mockResolvedValue({ term: null, nodes: [] }) }),
+      stubApi({
+        listServers: vi
+          .fn()
+          .mockResolvedValue({ term: null, authorityFingerprint: null, nodes: [] }),
+      }),
     );
     expect(empty.shadowRoot!.querySelector("[data-test=not-primary]")).toBeNull();
     cleanupWidgets();
@@ -376,6 +447,23 @@ describe("servers screen removal", () => {
     expect(inTable(el, `role-${STANDBY}`)!.textContent!.trim()).toBe(t("servers.standing.removed"));
     expect(inTable(el, `remove-${STANDBY}`)).toBeNull();
     expect(rowMenu(el, STANDBY)!.querySelector(`[data-test="clear-${STANDBY}"]`)).not.toBeNull();
+  });
+
+  it("shows the fingerprint the refresh after a removal reads", async () => {
+    const api = stubApi();
+    const el = await mount(api);
+    await openRemove(el);
+    const renewed =
+      "00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF";
+    vi.mocked(api.listServers).mockResolvedValue({
+      ...afterRemoval,
+      authorityFingerprint: renewed,
+    });
+    await confirmRemove(el);
+    expect(api.listServers).toHaveBeenCalledTimes(2);
+    expect(el.shadowRoot!.querySelector("[data-test=fingerprint-value]")!.textContent!.trim()).toBe(
+      renewed,
+    );
   });
 
   it("returns focus to the row's menu when the confirmation is cancelled or dismissed", async () => {
@@ -546,10 +634,12 @@ describe("servers screen clearing", () => {
   // The server marks `canClear` only on a removed row, and only while this server is the primary.
   const clearable: ServerListing = {
     term: 4,
+    authorityFingerprint: FINGERPRINT,
     nodes: listing.nodes.map((n) => ({ ...n, canClear: n.nodeId === REMOVED })),
   };
   const afterClearing: ServerListing = {
     term: 5,
+    authorityFingerprint: FINGERPRINT,
     nodes: clearable.nodes.filter((n) => n.nodeId !== REMOVED),
   };
 
@@ -590,6 +680,7 @@ describe("servers screen clearing", () => {
   it("offers no Clear on a removed row the server does not mark clearable", async () => {
     const notClearable: ServerListing = {
       term: 4,
+      authorityFingerprint: FINGERPRINT,
       nodes: clearable.nodes.map((n) => ({ ...n, canClear: false })),
     };
     const el = await mount(clearApi({ listServers: vi.fn().mockResolvedValue(notClearable) }));
@@ -779,6 +870,7 @@ describe("servers screen at phone width", () => {
   // Larger text makes each row tall, so the fixture keeps one menu row inside an 844 px window.
   const phoneListing: ServerListing = {
     term: 3,
+    authorityFingerprint: FINGERPRINT,
     nodes: [
       listing.nodes[0]!,
       {

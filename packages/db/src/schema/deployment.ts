@@ -5,7 +5,7 @@ import { count, label, now, table, ts } from "./columns.js";
 /**
  * The environment this database was stamped for — one row, `id` pinned to 1 by
  * `deployment_singleton_ck`. It belongs to the DATABASE, not to a node: one database per environment
- * (CLAUDE.md §5), whichever node reads it. A node's own role is on `node_roles`.
+ * (CLAUDE.md §5), whichever node reads it. A node's own role is in its `node.db`.
  */
 export const deployment = table(
   "deployment",

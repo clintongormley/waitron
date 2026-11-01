@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
-import type { Database } from "@waitron/db";
+import type { Database, NodeDatabase } from "@waitron/db";
 import type { PromoteRunResult } from "./promote-api.js";
 
 // A unit test with no database: login, authorisation, `verifyBreakGlass` and `run` are doubled, so
@@ -53,6 +53,7 @@ import { mountPromoteApi } from "./promote-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 const fakeDb = {} as Database;
+const fakeNode = {} as NodeDatabase;
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 function appWith(
@@ -62,7 +63,13 @@ function appWith(
   })),
 ): { app: Hono; run: typeof run } {
   const app = new Hono();
-  mountPromoteApi(app, { appDb: fakeDb, nodeId: NODE, run, credentialKeyRing: TOTP_KEY_RING });
+  mountPromoteApi(app, {
+    appDb: fakeDb,
+    nodeDb: fakeNode,
+    nodeId: NODE,
+    run,
+    credentialKeyRing: TOTP_KEY_RING,
+  });
   return { app, run };
 }
 
@@ -103,7 +110,7 @@ describe("POST /management-api/promote (two-path auth over the promote closure)"
     const res = await post(app, { oldNodeNeutralised: true, breakGlass: GOOD_SECRET });
     expect(res.status).toBe(200);
     expect(run).toHaveBeenCalledWith({ oldNodeNeutralised: true });
-    expect(verifyBreakGlass).toHaveBeenCalledWith(fakeDb, NODE, GOOD_SECRET);
+    expect(verifyBreakGlass).toHaveBeenCalledWith(fakeNode, NODE, GOOD_SECRET);
     // The break-glass path never touches the manager-login path.
     expect(loginManagerById).not.toHaveBeenCalled();
   });
@@ -194,6 +201,16 @@ describe("POST /management-api/promote (two-path auth over the promote closure)"
       const res = await post(app, { oldNodeNeutralised: true, breakGlass: GOOD_SECRET });
       expect([res.status, (await res.json()).error.code]).toEqual([409, refusal.code]);
     }
+  });
+
+  it("run's membership.held_untrusted maps to 409", async () => {
+    const run = vi.fn(async (): Promise<PromoteRunResult> => {
+      throw new AppError("membership.held_untrusted", { reason: "untrusted_signer" });
+    });
+    const { app } = appWith(run);
+    const res = await post(app, { oldNodeNeutralised: true, breakGlass: GOOD_SECRET });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe("membership.held_untrusted");
   });
 
   it("run's promotion.node_fenced maps to 409", async () => {

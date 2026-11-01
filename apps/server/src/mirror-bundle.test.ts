@@ -7,7 +7,12 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { hashPassword, hashPin } from "@waitron/identity";
-import { canonicalize, generateNodeKeyPair, verifyBytes } from "@waitron/membership";
+import {
+  canonicalize,
+  generateNodeKeyPair,
+  verifyBytes,
+  verifyEndorsement,
+} from "@waitron/membership";
 import { parseModuleConfig, type WaitronModule } from "@waitron/module";
 import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue, type AdoptResult } from "@waitron/provisioning";
@@ -63,6 +68,7 @@ function nextNif(): string {
 
 let stateDir: string;
 let caPem: string;
+let caKeyPem: string;
 let db: Database;
 // Provisioned once: the suite does not reset between tests, and a database holds one tenant.
 let designated: AdoptResult;
@@ -104,13 +110,14 @@ async function setupVenue(): Promise<AdoptResult> {
     locationId: venue.locationId,
     nodeId: venue.nodeId,
   };
-  await establishNodeIdentity({ ownerDb: db, ring: RING }, designated.nodeId);
+  await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, designated.nodeId);
   return designated;
 }
 
 function baseDeps() {
   return {
     appDb: db,
+    node: suite.node,
     ring: RING,
     stateDir,
     relayUrl: "https://relay.test:9000/",
@@ -122,12 +129,15 @@ function baseDeps() {
 beforeAll(async () => {
   stateDir = await mkdtemp(join(tmpdir(), "waitron-mirror-bundle-state-"));
   await mkdir(join(stateDir, "tls"), { recursive: true });
-  caPem = mintSelfSignedServerCert({
+  const ca = mintSelfSignedServerCert({
     hostnames: ["waitron.local"],
     ipAddresses: [],
     now: new Date(),
-  }).caCertPem;
+  });
+  caPem = ca.caCertPem;
+  caKeyPem = ca.caKeyPem;
   await writeFile(join(stateDir, "tls", "ca.crt"), caPem);
+  await writeFile(join(stateDir, "tls", "ca.key"), caKeyPem);
 
   db = suite.db;
   await stampDeployment(db, "preproduction");
@@ -195,6 +205,40 @@ describe("assembleMirrorBundle (primary side)", () => {
         primaryPub,
       ),
     ).toBe(true);
+  });
+
+  it("carries the ring, the authority's key and the main box's public key, and the endorsement verifies under that key", async () => {
+    const standby = { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB };
+    const { bundle } = await allocatedBundle(standby);
+
+    expect(bundle.credentialsRing).toEqual({
+      key: RING.current.key.toString("base64"),
+      version: RING.current.version,
+    });
+    expect(bundle.boxCaKeyPem).toBe(caKeyPem);
+    expect(bundle.boxCaPem).toBe(caPem);
+    expect(bundle.primaryPublicKey).toBe((await readMembershipTrustSet(db))[designated.nodeId]);
+    expect(verifyEndorsement(bundle.reservedIdentity.endorsement, bundle.primaryPublicKey)).toBe(
+      true,
+    );
+  });
+
+  it("carries the ring's previous key and version when the ring holds one", async () => {
+    const rotating = loadKeyRing({
+      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xd).toString("base64"),
+      WAITRON_CREDENTIALS_KEY_VERSION: "2",
+      WAITRON_CREDENTIALS_KEY_PREVIOUS: RING.current.key.toString("base64"),
+      WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "1",
+    });
+    const { bundle } = await allocatedBundle(
+      { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
+      { ring: rotating },
+    );
+    expect(bundle.credentialsRing).toEqual({
+      key: Buffer.alloc(32, 0xd).toString("base64"),
+      version: 2,
+      previous: { key: RING.current.key.toString("base64"), version: 1 },
+    });
   });
 
   it("carries the primary's on-box module overrides", async () => {
@@ -270,6 +314,14 @@ describe("assembleMirrorBundle (primary side)", () => {
     } finally {
       (ALL_MODULES as WaitronModule[]).splice(ALL_MODULES.indexOf(seriesless), 1);
     }
+  });
+
+  it("endorses the standby with the primary key the caller supplies", async () => {
+    const standby = { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB };
+    const supplied = generateNodeKeyPair();
+    const { bundle } = await allocatedBundle(standby, { primaryPrivateKey: supplied.privateKey });
+    expect(bundle.primaryPublicKey).toBe(supplied.publicKey);
+    expect(verifyEndorsement(bundle.reservedIdentity.endorsement, supplied.publicKey)).toBe(true);
   });
 
   it("throws mirror.not_provisioned when the database carries no deployment stamp", async () => {

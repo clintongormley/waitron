@@ -323,6 +323,7 @@ export const LIGHT_B_PACKAGES = [
   "@waitron/composition",
   "@waitron/fiscal-none",
   "@waitron/recovery-pack",
+  "@waitron/node-db",
 ];
 
 /**

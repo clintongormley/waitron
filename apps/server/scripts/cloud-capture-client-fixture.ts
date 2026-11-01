@@ -73,7 +73,13 @@ else if (request.command === "schedule") {
       createArchive: async (grant, at, signal) => {
         created++;
         return createCloudSnapshotArchive(
-          { db: store.venue, modules: ALL_MODULES, environment: "preproduction", stateDir },
+          {
+            db: store.venue,
+            node: store.node,
+            modules: ALL_MODULES,
+            environment: "preproduction",
+            stateDir,
+          },
           grant.recoveryKey,
           at,
           signal,

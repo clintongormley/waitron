@@ -10,15 +10,13 @@ import {
   locations,
   nodes,
   openVenueDatabase,
-  setDeploymentMode,
-  setSingletonRole,
   stampDeployment,
   tenants,
   workingOrders,
-  writeMirrorConfig,
   type Database,
   type VenueDatabase,
 } from "@waitron/db";
+import { setNodeMode, setSingletonRole, writeMirrorLink } from "@waitron/node-db";
 import { hashPin, hashSecret, persons } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
@@ -29,6 +27,19 @@ import { freePorts } from "./testing/free-ports.js";
 
 const { beforeServerStarts, startServer } = serverFixture();
 
+const serverStores = vi.hoisted((): VenueDatabase[] => []);
+vi.mock("@waitron/db", async (original) => {
+  const actual = await original<typeof import("@waitron/db")>();
+  return {
+    ...actual,
+    openVenueDatabase: async (...args: Parameters<typeof actual.openVenueDatabase>) => {
+      const store = await actual.openVenueDatabase(...args);
+      serverStores.push(store);
+      return store;
+    },
+  };
+});
+
 // This reroute fixture changes only the stored axes, through the mirror's server-side queue.
 vi.mock("./promote-api.js", async (original) => {
   const actual = await original<typeof import("./promote-api.js")>();
@@ -37,8 +48,10 @@ vi.mock("./promote-api.js", async (original) => {
     mountPromoteApi: (...args: Parameters<typeof actual.mountPromoteApi>) => {
       const [app, deps] = args;
       app.post("/management-api/promote", async (c) => {
-        await setDeploymentMode(deps.appDb, NODE_B, "primary");
-        await setSingletonRole(deps.appDb, NODE_B, "primary");
+        const server = serverStores.find((s) => s.venue === deps.appDb);
+        if (server === undefined) throw new Error("the promoted server's store was not captured");
+        await setNodeMode({ venue: deps.appDb, node: server.node }, NODE_B, "primary");
+        await setSingletonRole({ venue: deps.appDb, node: server.node }, NODE_B, "primary");
         return c.body(null, 204);
       });
     },
@@ -200,9 +213,10 @@ function primaryEnv(venueDir: string, port: number, nodeId: string): Record<stri
   };
 }
 
-/** The env for B's MIRROR boot: no mirror config rides in env. A mirror boot REQUIRES a `mirror_config`
- * row (seeded in beforeAll) and reads its DATA SCOPE from it — `origin_node_id`, the primary whose rows
- * its node-scoped reads display; an absent row is a loud `server.config_invalid` (boot.ts). */
+/** The env for B's MIRROR boot: no mirror config rides in env. A mirror boot REQUIRES a
+ * `node_mirror_link` row in node.db (seeded in beforeAll) and reads its DATA SCOPE from it —
+ * `origin_node_id`, the primary whose rows its node-scoped reads display; an absent row is a loud
+ * `server.config_invalid` (boot.ts). */
 function mirrorEnv(venueDir: string, port: number): Record<string, string> {
   return {
     ...KEY_ENV,
@@ -261,12 +275,12 @@ beforeAll(async () => {
   await seedVenue(b);
 
   // B is the mirror: stamp it, flip mode='mirror' (co-sets singleton_role='secondary'), and seed the
-  // `mirror_config` row a mirror boot requires. A gets no `node_roles` row, so it reads
-  // 'primary'/'primary' through `readDeploymentAxes`'s missing-row fallback; a stamp is all it needs.
+  // node.db `node_mirror_link` row a mirror boot requires. A gets no `node_mode` row, so it reads
+  // 'primary'/'primary' through `readNodeMode`'s missing-row fallback; a stamp is all it needs.
   await stampDeployment(a, "preproduction");
   await stampDeployment(b, "preproduction");
-  await setDeploymentMode(b, NODE_B, "mirror");
-  await writeMirrorConfig(b, NODE_B, {
+  await setNodeMode({ venue: b, node: storeB.node }, NODE_B, "mirror");
+  await writeMirrorLink(storeB.node, NODE_B, {
     relayUrl: "http://127.0.0.1:1/",
     boxHostname: "reroute-box.local",
     boxCaPem: mintSelfSignedServerCert({

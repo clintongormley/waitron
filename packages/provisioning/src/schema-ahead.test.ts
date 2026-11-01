@@ -17,19 +17,21 @@ const PHANTOM: MigrationSetSource = {
  * probe, then the journal read. */
 function dbWith(hashes: readonly string[], tableName = CORE.table) {
   let call = 0;
-  return {
+  const db = {
     execute: () =>
       Promise.resolve(
         call++ % 2 === 0
           ? { rows: [{ name: tableName }] }
           : { rows: hashes.map((hash) => ({ hash })) },
       ),
-  } as never;
+  };
+  return { venue: db, node: db } as never;
 }
 
 /** A database whose journal table does not exist: the catalogue reports it absent, and the journal
  *  read is never reached — the never-migrated set. */
-const dbWithoutJournal = { execute: () => Promise.resolve({ rows: [] }) } as never;
+const noJournal = { execute: () => Promise.resolve({ rows: [] }) };
+const dbWithoutJournal = { venue: noJournal, node: noJournal } as never;
 
 describe("unknownHashes", () => {
   it("returns the database hashes the image has no file for", () => {

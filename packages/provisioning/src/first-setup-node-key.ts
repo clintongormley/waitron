@@ -1,18 +1,17 @@
 import "./errors.js";
 import { createHash, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { eq } from "drizzle-orm";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
 import { hashSecret } from "@waitron/identity";
 import {
   insertRecoveryPack,
   markRecoveryPackReceived,
-  nodeRoles,
-  setBreakGlassVerifierTx,
+  readRecoveryPack,
+  withNodeTransaction,
   withTransaction,
-  type Database,
 } from "@waitron/db";
+import { readRecoveryKey, setRecoveryKeyTx, type VenueAndNodeHandles } from "@waitron/node-db";
 import { generatePassword } from "./identifiers.js";
 import { newBreakGlassKeyName } from "./server-key-name.js";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
@@ -157,7 +156,7 @@ export function createFirstSetupNodeKeys(options: Options) {
       });
     },
     installStagedNodeKey(
-      db: Database,
+      db: VenueAndNodeHandles,
       state: FirstSetupState,
       stage: StagedNodeKey,
       hold?: FirstSetupHold,
@@ -176,15 +175,20 @@ export function createFirstSetupNodeKeys(options: Options) {
         )
           uncertain();
         // Installation follows the checked fiscal commit; publication retries must keep the delivered pair.
-        await withTransaction(db, async (tx) => {
-          const [stored] = await tx
-            .select({ verifier: nodeRoles.breakGlassVerifier, name: nodeRoles.breakGlassKeyName })
-            .from(nodeRoles)
-            .where(eq(nodeRoles.nodeId, stage.nodeId));
-          const verifier = stored?.verifier ?? null,
-            name = stored?.name ?? null;
-          if (verifier === null && name === null) {
-            await setBreakGlassVerifierTx(tx, stage.nodeId, stage.verifier, stage.name);
+        // Pack 1 is saved in venue.db first and the key in node.db after it, so an interruption
+        // between them leaves pack 1 with no key, which the next run finishes.
+        await withNodeTransaction(db.node, async (nodeTx) => {
+          const key = await readRecoveryKey(nodeTx, stage.nodeId);
+          const keyStaged = key?.verifier === stage.verifier && key.keyName === stage.name;
+          if (key !== null && !keyStaged) uncertain();
+          await withTransaction(db.venue, async (tx) => {
+            const pack = await readRecoveryPack(tx, stage.nodeId, 1);
+            if (pack !== null) {
+              const named = pack.parts.find((part) => part.part === "server-key")?.keyName;
+              if (named !== stage.name) uncertain();
+              return;
+            }
+            if (keyStaged) uncertain();
             const at = new Date();
             await insertRecoveryPack(tx, {
               nodeId: stage.nodeId,
@@ -199,7 +203,8 @@ export function createFirstSetupNodeKeys(options: Options) {
             });
             // The first-hour step's "I kept it" confirmed this pack reached the person.
             await markRecoveryPackReceived(tx, stage.nodeId, 1, at);
-          } else if (verifier !== stage.verifier || name !== stage.name) uncertain();
+          });
+          if (!keyStaged) await setRecoveryKeyTx(nodeTx, stage.nodeId, stage.verifier, stage.name);
         });
       });
     },

@@ -292,6 +292,7 @@ function app(overrides: Partial<SetupDeps> = {}) {
     {
       environment: "preproduction",
       db: suite.db,
+      node: suite.node,
       ring,
       provision: (req) => provisionVenue(deps(), req),
       recoverProvision: (req) => recoverProvisionedVenue(suite.db, req),

@@ -1,7 +1,7 @@
 import { createServer as createHttpsServer } from "node:https";
 import type { AddressInfo } from "node:net";
 import forge from "node-forge";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { tunnelHttpClient } from "./tunnel-http.js";
 
@@ -61,6 +61,27 @@ describe("tunnelHttpClient", () => {
         cause: { code: "ERR_TLS_CERT_ALTNAME_INVALID" },
       });
     } finally {
+      await close();
+    }
+  });
+
+  it("refuses a box under another authority even with Node's certificate checks switched off", async () => {
+    const { port, close } = await startBoxServer();
+    const other = mintSelfSignedServerCert({
+      hostnames: ["waitron.local"],
+      ipAddresses: [],
+      now: new Date("2026-08-26T00:00:00Z"),
+    });
+    vi.stubEnv("NODE_TLS_REJECT_UNAUTHORIZED", "0");
+    try {
+      const http = tunnelHttpClient({ ca: other.caCertPem, servername: "waitron.local" });
+      await expect(http(`https://127.0.0.1:${port}/`, { headers: {} })).rejects.toMatchObject({
+        cause: {
+          code: expect.stringMatching(/^(UNABLE_TO_VERIFY_LEAF_SIGNATURE|CERT_SIGNATURE_FAILURE)$/),
+        },
+      });
+    } finally {
+      vi.unstubAllEnvs();
       await close();
     }
   });

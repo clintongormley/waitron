@@ -6,7 +6,6 @@ import { sql } from "drizzle-orm";
 import { locations, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   PENDING_ADOPTION_FILE,
@@ -30,7 +29,7 @@ async function tempDir(): Promise<string> {
 const STANDBY_NODE_ID = "33333333-3333-4333-8333-333333333333";
 const PENDING: PendingAdoption = {
   locationId: "55555555-5555-4555-8555-555555555555",
-  standby: { nodeId: STANDBY_NODE_ID, publicKey: "pub", privateKey: "priv" },
+  standby: { nodeId: STANDBY_NODE_ID, publicKey: "pub" },
   nodeName: "standby",
   filingModule: "fiscal-verifactu",
   taxModule: null,
@@ -39,7 +38,6 @@ const PENDING: PendingAdoption = {
 };
 
 const dummyDb = {} as Database;
-const dummyRing = {} as KeyRing;
 const noop = (): void => {};
 
 describe("writePendingAdoption / readPendingAdoption", () => {
@@ -65,7 +63,6 @@ describe("runFinishAdoption", () => {
     let viewerCalls = 0;
     await runFinishAdoption({
       ownerDb: dummyDb,
-      ring: dummyRing,
       stateDir: dir,
       modules: [],
       establish: (args) => {
@@ -88,7 +85,6 @@ describe("runFinishAdoption", () => {
     let establishCalls = 0;
     await runFinishAdoption({
       ownerDb: dummyDb,
-      ring: dummyRing,
       stateDir: dir,
       modules: [],
       establish: () => {
@@ -108,7 +104,6 @@ describe("runFinishAdoption", () => {
     const events: string[] = [];
     await runFinishAdoption({
       ownerDb: dummyDb,
-      ring: dummyRing,
       stateDir: dir,
       modules: [],
       establish: () => Promise.reject(new Error("no tenant row yet")),
@@ -132,7 +127,6 @@ describe("runFinishAdoption", () => {
     const events: string[] = [];
     await runFinishAdoption({
       ownerDb: dummyDb,
-      ring: dummyRing,
       stateDir: dir,
       modules: [],
       establish: () => Promise.resolve(),
@@ -156,10 +150,6 @@ describe("runFinishAdoption — default steps on a migrated venue", () => {
   const suite = useVenueDb({
     migrations: migrationOptionsFor(manifestSets(), null),
     timeoutMs: 60_000,
-  });
-  const ring: KeyRing = loadKeyRing({
-    WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xd).toString("base64"),
-    WAITRON_CREDENTIALS_KEY_VERSION: "1",
   });
 
   it("establishes the standby's node and the mirror viewer, then clears the record", async () => {
@@ -187,7 +177,6 @@ describe("runFinishAdoption — default steps on a migrated venue", () => {
 
     await runFinishAdoption({
       ownerDb: suite.db,
-      ring,
       stateDir: dir,
       modules: [],
       log: ((level: string, event: string, fields: unknown) =>

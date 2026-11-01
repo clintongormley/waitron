@@ -1,5 +1,6 @@
-// SSRF guard for the `primaryUrl` the unauthenticated `POST /setup-api/adopt` fetches a mirror
-// bundle from. The policy:
+// SSRF guard for the `primaryUrl` of the two unauthenticated setup routes that send a request to
+// it: `POST /setup-api/primary-certificate` (the certificate read) and `POST /setup-api/adopt` (the
+// bundle request). The policy:
 //   1. only http and https;
 //   2. a private, link-local, CGNAT, metadata or 0.0.0.0/8 literal IP is refused over either scheme;
 //   3. a loopback host is allowed over either scheme;

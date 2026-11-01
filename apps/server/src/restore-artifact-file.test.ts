@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
@@ -93,6 +94,7 @@ async function artifact(f: Awaited<ReturnType<typeof fixture>>) {
   await suite.db.archiveTo(database);
   const manifest = await buildManifest({
     db: suite.db,
+    node: suite.node,
     modules: ALL_MODULES,
     environment: "preproduction",
     now: new Date("2026-10-06T00:00:00Z"),
@@ -100,6 +102,7 @@ async function artifact(f: Awaited<ReturnType<typeof fixture>>) {
   const entries = [
     { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
     { name: "db.dump", bytes: await readFile(database) },
+    await nodeDumpEntry(suite.node, f.root),
     {
       name: "secrets/trading.env",
       bytes: Buffer.from(`WAITRON_NODE_ID=${ids.node}\n`),
@@ -124,7 +127,7 @@ it("validates one protected database, owns cleanup and retains the encrypted sou
   const validated = await validateArtifactFile(f);
   expect((await stat(validated.databasePath)).mode & 0o777).toBe(0o600);
   expect((await stat(join(validated.databasePath, ".."))).mode & 0o777).toBe(0o700);
-  expect(await readdir(join(validated.databasePath, ".."))).toEqual(["venue.db"]);
+  expect(await readdir(join(validated.databasePath, ".."))).toEqual(["node.db", "venue.db"]);
   const opened = await openVenueDatabase(join(validated.databasePath, ".."));
   try {
     expect((await opened.venue.select().from(tenants))[0].legalName).toBe("File roundtrip");
@@ -199,6 +202,7 @@ it("roundtrips real SQLite and state through scheduled capture, local file stora
     ...f,
     stateDir: captureState,
     db: suite.db,
+    node: suite.node,
     backends: [backend],
     resolvers: {},
     retain: 3,

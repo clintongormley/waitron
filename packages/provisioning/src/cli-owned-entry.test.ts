@@ -91,7 +91,7 @@ it("with no network the built venue command explains, asks nothing and spends no
   await mkdir(target);
   const databases = await venue.db.execute<{ name: string; file: string }>("pragma database_list");
   const source = databases.rows.find((row) => row.name === "main")!.file;
-  for (const name of ["venue.db", "venue.db-wal"])
+  for (const name of ["venue.db", "venue.db-wal", "node.db", "node.db-wal"])
     await copyFile(join(dirname(source), name), join(target, name));
   const offline = join(directory!, "offline.mjs");
   await writeFile(
@@ -204,7 +204,7 @@ it.each([false, true])(
       "pragma database_list",
     );
     const source = databases.rows.find((row) => row.name === "main")!.file;
-    for (const name of ["venue.db", "venue.db-wal"])
+    for (const name of ["venue.db", "venue.db-wal", "node.db", "node.db-wal"])
       await copyFile(join(dirname(source), name), join(target, name));
     const preload = join(root, "preproduction-clock.mjs");
     const values = {
@@ -385,7 +385,7 @@ it("the built production command checks readiness and seals settings without sen
   await mkdir(stateDir);
   const databases = await venue.db.execute<{ name: string; file: string }>("pragma database_list");
   const source = databases.rows.find((row) => row.name === "main")!.file;
-  for (const name of ["venue.db", "venue.db-wal"])
+  for (const name of ["venue.db", "venue.db-wal", "node.db", "node.db-wal"])
     await copyFile(join(dirname(source), name), join(target, name));
   const preload = join(root, "clock.mjs");
   const certificate = {
@@ -415,7 +415,10 @@ it("the built production command checks readiness and seals settings without sen
   const selected = venueFiscalSelection(ALL_MODULES, "ES-common");
   const versions: Record<string, number> = {};
   for (const module of enabledModules(ALL_MODULES, selected.config))
-    versions[module.name] = await appliedSchemaVersion(venue.db, module.migrations);
+    versions[module.name] = await appliedSchemaVersion(
+      { venue: venue.db, node: venue.node },
+      module.migrations,
+    );
   const { createFiscalReadinessStore } = await import("./fiscal-readiness.js");
   const { fiscalReadinessInput } = await import("./fiscal-readiness-input.js");
   await createFiscalReadinessStore(
@@ -557,7 +560,7 @@ it("the built production command runs a confirmed isolated test and refuses acti
   await mkdir(stateDir);
   const databases = await venue.db.execute<{ name: string; file: string }>("pragma database_list");
   const source = databases.rows.find((row) => row.name === "main")!.file;
-  for (const name of ["venue.db", "venue.db-wal"])
+  for (const name of ["venue.db", "venue.db-wal", "node.db", "node.db-wal"])
     await copyFile(join(dirname(source), name), join(target, name));
   const preload = join(root, "clock.mjs");
   const certificate = {
@@ -587,7 +590,10 @@ it("the built production command runs a confirmed isolated test and refuses acti
   const selected = venueFiscalSelection(ALL_MODULES, "ES-common");
   const versions: Record<string, number> = {};
   for (const module of enabledModules(ALL_MODULES, selected.config))
-    versions[module.name] = await appliedSchemaVersion(venue.db, module.migrations);
+    versions[module.name] = await appliedSchemaVersion(
+      { venue: venue.db, node: venue.node },
+      module.migrations,
+    );
   const { fiscalReadinessInput } = await import("./fiscal-readiness-input.js");
   const readiness = fiscalReadinessInput({
     venue: {

@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
@@ -149,7 +150,7 @@ beforeAll(async () => {
     personId = person!.id;
   });
   await stampDeployment(suite.db, "preproduction");
-  nodeSecret = await mintBreakGlassSecret(suite.db, ids.node);
+  nodeSecret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, ids.node);
   await seedFiscalRecord(suite.db);
   for (const at of ["2026-10-01T09:00:00Z", "2026-10-01T13:00:00Z"]) {
     await suite.db.transaction((tx) =>
@@ -171,6 +172,7 @@ beforeAll(async () => {
   await suite.db.archiveTo(database);
   const manifest = await buildManifest({
     db: suite.db,
+    node: suite.node,
     modules: ALL_MODULES,
     environment: "preproduction",
     now: new Date("2026-10-01T03:00:00Z"),
@@ -179,6 +181,7 @@ beforeAll(async () => {
     packArchive([
       { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
       { name: "db.dump", bytes: await readFile(database) },
+      await nodeDumpEntry(suite.node, scratch),
       {
         name: "secrets/trading.env",
         bytes: Buffer.from(`WAITRON_NODE_ID=${ids.node}\n`),

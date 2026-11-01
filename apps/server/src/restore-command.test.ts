@@ -190,6 +190,7 @@ describe("waitron-restore restore", () => {
         name: "db.dump",
         bytes: Buffer.from("SQLite format 3\u0000 — never opened: the gate refuses first"),
       },
+      { name: "node.dump", bytes: Buffer.from("never opened either") },
     ];
     const artifactPath = join(dir, "backup.wrb");
     await writeFile(artifactPath, encryptArtifact(packArchive(entries), RECOVERY_KEY));
@@ -838,6 +839,7 @@ describe("waitron-restore restore <artifact>, the old server's bucket", () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-cli-archive-bucket-"));
     const file = join(await mkdtemp(join(tmpdir(), "waitron-cli-archive-db-")), "venue.db");
     await suite.db.archiveTo(file);
+    await suite.node.archiveTo(join(dirname(file), "node.db"));
     const copy = await openVenueDatabase(dirname(file));
     try {
       const ring = loadKeyRing({

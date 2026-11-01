@@ -15,8 +15,17 @@ import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { parseModuleConfig } from "@waitron/module";
 import { ALL_MODULES } from "@waitron/composition";
-import { loadKeyRing } from "@waitron/credentials";
-import { invoiceSeries, sales, saleLines, withTransaction, openVenueDatabase } from "@waitron/db";
+import { loadKeyRing, readNodeSigningKey, sealNodeSigningKeyTx } from "@waitron/credentials";
+import {
+  invoiceSeries,
+  openVenueDatabase,
+  readMembershipTrustSet,
+  sales,
+  saleLines,
+  withNodeTransaction,
+  withTransaction,
+} from "@waitron/db";
+import { generateNodeKeyPair } from "@waitron/membership";
 import { recordSale } from "@waitron/core";
 import { nodeId, seriesId } from "@waitron/shared";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -137,6 +146,7 @@ async function fixture() {
   const deps: SetupDeps = {
     environment: "preproduction",
     db: suite.db,
+    node: suite.node,
     ring,
     provision: async (req, beforeTransaction) => {
       activations++;
@@ -161,10 +171,14 @@ async function fixture() {
         interrupt = false;
         throw new Error("synthetic after commit");
       }
-      await establishNodeIdentity({ ownerDb: suite.db, ring }, nodeId);
+      await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, nodeId);
     },
     seedMembership: (nodeId) =>
-      seedTermZeroMembership({ db: suite.db, ring }, nodeId, "https://test.example"),
+      seedTermZeroMembership(
+        { db: suite.db, node: suite.node, ring },
+        nodeId,
+        "https://test.example",
+      ),
     persistTrading: async () => {
       publications++;
     },
@@ -262,6 +276,29 @@ it("exact hour Finish publishes after password recovery without register consult
       register: null,
     },
   ]);
+});
+
+it("a setup interrupted after the key was sealed and before it was stamped stamps it on the next run, and the stamped key matches", async () => {
+  const f = await fixture();
+  const ring = f.deps.ring!;
+  const sealed = generateNodeKeyPair();
+  f.deps.establishIdentity = async (nodeId) => {
+    f.deps.establishIdentity = (id) =>
+      establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, id);
+    await withNodeTransaction(suite.node, (tx) =>
+      sealNodeSigningKeyTx(tx, ring, nodeId, sealed.privateKey),
+    );
+    throw new Error("synthetic after seal");
+  };
+  await expect(f.activate()).rejects.toThrow("synthetic after seal");
+  await f.recover();
+  const nodeId = f.owner().nodeId!;
+  expect((await readMembershipTrustSet(suite.db))[nodeId]).toBeUndefined();
+
+  await expect(f.finish()).resolves.toMatchObject({ nodeId });
+
+  expect((await readMembershipTrustSet(suite.db))[nodeId]).toBe(sealed.publicKey);
+  expect(await readNodeSigningKey(suite.node, ring, nodeId)).toBe(sealed.privateKey);
 });
 
 it("empty never-activated hour restart deletes the attempt and burns the entire hour on every base", async () => {
@@ -708,6 +745,7 @@ it("real HTTPS resolution boot finishes the retained hour database without docum
   const f = await fixture();
   await expect(f.activate()).rejects.toThrow("synthetic after commit");
   await suite.db.archiveTo(join(f.venueDir, "venue.db"));
+  await suite.node.archiveTo(join(f.venueDir, "node.db"));
   await ensureBoxSecrets({
     stateDir: f.stateDir,
     hostnames: ["localhost", "waitron.local"],
@@ -809,6 +847,7 @@ it("real HTTPS hour Finish survives a discarded answer and two trading boots wit
   const f = await fixture();
   await expect(f.activate()).rejects.toThrow("synthetic after commit");
   await suite.db.archiveTo(join(f.venueDir, "venue.db"));
+  await suite.node.archiveTo(join(f.venueDir, "node.db"));
   await ensureBoxSecrets({
     stateDir: f.stateDir,
     hostnames: ["localhost", "waitron.local"],

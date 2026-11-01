@@ -34,7 +34,11 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu/src/backend.js";
 import { makeAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { buildManifest } from "../backup-manifest.js";
-import { assembleArchiveEntries, collectStateParts } from "../archive-entries.js";
+import {
+  assembleArchiveEntries,
+  collectStateParts,
+  snapshotNodeDatabase,
+} from "../archive-entries.js";
 import { packArchive, type ArchiveEntry } from "../backup-archive.js";
 import { encryptArtifactAsync } from "../artifact-cipher.js";
 import { buildBackupVerificationTarget } from "../backup-verification-target.js";
@@ -323,6 +327,7 @@ export function useBackupVerificationFixture() {
     await suite.db.archiveTo(databasePath);
     const manifest = await buildManifest({
       db: suite.db,
+      node: suite.node,
       modules: ALL_MODULES,
       environment: "production",
       now: new Date(verificationTime),
@@ -330,7 +335,13 @@ export function useBackupVerificationFixture() {
     const entries = assembleArchiveEntries(
       manifest,
       await readFile(databasePath),
-      await collectStateParts({ stateDir, venueDir: root, modules: ALL_MODULES, resolvers: {} }),
+      await collectStateParts({
+        stateDir,
+        venueDir: root,
+        modules: ALL_MODULES,
+        resolvers: {},
+        snapshotNode: snapshotNodeDatabase(suite.node, join(root, "node-copy")),
+      }),
     );
     const target = buildBackupVerificationTarget({
       modules: ALL_MODULES,
@@ -411,6 +422,7 @@ export function useBackupVerificationFixture() {
       logical: logicalDatabase(databasePath),
       corrupt,
       db: suite.db,
+      node: suite.node,
     };
   }
   return { create };

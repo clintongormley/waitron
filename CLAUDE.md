@@ -92,7 +92,7 @@ it reads each config's `thresholds` literal as TEXT and never reads an exclude o
 More: [ci-and-gates.md](docs/developers/ci-and-gates.md).
 
 **A mutation floor of 90 breaks the run in every mutation-tested package — `ui`, `ui-core`,
-`shared`, `fiscal` and `db`** (the owner's 90-everywhere decision of 2026-09-19). WHERE it bites
+`shared`, `fiscal`, `db` and `node-db`** (the owner's 90-everywhere decision of 2026-09-19). WHERE it bites
 differs — on a pull request, only in the nightly run, or only locally — and neither `fiscal`'s nor
 `db`'s floor is package-wide. Guard: `scripts/mutation-break-thresholds.test.mjs`, weaker than its
 name — it reads the workflow as TEXT for the sharded packages' bars (db, ui and ui-core). Which
@@ -443,6 +443,11 @@ called weaker than its name, the topic file lists what it does not see.
   taking turns through `inTurn`. **Splitting one logical change across transactions is a commented
   decision, never a default.** **Await queries on one transaction in turn, never `Promise.all`.**
   No guard enforces this convention.
+- **Across `venue.db` and `node.db`, take `node.db`'s write lock outside `venue.db`'s; save
+  `venue.db` first and `node.db` after, so a re-run repairs `node.db` (a signing key is the stated
+  exception); write `node.db` through `withNodeTransaction`, since `withTransaction` refuses the node
+  handle at compile time.** The two files have independent write queues. Nothing guards the first
+  two. [Rules and sites](docs/developers/conventions-data.md#a-local-row-belongs-to-one-node-so-no-foreign-key-may-join-a-local-table-to-a-ledgerstate-one).
 - **Housekeeping writes must not take reads down on a full disk.** Last-seen stamps give way;
   reads that must answer while a change waits use `withWriteLock` turns without draining, a stated
   exception to one transaction per route. Guard: `apps/server/src/start-full-disk.e2e.test.ts`,
@@ -529,9 +534,8 @@ called weaker than its name, the topic file lists what it does not see.
   the refusal moved to. Guard: `scripts/two-file-foreign-keys.test.ts`, weaker than its name — it
   reads drizzle's generated snapshots, not hand-written SQL.
 - **A `local` table says what ties a row to its node** — a `node_id` column that every read and
-  write names, a seal only that node's key opens, or rows the transaction that wrote them deletes.
-  A node holding another node's copy of `venue.db` must read its own rows or none. No guard makes a
-  new `local` table say which.
+  write names, a seal only a box holding the key ring opens, or rows the transaction that wrote
+  them deletes. No guard makes a new `local` table say which.
 - **Store anything that works as a live login as a hash.** Guards: database-copy cases in
   `apps/server/src/me-api.test.ts`, `apps/server/src/till-api.test.ts` and the stored-hash case in
   `packages/identity/src/management-session.test.ts`, weaker than the rule: limited credentials,

@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { MigrationOptions } from "@waitron/db";
+import type { MigrationDatabase, MigrationOptions } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import manifest from "../migrations.manifest.json" with { type: "json" };
 import "./errors.js";
@@ -24,6 +24,8 @@ const MANIFEST_DIR = dirname(fileURLToPath(import.meta.url));
  */
 export interface VenueMigrationOptions extends MigrationOptions {
   readonly appendOnlyTables?: readonly string[];
+  /** Which of the node's two files the set is applied to. Absent means `venue.db`. */
+  readonly database?: MigrationDatabase;
 }
 
 /**
@@ -35,6 +37,8 @@ export interface MigrationSetSource {
   table: string;
   /** Source folder, relative to this package — used when running from source (tests, dev). */
   from: string;
+  /** Which of the node's two files the set is applied to. Absent means `venue.db`. */
+  database?: MigrationDatabase;
 }
 
 export interface MigrationSet extends MigrationSetSource {
@@ -117,6 +121,11 @@ export function migrationOptionsFor(
 ): VenueMigrationOptions[] {
   return sets.map((set) => {
     const migrationsFolder = resolveExistingMigrationsFolder(set, root);
-    return { migrationsFolder, migrationsTable: set.table, appendOnlyTables: set.appendOnlyTables };
+    return {
+      migrationsFolder,
+      migrationsTable: set.table,
+      appendOnlyTables: set.appendOnlyTables,
+      ...(set.database === undefined ? {} : { database: set.database }),
+    };
   });
 }

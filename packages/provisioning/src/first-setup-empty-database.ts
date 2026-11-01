@@ -30,6 +30,8 @@ export async function firstSetupDatabaseIsEmpty(
     const options = migrationOptionsFor(sets, migrationsRoot);
     const accounted = new Set<string>();
     for (const [index, set] of sets.entries()) {
+      // A node.db set's tables are never accounted for here, so one found in venue.db refuses.
+      if (set.database === "node") continue;
       const folder = options[index]!.migrationsFolder;
       const journal = JSON.parse(await readFile(join(folder, "meta/_journal.json"), "utf8")) as {
         entries: { idx: number }[];

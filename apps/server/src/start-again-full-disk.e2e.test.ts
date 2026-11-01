@@ -185,9 +185,9 @@ it("a recovery whose placement fills the disk stops, and Start again on the same
     spareOption(f.roots),
   );
   if (entry.kind !== "resolution") throw new Error("repair app missing");
-  // With 64 KiB left the refusal came before the placement was recorded, and the recovery still
-  // counted as running; 128 KiB lets the placement begin and fail.
-  small.fill(128 * 1024);
+  // With 128 KiB left, the recheck's opening of the staged copy fails (SQLite error 4874) before
+  // the placement is recorded; 256 KiB lets the placement begin and fail.
+  small.fill(256 * 1024);
 
   await expect(
     f.service.commit(f.session.sessionId, f.selected.input, { onBox: false }),

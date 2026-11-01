@@ -1,5 +1,7 @@
 > **Later A950 authority, 29 October 2026:** the owner approved its [implementation plan](2026-10-29-a950-automatic-upgrades.md), option A. The earlier pending-plan note below is superseded. The newer/unknown/damaged-floor and fiscal boundaries remain.
 
+> **A947 slice 3a, 1 November 2026:** `node.db` is no longer empty: a box's role, recovery-key check, signing key, main-box link and pinned main-box key now live there, and `node_roles` and `mirror_config` are gone, so this plan's statements about where those live, and that `node.db` has no tables, describe the tree before it ([slice 3a plan](2026-10-31-a947-3a-node-db.md)).
+
 # A1042: "Start again" keeps one small note, not an archive — implementation plan
 
 > **A950 pointer, 29 October 2026:** use the [approved A950 design](../specs/2026-10-27-a950-automatic-upgrades-design.md)

@@ -333,9 +333,12 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
         ),
         { db: seeding.venue, modules: ALL_MODULES },
       );
-      await establishNodeIdentity({ ownerDb: seeding.venue, ring }, venue.nodeId);
+      await establishNodeIdentity(
+        { ownerDb: seeding.venue, node: seeding.node, ring },
+        venue.nodeId,
+      );
       await seedTermZeroMembership(
-        { db: seeding.venue, ring },
+        { db: seeding.venue, node: seeding.node, ring },
         venue.nodeId,
         `https://127.0.0.1:${port}`,
       );

@@ -1,6 +1,8 @@
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { nodeDumpEntry } from "./testing/node-copy.js";
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import {
@@ -12,6 +14,7 @@ import {
   stampDeployment,
   tenants,
 } from "@waitron/db";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   readOperationAuthority,
@@ -31,7 +34,9 @@ import { restoreFromArtifactFile, writeValidated, type PlacementDeps } from "./r
 import { encryptArtifact } from "./artifact-cipher.js";
 import { packArchive } from "./backup-archive.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
+});
 const NODE = "d0000000-0000-4000-8000-000000000001";
 const LOCATION = "d0000000-0000-4000-8000-000000000002";
 const binding = {
@@ -61,7 +66,7 @@ beforeEach(async () => {
     { nodeId: NODE, code: "FF", purpose: "full" },
     { nodeId: NODE, code: "R", purpose: "rectificative" },
   ]);
-  nodeKey = await mintBreakGlassSecret(suite.db, NODE);
+  nodeKey = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
 });
 afterEach(async () => {
   for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
@@ -76,6 +81,7 @@ async function fixture(module: WaitronModule) {
   await suite.db.archiveTo(databasePath);
   const validated = {
     databasePath,
+    nodeDump: (await nodeDumpEntry(suite.node, root)).bytes,
     discard: async () => {},
     manifest: {
       manifestVersion: 1 as const,
@@ -99,9 +105,12 @@ async function fixture(module: WaitronModule) {
     environment: "preproduction",
     migrate: async () => {},
     log: () => {},
-    withModuleOperations: ({ db, node }, run) =>
-      withRecoveryKeyOperation({ db, nodeId: node.nodeId }, binding, nodeKey, (tx, authority) =>
-        run(tx, new Map([[binding.module, { input, binding, authority }]])),
+    withModuleOperations: ({ db, nodeDb, node }, run) =>
+      withRecoveryKeyOperation(
+        { db, node: nodeDb, nodeId: node.nodeId },
+        binding,
+        nodeKey,
+        (tx, authority) => run(tx, new Map([[binding.module, { input, binding, authority }]])),
       ),
   };
   return { validated, deps };
@@ -155,6 +164,7 @@ it("admits an existing resumed database and preserves its rows instead of replac
   });
   await mkdir(f.deps.venueDir);
   await copyFile(f.validated.databasePath, join(f.deps.venueDir, "venue.db"));
+  await writeFile(join(f.deps.venueDir, "node.db"), f.validated.nodeDump);
   const placed = await openVenueDatabase(f.deps.venueDir);
   try {
     await placed.venue.update(locations).set({ name: "Already placed" });
@@ -214,6 +224,35 @@ it("authenticates against the placed database and keeps the scoped authority ali
   expect(await readFile(join(f.deps.stateDir, "trading.env"), "utf8")).toContain(NODE);
 });
 
+it("the admission check's folder holds the backup's node copy, not an empty node.db", async () => {
+  await suite.node.run(sql`create table backup_marker (v text)`);
+  try {
+    await suite.node.run(sql`insert into backup_marker values ('backup')`);
+    const f = await fixture(regime(async () => ({ report: "restored" })));
+    let seen: unknown[] | undefined;
+    f.deps.withModuleOperations!.checkBeforePlacement = async () => {
+      const [admission] = (await readdir(f.deps.stagingDir)).filter((name) =>
+        name.startsWith("restore-admission-"),
+      );
+      const copy = new DatabaseSync(join(f.deps.stagingDir, admission!, "node.db"), {
+        readOnly: true,
+      });
+      try {
+        seen = copy
+          .prepare("select v from backup_marker")
+          .all()
+          .map((row) => row.v);
+      } finally {
+        copy.close();
+      }
+    };
+    await writeValidated(f.validated, f.deps);
+    expect(seen).toEqual(["backup"]);
+  } finally {
+    await suite.node.run(sql`drop table backup_marker`);
+  }
+});
+
 it("refuses a wrong node key before hooks or restored identity are published", async () => {
   let entered = false;
   const f = await fixture(
@@ -234,10 +273,10 @@ it("refuses a wrong node key before hooks or restored identity are published", a
 
 it("identifies the chosen backup's paper key before authentication can refuse it", async () => {
   const f = await fixture(regime(async () => ({ report: "restored" })));
-  const archivedName = await suite.db.execute<Record<string, unknown>>(
-    sql`select * from node_roles where node_id = ${NODE}`,
+  const archivedName = await suite.node.execute<Record<string, unknown>>(
+    sql`select * from node_recovery_key where node_id = ${NODE}`,
   );
-  await mintBreakGlassSecret(suite.db, NODE);
+  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
   const entries: { code: string; params: Record<string, unknown> | undefined }[] = [];
   f.deps = {
     ...f.deps,
@@ -251,7 +290,7 @@ it("identifies the chosen backup's paper key before authentication can refuse it
   });
   expect(entries).toContainEqual({
     code: "restore.recovery_key_selected",
-    params: { name: archivedName.rows[0]!.break_glass_key_name },
+    params: { name: archivedName.rows[0]!.key_name },
   });
   expect(JSON.stringify(entries)).not.toContain(nodeKey);
 });
@@ -278,9 +317,9 @@ it("rolls authentication and earlier hook writes back together when a later modu
         },
       },
     ],
-    withModuleOperations: ({ db, node }, run) =>
+    withModuleOperations: ({ db, nodeDb, node }, run) =>
       withRecoveryKeyOperation(
-        { db, nodeId: node.nodeId },
+        { db, node: nodeDb, nodeId: node.nodeId },
         binding,
         nodeKey,
         async (tx, authority) => {
@@ -338,13 +377,18 @@ it("snapshots operation inputs issued by the host before an earlier restore hook
   await expect(
     writeValidated(f.validated, {
       ...f.deps,
-      withModuleOperations: ({ db, node }, run) =>
-        withRecoveryKeyOperation({ db, nodeId: node.nodeId }, binding, nodeKey, (tx, authority) => {
-          const operations = new Map([
-            [binding.module, { input, binding: suppliedBinding, authority }],
-          ]);
-          return run(tx, operations);
-        }),
+      withModuleOperations: ({ db, nodeDb, node }, run) =>
+        withRecoveryKeyOperation(
+          { db, node: nodeDb, nodeId: node.nodeId },
+          binding,
+          nodeKey,
+          (tx, authority) => {
+            const operations = new Map([
+              [binding.module, { input, binding: suppliedBinding, authority }],
+            ]);
+            return run(tx, operations);
+          },
+        ),
       modules: [
         {
           ...fakeModule("earlier"),
@@ -389,7 +433,10 @@ it.each(["archive", "stream"] as const)(
         : {
             kind: "stream",
             databasePath: f.validated.databasePath,
-            entries: f.validated.secretEntries,
+            entries: [
+              { name: "node.dump", bytes: f.validated.nodeDump },
+              ...f.validated.secretEntries,
+            ],
             environment: "preproduction",
           },
     );
@@ -496,6 +543,7 @@ it("carries the runner through real stream validation and placement", async () =
     databasePath: f.validated.databasePath,
     entries: [
       { name: "manifest.json", bytes: Buffer.from(JSON.stringify(f.validated.manifest)) },
+      { name: "node.dump", bytes: f.validated.nodeDump },
       ...f.validated.secretEntries,
     ],
   });
@@ -523,6 +571,7 @@ it("carries the runner through encrypted file validation and placement with a se
       packArchive([
         { name: "manifest.json", bytes: Buffer.from(JSON.stringify(f.validated.manifest)) },
         { name: "db.dump", bytes: await readFile(f.validated.databasePath) },
+        await nodeDumpEntry(suite.node, dirname(f.validated.databasePath)),
         ...f.validated.secretEntries,
       ]),
       recoveryKey,

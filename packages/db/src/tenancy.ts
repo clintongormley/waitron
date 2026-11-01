@@ -1,5 +1,5 @@
 import type { ResourceChange } from "@waitron/shared";
-import type { Database, Transaction } from "./client.js";
+import type { Database, NodeDatabase, NodeTransaction, Transaction } from "./client.js";
 import { deliverChanges, drainChangeLog } from "./change-log.js";
 
 /**
@@ -28,7 +28,7 @@ import { deliverChanges, drainChangeLog } from "./change-log.js";
  * wrote.
  */
 export async function withTransaction<T>(
-  db: Database,
+  db: Database & { readonly __file?: never },
   fn: (tx: Transaction) => Promise<T> | T,
 ): Promise<T> {
   let pending: readonly ResourceChange[] = [];
@@ -39,4 +39,15 @@ export async function withTransaction<T>(
   });
   deliverChanges(pending);
   return result;
+}
+
+/**
+ * One transaction on `node.db`: its own write lock, with no change-log drain and no change delivery,
+ * because `node.db` has no `change_log` and nothing listens for its changes.
+ */
+export async function withNodeTransaction<T>(
+  node: NodeDatabase,
+  fn: (tx: NodeTransaction) => Promise<T> | T,
+): Promise<T> {
+  return node.withWriteLock(async () => fn(node));
 }

@@ -1422,6 +1422,13 @@
       "when": 1793410696153,
       "tag": "0202_retire_main_bill",
       "breakpoints": true
+    },
+    {
+      "idx": 203,
+      "version": "6",
+      "when": 1793522604460,
+      "tag": "0203_node_tables_leave",
+      "breakpoints": true
     }
   ]
 }

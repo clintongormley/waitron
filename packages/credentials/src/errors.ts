@@ -35,6 +35,12 @@ declare module "@waitron/shared" {
     "credentials.decrypt_failed": { purpose: string };
     /** The row decrypted, but the plaintext is not a JSON object. Never carries the plaintext. */
     "credentials.malformed_payload": { purpose: string };
+    /**
+     * Establishing the box's signing key found `nodes.public_key` naming a different key from the
+     * one this box holds in `node.db`. Only a fault in Waitron produces it, so screens show their
+     * generic text.
+     */
+    "node.identity_mismatch": Record<string, never>;
     /** No row for this purpose. Not provisioned. */
     "credentials.missing": { purpose: string };
     /** Not a purpose this package knows. `known` lets a CLI print the legal set. */

@@ -9,12 +9,11 @@ import {
   locations,
   nodes,
   sales,
-  setDeploymentMode,
   stampDeployment,
   tenants,
   withTransaction,
-  writeMirrorConfig,
 } from "@waitron/db";
+import { setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { stringToCents } from "@waitron/shared";
@@ -105,12 +104,13 @@ async function environment(ownNode: boolean, pending = false) {
   );
   const destination = join(venue, "venue.db");
   await source.db.execute(sql`vacuum into ${destination}`);
+  await source.node.execute(sql`vacuum into ${join(venue, "node.db")}`);
   if (pending) {
     await writeFile(
       join(state, "pending-adoption.json"),
       JSON.stringify({
         locationId: LOCATION,
-        standby: { nodeId: NODE, publicKey: "pub", privateKey: "priv" },
+        standby: { nodeId: NODE, publicKey: "pub" },
         nodeName: "standby",
         filingModule: "fiscal-none",
         taxModule: null,
@@ -334,8 +334,8 @@ it.each(["mirror", "primary"] as const)(
     );
     await stampDeployment(source.db, "preproduction");
     if (mode === "mirror") {
-      await setDeploymentMode(source.db, NODE, "mirror");
-      await writeMirrorConfig(source.db, NODE, {
+      await setNodeMode({ venue: source.db, node: source.node }, NODE, "mirror");
+      await writeMirrorLink(source.node, NODE, {
         relayUrl: "http://127.0.0.1:1/",
         boxHostname: "origin-box.local",
         boxCaPem: mintSelfSignedServerCert({

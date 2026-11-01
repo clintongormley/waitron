@@ -125,7 +125,7 @@ async function configurationArtifact() {
     { ...created, sourceOperatorId: (await source.db.select().from(persons))[0]!.id },
     selected,
     new Date("2026-10-15T12:00:00Z"),
-    await schemaVersionsByModule(source.db, selected),
+    await schemaVersionsByModule({ venue: source.db, node: source.node }, selected),
   );
   return encodeConfigurationBundle(bundle, "synthetic import passphrase");
 }

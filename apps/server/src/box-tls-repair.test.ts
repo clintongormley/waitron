@@ -6,7 +6,7 @@ import { createSecureContext } from "node:tls";
 import forge from "node-forge";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
-import { inspectBoxTls, repairBoxTls } from "./box-tls-repair.js";
+import { inspectBoxTls, readBoxCaFingerprint, repairBoxTls } from "./box-tls-repair.js";
 import { ensureBoxSecrets, reissueBoxLeaf } from "./box-secrets.js";
 
 const faults = vi.hoisted(() => ({ rename: vi.fn(), open: vi.fn() }));
@@ -88,6 +88,18 @@ async function validInstalled(stateDir: string, ca = material.caCertPem) {
   expect(Date.parse(leaf.validTo)).toBeGreaterThan(now.getTime());
   expect(() => createSecureContext({ key: keyPem, cert: leafPem })).not.toThrow();
 }
+
+it("reads the same authority fingerprint the connection page shows, and none without a usable authority", async () => {
+  const f = await fixture();
+  const shown = (await inspectBoxTls(f)).fingerprint;
+  expect(shown).toBe(new X509Certificate(material.caCertPem).fingerprint256);
+  expect(await readBoxCaFingerprint(f.stateDir, now)).toBe(shown);
+
+  await writeFile(join(f.stateDir, "tls", "ca.crt"), "not a certificate");
+  expect(await readBoxCaFingerprint(f.stateDir, now)).toBeNull();
+  await rm(join(f.stateDir, "tls", "ca.crt"));
+  expect(await readBoxCaFingerprint(f.stateDir, now)).toBeNull();
+});
 
 it("preserves a usable CA and every old byte when the server key is lost", async () => {
   const f = await fixture();

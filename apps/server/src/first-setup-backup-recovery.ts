@@ -1,18 +1,18 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { copyFile, lstat, mkdtemp, readdir, rm } from "node:fs/promises";
+import { lstat, mkdtemp, readdir, rm } from "node:fs/promises";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import {
   openVenueDatabase,
-  readBreakGlassVerifier,
-  readBreakGlassKeyName,
   withTransaction,
   lockVenueDatabase,
   type Database,
+  type NodeDatabase,
 } from "@waitron/db";
+import { readRecoveryKey, readRecoveryKeyVerifier } from "@waitron/node-db";
 import type { OperationBinding, OperationClient, WaitronModule } from "@waitron/module";
 import {
   assertNoStartAgainDeletion,
@@ -28,6 +28,7 @@ import {
   createFirstSetupBackupWorkspace,
 } from "@waitron/provisioning";
 import { AppError, isAppError } from "@waitron/shared";
+import { NODE_FILE } from "@waitron/store";
 import type { DeploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
 import { createCloudRecoveryClient, type CloudRecoveryOptions } from "./cloud-recovery.js";
@@ -40,8 +41,12 @@ import {
 } from "./first-setup-backup-source.js";
 import type { RecoveryBackupPreview } from "./recovery-backup-preview.js";
 import {
+  assertStagedNodeCopy,
+  copyStagedCopy,
+  openStagedCopy,
   readArtifactNode,
   resolveArtifactNode,
+  writeStagedNodeCopy,
   writeValidated,
   restoreFromArtifact,
 } from "./restore.js";
@@ -124,7 +129,12 @@ function ownerRequired(): never {
 async function fingerprint(selected: Selected): Promise<string> {
   const hash = createHash("sha256");
   for await (const bytes of createReadStream(selected.copy.databasePath)) hash.update(bytes);
+  assertStagedNodeCopy(dirname(selected.copy.databasePath));
+  for await (const bytes of createReadStream(join(dirname(selected.copy.databasePath), NODE_FILE)))
+    hash.update(bytes);
   hash.update(JSON.stringify([selected.sourceId, selected.copy.sourceId, selected.copy.manifest]));
+  hash.update(JSON.stringify(["node.dump", selected.copy.nodeDump.byteLength]));
+  hash.update(selected.copy.nodeDump);
   for (const entry of selected.copy.secretEntries) {
     hash.update(JSON.stringify([entry.name, entry.bytes.byteLength]));
     hash.update(entry.bytes);
@@ -133,9 +143,9 @@ async function fingerprint(selected: Selected): Promise<string> {
 }
 async function verifier(selected: Selected): Promise<string | null> {
   const node = await readArtifactNode(selected.copy);
-  const db = await openVenueDatabase(dirname(selected.copy.databasePath));
+  const db = await openStagedCopy(dirname(selected.copy.databasePath));
   try {
-    return await readBreakGlassVerifier(db.venue, node.nodeId);
+    return await readRecoveryKeyVerifier(db.node, node.nodeId);
   } finally {
     await db.close();
   }
@@ -406,7 +416,12 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       assertSnapshotRecoveryTarget(snapshot.verification, currentBackupVerificationTarget());
     }
   };
-  const scopes = new AsyncLocalStorage<{ hold: FirstSetupHold; db: Database; placing?: true }>();
+  const scopes = new AsyncLocalStorage<{
+    hold: FirstSetupHold;
+    db: Database;
+    nodeDb: NodeDatabase;
+    placing?: true;
+  }>();
   let expiry: NodeJS.Timeout | undefined;
   const drop = async () => {
     const old = active;
@@ -646,8 +661,10 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       const directory = await mkdtemp(
         join(dirname(entry.selected.copy.databasePath), "preparation-"),
       );
-      await copyFile(entry.selected.copy.databasePath, join(directory, "venue.db"));
-      const copy = { ...entry.selected.copy, databasePath: join(directory, "venue.db") };
+      const copy = {
+        ...entry.selected.copy,
+        databasePath: await copyStagedCopy(entry.selected.copy, directory),
+      };
       await readRecoveryCopyPreview(copy, entry.selected.sourceId, options.sources);
       entry.working = directory;
     }
@@ -670,6 +687,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       secret: entry.request.nodeRecoverySecret,
       selected: entry.session.preview,
       database: () => scopes.getStore()?.db ?? ownerRequired(),
+      nodeDatabase: () => scopes.getStore()?.nodeDb ?? ownerRequired(),
       readRecoveryFacts: async (binding, db) => {
         await recheck(entry);
         if (entry.sourceReopened && scopes.getStore()?.placing !== true)
@@ -1075,6 +1093,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
               stagingDir: join(scratch, "staging"),
             },
           );
+          await writeStagedNodeCopy(selected.copy.databasePath, selected.copy.nodeDump);
           const node = await readArtifactNode(selected.copy);
           const assertCommitted = options.modules.find(
             (module) => module.name === before.record.binding.module,
@@ -1118,7 +1137,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             !isDeepStrictEqual(proved.taxpayer, selected.preview.taxpayer)
           )
             conflict();
-          const database = await openVenueDatabase(scratch);
+          const database = await openStagedCopy(scratch);
           try {
             await withTransaction(database.venue, (tx) =>
               assertCommitted(tx, node, before.record.binding),
@@ -1150,7 +1169,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             await existingTarget(before.record);
             const target = await openVenueDatabase(before.record.target.target.venueDir);
             try {
-              if ((await readBreakGlassVerifier(target.venue, node.nodeId)) !== provedVerifier)
+              if ((await readRecoveryKeyVerifier(target.node, node.nodeId)) !== provedVerifier)
                 conflict();
               await withTransaction(target.venue, (tx) =>
                 assertCommitted(tx, node, before.record.binding),
@@ -1231,7 +1250,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
           const service = await preparation(entry);
           const store = await openVenueDatabase(entry.working!);
           try {
-            const result = await scopes.run({ hold, db: store.venue }, () =>
+            const result = await scopes.run({ hold, db: store.venue, nodeDb: store.node }, () =>
               service.prepare(proposal, client),
             );
             await recheck(entry);
@@ -1335,13 +1354,10 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             await existingTarget(entry.record);
             const current = await openVenueDatabase(target.venueDir);
             try {
+              const key = await readRecoveryKey(current.node, entry.session.binding.targetNodeId);
               if (
-                (await readBreakGlassVerifier(
-                  current.venue,
-                  entry.session.binding.targetNodeId,
-                )) !== entry.provedVerifier ||
-                (await readBreakGlassKeyName(current.venue, entry.session.binding.targetNodeId)) !==
-                  entry.session.preview.nodeRecoveryKeyName
+                (key?.verifier ?? null) !== entry.provedVerifier ||
+                (key?.keyName ?? null) !== entry.session.preview.nodeRecoveryKeyName
               )
                 conflict();
               await withTransaction(current.venue, async (tx) =>
@@ -1358,78 +1374,81 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
           }
           const store = await openVenueDatabase(entry.working!);
           try {
-            await scopes.run({ hold, db: store.venue, placing: true }, async () => {
-              const runner = entry.preparation!.runner(
-                input,
-                entry.resumed ? undefined : { refresh: true },
-              );
-              const check = runner.checkBeforePlacement;
-              runner.checkBeforePlacement = async (context) => {
-                if (!entry.resumed) await emptyTarget(entry.record!, entry.cloudState);
-                await check?.(context);
-              };
-              const placement = {
-                ...target,
-                stagingDir: dirname(entry.selected.copy.databasePath),
-                modules: options.modules,
-                migrationsRoot: options.sources.migrationsRoot,
-                environment: options.environment,
-                log: options.log,
-                rebuildSource: entry.rebuildSource,
-                withModuleOperations: runner,
-                ...(entry.resumed ? { resumeOperation: entry.session.binding } : {}),
-              };
-              if (entry.cloudState !== undefined && !entry.resumed) {
-                const cloud = await cloudFor(entry.session.recoveryId);
-                await cloud.client.restore(async (request) => {
-                  if (!isDeepStrictEqual(request, entry.selected.cloudRequest)) conflict();
-                  await recheck(entry);
-                  await saveCloud(entry, target.stateDir);
-                  const checkTarget = runner.checkBeforePlacement;
-                  runner.checkBeforePlacement = async (context) => {
-                    await saveCloud(entry, target.stateDir);
-                    await checkTarget?.(context);
-                  };
-                  await restoreFromArtifact({
-                    ...placement,
-                    ...request,
-                    snapshotRequestKey: entry.cloudState!.publicKey,
-                  });
-                }, entry.cloudState.pointId!);
-                entry.cloudState = { ...entry.cloudState, phase: "staged" };
-              } else if (entry.cloudState === undefined)
-                await writeValidated(entry.selected.copy, placement);
-              if (entry.cloudState !== undefined) {
-                const cloud = await cloudFor(entry.session.recoveryId);
-                await cloud.client.reconcileRestored(
-                  { requestId: entry.cloudState.requestId, pointId: entry.cloudState.pointId! },
-                  async () => {
-                    await admitCloud(entry);
-                    if (entry.resumed) {
-                      await evidence(entry, false, true);
-                      await writeValidated(entry.selected.copy, placement);
-                    }
-                    const db = await openVenueDatabase(target.venueDir);
-                    try {
-                      await withTransaction(db.venue, async (tx) =>
-                        assertCommitted(
-                          tx,
-                          await resolveArtifactNode(tx, entry.selected.copy.secretEntries),
-                          entry.session.binding,
-                        ),
-                      );
-                    } finally {
-                      await db.close();
-                    }
-                  },
+            await scopes.run(
+              { hold, db: store.venue, nodeDb: store.node, placing: true },
+              async () => {
+                const runner = entry.preparation!.runner(
+                  input,
+                  entry.resumed ? undefined : { refresh: true },
                 );
-                entry.cloudState = {
-                  ...entry.cloudState,
-                  phase: entry.cloudState.phase === "reported" ? "reported" : "restored",
+                const check = runner.checkBeforePlacement;
+                runner.checkBeforePlacement = async (context) => {
+                  if (!entry.resumed) await emptyTarget(entry.record!, entry.cloudState);
+                  await check?.(context);
                 };
-                await saveCloud(entry, target.stateDir);
-              }
-            });
+                const placement = {
+                  ...target,
+                  stagingDir: dirname(entry.selected.copy.databasePath),
+                  modules: options.modules,
+                  migrationsRoot: options.sources.migrationsRoot,
+                  environment: options.environment,
+                  log: options.log,
+                  rebuildSource: entry.rebuildSource,
+                  withModuleOperations: runner,
+                  ...(entry.resumed ? { resumeOperation: entry.session.binding } : {}),
+                };
+                if (entry.cloudState !== undefined && !entry.resumed) {
+                  const cloud = await cloudFor(entry.session.recoveryId);
+                  await cloud.client.restore(async (request) => {
+                    if (!isDeepStrictEqual(request, entry.selected.cloudRequest)) conflict();
+                    await recheck(entry);
+                    await saveCloud(entry, target.stateDir);
+                    const checkTarget = runner.checkBeforePlacement;
+                    runner.checkBeforePlacement = async (context) => {
+                      await saveCloud(entry, target.stateDir);
+                      await checkTarget?.(context);
+                    };
+                    await restoreFromArtifact({
+                      ...placement,
+                      ...request,
+                      snapshotRequestKey: entry.cloudState!.publicKey,
+                    });
+                  }, entry.cloudState.pointId!);
+                  entry.cloudState = { ...entry.cloudState, phase: "staged" };
+                } else if (entry.cloudState === undefined)
+                  await writeValidated(entry.selected.copy, placement);
+                if (entry.cloudState !== undefined) {
+                  const cloud = await cloudFor(entry.session.recoveryId);
+                  await cloud.client.reconcileRestored(
+                    { requestId: entry.cloudState.requestId, pointId: entry.cloudState.pointId! },
+                    async () => {
+                      await admitCloud(entry);
+                      if (entry.resumed) {
+                        await evidence(entry, false, true);
+                        await writeValidated(entry.selected.copy, placement);
+                      }
+                      const db = await openVenueDatabase(target.venueDir);
+                      try {
+                        await withTransaction(db.venue, async (tx) =>
+                          assertCommitted(
+                            tx,
+                            await resolveArtifactNode(tx, entry.selected.copy.secretEntries),
+                            entry.session.binding,
+                          ),
+                        );
+                      } finally {
+                        await db.close();
+                      }
+                    },
+                  );
+                  entry.cloudState = {
+                    ...entry.cloudState,
+                    phase: entry.cloudState.phase === "reported" ? "reported" : "restored",
+                  };
+                  await saveCloud(entry, target.stateDir);
+                }
+              },
+            );
           } finally {
             await store.close();
           }

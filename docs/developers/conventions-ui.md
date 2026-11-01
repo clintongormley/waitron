@@ -1236,14 +1236,20 @@ filesystem, otherwise the venue files under `<venue>/first-setup-set-aside/<stem
 the record it makes those folders and renames an empty probe folder from each source root into
 them; a probe that fails with `EXDEV` removes the empty folders it made and refuses
 `setup.start_again_set_aside_unavailable`, and Keep stays available. Then it writes the record,
-renames the pieces (a database's main file last, never over anything) and runs
+copies the box's key ring file `<state>/secrets.env`, when there is one, to
+`<state>/first-setup-set-aside/<stem>/secrets.env` (`keepRingCopy`, the same file; the moved
+databases' sealed rows open only with that ring, and a later join replaces the box's own), renames
+the pieces (a database's main file last, never over anything) and runs
 A1042's finisher. Any failure after the record is written refuses
 `setup.start_again_move_unfinished`, keeping the cause as the error's `reason`: a Waitron
 error's own reason (or its code), otherwise `move failed:` with the system error code and the path
 the error names, written relative to its folder (`state/…` or `venue/…`) and left out when it lies
 outside both; a failure before it (the probe, the list check, the guess counter, the password or
-the record write, for example) keeps its own code. A plain `waitron.sh reset` keeps the choices and the set-aside folder; `reset
---all` removes them. A backup recovery's check of the box's files skips `first-setup-set-aside` in
+the record write, for example) keeps its own code. A plain `waitron.sh reset` keeps the choices and the set-aside folder, the key ring copy
+included; `reset --all` removes them. Anyone who copies the set-aside folder off the box copies
+that key ring too. On two filesystems the copy sits in the state root's stem folder, which the
+repair page's moved-folder message does not name: it names `…/<stem>/state` and the venue
+folder's `…/<stem>` (`movedFolder`, `apps/server/src/recovery-start-again.ts`). A backup recovery's check of the box's files skips `first-setup-set-aside` in
 each root (`originals`, `packages/provisioning/src/first-setup-backup-workspace.ts`).
 
 After a Keep, the process serves the kept page on `GET /` (the `onKept` latch in `recoveryApp`,

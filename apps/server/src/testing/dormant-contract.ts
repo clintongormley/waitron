@@ -1,4 +1,10 @@
-import { invoiceSeries, nodes, stampDeployment, type Database } from "@waitron/db";
+import {
+  invoiceSeries,
+  nodes,
+  stampDeployment,
+  type Database,
+  type NodeDatabase,
+} from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { Endorsement } from "@waitron/membership";
 import type { WaitronModule } from "@waitron/module";
@@ -7,9 +13,11 @@ import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fix
 import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { withTransaction } from "@waitron/db";
 import { establishReservedStandbyIdentity, type StandbyIdentity } from "../reserved-identity.js";
+import { sealAdoptedStandbyKey } from "./adopted-standby-key.js";
 
 export async function establishDormantContract(args: {
   db: Database;
+  node: NodeDatabase;
   ring: KeyRing;
   locationId: string;
   sourceId: string;
@@ -25,6 +33,7 @@ export async function establishDormantContract(args: {
     { code: "FA", purpose: "standard" },
     { code: "FF", purpose: "full" },
   ];
+  await sealAdoptedStandbyKey(args.node, args.ring, args.standby);
   await stampDeployment(args.db, "production");
   await args.db
     .insert(nodes)
@@ -56,7 +65,7 @@ export async function establishDormantContract(args: {
   );
   await fixture.authorised("establish", (operation) =>
     establishReservedStandbyIdentity(
-      { ownerDb: args.db, ring: args.ring },
+      { ownerDb: args.db },
       {
         locationId: args.locationId,
         standby: args.standby,

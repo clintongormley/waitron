@@ -230,13 +230,19 @@ export async function verifyBackupArtifact(
     if (!integrity(validated.databasePath)) refuse("invalid", "sqlite_integrity");
     const before = await openBackupQuery(validated.databasePath);
     close.push(before.close);
+    // Module checks read the archive's own entries: its secrets and its copy of node.db.
+    const moduleEntries = [
+      { name: "node.dump", bytes: validated.nodeDump },
+      ...validated.secretEntries,
+    ];
     const compatibility = await checkBackupVerificationCompatibility({
       manifest: validated.manifest,
       target,
       modules: deps.modules,
       before: before.query,
-      entries: validated.secretEntries,
+      entries: moduleEntries,
       migrationsRoot: deps.migrationsRoot,
+      scratchDir: scratch,
     });
     if (compatibility !== "passed")
       refuse(
@@ -314,7 +320,7 @@ export async function verifyBackupArtifact(
                 read: async (name: string) => {
                   if (!allowed.has(name))
                     throw new BackupVerificationUnsupported("semantics_missing");
-                  const entry = validated.secretEntries.find((e) => e.name === name);
+                  const entry = moduleEntries.find((e) => e.name === name);
                   return entry === undefined ? null : new Uint8Array(entry.bytes);
                 },
               }),

@@ -10,6 +10,7 @@ import {
   stampDeployment,
   withTransaction,
   type Database,
+  type NodeDatabase,
 } from "@waitron/db";
 import { withOperationAuthority, type OperationBinding } from "@waitron/module";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
@@ -27,6 +28,7 @@ import { previewRecoveryArchive } from "../recovery-backup-preview.js";
 import { recoveryStreamSourceId } from "../recovery-source.js";
 import { createSelectedRecoveryPreparation } from "../recovery-preparation.js";
 import { runStagedRestore, stageRestoreRequest } from "../restore-request.js";
+import { nodeDumpEntry } from "./node-copy.js";
 import {
   createFakeTimersHourClock,
   recoverySelectPastWaits,
@@ -55,7 +57,7 @@ const bases = [
   { code: "R", purpose: "rectificative" },
 ];
 export async function stagedHourRestore(
-  db: Database,
+  { db, node: nodeDb }: { db: Database; node: NodeDatabase },
   kind: "archive" | "stream",
   eventId: string,
   seams: {
@@ -84,7 +86,7 @@ export async function stagedHourRestore(
   try {
     await seedTenants(db);
     await stampDeployment(db, "preproduction");
-    const key = await mintBreakGlassKey(db, TENANT_A.nodeId);
+    const key = await mintBreakGlassKey({ venue: db, node: nodeDb }, TENANT_A.nodeId);
     const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
     const initial: OperationBinding = {
       module: "fiscal-verifactu",
@@ -147,11 +149,13 @@ export async function stagedHourRestore(
     const databasePath = join(root, "backup.db");
     const manifest = await buildManifest({
       db,
+      node: nodeDb,
       modules: ALL_MODULES,
       environment: "preproduction",
       now: new Date(),
     });
     const entries = [
+      await nodeDumpEntry(nodeDb, root),
       { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
       {
         name: "secrets/trading.env",
@@ -204,6 +208,7 @@ export async function stagedHourRestore(
       node,
       secret: key.secret,
       database: () => db,
+      nodeDatabase: () => nodeDb,
       selected,
       testClock: clock,
       readIsolation: async () => ({
@@ -255,13 +260,18 @@ export async function stagedHourRestore(
     };
     const seedDestination = async () => {
       await db.archiveTo(join(roots.venueDir, "venue.db"));
+      await nodeDb.archiveTo(join(roots.venueDir, "node.db"));
       const copy = await openVenueDatabase(roots.venueDir);
       try {
         await copy.venue.update(invoiceSeries).set({ nextNumber: 777 });
       } finally {
         await copy.close();
       }
-      return { rows: await snapshot(), bytes: await readFile(join(roots.venueDir, "venue.db")) };
+      return {
+        rows: await snapshot(),
+        bytes: await readFile(join(roots.venueDir, "venue.db")),
+        nodeBytes: await readFile(join(roots.venueDir, "node.db")),
+      };
     };
     const advanceCounters = async () => {
       const copy = await openVenueDatabase(roots.venueDir);

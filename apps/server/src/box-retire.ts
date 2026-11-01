@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { KeyRing } from "@waitron/credentials";
 import { retireSelf } from "./retire.js";
@@ -8,10 +8,12 @@ import { CHART_MINT_REFUSALS } from "./membership-mint.js";
 import { requireManagementSession } from "@waitron/server-kit";
 import { createErrorBoundary } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
+import { HELD_DOCUMENT_REFUSALS } from "./membership-trust.js";
 // No `./errors.js` side-effect import: this file throws no code of its own.
 
 export type BoxRetireDeps = {
   appDb: Database;
+  node: NodeDatabase;
   /** The box key ring — unseals this node's identity key so the minted eviction can be signed. */
   ring: KeyRing;
   /** THIS (departing) node — the node that becomes `evicted`, the eviction document's signer, and
@@ -32,6 +34,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "node.retire_no_carrier": 409,
   "node.retire_superseded": 409,
   ...CHART_MINT_REFUSALS,
+  ...HELD_DOCUMENT_REFUSALS,
 };
 
 /**
@@ -53,6 +56,7 @@ export function mountBoxRetireApi(app: Hono, deps: BoxRetireDeps, log: Logger): 
       });
       const result = await retireSelf({
         appDb: deps.appDb,
+        node: deps.node,
         ring: deps.ring,
         nodeId: deps.nodeId,
         log,

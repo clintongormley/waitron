@@ -1809,7 +1809,7 @@ describe("the test shards", () => {
   });
 
   // Nightly and by hand (owner, 2026-10-12). Weaker than its name: it reads mutation.yml as TEXT.
-  it("runs mutation checks for ui, ui-core and db every night and by hand", () => {
+  it("runs mutation checks for ui, ui-core, db and node-db every night and by hand", () => {
     const workflow = readFileSync(join(repoRoot, ".github/workflows/mutation.yml"), "utf8");
     expect(workflowTriggers(workflow).sort()).toEqual(["schedule", "workflow_dispatch"]);
     const crons = [...workflow.matchAll(/^ {4}- cron: "([^"]*)"/gm)].map((match) => match[1]);
@@ -1868,6 +1868,10 @@ describe("the test shards", () => {
     expect(dbAggregate).toContain("needs: mutation-db");
     expect(dbAggregate).toContain("if: always()");
     expect(dbAggregate).toContain("pattern: mutation-report-db-shard-*");
+
+    expect(lines(section("mutation-node-db"))).toContain(
+      "- run: pnpm --filter @waitron/node-db mutation",
+    );
   });
 
   it("isolates Provisioning into six coverage shards and enforces the merged result", () => {

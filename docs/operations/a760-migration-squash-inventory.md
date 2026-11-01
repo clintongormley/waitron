@@ -7,6 +7,10 @@
 > Proposed helpers below are build work, not commands available on the current tree.
 > Start only after the watcher records clearance; this copy authorises no reset or lane pause.
 
+_2026-11-01: A947 slice 3a removed the `node_roles` and `mirror_config` tables listed below and
+added the `node` migration set (`packages/node-db`), applied to `node.db`; refresh the inventory
+for both._
+
 Pinned tree: `13bb9ec1aa4d49eac4903c22b90b39c560085c93`, 16 October 2026. Read this with the [operator procedure](a760-migration-squash.md). Refresh it at the execution freeze; it does not cover later merges.
 
 ## What was run

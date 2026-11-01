@@ -107,15 +107,34 @@ function caPublic(bytes: Buffer | null, now: Date): X509Certificate | null {
     return null;
   }
 }
-export async function readBoxPublicCa(stateDir: string, now = new Date()): Promise<string | null> {
+async function readServedCa(
+  stateDir: string,
+  now: Date,
+): Promise<{ ca: X509Certificate; pem: string } | null> {
   const pem = await fs.readFile(join(stateDir, "tls", "ca.crt"), "utf8");
   const ca = caPublic(Buffer.from(pem), now);
+  return ca === null ? null : { ca, pem };
+}
+export async function readBoxPublicCa(stateDir: string, now = new Date()): Promise<string | null> {
+  const served = await readServedCa(stateDir, now);
   // A parsed certificate is public; the rest of its source file may contain private material.
-  return ca === null
+  return served === null
     ? null
-    : ca
+    : served.ca
         .toString()
-        .replaceAll("\n", pem.includes("-----BEGIN CERTIFICATE-----\r\n") ? "\r\n" : "\n");
+        .replaceAll("\n", served.pem.includes("-----BEGIN CERTIFICATE-----\r\n") ? "\r\n" : "\n");
+}
+
+/** The fingerprint of the authority `/ca.crt` serves, as the connection page shows it. */
+export async function readBoxCaFingerprint(
+  stateDir: string,
+  now = new Date(),
+): Promise<string | null> {
+  try {
+    return (await readServedCa(stateDir, now))?.ca.fingerprint256 ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function signingAuthority(s: Snapshot, now: Date): boolean {

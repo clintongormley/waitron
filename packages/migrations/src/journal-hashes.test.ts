@@ -49,7 +49,7 @@ describe("journalHashes", () => {
   it("refuses a table name that is not a drizzle journal table", async () => {
     const db = { execute: () => Promise.reject(new Error("must not be reached")) };
     const bad = { name: "x", table: 'evil"; drop table tenants; --', from: "../db/drizzle" };
-    await expect(journalHashes(db as never, bad)).rejects.toMatchObject({
+    await expect(journalHashes({ venue: db, node: db } as never, bad)).rejects.toMatchObject({
       code: "migrations.invalid_table",
     });
   });
@@ -58,7 +58,7 @@ describe("journalHashes", () => {
     const db = {
       execute: () => Promise.resolve({ rows: [{ hash: "aa" }, { hash: "bb" }] }),
     };
-    expect(await journalHashes(db as never, core)).toEqual(["aa", "bb"]);
+    expect(await journalHashes({ venue: db, node: db } as never, core)).toEqual(["aa", "bb"]);
   });
 });
 
@@ -67,11 +67,11 @@ describe("journalHashes — against a real database", () => {
 
   it("returns null when the journal table is absent, rather than throwing", async () => {
     const absentSet = { name: "nope", table: "__drizzle_migrations_absent", from: "x" };
-    expect(await journalHashes(suite.db, absentSet)).toBeNull();
+    expect(await journalHashes({ venue: suite.db, node: suite.node }, absentSet)).toBeNull();
   });
 
   it("reads the hashes a real migrate wrote", async () => {
-    const hashes = await journalHashes(suite.db, core);
+    const hashes = await journalHashes({ venue: suite.db, node: suite.node }, core);
     expect(hashes).toEqual(imageMigrationHashes(core, null));
   });
 
@@ -83,9 +83,8 @@ describe("journalHashes — against a real database", () => {
     const directory = mkdtempSync(join(tmpdir(), "waitron-journal-hashes-dead-"));
     try {
       const store = await openVenueDatabase(directory);
-      const dead = store.venue;
       await store.close();
-      const error = await captureError(() => journalHashes(dead, core));
+      const error = await captureError(() => journalHashes(store, core));
       expect((error as { code?: string }).code).toBe("ERR_INVALID_STATE");
     } finally {
       rmSync(directory, { recursive: true, force: true });
@@ -97,6 +96,6 @@ describe("journalHashes — against a real database", () => {
     // predicate a view named like a journal table would be read as a journal.
     const viewSet = { name: "v", table: "__drizzle_migrations_view", from: "x" };
     suite.db.run(sql.raw(`create view "${viewSet.table}" as select 'x' as "hash"`));
-    expect(await journalHashes(suite.db, viewSet)).toBeNull();
+    expect(await journalHashes({ venue: suite.db, node: suite.node }, viewSet)).toBeNull();
   });
 });

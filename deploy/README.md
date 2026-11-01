@@ -14,6 +14,9 @@ folder itself holds `recovery.lock`, which serialises changes to `recovery.json`
 lock files is held a `-journal` appears beside it, and a crash can leave that behind. None of the
 lock files holds data; do not delete them, because a process that finds one missing takes a new
 lock beside the one still held.
+`venue.db` is the venue's data; `node.db` is what this box remembers about itself (its role, its
+signing key, its recovery-key check, and on a spare the main box's address and key). Only `venue.db`
+streams to a bucket; a backup file carries both.
 There is no database server in the app's path, no connection string and no database password.
 
 | volume        | mounted at                     | holds                                                                                                                                                                                       |
@@ -414,14 +417,20 @@ Both forms wipe every volume in the table above. Plain `reset` keeps four things
 
 - `tls/`, which holds the certificate authority the box's devices already trust and the box's own
   certificate signed by it. Because that folder survives, a device that has already been told to
-  trust this box does not need to trust it again after a plain `reset`.
+  trust this box does not need to trust it again after a plain `reset`. Two files in it go:
+  `venue-ca.crt` and `venue-ca.key`, the other server's certificate authority that joining it as a
+  spare left on this box, together with their working copies `venue-ca.crt.tmp` and
+  `venue-ca.key.tmp`, which a join stopped while writing them can leave.
 - `first-setup-start-again-confirmations/`, one small record for each Start again confirmed while
   the venue database was missing or partly unreadable, or that discarded a stopped backup recovery:
   whose setup it was, that it was confirmed on the repair page with nobody signed in, when, and the
   summary the page confirmed.
 - `first-setup-start-again-choices/`, one small record for each Keep or Move choice someone made
   at Start again.
-- `first-setup-set-aside/`, the files a Move set aside rather than deleted.
+- `first-setup-set-aside/`, the files a Move set aside rather than deleted. Each Move's folder also
+  holds `secrets.env`, a copy of the box's key ring file as it was at the Move, because the moved
+  databases' sealed rows open only with it. Anyone who copies this folder off the box copies that
+  key ring too.
 
 `reset --all` removes the whole `state` volume, those four included, so the box mints a brand-new
 certificate authority on its next boot and every device has to go through the trust step again. That includes any device with a dashboard or till tab left open across the reset:
@@ -454,9 +463,10 @@ A box whose join to another server stopped partway can also be reset from the se
 a terminal, given the admin login the join used; the server refuses it in any other state. The box
 restarts and, before the server opens the database, removes the venue's databases (`venue.db`,
 `node.db` and their side files, and Litestream's folder beside them), `modules.json`,
-`pending-adoption.json`, the record of the stopped join and, last, its own request file,
-`reset-request.json`; everything else, including the
-certificate (`tls/`), `secrets.env` and `backup.env`, is kept. It does nothing if the box has meanwhile got a `trading.env` or
+`pending-adoption.json`, the record of the stopped join, the other server's certificate authority
+the join left in `tls/` (`venue-ca.crt` and `venue-ca.key`, and their `.tmp` working copies) and,
+last, its own request file, `reset-request.json`; everything else, including the box's own certificate files in `tls/`,
+`secrets.env` and `backup.env`, is kept. It does nothing if the box has meanwhile got a `trading.env` or
 holds a venue. It does not remove this box from the other server's list of machines, nor release
 the installation number reserved for it there. To take the box off that list, open the other
 server's dashboard, then Settings, then Servers, and in the box's row menu choose Remove and then
@@ -616,7 +626,8 @@ command against it treat that entrypoint differently:
   reports `restore.placement_failed` and says the previous database could not all be put back,
   move everything in the folder it names back into the venue folder before
   `docker compose start app`. If the restore succeeded but its output shows
-  `restore.db.aside_kept`, the folder that line names (`folder`) holds only the replaced database;
+  `restore.db.aside_kept`, the folder that line names (`folder`) holds only the replaced
+  `venue.db` and the replaced `node.db`;
   the next server start tries to delete it, logging `restore.db.aside_removed` when it does and
   `restore.db.aside_kept` when it cannot. A server start that finds
   such a folder holding files and no `venue.db` beside it deletes nothing and refuses to start with

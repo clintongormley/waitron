@@ -39,7 +39,10 @@ async function exported(prepare?: () => Promise<void>): Promise<ConfigurationBun
   );
   const versions: Record<string, number> = {};
   for (const module of modules)
-    versions[module.name] = await appliedSchemaVersion(suite.db, module.migrations);
+    versions[module.name] = await appliedSchemaVersion(
+      { venue: suite.db, node: suite.node },
+      module.migrations,
+    );
   const seeded = await applyHistoricalTestVenue(
     planVenue(
       {

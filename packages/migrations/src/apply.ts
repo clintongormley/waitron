@@ -5,7 +5,7 @@ import { openVenueDatabase, removeChangeFeed, runMigrations, type Database } fro
 import { AppError, sqliteFailureOf } from "@waitron/shared";
 import { installAppendOnlyTriggers, openLock } from "@waitron/store";
 import type { VenueMigrationOptions } from "./manifest.js";
-import { appliedSchemaVersion } from "./schema-version.js";
+import { appliedSchemaVersion, type MigrationFiles } from "./schema-version.js";
 import "./errors.js";
 
 /**
@@ -28,13 +28,13 @@ const LOCK_FILE = "migrations.lock";
 const LOCK_WAIT_MS = 120_000;
 
 /**
- * Applies every set in order to the venue file under `directory`.
+ * Applies every set in order under `directory`, each to the file its `database` names: `node.db`
+ * for a set marked `"node"`, `venue.db` for every other set.
  *
- * Every set goes to the VENUE file, and `node.db` stays empty (#548).
- *
- * It also installs the append-only triggers, set by set, from each set's `appendOnlyTables`, which a
- * `migrationOptionsFor(...)` result carries. A caller that hands over no `appendOnlyTables` gets a
- * migrated database with no triggers on it (`scripts/apply-migrations-callers.test.ts`).
+ * It also installs the append-only triggers on `venue.db`, set by set, from each venue set's
+ * `appendOnlyTables`, which a `migrationOptionsFor(...)` result carries. A caller that hands over
+ * no `appendOnlyTables` gets a migrated database with no triggers on it
+ * (`scripts/apply-migrations-callers.test.ts`).
  *
  * It removes the change feed first and does not put it back, because a migration cannot drop a
  * column the feed's update trigger names; `installChangeFeed` in
@@ -44,6 +44,7 @@ export async function applyMigrations(
   directory: string,
   options: readonly VenueMigrationOptions[],
 ): Promise<void> {
+  for (const set of options) assertNoNodeAppendOnly(set);
   // Before the venue file is opened, not after: the store's open takes `venue.lock`, which refuses a
   // second process at once instead of making it wait.
   await mkdir(directory, { recursive: true });
@@ -53,6 +54,20 @@ export async function applyMigrations(
   } finally {
     // No commit: nothing was written, and closing releases the lock.
     lock.release();
+  }
+}
+
+/**
+ * node.db never gets append-only triggers, so a node set that names tables for them is refused.
+ * Only a fault in Waitron produces it: the node set in `migrations.manifest.json` names none.
+ */
+function assertNoNodeAppendOnly(set: VenueMigrationOptions): void {
+  const tables = set.appendOnlyTables ?? [];
+  if (set.database === "node" && tables.length > 0) {
+    throw new AppError("migrations.node_append_only", {
+      set: set.migrationsTable,
+      tables: [...tables],
+    });
   }
 }
 
@@ -67,11 +82,13 @@ async function migrateEverySet(
     // `requires` (`orderedMigrationSets`, which refuses a missing dependency or a cycle). Core must
     // come before media, whose triggers are on core's `products`.
     for (const set of options) {
-      await runSet(store.venue, set);
-      await assertSetApplied(store.venue, set);
+      await runSet(set.database === "node" ? store.node : store.venue, set);
+      await assertSetApplied(store, set);
       // Inside the loop, not once at the end, so a set already migrated is protected even when a
       // LATER set aborts the run.
-      installAppendOnlyTriggers(store.venue, set.appendOnlyTables ?? []);
+      if (set.database !== "node") {
+        installAppendOnlyTriggers(store.venue, set.appendOnlyTables ?? []);
+      }
     }
   } finally {
     await store.close();
@@ -107,18 +124,16 @@ async function runSet(db: Database, set: VenueMigrationOptions): Promise<void> {
  * `expectedSchemaVersion`, which would resolve a relative folder against the parent of this
  * module's directory rather than the working directory drizzle uses.
  */
-async function assertSetApplied(
-  db: Pick<Database, "execute">,
-  set: VenueMigrationOptions,
-): Promise<void> {
+async function assertSetApplied(files: MigrationFiles, set: VenueMigrationOptions): Promise<void> {
   // `MigrationOptions` carries no set NAME, only a folder and a table, so the table names the set
   // here and in the thrown params.
   const migrationSet = {
     name: set.migrationsTable,
     table: set.migrationsTable,
     from: set.migrationsFolder,
+    database: set.database,
   };
-  const applied = await appliedSchemaVersion(db, migrationSet);
+  const applied = await appliedSchemaVersion(files, migrationSet);
   const journal = JSON.parse(
     readFileSync(join(set.migrationsFolder, "meta", "_journal.json"), "utf8"),
   ) as { entries: unknown[] };

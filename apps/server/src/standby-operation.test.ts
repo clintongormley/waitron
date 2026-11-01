@@ -5,18 +5,21 @@ import { beforeAll, afterAll, beforeEach, describe, expect, it, vi } from "vites
 import { eq, sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
-  type Transaction,
   invoiceSeries,
   locations,
   nodes,
-  readDeploymentMode,
-  readSingletonRole,
-  setDeploymentMode,
   stampDeployment,
+  type Transaction,
   withTransaction,
 } from "@waitron/db";
+import { NODE_MIGRATIONS, readNodeMode, setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CREDENTIALS_MIGRATIONS, loadKeyRing, tryGetCredential } from "@waitron/credentials";
+import {
+  CREDENTIALS_MIGRATIONS,
+  loadKeyRing,
+  readNodeSigningKey,
+  tryGetCredential,
+} from "@waitron/credentials";
 import { generateNodeKeyPair } from "@waitron/membership";
 import {
   readOperationAuthority,
@@ -38,7 +41,9 @@ import { mintBreakGlassSecret } from "./break-glass.js";
 
 const modules = vi.hoisted(() => [] as WaitronModule[]);
 vi.mock("./modules.js", () => ({ ALL_MODULES: modules }));
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
+});
 const LOCATION = "e0000000-0000-4000-8000-000000000001";
 const PRIMARY = "e0000000-0000-4000-8000-000000000002";
 const TARGET = "e0000000-0000-4000-8000-000000000003";
@@ -60,6 +65,7 @@ beforeAll(async () => {
   stateDir = await mkdtemp(join(tmpdir(), "waitron-standby-operation-"));
   await mkdir(join(stateDir, "tls"));
   await writeFile(join(stateDir, "tls", "ca.crt"), "public-test-ca");
+  await writeFile(join(stateDir, "tls", "ca.key"), "public-test-ca-key");
 });
 afterAll(async () => {
   if (stateDir !== undefined) await rm(stateDir, { recursive: true, force: true });
@@ -94,6 +100,7 @@ function regime(
 function bundleDeps() {
   return {
     appDb: suite.db,
+    node: suite.node,
     ring: RING,
     stateDir: stateDir!,
     relayUrl: "https://relay.test",
@@ -155,8 +162,8 @@ it("collects the standby's current outside input before the promotion transactio
     ),
   );
   expect(result.alreadyPrimary).toBe(false);
-  expect(await readDeploymentMode(suite.db, TARGET)).toBe("primary");
-  expect(await readSingletonRole(suite.db, TARGET)).toBe("primary");
+  expect((await readNodeMode(suite.node, TARGET)).mode).toBe("primary");
+  expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("primary");
   expect((await suite.db.select().from(invoiceSeries)).map((row) => row.purpose).sort()).toEqual([
     "full",
     "rectificative",
@@ -185,17 +192,18 @@ it("does not promote or open series after the standby's outside source refuses",
       ),
     ).rejects.toThrow("current-register-refused");
   });
-  expect(await readDeploymentMode(suite.db, TARGET)).toBe("mirror");
-  expect(await readSingletonRole(suite.db, TARGET)).toBe("secondary");
+  expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
+  expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("secondary");
   expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
 });
 
 async function mirror(activate: StandbyProvisioning["activate"]) {
   await suite.db.insert(nodes).values({ id: TARGET, locationId: LOCATION, name: "Standby" });
-  await setDeploymentMode(suite.db, TARGET, "mirror");
-  await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, TARGET);
+  await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror");
+  await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, TARGET);
   return {
     db: suite.db,
+    node: suite.node,
     ring: RING,
     nodeId: TARGET,
     holders: createDeploymentHolders("mirror", "secondary"),
@@ -222,7 +230,7 @@ async function activateSeries(tx: Transaction, node: ProvisionedNode) {
 
 describe("opaque authenticated standby carriers", () => {
   it("delivers the named standby and reserve authority to its module", async () => {
-    await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, PRIMARY);
+    await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, PRIMARY);
     let received: ModuleOperationInput | undefined;
     modules.push(
       regime(async (_tx, primary, standby, operation) => {
@@ -253,7 +261,7 @@ describe("opaque authenticated standby carriers", () => {
   it.each(["module", "action", "targetNodeId"] as const)(
     "rejects mismatched reserve %s before module writes",
     async (key) => {
-      await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, PRIMARY);
+      await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, PRIMARY);
       let entered = false;
       modules.push(
         regime(async () => {
@@ -294,7 +302,7 @@ describe("opaque authenticated standby carriers", () => {
     );
     await withOperationAuthority(scope, "admin", (authority) =>
       establishReservedStandbyIdentity(
-        { ownerDb: suite.db, ring: RING },
+        { ownerDb: suite.db },
         { ...args, moduleOperations: operations(authority, scope) },
       ),
     );
@@ -304,7 +312,7 @@ describe("opaque authenticated standby carriers", () => {
     expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
   });
 
-  it("rolls back the node and sealed key when establishment authority is stale", async () => {
+  it("rolls back the node when establishment authority is stale", async () => {
     const args = adoptionArgs();
     const scope = { ...binding, action: "establish", targetNodeId: args.standby.nodeId };
     const authority = await withOperationAuthority(scope, "admin", async (token) => token);
@@ -319,7 +327,7 @@ describe("opaque authenticated standby carriers", () => {
     );
     await expect(
       establishReservedStandbyIdentity(
-        { ownerDb: suite.db, ring: RING },
+        { ownerDb: suite.db },
         { ...args, moduleOperations: operations(authority, scope) },
       ),
     ).rejects.toMatchObject({ code: "module.operation_invalid" });
@@ -332,12 +340,13 @@ describe("opaque authenticated standby carriers", () => {
         tryGetCredential(tx, RING, { purpose: "membership.node_key" }),
       ),
     ).toBeNull();
+    expect(await readNodeSigningKey(suite.node, RING, args.standby.nodeId)).toBeNull();
   });
 
   it("activates a dormant module before reading series and commits with the role change", async () => {
     await suite.db.insert(nodes).values({ id: TARGET, locationId: LOCATION, name: "Standby" });
-    await setDeploymentMode(suite.db, TARGET, "mirror");
-    await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, TARGET);
+    await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror");
+    await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, TARGET);
     const scope = { ...binding, action: "promote" };
     const module = regime(
       async () => ({ state: {} }),
@@ -362,6 +371,7 @@ describe("opaque authenticated standby carriers", () => {
       const result = await promoteMirrorToPrimary(
         {
           db: suite.db,
+          node: suite.node,
           ring: RING,
           nodeId: TARGET,
           holders,
@@ -379,8 +389,8 @@ describe("opaque authenticated standby carriers", () => {
         )[0]!.purpose,
       ).toBe("standard");
     });
-    expect(await readDeploymentMode(suite.db, TARGET)).toBe("primary");
-    expect(await readSingletonRole(suite.db, TARGET)).toBe("primary");
+    expect((await readNodeMode(suite.node, TARGET)).mode).toBe("primary");
+    expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("primary");
     expect(holders.mode.current).toBe("primary");
   });
 
@@ -393,19 +403,22 @@ describe("opaque authenticated standby carriers", () => {
       });
       await activateSeries(tx, node);
     });
-    const key = await mintBreakGlassSecret(suite.db, TARGET);
+    const key = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TARGET);
     const result = await promoteMirrorToPrimary(
       {
         ...deps,
-        withModuleOperations: ({ db, node }, run) =>
-          withRecoveryKeyOperation({ db, nodeId: node.nodeId }, scope, key, (tx, authority) =>
-            run(tx, operations(authority, scope)),
+        withModuleOperations: ({ db, nodeDb, node }, run) =>
+          withRecoveryKeyOperation(
+            { db, node: nodeDb, nodeId: node.nodeId },
+            scope,
+            key,
+            (tx, authority) => run(tx, operations(authority, scope)),
           ),
       },
       { oldNodeNeutralised: true },
     );
     expect(result.alreadyPrimary).toBe(false);
-    expect(await readSingletonRole(suite.db, TARGET)).toBe("primary");
+    expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("primary");
   });
 
   it("refuses a recovery key replaced while the host prepares promotion", async () => {
@@ -415,15 +428,15 @@ describe("opaque authenticated standby carriers", () => {
       entered = true;
       await activateSeries(tx, node);
     });
-    const key = await mintBreakGlassSecret(suite.db, TARGET);
+    const key = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TARGET);
     await expect(
       promoteMirrorToPrimary(
         {
           ...deps,
-          withModuleOperations: async ({ db, node }, run) => {
-            await mintBreakGlassSecret(db, node.nodeId);
+          withModuleOperations: async ({ db, nodeDb, node }, run) => {
+            await mintBreakGlassSecret({ venue: db, node: nodeDb }, node.nodeId);
             return withRecoveryKeyOperation(
-              { db, nodeId: node.nodeId },
+              { db, node: nodeDb, nodeId: node.nodeId },
               scope,
               key,
               (tx, authority) => run(tx, operations(authority, scope)),
@@ -435,8 +448,8 @@ describe("opaque authenticated standby carriers", () => {
     ).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
     expect(entered).toBe(false);
     expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
-    expect(await readDeploymentMode(suite.db, TARGET)).toBe("mirror");
-    expect(await readSingletonRole(suite.db, TARGET)).toBe("secondary");
+    expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
+    expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("secondary");
   });
 
   it("rolls back activation when the module omits the full-purpose series", async () => {
@@ -459,8 +472,8 @@ describe("opaque authenticated standby carriers", () => {
     ).rejects.toMatchObject({ code: "series.no_full_for_node" });
     expect(persisted).toBe(false);
     expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
-    expect(await readDeploymentMode(suite.db, TARGET)).toBe("mirror");
-    expect(await readSingletonRole(suite.db, TARGET)).toBe("secondary");
+    expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
+    expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("secondary");
   });
 
   it("rolls back activation when the membership write refuses", async () => {
@@ -473,8 +486,8 @@ describe("opaque authenticated standby carriers", () => {
         "test chart refusal",
       );
       expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
-      expect(await readDeploymentMode(suite.db, TARGET)).toBe("mirror");
-      expect(await readSingletonRole(suite.db, TARGET)).toBe("secondary");
+      expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
+      expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("secondary");
     } finally {
       await suite.db.execute(sql`drop trigger refuse_chart`);
     }
@@ -513,7 +526,7 @@ describe("opaque authenticated standby carriers", () => {
       await blocker;
       expect((await pending).alreadyPrimary).toBe(false);
     });
-    expect(await readSingletonRole(suite.db, TARGET)).toBe("primary");
+    expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("primary");
   });
 
   it("snapshots freshly authenticated host entries before the first activation hook", async () => {
@@ -585,7 +598,7 @@ describe("opaque authenticated standby carriers", () => {
     await refused;
     expect(persisted).toBe(false);
     expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
-    expect(await readDeploymentMode(suite.db, TARGET)).toBe("mirror");
+    expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
   });
 
   it("refuses authority revoked during the trading-settings write", async () => {
@@ -618,11 +631,11 @@ describe("opaque authenticated standby carriers", () => {
     release();
     await refused;
     expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
-    expect(await readDeploymentMode(suite.db, TARGET)).toBe("mirror");
+    expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
   });
 
   it("snapshots reserve input before waiting for a prior transaction", async () => {
-    await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, PRIMARY);
+    await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, PRIMARY);
     modules.push(
       regime(async (_tx, _primary, _standby, operation) => {
         expect(operation).toBeDefined();
@@ -660,7 +673,7 @@ describe("opaque authenticated standby carriers", () => {
   });
 
   it("rolls back a reservation write when authority expires during its await", async () => {
-    await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, PRIMARY);
+    await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, PRIMARY);
     let enter!: () => void;
     let release!: () => void;
     const entered = new Promise<void>((resolve) => {
@@ -712,7 +725,7 @@ describe("opaque authenticated standby carriers", () => {
     let pending!: Promise<unknown>;
     await withOperationAuthority(scope, "admin", async (authority) => {
       pending = establishReservedStandbyIdentity(
-        { ownerDb: suite.db, ring: RING },
+        { ownerDb: suite.db },
         { ...args, moduleOperations: operations(authority, scope) },
       );
       await entered;
@@ -745,8 +758,8 @@ describe("opaque authenticated standby carriers", () => {
       ),
     ).rejects.toThrow("settings write refused");
     expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
-    expect(await readDeploymentMode(suite.db, TARGET)).toBe("mirror");
-    expect(await readSingletonRole(suite.db, TARGET)).toBe("secondary");
+    expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
+    expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("secondary");
   });
 
   it.each(["module", "action", "targetNodeId"] as const)(
@@ -771,16 +784,17 @@ describe("opaque authenticated standby carriers", () => {
       });
       expect(entered).toBe(false);
       expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
-      expect(await readDeploymentMode(suite.db, TARGET)).toBe("mirror");
+      expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
     },
   );
 
   it("refuses a mirror whose configured node has no venue row", async () => {
-    await setDeploymentMode(suite.db, TARGET, "mirror");
+    await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror");
     await expect(
       promoteMirrorToPrimary(
         {
           db: suite.db,
+          node: suite.node,
           ring: RING,
           nodeId: TARGET,
           holders: createDeploymentHolders("mirror", "secondary"),
@@ -790,12 +804,12 @@ describe("opaque authenticated standby carriers", () => {
         { oldNodeNeutralised: true },
       ),
     ).rejects.toMatchObject({ code: "node.not_found", params: { id: TARGET } });
-    expect(await readDeploymentMode(suite.db, TARGET)).toBe("mirror");
+    expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
   });
 });
 
 it("collects the outside reservation before entering the bundle's write transaction", async () => {
-  await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, PRIMARY);
+  await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, PRIMARY);
   const module = regime(async (tx, _primary, _standby, operation) => {
     expect(operation?.input).toEqual({ prepared: "reservation" });
     expect((await tx.select().from(locations))[0]?.name).toBe("Source checked");
@@ -844,7 +858,7 @@ it("collects outside establishment evidence before sealing the spare's key", asy
   });
   await withOperationAuthority(scope, "admin", (authority) =>
     establishReservedStandbyIdentity(
-      { ownerDb: suite.db, ring: RING },
+      { ownerDb: suite.db },
       { ...args, moduleOperations: operations(authority, scope) },
     ),
   );
@@ -868,13 +882,13 @@ it("does not create a spare node or sealed key after outside collection refuses"
   await expect(
     withOperationAuthority(scope, "admin", (authority) =>
       establishReservedStandbyIdentity(
-        { ownerDb: suite.db, ring: RING },
+        { ownerDb: suite.db },
         { ...args, moduleOperations: operations(authority, scope) },
       ),
     ),
   ).rejects.toThrow("outside source refused");
   expect(await suite.db.select().from(nodes).where(eq(nodes.id, args.standby.nodeId))).toEqual([]);
-  expect(await tryGetCredential(suite.db, RING, { purpose: "membership.node_key" })).toBeNull();
+  expect(await readNodeSigningKey(suite.node, RING, args.standby.nodeId)).toBeNull();
 });
 
 it("refuses a carrier that smuggles invoice series beside a module that opens them on activation", async () => {
@@ -892,7 +906,7 @@ it("refuses a carrier that smuggles invoice series beside a module that opens th
   );
   await expect(
     establishReservedStandbyIdentity(
-      { ownerDb: suite.db, ring: RING },
+      { ownerDb: suite.db },
       {
         ...args,
         reserved: { ...args.reserved, series: [{ code: "unexpected", purpose: "standard" }] },
@@ -901,11 +915,11 @@ it("refuses a carrier that smuggles invoice series beside a module that opens th
   ).rejects.toMatchObject({ code: "module.operation_invalid", params: { module: binding.module } });
   expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
   expect(await suite.db.select().from(nodes).where(eq(nodes.id, args.standby.nodeId))).toEqual([]);
-  expect(await tryGetCredential(suite.db, RING, { purpose: "membership.node_key" })).toBeNull();
+  expect(await readNodeSigningKey(suite.node, RING, args.standby.nodeId)).toBeNull();
 });
 
 it("refuses a reservation contribution that opens series before its declared activation", async () => {
-  await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, PRIMARY);
+  await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, PRIMARY);
   modules.push(
     fakeModule(binding.module, {
       provisioning: {
@@ -936,7 +950,7 @@ it("snapshots the submitted spare and reservation before its first credential re
       },
     ),
   );
-  const pending = establishReservedStandbyIdentity({ ownerDb: suite.db, ring: RING }, args);
+  const pending = establishReservedStandbyIdentity({ ownerDb: suite.db }, args);
   args.standby.nodeId = crypto.randomUUID();
   args.reserved.modules[binding.module] = { reserved: false };
   args.nodeName = "Changed caller";
@@ -957,7 +971,7 @@ it.each(["reserve", "establish"])(
       targetNodeId: action === "reserve" ? TARGET : args.standby.nodeId,
     };
     if (action === "reserve")
-      await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, PRIMARY);
+      await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, PRIMARY);
     let enter!: () => void;
     let release!: () => void;
     const entered = new Promise<void>((resolve) => {
@@ -1006,7 +1020,7 @@ it.each(["reserve", "establish"])(
               moduleOperations: operations(authority, scope),
             })
           : establishReservedStandbyIdentity(
-              { ownerDb: suite.db, ring: RING },
+              { ownerDb: suite.db },
               { ...args, moduleOperations: operations(authority, scope) },
             );
       await entered;
@@ -1022,7 +1036,7 @@ it.each(["reserve", "establish"])(
       expect(await suite.db.select().from(nodes).where(eq(nodes.id, args.standby.nodeId))).toEqual(
         [],
       );
-      expect(await tryGetCredential(suite.db, RING, { purpose: "membership.node_key" })).toBeNull();
+      expect(await readNodeSigningKey(suite.node, RING, args.standby.nodeId)).toBeNull();
     }
   },
 );

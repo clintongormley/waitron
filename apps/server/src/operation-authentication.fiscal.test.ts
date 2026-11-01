@@ -1,8 +1,9 @@
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
-import { eq, sql } from "drizzle-orm";
-import { deployment, invoiceSeries, nodeRoles, withTransaction } from "@waitron/db";
+import { sql } from "drizzle-orm";
+import { deployment, invoiceSeries, withNodeTransaction, withTransaction } from "@waitron/db";
+import { nodeMode, readNodeMode, setNodeModeTx, setSingletonRoleTx } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, persons } from "@waitron/identity";
 import { locationId } from "@waitron/shared";
@@ -144,7 +145,7 @@ const binding = {
 const document = signedMembershipDoc(2, { signerNodeId: target.nodeId });
 
 async function promote(personId = ADMIN) {
-  return withAuthenticatedOperation(
+  const result = await withAuthenticatedOperation(
     { db: suite.db, credentialKeyRing: TOTP_KEY_RING },
     { binding, permission: "node.promote" },
     { personId, password: PASSWORD },
@@ -159,10 +160,15 @@ async function promote(personId = ADMIN) {
           context,
           authority,
         );
-        await commitMirrorPromotionTx(tx, target.nodeId, document);
+        await commitMirrorPromotionTx(tx, document);
         return result;
       }),
   );
+  await withNodeTransaction(suite.node, async (tx) => {
+    await setNodeModeTx(tx, target.nodeId, "primary");
+    await setSingletonRoleTx(tx, target.nodeId, "primary");
+  });
+  return result;
 }
 
 async function snapshot() {
@@ -173,7 +179,6 @@ async function snapshot() {
     "cadenas",
     "fiscal_allocations",
     "fiscal_reservations",
-    "node_roles",
     "node_membership",
   ])
     rows.push((await suite.db.execute(sql`select * from ${sql.identifier(table)}`)).rows);
@@ -197,8 +202,8 @@ beforeEach(async () => {
   await suite.db
     .insert(invoiceSeries)
     .values(bases.map((series) => ({ ...series, nodeId: primary.nodeId })));
-  await suite.db
-    .insert(nodeRoles)
+  await suite.node
+    .insert(nodeMode)
     .values({ nodeId: target.nodeId, mode: "mirror", singletonRole: "secondary" });
   await withTransaction(suite.db, (tx) =>
     establishDormantAllocation(tx, primary, target, reservation, trust, {
@@ -219,7 +224,7 @@ beforeEach(async () => {
 });
 
 describe("authenticated internal takeover plus the host's promotion transaction", () => {
-  it("commits all three allocated purposes, the new identity, role and membership together", async () => {
+  it("commits all three allocated purposes, the new identity and membership together, and the role follows", async () => {
     const before = await snapshot();
     const result = await promote();
     expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual(candidate.series);
@@ -228,19 +233,18 @@ describe("authenticated internal takeover plus the host's promotion transaction"
     expect(
       (after[0] as Record<string, unknown>[]).find((row) => row.node_id === primary.nodeId),
     ).toEqual((before[0] as Record<string, unknown>[])[0]);
-    const [role] = await suite.db
-      .select()
-      .from(nodeRoles)
-      .where(eq(nodeRoles.nodeId, target.nodeId));
-    expect(role).toMatchObject({ mode: "primary", singletonRole: "primary" });
+    expect(await readNodeMode(suite.node, target.nodeId)).toMatchObject({
+      mode: "primary",
+      singletonRole: "primary",
+    });
     expect((after[3] as Record<string, unknown>[])[0]).toMatchObject({
       installation_identity: "P000042",
       event_key: "takeover-1",
     });
-    expect(after[6]).toHaveLength(1);
+    expect(after[5]).toHaveLength(1);
   });
 
-  it("rolls back every activation row and role if the host membership write is refused", async () => {
+  it("rolls back every activation row, and the role stays, if the host membership write is refused", async () => {
     await suite.db.execute(
       sql`create trigger refuse_chart before insert on node_membership begin select raise(abort, 'chart refused'); end`,
     );
@@ -248,6 +252,10 @@ describe("authenticated internal takeover plus the host's promotion transaction"
     try {
       await expect(promote()).rejects.toThrow("chart refused");
       expect(await snapshot()).toEqual(before);
+      expect(await readNodeMode(suite.node, target.nodeId)).toEqual({
+        mode: "mirror",
+        singletonRole: "secondary",
+      });
       expect(allocation.reservationEvidence.consumption.payload.eventId).toBe("takeover-1");
     } finally {
       await suite.db.execute(sql`drop trigger refuse_chart`);

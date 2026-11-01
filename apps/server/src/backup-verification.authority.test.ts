@@ -202,7 +202,13 @@ it("ordinary restore still refuses absent authority after verification passed", 
   expect((await verifyBackupArtifact(f.request, f.deps)).status).toBe("passed");
   const { runRestoreHooks } = await import("./restore.js");
   await expect(
-    runRestoreHooks({ db: f.db, modules: f.deps.modules, node: verificationNode, log: () => {} }),
+    runRestoreHooks({
+      db: f.db,
+      nodeDb: f.node,
+      modules: f.deps.modules,
+      node: verificationNode,
+      log: () => {},
+    }),
   ).rejects.toMatchObject({
     code: "restore.hook_failed",
     params: { module: "fiscal-verifactu", code: "sif.allocation_invalid" },
@@ -227,6 +233,7 @@ it("ordinary authorised restore still needs genuine binding", async () => {
     await expect(
       runRestoreHooks({
         db: f.db,
+        nodeDb: f.node,
         modules: f.deps.modules,
         node: verificationNode,
         log: () => {},

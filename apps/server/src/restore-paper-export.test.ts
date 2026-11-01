@@ -16,9 +16,9 @@ afterEach(async () => {
 it.each(["archive", "stream"] as const)(
   "restores staged %s using the selected backup's older named node key and the current hour flow",
   async (kind) => {
-    f = await stagedHourRestore(suite.db, kind, "paper-offline-restore");
+    f = await stagedHourRestore(suite, kind, "paper-offline-restore");
     const retained = f.journal();
-    await mintBreakGlassSecret(suite.db, TENANT_A.nodeId);
+    await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TENANT_A.nodeId);
     const log = vi.fn();
     expect(await f.run(log)).toBe(true);
     const rows = await f.snapshot();
@@ -58,7 +58,7 @@ it.each(["archive", "stream"] as const)(
 it.each(["missing", "wrong event", "wrong source"] as const)(
   "rereads retained hour intent and refuses %s evidence before placement",
   async (mode) => {
-    f = await stagedHourRestore(suite.db, "archive", "paper-offline-restore");
+    f = await stagedHourRestore(suite, "archive", "paper-offline-restore");
     const record = JSON.parse(f.journal());
     if (mode === "missing") record.revisions = [];
     else {
@@ -79,6 +79,7 @@ it.each(["missing", "wrong event", "wrong source"] as const)(
       params: { reason: mode === "wrong source" ? "event_mismatch" : "reservation_missing" },
     };
     expect(await readFile(join(f.venueDir, "venue.db"))).toEqual(destination.bytes);
+    expect(await readFile(join(f.venueDir, "node.db"))).toEqual(destination.nodeBytes);
     expect(await f.snapshot()).toEqual(destination.rows);
     expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toBe("untouched identity");
     expect(f.journal()).toBe(retained);
@@ -86,7 +87,7 @@ it.each(["missing", "wrong event", "wrong source"] as const)(
   },
 );
 it("refuses the archive encryption key as node authentication before changing the destination", async () => {
-  f = await stagedHourRestore(suite.db, "archive", "paper-offline-restore");
+  f = await stagedHourRestore(suite, "archive", "paper-offline-restore");
   await writeFile(join(f.stateDir, "restore-request.node-key"), f.encryptionKey);
   const destination = await f.seedDestination();
   await writeFile(join(f.stateDir, "trading.env"), "untouched identity");
@@ -98,6 +99,7 @@ it("refuses the archive encryption key as node authentication before changing th
   );
   const expectedRefusal = { code: "promotion.break_glass_invalid" };
   expect(await readFile(join(f.venueDir, "venue.db"))).toEqual(destination.bytes);
+  expect(await readFile(join(f.venueDir, "node.db"))).toEqual(destination.nodeBytes);
   expect(await f.snapshot()).toEqual(destination.rows);
   expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toBe("untouched identity");
   expect(f.journal()).toBe(retained);

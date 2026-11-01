@@ -47,7 +47,7 @@ it("the built command waits, then takes its name in another process and resumes 
   await mkdir(target);
   const databases = await venue.db.execute<{ name: string; file: string }>("pragma database_list");
   const source = databases.rows.find((row) => row.name === "main")!.file;
-  for (const name of ["venue.db", "venue.db-wal"])
+  for (const name of ["venue.db", "venue.db-wal", "node.db", "node.db-wal"])
     await copyFile(join(dirname(source), name), join(target, name));
   async function clockAt(instant: string) {
     const preload = join(directory!, `clock-${instant.replaceAll(":", "")}.mjs`);

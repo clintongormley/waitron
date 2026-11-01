@@ -260,7 +260,7 @@ function argumentsRefused(args: readonly string[]): string {
 export async function assertNotAhead(venueDir: string, migrationsRoot: string): Promise<void> {
   const store = await openVenueDatabase(venueDir);
   try {
-    await assertDatabaseNotAhead(store.venue, manifestSets(), migrationsRoot);
+    await assertDatabaseNotAhead(store, manifestSets(), migrationsRoot);
   } finally {
     await store.close();
   }

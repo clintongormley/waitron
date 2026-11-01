@@ -1,4 +1,4 @@
-import { readMembershipTrustSet, readNodeMembershipRow, withTransaction } from "@waitron/db";
+import { readNodeMembershipRow, withTransaction } from "@waitron/db";
 import { initialSetupFor } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import {
@@ -17,14 +17,13 @@ import type { FirstFiscalHost } from "./setup-first-fiscal-api.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
 import type { FirstSetupOwnerAttempt } from "./first-setup-owner.js";
 import { parseEmailSettings } from "./email-settings-api.js";
-import { NODE_KEY_PURPOSE } from "./node-identity.js";
 import {
   isMembershipDocument,
   signBytes,
   verifyBytes,
   verifyMembershipDocument,
 } from "@waitron/membership";
-import { putCredential, tryGetCredential } from "@waitron/credentials";
+import { putCredential, readNodeIdentity } from "@waitron/credentials";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import "./errors.js";
 
@@ -112,6 +111,7 @@ export async function activateFirstFiscal(
   if (
     deps.provision === undefined ||
     deps.db === undefined ||
+    deps.node === undefined ||
     deps.ring === undefined ||
     deps.establishIdentity === undefined ||
     deps.seedMembership === undefined ||
@@ -211,6 +211,7 @@ export async function publishCheckedFirstFiscal(
 ): Promise<VenueResult> {
   if (
     deps.db === undefined ||
+    deps.node === undefined ||
     deps.ring === undefined ||
     deps.establishIdentity === undefined ||
     deps.seedMembership === undefined ||
@@ -222,30 +223,27 @@ export async function publishCheckedFirstFiscal(
     host,
     {
       db: deps.db,
+      node: deps.node,
       publishSelection: async (current) => {
         await host.publishSelection(current);
       },
       publishIdentity: async (result, state) => {
-        const identity = async () => ({
-          trust: await readMembershipTrustSet(deps.db!),
-          credential: await withTransaction(deps.db!, (tx) =>
-            tryGetCredential(tx, deps.ring!, { purpose: NODE_KEY_PURPOSE }),
-          ),
-        });
+        const identity = () => readNodeIdentity(deps.db!, deps.node!, deps.ring!, result.nodeId);
         let own = await identity();
-        if (own.trust[result.nodeId] === undefined && own.credential === null) {
+        // Establishing reuses a key already sealed, so a run interrupted between the two saves
+        // finishes stamping it.
+        if (own.trust[result.nodeId] === undefined) {
           await deps.establishIdentity!(result.nodeId);
           own = await identity();
         }
         const publicKey = own.trust[result.nodeId];
-        if (publicKey === undefined || own.credential === null) conflict();
+        if (publicKey === undefined || own.privateKey === null) conflict();
         const challenge = JSON.stringify([
           "waitron.first-setup-node-check",
           state.frozen.attemptId,
           result.nodeId,
         ]);
-        if (!verifyBytes(challenge, signBytes(challenge, own.credential.privateKey!), publicKey))
-          conflict();
+        if (!verifyBytes(challenge, signBytes(challenge, own.privateKey), publicKey)) conflict();
         let membership = await readNodeMembershipRow(deps.db!);
         if (membership === null) {
           await deps.seedMembership!(result.nodeId);
@@ -267,7 +265,12 @@ export async function publishCheckedFirstFiscal(
         const binding = firstSetupModuleContext(current, module).binding;
         if (!(await host.delivery.has(binding))) return;
         const stage = await host.keys.readStage({ ...owner, revision: current.revision }, hold);
-        await host.keys.installStagedNodeKey(deps.db!, current, stage, hold);
+        await host.keys.installStagedNodeKey(
+          { venue: deps.db!, node: deps.node! },
+          current,
+          stage,
+          hold,
+        );
       },
       sealSettings: async (result) => {
         if (payload.required)

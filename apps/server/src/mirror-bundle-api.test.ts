@@ -23,9 +23,13 @@ import {
   endorseKey,
   generateNodeKeyPair,
   MAX_NODES,
+  signDocumentBody,
   verifyBytes,
   verifyMembershipDocument,
+  type MembershipDocumentBody,
   type MembershipNode,
+  type NodeKeyPair,
+  type SignedMembershipDocument,
 } from "@waitron/membership";
 import { planVenue, type AdoptResult } from "@waitron/provisioning";
 import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
@@ -41,7 +45,7 @@ import {
 } from "./testing/allocated-contract.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
-import { establishNodeIdentity } from "./node-identity.js";
+import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
@@ -124,6 +128,8 @@ function nextNif(): string {
 
 let stateDir: string;
 let db: Database;
+// The main box's own key pair, set by `setupVenue`, so each chart it holds is one it signed.
+let primaryKeyPair: NodeKeyPair;
 
 async function setupVenue(): Promise<{
   designated: AdoptResult;
@@ -166,8 +172,12 @@ async function setupVenue(): Promise<{
     locationId: venue.locationId,
     nodeId: venue.nodeId,
   };
-  await establishNodeIdentity({ ownerDb: db, ring: RING }, designated.nodeId);
+  await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, designated.nodeId);
   const primaryPublicKey = (await readMembershipTrustSet(db))[designated.nodeId]!;
+  primaryKeyPair = {
+    publicKey: primaryPublicKey,
+    privateKey: await readNodeIdentityKey(suite.node, RING, designated.nodeId),
+  };
   const adminPersonId = await withTransaction(db, async (tx) => {
     const r = await tx.execute<{ id: string }>(sql`select id from persons where role = 'admin'`);
     return r.rows[0]!.id;
@@ -196,6 +206,7 @@ function mountApp(designated: AdoptResult, relayUrl: string | undefined, log?: L
     app,
     {
       appDb: db,
+      node: suite.node,
       ring: RING,
       stateDir,
       relayUrl,
@@ -250,7 +261,11 @@ async function holdChartWithStandby(
   ];
   await writeNodeMembership(
     db,
-    signedMembershipDoc(term, { signerNodeId: designated.nodeId, nodes: members }),
+    signedMembershipDoc(term, {
+      signerNodeId: designated.nodeId,
+      keyPair: primaryKeyPair,
+      nodes: members,
+    }),
   );
   return term;
 }
@@ -318,11 +333,13 @@ async function post(app: Hono, body: unknown): Promise<Response> {
 beforeAll(async () => {
   stateDir = await mkdtemp(join(tmpdir(), "waitron-mirror-bundle-api-state-"));
   await mkdir(join(stateDir, "tls"), { recursive: true });
-  await writeFile(
-    join(stateDir, "tls", "ca.crt"),
-    mintSelfSignedServerCert({ hostnames: ["waitron.local"], ipAddresses: [], now: new Date() })
-      .caCertPem,
-  );
+  const ca = mintSelfSignedServerCert({
+    hostnames: ["waitron.local"],
+    ipAddresses: [],
+    now: new Date(),
+  });
+  await writeFile(join(stateDir, "tls", "ca.crt"), ca.caCertPem);
+  await writeFile(join(stateDir, "tls", "ca.key"), ca.caKeyPem);
 
   db = suite.db;
 }, 180_000);
@@ -382,6 +399,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       db,
       signedMembershipDoc(seedTerm, {
         signerNodeId: designated.nodeId,
+        keyPair: primaryKeyPair,
         nodes: [
           {
             nodeId: designated.nodeId,
@@ -505,6 +523,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       db,
       signedMembershipDoc(seedTerm, {
         signerNodeId: designated.nodeId,
+        keyPair: primaryKeyPair,
         nodes: [
           {
             nodeId: designated.nodeId,
@@ -556,6 +575,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       db,
       signedMembershipDoc(seedTerm, {
         signerNodeId: designated.nodeId,
+        keyPair: primaryKeyPair,
         nodes: [
           {
             nodeId: designated.nodeId,
@@ -859,6 +879,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       db,
       signedMembershipDoc(seedTerm, {
         signerNodeId: designated.nodeId,
+        keyPair: primaryKeyPair,
         nodes: [
           {
             nodeId: designated.nodeId,
@@ -903,6 +924,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       db,
       signedMembershipDoc(seedTerm, {
         signerNodeId: designated.nodeId,
+        keyPair: primaryKeyPair,
         nodes: [
           {
             nodeId: designated.nodeId,
@@ -937,6 +959,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       db,
       signedMembershipDoc(seedTerm, {
         signerNodeId: designated.nodeId,
+        keyPair: primaryKeyPair,
         nodes: [
           {
             nodeId: designated.nodeId,
@@ -962,6 +985,247 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect(await readNodeMembership(db)).toEqual(chartBefore);
   });
 
+  it("refuses to sign over a held document no stored key vouches for, writing nothing", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+    const seedTerm = ((await readNodeMembership(db))?.body.term ?? -1) + 1;
+    await writeNodeMembership(
+      db,
+      signedMembershipDoc(seedTerm, {
+        signerNodeId: "stranger",
+        nodes: [
+          {
+            nodeId: designated.nodeId,
+            contactUrl: "https://box.deli.test",
+            standing: "serving-primary",
+          },
+        ],
+      }),
+    );
+    const chartBefore = await readNodeMembership(db);
+
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      ...validStandby(),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: { code: "membership.held_untrusted", params: { reason: "untrusted_signer" } },
+    });
+    expect(await readNodeMembership(db)).toEqual(chartBefore);
+  });
+
+  it("still refuses a malformed held document signed by a key no stored key vouches for", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+    const seedTerm = ((await readNodeMembership(db))?.body.term ?? -1) + 1;
+    await writeNodeMembership(
+      db,
+      signedMembershipDoc(seedTerm, {
+        signerNodeId: "stranger",
+        nodes: [
+          {
+            nodeId: designated.nodeId,
+            contactUrl: "https://box.deli.test",
+            standing: "serving-primary",
+          },
+        ],
+        revoked: ["gone", "gone"],
+      }),
+    );
+    const chartBefore = await readNodeMembership(db);
+
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      ...validStandby(),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: { code: "membership.held_untrusted", params: { reason: "untrusted_signer" } },
+    });
+    expect(await readNodeMembership(db)).toEqual(chartBefore);
+  });
+
+  /** Holds a chart signed by a key this box never stored, then changed as `alter` says. */
+  async function holdStrangerChart(
+    designated: AdoptResult,
+    alter: (doc: SignedMembershipDocument) => object = (doc) => doc,
+  ): Promise<void> {
+    const seedTerm = ((await readNodeMembership(db))?.body.term ?? -1) + 1;
+    const doc = signedMembershipDoc(seedTerm, {
+      signerNodeId: "stranger",
+      nodes: [
+        {
+          nodeId: designated.nodeId,
+          contactUrl: "https://box.deli.test",
+          standing: "serving-primary",
+        },
+      ],
+    });
+    await writeNodeMembership(db, alter(doc) as SignedMembershipDocument);
+  }
+
+  it("refuses a held document no stored key vouches for that carries an unsigned field beside its body", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+    await holdStrangerChart(designated, (doc) => ({ ...doc, note: "x" }));
+    const chartBefore = await readNodeMembership(db);
+
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      ...validStandby(),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: { code: "membership.held_untrusted", params: { reason: "untrusted_signer" } },
+    });
+    expect(await readNodeMembership(db)).toEqual(chartBefore);
+  });
+
+  it("refuses a held document too broken to verify with 409 membership.held_untrusted", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+    await holdStrangerChart(designated, (doc) => ({ ...doc, signature: undefined }));
+    const chartBefore = await readNodeMembership(db);
+
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      ...validStandby(),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: { code: "membership.held_untrusted", params: { reason: "malformed" } },
+    });
+    expect(await readNodeMembership(db)).toEqual(chartBefore);
+  });
+
+  it("refuses a held document no stored key vouches for before reserving anything", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+    await holdStrangerChart(designated);
+    const counterBefore = await allocationSnapshot();
+
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      ...validStandby(),
+    });
+
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
+      "membership.held_untrusted",
+    );
+    expect(await allocationSnapshot()).toEqual(counterBefore);
+  });
+
+  /** Holds a chart the main box signed with its own key over `body`, whatever its shape. */
+  async function holdMainSignedBody(designated: AdoptResult, body: object): Promise<void> {
+    await writeNodeMembership(db, {
+      body,
+      signerNodeId: designated.nodeId,
+      signature: signDocumentBody(body as MembershipDocumentBody, primaryKeyPair.privateKey),
+      endorsements: [],
+    } as unknown as SignedMembershipDocument);
+  }
+
+  it.each([
+    ["with no nodes list", (term: number) => ({ term })],
+    ["whose nodes entry is a number", (term: number) => ({ term, nodes: [42] })],
+  ])(
+    "refuses 409 membership.held_untrusted malformed for a chart the main box signed %s, reserving nothing and changing no chart",
+    async (_label, bodyAt) => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated, "https://relay.example:9000/");
+      const seedTerm = ((await readNodeMembership(db))?.body.term ?? -1) + 1;
+      await holdMainSignedBody(designated, bodyAt(seedTerm));
+      const chartBefore = await readNodeMembership(db);
+      const counterBefore = await allocationSnapshot();
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error: { code: "membership.held_untrusted", params: { reason: "malformed" } },
+      });
+      expect(await allocationSnapshot()).toEqual(counterBefore);
+      expect(await readNodeMembership(db)).toEqual(chartBefore);
+    },
+  );
+
+  it.each([
+    ["with no nodes list", (term: number) => ({ term })],
+    ["whose nodes entry is a number", (term: number) => ({ term, nodes: [42] })],
+  ])(
+    "refuses 409 membership.held_untrusted malformed when a chart the main box signed %s lands between a chart round's read and its write",
+    async (_label, bodyAt) => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated, "https://relay.example:9000/");
+      const seedTerm = await holdChartWithStandby(designated, crypto.randomUUID());
+      pause.beforeChartMint = () => holdMainSignedBody(designated, bodyAt(seedTerm + 1));
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+      });
+
+      expect(pause.beforeChartMint).toBeUndefined();
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error: { code: "membership.held_untrusted", params: { reason: "malformed" } },
+      });
+      expect((await readNodeMembership(db))?.body).toEqual(bodyAt(seedTerm + 1));
+    },
+  );
+
+  it("adds a spare after another spare retired itself", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+    const retired = generateNodeKeyPair();
+    const retiredId = crypto.randomUUID();
+    const endorsement = endorseKey(
+      retiredId,
+      retired.publicKey,
+      designated.nodeId,
+      primaryKeyPair.privateKey,
+    );
+    const seedTerm = ((await readNodeMembership(db))?.body.term ?? -1) + 1;
+    const retirement = signedMembershipDoc(seedTerm, {
+      signerNodeId: retiredId,
+      keyPair: retired,
+      nodes: [
+        {
+          nodeId: designated.nodeId,
+          contactUrl: "https://box.deli.test",
+          standing: "serving-primary",
+        },
+        { nodeId: retiredId, contactUrl: "https://cloud.deli.test", standing: "evicted" },
+      ],
+    });
+    await writeNodeMembership(db, { ...retirement, endorsements: [endorsement] });
+    const standby = validStandby();
+
+    const res = await post(app, { personId: adminPersonId, password: ADMIN_PASSWORD, ...standby });
+
+    expect(res.status).toBe(200);
+    const held = (await readNodeMembership(db))!;
+    expect(held.body.term).toBe(seedTerm + 1);
+    expect(held.signerNodeId).toBe(designated.nodeId);
+    expect(held.body.nodes.map((n) => n.nodeId)).toContain(standby.standbyNodeId);
+  });
+
   describe("a held chart already listing MAX_NODES machines", () => {
     /** This primary and MAX_NODES - 1 others, the first of them `evicted`; returns their ids. */
     async function holdFullChart(
@@ -977,6 +1241,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         db,
         signedMembershipDoc(term, {
           signerNodeId: designated.nodeId,
+          keyPair: primaryKeyPair,
           nodes: [
             {
               nodeId: designated.nodeId,
@@ -1025,7 +1290,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       expect(refused.status).toBe(409);
 
       const clearance = await clearRemovedMachine(
-        { db, ring: RING, nodeId: designated.nodeId, log: () => {} },
+        { db, node: suite.node, ring: RING, nodeId: designated.nodeId, log: () => {} },
         { targetNodeId: removed, personId: adminPersonId },
       );
       expect(clearance.cleared).toBe(true);
@@ -1104,7 +1369,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       (designated: AdoptResult, adminPersonId: string, standbyNodeId: string) =>
       async (): Promise<void> => {
         await removeUnjoinedStandby(
-          { db, ring: RING, nodeId: designated.nodeId, log: () => {} },
+          { db, node: suite.node, ring: RING, nodeId: designated.nodeId, log: () => {} },
           { targetNodeId: standbyNodeId, personId: adminPersonId },
         );
       };

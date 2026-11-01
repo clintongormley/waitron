@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -54,6 +55,7 @@ it.each(["archive", "bucket"])(
     const database = join(scratch, "selected.db");
     await suite.db.archiveTo(database);
     const entries = [
+      await nodeDumpEntry(suite.node, scratch),
       {
         name: "manifest.json",
         bytes: Buffer.from(

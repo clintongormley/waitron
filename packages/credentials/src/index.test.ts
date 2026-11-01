@@ -27,6 +27,12 @@ describe("the public surface", () => {
         "readCredentialMeta",
         "rotateCredentials",
         "tryGetCredential",
+        "establishNodeSigningKey",
+        "nodeSigningPublicKey",
+        "openNodeSigningKeyRow",
+        "readNodeIdentity",
+        "readNodeSigningKey",
+        "sealNodeSigningKeyTx",
       ].sort(),
     );
   });

@@ -7,12 +7,18 @@ import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
-import type { MembershipNode, SignedMembershipDocument } from "@waitron/membership";
+import {
+  generateNodeKeyPair,
+  signDocumentBody,
+  type MembershipNode,
+  type SignedMembershipDocument,
+} from "@waitron/membership";
 import { ALL_MODULES } from "./modules.js";
-import { establishNodeIdentity } from "./node-identity.js";
+import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountManagementApi } from "./management-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { tableSnapshot } from "./testing/table-snapshot.js";
 
 // Exercise route authorization, refusal-to-status mapping and success responses over a migrated
 // venue database. Retirement semantics are covered by retire.test.ts.
@@ -106,6 +112,7 @@ function buildApp(nodeId: string): Hono {
     app,
     {
       appDb: suite.db,
+      node: suite.node,
       ring: RING,
       nodeId,
     },
@@ -125,13 +132,15 @@ async function login(app: Hono, email: string): Promise<string> {
   return res.headers.get("set-cookie")!.split(";")[0];
 }
 
-/** Written through the plain-upsert setter (the read is unverified), so the placeholder signature is
- * fine. */
+// This box's own signing key, read once its identity is established.
+let ownKey: string;
+
+/** Signed by this box with its own key, which it trusts. */
 function membershipDoc(term: number, nodes: readonly MembershipNode[]): SignedMembershipDocument {
   return {
     body: { term, nodes },
     signerNodeId: nodes[0]!.nodeId,
-    signature: "self-placeholder-sig",
+    signature: signDocumentBody({ term, nodes }, ownKey),
     endorsements: [],
   };
 }
@@ -144,7 +153,8 @@ describe("POST /api/box/retire", () => {
     ({ nodeId } = await setupTenant());
     // Establish the node identity so the mint on the happy path has a key to sign with; harmless to
     // the refusal paths, which return before any mint.
-    await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, nodeId);
+    await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, nodeId);
+    ownKey = await readNodeIdentityKey(suite.node, RING, nodeId);
     managerCookie = await login(buildApp(nodeId), MANAGER_EMAIL);
   });
 
@@ -177,18 +187,23 @@ describe("POST /api/box/retire", () => {
   });
 
   it("409 when the held chart's revoked list names a machine twice, so the eviction cannot be minted", async () => {
+    const body = {
+      term: 5,
+      nodes: [
+        { nodeId, contactUrl: "", standing: "sell-only" as const },
+        {
+          nodeId: CARRIER_NODE_ID,
+          contactUrl: "https://carrier",
+          standing: "serving-primary" as const,
+        },
+      ],
+      revoked: ["gone", "gone"],
+    };
     await writeNodeMembership(suite.db, {
       signerNodeId: nodeId,
-      signature: "self-placeholder-sig",
+      signature: signDocumentBody(body, ownKey),
       endorsements: [],
-      body: {
-        term: 5,
-        nodes: [
-          { nodeId, contactUrl: "", standing: "sell-only" },
-          { nodeId: CARRIER_NODE_ID, contactUrl: "https://carrier", standing: "serving-primary" },
-        ],
-        revoked: ["gone", "gone"],
-      },
+      body,
     });
     const app = buildApp(nodeId);
     const res = await app.request("/api/box/retire", {
@@ -198,6 +213,62 @@ describe("POST /api/box/retire", () => {
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: { code: "membership.revoked_duplicate" } });
     expect((await readNodeMembership(suite.db))?.body.term).toBe(5);
+  });
+
+  it("409 membership.held_untrusted when no stored key vouches for the held chart", async () => {
+    const body = {
+      term: 5,
+      nodes: [
+        { nodeId, contactUrl: "", standing: "sell-only" as const },
+        {
+          nodeId: CARRIER_NODE_ID,
+          contactUrl: "https://carrier",
+          standing: "serving-primary" as const,
+        },
+      ],
+    };
+    await writeNodeMembership(suite.db, {
+      signerNodeId: CARRIER_NODE_ID,
+      signature: signDocumentBody(body, generateNodeKeyPair().privateKey),
+      endorsements: [],
+      body,
+    });
+    const app = buildApp(nodeId);
+    const res = await app.request("/api/box/retire", {
+      method: "POST",
+      headers: { cookie: managerCookie },
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "membership.held_untrusted" } });
+    expect((await readNodeMembership(suite.db))?.body.term).toBe(5);
+  });
+
+  it("409 membership.held_untrusted, writing nothing, when the held chart's body is not a membership chart", async () => {
+    const body = { term: 5 };
+    await writeNodeMembership(suite.db, {
+      signerNodeId: CARRIER_NODE_ID,
+      signature: signDocumentBody(body as never, generateNodeKeyPair().privateKey),
+      endorsements: [],
+      body,
+    } as unknown as SignedMembershipDocument);
+    // The login's session row changes on every request; nothing else may.
+    const before = [
+      await tableSnapshot(suite.db, ["management_sessions"]),
+      await tableSnapshot(suite.node),
+    ];
+    const app = buildApp(nodeId);
+    const res = await app.request("/api/box/retire", {
+      method: "POST",
+      headers: { cookie: managerCookie },
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "membership.held_untrusted", params: { reason: "malformed" } },
+    });
+    expect([
+      await tableSnapshot(suite.db, ["management_sessions"]),
+      await tableSnapshot(suite.node),
+    ]).toEqual(before);
   });
 
   it("200 evicts a fenced node with a carrier and flips self to evicted", async () => {

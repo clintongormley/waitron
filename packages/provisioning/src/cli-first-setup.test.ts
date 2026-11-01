@@ -130,7 +130,7 @@ async function fixture(answer = "yes") {
     },
     env: { WAITRON_ADMIN_PIN: request.admin.pin, WAITRON_ADMIN_PASSWORD: PASSWORD },
     openVenue: vi.fn(
-      async () => ({ venue: venue.db, node: venue.db, close: async () => {} }) as VenueDatabase,
+      async () => ({ venue: venue.db, node: venue.node, close: async () => {} }) as VenueDatabase,
     ),
     applyVenue,
     modules: ALL_MODULES,
@@ -322,7 +322,7 @@ it("ownership lost during open refuses before the command reads the opened datab
     });
     return {
       venue: venue.db,
-      node: venue.db,
+      node: venue.node,
       close: async () => {
         closes++;
       },
@@ -531,10 +531,11 @@ it("a restarted venue command finishes the exact commit without preparing or act
 it("the real preproduction deployment adapter completes publication through the venue command", async () => {
   const f = await activationFixture();
   const { createFirstSetupCommandDeployment } = await import("./first-setup-command-deployment.js");
-  f.deps.firstSetupDeployment = ({ runtime, db }) =>
+  f.deps.firstSetupDeployment = ({ runtime, db, node }) =>
     createFirstSetupCommandDeployment({
       runtime,
       db,
+      node,
       environment: {
         WAITRON_ADVERTISED_ORIGIN: "https://olivo.example.test:3443",
         WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 73).toString("base64"),
@@ -608,11 +609,15 @@ it("stale command ownership refuses before loading publication settings", async 
     password: PASSWORD,
   });
   expect(recovered.state.ownerGeneration).toBe(owner.ownerGeneration + 1);
-  const deployment = f.deps.firstSetupDeployment!({ runtime: f.runtime, db: venue.db });
+  const deployment = f.deps.firstSetupDeployment!({
+    runtime: f.runtime,
+    db: venue.db,
+    node: venue.node,
+  });
   const publication = vi.spyOn(deployment, "publication");
   const { completeFirstSetupCommand } = await import("./first-setup-command-activation.js");
   await expect(
-    completeFirstSetupCommand(f.runtime, venue.db, owner, deployment),
+    completeFirstSetupCommand(f.runtime, { venue: venue.db, node: venue.node }, owner, deployment),
   ).rejects.toMatchObject({ code: "setup.owner_required" });
   expect(publication).not.toHaveBeenCalled();
   expect((await f.runtime.store.read())!.status).toBe("committed");
@@ -622,8 +627,8 @@ it("the real command deployment refuses production before committing any venue",
   const f = await activationFixture();
   f.deps.env.WAITRON_ENV = "production";
   const { createFirstSetupCommandDeployment } = await import("./first-setup-command-deployment.js");
-  f.deps.firstSetupDeployment = ({ runtime, db }) =>
-    createFirstSetupCommandDeployment({ runtime, db, environment: {} });
+  f.deps.firstSetupDeployment = ({ runtime, db, node }) =>
+    createFirstSetupCommandDeployment({ runtime, db, node, environment: {} });
   expect(await runCliPastWait(f.args, f.deps)).toBe(1);
   expect(f.output).toContain("setup.not_ready {}");
   expect((await f.runtime.store.read())!.status).toBe("consumption-intent");
@@ -640,8 +645,8 @@ async function realActivationFixture(environment: Record<string, string | undefi
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 73).toString("base64"),
     ...environment,
   };
-  f.deps.firstSetupDeployment = ({ runtime, db }) => {
-    const deployment = createFirstSetupCommandDeployment({ runtime, db, environment: env });
+  f.deps.firstSetupDeployment = ({ runtime, db, node }) => {
+    const deployment = createFirstSetupCommandDeployment({ runtime, db, node, environment: env });
     const publication = deployment.publication;
     return {
       ...deployment,
@@ -857,7 +862,10 @@ async function productionFixture(accepted: boolean, certificate = productionCert
   const versions: Record<string, number> = {};
   const { appliedSchemaVersion } = await import("@waitron/migrations");
   for (const module of modules)
-    versions[module.name] = await appliedSchemaVersion(venue.db, module.migrations);
+    versions[module.name] = await appliedSchemaVersion(
+      { venue: venue.db, node: venue.node },
+      module.migrations,
+    );
   const { fiscalReadinessInput } = await import("./fiscal-readiness-input.js");
   const readiness = fiscalReadinessInput({
     venue: {
@@ -1213,9 +1221,9 @@ it("a missing private node key cannot finish interrupted command publication", a
   );
   const before = (await f.runtime.store.read())!;
   const counters = await venue.db.select().from(invoiceSeries);
-  const { deleteCredential } = await import("@waitron/credentials");
-  const { withTransaction, readMembershipTrustSet } = await import("@waitron/db");
-  await withTransaction(venue.db, (tx) => deleteCredential(tx, { purpose: "membership.node_key" }));
+  const { nodeSigningKey } = await import("@waitron/node-db");
+  const { withNodeTransaction, readMembershipTrustSet } = await import("@waitron/db");
+  await withNodeTransaction(venue.node, (tx) => tx.delete(nodeSigningKey));
   const trust = await readMembershipTrustSet(venue.db);
   expect(trust[before.frozen.nodeId]).toEqual(expect.any(String));
   f.interrupt(false);
@@ -1229,6 +1237,71 @@ it("a missing private node key cannot finish interrupted command publication", a
   });
 });
 
+it("a setup interrupted after the key was sealed and before it was stamped stamps it on the next run, and the stamped key matches", async () => {
+  const f = await realActivationFixture();
+  const { loadKeyRing, readNodeSigningKey, sealNodeSigningKeyTx } =
+    await import("@waitron/credentials");
+  const { withNodeTransaction, readMembershipTrustSet, readNodeMembershipRow } =
+    await import("@waitron/db");
+  const { generateNodeKeyPair } = await import("@waitron/membership");
+  const ring = loadKeyRing({ WAITRON_CREDENTIALS_KEY: f.env.WAITRON_CREDENTIALS_KEY });
+  const sealed = generateNodeKeyPair();
+  let interruptIdentity = true;
+  const real = f.deps.firstSetupDeployment!;
+  f.deps.firstSetupDeployment = (options) => {
+    const deployment = real(options);
+    const publication = deployment.publication;
+    return {
+      ...deployment,
+      publication: async (state) => {
+        const result = await publication(state);
+        const publishIdentity = result.deps.publishIdentity;
+        return {
+          ...result,
+          deps: {
+            ...result.deps,
+            publishIdentity: async (written, current) => {
+              if (!interruptIdentity) return publishIdentity(written, current);
+              interruptIdentity = false;
+              await withNodeTransaction(options.node, (tx) =>
+                sealNodeSigningKeyTx(tx, ring, written.nodeId, sealed.privateKey),
+              );
+              throw new Error("synthetic after seal");
+            },
+          },
+        };
+      },
+    };
+  };
+  await expect(runCliPastWait(f.args, f.deps)).rejects.toThrow("synthetic after seal");
+  const nodeId = (await f.runtime.store.read())!.frozen.nodeId;
+  expect((await readMembershipTrustSet(venue.db))[nodeId]).toBeUndefined();
+  expect(await readNodeMembershipRow(venue.db)).toBeNull();
+
+  expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
+
+  expect((await f.runtime.store.read())!.status).toBe("complete");
+  expect((await readMembershipTrustSet(venue.db))[nodeId]).toBe(sealed.publicKey);
+  expect(await readNodeSigningKey(venue.node, ring, nodeId)).toBe(sealed.privateKey);
+});
+
+it("a setup whose node.db refuses to seal the key stamps no public key in venue.db", async () => {
+  const f = await realActivationFixture();
+  const { sql } = await import("drizzle-orm");
+  const { readMembershipTrustSet } = await import("@waitron/db");
+  await venue.node.execute(
+    sql.raw(`create trigger refuse_signing_key before insert on node_signing_key
+      begin select raise(abort, 'refused by test'); end`),
+  );
+  try {
+    await expect(runCliPastWait(f.args, f.deps)).rejects.toThrow("refused by test");
+    const nodeId = (await f.runtime.store.read())!.frozen.nodeId;
+    expect((await readMembershipTrustSet(venue.db))[nodeId]).toBeUndefined();
+  } finally {
+    await venue.node.execute(sql`drop trigger if exists refuse_signing_key`);
+  }
+});
+
 async function unpreparedDeploymentFixture(
   environment: "production" | "preproduction" = "preproduction",
 ) {
@@ -1238,7 +1311,11 @@ async function unpreparedDeploymentFixture(
     randomBytes(32).toString("base64url"),
   );
   const state = (await f.runtime.store.read())!;
-  const deployment = f.deps.firstSetupDeployment!({ runtime: f.runtime, db: venue.db });
+  const deployment = f.deps.firstSetupDeployment!({
+    runtime: f.runtime,
+    db: venue.db,
+    node: venue.node,
+  });
   const { firstSetupProvisionRequest } = await import("./first-setup-activation.js");
   const provision = firstSetupProvisionRequest(state);
   return { ...f, state, deployment, provision };
@@ -1299,7 +1376,11 @@ it("command deployment refuses to provision over its already completed venue", a
   const state = (await f.runtime.store.read())!;
   const before = await venue.db.select().from(invoiceSeries);
   const tenants = await readTenantIdentities(venue.db);
-  const deployment = f.deps.firstSetupDeployment!({ runtime: f.runtime, db: venue.db });
+  const deployment = f.deps.firstSetupDeployment!({
+    runtime: f.runtime,
+    db: venue.db,
+    node: venue.node,
+  });
   await deployment.publication(state);
   const { firstSetupProvisionRequest } = await import("./first-setup-activation.js");
   await expect(

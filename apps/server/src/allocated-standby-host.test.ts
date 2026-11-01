@@ -5,17 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, afterAll, beforeEach, expect, it, vi } from "vitest";
 import { and, eq, isNull, sql } from "drizzle-orm";
-import { loadKeyRing, tryGetCredential } from "@waitron/credentials";
-import {
-  deployment,
-  invoiceSeries,
-  locations,
-  nodes,
-  tenants,
-  readSingletonRole,
-  setDeploymentMode,
-  withTransaction,
-} from "@waitron/db";
+import { loadKeyRing, readNodeSigningKey } from "@waitron/credentials";
+import { deployment, invoiceSeries, locations, nodes, tenants, withTransaction } from "@waitron/db";
+import { readNodeMode, setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -44,6 +36,7 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { adoptFromPrimary } from "./adopt.js";
 import { readPendingAdoption } from "./finish-adoption.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
+import { sealAdoptedStandbyKey } from "./testing/adopted-standby-key.js";
 import { promoteMirrorToPrimary } from "./promote.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
@@ -102,6 +95,7 @@ beforeAll(async () => {
   stateDir = await mkdtemp(join(tmpdir(), "allocated-standby-host-"));
   await mkdir(join(stateDir, "tls"));
   await writeFile(join(stateDir, "tls", "ca.crt"), "public-test-ca");
+  await writeFile(join(stateDir, "tls", "ca.key"), "public-test-ca-key");
 });
 afterAll(async () => {
   if (stateDir !== undefined) await rm(stateDir, { recursive: true, force: true });
@@ -150,7 +144,7 @@ beforeEach(async () => {
     );
     await db.insert(invoiceSeries).values(bases.map((base) => ({ ...base, nodeId: PRIMARY })));
   }
-  await establishNodeIdentity({ ownerDb: primary.db, ring: RING }, PRIMARY);
+  await establishNodeIdentity({ ownerDb: primary.db, node: primary.node, ring: RING }, PRIMARY);
 });
 function joinRequest(targetNodeId: string, action: string) {
   const binding = {
@@ -199,6 +193,7 @@ async function reserve(standby = generateStandbyIdentity()) {
   const bundle = await withOperationAuthority(held.binding, held.operatorId, (authority) =>
     assembleMirrorBundle({
       appDb: primary.db,
+      node: primary.node,
       ring: RING,
       stateDir: stateDir!,
       relayUrl: "https://relay.test",
@@ -221,7 +216,7 @@ async function establish(
   await writeFile(configuration().confirmationPath, JSON.stringify(request.confirmation));
   await withOperationAuthority(request.binding, request.operatorId, (authority) =>
     establishReservedStandbyIdentity(
-      { ownerDb: spare.db, ring: RING },
+      { ownerDb: spare.db },
       {
         locationId: LOCATION,
         standby: held.standby,
@@ -238,6 +233,7 @@ async function establish(
   );
 }
 async function promote(held: Awaited<ReturnType<typeof reserve>>, key: string, current = true) {
+  await sealAdoptedStandbyKey(spare.node, RING, held.standby);
   const binding = {
     module: "fiscal-verifactu",
     action: "promote",
@@ -300,16 +296,17 @@ async function promote(held: Awaited<ReturnType<typeof reserve>>, key: string, c
   return promoteMirrorToPrimary(
     {
       db: spare.db,
+      node: spare.node,
       ring: RING,
       nodeId: held.standby.nodeId,
       holders: createDeploymentHolders("mirror", "secondary"),
       log: () => {},
       persistTradingEnv: async () => {},
       modules,
-      withModuleOperations: ({ db, node }, run) => {
+      withModuleOperations: ({ db, nodeDb, node }, run) => {
         let prepared: ModuleOperations;
         return withRecoveryKeyOperation(
-          { db, nodeId: node.nodeId },
+          { db, node: nodeDb, nodeId: node.nodeId },
           binding,
           key,
           (tx) => run(tx, prepared),
@@ -355,8 +352,11 @@ it("reserves and adopts without an active SIF or series, then opens all purposes
   expect(await spare.db.select().from(fiscalReservations)).toHaveLength(1);
   expect(await primary.db.select().from(registroSif)).toEqual(primaryBefore);
   expect(await primary.db.select().from(fiscalAllocations)).toEqual(allocationsBefore);
-  await setDeploymentMode(spare.db, held.standby.nodeId, "mirror");
-  const key = await mintBreakGlassSecret(spare.db, held.standby.nodeId);
+  await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror");
+  const key = await mintBreakGlassSecret(
+    { venue: spare.db, node: spare.node },
+    held.standby.nodeId,
+  );
   const result = await promote(held, key);
   expect(result.alreadyPrimary).toBe(false);
   const live = await liveTarget(held.standby.nodeId);
@@ -376,10 +376,10 @@ it("reserves and adopts without an active SIF or series, then opens all purposes
     nodeId: held.standby.nodeId,
     eventId: "host-takeover",
   });
-  expect(await readSingletonRole(spare.db, held.standby.nodeId)).toBe("primary");
+  expect((await readNodeMode(spare.node, held.standby.nodeId)).singletonRole).toBe("primary");
 });
 
-it("rolls back the sealed key and spare node when the carrier includes premature series", async () => {
+it("refuses premature series and leaves no spare node, reservation or signing key", async () => {
   const held = await reserve();
   await expect(
     establish(held, { ...held.reserved, series: [{ code: "A-P000042", purpose: "standard" }] }),
@@ -389,14 +389,17 @@ it("rolls back the sealed key and spare node when the carrier includes premature
   });
   expect(await spare.db.select().from(nodes).where(eq(nodes.id, held.standby.nodeId))).toEqual([]);
   expect(await spare.db.select().from(fiscalReservations)).toEqual([]);
-  expect(await tryGetCredential(spare.db, RING, { purpose: "membership.node_key" })).toBeNull();
+  expect(await readNodeSigningKey(spare.node, RING, held.standby.nodeId)).toBeNull();
 });
 
 it("retains a dormant spare when independent current consumption is absent at takeover", async () => {
   const held = await reserve();
   await establish(held);
-  await setDeploymentMode(spare.db, held.standby.nodeId, "mirror");
-  const key = await mintBreakGlassSecret(spare.db, held.standby.nodeId);
+  await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror");
+  const key = await mintBreakGlassSecret(
+    { venue: spare.db, node: spare.node },
+    held.standby.nodeId,
+  );
   const reservation = await spare.db.select().from(fiscalReservations);
   await expect(promote(held, key, false)).rejects.toMatchObject({
     code: "sif.allocation_invalid",
@@ -404,14 +407,17 @@ it("retains a dormant spare when independent current consumption is absent at ta
   });
   expect(await liveTarget(held.standby.nodeId)).toEqual({ sif: [], series: [], allocations: [] });
   expect(await spare.db.select().from(fiscalReservations)).toEqual(reservation);
-  expect(await readSingletonRole(spare.db, held.standby.nodeId)).toBe("secondary");
+  expect((await readNodeMode(spare.node, held.standby.nodeId)).singletonRole).toBe("secondary");
 });
 
 it("retains the dormant reservation and all fiscal rows after a refused membership write", async () => {
   const held = await reserve();
   await establish(held);
-  await setDeploymentMode(spare.db, held.standby.nodeId, "mirror");
-  const key = await mintBreakGlassSecret(spare.db, held.standby.nodeId);
+  await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror");
+  const key = await mintBreakGlassSecret(
+    { venue: spare.db, node: spare.node },
+    held.standby.nodeId,
+  );
   const reservation = await spare.db.select().from(fiscalReservations);
   await spare.db.execute(
     sql`create trigger refuse_chart before insert on node_membership begin select raise(abort, 'test chart refusal'); end`,
@@ -420,7 +426,7 @@ it("retains the dormant reservation and all fiscal rows after a refused membersh
     await expect(promote(held, key)).rejects.toThrow("test chart refusal");
     expect(await liveTarget(held.standby.nodeId)).toEqual({ sif: [], series: [], allocations: [] });
     expect(await spare.db.select().from(fiscalReservations)).toEqual(reservation);
-    expect(await readSingletonRole(spare.db, held.standby.nodeId)).toBe("secondary");
+    expect((await readNodeMode(spare.node, held.standby.nodeId)).singletonRole).toBe("secondary");
   } finally {
     await spare.db.execute(sql`drop trigger refuse_chart`);
   }
@@ -436,12 +442,15 @@ it("a refused public adoption retains its independently signed reservation witho
     adoptFromPrimary(
       {
         ownerDb: unadopted.db,
+        ownerNode: unadopted.node,
+        ring: RING,
         advertisedOrigin: "https://spare.test",
         environment: "preproduction",
         database: "synthetic-empty-spare",
         stateDir: adoptionDir,
         persistTrading: async () => {},
         persistModuleConfig: async () => {},
+        persistCredentialsRing: async () => {},
         fetchBundle: async (_url, _credential, standby) => {
           target = standby.nodeId;
           const held = joinRequest(target, "reserve");
@@ -451,6 +460,7 @@ it("a refused public adoption retains its independently signed reservation witho
           return withOperationAuthority(held.binding, held.operatorId, (authority) =>
             assembleMirrorBundle({
               appDb: primary.db,
+              node: primary.node,
               ring: RING,
               stateDir: stateDir!,
               relayUrl: "https://relay.test",
@@ -485,6 +495,6 @@ it("a refused public adoption retains its independently signed reservation witho
   expect(await unadopted.db.select().from(nodes)).toEqual([]);
   expect(await unadopted.db.select().from(fiscalReservations)).toEqual([]);
   expect(await unadopted.db.select().from(fiscalAllocations)).toEqual([]);
-  expect(await tryGetCredential(unadopted.db, RING, { purpose: "membership.node_key" })).toBeNull();
+  expect(await readNodeSigningKey(unadopted.node, RING, target)).toBeNull();
   expect(await readPendingAdoption(adoptionDir)).toBeNull();
 });

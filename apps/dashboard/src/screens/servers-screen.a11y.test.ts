@@ -7,8 +7,12 @@ import type { DashboardApi, ServerListing } from "../api/client.js";
 
 const STANDBY = "22222222-2222-4222-8222-222222222222";
 
+const FINGERPRINT =
+  "3F:A1:9C:0B:7E:22:D4:51:88:6A:E0:13:BC:47:F9:2D:65:0E:A8:31:DC:74:5B:96:C2:0F:E7:38:41:AD:9B:16";
+
 const listing: ServerListing = {
   term: 3,
+  authorityFingerprint: FINGERPRINT,
   nodes: [
     {
       nodeId: "11111111-1111-4111-8111-111111111111",
@@ -81,6 +85,7 @@ const REMOVED = "44444444-4444-4444-8444-444444444444";
 // The server marks `canClear` only on a removed row, and only while this server is the primary.
 const clearable: ServerListing = {
   term: 4,
+  authorityFingerprint: FINGERPRINT,
   nodes: listing.nodes.map((n) => ({ ...n, canClear: n.nodeId === REMOVED })),
 };
 
@@ -153,6 +158,7 @@ describe.each(["light", "dark"] as const)("servers-screen a11y (%s theme)", (the
     const blank = "55555555-5555-4555-8555-555555555555";
     const withBlank: ServerListing = {
       term: 3,
+      authorityFingerprint: FINGERPRINT,
       nodes: [
         ...listing.nodes,
         {
@@ -212,6 +218,7 @@ describe.each(["light", "dark"] as const)("servers-screen a11y (%s theme)", (the
   it("renders the not-primary note accessibly", async () => {
     const onStandby: ServerListing = {
       term: 3,
+      authorityFingerprint: FINGERPRINT,
       nodes: listing.nodes.map((n) => ({ ...n, isSelf: n.nodeId === STANDBY, removable: false })),
     };
     const { el, host } = await mountWidget<ServersScreen>(

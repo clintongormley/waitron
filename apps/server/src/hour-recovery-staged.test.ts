@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import {
   suite,
   root,
@@ -70,6 +71,7 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-history-reader.js", async (original)
 async function olderBackup() {
   const manifest = await buildManifest({
     db: suite.db,
+    node: suite.node,
     modules: ALL_MODULES,
     environment: "preproduction",
     now: new Date(),
@@ -106,6 +108,7 @@ async function olderBackup() {
     packArchive([
       { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
       { name: "db.dump", bytes: dump },
+      await nodeDumpEntry(suite.node, root),
       {
         name: "secrets/trading.env",
         bytes: Buffer.from(`WAITRON_NODE_ID=${node.nodeId}\n`),

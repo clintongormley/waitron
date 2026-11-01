@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "../src/testing/node-copy.js";
 import { FISCAL_OPERATIONS as historicalFiscalOperations } from "@waitron/fiscal-verifactu/src/allocation-configuration.js";
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
@@ -161,7 +162,7 @@ beforeEach(async () => {
   await withTransaction(suite.db, (tx) =>
     registerSif(tx, { nodeId: NODE, nif: "50000000R", idSistemaInformatico: "W1" }),
   );
-  secret = await mintBreakGlassSecret(suite.db, NODE);
+  secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
   root = await mkdtemp(join(tmpdir(), "restore-allocation-"));
   venueDir = join(root, "venue");
   await mkdir(venueDir);
@@ -226,6 +227,7 @@ it.each(["archive", "bucket"])(
     };
     const entries = [
       { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
+      await nodeDumpEntry(suite.node, root),
       {
         name: "secrets/trading.env",
         bytes: Buffer.from(`WAITRON_NODE_ID=${NODE}\n`),

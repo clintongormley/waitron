@@ -4,12 +4,12 @@ import { describe, expect, it } from "vitest";
 import { blankComments } from "../packages/shared/src/source-comments.js";
 
 /**
- * Five tables the application code may read and never write: `tenants`, `nodes`, `deployment`,
- * `mirror_config` and `node_roles`.
+ * The tables the application code may read and never write: venue.db's `tenants`, `nodes` and
+ * `deployment`, and node.db's `node_mode`, `node_mirror_link`, `node_primary_key`,
+ * `node_recovery_key` and `node_signing_key`.
  *
- * NOTHING BUT THIS FILE REFUSES THEM. SQLite has no roles and no grants — one process opens one
- * file — and every path, request and provisioning alike, shares that one venue handle. So the rule
- * survives only as a convention over source text, and this guard is the whole of its enforcement.
+ * NOTHING BUT THIS FILE REFUSES THEM. SQLite has no roles and no grants, so the rule survives only
+ * as a convention over source text, and this guard is the whole of its enforcement.
  * Read the four hedges below before trusting it.
  *
  * It is about WHICH FILE does the write, not about being a request: a request may reach these
@@ -54,22 +54,19 @@ const REPO_ROOT = join(import.meta.dirname, "..");
  *                                                provision route.
  *   `packages/db/src/reserved-identity.ts`       writes a standby's dormant node row, from the boot
  *                                                adoption worker.
- *   `packages/db/src/deployment.ts`              stamps the environment, from the setup-mode
- *                                                provision and adopt routes and the
- *                                                `waitron-provision` command line; writes a node's
- *                                                mode from adopt and the mirror promotion (a
- *                                                `mirror` mode write sets the singleton role with
- *                                                it); its singleton role from both promote paths
- *                                                and the boot demote; and its break-glass verifier
- *                                                from adopt, through the break-glass mint.
- *   `packages/db/src/mirror-config.ts`           writes the cloud mirror's connection config, from
- *                                                the setup-mode adopt route.
+ *   `packages/db/src/deployment.ts`              stamps the environment.
+ *   `packages/node-db/src/mirror-link.ts`        writes this node's mirror link.
+ *   `packages/node-db/src/mode.ts`               writes this node's mode and singleton role.
+ *   `packages/node-db/src/primary-key.ts`        pins the primary's public key on this node.
+ *   `packages/node-db/src/recovery-key.ts`       writes this node's recovery-key verifier and name.
+ *   `packages/credentials/src/node-signing-key.ts` seals a node's signing key, and re-seals every
+ *                                                row not on the key ring's current key.
  */
 const ALLOWED: Record<string, readonly string[]> = JSON.parse(
   readFileSync(join(REPO_ROOT, "scripts", "write-path-tables.json"), "utf8"),
 );
 
-/** `mirror_config` -> `mirrorConfig`: the drizzle object a write names, from the SQL table name. */
+/** `node_mirror_link` -> `nodeMirrorLink`: the drizzle object a write names, from the SQL table name. */
 function schemaObject(table: string): string {
   return table.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
 }
@@ -107,9 +104,13 @@ const TABLES = Object.keys(ALLOWED);
 const DETECTORS = new Map(TABLES.map((table) => [table, new RegExp(detector(table), "im")]));
 const ANY_TABLE = new RegExp(TABLES.map((table) => detector(table)).join("|"), "im");
 
-/** Does this source write `table`? A comment is not code, wherever on its line it starts. */
+/**
+ * Does this source write `table`? A comment is not code, wherever on its line it starts. A table
+ * the JSON does not list gets its detector built here, so the detector's own cases can name any.
+ */
 function writes(source: string, table: string): boolean {
-  return DETECTORS.get(table)!.test(blankComments(source));
+  const found = DETECTORS.get(table) ?? new RegExp(detector(table), "im");
+  return found.test(blankComments(source));
 }
 
 const SOURCE_EXTENSIONS = [".ts", ".mts", ".cts", ".tsx"];
@@ -190,8 +191,11 @@ describe("no source writes a table the application role may only read", () => {
   it("keeps every table whose writes belong in the named provisioning or identity files", () => {
     expect(TABLES.slice().sort()).toEqual([
       "deployment",
-      "mirror_config",
-      "node_roles",
+      "node_mirror_link",
+      "node_mode",
+      "node_primary_key",
+      "node_recovery_key",
+      "node_signing_key",
       "nodes",
       "tenants",
     ]);

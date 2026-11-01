@@ -237,6 +237,7 @@ describe("selected-hour admission before archive placement", () => {
       const reconstructed = createSelectedRecoveryPreparation(f.options);
       await runRestoreHooks({
         db: restored.venue,
+        nodeDb: restored.node,
         node,
         modules: ALL_MODULES,
         log: () => {},
@@ -300,7 +301,12 @@ describe("selected-hour admission before archive placement", () => {
     }));
     const reconstructed = createSelectedRecoveryPreparation(f.options);
     const runner = reconstructed.runner(f.outcome.input, { refresh: true });
-    const context = { db: suite.db, node, sourceId: f.options.binding.sourceId };
+    const context = {
+      db: suite.db,
+      nodeDb: suite.node,
+      node,
+      sourceId: f.options.binding.sourceId,
+    };
     await runner.checkBeforePlacement!(context);
     vi.advanceTimersByTime(31_000);
     await runner.checkBeforePlacement!(context);
@@ -651,6 +657,7 @@ describe("selected-hour admission before archive placement", () => {
           modules: (
             await buildManifest({
               db: suite.db,
+              node: suite.node,
               modules: ALL_MODULES,
               environment: "preproduction",
               now: new Date(),

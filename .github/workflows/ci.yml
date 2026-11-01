@@ -3409,6 +3409,7 @@ jobs:
           set -- "$@" --filter "!@waitron/composition"
           set -- "$@" --filter "!@waitron/fiscal-none"
           set -- "$@" --filter "!@waitron/recovery-pack"
+          set -- "$@" --filter "!@waitron/node-db"
 
           pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage

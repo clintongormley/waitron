@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -67,7 +68,10 @@ describe("business-day timeline through cold restore and reset", () => {
     try {
       const dump = join(root, "copy.db");
       await stampDeployment(suite.db, "preproduction");
-      const secret = await mintBreakGlassSecret(suite.db, venue.cfg.nodeId);
+      const secret = await mintBreakGlassSecret(
+        { venue: suite.db, node: suite.node },
+        venue.cfg.nodeId,
+      );
       const series = await suite.db.select().from(invoiceSeries);
       const fixture = allocationFixture({
         node: { nodeId: nodeId(venue.cfg.nodeId), locationId: venue.cfg.locationId },
@@ -85,6 +89,7 @@ describe("business-day timeline through cold restore and reset", () => {
       await suite.db.archiveTo(dump);
       const manifest = await buildManifest({
         db: suite.db,
+        node: suite.node,
         modules: ALL_MODULES,
         environment: "preproduction",
         now: new Date("2026-11-08T12:00:00Z"),
@@ -93,6 +98,7 @@ describe("business-day timeline through cold restore and reset", () => {
         packArchive([
           { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
           { name: "db.dump", bytes: await readFile(dump) },
+          await nodeDumpEntry(suite.node, root),
           {
             name: "secrets/secrets.env",
             bytes: Buffer.from(

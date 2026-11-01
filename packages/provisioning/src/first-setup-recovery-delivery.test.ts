@@ -194,7 +194,13 @@ it("returns no document and refuses installation when the delivery record is abs
   expect(await f.runtime.recoveryDelivery.readRecoveryDocument(f.owner, MODULE)).toBeNull();
   await expect(
     f.runtime.coordinator.run((hold) =>
-      f.runtime.recoveryDelivery.install(venue.db, f.state, f.owner, MODULE, hold),
+      f.runtime.recoveryDelivery.install(
+        { venue: venue.db, node: venue.node },
+        f.state,
+        f.owner,
+        MODULE,
+        hold,
+      ),
     ),
   ).rejects.toMatchObject({ code: "setup.not_ready" });
   await writeFile(f.path, f.bytes);

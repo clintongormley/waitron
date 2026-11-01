@@ -56,6 +56,11 @@ export type VerifyResult =
     }
   | { readonly valid: false; readonly reason: VerifyFailure };
 
+/** `verifyDocumentSigner`'s answer; it never reads a held chart, so never `signer_removed`. */
+export type SignerVerdict =
+  | { readonly trusted: true; readonly signerNodeId: string }
+  | { readonly trusted: false; readonly reason: Exclude<VerifyFailure, "signer_removed"> };
+
 export type AcceptResult =
   | { readonly accepted: true; readonly document: SignedMembershipDocument }
   | { readonly accepted: false; readonly reason: "invalid"; readonly failure: VerifyFailure }

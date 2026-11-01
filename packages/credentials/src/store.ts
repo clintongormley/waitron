@@ -1,9 +1,17 @@
 import { createHash } from "node:crypto";
 import { eq, exists } from "drizzle-orm";
-import { nowIso, tenants, withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  nowIso,
+  tenants,
+  withTransaction,
+  type Database,
+  type NodeDatabase,
+  type Transaction,
+} from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { aadFor, open, seal } from "./cipher.js";
 import { keyForVersion, type KeyRing } from "./keyring.js";
+import { rotateNodeSigningKeys } from "./node-signing-key.js";
 import { isPurpose, validatePayload, type Purpose } from "./purposes.js";
 import { tenantCredentials } from "./schema/tenant-credentials.js";
 import "./errors.js";
@@ -245,8 +253,15 @@ export interface RotationResult {
  * or renamed on a provisioned purpose makes `rotate` throw `credentials.invalid_payload` at that
  * row and stop, until the purpose is re-provisioned. Kept deliberately: re-sealing a payload the
  * package would now refuse is its own trap.
+ *
+ * Given `node`, every row in its `node_signing_key` table is re-sealed too, after the vault, and
+ * counted in the same result.
  */
-export async function rotateCredentials(db: Database, ring: KeyRing): Promise<RotationResult> {
+export async function rotateCredentials(
+  db: Database,
+  ring: KeyRing,
+  node?: NodeDatabase,
+): Promise<RotationResult> {
   const result: RotationResult = { rotated: 0, alreadyCurrent: 0 };
   const rows = await withTransaction(db, (tx) => listCredentials(tx));
   for (const row of rows) {
@@ -262,6 +277,11 @@ export async function rotateCredentials(db: Database, ring: KeyRing): Promise<Ro
       await putCredential(tx, ring, { purpose, value });
       result.rotated += 1;
     });
+  }
+  if (node !== undefined) {
+    const signing = await rotateNodeSigningKeys(node, ring);
+    result.rotated += signing.rotated;
+    result.alreadyCurrent += signing.alreadyCurrent;
   }
   return result;
 }

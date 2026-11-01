@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import type { Database } from "@waitron/db";
+import { STUB_NODE } from "./testing/node-copy.js";
 import { AppError } from "@waitron/shared";
 import { runOnce } from "./backup-sweep.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
@@ -36,6 +37,7 @@ function deps(f: Awaited<ReturnType<typeof fixture>>, backends: StorageBackend[]
     ...f,
     backends,
     db: {} as Database,
+    node: STUB_NODE,
     modules: [],
     environment: "preproduction" as const,
     resolvers: {},

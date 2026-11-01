@@ -7,7 +7,7 @@ import {
   createFirstSetupResolutionStore,
 } from "@waitron/provisioning";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { readBreakGlassVerifier } from "@waitron/db";
+import { readRecoveryKeyVerifier } from "@waitron/node-db";
 import { verifySecretAsync } from "@waitron/identity";
 import { loadKeyRing } from "@waitron/credentials";
 import { parseModuleConfig } from "@waitron/module";
@@ -83,6 +83,7 @@ async function fixture(certificate?: { pfxBase64: string; passphrase: string; ce
   const deps: SetupDeps = {
     environment: "production",
     db: suite.db,
+    node: suite.node,
     ring,
     firstFiscal: host,
     provision: async (req, beforeTransaction) => {
@@ -109,13 +110,17 @@ async function fixture(certificate?: { pfxBase64: string; passphrase: string; ce
         interrupt = false;
         throw new Error("synthetic after commit");
       }
-      await establishNodeIdentity({ ownerDb: suite.db, ring }, nodeId);
+      await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, nodeId);
     },
     seedMembership: (nodeId) =>
-      seedTermZeroMembership({ db: suite.db, ring }, nodeId, "https://test.example"),
+      seedTermZeroMembership(
+        { db: suite.db, node: suite.node, ring },
+        nodeId,
+        "https://test.example",
+      ),
     persistTrading: async () => {
       await publicationProbe?.();
-      const verifier = await readBreakGlassVerifier(suite.db, staged.key.nodeId);
+      const verifier = await readRecoveryKeyVerifier(suite.node, staged.key.nodeId);
       expect(verifier).not.toBeNull();
       expect(await verifySecretAsync(staged.key.secret, verifier!)).toBe(true);
       publications++;
@@ -335,11 +340,11 @@ it("publication after interruption preserves the staged verifier with zero furth
   await f.currentOwnerReference();
   f.interrupt();
   await expect(f.activate()).rejects.toThrow("synthetic after commit");
-  const verifier = await readBreakGlassVerifier(suite.db, f.staged.key.nodeId);
+  const verifier = await readRecoveryKeyVerifier(suite.node, f.staged.key.nodeId);
   expect(verifier).toBe(f.staged.stage.verifier);
   const owner = await f.recover();
   await f.finish(owner);
-  expect(await readBreakGlassVerifier(suite.db, f.staged.key.nodeId)).toBe(verifier);
+  expect(await readRecoveryKeyVerifier(suite.node, f.staged.key.nodeId)).toBe(verifier);
   expect(f.counts()).toEqual({ activations: 1, publications: 1 });
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
 });

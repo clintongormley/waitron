@@ -14,14 +14,14 @@ import {
   nodes,
   openVenueDatabase,
   readNodeMembership,
-  readSingletonRole,
   stampDeployment,
   tenants,
-  writeMirrorConfig,
   writeNodeMembership,
   type Database,
+  type NodeDatabase,
   type VenueDatabase,
 } from "@waitron/db";
+import { readNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
@@ -81,6 +81,8 @@ let supersededVenueDir: string;
 let proceedsVenueDir: string;
 let supersededDb: Database;
 let proceedsDb: Database;
+let supersededNode: NodeDatabase;
+let proceedsNode: NodeDatabase;
 const openStores: VenueDatabase[] = [];
 const venueDirs: string[] = [];
 
@@ -158,13 +160,13 @@ function peerFencingChart(term: number) {
 }
 
 /** Migrated here, not by boot, because the identity rows have to exist before boot reads them. */
-async function migratedVenue(): Promise<[string, Database]> {
+async function migratedVenue(): Promise<[string, Database, NodeDatabase]> {
   const directory = await mkdtemp(join(tmpdir(), "waitron-reconcile-venue-"));
   venueDirs.push(directory);
   await applyMigrations(directory, migrationOptionsFor(manifestSets(), null));
   const store = await openVenueDatabase(directory);
   openStores.push(store);
-  return [directory, store.venue];
+  return [directory, store.venue, store.node];
 }
 
 beforeAll(async () => {
@@ -177,8 +179,8 @@ beforeAll(async () => {
   }
 
   // Both keep the default mode 'primary': the returned box believes it is primary.
-  [supersededVenueDir, supersededDb] = await migratedVenue();
-  [proceedsVenueDir, proceedsDb] = await migratedVenue();
+  [supersededVenueDir, supersededDb, supersededNode] = await migratedVenue();
+  [proceedsVenueDir, proceedsDb, proceedsNode] = await migratedVenue();
   for (const db of [supersededDb, proceedsDb]) {
     await seed(db);
     await stampDeployment(db, "preproduction");
@@ -214,7 +216,7 @@ describe("returned-box membership reconciliation at boot", () => {
   it("a reachable peer holding a higher-term fencing chart sends the returned box read-only — it cannot sell", async () => {
     await seedHeldChart(supersededDb, 1);
     const peer = await startPeer(peerFencingChart(2));
-    await writeMirrorConfig(supersededDb, TILL_ENV.WAITRON_NODE_ID, {
+    await writeMirrorLink(supersededNode, TILL_ENV.WAITRON_NODE_ID, {
       relayUrl: peer.url,
       boxHostname: "box.local",
       boxCaPem: BOX_CA_PEM,
@@ -244,7 +246,9 @@ describe("returned-box membership reconciliation at boot", () => {
       // Persisted and demoted, not merely a per-request gate.
       const held = await readNodeMembership(supersededDb);
       expect(held?.body.term).toBe(2);
-      expect(await readSingletonRole(supersededDb, TILL_ENV.WAITRON_NODE_ID)).toBe("secondary");
+      expect((await readNodeMode(supersededNode, TILL_ENV.WAITRON_NODE_ID)).singletonRole).toBe(
+        "secondary",
+      );
     } finally {
       await server.close();
       await peer.stop();
@@ -255,17 +259,17 @@ describe("returned-box membership reconciliation at boot", () => {
   // the restore must not move the term before the peer's chart is read, or the fencing chart reads
   // as not newer and two nodes sell.
   it("a restored box that the peer fences adopts the fence and leaves its first start for later", async () => {
-    const [venueDir, db] = await migratedVenue();
+    const [venueDir, db, nodeDb] = await migratedVenue();
     await seed(db);
     await stampDeployment(db, "preproduction");
     // This node can sign, so a first start that ran would move the term.
     await establishNodeIdentity(
-      { ownerDb: db, ring: loadKeyRing(KEY_ENV) },
+      { ownerDb: db, node: nodeDb, ring: loadKeyRing(KEY_ENV) },
       TILL_ENV.WAITRON_NODE_ID,
     );
     await seedHeldChart(db, 1);
     const peer = await startPeer(peerFencingChart(2));
-    await writeMirrorConfig(db, TILL_ENV.WAITRON_NODE_ID, {
+    await writeMirrorLink(nodeDb, TILL_ENV.WAITRON_NODE_ID, {
       relayUrl: peer.url,
       boxHostname: "box.local",
       boxCaPem: BOX_CA_PEM,
@@ -322,8 +326,8 @@ describe("returned-box membership reconciliation at boot", () => {
   describe("a peer chart signed by a machine this box's held chart has removed", () => {
     async function bootWithHeldPeerStanding(
       peerStanding: "evicted" | "serving-secondary",
-    ): Promise<{ db: Database; acceptingSales: unknown; lines: string[] }> {
-      const [venueDir, db] = await migratedVenue();
+    ): Promise<{ db: Database; nodeDb: NodeDatabase; acceptingSales: unknown; lines: string[] }> {
+      const [venueDir, db, nodeDb] = await migratedVenue();
       await seed(db);
       await stampDeployment(db, "preproduction");
       await writeNodeMembership(
@@ -341,7 +345,7 @@ describe("returned-box membership reconciliation at boot", () => {
         }),
       );
       const peer = await startPeer(peerFencingChart(2));
-      await writeMirrorConfig(db, TILL_ENV.WAITRON_NODE_ID, {
+      await writeMirrorLink(nodeDb, TILL_ENV.WAITRON_NODE_ID, {
         relayUrl: peer.url,
         boxHostname: "box.local",
         boxCaPem: BOX_CA_PEM,
@@ -365,7 +369,7 @@ describe("returned-box membership reconciliation at boot", () => {
         const node = await fetch(`http://127.0.0.1:${httpPort()}/api/node`);
         expect(node.status).toBe(200);
         const { acceptingSales } = (await node.json()) as { acceptingSales: unknown };
-        return { db, acceptingSales, lines };
+        return { db, nodeDb, acceptingSales, lines };
       } finally {
         process.stdout.write = original;
         await server?.close();
@@ -374,11 +378,11 @@ describe("returned-box membership reconciliation at boot", () => {
     }
 
     it("is not persisted, the box keeps selling, and the refusal is logged at warn with its reason", async () => {
-      const { db, acceptingSales, lines } = await bootWithHeldPeerStanding("evicted");
+      const { db, nodeDb, acceptingSales, lines } = await bootWithHeldPeerStanding("evicted");
 
       expect(acceptingSales).toBe(true);
       expect((await readNodeMembership(db))?.body.term).toBe(1);
-      expect(await readSingletonRole(db, TILL_ENV.WAITRON_NODE_ID)).toBe("primary");
+      expect((await readNodeMode(nodeDb, TILL_ENV.WAITRON_NODE_ID)).singletonRole).toBe("primary");
       const refused = lines
         .map((line) => JSON.parse(line) as Record<string, unknown>)
         .filter((entry) => entry["event"] === "node.membership_refused_on_boot");
@@ -398,7 +402,7 @@ describe("returned-box membership reconciliation at boot", () => {
   it("an UNREACHABLE peer leaves the returned box PRIMARY — it proceeds and accepts sales (prove-by-deletion)", async () => {
     await seedHeldChart(proceedsDb, 1);
     const [deadPort, port] = await freePorts(2);
-    await writeMirrorConfig(proceedsDb, TILL_ENV.WAITRON_NODE_ID, {
+    await writeMirrorLink(proceedsNode, TILL_ENV.WAITRON_NODE_ID, {
       relayUrl: `http://127.0.0.1:${deadPort}/`,
       boxHostname: "box.local",
       boxCaPem: BOX_CA_PEM,
@@ -422,7 +426,9 @@ describe("returned-box membership reconciliation at boot", () => {
 
       const held = await readNodeMembership(proceedsDb);
       expect(held?.body.term).toBe(1);
-      expect(await readSingletonRole(proceedsDb, TILL_ENV.WAITRON_NODE_ID)).toBe("primary");
+      expect((await readNodeMode(proceedsNode, TILL_ENV.WAITRON_NODE_ID)).singletonRole).toBe(
+        "primary",
+      );
     } finally {
       await server.close();
     }

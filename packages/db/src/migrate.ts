@@ -2,6 +2,9 @@ import { migrate as migrateSqlite } from "drizzle-orm/better-sqlite3/migrator";
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 import type { Database } from "./client.js";
 
+/** The two database files a node keeps: `venue.db`, shared with the venue, and its own `node.db`. */
+export type MigrationDatabase = "venue" | "node";
+
 export interface MigrationOptions {
   /** Absolute path to a drizzle-kit output folder containing meta/_journal.json. */
   migrationsFolder: string;

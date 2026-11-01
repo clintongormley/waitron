@@ -1,10 +1,11 @@
 import {
-  readBreakGlassKeyName,
-  readBreakGlassVerifier,
+  withNodeTransaction,
   withTransaction,
   type Database,
+  type NodeDatabase,
   type Transaction,
 } from "@waitron/db";
+import { readRecoveryKey, readRecoveryKeyVerifier } from "@waitron/node-db";
 import { verifySecretAsync } from "@waitron/identity";
 import type { ProvisionedNode, WaitronModule } from "@waitron/module";
 import { AppError } from "@waitron/shared";
@@ -30,6 +31,7 @@ function record(value: unknown): value is Record<string, unknown> {
 export async function createRecoveryPack(
   deps: {
     readonly db: Database;
+    readonly nodeDb: NodeDatabase;
     readonly node: ProvisionedNode;
     readonly venueId: string;
     readonly modules: readonly WaitronModule[];
@@ -57,36 +59,41 @@ export async function createRecoveryPack(
     throw new AppError("promotion.break_glass_invalid", {});
   };
   if (typeof secret !== "string" || secret.length === 0) return invalidKey();
-  const verifier = await readBreakGlassVerifier(deps.db, node.nodeId);
+  const verifier = await readRecoveryKeyVerifier(deps.nodeDb, node.nodeId);
   if (verifier === null || !(await verifySecretAsync(secret, verifier))) return invalidKey();
   for (const name of Object.keys(inputs)) {
     if (!modules.some((module) => module.name === name && module.backup?.recoveryPack))
       return refuse("module_unsupported");
   }
-  return withTransaction(deps.db, async (tx) => {
-    await deps.authorize?.(tx);
-    if ((await readBreakGlassVerifier(tx, node.nodeId)) !== verifier) return invalidKey();
-    const name = await readBreakGlassKeyName(tx, node.nodeId);
-    if (name === null) return refuse("key_name_missing");
-    const snapshots: Record<string, unknown> = {};
-    for (const module of modules) {
-      const contribution = module.backup?.recoveryPack;
-      if (contribution === undefined) continue;
-      if (!Object.hasOwn(inputs, module.name)) return refuse("module_input_missing");
-      snapshots[module.name] = await contribution(tx, node, inputs[module.name]);
-    }
-    if ((await readBreakGlassVerifier(tx, node.nodeId)) !== verifier) return invalidKey();
-    return {
-      version: 1,
-      kind: "node-recovery-pack",
-      createdAt,
-      nodeRecovery: { nodeId: node.nodeId, name, secret },
-      modules: snapshots,
-      warnings: [
-        "contains-node-recovery-key",
-        "register-snapshot-may-be-stale",
-        "retain-older-node-keys-for-older-backups",
-      ],
-    };
-  });
+  // node.db's lock is held across the venue commit, and every key write takes it, so the key
+  // cannot change while the pack is made; it is taken outside venue.db's, never inside.
+  return withNodeTransaction(deps.nodeDb, (nodeTx) =>
+    withTransaction(deps.db, async (tx) => {
+      await deps.authorize?.(tx);
+      const key = await readRecoveryKey(nodeTx, node.nodeId);
+      if (key?.verifier !== verifier) return invalidKey();
+      const name = key.keyName;
+      if (name === null) return refuse("key_name_missing");
+      const snapshots: Record<string, unknown> = {};
+      for (const module of modules) {
+        const contribution = module.backup?.recoveryPack;
+        if (contribution === undefined) continue;
+        if (!Object.hasOwn(inputs, module.name)) return refuse("module_input_missing");
+        snapshots[module.name] = await contribution(tx, node, inputs[module.name]);
+      }
+      if ((await readRecoveryKeyVerifier(nodeTx, node.nodeId)) !== verifier) return invalidKey();
+      return {
+        version: 1,
+        kind: "node-recovery-pack",
+        createdAt,
+        nodeRecovery: { nodeId: node.nodeId, name, secret },
+        modules: snapshots,
+        warnings: [
+          "contains-node-recovery-key",
+          "register-snapshot-may-be-stale",
+          "retain-older-node-keys-for-older-backups",
+        ],
+      };
+    }),
+  );
 }

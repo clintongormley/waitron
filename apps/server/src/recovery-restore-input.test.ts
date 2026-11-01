@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +11,7 @@ import {
   openVenueDatabase,
   stampDeployment,
 } from "@waitron/db";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   readOperationAuthority,
@@ -32,7 +34,9 @@ import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
 import * as operations from "./recovery-module-operation.js";
 const modules = vi.hoisted(() => [] as WaitronModule[]);
 vi.mock("./modules.js", () => ({ ALL_MODULES: modules }));
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
+});
 const NODE = "d0000000-0000-4000-8000-000000000001";
 const LOCATION = "d0000000-0000-4000-8000-000000000002";
 const request = {
@@ -66,6 +70,7 @@ const kit = {
   recoveryKey: "separate backup key",
   pointerSignerPublicKey: "MCowBQYDK2VwAyEA0000000000000000000000000000000000000000000=",
 };
+let nodeCopy: Awaited<ReturnType<typeof nodeDumpEntry>>;
 let root: string;
 let stateDir: string;
 let databasePath: string;
@@ -100,12 +105,13 @@ beforeEach(async () => {
     { nodeId: NODE, code: "A", purpose: "standard" },
     { nodeId: NODE, code: "FF", purpose: "full" },
   ]);
-  nodeKey = await mintBreakGlassSecret(suite.db, NODE);
+  nodeKey = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
   root = await mkdtemp(join(tmpdir(), "restore-public-input-"));
   stateDir = join(root, "state");
   await mkdir(stateDir);
   databasePath = join(root, "backup.db");
   await suite.db.archiveTo(databasePath);
+  nodeCopy = await nodeDumpEntry(suite.node, root);
   operationPath = join(root, "operation.json");
   await writeFile(operationPath, JSON.stringify(request));
   archivePath = join(root, "artifact");
@@ -115,6 +121,7 @@ beforeEach(async () => {
       packArchive([
         { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
         { name: "db.dump", bytes: await readFile(databasePath) },
+        nodeCopy,
         ...secretEntries,
       ]),
       kit.recoveryKey,
@@ -181,7 +188,7 @@ it("constructs a detached restore runner and authenticates only against the plac
   const runner = pending.createRecoveryRestoreRunner(modules, submitted, nodeKey);
   submitted.binding.eventId = "changed";
   submitted.input.signed = "changed";
-  await mintBreakGlassSecret(suite.db, NODE);
+  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
   await restoreFromArtifactFile({
     ...target(),
     artifactPath: archivePath,
@@ -221,6 +228,7 @@ it.each(["archive", "bucket"])(
           databasePath,
           entries: [
             { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
+            nodeCopy,
             ...secretEntries,
           ],
         }),
@@ -261,6 +269,7 @@ it.each(["archive", "bucket"])(
           databasePath,
           entries: [
             { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
+            nodeCopy,
             ...secretEntries,
           ],
         }),
@@ -284,6 +293,7 @@ it.each(["archive", "stream"] as const)(
             databasePath,
             entries: [
               { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
+              nodeCopy,
               ...secretEntries,
             ],
             environment: "preproduction",
@@ -453,6 +463,7 @@ it.each(["archive", "stream"] as const)(
       kind === "stream"
         ? await recoveryStreamSourceId(databasePath, [
             { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
+            nodeCopy,
             ...secretEntries,
           ])
         : recoveryArchiveSourceId(await readFile(archivePath));
@@ -464,6 +475,7 @@ it.each(["archive", "stream"] as const)(
             databasePath,
             entries: [
               { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
+              nodeCopy,
               ...secretEntries,
             ],
             environment: "preproduction",
@@ -478,7 +490,7 @@ it.each(["archive", "stream"] as const)(
             nodeRecoverySecret: nodeKey,
           },
     );
-    const replacementKey = await mintBreakGlassSecret(suite.db, NODE);
+    const replacementKey = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
     const log = vi.fn();
     await expect(
       runStagedRestore(

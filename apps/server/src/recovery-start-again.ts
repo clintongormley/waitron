@@ -91,7 +91,7 @@ export const START_AGAIN_PAGE_TEXT: Readonly<Record<SupportedLocale, StartAgainP
     diskFull:
       "The box's disk is full, so the choice could not be saved. Nothing was moved. Press “Retry a normal boot”: as it starts, the box frees space by clearing its own temporary copies, old logs and crash reports. Then choose again. If that is not enough, the choice cannot be saved on this box; if you reinstall Waitron, the box starts fresh, but everything on it is lost, these files included.",
     moveUnavailable:
-      "These files cannot be moved aside on this box: the system treats the folder they are in and the box's folder for moved files as separate disks, and Start again never copies files. Nothing was changed. Keep everything and stop is still available.",
+      "These files cannot be moved aside on this box: the system treats the folder they are in and the box's folder for moved files as separate disks, and Start again never copies these files. Nothing was changed. Keep everything and stop is still available.",
     notSaved: "The box could not save the choice. Nothing was moved. Press Continue to try again.",
     notFinished:
       "Start again could not finish. The files it found are unchanged. Press “Retry a normal boot”: the box carries on as it starts.",
@@ -133,7 +133,7 @@ export const START_AGAIN_PAGE_TEXT: Readonly<Record<SupportedLocale, StartAgainP
     diskFull:
       "El disco del equipo está lleno, así que no se ha podido guardar la elección. No se ha movido nada. Pulsa «Reintentar un arranque normal»: al arrancar, el equipo libera espacio descartando sus propias copias temporales, registros antiguos e informes de fallos. Después vuelve a elegir. Si no basta, la elección no se puede guardar en este equipo; si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que hay en él, también estos archivos.",
     moveUnavailable:
-      "Estos archivos no se pueden apartar en este equipo: el sistema trata la carpeta donde están y la carpeta del equipo para archivos apartados como discos distintos, y «Empezar de nuevo» nunca copia archivos. No se ha cambiado nada. Puedes elegir «Conservarlo todo y parar».",
+      "Estos archivos no se pueden apartar en este equipo: el sistema trata la carpeta donde están y la carpeta del equipo para archivos apartados como discos distintos, y «Empezar de nuevo» nunca copia estos archivos. No se ha cambiado nada. Puedes elegir «Conservarlo todo y parar».",
     notSaved:
       "El equipo no ha podido guardar la elección. No se ha movido nada. Pulsa «Continuar» para volver a intentarlo.",
     notFinished:

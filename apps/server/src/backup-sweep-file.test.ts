@@ -2,7 +2,7 @@ import { chmod, mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/pro
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import type { Database } from "@waitron/db";
+import type { Database, NodeDatabase } from "@waitron/db";
 import { runOnce } from "./backup-sweep.js";
 import { parseBackupArchiveKey } from "./backup-keys.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
@@ -11,6 +11,9 @@ import { decryptArtifact } from "./artifact-cipher.js";
 import { unpackArchive } from "./backup-archive.js";
 import { ARCHIVE_MAX_METADATA_BYTES } from "./backup-archive-file.js";
 import type { StorageCall } from "./storage-backend.js";
+const NODE_COPY = {
+  archiveTo: (path: string) => writeFile(path, "NODE"),
+} as unknown as NodeDatabase;
 const guard = vi.hoisted(() => ({ forbidden: new Set<string>() }));
 vi.mock("node:fs/promises", async (original) => {
   const actual = await original<typeof import("node:fs/promises")>();
@@ -58,6 +61,7 @@ function deps(f: Awaited<ReturnType<typeof fixture>>, backends: LocalFsBackend[]
     ...f,
     backends,
     db: {} as Database,
+    node: NODE_COPY,
     modules: [],
     environment: "preproduction" as const,
     resolvers: {},
@@ -104,6 +108,7 @@ it("streams capture once to independent file destinations and leaves no staging 
   expect(entries.map((e) => e.name)).toEqual([
     "manifest.json",
     "db.dump",
+    "node.dump",
     ...RECOVERY_FILES.map((rel) => `secrets/${rel}`),
   ]);
   expect(Buffer.from(entries[1].bytes).toString()).toBe("DATABASE");

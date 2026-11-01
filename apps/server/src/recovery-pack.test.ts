@@ -1,20 +1,19 @@
 import { beforeEach, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import {
-  CORE_MIGRATIONS,
-  readBreakGlassKeyName,
-  setBreakGlassVerifierTx,
-  stampDeployment,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, stampDeployment, type NodeTransaction } from "@waitron/db";
 import { hashSecret } from "@waitron/identity";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import type { WaitronModule } from "@waitron/module";
+import { NODE_MIGRATIONS, readRecoveryKeyName, setRecoveryKeyTx } from "@waitron/node-db";
 import { nodeId, locationId } from "@waitron/shared";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { createRecoveryPack } from "./recovery-pack.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
+});
+const handles = () => ({ venue: suite.db, node: suite.node });
 const node = {
   nodeId: nodeId("cccccccc-cccc-4ccc-8ccc-cccccccccccc"),
   locationId: locationId("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
@@ -34,14 +33,14 @@ async function create(
   input: unknown = { block: "input" },
 ) {
   return createRecoveryPack(
-    { db: suite.db, node, venueId: "venue-one", modules, now },
+    { db: suite.db, nodeDb: suite.node, node, venueId: "venue-one", modules, now },
     { nodeRecoveryKey: secret, modules: { "test-regime": input } },
   );
 }
 
 it("downloads the named node key and module's public snapshot without any bucket settings", async () => {
-  const secret = await mintBreakGlassSecret(suite.db, node.nodeId);
-  const keyName = await readBreakGlassKeyName(suite.db, node.nodeId);
+  const secret = await mintBreakGlassSecret(handles(), node.nodeId);
+  const keyName = await readRecoveryKeyName(suite.node, node.nodeId);
   expect(await create(secret)).toEqual({
     version: 1,
     kind: "node-recovery-pack",
@@ -57,14 +56,14 @@ it("downloads the named node key and module's public snapshot without any bucket
 });
 
 it("keeps the verifier and name unchanged when reprinting the pack", async () => {
-  const secret = await mintBreakGlassSecret(suite.db, node.nodeId);
-  const before = await suite.db.execute(sql`select * from node_roles`);
+  const secret = await mintBreakGlassSecret(handles(), node.nodeId);
+  const before = suite.node.all(sql`select * from node_recovery_key`);
   expect(await create(secret)).toEqual(await create(secret));
-  expect(await suite.db.execute(sql`select * from node_roles`)).toEqual(before);
+  expect(suite.node.all(sql`select * from node_recovery_key`)).toEqual(before);
 });
 
 it("marks the download as secret-bearing and its register as a possibly stale snapshot", async () => {
-  const secret = await mintBreakGlassSecret(suite.db, node.nodeId);
+  const secret = await mintBreakGlassSecret(handles(), node.nodeId);
   expect(await create(secret)).toMatchObject({
     warnings: [
       "contains-node-recovery-key",
@@ -77,19 +76,19 @@ it("marks the download as secret-bearing and its register as a possibly stale sn
 it.each([undefined, null, "", "wrong-key"])(
   "refuses an unusable node credential %j",
   async (secret) => {
-    await mintBreakGlassSecret(suite.db, node.nodeId);
+    await mintBreakGlassSecret(handles(), node.nodeId);
     await expect(create(secret)).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
   },
 );
 
 it("refuses a replaced node key without returning either secret", async () => {
-  const old = await mintBreakGlassSecret(suite.db, node.nodeId);
-  await mintBreakGlassSecret(suite.db, node.nodeId);
+  const old = await mintBreakGlassSecret(handles(), node.nodeId);
+  await mintBreakGlassSecret(handles(), node.nodeId);
   await expect(create(old)).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
 });
 
 it("refuses a module without a public pack contribution", async () => {
-  const secret = await mintBreakGlassSecret(suite.db, node.nodeId);
+  const secret = await mintBreakGlassSecret(handles(), node.nodeId);
   await expect(create(secret, [{ ...contribution, backup: {} }])).rejects.toMatchObject({
     code: "recovery.pack_invalid",
     params: { reason: "module_unsupported" },
@@ -97,10 +96,17 @@ it("refuses a module without a public pack contribution", async () => {
 });
 
 it("refuses a missing contribution input rather than silently printing an incomplete register", async () => {
-  const secret = await mintBreakGlassSecret(suite.db, node.nodeId);
+  const secret = await mintBreakGlassSecret(handles(), node.nodeId);
   await expect(
     createRecoveryPack(
-      { db: suite.db, node, venueId: "venue-one", modules: [contribution], now },
+      {
+        db: suite.db,
+        nodeDb: suite.node,
+        node,
+        venueId: "venue-one",
+        modules: [contribution],
+        now,
+      },
       { nodeRecoveryKey: secret, modules: {} },
     ),
   ).rejects.toMatchObject({
@@ -110,8 +116,8 @@ it("refuses a missing contribution input rather than silently printing an incomp
 });
 
 it("returns the module's refusal without rotating the key or exposing input", async () => {
-  const secret = await mintBreakGlassSecret(suite.db, node.nodeId);
-  const before = await suite.db.execute(sql`select * from node_roles`);
+  const secret = await mintBreakGlassSecret(handles(), node.nodeId);
+  const before = suite.node.all(sql`select * from node_recovery_key`);
   const failing = {
     ...contribution,
     backup: {
@@ -121,18 +127,19 @@ it("returns the module's refusal without rotating the key or exposing input", as
     },
   };
   await expect(create(secret, [failing])).rejects.toThrow("snapshot refused");
-  expect(await suite.db.execute(sql`select * from node_roles`)).toEqual(before);
+  expect(suite.node.all(sql`select * from node_recovery_key`)).toEqual(before);
 });
 
 it("refuses a key replaced while a module is preparing the pack and rolls the replacement back", async () => {
-  const secret = await mintBreakGlassSecret(suite.db, node.nodeId);
-  const before = await suite.db.execute(sql`select * from node_roles`);
+  const secret = await mintBreakGlassSecret(handles(), node.nodeId);
+  const before = suite.node.all(sql`select * from node_recovery_key`);
   const replacing: WaitronModule = {
     ...contribution,
     backup: {
-      recoveryPack: async (tx) => {
-        await setBreakGlassVerifierTx(
-          tx,
+      recoveryPack: async () => {
+        // The pack is made while the node.db lock is held, so this write joins its transaction.
+        await setRecoveryKeyTx(
+          suite.node as unknown as NodeTransaction,
           node.nodeId,
           hashSecret("replacement-secret"),
           "replacement-name",
@@ -144,14 +151,12 @@ it("refuses a key replaced while a module is preparing the pack and rolls the re
   await expect(create(secret, [replacing])).rejects.toMatchObject({
     code: "promotion.break_glass_invalid",
   });
-  expect(await suite.db.execute(sql`select * from node_roles`)).toEqual(before);
+  expect(suite.node.all(sql`select * from node_recovery_key`)).toEqual(before);
 });
 
 it("refuses an unnamed historical verifier instead of naming a new key on reprint", async () => {
-  const secret = await mintBreakGlassSecret(suite.db, node.nodeId);
-  await suite.db.execute(
-    sql`update node_roles set break_glass_key_name = null where node_id = ${node.nodeId}`,
-  );
+  const secret = await mintBreakGlassSecret(handles(), node.nodeId);
+  suite.node.run(sql`update node_recovery_key set key_name = '' where node_id = ${node.nodeId}`);
   await expect(create(secret)).rejects.toMatchObject({
     code: "recovery.pack_invalid",
     params: { reason: "key_name_missing" },

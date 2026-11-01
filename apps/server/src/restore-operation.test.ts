@@ -81,6 +81,7 @@ describe("authenticated opaque restore seat", () => {
       async (authority) =>
         runRestoreHooks({
           db: suite.db,
+          nodeDb: suite.node,
           modules: [module],
           node: target,
           log: noopLog,
@@ -104,6 +105,7 @@ describe("authenticated opaque restore seat", () => {
         await expect(
           runRestoreHooks({
             db: suite.db,
+            nodeDb: suite.node,
             modules: [module],
             node: target,
             log: noopLog,
@@ -128,6 +130,7 @@ describe("authenticated opaque restore seat", () => {
     await expect(
       runRestoreHooks({
         db: suite.db,
+        nodeDb: suite.node,
         modules: [module],
         node: target,
         log: noopLog,
@@ -150,6 +153,7 @@ describe("authenticated opaque restore seat", () => {
         (
           await runRestoreHooks({
             db: suite.db,
+            nodeDb: suite.node,
             modules: [module],
             node: target,
             log: noopLog,
@@ -178,6 +182,7 @@ describe("authenticated opaque restore seat", () => {
         (
           await runRestoreHooks({
             db: suite.db,
+            nodeDb: suite.node,
             modules: [first, second],
             node: target,
             log: noopLog,
@@ -199,6 +204,7 @@ describe("authenticated opaque restore seat", () => {
       await expect(
         runRestoreHooks({
           db: suite.db,
+          nodeDb: suite.node,
           modules: [first, second],
           node: target,
           log: noopLog,

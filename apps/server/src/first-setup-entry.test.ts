@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { CORE_MIGRATIONS, tenants, openVenueDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { packArchive } from "./backup-archive.js";
@@ -112,6 +113,7 @@ it("checks before archive/bucket placement changes either database or host state
           modules: {},
         },
         secretEntries: [],
+        nodeDump: Buffer.from("NODE"),
         discard: async () => {},
       },
       {
@@ -173,6 +175,7 @@ it.each(["first-setup.json", "first-setup-claim.json", "module-operation-public.
           }),
         ),
       },
+      { name: "node.dump", bytes: Buffer.from("NODE") },
       { name: `secrets/${name}`, bytes: Buffer.from("{}") },
     ];
     await expect(
@@ -339,6 +342,7 @@ it.each(["pre-consumption-abandoned", "complete"])(
           ),
         },
         { name: "db.dump", bytes: await readFile(source) },
+        await nodeDumpEntry(suite.node, f.root),
       ]),
       "synthetic-archive-key",
     );
@@ -400,6 +404,7 @@ it.each([
             }),
           ),
         },
+        { name: "node.dump", bytes: Buffer.from("NODE") },
         { name: `secrets/${name}`, bytes: Buffer.from("{}") },
       ],
       join(f.root, "source.db"),

@@ -4,20 +4,19 @@ import { isAppError, locationId as brandLocationId } from "@waitron/shared";
 import {
   captureError,
   CORE_MIGRATIONS,
+  deployment,
   locations,
   nodes,
   stampDeployment,
-  setSingletonRole,
-  setDeploymentMode,
-  readDeploymentMode,
-  readSingletonRole,
   readMembershipTrustSet,
   readNodeMembership,
   readStandardSeriesId,
   withTransaction,
   writeNodeMembership,
   type Database,
+  type NodeDatabase,
 } from "@waitron/db";
+import { NODE_MIGRATIONS, readNodeMode, setNodeMode, setSingletonRole } from "@waitron/node-db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -26,17 +25,24 @@ import {
   endorseKey,
   generateNodeKeyPair,
   MAX_NODES,
+  signDocumentBody,
   verifyMembershipDocument,
   type Endorsement,
+  type MembershipDocumentBody,
   type MembershipNode,
+  type NodeKeyPair,
   type SignedMembershipDocument,
 } from "@waitron/membership";
+import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
+import { sealAdoptedStandbyKey } from "./testing/adopted-standby-key.js";
+import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { singletonPass } from "./singleton-pass.js";
+import { tableSnapshot } from "./testing/table-snapshot.js";
 import { DRAIN_DUTY } from "./pass.js";
 import {
   commitMirrorPromotionTx,
@@ -53,25 +59,99 @@ const RING: KeyRing = loadKeyRing({
 
 const noopLog: PromoteDeps["log"] = () => {};
 
-// Promote reads only the held term and node list, never the signature, so a placeholder serves.
+type LogEntry = { level: string; event: string; detail: unknown };
+
+function recordingLog(): { log: PromoteDeps["log"]; entries: LogEntry[] } {
+  const entries: LogEntry[] = [];
+  return {
+    entries,
+    log: (level, event, detail) => {
+      entries.push({ level, event, detail });
+    },
+  };
+}
+
+// The node handle that refuses its next write lock without running the write, so nothing is
+// written. Reads before that go through; with `readsFailAfter`, every call after it throws.
+function nodeFailingNextWrite(
+  node: NodeDatabase,
+  { readsFailAfter = false }: { readsFailAfter?: boolean } = {},
+): NodeDatabase {
+  let failed = false;
+  return new Proxy(node, {
+    get(target, property, receiver) {
+      if (property === "withWriteLock" && !failed) {
+        return () => {
+          failed = true;
+          return Promise.reject(new Error("node.db write refused"));
+        };
+      }
+      const value: unknown = Reflect.get(target, property, receiver);
+      if (typeof value !== "function") return value;
+      if (failed && readsFailAfter) {
+        return () => {
+          throw new Error("node.db read refused");
+        };
+      }
+      return value.bind(target);
+    },
+  });
+}
+
+// A real key pair per signer id, so a held chart verifies against the key its box pins.
+const signerKeys = new Map<string, NodeKeyPair>();
+function signerKey(nodeId: string): NodeKeyPair {
+  let key = signerKeys.get(nodeId);
+  if (key === undefined) {
+    key = generateNodeKeyPair();
+    signerKeys.set(nodeId, key);
+  }
+  return key;
+}
+
+function signedBy(signerNodeId: string, body: MembershipDocumentBody): SignedMembershipDocument {
+  return {
+    body,
+    signerNodeId,
+    signature: signDocumentBody(body, signerKey(signerNodeId).privateKey),
+    endorsements: [],
+  };
+}
+
+/** Holds `doc`, pinning its signer's key as adopt pins the main box's, unless self-signed. */
+async function holdChart(
+  db: Database,
+  node: NodeDatabase,
+  boxId: string,
+  doc: SignedMembershipDocument,
+): Promise<void> {
+  await writeNodeMembership(db, doc);
+  if (doc.signerNodeId === boxId) return;
+  await pinMainBoxKey(node, boxId, {
+    nodeId: doc.signerNodeId,
+    publicKey: signerKey(doc.signerNodeId).publicKey,
+  });
+}
+
 function heldTermThreeDoc(
   nodeId: string,
   oldNodeId: string,
   extra: MembershipNode[] = [],
 ): SignedMembershipDocument {
-  return {
-    body: {
-      term: 3,
-      nodes: [
-        { nodeId: oldNodeId, contactUrl: "https://old", standing: "serving-primary" },
-        { nodeId, contactUrl: "", standing: "serving-secondary" },
-        ...extra,
-      ],
-    },
-    signerNodeId: oldNodeId,
-    signature: "held-placeholder-sig",
-    endorsements: [],
-  };
+  return signedBy(oldNodeId, {
+    term: 3,
+    nodes: [
+      { nodeId: oldNodeId, contactUrl: "https://old", standing: "serving-primary" },
+      { nodeId, contactUrl: "", standing: "serving-secondary" },
+      ...extra,
+    ],
+  });
+}
+
+/** A signed chart whose body was rewritten to one with no `nodes` list, as an outside edit leaves it. */
+function unreadableChart(nodeId: string, signerNodeId: string): SignedMembershipDocument {
+  const doc = heldTermThreeDoc(nodeId, signerNodeId);
+  return { ...doc, body: { term: 3 } } as unknown as SignedMembershipDocument;
 }
 
 // A fenced node has the same `(primary, secondary)` axis pair as a healthy local secondary, so only
@@ -81,25 +161,20 @@ function heldFencedDoc(
   standing: "sell-only" | "evicted",
   carrierNodeId = "carrier-node",
 ): SignedMembershipDocument {
-  return {
-    body: {
-      term: 3,
-      nodes: [
-        { nodeId: carrierNodeId, contactUrl: "https://carrier", standing: "serving-primary" },
-        { nodeId, contactUrl: "", standing },
-      ],
-    },
-    signerNodeId: carrierNodeId,
-    signature: "held-placeholder-sig",
-    endorsements: [],
-  };
+  return signedBy(carrierNodeId, {
+    term: 3,
+    nodes: [
+      { nodeId: carrierNodeId, contactUrl: "https://carrier", standing: "serving-primary" },
+      { nodeId, contactUrl: "", standing },
+    ],
+  });
 }
 
 describe("promoteLocalSecondaryToPrimary", () => {
   // Declared inside the describe so its hooks do not fire around the mirror block's cases. The
   // per-test reset matters: the term-0 mint case fails when it sees an earlier case's rows.
   const suite = useVenueDb({
-    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
+    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
     timeoutMs: 60_000,
   });
 
@@ -120,27 +195,27 @@ describe("promoteLocalSecondaryToPrimary", () => {
       })
       .returning({ id: locations.id });
     const nodeId = await seedNode(db, brandLocationId(loc!.id));
-    await setSingletonRole(db, nodeId, "secondary");
-    await establishNodeIdentity({ ownerDb: db, ring: RING }, nodeId);
+    await setSingletonRole({ venue: db, node: suite.node }, nodeId, "secondary");
+    await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, nodeId);
     const holders = createDeploymentHolders("primary", "secondary");
     return {
       db,
       nodeId,
-      deps: (log) => ({ db, holders, log, ring: RING, nodeId }),
+      deps: (log) => ({ db, node: suite.node, holders, log, ring: RING, nodeId }),
     };
   }
 
   it("refuses without a fence attestation and leaves state unchanged", async () => {
-    const { db, deps, nodeId } = await localSecondary();
+    const { deps, nodeId } = await localSecondary();
     const error = await captureError(() =>
       promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: false }),
     );
     expect(isAppError(error) && error.code).toBe("promotion.fence_not_attested");
-    expect(await readSingletonRole(db, nodeId)).toBe("secondary");
+    expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("secondary");
   });
 
   it("claims the singletons and flips the holder so the fiscal pass starts", async () => {
-    const { db, deps, nodeId } = await localSecondary();
+    const { deps, nodeId } = await localSecondary();
     const d = deps(noopLog);
 
     // The same pass, built once over the holder, must flip from empty to real with no restart.
@@ -155,26 +230,28 @@ describe("promoteLocalSecondaryToPrimary", () => {
 
     const result = await promoteLocalSecondaryToPrimary(d, { oldNodeNeutralised: true });
     expect(result).toEqual({ alreadyPrimary: false });
-    expect(await readSingletonRole(db, nodeId)).toBe("primary");
+    expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("primary");
     expect(d.holders.singletonRole.current).toBe("primary");
     expect((await pass(new Date())).duties.map((r) => r.duty)).toContain(DRAIN_DUTY);
   });
 
   it("is idempotent — a second promote on an already-primary node is a no-op", async () => {
-    const { db, deps, nodeId } = await localSecondary();
+    const { deps, nodeId } = await localSecondary();
     const d = deps(noopLog);
     await promoteLocalSecondaryToPrimary(d, { oldNodeNeutralised: true });
     const second = await promoteLocalSecondaryToPrimary(d, { oldNodeNeutralised: true });
     expect(second).toEqual({ alreadyPrimary: true });
-    expect(await readSingletonRole(db, nodeId)).toBe("primary");
+    expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("primary");
   });
 
-  it("mints the next membership document atomically with the role flip", async () => {
+  it("mints the next membership document, then writes the role", async () => {
     const { db, deps, nodeId } = await localSecondary();
     const oldNodeId = "old-node-1";
     const bystanderId = "bystander-1";
-    await writeNodeMembership(
+    await holdChart(
       db,
+      suite.node,
+      nodeId,
       heldTermThreeDoc(nodeId, oldNodeId, [
         { nodeId: bystanderId, contactUrl: "https://bystander", standing: "sell-only" },
       ]),
@@ -185,7 +262,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
     });
 
     expect(result.alreadyPrimary).toBe(false);
-    expect(await readSingletonRole(db, nodeId)).toBe("primary");
+    expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("primary");
 
     const held = await readNodeMembership(db);
     expect(held?.body.term).toBe(4);
@@ -217,7 +294,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
     const ownKey = (await readMembershipTrustSet(db))[nodeId]!;
     const endorsement = endorseKey(nodeId, ownKey, oldNodeId, endorser.privateKey);
     await db.update(nodes).set({ endorsement }).where(eq(nodes.id, nodeId));
-    await writeNodeMembership(db, heldTermThreeDoc(nodeId, oldNodeId));
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, oldNodeId));
 
     await promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true });
 
@@ -248,7 +325,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
   it("is idempotent: a second promote does not bump the term again", async () => {
     const { db, deps, nodeId } = await localSecondary();
     const oldNodeId = "old-node-1";
-    await writeNodeMembership(db, heldTermThreeDoc(nodeId, oldNodeId));
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, oldNodeId));
 
     const first = await promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true });
     expect(first.alreadyPrimary).toBe(false);
@@ -263,26 +340,98 @@ describe("promoteLocalSecondaryToPrimary", () => {
 
   it("refuses a fenced (sell-only) node with promotion.node_fenced and writes nothing", async () => {
     const { db, deps, nodeId } = await localSecondary();
-    await writeNodeMembership(db, heldFencedDoc(nodeId, "sell-only"));
+    await holdChart(db, suite.node, nodeId, heldFencedDoc(nodeId, "sell-only"));
     const error = await captureError(() =>
       promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
     );
     expect(isAppError(error) && error.code).toBe("promotion.node_fenced");
     expect(isAppError(error) && error.params).toEqual({ standing: "sell-only" });
-    expect(await readSingletonRole(db, nodeId)).toBe("secondary");
+    expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("secondary");
     expect((await readNodeMembership(db))?.body.term).toBe(3);
   });
 
   it("refuses a fenced (evicted) node with promotion.node_fenced and writes nothing", async () => {
     const { db, deps, nodeId } = await localSecondary();
-    await writeNodeMembership(db, heldFencedDoc(nodeId, "evicted"));
+    await holdChart(db, suite.node, nodeId, heldFencedDoc(nodeId, "evicted"));
     const error = await captureError(() =>
       promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
     );
     expect(isAppError(error) && error.code).toBe("promotion.node_fenced");
     expect(isAppError(error) && error.params).toEqual({ standing: "evicted" });
-    expect(await readSingletonRole(db, nodeId)).toBe("secondary");
+    expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("secondary");
     expect((await readNodeMembership(db))?.body.term).toBe(3);
+  });
+
+  it("on a local secondary, a role write that fails after the venue save is logged and rejects", async () => {
+    const { db, deps, nodeId } = await localSecondary();
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-node-1"));
+    const { log, entries } = recordingLog();
+
+    const error = await captureError(() =>
+      promoteLocalSecondaryToPrimary(
+        { ...deps(log), node: nodeFailingNextWrite(suite.node) },
+        { oldNodeNeutralised: true },
+      ),
+    );
+
+    expect((error as Error).message).toBe("node.db write refused");
+    expect(entries.filter((entry) => entry.event === "promotion.role_write_failed")).toEqual([
+      {
+        level: "warn",
+        event: "promotion.role_write_failed",
+        detail: { errorCode: "unknown", error: "node.db write refused" },
+      },
+    ]);
+    expect(entries.map((entry) => entry.event)).not.toContain("promotion.completed");
+    expect(await readNodeMode(suite.node, nodeId)).toEqual({
+      mode: "primary",
+      singletonRole: "secondary",
+    });
+    expect((await readNodeMembership(db))?.body.term).toBe(4);
+  });
+
+  it("a second call after a lost role write finishes the role and mints no second term", async () => {
+    const { db, deps, nodeId } = await localSecondary();
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-node-1"));
+    const { log, entries } = recordingLog();
+
+    const first = await captureError(() =>
+      promoteLocalSecondaryToPrimary(
+        { ...deps(log), node: nodeFailingNextWrite(suite.node) },
+        { oldNodeNeutralised: true },
+      ),
+    );
+    expect((first as Error).message).toBe("node.db write refused");
+    const termAfterFirst = (await readNodeMembership(db))?.body.term;
+
+    const d = deps(log);
+    const second = await promoteLocalSecondaryToPrimary(d, { oldNodeNeutralised: true });
+
+    expect(second).toEqual({ alreadyPrimary: false });
+    expect(await readNodeMode(suite.node, nodeId)).toEqual({
+      mode: "primary",
+      singletonRole: "primary",
+    });
+    expect(d.holders.singletonRole.current).toBe("primary");
+    expect((await readNodeMembership(db))?.body.term).toBe(termAfterFirst);
+    expect(entries.map((entry) => entry.event)).toContain("promotion.role_finished");
+  });
+
+  it("refuses an unstamped venue.db with deployment.not_stamped, saving nothing in either file", async () => {
+    const { db, deps, nodeId } = await localSecondary();
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-node-1"));
+    await db.delete(deployment);
+
+    const error = await captureError(() =>
+      promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
+    );
+
+    expect(isAppError(error) && error.code).toBe("deployment.not_stamped");
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+    expect(await readNodeMode(suite.node, nodeId)).toEqual({
+      mode: "primary",
+      singletonRole: "secondary",
+    });
   });
 
   it("refuses a mirror with promotion.not_a_local_secondary before any write", async () => {
@@ -290,26 +439,85 @@ describe("promoteLocalSecondaryToPrimary", () => {
     const db = suite.db;
     const nodeId = "n";
     await stampDeployment(db, "preproduction");
-    await setDeploymentMode(db, nodeId, "mirror");
+    await setNodeMode({ venue: db, node: suite.node }, nodeId, "mirror");
     const holders = createDeploymentHolders("mirror", "secondary");
     const error = await captureError(() =>
       promoteLocalSecondaryToPrimary(
-        { db, holders, log: noopLog, ring: RING, nodeId },
+        { db, node: suite.node, holders, log: noopLog, ring: RING, nodeId },
         { oldNodeNeutralised: true },
       ),
     );
     expect(isAppError(error) && error.code).toBe("promotion.not_a_local_secondary");
-    expect(await readSingletonRole(db, nodeId)).toBe("secondary");
+    expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("secondary");
+  });
+
+  it("refuses to sign over a held document no stored key vouches for, writing nothing", async () => {
+    const { db, deps, nodeId } = await localSecondary();
+    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "unpinned-old-node"));
+    const error = await captureError(() =>
+      promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
+    );
+    expect(isAppError(error) && error.code).toBe("membership.held_untrusted");
+    expect(isAppError(error) && error.params).toEqual({ reason: "untrusted_signer" });
+    expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("secondary");
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+  });
+
+  it("still refuses a fenced node with promotion.node_fenced when no stored key vouches for its chart", async () => {
+    const { db, deps, nodeId } = await localSecondary();
+    await writeNodeMembership(db, heldFencedDoc(nodeId, "sell-only", "unpinned-carrier"));
+    const error = await captureError(() =>
+      promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
+    );
+    expect(isAppError(error) && error.code).toBe("promotion.node_fenced");
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+  });
+
+  it("still refuses a malformed held document signed by a key no stored key vouches for", async () => {
+    const { db, deps, nodeId } = await localSecondary();
+    const doc = heldTermThreeDoc(nodeId, "unpinned-old-node");
+    const body = { ...doc.body, revoked: ["gone", "gone"] };
+    await writeNodeMembership(db, signedBy("unpinned-old-node", body));
+    const error = await captureError(() =>
+      promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
+    );
+    expect(isAppError(error) && error.code).toBe("membership.held_untrusted");
+    expect(isAppError(error) && error.params).toEqual({ reason: "untrusted_signer" });
+    expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("secondary");
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+  });
+
+  it("refuses a held document no stored key vouches for that carries an unsigned field beside its body", async () => {
+    const { db, deps, nodeId } = await localSecondary();
+    const doc = { ...heldTermThreeDoc(nodeId, "unpinned-old-node"), note: "x" };
+    await writeNodeMembership(db, doc as SignedMembershipDocument);
+    const error = await captureError(() =>
+      promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
+    );
+    expect(isAppError(error) && error.code).toBe("membership.held_untrusted");
+    expect(isAppError(error) && error.params).toEqual({ reason: "untrusted_signer" });
+    expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("secondary");
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+  });
+
+  it("refuses a held chart whose body is not a membership chart with reason malformed, writing nothing", async () => {
+    const { db, deps, nodeId } = await localSecondary();
+    await writeNodeMembership(db, unreadableChart(nodeId, "unpinned-old-node"));
+    const before = [await tableSnapshot(db), await tableSnapshot(suite.node)];
+    const error = await captureError(() =>
+      promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
+    );
+    expect(isAppError(error) && error.code).toBe("membership.held_untrusted");
+    expect(isAppError(error) && error.params).toEqual({ reason: "malformed" });
+    expect([await tableSnapshot(db), await tableSnapshot(suite.node)]).toEqual(before);
   });
 });
 
 function docAtTerm(term: number, nodeId: string): SignedMembershipDocument {
-  return {
-    body: { term, nodes: [{ nodeId, contactUrl: "", standing: "serving-primary" }] },
-    signerNodeId: nodeId,
-    signature: "placeholder-sig",
-    endorsements: [],
-  };
+  return signedBy(nodeId, {
+    term,
+    nodes: [{ nodeId, contactUrl: "", standing: "serving-primary" }],
+  });
 }
 
 describe("promoteMirrorToPrimary", () => {
@@ -344,7 +552,12 @@ describe("promoteMirrorToPrimary", () => {
     const nif = t.rows[0]!.tax_id;
 
     const standby = generateStandbyIdentity();
-    await setDeploymentMode(db, standby.nodeId, "mirror");
+    signerKeys.set(standby.nodeId, {
+      publicKey: standby.publicKey,
+      privateKey: standby.privateKey,
+    });
+    await sealAdoptedStandbyKey(suite.node, RING, standby);
+    await setNodeMode({ venue: db, node: suite.node }, standby.nodeId, "mirror");
     const endorsement: Endorsement = {
       nodeId: standby.nodeId,
       publicKey: standby.publicKey,
@@ -352,7 +565,7 @@ describe("promoteMirrorToPrimary", () => {
       signature: "endorsement-sig",
     };
     await establishReservedStandbyIdentity(
-      { ownerDb: db, ring: RING },
+      { ownerDb: db },
       {
         locationId,
         standby,
@@ -390,6 +603,7 @@ describe("promoteMirrorToPrimary", () => {
       endorsement,
       deps: (log, persistTradingEnv = async () => {}) => ({
         db,
+        node: suite.node,
         holders,
         log,
         ring: RING,
@@ -401,7 +615,7 @@ describe("promoteMirrorToPrimary", () => {
 
   it("persists trading identity without handing the callback a cached series", async () => {
     const { db, deps, nodeId } = await mirror();
-    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary"));
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary"));
     const persist = vi.fn(async () => {});
     await promoteMirrorToPrimary(deps(noopLog, persist), { oldNodeNeutralised: true });
     expect(persist).toHaveBeenCalledTimes(1);
@@ -410,14 +624,14 @@ describe("promoteMirrorToPrimary", () => {
 
   it("flips mode+singleton to primary, mints an endorsed term-bumped doc, and returns the validated standard seriesId", async () => {
     const { db, deps, nodeId, standardSeriesId, endorsement } = await mirror();
-    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary", []));
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary", []));
 
     const result = await promoteMirrorToPrimary(deps(noopLog), { oldNodeNeutralised: true });
 
     expect(result.alreadyPrimary).toBe(false);
     expect(result.seriesId).toBe(standardSeriesId);
-    expect(await readDeploymentMode(db, nodeId)).toBe("primary");
-    expect(await readSingletonRole(db, nodeId)).toBe("primary");
+    expect((await readNodeMode(suite.node, nodeId)).mode).toBe("primary");
+    expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("primary");
 
     const held = await readNodeMembership(db);
     expect(held?.body.term).toBe(4);
@@ -430,7 +644,7 @@ describe("promoteMirrorToPrimary", () => {
 
   it("refuses promotion before changing roles when the mirror has no full invoice series", async () => {
     const { db, deps, nodeId } = await mirror();
-    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary"));
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary"));
     await db.execute(
       sql`update invoice_series set retired_at = current_timestamp where node_id = ${nodeId} and purpose = 'full'`,
     );
@@ -447,14 +661,14 @@ describe("promoteMirrorToPrimary", () => {
 
     expect(isAppError(error) && error.code).toBe("series.no_full_for_node");
     expect(persisted).toEqual([]);
-    expect(await readDeploymentMode(db, nodeId)).toBe("mirror");
-    expect(await readSingletonRole(db, nodeId)).toBe("secondary");
+    expect((await readNodeMode(suite.node, nodeId)).mode).toBe("mirror");
+    expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("secondary");
   });
 
   it("persists trading identity BEFORE the point-of-no-return (a persist failure aborts the flip)", async () => {
     // A persist that throws must leave the node a mirror; had the flip run first, it would be primary.
     const { db, deps, nodeId } = await mirror();
-    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary"));
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary"));
     const persisted: string[] = [];
     const err = await captureError(() =>
       promoteMirrorToPrimary(
@@ -467,13 +681,13 @@ describe("promoteMirrorToPrimary", () => {
     );
     expect((err as Error).message).toBe("disk full");
     expect(persisted).toEqual(["persisted"]);
-    expect(await readDeploymentMode(db, nodeId)).toBe("mirror");
-    expect(await readSingletonRole(db, nodeId)).toBe("secondary");
+    expect((await readNodeMode(suite.node, nodeId)).mode).toBe("mirror");
+    expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("secondary");
     expect((await readNodeMembership(db))?.body.term).toBe(3);
   });
 
   it("refuses without a fence attestation, leaving the node a mirror and persisting nothing", async () => {
-    const { db, deps, nodeId } = await mirror();
+    const { deps, nodeId } = await mirror();
     const persisted: string[] = [];
     const err = await captureError(() =>
       promoteMirrorToPrimary(
@@ -484,13 +698,13 @@ describe("promoteMirrorToPrimary", () => {
       ),
     );
     expect(isAppError(err) && err.code).toBe("promotion.fence_not_attested");
-    expect(await readDeploymentMode(db, nodeId)).toBe("mirror");
+    expect((await readNodeMode(suite.node, nodeId)).mode).toBe("mirror");
     expect(persisted).toEqual([]);
   });
 
   it("is idempotent — a second promote on an already-primary node is a no-op", async () => {
     const { db, deps, nodeId } = await mirror();
-    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary"));
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary"));
 
     const first = await promoteMirrorToPrimary(deps(noopLog), { oldNodeNeutralised: true });
     const second = await promoteMirrorToPrimary(deps(noopLog), { oldNodeNeutralised: true });
@@ -502,7 +716,7 @@ describe("promoteMirrorToPrimary", () => {
 
   it("refuses a fenced node with promotion.node_fenced, leaving it a mirror and persisting nothing", async () => {
     const { db, deps, nodeId } = await mirror();
-    await writeNodeMembership(db, heldFencedDoc(nodeId, "sell-only"));
+    await holdChart(db, suite.node, nodeId, heldFencedDoc(nodeId, "sell-only"));
     const persisted: string[] = [];
     const err = await captureError(() =>
       promoteMirrorToPrimary(
@@ -514,8 +728,8 @@ describe("promoteMirrorToPrimary", () => {
     );
     expect(isAppError(err) && err.code).toBe("promotion.node_fenced");
     expect(isAppError(err) && err.params).toEqual({ standing: "sell-only" });
-    expect(await readDeploymentMode(db, nodeId)).toBe("mirror");
-    expect(await readSingletonRole(db, nodeId)).toBe("secondary");
+    expect((await readNodeMode(suite.node, nodeId)).mode).toBe("mirror");
+    expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("secondary");
     expect((await readNodeMembership(db))?.body.term).toBe(3);
     expect(persisted).toEqual([]);
   });
@@ -525,18 +739,18 @@ describe("promoteMirrorToPrimary", () => {
   // the clearing; the primary's join refusal (`mirror.standby_removed`) is what refuses it.
   it("refuses a machine its own held chart has cleared (revoked) with promotion.node_fenced, leaving it a mirror", async () => {
     const { db, deps, nodeId } = await mirror();
-    await writeNodeMembership(db, {
-      body: {
+    await holdChart(
+      db,
+      suite.node,
+      nodeId,
+      signedBy("carrier-node", {
         term: 3,
         nodes: [
           { nodeId: "carrier-node", contactUrl: "https://carrier", standing: "serving-primary" },
         ],
         revoked: [nodeId],
-      },
-      signerNodeId: "carrier-node",
-      signature: "held-placeholder-sig",
-      endorsements: [],
-    });
+      }),
+    );
     const persisted: string[] = [];
     const err = await captureError(() =>
       promoteMirrorToPrimary(
@@ -548,26 +762,26 @@ describe("promoteMirrorToPrimary", () => {
     );
     expect(isAppError(err) && err.code).toBe("promotion.node_fenced");
     expect(isAppError(err) && err.params).toEqual({ standing: "evicted" });
-    expect(await readDeploymentMode(db, nodeId)).toBe("mirror");
+    expect((await readNodeMode(suite.node, nodeId)).mode).toBe("mirror");
     expect((await readNodeMembership(db))?.body.term).toBe(3);
     expect(persisted).toEqual([]);
   });
 
   it("refuses with membership.chart_too_large, leaving it a mirror, when its held chart lists MAX_NODES machines but not itself", async () => {
     const { db, deps, nodeId } = await mirror();
-    await writeNodeMembership(db, {
-      body: {
+    await holdChart(
+      db,
+      suite.node,
+      nodeId,
+      signedBy("other-0", {
         term: 3,
         nodes: Array.from({ length: MAX_NODES }, (_, i) => ({
           nodeId: `other-${i}`,
           contactUrl: `https://other-${i}`,
           standing: i === 0 ? ("serving-primary" as const) : ("serving-secondary" as const),
         })),
-      },
-      signerNodeId: "other-0",
-      signature: "held-placeholder-sig",
-      endorsements: [],
-    });
+      }),
+    );
     const persisted: string[] = [];
     const err = await captureError(() =>
       promoteMirrorToPrimary(
@@ -578,7 +792,7 @@ describe("promoteMirrorToPrimary", () => {
       ),
     );
     expect(isAppError(err) && err.code).toBe("membership.chart_too_large");
-    expect(await readDeploymentMode(db, nodeId)).toBe("mirror");
+    expect((await readNodeMode(suite.node, nodeId)).mode).toBe("mirror");
     expect((await readNodeMembership(db))?.body.term).toBe(3);
     expect(persisted).toEqual([]);
   });
@@ -590,12 +804,134 @@ describe("promoteMirrorToPrimary", () => {
     await writeNodeMembership(db, docAtTerm(5, nodeId));
 
     const err = await captureError(() =>
-      withTransaction(db, (tx) => commitMirrorPromotionTx(tx, nodeId, docAtTerm(4, nodeId))),
+      withTransaction(db, (tx) => commitMirrorPromotionTx(tx, docAtTerm(4, nodeId))),
     );
     expect(isAppError(err) && err.code).toBe("promotion.membership_superseded");
     expect((await readNodeMembership(db))?.body.term).toBe(5);
-    expect(await readDeploymentMode(db, nodeId)).toBe("mirror");
-    expect(await readSingletonRole(db, nodeId)).toBe("secondary");
+    expect((await readNodeMode(suite.node, nodeId)).mode).toBe("mirror");
+    expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("secondary");
+  });
+
+  it("a refused membership write leaves node.db's role untouched", async () => {
+    const { db, deps, nodeId } = await mirror();
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary"));
+
+    // A newer term lands between the mint and the venue save, as a gossip adoption would.
+    const err = await captureError(() =>
+      promoteMirrorToPrimary(
+        {
+          ...deps(noopLog),
+          withModuleOperations: async (_context, run) => {
+            await writeNodeMembership(db, docAtTerm(5, nodeId));
+            return withTransaction(db, (tx) => run(tx, new Map()));
+          },
+        },
+        { oldNodeNeutralised: true },
+      ),
+    );
+
+    expect(isAppError(err) && err.code).toBe("promotion.membership_superseded");
+    expect((await readNodeMembership(db))?.body.term).toBe(5);
+    expect(await readNodeMode(suite.node, nodeId)).toEqual({
+      mode: "mirror",
+      singletonRole: "secondary",
+    });
+  });
+
+  it("a role write that fails after the venue save is logged and still asks for a restart", async () => {
+    const { db, deps, nodeId, standardSeriesId } = await mirror();
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary"));
+    const { log, entries } = recordingLog();
+
+    const result = await promoteMirrorToPrimary(
+      { ...deps(log), node: nodeFailingNextWrite(suite.node) },
+      { oldNodeNeutralised: true },
+    );
+
+    expect(result).toEqual({ alreadyPrimary: false, seriesId: standardSeriesId });
+    expect(entries.filter((entry) => entry.event === "promotion.role_write_failed")).toEqual([
+      {
+        level: "warn",
+        event: "promotion.role_write_failed",
+        detail: { errorCode: "unknown", error: "node.db write refused" },
+      },
+    ]);
+    expect(entries.map((entry) => entry.event)).not.toContain("promotion.completed");
+    expect((await readNodeMembership(db))?.body.term).toBe(4);
+    expect(await readNodeMode(suite.node, nodeId)).toEqual({
+      mode: "mirror",
+      singletonRole: "secondary",
+    });
+  });
+
+  it("a second call after a lost role write finishes the role and mints no second term", async () => {
+    const { db, deps, nodeId, standardSeriesId } = await mirror();
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary"));
+    const { log, entries } = recordingLog();
+
+    const first = await promoteMirrorToPrimary(
+      { ...deps(log), node: nodeFailingNextWrite(suite.node) },
+      { oldNodeNeutralised: true },
+    );
+    expect(first).toEqual({ alreadyPrimary: false, seriesId: standardSeriesId });
+    const termAfterFirst = (await readNodeMembership(db))?.body.term;
+
+    const d = deps(log);
+    const second = await promoteMirrorToPrimary(d, { oldNodeNeutralised: true });
+
+    expect(second).toEqual({ alreadyPrimary: false, seriesId: standardSeriesId });
+    expect(await readNodeMode(suite.node, nodeId)).toEqual({
+      mode: "primary",
+      singletonRole: "primary",
+    });
+    expect(d.holders.mode.current).toBe("primary");
+    expect((await readNodeMembership(db))?.body.term).toBe(termAfterFirst);
+    expect(entries.map((entry) => entry.event)).toContain("promotion.role_finished");
+  });
+
+  it("still asks for a restart when node.db can be neither written nor read after the venue save", async () => {
+    const { db, deps, nodeId, standardSeriesId } = await mirror();
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary"));
+    const promoteDeps = {
+      ...deps(noopLog),
+      node: nodeFailingNextWrite(suite.node, { readsFailAfter: true }),
+    };
+
+    const result = await promoteMirrorToPrimary(promoteDeps, { oldNodeNeutralised: true });
+
+    expect(result).toEqual({ alreadyPrimary: false, seriesId: standardSeriesId });
+    expect((await readNodeMembership(db))?.body.term).toBe(4);
+    expect(promoteDeps.holders.mode.current).toBe("mirror");
+    expect(promoteDeps.holders.singletonRole.current).toBe("secondary");
+  });
+
+  it("refuses an unstamped venue.db with deployment.not_stamped before activating or persisting anything", async () => {
+    const { db, deps, nodeId } = await mirror();
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary"));
+    await db.delete(deployment);
+    const persist = vi.fn(async () => {});
+    const activate = vi.fn(async () => {});
+    const activating = fakeModule("activating-regime", {
+      provisioning: {
+        standby: { reserve: async () => ({ state: {} }), establish: async () => {}, activate },
+      },
+    });
+
+    const error = await captureError(() =>
+      promoteMirrorToPrimary(
+        { ...deps(noopLog, persist), modules: [activating] },
+        { oldNodeNeutralised: true },
+      ),
+    );
+
+    expect(isAppError(error) && error.code).toBe("deployment.not_stamped");
+    expect(activate).not.toHaveBeenCalled();
+    expect(persist).not.toHaveBeenCalled();
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+    expect(await readNodeMode(suite.node, nodeId)).toEqual({
+      mode: "mirror",
+      singletonRole: "secondary",
+    });
   });
 
   it("mints a first chart naming only itself, with no endorsement, when the mirror holds neither", async () => {
@@ -614,6 +950,68 @@ describe("promoteMirrorToPrimary", () => {
     expect(held?.endorsements).toEqual([]);
   });
 
+  it("refuses to sign over a held document no stored key vouches for, writing nothing", async () => {
+    const { db, deps, nodeId } = await mirror();
+    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "unpinned-old-primary"));
+    const persist = vi.fn(async () => {});
+    const err = await captureError(() =>
+      promoteMirrorToPrimary(deps(noopLog, persist), { oldNodeNeutralised: true }),
+    );
+    expect(isAppError(err) && err.code).toBe("membership.held_untrusted");
+    expect(isAppError(err) && err.params).toEqual({ reason: "untrusted_signer" });
+    expect(persist).not.toHaveBeenCalled();
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+    expect(await readNodeMode(suite.node, nodeId)).toEqual({
+      mode: "mirror",
+      singletonRole: "secondary",
+    });
+  });
+
+  it("still refuses a malformed held document signed by a key no stored key vouches for", async () => {
+    const { db, deps, nodeId } = await mirror();
+    const doc = heldTermThreeDoc(nodeId, "unpinned-old-primary");
+    const body = { ...doc.body, revoked: ["gone", "gone"] };
+    await writeNodeMembership(db, signedBy("unpinned-old-primary", body));
+    const persist = vi.fn(async () => {});
+    const err = await captureError(() =>
+      promoteMirrorToPrimary(deps(noopLog, persist), { oldNodeNeutralised: true }),
+    );
+    expect(isAppError(err) && err.code).toBe("membership.held_untrusted");
+    expect(isAppError(err) && err.params).toEqual({ reason: "untrusted_signer" });
+    expect(persist).not.toHaveBeenCalled();
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+    expect((await readNodeMode(suite.node, nodeId)).mode).toBe("mirror");
+  });
+
+  it("refuses a held document no stored key vouches for that carries an unsigned field beside its body", async () => {
+    const { db, deps, nodeId } = await mirror();
+    const doc = { ...heldTermThreeDoc(nodeId, "unpinned-old-primary"), note: "x" };
+    await writeNodeMembership(db, doc as SignedMembershipDocument);
+    const persist = vi.fn(async () => {});
+    const err = await captureError(() =>
+      promoteMirrorToPrimary(deps(noopLog, persist), { oldNodeNeutralised: true }),
+    );
+    expect(isAppError(err) && err.code).toBe("membership.held_untrusted");
+    expect(isAppError(err) && err.params).toEqual({ reason: "untrusted_signer" });
+    expect(persist).not.toHaveBeenCalled();
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+    expect((await readNodeMode(suite.node, nodeId)).mode).toBe("mirror");
+  });
+
+  it("refuses a held chart whose body is not a membership chart with reason malformed, writing nothing", async () => {
+    const { db, deps, nodeId } = await mirror();
+    await writeNodeMembership(db, unreadableChart(nodeId, "unpinned-old-primary"));
+    const before = [await tableSnapshot(db), await tableSnapshot(suite.node)];
+    const persist = vi.fn(async () => {});
+    const err = await captureError(() =>
+      promoteMirrorToPrimary(deps(noopLog, persist), { oldNodeNeutralised: true }),
+    );
+    expect(isAppError(err) && err.code).toBe("membership.held_untrusted");
+    expect(isAppError(err) && err.params).toEqual({ reason: "malformed" });
+    expect(persist).not.toHaveBeenCalled();
+    expect([await tableSnapshot(db), await tableSnapshot(suite.node)]).toEqual(before);
+  });
+
   it("reports a held term of -1 when the refused membership write leaves no chart held at all", async () => {
     const { db, nodeId } = await mirror();
     // Stands in for the held row vanishing under the write: the engine skips the insert.
@@ -623,13 +1021,13 @@ describe("promoteMirrorToPrimary", () => {
     let err: unknown;
     try {
       err = await captureError(() =>
-        withTransaction(db, (tx) => commitMirrorPromotionTx(tx, nodeId, docAtTerm(4, nodeId))),
+        withTransaction(db, (tx) => commitMirrorPromotionTx(tx, docAtTerm(4, nodeId))),
       );
     } finally {
       await db.execute(sql`drop trigger promote_skip_membership`);
     }
     expect(isAppError(err) && err.code).toBe("promotion.membership_superseded");
     expect(isAppError(err) && err.params).toEqual({ heldTerm: -1, mintedTerm: 4 });
-    expect(await readDeploymentMode(db, nodeId)).toBe("mirror");
+    expect((await readNodeMode(suite.node, nodeId)).mode).toBe("mirror");
   });
 });

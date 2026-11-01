@@ -1712,6 +1712,9 @@ export interface ServerRow {
 /** `term` is null, and `nodes` empty, when this server holds no chart. */
 export interface ServerListing {
   term: number | null;
+  /** This box's authority fingerprint, which a joining spare asks the person to compare; null
+   * when the box serves no authority of its own. */
+  authorityFingerprint: string | null;
   nodes: ServerRow[];
 }
 

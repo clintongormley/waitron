@@ -134,6 +134,12 @@ vice versa, or the two files could not be backed up independently.
 > `docs/developers/conventions-data.md`. Anything that works as a live login is stored as a hash, because
 > the bucket now holds it. Slice 2: #548 and #554.
 
+> **Pointer, 2026-11-01 (A947 slice 3a).** `node.db` is no longer empty. It holds five `local`
+> tables: a box's mode and singleton role, its link to the main box, the main box's key it pinned
+> when it joined, its recovery-key check and its sealed signing key. It is never streamed; every
+> other table, `local` ones included, stays in `venue.db`. See
+> `docs/developers/conventions-data.md` and the [slice 3a plan](../plans/2026-10-31-a947-3a-node-db.md).
+
 ### 2.2 Generations
 
 Each venue owns one prefix in the store, `venues/<venue-id>/`. Under it the history is a set of
@@ -548,6 +554,10 @@ the premier, default backup; the archive is the self-host / extra-copy path.**
 > is the one database file the archive copies (`archiveTo`, `packages/store/src/archive.ts`).
 > Slice 2: #548.
 
+> **Pointer, 2026-11-01 (A947 slice 3a).** The archive now carries `node.db` whole as `node.dump`,
+> beside the venue's `db.dump`, and a restore refuses an archive without it
+> (`apps/server/src/restore.ts`). [Slice 3a plan](../plans/2026-10-31-a947-3a-node-db.md).
+
 **The stream and the archive are two independent recovery ladders, not one that refines the other**
 (owner question, 2026-09-16). What Litestream brings up to date is a *replica* — a store holding one of
 its snapshots plus the change files (LTX) since — which it restores to the latest point and can advance
@@ -636,6 +646,11 @@ is weakened knowingly: the records the stream holds are, once submitted, already
 > recovery key that streams with the database, and places the copy through the archive restore's own
 > path, so the fiscal restore hook mints a fresh installation number, series and chain as it does for
 > an archive. Slice 2: #642 and #646.
+
+> **Pointer, 2026-11-01 (A947 slice 3a).** `node.db` again holds the box's own identity (§2.1's
+> pointer of this date). A rebuild from the bucket takes its `node.db` from the `node.dump` entry of
+> the sealed state that streams in `venue.db` (`apps/server/src/restore-stream.ts`), and an archive
+> carries `node.dump` (§7.2's pointer of this date). [Slice 3a plan](../plans/2026-10-31-a947-3a-node-db.md).
 
 ### 7.6 The legible export the regulation requires
 

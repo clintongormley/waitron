@@ -1,9 +1,20 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { createHash } from "node:crypto";
-import { copyFile, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, beforeEach, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, nodes, stampDeployment, tenants } from "@waitron/db";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { DatabaseSync } from "node:sqlite";
+import { sql } from "drizzle-orm";
+import {
+  CORE_MIGRATIONS,
+  locations,
+  nodes,
+  openVenueDatabase,
+  stampDeployment,
+  tenants,
+} from "@waitron/db";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { generateNodeKeyPair } from "@waitron/membership";
@@ -16,7 +27,41 @@ import { mintBreakGlassKey } from "./break-glass.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import * as adapter from "./first-setup-backup-source.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const proofNodeRows = vi.hoisted(() => ({ recording: false, seen: [] as unknown[][] }));
+vi.mock("./recovery-backup-preview.js", async (original) => {
+  const actual = await original<typeof import("./recovery-backup-preview.js")>();
+  const path = await import("node:path");
+  const { DatabaseSync } = await import("node:sqlite");
+  return {
+    ...actual,
+    readRecoveryCopyPreview: async (...args: Parameters<typeof actual.readRecoveryCopyPreview>) => {
+      if (!proofNodeRows.recording) return actual.readRecoveryCopyPreview(...args);
+      const copy = new DatabaseSync(path.join(path.dirname(args[0].databasePath), "node.db"), {
+        readOnly: true,
+      });
+      try {
+        const marked = copy
+          .prepare("select name from sqlite_master where name = 'backup_marker'")
+          .all();
+        proofNodeRows.seen.push(
+          marked.length === 0
+            ? []
+            : copy
+                .prepare("select v from backup_marker")
+                .all()
+                .map((row) => row.v),
+        );
+      } finally {
+        copy.close();
+      }
+      return actual.readRecoveryCopyPreview(...args);
+    },
+  };
+});
+
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
+});
 const NODE = "d0000000-0000-4000-8000-000000000001";
 const LOCATION = "d0000000-0000-4000-8000-000000000002";
 const POINT = "047bacd4-df70-4881-a835-c6dd75ae7ecf";
@@ -45,10 +90,11 @@ beforeEach(async () => {
     operationDescription: "Restaurant",
   });
   await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Selected node" });
-  key = await mintBreakGlassKey(suite.db, NODE);
+  key = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, NODE);
   database = join(scratch, "selected.db");
   await suite.db.archiveTo(database);
   entries = [
+    await nodeDumpEntry(suite.node, scratch),
     {
       name: "manifest.json",
       bytes: Buffer.from(
@@ -74,6 +120,7 @@ beforeEach(async () => {
   );
 });
 afterEach(async () => {
+  proofNodeRows.recording = false;
   if (scratch) await rm(scratch, { recursive: true, force: true });
 });
 
@@ -304,7 +351,7 @@ it("authenticates the selected backup before revealing its private preview, reta
   const selected = await adapter.openFirstSetupBackupSource(archive(), deps());
   try {
     const before = await readFile(selected.copy.databasePath);
-    const replacement = await mintBreakGlassKey(suite.db, NODE);
+    const replacement = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, NODE);
     await expect(
       adapter.authenticatedFirstSetupBackupPreview(
         selected,
@@ -341,7 +388,43 @@ it("authenticates the selected backup before revealing its private preview, reta
       locationName: "Selected location",
     });
     expect(await readFile(selected.copy.databasePath)).toEqual(before);
-    expect(await readdir(dirname(selected.copy.databasePath))).toEqual(["venue.db"]);
+    expect(await readdir(dirname(selected.copy.databasePath))).toEqual(["node.db", "venue.db"]);
+  } finally {
+    await selected.copy.discard();
+  }
+});
+
+it("the proof preview's folder holds the backup's node copy, not an empty node.db", async () => {
+  const marker = join(scratch, "marker-node.db");
+  await writeFile(marker, entries.find((entry) => entry.name === "node.dump")!.bytes);
+  const source = new DatabaseSync(marker);
+  source.exec("create table backup_marker (v text); insert into backup_marker values ('backup')");
+  source.close();
+  artifact = encryptArtifact(
+    packArchive([
+      ...entries.filter((entry) => entry.name !== "node.dump"),
+      { name: "node.dump", bytes: await readFile(marker) },
+      { name: "db.dump", bytes: await readFile(database) },
+    ]),
+    "archive-key",
+  );
+  const selected = await adapter.openFirstSetupBackupSource(archive(), deps());
+  try {
+    proofNodeRows.seen = [];
+    proofNodeRows.recording = true;
+    await adapter.authenticatedFirstSetupBackupPreview(
+      selected,
+      {
+        module: "core",
+        action: "restore",
+        eventId: "repair-proof",
+        targetNodeId: NODE,
+        sourceId: selected.copy.sourceId!,
+      },
+      key.secret,
+      deps(),
+    );
+    expect(proofNodeRows.seen).toEqual([["backup"]]);
   } finally {
     await selected.copy.discard();
   }
@@ -366,7 +449,7 @@ it.each(["", "wrong-node-key"])(
           deps(),
         ),
       ).rejects.toMatchObject({ code: "promotion.break_glass_invalid", params: {} });
-      expect(await readdir(dirname(selected.copy.databasePath))).toEqual(["venue.db"]);
+      expect(await readdir(dirname(selected.copy.databasePath))).toEqual(["node.db", "venue.db"]);
     } finally {
       await selected.copy.discard();
     }
@@ -396,13 +479,13 @@ it("does not accept an archive encryption key as the selected node's proof", asy
 });
 
 it("does not disclose a private preview when the selected database's node key has no name", async () => {
-  const { setBreakGlassVerifierTx, readBreakGlassVerifier, withTransaction } =
-    await import("@waitron/db");
-  const verifier = await readBreakGlassVerifier(suite.db, NODE);
-  await withTransaction(suite.db, (tx) => setBreakGlassVerifierTx(tx, NODE, verifier!, null));
-  await suite.db.archiveTo(database);
+  suite.node.run(sql`update node_recovery_key set key_name = '' where node_id = ${NODE}`);
   const bytes = encryptArtifact(
-    packArchive([...entries, { name: "db.dump", bytes: await readFile(database) }]),
+    packArchive([
+      ...entries.filter((entry) => entry.name !== "node.dump"),
+      await nodeDumpEntry(suite.node, scratch),
+      { name: "db.dump", bytes: await readFile(database) },
+    ]),
     "archive-key",
   );
   const selected = await adapter.openFirstSetupBackupSource(
@@ -429,10 +512,55 @@ it("does not disclose a private preview when the selected database's node key ha
   }
 });
 
+it("refuses as incomplete a backup whose node copy the node set never migrated, before the proof reads it", async () => {
+  const bare = await openVenueDatabase(join(scratch, "bare"));
+  let dump: ArchiveEntry;
+  try {
+    dump = await nodeDumpEntry(bare.node, scratch);
+  } finally {
+    await bare.close();
+  }
+  const selected = await adapter.openFirstSetupBackupSource(
+    {
+      ...archive(),
+      artifact: encryptArtifact(
+        packArchive([
+          ...entries.filter((entry) => entry.name !== "node.dump"),
+          dump,
+          { name: "db.dump", bytes: await readFile(database) },
+        ]),
+        "archive-key",
+      ),
+    },
+    deps(),
+  );
+  try {
+    await expect(
+      adapter.authenticatedFirstSetupBackupPreview(
+        selected,
+        {
+          module: "core",
+          action: "restore",
+          eventId: "repair-proof",
+          targetNodeId: NODE,
+          sourceId: selected.copy.sourceId!,
+        },
+        key.secret,
+        deps(),
+      ),
+    ).rejects.toMatchObject({
+      code: "restore.archive_incomplete",
+      params: { missing: "node.dump" },
+    });
+  } finally {
+    await selected.copy.discard();
+  }
+});
+
 it("passes only the selected copy's original node identity across asynchronous proof", async () => {
   const other = "d0000000-0000-4000-8000-000000000003";
   await suite.db.insert(nodes).values({ id: other, locationId: LOCATION, name: "Another node" });
-  await mintBreakGlassKey(suite.db, other);
+  await mintBreakGlassKey({ venue: suite.db, node: suite.node }, other);
   await suite.db.archiveTo(database);
   const bytes = encryptArtifact(
     packArchive([...entries, { name: "db.dump", bytes: await readFile(database) }]),
@@ -526,7 +654,7 @@ it.each([
         deps(),
       ),
     ).rejects.toMatchObject({ code: "promotion.break_glass_invalid", params: {} });
-    expect(await readdir(dirname(selected.copy.databasePath))).toEqual(["venue.db"]);
+    expect(await readdir(dirname(selected.copy.databasePath))).toEqual(["node.db", "venue.db"]);
   } finally {
     await selected.copy.discard();
   }
@@ -573,7 +701,7 @@ it("cleans the private proof copy when selected backup evidence cannot be parsed
         { ...deps(), modules: [badModule] },
       ),
     ).rejects.toThrow("invalid history");
-    expect(await readdir(dirname(selected.copy.databasePath))).toEqual(["venue.db"]);
+    expect(await readdir(dirname(selected.copy.databasePath))).toEqual(["node.db", "venue.db"]);
   } finally {
     await selected.copy.discard();
   }

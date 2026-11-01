@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
 import { basename, dirname, join, relative, sep } from "node:path";
 import { lockVenueDatabase } from "@waitron/db";
@@ -20,6 +21,8 @@ export interface SetAsideIo {
   mkdir: typeof fs.mkdir;
   rmdir: typeof fs.rmdir;
   rename: (from: string, to: string) => Promise<void>;
+  /** Creates `path` (never over anything) holding `bytes` with exactly `mode`, flushed to disk. */
+  writeRing?: (path: string, bytes: Buffer, mode: number) => Promise<void>;
 }
 
 type Root = "venue" | "state";
@@ -36,6 +39,22 @@ const PROBE = ".first-setup-set-aside-probe-";
 const LEFTOVER_PROBE =
   /^\.first-setup-set-aside-probe-\d+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MODE = 0o700;
+const RING = "secrets.env";
+const RING_TEMP = ".secrets.env.set-aside-";
+const LEFTOVER_RING_TEMP =
+  /^\.secrets\.env\.set-aside-\d+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+async function writeRingFile(path: string, bytes: Buffer, mode: number): Promise<void> {
+  const handle = await fs.open(path, "wx", mode);
+  try {
+    // The umask may have narrowed `mode` at creation.
+    await handle.chmod(mode);
+    await handle.writeFile(bytes);
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
 
 const codeOf = (error: unknown) =>
   String(
@@ -114,7 +133,10 @@ export function setAsideFolderPaths(
 const stemFolderOf = (root: Root, folders: Record<Root, string>, destinations: Destinations) =>
   root === "state" || venueBesideState(destinations) ? dirname(folders[root]) : folders[root];
 
-/** Box-named empty probe folders a cut left, in each root and in any set-aside stem folder. */
+/**
+ * Box-named empty probe folders a cut left, in each root and in any set-aside stem folder, and
+ * half-written ring copies (plain files with this code's temporary name, in state-root stem folders).
+ */
 async function removeLeftoverProbes(roots: Roots, io: SetAsideIo): Promise<void> {
   const list = async (folder: string) => {
     try {
@@ -126,6 +148,7 @@ async function removeLeftoverProbes(roots: Roots, io: SetAsideIo): Promise<void>
   };
   // Descends only into real folders, so nothing is read or removed through a link.
   const folders: string[] = [];
+  const stemFolders: string[] = [];
   for (const root of [roots.stateDir, roots.venueDir]) {
     folders.push(root);
     if ((await notASetAsideFolder(root, io)) !== null) continue;
@@ -134,6 +157,7 @@ async function removeLeftoverProbes(roots: Roots, io: SetAsideIo): Promise<void>
       const stemFolder = join(base, stem);
       if ((await notAFolder(stemFolder, io)) !== null) continue;
       folders.push(stemFolder);
+      if (root === roots.stateDir) stemFolders.push(stemFolder);
       for (const sub of ["state", "venue"])
         if ((await notAFolder(join(stemFolder, sub), io)) === null)
           folders.push(join(stemFolder, sub));
@@ -148,6 +172,11 @@ async function removeLeftoverProbes(roots: Roots, io: SetAsideIo): Promise<void>
           // Not empty, or not a folder: not a probe this code left, so it stays.
           if (!["ENOTEMPTY", "EEXIST", "ENOTDIR"].includes(codeOf(error))) throw error;
         }
+  // A half-written copy of the key ring a cut left; only a plain file this code named.
+  for (const folder of stemFolders)
+    for (const name of await list(folder))
+      if (LEFTOVER_RING_TEMP.test(name) && (await io.lstat(join(folder, name))).isFile())
+        await fs.unlink(join(folder, name));
 }
 
 /**
@@ -342,6 +371,57 @@ async function deleteNoteFirst(stateDir: string): Promise<void> {
 }
 
 /**
+ * Copies the box's key ring into the Move's stem folder on the state root, before any piece moves:
+ * the moved databases' sealed rows open only with it, and a later join replaces the ring whole.
+ * Bytes and permission bits as they are; written under a temporary name, flushed, renamed and the
+ * folder synced, so a cut leaves no copy or a whole one. A copy already there is left as it is; with
+ * no ring file there is nothing to copy.
+ */
+async function keepRingCopy(roots: Roots, destinations: Destinations, io: SetAsideIo) {
+  let label = `state/${RING}`;
+  try {
+    let bytes: Buffer;
+    let mode: number;
+    try {
+      const handle = await fs.open(join(roots.stateDir, RING), "r");
+      try {
+        mode = (await handle.stat()).mode & 0o777;
+        bytes = await handle.readFile();
+      } finally {
+        await handle.close();
+      }
+    } catch (error) {
+      if (codeOf(error) === "ENOENT") return;
+      throw error;
+    }
+    const stemFolder = join(roots.stateDir, dirname(destinations.state));
+    for (const folder of chain(roots.stateDir, stemFolder).slice(1)) {
+      const found = await notAFolder(folder, io);
+      if (found !== null) throw failed(found, `state/${relative(roots.stateDir, folder)}`);
+    }
+    const copy = join(stemFolder, RING);
+    label = `state/${relative(roots.stateDir, copy)}`;
+    const present = await io.lstat(copy).then(
+      () => true,
+      (error: unknown) => {
+        if (codeOf(error) === "ENOENT") return false;
+        throw error;
+      },
+    );
+    if (present) return;
+    await io.mkdir(stemFolder, { recursive: true, mode: MODE });
+    for (const folder of chain(roots.stateDir, stemFolder)) await syncFolder(folder);
+    const temp = join(stemFolder, `${RING_TEMP}${process.pid}-${randomUUID()}`);
+    await (io.writeRing ?? writeRingFile)(temp, bytes, mode);
+    await io.rename(temp, copy);
+    await syncFolder(stemFolder);
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw failed(codeOf(error), label);
+  }
+}
+
+/**
  * D4 steps 3 and 4: renames each unit's pieces, in survey order and each unit's move order, into
  * the record's folders. Never overwrites: a present
  * destination refuses. The caller holds the venue lock.
@@ -355,6 +435,7 @@ export async function moveStartAgainUnits(
     throw new AppError("setup.attempt_invalid", {});
   await deleteNoteFirst(roots.stateDir);
   const folders = await makeDestinationFolders(roots, { ...record, setAside: record.setAside }, io);
+  await keepRingCopy(roots, record.setAside, io);
   for (const unit of record.listed.units)
     for (const piece of unit.pieces) {
       const side = await unrecordedSideFile(roots, unit, piece, io);
@@ -425,7 +506,8 @@ export async function recordedStartAgainMove(
  * (the latest), finishes that Move piece by piece into the folders the record names. A piece at
  * its source exactly as recorded, with nothing at its destination, is renamed; one gone from its
  * source and at its destination exactly as recorded is already moved; anything else stops,
- * moving nothing more. Removes nothing but empty probe folders.
+ * moving nothing more. Removes nothing but empty probe folders and half-written ring copies (plain
+ * files with this code's temporary name, in state-root stem folders).
  */
 export async function resumeStartAgainSetAside(
   roots: Roots,
@@ -441,6 +523,7 @@ export async function resumeStartAgainSetAside(
     await deleteNoteFirst(canonical.stateDir);
     await removeLeftoverProbes(canonical, io);
     const folders = await makeDestinationFolders(canonical, record, io);
+    await keepRingCopy(canonical, record.setAside, io);
     for (const unit of record.listed.units)
       for (const piece of unit.pieces) {
         const expected = JSON.stringify(recordedFor(unit, piece));

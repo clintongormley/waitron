@@ -11,16 +11,8 @@ import { join } from "node:path";
 import { beforeAll, afterAll, beforeEach, expect, it, vi } from "vitest";
 import { and, eq, isNull } from "drizzle-orm";
 import { loadKeyRing } from "@waitron/credentials";
-import {
-  deployment,
-  invoiceSeries,
-  locations,
-  nodes,
-  tenants,
-  readSingletonRole,
-  setDeploymentMode,
-  withTransaction,
-} from "@waitron/db";
+import { deployment, invoiceSeries, locations, nodes, tenants, withTransaction } from "@waitron/db";
+import { readNodeMode, setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -42,6 +34,7 @@ import { nodeId } from "@waitron/shared";
 import { type ReservedIdentity } from "./mirror-bundle.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
+import { sealAdoptedStandbyKey } from "./testing/adopted-standby-key.js";
 import { promoteMirrorToPrimary } from "./promote.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
@@ -101,6 +94,7 @@ beforeAll(async () => {
   stateDir = await mkdtemp(join(tmpdir(), "allocated-standby-public-fiscal-"));
   await mkdir(join(stateDir, "tls"));
   await writeFile(join(stateDir, "tls", "ca.crt"), "public-test-ca");
+  await writeFile(join(stateDir, "tls", "ca.key"), "public-test-ca-key");
 });
 afterAll(async () => {
   if (stateDir !== undefined) await rm(stateDir, { recursive: true, force: true });
@@ -152,7 +146,7 @@ beforeEach(async () => {
   await primary.db
     .insert(persons)
     .values({ id: ADMIN, displayName: "Administrator", role: "admin", passwordHash: HASH });
-  await establishNodeIdentity({ ownerDb: primary.db, ring: RING }, PRIMARY);
+  await establishNodeIdentity({ ownerDb: primary.db, node: primary.node, ring: RING }, PRIMARY);
 });
 function joinRequest(targetNodeId: string, action: string) {
   const binding = {
@@ -201,6 +195,7 @@ async function reserve(standby = generateStandbyIdentity()) {
   const app = new Hono();
   mountMirrorBundleApi(app, {
     appDb: primary.db,
+    node: primary.node,
     ring: RING,
     stateDir: stateDir!,
     relayUrl: "https://relay.test",
@@ -233,7 +228,7 @@ async function establish(
   await writeFile(configuration().confirmationPath, JSON.stringify(request.confirmation));
   await withOperationAuthority(request.binding, request.operatorId, (authority) =>
     establishReservedStandbyIdentity(
-      { ownerDb: spare.db, ring: RING },
+      { ownerDb: spare.db },
       {
         locationId: LOCATION,
         standby: held.standby,
@@ -250,6 +245,7 @@ async function establish(
   );
 }
 async function promote(held: Awaited<ReturnType<typeof reserve>>, key: string, current = true) {
+  await sealAdoptedStandbyKey(spare.node, RING, held.standby);
   const binding = {
     module: "fiscal-verifactu",
     action: "promote",
@@ -312,6 +308,7 @@ async function promote(held: Awaited<ReturnType<typeof reserve>>, key: string, c
   const app = new Hono();
   mountPromoteApi(app, {
     appDb: spare.db,
+    nodeDb: spare.node,
     nodeId: held.standby.nodeId,
     modules,
     credentialKeyRing: TOTP_KEY_RING,
@@ -319,6 +316,7 @@ async function promote(held: Awaited<ReturnType<typeof reserve>>, key: string, c
       const result = await promoteMirrorToPrimary(
         {
           db: spare.db,
+          node: spare.node,
           ring: RING,
           nodeId: held.standby.nodeId,
           holders: createDeploymentHolders("mirror", "secondary"),
@@ -362,8 +360,11 @@ it("consumes signed public reservation and takeover evidence through both HTTP r
   expect(held.reserved.series).toEqual([]);
   await establish(held);
   expect(await liveTarget(held.standby.nodeId)).toEqual({ sif: [], series: [], allocations: [] });
-  await setDeploymentMode(spare.db, held.standby.nodeId, "mirror");
-  const key = await mintBreakGlassSecret(spare.db, held.standby.nodeId);
+  await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror");
+  const key = await mintBreakGlassSecret(
+    { venue: spare.db, node: spare.node },
+    held.standby.nodeId,
+  );
   const response = await promote(held, key);
   expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
   const live = await liveTarget(held.standby.nodeId);
@@ -382,13 +383,16 @@ it("consumes signed public reservation and takeover evidence through both HTTP r
     nodeId: held.standby.nodeId,
     eventId: "host-takeover",
   });
-  expect(await readSingletonRole(spare.db, held.standby.nodeId)).toBe("primary");
+  expect((await readNodeMode(spare.node, held.standby.nodeId)).singletonRole).toBe("primary");
 });
 it("refuses absent current outside consumption through HTTP and retains the dormant reservation", async () => {
   const held = await reserve();
   await establish(held);
-  await setDeploymentMode(spare.db, held.standby.nodeId, "mirror");
-  const key = await mintBreakGlassSecret(spare.db, held.standby.nodeId);
+  await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror");
+  const key = await mintBreakGlassSecret(
+    { venue: spare.db, node: spare.node },
+    held.standby.nodeId,
+  );
   const reservation = await spare.db.select().from(fiscalReservations);
   const response = await promote(held, key, false);
   expect(response.status).toBe(400);
@@ -398,5 +402,5 @@ it("refuses absent current outside consumption through HTTP and retains the dorm
   });
   expect(await liveTarget(held.standby.nodeId)).toEqual({ sif: [], series: [], allocations: [] });
   expect(await spare.db.select().from(fiscalReservations)).toEqual(reservation);
-  expect(await readSingletonRole(spare.db, held.standby.nodeId)).toBe("secondary");
+  expect((await readNodeMode(spare.node, held.standby.nodeId)).singletonRole).toBe("secondary");
 });

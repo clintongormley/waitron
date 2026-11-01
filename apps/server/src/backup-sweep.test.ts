@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, stat, utimes, writeFile } from "
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { readVenueDetails, writeVenueDetails } from "./venue-details.js";
 import { resolveVenueClock } from "./report-api.js";
@@ -32,6 +32,9 @@ import type { StorageBackend, StoredObject } from "./storage-backend.js";
 
 // Never touched under an injected manifest builder.
 const NO_DB = {} as Database;
+const NODE_COPY = {
+  archiveTo: (path: string) => writeFile(path, "NODE"),
+} as unknown as NodeDatabase;
 
 const FIXED_MANIFEST: BackupManifest = {
   manifestVersion: 1,
@@ -116,6 +119,7 @@ describe("runOnce (fan-out)", () => {
   const deps = (backends: StorageBackend[], log = vi.fn()) => ({
     backends,
     db: NO_DB,
+    node: NODE_COPY,
     modules: ALL_MODULES,
     environment: "preproduction" as const,
     resolvers: { media: mediaDir },
@@ -263,7 +267,7 @@ describe("runOnce (fan-out)", () => {
     }
   });
 
-  it("packs the archive in a fixed entry order: manifest, database, required state, optional state", async () => {
+  it("packs the archive in a fixed entry order: manifest, database, node copy, required state, optional state", async () => {
     await writeFile(join(stateDir, "backup.env"), "WAITRON_BACKUP_DIR=/mnt/usb\n");
     await writeFile(join(stateDir, "modules.json"), '{"modules":{}}\n');
     const a = new FakeBackend("a");
@@ -274,6 +278,7 @@ describe("runOnce (fan-out)", () => {
     expect(order).toEqual([
       "manifest.json",
       "db.dump",
+      "node.dump",
       ...RECOVERY_FILES.map((rel) => `secrets/${rel}`),
       "secrets/backup.env",
       "secrets/modules.json",
@@ -451,6 +456,20 @@ describe("runOnce (fan-out)", () => {
     await runOnce(deps([a]));
     expect(await readdir(staging)).toEqual([]);
   });
+
+  it("takes the node copy outside staging and leaves nothing behind", async () => {
+    const copies: string[] = [];
+    const node = {
+      archiveTo: async (path: string) => {
+        copies.push(path);
+        await writeFile(path, "NODE");
+      },
+    } as unknown as NodeDatabase;
+    await runOnce({ ...deps([new FakeBackend("a")]), node });
+    expect(copies).toHaveLength(1);
+    expect(copies[0]!.startsWith(staging)).toBe(false);
+    expect(await stat(dirname(copies[0]!)).catch(() => null)).toBeNull();
+  });
 });
 
 describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
@@ -469,6 +488,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
   const loopDeps = (backend: StorageBackend, overrides: LoopOverrides): BackupSweepDeps => ({
     backends: [backend],
     db: NO_DB,
+    node: NODE_COPY,
     modules: ALL_MODULES,
     environment: "preproduction",
     resolvers: {},
@@ -725,6 +745,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
     await runBackupSweep(
       loopDeps(backend, {
         db: suite.db,
+        node: suite.node,
         signal: controller.signal,
         log: vi.fn(),
         now: () => now,
@@ -1516,6 +1537,7 @@ describe("runOnce with the real buildManifest (a migrated venue)", () => {
     await runOnce({
       backends: [a],
       db: suite.db,
+      node: suite.node,
       modules: ALL_MODULES,
       environment: "preproduction",
       resolvers: {},

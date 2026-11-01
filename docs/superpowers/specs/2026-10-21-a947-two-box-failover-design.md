@@ -2,6 +2,12 @@
 >
 > **A1207, 30 October 2026:** a setup or restore whose minute is taken now waits with one countdown and checks again by itself, instead of the refusal with "carry on from" ([A1207 plan](../plans/2026-10-29-a1207-minute-not-in-database.md), Part 1b).
 
+> **A947 slice 3a, 1 November 2026:** each box's own state now lives in its `node.db`, and the
+> owner answered yes to both of the slice's questions on 31 October: the box's role is saved a
+> moment after the switch's other saves (so §6.3 step 2's role flip is no longer in the same
+> transaction), and a spare checks the main box's certificate fingerprint before it receives the
+> venue's keys ([slice 3a plan](../plans/2026-10-31-a947-3a-node-db.md)).
+
 # A947 — Go-live on two local boxes: a spare box that takes over
 
 **Date:** 2026-10-21, revised twice the same day for the owner's answers, amended 2026-10-22.
@@ -564,6 +570,11 @@ time the spare heard from the main box. The topology design reserved `node.db` f
 "`node.db` stays empty, reserved for slice 5's mirror box"). Its first tables are this design's one
 migration (slice 3a), classified `local`.
 
+> **Pointer, 2026-11-01 (slice 3a).** Built as five tables: `node_mode`, `node_mirror_link`,
+> `node_recovery_key`, `node_signing_key` and `node_primary_key`. The follower's position, the pair's
+> access key and the last time the spare heard from the main box are not among them.
+> [Slice 3a plan](../plans/2026-10-31-a947-3a-node-db.md).
+
 ## 5. While both are up
 
 The spare runs in a **waiting** start mode. It holds its S3 store, follows it, copies up, answers its
@@ -692,6 +703,10 @@ In this order, each step refusing cleanly before the next (the existing promotio
    activation seat switch on a fresh identity, the series checks run, membership term *n+1* is
    signed and checked against the stored main-box key (§4, item 2), and the role flips — one
    transaction, the point of no return.
+
+   > **Pointer, 2026-11-01 (slice 3a, owner's answer to its Q1).** Not one transaction: the role
+   > lives in `node.db`, so it is saved after the venue save, and a role left behind is finished at
+   > the next press or the next start (`finishPromotedRole`, `apps/server/src/promoted-role.ts`).
 3. **Restarts** into the trading start mode, resets every in-flight AEAT claim it inherited
    (`resetInFlightClaims`, already built), and starts filing — its own new chain, and the old main
    box's records that reached it.

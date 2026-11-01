@@ -84,6 +84,15 @@ it("placement deletes the note in its scratch state folder, never the box's own"
   expect(scratchNoteLeft).toBe(false);
   expect(await readFile(boxNote, "utf8")).toBe("{}");
 });
+it("passes a joined spare's backup that carries the venue's authority", async () => {
+  const f = await suite.create();
+  await f.seal([
+    ...f.entries,
+    { name: "secrets/tls/venue-ca.crt", bytes: Buffer.from("venue-ca-cert") },
+    { name: "secrets/tls/venue-ca.key", bytes: Buffer.from("venue-ca-key") },
+  ]);
+  expect((await verify(f)).status).toBe("passed");
+});
 it("complete coverage refuses a shipped owner without semantics", async () => {
   const f = await suite.create();
   f.deps.modules = ALL_MODULES.map((m) =>

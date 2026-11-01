@@ -34,6 +34,35 @@ describe("the migration manifest", () => {
     }
   });
 
+  it("carries the file a set names into its options", () => {
+    const root = mkdtempSync(join(tmpdir(), "waitron-migrations-"));
+    try {
+      for (const name of ["node", "core"]) {
+        mkdirSync(join(root, name, "meta"), { recursive: true });
+        writeFileSync(join(root, name, "meta", "_journal.json"), "{}");
+      }
+      expect(
+        migrationOptionsFor(
+          [
+            { name: "node", table: "n", from: "x", appendOnlyTables: [], database: "node" },
+            { name: "core", table: "c", from: "y", appendOnlyTables: [] },
+          ],
+          root,
+        ),
+      ).toEqual([
+        {
+          migrationsFolder: join(root, "node"),
+          migrationsTable: "n",
+          appendOnlyTables: [],
+          database: "node",
+        },
+        { migrationsFolder: join(root, "core"), migrationsTable: "c", appendOnlyTables: [] },
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("resolves a relative root against this package, not the process's cwd", async () => {
     // The root branch uses the from-source branch's base for a RELATIVE root, not process.cwd().
     // There is no real folder at the computed path, so the assertion is on the resolved `folder`.

@@ -1,7 +1,13 @@
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tryGetCredential, type KeyRing } from "@waitron/credentials";
-import { readNodeMembership, withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  readNodeMembership,
+  withTransaction,
+  type Database,
+  type NodeDatabase,
+  type Transaction,
+} from "@waitron/db";
 import { signBytes } from "@waitron/membership";
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
@@ -84,6 +90,7 @@ export async function readStreamSettingsIn(
 
 export interface StreamHostDeps {
   db: Database;
+  node: NodeDatabase;
   ring: KeyRing;
   nodeId: string;
   venueDir: string;
@@ -161,7 +168,8 @@ export class StreamHost {
         venueId: settings.venueId,
         nodeId: this.#deps.nodeId,
         term: membership.body.term,
-        sign: async (message) => signBytes(message, await readNodeIdentityKey(db, ring)),
+        sign: async (message) =>
+          signBytes(message, await readNodeIdentityKey(this.#deps.node, ring, this.#deps.nodeId)),
         foldBack: () => db.checkpointTruncate(),
         walBytes: () => fileBytes(`${venueDbPath}${WAL_SUFFIX}`),
         walLimitBytes: this.#deps.walLimitBytes ?? DEFAULT_WAL_LIMIT_BYTES,

@@ -2,6 +2,7 @@ import { CARD_PROVIDERS } from "./card-providers.js";
 import { MEDIA_MODULE } from "@waitron/media";
 import { CREDENTIALS_BACKUP_VERIFICATION } from "./credentials-backup-verification.js";
 import { CORE_BACKUP_VERIFICATION } from "./core-backup-verification.js";
+import { NODE_BACKUP_VERIFICATION } from "./node-backup-verification.js";
 import {
   ADJUSTMENTS_BACKUP_VERIFICATION,
   ADJUSTMENTS_CHANGE_SOURCES,
@@ -13,6 +14,7 @@ import {
   ADJUSTMENTS_ROUTES,
 } from "@waitron/adjustments";
 import { CREDENTIALS_CLASSIFICATION } from "@waitron/credentials";
+import { NODE_CLASSIFICATION } from "@waitron/node-db";
 import {
   CATALOGUE_CLASSIFICATION,
   CATALOGUE_BACKUP_VERIFICATION,
@@ -135,7 +137,7 @@ const CORE_TRANSFER: ModuleConfigurationTransfer = {
  * `@waitron/identity` and `@waitron/layouts` are ordinary dependencies of the packages that use them,
  * not slots, and the guard says nothing about them.
  *
- * Each `migrations` object carries the exact `{ name, table, from }` from
+ * Each `migrations` object carries the exact `{ name, table, from }`, and `database` where set, from
  * `packages/migrations/migrations.manifest.json`; `composition.test.ts` pins the two byte-for-byte
  * while both exist. `requires` must name every set whose table this set's SQL `REFERENCES`, puts a
  * trigger `ON`, or names inside a trigger body. Two modules fill the `fiscal` slot —
@@ -153,6 +155,20 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     changes: CORE_CHANGE_SOURCES,
     configurationTransfer: CORE_TRANSFER,
     backup: { verification: CORE_BACKUP_VERIFICATION },
+  },
+  {
+    name: "node",
+    version: "0.0.0",
+    tier: "mandatory",
+    migrations: {
+      name: "node",
+      table: "__drizzle_migrations_node",
+      from: "../node-db/drizzle",
+      database: "node",
+    },
+    classification: NODE_CLASSIFICATION,
+    backup: { verification: NODE_BACKUP_VERIFICATION },
+    configurationTransfer: { kind: "none" },
   },
   {
     name: "catalogue",

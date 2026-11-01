@@ -1,6 +1,6 @@
 import { AppError } from "@waitron/shared";
 import { isDeepStrictEqual } from "node:util";
-import { withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import { initialSetupFor } from "@waitron/module";
 import type { createFirstSetupRuntime } from "./first-setup-runtime.js";
 import type { FirstSetupOwnerAttempt } from "./first-setup-owner.js";
@@ -163,6 +163,7 @@ export async function activateFirstSetup(
 
 export interface FirstSetupPublicationDeps {
   db: Database;
+  node: NodeDatabase;
   publishSelection(state: FirstSetupState): Promise<void>;
   publishIdentity(result: VenueResult, state: FirstSetupState): Promise<void>;
   sealSettings(result: VenueResult): Promise<void>;
@@ -197,7 +198,7 @@ export async function publishCheckedFirstSetup(
   for (const module of state.frozen.modules) {
     if (initialSetupFor(host.modules, module.module)?.recoveryDocument !== undefined) {
       await host.recoveryDelivery.install(
-        deps.db,
+        { venue: deps.db, node: deps.node },
         state,
         { ...owner, revision: state.revision },
         module.module,

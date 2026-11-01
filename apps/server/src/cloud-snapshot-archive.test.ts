@@ -29,7 +29,13 @@ it("builds an encrypted real SQLite archive with module versions and no Cloud cr
   await writeFile(join(root, "cloud-tls/staff.key"), "private staff key");
   const at = new Date("2026-09-24T12:00:00Z");
   const result = await createCloudSnapshotArchive(
-    { db: db.db, modules: ALL_MODULES, environment: "preproduction", stateDir: root },
+    {
+      db: db.db,
+      node: db.node,
+      modules: ALL_MODULES,
+      environment: "preproduction",
+      stateDir: root,
+    },
     "recovery key",
     at,
     new AbortController().signal,
@@ -56,7 +62,13 @@ it("builds an encrypted real SQLite archive with module versions and no Cloud cr
   c.abort();
   await expect(
     createCloudSnapshotArchive(
-      { db: db.db, modules: ALL_MODULES, environment: "preproduction", stateDir: root },
+      {
+        db: db.db,
+        node: db.node,
+        modules: ALL_MODULES,
+        environment: "preproduction",
+        stateDir: root,
+      },
       "key",
       at,
       c.signal,
@@ -83,7 +95,13 @@ it("refuses an oversized SQLite copy and removes its plaintext staging", async (
   try {
     await expect(
       createCloudSnapshotArchive(
-        { db: db.db, modules: ALL_MODULES, environment: "preproduction", stateDir: root },
+        {
+          db: db.db,
+          node: db.node,
+          modules: ALL_MODULES,
+          environment: "preproduction",
+          stateDir: root,
+        },
         "key",
         new Date(),
         new AbortController().signal,
@@ -92,5 +110,46 @@ it("refuses an oversized SQLite copy and removes its plaintext staging", async (
     expect(await readdir(join(root, "cloud-snapshots"))).toEqual([]);
   } finally {
     archive.mockRestore();
+  }
+});
+
+it("lets a node copy still writing into staging finish before it clears staging and rejects with the state read's own failure", async () => {
+  const root = await mkdtemp(join(tmpdir(), "snapshot-busy-copy-"));
+  dirs.push(root);
+  for (const path of RECOVERY_FILES) {
+    await mkdir(dirname(join(root, path)), { recursive: true });
+    await writeFile(join(root, path), "state");
+  }
+  // A directory where a state file should be: reading it fails with EISDIR.
+  await rm(join(root, "secrets.env"));
+  await mkdir(join(root, "secrets.env"));
+  let copyFinished = false;
+  const copy = vi.spyOn(db.node, "archiveTo").mockImplementationOnce(async (path) => {
+    for (let part = 0; part < 10; part += 1) {
+      await writeFile(join(dirname(path), `part-${part}`), "x");
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    await writeFile(path, "NODE");
+    copyFinished = true;
+  });
+  try {
+    await expect(
+      createCloudSnapshotArchive(
+        {
+          db: db.db,
+          node: db.node,
+          modules: ALL_MODULES,
+          environment: "preproduction",
+          stateDir: root,
+        },
+        "key",
+        new Date(),
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({ code: "EISDIR" });
+    expect(copyFinished).toBe(true);
+    expect(await readdir(join(root, "cloud-snapshots"))).toEqual([]);
+  } finally {
+    copy.mockRestore();
   }
 });

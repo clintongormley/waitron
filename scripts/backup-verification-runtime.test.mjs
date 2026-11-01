@@ -226,6 +226,7 @@ console.log(JSON.stringify({ first, same: JSON.stringify(first) === JSON.stringi
         "fiscal-verifactu",
         "identity",
         "media",
+        "node",
         "payments",
         "scheduler",
         "staffing",
@@ -238,7 +239,12 @@ console.log(JSON.stringify({ first, same: JSON.stringify(first) === JSON.stringi
           (m) =>
             JSON.parse(
               readFileSync(
-                join(ROOT, "packages", m.name === "core" ? "db" : m.name, "package.json"),
+                join(
+                  ROOT,
+                  "packages",
+                  { core: "db", node: "node-db" }[m.name] ?? m.name,
+                  "package.json",
+                ),
                 "utf8",
               ),
             ).version,

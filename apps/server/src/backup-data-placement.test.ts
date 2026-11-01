@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -96,6 +97,7 @@ async function fixture() {
   await suite.db.archiveTo(source);
   const manifest = await buildManifest({
     db: suite.db,
+    node: suite.node,
     modules,
     environment: "preproduction",
     now: new Date(capturedAt),
@@ -103,6 +105,7 @@ async function fixture() {
   const entries: ArchiveEntry[] = [
     { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
     { name: "db.dump", bytes: await readFile(source) },
+    await nodeDumpEntry(suite.node, root),
     ...RECOVERY_FILES.map((name) => ({
       name: "secrets/" + name,
       bytes: Buffer.from(
@@ -316,6 +319,24 @@ it.each([
   await expect(stat(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
   expect(await readdir(f.stagingDir)).toEqual([]);
   expect(f.hook).not.toHaveBeenCalled();
+});
+
+it("places a joined spare's venue authority beside the box's own", async () => {
+  const f = await fixture();
+  f.entries.push(
+    { name: "secrets/tls/venue-ca.crt", bytes: Buffer.from("venue-ca-cert") },
+    { name: "secrets/tls/venue-ca.key", bytes: Buffer.from("venue-ca-key") },
+  );
+  await seal(f);
+  const validated = await validateBackupArtifactFile(f);
+  try {
+    await placeBackupData(validated, f);
+    expect(await readFile(join(f.stateDir, "tls/ca.key"), "utf8")).toBe("private-tls/ca.key");
+    expect(await readFile(join(f.stateDir, "tls/venue-ca.crt"), "utf8")).toBe("venue-ca-cert");
+    expect(await readFile(join(f.stateDir, "tls/venue-ca.key"), "utf8")).toBe("venue-ca-key");
+  } finally {
+    await validated.discard();
+  }
 });
 
 it("accepts absent optional backup state and a module with no private entry obligations", async () => {

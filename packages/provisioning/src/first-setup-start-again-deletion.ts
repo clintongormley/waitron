@@ -1,7 +1,17 @@
 import { createHash } from "node:crypto";
 import { lstat, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
+import type { DatabaseSync } from "node:sqlite";
+import { getTableName } from "drizzle-orm";
 import { lockVenueDatabase } from "@waitron/db";
+import {
+  NODE_MIGRATIONS,
+  nodeMirrorLink,
+  nodeMode,
+  nodePrimaryKey,
+  nodeRecoveryKey,
+  nodeSigningKey,
+} from "@waitron/node-db";
 import { AppError, isUuid } from "@waitron/shared";
 import { deleteBackupRoomNote } from "./backup-room-note-file.js";
 import { readDurableHostJsonWithBytes, writeDurableHostJson } from "./durable-host-json.js";
@@ -14,6 +24,7 @@ import {
 import { isEmptiedTombstone } from "./first-setup-backup-discard.js";
 import { removeAndSync } from "./folder-sync.js";
 import { openImmutableWhenWalEmpty } from "./read-only-database.js";
+import { quoteIdent } from "./identifiers.js";
 import { BACKUP_ROOM_NOTE_FILE } from "./spare-space-name.js";
 import "./errors.js";
 
@@ -70,9 +81,10 @@ type Roots = { stateDir: string; venueDir: string };
 /**
  * `discarding`: the id of the backup recovery this Start again is about to discard. `held`: the
  * setup database holds what activation wrote, so the `modules.json` activation writes after its
- * commit is deleted with it rather than refused.
+ * commit is deleted with it rather than refused. `nodeId`: the attempt's node; without it, no
+ * node.db row counts as the attempt's.
  */
-type Options = { discarding?: string; held?: true };
+type Options = { discarding?: string; held?: true; nodeId?: string };
 const MODULES = "modules.json";
 /** A marker that names `modules.json` was taken with `held`. */
 const heldBy = (marker: StartAgainMarker): Options =>
@@ -433,6 +445,52 @@ export async function clearStartAgainMarker(venueDir: string): Promise<void> {
   }
 }
 
+/**
+ * The most rows a first setup attempt may leave in each node.db table, each of them the attempt's
+ * own node's: its recovery-key check (`installStagedNodeKey`) and its signing key (publication).
+ */
+export const NODE_ROWS_A_FIRST_SETUP_WRITES: Readonly<Record<string, number>> = {
+  [getTableName(nodeMode)]: 0,
+  [getTableName(nodeMirrorLink)]: 0,
+  [getTableName(nodePrimaryKey)]: 0,
+  [getTableName(nodeRecoveryKey)]: 1,
+  [getTableName(nodeSigningKey)]: 1,
+};
+
+/**
+ * Why Start again may not delete this node.db, or null: it holds nothing, or exactly the node
+ * migration set's tables and journal with no more rows than a first setup attempt writes, all of
+ * them `nodeId`'s.
+ */
+function nodeRefusal(connection: DatabaseSync, nodeId: string | undefined): string | null {
+  const objects = connection
+    .prepare("select type, name from sqlite_schema where name not like 'sqlite\\_%' escape '\\'")
+    .all() as { type: string; name: string }[];
+  if (objects.length === 0) return null;
+  const expected = [
+    NODE_MIGRATIONS.migrationsTable,
+    ...Object.keys(NODE_ROWS_A_FIRST_SETUP_WRITES),
+  ];
+  if (!objects.every((found) => found.type === "table" && expected.includes(found.name)))
+    return "node.db holds a table";
+  if (objects.length !== expected.length) return "node.db lacks the node tables";
+  // SQLite counts from the smallest index unless told not to; a damaged index alone must not
+  // make a readable table count as empty.
+  const count = (name: string, where = "", ...values: string[]) =>
+    (
+      connection
+        .prepare(`select count(*) as rows from ${quoteIdent(name)} not indexed ${where}`)
+        .get(...values) as { rows: number }
+    ).rows;
+  for (const [name, most] of Object.entries(NODE_ROWS_A_FIRST_SETUP_WRITES)) {
+    const rows = count(name);
+    if (rows > most) return `node.db holds a row: ${name}`;
+    if (rows > 0 && (nodeId === undefined || count(name, "where node_id is not ?", nodeId) > 0))
+      return `node.db holds another node's row: ${name}`;
+  }
+  return null;
+}
+
 /** D3's refusals that the folders alone can answer; returns the canonical folders. */
 export async function assertStartAgainAllowedOnDisk(
   roots: Roots,
@@ -485,17 +543,15 @@ export async function assertStartAgainAllowedOnDisk(
           ? `check failed: ${codeOf(opened.error)} ${node}-wal`
           : "node.db unreadable",
       );
-    let tables: unknown[];
+    let refusal: string | null;
     try {
-      tables = opened.connection
-        .prepare("select name from sqlite_schema where name not like 'sqlite\\_%' escape '\\'")
-        .all();
+      refusal = nodeRefusal(opened.connection, options.nodeId);
     } catch {
       throw notReady("node.db unreadable");
     } finally {
       opened.connection.close();
     }
-    if (tables.length !== 0) throw notReady("node.db holds a table");
+    if (refusal !== null) throw notReady(refusal);
   }
   return canonical;
 }

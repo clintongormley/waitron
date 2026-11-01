@@ -9,6 +9,7 @@ import {
   readTenant,
   withTransaction,
   type Database,
+  type NodeDatabase,
 } from "@waitron/db";
 import {
   endorseKey,
@@ -17,7 +18,7 @@ import {
   type Endorsement,
   type SignedMembershipDocument,
 } from "@waitron/membership";
-import type { KeyRing } from "@waitron/credentials";
+import { nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
 import type { AdoptResult } from "@waitron/provisioning";
 import {
   enabledModules,
@@ -27,7 +28,7 @@ import {
   withPreparedModuleOperations,
   type ModuleOperations,
 } from "@waitron/module";
-import { caCertPath } from "./box-secrets.js";
+import { caCertPath, caKeyPath, type EncodedKeyRing } from "./box-secrets.js";
 import { readModuleConfig } from "./module-config.js";
 import { ALL_MODULES } from "./modules.js";
 import { readNodeIdentityKey } from "./node-identity.js";
@@ -44,6 +45,11 @@ export interface ReservedIdentity {
   endorsement: Endorsement;
 }
 
+/**
+ * Three secrets travel in this bundle, which is sent only to an authenticated admin: `accountKey`,
+ * `credentialsRing` (the key ring every sealed row on the main box opens with) and `boxCaKeyPem`
+ * (the private key of the main box's certificate authority).
+ */
 export interface MirrorBundle {
   designated: AdoptResult;
   /** The venue's tenant identity, for the mirror's foreign-tenant guard (one tenant per database). */
@@ -61,11 +67,30 @@ export interface MirrorBundle {
   moduleOverrides: Record<string, boolean>;
   /** The box's WireGuard public key. */
   wireguardPublicKey?: string;
+  /** The designated node's identity public key, which signed `reservedIdentity.endorsement`. */
+  primaryPublicKey: string;
+  credentialsRing: EncodedKeyRing;
+  boxCaKeyPem: string;
 }
 
-// `ring` unseals the primary's identity private key, which signs the standby's endorsement.
+function encodeKeyRing(ring: KeyRing): EncodedKeyRing {
+  const encoded: EncodedKeyRing = {
+    key: ring.current.key.toString("base64"),
+    version: ring.current.version,
+  };
+  if (ring.previous !== undefined)
+    encoded.previous = {
+      key: ring.previous.key.toString("base64"),
+      version: ring.previous.version,
+    };
+  return encoded;
+}
+
+// `ring` travels whole as `credentialsRing`, and unseals the primary's identity private key, which
+// signs the standby's endorsement, when `primaryPrivateKey` does not carry it.
 export interface AssembleDeps {
   appDb: Database;
+  node: NodeDatabase;
   ring: KeyRing;
   stateDir: string;
   relayUrl: string;
@@ -75,6 +100,8 @@ export interface AssembleDeps {
   accountKey: string;
   wireguardPublicKey?: string;
   moduleOperations?: ModuleOperations;
+  /** The designated node's private key, when the caller has already unsealed it. */
+  primaryPrivateKey?: string;
 }
 
 export function refuseRemovedStandby(
@@ -144,7 +171,7 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
   }
 
   // Every module's reservation shares one transaction, so their reads and allocations agree.
-  const [reserved, primaryPrivateKey, boxCaPem] = await Promise.all([
+  const [reserved, primaryPrivateKey, boxCaPem, boxCaKeyPem] = await Promise.all([
     withPreparedModuleOperations(modules, operations, standby.nodeId, "reserve", (prepared) =>
       withTransaction(deps.appDb, async (tx) => {
         // In the reservation's own transaction, so a removal commits wholly before or after it.
@@ -174,8 +201,9 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
         return { modules: states, series };
       }),
     ),
-    readNodeIdentityKey(deps.appDb, deps.ring),
+    deps.primaryPrivateKey ?? readNodeIdentityKey(deps.node, deps.ring, deps.designated.nodeId),
     readFile(caCertPath(deps.stateDir), "utf8"),
+    readFile(caKeyPath(deps.stateDir), "utf8"),
   ]);
 
   const endorsement = endorseKey(
@@ -201,5 +229,8 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
     reservedIdentity: { ...reserved, endorsement },
     moduleOverrides: serializeModuleConfig(moduleConfig),
     wireguardPublicKey: deps.wireguardPublicKey,
+    primaryPublicKey: nodeSigningPublicKey(primaryPrivateKey),
+    credentialsRing: encodeKeyRing(deps.ring),
+    boxCaKeyPem,
   };
 }

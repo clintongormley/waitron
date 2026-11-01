@@ -1,19 +1,21 @@
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  CORE_MIGRATIONS,
-  readBreakGlassKeyName,
-  readBreakGlassVerifier,
-  setBreakGlassVerifierTx,
-  stampDeployment,
-  withTransaction,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, stampDeployment, withNodeTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { verifySecretAsync } from "@waitron/identity";
+import {
+  NODE_MIGRATIONS,
+  readRecoveryKeyName,
+  readRecoveryKeyVerifier,
+  setRecoveryKeyTx,
+} from "@waitron/node-db";
 import { firstFiscalFixture, PASSWORD } from "../test/first-fiscal.js";
 import { createFirstSetupNodeKeys } from "./first-setup-node-key.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
+});
+const handles = () => ({ venue: suite.db, node: suite.node });
 const fixtures: Awaited<ReturnType<typeof firstFiscalFixture>>[] = [];
 afterEach(async () => {
   await Promise.all(fixtures.splice(0).map((f) => f.dispose()));
@@ -49,7 +51,7 @@ it("stages 192 random bits without installing or persisting the raw node key", a
   expect(result.key.nodeId).toBe(f.context.binding.targetNodeId);
   expect(Buffer.from(result.key.secret, "base64url")).toHaveLength(24);
   expect(result.key.name).toMatch(/^\d{4}-\d\d-\d\d · [34679ACDEFHJKMNPQRTUVWXY]{4}$/);
-  expect(await readBreakGlassVerifier(suite.db, result.key.nodeId)).toBeNull();
+  expect(await readRecoveryKeyVerifier(suite.node, result.key.nodeId)).toBeNull();
   const persisted = await readFile(f.path, "utf8");
   expect(persisted).not.toContain(result.key.secret);
   expect(persisted).not.toContain(f.ownerAttempt.capability);
@@ -102,14 +104,14 @@ it("installs the exact retained verifier once after commit and checks it on publ
   const f = await fixture();
   const { key, stage } = await f.stage();
   const state = await committed(f);
-  await f.keys.installStagedNodeKey(suite.db, state, stage);
-  expect(await readBreakGlassKeyName(suite.db, key.nodeId)).toBe(key.name);
-  expect(await readBreakGlassVerifier(suite.db, key.nodeId)).toBe(stage.verifier);
+  await f.keys.installStagedNodeKey(handles(), state, stage);
+  expect(await readRecoveryKeyName(suite.node, key.nodeId)).toBe(key.name);
+  expect(await readRecoveryKeyVerifier(suite.node, key.nodeId)).toBe(stage.verifier);
   expect(
-    await verifySecretAsync(key.secret, (await readBreakGlassVerifier(suite.db, key.nodeId))!),
+    await verifySecretAsync(key.secret, (await readRecoveryKeyVerifier(suite.node, key.nodeId))!),
   ).toBe(true);
-  await f.keys.installStagedNodeKey(suite.db, state, stage);
-  expect(await readBreakGlassVerifier(suite.db, key.nodeId)).toBe(stage.verifier);
+  await f.keys.installStagedNodeKey(handles(), state, stage);
+  expect(await readRecoveryKeyVerifier(suite.node, key.nodeId)).toBe(stage.verifier);
 });
 it.each([
   "before commit",
@@ -129,19 +131,19 @@ it.each([
     state = { ...state, frozen: { ...state.frozen, sourceId: "other" } };
   if (why === "wrong stage") supplied = { ...stage, stageId: "other" };
   if (why.startsWith("existing"))
-    await withTransaction(suite.db, (tx) =>
-      setBreakGlassVerifierTx(
+    await withNodeTransaction(suite.node, (tx) =>
+      setRecoveryKeyTx(
         tx,
         state.frozen.nodeId,
         why === "existing verifier" ? "other" : stage.verifier,
         why === "existing name" ? "other" : stage.name,
       ),
     );
-  const before = await readBreakGlassVerifier(suite.db, state.frozen.nodeId);
-  await expect(f.keys.installStagedNodeKey(suite.db, state, supplied)).rejects.toMatchObject({
+  const before = await readRecoveryKeyVerifier(suite.node, state.frozen.nodeId);
+  await expect(f.keys.installStagedNodeKey(handles(), state, supplied)).rejects.toMatchObject({
     code: "setup.attempt_uncertain",
   });
-  expect(await readBreakGlassVerifier(suite.db, state.frozen.nodeId)).toBe(before);
+  expect(await readRecoveryKeyVerifier(suite.node, state.frozen.nodeId)).toBe(before);
 });
 it.each(["extra secret", "wrong verifier", "wrong binding", "bad stage"])(
   "refuses corrupt staged metadata: %s",
@@ -168,21 +170,20 @@ it("a supplied committed marker cannot replace the exact retained checked state"
     status: "committed" as const,
     result: { venue: { nodeId: current.frozen.nodeId }, modules: {} },
   };
-  await expect(f.keys.installStagedNodeKey(suite.db, forged, stage)).rejects.toMatchObject({
+  await expect(f.keys.installStagedNodeKey(handles(), forged, stage)).rejects.toMatchObject({
     code: "setup.attempt_uncertain",
   });
-  expect(await readBreakGlassVerifier(suite.db, current.frozen.nodeId)).toBeNull();
+  expect(await readRecoveryKeyVerifier(suite.node, current.frozen.nodeId)).toBeNull();
 });
-it("refuses an existing name without its verifier rather than overwriting half a pair", async () => {
-  const { nodeRoles } = await import("@waitron/db");
+it("refuses an existing verifier without its name rather than overwriting half a pair", async () => {
   const f = await fixture(),
     { stage } = await f.stage(),
     state = await committed(f);
-  await suite.db
-    .insert(nodeRoles)
-    .values({ nodeId: stage.nodeId, breakGlassKeyName: "older key", breakGlassVerifier: null });
-  await expect(f.keys.installStagedNodeKey(suite.db, state, stage)).rejects.toMatchObject({
+  await withNodeTransaction(suite.node, (tx) =>
+    setRecoveryKeyTx(tx, stage.nodeId, stage.verifier, ""),
+  );
+  await expect(f.keys.installStagedNodeKey(handles(), state, stage)).rejects.toMatchObject({
     code: "setup.attempt_uncertain",
   });
-  expect(await readBreakGlassVerifier(suite.db, stage.nodeId)).toBeNull();
+  expect(await readRecoveryKeyName(suite.node, stage.nodeId)).toBeNull();
 });

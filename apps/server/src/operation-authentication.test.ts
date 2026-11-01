@@ -1,11 +1,16 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { eq, isNull } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, IDENTITY_MIGRATIONS, managementSessions, persons } from "@waitron/identity";
 import { readOperationAuthority, type OperationAuthority } from "@waitron/module";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { generateSync } from "otplib";
-import { withAuthenticatedOperation } from "./operation-authentication.js";
+import { mintBreakGlassSecret, verifyBreakGlass } from "./break-glass.js";
+import {
+  withAuthenticatedOperation,
+  withRecoveryKeyOperation,
+} from "./operation-authentication.js";
 import { enrolAuthenticator, TOTP_KEY_RING, wrongTotpCode } from "./testing/authenticator.js";
 import { whileChangingOnLockRequest, writerBesideRequest } from "./testing/watched-scrypt.js";
 
@@ -13,7 +18,9 @@ vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
 );
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, NODE_MIGRATIONS],
+});
 const ADMIN = "a0000000-0000-4000-8000-000000000001";
 const OTHER = "a0000000-0000-4000-8000-000000000002";
 const PASSWORD = "correct horse";
@@ -240,5 +247,93 @@ describe("host-issued authority after fresh operator authentication", () => {
     expect(
       await suite.db.select().from(managementSessions).where(isNull(managementSessions.endedAt)),
     ).toEqual([]);
+  });
+});
+
+describe("a recovery key's authority", () => {
+  const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+  const recovery = { ...binding, action: "restore", targetNodeId: NODE };
+  const handles = () => ({ venue: suite.db, node: suite.node });
+
+  beforeEach(() => stampDeployment(suite.db, "preproduction"));
+
+  async function waitingWrite(replace: boolean): Promise<string> {
+    const secret = await mintBreakGlassSecret(handles(), NODE);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let arrived!: () => void;
+    const waiting = new Promise<void>((resolve) => (arrived = resolve));
+    const result = withRecoveryKeyOperation(
+      { db: suite.db, node: suite.node, nodeId: NODE },
+      recovery,
+      secret,
+      async () => "committed",
+      async (_authority, commit) => {
+        arrived();
+        await gate;
+        return commit();
+      },
+    );
+    await waiting;
+    if (replace) await mintBreakGlassSecret(handles(), NODE);
+    release();
+    return result;
+  }
+
+  it("a recovery key replaced while an authorised write waits is refused", async () => {
+    await expect(waitingWrite(true)).rejects.toMatchObject({
+      code: "promotion.break_glass_invalid",
+    });
+  });
+
+  it("commits the waiting write when the key is not replaced", async () => {
+    expect(await waitingWrite(false)).toBe("committed");
+  });
+
+  it("holds node.db's lock until the authorised write commits, so a key replacement waits for it", async () => {
+    const secret = await mintBreakGlassSecret(handles(), NODE);
+    const order: string[] = [];
+    const original = suite.db.withWriteLock;
+    const spy = vi.spyOn(suite.db, "withWriteLock").mockImplementation(async (body) => {
+      const value = await original(body);
+      order.push("venue write committed");
+      return value;
+    });
+    onTestFinished(() => spy.mockRestore());
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let arrived!: () => void;
+    const inside = new Promise<void>((resolve) => (arrived = resolve));
+    const result = withRecoveryKeyOperation(
+      { db: suite.db, node: suite.node, nodeId: NODE },
+      recovery,
+      secret,
+      async () => {
+        arrived();
+        await gate;
+        return "committed";
+      },
+    );
+    await inside;
+    let asked!: () => void;
+    const lockRequested = new Promise<void>((resolve) => (asked = resolve));
+    const nodeLock = suite.node.withWriteLock;
+    const nodeSpy = vi.spyOn(suite.node, "withWriteLock").mockImplementation((body) => {
+      asked();
+      return nodeLock(body);
+    });
+    onTestFinished(() => nodeSpy.mockRestore());
+    const replacement = mintBreakGlassSecret(handles(), NODE).then((replaced) => {
+      order.push("key replaced");
+      return replaced;
+    });
+    // Once the replacement asks for node.db's lock, room for it to finish if nothing holds it back.
+    await lockRequested;
+    await Promise.race([replacement, new Promise((resolve) => setTimeout(resolve, 100))]);
+    release();
+    expect(await result).toBe("committed");
+    const replaced = await replacement;
+    expect(order).toEqual(["venue write committed", "key replaced"]);
+    expect(await verifyBreakGlass(suite.node, NODE, replaced)).toBe(true);
   });
 });

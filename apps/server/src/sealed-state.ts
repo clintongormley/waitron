@@ -1,8 +1,19 @@
+import { tmpdir } from "node:os";
 import { eq } from "drizzle-orm";
-import { nodeSealedState, withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  nodeSealedState,
+  withTransaction,
+  type Database,
+  type NodeDatabase,
+  type Transaction,
+} from "@waitron/db";
 import type { WaitronModule } from "@waitron/module";
 import { codeOf } from "@waitron/server-kit";
-import { assembleArchiveEntries, collectStateParts } from "./archive-entries.js";
+import {
+  assembleArchiveEntries,
+  collectStateParts,
+  snapshotNodeDatabase,
+} from "./archive-entries.js";
 import { decryptArtifact, encryptArtifactAsync } from "./artifact-cipher.js";
 import { packArchive, unpackArchive, type ArchiveEntry } from "./backup-archive.js";
 import { buildManifest, type BackupManifest } from "./backup-manifest.js";
@@ -16,6 +27,7 @@ export async function collectSealedEntries(deps: {
   readonly venueDir?: string;
   readonly modules: readonly WaitronModule[];
   readonly resolvers: Record<string, string>;
+  readonly snapshotNode: () => Promise<Uint8Array>;
   readonly manifest: BackupManifest;
 }): Promise<ArchiveEntry[]> {
   return assembleArchiveEntries(deps.manifest, null, await collectStateParts(deps));
@@ -76,6 +88,7 @@ export interface SealedStateStatus {
 
 export interface SealedStateDeps {
   readonly db: Database;
+  readonly node: NodeDatabase;
   readonly nodeId: string;
   readonly stateDir: string;
   readonly venueDir?: string;
@@ -91,13 +104,17 @@ export interface SealedStateDeps {
 
 export interface SealedStateRefresher {
   refresh(): Promise<SealedStateOutcome>;
+  /** Settles once no refresh is running or waiting; never rejects. */
+  settled(): Promise<void>;
 }
 
 /**
  * Re-reads the state files and the key and rewrites this node's row.
  *
  * Refreshes run one at a time, in call order: run side by side, a refresh holding an older key
- * could land after a newer one, leaving a row only a superseded key opens.
+ * could land after a newer one, leaving a row only a superseded key opens. A request made while one
+ * runs waits for it, and every further request joins that waiting one: it has not read anything
+ * yet, so it seals whatever all of them asked it to.
  *
  * Never rejects. A refresh that throws before its write commits answers "failed" and leaves the
  * previous row as it was. The outcome is settled before anything is logged, so a logger that
@@ -114,6 +131,7 @@ export function createSealedStateRefresher(deps: SealedStateDeps): SealedStateRe
       const now = deps.now();
       const manifest = await buildManifest({
         db: deps.db,
+        node: deps.node,
         modules: deps.modules,
         environment: deps.environment,
         now,
@@ -123,6 +141,7 @@ export function createSealedStateRefresher(deps: SealedStateDeps): SealedStateRe
         venueDir: deps.venueDir,
         modules: deps.modules,
         resolvers: deps.resolvers,
+        snapshotNode: snapshotNodeDatabase(deps.node, tmpdir()),
         manifest,
       });
       // Sealed before the transaction opens, so the write lock is not held across the derivation.
@@ -147,16 +166,36 @@ export function createSealedStateRefresher(deps: SealedStateDeps): SealedStateRe
     else deps.status.failedSince ??= deps.now().toISOString();
     return outcome;
   };
-  let tail: Promise<SealedStateOutcome> = Promise.resolve("sealed");
+  let running: Promise<SealedStateOutcome> | undefined;
+  let waiting: Promise<SealedStateOutcome> | undefined;
+  const start = (): Promise<SealedStateOutcome> => {
+    // Reached only when building a failure's log fields throws, as reading an unreadable `code`
+    // does; without it the refresh would reject.
+    const run = Promise.resolve()
+      .then(once)
+      .catch((): SealedStateOutcome => "failed")
+      .then(record);
+    running = run;
+    const clear = () => {
+      if (running === run) running = undefined;
+    };
+    run.then(clear, clear);
+    return run;
+  };
   return {
     refresh: () => {
-      // Reached only when building a failure's log fields throws, as reading an unreadable `code`
-      // does; without it one rejection would reject every later refresh in the chain unrun.
-      tail = tail
-        .then(once)
-        .catch((): SealedStateOutcome => "failed")
-        .then(record);
-      return tail;
+      if (waiting !== undefined) return waiting;
+      if (running === undefined) return start();
+      const next = () => {
+        waiting = undefined;
+        return start();
+      };
+      waiting = running.then(next, next);
+      return waiting;
+    },
+    settled: async () => {
+      for (let pending = waiting ?? running; pending !== undefined; pending = waiting ?? running)
+        await pending.catch(() => {});
     },
   };
 }

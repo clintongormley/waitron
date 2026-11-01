@@ -2,20 +2,23 @@ import { createHash, createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseEnv, isDeepStrictEqual } from "node:util";
-import { loadKeyRing, putCredential, tryGetCredential } from "@waitron/credentials";
+import {
+  establishNodeSigningKey,
+  loadKeyRing,
+  putCredential,
+  readNodeIdentity,
+} from "@waitron/credentials";
 import {
   applicationVersion,
-  readMembershipTrustSet,
   readNodeMembershipRow,
-  setNodePublicKeyTx,
   stampDeployment,
   withTransaction,
   writeNodeMembership,
   type Database,
+  type NodeDatabase,
 } from "@waitron/db";
 import {
   buildNextMembershipDocument,
-  generateNodeKeyPair,
   isMembershipDocument,
   signBytes,
   verifyBytes,
@@ -51,7 +54,6 @@ import {
 } from "./configuration-transfer.js";
 import "./errors.js";
 
-const keyPurpose = "membership.node_key";
 function conflict(): never {
   throw new AppError("setup.attempt_uncertain", {});
 }
@@ -59,9 +61,10 @@ function conflict(): never {
 export function createFirstSetupCommandDeployment(options: {
   runtime: ReturnType<typeof createFirstSetupRuntime>;
   db: Database;
+  node: NodeDatabase;
   environment: Record<string, string | undefined>;
 }): FirstSetupCommandDeployment {
-  const { runtime, db } = options;
+  const { runtime, db, node } = options;
   const environment = Object.freeze({ ...options.environment });
   let publication:
     | {
@@ -90,7 +93,7 @@ export function createFirstSetupCommandDeployment(options: {
     );
     const versions: Record<string, number> = {};
     for (const module of modules)
-      versions[module.name] = await appliedSchemaVersion(db, module.migrations);
+      versions[module.name] = await appliedSchemaVersion({ venue: db, node }, module.migrations);
     validateConfigurationBundle(staged.bundle, modules, versions);
     return { bundle: staged.bundle, versions };
   }
@@ -108,7 +111,7 @@ export function createFirstSetupCommandDeployment(options: {
     const modules = enabledModules(runtime.modules, selected.config);
     const versions: Record<string, number> = {};
     for (const module of modules)
-      versions[module.name] = await appliedSchemaVersion(db, module.migrations);
+      versions[module.name] = await appliedSchemaVersion({ venue: db, node }, module.migrations);
     const input = fiscalReadinessInput({
       venue: state.frozen.request,
       contribution: selected.contribution,
@@ -182,12 +185,6 @@ export function createFirstSetupCommandDeployment(options: {
         throw new AppError("setup.not_ready", {});
       }
       const config = selection.config;
-      const identity = async () => ({
-        trust: await readMembershipTrustSet(db),
-        credential: await withTransaction(db, (tx) =>
-          tryGetCredential(tx, ring, { purpose: keyPurpose }),
-        ),
-      });
       const digest = firstSetupPublicationDigest(state, settings);
       publication = { digest, settings, ring };
       return {
@@ -202,21 +199,14 @@ export function createFirstSetupCommandDeployment(options: {
             );
           },
           publishIdentity: async (result, current) => {
-            let own = await identity();
-            if (own.trust[result.nodeId] === undefined && own.credential === null) {
-              const pair = generateNodeKeyPair();
-              await withTransaction(db, async (tx) => {
-                await putCredential(tx, ring, {
-                  purpose: keyPurpose,
-                  value: { privateKey: pair.privateKey },
-                });
-                await setNodePublicKeyTx(tx, result.nodeId, pair.publicKey);
-              });
-              own = await identity();
+            let own = await readNodeIdentity(db, node, ring, result.nodeId);
+            if (own.trust[result.nodeId] === undefined) {
+              await establishNodeSigningKey(db, node, ring, result.nodeId);
+              own = await readNodeIdentity(db, node, ring, result.nodeId);
             }
             const publicKey = own.trust[result.nodeId];
-            const privateKey = own.credential?.privateKey;
-            if (publicKey === undefined || typeof privateKey !== "string") conflict();
+            const privateKey = own.privateKey;
+            if (publicKey === undefined || privateKey === null) conflict();
             const challenge = JSON.stringify([
               "waitron.first-setup-node-check",
               current.frozen.attemptId,

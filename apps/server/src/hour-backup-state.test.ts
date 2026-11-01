@@ -11,6 +11,7 @@ import { RECOVERY_FILES } from "./state-secrets.js";
 import { ArchiveReadBudget } from "./archive-read-budget.js";
 import { packArchive, unpackArchive } from "./backup-archive.js";
 import { encryptArtifact, decryptArtifact } from "./artifact-cipher.js";
+import { stubNodeSnapshot } from "./testing/node-copy.js";
 
 const modules = ALL_MODULES.filter((m) => m.name === "fiscal-verifactu");
 const manifest = {
@@ -86,7 +87,7 @@ async function journal(
     JSON.stringify({ version: 1, revisions }),
   );
 }
-const deps = () => ({ modules, stateDir, venueDir, resolvers: {} });
+const deps = () => ({ modules, stateDir, venueDir, resolvers: {}, snapshotNode: stubNodeSnapshot });
 const evidence = (entries: { name: string; bytes: Uint8Array }[]) => {
   const found = entries.find((e) => e.name === entryName);
   expect(found, "declared public hour evidence must travel with this backup").toBeDefined();

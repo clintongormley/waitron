@@ -78,7 +78,10 @@ async function fixture(newTaxpayer = false, change?: (bundle: ConfigurationBundl
   );
   const versions: Record<string, number> = {};
   for (const module of modules)
-    versions[module.name] = await appliedSchemaVersion(source.db, module.migrations);
+    versions[module.name] = await appliedSchemaVersion(
+      { venue: source.db, node: source.node },
+      module.migrations,
+    );
   const seeded = await applyHistoricalTestVenue(
     planVenue(
       {
@@ -171,7 +174,12 @@ async function fixture(newTaxpayer = false, change?: (bundle: ConfigurationBundl
   expect(
     (await runtime.commandDelivery.deliver(owner, io, join(root, "recovery.pdf"), "es")).status,
   ).toBe("ready");
-  const deployment = createFirstSetupCommandDeployment({ runtime, db: target.db, environment });
+  const deployment = createFirstSetupCommandDeployment({
+    runtime,
+    db: target.db,
+    node: target.node,
+    environment,
+  });
   return { root, stateDir, runtime, owner, deployment, bundle, artifact, seeded };
 }
 
@@ -180,7 +188,12 @@ it.each([false, true])(
   async (newTaxpayer) => {
     const f = await fixture(newTaxpayer);
     const before = (await f.runtime.store.read())!;
-    const result = await completeFirstSetupCommand(f.runtime, target.db, f.owner, f.deployment);
+    const result = await completeFirstSetupCommand(
+      f.runtime,
+      { venue: target.db, node: target.node },
+      f.owner,
+      f.deployment,
+    );
     expect((await target.db.execute("select name from products")).rows).toEqual([
       { name: "Imported gazpacho" },
     ]);
@@ -233,7 +246,12 @@ it("command completion refuses a replaced retained artifact before stamping or a
     ),
   );
   await expect(
-    completeFirstSetupCommand(f.runtime, target.db, f.owner, f.deployment),
+    completeFirstSetupCommand(
+      f.runtime,
+      { venue: target.db, node: target.node },
+      f.owner,
+      f.deployment,
+    ),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   expect(await readDeploymentEnvironment(target.db)).toBeNull();
   expect((await target.db.execute("select count(*) as n from tenants")).rows).toEqual([{ n: 0 }]);
@@ -269,7 +287,12 @@ it.each([
   async (_label, change, field) => {
     const f = await fixture(false, change);
     await expect(
-      completeFirstSetupCommand(f.runtime, target.db, f.owner, f.deployment),
+      completeFirstSetupCommand(
+        f.runtime,
+        { venue: target.db, node: target.node },
+        f.owner,
+        f.deployment,
+      ),
     ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field } });
     expect(await readDeploymentEnvironment(target.db)).toBeNull();
     expect((await target.db.execute("select count(*) as n from tenants")).rows).toEqual([{ n: 0 }]);
@@ -281,7 +304,12 @@ it("command refuses new-taxpayer import retaining the source taxpayer", async ()
     bundle.venue.taxId = "B12345674";
   });
   await expect(
-    completeFirstSetupCommand(f.runtime, target.db, f.owner, f.deployment),
+    completeFirstSetupCommand(
+      f.runtime,
+      { venue: target.db, node: target.node },
+      f.owner,
+      f.deployment,
+    ),
   ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field: "taxId" } });
   expect(await readDeploymentEnvironment(target.db)).toBeNull();
 });
@@ -300,7 +328,12 @@ it("command rechecks the artifact after publication settings have been checked",
     );
   };
   await expect(
-    completeFirstSetupCommand(f.runtime, target.db, f.owner, f.deployment),
+    completeFirstSetupCommand(
+      f.runtime,
+      { venue: target.db, node: target.node },
+      f.owner,
+      f.deployment,
+    ),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   expect(await readDeploymentEnvironment(target.db)).toBeNull();
   expect((await target.db.execute("select count(*) as n from tenants")).rows).toEqual([{ n: 0 }]);
@@ -311,7 +344,12 @@ it("an import refusal rolls back the venue and fiscal activation together", asyn
     bundle.tables.products![0]!.unexpected_column = "invalid";
   });
   await expect(
-    completeFirstSetupCommand(f.runtime, target.db, f.owner, f.deployment),
+    completeFirstSetupCommand(
+      f.runtime,
+      { venue: target.db, node: target.node },
+      f.owner,
+      f.deployment,
+    ),
   ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field: "table:products" } });
   expect(await readDeploymentEnvironment(target.db)).toBe("preproduction");
   for (const name of ["tenants", "fiscal_allocations", "products"])
@@ -334,7 +372,12 @@ it("recovered exact Finish completes after imported configuration has been clear
     return result;
   };
   await expect(
-    completeFirstSetupCommand(f.runtime, target.db, f.owner, f.deployment),
+    completeFirstSetupCommand(
+      f.runtime,
+      { venue: target.db, node: target.node },
+      f.owner,
+      f.deployment,
+    ),
   ).rejects.toThrow("synthetic interruption after import cleanup");
   expect((await target.db.execute("select name from products")).rows).toEqual([
     { name: "Imported gazpacho" },
@@ -352,12 +395,18 @@ it("recovered exact Finish completes after imported configuration has been clear
   const deployment = createFirstSetupCommandDeployment({
     runtime: f.runtime,
     db: target.db,
+    node: target.node,
     environment: {
       WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 73).toString("base64"),
       WAITRON_ADVERTISED_ORIGIN: "https://olivo.example.test:3443",
     },
   });
-  await completeFirstSetupCommand(f.runtime, target.db, owner, deployment);
+  await completeFirstSetupCommand(
+    f.runtime,
+    { venue: target.db, node: target.node },
+    owner,
+    deployment,
+  );
   expect((await f.runtime.store.read())!.status).toBe("complete");
   expect((await f.runtime.store.read())!.inputs).toEqual(inputs);
   expect(await target.db.select().from(invoiceSeries)).toEqual(series);
@@ -378,7 +427,7 @@ it("the actual relocated command resumes a retained import and publishes it once
   const files = (await target.db.execute<{ name: string; file: string }>("pragma database_list"))
     .rows;
   const databaseDir = dirname(files.find((row) => row.name === "main")!.file);
-  for (const name of ["venue.db", "venue.db-wal"])
+  for (const name of ["venue.db", "venue.db-wal", "node.db", "node.db-wal"])
     await copyFile(join(databaseDir, name), join(venueDir, name));
   const binary = join(f.root, "provision.js");
   const environment = { ...process.env };

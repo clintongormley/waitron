@@ -1,13 +1,16 @@
 import { key, node, clock } from "../test/hour-recovery-host.js";
 
-import { access, copyFile, readFile, unlink, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { expect, it, vi } from "vitest";
 import { openVenueDatabase, invoiceSeries } from "@waitron/db";
 
 import { AppError } from "@waitron/shared";
 
 import * as stateSecrets from "./state-secrets.js";
+import * as sources from "./first-setup-backup-source.js";
 
 import { encryptArtifact, decryptArtifact } from "./artifact-cipher.js";
 import { packArchive, unpackArchive } from "./backup-archive.js";
@@ -101,6 +104,45 @@ it.each(["secrets", "restored-record", "selection"] as const)(
     });
   },
 );
+
+it("a resumed recovery's staged folder holds the backup's node copy", async () => {
+  const f = await interruptedRepair(async (entries) => {
+    const index = entries.findIndex((entry) => entry.name === "node.dump");
+    expect(index).toBeGreaterThanOrEqual(0);
+    const scratch = await mkdtemp(join(tmpdir(), "waitron-resume-marker-"));
+    try {
+      const file = join(scratch, "node.db");
+      await writeFile(file, entries[index]!.bytes);
+      const copy = new DatabaseSync(file);
+      copy.exec("create table backup_marker (v text); insert into backup_marker values ('backup')");
+      copy.close();
+      entries[index] = { name: "node.dump", bytes: await readFile(file) };
+    } finally {
+      await rm(scratch, { recursive: true, force: true });
+    }
+  });
+  vi.mocked(sources.authenticatedFirstSetupBackupPreview).mockClear();
+  await recovery(f.options).resume(f.resumeRequest, { onBox: false });
+  const staged = vi.mocked(sources.authenticatedFirstSetupBackupPreview).mock.calls.at(-1)![0];
+  const copy = new DatabaseSync(join(dirname(staged.copy.databasePath), "node.db"), {
+    readOnly: true,
+  });
+  try {
+    const marked = copy
+      .prepare("select name from sqlite_master where name = 'backup_marker'")
+      .all();
+    expect(
+      marked.length === 0
+        ? []
+        : copy
+            .prepare("select v from backup_marker")
+            .all()
+            .map((row) => row.v),
+    ).toEqual(["backup"]);
+  } finally {
+    copy.close();
+  }
+});
 
 it("retains encrypted publication material without saving the node proof, archive key or private plaintext", async () => {
   const f = await interruptedRepair();

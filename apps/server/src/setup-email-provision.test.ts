@@ -95,6 +95,7 @@ function mount(overrides: Partial<SetupDeps> = {}) {
     {
       environment: "preproduction",
       db: suite.db,
+      node: suite.node,
       ring,
       provision: async () => {
         calls.push("provision");

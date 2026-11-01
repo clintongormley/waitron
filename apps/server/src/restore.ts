@@ -1,6 +1,7 @@
 import { readNodeLocation } from "./node-config.js";
 import { assertVenueFirstSetupAllowed, isFirstSetupHostPath } from "@waitron/provisioning";
 import { lstatSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { isDeepStrictEqual } from "node:util";
 import {
   chmod,
@@ -26,7 +27,6 @@ import {
 import {
   insertNodeSeriesTx,
   readLiveSeriesIdTx,
-  readBreakGlassKeyName,
   lockVenueDatabase,
   nodes,
   openVenueDatabase,
@@ -34,11 +34,14 @@ import {
   retireNodeSeriesTx,
   withTransaction,
   type Database,
+  type NodeDatabase,
   type Transaction,
+  type VenueDatabase,
   type VenueLock,
 } from "@waitron/db";
+import { NODE_MIGRATIONS, readRecoveryKeyName } from "@waitron/node-db";
 import { applyMigrations, expectedSchemaVersion, migrationOptionsFor } from "@waitron/migrations";
-import { openBackupQuery, SIDE_FILE_SUFFIXES, VENUE_FILE } from "@waitron/store";
+import { NODE_FILE, openBackupQuery, SIDE_FILE_SUFFIXES, VENUE_FILE } from "@waitron/store";
 import { litestreamMetaDir } from "@waitron/stream/litestream.js";
 import {
   orderedMigrationSets,
@@ -46,7 +49,7 @@ import {
   type ProvisionedNode,
   type WaitronModule,
 } from "@waitron/module";
-import { assertNotAhead } from "@waitron/provisioning";
+import { assertNotAhead, quoteIdent } from "@waitron/provisioning";
 import {
   moduleOperationFor,
   snapshotModuleOperations,
@@ -86,6 +89,8 @@ import {
 const MANIFEST_NAME = "manifest.json";
 /** Holds a whole SQLite venue database, the file `archiveTo` (`packages/store/src/archive.ts`) writes. */
 const DB_DUMP_NAME = "db.dump";
+/** Holds a whole copy of the box's own `node.db`, placed beside the venue file. */
+const NODE_DUMP_NAME = "node.dump";
 const SECRETS_PREFIX = "secrets/";
 const TRADING_ENV_ENTRY = `${SECRETS_PREFIX}trading.env`;
 const TRADING_ENV_FILE = "trading.env";
@@ -107,8 +112,11 @@ export interface RestoreDeps extends ValidationDeps {
   readonly managedCloud?: { requestId: string; pointId: string };
   /** The directory holding `venue.db` and `node.db` (`packages/store/src/index.ts`). */
   readonly venueDir: string;
-  /** Opens the handle the hook transaction runs on. Default {@link openVenueDatabase}'s venue file. */
-  readonly openDb?: (directory: string) => Promise<{ db: Database; close(): Promise<void> }>;
+  /** Opens the handle the hook transaction runs on. Default {@link openVenueDatabase}'s venue file,
+   * with its node file beside it. */
+  readonly openDb?: (
+    directory: string,
+  ) => Promise<{ db: Database; node: NodeDatabase; close(): Promise<void> }>;
   /** Migrates the restored database to this binary's schema before any hook runs. Default
    * `applyMigrations`. */
   readonly migrate?: typeof applyMigrations;
@@ -135,11 +143,16 @@ export interface RestoreHookResult {
 // Authentication is reconstructed by the trusted host, never deserialised from a backup or marker.
 export interface RestoreOperationRunner {
   (
-    context: { readonly db: Database; readonly node: ProvisionedNode },
+    context: {
+      readonly db: Database;
+      readonly nodeDb: NodeDatabase;
+      readonly node: ProvisionedNode;
+    },
     run: (tx: Transaction, operations: ModuleOperations) => Promise<RestoreHookResult>,
   ): Promise<RestoreHookResult>;
   checkBeforePlacement?(context: {
     readonly db: Database;
+    readonly nodeDb: NodeDatabase;
     readonly node: ProvisionedNode;
     readonly sourceId: string | undefined;
   }): Promise<void>;
@@ -167,8 +180,73 @@ export interface ValidatedArtifact {
   readonly sourceId?: string;
   readonly manifest: BackupManifest;
   readonly databasePath: string;
+  /** The archive's copy of `node.db`, placed with the venue file unless `skipSecrets`. */
+  readonly nodeDump: Uint8Array;
   readonly discard: () => Promise<void>;
   readonly secretEntries: readonly ArchiveEntry[];
+}
+
+/**
+ * Writes a backup's node copy as `node.db` beside a staged `venue.db`, replacing any `node.db` set
+ * a store open already created there; with no copy, that set is only removed.
+ */
+export async function writeStagedNodeCopy(
+  databasePath: string,
+  nodeDump: Uint8Array | undefined,
+): Promise<void> {
+  const target = join(dirname(databasePath), NODE_FILE);
+  for (const suffix of ["", ...SIDE_FILE_SUFFIXES]) await rm(`${target}${suffix}`, { force: true });
+  if (nodeDump !== undefined)
+    await writeFile(target, nodeDump, { mode: VENUE_FILE_MODE, flag: "wx" });
+}
+
+/**
+ * Opening a staged folder without its `node.db` would create an empty one in its place, and a node
+ * copy the node set never migrated has none of the tables its unmigrated readers read.
+ */
+export function assertStagedNodeCopy(directory: string): void {
+  const path = join(directory, NODE_FILE);
+  if (!lstatSync(path, { throwIfNoEntry: false })?.isFile() || !nodeSetApplied(path))
+    throw new AppError("restore.archive_incomplete", { missing: NODE_DUMP_NAME });
+}
+
+function nodeSetApplied(path: string): boolean {
+  let copy: DatabaseSync | undefined;
+  try {
+    copy = new DatabaseSync(path, { readOnly: true, allowExtension: false });
+    const journal = NODE_MIGRATIONS.migrationsTable;
+    return (
+      copy.prepare("select 1 from sqlite_schema where type = 'table' and name = ?").get(journal) !==
+        undefined &&
+      copy.prepare(`select 1 from ${quoteIdent(journal)} limit 1`).get() !== undefined
+    );
+  } catch (error) {
+    // Any copy SQLite cannot open or read, a non-database included, is refused as incomplete.
+    if (error instanceof Error && "code" in error && error.code === "ERR_SQLITE_ERROR")
+      return false;
+    throw error;
+  } finally {
+    copy?.close();
+  }
+}
+
+export async function openStagedCopy(directory: string): Promise<VenueDatabase> {
+  assertStagedNodeCopy(directory);
+  return openVenueDatabase(directory);
+}
+
+/**
+ * Copies a validated copy's `venue.db` into `directory` with its node copy beside it, so opening
+ * that folder never creates an empty `node.db`; returns the new `venue.db`.
+ */
+export async function copyStagedCopy(
+  copy: Pick<ValidatedArtifact, "databasePath" | "nodeDump">,
+  directory: string,
+): Promise<string> {
+  const target = join(directory, VENUE_FILE);
+  await copyFile(copy.databasePath, target);
+  await writeStagedNodeCopy(target, copy.nodeDump);
+  return target;
 }
 
 /** Validate before replacing any destination database, identity or secrets. */
@@ -195,6 +273,7 @@ export async function validateEntries(
   const databasePath = join(scratch, VENUE_FILE);
   try {
     await writeFile(databasePath, dumpEntry.bytes, { mode: VENUE_FILE_MODE, flag: "wx" });
+    await writeStagedNodeCopy(databasePath, metadata.nodeDump);
     return { ...metadata, databasePath, discard };
   } catch (error) {
     await discard();
@@ -207,13 +286,14 @@ export async function validateDatabaseEntries(
   databasePath: string,
   deps: EntryValidationDeps,
 ): Promise<ValidatedArtifact & { readonly sourceId: string }> {
-  const { manifest, secretEntries } = await validateEntryMetadata(
+  const { manifest, nodeDump, secretEntries } = await validateEntryMetadata(
     [...entries, { name: DB_DUMP_NAME, bytes: new Uint8Array() }],
     deps,
   );
   return {
     manifest,
     databasePath,
+    nodeDump,
     secretEntries,
     discard: async () => {},
     sourceId: await recoveryStreamSourceId(databasePath, entries),
@@ -223,18 +303,25 @@ export async function validateDatabaseEntries(
 async function validateEntryMetadata(
   entries: ArchiveEntry[],
   deps: EntryValidationDeps,
-): Promise<{ manifest: BackupManifest; dumpEntry: ArchiveEntry; secretEntries: ArchiveEntry[] }> {
-  // Rejection precedence is the statement order below: missing manifest → missing dump →
-  // compatibility gate → unexpected entry → path guard / duplicate destination → identity
+): Promise<{
+  manifest: BackupManifest;
+  dumpEntry: ArchiveEntry;
+  nodeDump: Uint8Array;
+  secretEntries: ArchiveEntry[];
+}> {
+  // Rejection precedence is the statement order below: missing manifest → missing dump → missing
+  // node copy → compatibility gate → unexpected entry → path guard / duplicate destination → identity
   // completeness. `??=` only fixes which entry a repeated name is classified as; a repeated
   // destination is refused by the guard loop regardless.
   let manifestEntry: ArchiveEntry | undefined;
   let dumpEntry: ArchiveEntry | undefined;
+  let nodeEntry: ArchiveEntry | undefined;
   const secretEntries: ArchiveEntry[] = [];
   let firstUnexpected: ArchiveEntry | undefined;
   for (const entry of entries) {
     if (entry.name === MANIFEST_NAME) manifestEntry ??= entry;
     else if (entry.name === DB_DUMP_NAME) dumpEntry ??= entry;
+    else if (entry.name === NODE_DUMP_NAME) nodeEntry ??= entry;
     else if (
       entry.name.startsWith(SECRETS_PREFIX) &&
       !isFirstSetupHostPath(posix.normalize(entry.name.slice(SECRETS_PREFIX.length)))
@@ -250,6 +337,9 @@ async function validateEntryMetadata(
 
   if (dumpEntry === undefined) {
     throw new AppError("restore.archive_incomplete", { missing: DB_DUMP_NAME });
+  }
+  if (nodeEntry === undefined) {
+    throw new AppError("restore.archive_incomplete", { missing: NODE_DUMP_NAME });
   }
 
   // GATE — before any write. `expectedVersions` is read from THIS binary's own migrations per module
@@ -284,7 +374,7 @@ async function validateEntryMetadata(
 
   if (!deps.skipSecrets) readArtifactIdentity(secretEntries);
 
-  return { manifest, dumpEntry, secretEntries };
+  return { manifest, dumpEntry, nodeDump: nodeEntry.bytes, secretEntries };
 }
 
 /**
@@ -298,7 +388,11 @@ async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps)
   if (deps.resumeOperation !== undefined) {
     const existing = await (deps.openDb ?? openVenue)(deps.venueDir);
     try {
-      await assertNotAhead(existing.db, orderedMigrationSets(deps.modules), deps.migrationsRoot);
+      await assertNotAhead(
+        { venue: existing.db, node: existing.node },
+        orderedMigrationSets(deps.modules),
+        deps.migrationsRoot,
+      );
     } finally {
       await existing.close();
     }
@@ -306,6 +400,8 @@ async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps)
     if (!deps.skipSecrets) await setAsideExistingIdentity(deps.stateDir, log);
     await restoreDatabase({
       databasePath: validated.databasePath,
+      // One source per restore: a restore that keeps the box's identity keeps its node.db too.
+      ...(deps.skipSecrets ? {} : { nodeDump: validated.nodeDump }),
       venueDir: deps.venueDir,
       stateDir: deps.stateDir,
       log,
@@ -325,10 +421,11 @@ async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps)
   const opened = await (deps.openDb ?? openVenue)(deps.venueDir);
   try {
     const node = await resolveArtifactNode(opened.db, validated.secretEntries);
-    const name = await readBreakGlassKeyName(opened.db, node.nodeId);
+    const name = await readRecoveryKeyName(opened.node, node.nodeId);
     if (name !== null) log("info", "restore.recovery_key_selected", { name });
     await runRestoreHooks({
       db: opened.db,
+      nodeDb: opened.node,
       modules: deps.modules,
       node,
       log,
@@ -368,9 +465,10 @@ export async function writeValidated(
       if (deps.resumeOperation === undefined) {
         admissionDirectory = await mkdtemp(join(deps.stagingDir, "restore-admission-"));
         directory = admissionDirectory;
-        const databasePath = join(directory, VENUE_FILE);
-        await copyFile(validated.databasePath, databasePath);
-        admitted = { ...validated, databasePath };
+        admitted = {
+          ...validated,
+          databasePath: await copyStagedCopy(validated, directory),
+        };
         await (deps.migrate ?? applyMigrations)(
           directory,
           migrationOptionsFor(orderedMigrationSets(deps.modules), deps.migrationsRoot),
@@ -380,6 +478,7 @@ export async function writeValidated(
       try {
         await check({
           db: opened.db,
+          nodeDb: opened.node,
           node: await resolveArtifactNode(opened.db, validated.secretEntries),
           sourceId: validated.sourceId,
         });
@@ -474,9 +573,13 @@ async function restoreOwned(
  * Consume a closed staging file. On EXDEV its owner retains the original for cleanup.
  * Move the old main and sidecars together: a committed row may exist only in the WAL.
  * Rollback puts the main back last so it cannot open without its committed tail.
+ * With `nodeDump`, the old `node.db` set goes into the same set-aside folder and the copy takes its
+ * place before `venue.db` does, so a placed `venue.db` always has its own `node.db` beside it.
  */
 export async function restoreDatabase(args: {
   databasePath: string;
+  /** The backup's `node.db`; left out, the box keeps its own. */
+  nodeDump?: Uint8Array;
   venueDir: string;
   /** The venue's own state folder, whose backup room note vouches for the `venue.db` replaced. */
   stateDir: string;
@@ -491,6 +594,8 @@ export async function restoreDatabase(args: {
   await mkdir(args.venueDir, { recursive: true, mode: 0o700 });
   const target = join(args.venueDir, VENUE_FILE);
   const incoming = `${target}${INCOMING_SUFFIX}`;
+  const nodeTarget = join(args.venueDir, NODE_FILE);
+  const nodeIncoming = `${nodeTarget}${INCOMING_SUFFIX}`;
   const source = await lstat(args.databasePath).catch((error: unknown) => {
     if (errnoOf(error) === "ENOENT") {
       throw new AppError("restore.unsafe_entry_path", { name: DB_DUMP_NAME });
@@ -501,8 +606,9 @@ export async function restoreDatabase(args: {
   const venueParent = await realpath(args.venueDir);
   const canonicalSource = join(sourceParent, basename(args.databasePath));
   const protectedPaths = [
-    ...["", ...SIDE_FILE_SUFFIXES, INCOMING_SUFFIX].map((suffix) => `${target}${suffix}`),
-    join(args.venueDir, "node.db"),
+    ...[target, nodeTarget].flatMap((file) =>
+      ["", ...SIDE_FILE_SUFFIXES, INCOMING_SUFFIX].map((suffix) => `${file}${suffix}`),
+    ),
     join(args.venueDir, "venue.lock"),
     join(args.venueDir, "migrations.lock"),
   ];
@@ -525,6 +631,11 @@ export async function restoreDatabase(args: {
     throw new AppError("restore.unsafe_entry_path", { name: DB_DUMP_NAME });
   }
   await fs.rm(incoming, { force: true });
+  if (args.nodeDump !== undefined) await fs.rm(nodeIncoming, { force: true });
+  const removeIncomings = async () => {
+    await removeIncoming(fs, incoming, args.log);
+    if (args.nodeDump !== undefined) await removeIncoming(fs, nodeIncoming, args.log);
+  };
   let aside: string;
   try {
     await (fs.chmod ?? chmod)(args.databasePath, VENUE_FILE_MODE);
@@ -535,16 +646,21 @@ export async function restoreDatabase(args: {
       await (fs.copyFile ?? copyFile)(args.databasePath, incoming);
       await (fs.chmod ?? chmod)(incoming, VENUE_FILE_MODE);
     }
+    if (args.nodeDump !== undefined)
+      await writeFile(nodeIncoming, args.nodeDump, { mode: VENUE_FILE_MODE, flag: "wx" });
     await fs.rm(litestreamMetaDir(target), { recursive: true, force: true });
     aside = await mkdtemp(join(args.venueDir, ASIDE_PREFIX));
   } catch (error) {
-    await removeIncoming(fs, incoming, args.log);
+    await removeIncomings();
     throw error;
   }
+  const replaced = args.nodeDump === undefined ? [target] : [target, nodeTarget];
   const moved: string[] = [];
+  let nodePlaced = false;
   try {
-    for (const suffix of ["", ...SIDE_FILE_SUFFIXES]) {
-      const member = `${target}${suffix}`;
+    for (const member of replaced.flatMap((file) =>
+      ["", ...SIDE_FILE_SUFFIXES].map((suffix) => `${file}${suffix}`),
+    )) {
       const found = lstatSync(member, { throwIfNoEntry: false });
       if (found === undefined) continue;
       if (!found.isFile()) {
@@ -555,10 +671,16 @@ export async function restoreDatabase(args: {
       await fs.rename(member, join(aside, basename(member)));
       moved.push(member);
     }
+    if (args.nodeDump !== undefined) {
+      await fs.rename(nodeIncoming, nodeTarget);
+      nodePlaced = true;
+    }
     await fs.rename(incoming, target);
   } catch (error) {
+    // The backup's node.db never stays without its venue.db: the box's own goes back or none does.
+    if (nodePlaced) await removeIncoming(fs, nodeTarget, args.log);
     const putBack = await putBackMoved(fs, moved, aside, args.log);
-    await removeIncoming(fs, incoming, args.log);
+    await removeIncomings();
     if (moved.length === 0) throw error;
     const params =
       putBack === "all"
@@ -774,6 +896,7 @@ function wrapHookError(module: string, err: unknown): unknown {
  */
 export async function runRestoreHooks(args: {
   db: Database;
+  nodeDb: NodeDatabase;
   modules: readonly WaitronModule[];
   node: ProvisionedNode;
   log: Logger;
@@ -865,7 +988,7 @@ export async function runRestoreHooks(args: {
         "restore",
         (ready) => withTransaction(args.db, (tx) => run(tx, ready)),
       )
-    : args.withModuleOperations({ db: args.db, node }, run);
+    : args.withModuleOperations({ db: args.db, nodeDb: args.nodeDb, node }, run);
 }
 
 /**
@@ -874,9 +997,11 @@ export async function runRestoreHooks(args: {
  * `close` closes BOTH files, not just the venue one — `openVenueDatabase` opens `node.db` beside it
  * and a handle left open would hold the restored directory for the life of the process.
  */
-async function openVenue(directory: string): Promise<{ db: Database; close(): Promise<void> }> {
+async function openVenue(
+  directory: string,
+): Promise<{ db: Database; node: NodeDatabase; close(): Promise<void> }> {
   const store = await openVenueDatabase(directory);
-  return { db: store.venue, close: () => store.close() };
+  return { db: store.venue, node: store.node, close: () => store.close() };
 }
 
 export type RestoreFileDeps = Omit<RestoreDeps, "artifact"> & { readonly artifactPath: string };
@@ -897,8 +1022,16 @@ export async function validateArtifactFile(
     const entries = inputs.map((input) =>
       input.kind === "bytes" ? input.entry : { name: input.name, bytes: new Uint8Array() },
     );
-    const { manifest, secretEntries } = await validateEntryMetadata(entries, deps);
-    return { manifest, secretEntries, databasePath: join(scratch, VENUE_FILE), discard, sourceId };
+    const { manifest, nodeDump, secretEntries } = await validateEntryMetadata(entries, deps);
+    await writeStagedNodeCopy(join(scratch, VENUE_FILE), nodeDump);
+    return {
+      manifest,
+      secretEntries,
+      databasePath: join(scratch, VENUE_FILE),
+      nodeDump,
+      discard,
+      sourceId,
+    };
   } catch (error) {
     await discard();
     throw error;

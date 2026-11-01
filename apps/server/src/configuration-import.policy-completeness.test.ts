@@ -68,7 +68,10 @@ async function fixture() {
     return { department, zone };
   });
   const [operator] = await source.db.select().from(persons).where(eq(persons.role, "admin"));
-  const versions = await schemaVersionsByModule(source.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule(
+    { venue: source.db, node: source.node },
+    ALL_MODULES,
+  );
   const bundle = await buildConfigurationBundle(
     source.db,
     { ...prepared, sourceOperatorId: operator!.id },

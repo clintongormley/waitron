@@ -11,22 +11,19 @@ import {
   captureError,
   locations,
   nodes,
-  readDeploymentMode,
-  readSingletonRole,
   readStandardSeriesId,
-  setDeploymentMode,
-  setSingletonRole,
   openVenueDatabase,
   stampDeployment,
   tenants,
   withTransaction,
-  writeMirrorConfig,
   writeNodeMembership,
   type Database,
+  type NodeDatabase,
   type VenueDatabase,
 } from "@waitron/db";
+import { readNodeMode, setNodeMode, setSingletonRole, writeMirrorLink } from "@waitron/node-db";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
-import type { Endorsement, SignedMembershipDocument } from "@waitron/membership";
+import { generateNodeKeyPair, signDocumentBody, type Endorsement } from "@waitron/membership";
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
@@ -44,6 +41,8 @@ import { invoiceSeries } from "@waitron/db";
 import { parseEnvFile } from "./env-file.js";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 import { freePort } from "./testing/free-ports.js";
+import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -97,7 +96,9 @@ let migrationsRoot: string;
 let appVenueDir: string;
 let mirrorVenueDir: string;
 let appDb: Database;
+let appNode: NodeDatabase;
 let mirrorDb: Database;
+let mirrorNode: NodeDatabase;
 const openStores: VenueDatabase[] = [];
 
 // The same credentials key boot loads, so the identity sealed here is the one the promote unseals.
@@ -107,7 +108,7 @@ const PROMOTE_RING = loadKeyRing({
 });
 
 /** Includes a node identity, so the promote's membership-document mint has a key to sign with. */
-async function seedTillIdentity(db: Database): Promise<void> {
+async function seedTillIdentity(db: Database, node: NodeDatabase): Promise<void> {
   // `onConflictDoNothing` is untargeted: nothing here reads the result.
   await db
     .insert(tenants)
@@ -130,16 +131,16 @@ async function seedTillIdentity(db: Database): Promise<void> {
       name: "Promote node",
     })
     .onConflictDoNothing();
-  await establishNodeIdentity({ ownerDb: db, ring: PROMOTE_RING }, TILL_ENV.WAITRON_NODE_ID);
+  await establishNodeIdentity({ ownerDb: db, node, ring: PROMOTE_RING }, TILL_ENV.WAITRON_NODE_ID);
 }
 
 /** Migrated here, not by boot, because the identity rows have to exist before boot reads them. */
-async function migratedVenue(): Promise<[string, Database]> {
+async function migratedVenue(): Promise<[string, Database, NodeDatabase]> {
   const directory = await mkdtemp(join(tmpdir(), "waitron-promote-venue-"));
   await applyMigrations(directory, migrationOptionsFor(manifestSets(), null));
   const store = await openVenueDatabase(directory);
   openStores.push(store);
-  return [directory, store.venue];
+  return [directory, store.venue, store.node];
 }
 
 beforeAll(async () => {
@@ -151,14 +152,14 @@ beforeAll(async () => {
     });
   }
 
-  [appVenueDir, appDb] = await migratedVenue();
-  [mirrorVenueDir, mirrorDb] = await migratedVenue();
-  await seedTillIdentity(appDb);
+  [appVenueDir, appDb, appNode] = await migratedVenue();
+  [mirrorVenueDir, mirrorDb, mirrorNode] = await migratedVenue();
+  await seedTillIdentity(appDb, appNode);
 
   await stampDeployment(appDb, "production");
-  await setSingletonRole(appDb, TILL_ENV.WAITRON_NODE_ID, "secondary");
-  expect(await readDeploymentMode(appDb, TILL_ENV.WAITRON_NODE_ID)).toBe("primary");
-  expect(await readSingletonRole(appDb, TILL_ENV.WAITRON_NODE_ID)).toBe("secondary");
+  await setSingletonRole({ venue: appDb, node: appNode }, TILL_ENV.WAITRON_NODE_ID, "secondary");
+  expect((await readNodeMode(appNode, TILL_ENV.WAITRON_NODE_ID)).mode).toBe("primary");
+  expect((await readNodeMode(appNode, TILL_ENV.WAITRON_NODE_ID)).singletonRole).toBe("secondary");
 }, 180_000);
 
 afterAll(async () => {
@@ -236,10 +237,16 @@ const TICK_ENV = {
   WAITRON_SKIP_RETRY_MS: "250",
 };
 
+/** A prior test may have promoted the shared directory's node. Its chart goes too, or the start
+ * would finish that promotion's role from it. */
+async function resetLocalSecondary(): Promise<void> {
+  await setSingletonRole({ venue: appDb, node: appNode }, TILL_ENV.WAITRON_NODE_ID, "secondary");
+  await appDb.execute(sql`delete from node_membership`);
+}
+
 describe("historical promote: local secondary → primary, live", () => {
   it("does not file as a secondary, then files on the next tick after a live promote — tills answer throughout", async () => {
-    // A prior test may have flipped the shared directory's singleton_role to 'primary'.
-    await setSingletonRole(appDb, TILL_ENV.WAITRON_NODE_ID, "secondary");
+    await resetLocalSecondary();
     const seeded = await seedFiscalWork();
     const { registroIds } = seeded;
     const port = await freePort();
@@ -269,7 +276,7 @@ describe("historical promote: local secondary → primary, live", () => {
 
       const result = await server.promoteLocalSecondaryToPrimary!({ oldNodeNeutralised: true });
       expect(result).toEqual({ alreadyPrimary: false });
-      expect(await readSingletonRole(appDb, TILL_ENV.WAITRON_NODE_ID)).toBe("primary");
+      expect((await readNodeMode(appNode, TILL_ENV.WAITRON_NODE_ID)).singletonRole).toBe("primary");
 
       // Phase B — now the singleton. Poll on `incidencia`, set as the LAST step of a failed attempt,
       // not `intentos`, set at claim while estado is still 'enviando'.
@@ -290,7 +297,7 @@ describe("historical promote: local secondary → primary, live", () => {
   }, 60_000);
 
   it("refuses an unattested promote and keeps filing off", async () => {
-    await setSingletonRole(appDb, TILL_ENV.WAITRON_NODE_ID, "secondary");
+    await resetLocalSecondary();
     const seeded = await seedFiscalWork();
     const { registroIds } = seeded;
     const port = await freePort();
@@ -310,7 +317,9 @@ describe("historical promote: local secondary → primary, live", () => {
       );
       expect(isAppError(error) && error.code).toBe("promotion.fence_not_attested");
 
-      expect(await readSingletonRole(appDb, TILL_ENV.WAITRON_NODE_ID)).toBe("secondary");
+      expect((await readNodeMode(appNode, TILL_ENV.WAITRON_NODE_ID)).singletonRole).toBe(
+        "secondary",
+      );
       expect(await readEnvio(registroIds[0]!)).toEqual({
         estado: "pendiente",
         intentos: 0,
@@ -329,6 +338,7 @@ const MIRROR_ORIGIN_NODE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 /** A mirror holding its own dormant identity. */
 async function seedMirrorIdentity(
   db: Database,
+  node: NodeDatabase,
 ): Promise<{ nodeId: string; fixture: ReturnType<typeof allocationFixture> }> {
   await db
     .insert(tenants)
@@ -356,6 +366,7 @@ async function seedMirrorIdentity(
   };
   const fixture = await establishDormantContract({
     db: db,
+    node,
     ring: PROMOTE_RING,
     locationId: MIRROR_LOCATION_ID,
     sourceId: MIRROR_ORIGIN_NODE_ID,
@@ -368,21 +379,23 @@ async function seedMirrorIdentity(
   });
 
   // A held term-3 chart: the outgoing primary serving, this node secondary — the promote bumps it to 4.
-  const held: SignedMembershipDocument = {
-    body: {
-      term: 3,
-      nodes: [
-        { nodeId: MIRROR_ORIGIN_NODE_ID, contactUrl: "https://old", standing: "serving-primary" },
-        { nodeId: standby.nodeId, contactUrl: "", standing: "serving-secondary" },
-      ],
-    },
+  // Signed by the outgoing primary's key, which this box pins as adopt would.
+  const origin = generateNodeKeyPair();
+  const held = signedMembershipDoc(3, {
     signerNodeId: MIRROR_ORIGIN_NODE_ID,
-    signature: "held-placeholder-sig",
-    endorsements: [],
-  };
+    keyPair: origin,
+    nodes: [
+      { nodeId: MIRROR_ORIGIN_NODE_ID, contactUrl: "https://old", standing: "serving-primary" },
+      { nodeId: standby.nodeId, contactUrl: "", standing: "serving-secondary" },
+    ],
+  });
   await writeNodeMembership(db, held);
+  await pinMainBoxKey(node, standby.nodeId, {
+    nodeId: MIRROR_ORIGIN_NODE_ID,
+    publicKey: origin.publicKey,
+  });
 
-  await writeMirrorConfig(db, standby.nodeId, {
+  await writeMirrorLink(node, standby.nodeId, {
     relayUrl: "https://127.0.0.1:1/",
     boxHostname: "box.test",
     boxCaPem: "unused-ca-pem",
@@ -391,14 +404,14 @@ async function seedMirrorIdentity(
 
   // Deployment: production (matching WAITRON_ENV) then mode='mirror' (co-sets singleton_role='secondary').
   await stampDeployment(db, "production");
-  await setDeploymentMode(db, standby.nodeId, "mirror");
+  await setNodeMode({ venue: db, node }, standby.nodeId, "mirror");
   return { nodeId: standby.nodeId, fixture };
 }
 
 describe("historical promote: mirror → primary, in-process, restart-into-primary", () => {
   it("exposes promoteMirrorToPrimary, promotes, and persists identity without a series cache", async () => {
-    const seed = await seedMirrorIdentity(mirrorDb);
-    const secret = await mintBreakGlassSecret(mirrorDb, seed.nodeId);
+    const seed = await seedMirrorIdentity(mirrorDb, mirrorNode);
+    const secret = await mintBreakGlassSecret({ venue: mirrorDb, node: mirrorNode }, seed.nodeId);
     const port = await freePort();
     // Its own state dir, so the rewritten `trading.env` can be read back.
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-mirror-state-"));
@@ -433,6 +446,7 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
           withPromotionModuleOperation(
             {
               db: context.db,
+              node: context.nodeDb,
               nodeId: seed.nodeId,
               credentialKeyRing: TOTP_KEY_RING,
               modules: ALL_MODULES,
@@ -453,8 +467,8 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
         seriesId: activeSeriesId,
       });
 
-      expect(await readDeploymentMode(mirrorDb, seed.nodeId)).toBe("primary");
-      expect(await readSingletonRole(mirrorDb, seed.nodeId)).toBe("primary");
+      expect((await readNodeMode(mirrorNode, seed.nodeId)).mode).toBe("primary");
+      expect((await readNodeMode(mirrorNode, seed.nodeId)).singletonRole).toBe("primary");
 
       // The read-only gate has lifted, so a write route mounted on the mirror answers its own
       // refusal; the agent routes boot left unmounted on the mirror stay absent until a restart.
@@ -484,11 +498,146 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
   }, 60_000);
 });
 
+describe("a mirror's promotion whose role write is lost", () => {
+  async function bootMirror(
+    venueDir: string,
+    stateDir: string,
+    nodeId: string,
+    extraEnv: Record<string, string> = {},
+  ) {
+    return startServer({
+      ...KEY_ENV,
+      ...extraEnv,
+      ...TICK_ENV,
+      WAITRON_NODE_ID: nodeId,
+      WAITRON_VENUE_DIR: venueDir,
+      WAITRON_HTTP_PORT: String(await freePort()),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_STATE_DIR: stateDir,
+    });
+  }
+
+  async function writeStatus(): Promise<number> {
+    const response = await fetch(`http://127.0.0.1:${httpPort()}/management-api/catalogues`, {
+      method: "POST",
+      body: "{}",
+    });
+    return response.status;
+  }
+
+  it("a promotion whose role write is lost finishes at the next start, activating once", async () => {
+    const [venueDir, db, node] = await migratedVenue();
+    const seed = await seedMirrorIdentity(db, node);
+    const secret = await mintBreakGlassSecret({ venue: db, node }, seed.nodeId);
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-lost-role-"));
+    writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
+    const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
+    for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
+    await node.execute(
+      sql`create trigger refuse_role_update before update on node_mode begin select raise(abort, 'role refused'); end`,
+    );
+    await node.execute(
+      sql`create trigger refuse_role_insert before insert on node_mode begin select raise(abort, 'role refused'); end`,
+    );
+
+    const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
+    try {
+      const first = await bootMirror(venueDir, stateDir, seed.nodeId, allocationEnv);
+      try {
+        const request = seed.fixture.request("promote");
+        const response = await fetch(`http://127.0.0.1:${httpPort()}/management-api/promote`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            oldNodeNeutralised: true,
+            breakGlass: secret,
+            moduleOperation: { binding: request.binding, input: request.input },
+          }),
+        });
+        expect(response.status, await response.clone().text()).toBe(200);
+        expect(((await response.json()) as { alreadyPrimary: boolean }).alreadyPrimary).toBe(false);
+        await delay(50);
+        expect(killSpy).toHaveBeenCalledWith(process.pid, "SIGTERM");
+      } finally {
+        await first.close();
+      }
+      await node.execute(sql`drop trigger refuse_role_update`);
+      await node.execute(sql`drop trigger refuse_role_insert`);
+      expect(await readNodeMode(node, seed.nodeId)).toEqual({
+        mode: "mirror",
+        singletonRole: "secondary",
+      });
+
+      const second = await bootMirror(venueDir, stateDir, seed.nodeId, allocationEnv);
+      try {
+        expect(await readNodeMode(node, seed.nodeId)).toEqual({
+          mode: "primary",
+          singletonRole: "primary",
+        });
+        expect(await writeStatus()).toBe(401);
+      } finally {
+        await second.close();
+      }
+      const live = await db.execute<{ id: string }>(
+        sql`select id from registro_sif where node_id = ${seed.nodeId} and revocado_en is null`,
+      );
+      expect(live.rows).toHaveLength(1);
+    } finally {
+      await delay(50);
+      killSpy.mockRestore();
+      vi.unstubAllEnvs();
+      await rm(stateDir, { recursive: true, force: true });
+      await rm(venueDir, { recursive: true, force: true });
+    }
+  }, 90_000);
+
+  it("a held document naming this box the main box but signed with another key does not move it", async () => {
+    const [venueDir, db, node] = await migratedVenue();
+    const seed = await seedMirrorIdentity(db, node);
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-forged-chart-"));
+    writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
+    const forger = generateNodeKeyPair();
+    const body = {
+      term: 4,
+      nodes: [
+        {
+          nodeId: MIRROR_ORIGIN_NODE_ID,
+          contactUrl: "https://old",
+          standing: "sell-only" as const,
+        },
+        { nodeId: seed.nodeId, contactUrl: "", standing: "serving-primary" as const },
+      ],
+    };
+    await writeNodeMembership(db, {
+      body,
+      signerNodeId: seed.nodeId,
+      signature: signDocumentBody(body, forger.privateKey),
+      endorsements: [],
+    });
+
+    try {
+      const server = await bootMirror(venueDir, stateDir, seed.nodeId);
+      try {
+        expect(await readNodeMode(node, seed.nodeId)).toEqual({
+          mode: "mirror",
+          singletonRole: "secondary",
+        });
+        expect(await writeStatus()).toBe(403);
+      } finally {
+        await server.close();
+      }
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+      await rm(venueDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+});
+
 describe("a mirror's promote and the backup room note", () => {
   it("is refused while the note cannot be deleted, and deletes it before promoting and before the restart", async () => {
-    const [venueDir, db] = await migratedVenue();
-    const seed = await seedMirrorIdentity(db);
-    const secret = await mintBreakGlassSecret(db, seed.nodeId);
+    const [venueDir, db, node] = await migratedVenue();
+    const seed = await seedMirrorIdentity(db, node);
+    const secret = await mintBreakGlassSecret({ venue: db, node }, seed.nodeId);
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-note-state-"));
     const note = join(stateDir, BACKUP_ROOM_NOTE_FILE);
@@ -526,6 +675,7 @@ describe("a mirror's promote and the backup room note", () => {
           return withPromotionModuleOperation(
             {
               db: context.db,
+              node: context.nodeDb,
               nodeId: seed.nodeId,
               credentialKeyRing: TOTP_KEY_RING,
               modules: ALL_MODULES,
@@ -541,7 +691,7 @@ describe("a mirror's promote and the backup room note", () => {
         code: expect.stringMatching(/^(EISDIR|EPERM)$/),
       });
       expect(noteDuringPromotion).toBeUndefined();
-      expect(await readDeploymentMode(db, seed.nodeId)).toBe("mirror");
+      expect((await readNodeMode(node, seed.nodeId)).mode).toBe("mirror");
       rmSync(note, { recursive: true });
 
       writeFileSync(note, "{}");
@@ -562,9 +712,9 @@ describe("a mirror's promote and the backup room note", () => {
   }, 60_000);
 
   it("restarts once and logs the failure when the note cannot be deleted after promoting", async () => {
-    const [venueDir, db] = await migratedVenue();
-    const seed = await seedMirrorIdentity(db);
-    const secret = await mintBreakGlassSecret(db, seed.nodeId);
+    const [venueDir, db, node] = await migratedVenue();
+    const seed = await seedMirrorIdentity(db, node);
+    const secret = await mintBreakGlassSecret({ venue: db, node }, seed.nodeId);
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-note-after-"));
     const note = join(stateDir, BACKUP_ROOM_NOTE_FILE);
@@ -597,6 +747,7 @@ describe("a mirror's promote and the backup room note", () => {
             return withPromotionModuleOperation(
               {
                 db: context.db,
+                node: context.nodeDb,
                 nodeId: seed.nodeId,
                 credentialKeyRing: TOTP_KEY_RING,
                 modules: ALL_MODULES,
@@ -608,7 +759,7 @@ describe("a mirror's promote and the backup room note", () => {
           });
 
         expect((await promote()).alreadyPrimary).toBe(false);
-        expect(await readDeploymentMode(db, seed.nodeId)).toBe("primary");
+        expect((await readNodeMode(node, seed.nodeId)).mode).toBe("primary");
         await delay(50);
         expect(killSpy.mock.calls).toEqual([[process.pid, "SIGTERM"]]);
         const failures = lines

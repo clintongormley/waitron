@@ -84,7 +84,7 @@ beforeAll(async () => {
     operationDescription: "Venta",
   });
   await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Node 1" });
-  await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, NODE);
+  await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, NODE);
 });
 
 const dirs: string[] = [];
@@ -107,7 +107,11 @@ async function rebuiltStateDir(marker: RebuildSource | false): Promise<string> {
   if (marker !== false) {
     await writeFile(join(stateDir, REBUILD_MARKER), JSON.stringify({ version: 1, source: marker }));
   }
-  await seedTermZeroMembership({ db: suite.db, ring: RING }, NODE, "https://old-box.example");
+  await seedTermZeroMembership(
+    { db: suite.db, node: suite.node, ring: RING },
+    NODE,
+    "https://old-box.example",
+  );
   return stateDir;
 }
 
@@ -115,6 +119,7 @@ function deps(stateDir: string, overrides: Partial<RebuildDeps> = {}): RebuildDe
   return {
     stateDir,
     db: suite.db,
+    node: suite.node,
     ring: RING,
     nodeId: NODE,
     contactUrl: "https://waitron.local",
@@ -282,11 +287,12 @@ describe("completeRebuild", () => {
     await writeNodeMembership(
       suite.db,
       await mintNextMembershipDocument(
-        { db: suite.db, ring: RING },
+        { db: suite.db, node: suite.node, ring: RING },
         {
           heldDocument: null,
           nodes: [...held!.body.nodes, other],
           signerNodeId: NODE,
+          verifyHeld: "none",
         },
       ),
     );
@@ -309,8 +315,8 @@ describe("completeRebuild", () => {
     await writeNodeMembership(
       suite.db,
       await mintNextMembershipDocument(
-        { db: suite.db, ring: RING },
-        { heldDocument: null, nodes: [other], signerNodeId: NODE },
+        { db: suite.db, node: suite.node, ring: RING },
+        { heldDocument: null, nodes: [other], signerNodeId: NODE, verifyHeld: "none" },
       ),
     );
     await completeRebuild(deps(stateDir));
@@ -329,11 +335,12 @@ describe("completeRebuild", () => {
     try {
       const held = await readNodeMembership(suite.db);
       const promoted = await mintNextMembershipDocument(
-        { db: suite.db, ring: RING },
+        { db: suite.db, node: suite.node, ring: RING },
         {
           heldDocument: held,
           nodes: held!.body.nodes,
           signerNodeId: NODE,
+          verifyHeld: "none",
         },
       );
       await writeNodeMembership(suite.db, promoted);

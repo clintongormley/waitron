@@ -237,3 +237,28 @@ it("requires exact framing only when requested and cleans a refused extraction",
   expect(entries).toEqual([{ kind: "file", name: "db.dump", path: join(dir, "venue.db") }]);
   expect((await readFile(join(dir, "venue.db"))).toString()).toBe("database");
 });
+
+it("carries node.dump as a bytes entry after db.dump, never extracted as a file", async () => {
+  const dir = await scratch();
+  const path = join(dir, "archive");
+  await writeFile(
+    path,
+    await collect(
+      packArchiveStream([
+        { kind: "bytes", entry: { name: "manifest.json", bytes: Buffer.from("{}") } },
+        { kind: "bytes", entry: { name: "db.dump", bytes: Buffer.from("venue") } },
+        { kind: "bytes", entry: { name: "node.dump", bytes: Buffer.from("node") } },
+      ]),
+    ),
+  );
+  const entries = await unpackArchiveFile(path, dir);
+  expect(entries.map((e) => (e.kind === "file" ? e.name : e.entry.name))).toEqual([
+    "manifest.json",
+    "db.dump",
+    "node.dump",
+  ]);
+  expect(entries[2]).toEqual({
+    kind: "bytes",
+    entry: { name: "node.dump", bytes: Buffer.from("node") },
+  });
+});

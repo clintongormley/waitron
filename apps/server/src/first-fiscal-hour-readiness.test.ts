@@ -197,6 +197,7 @@ async function preparedActivation(environment: "production" | "preproduction") {
     environment,
     devMode: environment === "preproduction",
     db: venue.db,
+    node: venue.node,
     ring,
     firstFiscal: host,
     provision: (req, beforeTransaction) =>
@@ -215,9 +216,10 @@ async function preparedActivation(environment: "production" | "preproduction") {
         host.modules,
       ),
     recoverProvision: (req) => recoverProvisionedVenue(venue.db, req, host.modules),
-    establishIdentity: (id) => establishNodeIdentity({ ownerDb: venue.db, ring }, id),
+    establishIdentity: (id) =>
+      establishNodeIdentity({ ownerDb: venue.db, node: venue.node, ring }, id),
     seedMembership: (id) =>
-      seedTermZeroMembership({ db: venue.db, ring }, id, "https://test.example"),
+      seedTermZeroMembership({ db: venue.db, node: venue.node, ring }, id, "https://test.example"),
     persistTrading: async (value) => {
       published.push(value);
     },

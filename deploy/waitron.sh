@@ -805,11 +805,12 @@ wipe_box() {
   else
     # Empty state except tls/, keeping the CA + leaf so an already-trusting phone needs no new step,
     # and except the confirmation records of each Start again, the records of each Keep
-    # or Move choice, and the files a Move set aside. Only --all removes them.
+    # or Move choice, and the files a Move set aside. Only --all removes them. The other venue's
+    # authority a join left in tls/ goes: this box no longer belongs to that venue.
     # Same container shape as the trading.env read above, and `--entrypoint` for the same reason.
     docker compose -f "$WAITRON_DIR/compose.yml" run --rm --no-deps -T \
       --entrypoint sh app \
-      -c 'find "${WAITRON_STATE_DIR:?}" -mindepth 1 -maxdepth 1 ! -name tls ! -name first-setup-start-again-confirmations ! -name first-setup-start-again-choices ! -name first-setup-set-aside -exec rm -rf {} +'
+      -c 'find "${WAITRON_STATE_DIR:?}" -mindepth 1 -maxdepth 1 ! -name tls ! -name first-setup-start-again-confirmations ! -name first-setup-start-again-choices ! -name first-setup-set-aside -exec rm -rf {} + && rm -f "${WAITRON_STATE_DIR:?}/tls/venue-ca.crt" "${WAITRON_STATE_DIR:?}/tls/venue-ca.key" "${WAITRON_STATE_DIR:?}/tls/venue-ca.crt.tmp" "${WAITRON_STATE_DIR:?}/tls/venue-ca.key.tmp"'
   fi
 }
 

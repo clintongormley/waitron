@@ -22,7 +22,10 @@ const target = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null
 it("round-trips the clock-in capability and still refuses a shared display", async () => {
   const at = new Date("2026-01-05T09:00:00Z");
   const venue = await createClockVenue(source.db, () => at);
-  const versions = await schemaVersionsByModule(source.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule(
+    { venue: source.db, node: source.node },
+    ALL_MODULES,
+  );
   const exported = await exportConfigurationTables(source.db, ALL_MODULES);
   const [operator] = await source.db
     .select({ id: persons.id })

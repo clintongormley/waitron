@@ -1,13 +1,15 @@
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Database } from "@waitron/db";
-import type { KeyRing } from "@waitron/credentials";
 import "@waitron/module";
 import type { WaitronModule } from "@waitron/module";
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { writeFileAtomic } from "./fs-atomic.js";
-import { establishReservedStandbyIdentity, type StandbyIdentity } from "./reserved-identity.js";
+import {
+  establishReservedStandbyIdentity,
+  type StandbyPublicIdentity,
+} from "./reserved-identity.js";
 import { ensureMirrorViewer } from "./mirror-session.js";
 import type { ReservedIdentity } from "./mirror-bundle.js";
 import type { Logger } from "./logger.js";
@@ -42,7 +44,7 @@ export function assertAdoptionModules(modules: readonly WaitronModule[]): void {
  */
 export interface PendingAdoption {
   locationId: string;
-  standby: StandbyIdentity;
+  standby: StandbyPublicIdentity;
   nodeName: string;
   filingModule: string | null;
   taxModule: string | null;
@@ -54,8 +56,7 @@ function pendingPath(stateDir: string): string {
   return join(stateDir, PENDING_ADOPTION_FILE);
 }
 
-/** Atomically write `<stateDir>/pending-adoption.json` (0600, tmp+rename): the record carries the
- * standby's sealed private key. */
+/** Atomically write `<stateDir>/pending-adoption.json` (0600, tmp+rename). */
 export async function writePendingAdoption(stateDir: string, p: PendingAdoption): Promise<void> {
   await writeFileAtomic(pendingPath(stateDir), JSON.stringify(p), 0o600);
 }
@@ -77,7 +78,7 @@ export async function readPendingAdoption(stateDir: string): Promise<PendingAdop
  * seat below matches it exactly. */
 type EstablishArgs = {
   locationId: string;
-  standby: StandbyIdentity;
+  standby: StandbyPublicIdentity;
   nodeName: string;
   filingModule: string | null;
   taxModule: string | null;
@@ -91,7 +92,6 @@ type EstablishArgs = {
  */
 export async function runFinishAdoption(deps: {
   ownerDb: Database;
-  ring: KeyRing;
   stateDir: string;
   modules: readonly WaitronModule[];
   establish?: (args: EstablishArgs) => Promise<void>;
@@ -99,8 +99,7 @@ export async function runFinishAdoption(deps: {
   log: Logger;
 }): Promise<void> {
   const establish =
-    deps.establish ??
-    ((args) => establishReservedStandbyIdentity({ ownerDb: deps.ownerDb, ring: deps.ring }, args));
+    deps.establish ?? ((args) => establishReservedStandbyIdentity({ ownerDb: deps.ownerDb }, args));
   const ensureViewer = deps.ensureViewer ?? (() => ensureMirrorViewer(deps.ownerDb));
 
   const pending = await readPendingAdoption(deps.stateDir);

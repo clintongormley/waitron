@@ -11,7 +11,9 @@ import { ALLOCATED_FISCAL_STANDBY, FISCAL_OPERATIONS } from "@waitron/fiscal-ver
 import type { WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { loadKeyRing } from "@waitron/credentials";
+import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
 import { adoptFromPrimary } from "./adopt.js";
+import { writeCredentialsRing } from "./box-secrets.js";
 import {
   readPendingAdoption,
   runFinishAdoption,
@@ -27,6 +29,7 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 const LOCATION = "a7000000-0000-4000-8000-000000000001";
 const PRIMARY = "a7000000-0000-4000-8000-000000000002";
 const STANDBY = "a7000000-0000-4000-8000-000000000003";
+const PRIMARY_KEYS = generateNodeKeyPair();
 const credential = {
   personId: "a7000000-0000-4000-8000-000000000004",
   password: "synthetic-login",
@@ -59,19 +62,45 @@ function bundle(): MirrorBundle {
     reservedIdentity: {
       modules: { "fiscal-verifactu": { version: 1, evidence: {} } },
       series: [],
-      endorsement: {} as never,
+      endorsement: endorseKey(STANDBY, "synthetic-standby-key", PRIMARY, PRIMARY_KEYS.privateKey),
     },
     moduleOverrides: {},
+    primaryPublicKey: PRIMARY_KEYS.publicKey,
+    credentialsRing: { key: Buffer.alloc(32, 5).toString("base64"), version: 1 },
+    boxCaKeyPem: "synthetic-ca-key",
   };
 }
 function deps(value = bundle()) {
   return {
     ownerDb: suite.db,
+    ownerNode: suite.node,
+    ring: loadKeyRing({
+      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 4).toString("base64"),
+      WAITRON_CREDENTIALS_KEY_VERSION: "1",
+    }),
     advertisedOrigin: "https://spare.test",
     environment: "preproduction" as const,
-    fetchBundle: async () => value,
+    // The main box endorses the identity this box sends.
+    fetchBundle: async (
+      _url: string,
+      _credential: unknown,
+      standby: { nodeId: string; publicKey: string },
+    ) => ({
+      ...value,
+      reservedIdentity: {
+        ...value.reservedIdentity,
+        endorsement: endorseKey(
+          standby.nodeId,
+          standby.publicKey,
+          PRIMARY,
+          PRIMARY_KEYS.privateKey,
+        ),
+      },
+    }),
     persistTrading: async () => {},
     persistModuleConfig: async () => {},
+    persistCredentialsRing: (ring: MirrorBundle["credentialsRing"]) =>
+      writeCredentialsRing(stateDir, ring),
     stateDir,
     database: "synthetic-spare",
   };
@@ -179,7 +208,7 @@ it("a pending allocated adoption refuses without creating a selling identity and
   const pending: PendingAdoption = {
     locationId: LOCATION,
     originNodeId: PRIMARY,
-    standby: { nodeId: STANDBY, publicKey: "synthetic-public", privateKey: "synthetic-private" },
+    standby: { nodeId: STANDBY, publicKey: "synthetic-public" },
     nodeName: "Spare",
     filingModule: "fiscal-verifactu",
     taxModule: null,
@@ -188,14 +217,9 @@ it("a pending allocated adoption refuses without creating a selling identity and
   await writePendingAdoption(stateDir, pending);
   const before = await state();
   const events: unknown[] = [];
-  const ring = loadKeyRing({
-    WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 4).toString("base64"),
-    WAITRON_CREDENTIALS_KEY_VERSION: "1",
-  });
   for (let retry = 0; retry < 2; retry += 1) {
     await runFinishAdoption({
       ownerDb: suite.db,
-      ring,
       stateDir,
       modules,
       log: (level, event, fields) => {

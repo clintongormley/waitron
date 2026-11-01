@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -423,6 +424,7 @@ describe("comparison immediately before real archive placement", () => {
     await suite.db.archiveTo(archivePath);
     const manifest = await buildManifest({
       db: suite.db,
+      node: suite.node,
       modules: ALL_MODULES,
       environment: "preproduction",
       now: new Date(),
@@ -431,6 +433,7 @@ describe("comparison immediately before real archive placement", () => {
       packArchive([
         { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
         { name: "db.dump", bytes: await readFile(archivePath) },
+        await nodeDumpEntry(suite.node, sourceDir),
         {
           name: "secrets/trading.env",
           bytes: Buffer.from(`WAITRON_NODE_ID=${nodeId}\nWAITRON_ENV=preproduction\n`),

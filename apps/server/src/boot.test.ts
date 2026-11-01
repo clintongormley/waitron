@@ -710,7 +710,7 @@ describe("startServer, against a migrated venue directory", () => {
         // 0; every other set ships migrations, so `> 0` is the control that a real set was measured.
         if (set.name === "fiscal-none") expect(expected).toBe(0);
         else expect(expected).toBeGreaterThan(0);
-        expect(await appliedSchemaVersion(sharedDb, set)).toBe(expected);
+        expect(await appliedSchemaVersion(sharedStore, set)).toBe(expected);
       }
     } finally {
       await server.close();
@@ -1057,12 +1057,12 @@ describe("startServer, against a migrated venue directory", () => {
       // `expected > 0` is the control: an empty journal would make `0 === 0` pass. `fiscal-none`
       // ships no migrations, so its version is legitimately 0.
       const sets = orderedMigrationSets(ALL_MODULES);
-      expect(sets).toHaveLength(15);
+      expect(sets).toHaveLength(16);
       for (const set of sets) {
         const expected = expectedSchemaVersion(set, migrationsRoot);
         if (set.name === "fiscal-none") expect(expected).toBe(0);
         else expect(expected).toBeGreaterThan(0);
-        expect(await appliedSchemaVersion(probe.venue, set)).toBe(expected);
+        expect(await appliedSchemaVersion(probe, set)).toBe(expected);
       }
     } finally {
       if (probe !== undefined) await probe.close();
@@ -1113,12 +1113,12 @@ describe("startServer, against a migrated venue directory", () => {
       const payments = ALL_MODULES.find((m) => m.name === "payments")!;
       const paymentsExpected = expectedSchemaVersion(payments.migrations, migrationsRoot);
       expect(paymentsExpected).toBeGreaterThan(0);
-      expect(await appliedSchemaVersion(probe.venue, payments.migrations)).toBe(paymentsExpected);
+      expect(await appliedSchemaVersion(probe, payments.migrations)).toBe(paymentsExpected);
       // `enabledModules` never drops `core`, whatever modules.json says.
       const core = ALL_MODULES.find((m) => m.name === "core")!;
       const coreExpected = expectedSchemaVersion(core.migrations, migrationsRoot);
       expect(coreExpected).toBeGreaterThan(0);
-      expect(await appliedSchemaVersion(probe.venue, core.migrations)).toBe(coreExpected);
+      expect(await appliedSchemaVersion(probe, core.migrations)).toBe(coreExpected);
     } finally {
       if (probe !== undefined) await probe.close();
       if (server !== undefined) await server.close();

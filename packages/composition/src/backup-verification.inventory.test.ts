@@ -32,8 +32,10 @@ it("covers the actual composition and every migrated data table, including disab
   }
   expect(new Set(declared).size).toBe(declared.length);
   const journals = new Set(ALL_MODULES.map((module) => module.migrations.table));
-  const actual = suite.db
-    .all<{ name: string }>(sql`select name from sqlite_schema where type='table'`)
+  const actual = [suite.db, suite.node]
+    .flatMap((db) =>
+      db.all<{ name: string }>(sql`select name from sqlite_schema where type='table'`),
+    )
     .map((row) => row.name)
     .filter((name) => !journals.has(name) && name !== "sqlite_sequence");
   expect([...declared].sort()).toEqual(actual.sort());

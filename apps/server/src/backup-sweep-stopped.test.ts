@@ -11,6 +11,7 @@ import { runBackupSweep, type BackupSweepDeps } from "./backup-sweep.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
 import { START_FREE_SPACE_FLOOR } from "./start-space.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
+import { STUB_NODE } from "./testing/node-copy.js";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -35,6 +36,7 @@ async function loopDeps(
   const deps: BackupSweepDeps = {
     backends: [backend],
     db: {} as Database,
+    node: STUB_NODE,
     modules: [],
     environment: "preproduction",
     resolvers: {},

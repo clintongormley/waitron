@@ -126,11 +126,14 @@ too widely. While a primary streams to a bucket, the server's own Litestream chi
 also opens `venue.db`, and takes no lock ([conventions-data.md](../../docs/developers/conventions-data.md), "Litestream is a second
 process on `venue.db`").
 
-**Every migration set is applied to `venue.db`, and `node.db` is created and left empty**
-(`packages/migrations/src/apply.ts`, and `useVenueDb`'s own note in
-`packages/db/src/testing/venue-db.ts`). A table's class does not choose a file: a `local` table's
-rows each belong to one node and sit in `venue.db` beside every other table. `node.db` is reserved
-for a later slice (#548).
+**The node migration set is applied to `node.db`, and every other set to `venue.db`**
+(`packages/migrations/src/apply.ts`). `node.db` holds what this box must remember about itself:
+its mode and singleton role, its link to the main box, the main box's key it pinned when it joined,
+its recovery-key check and its sealed signing key (`packages/node-db`). So a spare holding a copy of
+the main box's `venue.db` still knows who it is. Only `venue.db` is streamed to a bucket; a backup
+file carries `node.db` whole as `node.dump`. Every other `local` table sits in `venue.db`
+([conventions-data.md](../../docs/developers/conventions-data.md), "A `local` row belongs to one
+node").
 
 `WAITRON_VENUE_DIR` names the directory. Left unset — or set to the empty string, which counts as
 unset everywhere in this codebase — it is `venue` under `WAITRON_STATE_DIR`, so the databases live

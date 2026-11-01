@@ -1,9 +1,10 @@
 import {
   lockVenueDatabase,
   openVenueDatabase,
-  readBreakGlassKeyName,
   type Database,
+  type NodeDatabase,
 } from "@waitron/db";
+import { readRecoveryKeyName } from "@waitron/node-db";
 import {
   configureModuleOperations,
   type ModuleOperationHost,
@@ -22,11 +23,13 @@ import {
 import { AppError, isAppError } from "@waitron/shared";
 import { isDeepStrictEqual } from "node:util";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { chmod, copyFile, lstat, mkdir, rm } from "node:fs/promises";
+import { chmod, lstat, mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { readRecoveryCopyPreview } from "./recovery-backup-preview.js";
 import {
+  copyStagedCopy,
+  openStagedCopy,
   readArtifactNode,
   validateArtifact,
   validateDatabaseEntries,
@@ -60,6 +63,8 @@ interface BaseOptions {
   node: ProvisionedNode;
   secret: unknown;
   database(): Database;
+  /** node.db beside {@link BaseOptions.database}, which holds the recovery-key check. */
+  nodeDatabase(): NodeDatabase;
   selected: RecoveryBackupPreview;
   testClock?: ModuleOperationHost["testClock"];
   /** Recovery states already read from this same unchanging database, keyed by node and binding. */
@@ -89,8 +94,9 @@ export function createSelectedRecoveryPreparation(options: Options): {
   const node = Object.freeze({ ...options.node });
   const selected = structuredClone(options.selected);
   const secret = options.secret;
-  const databases = new AsyncLocalStorage<Database>();
-  const database = () => databases.getStore() ?? options.database();
+  const databases = new AsyncLocalStorage<{ db: Database; nodeDb: NodeDatabase }>();
+  const database = () => databases.getStore()?.db ?? options.database();
+  const nodeDatabase = () => databases.getStore()?.nodeDb ?? options.nodeDatabase();
   const survivingHistory: unknown[] = [];
   const refuse = (): never => {
     throw new AppError("module.operation_invalid", { module: binding.module });
@@ -134,8 +140,14 @@ export function createSelectedRecoveryPreparation(options: Options): {
     checkSelection();
     if (!isDeepStrictEqual(held, binding)) refuse();
     const db = database();
-    if ((await readBreakGlassKeyName(db, node.nodeId)) !== selected.nodeRecoveryKeyName) refuse();
-    await withRecoveryKeyAuthority({ db, nodeId: node.nodeId }, binding, secret, async () => {});
+    if ((await readRecoveryKeyName(nodeDatabase(), node.nodeId)) !== selected.nodeRecoveryKeyName)
+      refuse();
+    await withRecoveryKeyAuthority(
+      { db, node: nodeDatabase(), nodeId: node.nodeId },
+      binding,
+      secret,
+      async () => {},
+    );
   };
   const scoped = createRecoveryPreparationHost({
     stateDir: options.stateDir,
@@ -228,7 +240,7 @@ export function createSelectedRecoveryPreparation(options: Options): {
       checkSelection();
       if (contribution?.recovery === undefined) return refuse();
       return withRecoveryKeyAuthority(
-        { db: database(), nodeId: node.nodeId },
+        { db: database(), node: nodeDatabase(), nodeId: node.nodeId },
         binding,
         secret,
         (authority) => contribution.recovery!({ binding, authority }, proposal, client),
@@ -239,11 +251,11 @@ export function createSelectedRecoveryPreparation(options: Options): {
       const runner = createRecoveryRestoreRunner(modules, { binding, input }, secret);
       let refreshed = false;
       const scoped: RestoreOperationRunner = (context, run) =>
-        databases.run(context.db, async () => {
+        databases.run({ db: context.db, nodeDb: context.nodeDb }, async () => {
           if (entry?.refresh === true && !refreshed) {
             if (contribution?.resumeRecovery === undefined) return refuse();
             await withRecoveryKeyAuthority(
-              { db: context.db, nodeId: node.nodeId },
+              { db: context.db, node: context.nodeDb, nodeId: node.nodeId },
               binding,
               secret,
               (authority) => contribution.resumeRecovery!({ binding, authority }),
@@ -273,6 +285,7 @@ export function createInteractiveRecoveryPreparation(options: {
 }) {
   const requests = new AsyncLocalStorage<{
     db: Database;
+    nodeDb: NodeDatabase;
     hold: FirstSetupHold;
     rememberedStates?: Map<string, unknown>;
   }>();
@@ -308,10 +321,10 @@ export function createInteractiveRecoveryPreparation(options: {
           selected.fiscalSelection?.module !== input.binding.module
         )
           return refuse();
-        const store = await openVenueDatabase(dirname(copy.databasePath));
+        const store = await openStagedCopy(dirname(copy.databasePath));
         try {
           await withRecoveryKeyAuthority(
-            { db: store.venue, nodeId: node.nodeId },
+            { db: store.venue, node: store.node, nodeId: node.nodeId },
             input.binding,
             input.nodeRecoverySecret,
             async () => {},
@@ -346,6 +359,7 @@ export function createInteractiveRecoveryPreparation(options: {
                 binding: input.binding,
                 secret: input.nodeRecoverySecret,
                 database: () => active().db,
+                nodeDatabase: () => active().nodeDb,
                 currentHold: () => active().hold,
                 rememberedStates: () => requests.getStore()?.rememberedStates,
                 readIsolation: async () => ({
@@ -357,7 +371,12 @@ export function createInteractiveRecoveryPreparation(options: {
             };
           }
           const result = await requests.run(
-            { db: store.venue, hold: currentHold, rememberedStates: staged?.rememberedStates },
+            {
+              db: store.venue,
+              nodeDb: store.node,
+              hold: currentHold,
+              rememberedStates: staged?.rememberedStates,
+            },
             () => cached!.service.prepare(input.proposal, client),
           );
           if (!sessions.has(key) && sessions.size === 16)
@@ -511,8 +530,7 @@ export function createSetupRecoveryPreparation(
     try {
       const folder = join(dirname(copy.databasePath), "working");
       await mkdir(folder, { mode: 0o700 });
-      working = join(folder, VENUE_FILE);
-      await copyFile(copy.databasePath, working);
+      working = await copyStagedCopy(copy, folder);
       await chmod(working, 0o600);
       preview = await readRecoveryCopyPreview(
         { ...copy, databasePath: working },

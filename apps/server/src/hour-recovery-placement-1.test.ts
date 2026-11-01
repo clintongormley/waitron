@@ -313,6 +313,7 @@ describe("selected-hour admission before archive placement", () => {
           modules: (
             await buildManifest({
               db: suite.db,
+              node: suite.node,
               modules: ALL_MODULES,
               environment: "preproduction",
               now: new Date(),

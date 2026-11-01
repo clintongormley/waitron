@@ -16,9 +16,14 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BACKUP_ROOM_NOTE_FILE } from "@waitron/provisioning";
-import { restoreDatabase } from "./restore.js";
+import { encryptArtifact } from "./artifact-cipher.js";
+import { type ArchiveEntry, packArchive } from "./backup-archive.js";
+import type { BackupManifest } from "./backup-manifest.js";
+import { ALL_MODULES } from "./modules.js";
+import { restoreDatabase, restoreFromArtifact, type RestoreDeps } from "./restore.js";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -262,5 +267,218 @@ describe("restoreDatabase consumes a database file", () => {
     await oldIntact(venueDir);
     expect(await readFile(`${target}.incoming`, "utf8")).toBe("STALE");
     expect(await readFile(source, "utf8")).toBe("NEW-DATABASE");
+  });
+});
+
+/** A real SQLite file holding one `node_mode` row for `nodeId`, as node.db would. */
+function nodeFile(path: string, nodeId: string): void {
+  const database = new DatabaseSync(path);
+  try {
+    database.exec("create table node_mode (node_id text primary key)");
+    database.prepare("insert into node_mode (node_id) values (?)").run(nodeId);
+  } finally {
+    database.close();
+  }
+}
+function nodeIdsIn(path: string): unknown[] {
+  const database = new DatabaseSync(path, { readOnly: true });
+  try {
+    return database
+      .prepare("select node_id from node_mode")
+      .all()
+      .map((row) => row.node_id);
+  } finally {
+    database.close();
+  }
+}
+async function nodeFixture() {
+  const placement = await fixture();
+  nodeFile(join(placement.venueDir, "node.db"), "NEW");
+  await writeFile(join(placement.venueDir, "node.db-wal"), "");
+  const archived = join(placement.root, "archived-node.db");
+  nodeFile(archived, "OLD");
+  return { ...placement, nodeDump: await readFile(archived) };
+}
+
+describe("restoreDatabase puts a backup's node.db back", () => {
+  it("places the archive's node.dump as node.db and sets the box's own aside", async () => {
+    const { source, venueDir, stateDir, nodeDump } = await nodeFixture();
+    const asides: string[] = [];
+    const fs = {
+      rename,
+      rmdir,
+      rm: async (path: string, options: { recursive?: boolean; force: boolean }) => {
+        // Keep the set-aside folder, so the test can read what was set aside.
+        if (path.includes(".venue.db-replaced-")) {
+          asides.push(path);
+          throw ioError("EBUSY");
+        }
+        await rm(path, options);
+      },
+    };
+    await restoreDatabase({
+      databasePath: source,
+      venueDir,
+      stateDir,
+      log: () => {},
+      fs,
+      nodeDump,
+    });
+    expect(nodeIdsIn(join(venueDir, "node.db"))).toEqual(["OLD"]);
+    await expect(stat(join(venueDir, "node.db-wal"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(join(venueDir, "node.db.incoming"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect((await stat(join(venueDir, "node.db"))).mode & 0o777).toBe(0o600);
+    expect(asides).toHaveLength(1);
+    expect(nodeIdsIn(join(asides[0]!, "node.db"))).toEqual(["NEW"]);
+    expect(await readFile(join(asides[0]!, "venue.db"), "utf8")).toBe("OLD");
+  });
+
+  it("puts the box's own node.db back when the final placement fails", async () => {
+    const { source, target, venueDir, stateDir, nodeDump } = await nodeFixture();
+    await expect(
+      restoreDatabase({
+        databasePath: source,
+        venueDir,
+        stateDir,
+        log: () => {},
+        nodeDump,
+        fs: {
+          rm,
+          rmdir,
+          rename: async (from, to) => {
+            if (from === `${target}.incoming`) throw ioError("EIO");
+            await rename(from, to);
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ code: "restore.placement_failed", params: { kept: "previous" } });
+    await oldIntact(venueDir);
+    expect(nodeIdsIn(join(venueDir, "node.db"))).toEqual(["NEW"]);
+    await expect(stat(join(venueDir, "node.db.incoming"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("leaves no node.db behind when a target that had none fails its final placement", async () => {
+    const { source, target, venueDir, stateDir, nodeDump } = await nodeFixture();
+    await rm(join(venueDir, "node.db"));
+    await rm(join(venueDir, "node.db-wal"));
+    await expect(
+      restoreDatabase({
+        databasePath: source,
+        venueDir,
+        stateDir,
+        log: () => {},
+        nodeDump,
+        fs: {
+          rm,
+          rmdir,
+          rename: async (from, to) => {
+            if (from === `${target}.incoming`) throw ioError("EIO");
+            await rename(from, to);
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ code: "restore.placement_failed", params: { kept: "previous" } });
+    await oldIntact(venueDir);
+    await expect(stat(join(venueDir, "node.db"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(join(venueDir, "node.db.incoming"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("places node.db before venue.db", async () => {
+    const { source, target, venueDir, stateDir, nodeDump } = await nodeFixture();
+    const placed: string[] = [];
+    await restoreDatabase({
+      databasePath: source,
+      venueDir,
+      stateDir,
+      log: () => {},
+      nodeDump,
+      fs: {
+        rm,
+        rmdir,
+        rename: async (from, to) => {
+          if (to === target || to === join(venueDir, "node.db")) placed.push(to);
+          await rename(from, to);
+        },
+      },
+    });
+    expect(placed).toEqual([join(venueDir, "node.db"), target]);
+  });
+
+  it("leaves the box's own node.db alone when handed no node copy", async () => {
+    const { source, venueDir, stateDir } = await nodeFixture();
+    await restoreDatabase({ databasePath: source, venueDir, stateDir, log: () => {} });
+    expect(nodeIdsIn(join(venueDir, "node.db"))).toEqual(["NEW"]);
+  });
+});
+
+describe("a restore from an archive and the node copy", () => {
+  const MANIFEST: BackupManifest = {
+    manifestVersion: 1,
+    createdAt: "2026-09-05T00:00:00.000Z",
+    environment: "preproduction",
+    modules: {},
+  };
+  const KEY = "correct horse battery staple";
+  function artifact(entries: ArchiveEntry[]): Uint8Array {
+    return encryptArtifact(
+      packArchive([
+        { name: "manifest.json", bytes: Buffer.from(JSON.stringify(MANIFEST)) },
+        ...entries,
+      ]),
+      KEY,
+    );
+  }
+  async function restoreFixture() {
+    const placement = await nodeFixture();
+    const stagingDir = join(placement.root, "staging");
+    const secrets: ArchiveEntry[] = [
+      { name: "secrets/secrets.env", bytes: Buffer.from("WAITRON_VAULT_MASTER_KEY=deadbeef\n") },
+      {
+        name: "secrets/trading.env",
+        bytes: Buffer.from("WAITRON_NODE_ID=c0000000-0000-4000-8000-000000000003\n"),
+      },
+    ];
+    const deps = (entries: ArchiveEntry[], overrides: Partial<RestoreDeps> = {}): RestoreDeps => ({
+      artifact: artifact(entries),
+      recoveryKey: KEY,
+      venueDir: placement.venueDir,
+      stateDir: placement.stateDir,
+      stagingDir,
+      migrationsRoot: null,
+      modules: ALL_MODULES,
+      environment: "preproduction",
+      migrate: vi.fn(async () => {}),
+      log: () => {},
+      ...overrides,
+    });
+    const dump: ArchiveEntry = { name: "db.dump", bytes: Buffer.from("NEW-DATABASE") };
+    const node: ArchiveEntry = { name: "node.dump", bytes: placement.nodeDump };
+    return { ...placement, deps, dump, node, secrets };
+  }
+
+  it("refuses an archive with no node.dump, replacing nothing", async () => {
+    const { deps, dump, secrets, venueDir, stateDir } = await restoreFixture();
+    await writeFile(join(stateDir, "trading.env"), "WAITRON_NODE_ID=the-box\n");
+    await expect(restoreFromArtifact(deps([dump, ...secrets]))).rejects.toMatchObject({
+      code: "restore.archive_incomplete",
+      params: { missing: "node.dump" },
+    });
+    await oldIntact(venueDir);
+    expect(nodeIdsIn(join(venueDir, "node.db"))).toEqual(["NEW"]);
+    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe("WAITRON_NODE_ID=the-box\n");
+    await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("keeps the target's own node.db under skipSecrets", async () => {
+    const { deps, dump, node, secrets, target, venueDir } = await restoreFixture();
+    await restoreFromArtifact(deps([dump, node, ...secrets], { skipSecrets: true }));
+    expect(await readFile(target, "utf8")).toBe("NEW-DATABASE");
+    expect(nodeIdsIn(join(venueDir, "node.db"))).toEqual(["NEW"]);
   });
 });

@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { createHash } from "node:crypto";
 import { copyFile, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -23,7 +24,7 @@ const moduleNames = ["core", "fiscal-verifactu", "fiscal-none"];
 const modules = ALL_MODULES.filter((module) => moduleNames.includes(module.name));
 const suite = useVenueDb({
   migrations: migrationOptionsFor(
-    manifestSets().filter((set) => moduleNames.includes(set.name)),
+    manifestSets().filter((set) => [...moduleNames, "node"].includes(set.name)),
     null,
   ),
 });
@@ -49,7 +50,7 @@ beforeEach(async () => {
     timeZone: "Europe/Madrid",
   });
   await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Selected box" });
-  await mintBreakGlassSecret(suite.db, NODE);
+  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
 });
 afterEach(async () => {
   if (scratch) await rm(scratch, { recursive: true, force: true });
@@ -60,11 +61,13 @@ async function archive(
 ) {
   const manifest = await buildManifest({
     db: suite.db,
+    node: suite.node,
     modules,
     environment: "preproduction",
     now: new Date(createdAt),
   });
   const entries = [
+    await nodeDumpEntry(suite.node, scratch),
     { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
     {
       name: "secrets/trading.env",

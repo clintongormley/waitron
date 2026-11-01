@@ -1,15 +1,23 @@
-// Runs the entry point against a real migrated venue directory. Both handles `openVenueDatabase`
-// returns are one type, `Database`, so passing the node handle where the venue one belongs
-// compiles; the `set`/`list` round trip below is what holds the vault to the venue file.
+// Runs the entry point against a real migrated venue directory. The node handle's type extends
+// `Database`, so passing it where the venue handle belongs compiles; the round trip below is what
+// holds the vault to the venue file.
 import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, openVenueDatabase, runMigrations } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  openVenueDatabase,
+  runMigrations,
+  withNodeTransaction,
+} from "@waitron/db";
+import { NODE_MIGRATIONS, nodeSigningKey } from "@waitron/node-db";
 import { runBin } from "./bin.js";
 import type { CliIo } from "./cli.js";
+import { loadKeyRing } from "./keyring.js";
 import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
+import { sealNodeSigningKeyTx } from "./node-signing-key.js";
 import { tenantCredentials } from "./schema/index.js";
 
 const KEY_ENV = {
@@ -56,6 +64,7 @@ describe("waitron-credentials against a real venue directory", () => {
     try {
       await runMigrations(store.venue, CORE_MIGRATIONS);
       await runMigrations(store.venue, CREDENTIALS_MIGRATIONS);
+      await runMigrations(store.node, NODE_MIGRATIONS);
     } finally {
       await store.close();
     }
@@ -144,4 +153,34 @@ setInterval(() => db, 1000);`;
       holder.kill("SIGKILL");
     }
   }, 20_000);
+
+  it("rotate re-seals the box's signing key in the directory's node.db", async () => {
+    const node = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const store = await openVenueDatabase(venueDir, { exclusive: false });
+    try {
+      await withNodeTransaction(store.node, (tx) =>
+        sealNodeSigningKeyTx(tx, loadKeyRing(KEY_ENV), node, "AAAA"),
+      );
+    } finally {
+      await store.close();
+    }
+    const rotatedEnv = {
+      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+      WAITRON_CREDENTIALS_KEY_VERSION: "2",
+      WAITRON_CREDENTIALS_KEY_PREVIOUS: KEY_ENV.WAITRON_CREDENTIALS_KEY,
+      WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "1",
+    };
+    const h = capture();
+    expect(await runBin(["rotate"], { ...rotatedEnv, WAITRON_VENUE_DIR: venueDir }, h.io)).toBe(0);
+    expect(h.err).toEqual([]);
+    const after = await openVenueDatabase(venueDir, { exclusive: false });
+    try {
+      const rows = await after.node
+        .select({ keyVersion: nodeSigningKey.keyVersion })
+        .from(nodeSigningKey);
+      expect(rows).toEqual([{ keyVersion: 2 }]);
+    } finally {
+      await after.close();
+    }
+  });
 });

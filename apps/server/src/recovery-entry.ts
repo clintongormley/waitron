@@ -66,6 +66,9 @@ export async function createRecoveryEntryRunner(options: {
     database() {
       throw new AppError("module.operation_invalid", { module: operation.binding.module });
     },
+    nodeDatabase() {
+      throw new AppError("module.operation_invalid", { module: operation.binding.module });
+    },
     // These declarations are independent of the allocation; local locks do not establish them.
     readIsolation: async () => ({
       oldMachineAbsent: false,

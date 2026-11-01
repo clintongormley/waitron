@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { generateNodeKeyPair } from "@waitron/membership";
-import { putCredential, tryGetCredential, type KeyRing } from "@waitron/credentials";
 import {
   insertReservedNodeTx,
   insertReservedSeriesTx,
+  nodes,
   withTransaction,
   type Database,
+  type Transaction,
 } from "@waitron/db";
+import { eq } from "drizzle-orm";
 import {
   moduleOperationFor,
   snapshotModuleOperations,
@@ -15,13 +17,16 @@ import {
   type WaitronModule,
 } from "@waitron/module";
 import { AppError, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
-import { NODE_KEY_PURPOSE } from "./node-identity.js";
 import type { ReservedIdentity } from "./mirror-bundle.js";
 import "./errors.js";
 
-export interface StandbyIdentity {
+/** What venue.db learns of a standby: never its private key, which only its own node.db holds. */
+export interface StandbyPublicIdentity {
   nodeId: string;
   publicKey: string;
+}
+
+export interface StandbyIdentity extends StandbyPublicIdentity {
   privateKey: string;
 }
 
@@ -32,15 +37,15 @@ export function generateStandbyIdentity(): StandbyIdentity {
 }
 
 /**
- * The sealed key, node and module reservations commit together. Modules that open series at
- * activation receive no scaffold series. A sealed membership key makes repeated adoption a no-op.
- * The enabled module set chooses what establishes; each module validates its own opaque state.
+ * The node and module reservations commit together. Modules that open series at activation receive
+ * no scaffold series. The standby's `nodes` row makes repeated adoption a no-op. The enabled module
+ * set chooses what establishes; each module validates its own opaque state.
  */
 export async function establishReservedStandbyIdentity(
-  deps: { ownerDb: Database; ring: KeyRing },
+  deps: { ownerDb: Database },
   args: {
     locationId: string;
-    standby: StandbyIdentity;
+    standby: StandbyPublicIdentity;
     nodeName: string;
     filingModule: string | null;
     taxModule: string | null;
@@ -54,23 +59,17 @@ export async function establishReservedStandbyIdentity(
   const operations = snapshotModuleOperations(supplied.moduleOperations);
   const modules = [...supplied.modules];
   const reserved = structuredClone(supplied.reserved);
-  const standby = { ...supplied.standby };
-  if ((await tryGetCredential(deps.ownerDb, deps.ring, { purpose: NODE_KEY_PURPOSE })) !== null)
-    return;
+  const standby = { nodeId: supplied.standby.nodeId, publicKey: supplied.standby.publicKey };
+  if (await standbyNodeExists(deps.ownerDb, standby.nodeId)) return;
   await withPreparedModuleOperations(modules, operations, standby.nodeId, "establish", (prepared) =>
     withTransaction(deps.ownerDb, async (tx) => {
-      const existing = await tryGetCredential(tx, deps.ring, { purpose: NODE_KEY_PURPOSE });
-      if (existing !== null) return;
+      if (await standbyNodeExists(tx, standby.nodeId)) return;
 
       const owner = modules.find(
         (module) => module.provisioning?.standby?.series === "on-activation",
       );
       if (owner !== undefined && (reserved.series?.length ?? 0) !== 0)
         throw new AppError("module.operation_invalid", { module: owner.name });
-      await putCredential(tx, deps.ring, {
-        purpose: NODE_KEY_PURPOSE,
-        value: { privateKey: standby.privateKey },
-      });
       await insertReservedNodeTx(tx, {
         id: standby.nodeId,
         locationId: supplied.locationId,
@@ -109,4 +108,9 @@ export async function establishReservedStandbyIdentity(
       }
     }),
   );
+}
+
+async function standbyNodeExists(db: Database | Transaction, nodeId: string): Promise<boolean> {
+  const rows = await db.select({ id: nodes.id }).from(nodes).where(eq(nodes.id, nodeId));
+  return rows.length > 0;
 }

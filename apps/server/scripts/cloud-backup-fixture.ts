@@ -97,6 +97,7 @@ if (request.command === "capture") {
         },
       ],
       db: store.venue,
+      node: store.node,
       modules: ALL_MODULES,
       environment: "preproduction",
       resolvers: {},

@@ -18,6 +18,7 @@ import {
   restoreFromArtifactFile,
   validateArtifactFile,
   validateDatabaseEntries,
+  writeStagedNodeCopy,
   type EntryValidationDeps,
   type RestoreFileDeps,
   type RestoreOperationRunner,
@@ -515,6 +516,7 @@ export async function runStagedRestore(
                   databasePath,
                   validation,
                 );
+                await writeStagedNodeCopy(databasePath, validated.nodeDump);
                 return { ...validated, discard };
               } catch (error) {
                 await discard();

@@ -9,12 +9,10 @@ import {
   invoiceSeries,
   locations,
   nodes,
-  readDeploymentMode,
-  readSingletonRole,
-  setDeploymentMode,
   stampDeployment,
   withTransaction,
 } from "@waitron/db";
+import { NODE_MIGRATIONS, readNodeMode, setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing } from "@waitron/credentials";
@@ -38,7 +36,7 @@ import { TOTP_KEY_RING, enrolAuthenticator, wrongTotpCode } from "./testing/auth
 const modules = vi.hoisted(() => [] as WaitronModule[]);
 vi.mock("./modules.js", () => ({ ALL_MODULES: modules }));
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, IDENTITY_MIGRATIONS, NODE_MIGRATIONS],
 });
 const LOCATION = "f1000000-0000-4000-8000-000000000001";
 const PRIMARY = "f1000000-0000-4000-8000-000000000002";
@@ -67,6 +65,7 @@ beforeAll(async () => {
   stateDir = await mkdtemp(join(tmpdir(), "waitron-standby-public-"));
   await mkdir(join(stateDir, "tls"));
   await writeFile(join(stateDir, "tls", "ca.crt"), "public-test-ca");
+  await writeFile(join(stateDir, "tls", "ca.key"), "public-test-ca-key");
 });
 afterAll(async () => {
   if (stateDir !== undefined) await rm(stateDir, { recursive: true, force: true });
@@ -107,7 +106,7 @@ beforeEach(async () => {
           await withTransaction(suite.db, (tx) =>
             tx.update(locations).set({ name: "Source collected" }),
           );
-          if (replaceKey) await mintBreakGlassSecret(suite.db, TARGET);
+          if (replaceKey) await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TARGET);
           return run({ ...operation, input: { current: "independent" } });
         },
       },
@@ -151,12 +150,13 @@ beforeEach(async () => {
   );
 });
 async function promotionApp() {
-  await setDeploymentMode(suite.db, TARGET, "mirror");
-  await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, TARGET);
+  await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror");
+  await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, TARGET);
   const holders = createDeploymentHolders("mirror", "secondary");
   const app = new Hono();
   mountPromoteApi(app, {
     appDb: suite.db,
+    nodeDb: suite.node,
     nodeId: TARGET,
     credentialKeyRing: TOTP_KEY_RING,
     modules,
@@ -164,6 +164,7 @@ async function promotionApp() {
       const result = await promoteMirrorToPrimary(
         {
           db: suite.db,
+          node: suite.node,
           ring: RING,
           nodeId: TARGET,
           holders,
@@ -180,10 +181,11 @@ async function promotionApp() {
   return app;
 }
 async function bundleApp() {
-  await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, PRIMARY);
+  await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, PRIMARY);
   const app = new Hono();
   mountMirrorBundleApi(app, {
     appDb: suite.db,
+    node: suite.node,
     ring: RING,
     stateDir: stateDir!,
     relayUrl: "https://relay.test",
@@ -220,8 +222,8 @@ function bundleBody() {
 }
 async function untouched() {
   expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
-  expect(await readDeploymentMode(suite.db, TARGET)).toBe("mirror");
-  expect(await readSingletonRole(suite.db, TARGET)).toBe("secondary");
+  expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
+  expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("secondary");
 }
 it.each(["account", "key"])(
   "activates all purposes through the public promotion route with %s authentication",
@@ -230,7 +232,7 @@ it.each(["account", "key"])(
     const credentials =
       method === "account"
         ? { personId: ADMIN, password: PASSWORD }
-        : { breakGlass: await mintBreakGlassSecret(suite.db, TARGET) };
+        : { breakGlass: await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TARGET) };
     const response = await post(app, "/management-api/promote", promoteBody(credentials));
     expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
     expect(await response.json()).toEqual({ alreadyPrimary: false, restarting: true });
@@ -243,7 +245,7 @@ it.each(["account", "key"])(
       { code: "FF-P000042", purpose: "full" },
       { code: "R-P000042", purpose: "rectificative" },
     ]);
-    expect(await readSingletonRole(suite.db, TARGET)).toBe("primary");
+    expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("primary");
     expect(collected).toEqual(["promote"]);
     const expectedOperator =
       method === "account"
@@ -270,7 +272,7 @@ it("reserves an opaque dormant identity through the public bundle route after re
 });
 it("refuses a node key replaced during outside collection without activating or changing role", async () => {
   const app = await promotionApp();
-  const key = await mintBreakGlassSecret(suite.db, TARGET);
+  const key = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TARGET);
   replaceKey = true;
   const response = await post(app, "/management-api/promote", promoteBody({ breakGlass: key }));
   expect(response.status).toBe(401);
@@ -310,7 +312,7 @@ it("does not consult outside evidence when the account password is wrong", async
 });
 it("does not consult outside evidence when the node key is wrong, even with valid account credentials", async () => {
   const app = await promotionApp();
-  await mintBreakGlassSecret(suite.db, TARGET);
+  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TARGET);
   const response = await post(
     app,
     "/management-api/promote",
@@ -378,7 +380,7 @@ it("refuses reservation evidence for a module the enabled set does not reserve",
 });
 it("returns the committed promotion result after a lost response without consulting outside evidence again", async () => {
   const app = await promotionApp();
-  const key = await mintBreakGlassSecret(suite.db, TARGET);
+  const key = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TARGET);
   const body = promoteBody({ breakGlass: key });
   const first = await post(app, "/management-api/promote", body);
   expect(first.status).toBe(200);
@@ -398,17 +400,22 @@ it("returns the committed promotion result after a lost response without consult
   expect(collected).toEqual(["promote"]);
 });
 it("refuses a promotion runner redirected to another node before collecting evidence", async () => {
-  await setDeploymentMode(suite.db, TARGET, "mirror");
+  await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror");
   const app = new Hono();
   mountPromoteApi(app, {
     appDb: suite.db,
+    nodeDb: suite.node,
     nodeId: TARGET,
     modules,
     credentialKeyRing: TOTP_KEY_RING,
     async run(_attestation, runner) {
       expect(runner).toBeDefined();
       await runner!(
-        { db: suite.db, node: { nodeId: PRIMARY as never, locationId: LOCATION as never } },
+        {
+          db: suite.db,
+          nodeDb: suite.node,
+          node: { nodeId: PRIMARY as never, locationId: LOCATION as never },
+        },
         async (tx) => {
           await tx
             .insert(invoiceSeries)

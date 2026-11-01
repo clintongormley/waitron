@@ -907,23 +907,24 @@ calendar.
 
 ## The tables `scripts/write-path-tables.json` lists are read-only to the application, and one guard is the whole of the enforcement
 
-`tenants`, `nodes`, `deployment`, `mirror_config` and `node_roles`. `node_roles` joined on
-2026-09-23, when a node's mode, singleton role and break-glass verifier left `deployment` (#548);
-it inherits `deployment`'s rule. The guard pins all five names directly. NOTHING BUT
+`venue.db`'s `tenants`, `nodes` and `deployment`, and `node.db`'s `node_mode`, `node_mirror_link`,
+`node_primary_key`, `node_recovery_key` and `node_signing_key`. NOTHING BUT
 `scripts/write-path-tables.test.ts` REFUSES THEM.
-SQLite has no roles and no grants — one process opens one file, and every path, request and
-provisioning alike, shares that one venue handle (`ownerDb` is a name, not a separate handle). So
-the rule is a convention over source text, and that guard is not a second opinion on an engine that
-would refuse the write anyway.
+SQLite has no roles and no grants, and every path, request and provisioning alike, shares the one
+venue handle and the one node handle a process opens (`ownerDb` is a name, not a separate handle).
+So the rule is a convention over source text, and that guard is not a second opinion on an engine
+that would refuse the write anyway.
 
 The guard reads `scripts/write-path-tables.json` and pins its table set independently. It reads
 TEXT, judges a FILE rather than a call chain, and walks `<member>/src` under `apps` and `packages`
 alone. Read its header for the full limits. The [2026-10-19 grants-record audit](grants-retirement-audit.md)
 records the removal of the old matrix and the restrictions still awaiting individual decisions.
 
-Real code does write all five, legitimately: the setup-mode provision route reaches `tenants`,
-`nodes` and `deployment`; the setup-mode adopt route reaches `deployment`, `node_roles` and
-`mirror_config`; the promote route reaches `node_roles`; and the dashboard's legal-name change
+Real code does write them, legitimately: the setup-mode provision route reaches `tenants`,
+`nodes` and `deployment`; joining as a spare (`apps/server/src/adopt.ts`) reaches `deployment` and
+all five `node.db` tables; promotion and its repair (`promote.ts`, `promoted-role.ts`) reach
+`node_mode`; first setup and replacing the recovery key reach `node_recovery_key`; first setup and
+`waitron-credentials rotate` reach `node_signing_key`; and the dashboard's legal-name change
 (`PUT /management-api/venue-details/legal-name`, owner A494) reaches `tenants` through
 `packages/provisioning/src/taxpayer-name.ts`, which updates `legal_name` alone, and the
 dashboard's privacy contact (`PUT /management-api/venue-privacy`, A980 S1a) reaches it through
@@ -1453,12 +1454,36 @@ without `applyMigrations` (`runMigrations` called directly) is invisible to it.
 
 ## A `local` row belongs to one node, so no foreign key may join a `local` table to a `ledger`/`state` one
 
-Every table is in `venue.db`, which a primary streams whole to the owner's bucket once one is set up
-(#548, which
-replaced the topology design's plan to put `local` tables in `node.db`). A `local` row means nothing to another
-node, so no venue row may depend on one, and `node.db` stays reserved for a later slice that may
-move `local` tables into it — which a key in either direction would block. Guard:
-`scripts/two-file-foreign-keys.test.ts`.
+`venue.db` holds every table but five, and a primary streams it whole to the owner's bucket once
+one is set up. `node.db`, beside it, holds what a box must remember about itself — its mode and
+singleton role (`node_mode`), its link to the main box (`node_mirror_link`), the main box's key it
+pinned when it joined (`node_primary_key`), its recovery-key check (`node_recovery_key`) and its
+sealed signing key (`node_signing_key`) — so a spare holding a copy of the main box's `venue.db`
+still knows who it is (A947 slice 3a). `node.db` is never streamed (`packages/stream/src/litestream.ts`
+names only `venue.db`); a backup file carries it whole as `node.dump`, and the bucket's sealed state
+carries a `node.dump` entry. Every other `local` table stays in `venue.db`. A `local` row means
+nothing to another node, so no venue row may depend on one, and a key in either direction would
+block moving a `local` table into `node.db`. Guard: `scripts/two-file-foreign-keys.test.ts`, weaker
+than its name: it sides tables by class, not by file, so a key from a `node.db` table into one of
+`venue.db`'s `local` tables passes it; SQLite refuses the write instead (`no such table`), because
+the target is not in `node.db`.
+
+**Writing across the two files.** Three rules, each because the two files have independent write
+queues (`packages/store/src/index.ts`):
+
+- **`node.db`'s write lock is taken outside `venue.db`'s, never inside**, so two writers cannot each
+  hold one file and wait for the other.
+- **Where one change spans both files, `venue.db` is saved first and `node.db` follows**, and a
+  re-run repairs a `node.db` left behind; each such site says so in a one-line comment. The sites:
+  promotion's role (`apps/server/src/promote.ts`; `finishPromotedRole` in `promoted-role.ts`
+  finishes a role left behind at the next press or the next start), the recovery-key replacement
+  and its pack record (`backup-recovery-pack-api.ts`), and first setup's key and first pack
+  (`packages/provisioning/src/first-setup-node-key.ts`). The last two hold the node lock around
+  the venue save; promotion takes the two one after the other. A signing key is the stated exception: it is sealed in `node.db` before its public
+  half reaches `venue.db`, because a public key with no private half could never sign as the box.
+- **`withTransaction` never takes the node handle**, and the compiler refuses it: it drains
+  `change_log`, which `node.db` does not have (`packages/db/src/tenancy.ts`). A `node.db` write
+  uses `withNodeTransaction`. Nothing guards the first two rules.
 
 Cost of the shape it replaced: six such keys existed and nothing would have failed at the flip.
 
@@ -1491,14 +1516,18 @@ open under Task 1b. _2026-10-04 (A238):_ `tills` is gone; `sessions.device_id` n
 (`packages/identity/src/schema/sessions.ts`).
 
 **What ties a `local` row to its node, and which ties are pinned.** A `local` table's reason says
-which of three ties it uses: a `node_id` column every read and write names (`node_roles`,
-`mirror_config`, `join_requests`, `node_sealed_state`, `recovery_packs`), a seal only that node's key opens (`tenant_credentials`), or rows
-the transaction that wrote them deletes (`change_log`). Identity has no `local` table: slice-2
+which of three ties it uses: a `node_id` column every read and write names (`join_requests`,
+`node_sealed_state`, `recovery_packs`; the five `node.db` tables carry one too, though a key-ring
+rotation reads `node_signing_key` whole), a seal only a box holding the key ring opens
+(`tenant_credentials`, whose ring a joining spare receives from the main box), or rows the
+transaction that wrote them deletes (`change_log`). Identity has no `local` table: slice-2
 Task 1b reclassified its logins and sign-in ceremonies `state`, with a login's cookie token stored
 only as its hash (`packages/identity/src/classification.ts`; #554, and the owner's decision that a
 login survives a rebuild and a promotion). Pinned,
-each by deleting the node filter and watching a case fail: the `node_roles` and
-`mirror_config` readers (`packages/db/src/node-roles.test.ts`), and every node filter on
+each by deleting the node filter and watching a case fail: the `node_mode` and
+`node_mirror_link` readers in `node.db` (the "keeps each node's row apart" case in
+`packages/node-db/src/mode.test.ts` and the "reads a mirror link only for the node that was
+adopted" case in `packages/node-db/src/mirror-link.test.ts`), and every node filter on
 `join_requests` in `apps/server/src/join-requests.ts` but deny's delete, which runs only after a
 node-filtered read of the same id (the "belong to the node" cases in
 `apps/server/src/join-requests.test.ts`), and the `node_sealed_state` reader

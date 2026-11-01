@@ -7,7 +7,13 @@ import { createSecureContext } from "node:tls";
 import forge from "node-forge";
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
 import { chmod, lstat, symlink, writeFile, mkdir, type FileHandle } from "node:fs/promises";
-import { ensureBoxSecrets, mintedBoxLeaf, reissueBoxLeaf, tightenTlsDir } from "./box-secrets.js";
+import {
+  ensureBoxSecrets,
+  mintedBoxLeaf,
+  reissueBoxLeaf,
+  tightenTlsDir,
+  writeCredentialsRing,
+} from "./box-secrets.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
 // `access`, `copyFile`, `open` and `rename` are wrapped so a test can inject a failure for a single
@@ -430,6 +436,30 @@ describe("reissueBoxLeaf", () => {
     const after = await pairOf(d);
     expect(after.key).toBe(before.key);
     expect(after.cert).not.toBe(before.cert);
+  });
+});
+
+describe("writeCredentialsRing", () => {
+  it("syncs the new secrets.env before it replaces the old one, owner-only", async () => {
+    const d = await newDir();
+    const syncs: ReturnType<typeof vi.fn>[] = [];
+    const passthrough = openMock.getMockImplementation()!;
+    openMock.mockImplementation(async (p: unknown, ...rest: unknown[]) => {
+      const handle = (await (passthrough as (...a: unknown[]) => unknown)(
+        p,
+        ...rest,
+      )) as FileHandle;
+      if (p === join(d, "secrets.env.tmp")) syncs.push(vi.spyOn(handle, "sync") as never);
+      return handle;
+    });
+    try {
+      await writeCredentialsRing(d, { key: "A".repeat(43) + "=", version: 1 });
+    } finally {
+      openMock.mockImplementation(passthrough);
+    }
+    expect(syncs).toHaveLength(1);
+    expect(syncs[0]).toHaveBeenCalledTimes(1);
+    expect((await stat(join(d, "secrets.env"))).mode & 0o777).toBe(0o600);
   });
 });
 

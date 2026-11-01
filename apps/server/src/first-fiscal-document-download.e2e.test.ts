@@ -397,6 +397,7 @@ it.each(["en", "es"] as const)(
       try {
         await mkdir(backupDir);
         await source.venue.archiveTo(join(backupDir, "venue.db"));
+        await source.node.archiveTo(join(backupDir, "node.db"));
       } finally {
         await source.close();
       }
@@ -411,7 +412,7 @@ it.each(["en", "es"] as const)(
         };
         await expect(
           withRecoveryKeyAuthority(
-            { db: selected.venue, nodeId: decoded.nodeKey.nodeId },
+            { db: selected.venue, node: selected.node, nodeId: decoded.nodeKey.nodeId },
             binding,
             "wrong-key",
             async () => true,
@@ -419,7 +420,7 @@ it.each(["en", "es"] as const)(
         ).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
         await expect(
           withRecoveryKeyAuthority(
-            { db: selected.venue, nodeId: decoded.nodeKey.nodeId },
+            { db: selected.venue, node: selected.node, nodeId: decoded.nodeKey.nodeId },
             binding,
             await recovered(),
             async (_authority, commit) =>

@@ -31,6 +31,8 @@ const ADDED_TABLES = [
   "sale_line_portions",
   "working_line_portions",
 ];
+/** Tables dropped after the capture; the seed wrote no row to them. */
+const REMOVED_TABLES = ["mirror_config", "node_roles"];
 const byName = <T>(tables: Record<string, T>) =>
   Object.fromEntries(Object.entries(tables).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -119,6 +121,14 @@ for (const locale of ["en", "es"] as const) {
         expect(expected[phase].tables[name], `${phase}/${name} in the capture`).toBeUndefined();
         expected[phase].tables[name] = structuredClone(added!);
         phases[phase]![name] = 0;
+      }
+      for (const name of REMOVED_TABLES) {
+        const removed = expected[phase].tables[name];
+        expect(removed, `${phase}/${name} in the capture`).toBeDefined();
+        expect(Object.keys(removed!.rows), `${phase}/${name} captured rows`).toEqual([]);
+        expect(phases[phase]![name], `${phase}/${name} captured count`).toBe(0);
+        delete expected[phase].tables[name];
+        delete phases[phase]![name];
       }
       expected[phase].tables = byName(expected[phase].tables);
       phases[phase] = byName(phases[phase]!);

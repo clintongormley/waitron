@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { sealNodeState, writeSealedStateRow } from "./sealed-state.js";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { signPointer, writePointer } from "@waitron/stream";
@@ -18,6 +19,8 @@ import {
   openVenueDatabase,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { applyMigrations } from "@waitron/migrations";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { packArchive } from "./backup-archive.js";
@@ -58,7 +61,23 @@ const suite = useVenueDb({
 });
 afterAll(() => rmSync(prefix, { recursive: true, force: true }));
 
-it("previews a backup predating named keys by migrating only its private scratch copy", async () => {
+/** Every box migrates its node.db at start, so a real backup's node copy carries the node set. */
+async function migratedNodeDump(parent: string) {
+  const box = await mkdtemp(join(tmpdir(), "preview-old-node-"));
+  try {
+    await applyMigrations(box, [NODE_MIGRATIONS]);
+    const store = await openVenueDatabase(box);
+    try {
+      return await nodeDumpEntry(store.node, parent);
+    } finally {
+      await store.close();
+    }
+  } finally {
+    await rm(box, { recursive: true, force: true });
+  }
+}
+
+it("previews a backup with an older venue schema by migrating only its private scratch copy", async () => {
   const nodeId = "d0000000-0000-4000-8000-000000000001";
   const locationId = "d0000000-0000-4000-8000-000000000002";
   await stampDeployment(suite.db, "preproduction");
@@ -90,6 +109,7 @@ it("previews a backup predating named keys by migrating only its private scratch
           ),
         },
         { name: "db.dump", bytes: sourceBytes },
+        await migratedNodeDump(scratch),
         {
           name: "secrets/trading.env",
           bytes: Buffer.from(`WAITRON_NODE_ID=${nodeId}\n`),
@@ -115,24 +135,29 @@ it("previews a backup predating named keys by migrating only its private scratch
           ...fakeModule("core"),
           migrations: { name: "core", table: "__drizzle_migrations_db", from: "../db/drizzle" },
         },
+        {
+          ...fakeModule("node"),
+          migrations: {
+            name: "node",
+            table: "__drizzle_migrations_node",
+            from: "../node-db/drizzle",
+            database: "node",
+          },
+        },
       ],
     });
     expect(preview.nodeRecoveryKeyName).toBeNull();
     expect(preview.taxpayer).toEqual({ legalName: "Earlier venue", taxId: "89890001K" });
     expect(preview.locationName).toBe("Earlier location");
     expect(await readFile(source)).toEqual(sourceBytes);
-    expect(
-      suite.db
-        .all<{ name: string }>(sql`pragma table_info(node_roles)`)
-        .map((column) => column.name),
-    ).not.toContain("break_glass_key_name");
+    expect(suite.node.all(sql`pragma table_info(node_recovery_key)`)).toEqual([]);
     expect(await readdir(scratch)).toEqual(["source.db"]);
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }
 });
 
-it("binds an older bucket copy before private preview migrations change its bytes", async () => {
+it("binds a bucket copy with an older venue schema before private preview migrations change its bytes", async () => {
   const nodeId = "d0000000-0000-4000-8000-000000000001";
   const locationId = "d0000000-0000-4000-8000-000000000002";
   await stampDeployment(suite.db, "preproduction");
@@ -163,6 +188,7 @@ it("binds an older bucket copy before private preview migrations change its byte
         name: "secrets/trading.env",
         bytes: Buffer.from(`WAITRON_NODE_ID=${nodeId}\n`),
       },
+      await migratedNodeDump(scratch),
       { name: "secrets/node-key.enc", bytes: Buffer.from("sealed") },
       { name: "secrets/cluster-id", bytes: Buffer.from("cluster") },
       {
@@ -216,6 +242,15 @@ it("binds an older bucket copy before private preview migrations change its byte
           ...fakeModule("core"),
           migrations: { name: "core", table: "__drizzle_migrations_db", from: "../db/drizzle" },
         },
+        {
+          ...fakeModule("node"),
+          migrations: {
+            name: "node",
+            table: "__drizzle_migrations_node",
+            from: "../node-db/drizzle",
+            database: "node",
+          },
+        },
       ],
       environment: "preproduction",
       litestreamBin: "/unused",
@@ -230,11 +265,7 @@ it("binds an older bucket copy before private preview migrations change its byte
     expect(preview.activationSourceId).toBe(expected);
     expect(preview.nodeRecoveryKeyName).toBeNull();
     expect(await readFile(source)).toEqual(bytes);
-    expect(
-      suite.db
-        .all<{ name: string }>(sql`pragma table_info(node_roles)`)
-        .map((column) => column.name),
-    ).not.toContain("break_glass_key_name");
+    expect(suite.node.all(sql`pragma table_info(node_recovery_key)`)).toEqual([]);
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }

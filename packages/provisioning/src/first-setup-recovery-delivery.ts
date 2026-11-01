@@ -2,6 +2,7 @@ import { isDeepStrictEqual as equal } from "node:util";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
 import { initialSetupFor, type WaitronModule } from "@waitron/module";
+import type { VenueAndNodeHandles } from "@waitron/node-db";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
 import type {
   FirstSetupState,
@@ -353,7 +354,7 @@ export function createFirstSetupRecoveryDelivery(options: Options) {
       });
     },
     install(
-      db: import("@waitron/db").Database,
+      db: VenueAndNodeHandles,
       state: FirstSetupState,
       owner: FirstSetupOwnerAttempt,
       module: string,

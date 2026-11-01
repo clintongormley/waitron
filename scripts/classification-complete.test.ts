@@ -121,8 +121,8 @@ describe("every table is classified exactly once", () => {
   it("discovers the known real tables in each class, at a floor, across the modules", () => {
     expect(classOfTable.get("sales")).toBe("ledger");
     expect(classOfTable.get("tenants")).toBe("state");
-    expect(classOfTable.get("mirror_config")).toBe("local");
-    for (const t of ["sales", "tenants", "mirror_config"])
+    expect(classOfTable.get("join_requests")).toBe("local");
+    for (const t of ["sales", "tenants", "join_requests"])
       expect(allCreatedTables.has(t)).toBe(true);
 
     expect(allCreatedTables.size).toBeGreaterThanOrEqual(77);

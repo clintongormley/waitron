@@ -27,6 +27,13 @@
     ]
   },
   {
+    "name": "node",
+    "table": "__drizzle_migrations_node",
+    "from": "../node-db/drizzle",
+    "database": "node",
+    "appendOnlyTables": []
+  },
+  {
     "name": "catalogue",
     "table": "__drizzle_migrations_catalogue",
     "from": "../catalogue/drizzle",

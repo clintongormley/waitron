@@ -1,9 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import type { Database, Transaction } from "./client.js";
-import { now } from "./schema/columns.js";
 import { deployment } from "./schema/deployment.js";
-import { nodeRoles } from "./schema/node-roles.js";
 import { tableExists } from "./table-exists.js";
 import "./errors.js";
 
@@ -92,141 +90,8 @@ export type DeploymentMode = "primary" | "mirror";
  * `primary` — or sells only. */
 export type SingletonRole = "primary" | "secondary";
 
-/**
- * Both of one node's axes, `mode` and `singleton_role`, from ONE read of that node's row, so the
- * pair is never torn — never the `(mirror, primary)` pair `node_roles_role_valid_ck` forbids. A
- * node with no row, or a database whose migrations have not run, reads as a sole primary: a box
- * between its first migration and its first role write must still sell.
- */
-export async function readDeploymentAxes(
-  db: Database,
-  nodeId: string,
-): Promise<{ mode: DeploymentMode; singletonRole: SingletonRole }> {
-  if (!(await tableExists(db, "node_roles"))) return { mode: "primary", singletonRole: "primary" };
-  const [row] = await db
-    .select({ mode: nodeRoles.mode, singletonRole: nodeRoles.singletonRole })
-    .from(nodeRoles)
-    .where(eq(nodeRoles.nodeId, nodeId));
-  return { mode: row?.mode ?? "primary", singletonRole: row?.singletonRole ?? "primary" };
-}
-
-/** One node's mode; see {@link readDeploymentAxes}. */
-export async function readDeploymentMode(db: Database, nodeId: string): Promise<DeploymentMode> {
-  return (await readDeploymentAxes(db, nodeId)).mode;
-}
-
-/** One node's singleton role; see {@link readDeploymentAxes}. */
-export async function readSingletonRole(db: Database, nodeId: string): Promise<SingletonRole> {
-  return (await readDeploymentAxes(db, nodeId)).singletonRole;
-}
-
-/**
- * Refuses a role write on a database that has not been stamped with its environment. These are
- * promotion primitives: a mis-sequenced adopt or promote that "succeeded" before the stamp would
- * leave a node's role recorded on a database nothing has claimed for an environment.
- */
-async function requireStamp(tx: Transaction): Promise<void> {
+/** Refuses a role write on a database that has not been stamped with its environment. */
+export async function requireStamp(tx: Transaction): Promise<void> {
   const [row] = await tx.select({ id: deployment.id }).from(deployment).where(eq(deployment.id, 1));
   if (row === undefined) throw new AppError("deployment.not_stamped", {});
-}
-
-/** Sets one node's mode, on its own write transaction. See {@link setDeploymentModeTx}. */
-export async function setDeploymentMode(
-  db: Database,
-  nodeId: string,
-  mode: DeploymentMode,
-): Promise<void> {
-  await db.withWriteLock(async () => setDeploymentModeTx(db, nodeId, mode));
-}
-
-/**
- * Sets one node's mode on a caller's transaction, creating the node's row if it has none. `mirror`
- * co-sets `singleton_role = 'secondary'` in the same write, so the pair `node_roles_role_valid_ck`
- * forbids is never written even transiently; `primary` leaves `singleton_role` as it is. Nothing in
- * the database refuses another caller this write. `scripts/write-path-tables.test.ts` flags a
- * `node_roles` write written in one of the statement or builder shapes its `detector` matches, in
- * the production source under each app's and package's `src`, outside this file; its header lists
- * what it cannot see.
- */
-export async function setDeploymentModeTx(
-  tx: Transaction,
-  nodeId: string,
-  mode: DeploymentMode,
-): Promise<void> {
-  await requireStamp(tx);
-  await tx
-    .insert(nodeRoles)
-    .values({ nodeId, mode, singletonRole: mode === "mirror" ? "secondary" : "primary" })
-    .onConflictDoUpdate({
-      target: nodeRoles.nodeId,
-      set:
-        mode === "mirror"
-          ? { mode, singletonRole: "secondary", updatedAt: now() }
-          : { mode, updatedAt: now() },
-    });
-}
-
-/** Sets one node's singleton role, on its own write transaction. See {@link setSingletonRoleTx}. */
-export async function setSingletonRole(
-  db: Database,
-  nodeId: string,
-  role: SingletonRole,
-): Promise<void> {
-  await db.withWriteLock(async () => setSingletonRoleTx(db, nodeId, role));
-}
-
-/** Sets one node's singleton role on a caller's transaction, creating the node's row (mode
- * `primary`) if it has none. `'primary'` on a node whose mode is `mirror` is refused by
- * `node_roles_role_valid_ck`: a promotion flips the mode first. */
-export async function setSingletonRoleTx(
-  tx: Transaction,
-  nodeId: string,
-  role: SingletonRole,
-): Promise<void> {
-  await requireStamp(tx);
-  await tx
-    .insert(nodeRoles)
-    .values({ nodeId, singletonRole: role })
-    .onConflictDoUpdate({
-      target: nodeRoles.nodeId,
-      set: { singletonRole: role, updatedAt: now() },
-    });
-}
-
-export async function readBreakGlassVerifier(
-  db: Database | Transaction,
-  nodeId: string,
-): Promise<string | null> {
-  const [row] = await db
-    .select({ v: nodeRoles.breakGlassVerifier })
-    .from(nodeRoles)
-    .where(eq(nodeRoles.nodeId, nodeId));
-  return row?.v ?? null;
-}
-
-export async function readBreakGlassKeyName(
-  db: Database | Transaction,
-  nodeId: string,
-): Promise<string | null> {
-  const [row] = await db
-    .select({ name: nodeRoles.breakGlassKeyName, verifier: nodeRoles.breakGlassVerifier })
-    .from(nodeRoles)
-    .where(eq(nodeRoles.nodeId, nodeId));
-  return row?.verifier == null ? null : row.name;
-}
-
-export async function setBreakGlassVerifierTx(
-  tx: Transaction,
-  nodeId: string,
-  verifier: string,
-  keyName: string | null = null,
-): Promise<void> {
-  await requireStamp(tx);
-  await tx
-    .insert(nodeRoles)
-    .values({ nodeId, breakGlassVerifier: verifier, breakGlassKeyName: keyName })
-    .onConflictDoUpdate({
-      target: nodeRoles.nodeId,
-      set: { breakGlassVerifier: verifier, breakGlassKeyName: keyName, updatedAt: now() },
-    });
 }

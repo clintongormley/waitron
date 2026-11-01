@@ -25,9 +25,11 @@ interface PlacementInput {
 export async function placeBackupDatabase(
   databasePath: string,
   input: PlacementInput,
+  nodeDump?: Uint8Array,
 ): Promise<void> {
   await restoreDatabase({
     databasePath,
+    ...(nodeDump === undefined ? {} : { nodeDump }),
     venueDir: input.venueDir,
     stateDir: input.stateDir,
     log: input.log,
@@ -66,7 +68,7 @@ export async function placeBackupData(
   });
   loadRecoveryKey(env);
   loadBackupConfig(env, node.locationId);
-  await placeBackupDatabase(validated.databasePath, input);
+  await placeBackupDatabase(validated.databasePath, input, validated.nodeDump);
   await restoreSecrets({
     entries: validated.secretEntries.filter((entry) => entry.name !== "secrets/backup.env"),
     stateDir: input.stateDir,

@@ -246,6 +246,10 @@ const VENUE_ERROR_MESSAGES: Record<string, StringKey> = {
 const ADOPT_ERROR_MESSAGES: Record<string, StringKey> = {
   ...FIRST_SETUP_ERROR_MESSAGES,
   "mirror.bundle_fetch_failed": "shell.adopt.bundle_fetch_failed",
+  "mirror.vault_not_empty": "shell.adopt.vault_not_empty",
+  // A fault in Waitron: the connect screen sends a certificate only from its own read, which the
+  // server has already checked is one authority certificate.
+  "mirror.primary_unconfirmed": "shell.adopt.primary_unconfirmed",
   "password.invalid": "shell.adopt.login_failed",
   "setup.request_invalid": "shell.adopt.request_invalid",
   "setup.not_ready": "shell.not_ready",
@@ -709,6 +713,7 @@ export class SetupApp extends LitElement {
   @state() private venueInvalidField?: string;
 
   @state() private connectError?: Message;
+  @state() private connectErrorAboutLogin = false;
   @state() private connectInvalidField?: ConnectField;
   /** Held only in this tab's memory, to hand back to the connect form with a refusal. */
   @state() private connectRequest?: AdoptBody;
@@ -1043,6 +1048,7 @@ export class SetupApp extends LitElement {
     this.venueInvalidField = undefined;
     this.reviewError = undefined;
     this.connectError = undefined;
+    this.connectErrorAboutLogin = false;
     this.connectInvalidField = undefined;
     this.connectRequest = undefined;
     this.restoreError = undefined;
@@ -1779,6 +1785,7 @@ export class SetupApp extends LitElement {
   async #onAdoptRequested(event: CustomEvent<{ body: AdoptBody }>): Promise<void> {
     event.stopPropagation();
     this.connectError = undefined;
+    this.connectErrorAboutLogin = false;
     this.connectInvalidField = undefined;
     this.connectRequest = undefined;
     this.#clearProvisionOutcome();
@@ -2208,6 +2215,7 @@ export class SetupApp extends LitElement {
       );
       if (this.connectInvalidField === undefined) {
         this.connectError = say(ADOPT_ERROR_MESSAGES[code] ?? "shell.adopt.generic");
+        this.connectErrorAboutLogin = code === "password.invalid";
       }
       this.connectRequest = body;
       this.screen = "connect";
@@ -2769,7 +2777,9 @@ export class SetupApp extends LitElement {
       case "connect":
         return html`<setup-connect-screen
           data-test="screen-connect"
+          .api=${this.api}
           .errorMessage=${this.connectError?.()}
+          .errorAboutLogin=${this.connectErrorAboutLogin}
           .invalidField=${this.connectInvalidField}
           .request=${this.connectRequest}
         ></setup-connect-screen>`;

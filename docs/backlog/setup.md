@@ -543,6 +543,40 @@ the venue folder's own `first-setup-set-aside/` when the two folders are on diff
 filesystems). If they were a venue worth keeping, the app offers no way to put them back: **Recover from backup** takes only a backup file, a bucket copy or
 a Waitron Cloud copy (`apps/server/src/guide/en/backup-recovery.md`, "Choose your copy").
 
+Whatever puts a folder back must open its sealed rows with the key ring stored beside it,
+`<state>/first-setup-set-aside/<stem>/secrets.env` (`keepRingCopy`,
+`packages/provisioning/src/first-setup-start-again-set-aside.ts`, since A947 slice 3a), not the
+box's current `secrets.env`: joining as a spare replaces that whole (`apps/server/src/adopt.ts`),
+and a plain `waitron.sh reset` deletes it. On two filesystems that copy is in the state root's stem
+folder, which the repair page's moved-folder message does not name: it names
+`state/…/<stem>/state` and `venue/…/<stem>` (`movedFolder`, `apps/server/src/recovery-start-again.ts`;
+the message predates the slice).
+
+## A1285: should the staged reset of a stopped join delete `secrets.env`?
+
+Left open by A947 slice 3a. A staged reset of a stopped join keeps `secrets.env` (its list in
+`runStagedReset`, `apps/server/src/reset-request.ts`, leaves it out). That was kept so a Move folder
+sealed under the box's own ring stays readable after an early-stopped join; a join that stopped
+after it replaced `secrets.env` leaves the main box's ring there. Now that the Move keeps its own
+copy (A1143), decide whether the staged reset should delete `secrets.env`.
+
+## A1284: where the environment sets the vault key, a Move or a join leaves a ring that is not the one in use
+
+Left open by A947 slice 3a. Setup mode always writes `secrets.env` with its own key
+(`ensureBoxSecrets`, called from `apps/server/src/boot.ts` in setup mode), and in trading mode a
+non-empty `WAITRON_CREDENTIALS_KEY` in the environment wins over the file
+(`apps/server/src/box-env.ts`). So on such a box a Move copies `secrets.env`, which opens rows
+sealed in setup mode but not rows sealed in trading mode. Measured with the real `ensureBoxSecrets`
+and `loadBoxEnv` in the slice's Task R review. The slice's finish-branch review (2026-11-01) then
+ran both cases in a scratch test with the key set in the environment: after a Move and a join, the
+copied ring opened neither the moved signing key nor the payment credential
+(`credentials.decrypt_failed`); and a join through the real route wrote the main box's ring to
+`secrets.env` (`apps/server/src/adopt.ts`), which the next start ignores, so the spare's new
+signing key failed `credentials.decrypt_failed`. No production box sets the key in the environment
+today (`deploy/` names none); a cloud profile can (`box-env.ts`). Decide whether the Move should
+record the key in use or refuse to copy, and whether a join should refuse before any write when
+the environment's key would hide the ring it receives.
+
 ## A1144: after Keep, the box stays on its page even if the files are later removed by hand
 
 Left open by A1098. A recorded Keep refuses every later start with `setup.start_again_kept`

@@ -46,7 +46,7 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 let fixture: Awaited<ReturnType<typeof stagedHourCrash>> | undefined;
 async function stage(kind: "archive" | "stream") {
-  fixture = await stagedHourCrash(suite.db, kind, "emergency-offline-restore");
+  fixture = await stagedHourCrash(suite, kind, "emergency-offline-restore");
   const originalRecords = await suite.db.select().from(registrosFacturacion);
   expect(originalRecords).toHaveLength(1);
   return { ...fixture, originalRecords };
@@ -141,6 +141,7 @@ it.each(["archive", "stream"] as const)(
   async (kind) => {
     const f = await stage(kind);
     await cp(f.databasePath, join(f.venueDir, "venue.db"));
+    await suite.node.archiveTo(join(f.venueDir, "node.db"));
     await markPlaced(f.stateDir);
     const original = await f.snapshot();
     await expect(f.run()).rejects.toMatchObject({
@@ -180,6 +181,7 @@ it.each(["archive", "stream"] as const)(
     try {
       await runRestoreHooks({
         db: copy.venue,
+        nodeDb: copy.node,
         node: f.node,
         modules: ALL_MODULES,
         log: () => {},

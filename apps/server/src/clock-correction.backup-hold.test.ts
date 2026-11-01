@@ -14,6 +14,7 @@ import { clockCorrection, latestClockStepFor } from "./clock-correction.js";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import type { StorageBackend, StoredObject } from "./storage-backend.js";
+import { STUB_NODE } from "./testing/node-copy.js";
 
 const DAY = 86_400_000;
 const START_MS = Date.parse("2026-09-05T00:00:00.000Z");
@@ -150,6 +151,7 @@ function box(options: { seatFails?: number } = {}) {
     runOnce({
       backends: [backend],
       db: {} as Database,
+      node: STUB_NODE,
       modules: ALL_MODULES,
       environment: "preproduction",
       resolvers: {},

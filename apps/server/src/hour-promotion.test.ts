@@ -5,16 +5,13 @@ import { dirname, join } from "node:path";
 import { eq, sql } from "drizzle-orm";
 import {
   invoiceSeries,
-  tenants,
   locations,
   nodes,
-  readDeploymentMode,
-  readSingletonRole,
-  setDeploymentMode,
   stampDeployment,
-  writeMirrorConfig,
+  tenants,
   withTransaction,
 } from "@waitron/db";
+import { readNodeMode, setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
 import { createFirstSetupCoordinator, readModulePreparationHistory } from "@waitron/provisioning";
@@ -178,9 +175,9 @@ beforeEach(async () => {
     );
   });
   await suite.db.update(invoiceSeries).set({ nextNumber: 123 });
-  await establishNodeIdentity({ ownerDb: suite.db, ring }, standby.nodeId);
-  await setDeploymentMode(suite.db, standby.nodeId, "mirror");
-  key = await mintBreakGlassKey(suite.db, standby.nodeId);
+  await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, standby.nodeId);
+  await setNodeMode({ venue: suite.db, node: suite.node }, standby.nodeId, "mirror");
+  key = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, standby.nodeId);
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
 });
 afterEach(async () => {
@@ -194,6 +191,7 @@ async function service(modules = ALL_MODULES.filter((module) => module.name === 
     stateDir: join(root, "state"),
     venueDir: join(root, "venue"),
     db: suite.db,
+    nodeDb: suite.node,
     node: standby,
     modules,
     credentialKeyRing: TOTP_KEY_RING,
@@ -274,6 +272,7 @@ async function promote(
     promoteMirrorToPrimary(
       {
         db: suite.db,
+        node: suite.node,
         nodeId: standby.nodeId,
         ring,
         modules,
@@ -326,8 +325,8 @@ it.each(["key", "manager"])(
         .filter((row) => row.nodeId === standby.nodeId)
         .map(({ code, purpose, nextNumber }) => ({ code, purpose, nextNumber })),
     ).toEqual(bases.map((base) => ({ ...base, code: `${base.code}-0CNQR`, nextNumber: 1 })));
-    expect(await readDeploymentMode(suite.db, standby.nodeId)).toBe("primary");
-    expect(await readSingletonRole(suite.db, standby.nodeId)).toBe("primary");
+    expect((await readNodeMode(suite.node, standby.nodeId)).mode).toBe("primary");
+    expect((await readNodeMode(suite.node, standby.nodeId)).singletonRole).toBe("primary");
     expect(await promote(s, selected.input, auth)).toMatchObject({ alreadyPrimary: true });
     expect(await rows()).toEqual(after);
     expect(await readFile(join(root, "state/module-preparation-state.json"), "utf8")).not.toContain(
@@ -447,7 +446,7 @@ it.each(["standard", "full", "rectificative"])(
       params: { reason: "series_configuration_unsupported" },
     });
     expect(await rows()).toEqual(before);
-    expect(await readDeploymentMode(suite.db, standby.nodeId)).toBe("mirror");
+    expect((await readNodeMode(suite.node, standby.nodeId)).mode).toBe("mirror");
     expect(
       await readModulePreparationHistory(
         { stateDir: join(root, "state"), venueDir: join(root, "venue") },
@@ -469,6 +468,7 @@ it("never counts a browser on the box itself as the promotion's second clock", a
     const app = new Hono();
     mountPromoteApi(app, {
       appDb: suite.db,
+      nodeDb: suite.node,
       nodeId: standby.nodeId,
       credentialKeyRing: TOTP_KEY_RING,
       nodePreparation: s,
@@ -523,6 +523,7 @@ it("serves clock, selection and authenticated promotion through the management r
   const app = new Hono();
   mountPromoteApi(app, {
     appDb: suite.db,
+    nodeDb: suite.node,
     nodeId: standby.nodeId,
     credentialKeyRing: TOTP_KEY_RING,
     modules: ALL_MODULES.filter((module) => module.name === binding.module),
@@ -531,6 +532,7 @@ it("serves clock, selection and authenticated promotion through the management r
       const result = await promoteMirrorToPrimary(
         {
           db: suite.db,
+          node: suite.node,
           nodeId: standby.nodeId,
           ring,
           modules: ALL_MODULES.filter((module) => module.name === binding.module),
@@ -673,6 +675,7 @@ it("a key-only operation service refuses administrator credentials without a cre
     stateDir: join(root, "state"),
     venueDir: join(root, "venue"),
     db: suite.db,
+    nodeDb: suite.node,
     node: standby,
     modules: ALL_MODULES,
     coordinator: createFirstSetupCoordinator(),
@@ -694,7 +697,7 @@ it("invalidates an earlier comparison when the named recovery key changes", asyn
   const s = await service();
   await admit(s);
   await compare(s);
-  key = await mintBreakGlassKey(suite.db, standby.nodeId);
+  key = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, standby.nodeId);
   await expect(
     s.prepare(
       binding,
@@ -726,7 +729,7 @@ it("the real mirror boot serves preparation over verified HTTPS and promotes the
   const s = await service();
   await admit(s);
   const stateDir = join(root, "state");
-  await writeMirrorConfig(suite.db, standby.nodeId, {
+  await writeMirrorLink(suite.node, standby.nodeId, {
     relayUrl: "https://127.0.0.1:1/",
     boxHostname: "box.test",
     boxCaPem: "unused-ca",
@@ -805,7 +808,7 @@ it("the real mirror boot serves preparation over verified HTTPS and promotes the
     kill.mockRestore();
   }
   expect((await rows()).allocations).toHaveLength(2);
-  expect(await readDeploymentMode(suite.db, standby.nodeId)).toBe("primary");
+  expect((await readNodeMode(suite.node, standby.nodeId)).mode).toBe("primary");
 }, 120_000);
 
 it.each(["key", "manager"])(
@@ -826,7 +829,7 @@ it.each(["key", "manager"])(
       { onBox: true },
     )) as { input: unknown };
     expect(selected).toMatchObject({ identity: "0CNQR" });
-    await writeMirrorConfig(suite.db, standby.nodeId, {
+    await writeMirrorLink(suite.node, standby.nodeId, {
       relayUrl: "https://127.0.0.1:1/",
       boxHostname: "box.test",
       boxCaPem: "unused-ca",
@@ -938,8 +941,8 @@ it.each(["key", "manager"])(
       expect(kill).not.toHaveBeenCalled();
       expect(await rows()).toEqual(before);
       expect(await readFile(join(stateDir, "module-preparation-state.json"), "utf8")).toBe(journal);
-      expect(await readDeploymentMode(suite.db, standby.nodeId)).toBe("primary");
-      expect(await readSingletonRole(suite.db, standby.nodeId)).toBe("primary");
+      expect((await readNodeMode(suite.node, standby.nodeId)).mode).toBe("primary");
+      expect((await readNodeMode(suite.node, standby.nodeId)).singletonRole).toBe("primary");
     } finally {
       await agent?.close();
       await server?.close();
@@ -962,7 +965,11 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
     coordinator: createFirstSetupCoordinator(),
     environment: {},
   };
-  const reserving = createNodeOperationPreparation({ ...options, db: suite.db });
+  const reserving = createNodeOperationPreparation({
+    ...options,
+    db: suite.db,
+    nodeDb: suite.node,
+  });
   let state: unknown;
   await reserving.withOperation(
     { binding: held, input: { kind: "hour-dormant", version: 1 } },
@@ -1019,7 +1026,7 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
     series: await spare.db.select().from(invoiceSeries),
     sif: await spare.db.select().from(registroSif),
   };
-  const s = createNodeOperationPreparation({ ...options, db: spare.db });
+  const s = createNodeOperationPreparation({ ...options, db: spare.db, nodeDb: spare.node });
   const operation = { binding: { ...held, action: "establish" }, input: state };
   const endorsement = endorseKey(
     identity.nodeId,
@@ -1030,7 +1037,7 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
   const establish = () =>
     s.withOperation(operation, credentials, {}, (modules, moduleOperations) =>
       establishReservedStandbyIdentity(
-        { ownerDb: spare.db, ring },
+        { ownerDb: spare.db },
         {
           locationId: target.locationId,
           standby: identity,
@@ -1116,6 +1123,7 @@ it.each(["identity", "allocation-id", "bases", "purpose", "approval", "binding"]
               promoteMirrorToPrimary(
                 {
                   db: suite.db,
+                  node: suite.node,
                   nodeId: standby.nodeId,
                   ring,
                   modules,
@@ -1130,7 +1138,7 @@ it.each(["identity", "allocation-id", "bases", "purpose", "approval", "binding"]
         : promote(s, input),
     ).rejects.toMatchObject({ code: "sif.allocation_invalid" });
     expect(await rows()).toEqual(before);
-    expect(await readDeploymentMode(suite.db, standby.nodeId)).toBe("mirror");
+    expect((await readNodeMode(suite.node, standby.nodeId)).mode).toBe("mirror");
   },
 );
 
@@ -1183,6 +1191,7 @@ it.each(["database", "node"])(
           runner(
             {
               db: fault === "database" ? spare.db : suite.db,
+              nodeDb: fault === "database" ? spare.node : suite.node,
               node: fault === "node" ? primary : standby,
             },
             async () => "unexpected",
@@ -1258,7 +1267,7 @@ it("refuses a recovery key rotated while a comparison is in flight", async () =>
   const before = await readFile(join(root, "state/module-preparation-state.json"), "utf8");
   const pending = compare(s);
   await started;
-  key = await mintBreakGlassKey(suite.db, standby.nodeId);
+  key = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, standby.nodeId);
   const refused = expect(pending).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
   release();
   await refused;

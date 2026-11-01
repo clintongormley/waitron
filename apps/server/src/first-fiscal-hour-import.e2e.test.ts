@@ -169,7 +169,7 @@ async function configurationArtifact() {
     },
     selected,
     new Date("2026-10-15T12:00:00Z"),
-    await schemaVersionsByModule(source.db, selected),
+    await schemaVersionsByModule({ venue: source.db, node: source.node }, selected),
   );
   for (const name of [
     "invoice_series",

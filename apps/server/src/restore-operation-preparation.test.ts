@@ -80,6 +80,7 @@ it("collects outside evidence before restore hooks open their write transaction"
   const result = await withOperationAuthority(binding, ADMIN, (authority) =>
     runRestoreHooks({
       db: suite.db,
+      nodeDb: suite.node,
       modules: [module],
       node: target,
       log: noopLog,
@@ -105,6 +106,7 @@ it("leaves restore rows unchanged when the outside source refuses", async () => 
     await expect(
       runRestoreHooks({
         db: suite.db,
+        nodeDb: suite.node,
         modules: [module],
         node: target,
         log: noopLog,
@@ -146,6 +148,7 @@ it("names the expired earlier module when a later hook finishes", async () => {
   await withOperationAuthority(binding, ADMIN, async (authority) => {
     attempt = runRestoreHooks({
       db: suite.db,
+      nodeDb: suite.node,
       modules: [first, later],
       node: target,
       log: noopLog,
@@ -193,6 +196,7 @@ it("rolls back hook writes when authority expires while a hook awaits", async ()
   await withOperationAuthority(binding, ADMIN, async (authority) => {
     attempt = runRestoreHooks({
       db: suite.db,
+      nodeDb: suite.node,
       modules: [module, later],
       node: target,
       log: noopLog,

@@ -1,11 +1,19 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTransaction, type Database } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  withNodeTransaction,
+  withTransaction,
+  type Database,
+  type NodeDatabase,
+} from "@waitron/db";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { hasCode } from "@waitron/shared";
 import { aadFor, seal } from "./cipher.js";
 import { loadKeyRing } from "./keyring.js";
 import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
 import { tenantCredentials } from "./schema/tenant-credentials.js";
+import { readNodeSigningKey, sealNodeSigningKeyTx } from "./node-signing-key.js";
 import { getCredential, putCredential, rotateCredentials } from "./store.js";
 import { captured } from "./testing/captured.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -32,7 +40,12 @@ const STRIPE = {
   cancelUrl: "https://example.test/no",
 };
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
+});
+
+const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const SIGNING_KEY = "MC4CAQAwBQYDK2VwBCIEIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
 /** Rotation enumerates the whole vault, so each case starts with an empty credential table. */
 beforeEach(async () => {
@@ -187,5 +200,55 @@ describe("rotateCredentials", () => {
     const result = await rotateCredentials(deletingDb, RING_BOTH);
     expect(transactions).toBe(2);
     expect(result).toEqual({ rotated: 0, alreadyCurrent: 0 });
+  });
+
+  it("rotation re-seals the signing key, and it opens once the previous key is dropped", async () => {
+    await withNodeTransaction(suite.node, (tx) =>
+      sealNodeSigningKeyTx(tx, RING_V1, NODE, SIGNING_KEY),
+    );
+
+    const result = await rotateCredentials(suite.db, RING_BOTH, suite.node);
+    expect(result).toEqual({ rotated: 1, alreadyCurrent: 0 });
+    expect(suite.node.all(sql`select key_version from node_signing_key`)).toEqual([
+      { key_version: 2 },
+    ]);
+    expect(await readNodeSigningKey(suite.node, RING_V2_ONLY, NODE)).toBe(SIGNING_KEY);
+
+    const again = await rotateCredentials(suite.db, RING_BOTH, suite.node);
+    expect(again).toEqual({ rotated: 0, alreadyCurrent: 1 });
+  });
+
+  it("leaves the signing key alone when no node handle is given", async () => {
+    await withNodeTransaction(suite.node, (tx) =>
+      sealNodeSigningKeyTx(tx, RING_V1, NODE, SIGNING_KEY),
+    );
+    expect(await rotateCredentials(suite.db, RING_BOTH)).toEqual({ rotated: 0, alreadyCurrent: 0 });
+    expect(suite.node.all(sql`select key_version from node_signing_key`)).toEqual([
+      { key_version: 1 },
+    ]);
+  });
+
+  it("does not count a signing key deleted between the listing and its re-seal", async () => {
+    await withNodeTransaction(suite.node, (tx) =>
+      sealNodeSigningKeyTx(tx, RING_V1, NODE, SIGNING_KEY),
+    );
+    const node = suite.node;
+    // The listing takes no write lock, so the first `withWriteLock` is the row's re-seal; the
+    // delete commits on `target` before that lock is taken.
+    const deletingNode = new Proxy(node, {
+      get(target, property, receiver) {
+        if (property !== "withWriteLock") return Reflect.get(target, property, receiver) as unknown;
+        const withWriteLock: NodeDatabase["withWriteLock"] = async (body) => {
+          target.run(sql`delete from node_signing_key`);
+          return target.withWriteLock(body);
+        };
+        return withWriteLock;
+      },
+    });
+
+    expect(await rotateCredentials(suite.db, RING_BOTH, deletingNode)).toEqual({
+      rotated: 0,
+      alreadyCurrent: 0,
+    });
   });
 });

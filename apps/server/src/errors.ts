@@ -141,9 +141,10 @@ declare module "@waitron/shared" {
     /** No node with this id. The id is a caller-supplied uuid, not a secret. */
     "node.not_found": { id: string };
     /**
-     * A write reached a node running as a read-only MIRROR (`node_roles.mode = 'mirror'`): the
-     * read-only gate (`read-only-gate.ts`) refuses every non-GET, and the invoice customer search
-     * and download refuse their GETs too. Cleared by promotion, read live.
+     * A write reached a node running as a read-only MIRROR (node.db's
+     * `node_mode.mode = 'mirror'`): the read-only gate (`read-only-gate.ts`) refuses every non-GET,
+     * and the invoice customer search and download refuse their GETs too. Cleared by promotion,
+     * read live.
      */
     "node.read_only": Record<string, never>;
     /**
@@ -1133,6 +1134,17 @@ declare module "@waitron/shared" {
      */
     "mirror.bundle_fetch_failed": Record<string, never>;
     /**
+     * A box joining as a spare already holds a sealed vault row. Joining replaces its key ring with
+     * the main box's, so that row would never open again; nothing has been written.
+     */
+    "mirror.vault_not_empty": Record<string, never>;
+    /**
+     * A spare was asked to join a main box over https before the person confirmed that box's
+     * authority certificate, or with something other than one authority certificate as the
+     * confirmed one; nothing was sent.
+     */
+    "mirror.primary_unconfirmed": Record<string, never>;
+    /**
      * The membership document could not be written because every read-mint-write round lost its
      * term race. The mirror-bundle adopt handshake refuses rather than force a write that would drop
      * the winner's node from the chart; transient, so the caller retries. `attempts` is the round
@@ -1140,6 +1152,14 @@ declare module "@waitron/shared" {
      * clearance (`clearRemovedMachine`) raise it the same way.
      */
     "membership.write_contended": { attempts: number };
+    /**
+     * The chart this box holds is too broken to read (`malformed`), or vouched for by no key it
+     * stores itself (its own, or the main box's it pinned). The first comes only from a fault; the
+     * second also from a Cloud peer, or, in a venue of three or more boxes after two promotions, a
+     * main box that no key this box trusts vouched for, which the backlog records. Screens show the
+     * generic text.
+     */
+    "membership.held_untrusted": { reason: VerifyFailure };
     /**
      * An admin asked to remove or clear a machine this node's held membership chart lists neither
      * among its machines nor as cleared, or no chart is held.

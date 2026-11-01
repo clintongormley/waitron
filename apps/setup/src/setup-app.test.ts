@@ -48,13 +48,20 @@ function stubApi(overrides: Partial<Record<keyof SetupApi, unknown>> = {}): Setu
     stageConfiguration: vi.fn(),
     runFiscalTest: vi.fn().mockResolvedValue({ status: "accepted" }),
     resetIncompleteAdopt: vi.fn().mockResolvedValue({ resetStaged: true, restarting: true }),
+    primaryCertificate: vi.fn().mockResolvedValue(PRIMARY_CERTIFICATE),
     ...overrides,
   } as unknown as SetupApi;
 }
 
+const PRIMARY_CERTIFICATE = {
+  pem: "-----BEGIN CERTIFICATE-----\nAUTHORITY-X\n-----END CERTIFICATE-----\n",
+  fingerprint256: "3F:A1:9C:0B",
+};
+
 const adoptBody = {
   primaryUrl: "https://waitron.local",
   credential: { personId: "op-1", password: "correct horse" },
+  confirmedCaPem: PRIMARY_CERTIFICATE.pem,
 };
 
 async function mountSetupApp(api: SetupApi = stubApi()): Promise<SetupApp> {
@@ -1717,6 +1724,33 @@ describe("setup-app", () => {
   );
 
   it.each([
+    [
+      "en-GB",
+      "This server already holds saved keys for other services, and joining would make them unreadable for good. Nothing was changed. Starting again on this server would set those keys aside or delete them, with the rest of its restaurant files; to keep them, leave this server as it is.",
+    ],
+    [
+      "es-ES",
+      "Este servidor ya guarda claves de otros servicios y, al unirlo, dejarían de poder leerse para siempre. No se ha cambiado nada. Empezar de nuevo en este servidor apartaría o borraría esas claves junto con el resto de sus archivos del restaurante; para conservarlas, deja este servidor como está.",
+    ],
+  ] as const)(
+    "says a server holding saved keys cannot join, and what starting again would do (%s)",
+    async (locale, sentence) => {
+      try {
+        const adopt = vi
+          .fn()
+          .mockRejectedValue({ code: "mirror.vault_not_empty", params: {}, status: 409 });
+        const el = await mountSetupApp(stubApi({ adopt }));
+        setLocale(locale);
+        adoptRequest(el);
+        await flush(el);
+        expect(await bottomOf(await screenHost(el, "connect"))).toBe(sentence);
+      } finally {
+        setLocale("en-GB");
+      }
+    },
+  );
+
+  it.each([
     ["mirror.primary_url_invalid", {}, "primaryUrl", "Check the primary server address."],
     [
       "setup.request_invalid",
@@ -1743,7 +1777,7 @@ describe("setup-app", () => {
       "Check the authenticator code (if required).",
     ],
   ])(
-    "sends the adopt refusal %s %o back to connect under its field, leaving Connect working",
+    "sends the adopt refusal %s %o back to connect under its field, leaving its button working",
     async (code, params, field, message) => {
       const adopt = vi.fn().mockRejectedValue({ code, params, status: 400 });
       const el = await mountSetupApp(stubApi({ adopt }));
@@ -1753,10 +1787,63 @@ describe("setup-app", () => {
       const input = connect.shadowRoot!.querySelector(`[data-test=${field}]`)!;
       expect(input.getAttribute("error")).toBe(message);
       expect(await bottomOf(connect)).toBe("Correct the highlighted fields to continue.");
-      const button = connect.shadowRoot!.querySelector("[data-test=connect]") as HTMLElement & {
-        disabled: boolean;
-      };
+      const button = connect.shadowRoot!.querySelector(
+        field === "primaryUrl" ? "[data-test=continue]" : "[data-test=connect]",
+      ) as HTMLElement & { disabled: boolean };
       expect(button.disabled).toBe(false);
+    },
+  );
+
+  const UNCONFIRMED = [
+    [
+      "en-GB",
+      "The primary server's certificate wasn't compared, so nothing was sent. This is a fault in Waitron. Check the address and compare the certificate again.",
+    ],
+    [
+      "es-ES",
+      "No se ha comparado el certificado del servidor principal, así que no se ha enviado nada. Es un fallo de Waitron. Revisa la dirección y vuelve a comparar el certificado.",
+    ],
+  ] as const;
+
+  it.each(UNCONFIRMED)(
+    "says an unconfirmed certificate sent nothing and reopens the address step (%s)",
+    async (locale, sentence) => {
+      try {
+        const adopt = vi
+          .fn()
+          .mockRejectedValue({ code: "mirror.primary_unconfirmed", params: {}, status: 409 });
+        const el = await mountSetupApp(stubApi({ adopt }));
+        setLocale(locale);
+        adoptRequest(el, { primaryUrl: adoptBody.primaryUrl, credential: adoptBody.credential });
+        await flush(el);
+        const connect = await screenHost(el, "connect");
+        expect(await bottomOf(connect)).toBe(sentence);
+        expect(connect.shadowRoot!.querySelector("[data-test=continue]")).not.toBeNull();
+        expect(connect.shadowRoot!.querySelector("[data-test=password]")).toBeNull();
+      } finally {
+        setLocale("en-GB");
+      }
+    },
+  );
+
+  it.each(UNCONFIRMED)(
+    "after a compared certificate is refused as unconfirmed, names only what the login step offers (%s)",
+    async (locale, sentence) => {
+      try {
+        const adopt = vi
+          .fn()
+          .mockRejectedValue({ code: "mirror.primary_unconfirmed", params: {}, status: 409 });
+        const el = await mountSetupApp(stubApi({ adopt }));
+        setLocale(locale);
+        adoptRequest(el, adoptBody);
+        await flush(el);
+        const connect = await screenHost(el, "connect");
+        expect(await bottomOf(connect)).toBe(sentence);
+        expect(connect.shadowRoot!.querySelector("[data-test=continue]")).toBeNull();
+        expect(connect.shadowRoot!.querySelector("[data-test=check-address]")).not.toBeNull();
+      } finally {
+        setLocale("en-GB");
+      }
     },
   );
 
@@ -1895,12 +1982,20 @@ describe("setup-app", () => {
         .shadowRoot!.querySelector(`[data-test=${field}]`)!
         .shadowRoot!.querySelector("input")!;
 
-    /** Types every field through the real inputs and presses Connect. */
+    /** Types the address, confirms the fingerprint, types the login and presses Connect. */
     async function typeAndConnect(el: SetupApp): Promise<void> {
       goto(el, "connect");
       await el.updateComplete;
       const connect = await screenHost(el, "connect");
-      for (const [field, value] of Object.entries(TYPED)) {
+      const { primaryUrl, ...login } = TYPED;
+      await userEvent.fill(input(connect, "primaryUrl"), primaryUrl);
+      connect.shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
+      await vi.waitFor(() =>
+        expect(connect.shadowRoot!.querySelector("[data-test=matches]")).not.toBeNull(),
+      );
+      connect.shadowRoot!.querySelector<HTMLElement>("[data-test=matches]")!.click();
+      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      for (const [field, value] of Object.entries(login)) {
         await userEvent.fill(input(connect, field), value);
       }
       connect.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!.click();
@@ -1910,6 +2005,7 @@ describe("setup-app", () => {
     const sentBody = {
       primaryUrl: "https://primary.example",
       credential: { personId: "op-7", password: "  kept secret ", totp: "123456" },
+      confirmedCaPem: PRIMARY_CERTIFICATE.pem,
     };
 
     it.each([
@@ -1964,6 +2060,119 @@ describe("setup-app", () => {
         "Check the admin password.",
       );
       expect(input(connect, "password").value).toBe(TYPED.password);
+    });
+
+    const OTHER_CERTIFICATE = {
+      pem: "-----BEGIN CERTIFICATE-----\nAUTHORITY-B\n-----END CERTIFICATE-----\n",
+      fingerprint256: "B0:B1:B2:B3",
+    };
+
+    const button = (connect: HTMLElement, name: string) =>
+      connect.shadowRoot!.querySelector<HTMLElement>(`[data-test=${name}]`);
+
+    it("pairs an address edited while its certificate is read only with its own certificate", async () => {
+      const answers: Array<(value: unknown) => void> = [];
+      const primaryCertificate = vi.fn(() => new Promise((resolve) => answers.push(resolve)));
+      const adopt = vi.fn().mockResolvedValue({ adopted: true, restarting: true });
+      const el = await mountSetupApp(stubApi({ adopt, primaryCertificate }));
+      goto(el, "connect");
+      await el.updateComplete;
+      const connect = await screenHost(el, "connect");
+      await userEvent.fill(input(connect, "primaryUrl"), "https://a.example");
+      button(connect, "continue")!.click();
+      await userEvent.fill(input(connect, "primaryUrl"), "https://b.example");
+      answers[0]!(PRIMARY_CERTIFICATE);
+      await flush(el);
+      expect(button(connect, "matches")).toBeNull();
+      expect(input(connect, "primaryUrl").value).toBe("https://b.example");
+
+      button(connect, "continue")!.click();
+      expect(primaryCertificate).toHaveBeenLastCalledWith("https://b.example");
+      answers[1]!(OTHER_CERTIFICATE);
+      await vi.waitFor(() => expect(button(connect, "matches")).not.toBeNull());
+      expect(
+        connect.shadowRoot!.querySelector("[data-test=fingerprint]")!.textContent!.trim(),
+      ).toBe(OTHER_CERTIFICATE.fingerprint256);
+      button(connect, "matches")!.click();
+      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      await userEvent.fill(input(connect, "personId"), "op-1");
+      await userEvent.fill(input(connect, "password"), "pw");
+      button(connect, "connect")!.click();
+      await flush(el);
+      expect(adopt).toHaveBeenCalledExactlyOnceWith({
+        primaryUrl: "https://b.example",
+        credential: { personId: "op-1", password: "pw" },
+        confirmedCaPem: OTHER_CERTIFICATE.pem,
+      });
+    });
+
+    it("after a join refused at the main box's certificate, lets the person correct the address and compare again", async () => {
+      const adopt = vi
+        .fn()
+        .mockRejectedValueOnce({ code: "mirror.bundle_fetch_failed", params: {}, status: 502 })
+        .mockResolvedValue({ adopted: true, restarting: true });
+      const primaryCertificate = vi
+        .fn()
+        .mockResolvedValueOnce(PRIMARY_CERTIFICATE)
+        .mockResolvedValueOnce(OTHER_CERTIFICATE);
+      const el = await mountSetupApp(stubApi({ adopt, primaryCertificate }));
+      await typeAndConnect(el);
+      const connect = await screenHost(el, "connect");
+      expect(await bottomOf(connect)).toContain("Check that the address is");
+      expect(button(connect, "check-address")!.textContent!.trim()).toBe("Check the address");
+
+      button(connect, "check-address")!.click();
+      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      expect(input(connect, "primaryUrl").readOnly).toBe(false);
+      await userEvent.fill(input(connect, "primaryUrl"), "https://main.example");
+      button(connect, "continue")!.click();
+      await vi.waitFor(() => expect(button(connect, "matches")).not.toBeNull());
+      expect(primaryCertificate).toHaveBeenLastCalledWith("https://main.example");
+      button(connect, "matches")!.click();
+      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      expect(input(connect, "personId").value).toBe(TYPED.personId);
+      await userEvent.fill(input(connect, "totp"), "654321");
+      button(connect, "connect")!.click();
+      await flush(el);
+      expect(adopt).toHaveBeenLastCalledWith({
+        primaryUrl: "https://main.example",
+        credential: { ...sentBody.credential, totp: "654321" },
+        confirmedCaPem: OTHER_CERTIFICATE.pem,
+      });
+    });
+
+    it("after a join refused at the login, drops the login's message once the person goes back to the address", async () => {
+      const adopt = vi
+        .fn()
+        .mockRejectedValue({ code: "password.invalid", params: {}, status: 401 });
+      const el = await mountSetupApp(stubApi({ adopt }));
+      await typeAndConnect(el);
+      const connect = await screenHost(el, "connect");
+      expect(await bottomOf(connect)).toContain("The login failed.");
+      button(connect, "check-address")!.click();
+      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      expect(input(connect, "primaryUrl").readOnly).toBe(false);
+      expect(await bottomOf(connect)).toBe("");
+    });
+
+    it("after a join refused for its address, reopens the address step marked and editable, and reads the corrected one", async () => {
+      const adopt = vi
+        .fn()
+        .mockRejectedValue({ code: "mirror.primary_url_invalid", params: {}, status: 400 });
+      const primaryCertificate = vi.fn().mockResolvedValue(PRIMARY_CERTIFICATE);
+      const el = await mountSetupApp(stubApi({ adopt, primaryCertificate }));
+      await typeAndConnect(el);
+      const connect = await screenHost(el, "connect");
+      expect(
+        connect.shadowRoot!.querySelector("[data-test=primaryUrl]")!.getAttribute("error"),
+      ).toBe("Check the primary server address.");
+      expect(input(connect, "primaryUrl").readOnly).toBe(false);
+      expect(button(connect, "connect")).toBeNull();
+
+      await userEvent.fill(input(connect, "primaryUrl"), "https://main.example");
+      button(connect, "continue")!.click();
+      await vi.waitFor(() => expect(primaryCertificate).toHaveBeenCalledTimes(2));
+      expect(primaryCertificate).toHaveBeenLastCalledWith("https://main.example");
     });
 
     // Owner rule (C95): a refused login must not say whether the person exists, so it marks no
@@ -2067,8 +2276,9 @@ describe("setup-app", () => {
       goto(el, "connect");
       await el.updateComplete;
       const connect = await screenHost(el, "connect");
-      for (const field of Object.keys(TYPED)) {
-        expect(input(connect, field).value).toBe("");
+      expect(input(connect, "primaryUrl").value).toBe("");
+      for (const field of ["personId", "password", "totp"]) {
+        expect(connect.shadowRoot!.querySelector(`[data-test=${field}]`)).toBeNull();
       }
     });
   });

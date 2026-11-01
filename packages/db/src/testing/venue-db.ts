@@ -4,8 +4,13 @@ import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll } from "vitest";
 import { installAppendOnlyTriggers } from "@waitron/store";
-import { openVenueDatabase, type Database, type VenueDatabase } from "../client.js";
-import { runMigrations, type MigrationOptions } from "../migrate.js";
+import {
+  openVenueDatabase,
+  type Database,
+  type NodeDatabase,
+  type VenueDatabase,
+} from "../client.js";
+import { runMigrations, type MigrationDatabase, type MigrationOptions } from "../migrate.js";
 import { assertSafeIdentifier } from "./identifiers.js";
 
 // Captured at load so a suite's `vi.useFakeTimers()` cannot replace it and stall the hook below.
@@ -21,6 +26,8 @@ const DEFAULT_SETUP_TIMEOUT_MS = 60_000;
  */
 export type VenueMigrationSet = MigrationOptions & {
   readonly appendOnlyTables?: readonly string[];
+  /** `"node"` applies the set to the node handle, as `applyMigrations` does; absent means venue. */
+  readonly database?: MigrationDatabase;
 };
 
 export interface VenueDbOptions {
@@ -42,8 +49,10 @@ export interface VenueDbOptions {
 }
 
 export interface VenueDb {
-  /** The migrated database. Throws if read before `beforeAll` has run. */
+  /** The migrated venue database. Throws if read before `beforeAll` has run. */
   readonly db: Database;
+  /** The node file, holding the sets marked `database: "node"`. Throws as `db` does. */
+  readonly node: NodeDatabase;
 }
 
 /**
@@ -161,8 +170,9 @@ async function applyReset(db: Database, plan: ResetPlan): Promise<void> {
  * {@link openVenueDatabase}, so a suite's handle is the one the product's own opener hands out: the
  * write-ahead mode, the file locking, the pragmas and the per-file write queue included.
  *
- * **Every migration set is applied to the VENUE handle, and the node file stays empty**, as
- * `applyMigrations` does (`packages/migrations/src/apply.ts`).
+ * **Each migration set is applied to the handle its `database` names, the venue one when it names
+ * none**, as `applyMigrations` does (`packages/migrations/src/apply.ts`), and the per-test reset
+ * empties both files.
  *
  * The accessor throws rather than returning `undefined` when read before `beforeAll` has run, since
  * `undefined` turns a setup failure into `Cannot read properties of undefined` two frames from the
@@ -174,7 +184,9 @@ export function useVenueDb(options: VenueDbOptions): VenueDb {
   let directory: string | undefined;
   let store: VenueDatabase | undefined;
   let db: Database | undefined;
+  let node: NodeDatabase | undefined;
   let resetPlan: ResetPlan | undefined;
+  let nodeResetPlan: ResetPlan | undefined;
   const resetPerTest = options.resetPerTest ?? true;
 
   // The directory and the store are each assigned the instant they exist, BEFORE migrations or
@@ -183,16 +195,25 @@ export function useVenueDb(options: VenueDbOptions): VenueDb {
     directory = await mkdtemp(join(tmpdir(), "waitron-venue-db-"));
     store = await openVenueDatabase(directory);
     db = store.venue;
-    for (const migrations of options.migrations) await applyMigrationSet(db, migrations);
+    node = store.node;
+    for (const migrations of options.migrations) {
+      if (migrations.database === "node") await runMigrations(node, migrations);
+      else await applyMigrationSet(db, migrations);
+    }
     if (options.setup !== undefined) await options.setup(db);
     // After setup so a fake backend's tables are in the delete set; the plan records only names and
     // trigger text, so setup's own seeded rows do not affect it.
-    if (resetPerTest) resetPlan = buildResetPlan(db);
+    if (resetPerTest) {
+      resetPlan = buildResetPlan(db);
+      nodeResetPlan = buildResetPlan(node);
+    }
   }, options.timeoutMs ?? DEFAULT_SETUP_TIMEOUT_MS);
 
   afterEach(async () => {
     if (resetPerTest && db !== undefined && resetPlan !== undefined)
       await applyReset(db, resetPlan);
+    if (resetPerTest && node !== undefined && nodeResetPlan !== undefined)
+      await applyReset(node, nodeResetPlan);
     // A file of synchronous database work otherwise gives the loop no timer turn, so the venue
     // watchdog kills this worker as frozen once the file outlasts `WATCHDOG_KILL_MS`.
     await new Promise((resolve) => realSetTimeout(resolve, 0));
@@ -205,6 +226,7 @@ export function useVenueDb(options: VenueDbOptions): VenueDb {
     const created = directory;
     store = undefined;
     db = undefined;
+    node = undefined;
     directory = undefined;
     if (opened !== undefined) await opened.close();
     if (created !== undefined) await rm(created, { recursive: true, force: true });
@@ -216,6 +238,12 @@ export function useVenueDb(options: VenueDbOptions): VenueDb {
         throw new Error("test database not started: the accessor was read before beforeAll ran");
       }
       return db;
+    },
+    get node(): NodeDatabase {
+      if (node === undefined) {
+        throw new Error("test database not started: the accessor was read before beforeAll ran");
+      }
+      return node;
     },
   };
 }

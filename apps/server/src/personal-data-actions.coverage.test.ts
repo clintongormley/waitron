@@ -159,7 +159,7 @@ const COLUMNS: Record<string, { readonly in: string[]; readonly out: string[] }>
   },
 };
 
-const ROOT_UNEXPORTED = ["change_log", "mirror_config", "node_membership"];
+const ROOT_UNEXPORTED = ["change_log", "node_membership"];
 
 const tables = Object.values(db).flatMap((value) =>
   is(value, SQLiteTable) ? [getTableConfig(value)] : [],

@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import { ownedHourSetup } from "../test/owned-hour-setup.js";
@@ -933,6 +934,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             ),
           },
           { name: "db.dump", bytes: await readFile(dump) },
+          await nodeDumpEntry(source.store.node, dumpDir),
           {
             name: "secrets/trading.env",
             bytes: Buffer.from(
@@ -1267,6 +1269,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
               ),
             },
             { name: "db.dump", bytes: await readFile(dump) },
+            await nodeDumpEntry(source.store.node, dirname(dump)),
             {
               name: "secrets/secrets.env",
               bytes: Buffer.from(
@@ -1404,6 +1407,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         },
       },
       moduleOverrides: {},
+      primaryPublicKey: "fixture-primary-key",
+      credentialsRing: { key: Buffer.alloc(32, 8).toString("base64"), version: 1 },
+      boxCaKeyPem: "fixture-ca-key",
     };
     const primary = createHttpServer((_req, res) => {
       res.writeHead(200, { "content-type": "application/json" });
@@ -1476,7 +1482,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           { ...sourceIds, sourceOperatorId: exporter!.id },
           modules,
           new Date(),
-          await schemaVersionsByModule(source.store.venue, modules),
+          await schemaVersionsByModule(source.store, modules),
         ),
         PASSPHRASE,
       );
@@ -1594,7 +1600,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           { ...sourceIds, sourceOperatorId: exporter!.id },
           modules,
           new Date(),
-          await schemaVersionsByModule(source.store.venue, modules),
+          await schemaVersionsByModule(source.store, modules),
         ),
         PASSPHRASE,
       );

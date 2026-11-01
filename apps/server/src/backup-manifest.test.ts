@@ -10,6 +10,7 @@ describe("buildManifest", () => {
   it("stamps environment, createdAt, and a version per module", async () => {
     const manifest = await buildManifest({
       db: suite.db,
+      node: suite.node,
       modules: ALL_MODULES,
       environment: "preproduction",
       now: new Date("2026-09-05T00:00:00Z"),

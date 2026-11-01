@@ -5,13 +5,12 @@ import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
-  setDeploymentMode,
-  setSingletonRoleTx,
   stampDeployment,
+  withNodeTransaction,
   withTransaction,
-  writeMirrorConfig,
   writeNodeMembership,
 } from "@waitron/db";
+import { setNodeMode, setSingletonRoleTx, writeMirrorLink } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startManagementSession } from "@waitron/identity";
@@ -59,15 +58,15 @@ for (const state of ["provider", "workforce-only", "disabled"] as const) {
         );
         await stampDeployment(suite.db, "preproduction");
         if (mode === "mirror") {
-          await setDeploymentMode(suite.db, venue.cfg.nodeId, "mirror");
-          await writeMirrorConfig(suite.db, venue.cfg.nodeId, {
+          await setNodeMode({ venue: suite.db, node: suite.node }, venue.cfg.nodeId, "mirror");
+          await writeMirrorLink(suite.node, venue.cfg.nodeId, {
             relayUrl: "https://127.0.0.1:1/",
             boxHostname: "box.test",
             boxCaPem: "unused",
             originNodeId: venue.cfg.nodeId,
           });
         } else if (mode === "secondary")
-          await withTransaction(suite.db, (tx) =>
+          await withNodeTransaction(suite.node, (tx) =>
             setSingletonRoleTx(tx, venue.cfg.nodeId, "secondary"),
           );
         else if (mode === "fenced")

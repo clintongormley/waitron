@@ -8,6 +8,7 @@ import {
   nodes,
   tenants,
 } from "@waitron/db";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
 import { readOperationAuthority, type ModuleOperationInput } from "@waitron/module";
@@ -16,7 +17,9 @@ import { locationId, nodeId } from "@waitron/shared";
 import { withRecoveryModuleOperation } from "./recovery-module-operation.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, NODE_MIGRATIONS],
+});
 const target = {
   locationId: locationId("c0000000-0000-4000-8000-000000000001"),
   nodeId: nodeId("c0000000-0000-4000-8000-000000000002"),
@@ -62,7 +65,7 @@ function module(prepare: import("@waitron/module").ModuleOperationPreparation["p
 }
 
 it("collects for the real node key before opening the host transaction", async () => {
-  const secret = await mintBreakGlassSecret(suite.db, target.nodeId);
+  const secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, target.nodeId);
   const owner = module(async (operation, run) => {
     expect(readOperationAuthority(operation.authority, operation.binding)).toEqual({
       operatorId: { kind: "recovery-key", nodeId: target.nodeId, eventId: binding.eventId },
@@ -72,7 +75,7 @@ it("collects for the real node key before opening the host transaction", async (
   });
   let captured!: ModuleOperationInput;
   const result = await withRecoveryModuleOperation(
-    { db: suite.db, node: target, modules: [owner] },
+    { db: suite.db, nodeDb: suite.node, node: target, modules: [owner] },
     { binding, input, secret },
     async (tx, ready) => {
       captured = ready.get(binding.module)!;
@@ -88,7 +91,7 @@ it("collects for the real node key before opening the host transaction", async (
 });
 
 it("does not consult outside evidence for a wrong recovery key", async () => {
-  await mintBreakGlassSecret(suite.db, target.nodeId);
+  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, target.nodeId);
   let consulted = false;
   const owner = module(async (operation, run) => {
     consulted = true;
@@ -96,7 +99,7 @@ it("does not consult outside evidence for a wrong recovery key", async () => {
   });
   await expect(
     withRecoveryModuleOperation(
-      { db: suite.db, node: target, modules: [owner] },
+      { db: suite.db, nodeDb: suite.node, node: target, modules: [owner] },
       { binding, input, secret: "wrong-key" },
       async () => "unexpected",
     ),
@@ -105,16 +108,16 @@ it("does not consult outside evidence for a wrong recovery key", async () => {
 });
 
 it("refuses a key replaced while the outside source is being collected", async () => {
-  const secret = await mintBreakGlassSecret(suite.db, target.nodeId);
+  const secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, target.nodeId);
   let replacement = "";
   const owner = module(async (operation, run) => {
-    replacement = await mintBreakGlassSecret(suite.db, target.nodeId);
+    replacement = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, target.nodeId);
     return run(operation);
   });
   let entered = false;
   await expect(
     withRecoveryModuleOperation(
-      { db: suite.db, node: target, modules: [owner] },
+      { db: suite.db, nodeDb: suite.node, node: target, modules: [owner] },
       { binding, input, secret },
       async (tx) => {
         entered = true;
@@ -128,14 +131,14 @@ it("refuses a key replaced while the outside source is being collected", async (
 });
 
 it("keeps outside work and rolls back a refused host write", async () => {
-  const secret = await mintBreakGlassSecret(suite.db, target.nodeId);
+  const secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, target.nodeId);
   const owner = module(async (operation, run) => {
     await withTransaction(suite.db, (tx) => tx.update(locations).set({ name: "outside-retained" }));
     return run(operation);
   });
   await expect(
     withRecoveryModuleOperation(
-      { db: suite.db, node: target, modules: [owner] },
+      { db: suite.db, nodeDb: suite.node, node: target, modules: [owner] },
       { binding, input, secret },
       async (tx) => {
         await tx.update(locations).set({ name: "rolled-back" });
@@ -147,7 +150,7 @@ it("keeps outside work and rolls back a refused host write", async () => {
 });
 
 it("passes only the declared operation scope to an outside source", async () => {
-  const secret = await mintBreakGlassSecret(suite.db, target.nodeId);
+  const secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, target.nodeId);
   let fields: string[] = [];
   const owner = module(async (operation, run) => {
     fields = Object.keys(operation.binding).sort();
@@ -155,7 +158,7 @@ it("passes only the declared operation scope to an outside source", async () => 
   });
   const supplied = { ...binding, password: "synthetic-extra-field" };
   await withRecoveryModuleOperation(
-    { db: suite.db, node: target, modules: [owner] },
+    { db: suite.db, nodeDb: suite.node, node: target, modules: [owner] },
     { binding: supplied, input, secret },
     async () => "done",
   );

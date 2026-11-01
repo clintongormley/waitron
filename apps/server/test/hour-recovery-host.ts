@@ -60,6 +60,7 @@ import { generateNodeKeyPair } from "@waitron/membership";
 import { encodeRecoveryKit, signPointer, writePointer } from "@waitron/stream";
 import { createMemoryObjectStore } from "@waitron/stream/testing/memory-store.js";
 import { sealNodeState, writeSealedStateRow } from "../src/sealed-state.js";
+import { nodeDumpEntry } from "../src/testing/node-copy.js";
 import {
   createFakeTimersHourClock,
   recoverySelectPastWaits,
@@ -114,7 +115,7 @@ beforeEach(async () => {
   }));
   await seedTenants(suite.db);
   await stampDeployment(suite.db, "preproduction");
-  key = await mintBreakGlassKey(suite.db, node.nodeId);
+  key = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, node.nodeId);
   value = null;
   const first = { ...binding, action: "setup", eventId: "original" };
   const setup = createHourPreparation({
@@ -221,6 +222,7 @@ export async function host() {
     node,
     secret: key.secret,
     database: () => suite.db,
+    nodeDatabase: () => suite.node,
     selected,
     readRecoveryFacts: async () => facts,
   };
@@ -277,6 +279,7 @@ export async function archiveHost(kind: "archive" | "stream" = "archive") {
   const f = await host();
   const manifest = await buildManifest({
     db: suite.db,
+    node: suite.node,
     modules: ALL_MODULES,
     environment: "preproduction",
     now: new Date(),
@@ -287,6 +290,7 @@ export async function archiveHost(kind: "archive" | "stream" = "archive") {
     packArchive([
       { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
       { name: "db.dump", bytes: await readFile(database) },
+      await nodeDumpEntry(suite.node, root),
       {
         name: "secrets/trading.env",
         bytes: Buffer.from(`WAITRON_NODE_ID=${node.nodeId}\n`),
@@ -629,6 +633,7 @@ export async function managedHttp(f: Awaited<ReturnType<typeof archiveHost>>) {
     modules: (
       await buildManifest({
         db: suite.db,
+        node: suite.node,
         modules: ALL_MODULES,
         environment: "preproduction",
         now: new Date(),

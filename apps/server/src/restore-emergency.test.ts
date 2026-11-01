@@ -16,9 +16,9 @@ afterEach(async () => {
 it.each(["archive", "stream"] as const)(
   "restores a staged %s with the selected copy's older key and a durably selected current hour",
   async (kind) => {
-    f = await stagedHourRestore(suite.db, kind, "emergency-offline-restore");
+    f = await stagedHourRestore(suite, kind, "emergency-offline-restore");
     const before = f.journal();
-    await mintBreakGlassSecret(suite.db, TENANT_A.nodeId);
+    await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TENANT_A.nodeId);
     const log = vi.fn();
     await expect(f.run(log)).resolves.toBe(true);
     const rows = await f.snapshot();
@@ -58,7 +58,7 @@ it.each(["archive", "stream"] as const)(
   },
 );
 it("rereads the retained selected-hour binding and refuses a changed event before placement", async () => {
-  f = await stagedHourRestore(suite.db, "archive", "emergency-offline-restore");
+  f = await stagedHourRestore(suite, "archive", "emergency-offline-restore");
   const path = join(f.stateDir, "restore-request.json");
   const marker = JSON.parse(await readFile(path, "utf8"));
   marker.recoveryOperation.binding.eventId = "another-recovery";
@@ -75,6 +75,7 @@ it("rereads the retained selected-hour binding and refuses a changed event befor
     params: { reason: "reservation_missing" },
   };
   expect(await readFile(join(f.venueDir, "venue.db"))).toEqual(destination.bytes);
+  expect(await readFile(join(f.venueDir, "node.db"))).toEqual(destination.nodeBytes);
   expect(await f.snapshot()).toEqual(destination.rows);
   expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toBe("untouched identity");
   expect(f.journal()).toBe(journal);

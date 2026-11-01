@@ -1,6 +1,8 @@
 import { lstat } from "node:fs/promises";
 import { join } from "node:path";
+import { getTableName, sql } from "drizzle-orm";
 import { openVenueDatabase } from "@waitron/db";
+import { nodeRecoveryKey } from "@waitron/node-db";
 import { loadKeyRing } from "@waitron/credentials";
 import { AppError } from "@waitron/shared";
 import { loadBoxEnv } from "./box-env.js";
@@ -32,17 +34,9 @@ export async function withFirstSetupPublication<T>(
   const file = await lstat(join(roots.venueDir, "venue.db")).catch(() => null);
   if (file === null || !file.isFile() || file.isSymbolicLink())
     throw new AppError("setup.attempt_uncertain", {});
-  const nodeFile = await lstat(join(roots.venueDir, "node.db")).catch((error: unknown) => {
-    if (
-      typeof error !== "object" ||
-      error === null ||
-      !("code" in error) ||
-      error.code !== "ENOENT"
-    )
-      throw new AppError("setup.attempt_uncertain", {});
-    return null;
-  });
-  if (nodeFile !== null && (!nodeFile.isFile() || nodeFile.isSymbolicLink()))
+  // Opening a missing node.db would create an empty one in its place.
+  const nodeFile = await lstat(join(roots.venueDir, "node.db")).catch(() => null);
+  if (nodeFile === null || !nodeFile.isFile() || nodeFile.isSymbolicLink())
     throw new AppError("setup.attempt_uncertain", {});
   const env = await loadBoxEnv({ ...environment }, roots.stateDir);
   const config = loadConfig(
@@ -56,16 +50,22 @@ export async function withFirstSetupPublication<T>(
   const accountKey = resolveAccountKey({}, ring);
   const opened = await openVenueDatabase(roots.venueDir);
   try {
+    const keyTable = await opened.node.execute(
+      sql`select name from sqlite_schema where type = 'table' and name = ${getTableName(nodeRecoveryKey)}`,
+    );
+    if (keyTable.rows.length === 0) throw new AppError("setup.attempt_uncertain", {});
     const db = opened.venue;
     return await body({
       environment: state.frozen.environment,
       devMode: config.devMode,
       db,
+      node: opened.node,
       ring,
       recoverProvision: (request) => recoverProvisionedVenue(db, request, host.modules),
-      establishIdentity: (nodeId) => establishNodeIdentity({ ownerDb: db, ring }, nodeId),
+      establishIdentity: (nodeId) =>
+        establishNodeIdentity({ ownerDb: db, node: opened.node, ring }, nodeId),
       seedMembership: (nodeId) =>
-        seedTermZeroMembership({ db, ring }, nodeId, config.advertisedOrigin),
+        seedTermZeroMembership({ db, node: opened.node, ring }, nodeId, config.advertisedOrigin),
       persistTrading: async (settings) => {
         await writeTradingEnv(roots.stateDir, {
           ...settings,

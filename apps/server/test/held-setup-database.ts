@@ -85,7 +85,8 @@ export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSet
   const held = await openVenueDatabase(f.roots.venueDir);
   let open = true;
   try {
-    for (const set of TEST_MIGRATIONS) await applyMigrationSet(held.venue, set);
+    for (const set of TEST_MIGRATIONS)
+      await applyMigrationSet(set.database === "node" ? held.node : held.venue, set);
     // A synthetic certificate stands in for the AEAT one, as `first-fiscal-interruption.test.ts` does.
     const modules = ALL_MODULES.map((module) =>
       module.name !== MODULE
@@ -113,6 +114,7 @@ export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSet
     const deps: SetupDeps = {
       environment: "production",
       db: held.venue,
+      node: held.node,
       ring,
       firstFiscal: host,
       provision: (request, beforeTransaction) =>
@@ -133,10 +135,14 @@ export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSet
       recoverProvision: (request) => recoverProvisionedVenue(held.venue, request, host.modules),
       seedDemo: async () => {},
       establishIdentity: async (nodeId) => {
-        await establishNodeIdentity({ ownerDb: held.venue, ring }, nodeId);
+        await establishNodeIdentity({ ownerDb: held.venue, node: held.node, ring }, nodeId);
       },
       seedMembership: async (nodeId) => {
-        await seedTermZeroMembership({ db: held.venue, ring }, nodeId, "https://test.example");
+        await seedTermZeroMembership(
+          { db: held.venue, node: held.node, ring },
+          nodeId,
+          "https://test.example",
+        );
       },
       persistTrading: async (settings) => {
         if (options.tradingSettings === true)

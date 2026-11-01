@@ -1,7 +1,7 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { KeyRing } from "@waitron/credentials";
 import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
@@ -11,8 +11,11 @@ import type { Logger } from "./logger.js";
 
 export interface MembershipRemovalApiDeps {
   db: Database;
+  node: NodeDatabase;
   ring: KeyRing;
   nodeId: string;
+  /** The Servers screen shows it so a joining spare's person can compare it; null without one. */
+  authorityFingerprint: () => Promise<string | null>;
 }
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -51,7 +54,12 @@ export function mountMembershipRemovalApi(
   app.get("/management-api/servers", (c) =>
     run(c, log, async () => {
       await authorize(requireManagementSession(c));
-      return c.json(await listServers(deps.db, deps.nodeId));
+      const listing = await listServers(deps.db, deps.nodeId);
+      return c.json({
+        term: listing.term,
+        authorityFingerprint: await deps.authorityFingerprint(),
+        nodes: listing.nodes,
+      });
     }),
   );
 
@@ -62,7 +70,7 @@ export function mountMembershipRemovalApi(
       const personId = await authorize(requireManagementSession(c));
       const targetNodeId = c.req.param("nodeId");
       const result = await removeUnjoinedStandby(
-        { db: deps.db, ring: deps.ring, nodeId: deps.nodeId, log },
+        { db: deps.db, node: deps.node, ring: deps.ring, nodeId: deps.nodeId, log },
         { targetNodeId, personId },
       );
       return c.json(result);
@@ -73,7 +81,7 @@ export function mountMembershipRemovalApi(
     runClear(c, log, async () => {
       const personId = await authorize(requireManagementSession(c));
       const result = await clearRemovedMachine(
-        { db: deps.db, ring: deps.ring, nodeId: deps.nodeId, log },
+        { db: deps.db, node: deps.node, ring: deps.ring, nodeId: deps.nodeId, log },
         { targetNodeId: c.req.param("nodeId"), personId },
       );
       return c.json(result);

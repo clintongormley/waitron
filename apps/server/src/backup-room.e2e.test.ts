@@ -7,6 +7,7 @@ import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 import type { Database } from "@waitron/db";
+import { STUB_NODE } from "./testing/node-copy.js";
 import { backupArchiveKey } from "./backup-keys.js";
 import { runOnce } from "./backup-sweep.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
@@ -78,6 +79,7 @@ async function runCase(small: SmallDisk, name: string, c: Case) {
       await runOnce({
         backends: [new Counting("box", backupDir)],
         db: {} as Database,
+        node: STUB_NODE,
         modules: [],
         environment: "preproduction",
         resolvers: {},

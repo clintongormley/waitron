@@ -1,4 +1,4 @@
-import { writeNodeMembership, type Database } from "@waitron/db";
+import { writeNodeMembership, type Database, type NodeDatabase } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import { mintNextMembershipDocument } from "./membership-mint.js";
 import "./errors.js";
@@ -9,7 +9,7 @@ import "./errors.js";
  * bump one. `contactUrl` is the node's `advertisedOrigin` — the address tills route on.
  */
 export async function seedTermZeroMembership(
-  deps: { db: Database; ring: KeyRing },
+  deps: { db: Database; node: NodeDatabase; ring: KeyRing },
   nodeId: string,
   contactUrl: string,
 ): Promise<void> {
@@ -17,6 +17,7 @@ export async function seedTermZeroMembership(
     heldDocument: null,
     nodes: [{ nodeId, contactUrl, standing: "serving-primary" }],
     signerNodeId: nodeId,
+    verifyHeld: "none",
   });
   await writeNodeMembership(deps.db, document);
 }

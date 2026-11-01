@@ -3,8 +3,9 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { openBackupQuery } from "@waitron/store";
 import {
   BACKUP_ROOM_NOTE_FILE,
   BACKUP_ROOM_START_DELETED_FILE,
@@ -66,6 +67,7 @@ function codeThrownBy(fn: () => unknown): unknown {
 
 const deps = (over: Partial<SealedStateDeps> = {}): SealedStateDeps => ({
   db: suite.db,
+  node: suite.node,
   nodeId: NODE_ID,
   stateDir,
   modules: ALL_MODULES,
@@ -88,10 +90,12 @@ describe("collectSealedEntries", () => {
       stateDir,
       modules: ALL_MODULES,
       resolvers: {},
+      snapshotNode: async () => Buffer.from("node"),
       manifest: MANIFEST,
     });
     expect(names(entries)).toEqual([
       "manifest.json",
+      "node.dump",
       ...REQUIRED,
       "secrets/backup.env",
       "secrets/modules.json",
@@ -114,9 +118,10 @@ describe("collectSealedEntries with the backup room's files present", () => {
       stateDir,
       modules: ALL_MODULES,
       resolvers: {},
+      snapshotNode: async () => Buffer.from("node"),
       manifest: MANIFEST,
     });
-    expect(names(entries)).toEqual(["manifest.json", ...REQUIRED]);
+    expect(names(entries)).toEqual(["manifest.json", "node.dump", ...REQUIRED]);
   });
 });
 
@@ -192,7 +197,7 @@ describe("createSealedStateRefresher", () => {
     const log = vi.fn();
     expect(await createSealedStateRefresher(deps({ log })).refresh()).toBe("sealed");
     const entries = unsealNodeState((await row())!, KEY);
-    expect(names(entries)).toEqual(["manifest.json", ...REQUIRED]);
+    expect(names(entries)).toEqual(["manifest.json", "node.dump", ...REQUIRED]);
     const manifest = JSON.parse(text(entries, "manifest.json")) as BackupManifest;
     expect(manifest.environment).toBe("preproduction");
     expect(manifest.createdAt).toBe("2026-09-23T10:00:00.000Z");
@@ -201,6 +206,28 @@ describe("createSealedStateRefresher", () => {
     expect(log).toHaveBeenCalledWith("info", "backup.sealed_state_refreshed", {
       entries: entries.length,
     });
+  });
+
+  it("the sealed state carries node.dump", async () => {
+    suite.node.run(sql`create table node_probe (value text)`);
+    try {
+      suite.node.run(sql`insert into node_probe (value) values ('this box')`);
+      expect(await createSealedStateRefresher(deps()).refresh()).toBe("sealed");
+      const entries = unsealNodeState((await row())!, KEY);
+      const copy = join(stateDir, "node.copy");
+      await writeFile(copy, entries.find((e) => e.name === "node.dump")!.bytes);
+      const opened = await openBackupQuery(copy);
+      try {
+        const values = [];
+        for await (const probe of opened.query.rows("select value from node_probe"))
+          values.push(probe.value);
+        expect(values).toEqual(["this box"]);
+      } finally {
+        await opened.close();
+      }
+    } finally {
+      suite.node.run(sql`drop table node_probe`);
+    }
   });
 
   it("replaces the row rather than adding one, and carries each file as it now reads", async () => {
@@ -281,6 +308,35 @@ describe("createSealedStateRefresher", () => {
     await rm(join(stateDir, "secrets.env"));
     await mkdir(join(stateDir, "secrets.env"));
     expect(await refresher.refresh()).toBe("failed");
+    expect(log).toHaveBeenCalledWith("warn", "backup.sealed_state_failed", {
+      errorCode: "unknown",
+      errno: "EISDIR",
+    });
+  });
+
+  it("lets a node copy still writing into its folder finish, then logs the state read's own failure", async () => {
+    const log = vi.fn();
+    let copyFinished = false;
+    const busyCopy = async (path: string): Promise<void> => {
+      for (let part = 0; part < 10; part += 1) {
+        await writeFile(join(dirname(path), `part-${part}`), "x");
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      await writeFile(path, "NODE");
+      copyFinished = true;
+    };
+    const node = new Proxy(suite.node, {
+      get: (target, key) => {
+        if (key === "archiveTo") return busyCopy;
+        const value: unknown = Reflect.get(target, key, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const refresher = createSealedStateRefresher(deps({ log, node }));
+    await rm(join(stateDir, "secrets.env"));
+    await mkdir(join(stateDir, "secrets.env"));
+    expect(await refresher.refresh()).toBe("failed");
+    expect(copyFinished).toBe(true);
     expect(log).toHaveBeenCalledWith("warn", "backup.sealed_state_failed", {
       errorCode: "unknown",
       errno: "EISDIR",
@@ -380,4 +436,105 @@ describe("createSealedStateRefresher", () => {
     const sealedNow = await row();
     expect(codeThrownBy(() => unsealNodeState(sealedNow!, OTHER_KEY))).toBe("nothing thrown");
   }, 20_000);
+
+  it("a burst of requests during a running refresh causes exactly one more refresh", async () => {
+    let releaseFirst!: () => void;
+    const firstHeld = new Promise<void>((resolve) => (releaseFirst = resolve));
+    let reads = 0;
+    const refresher = createSealedStateRefresher(
+      deps({
+        readRecoveryKey: async () => {
+          reads += 1;
+          if (reads === 1) await firstHeld;
+          return KEY;
+        },
+      }),
+    );
+    const first = refresher.refresh();
+    const burst = Array.from({ length: 10 }, () => refresher.refresh());
+    releaseFirst();
+    expect(await first).toBe("sealed");
+    expect(await Promise.all(burst)).toEqual(Array.from({ length: 10 }, () => "sealed"));
+    expect(reads).toBe(2);
+  });
+
+  it("a node change made while a refresh is running is in the final sealed row", async () => {
+    suite.node.run(sql`create table node_probe (value text)`);
+    try {
+      suite.node.run(sql`insert into node_probe (value) values ('before')`);
+      let releaseFirst!: () => void;
+      const firstHeld = new Promise<void>((resolve) => (releaseFirst = resolve));
+      let firstAtWrite!: () => void;
+      const firstWriting = new Promise<void>((resolve) => (firstAtWrite = resolve));
+      let writes = 0;
+      // The first refresh is held as it asks for the row's write lock, after its node snapshot.
+      const db = new Proxy(suite.db, {
+        get(target, prop) {
+          if (prop === "withWriteLock") {
+            return async (work: Parameters<Database["withWriteLock"]>[0]) => {
+              if ((writes += 1) === 1) {
+                firstAtWrite();
+                await firstHeld;
+              }
+              return target.withWriteLock(work);
+            };
+          }
+          const value: unknown = Reflect.get(target, prop, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const refresher = createSealedStateRefresher(deps({ db }));
+      let firstDone = false;
+      const first = refresher.refresh().finally(() => (firstDone = true));
+      await firstWriting;
+      suite.node.run(sql`update node_probe set value = 'during'`);
+      const second = refresher.refresh();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(firstDone).toBe(false);
+      releaseFirst();
+      await Promise.all([first, second]);
+      const entries = unsealNodeState((await row())!, KEY);
+      const copy = join(stateDir, "node.copy");
+      await writeFile(copy, entries.find((e) => e.name === "node.dump")!.bytes);
+      const opened = await openBackupQuery(copy);
+      try {
+        const values = [];
+        for await (const probe of opened.query.rows("select value from node_probe"))
+          values.push(probe.value);
+        expect(values).toEqual(["during"]);
+      } finally {
+        await opened.close();
+      }
+    } finally {
+      suite.node.run(sql`drop table node_probe`);
+    }
+  });
+
+  it("settles its tail only once every queued refresh has finished", async () => {
+    let releaseFirst!: () => void;
+    const firstHeld = new Promise<void>((resolve) => (releaseFirst = resolve));
+    let reads = 0;
+    let finished = 0;
+    const refresher = createSealedStateRefresher(
+      deps({
+        readRecoveryKey: async () => {
+          reads += 1;
+          if (reads === 1) await firstHeld;
+          return KEY;
+        },
+        log: () => {
+          finished += 1;
+        },
+      }),
+    );
+    void refresher.refresh();
+    void refresher.refresh();
+    let settled = false;
+    const tail = refresher.settled().then(() => (settled = true));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(settled).toBe(false);
+    releaseFirst();
+    await tail;
+    expect(finished).toBe(2);
+  });
 });

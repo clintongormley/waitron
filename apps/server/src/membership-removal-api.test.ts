@@ -35,6 +35,8 @@ const RING: KeyRing = loadKeyRing({
 });
 
 const BOX_URL = "https://box.deli.test";
+const FINGERPRINT =
+  "3F:A1:9C:0B:7E:22:D4:51:88:6A:E0:13:BC:47:F9:2D:65:0E:A8:31:DC:74:5B:96:C2:0F:E7:38:41:AD:9B:16";
 const CLOUD_URL = "https://cloud.deli.test";
 
 const suite = useVenueDb({
@@ -55,11 +57,13 @@ interface Primary {
 }
 
 /** A provisioned venue whose node holds its sealed identity key, and an admin's dashboard session. */
-async function primary(): Promise<Primary> {
+async function primary(
+  authorityFingerprint: () => Promise<string | null> = async () => FINGERPRINT,
+): Promise<Primary> {
   const db = suite.db;
   const venue = await setupVenue(db);
   const nodeId = venue.cfg.nodeId;
-  await establishNodeIdentity({ ownerDb: db, ring: RING }, nodeId);
+  await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, nodeId);
   const publicKey = (await readMembershipTrustSet(db))[nodeId]!;
   const { adminPersonId, token } = await withTransaction(db, async (tx) => {
     const rows = tx.all<{ id: string }>(sql`select id from persons where role = 'admin'`);
@@ -70,7 +74,11 @@ async function primary(): Promise<Primary> {
   const lines: Primary["lines"] = [];
   const log: Logger = (level, event, fields) => lines.push({ level, event, fields });
   const app = new Hono();
-  mountMembershipRemovalApi(app, { db, ring: RING, nodeId }, log);
+  mountMembershipRemovalApi(
+    app,
+    { db, node: suite.node, ring: RING, nodeId, authorityFingerprint },
+    log,
+  );
   return {
     db,
     nodeId,
@@ -88,8 +96,8 @@ async function primary(): Promise<Primary> {
 async function holdChart(p: Primary, nodes: readonly MembershipNode[]): Promise<void> {
   const held = await readNodeMembership(p.db);
   const document = await mintNextMembershipDocument(
-    { db: p.db, ring: RING },
-    { heldDocument: held, nodes, signerNodeId: p.nodeId },
+    { db: p.db, node: suite.node, ring: RING },
+    { heldDocument: held, nodes, signerNodeId: p.nodeId, verifyHeld: "none" },
   );
   await writeNodeMembership(p.db, document);
 }
@@ -154,8 +162,8 @@ async function holdChartRevoking(
 ): Promise<void> {
   const held = await readNodeMembership(p.db);
   const document = await mintNextMembershipDocument(
-    { db: p.db, ring: RING },
-    { heldDocument: held, nodes, signerNodeId: p.nodeId, revoked },
+    { db: p.db, node: suite.node, ring: RING },
+    { heldDocument: held, nodes, signerNodeId: p.nodeId, revoked, verifyHeld: "none" },
   );
   await writeNodeMembership(p.db, document);
 }
@@ -768,6 +776,7 @@ describe("GET /management-api/servers", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       term: await heldTerm(p.db),
+      authorityFingerprint: FINGERPRINT,
       nodes: [
         { ...self(p), isSelf: true, removable: false, canClear: false },
         { ...neverJoined, isSelf: false, removable: true, canClear: false },
@@ -849,7 +858,19 @@ describe("GET /management-api/servers", () => {
     const res = await list(p, p.adminCookie);
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ term: null, nodes: [] });
+    expect(await res.json()).toEqual({ term: null, authorityFingerprint: FINGERPRINT, nodes: [] });
+  });
+
+  it("answers this box's authority fingerprint, or null when it serves no authority", async () => {
+    const p = await primary(async () => null);
+    await holdChart(p, [self(p)]);
+
+    const res = await list(p, p.adminCookie);
+
+    expect(res.status).toBe(200);
+    expect(
+      ((await res.json()) as { authorityFingerprint: unknown }).authorityFingerprint,
+    ).toBeNull();
   });
 
   it("refuses no session with 401 and a manager with 403", async () => {

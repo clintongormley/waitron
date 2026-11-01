@@ -1,10 +1,12 @@
 import { dirname } from "node:path";
 import { eq } from "drizzle-orm";
-import { locations, openVenueDatabase, readTenant, readBreakGlassKeyName } from "@waitron/db";
+import { locations, openVenueDatabase, readTenant } from "@waitron/db";
+import { readRecoveryKeyName } from "@waitron/node-db";
 import { AppError } from "@waitron/shared";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets } from "@waitron/module";
 import {
+  openStagedCopy,
   readArtifactNode,
   validateDatabaseEntries,
   type EntryValidationDeps,
@@ -42,10 +44,10 @@ export async function readRecoveryCopyPreview(
 ): Promise<RecoveryBackupPreview> {
   const node = await readArtifactNode(copy);
   const directory = dirname(copy.databasePath);
-  const original = await openVenueDatabase(directory);
+  const original = await openStagedCopy(directory);
   let recordedVersions: Record<string, number>;
   try {
-    recordedVersions = await schemaVersionsByModule(original.venue, deps.modules);
+    recordedVersions = await schemaVersionsByModule(original, deps.modules);
   } finally {
     await original.close();
   }
@@ -87,7 +89,7 @@ export async function readRecoveryCopyPreview(
       createdAt: copy.manifest.createdAt,
       environment: copy.manifest.environment,
       nodeId: node.nodeId,
-      nodeRecoveryKeyName: await readBreakGlassKeyName(store.venue, node.nodeId),
+      nodeRecoveryKeyName: await readRecoveryKeyName(store.node, node.nodeId),
       taxpayer: { legalName: tenant.legalName, taxId: tenant.taxId },
       locationName: location.name,
     };

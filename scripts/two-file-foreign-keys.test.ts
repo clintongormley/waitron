@@ -11,8 +11,11 @@ import {
  * No foreign key joins a `local` table to a `ledger`/`state` one, in either direction.
  *
  * A `local` row belongs to one node and means nothing to another, so no venue row may depend on
- * one; and `node.db` is reserved, empty, for a later slice that may move `local` tables into it,
- * which a key across the classes would block.
+ * one, and a key across the classes would block moving a `local` table into `node.db`.
+ *
+ * It sides tables by CLASS, not by the file a set is applied to: node.db's tables are `local`, so a
+ * key from one of them into one of venue.db's `local` tables passes here. SQLite refuses the write
+ * instead, because the target table is not in node.db.
  *
  * It reads drizzle's head snapshot per migration set (`headSnapshot` in
  * `packages/sync-enrolment/src/testing/migration-sets.ts`), which holds the graph as
@@ -150,7 +153,7 @@ describe("negative controls", () => {
 
   it("says nothing about a key that stays on one side", () => {
     expect(violationOf(edge("webauthn_credentials", "persons"), classes)).toBeNull();
-    expect(violationOf(edge("join_requests", "mirror_config"), classes)).toBeNull();
+    expect(violationOf(edge("join_requests", "node_mirror_link"), classes)).toBeNull();
   });
 
   it("reports an endpoint no module classifies, rather than skipping it", () => {

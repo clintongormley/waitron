@@ -9,6 +9,7 @@ import {
   readNodeMembership,
   withTransaction,
   type Database,
+  type NodeDatabase,
 } from "@waitron/db";
 import { withMember } from "@waitron/membership";
 import {
@@ -26,6 +27,13 @@ import {
   MAX_CHART_WRITE_ROUNDS,
   mintNextMembershipDocument,
 } from "./membership-mint.js";
+import {
+  assertHeldDocumentReadable,
+  assertHeldDocumentTrusted,
+  HELD_DOCUMENT_REFUSALS,
+  type StoredTrustDeps,
+} from "./membership-trust.js";
+import { readNodeIdentityKey } from "./node-identity.js";
 import { withAuthenticatedOperation } from "./operation-authentication.js";
 import { parseStandbyOperationInput } from "./recovery-module-operation.js";
 import type { ModuleOperations } from "@waitron/module";
@@ -38,6 +46,7 @@ import type { Logger } from "./logger.js";
 // `relayUrl` is `undefined` when no tunnel is configured; the route then refuses `mirror.no_relay`.
 export interface MirrorBundleApiDeps {
   appDb: Database;
+  node: NodeDatabase;
   ring: KeyRing;
   stateDir: string;
   relayUrl: string | undefined;
@@ -56,6 +65,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.standby_removed": 409,
   "mirror.membership_full": 409,
   ...CHART_MINT_REFUSALS,
+  ...HELD_DOCUMENT_REFUSALS,
   "membership.write_contended": 503,
 };
 
@@ -105,9 +115,18 @@ export function mountMirrorBundleApi(
 
       const assemble = async (moduleOperations?: ModuleOperations) => {
         if (deps.relayUrl === undefined) throw new AppError("mirror.no_relay", {});
+        // Before assembly, so a chart too broken to read, or one no stored key vouches for, spends no
+        // reservation. Each mint round below checks the chart it re-reads again.
+        const held = await readNodeMembership(deps.appDb);
+        assertHeldDocumentReadable(held);
+        // Unsealed once for the whole request: the check below, the bundle's endorsement and every
+        // chart round sign or verify with it.
+        const signingKey = await readNodeIdentityKey(deps.node, deps.ring, deps.designated.nodeId);
+        await assertHeldDocumentTrusted(trustDeps(deps, signingKey), held);
 
         const bundle = await assembleMirrorBundle({
           appDb: deps.appDb,
+          node: deps.node,
           ring: deps.ring,
           stateDir: deps.stateDir,
           relayUrl: deps.relayUrl,
@@ -116,11 +135,12 @@ export function mountMirrorBundleApi(
           standby,
           accountKey: deps.accountKey,
           moduleOperations,
+          primaryPrivateKey: signingKey,
         });
         // Before the response, so no bundle is handed out for a node the chart omits: a till reroutes by
         // the chart's `contactUrl`. Deliberately a separate transaction: assembly's reservation has already
         // committed.
-        await appendStandbyToChart(deps, standby.nodeId, standbyContactUrl);
+        await appendStandbyToChart(deps, signingKey, standby.nodeId, standbyContactUrl);
 
         return c.json(bundle);
       };
@@ -164,22 +184,30 @@ export function mountMirrorBundleApi(
   );
 }
 
+/** The designated main box's own stored keys, which it trusts the held chart against. */
+function trustDeps(deps: MirrorBundleApiDeps, privateKey: string): StoredTrustDeps {
+  return { node: deps.node, ring: deps.ring, nodeId: deps.designated.nodeId, privateKey };
+}
+
 // A refused write means this mint was built on a stale chart: re-read and mint again, never force.
 async function appendStandbyToChart(
   deps: MirrorBundleApiDeps,
+  signingKey: string,
   standbyNodeId: string,
   standbyContactUrl: string,
 ): Promise<void> {
   for (let round = 1; round <= MAX_CHART_WRITE_ROUNDS; round += 1) {
     const held = await readNodeMembership(deps.appDb);
+    assertHeldDocumentReadable(held);
     refuseRemovedStandby(held, standbyNodeId);
     refuseFullChart(held, standbyNodeId);
     const document = await mintNextMembershipDocument(
-      { db: deps.appDb, ring: deps.ring },
+      { db: deps.appDb, node: deps.node, ring: deps.ring, signerPrivateKey: signingKey },
       {
         heldDocument: held,
         nodes: withMember(held?.body.nodes ?? [], standbyNodeId, standbyContactUrl),
         signerNodeId: deps.designated.nodeId,
+        verifyHeld: "stored-keys",
       },
     );
     if (await persistNodeMembershipIfNewer(deps.appDb, document)) return;

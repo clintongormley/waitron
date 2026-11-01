@@ -59,7 +59,7 @@ it("the actual trading listener downloads the named node key and signed register
       .returning();
     return (await startManagementSession(tx, { personId: admin!.id })).token;
   });
-  const secret = await mintBreakGlassSecret(suite.db, node.nodeId);
+  const secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
   const fixture = allocationFixture({ node, bases, identity: "P000042" });
   const keys = generateKeyPairSync("ed25519");
   const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();

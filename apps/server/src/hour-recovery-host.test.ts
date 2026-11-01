@@ -1,3 +1,4 @@
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import {
   external,
   suite,
@@ -18,11 +19,11 @@ import { describe, expect, it, vi } from "vitest";
 import {
   incidents,
   invoiceSeries,
-  readBreakGlassVerifier,
-  setBreakGlassVerifierTx,
   stampDeployment,
+  withNodeTransaction,
   withTransaction,
 } from "@waitron/db";
+import { readRecoveryKeyVerifier, setRecoveryKeyTx } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
 import { createFirstSetupCoordinator, readModulePreparationHistory } from "@waitron/provisioning";
@@ -39,7 +40,7 @@ import { buildManifest } from "./backup-manifest.js";
 import { packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { previewRecoveryArchive } from "./recovery-backup-preview.js";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { recordSale } from "@waitron/core";
 import { seriesId } from "@waitron/shared";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu/src/backend.js";
@@ -71,6 +72,7 @@ it("persists a recovery hour before the real configured restore runner activates
   const old = await suite.db.select().from(invoiceSeries);
   await runRestoreHooks({
     db: suite.db,
+    nodeDb: suite.node,
     node,
     modules: f.configured,
     log: () => {},
@@ -140,6 +142,7 @@ it("replays the exact restore after reading the now-committed database history",
   );
   await runRestoreHooks({
     db: suite.db,
+    nodeDb: suite.node,
     node,
     modules: f.configured,
     log: () => {},
@@ -150,6 +153,7 @@ it("replays the exact restore after reading the now-committed database history",
   f.facts.history = [await withTransaction(suite.db, (tx) => readHourHistory(tx, "preproduction"))];
   await runRestoreHooks({
     db: suite.db,
+    nodeDb: suite.node,
     node,
     modules: f.configured,
     log: () => {},
@@ -219,6 +223,7 @@ it("binds durable host admission to the selected source and refuses a different 
     node,
     secret: key.secret,
     database: () => suite.db,
+    nodeDatabase: () => suite.node,
     selected: {
       sourceId: "different-artifact",
       createdAt: "2026-10-16T11:40:00Z",
@@ -290,6 +295,7 @@ it("requires a real committed result when the host reports that replay is possib
   await expect(
     runRestoreHooks({
       db: suite.db,
+      nodeDb: suite.node,
       node,
       modules: f.configured,
       log: () => {},
@@ -349,6 +355,7 @@ it("admits recovery from the real validated archive preview with its public spen
   agreeInternet();
   const manifest = await buildManifest({
     db: suite.db,
+    node: suite.node,
     modules: ALL_MODULES,
     environment: "preproduction",
     now: new Date(),
@@ -359,6 +366,7 @@ it("admits recovery from the real validated archive preview with its public spen
     packArchive([
       { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
       { name: "db.dump", bytes: await readFile(database) },
+      await nodeDumpEntry(suite.node, root),
       {
         name: "secrets/trading.env",
         bytes: Buffer.from(`WAITRON_NODE_ID=${node.nodeId}\n`),
@@ -429,6 +437,7 @@ it("admits recovery from the real validated archive preview with its public spen
   expect(outcome.identity).toBe("0CNVJ");
   await runRestoreHooks({
     db: suite.db,
+    nodeDb: suite.node,
     node,
     modules: service.modules,
     log: () => {},
@@ -446,6 +455,7 @@ it("finishes an already committed restore after restart without selecting or com
   const selected = (await first.selectPastWaits()) as { input: unknown };
   await runRestoreHooks({
     db: suite.db,
+    nodeDb: suite.node,
     node,
     modules: first.configured,
     log: () => {},
@@ -457,6 +467,7 @@ it("finishes an already committed restore after restart without selecting or com
   external.internet.mockClear();
   await runRestoreHooks({
     db: suite.db,
+    nodeDb: suite.node,
     node,
     modules: next.configured,
     log: () => {},
@@ -476,13 +487,14 @@ describe("the database supplied by the placement runner", () => {
     const selected = (await f.selectPastWaits()) as { input: unknown };
     await seedTenants(placed.db);
     await stampDeployment(placed.db, "preproduction");
-    const verifier = await readBreakGlassVerifier(suite.db, node.nodeId);
-    await withTransaction(placed.db, (tx) =>
-      setBreakGlassVerifierTx(tx, node.nodeId, verifier!, "different-copy-key"),
+    const verifier = await readRecoveryKeyVerifier(suite.node, node.nodeId);
+    await withNodeTransaction(placed.node, (tx) =>
+      setRecoveryKeyTx(tx, node.nodeId, verifier!, "different-copy-key"),
     );
     await expect(
       runRestoreHooks({
         db: placed.db,
+        nodeDb: placed.node,
         node,
         modules: f.configured,
         log: () => {},
@@ -500,7 +512,7 @@ it("refuses preparation through a configured module after its source binding cha
   const contribution = f.configured.find((module) => module.name === binding.module)!.operations!;
   await expect(
     withRecoveryKeyAuthority(
-      { db: suite.db, nodeId: node.nodeId },
+      { db: suite.db, node: suite.node, nodeId: node.nodeId },
       other,
       key.secret,
       (authority) =>
@@ -527,10 +539,7 @@ it("refuses a selected module that has no configured recovery contribution", asy
 
 it("refuses an unnamed recovery verifier even when its secret matches", async () => {
   const f = await host();
-  const verifier = await readBreakGlassVerifier(suite.db, node.nodeId);
-  await withTransaction(suite.db, (tx) =>
-    setBreakGlassVerifierTx(tx, node.nodeId, verifier!, null),
-  );
+  suite.node.run(sql`update node_recovery_key set key_name = '' where node_id = ${node.nodeId}`);
   const service = createSelectedRecoveryPreparation({
     ...f.options,
     selected: { ...f.selected, nodeRecoveryKeyName: null },
@@ -643,6 +652,7 @@ describe("module-owned recovery facts from the actual database", () => {
     expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
     await runRestoreHooks({
       db: suite.db,
+      nodeDb: suite.node,
       node,
       modules: f.service.modules,
       log: () => {},
@@ -676,6 +686,7 @@ describe("module-owned recovery facts from the actual database", () => {
     };
     await runRestoreHooks({
       db: suite.db,
+      nodeDb: suite.node,
       node,
       modules: first.service.modules,
       log: () => {},
@@ -686,6 +697,7 @@ describe("module-owned recovery facts from the actual database", () => {
     external.internet.mockClear();
     await runRestoreHooks({
       db: suite.db,
+      nodeDb: suite.node,
       node,
       modules: next.service.modules,
       log: () => {},
@@ -807,6 +819,7 @@ describe("a backup whose newest record and creation time are near or past the cl
     });
     await runRestoreHooks({
       db: suite.db,
+      nodeDb: suite.node,
       node,
       modules: f.configured,
       log: () => {},

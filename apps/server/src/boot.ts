@@ -53,11 +53,8 @@ import {
   installChangeFeed,
   subscribeToChanges,
   persistNodeMembershipIfNewer,
-  readDeploymentAxes,
   readMembershipTrustSet,
   readNodeMembership,
-  setSingletonRoleTx,
-  readMirrorConfig,
   openVenueDatabase,
   withTransaction,
   applicationVersion,
@@ -65,6 +62,8 @@ import {
   type Database,
   type SingletonRole,
 } from "@waitron/db";
+import { readMirrorLink, readNodeMode, setSingletonRole } from "@waitron/node-db";
+import { finishPromotedRole } from "./promoted-role.js";
 import { credentialProvisioned, loadKeyRing, tenantCredentials } from "@waitron/credentials";
 import { registerModulePermissions, withPassiveManagementRead } from "@waitron/identity";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
@@ -293,7 +292,13 @@ import { mountGuidePages } from "./guide-pages.js";
 import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
 import { startMenuActivation } from "./menu-activation.js";
 import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
-import { ensureBoxSecrets, mintedBoxLeaf, tightenTlsDir } from "./box-secrets.js";
+import { readBoxCaFingerprint } from "./box-tls-repair.js";
+import {
+  ensureBoxSecrets,
+  mintedBoxLeaf,
+  tightenTlsDir,
+  writeCredentialsRing,
+} from "./box-secrets.js";
 import { resolveTradingTls } from "./trading-tls.js";
 import {
   assertRestoredMembershipReadable,
@@ -1057,7 +1062,7 @@ async function bootServer(
   // soft-disabled module's data is kept; it is simply not migrated.
   let appliedModuleVersions: Record<string, number> = {};
   if (config.node !== undefined) {
-    const myModuleVersions = await schemaVersionsByModule(db, availableModules);
+    const myModuleVersions = await schemaVersionsByModule(store, availableModules);
     appliedModuleVersions = myModuleVersions;
     const migrated = new Set(
       Object.entries(myModuleVersions)
@@ -1331,7 +1336,11 @@ async function bootServer(
               bundle.venue.location.fiscalTerritory,
             );
             const modules = enabledModules(availableModules, resolvedConfig);
-            validateConfigurationBundle(bundle, modules, await schemaVersionsByModule(db, modules));
+            validateConfigurationBundle(
+              bundle,
+              modules,
+              await schemaVersionsByModule(store, modules),
+            );
           }),
         clearConfiguration: () => clearStagedConfigurationImport(config.stateDir),
         runFiscalTest: async ({ request, contribution, secret }) => {
@@ -1340,7 +1349,7 @@ async function bootServer(
             request.venue.location.fiscalTerritory,
           );
           const modules = enabledModules(availableModules, resolvedConfig);
-          const moduleVersions = await schemaVersionsByModule(db, modules);
+          const moduleVersions = await schemaVersionsByModule(store, modules);
           const input = fiscalReadinessInput({
             venue: request.venue,
             contribution,
@@ -1370,7 +1379,7 @@ async function bootServer(
             request.venue.location.fiscalTerritory,
           );
           const modules = enabledModules(availableModules, resolvedConfig);
-          const moduleVersions = await schemaVersionsByModule(db, modules);
+          const moduleVersions = await schemaVersionsByModule(store, modules);
           await createFiscalReadinessStore(
             config.stateDir,
             async () => ({ status: "uncertain" }),
@@ -1416,7 +1425,8 @@ async function bootServer(
                 req.configurationDigest)
           )
             throw new AppError("setup.attempt_conflict", {});
-          const versions = staged === null ? undefined : await schemaVersionsByModule(db, modules);
+          const versions =
+            staged === null ? undefined : await schemaVersionsByModule(store, modules);
           const result = await provisionVenue(
             {
               ownerDb: db,
@@ -1453,6 +1463,9 @@ async function bootServer(
           adoptFromPrimary(
             {
               ownerDb: db,
+              ownerNode: store.node,
+              ring,
+              persistCredentialsRing: (r) => writeCredentialsRing(config.stateDir, r),
               fetchBundle: fetchMirrorBundle,
               advertisedOrigin: config.advertisedOrigin,
               environment: config.environment,
@@ -1466,12 +1479,14 @@ async function bootServer(
             req,
             hooks,
           ),
-        establishIdentity: (nodeId) => establishNodeIdentity({ ownerDb: db, ring }, nodeId),
+        establishIdentity: (nodeId) =>
+          establishNodeIdentity({ ownerDb: db, node: store.node, ring }, nodeId),
         seedMembership: (nodeId) =>
-          seedTermZeroMembership({ db, ring }, nodeId, config.advertisedOrigin),
+          seedTermZeroMembership({ db, node: store.node, ring }, nodeId, config.advertisedOrigin),
         // Handed to the fiscal contribution's `provisioningSecret.seal` seat, so boot imports no
         // regime package.
         db,
+        node: store.node,
         ring,
         persistTrading,
         requestRestart: () => process.kill(process.pid, "SIGTERM"),
@@ -1531,7 +1546,6 @@ async function bootServer(
     app.get("/api/box/status", (c) => c.json({ adoption: "pending" }, 200));
     const finishWorker = runFinishAdoption({
       ownerDb: db,
-      ring,
       stateDir: config.stateDir,
       modules: setsToMigrate,
       log,
@@ -1573,12 +1587,13 @@ async function bootServer(
   const node: NodeConfig = { ...config.node, locationId: nodeLocationId };
   assertSingleOperationalVenue(await readOperationalVenueIds(db), nodeLocationId);
 
-  // Nothing reaches here as a `mirror` today: `adoptFromPrimary` writes `mode='mirror'` together with
-  // the adoption-pending latch, and the branch above returns while it is set.
+  await assertRestoredMembershipReadable(config.stateDir, db);
+  // Not a self-promotion: it applies a promotion this box already committed and signed with its own
+  // key, whose role write was lost. Before the peer reconciliation, which stays demote-only.
+  await finishPromotedRole({ venue: db, node: store.node, ring, nodeId: config.node.nodeId, log });
   // Both deployment axes from ONE read of the row, so the initial holder pair is never torn: two
   // separate reads could straddle a concurrent promotion and yield an impossible `(mirror, primary)`.
-  const initialAxes = await readDeploymentAxes(db, config.node.nodeId);
-  await assertRestoredMembershipReadable(config.stateDir, db);
+  const initialAxes = await readNodeMode(store.node, config.node.nodeId);
   // A returned box that died before it was fenced would otherwise boot with a stale chart and SELL
   // while the promoted cloud is also primary — two nodes filing under one NIF (CLAUDE.md §5). So a
   // non-mirror node with a configured cloud peer best-effort fetches the peer's signed chart and
@@ -1586,7 +1601,7 @@ async function bootServer(
   // so a persisted superseding document flows into the `fenced` demote. An unreachable peer lets
   // boot proceed as primary: the MVP's accepted window. Demote-only: it can never self-promote.
   if (initialAxes.mode !== "mirror") {
-    const peer = await readMirrorConfig(db, config.node.nodeId);
+    const peer = await readMirrorLink(store.node, config.node.nodeId);
     if (peer !== null) {
       const [trustSet, held] = await Promise.all([
         readMembershipTrustSet(db),
@@ -1595,7 +1610,7 @@ async function bootServer(
       await reconcileMembershipOnBoot({
         held,
         nodeId: config.node.nodeId,
-        // `mirror_config` is owner-written trusted config, so no SSRF screen.
+        // The mirror link is owner-written trusted config, so no SSRF screen.
         peerUrl: `${peer.relayUrl.replace(/\/+$/, "")}/management-api/membership`,
         fetchPeerMembership: fetchPeerMembershipDocument,
         // Persist-if-accepted, so a newer verified chart is held even when it does not fence this node.
@@ -1618,13 +1633,10 @@ async function bootServer(
   if (fenced && axes.singletonRole === "primary") {
     // Demote the singleton axis, which stops every singleton duty. `mode` stays 'primary'; the
     // read-only gate below, not the mode, enforces the fence.
-    const ownNodeId = config.node.nodeId;
-    await withTransaction(db, async (tx) => {
-      await setSingletonRoleTx(tx, ownNodeId, "secondary");
-    });
+    await setSingletonRole({ venue: db, node: store.node }, config.node.nodeId, "secondary");
     // Re-read rather than synthesize: both axes from one read of the current row, so `mode` cannot
     // be stale if it flipped since the initial read.
-    axes = await readDeploymentAxes(db, config.node.nodeId);
+    axes = await readNodeMode(store.node, config.node.nodeId);
   }
   const holders = createDeploymentHolders(axes.mode, axes.singletonRole);
   // Shared by reference between the fiscal pass that WRITES it and the box-status read that surfaces
@@ -1651,6 +1663,7 @@ async function bootServer(
     : await runFirstStart({
         stateDir: config.stateDir,
         db,
+        node: store.node,
         ring,
         nodeId: config.node.nodeId,
         contactUrl: config.advertisedOrigin,
@@ -1662,7 +1675,7 @@ async function bootServer(
       });
   // The singleton duties gate on this, not on `isMirror`: a sell-only local secondary is not a mirror,
   // and must not dial a second tunnel or write scheduled backups beside the primary.
-  // `node_roles_role_valid_ck` rejects `(mirror, primary)`, so a mirror is always 'secondary'.
+  // `node_mode_role_valid_ck` rejects `(mirror, primary)`, so a mirror is always 'secondary'.
   //
   // A BOOT decision, deliberately not live: an in-process promotion does not start the duties gated
   // on this without a restart.
@@ -1721,11 +1734,11 @@ async function bootServer(
   // every WRITE path.
   let dataNodeId: string = config.node.nodeId;
   if (isMirror) {
-    const loaded = await readMirrorConfig(db, config.node.nodeId);
+    const loaded = await readMirrorLink(store.node, config.node.nodeId);
     if (loaded === null) {
       throw new AppError("server.config_invalid", {
-        variable: "mirror_config",
-        reason: "mirror_requires_mirror_config",
+        variable: "node_mirror_link",
+        reason: "mirror_requires_mirror_link",
       });
     }
     dataNodeId = loaded.originNodeId;
@@ -2387,6 +2400,7 @@ async function bootServer(
   // After migrations, so the row's manifest names the schema the database holds.
   const sealedState = createSealedStateRefresher({
     db,
+    node: store.node,
     nodeId: tradingContext.nodeId,
     stateDir: config.stateDir,
     venueDir: config.venueDir,
@@ -2401,10 +2415,17 @@ async function bootServer(
   // Reached by every boot past setup and adoption, standby and mirror included: each node writes its
   // own row by design (one row per node; owner, 2026-09-24).
   await sealedState.refresh();
+  // The refresher writes only venue.db, so its own commit cannot call it again.
+  const stopSealingNodeCommits = store.node.onCommit(() => void sealedState.refresh());
+  // Undone newest first: the unsubscribe runs, then a refresh already started finishes before the
+  // store closes.
+  undoOnFailure.push(() => sealedState.settled());
+  undoOnFailure.push(async () => stopSealingNodeCommits());
   // The live copy of venue.db to the owner's bucket, primary only. `start()` returns without
   // waiting for the bucket, so a bucket that never answers cannot hold boot or a sale.
   const streamHost = new StreamHost({
     db,
+    node: store.node,
     ring,
     nodeId: tradingContext.nodeId,
     venueDir: config.venueDir,
@@ -2698,10 +2719,22 @@ async function bootServer(
   );
 
   // Mounted on every node: `retireSelf`'s own guards refuse a serving node.
-  mountBoxRetireApi(app, { appDb: db, ring, nodeId: tradingContext.nodeId }, log);
+  mountBoxRetireApi(app, { appDb: db, node: store.node, ring, nodeId: tradingContext.nodeId }, log);
   // Mounted on every node: a mirror or fenced node's read-only gate refuses the removal, and a
   // node that is not the chart's serving primary refuses it itself.
-  mountMembershipRemovalApi(app, { db, ring, nodeId: tradingContext.nodeId }, log);
+  mountMembershipRemovalApi(
+    app,
+    {
+      db,
+      node: store.node,
+      ring,
+      nodeId: tradingContext.nodeId,
+      // `/ca.crt` serves no authority when the operator supplies the certificate files.
+      authorityFingerprint: () =>
+        config.tls === undefined ? readBoxCaFingerprint(config.stateDir) : Promise.resolve(null),
+    },
+    log,
+  );
 
   mountRecoveryBundleApi(app, { db, stateDir: config.stateDir, now }, log);
   const documentEvidence: RecoveryDocumentEvidence = (module) =>
@@ -2711,6 +2744,7 @@ async function bootServer(
     app,
     {
       db,
+      nodeDb: store.node,
       node: tradingContext,
       venueId: tradingContext.locationId,
       modules: setsToMigrate,
@@ -2800,6 +2834,7 @@ async function bootServer(
     app,
     {
       db,
+      nodeDb: store.node,
       rpId: config.managementRpId,
       origin: config.managementOrigin,
       keyRing: totpKeyRing,
@@ -2869,6 +2904,7 @@ async function bootServer(
       app,
       {
         appDb: db,
+        node: store.node,
         ring,
         stateDir: config.stateDir,
         // https: the mirror reaches the box's own certificate end-to-end through the tunnel.
@@ -2887,6 +2923,7 @@ async function bootServer(
 
   const promoteDeps: PromoteDeps = {
     db,
+    node: store.node,
     holders,
     log,
     ring,
@@ -2964,6 +3001,7 @@ async function bootServer(
     app,
     {
       appDb: db,
+      nodeDb: store.node,
       nodeId: tradingContext.nodeId,
       credentialKeyRing: totpKeyRing,
       modules: setsToMigrate,
@@ -2972,6 +3010,7 @@ async function bootServer(
       nodePreparation: createNodeOperationPreparation({
         testClock: seams.testClock,
         db,
+        nodeDb: store.node,
         node: { nodeId: tradingContext.nodeId, locationId: tradingContext.locationId },
         modules: enabledModules(ALL_MODULES, moduleConfig),
         credentialKeyRing: totpKeyRing,
@@ -3215,6 +3254,7 @@ async function bootServer(
             createCloudSnapshotArchive(
               {
                 db,
+                node: store.node,
                 modules: availableModules,
                 environment: config.environment,
                 stateDir: config.stateDir,
@@ -3263,6 +3303,9 @@ async function bootServer(
           () => cloudSnapshots,
           () => suggestionLoop,
           unsubscribeFromChanges,
+          stopSealingNodeCommits,
+          // A refresh still running would otherwise run against the closed store and log a failure.
+          () => sealedState.settled(),
           () => menuActivation.stop(),
           () => appendOnlyWatch.stop(),
           () => freeSpaceWatch.stop(),

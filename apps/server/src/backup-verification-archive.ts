@@ -211,6 +211,7 @@ export async function validateBackupArtifactFile(
       manifest: validated.manifest,
       secretEntries: validated.secretEntries,
       databasePath: validated.databasePath,
+      nodeDump: validated.nodeDump,
       discard,
     };
   } catch (error) {

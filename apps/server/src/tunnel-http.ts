@@ -21,11 +21,13 @@ const undiciHttpClient =
  *
  * `servername` drives both the SNI and Node's default `checkServerIdentity` hostname, so the cert is
  * checked against the box hostname, not the relay's URL host. `ca` is the box's private CA; omitted,
- * Node's default store rejects the self-signed leaf. `rejectUnauthorized` is never lowered.
+ * Node's default store rejects the self-signed leaf. `rejectUnauthorized` is explicit so
+ * NODE_TLS_REJECT_UNAUTHORIZED=0 cannot switch it off.
  */
 export function tunnelHttpClient(opts: { ca?: string; servername?: string }): HttpClient {
   const dispatcher = new Agent({
     connect: {
+      rejectUnauthorized: true,
       ...(opts.servername === undefined ? {} : { servername: opts.servername }),
       ...(opts.ca === undefined ? {} : { ca: opts.ca }),
     },

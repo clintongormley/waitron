@@ -49,8 +49,8 @@ import { resolveSessionLocale } from "./session-locale.js";
 import type { Logger } from "./logger.js";
 
 /**
- * On a mirror the data node is the ORIGIN recorded in `mirror_config`, not the mirror's own id.
- * Per-node reports use it; the overview and modelo 303 aggregate every node.
+ * On a mirror the data node is the ORIGIN recorded in node.db's `node_mirror_link`, not the
+ * mirror's own id. Per-node reports use it; the overview and modelo 303 aggregate every node.
  */
 export interface ReportApiDeps {
   db: Database;

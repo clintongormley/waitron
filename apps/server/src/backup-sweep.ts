@@ -1,10 +1,15 @@
 import { chmod, mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { Database } from "@waitron/db";
+import { tmpdir } from "node:os";
+import type { Database, NodeDatabase } from "@waitron/db";
 import type { ClockStep } from "@waitron/fiscal";
 import { recordBackupOutcome, type BackupOutcomeHolder } from "./alert-sources.js";
 import type { WaitronModule } from "@waitron/module";
-import { assembleArchiveEntries, collectStateParts } from "./archive-entries.js";
+import {
+  assembleArchiveEntries,
+  collectStateParts,
+  snapshotNodeDatabase,
+} from "./archive-entries.js";
 import { encryptArtifactFile } from "./artifact-cipher-file.js";
 import { ArchiveReadBudget } from "./archive-read-budget.js";
 import { packArchiveStream, type ArchiveInputEntry } from "./backup-archive-file.js";
@@ -48,6 +53,7 @@ import "./errors.js";
 
 export type ManifestBuilder = (deps: {
   readonly db: Database;
+  readonly node: NodeDatabase;
   readonly modules: readonly WaitronModule[];
   readonly environment: DeploymentEnvironment;
   readonly now: Date;
@@ -64,6 +70,8 @@ export interface BackupSweepDeps {
   backends: StorageBackend[];
   /** Read only for the manifest; the copy goes through {@link BackupSweepDeps.archive}. */
   db: Database;
+  /** Read for the manifest, and copied whole as the archive's `node.dump` through the OS temp folder. */
+  node: NodeDatabase;
   modules: readonly WaitronModule[];
   environment: DeploymentEnvironment;
   resolvers: Record<string, string>;
@@ -200,6 +208,7 @@ export async function runOnce(
     const [manifest, parts] = await Promise.all([
       buildBackupManifest({
         db: deps.db,
+        node: deps.node,
         modules: deps.modules,
         environment: deps.environment,
         now: stamp,
@@ -210,6 +219,9 @@ export async function runOnce(
           venueDir: deps.venueDir,
           modules: deps.modules,
           resolvers: deps.resolvers,
+          // Outside staging: tens of KB that staging's space accounting gains nothing from, and
+          // nothing under staging may be removed while a transfer still reads it.
+          snapshotNode: snapshotNodeDatabase(deps.node, tmpdir()),
         },
         budget,
       ),

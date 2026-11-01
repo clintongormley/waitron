@@ -52,7 +52,7 @@ their full text.
   `scripts/module-graph-honesty.test.ts`, a guard reading the repository's own SQL;
   `apps/till/src/i18n/t.ts` still strips the region with `/-.*$/` on the till's locale (CodeQL did
   not flag it); and `/\/+$/` (written `/\/+$/u` in `mailpit-client.ts`) is still used in
-  `apps/server/src/boot.ts` (a peer relay URL from `mirror_config`, owner-written config),
+  `apps/server/src/boot.ts` (a peer relay URL from `node_mirror_link`, owner-written config),
   `apps/server/src/mailpit-client.ts` (the loopback Mailpit base URL) and
   `apps/server/src/mirror-bundle-fetch.ts` (a URL already parsed by `assertSafePrimaryUrl`) — none of
   the three timed; and the email pattern itself is still copied in `apps/dashboard`
@@ -245,7 +245,7 @@ all.
 
 **OPEN.** W8 replaced the probes in
 `packages/db/src/deployment.ts`, `packages/db/src/node-membership.ts`,
-`packages/db/src/mirror-config.ts`, `packages/migrations/src/schema-version.ts`,
+`packages/db/src/mirror-config.ts` (deleted since), `packages/migrations/src/schema-version.ts`,
 `packages/migrations/src/journal-hashes.ts` and `packages/catalogue/src/categories.ts` with
 `@waitron/db`'s `tableExists`. `apps/server/src/restore-stream.ts` still has a one-table probe;
 `apps/server/scripts/dev-setup.ts` checks two table names in one query. The identifier validator is in

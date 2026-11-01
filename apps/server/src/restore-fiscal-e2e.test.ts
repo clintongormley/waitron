@@ -1,6 +1,7 @@
 // Every database here is a real venue DIRECTORY migrated by the product's own `applyMigrations`,
 // so the append-only triggers on `registros_facturacion`, and the schema every assertion reads,
 // are the ones a box would carry.
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { createHash } from "node:crypto";
 import { cp, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -251,7 +252,10 @@ async function buildArtifact(older: boolean, artifact: string): Promise<void> {
   const store = await openVenueDatabase(baselineDir);
   try {
     await seedFiscalRegistro(store.venue);
-    artifactSecrets.set(artifact, await mintBreakGlassSecret(store.venue, F.nodeId));
+    artifactSecrets.set(
+      artifact,
+      await mintBreakGlassSecret({ venue: store.venue, node: store.node }, F.nodeId),
+    );
     await seedImage(store.venue);
     const head = await store.venue
       .select({ secuencia: cadenas.secuencia, ultimaHuella: cadenas.ultimaHuella })
@@ -264,6 +268,7 @@ async function buildArtifact(older: boolean, artifact: string): Promise<void> {
     }
     const manifest = await buildManifest({
       db: store.venue,
+      node: store.node,
       modules: ALL_MODULES,
       environment: "preproduction",
       now: new Date(),
@@ -279,6 +284,7 @@ async function buildArtifact(older: boolean, artifact: string): Promise<void> {
     const entries: ArchiveEntry[] = [
       { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
       { name: "db.dump", bytes: await readFile(dumpPath) },
+      await nodeDumpEntry(store.node, scratchRoot),
       {
         name: "secrets/trading.env",
         bytes: Buffer.from(
@@ -428,7 +434,7 @@ describe("fiscal restore, end to end", () => {
       ).toBeDefined();
       expect(blocked?.errcode).toBe(SQLITE_CONSTRAINT_TRIGGER);
       expect(blocked?.message).toMatch(/registros_facturacion is append-only/);
-      expect(await schemaVersionsByModule(db, ALL_MODULES)).toEqual(
+      expect(await schemaVersionsByModule(store, ALL_MODULES)).toEqual(
         Object.fromEntries(
           ALL_MODULES.map((m) => [m.name, expectedSchemaVersion(m.migrations, migrationsRoot)]),
         ),
@@ -446,7 +452,7 @@ describe("fiscal restore, end to end", () => {
     await drive(dirs, olderArtifactPath);
     const store = await openVenueDatabase(dirs.venueDir);
     try {
-      expect(await schemaVersionsByModule(store.venue, ALL_MODULES)).toEqual(
+      expect(await schemaVersionsByModule(store, ALL_MODULES)).toEqual(
         Object.fromEntries(
           ALL_MODULES.map((m) => [
             m.name,

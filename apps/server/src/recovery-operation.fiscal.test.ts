@@ -2,7 +2,8 @@ import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/si
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { deployment, invoiceSeries, nodeRoles, withTransaction } from "@waitron/db";
+import { deployment, invoiceSeries, withNodeTransaction, withTransaction } from "@waitron/db";
+import { nodeMode, readNodeMode, setNodeModeTx, setSingletonRoleTx } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons, managementSessions } from "@waitron/identity";
 import { locationId } from "@waitron/shared";
@@ -200,8 +201,8 @@ async function promote(
   suppliedApproval: unknown = approval,
   suppliedAllocation: unknown = allocation,
 ) {
-  return withRecoveryKeyOperation(
-    { db: suite.db, nodeId: target.nodeId },
+  const result = await withRecoveryKeyOperation(
+    { db: suite.db, node: suite.node, nodeId: target.nodeId },
     binding,
     recoveryKey,
     async (tx, authority) => {
@@ -214,11 +215,16 @@ async function promote(
         { ...context, ...overrides },
         authority,
       );
-      if (overrides.priorActivation !== "committed")
-        await commitMirrorPromotionTx(tx, target.nodeId, document);
+      if (overrides.priorActivation !== "committed") await commitMirrorPromotionTx(tx, document);
       return result;
     },
   );
+  if (overrides.priorActivation !== "committed")
+    await withNodeTransaction(suite.node, async (tx) => {
+      await setNodeModeTx(tx, target.nodeId, "primary");
+      await setSingletonRoleTx(tx, target.nodeId, "primary");
+    });
+  return result;
 }
 async function snapshot() {
   const rows: unknown[] = [];
@@ -228,7 +234,6 @@ async function snapshot() {
     "cadenas",
     "fiscal_allocations",
     "fiscal_reservations",
-    "node_roles",
     "node_membership",
   ])
     rows.push((await suite.db.execute(sql`select * from ${sql.identifier(table)}`)).rows);
@@ -247,8 +252,8 @@ beforeEach(async () => {
   await suite.db
     .insert(invoiceSeries)
     .values(bases.map((series) => ({ ...series, nodeId: primary.nodeId })));
-  await suite.db
-    .insert(nodeRoles)
+  await suite.node
+    .insert(nodeMode)
     .values({ nodeId: target.nodeId, mode: "mirror", singletonRole: "secondary" });
   await withTransaction(suite.db, (tx) =>
     establishDormantAllocation(tx, primary, target, reservation, trust, {
@@ -266,7 +271,7 @@ beforeEach(async () => {
       requiredBases: bases,
     }),
   );
-  recoveryKey = await mintBreakGlassSecret(suite.db, target.nodeId);
+  recoveryKey = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, target.nodeId);
 });
 
 describe("recovery-key fiscal attribution", () => {
@@ -286,7 +291,7 @@ describe("recovery-key fiscal attribution", () => {
     );
     expect(signed).toEqual(signedConsumption);
   });
-  it("activates all three purposes and the role atomically without a person or a session", async () => {
+  it("activates all three purposes, then the role, without a person or a session", async () => {
     const result = await promote();
     expect(result.series.map((s) => ({ code: s.code, purpose: s.purpose }))).toEqual(
       candidate.series,
@@ -304,11 +309,8 @@ describe("recovery-key fiscal attribution", () => {
     expect(JSON.stringify(audit)).not.toContain(recoveryKey);
     expect(await suite.db.select().from(persons)).toEqual([]);
     expect(await suite.db.select().from(managementSessions)).toEqual([]);
-    const [role] = await suite.db
-      .select()
-      .from(nodeRoles)
-      .where(eq(nodeRoles.nodeId, target.nodeId));
-    expect(role!.mode).toBe("primary");
+    const role = await readNodeMode(suite.node, target.nodeId);
+    expect(role.mode).toBe("primary");
     const before = await snapshot();
     expect(await promote({ priorActivation: "committed" })).toEqual(result);
     expect(await snapshot()).toEqual(before);
@@ -375,7 +377,7 @@ describe("real mirror promotion with a dormant fiscal seat", () => {
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
   });
   async function realPromotion() {
-    await establishNodeIdentity({ ownerDb: suite.db, ring }, target.nodeId);
+    await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, target.nodeId);
     const module = fakeModule("fiscal-verifactu", {
       provisioning: {
         standby: {
@@ -398,15 +400,16 @@ describe("real mirror promotion with a dormant fiscal seat", () => {
     return promoteMirrorToPrimary(
       {
         db: suite.db,
+        node: suite.node,
         nodeId: target.nodeId,
         ring,
         holders: createDeploymentHolders("mirror", "secondary"),
         log: () => {},
         persistTradingEnv: async () => {},
         modules: [module],
-        withModuleOperations: ({ db, node }, run) =>
+        withModuleOperations: ({ db, nodeDb, node }, run) =>
           withRecoveryKeyOperation(
-            { db, nodeId: node.nodeId },
+            { db, node: nodeDb, nodeId: node.nodeId },
             binding,
             recoveryKey,
             (tx, authority) =>
@@ -436,16 +439,13 @@ describe("real mirror promotion with a dormant fiscal seat", () => {
     expect(JSON.parse(audit[0]!.approval as string)).toEqual(approval);
     expect(await suite.db.select().from(persons)).toEqual([]);
     expect(await suite.db.select().from(managementSessions)).toEqual([]);
-    const [role] = await suite.db
-      .select()
-      .from(nodeRoles)
-      .where(eq(nodeRoles.nodeId, target.nodeId));
-    expect(role!.mode).toBe("primary");
-    expect(role!.singletonRole).toBe("primary");
+    const role = await readNodeMode(suite.node, target.nodeId);
+    expect(role.mode).toBe("primary");
+    expect(role.singletonRole).toBe("primary");
   });
 
   it("rolls the actual signed activation back with a refused promotion document", async () => {
-    await establishNodeIdentity({ ownerDb: suite.db, ring }, target.nodeId);
+    await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, target.nodeId);
     const before = await snapshot();
     await suite.db.execute(
       sql`create trigger refuse_chart before insert on node_membership begin select raise(abort, 'test chart refusal'); end`,

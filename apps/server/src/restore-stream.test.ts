@@ -146,6 +146,12 @@ beforeAll(async () => {
   await db.insert(nodes).values({ id: T.nodeId, locationId: T.locationId, name: "Node 1" });
   await db.insert(invoiceSeries).values({ id: T.seriesId, nodeId: T.nodeId, code: "FA" });
   await db.insert(invoiceSeries).values({ nodeId: T.nodeId, code: "FF", purpose: "full" });
+  suite.node.run(
+    sql`insert into node_mode (node_id, mode, singleton_role, updated_at) values (${T.nodeId}, 'mirror', 'secondary', 0)`,
+  );
+  const nodeCopy = join(await fresh("waitron-stream-node-"), "node.db");
+  await suite.node.archiveTo(nodeCopy);
+  ENTRIES.splice(1, 0, { name: "node.dump", bytes: await readFile(nodeCopy) });
   await writeSealedStateRow(db, T.nodeId, await sealNodeState(ENTRIES, RECOVERY_KEY), NOW);
   fixtureDb = join(await mkdtemp(join(tmpdir(), "waitron-stream-fixture-")), "venue.db");
   await db.archiveTo(fixtureDb);
@@ -251,6 +257,9 @@ describe("prepareStreamRestore", () => {
         venueId: T.locationId,
         bucket: KIT.bucket,
       }),
+    );
+    expect(await readFile(join(dirname(prepared.databasePath), "node.db"))).toEqual(
+      Buffer.from(ENTRIES.find((entry) => entry.name === "node.dump")!.bytes),
     );
     // The checks only read, so no committed row is left in a side file beside the one staged.
     const wal = await stat(`${prepared.databasePath}-wal`).catch(() => null);
@@ -678,6 +687,7 @@ describe("refuseIfArchiveSourceLive", () => {
   ): Promise<ValidatedArtifact> {
     const file = join(await fresh("waitron-archive-db-"), "venue.db");
     await suite.db.archiveTo(file);
+    await suite.node.archiveTo(join(dirname(file), "node.db"));
     if (withSettings) {
       const store = await openVenueDatabase(dirname(file));
       try {
@@ -697,6 +707,7 @@ describe("refuseIfArchiveSourceLive", () => {
     return {
       manifest: MANIFEST,
       databasePath: file,
+      nodeDump: Buffer.from("NODE"),
       discard: () => rm(dirname(file), { recursive: true, force: true }),
       secretEntries: secrets
         ? [{ name: "secrets/secrets.env", bytes: Buffer.from(SECRETS_ENV) }]
@@ -1043,7 +1054,7 @@ describe("restoreFromStream (the command line's whole path)", () => {
       environment: "preproduction",
       modules: [],
       migrate: vi.fn(async () => {}),
-      openDb: async () => ({ db: suite.db, close: async () => {} }),
+      openDb: async () => ({ db: suite.db, node: suite.node, close: async () => {} }),
       confirmVenue: () => true,
     });
     const placed = await openVenueDatabase(venueDir);
@@ -1063,6 +1074,69 @@ describe("restoreFromStream (the command line's whole path)", () => {
     expect(
       (await readdir(deps.stateDir)).filter((name) => name.startsWith("stream-restore")),
     ).toEqual([]);
+  });
+
+  it("a bucket rebuild restores node.db from the sealed state", async () => {
+    const venueDir = await fresh("waitron-stream-venue-");
+    const deps = await prepareDeps(await bucket());
+    await restoreFromStream({
+      ...deps,
+      venueDir,
+      stagingDir: join(deps.stateDir, "restore-staging"),
+      environment: "preproduction",
+      modules: [],
+      confirmVenue: () => true,
+    });
+    const placed = new DatabaseSync(join(venueDir, "node.db"), { readOnly: true });
+    try {
+      expect(placed.prepare("select node_id, mode from node_mode").all()).toEqual([
+        { node_id: T.nodeId, mode: "mirror" },
+      ]);
+    } finally {
+      placed.close();
+    }
+  });
+
+  it("a bucket rebuild whose sealed state has no node.dump refuses, replacing nothing", async () => {
+    const venueDir = await fresh("waitron-stream-venue-");
+    await writeFile(join(venueDir, "venue.db"), "the box's own database");
+    await writeFile(join(venueDir, "node.db"), "the box's own node file");
+    const withoutNode = await sealNodeState(
+      ENTRIES.filter((entry) => entry.name !== "node.dump"),
+      RECOVERY_KEY,
+    );
+    const deps = await prepareDeps(await bucket(), {
+      restoreGeneration: async (args) => {
+        await copyFixture(args);
+        const copy = new DatabaseSync(args.outPath);
+        try {
+          copy
+            .prepare("update node_sealed_state set sealed = ? where node_id = ?")
+            .run(withoutNode, T.nodeId);
+        } finally {
+          copy.close();
+        }
+      },
+    });
+    await writeFile(join(deps.stateDir, "trading.env"), "WAITRON_NODE_ID=someone-else\n");
+    await expect(
+      restoreFromStream({
+        ...deps,
+        venueDir,
+        stagingDir: join(deps.stateDir, "restore-staging"),
+        environment: "preproduction",
+        modules: [],
+        confirmVenue: () => true,
+      }),
+    ).rejects.toMatchObject({
+      code: "restore.archive_incomplete",
+      params: { missing: "node.dump" },
+    });
+    expect(await readFile(join(venueDir, "venue.db"), "utf8")).toBe("the box's own database");
+    expect(await readFile(join(venueDir, "node.db"), "utf8")).toBe("the box's own node file");
+    expect(await readFile(join(deps.stateDir, "trading.env"), "utf8")).toBe(
+      "WAITRON_NODE_ID=someone-else\n",
+    );
   });
 
   // #642: the operator sees whose copy this is before anything changes.

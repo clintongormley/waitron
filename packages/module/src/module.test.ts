@@ -81,6 +81,14 @@ describe("orderedMigrationSets", () => {
     expect(orderedMigrationSets([])).toEqual([]);
   });
 
+  it("carries the file a set names", () => {
+    const node: WaitronModule = {
+      ...mod("node"),
+      migrations: { ...mod("node").migrations, database: "node" },
+    };
+    expect(orderedMigrationSets([node])[0]?.database).toBe("node");
+  });
+
   it("reorders a wrong input into dependency order, input order as tie-break", () => {
     const mods = [
       mod("workforce", { core: "*", modules: { identity: "*" } }),

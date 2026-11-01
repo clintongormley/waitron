@@ -163,6 +163,29 @@ export function textLines(element: Element): DOMRectList {
 }
 
 /**
+ * Every byte pair of a drawn fingerprint sits on one line, and the value stays inside its box; with
+ * `wraps`, it also takes more than one line, so the check has a line end to look at.
+ */
+export function expectBreaksOnlyAfterColons(fingerprint: HTMLElement, wraps: boolean): void {
+  const box = fingerprint.getBoundingClientRect();
+  const lineTops = new Set<number>();
+  const walker = document.createTreeWalker(fingerprint, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    const value = node.textContent ?? "";
+    for (const match of value.matchAll(/[0-9A-F]{2}/g)) {
+      const range = document.createRange();
+      range.setStart(node, match.index);
+      range.setEnd(node, match.index + 2);
+      const rects = [...range.getClientRects()];
+      expect(rects, `pair ${match[0]}`).toHaveLength(1);
+      expect(rects[0]!.right).toBeLessThanOrEqual(box.right + 0.5);
+      lineTops.add(Math.round(rects[0]!.top));
+    }
+  }
+  if (wraps) expect(lineTops.size).toBeGreaterThan(1);
+}
+
+/**
  * Whether a box's vertical middle falls within `line`. Middles, not whole boxes: line boxes differ by
  * a pixel between machines' fonts.
  */

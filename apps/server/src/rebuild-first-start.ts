@@ -8,6 +8,7 @@ import {
   readNodeMembership,
   readNodeMembershipRow,
   type Database,
+  type NodeDatabase,
 } from "@waitron/db";
 import { isMembershipDocument, verifyMembershipDocument } from "@waitron/membership";
 import { codeOf } from "@waitron/server-kit";
@@ -34,6 +35,7 @@ export type RebuildSource = "archive" | "stream";
 export interface RebuildDeps {
   stateDir: string;
   db: Database;
+  node: NodeDatabase;
   ring: KeyRing;
   nodeId: string;
   /** This machine's `advertisedOrigin`, what tills route on. */
@@ -126,11 +128,13 @@ export async function completeRebuild(deps: RebuildDeps): Promise<boolean> {
   // higher term.
   const pointerTerm = (await deps.pointerTerm?.()) ?? null;
   const next = await mintNextMembershipDocument(
-    { db: deps.db, ring: deps.ring },
+    { db: deps.db, node: deps.node, ring: deps.ring },
     {
       heldDocument: held,
       nodes,
       signerNodeId: deps.nodeId,
+      // `assertRestoredMembershipValid` above checked it against the keys venue.db names.
+      verifyHeld: "none",
       ...(pointerTerm === null ? {} : { minTerm: pointerTerm + 1 }),
     },
   );

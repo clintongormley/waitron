@@ -12,18 +12,16 @@ import {
   kitchenStations,
   locations,
   openVenueDatabase,
-  readDeploymentMode,
-  readSingletonRole,
   readStandardSeriesId,
-  setDeploymentMode,
   stampDeployment,
   tenants,
   withTransaction,
-  writeMirrorConfig,
   writeNodeMembership,
   type Database,
+  type NodeDatabase,
   type VenueDatabase,
 } from "@waitron/db";
+import { readNodeMode, setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { loadKeyRing } from "@waitron/credentials";
 import { hashPassword, hashPin, hashSecret, persons } from "@waitron/identity";
 import {
@@ -32,7 +30,7 @@ import {
   createCategory,
   createProduct,
 } from "@waitron/catalogue";
-import type { Endorsement, SignedMembershipDocument } from "@waitron/membership";
+import { generateNodeKeyPair, type Endorsement } from "@waitron/membership";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer, type StartedServer } from "./boot.js";
@@ -52,6 +50,8 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { freePort } from "./testing/free-ports.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
+import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 
 // The promote endpoint end to end over HTTP, each boot on its own venue directory: an admin-login
 // promote restarts the mirror as a primary that sells and chains on its own reserved SIF without
@@ -134,6 +134,7 @@ let killSpy: MockInstance<typeof process.kill>;
 
 async function seedMirror(
   admin: Database,
+  node: NodeDatabase,
 ): Promise<{ nodeId: string; fixture: ReturnType<typeof allocationFixture> }> {
   await admin
     .insert(tenants)
@@ -160,6 +161,7 @@ async function seedMirror(
   };
   const fixture = await establishDormantContract({
     db: admin,
+    node,
     ring: RING,
     locationId: MIRROR_LOCATION_ID,
     sourceId: MIRROR_ORIGIN_NODE_ID,
@@ -171,21 +173,23 @@ async function seedMirror(
     recoveryKey: false,
   });
 
-  const held: SignedMembershipDocument = {
-    body: {
-      term: 3,
-      nodes: [
-        { nodeId: MIRROR_ORIGIN_NODE_ID, contactUrl: "https://old", standing: "serving-primary" },
-        { nodeId: standby.nodeId, contactUrl: "", standing: "serving-secondary" },
-      ],
-    },
+  // Signed by the outgoing primary's key, which this box pins as adopt would.
+  const origin = generateNodeKeyPair();
+  const held = signedMembershipDoc(3, {
     signerNodeId: MIRROR_ORIGIN_NODE_ID,
-    signature: "held-placeholder-sig",
-    endorsements: [],
-  };
+    keyPair: origin,
+    nodes: [
+      { nodeId: MIRROR_ORIGIN_NODE_ID, contactUrl: "https://old", standing: "serving-primary" },
+      { nodeId: standby.nodeId, contactUrl: "", standing: "serving-secondary" },
+    ],
+  });
   await writeNodeMembership(admin, held);
+  await pinMainBoxKey(node, standby.nodeId, {
+    nodeId: MIRROR_ORIGIN_NODE_ID,
+    publicKey: origin.publicKey,
+  });
 
-  await writeMirrorConfig(admin, standby.nodeId, {
+  await writeMirrorLink(node, standby.nodeId, {
     relayUrl: "https://127.0.0.1:1/",
     boxHostname: "box.test",
     boxCaPem: "unused-ca-pem",
@@ -205,7 +209,7 @@ async function seedMirror(
     .onConflictDoNothing();
 
   await stampDeployment(admin, "production");
-  await setDeploymentMode(admin, standby.nodeId, "mirror");
+  await setNodeMode({ venue: admin, node }, standby.nodeId, "mirror");
   return { nodeId: standby.nodeId, fixture };
 }
 
@@ -345,9 +349,9 @@ async function readEnvios(
 
 describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
   it("admin login → 200 restarting; restart into primary; sells + chains on its own reserved SIF; does NOT file", async () => {
-    const seed = await seedMirror(db.main);
+    const seed = await seedMirror(db.main, stores.main.node);
     const waterOffer = await seedSaleVenue(db.main, seed.nodeId);
-    await mintBreakGlassSecret(db.main, seed.nodeId); // an adopted mirror always has a verifier
+    await mintBreakGlassSecret({ venue: db.main, node: stores.main.node }, seed.nodeId); // an adopted mirror always has a verifier
 
     const mirrorPort = await freePort();
     const mirrorBase = `http://127.0.0.1:${mirrorPort}`;
@@ -377,7 +381,7 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       });
       expect(wrongBg.status).toBe(401);
       expect((await wrongBg.json()).error.code).toBe("promotion.break_glass_invalid");
-      expect(await readDeploymentMode(db.main, seed.nodeId)).toBe("mirror");
+      expect((await readNodeMode(stores.main.node, seed.nodeId)).mode).toBe("mirror");
 
       const unattested = await postPromote(mirrorBase, {
         oldNodeNeutralised: false,
@@ -386,7 +390,7 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       });
       expect(unattested.status).toBe(400);
       expect((await unattested.json()).error.code).toBe("promotion.fence_not_attested");
-      expect(await readDeploymentMode(db.main, seed.nodeId)).toBe("mirror");
+      expect((await readNodeMode(stores.main.node, seed.nodeId)).mode).toBe("mirror");
 
       // The gate is live, so the promote POST reaching its handler is the exemption's doing.
       const write = await fetch(`${mirrorBase}/management-api/catalogues`, {
@@ -406,8 +410,8 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ alreadyPrimary: false, restarting: true });
 
-      expect(await readDeploymentMode(db.main, seed.nodeId)).toBe("primary");
-      expect(await readSingletonRole(db.main, seed.nodeId)).toBe("primary");
+      expect((await readNodeMode(stores.main.node, seed.nodeId)).mode).toBe("primary");
+      expect((await readNodeMode(stores.main.node, seed.nodeId)).singletonRole).toBe("primary");
       await delay(50);
       expect(killSpy).toHaveBeenCalledWith(process.pid, "SIGTERM");
 
@@ -514,8 +518,11 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
   }, 120_000);
 
   it("break-glass secret → 200 promoted (no login)", async () => {
-    const seed = await seedMirror(db.breakGlass);
-    const breakGlass = await mintBreakGlassSecret(db.breakGlass, seed.nodeId);
+    const seed = await seedMirror(db.breakGlass, stores.breakGlass.node);
+    const breakGlass = await mintBreakGlassSecret(
+      { venue: db.breakGlass, node: stores.breakGlass.node },
+      seed.nodeId,
+    );
     const keyFixture = allocationFixture({
       node: { nodeId: brandNodeId(seed.nodeId), locationId: brandLocationId(MIRROR_LOCATION_ID) },
       primary: {
@@ -557,8 +564,10 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ alreadyPrimary: false, restarting: true });
-      expect(await readDeploymentMode(db.breakGlass, seed.nodeId)).toBe("primary");
-      expect(await readSingletonRole(db.breakGlass, seed.nodeId)).toBe("primary");
+      expect((await readNodeMode(stores.breakGlass.node, seed.nodeId)).mode).toBe("primary");
+      expect((await readNodeMode(stores.breakGlass.node, seed.nodeId)).singletonRole).toBe(
+        "primary",
+      );
     } finally {
       await server.close();
       vi.unstubAllEnvs();
@@ -586,6 +595,7 @@ describe("read-only-gate exemption for the promote POST — proven by deletion",
     // No case here reaches the break-glass check, so the node id is a placeholder.
     mountPromoteApi(app, {
       appDb: db.main,
+      nodeDb: stores.main.node,
       nodeId: "gate-only",
       run: alwaysRun,
       credentialKeyRing: TOTP_KEY_RING,
