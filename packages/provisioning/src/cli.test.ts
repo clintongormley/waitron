@@ -345,7 +345,13 @@ describe("runCli venue", () => {
     });
     // The territory must be prefixed by the country.
     const gbArgs = VENUE_ARGS.map((arg) =>
-      arg === "ES" ? "GB" : arg === "ES-common" ? "GB-vat" : arg,
+      arg === "ES"
+        ? "GB"
+        : arg === "ES-common"
+          ? "GB-vat"
+          : arg === "Europe/Madrid"
+            ? "Europe/London"
+            : arg,
     );
     const code = await runCli([...gbArgs, "--yes"], h.deps);
     expect(code).toBe(0);

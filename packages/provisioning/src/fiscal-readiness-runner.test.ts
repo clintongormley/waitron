@@ -587,6 +587,7 @@ it.each([false, true])(
     const { request } = await import("../test/first-setup-request.js");
     const requestVenue = {
       ...request,
+      location: { ...request.location, timeZone: "Atlantic/Canary" },
       admin: {
         displayName: "Elena",
         email: "elena@example.test",

@@ -248,7 +248,7 @@ describe("while the box's clock reads behind its last sale", () => {
       }),
     );
     const app = new Hono();
-    mountWebhook(app, deps(venueSuite.db), collect([]));
+    mountWebhook(app, { ...deps(venueSuite.db), nodeId: venue.cfg.nodeId }, collect([]));
 
     const body = stripeSessionEvent({
       type: "checkout.session.completed",

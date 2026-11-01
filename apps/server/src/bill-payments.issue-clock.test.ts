@@ -270,12 +270,14 @@ describe("the invoice at full payment", () => {
         }),
       };
       const completed = await inTx((tx) =>
-        completeBillPayment(
-          tx,
-          { admission: testTradingAdmission(), ...fiscal(), clock: issueClock },
-          venue.cfg,
-          paymentId,
-          new Date("2026-10-06T22:10:00Z"),
+        withSavedIssueZone(tx, offsetMinutes, () =>
+          completeBillPayment(
+            tx,
+            { admission: testTradingAdmission(), ...fiscal(), clock: issueClock },
+            venue.cfg,
+            paymentId,
+            new Date("2026-10-06T22:10:00Z"),
+          ),
         ),
       );
       const [location] = await inTx((tx) =>
@@ -373,3 +375,27 @@ describe("the invoice at full payment", () => {
     },
   );
 });
+
+async function withSavedIssueZone<T>(
+  tx: Transaction,
+  offsetMinutes: number,
+  issue: () => Promise<T>,
+): Promise<T> {
+  const zones: Record<number, string> = { 60: "Etc/GMT-1", 0: "Etc/UTC", [-480]: "Etc/GMT+8" };
+  const [location] = await tx
+    .select()
+    .from(locations)
+    .where(eq(locations.id, venue.cfg.locationId));
+  await tx
+    .update(locations)
+    .set({ timeZone: zones[offsetMinutes] })
+    .where(eq(locations.id, venue.cfg.locationId));
+  try {
+    return await issue();
+  } finally {
+    await tx
+      .update(locations)
+      .set({ timeZone: location!.timeZone })
+      .where(eq(locations.id, venue.cfg.locationId));
+  }
+}

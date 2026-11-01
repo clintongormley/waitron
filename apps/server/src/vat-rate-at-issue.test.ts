@@ -6,7 +6,7 @@ import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { diningTables, saleLines, sales, withTransaction } from "@waitron/db";
+import { diningTables, saleLines, sales, locations, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -547,24 +547,43 @@ describe("the day is the invoice's own, read once", () => {
     const east = randomUUID();
     const utc = randomUUID();
 
-    // 23:30 UTC on 31 December: already 1 January two hours east, still 31 December in UTC.
-    at("2026-12-31T23:30:00.000Z", 120);
-    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-      workingOrderId: east,
-      zoneId: v.counter.zoneId,
-      lines: one(v, v.products.cana),
-      tender: { method: "cash", amount: "2.50" },
-    });
-    at("2026-12-31T23:30:00.000Z", 0);
-    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-      workingOrderId: utc,
-      zoneId: v.counter.zoneId,
-      lines: one(v, v.products.cana),
-      tender: { method: "cash", amount: "2.50" },
-    });
+    const [location] = await suite.db
+      .select({ timeZone: locations.timeZone })
+      .from(locations)
+      .where(eq(locations.id, v.cfg.locationId));
+    try {
+      await suite.db
+        .update(locations)
+        .set({ timeZone: "Etc/GMT-2" })
+        .where(eq(locations.id, v.cfg.locationId));
+      // 23:30 UTC on 31 December: already 1 January two hours east, still 31 December in UTC.
+      at("2026-12-31T23:30:00.000Z", 120);
+      await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
+        workingOrderId: east,
+        zoneId: v.counter.zoneId,
+        lines: one(v, v.products.cana),
+        tender: { method: "cash", amount: "2.50" },
+      });
+      await suite.db
+        .update(locations)
+        .set({ timeZone: "Etc/UTC" })
+        .where(eq(locations.id, v.cfg.locationId));
+      at("2026-12-31T23:30:00.000Z", 0);
+      await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
+        workingOrderId: utc,
+        zoneId: v.counter.zoneId,
+        lines: one(v, v.products.cana),
+        tender: { method: "cash", amount: "2.50" },
+      });
 
-    expect(await filed(east)).toMatchObject({ offsetMinutes: 120, vatBreakdown: CANA_AT_4 });
-    expect(await filed(utc)).toMatchObject({ offsetMinutes: 0, vatBreakdown: CANA_AT_10 });
+      expect(await filed(east)).toMatchObject({ offsetMinutes: 120, vatBreakdown: CANA_AT_4 });
+      expect(await filed(utc)).toMatchObject({ offsetMinutes: 0, vatBreakdown: CANA_AT_10 });
+    } finally {
+      await suite.db
+        .update(locations)
+        .set({ timeZone: location!.timeZone })
+        .where(eq(locations.id, v.cfg.locationId));
+    }
   });
 });
 

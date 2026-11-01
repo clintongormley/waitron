@@ -495,20 +495,19 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
       );
       const records = mirrorDb.all(sql`select * from registros_facturacion order by secuencia`);
       const attempts = mirrorDb.all(sql`select * from envios order by registro_id`);
-      const restartPort = await freePort();
       const restarted = await startServer({
         ...KEY_ENV,
         ...TICK_ENV,
         ...persisted,
         WAITRON_VENUE_DIR: mirrorVenueDir,
-        WAITRON_HTTP_PORT: String(restartPort),
+        WAITRON_HTTP_PORT: String(port),
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
         WAITRON_STATE_DIR: stateDir,
       });
       try {
-        const node = await fetch(`http://127.0.0.1:${restartPort}/api/node`);
+        const node = await fetch(`http://127.0.0.1:${httpPort()}/api/node`);
         expect(await node.json()).toEqual({ acceptingSales: false });
-        const health = await fetch(`http://127.0.0.1:${restartPort}/health`);
+        const health = await fetch(`http://127.0.0.1:${httpPort()}/health`);
         expect(await health.json()).toEqual({ ok: true, tradingAvailable: false });
         expect(restarted.promoteMirrorToPrimary).toBeUndefined();
         expect(mirrorDb.all(sql`select * from registros_facturacion order by secuencia`)).toEqual(

@@ -6886,7 +6886,8 @@ export async function updateOrderLine(
   authority: OrderEditAuthority & { admission: TradingAdmission },
   attendance?: OrderAttendance,
 ): Promise<number> {
-  await requireEconomicWrite(tx, cfg, authority.admission);
+  // Line edits retain the order's location; admission follows the writing node.
+  await requireEconomicWrite(tx, { nodeId: cfg.nodeId }, authority.admission);
   const { locationId } = await requireEditableOrder(tx, orderId, revision);
   await requireOrderBillEditor(tx, orderId, authority);
   const operatorId = authority.operatorId;

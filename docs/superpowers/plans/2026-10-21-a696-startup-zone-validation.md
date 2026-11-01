@@ -383,3 +383,42 @@ every matcher and property key. Focused guard40/server30/fiscal30 pass. A text s
 a retired setting after an escaped newline that the guard missed; its decoded-string gap is
 recorded in the CI backlog, with the actual two-way probe. No guard was relaxed. The blocked
 hook is retained as failure evidence; the next normal push must complete its gate again.
+
+
+### First PR CI corrections, 1 November
+
+PR #2369's first run (`41298505179`, head `465c0d43c`) completed with eleven failing
+package jobs and the failing aggregate. Its other package merges and shared mutation passed;
+server/provisioning merges were skipped. The normal push hook had passed 10,091 root cases,
+coverage and affected types in 572 seconds. No failed check is bypassed or rerun unchanged.
+
+The attendance test exposed a regression: line edits retain the order's recorded location when
+configuration points elsewhere. `updateOrderLine` now checks the writing node's zone without
+requiring the unrelated configured location to match. The original attendance assertions remain;
+two new direct-edit controls accept a valid writing-node zone beside invalid unrelated configuration
+and reject the reverse with unchanged rows. Observed red2, green75 across attendance/economic
+suites. In an independently installed complete candidate, deleting just that admission makes the
+invalid-node-zone case resolve revision1 instead of refusing; the positive control still passes.
+
+Other failures exposed incomplete fixtures at the new boundaries. Payment/PIN routes now seed an
+actual node and explicit zone; the signed webhook case uses its provisioned node. Bill/VAT tests
+save the zone matching each literal issue offset, retaining every fiscal date/rate/replay matcher.
+British fixtures use London; Spain CLI reuse uses Canary instead of an out-of-country candidate.
+The two real readiness-drain cases save Canary for their unchanged UTC winter expectation.
+Promotion restart fetches the actual ephemeral listener port, as main's A1152 harness requires.
+An initial attempt to set the configuration port to0 correctly failed positive-integer validation;
+the final fixture retains a positive configuration value and reads the bound port.
+
+Changed-check notice: Task15 authorizes the three receipt-layout expectations to supply their
+fixture's recorded offset120 rather than the date helper's implicit0. Their format/spacing/counter
+assertions remain. Task3 authorizes the exact returned clock model to increment revision once for
+a real zone edit; the three account-email cases now expect that increment and retain every email,
+deadline and other model assertion. These follow the approved behavior, not changes to protected
+fiscal expectations. The golden pair remains untouched.
+
+Focused results after these corrections: attendance/economic75, receipt97, provisioning readiness/
+reuse36, CLI68, seven server suites150, and promotion5 pass. The first combined server rerun was
+154pass/1fail because of the attempted port0 fixture; the final promotion run fixes that failure.
+No unhandled SQL error remains in the final payment test output. Exact red/green/history/omission
+logs are retained in Lane E `receipts/a696-resume-20261101/`. A fresh normal push hook and
+current-head CI remain required; the sole766-second review is retained for these bounded fixes.
