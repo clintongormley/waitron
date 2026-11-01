@@ -248,6 +248,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   at UTC midnight; AEAT validations §3.1.3.1 and the error wording do not name the comparison zone.
   Establish it from an authoritative definition or controlled preproduction probe, then correct and
   release `@waitron/verifactu` if needed. Keep this separate from A696's venue-zone implementation.
+  Audit server fixtures found by `rg 'createFakeAeat.*serverNow: new Date' apps/server`;
+  their exposure to the same date boundary has not been reproduced.
   [Reproduction and sources](developers/testing-guide.md#give-a-fake-fiscal-service-and-its-sample-one-controlled-clock).
 
 - **A696. Invoice issue dates and record offsets follow the process zone.**

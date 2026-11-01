@@ -66,7 +66,8 @@ fixture failure; it is not evidence that every CI host fails during that hour.
 
 The case now fixes its wall and issue clocks at noon UTC and the fake's clock one minute later,
 checks the transmitted invoice date and generation timestamp, and retains both original result
-assertions. Run it with
+assertions. It runs with a Madrid host zone even on a UTC machine, so the wire assertions also
+catch a return to the host-derived issue clock in CI. Run it with
 `pnpm --filter @waitron/provisioning exec vitest run src/fiscal-readiness-runner.test.ts`.
 This verifies the synthetic readiness path, not AEAT's acceptance at a Spanish midnight.
 

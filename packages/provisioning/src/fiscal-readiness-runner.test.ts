@@ -40,6 +40,7 @@ function submitFiscalReadiness(args: Omit<Parameters<typeof submit>[0], "clock">
 const dirs: string[] = [];
 afterEach(async () => {
   vi.useRealTimers();
+  vi.unstubAllEnvs();
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
@@ -580,6 +581,7 @@ it.each([false, true])(
     vi.useFakeTimers({ toFake: ["Date"] });
     const sampleAt = new Date("2026-10-31T12:00:00Z");
     vi.setSystemTime(sampleAt);
+    vi.stubEnv("TZ", "Europe/Madrid");
     const stateDir = await mkdtemp(join(tmpdir(), "readiness-real-drain-"));
     dirs.push(stateDir);
     const { request } = await import("../test/first-setup-request.js");
