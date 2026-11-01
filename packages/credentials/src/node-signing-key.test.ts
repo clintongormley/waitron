@@ -170,9 +170,9 @@ describe("establishing the box's signing key", () => {
     const [loc] = await suite.db
       .insert(locations)
       .values({
-        name: "Barra",
+        name: "Bar",
         invoiceLocales: ["es-ES"],
-        operationDescription: "Venta en establecimiento",
+        operationDescription: "Sales on the premises",
       })
       .returning({ id: locations.id });
     return seedNode(suite.db, brandLocationId(loc!.id));
