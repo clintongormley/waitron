@@ -15,6 +15,7 @@ import {
 import { withHourAdmission } from "./allocation-envelope.js";
 import { createAllocationPreparation } from "./allocation-preparation.js";
 import { WAITRON_ID_SISTEMA } from "./software.js";
+import type { ConflictAllocationInput } from "./conflict-recovery-contract.js";
 import "./errors.js";
 
 export interface HourRecoveryFacts extends HourSelectionFacts {
@@ -38,7 +39,7 @@ function hourOperator(
   const operator = readOperationAuthority(authority, binding)?.operatorId;
   if (
     binding.module !== "fiscal-verifactu" ||
-    !(promotion ? ["promote"] : ["restore"]).includes(binding.action)
+    !(promotion ? ["promote"] : ["restore", "conflict-switch"]).includes(binding.action)
   )
     return refuse("event_mismatch");
   if (promotion && typeof operator === "string") return operator;
@@ -93,7 +94,7 @@ function inputFor(selected: Selection, operatorId: OperationOperator) {
       confirmedAt: selected.issuedAt,
       incidentEvidence: `hour/${selected.binding.eventId}`,
     },
-  };
+  } satisfies ConflictAllocationInput;
 }
 interface PreparationOptions {
   withState: HourSelectionStore;
@@ -117,7 +118,23 @@ function createPreparation(options: PreparationOptions, operatorFor: typeof reco
   };
   const read = async (binding: OperationBinding, comparisonId?: string) =>
     checked({ ...(await options.read(binding, comparisonId)) });
-  const engine = createHourSelection({ ...options, read });
+  const unused = new Map<string, unknown>();
+  const eventKey = (binding: OperationBinding) =>
+    JSON.stringify([
+      binding.module,
+      binding.action,
+      binding.eventId,
+      binding.sourceId,
+      binding.targetNodeId,
+    ]);
+  const engine = createHourSelection({
+    ...options,
+    read,
+    onNewIntent(selected) {
+      if (selected.binding.action === "conflict-switch")
+        unused.set(eventKey(selected.binding), inputFor(selected, selected.operatorId));
+    },
+  });
   const within = async <T>(
     request: Pick<Request, "binding" | "authority">,
     run: (selector: Selector, facts: RecoveryContext, operator: OperationOperator) => Promise<T>,
@@ -179,6 +196,12 @@ function createPreparation(options: PreparationOptions, operatorFor: typeof reco
         });
         if (!isDeepStrictEqual(inputFor(selected, operator), held.input))
           return refuse("event_mismatch");
+        if (held.binding.action === "conflict-switch" && facts.priorActivation !== "committed") {
+          const key = eventKey(held.binding);
+          if (!isDeepStrictEqual(unused.get(key), held.input))
+            return refuse("uncertain_prior_activation");
+          unused.delete(key);
+        }
         return withHourAdmission(
           held,
           { requiredBases: selected.bases, priorActivation: facts.priorActivation },

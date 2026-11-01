@@ -303,7 +303,7 @@ export async function withHourAdmission<T>(
   if (
     operator === undefined ||
     binding.module !== "fiscal-verifactu" ||
-    !["setup", "restore", "promote"].includes(binding.action)
+    !["setup", "restore", "promote", "conflict-switch"].includes(binding.action)
   )
     return refuse("reauthentication_required");
   if (

@@ -1,6 +1,7 @@
 import { boxHostClient, type BoxHostClient, type ClockServiceStatus } from "./box-host-client.js";
 import { clearStagedRecoveries, createSetupRecoveryPreparation } from "./recovery-preparation.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
+import { createLiveModuleOperation } from "./live-module-operation.js";
 import type { WaitronModule } from "@waitron/module";
 import { createHash } from "node:crypto";
 import { reconcileFirstSetupBeforeMode } from "./first-fiscal-mode.js";
@@ -2375,7 +2376,26 @@ async function bootServer(
   const drainWaker = createLoopWaker({ minTickMs: config.minTickMs });
   // Every ENABLED module's routes, so a module toggled off mounts nothing. `core.seatTable` closes
   // over the full `tradingContext` here, so `nodeId` never enters a module's cfg.
+  const nodePreparation = createNodeOperationPreparation({
+    testClock: seams.testClock,
+    db,
+    nodeDb: store.node,
+    node: { nodeId: tradingContext.nodeId, locationId: tradingContext.locationId },
+    modules: enabledModules(ALL_MODULES, moduleConfig),
+    credentialKeyRing: totpKeyRing,
+    stateDir: config.stateDir,
+    venueDir: config.venueDir,
+    coordinator: firstSetupHost.coordinator,
+    environment: env,
+    isLiveWritable: () =>
+      holders.mode.current === "primary" && holders.singletonRole.current === "primary" && !fenced,
+  });
   const routeCtx: ModuleRouteContext = {
+    liveOperations: createLiveModuleOperation({
+      node: { nodeId: tradingContext.nodeId, locationId: tradingContext.locationId },
+      preparation: nodePreparation,
+      requestFromBox: seams.requestFromBox,
+    }),
     db,
     cfg: {
       locationId: tradingContext.locationId,
@@ -3132,18 +3152,7 @@ async function bootServer(
       modules: setsToMigrate,
       run: promoteRun,
       requestFromBox: seams.requestFromBox,
-      nodePreparation: createNodeOperationPreparation({
-        testClock: seams.testClock,
-        db,
-        nodeDb: store.node,
-        node: { nodeId: tradingContext.nodeId, locationId: tradingContext.locationId },
-        modules: enabledModules(ALL_MODULES, moduleConfig),
-        credentialKeyRing: totpKeyRing,
-        stateDir: config.stateDir,
-        venueDir: config.venueDir,
-        coordinator: firstSetupHost.coordinator,
-        environment: env,
-      }),
+      nodePreparation,
     },
     log,
   );

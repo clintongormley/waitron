@@ -379,7 +379,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   by the owner's 1 November decision. Task 7's [current-contract plan](superpowers/plans/2026-11-01-w41s-7-conflict-recovery.md)
   covers that procedure. Filing replies now retain definite conflict observations independently of an existing case;
   active-conflict preflights now stop new money and final builders refuse new records while captured money stays recoverable.
-  The live administrator procedure and its operator presentation remain open. Corrective-record resolution, filing investigation, outside
+  The internal key-authenticated live operation now supports the switch and exact committed replay;
+  its public route and operator presentation remain open. Corrective-record resolution, filing investigation, outside
   evidence and fencing for the other tasks, and the complete old-backup/new-hardware exercise remain queued.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 

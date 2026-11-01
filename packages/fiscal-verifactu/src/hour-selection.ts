@@ -245,6 +245,7 @@ export function createHourSelection(options: {
   read(binding: OperationBinding, comparisonId?: string): Promise<HourSelectionFacts>;
   readCommitted?(binding: OperationBinding): Promise<Omit<HourSelectionFacts, "clock">>;
   monotonicNow(): number;
+  onNewIntent?(selection: ReturnType<typeof material>): void;
 }) {
   // Monotonic readings are process-local; persisted waits carry only their original UTC target.
   const timers = new Map<string, { start: number; duration: number }>();
@@ -261,7 +262,7 @@ export function createHourSelection(options: {
       const operator = readOperationAuthority(request.authority, request.binding);
       if (
         request.binding.module !== "fiscal-verifactu" ||
-        !["setup", "restore", "promote"].includes(request.binding.action) ||
+        !["setup", "restore", "promote", "conflict-switch"].includes(request.binding.action) ||
         operator === undefined
       )
         refuse("reauthentication_required");
@@ -367,9 +368,9 @@ export function createHourSelection(options: {
           )
       )
         return refuse("event_mismatch");
-      // Exact restore replay validates the committed writer result; it selects no fresh hour.
       if (mode === "committed") {
-        if (!["restore"].includes(request.binding.action)) return refuse("event_mismatch");
+        if (!["restore", "conflict-switch"].includes(request.binding.action))
+          return refuse("event_mismatch");
         return material(intent!);
       }
       const waits = sameEvent.filter((entry): entry is Wait => entry.kind === "wait");
@@ -438,7 +439,7 @@ export function createHourSelection(options: {
         latestWait !== undefined && now <= latestWait.targetMs + WAIT_REUSE_MS
           ? latestWait
           : undefined;
-      const settles = ["setup", "restore"].includes(request.binding.action);
+      const settles = ["setup", "restore", "conflict-switch"].includes(request.binding.action);
       const settleTarget = !settles
         ? -Infinity
         : currentWait !== undefined
@@ -503,6 +504,7 @@ export function createHourSelection(options: {
       };
       if (!persist) return { ...material(selected), status: "preview" as const };
       await write(selected);
+      options.onNewIntent?.(material(selected));
       return material(selected);
     });
   };

@@ -166,7 +166,9 @@ function authenticatedContext(context: AllocationContext, authority: unknown, ac
     const verified = readOperationAuthority(authority, binding);
     if (
       !isDeepStrictEqual(verified?.operatorId, operatorId) ||
-      (mode === "initial-setup" ? action !== "setup" : !["restore", "promote"].includes(action))
+      (mode === "initial-setup"
+        ? action !== "setup"
+        : !["restore", "promote", "conflict-switch"].includes(action))
     )
       throw new AppError("sif.allocation_invalid", { reason: "reauthentication_required" });
   };

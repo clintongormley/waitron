@@ -8,7 +8,7 @@ import {
   type Transaction,
   withTransaction,
 } from "@waitron/db";
-import { readRecoveryKeyName, readRecoveryKeyVerifier } from "@waitron/node-db";
+import { readNodeMode, readRecoveryKeyName, readRecoveryKeyVerifier } from "@waitron/node-db";
 import type { TotpKeyRing } from "@waitron/identity";
 import {
   configureModuleOperations,
@@ -21,6 +21,7 @@ import {
   type OperationClient,
   type ProvisionedNode,
   type WaitronModule,
+  type LiveModuleOperationScope,
 } from "@waitron/module";
 import {
   createModuleOperationHost,
@@ -53,15 +54,25 @@ export function createNodeOperationPreparation(options: {
   coordinator: FirstSetupCoordinator;
   environment: Readonly<Record<string, string | undefined>>;
   testClock?: ModuleOperationHost["testClock"];
+  isLiveWritable?: () => boolean;
 }) {
   const node = Object.freeze({ ...options.node });
   const scopes = new AsyncLocalStorage<{
     binding: OperationBinding;
     authority: OperationAuthority;
     verifier: string | null | undefined;
+    isolation?: Readonly<{ oldMachineOffline: boolean; noParallelRecovery: boolean }>;
   }>();
   const invalid = (binding: OperationBinding): never => {
     throw new AppError("module.operation_invalid", { module: binding.module });
+  };
+  const assertLive = async () => {
+    const role = await readNodeMode(options.nodeDb, node.nodeId);
+    if (
+      options.isLiveWritable?.() === false ||
+      role.mode !== "primary" || role.singletonRole !== "primary"
+    )
+      throw new AppError("node.read_only", {});
   };
   const authorize = async (binding: OperationBinding) => {
     const scope = scopes.getStore();
@@ -76,6 +87,7 @@ export function createNodeOperationPreparation(options: {
       (await readRecoveryKeyVerifier(options.nodeDb, node.nodeId)) !== scope.verifier
     )
       throw new AppError("promotion.break_glass_invalid", {});
+    if (scope.isolation !== undefined) await assertLive();
   };
   const scoped = createRecoveryPreparationHost({
     ...options,
@@ -93,21 +105,26 @@ export function createNodeOperationPreparation(options: {
         ?.readRecoveryState;
       if (reader === undefined) return invalid(binding);
       const history = await readModulePreparationHistory(options, binding.module);
+      await authorize(binding);
       const current = await reader(options.db, node, binding, history);
+      await authorize(binding);
       check();
+      const keyName = await readRecoveryKeyName(options.nodeDb, node.nodeId);
+      await authorize(binding);
+      const isolation = scopes.getStore()?.isolation;
       return {
         ...current,
         history: current.history,
-        oldMachineOffline: true,
+        oldMachineOffline: isolation?.oldMachineOffline ?? true,
         oldMachineAbsent: false,
-        noParallelRecovery: true,
+        noParallelRecovery: isolation?.noParallelRecovery ?? true,
         contextKey: JSON.stringify([
           binding,
           current.country,
           current.taxId,
           current.environment,
           current.bases,
-          await readRecoveryKeyName(options.nodeDb, node.nodeId),
+          keyName,
         ]),
       };
     },
@@ -166,6 +183,46 @@ export function createNodeOperationPreparation(options: {
     );
   };
   return {
+    async withLiveRecovery<T>(
+      supplied: OperationBinding,
+      key: unknown,
+      isolation: { oldMachineOffline: boolean; noParallelRecovery: boolean },
+      run: (scope: LiveModuleOperationScope) => Promise<T>,
+    ): Promise<T> {
+      const binding = Object.freeze({ ...supplied });
+      const answers = Object.freeze({ ...isolation });
+      const contribution = modules.find((module) => module.name === binding.module)?.operations;
+      const actions = [...(contribution?.liveRecoveryActions ?? [])];
+      if (
+        contribution === undefined ||
+        !actions.includes(binding.action) ||
+        binding.targetNodeId !== node.nodeId
+      )
+        return invalid(binding);
+      await assertLive();
+      const verifier = await readRecoveryKeyVerifier(options.nodeDb, node.nodeId);
+      return withRecoveryKeyAuthority(
+        { db: options.db, node: options.nodeDb, nodeId: node.nodeId },
+        binding,
+        key,
+        (authority, commit) =>
+          scopes.run({ binding, authority, verifier, isolation: answers }, async () => {
+            await authorize(binding);
+            return run({
+              binding,
+              node,
+              authority,
+              operations: contribution,
+              commit: (body) =>
+                commit(async (tx) => {
+                  await assertLive();
+                  return body(tx);
+                }),
+            });
+          }),
+        actions,
+      );
+    },
     async prepare(
       suppliedBinding: OperationBinding,
       credentials: unknown,

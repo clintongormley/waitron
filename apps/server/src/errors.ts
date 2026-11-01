@@ -984,6 +984,7 @@ declare module "@waitron/shared" {
      * throttle is not a fact about the caller.
      */
     "device.join_rate_limited": Record<string, never>;
+    "recovery.rate_limited": Record<string, never>;
     /**
      * The admin tapped a number that is not this request's. The request is DELETED, not offered
      * again: a wrong tap denies, which is what makes one-in-three an acceptable guess rate.

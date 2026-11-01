@@ -175,6 +175,29 @@ async function selectAfterWait(operations: Operations, operation: Operation) {
   return select();
 }
 
+it("configures a live conflict selection through the existing clocks and consumes its activation admission once", async () => {
+  const f = fixture();
+  const operations = FISCAL_OPERATIONS.configure!(f.host);
+  const live = { ...binding, action: "conflict-switch", sourceId: "committed-conflict" };
+  await withOperationAuthority(live, key, async (authority) => {
+    const selected = await selectAfterWait(operations, { binding: live, authority });
+    expect(selected.status).toBe("selected");
+    expect(
+      await operations.prepare(
+        { binding: live, authority, input: selected.input },
+        async () => "activated",
+      ),
+    ).toBe("activated");
+    await expect(
+      operations.prepare(
+        { binding: live, authority, input: selected.input },
+        async () => "unexpected",
+      ),
+    ).rejects.toMatchObject(refusal("uncertain_prior_activation"));
+  });
+  expect(f.history).toHaveLength(2);
+});
+
 it.each(["restore", "promote"])(
   "prepares %s only from the selected hour with the correct authenticated operator",
   async (action) => {

@@ -414,8 +414,10 @@ are retained in `fiscal_conflict_evidence`, including a later conflict on a reco
 already exists. Active-conflict reads include historical definite cases and ignore case-resolution notes;
 retired identities keep their evidence without stopping the replacement. New-money preflights and final
 fiscal builders stop active conflicts; captured charges and completed refunds retain their money facts,
-and successful requests replay. The live administrator operation, its route and operator presentation
-remain unimplemented.
+and successful requests replay. The internal live operation authenticates the current recovery key,
+uses the existing minute admission and activation writer, and validates exact committed replay.
+An interrupted uncommitted attempt cannot recreate its consumed process admission. Its public route
+and operator presentation remain unimplemented; this is not yet an available recovery procedure.
 
 Corrective-record resolution, filing investigation, outside evidence and fencing for the other
 tasks, and the complete old-backup/new-hardware operational exercise remain queued. Earlier

@@ -19,7 +19,7 @@ import { createErrorBoundary, readJsonBody } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import { CHART_MINT_REFUSALS } from "./membership-mint.js";
 import type { Logger } from "./logger.js";
-import { TLSSocket } from "node:tls";
+import { requireNodeOperationHttps } from "./node-operation-https.js";
 import type { createNodeOperationPreparation } from "./node-operation-preparation.js";
 import { requestFromBox } from "./request-from-box.js";
 import { HELD_DOCUMENT_REFUSALS } from "./membership-trust.js";
@@ -61,19 +61,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   ...CHART_MINT_REFUSALS,
   ...HELD_DOCUMENT_REFUSALS,
 };
-
-function requireNodeOperationHttps(c: Context): void {
-  const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
-  const origin = c.req.header("Origin"),
-    site = c.req.header("Sec-Fetch-Site");
-  if (
-    !(socket instanceof TLSSocket) ||
-    !socket.encrypted ||
-    (origin !== undefined && origin !== new URL(c.req.url).origin) ||
-    (site !== undefined && !["same-origin", "none"].includes(site))
-  )
-    throw new AppError("authorization.not_permitted", { permission: "node.promote" });
-}
 
 export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = () => {}): void {
   const run = createErrorBoundary(STATUS, "promotion.failed");

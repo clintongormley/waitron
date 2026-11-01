@@ -1,7 +1,8 @@
-import type { OperationBinding } from "./operation-authority.js";
+import type { OperationBinding, OperationAuthority } from "./operation-authority.js";
+import type { Context } from "hono";
 import type { InitialSetupContext } from "./initial-setup.js";
 import type { WaitronModule } from "./module.js";
-import type { Database } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import type { ProvisionedNode } from "./provisioning.js";
 import { AppError } from "@waitron/shared";
 import {
@@ -78,6 +79,7 @@ export interface OperationClient {
 }
 
 export interface ModuleOperationPreparation {
+  readonly liveRecoveryActions?: readonly string[];
   configure?(host: ModuleOperationHost): ModuleOperationPreparation;
   readRecoveryHistory?(db: Database): Promise<readonly unknown[]>;
   readRecoveryState?(
@@ -101,6 +103,27 @@ export interface ModuleOperationPreparation {
   prepare<T>(
     operation: ModuleOperationInput,
     run: (prepared: ModuleOperationInput) => Promise<T>,
+  ): Promise<T>;
+}
+
+export interface LiveModuleOperationScope {
+  readonly binding: OperationBinding;
+  readonly node: ProvisionedNode;
+  readonly authority: OperationAuthority;
+  readonly operations: ModuleOperationPreparation;
+  commit<R>(body: (tx: Transaction) => Promise<R>): Promise<R>;
+}
+
+export interface LiveModuleOperationBridge {
+  readonly node: ProvisionedNode;
+  requireHttps(c: Context): void;
+  client(c: Context): OperationClient;
+  withAdmission<T>(run: () => Promise<T>): Promise<T>;
+  run<T>(
+    binding: OperationBinding,
+    key: unknown,
+    isolation: { oldMachineOffline: boolean; noParallelRecovery: boolean },
+    body: (scope: LiveModuleOperationScope) => Promise<T>,
   ): Promise<T>;
 }
 

@@ -31,7 +31,10 @@ import type { MigrationSet, MigrationSetSource } from "@waitron/migrations";
 import { appendOnlyTablesIn, type ClassifiedTable } from "@waitron/sync-enrolment";
 import type { FiscalContribution } from "@waitron/fiscal";
 import type { ModuleProvisioning } from "./provisioning.js";
-import type { ModuleOperationPreparation } from "./operation-preparation.js";
+import type {
+  ModuleOperationPreparation,
+  LiveModuleOperationBridge,
+} from "./operation-preparation.js";
 import type { RestoreHook } from "./restore.js";
 import type { BackupVerificationContribution } from "./backup-verification.js";
 import type { ModuleAlerts } from "./alerts.js";
@@ -82,6 +85,7 @@ export interface FloorPlanSets {
  * tab it opens records the `dashboard` as its origin.
  */
 export interface ModuleRouteContext {
+  liveOperations?: LiveModuleOperationBridge;
   db: Database;
   cfg: {
     locationId: LocationId;

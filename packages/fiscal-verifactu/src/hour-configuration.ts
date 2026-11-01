@@ -36,6 +36,7 @@ function configured(host?: ModuleOperationHost): ModuleOperationPreparation {
     return host;
   };
   return {
+    liveRecoveryActions: ["conflict-switch"],
     readRecoveryHistory: readHourRecoveryHistory,
     readRecoveryState: readHourRecoveryState,
     async recovery(operation, proposal, client) {
@@ -56,7 +57,7 @@ function configured(host?: ModuleOperationHost): ModuleOperationPreparation {
         return hostedHourPreparation(requireHost()).prepare(operation, run);
       if (
         host?.readRecoveryFacts !== undefined &&
-        ["restore", "promote"].includes(operation.binding.action)
+        ["restore", "promote", "conflict-switch"].includes(operation.binding.action)
       )
         return hostedHourRecovery(host).prepare(operation, run);
       throw new AppError("sif.allocation_invalid", { reason: "outside_confirmation_missing" });
@@ -65,6 +66,7 @@ function configured(host?: ModuleOperationHost): ModuleOperationPreparation {
 }
 
 export const FISCAL_OPERATIONS: ModuleOperationPreparation = {
+  liveRecoveryActions: ["conflict-switch"],
   readRecoveryHistory: readHourRecoveryHistory,
   readRecoveryState: readHourRecoveryState,
   configure: configured,
