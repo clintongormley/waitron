@@ -1187,7 +1187,17 @@ trial built three static entries in one CLI invocation and in three invocations;
 implement or qualify Vitest global setup. The comparison and reverse-order control are in the
 A1271 PR. The server suites' larger build limits do not remove repeated metadata work.
 
-Also review `scripts/backup-verification-runtime.test.mjs`, whose real-source CLI case still
-allows 60 seconds for the child and 120 seconds for the test. Reading the script shows the same
-metadata budget mismatch; no timeout failure in that root case was reproduced for A1271.
-Changing that root guard needs the owner's test-change review under the campaign rule.
+Audit these remaining CLI callers and their containing test or hook deadlines:
+
+- `packages/fiscal-verifactu/src/emergency-attempt-crash.test.ts`: a 30-second build limit.
+  The same 16-second-per-Git-read control fails its build-status assertion. Keep its process-crash
+  and retained-attempt checks when correcting the build deadline.
+- `packages/fiscal-verifactu/src/recovery-pdf-node.test.ts`: a 60-second build limit. That delayed
+  control passes; it does not exhaust the metadata subprocess budgets.
+- `packages/provisioning/src/cli-entry.test.ts`: a 120-second build limit leaves no allowance
+  beyond the metadata subprocess budgets for compilation. This mismatch was found by reading;
+  no timeout failure was reproduced.
+- `scripts/backup-verification-runtime.test.mjs`: the real-source CLI case allows 60 seconds
+  for the build and 120 seconds for the test. Its later standalone Git read has a separate
+  10-second limit: the 16-second delay passes the build, then fails that Git read. That failure
+  does not reproduce the build-budget mismatch. Review both waits and the total case deadline.
