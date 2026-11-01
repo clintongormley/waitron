@@ -39,6 +39,7 @@ function submitFiscalReadiness(args: Omit<Parameters<typeof submit>[0], "clock">
 
 const dirs: string[] = [];
 afterEach(async () => {
+  vi.useRealTimers();
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
@@ -576,6 +577,9 @@ it.each(["malformed", "unknown-module", "no-operations", "no-seed"] as const)(
 it.each([false, true])(
   "the shared runner's disposable hour sample reaches the real fiscal drain (rejected=%s)",
   async (rejected) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const sampleAt = new Date("2026-10-31T12:00:00Z");
+    vi.setSystemTime(sampleAt);
     const stateDir = await mkdtemp(join(tmpdir(), "readiness-real-drain-"));
     dirs.push(stateDir);
     const { request } = await import("../test/first-setup-request.js");
@@ -592,11 +596,12 @@ it.each([false, true])(
     const modules = enabledModules(ALL_MODULES, selected.config);
     const { createFakeAeat, keyOf } = await import("@waitron/verifactu/testing");
     const { drain } = await import("@waitron/fiscal-verifactu");
-    const now = new Date(Date.now() + 60_000);
+    const now = new Date(sampleAt.getTime() + 60_000);
     const aeat = createFakeAeat({ serverNow: now });
     const client = aeat.client();
     let sent = 0;
-    const result = await submitFiscalReadiness({
+    const submissions: unknown[] = [];
+    const result = await submit({
       stateDir,
       modules,
       venue: requestVenue,
@@ -611,6 +616,7 @@ it.each([false, true])(
               resolveClient: async () => ({
                 submit: (header, records) => {
                   sent += records.length;
+                  submissions.push(...records);
                   if (rejected)
                     for (const record of records)
                       aeat.reject(
@@ -638,8 +644,29 @@ it.each([false, true])(
         applicationVersion: "sample-test",
       }),
       now: () => now,
+      clock: () => ({
+        now: () => ({
+          instant: sampleAt,
+          offsetMinutes: 0,
+          confident: true,
+          confidence: "anchored",
+          anchorAgeSeconds: 0,
+        }),
+        anchor: () => {
+          throw new Error("unused in sample test");
+        },
+        currentAnchor: () => null,
+      }),
     });
     expect(sent).toBe(1);
+    expect(submissions).toMatchObject([
+      {
+        RegistroAlta: {
+          IDFactura: { FechaExpedicionFactura: "31-10-2026" },
+          FechaHoraHusoGenRegistro: "2026-10-31T12:00:00+00:00",
+        },
+      },
+    ]);
     expect(result).toEqual(
       rejected
         ? { status: "rejected", rejections: [{ code: "1161", message: "Valor incorrecto" }] }

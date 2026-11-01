@@ -243,6 +243,13 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   and it lands before the first production venue goes live.
   [Detail](backlog/fiscal.md#a993-a-change-of-the-systems-identity-opens-a-new-installation-by-itself--designed-in-a940-56-approved-2026-10-22-fiscal-the-owner-lands-it).
 
+- **A1270. Verify the fake AEAT's invoice-date comparison at midnight.**
+  The readiness fixture uses a controlled clock. The library's `1112` check compares invoice dates
+  at UTC midnight; AEAT validations §3.1.3.1 and the error wording do not name the comparison zone.
+  Establish it from an authoritative definition or controlled preproduction probe, then correct and
+  release `@waitron/verifactu` if needed. Keep this separate from A696's venue-zone implementation.
+  [Reproduction and sources](developers/testing-guide.md#give-a-fake-fiscal-service-and-its-sample-one-controlled-clock).
+
 - **A696. Invoice issue dates and record offsets follow the process zone.**
   Every new invoice date/offset, ordinary receipt and till must use the saved venue zone, DST included; old records stay unchanged.
   Implementation and runtime acceptance remain open; the separate FULL fiscal PR finishes green for the owner to land.
