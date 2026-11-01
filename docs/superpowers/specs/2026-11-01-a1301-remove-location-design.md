@@ -19,6 +19,10 @@ Inputs: the inventory and the fiscal check written for this item by two read-onl
 - Question 4 stays open, with a note that A1268 may have to settle part of it (§7).
 - S13, S14, S15 and S22 shrink to what A1268 leaves, and wait for A1268 to land rather than for owner
   answers. S22 no longer touches a hash or an append-only table (§6, "How A1301 meets A1268").
+- The build plan for the code and fixture slices amends this design in places — files moved between
+  slices, S4's refusal named `mirror.venue_not_copied`, S16's limited edit of
+  `first-fiscal-setup.e2e.test.ts`, and more: see its "Amendments to the design this plan makes"
+  ([plan](../plans/2026-11-01-a1301-remove-location.md)).
 
 Words used below, once:
 
