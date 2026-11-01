@@ -609,7 +609,7 @@ it("A803 move dishes unsaved: a destination no longer offered is not unsaved wor
   await click(screen, '[data-move-dishes-to="other"]');
   expect(unload()).toBe(true);
   screen.bills = bills.map((bill) =>
-    bill.workingOrderId === "other" ? { ...bill, hasPayments: true } : bill,
+    bill.workingOrderId === "other" ? { ...bill, status: "placed" as const } : bill,
   );
   await screen.updateComplete;
   expect(unload()).toBe(false);

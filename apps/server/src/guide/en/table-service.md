@@ -306,8 +306,8 @@ Some ticks are grey, with the reason under the dish:
 - **€40.00 is already paid on this bill: move fewer dishes**: moving this dish, or one more of the row, would leave the
   bill owing less than has been paid on it. The other dishes can still go.
 
-Under **Move to**, choose where the dishes go: one of the table's other bills that has no payment
-yet, or **+ New bill**. **Move** stays quiet until you have ticked a dish and chosen where it goes.
+Under **Move to**, choose where the dishes go: one of the table's other open bills, or **+ New
+bill**. A bill that has already taken a payment simply owes more afterwards. **Move** stays quiet until you have ticked a dish and chosen where it goes.
 After the move, a new bill is put on screen; moving onto another bill leaves this one on screen.
 Each dish keeps its course and stays sent, fired or served as it was. If the till says **Send held
 items to the kitchen before moving them to another bill**, send them first, or move them onto one of

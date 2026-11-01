@@ -5791,11 +5791,11 @@ is picked. A dish recalled into an unsent order is left out.
   the tick only.
 - **A blocked row** shows its tick greyed with the reason under the dish, tied to the tick by
   `aria-describedby`: "Paid" for a dish with any quantity paid, and "{amount} is already paid on
-  this bill" when one more would leave the bill's total below what it has received or reserved. A
-  row holding picks keeps its tick usable so it can be cleared. The greyed box is drawn by the
+  this bill: move fewer dishes" when one more would leave the bill's total below what it has
+  received or reserved. A row holding picks keeps its tick usable so it can be cleared. The greyed box is drawn by the
   widget, because the browser's own disabled box is too faint on the light page.
-- **The destinations** follow under "Move to": the party's other open bills holding no payment, by
-  short label in number order, then "+ New bill". Nothing is chosen at first.
+- **The destinations** follow under "Move to": the party's other open bills, a part-paid one included,
+  by short label in number order, then "+ New bill". Nothing is chosen at first.
 - **Move** stays quiet and disabled until a dish and a destination are chosen.
 
 The floor in the picker is the till's estimate from the bill's balance; the server's own check

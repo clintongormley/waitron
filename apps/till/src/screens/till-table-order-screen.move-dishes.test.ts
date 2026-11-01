@@ -69,8 +69,8 @@ function table(id: string): TableState {
   } as TableState;
 }
 
-/** Bill 2 on screen; Bill 1 and Bill 4 take dishes; Bill 3 holds a payment and Bill 5 is
- * presented, so neither does. Given out of number order. */
+/** Bill 2 on screen; Bill 1, Bill 3 (holding a payment) and Bill 4 take dishes; Bill 5 is
+ * presented, so it does not. Given out of number order. */
 const BILLS = [
   partyBill("wo-4", 4, "0.00"),
   partyBill("wo-2", 2, "32.00"),
@@ -115,6 +115,8 @@ const picker = (el: TillTableOrderScreen) =>
 const destinations = (el: TillTableOrderScreen) => [
   ...panel(el)!.querySelectorAll<HTMLElement>("[data-move-dishes-to]"),
 ];
+const destination = (el: TillTableOrderScreen, id: string) =>
+  panel(el)!.querySelector<HTMLElement>(`[data-move-dishes-to="${id}"]`)!;
 const confirm = (el: TillTableOrderScreen) =>
   panel(el)!.querySelector<HTMLElement & { disabled: boolean }>("[data-move-dishes-confirm]")!;
 const textOf = (node: Element) => node.textContent!.replace(/\s+/g, " ").trim();
@@ -264,16 +266,23 @@ describe("A803 move dishes panel", () => {
     expect(labels[2]).toContain("Iberian ham ×0.32");
   });
 
-  it("offers the party's other open bills with no payment in number order, then + New bill", async () => {
+  it("offers the party's other open bills, one holding a payment included, in number order, then + New bill", async () => {
     const el = await mountScreen();
     await openMoveDishes(el);
     expect(destinations(el).map((choice) => choice.dataset.moveDishesTo)).toEqual([
       "wo-1",
+      "wo-3",
       "wo-4",
       "new",
     ]);
-    expect(destinations(el).map(textOf)).toEqual(["Bill 1 · Ana", "Bill 4", "+ New bill"]);
+    expect(destinations(el).map(textOf)).toEqual([
+      "Bill 1 · Ana",
+      "Bill 3",
+      "Bill 4",
+      "+ New bill",
+    ]);
     expect(destinations(el).map((choice) => choice.getAttribute("aria-pressed"))).toEqual([
+      "false",
       "false",
       "false",
       "false",
@@ -304,7 +313,7 @@ describe("A803 move dishes panel", () => {
     await tick(el, "c1");
     await step(el, "dec", "c1");
     await step(el, "dec", "c1");
-    await userEvent.click(destinations(el)[1]!);
+    await userEvent.click(destination(el, "wo-4"));
     await el.updateComplete;
     await userEvent.click(confirm(el));
     await el.updateComplete;
@@ -362,10 +371,10 @@ describe("A803 move dishes panel", () => {
 
   for (const [what, reread] of [
     [
-      "gains a payment",
+      "is presented",
       (bills: PartyBill[]) =>
         bills.map((bill) =>
-          bill.workingOrderId === "wo-4" ? { ...bill, hasPayments: true } : bill,
+          bill.workingOrderId === "wo-4" ? { ...bill, status: "placed" as const } : bill,
         ),
     ],
     [
@@ -378,7 +387,7 @@ describe("A803 move dishes panel", () => {
       const sent = capture(el, "move-dishes");
       await openMoveDishes(el);
       await tick(el, "h1");
-      await userEvent.click(destinations(el)[1]!);
+      await userEvent.click(destination(el, "wo-4"));
       await el.updateComplete;
       expect(pressed(el)).toEqual(["wo-4"]);
       expect(confirm(el).disabled).toBe(false);
@@ -386,6 +395,7 @@ describe("A803 move dishes panel", () => {
       await el.updateComplete;
       expect(destinations(el).map((choice) => choice.dataset.moveDishesTo)).toEqual([
         "wo-1",
+        "wo-3",
         "new",
       ]);
       expect(pressed(el)).toEqual([]);
@@ -724,7 +734,7 @@ describe("A803 move dishes, as Split by item and Transfer items did:", () => {
     expect(panel(el)).not.toBeNull();
   });
 
-  it("leaves out a bill holding a pending payment, though it still owes its total", async () => {
+  it("offers a bill holding a pending payment, which still owes its total", async () => {
     const el = await mountScreen({
       bills: [
         partyBill("wo-2", 2, "32.00"),
@@ -733,7 +743,28 @@ describe("A803 move dishes, as Split by item and Transfer items did:", () => {
       ],
     });
     await openMoveDishes(el);
-    expect(destinations(el).map((choice) => choice.dataset.moveDishesTo)).toEqual(["wo-1", "new"]);
+    expect(destinations(el).map((choice) => choice.dataset.moveDishesTo)).toEqual([
+      "wo-1",
+      "wo-3",
+      "new",
+    ]);
+  });
+
+  it("a chosen bill that gains a payment on a re-read stays chosen, and Move sends it", async () => {
+    const el = await mountScreen();
+    const sent = capture(el, "move-dishes");
+    await openMoveDishes(el);
+    await tick(el, "h1");
+    await userEvent.click(destination(el, "wo-4"));
+    await el.updateComplete;
+    el.bills = BILLS.map((bill) =>
+      bill.workingOrderId === "wo-4" ? { ...bill, hasPayments: true } : bill,
+    );
+    await el.updateComplete;
+    expect(pressed(el)).toEqual(["wo-4"]);
+    expect(confirm(el).disabled).toBe(false);
+    await userEvent.click(confirm(el));
+    expect(sent).toEqual([{ lineIds: ["h1"], toBillId: "wo-4" }]);
   });
 
   it("offers dishes only, never a child extras row", async () => {

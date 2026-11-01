@@ -322,8 +322,8 @@ Algunas casillas salen en gris, con el motivo debajo del plato:
 - **Ya se han pagado 40,00 € en esta cuenta: mueve menos platos**: mover este plato, o uno más de la fila, dejaría la
   cuenta por debajo de lo que ya se ha pagado en ella. Los demás platos sí pueden pasar.
 
-En **Mover a**, elige adónde van los platos: otra de las cuentas de la mesa que aún no tenga ningún
-pago, o **+ Cuenta nueva**. **Mover** sigue apagado hasta que marques un plato y elijas adónde va.
+En **Mover a**, elige adónde van los platos: otra de las cuentas abiertas de la mesa, o **+ Cuenta
+nueva**. Una cuenta que ya ha recibido un pago simplemente debe más después. **Mover** sigue apagado hasta que marques un plato y elijas adónde va.
 Después de moverlos, una cuenta nueva se pone en pantalla; si los pasas a otra cuenta, esta sigue en
 pantalla. Cada plato conserva su curso y sigue enviado, marchado o servido como estaba. Si la caja
 dice **Envía los artículos en espera a cocina antes de pasarlos a otra cuenta**, envíalos antes, o

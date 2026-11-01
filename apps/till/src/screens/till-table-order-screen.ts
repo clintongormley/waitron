@@ -4761,16 +4761,18 @@ export class TillTableOrderScreen extends LitElement {
     return null;
   }
 
-  /** The party's other open bills holding no payment, a pending one included, which merge and
-   * Move dishes… offer, each with its name. The server decides whether it takes the chosen one. */
+  /** The party's other open bills holding no payment, a pending one included, which merge
+   * offers, each with its name. The server decides whether it takes the chosen one. */
   #otherBills(): { bill: PartyBill; name: string }[] {
+    return this.#otherOpenBills().filter(({ bill }) => !bill.hasPayments);
+  }
+
+  /** The party's other open bills, one holding a payment included, which Move dishes… offers. */
+  #otherOpenBills(): { bill: PartyBill; name: string }[] {
     const party = this.party;
     if (party === null) return [];
     return this.#shownBills().flatMap((bill) =>
-      bill.workingOrderId !== this.orderId &&
-      bill.partyId === party.id &&
-      bill.status === "open" &&
-      !bill.hasPayments
+      bill.workingOrderId !== this.orderId && bill.partyId === party.id && bill.status === "open"
         ? [{ bill, name: this.#billName(bill) }]
         : [],
     );
@@ -5453,11 +5455,11 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** The chosen destination while it is still offered: a re-read can take a bill out of the party's
-   * bills or give it a payment after it was chosen. */
+   * bills or present it after it was chosen. */
   #moveDishesChosen(): string | null | undefined {
     const to = this.moveDishesTo;
     if (to === null || to === undefined) return to;
-    return this.#otherBills().some(({ bill }) => bill.workingOrderId === to) ? to : undefined;
+    return this.#otherOpenBills().some(({ bill }) => bill.workingOrderId === to) ? to : undefined;
   }
 
   /** A re-read that stops or starts offering the chosen destination changes what is unsaved. */
@@ -5512,7 +5514,7 @@ export class TillTableOrderScreen extends LitElement {
       ></till-portion-picker>
       <h3 id="move-dishes-to-heading" data-move-dishes-to-heading>${t("table.move_dishes_to")}</h3>
       <div class="action-options" role="group" aria-labelledby="move-dishes-to-heading">
-        ${this.#otherBills().map(({ bill }) =>
+        ${this.#otherOpenBills().map(({ bill }) =>
           destination(bill.workingOrderId, billLabel(bill), bill.workingOrderId),
         )}
         ${destination("new", t("table.new_bill"), null)}
