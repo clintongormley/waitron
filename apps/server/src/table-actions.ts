@@ -34,6 +34,7 @@ import {
   memberTables,
   insertPartyBill,
   openParty,
+  partyFamily,
   partyZone,
 } from "./parties.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
@@ -58,7 +59,7 @@ export interface TableActionOptions extends OtherPartyRead {
 
 export interface TableActionResult {
   partyId: string;
-  /** The party's bills that are not abandoned, in number order; never empty. */
+  /** The party's bills that are not abandoned, its family's included, in number order; never empty. */
   billIds: string[];
 }
 
@@ -109,8 +110,7 @@ export async function moveGuests(
     await leaveMergeOf(tx, toTableId, held);
     for (const expected of options.expectedEdits)
       await relocateBillEditor(tx, expected.billId, expected);
-    await ensureShownBill(tx, cfg, partyId);
-    return { partyId, billIds: await partyBillIds(tx, partyId) };
+    return { partyId, billIds: await shownBillIds(tx, cfg, partyId) };
   });
 }
 
@@ -163,8 +163,7 @@ export async function joinTables(
     options.slipsLater === undefined ? { parties: [partyId] } : { later: options.slipsLater };
   return withMovedSlips(tx, cfg, reach, async () => {
     await addTable(tx, partyId, tableId);
-    await ensureShownBill(tx, cfg, partyId);
-    return { partyId, billIds: await partyBillIds(tx, partyId) };
+    return { partyId, billIds: await shownBillIds(tx, cfg, partyId) };
   });
 }
 
@@ -189,8 +188,7 @@ async function combineAt(
       expectedEdits: options.expectedEdits,
       intoZoneId,
     });
-    await ensureShownBill(tx, cfg, into);
-    return { partyId: into, billIds: await partyBillIds(tx, into) };
+    return { partyId: into, billIds: await shownBillIds(tx, cfg, into) };
   });
 }
 
@@ -355,8 +353,8 @@ export async function splitTable(
             },
       );
       await printHoldTickets(tx, cfg, held);
-      // The staying party is given an empty bill when this was its last (D1).
-      await ensureShownBill(tx, cfg, partyId);
+      // The staying party is given an empty bill when it is left with none (D1).
+      await shownBillIds(tx, cfg, partyId);
     }
     await leaveMergesRestoring(tx, [tableId]);
     return { partyId: newParty, billId: taken };
@@ -383,24 +381,26 @@ async function refuseUnsplittableBill(
 }
 
 /**
- * A party with no bill that is not abandoned is given one new empty bill (A803 D1); its revision is
- * the caller's to move.
+ * The party's bills that are not abandoned, in number order (unnumbered last, then by id): its
+ * family's, as the party's bills read lists them, so a paid bill kept on a party combined into it
+ * counts. A party with none is first given one new empty bill (A803 D1); its revision is the
+ * caller's to move.
  */
-async function ensureShownBill(tx: Transaction, cfg: OriginConfig, partyId: string): Promise<void> {
-  const [row] = await tx
-    .select({ id: workingOrders.id })
-    .from(workingOrders)
-    .where(and(eq(workingOrders.partyId, partyId), ne(workingOrders.status, "abandoned")))
-    .limit(1);
-  if (row === undefined) await insertPartyBill(tx, cfg, partyId);
-}
-
-/** The party's bills that are not abandoned, in number order (unnumbered last, then by id). */
-async function partyBillIds(tx: Transaction, partyId: string): Promise<string[]> {
+async function shownBillIds(
+  tx: Transaction,
+  cfg: OriginConfig,
+  partyId: string,
+): Promise<string[]> {
   const rows = await tx
     .select({ id: workingOrders.id })
     .from(workingOrders)
-    .where(and(eq(workingOrders.partyId, partyId), ne(workingOrders.status, "abandoned")));
+    .where(
+      and(
+        inArray(workingOrders.partyId, await partyFamily(tx, partyId)),
+        ne(workingOrders.status, "abandoned"),
+      ),
+    );
+  if (rows.length === 0) return [await insertPartyBill(tx, cfg, partyId)];
   const numbers = await VENUE_SERVICE.readBillIdentities(
     tx,
     rows.map((row) => row.id),

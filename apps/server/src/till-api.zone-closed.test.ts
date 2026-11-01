@@ -318,6 +318,26 @@ describe("existing service in a closed zone", () => {
     ).toEqual([{ status: "open" }]);
   });
 
+  it("makes a new empty bill for a seated party without admitting a new service", async () => {
+    const v = await venue();
+    const seated = await seat(v);
+    at("23:45");
+    const answer = await request(v, "POST", `/api/parties/${seated.partyId}/bills`, {
+      expectedPartyRevision: seated.revision,
+    });
+    expect(answer.status).toBe(200);
+    expect(answer.json).toMatchObject({
+      billId: expect.any(String),
+      revision: seated.revision + 1,
+    });
+    expect(
+      await suite.db
+        .select({ status: workingOrders.status, partyId: workingOrders.partyId })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, answer.json.billId as string)),
+    ).toEqual([{ status: "open", partyId: seated.partyId }]);
+  });
+
   it.each(["first order", "handheld draft"])(
     "refuses a %s for an already seated party without creating a bill",
     async (kind) => {

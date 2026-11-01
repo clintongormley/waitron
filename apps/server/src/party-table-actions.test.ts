@@ -745,6 +745,85 @@ describe("a paid bill stays on its original party", () => {
   });
 });
 
+describe("A803 a paid bill kept on a party combined away is one of the table's bills", () => {
+  /** The bills the party's bills read lists, abandoned ones left out, as the till shows them. */
+  async function shownBills(partyId: string) {
+    const bills = await act((tx) => readPartyBills(tx, partyId));
+    return bills
+      .filter((bill) => bill.status !== "abandoned")
+      .map((bill) => ({ id: bill.workingOrderId, status: bill.status }));
+  }
+
+  /** Ana at `<prefix> 4` pays her only bill; Luis at `<prefix> 7` joins her table. */
+  async function luisJoinsPaidAna(prefix: string) {
+    const [m4, m7] = await tables(prefix, 4, 7);
+    const ana = await seat(v, m4);
+    const luis = await seat(v, m7);
+    await order(v, ana.tabId, "Burger");
+    await pay(v, ana.tabId, "12.00");
+    const joining = await opts(luis.partyId, ana.partyId);
+    const result = await act((tx) => joinTables(tx, v.cfg, luis.partyId, m4, joining));
+    return { ana, luis, m4, m7, result };
+  }
+
+  it("Move guests onto a seated table answers the moving party's paid bill among the bills", async () => {
+    const [m4, m7] = await tables("Family move", 4, 7);
+    const ana = await seat(v, m4);
+    const luis = await seat(v, m7);
+    await order(v, ana.tabId, "Burger");
+    await pay(v, ana.tabId, "12.00");
+
+    const moving = await opts(ana.partyId, luis.partyId);
+    const result = await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m7, moving));
+
+    expect(await shownBills(luis.partyId)).toEqual([
+      { id: luis.tabId, status: "open" },
+      { id: ana.tabId, status: "settled" },
+    ]);
+    expect(result).toEqual({ partyId: luis.partyId, billIds: [luis.tabId, ana.tabId] });
+  });
+
+  it("Join a seated table answers the joined party's paid bill among the bills", async () => {
+    const { ana, luis, result } = await luisJoinsPaidAna("Family join");
+
+    expect(await shownBills(luis.partyId)).toEqual([
+      { id: luis.tabId, status: "open" },
+      { id: ana.tabId, status: "settled" },
+    ]);
+    expect(result).toEqual({ partyId: luis.partyId, billIds: [luis.tabId, ana.tabId] });
+  });
+
+  it("Move guests and Join a free table afterwards still answer that paid bill", async () => {
+    const { ana, luis } = await luisJoinsPaidAna("Family free");
+    const [m9, m10] = await tables("Family free", 9, 10);
+
+    const moving = await opts(luis.partyId);
+    const moved = await act((tx) => moveGuests(tx, v.cfg, luis.partyId, m9, moving));
+    await nextMillisecond();
+    const joining = await opts(luis.partyId);
+    const joined = await act((tx) => joinTables(tx, v.cfg, luis.partyId, m10, joining));
+
+    expect(moved).toEqual({ partyId: luis.partyId, billIds: [luis.tabId, ana.tabId] });
+    expect(joined).toEqual({ partyId: luis.partyId, billIds: [luis.tabId, ana.tabId] });
+  });
+
+  it("Split a table taking the staying party's last bill of its own makes no new bill while that paid bill is still shown", async () => {
+    const { ana, luis, m4, m7 } = await luisJoinsPaidAna("Family split");
+
+    const splitting = await cmd(luis.partyId);
+    const result = await act((tx) =>
+      splitTable(tx, v.cfg, luis.partyId, m4, luis.tabId, splitting),
+    );
+
+    expect(result).toEqual({ partyId: result.partyId, billId: luis.tabId });
+    expect(await activeTablesOf(v, luis.partyId)).toEqual([m7]);
+    expect(await shownBills(luis.partyId)).toEqual([{ id: ana.tabId, status: "settled" }]);
+    expect(await partyRow(v, luis.partyId)).toMatchObject({
+      revision: splitting.expectedPartyRevision + 1,
+    });
+  });
+});
+
 describe("MOVED notices for a paid bill left on a party combined away", () => {
   /** The paid bill's stored row, lines and payments, which combining its party must not change. */
   async function paidBill(billId: string) {
