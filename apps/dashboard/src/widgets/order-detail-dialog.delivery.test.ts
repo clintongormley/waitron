@@ -47,8 +47,8 @@ const deliveries = (
 });
 
 const PRINTERS = [
-  { id: "printer-1", name: "Barra", kind: "receipt" as const },
-  { id: "page-1", name: "Oficina", kind: "a4" as const },
+  { id: "printer-1", name: "Bar printer", kind: "receipt" as const },
+  { id: "page-1", name: "Office printer", kind: "a4" as const },
 ];
 
 const f1 = (

@@ -43,7 +43,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       departure: null,
       reprints: [],
     }),
-    getOrderPrinters: vi.fn().mockResolvedValue([{ id: "printer-1", name: "Barra" }]),
+    getOrderPrinters: vi.fn().mockResolvedValue([{ id: "printer-1", name: "Bar printer" }]),
     reprintOrder: vi.fn().mockResolvedValue({ jobId: "job-1" }),
     liveData: new LiveData(),
     ...overrides,
@@ -87,8 +87,8 @@ function fullDetail(row: OrderRowDto) {
         retryOriginal: null,
         print: {
           printers: [
-            { id: "printer-1", name: "Barra", kind: "receipt" },
-            { id: "page-1", name: "Oficina", kind: "a4" },
+            { id: "printer-1", name: "Bar printer", kind: "receipt" },
+            { id: "page-1", name: "Office printer", kind: "a4" },
           ],
           designation: "duplicate",
         },
@@ -342,14 +342,16 @@ describe("dashboard Orders", () => {
       expect(picker.shadowRoot!.querySelector("wt-combobox")?.value).toBe("printer-1"),
     );
     picker.shadowRoot!.querySelector<HTMLElement>("[data-test=print]")!.click();
-    await vi.waitFor(() => expect(picker.shadowRoot!.textContent).toContain("Copy sent to Barra"));
+    await vi.waitFor(() =>
+      expect(picker.shadowRoot!.textContent).toContain("Copy sent to Bar printer"),
+    );
     (api.background.listOrderPages as ReturnType<typeof vi.fn>).mockResolvedValue({
       ...PAGE,
       rows: [{ ...ROW }],
     });
     api.liveData.invalidate([{ type: "working_orders", id: ROW.id }]);
     await vi.waitFor(() => expect(api.background.listOrderPages).toHaveBeenCalled());
-    expect(picker.shadowRoot!.textContent).toContain("Copy sent to Barra");
+    expect(picker.shadowRoot!.textContent).toContain("Copy sent to Bar printer");
     expect(api.getOrderPrinters).toHaveBeenCalledTimes(1);
   });
 
@@ -388,8 +390,8 @@ describe("dashboard Orders", () => {
           retryOriginal: null,
           print: {
             printers: [
-              { id: "printer-1", name: "Barra", kind: "receipt" },
-              { id: "page-1", name: "Oficina", kind: "a4" },
+              { id: "printer-1", name: "Bar printer", kind: "receipt" },
+              { id: "page-1", name: "Office printer", kind: "a4" },
             ],
             designation: "duplicate",
           },
