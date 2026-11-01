@@ -1138,6 +1138,12 @@ a full invoice's operation date read the venue. The printed and emailed invoice 
 sale's node's location. Until S23 "the venue" is the single `locations` row, so every value read is
 the same value read today; Task S2-1 proves that for the hashed one.
 
+**Amendment 2026-11-01 (watcher, 21:20).** S2-3 also owns the receipt-printer location
+predicate in `orderInvoicePrinters` (`apps/server/src/orders-list.ts`) and only the foreign-location
+half of “refuses a receipt printer switched off, deleted or at another location, writing nothing”
+in `orders-invoice-deliveries.test.ts`. These move from S11a. The switched-off and deleted-printer
+refusals and their assertions stay; the separate A4 location predicate remains S11a's.
+
 | | |
 | --- | --- |
 | Depends on | S1 (`readVenue` in `@waitron/db`, which `@waitron/core`, `@waitron/fiscal` and `@waitron/fiscal-verifactu` already depend on) |
@@ -3040,6 +3046,10 @@ comes back (`tender-refund-api.ts:65-76`, `tender-refund-authorization.ts:98-109
 `DeviceBinding.locationId` in S12a, which the design names for "admission". S11 leaves them.
 
 ### Task S11a: orders and bills
+
+**Amendment 2026-11-01 (watcher, 21:20).** The receipt-printer location predicate in
+`orderInvoicePrinters` and its mixed test's foreign-location half moved to S2-3, as recorded in
+S2's amendment above. This task still removes that reader's A4 location predicate.
 
 **Files (16):** `working-order.ts` (except the lines above), `order-drafts.ts`, `order-groups.ts`,
 `order-kitchen-note.ts`, `order-places.ts`, `orders-api.ts`, `orders-list.ts`, `move-bill.ts`,

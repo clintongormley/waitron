@@ -6452,7 +6452,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   the venue only). The build plan covers S1–S12, S16, S17 and F1–F5; the watcher hands out its
   slices. S1 landed (#2379): `@waitron/db`'s `readVenue`, `readVenueClock`,
   `readVenueClockAndPlace` and the interim `venueLocationId` are on main, so S2–S12 and S16 can
-  start. F1 landed (#2383): `@waitron/db/testing/seed.js` has `seedVenue` and `seedWorkingOrder`,
+  start. S2's invoice-input, document and receipt-reader changes are implemented on
+  `refactor/a1301-s2-invoice-inputs`; qualification and owner landing remain.
+  F1 landed (#2383): `@waitron/db/testing/seed.js` has `seedVenue` and `seedWorkingOrder`,
   `packages/db`'s tests seed through them, and `scripts/a1301-seed-codemod.mjs` rewrites the common
   shapes and reports the rest, so F2–F5 can start. S5 landed (#2386): the default and extra menus
   and the receipt languages are read from the one venue (`readVenueInvoiceLocales` in `@waitron/db`
