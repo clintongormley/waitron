@@ -514,7 +514,7 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
           records,
         );
         expect(mirrorDb.all(sql`select * from envios order by registro_id`)).toEqual(attempts);
-        expect(await readDeploymentMode(mirrorDb, seed.nodeId)).toBe("primary");
+        expect((await readNodeMode(mirrorNode, seed.nodeId)).mode).toBe("primary");
       } finally {
         await restarted.close();
       }

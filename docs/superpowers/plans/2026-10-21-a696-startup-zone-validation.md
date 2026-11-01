@@ -521,3 +521,24 @@ This completes the FULL PR checkpoint at the named source head. This final docum
 still passes through the normal hook and current-head CI before handoff. Leave A696 waiting for
 owner review and landing; its item-specific instruction overrides general campaign landing
 authorization. The feature worktree remains available for that review.
+
+
+### Node-database integration, 1 November
+
+Main's A947 slice 3a landed as PR #2371 while the final documentation push was
+being qualified. Rebased onto `790214ba8cdca2661e4ff70848b2f3c975af21df`;
+all 31 patches applied unchanged, as recorded by the range comparison.
+The initial seven-suite server run reported 243 passed and four failed: A696's
+mirror fixture, its promoted-role reader and its configuration version probe
+still used the retired one-file interfaces. Their three files now use the real
+node handle and `@waitron/node-db` interfaces. Every expected value remains;
+the role assertion still requires `primary`, read from its new owner.
+Those three suites then pass all 32 cases, and server types pass.
+
+The other focused results are provisioning import 11, dashboard shell 513,
+repair UI/API 26, process-zone matrix 18 across five files, and the unchanged
+protected fiscal pair 20. Formatting and lint pass for the three test files.
+No production code changed after this rebase. The completed 766-second review
+is retained; the next normal hook and exact-head CI remain required.
+The owner's new location-removal instruction adds no work to this integration;
+A1301's removal slices remain with lane B.

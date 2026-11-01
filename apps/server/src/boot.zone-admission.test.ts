@@ -18,12 +18,11 @@ import {
   stampDeployment,
   withTransaction,
   locationBusinessDaySettings,
-  setDeploymentMode,
-  writeMirrorConfig,
   writeNodeMembership,
   workingOrders,
   incidents,
 } from "@waitron/db";
+import { setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   hashPassword,
@@ -517,8 +516,8 @@ describe("startup zone admission", () => {
     async (mode) => {
       await rawZone("Invalid/Zone");
       if (mode === "mirror") {
-        await setDeploymentMode(suite.db, NODE, "mirror");
-        await writeMirrorConfig(suite.db, NODE, {
+        await setNodeMode({ venue: suite.db, node: suite.node }, NODE, "mirror");
+        await writeMirrorLink(suite.node, NODE, {
           relayUrl: "https://127.0.0.1:1/",
           boxHostname: "box.test",
           boxCaPem: "unused",
