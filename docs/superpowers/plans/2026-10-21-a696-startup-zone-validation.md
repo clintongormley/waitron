@@ -1,5 +1,8 @@
 # A696 Startup Zone Validation Implementation Plan
 
+> **Implementation landed, 1 November 2026:** [#2369](https://github.com/clintongormley/waitron/pull/2369).
+> Earlier approval, build and landing status below records its stated date.
+
 > **For agentic workers:** Use `superpowers:executing-plans` and implement inline, task by task. Read the TDD skill before writing implementation or tests. Checkboxes describe future work, not results. Do not dispatch implementation or review agents automatically.
 
 **Goal:** Admit trading only after validating the saved writing-location zone, provide restricted manager confirmation when that value is unusable, and date new invoices and ordinary tickets consistently without changing saved fiscal facts.

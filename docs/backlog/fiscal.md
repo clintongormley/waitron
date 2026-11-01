@@ -25,8 +25,8 @@ completion day through core/fiscal input, AltaInput.FechaOperacion, new nullable
 and migration, both row mappings and saved-day consultation periods including cancellation's
 original period. The grant excludes hash/chain/allocation/numbering, library alta builders,
 registerSif/restoreFiscal, shipped migrations, historical facts and protected tests; later expansion
-still stops. Implementation remains open, waiting only for released A696/A739 integration and
-the actual fiscal-branch slot. This docs revision authorizes no build or fiscal landing. No mandatory
+still stops. Implementation remains open, waiting for A739 integration. This docs revision
+authorizes no build or fiscal landing. No mandatory
 extra Bill requested action is introduced. The unrecorded physical-end limit is explicit; the restaurant
 analogy remains [S4](../compliance/asesor-questions.md#the-shortened-list-2026-10-09) for the adviser.
 Service-complete qualification, resumption invalidation, S3/A447 advance payments, F2/F3 and
@@ -119,11 +119,11 @@ plan's Mutation section lists them). Decide whether it joins the mutation-tested
 
 ## Walk-up invoice dates follow the server process time zone
 
-**1 November implementation update:** the A696 branch now prepares new invoice dates and record
-offsets from the writing node's saved venue zone. Its [coverage ledger](../superpowers/plans/2026-10-21-a696-startup-zone-validation.md#task-20-coverage-ledger)
-records the focused checks, current-main integration and remaining FULL PR qualification.
-The fiscal PR remains for owner landing. The 15 October observations below describe the earlier
-process-zone behavior; they are retained as historical receipts. Wider A166 and A444 remain open.
+**1 November landing update:** A696 landed in [#2369](https://github.com/clintongormley/waitron/pull/2369).
+New invoice dates and record offsets use the writing node's saved venue zone; the
+[coverage ledger](../superpowers/plans/2026-10-21-a696-startup-zone-validation.md#task-20-coverage-ledger)
+records the qualification. The 15 October observations below describe the earlier process-zone
+behavior. Wider A166 and A444 remain open.
 
 Found during A693's test-only fix (2026-10-15). In an installed disposable copy,
 `transactional-series.test.ts` issued real walk-up invoices with the venue's stored

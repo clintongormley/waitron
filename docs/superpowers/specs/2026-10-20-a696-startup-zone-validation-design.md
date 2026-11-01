@@ -1,5 +1,8 @@
 # A696: validate the saved venue zone before admitting trading
 
+> **Implementation landed, 1 November 2026:** [#2369](https://github.com/clintongormley/waitron/pull/2369).
+> Earlier approval, build and landing status below records its stated date.
+
 > **Owner approval and planning update, 2026-10-21:** the owner approved the
 > [startup design](2026-10-20-a696-startup-zone-validation-design.md), including the minimal
 > A166 country-zone list and creation/import checks first, and authorised its plan and build

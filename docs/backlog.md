@@ -253,7 +253,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   their exposure to the same date boundary has not been reproduced.
   [Reproduction and sources](developers/testing-guide.md#give-a-fake-fiscal-service-and-its-sample-one-controlled-clock).
 
-- **A444. A full invoice for a meal past midnight should carry the day the meal ends.** Automatic bill-close dating excludes Bill requested and staff date choice. Exact H2 scope approved; build waits for released A696/A739 integration and the fiscal-branch slot. Fiscal: the owner lands it.
+- **A444. A full invoice for a meal past midnight should carry the day the meal ends.** Automatic bill-close dating excludes Bill requested and staff date choice. Exact H2 scope approved; build waits for A739 integration. Fiscal: the owner lands it.
   [Detail](backlog/fiscal.md#a444-a-full-invoice-for-a-meal-past-midnight-should-carry-the-day-the-meal-ends).
 - **Structured B2B invoices before the applicable 2027 or 2028 date.** Establish the issuer's threshold and recipient scope, then build structured exchange and required reporting. Current paper/email qualification stays separate.
   [Detail](backlog/fiscal.md#structured-b2b-invoices-before-the-applicable-2027-or-2028-date).
