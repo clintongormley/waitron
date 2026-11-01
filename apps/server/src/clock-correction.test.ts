@@ -115,6 +115,8 @@ function harness(
     bootNaN?: boolean;
     /** The wall clock moves against the steady clock while the host's status is read. */
     statusMovesWallMs?: number;
+    /** Runs while the host's status is read. */
+    duringStatus?: () => void;
     onCorrectedThrows?: boolean;
     /** Steady time the host takes to set. */
     setTakesMs?: number;
@@ -135,6 +137,7 @@ function harness(
       clockStatus: async () => {
         calls.push("clockStatus");
         wallMs += options.statusMovesWallMs ?? 0;
+        options.duringStatus?.();
         return options.status ?? UNSYNCHRONISED;
       },
       setClock: async (input): Promise<ClockSetAnswer> => {
@@ -277,7 +280,7 @@ function byStaff(h: Harness, over: Partial<SetInput> = {}): SetInput {
 }
 
 describe("setting the box's clock", () => {
-  it("judges the stop, reads the service, tells the anchors, sets, re-anchors, clears and records, in that order", async () => {
+  it("judges the stop, reads the service, tells the anchors, judges the stop again, sets, re-anchors, clears and records, in that order", async () => {
     const h = harness();
     const answer = await h.correction.set(aeat(h));
 
@@ -285,6 +288,7 @@ describe("setting the box's clock", () => {
       "clockStopState",
       "clockStatus",
       "stepComing",
+      "clockStopState",
       "setClock",
       "reanchor",
       "clear",
@@ -848,6 +852,104 @@ describe("a person's set", () => {
     const h = harness();
     await h.correction.set(byAdmin(h));
     expect(h.seatCalls[0]).toMatchObject({ source: "admin", admin: LUIS });
+  });
+});
+
+describe("AEAT answering while a person's set waits", () => {
+  const AEAT_DISAGREES: ClockStopState = {
+    ...STOPPED,
+    proof: "contrary",
+    contrary: { authority: authority(START_MS, H), devices: [] },
+  };
+
+  for (const [who, input] of [
+    ["an administrator", byAdmin],
+    ["a staff member", byStaff],
+  ] as const) {
+    it(`refuses ${who} witnessed when AEAT answers while the host's status is read`, async () => {
+      let stop = STOPPED;
+      const h = harness({ stop: () => stop, duringStatus: () => void (stop = AEAT_DISAGREES) });
+      expect(await h.correction.set(input(h))).toEqual({ set: false, reason: "witnessed" });
+      expect(h.hostSets).toEqual([]);
+      expect(h.calls).toContain("reanchor");
+    });
+
+    it(`refuses ${who} witnessed when AEAT answers while an anchor is told a step is coming`, async () => {
+      let stop = STOPPED;
+      const calls: string[] = [];
+      const h = harness({
+        stop: () => stop,
+        anchors: [
+          {
+            stepComing: async () => void (stop = AEAT_DISAGREES),
+            reanchor: async () => void calls.push("reanchor"),
+          },
+        ],
+      });
+      expect(await h.correction.set(input(h))).toEqual({ set: false, reason: "witnessed" });
+      expect(h.hostSets).toEqual([]);
+      expect(calls).toEqual(["reanchor"]);
+    });
+  }
+
+  it("refuses an administrator during clock.unusable when AEAT's reading arrives while an anchor is told", async () => {
+    const before2024 = Date.parse("2020-01-01T00:00:00.000Z");
+    const witnesses: ClockWitness[] = [];
+    const h = harness({
+      unusable: () => true,
+      witnesses,
+      anchors: [
+        {
+          stepComing: async () => void witnesses.push(authority(before2024, H)),
+          reanchor: async () => {},
+        },
+      ],
+    });
+    expect(await h.correction.set(byAdmin(h, { reason: "unusable" }))).toEqual({
+      set: false,
+      reason: "witnessed",
+    });
+    expect(h.hostSets).toEqual([]);
+  });
+
+  it("still sets AEAT's own set when AEAT's reading arrives while an anchor is told", async () => {
+    let stop = STOPPED;
+    const h = harness({
+      stop: () => stop,
+      anchors: [{ stepComing: async () => void (stop = AEAT_DISAGREES), reanchor: async () => {} }],
+    });
+    expect(await h.correction.set(aeat(h))).toMatchObject({ set: true });
+  });
+
+  it("refuses not_stopped, re-anchoring, when the stop ends while an anchor is told", async () => {
+    let stop: ClockStopState | null = STOPPED;
+    const calls: string[] = [];
+    const h = harness({
+      stop: () => stop,
+      anchors: [
+        {
+          stepComing: async () => void (stop = null),
+          reanchor: async () => void calls.push("reanchor"),
+        },
+      ],
+    });
+    expect(await h.correction.set(aeat(h))).toEqual({ set: false, reason: "not_stopped" });
+    expect(h.hostSets).toEqual([]);
+    expect(calls).toEqual(["reanchor"]);
+  });
+
+  it("refuses a staff member when the till's check refuses once the waits are over", async () => {
+    const h = harness();
+    const admit = vi
+      .fn<() => Promise<"authority_pending" | null>>()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue("authority_pending");
+    expect(await h.correction.set(byStaff(h, { admit }))).toEqual({
+      set: false,
+      reason: "authority_pending",
+    });
+    expect(h.hostSets).toEqual([]);
+    expect(h.calls).toContain("reanchor");
   });
 });
 

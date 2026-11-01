@@ -201,6 +201,25 @@ export function clockCorrection(deps: {
     return input.stepsSeen !== steps || !(Math.abs(sinceWall - sinceSteady) <= STALE_MS);
   }
 
+  /** The stop and the till's check, judged in one write-lock turn. */
+  async function admission(
+    input: ClockSetInput,
+  ): Promise<{ refusal: ClockSetRefusal | null; authoritySpoke: boolean }> {
+    return deps.read(async (tx) => {
+      const stop = await judge(tx, input.reason);
+      if (!stop.stopped) return { refusal: "not_stopped" as const, authoritySpoke: false };
+      const refusal = input.admit === undefined ? null : await input.admit(tx);
+      return { refusal, authoritySpoke: stop.authoritySpoke };
+    });
+  }
+
+  function personRefusal(input: ClockSetInput, authoritySpoke: boolean): ClockSetRefusal | null {
+    if (input.source === "authority") return null;
+    if (authoritySpoke) return "witnessed";
+    if (agrees(input)) return "agrees";
+    return null;
+  }
+
   async function setInTurn(input: ClockSetInput): Promise<ClockSetAnswer> {
     // A later step's row written before an earlier one's would be judged against the wrong check.
     if (pending.length > 0) return { set: false, reason: "pending_disproofs" };
@@ -209,21 +228,14 @@ export function clockCorrection(deps: {
     if (!(planned >= EARLIEST_TARGET_MS && planned < LATEST_TARGET_MS))
       return { set: false, reason: "target_invalid" };
 
-    const judged = await deps.read(async (tx) => {
-      const stop = await judge(tx, input.reason);
-      if (!stop.stopped) return { refusal: "not_stopped" as const, stop };
-      const refusal = input.admit === undefined ? null : await input.admit(tx);
-      return { refusal, stop };
-    });
+    const judged = await admission(input);
     if (judged.refusal !== null) return { set: false, reason: judged.refusal };
 
     const status = await deps.host.clockStatus();
     if (!status.available) return { set: false, reason: "host_unavailable" };
     if (status.synchronised) return { set: false, reason: "synchronised" };
-    if (input.source !== "authority") {
-      if (judged.stop.authoritySpoke) return { set: false, reason: "witnessed" };
-      if (agrees(input)) return { set: false, reason: "agrees" };
-    }
+    const person = personRefusal(input, judged.authoritySpoke);
+    if (person !== null) return { set: false, reason: person };
 
     for (const anchor of anchors) {
       try {
@@ -235,7 +247,14 @@ export function clockCorrection(deps: {
       }
     }
 
-    // The waits for the host's status and the anchors leave time for a step by the time service.
+    // AEAT can answer, or the stop end, while the host's status and the anchors are awaited.
+    const rejudged = await admission(input);
+    const late = rejudged.refusal ?? personRefusal(input, rejudged.authoritySpoke);
+    if (late !== null) {
+      await reanchorAll();
+      return { set: false, reason: late };
+    }
+    // The waits leave time for a step by the time service.
     if (stale(input)) {
       await reanchorAll();
       return { set: false, reason: "stale" };
