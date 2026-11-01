@@ -20,9 +20,17 @@ changed by #2375, and #2375 changes nothing the case or its child imports (an em
 `git diff origin/main...HEAD` over the runner, dispatch, runtime, child fixture, test and
 `packages/fiscal`). Other branches' shard 6 passed in the same hour. Locally (macOS) the case
 passed 8 of 8 runs at load average 25, and 10 of 10 beside 30 busy `yes` processes, so it was not
-reproduced. Next action: add pipe and exit timeline diagnostics the failing case
-prints on CI (the testing guide's "A child's exit can precede its readable output" names the
-runner and process suites), reproduce, and fix the cause.
+reproduced.
+
+The process suite now prints expanded marker rows and its real child's event timeline on
+failure: spawn, pipe byte counts, end/close, error codes, parent termination signals and exit
+status. It omits raw protocol content. To inspect a passing control, run
+`DIAGNOSIS_PROCESS_TRACE=1 pnpm --filter @waitron/server exec vitest run src/fiscal-certificate-diagnosis-process.test.ts --reporter=default`.
+The diagnostic change does not fix or establish the cause. Compare the next failing timeline
+with a passing control: did a result arrive, did the parent send a signal, and how did the child
+exit? Reproduce that ordering before changing the runner or its fixture. Keep the original
+assertions and deadlines. The testing guide's "A child's exit can precede its readable output"
+names the companion runner tests.
 
 ## Tests that read a built command's error output fail under Claude Code
 

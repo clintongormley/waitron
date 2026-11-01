@@ -5972,7 +5972,9 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 - **A1303. The certificate diagnosis child still loses its result on CI after A1257's fix.**
   `fiscal-certificate-diagnosis-process.test.ts`'s first case got `interrupted`/`unavailable` again
-  on a run that carried #2342. Find the remaining cause with CI diagnostics and fix it.
+  on a run that carried #2342. Failure diagnostics record pipe byte counts, exit status and
+  parent termination signals; the cause remains open. Use a failing timeline to distinguish
+  missing output from interrupted shutdown, then reproduce and fix that ordering.
   [Detail](backlog/ci.md#a1303-the-certificate-diagnosis-child-still-loses-its-result-on-ci-after-a1257s-fix)
 
 - **Real-source bundle tests repeat metadata work.**
