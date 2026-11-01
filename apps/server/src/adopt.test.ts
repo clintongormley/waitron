@@ -135,6 +135,7 @@ function deps(
       url: string,
       c: AdoptCredential,
       s: { nodeId: string; publicKey: string; contactUrl: string },
+      confirmedCaPem?: string,
     ) => Promise<MirrorBundle>;
     environment?: "production" | "preproduction";
     persistCredentialsRing?: (ring: MirrorBundle["credentialsRing"]) => Promise<void>;
@@ -201,6 +202,21 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(isEnabled(persistedModules[0]!, ALL_MODULES[0]!.name)).toBe(true);
     expect(result.breakGlassSecret).toMatch(/^[A-Za-z0-9_-]{20,}$/);
     expect(await verifyBreakGlass(suite.node, ownNodeId, result.breakGlassSecret)).toBe(true);
+  });
+
+  it("hands the confirmed authority to the bundle fetch", async () => {
+    let confirmed: string | undefined;
+    await adoptFromPrimary(
+      deps({
+        fetchBundle: async (_u, _c, _s, ca) => {
+          confirmed = ca;
+          return makeBundle();
+        },
+      }),
+      { ...REQ, confirmedCaPem: "CONFIRMED-PEM" },
+      NO_HOOKS,
+    );
+    expect(confirmed).toBe("CONFIRMED-PEM");
   });
 
   it("leaves no mirror role behind when its link cannot be written", async () => {

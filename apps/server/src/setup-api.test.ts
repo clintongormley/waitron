@@ -1,5 +1,5 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { createHash } from "node:crypto";
+import { createHash, X509Certificate } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
@@ -20,6 +20,7 @@ import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
 import { makeAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { createSetupOperationStore } from "./setup-operation.js";
+import { mintBoxAuthority, startBoxServer, type BoxServer } from "./testing/box-authority.js";
 import type { ConfigurationPreview } from "./configuration-import.js";
 
 const noopLog: Logger = () => {};
@@ -2916,6 +2917,111 @@ it("serves fiscal-owned venue defaults without exposing provider secrets", async
   expect(await response.json()).toEqual({
     verifactu: { operationDescription: "Venta en establecimiento" },
     none: { operationDescription: "" },
+  });
+});
+
+describe("POST /setup-api/primary-certificate — the main box's authority, read before a password is sent", () => {
+  async function postCertificate(app: Hono, body: unknown): Promise<Response> {
+    return app.request("/setup-api/primary-certificate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it("answers the main box's certificate and fingerprint, refusing an unsafe address with mirror.primary_url_invalid", async () => {
+    const authority = await mintBoxAuthority();
+    const box: BoxServer = await startBoxServer(authority, () => ({
+      status: 200,
+      body: authority.caPem,
+      contentType: "application/x-pem-file",
+    }));
+    try {
+      const app = new Hono();
+      const { deps } = makeAdoptDeps();
+      mountSetup(app, deps, noopLog);
+
+      const res = await postCertificate(app, { primaryUrl: box.url });
+      expect(res.status).toBe(200);
+      const expected = new X509Certificate(authority.caPem);
+      expect(await res.json()).toEqual({
+        pem: expected.toString(),
+        fingerprint256: expected.fingerprint256,
+      });
+
+      const unsafe = await postCertificate(app, { primaryUrl: "https://10.0.0.5" });
+      expect(unsafe.status).toBe(400);
+      expect(await unsafe.json()).toEqual({
+        error: { code: "mirror.primary_url_invalid", params: {} },
+      });
+      expect(box.requests).toHaveLength(1);
+    } finally {
+      await box.close();
+    }
+  });
+
+  it("answers null for a plain-http loopback main box, which has no certificate to compare", async () => {
+    const app = new Hono();
+    const { deps } = makeAdoptDeps();
+    mountSetup(app, deps, noopLog);
+
+    const res = await postCertificate(app, { primaryUrl: "http://127.0.0.1:1" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toBeNull();
+  });
+
+  it("answers 502 mirror.bundle_fetch_failed when what answers is not an authority certificate", async () => {
+    const authority = await mintBoxAuthority();
+    const box = await startBoxServer(authority, () => ({ status: 200, body: authority.certPem }));
+    try {
+      const app = new Hono();
+      const { deps } = makeAdoptDeps();
+      mountSetup(app, deps, noopLog);
+
+      const res = await postCertificate(app, { primaryUrl: box.url });
+      expect(res.status).toBe(502);
+      expect(await res.json()).toEqual({
+        error: { code: "mirror.bundle_fetch_failed", params: {} },
+      });
+    } finally {
+      await box.close();
+    }
+  });
+
+  it("refuses a body with no address as 400 setup.request_invalid", async () => {
+    const app = new Hono();
+    const { deps } = makeAdoptDeps();
+    mountSetup(app, deps, noopLog);
+
+    const res = await postCertificate(app, {});
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("setup.request_invalid");
+  });
+
+  it("carries the confirmed certificate into the adopt request", async () => {
+    const app = new Hono();
+    const { deps, adoptRequests } = makeAdoptDeps();
+    mountSetup(app, deps, noopLog);
+
+    const res = await postAdopt(app, { ...adoptBody(), confirmedCaPem: "CONFIRMED-PEM" });
+    expect(res.status).toBe(200);
+    expect(adoptRequests[0]).toEqual({
+      primaryUrl: PRIMARY_URL,
+      credential: ADOPT_CREDENTIAL,
+      confirmedCaPem: "CONFIRMED-PEM",
+    });
+    await tick();
+  });
+
+  it("refuses a confirmed certificate that is not a string as 400 setup.request_invalid", async () => {
+    const app = new Hono();
+    const { deps, adopt } = makeAdoptDeps();
+    mountSetup(app, deps, noopLog);
+
+    const res = await postAdopt(app, { ...adoptBody(), confirmedCaPem: 42 });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("setup.request_invalid");
+    expect(adopt).not.toHaveBeenCalled();
   });
 });
 

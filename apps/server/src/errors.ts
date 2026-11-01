@@ -1145,6 +1145,11 @@ declare module "@waitron/shared" {
      */
     "mirror.vault_not_empty": Record<string, never>;
     /**
+     * A spare was asked to join a main box over https before the person confirmed that box's
+     * authority certificate; nothing was sent.
+     */
+    "mirror.primary_unconfirmed": Record<string, never>;
+    /**
      * The membership document could not be written because every read-mint-write round lost its
      * term race. The mirror-bundle adopt handshake refuses rather than force a write that would drop
      * the winner's node from the chart; transient, so the caller retries. `attempts` is the round

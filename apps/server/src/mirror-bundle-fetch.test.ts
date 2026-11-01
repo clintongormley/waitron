@@ -3,11 +3,18 @@ import { serve } from "@hono/node-server";
 import type { ServerType } from "@hono/node-server";
 import { Hono } from "hono";
 import type { Context } from "hono";
-import { afterEach, describe, expect, it } from "vitest";
+import { X509Certificate } from "node:crypto";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { hasCode, isAppError } from "@waitron/shared";
 import type { AdoptCredential } from "./adopt.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
-import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
+import { fetchMirrorBundle, fetchPrimaryCertificate } from "./mirror-bundle-fetch.js";
+import {
+  mintBoxAuthority,
+  startBoxServer,
+  type BoxAuthority,
+  type BoxServer,
+} from "./testing/box-authority.js";
 
 // The fetcher only JSON-round-trips it, so the content is immaterial.
 const SAMPLE_BUNDLE: MirrorBundle = {
@@ -338,5 +345,139 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
 
     const error = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
     expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
+  });
+});
+
+describe("the spare checks the main box's certificate before it sends a password", () => {
+  let x: BoxAuthority;
+  let y: BoxAuthority;
+  const boxServers: BoxServer[] = [];
+
+  beforeAll(async () => {
+    [x, y] = await Promise.all([mintBoxAuthority(), mintBoxAuthority()]);
+  });
+
+  afterEach(async () => {
+    while (boxServers.length > 0) await boxServers.pop()!.close();
+  });
+
+  async function serveBundle(authority: BoxAuthority, boxCaPem: string): Promise<BoxServer> {
+    const server = await startBoxServer(authority, () => ({
+      status: 200,
+      body: JSON.stringify({ ...SAMPLE_BUNDLE, boxCaPem }),
+    }));
+    boxServers.push(server);
+    return server;
+  }
+
+  it("with the confirmed authority, the bundle arrives", async () => {
+    const server = await serveBundle(x, x.caPem);
+
+    const bundle = await fetchMirrorBundle(server.url, CREDENTIAL, STANDBY, x.caPem);
+
+    expect(bundle).toEqual({ ...SAMPLE_BUNDLE, boxCaPem: x.caPem });
+    expect(server.requests).toHaveLength(1);
+  });
+
+  it("refuses a bundle whose authority is not the confirmed one, after the box received the request", async () => {
+    const server = await serveBundle(x, y.caPem);
+
+    const error = await fetchMirrorBundle(server.url, CREDENTIAL, STANDBY, x.caPem).catch(
+      (e: unknown) => e,
+    );
+
+    expect(server.requests).toHaveLength(1);
+    expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
+    expect(isAppError(error) && error.params).toEqual({});
+  });
+
+  it("refuses mirror.primary_unconfirmed over https when nothing was confirmed, sending nothing", async () => {
+    const server = await serveBundle(x, x.caPem);
+
+    const error = await fetchMirrorBundle(server.url, CREDENTIAL, STANDBY).catch((e: unknown) => e);
+
+    expect(isAppError(error) && hasCode(error, "mirror.primary_unconfirmed")).toBe(true);
+    expect(server.requests).toHaveLength(0);
+  });
+
+  // A pin, not a failing test: today's default trust refuses Y as well. The first case is its
+  // control.
+  it("sends nothing to a box whose certificate is not the confirmed one", async () => {
+    const server = await serveBundle(y, y.caPem);
+
+    const error = await fetchMirrorBundle(server.url, CREDENTIAL, STANDBY, x.caPem).catch(
+      (e: unknown) => e,
+    );
+
+    expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
+    expect(server.requests).toHaveLength(0);
+  });
+
+  it("reads the authority certificate from a box it does not trust yet, sending no credential", async () => {
+    const server = await startBoxServer(x, () => ({
+      status: 200,
+      body: x.caPem,
+      contentType: "application/x-pem-file",
+    }));
+    boxServers.push(server);
+
+    const read = await fetchPrimaryCertificate(server.url);
+
+    const expected = new X509Certificate(x.caPem);
+    expect(read).toEqual({ pem: expected.toString(), fingerprint256: expected.fingerprint256 });
+    expect(server.requests).toHaveLength(1);
+    const [seen] = server.requests;
+    expect(seen!.method).toBe("GET");
+    expect(seen!.path).toBe("/ca.crt");
+    expect(seen!.body).toBe("");
+    expect(seen!.headers).not.toHaveProperty("authorization");
+    expect(seen!.headers).not.toHaveProperty("cookie");
+  });
+
+  it("answers null for a plain-http loopback main box, which has no certificate to compare", async () => {
+    expect(await fetchPrimaryCertificate("http://127.0.0.1:1")).toBeNull();
+  });
+
+  it.each([
+    ["a refusal", () => ({ status: 404, body: "" })],
+    ["the box's leaf, which is no authority", () => ({ status: 200, body: x.certPem })],
+    ["two certificates", () => ({ status: 200, body: x.caPem + y.caPem })],
+    [
+      "a broken certificate",
+      () => ({
+        status: 200,
+        body: "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n",
+      }),
+    ],
+    ["an answer far larger than a certificate", () => ({ status: 200, body: "A".repeat(70_000) })],
+  ])("refuses to read the authority from %s", async (_label, answer) => {
+    const server = await startBoxServer(x, answer);
+    boxServers.push(server);
+
+    const error = await fetchPrimaryCertificate(server.url).catch((e: unknown) => e);
+    expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
+  });
+
+  it("refuses a bundle whose authority cannot be read as a certificate", async () => {
+    const server = await serveBundle(x, "not a certificate");
+
+    const error = await fetchMirrorBundle(server.url, CREDENTIAL, STANDBY, x.caPem).catch(
+      (e: unknown) => e,
+    );
+    expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
+  });
+
+  it("relays a refused login over https as password.invalid", async () => {
+    const server = await startBoxServer(x, () => ({
+      status: 401,
+      body: JSON.stringify({ error: { code: "password.invalid", params: { detail: "x" } } }),
+    }));
+    boxServers.push(server);
+
+    const error = await fetchMirrorBundle(server.url, CREDENTIAL, STANDBY, x.caPem).catch(
+      (e: unknown) => e,
+    );
+    expect(isAppError(error) && hasCode(error, "password.invalid")).toBe(true);
+    expect(isAppError(error) && error.params).toEqual({});
   });
 });

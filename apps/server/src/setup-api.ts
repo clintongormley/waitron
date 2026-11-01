@@ -37,6 +37,7 @@ import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
 import { resolveLoginLocale } from "./login-locale.js";
 import { createPasswordThrottle } from "./password-throttle.js";
+import { fetchPrimaryCertificate } from "./mirror-bundle-fetch.js";
 import { assertSafePrimaryUrl } from "./primary-url.js";
 import { mountSetupSpa } from "./setup-spa.js";
 import type { Logger } from "./logger.js";
@@ -288,6 +289,7 @@ const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.primary_url_invalid": 400,
   "mirror.bundle_fetch_failed": 502,
   "mirror.vault_not_empty": 409,
+  "mirror.primary_unconfirmed": 409,
   "password.invalid": 401,
   "setup.operation_conflict": 409,
   "setup.already_provisioning": 409,
@@ -296,6 +298,17 @@ const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 const runAdopt = createErrorBoundary(ADOPT_STATUS, "setup.adopt_failed");
+
+const PRIMARY_CERTIFICATE_STATUS: Record<string, ContentfulStatusCode> = {
+  "setup.request_invalid": 400,
+  "mirror.primary_url_invalid": 400,
+  "mirror.bundle_fetch_failed": 502,
+};
+
+const runPrimaryCertificate = createErrorBoundary(
+  PRIMARY_CERTIFICATE_STATUS,
+  "setup.primary_certificate_failed",
+);
 
 const RESET_STATUS: Record<string, ContentfulStatusCode> = {
   "setup.request_invalid": 400,
@@ -980,6 +993,18 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     });
   });
 
+  // Sends nothing secret: the person compares the answer's fingerprint with the main box's before
+  // the adopt request carries a password.
+  app.post("/setup-api/primary-certificate", async (c) =>
+    runPrimaryCertificate(c, log, async () => {
+      const body = await readJsonBody<{ primaryUrl?: unknown }>(c);
+      const primaryUrl = asString(body.primaryUrl, "primaryUrl");
+      // The same SSRF guard as the adopt route: this route is unauthenticated too.
+      assertSafePrimaryUrl(primaryUrl);
+      return c.json(await fetchPrimaryCertificate(primaryUrl));
+    }),
+  );
+
   app.post("/setup-api/adopt", async (c) => {
     const adopt = deps.adopt;
     const requestRestart = deps.requestRestart;
@@ -997,7 +1022,11 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       // The credential is validated PER FIELD at the mirror's own boundary, so a wrong-shape body
       // is a clean 400 rather than forwarded to fail at the primary as a 502. The password and
       // TOTP are never logged: `asString` names the field, never its value.
-      const body = await readJsonBody<{ primaryUrl?: unknown; credential?: unknown }>(c);
+      const body = await readJsonBody<{
+        primaryUrl?: unknown;
+        credential?: unknown;
+        confirmedCaPem?: unknown;
+      }>(c);
       const primaryUrl = asString(body.primaryUrl, "primaryUrl");
       // SSRF guard: this route is UNAUTHENTICATED, so without it anyone who can reach a box in
       // setup could point `primaryUrl` at a metadata endpoint or an internal host and have the
@@ -1010,8 +1039,13 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         totp: cred.totp === undefined ? undefined : asString(cred.totp, "credential.totp"),
       };
 
+      const confirmedCaPem =
+        body.confirmedCaPem === undefined
+          ? undefined
+          : asString(body.confirmedCaPem, "confirmedCaPem");
+
       const { breakGlassSecret, breakGlassKeyName } = await adopt(
-        { primaryUrl, credential },
+        { primaryUrl, credential, ...(confirmedCaPem === undefined ? {} : { confirmedCaPem }) },
         {
           // For adopt this phase means "adopt is past its own checks and may have written to this
           // node": the store keeps a record past "started", so a different request cannot run over

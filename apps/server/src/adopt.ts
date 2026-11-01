@@ -51,6 +51,9 @@ export interface AdoptCredential {
 export interface AdoptRequest {
   primaryUrl: string;
   credential: AdoptCredential;
+  /** The main box's authority as the person confirmed it; absent only for a plain-http loopback
+   * main box. */
+  confirmedCaPem?: string;
 }
 
 export interface AdoptHooks {
@@ -76,6 +79,7 @@ export interface AdoptDeps {
     primaryUrl: string,
     credential: AdoptCredential,
     standby: { nodeId: string; publicKey: string; contactUrl: string },
+    confirmedCaPem?: string,
   ) => Promise<MirrorBundle>;
   /** Sent as this node's `contactUrl`, which the primary records so a till can route here after a
    * failover. */
@@ -106,11 +110,12 @@ export async function adoptFromPrimary(
   hooks: AdoptHooks,
 ): Promise<{ breakGlassSecret: string; breakGlassKeyName: string }> {
   const standby = generateStandbyIdentity();
-  const bundle = await deps.fetchBundle(req.primaryUrl, req.credential, {
-    nodeId: standby.nodeId,
-    publicKey: standby.publicKey,
-    contactUrl: deps.advertisedOrigin,
-  });
+  const bundle = await deps.fetchBundle(
+    req.primaryUrl,
+    req.credential,
+    { nodeId: standby.nodeId, publicKey: standby.publicKey, contactUrl: deps.advertisedOrigin },
+    req.confirmedCaPem,
+  );
   const { designated } = bundle;
 
   // Validated against THIS node's modules, so a skewed or hostile primary is refused before any
