@@ -36,9 +36,9 @@ export interface StaffingGuideRange {
 
 /** A season's staffing for every active area; `weekdays` holds 0 (Sunday) to 6, empty when unpainted. */
 export interface SeasonStaffing {
-  /** The location's current changeover, `HH:MM`. */
+  /** The current changeover, `HH:MM`. */
   cutover: string;
-  /** Every season at the location, by start. */
+  /** Every season, by start. */
   seasons: { id: string; name: string; startsOn: string; colour: CalendarColour }[];
   areas: { area: AreaRef; name: string; weekdays: Record<number, StaffingBlock[]> }[];
   /** areaKey → weekday → opening ranges or station sending ranges. */
@@ -46,7 +46,7 @@ export interface SeasonStaffing {
 }
 
 export interface SpecialDayStaffing {
-  /** The location's current changeover, `HH:MM`. */
+  /** The current changeover, `HH:MM`. */
   cutover: string;
   name: string;
   /** areaKey → dateId → opening ranges or station sending ranges. */

@@ -143,7 +143,7 @@ describe("listStaffingAreas", () => {
       .update(kitchenStations)
       .set({ name: "barra" })
       .where(eq(kitchenStations.id, v.passId));
-    expect(await inTx((tx) => listStaffingAreas(tx, v.cfg))).toEqual([
+    expect(await inTx((tx) => listStaffingAreas(tx))).toEqual([
       { area: dept(v), name: "Dining room" },
       { area: grill(v), name: "Ásador" },
       { area: { kind: "station", id: v.passId }, name: "barra" },
@@ -157,7 +157,7 @@ describe("season staffing", () => {
     const late = block(v.cook, { headcount: 1, startsAt: "20:00", endsAt: "02:00" });
     const early = block(v.waiter, { startsAt: "07:00", endsAt: "11:30" });
     await inTx((tx) =>
-      saveSeasonStaffing(tx, v.cfg, v.seasonId, [
+      saveSeasonStaffing(tx, v.seasonId, [
         { area: dept(v), weekday: 5, blocks: [late, early] },
         { area: grill(v), weekday: 0, blocks: [block(v.cook)] },
       ]),
@@ -173,7 +173,7 @@ describe("season staffing", () => {
   it("stores times as HH:MM:00", async () => {
     const v = await venue();
     await inTx((tx) =>
-      saveSeasonStaffing(tx, v.cfg, v.seasonId, [
+      saveSeasonStaffing(tx, v.seasonId, [
         { area: dept(v), weekday: 1, blocks: [block(v.waiter, { endsAt: "16:45" })] },
       ]),
     );
@@ -190,9 +190,7 @@ describe("season staffing", () => {
   it("replaces a weekday's blocks and deletes its row when saved empty", async () => {
     const v = await venue();
     const save = (blocks: StaffingBlock[]) =>
-      inTx((tx) =>
-        saveSeasonStaffing(tx, v.cfg, v.seasonId, [{ area: dept(v), weekday: 2, blocks }]),
-      );
+      inTx((tx) => saveSeasonStaffing(tx, v.seasonId, [{ area: dept(v), weekday: 2, blocks }]));
     await save([block(v.waiter), block(v.cook)]);
     await save([block(v.cook, { headcount: 3 })]);
     expect(
@@ -217,47 +215,37 @@ describe("season staffing", () => {
     ).toEqual([]);
   });
 
-  it("refuses a season at another location, a staff role from another location and an unknown area", async () => {
+  it("refuses an unknown season, an unknown staff role and an unknown area", async () => {
     const v = await venue();
-    const other = await venue();
-    expect(await refusal(inTx((tx) => readSeasonStaffing(tx, v.cfg, other.seasonId)))).toEqual({
+    const ghostSeason = randomUUID();
+    expect(await refusal(inTx((tx) => readSeasonStaffing(tx, v.cfg, ghostSeason)))).toEqual({
       code: "season.not_found",
-      params: { seasonId: other.seasonId },
+      params: { seasonId: ghostSeason },
     });
-    expect(await refusal(inTx((tx) => saveSeasonStaffing(tx, v.cfg, other.seasonId, [])))).toEqual({
+    expect(await refusal(inTx((tx) => saveSeasonStaffing(tx, ghostSeason, [])))).toEqual({
       code: "season.not_found",
-      params: { seasonId: other.seasonId },
+      params: { seasonId: ghostSeason },
     });
+    const ghostRole = randomUUID();
     expect(
       await refusal(
         inTx((tx) =>
-          saveSeasonStaffing(tx, v.cfg, v.seasonId, [
-            { area: dept(v), weekday: 1, blocks: [block(v.waiter), block(other.cook)] },
+          saveSeasonStaffing(tx, v.seasonId, [
+            { area: dept(v), weekday: 1, blocks: [block(v.waiter), block(ghostRole)] },
           ]),
         ),
       ),
-    ).toEqual({ code: "staff_role.not_found", params: { staffRoleId: other.cook } });
+    ).toEqual({ code: "staff_role.not_found", params: { staffRoleId: ghostRole } });
     const unknown: AreaRef = { kind: "station", id: randomUUID() };
     expect(
       await refusal(
         inTx((tx) =>
-          saveSeasonStaffing(tx, v.cfg, v.seasonId, [
+          saveSeasonStaffing(tx, v.seasonId, [
             { area: unknown, weekday: 1, blocks: [block(v.waiter)] },
           ]),
         ),
       ),
     ).toEqual({ code: "staffing_area.not_found", params: { area: `station:${unknown.id}` } });
-    const elsewhere: AreaRef = { kind: "department", id: other.departmentId };
-    expect(
-      await refusal(
-        inTx((tx) =>
-          saveSeasonStaffing(tx, v.cfg, v.seasonId, [{ area: elsewhere, weekday: 1, blocks: [] }]),
-        ),
-      ),
-    ).toEqual({
-      code: "staffing_area.not_found",
-      params: { area: `department:${other.departmentId}` },
-    });
     expect(
       await inTx((tx) =>
         tx.select().from(staffingDays).where(eq(staffingDays.seasonId, v.seasonId)),
@@ -313,9 +301,8 @@ describe("season staffing", () => {
     });
   });
 
-  it("carries the location's changeover and every season at the location, by start", async () => {
+  it("carries the venue's changeover and every season, by start", async () => {
     const v = await venue();
-    const other = await venue();
     const [winter] = await inTx(async (tx) => {
       await tx
         .update(locations)
@@ -332,7 +319,6 @@ describe("season staffing", () => {
       { id: winter!.id, name: "Winter", startsOn: "01-15", colour: "blue" },
       { id: v.seasonId, name: "Summer", startsOn: "06-01", colour: "grey" },
     ]);
-    expect(read.seasons.map((s) => s.id)).not.toContain(other.seasonId);
     expect((await inTx((tx) => readSeasonStaffing(tx, v.cfg, winter!.id))).seasons).toEqual(
       read.seasons,
     );
@@ -343,7 +329,7 @@ describe("special-day staffing", () => {
   it("reads every date of the special day, null where it follows the season", async () => {
     const v = await venue();
     await inTx((tx) =>
-      saveSpecialDayStaffing(tx, v.cfg, v.specialDayId, [
+      saveSpecialDayStaffing(tx, v.specialDayId, [
         { area: dept(v), dateId: v.aug15, blocks: [block(v.waiter)] },
         { area: grill(v), dateId: v.aug14, blocks: [] },
       ]),
@@ -539,9 +525,7 @@ describe("special-day staffing", () => {
     const v = await venue();
     const save = (blocks: StaffingBlock[] | null) =>
       inTx((tx) =>
-        saveSpecialDayStaffing(tx, v.cfg, v.specialDayId, [
-          { area: dept(v), dateId: v.aug15, blocks },
-        ]),
+        saveSpecialDayStaffing(tx, v.specialDayId, [{ area: dept(v), dateId: v.aug15, blocks }]),
       );
     const rows = () =>
       inTx((tx) =>
@@ -561,21 +545,34 @@ describe("special-day staffing", () => {
     expect(await rows()).toEqual([]);
   });
 
-  it("refuses a special day elsewhere, a date of another special day, and an unknown staff role", async () => {
+  it("refuses an unknown special day, a date of another special day, and an unknown staff role", async () => {
     const v = await venue();
-    const other = await venue();
-    expect(
-      await refusal(inTx((tx) => readSpecialDayStaffing(tx, v.cfg, other.specialDayId))),
-    ).toEqual({ code: "special_day.not_found", params: { specialDayId: other.specialDayId } });
-    expect(
-      await refusal(inTx((tx) => saveSpecialDayStaffing(tx, v.cfg, other.specialDayId, []))),
-    ).toEqual({ code: "special_day.not_found", params: { specialDayId: other.specialDayId } });
+    const ghostDay = randomUUID();
+    expect(await refusal(inTx((tx) => readSpecialDayStaffing(tx, v.cfg, ghostDay)))).toEqual({
+      code: "special_day.not_found",
+      params: { specialDayId: ghostDay },
+    });
+    expect(await refusal(inTx((tx) => saveSpecialDayStaffing(tx, ghostDay, [])))).toEqual({
+      code: "special_day.not_found",
+      params: { specialDayId: ghostDay },
+    });
+    const otherDate = await inTx(async (tx) => {
+      const [day] = await tx
+        .insert(specialDays)
+        .values({ locationId: v.cfg.locationId, name: "Market day" })
+        .returning({ id: specialDays.id });
+      const [date] = await tx
+        .insert(specialDayDates)
+        .values({ specialDayId: day!.id, locationId: v.cfg.locationId, date: "2026-09-01" })
+        .returning({ id: specialDayDates.id });
+      return date!.id;
+    });
     expect(
       await refusal(
         inTx((tx) =>
-          saveSpecialDayStaffing(tx, v.cfg, v.specialDayId, [
+          saveSpecialDayStaffing(tx, v.specialDayId, [
             { area: dept(v), dateId: v.aug15, blocks: null },
-            { area: dept(v), dateId: other.aug14, blocks: null },
+            { area: dept(v), dateId: otherDate, blocks: null },
             { area: dept(v), dateId: randomUUID(), blocks: null },
           ]),
         ),
@@ -584,7 +581,7 @@ describe("special-day staffing", () => {
     expect(
       await refusal(
         inTx((tx) =>
-          saveSpecialDayStaffing(tx, v.cfg, v.specialDayId, [
+          saveSpecialDayStaffing(tx, v.specialDayId, [
             { area: dept(v), dateId: randomUUID(), blocks: null },
           ]),
         ),
@@ -594,21 +591,12 @@ describe("special-day staffing", () => {
     expect(
       await refusal(
         inTx((tx) =>
-          saveSpecialDayStaffing(tx, v.cfg, v.specialDayId, [
+          saveSpecialDayStaffing(tx, v.specialDayId, [
             { area: dept(v), dateId: v.aug14, blocks: [block(ghost)] },
           ]),
         ),
       ),
     ).toEqual({ code: "staff_role.not_found", params: { staffRoleId: ghost } });
-    expect(
-      await refusal(
-        inTx((tx) =>
-          saveSpecialDayStaffing(tx, v.cfg, v.specialDayId, [
-            { area: { kind: "station", id: other.stationId }, dateId: v.aug14, blocks: null },
-          ]),
-        ),
-      ),
-    ).toEqual({ code: "staffing_area.not_found", params: { area: `station:${other.stationId}` } });
   });
 });
 
@@ -620,12 +608,12 @@ describe("resolveStaffing", () => {
     const saturday = [block(v.cook, { startsAt: "18:00", endsAt: "23:00" })];
     const fiesta = [block(v.waiter, { headcount: 5 })];
     await inTx(async (tx) => {
-      await saveSeasonStaffing(tx, v.cfg, v.seasonId, [
+      await saveSeasonStaffing(tx, v.seasonId, [
         { area: dept(v), weekday: 5, blocks: friday },
         { area: grill(v), weekday: 5, blocks: saturday },
         { area: dept(v), weekday: 6, blocks: saturday },
       ]);
-      await saveSpecialDayStaffing(tx, v.cfg, v.specialDayId, [
+      await saveSpecialDayStaffing(tx, v.specialDayId, [
         { area: dept(v), dateId: v.aug14, blocks: fiesta },
         { area: dept(v), dateId: v.aug15, blocks: [] },
       ]);
@@ -655,10 +643,10 @@ describe("resolveStaffing", () => {
         .update(specialDays)
         .set({ repeatsYearly: true })
         .where(eq(specialDays.id, v.specialDayId));
-      await saveSeasonStaffing(tx, v.cfg, v.seasonId, [
+      await saveSeasonStaffing(tx, v.seasonId, [
         { area: dept(v), weekday: 0, blocks: [block(v.cook)] },
       ]);
-      await saveSpecialDayStaffing(tx, v.cfg, v.specialDayId, [
+      await saveSpecialDayStaffing(tx, v.specialDayId, [
         { area: dept(v), dateId: v.aug15, blocks: fiesta },
       ]);
     });
@@ -702,14 +690,12 @@ describe("switched-off areas", () => {
       const area = kind === "department" ? dept(v) : grill(v);
       const blocks = [block(v.cook)];
       await inTx(async (tx) => {
-        await saveSeasonStaffing(tx, v.cfg, v.seasonId, [{ area, weekday: 5, blocks }]);
-        await saveSpecialDayStaffing(tx, v.cfg, v.specialDayId, [
-          { area, dateId: v.aug15, blocks },
-        ]);
+        await saveSeasonStaffing(tx, v.seasonId, [{ area, weekday: 5, blocks }]);
+        await saveSpecialDayStaffing(tx, v.specialDayId, [{ area, dateId: v.aug15, blocks }]);
       });
       const reads = () =>
         inTx(async (tx) => ({
-          areas: (await listStaffingAreas(tx, v.cfg)).map((a) => a.area),
+          areas: (await listStaffingAreas(tx)).map((a) => a.area),
           season: await readSeasonStaffing(tx, v.cfg, v.seasonId),
           special: await readSpecialDayStaffing(tx, v.cfg, v.specialDayId),
           resolved: await resolveStaffing(tx, v.cfg, ["2026-08-14", "2026-08-15"]),
@@ -724,17 +710,13 @@ describe("switched-off areas", () => {
       for (const day of off.resolved.values()) expect(day.has(`${kind}:${area.id}`)).toBe(false);
       expect(
         await refusal(
-          inTx((tx) =>
-            saveSeasonStaffing(tx, v.cfg, v.seasonId, [{ area, weekday: 5, blocks: [] }]),
-          ),
+          inTx((tx) => saveSeasonStaffing(tx, v.seasonId, [{ area, weekday: 5, blocks: [] }])),
         ),
       ).toEqual({ code: "staffing_area.not_found", params: { area: `${kind}:${area.id}` } });
       expect(
         await refusal(
           inTx((tx) =>
-            saveSpecialDayStaffing(tx, v.cfg, v.specialDayId, [
-              { area, dateId: v.aug15, blocks: null },
-            ]),
+            saveSpecialDayStaffing(tx, v.specialDayId, [{ area, dateId: v.aug15, blocks: null }]),
           ),
         ),
       ).toEqual({ code: "staffing_area.not_found", params: { area: `${kind}:${area.id}` } });
@@ -756,7 +738,7 @@ describe("location clock", () => {
       block(second!),
     ];
     await inTx((tx) =>
-      saveSeasonStaffing(tx, v.cfg, v.seasonId, [
+      saveSeasonStaffing(tx, v.seasonId, [
         { area: dept(v), weekday: 4, blocks: [...ordered].reverse() },
       ]),
     );
@@ -776,9 +758,7 @@ describe("location clock", () => {
     const night = block(v.cook, { startsAt: "02:00", endsAt: "03:00" });
     const morning = block(v.cook, { startsAt: "04:00", endsAt: "05:00" });
     await inTx((tx) =>
-      saveSeasonStaffing(tx, v.cfg, v.seasonId, [
-        { area: dept(v), weekday: 1, blocks: [night, morning] },
-      ]),
+      saveSeasonStaffing(tx, v.seasonId, [{ area: dept(v), weekday: 1, blocks: [night, morning] }]),
     );
     expect(
       (await inTx((tx) => readSeasonStaffing(tx, v.cfg, v.seasonId))).areas[0]!.weekdays[1],
@@ -858,7 +838,7 @@ it("A724 returns period identity and station sending hours for the chosen season
 it("A724 returns dated station guides without removing staffing on a closed date", async () => {
   const v = await guideVenue();
   await inTx(async (tx) => {
-    await saveSpecialDayStaffing(tx, v.cfg, v.specialDayId, [
+    await saveSpecialDayStaffing(tx, v.specialDayId, [
       { area: grill(v), dateId: v.aug15, blocks: [block(v.cook)] },
     ]);
     await tx

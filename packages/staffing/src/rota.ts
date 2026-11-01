@@ -1,7 +1,6 @@
 import { and, asc, eq, gte, lte, inArray, or } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import { readVenueClock, type Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
-import { readLocationClock } from "@waitron/reporting";
 import { AppError, cutoverForBusinessDay, locationId } from "@waitron/shared";
 import {
   addDays,
@@ -38,12 +37,12 @@ export function isRotaWeek(value: unknown): value is string {
 export async function readRotaWeek(tx: Transaction, cfg: Cfg, week: string): Promise<RotaWeek> {
   if (!isRotaWeek(week)) throw invalid("week");
   const days = Array.from({ length: 7 }, (_, i) => addDays(week, i));
-  const clock = await readLocationClock(tx, cfg.locationId);
+  const clock = await readVenueClock(tx);
   const cutover = (day: string) => cutoverForBusinessDay(clock, day);
   const scope = { locationId: locationId(cfg.locationId) };
   const venueSeasons = await readSeasons(tx, scope);
   const plan = await readDayPlan(tx, scope, days, venueSeasons);
-  const areas = await listStaffingAreas(tx, cfg);
+  const areas = await listStaffingAreas(tx);
   const opening = await resolveDepartmentsDays(
     tx,
     scope,
@@ -54,8 +53,8 @@ export async function readRotaWeek(tx: Transaction, cfg: Cfg, week: string): Pro
   );
   const weekSeasonIds = new Set(days.map((day) => plan.seasonIdOn.get(day)));
   const paint = await resolveStaffing(tx, cfg, days, { plan, areas, cutover: clock.dayCutover });
-  const roles = await listStaffRoles(tx, cfg);
-  const data = await readRotaRows(tx, cfg, week, week);
+  const roles = await listStaffRoles(tx);
+  const data = await readRotaRows(tx, week, week);
   const version = data.selected.get(week);
   const placed = (data.byWeek.get(week) ?? []).map((s) => placeShift(s, cutover));
   const people = await tx
@@ -183,30 +182,24 @@ export async function readRotaWeek(tx: Transaction, cfg: Cfg, week: string): Pro
     staffRoles: roles,
   };
 }
-async function assignmentTargets(tx: Transaction, cfg: Cfg, area: AreaRef, staffRoleId: string) {
+async function assignmentTargets(tx: Transaction, area: AreaRef, staffRoleId: string) {
   parseArea(area, "area");
-  if (!(await listStaffingAreas(tx, cfg)).some((a) => areaKey(a.area) === areaKey(area)))
+  if (!(await listStaffingAreas(tx)).some((a) => areaKey(a.area) === areaKey(area)))
     throw new AppError("staffing_area.not_found", { area: areaKey(area) });
   const [role] = await tx
     .select({ id: staffRoles.id })
     .from(staffRoles)
-    .where(and(eq(staffRoles.id, staffRoleId), eq(staffRoles.locationId, cfg.locationId)));
+    .where(eq(staffRoles.id, staffRoleId));
   if (!role) throw new AppError("staff_role.not_found", { staffRoleId });
 }
-async function times(
-  tx: Transaction,
-  cfg: Cfg,
-  businessDay: string,
-  startsAt: string,
-  endsAt: string,
-) {
+async function times(tx: Transaction, businessDay: string, startsAt: string, endsAt: string) {
   for (const [field, value] of [
     ["startsAt", startsAt],
     ["endsAt", endsAt],
   ])
     if (typeof value !== "string" || !/^([01]\d|2[0-3]):(00|15|30|45)$/.test(value))
       throw invalid(field!);
-  const clock = await readLocationClock(tx, cfg.locationId);
+  const clock = await readVenueClock(tx);
   const cutover = cutoverForBusinessDay(clock, businessDay);
   const span = blockSpan({ startsAt, endsAt }, cutover);
   if (span.end <= span.start) throw invalid("endsAt");
@@ -246,8 +239,8 @@ export async function addRotaShift(
     input.businessDay > addDays(input.week, 6)
   )
     throw invalid("businessDay");
-  await assignmentTargets(tx, cfg, input.area, input.staffRoleId);
-  const interval = await times(tx, cfg, input.businessDay, input.startsAt, input.endsAt);
+  await assignmentTargets(tx, input.area, input.staffRoleId);
+  const interval = await times(tx, input.businessDay, input.startsAt, input.endsAt);
   const { version } = await backend.getRoster(tx, { ...cfg, period: input.week });
   if (version && version.status !== "draft")
     throw new AppError("roster.not_draft", { rosterVersionId: version.id });
@@ -264,11 +257,8 @@ export async function addRotaShift(
     .values({ shiftId, ...assignment(input.area, input.staffRoleId) });
   return shiftId;
 }
-async function writableShift(tx: Transaction, cfg: Cfg, shiftId: string) {
-  const [row] = await tx
-    .select()
-    .from(shifts)
-    .where(and(eq(shifts.id, shiftId), eq(shifts.locationId, cfg.locationId)));
+async function writableShift(tx: Transaction, shiftId: string) {
+  const [row] = await tx.select().from(shifts).where(eq(shifts.id, shiftId));
   if (!row) throw new AppError("shift.not_found", { shiftId });
   if (row.rosterVersionId !== null) {
     const v = await backend.getRosterVersion(tx, { versionId: row.rosterVersionId });
@@ -296,7 +286,7 @@ export async function updateRotaShift(
   shiftId: string,
   patch: RotaShiftPatch,
 ): Promise<void> {
-  const row = await writableShift(tx, cfg, shiftId);
+  const row = await writableShift(tx, shiftId);
   if (Object.keys(patch).length === 0) return;
   if (row.rosterVersionId === null) {
     const { week, version } = await unattachedWeek(tx, cfg, row);
@@ -319,14 +309,14 @@ export async function updateRotaShift(
     const staffRoleId = patch.staffRoleId ?? prior?.staffRoleId;
     if (!area) throw invalid("area");
     if (!staffRoleId) throw invalid("staffRoleId");
-    await assignmentTargets(tx, cfg, area, staffRoleId);
+    await assignmentTargets(tx, area, staffRoleId);
     await tx
       .insert(shiftAssignments)
       .values({ shiftId, ...assignment(area, staffRoleId) })
       .onConflictDoUpdate({ target: shiftAssignments.shiftId, set: assignment(area, staffRoleId) });
   }
   if (patch.personId !== undefined || patch.startsAt !== undefined || patch.endsAt !== undefined) {
-    const clock = await readLocationClock(tx, cfg.locationId);
+    const clock = await readVenueClock(tx);
     const placed = placeShift({ shiftId, area: null, staffRoleId: null, ...row }, (d) =>
       cutoverForBusinessDay(clock, d),
     );
@@ -336,7 +326,6 @@ export async function updateRotaShift(
       patch.startsAt !== undefined || patch.endsAt !== undefined
         ? await times(
             tx,
-            cfg,
             placed.businessDay,
             patch.startsAt ?? wall(row.startsAt, row.startsOffsetMinutes),
             patch.endsAt ?? wall(row.endsAt, row.endsOffsetMinutes),
@@ -350,7 +339,7 @@ export async function updateRotaShift(
   }
 }
 export async function removeRotaShift(tx: Transaction, cfg: Cfg, shiftId: string): Promise<void> {
-  const row = await writableShift(tx, cfg, shiftId);
+  const row = await writableShift(tx, shiftId);
   if (row.rosterVersionId === null) await unattachedWeek(tx, cfg, row);
   await backend.removeShift(tx, { shiftId });
 }

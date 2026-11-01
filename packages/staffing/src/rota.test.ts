@@ -92,7 +92,7 @@ async function venue() {
       startDate: "2026-01-01",
       payRate: 0,
     });
-    await saveSeasonStaffing(t, v.cfg, v.seasonId, [
+    await saveSeasonStaffing(t, v.seasonId, [
       {
         area,
         weekday: 0,
@@ -456,7 +456,7 @@ describe("the rota writes", () => {
     );
     expect(assignment!.departmentId).toBe(v.departmentId);
   });
-  it("assigns an unlinked shift, edits its person and time and removes only the scoped draft shift", async () => {
+  it("assigns an unlinked shift, edits its person and time and removes the draft shift", async () => {
     const v = await venue();
     const id = await rawShift(v, null, "2026-12-01T08:00:00Z", "2026-12-01T12:00:00Z");
     expect(api.updateRotaShift).toBeTypeOf("function");
@@ -480,25 +480,14 @@ describe("the rota writes", () => {
       startsAt: "2026-12-01T09:00:00Z",
       endsAt: "2026-12-01T13:00:00Z",
     });
-    const other = await venue();
-    await expect(tx((t) => api.removeRotaShift(t, other.cfg, id))).rejects.toMatchObject({
-      code: "shift.not_found",
-    });
     await tx((t) => api.removeRotaShift(t, v.cfg, id));
     expect((await read(v)).shifts).toEqual([]);
     expect(
       await tx((t) => t.select().from(shiftAssignments).where(eq(shiftAssignments.shiftId, id))),
     ).toEqual([]);
   });
-  it("refuses foreign and inactive areas and roles without leaving a draft", async () => {
+  it("refuses an unknown role and an inactive area without leaving a draft", async () => {
     const v = await venue();
-    const other = await venue();
-    await expect(add(v, { area: other.area })).rejects.toMatchObject({
-      code: "staffing_area.not_found",
-    });
-    await expect(add(v, { staffRoleId: other.staffRoleId })).rejects.toMatchObject({
-      code: "staff_role.not_found",
-    });
     await expect(add(v, { staffRoleId: randomUUID() })).rejects.toMatchObject({
       code: "staff_role.not_found",
     });

@@ -6457,9 +6457,11 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   shapes and reports the rest, so F2–F5 can start. S5 landed (#2386): the default and extra menus
   and the receipt languages are read from the one venue (`readVenueInvoiceLocales` in `@waitron/db`
   reads the languages alone), the menu routes moved to `/management-api/venue/…`, and
-  `location.not_found` is gone. The working-time slices have their own plan, written against
-  A1268's merged diff (#2375): S13, S14, S15 (three pull requests) and S12d, lane B's, landed in
-  that order. S18 waits for S2–S17, and the schema
+  `location.not_found` is gone. S9 moved bookings and staffing onto the venue; staffing's season,
+  day-plan and month reads still hand venue-service a `{ locationId }` scope until S8, and its rota
+  verbs keep theirs for the workforce roster calls S13 changes. The working-time slices have their
+  own plan, written against A1268's merged diff (#2375): S13, S14, S15 (three pull requests) and
+  S12d, lane B's, landed in that order. S18 waits for S2–S17, and the schema
   slices S20–S28 get a plan of their own, which first settles what the venue id sent to Cloud and
   naming the backup folder becomes.
   [Design](superpowers/specs/2026-11-01-a1301-remove-location-design.md),
