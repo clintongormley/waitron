@@ -6442,9 +6442,13 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **A1301. Remove the "location" concept: the venue holds everything a location held** (owner,
   2026-11-01, high priority; nothing new is built on locations meanwhile). The design is written and
   reviewed: its settings move to a new one-row `venue_settings` table, and the work is cut into
-  slices S1–S28 and fixture slices F1–F5, eight of them landed by the owner. Four owner questions
-  are open, about the working-time record and lane B's A1268 PR 2. Lane A builds it next.
-  [Design](superpowers/specs/2026-11-01-a1301-remove-location-design.md)
+  slices S1–S28 and fixture slices F1–F5, eight of them landed by the owner. The owner answered
+  every design question (lane B's A1268 does the working-time hashes; the working-time export names
+  the venue only). The build plan covers S1–S12, S16, S17 and F1–F5; the watcher hands out its
+  slices. S13–S15 wait for A1268, S18 for S2–S17, and the schema slices S20–S28 get a plan of their
+  own, which first settles what the venue id sent to Cloud and naming the backup folder becomes.
+  [Design](superpowers/specs/2026-11-01-a1301-remove-location-design.md),
+  [plan](superpowers/plans/2026-11-01-a1301-remove-location.md)
 
 - **The `authorized_by` comment on `drawer_opens` says only a manual open sets it**
   [Detail](backlog/architecture.md#the-authorized_by-comment-on-drawer_opens-says-only-a-manual-open-sets-it)
