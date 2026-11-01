@@ -639,12 +639,16 @@ describe("active fiscal conflict stops new money", () => {
   }
 
   async function originalSale(cfg: DeviceRequestConfig, cafe: OfferedProduct) {
-    return payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
-      id: randomUUID(),
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
-      tender: { method: "cash", amount: "1.50" },
-    });
+    return payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id: randomUUID(),
+        zoneId: cafe.zoneId,
+        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "1.50" },
+      },
+    );
   }
 
   for (const cause of ["fiscal.huella_divergente", "fiscal.duplicado_anulado"] as const) {
@@ -662,17 +666,25 @@ describe("active fiscal conflict stops new money", () => {
         const lines = [{ menuItemId: cafe.menuItemId, quantity: "1" }];
         const pay =
           method === "cash"
-            ? payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
-                id,
-                lines,
-                zoneId: cafe.zoneId,
-                tender: { method: "cash", amount: "1.50" },
-              })
-            : payWorkingOrderIntegrated({ db: suite.db, backend, clock, provider }, cfg, {
-                id,
-                lines,
-                zoneId: cafe.zoneId,
-              });
+            ? payWorkingOrder(
+                { admission: testTradingAdmission(), db: suite.db, backend, clock },
+                cfg,
+                {
+                  id,
+                  lines,
+                  zoneId: cafe.zoneId,
+                  tender: { method: "cash", amount: "1.50" },
+                },
+              )
+            : payWorkingOrderIntegrated(
+                { admission: testTradingAdmission(), db: suite.db, backend, clock, provider },
+                cfg,
+                {
+                  id,
+                  lines,
+                  zoneId: cafe.zoneId,
+                },
+              );
         await expect(pay).rejects.toMatchObject({
           code: "sif.allocation_invalid",
           params: { reason: "conflict_requires_administrator" },
@@ -706,7 +718,14 @@ describe("active fiscal conflict stops new money", () => {
         const jobs = await suite.db.select().from(printJobs);
         const provider = new FakePaymentProvider(suite.db);
         const refusal = await payWorkingOrderIntegrated(
-          { db: suite.db, backend, clock, provider, sayCardChargedNotRecorded: true },
+          {
+            admission: testTradingAdmission(),
+            db: suite.db,
+            backend,
+            clock,
+            provider,
+            sayCardChargedNotRecorded: true,
+          },
           cfg,
           { id, lines: [] },
         ).then(
@@ -746,7 +765,14 @@ describe("active fiscal conflict stops new money", () => {
       return captured;
     };
     const id = randomUUID();
-    const deps = { db: suite.db, backend, clock, provider, sayCardChargedNotRecorded: true };
+    const deps = {
+      admission: testTradingAdmission(),
+      db: suite.db,
+      backend,
+      clock,
+      provider,
+      sayCardChargedNotRecorded: true,
+    };
     const request = {
       id,
       zoneId: cafe.zoneId,
@@ -778,11 +804,19 @@ describe("active fiscal conflict stops new money", () => {
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       tender: { method: "cash" as const, amount: "1.50" },
     };
-    const ticket = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, req);
-    await seedConflict(cfg, "fiscal.duplicado_anulado");
-    await expect(payWorkingOrder({ db: suite.db, backend, clock }, cfg, req)).resolves.toEqual(
-      ticket,
+    const ticket = await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      req,
     );
+    await seedConflict(cfg, "fiscal.duplicado_anulado");
+    await expect(
+      payWorkingOrder(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        cfg,
+        req,
+      ),
+    ).resolves.toEqual(ticket);
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
   });
@@ -799,7 +833,12 @@ describe("active fiscal conflict stops new money", () => {
     await seedConflict(cfg, "fiscal.huella_divergente");
     const before = await suite.db.select().from(invoiceSeries);
     await expect(
-      issueOrderInvoice({ db: suite.db, backend, clock }, cfg, id, OPERATOR),
+      issueOrderInvoice(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        cfg,
+        id,
+        OPERATOR,
+      ),
     ).rejects.toMatchObject({
       code: "sif.allocation_invalid",
       params: { reason: "conflict_requires_administrator" },

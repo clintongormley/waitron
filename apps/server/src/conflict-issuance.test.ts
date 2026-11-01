@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
@@ -194,6 +195,7 @@ describe("conflict issuance preflights over real routes", () => {
       const before = await suite.db.select().from(table);
       const lookups = venue.card.lookupCalls.length;
       const deps = {
+        admission: testTradingAdmission(),
         db: suite.db,
         backend: venue.backend,
         clock: venue.clock,

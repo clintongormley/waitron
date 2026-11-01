@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -266,6 +267,7 @@ it("finalises an already captured bill once after the actual administrator switc
   expect(suite.db.all(sql`select * from registros_facturacion`)).toEqual(records);
   expect(suite.db.all(sql`select * from filing_cases`)).toEqual(cases);
   const deps = {
+    admission: testTradingAdmission(),
     db: suite.db,
     cfg: venue.cfg,
     backend: venue.backend,
