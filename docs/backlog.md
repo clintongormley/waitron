@@ -2212,8 +2212,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   transfer and split (`carveLines`), `splitUnitsWithinOrder`, and partial serve, cancel,
   adjustment and item payment stay for measured lines and lines stored before portions, and their
   tests build grouped bills. Since slice 4a the till calls neither `/api/bills/:id/split` nor
-  `/transfer` (Move dishes… sends whole dishes to `/move-dishes`); in `apps` and `packages` only
-  those two routes call `splitBill` and `transferItems`, and only tests call the routes.
+  `/transfer` (Move dishes… sends whole dishes to `/move-dishes`); outside tests and the helpers
+  under `apps/server/src/testing/`, only those two routes call `splitBill` and `transferItems`, and
+  no till code calls the routes.
   Slice 4a refuses cutting a bound measured portion only on its way to another bill: a part of one
   can still be split inside its bill (a part discount, a move to another course group), as the
   in-bill case in `apps/server/src/order-portions.lifecycle.test.ts` pins. Retire the paths with

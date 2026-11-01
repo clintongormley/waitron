@@ -2898,8 +2898,7 @@ and the staffing grid's block editor in the A761 entry):
   editor while the variant window, the image picker or any window the Products screen opens for the
   editor is open, which keeps its own variant while the Products screen is sending a request for the
   product (its `busy`). A417 brought the till's under it: the Confirm that asks which station makes
-  a dish after a refused edit; Transfer; Split's Add bill, which stays blue when its own quantity
-  check refuses a press; the dead-ends dialog's Continue; the extras picker's Add when adding a
+  a dish after a refused edit; the dead-ends dialog's Continue; the extras picker's Add when adding a
   dish (when editing one it is a save); and Cash and Card on the pay card, while the basket or bill has no
   lines, or while the basket's pay controls are held for a line not yet saved that cannot be sold
   as it stands or is stale, or for a part-paid order, keeping blue through a payment being sent,
@@ -5777,7 +5776,7 @@ alone (`printMovedSlips`, `apps/server/src/kitchen-print.ts`).
 Move dishes… draws the bill's dishes through `till-portion-picker`
 (`apps/till/src/widgets/portion-picker.ts`), which draws rows from the selection model
 (`pickRows`, `apps/till/src/state/portion-selection.ts`) and emits `portion-picks` with the picked
-line ids; the screen keeps the picks in its action draft scope, so leaving with picks asks first. A
+line ids; the screen keeps the picks in its action draft scope, so leaving with picks or a chosen destination asks first. A
 row is one dish, or [identical portions](#identical-portions-share-one-row) with their count; its
 amount, extras included, is what its picked dishes take off the bill, or the whole row's while none
 is picked. A dish recalled into an unsent order is left out.

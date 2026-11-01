@@ -752,8 +752,9 @@ Left open:
 - An extra counts its dish's percentage under a reason's per-line cap, and a dish the largest
   of its extras', which errs toward refusing. **Next action:** none unless staff find it gets
   in the way.
-- **Only give-aways and discounts split part of a dish with its extras.** Splitting a bill,
-  transferring items and moving part of a dish to another group still refuse a partial move
+- **Only give-aways and discounts split part of a dish with its extras.** The server's split and
+  transfer routes (no till caller since A803 slice 4a) and moving part of a dish to another group
+  still refuse a partial move
   of a line with extras (`tab.transfer_modifier_line`): part of a weighed dish.
   **Next action:** decide whether those partial moves should split extras too.
 - **`pressEscape` in `packages/ui/src/components/wt-dialog.test.ts` waits a fixed 50 ms after

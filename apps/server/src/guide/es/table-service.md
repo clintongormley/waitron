@@ -310,7 +310,7 @@ parte de ella ya esté pagada.
 
 El panel, con la cuenta como título, por ejemplo **Mover platos de Cuenta 1**, muestra los platos
 de la cuenta. Marca un plato para moverlo; sus extras van con él. Los platos iguales comparten una
-fila, por ejemplo **Caña** con un **4** al lado: al marcar la fila se toman todos, y **−** y **+**
+fila, por ejemplo **Caña** con un **4** al lado: al marcar la fila se toman todos, o tantos como permitan los pagos de la cuenta, y **−** y **+**
 fijan después cuántos, como **2 de 4**, con el importe de los que se mueven. Un plato al peso solo tiene la casilla, porque pasa entero. Un plato que
 alguien está cambiando en un pedido sin enviar no aparece.
 

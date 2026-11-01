@@ -294,7 +294,7 @@ when part of it is paid.
 
 The panel, headed with the bill, such as **Move dishes from Bill 1**, lists the bill's dishes. Tick
 a dish to move it; its extras go with it. Identical dishes share one row, such as **Caña** with a
-**4** beside it: ticking the row takes all of them, and **−** and **+** then set how many, shown as
+**4** beside it: ticking the row takes all of them, or as many as the bill's payments allow, and **−** and **+** then set how many, shown as
 **2 of 4**, with the amount of those moving. A
 weighed dish has a tick only, because it moves whole. A dish someone is changing in an unsent order
 is not listed.
