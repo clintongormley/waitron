@@ -31,6 +31,7 @@ import {
   freezeKitchenAllergyItems,
   refreshKitchenAllergyClashes,
 } from "./kitchen-allergy.js";
+import { passWaitingStations, requestStamps } from "./kitchen-release.js";
 import {
   readLineCancellations,
   serviceQuantities,
@@ -2233,7 +2234,7 @@ export async function fireLines(
   const sentLineIds: string[] = [];
   const dishPlaces: DishKitchenPlace[] = [];
   // A line with nowhere to go refuses the whole fire.
-  const values = lines
+  const placed = lines
     .map((line) => {
       const outcome = line.productId === null ? undefined : makers.get(line.productId);
       const maker = outcome?.kind === "made" ? outcome.route : null;
@@ -2273,20 +2274,35 @@ export async function fireLines(
         firedAt: fired ? firedAt : null,
       });
       return {
-        nodeId: cfg.nodeId,
-        workingOrderId: orderId,
-        workingOrderLineId: line.id,
-        stationId,
-        courseId,
-        note: line.note,
-        firedAt: fired ? firedAt : null,
-        madeHere: made,
-        state: made ? ("ready" as const) : ("queued" as const),
-        readyAt: made ? firedAt : null,
-        quantity: line.quantity,
+        initiated: courseFired,
+        value: {
+          nodeId: cfg.nodeId,
+          workingOrderId: orderId,
+          workingOrderLineId: line.id,
+          stationId,
+          courseId,
+          note: line.note,
+          madeHere: made,
+          state: made ? ("ready" as const) : ("queued" as const),
+          readyAt: made ? firedAt : null,
+          quantity: line.quantity,
+        },
       };
     })
-    .filter((value): value is NonNullable<typeof value> => value !== null);
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+  const waiting = await passWaitingStations(
+    tx,
+    placed.map((entry) => entry.value.stationId),
+  );
+  const values = placed.map(({ initiated, value }) => ({
+    ...value,
+    ...requestStamps({
+      at: firedAt,
+      initiated,
+      madeHere: value.madeHere,
+      waits: waiting.has(value.stationId),
+    }),
+  }));
   if (values.length > 0) {
     const [alreadyFired] = await tx
       .select({ id: ticketItems.id })
@@ -2312,6 +2328,7 @@ export async function fireLines(
         id: ticketItems.id,
         workingOrderLineId: ticketItems.workingOrderLineId,
         stationId: ticketItems.stationId,
+        requestedAt: ticketItems.requestedAt,
         firedAt: ticketItems.firedAt,
         madeHere: ticketItems.madeHere,
       })),
@@ -2372,7 +2389,10 @@ export async function fireLines(
         .filter((row) => row.firedAt !== null)
         .map((row) => ({ workingOrderLineId: row.workingOrderLineId, stationId: row.stationId })),
     );
-  await freezeKitchenAllergyItems(tx, cfg, orderId, firedItems);
+  const requestedItems = inserted
+    .filter((row) => row.firedAt === null && row.requestedAt !== null)
+    .map((row) => ({ workingOrderLineId: row.workingOrderLineId, stationId: row.stationId }));
+  await freezeKitchenAllergyItems(tx, cfg, orderId, [...firedItems, ...requestedItems]);
   await enqueueKitchenTickets(tx, cfg, orderId, firedItems);
   return unrouted;
 }
@@ -2904,7 +2924,7 @@ export async function recallLines(
     }));
   await tx
     .update(ticketItems)
-    .set({ firedAt: null })
+    .set({ firedAt: null, requestedAt: null, passControlled: false })
     .where(
       and(
         eq(ticketItems.workingOrderId, tabId),
