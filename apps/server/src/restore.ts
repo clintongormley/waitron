@@ -1,6 +1,7 @@
 import { readNodeLocation } from "./node-config.js";
 import { assertVenueFirstSetupAllowed, isFirstSetupHostPath } from "@waitron/provisioning";
 import { lstatSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { isDeepStrictEqual } from "node:util";
 import {
   chmod,
@@ -38,7 +39,7 @@ import {
   type VenueDatabase,
   type VenueLock,
 } from "@waitron/db";
-import { readRecoveryKeyName } from "@waitron/node-db";
+import { NODE_MIGRATIONS, readRecoveryKeyName } from "@waitron/node-db";
 import { applyMigrations, expectedSchemaVersion, migrationOptionsFor } from "@waitron/migrations";
 import { NODE_FILE, openBackupQuery, SIDE_FILE_SUFFIXES, VENUE_FILE } from "@waitron/store";
 import { litestreamMetaDir } from "@waitron/stream/litestream.js";
@@ -48,7 +49,7 @@ import {
   type ProvisionedNode,
   type WaitronModule,
 } from "@waitron/module";
-import { assertNotAhead } from "@waitron/provisioning";
+import { assertNotAhead, quoteIdent } from "@waitron/provisioning";
 import {
   moduleOperationFor,
   snapshotModuleOperations,
@@ -199,10 +200,34 @@ export async function writeStagedNodeCopy(
     await writeFile(target, nodeDump, { mode: VENUE_FILE_MODE, flag: "wx" });
 }
 
-/** Opening a staged folder without its `node.db` would create an empty one in its place. */
+/**
+ * Opening a staged folder without its `node.db` would create an empty one in its place, and a node
+ * copy the node set never migrated has none of the tables its unmigrated readers read.
+ */
 export function assertStagedNodeCopy(directory: string): void {
-  if (!lstatSync(join(directory, NODE_FILE), { throwIfNoEntry: false })?.isFile())
+  const path = join(directory, NODE_FILE);
+  if (!lstatSync(path, { throwIfNoEntry: false })?.isFile() || !nodeSetApplied(path))
     throw new AppError("restore.archive_incomplete", { missing: NODE_DUMP_NAME });
+}
+
+function nodeSetApplied(path: string): boolean {
+  let copy: DatabaseSync | undefined;
+  try {
+    copy = new DatabaseSync(path, { readOnly: true, allowExtension: false });
+    const journal = NODE_MIGRATIONS.migrationsTable;
+    return (
+      copy.prepare("select 1 from sqlite_schema where type = 'table' and name = ?").get(journal) !==
+        undefined &&
+      copy.prepare(`select 1 from ${quoteIdent(journal)} limit 1`).get() !== undefined
+    );
+  } catch (error) {
+    // A copy that is not a database at all lacks the node set's tables too.
+    if (error instanceof Error && "code" in error && error.code === "ERR_SQLITE_ERROR")
+      return false;
+    throw error;
+  } finally {
+    copy?.close();
+  }
 }
 
 export async function openStagedCopy(directory: string): Promise<VenueDatabase> {

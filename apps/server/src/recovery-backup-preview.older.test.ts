@@ -19,6 +19,8 @@ import {
   openVenueDatabase,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { applyMigrations } from "@waitron/migrations";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { packArchive } from "./backup-archive.js";
@@ -59,6 +61,22 @@ const suite = useVenueDb({
 });
 afterAll(() => rmSync(prefix, { recursive: true, force: true }));
 
+/** Every box migrates its node.db at start, so a real backup's node copy carries the node set. */
+async function migratedNodeDump(parent: string) {
+  const box = await mkdtemp(join(tmpdir(), "preview-old-node-"));
+  try {
+    await applyMigrations(box, [NODE_MIGRATIONS]);
+    const store = await openVenueDatabase(box);
+    try {
+      return await nodeDumpEntry(store.node, parent);
+    } finally {
+      await store.close();
+    }
+  } finally {
+    await rm(box, { recursive: true, force: true });
+  }
+}
+
 it("previews a backup with an older venue schema by migrating only its private scratch copy", async () => {
   const nodeId = "d0000000-0000-4000-8000-000000000001";
   const locationId = "d0000000-0000-4000-8000-000000000002";
@@ -91,7 +109,7 @@ it("previews a backup with an older venue schema by migrating only its private s
           ),
         },
         { name: "db.dump", bytes: sourceBytes },
-        await nodeDumpEntry(suite.node, scratch),
+        await migratedNodeDump(scratch),
         {
           name: "secrets/trading.env",
           bytes: Buffer.from(`WAITRON_NODE_ID=${nodeId}\n`),
@@ -170,7 +188,7 @@ it("binds a bucket copy with an older venue schema before private preview migrat
         name: "secrets/trading.env",
         bytes: Buffer.from(`WAITRON_NODE_ID=${nodeId}\n`),
       },
-      await nodeDumpEntry(suite.node, scratch),
+      await migratedNodeDump(scratch),
       { name: "secrets/node-key.enc", bytes: Buffer.from("sealed") },
       { name: "secrets/cluster-id", bytes: Buffer.from("cluster") },
       {

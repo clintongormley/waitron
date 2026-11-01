@@ -687,8 +687,7 @@ describe("refuseIfArchiveSourceLive", () => {
   ): Promise<ValidatedArtifact> {
     const file = join(await fresh("waitron-archive-db-"), "venue.db");
     await suite.db.archiveTo(file);
-    // A staged copy's folder holds a node.db; opening the store makes one.
-    if (!withSettings) await (await openVenueDatabase(dirname(file))).close();
+    await suite.node.archiveTo(join(dirname(file), "node.db"));
     if (withSettings) {
       const store = await openVenueDatabase(dirname(file));
       try {

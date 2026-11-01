@@ -6,7 +6,14 @@ import { dirname, join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, locations, nodes, stampDeployment, tenants } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  locations,
+  nodes,
+  openVenueDatabase,
+  stampDeployment,
+  tenants,
+} from "@waitron/db";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
@@ -500,6 +507,51 @@ it("does not disclose a private preview when the selected database's node key ha
         deps(),
       ),
     ).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
+  } finally {
+    await selected.copy.discard();
+  }
+});
+
+it("refuses as incomplete a backup whose node copy the node set never migrated, before the proof reads it", async () => {
+  const bare = await openVenueDatabase(join(scratch, "bare"));
+  let dump: ArchiveEntry;
+  try {
+    dump = await nodeDumpEntry(bare.node, scratch);
+  } finally {
+    await bare.close();
+  }
+  const selected = await adapter.openFirstSetupBackupSource(
+    {
+      ...archive(),
+      artifact: encryptArtifact(
+        packArchive([
+          ...entries.filter((entry) => entry.name !== "node.dump"),
+          dump,
+          { name: "db.dump", bytes: await readFile(database) },
+        ]),
+        "archive-key",
+      ),
+    },
+    deps(),
+  );
+  try {
+    await expect(
+      adapter.authenticatedFirstSetupBackupPreview(
+        selected,
+        {
+          module: "core",
+          action: "restore",
+          eventId: "repair-proof",
+          targetNodeId: NODE,
+          sourceId: selected.copy.sourceId!,
+        },
+        key.secret,
+        deps(),
+      ),
+    ).rejects.toMatchObject({
+      code: "restore.archive_incomplete",
+      params: { missing: "node.dump" },
+    });
   } finally {
     await selected.copy.discard();
   }
