@@ -58,6 +58,15 @@ export class TillPortionPicker extends LitElement {
         margin: 0;
         accent-color: var(--wt-color-primary);
       }
+      /* The browser's own disabled box is too faint to see on the light page. A disabled tick is
+         never checked (a row holding picks keeps its tick so it can be cleared), so only the empty
+         box is drawn. */
+      input:disabled {
+        appearance: none;
+        border: 1px solid var(--wt-color-text-muted);
+        border-radius: var(--wt-radius-sm);
+        background: var(--wt-color-track);
+      }
       .name {
         flex: 1;
         overflow-wrap: anywhere;
@@ -103,6 +112,8 @@ export class TillPortionPicker extends LitElement {
         composed: true,
       }),
     );
+    // Puts the tick back to what `picks` says when the screen does not redraw after the event.
+    this.requestUpdate();
   }
 
   #reason(row: PickRow): string {
@@ -113,7 +124,7 @@ export class TillPortionPicker extends LitElement {
 
   #row(row: PickRow): TemplateResult {
     const id = row.members[0]!.id;
-    const count = pickedCount(row, this.picks);
+    const count = row.blocked?.reason === "paid" ? 0 : pickedCount(row, this.picks);
     const name = this.nameOf(row);
     const reason = this.#reason(row);
     const reasonId = `pick-reason-${id}`;
@@ -134,22 +145,21 @@ export class TillPortionPicker extends LitElement {
         <span class="name">${name}</span>
         ${
           row.counted && count === 0
-            ? html`<span class="qty">${row.members.length}</span>`
+            ? html`<span class="qty" data-pick-qty=${id}>${row.members.length}</span>`
             : nothing
         }
         <span class="amount" data-pick-amount=${id}>${this.money(amount)}</span>
       </label>
       ${reason === "" ? nothing : html`<p class="reason" id=${reasonId}>${reason}</p>`}
-      ${row.counted && count > 0 ? this.#stepper(row, count, name) : nothing}
+      ${row.counted && count > 0 ? this.#stepper(row, count, name, reason) : nothing}
     </div>`;
   }
 
-  #stepper(row: PickRow, count: number, name: string): TemplateResult {
+  #stepper(row: PickRow, count: number, name: string, reason: string): TemplateResult {
     const id = row.members[0]!.id;
     return html`<div class="stepper">
       <wt-button
         variant="ghost"
-        size="sm"
         data-pick-dec=${id}
         aria-label=${`${t("basket.decrease")} ${name}`}
         ?disabled=${count <= 1}
@@ -165,9 +175,9 @@ export class TillPortionPicker extends LitElement {
       >
       <wt-button
         variant="ghost"
-        size="sm"
         data-pick-inc=${id}
         aria-label=${`${t("basket.increase")} ${name}`}
+        aria-description=${count >= row.limit && reason !== "" ? reason : nothing}
         ?disabled=${count >= row.limit}
         @click=${() => this.#emit(setCount(row, count + 1, this.picks))}
       >

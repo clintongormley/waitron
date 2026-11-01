@@ -6,6 +6,7 @@ import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import { paidQuantities } from "../state/bill-payment.js";
 import { tabLinePortionKey } from "../state/portion-groups.js";
 import { pickRows, type PickRow, type Picks } from "../state/portion-selection.js";
+import type { WtButton } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillPortionPicker } from "./portion-picker.js";
 
@@ -134,6 +135,26 @@ describe("till-portion-picker", () => {
     expect(last()).toEqual(["c1", "c2", "c3", "c4"]);
   });
 
+  it("A803 picker: from 2 of 4, − picks the first one and + the first three", async () => {
+    const down = await picker(CANAS, null, new Set(["c1", "c2"]));
+    await userEvent.click(dec(down.el, "c1")!);
+    expect(down.last()).toEqual(["c1"]);
+    const up = await picker(CANAS, null, new Set(["c1", "c2"]));
+    await userEvent.click(inc(up.el, "c1")!);
+    expect(up.last()).toEqual(["c1", "c2", "c3"]);
+  });
+
+  it("A803 picker: an unticked grouped row shows how many it holds; a ticked one shows the count control instead", async () => {
+    const lines = [...CANAS, dish("h1", 5, "Ham", "9.00")];
+    const { el } = await picker(lines);
+    expect(q(el, '[data-pick-qty="c1"]')!.textContent!.trim()).toBe("4");
+    expect(q(el, '[data-pick-qty="h1"]')).toBeNull();
+    await userEvent.click(tick(el, "c1"));
+    await el.updateComplete;
+    expect(q(el, '[data-pick-qty="c1"]')).toBeNull();
+    expect(q(el, '[data-pick-count="c1"]')).not.toBeNull();
+  });
+
   it("A803 picker: − at 1 is disabled, and an unticked row shows no count control", async () => {
     const { el } = await picker(CANAS, null, new Set(["c1"]));
     expect(disabled(dec(el, "c1"))).toBe(true);
@@ -147,6 +168,37 @@ describe("till-portion-picker", () => {
     const { el, last } = await picker(CANAS, null, new Set(["c1", "c2"]));
     await userEvent.click(tick(el, "c1"));
     expect(last()).toEqual([]);
+  });
+
+  it("A803 picker: a tick the screen does not answer goes back to what the picks say", async () => {
+    const { el } = await mountWidget<TillPortionPicker>("till-portion-picker", {
+      rows: rowsOf(CANAS, null, new Set()),
+      picks: new Set(),
+      nameOf,
+      money,
+    });
+    let heard = 0;
+    el.addEventListener("portion-picks", () => heard++);
+    await userEvent.click(tick(el, "c1"));
+    await el.updateComplete;
+    expect(heard).toBe(1);
+    expect(tick(el, "c1").checked).toBe(false);
+  });
+
+  it("A803 picker: a tick the screen answers with the same picks stays unticked", async () => {
+    const { el } = await mountWidget<TillPortionPicker>("till-portion-picker", {
+      rows: rowsOf(CANAS, null, new Set()),
+      picks: new Set(),
+      nameOf,
+      money,
+    });
+    el.addEventListener("portion-picks", () => {
+      el.picks = new Set();
+      el.rows = rowsOf(CANAS, null, new Set());
+    });
+    await userEvent.click(tick(el, "c1"));
+    await el.updateComplete;
+    expect(tick(el, "c1").checked).toBe(false);
   });
 
   it("A803 picker: a weighed row is a tick with no count control", async () => {
@@ -192,6 +244,25 @@ describe("till-portion-picker", () => {
     expect(tick(el, "k2").hasAttribute("aria-describedby")).toBe(false);
   });
 
+  it("A803 picker: a paid row still holding picks is drawn unticked, with no count control", async () => {
+    const lines = [
+      dish("k1", 1, "Croqueta", "3.00"),
+      dish("k2", 2, "Croqueta", "3.00"),
+      dish("k3", 3, "Croqueta", "3.00"),
+    ];
+    const paid = balance("9.00", "6.00", [
+      { lineId: "k1", lineNo: 1, paidQuantity: "1.000" },
+      { lineId: "k2", lineNo: 2, paidQuantity: "1.000" },
+    ]);
+    const { el } = await picker(lines, paid, new Set(["k1", "k2"]));
+    expect(q(el, '[data-pick-row="k1"]')!.querySelectorAll("input")).toHaveLength(1);
+    expect(q(el, "#pick-reason-k1")!.textContent!.trim()).toBe(t("bill_pay.paid"));
+    expect(tick(el, "k1").checked).toBe(false);
+    expect(tick(el, "k1").disabled).toBe(true);
+    expect(dec(el, "k1")).toBeNull();
+    expect(q(el, '[data-pick-qty="k1"]')!.textContent!.trim()).toBe("2");
+  });
+
   it("A803 picker: a floor-blocked row says what is already paid, in English and Spanish", async () => {
     const lines = [...CANAS, dish("s1", 5, "Steak", "32.00")];
     const paid = balance("52.00", "40.00");
@@ -227,9 +298,45 @@ describe("till-portion-picker", () => {
     expect(disabled(inc(el, "c1"))).toBe(true);
     expect(disabled(dec(el, "c1"))).toBe(false);
     const reasonId = tick(el, "c1").getAttribute("aria-describedby");
-    expect(el.shadowRoot!.getElementById(reasonId!)!.textContent!.trim()).toBe(
-      "€40.00 is already paid on this bill",
+    const reason = el.shadowRoot!.getElementById(reasonId!)!.textContent!.trim();
+    expect(reason).toBe("€40.00 is already paid on this bill");
+    const plus = inc(el, "c1") as WtButton;
+    await plus.updateComplete;
+    expect(plus.shadowRoot!.querySelector("button")!.getAttribute("aria-description")).toBe(reason);
+  });
+
+  it("A803 picker: + that can still add a dish carries no reason", async () => {
+    const { el } = await picker(CANAS, null, new Set(["c1", "c2"]));
+    const plus = inc(el, "c1") as WtButton;
+    await plus.updateComplete;
+    expect(plus.shadowRoot!.querySelector("button")!.hasAttribute("aria-description")).toBe(false);
+  });
+
+  it("A803 picker: a row ticked at its floor limit can be stepped down or unticked", async () => {
+    const lines = [...CANAS, dish("s1", 5, "Steak", "32.00")];
+    const paid = balance("52.00", "40.00");
+    const down = await picker(lines, paid, new Set(["c1", "c2"]));
+    await userEvent.click(dec(down.el, "c1")!);
+    expect(down.last()).toEqual(["c1"]);
+    const off = await picker(lines, paid, new Set(["c1", "c2"]));
+    expect(tick(off.el, "c1").checked).toBe(true);
+    expect(tick(off.el, "c1").disabled).toBe(false);
+    await userEvent.click(tick(off.el, "c1"));
+    expect(off.last()).toEqual([]);
+  });
+
+  it("A803 picker: a row holding more picks than the floor allows can be unticked", async () => {
+    const lines = [...CANAS, dish("s1", 5, "Steak", "32.00")];
+    const { el, last } = await picker(
+      lines,
+      balance("52.00", "40.00"),
+      new Set(["c1", "c2", "c3", "c4"]),
     );
+    expect(tick(el, "c1").checked).toBe(true);
+    expect(tick(el, "c1").disabled).toBe(false);
+    expect(tick(el, "c1").hasAttribute("aria-describedby")).toBe(true);
+    await userEvent.click(tick(el, "c1"));
+    expect(last()).toEqual([]);
   });
 
   it("A803 picker: Space toggles a tick and Tab reaches − and +", async () => {
