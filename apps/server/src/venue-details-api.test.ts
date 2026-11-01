@@ -9,7 +9,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import { ALL_MODULES } from "./modules.js";
-import { mountLocationSettingsApi } from "./location-settings-api.js";
+import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { readVenueDetails } from "./venue-details.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -24,11 +24,10 @@ let app: Hono;
 beforeEach(async () => {
   venue = await setupVenue(suite.db);
   app = new Hono();
-  mountLocationSettingsApi(
+  mountVenueSettingsApi(
     app,
     {
       db: suite.db,
-      cfg: venue.cfg,
       now: () => new Date("2026-10-06T02:00:00Z"),
       readBackupDeadlines: () => ({ archive: "2026-10-06T03:36:00.000Z", cloud: null }),
       fiscal: venueFiscalSelection(ALL_MODULES, "ES-common").contribution!,
@@ -37,9 +36,7 @@ beforeEach(async () => {
   );
 });
 const initial = () =>
-  withTransaction(suite.db, (tx) =>
-    readVenueDetails(tx, venue.cfg, new Date("2026-10-06T02:00:00Z")),
-  );
+  withTransaction(suite.db, (tx) => readVenueDetails(tx, new Date("2026-10-06T02:00:00Z")));
 function request(method: string, cookie?: string, body?: unknown) {
   return app.request("/management-api/venue-details", {
     method,
@@ -116,7 +113,7 @@ describe("venue details HTTP boundary", () => {
     });
     expect((await initial()).details).toEqual(model.details);
   });
-  it.each(["country", "taxId", "legalName", "locationId", "fiscalTerritory"])(
+  it.each(["country", "taxId", "legalName", "fiscalTerritory"])(
     "refuses a crafted %s identity edit",
     async (field) => {
       const model = await initial();
@@ -216,19 +213,6 @@ describe("fresh authorization and history at the HTTP write", () => {
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({
       error: { code: "management_session.expired", params: {} },
-    });
-    expect((await initial()).details).toEqual(model.details);
-  });
-  it("refuses a location identifier on the envelope and keeps the deployed location", async () => {
-    const model = await initial();
-    const response = await request("PATCH", venue.managerCookie, {
-      expected: model.details,
-      changes: { name: "Not saved" },
-      locationId: randomUUID(),
-    });
-    expect(response.status).toBe(409);
-    expect(await response.json()).toEqual({
-      error: { code: "venue.detail_read_only", params: { field: "locationId" } },
     });
     expect((await initial()).details).toEqual(model.details);
   });

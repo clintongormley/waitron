@@ -217,7 +217,7 @@ import { runAttendanceEmailLoop } from "./attendance-email-worker.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { createCardProviderPool } from "./card-provider-pool.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
-import { mountLocationSettingsApi } from "./location-settings-api.js";
+import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import { mountThemesApi } from "./themes-api.js";
 import { mountReceiptPreviewApi } from "./receipt-preview-api.js";
 import { drawLogoRasters } from "./receipt-logo.js";
@@ -2261,11 +2261,10 @@ async function bootServer(
     cloud: null,
   };
   mountThemesApi(app, { db }, log);
-  mountLocationSettingsApi(
+  mountVenueSettingsApi(
     app,
     {
       db,
-      cfg: tradingContext,
       fiscal: enabledFiscal,
       readBackupDeadlines: () => ({ ...backupDeadlines }),
     },

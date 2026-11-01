@@ -602,7 +602,7 @@ only the app keeps from deletion; no trigger protects it either.
   names only when an update changes them or moves the line, so the till can still split such a
   line, which copies its old-language names into a new line, or move it to another bill, and the
   database refuses both once the language differs. Measured by the till's own routes
-  (`apps/server/src/location-settings-api.orders-open.test.ts`): placed orders, paid bills whose
+  (`apps/server/src/venue-settings-api.orders-open.test.ts`): placed orders, paid bills whose
   party is still seated, a paid order with a dish no station took, and an open bill with no line
   no longer block. After the change, the tests serve a seated party's paid dish, take back a
   serve on one, send a paid sale's unsent dish and collect a placed order. If a language is

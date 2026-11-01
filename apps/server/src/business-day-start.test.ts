@@ -25,7 +25,7 @@ import {
 import { createOpenOrder } from "./working-order.js";
 import { randomUUID } from "node:crypto";
 import { ALL_MODULES } from "./modules.js";
-import { mountLocationSettingsApi } from "./location-settings-api.js";
+import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import { readVenueDetails } from "./venue-details.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 
@@ -38,11 +38,10 @@ beforeEach(async () => {
   venue = await setupVenue(suite.db);
   at = new Date("2026-11-02T12:00:00.000Z");
   app = new Hono();
-  mountLocationSettingsApi(
+  mountVenueSettingsApi(
     app,
     {
       db: suite.db,
-      cfg: venue.cfg,
       now: () => at,
       fiscal: venueFiscalSelection(ALL_MODULES, "ES-common").contribution!,
     },
@@ -101,7 +100,7 @@ describe("business-day start scheduling", () => {
     ["05:00", "05:00"],
   ])("refuses scalar PATCH without reinterpreting %s–%s", async (startsAt, endsAt) => {
     const { department, period } = await authorRange(startsAt, endsAt);
-    const before = await inTx((tx) => readVenueDetails(tx, venue.cfg));
+    const before = await inTx((tx) => readVenueDetails(tx));
     const serviceAt = new Date("2026-11-03T02:30:00.000Z");
     const serviceBefore = await inTx((tx) =>
       resolveDepartmentService(tx, venue.cfg, department.id, serviceAt),
@@ -144,7 +143,7 @@ describe("business-day start scheduling", () => {
       service: serviceBefore,
       resave: "accepted",
     });
-    expect((await inTx((tx) => readVenueDetails(tx, venue.cfg))).details).toEqual(before.details);
+    expect((await inTx((tx) => readVenueDetails(tx))).details).toEqual(before.details);
   });
 });
 
@@ -172,7 +171,7 @@ async function expectRefusal(response: Response, status: number, code: string) {
 }
 describe("dated route protection", () => {
   it("saves one future row, keeps today's and the initial clock, and previews both bounds", async () => {
-    const before = await inTx((tx) => readVenueDetails(tx, venue.cfg));
+    const before = await inTx((tx) => readVenueDetails(tx));
     const preview = await request(
       "GET",
       "/business-day-start/preview?dayCutover=03%3A00&expectedClockRevision=0",
@@ -589,7 +588,7 @@ describe("transaction-time and persisted history checks", () => {
       expect(refused.status).toBe(400);
       expect(await refused.json()).toEqual(changeoverPassed);
       expect(await clockRows()).toEqual(before);
-      const model = await inTx((tx) => readVenueDetails(tx, venue.cfg));
+      const model = await inTx((tx) => readVenueDetails(tx));
       expect(
         (
           await request("PATCH", "", {
@@ -641,13 +640,13 @@ describe("transaction-time and persisted history checks", () => {
   });
   it("locks time-zone edits after clock history but permits a name edit", async () => {
     expect((await request("PUT", "/business-day-start", proposal())).status).toBe(200);
-    const model = await inTx((tx) => readVenueDetails(tx, venue.cfg));
+    const model = await inTx((tx) => readVenueDetails(tx));
     const timezone = await request("PATCH", "", {
       expected: model.details,
       changes: { timeZone: "UTC", name: "Must roll back" },
     });
     await expectRefusal(timezone, 409, "venue.detail_locked");
-    expect((await inTx((tx) => readVenueDetails(tx, venue.cfg))).details).toEqual(model.details);
+    expect((await inTx((tx) => readVenueDetails(tx))).details).toEqual(model.details);
     expect(
       (await request("PATCH", "", { expected: model.details, changes: { name: "Allowed" } }))
         .status,
@@ -695,7 +694,7 @@ it("reads pending and activated boundaries from a reopened complete database cop
     const reopened = await openVenueDatabase(directory);
     try {
       const before = await withTransaction(reopened.venue, (tx) =>
-        readVenueDetails(tx, venue.cfg, new Date("2026-11-03T01:59:59.999Z")),
+        readVenueDetails(tx, new Date("2026-11-03T01:59:59.999Z")),
       );
       expect(before.details.dayCutover).toBe("05:00");
       expect(before.businessDayClock).toMatchObject({
@@ -708,7 +707,7 @@ it("reads pending and activated boundaries from a reopened complete database cop
         startsAt: "2026-11-03T02:00:00.000Z",
       });
       const activated = await withTransaction(reopened.venue, (tx) =>
-        readVenueDetails(tx, venue.cfg, new Date("2026-11-03T02:00:00.000Z")),
+        readVenueDetails(tx, new Date("2026-11-03T02:00:00.000Z")),
       );
       expect(activated.details.dayCutover).toBe("03:00");
       expect(activated.businessDayClock).toMatchObject({
@@ -725,37 +724,6 @@ it("reads pending and activated boundaries from a reopened complete database cop
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
-});
-it("keeps another location's clock rows isolated and rejects a client-selected location", async () => {
-  const [original] = await suite.db.select().from(locations);
-  const otherId = randomUUID();
-  await suite.db.insert(locations).values({ ...original!, id: otherId, name: "Other location" });
-  await suite.db
-    .insert(locationDayCutoverChanges)
-    .values({ locationId: otherId, effectiveBusinessDay: "2026-11-05", dayCutover: "07:00:00" });
-  await suite.db.insert(locationBusinessDaySettings).values({ locationId: otherId, revision: 9 });
-  await expectRefusal(
-    await request("PUT", "/business-day-start", proposal({ locationId: otherId })),
-    400,
-    "venue.business_day_invalid",
-  );
-  expect((await request("PUT", "/business-day-start", proposal())).status).toBe(200);
-  expect(await clockRows()).toEqual({
-    changes: expect.arrayContaining([
-      { locationId: otherId, effectiveBusinessDay: "2026-11-05", dayCutover: "07:00:00" },
-      {
-        locationId: venue.cfg.locationId,
-        effectiveBusinessDay: "2026-11-03",
-        dayCutover: "03:00:00",
-      },
-    ]),
-    settings: expect.arrayContaining([
-      { locationId: otherId, revision: 9 },
-      { locationId: venue.cfg.locationId, revision: 1 },
-    ]),
-  });
-  expect((await clockRows()).changes).toHaveLength(2);
-  expect((await clockRows()).settings).toHaveLength(2);
 });
 
 describe("dated start schedule refusal", () => {

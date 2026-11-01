@@ -1,12 +1,15 @@
-import { readLocationClock } from "@waitron/reporting";
 import type { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
+import { readCatalogueSettings, saveCatalogueSettings } from "@waitron/catalogue";
 import {
-  readCatalogueSettings,
-  readInvoiceLocales,
-  saveCatalogueSettings,
-} from "@waitron/catalogue";
-import { locations, withTransaction, type Database, type Transaction } from "@waitron/db";
+  locations,
+  readVenue,
+  readVenueClock,
+  venueLocationId,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import type { FiscalContribution } from "@waitron/fiscal";
 import { authorizeManager } from "@waitron/identity";
 import { readPrivacyContact, renameTaxpayer, savePrivacyContact } from "@waitron/provisioning";
@@ -30,6 +33,7 @@ import "./errors.js";
 const run = createErrorBoundary(
   {
     "venue.time_zone_not_ready": 409,
+    "venue.not_found": 409,
     "management_session.required": 401,
     "management_session.expired": 401,
     "person.suspended": 403,
@@ -51,33 +55,25 @@ const run = createErrorBoundary(
 );
 
 /**
- * The open orders at the location holding a line. The till can still split or move such a line, and
- * the line triggers refuse a copy or a move of text keyed under a language the location no longer has.
+ * The open orders holding a line. The till can still split or move such a line, and the line
+ * triggers refuse a copy or a move of text keyed under a language the venue no longer has.
  */
-async function ordersBlockingReceiptLanguage(tx: Transaction, locationId: string): Promise<number> {
+async function ordersBlockingReceiptLanguage(tx: Transaction): Promise<number> {
   const { rows } = await tx.execute<{ count: number }>(sql`
     select cast(count(*) as int) as count
     from working_orders wo
-    where wo.location_id = ${locationId}
-      and wo.status = 'open'
+    where wo.status = 'open'
       and exists (select 1 from working_order_lines l where l.working_order_id = wo.id)`);
   return rows[0]!.count;
 }
 
-/** The location's saved receipt languages. */
-async function storedLanguages(tx: Transaction, locationId: string): Promise<string[]> {
-  const stored = await readInvoiceLocales(tx, locationId);
-  if (stored.length === 0)
-    throw new AppError("management.request_invalid", { field: "locationId" });
-  return stored;
+/** The venue's saved receipt languages. */
+async function storedLanguages(tx: Transaction): Promise<string[]> {
+  return (await readVenue(tx)).invoiceLocales;
 }
 
-/** Saves `language` as the location's one receipt language, under the pack's and the region's rules. */
-async function writeReceiptLanguage(
-  tx: Transaction,
-  locationId: string,
-  language: string,
-): Promise<void> {
+/** Saves `language` as the venue's one receipt language, under the pack's and the region's rules. */
+async function writeReceiptLanguage(tx: Transaction, language: string): Promise<void> {
   const rules = await readVenueReceiptLanguageRules(tx);
   if (!rules.choices.includes(language)) {
     throw new AppError("management.request_invalid", { field: "receiptLanguage" });
@@ -88,22 +84,22 @@ async function writeReceiptLanguage(
       language: rules.fixed.locale,
     });
   }
-  const stored = await storedLanguages(tx, locationId);
-  // Saving the list the location already holds changes no line's key.
+  const stored = await storedLanguages(tx);
+  // Saving the list the venue already holds changes no line's key.
   if (stored.length === 1 && stored[0] === language) return;
-  const count = await ordersBlockingReceiptLanguage(tx, locationId);
+  const count = await ordersBlockingReceiptLanguage(tx);
   if (count > 0) {
     throw new AppError("receipt.language_orders_open", { field: "receiptLanguage", count });
   }
   await tx
     .update(locations)
     .set({ invoiceLocales: [language] })
-    .where(eq(locations.id, locationId));
+    .where(eq(locations.id, await venueLocationId(tx)));
 }
 
-async function readVenueDefaults(tx: Transaction, locationId: string): Promise<VenueDefaults> {
+async function readVenueDefaults(tx: Transaction): Promise<VenueDefaults> {
   const rules = await readVenueReceiptLanguageRules(tx);
-  const [receiptLanguage] = await storedLanguages(tx, locationId);
+  const [receiptLanguage] = await storedLanguages(tx);
   const { defaultProductVatClass } = await readCatalogueSettings(tx);
   return {
     receiptLanguage: receiptLanguage!,
@@ -144,15 +140,14 @@ function legalNameRequest(body: unknown): { legalName: string; expected: string 
 }
 
 function withTaxpayer<T>(contact: T | null): T {
-  if (contact === null) throw new AppError("management.request_invalid", { field: "locationId" });
+  if (contact === null) throw new AppError("venue.not_found", {});
   return contact;
 }
 
-export function mountLocationSettingsApi(
+export function mountVenueSettingsApi(
   app: Hono,
   deps: {
     db: Database;
-    cfg: { locationId: string };
     fiscal: FiscalContribution;
     now?: () => Date;
     readBackupDeadlines?: () => VenueClockPreview["backupDeadlines"];
@@ -175,7 +170,7 @@ export function mountLocationSettingsApi(
     run(c, log, async () => {
       const model = await gated(
         requireManagementSession(c),
-        (tx) => readVenueDetails(tx, deps.cfg, (deps.now ?? (() => new Date()))()),
+        (tx) => readVenueDetails(tx, (deps.now ?? (() => new Date()))()),
         "venue.view",
       );
       return c.json(model);
@@ -189,7 +184,6 @@ export function mountLocationSettingsApi(
         (tx) =>
           previewBusinessDayStart(
             tx,
-            deps.cfg,
             {
               ...query,
               expectedClockRevision: /^\d+$/.test(query.expectedClockRevision ?? "")
@@ -211,7 +205,7 @@ export function mountLocationSettingsApi(
       const session = requireManagementSession(c);
       const body = await readJsonBody<unknown>(c);
       const result = await gated(session, (tx) =>
-        writeBusinessDayStart(tx, deps.cfg, body, (deps.now ?? (() => new Date()))()),
+        writeBusinessDayStart(tx, body, (deps.now ?? (() => new Date()))()),
       );
       return c.json(result);
     }),
@@ -221,8 +215,8 @@ export function mountLocationSettingsApi(
       const model = await gated(
         requireManagementSession(c),
         async (tx) => ({
-          details: await readVenueDetails(tx, deps.cfg),
-          clock: await readLocationClock(tx, deps.cfg.locationId),
+          details: await readVenueDetails(tx),
+          clock: await readVenueClock(tx),
         }),
         "venue.view",
       );
@@ -244,12 +238,7 @@ export function mountLocationSettingsApi(
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<unknown>(c);
       const result = await gated(sessionId, (tx) =>
-        writeVenueDetails(
-          tx,
-          deps.cfg,
-          body as VenueDetailWrite,
-          (deps.now ?? (() => new Date()))(),
-        ),
+        writeVenueDetails(tx, body as VenueDetailWrite, (deps.now ?? (() => new Date()))()),
       );
       return c.json(result);
     }),
@@ -274,7 +263,7 @@ export function mountLocationSettingsApi(
             throw error;
           throw refuse("fiscal_format");
         }
-        const { issuer } = await readVenueDetails(tx, deps.cfg);
+        const { issuer } = await readVenueDetails(tx);
         const stored = normalizeVenueText(issuer.legalName);
         if (legalName === stored && expected === stored) throw refuse("unchanged");
         // A match after normalising stands for the stored spelling, which the write compares exactly.
@@ -283,7 +272,7 @@ export function mountLocationSettingsApi(
           legalName,
         });
         if (!renamed) throw new AppError("venue.detail_changed", { field: "legalName" });
-        return { model: await readVenueDetails(tx, deps.cfg) };
+        return { model: await readVenueDetails(tx) };
       });
       return c.json(result);
     }),
@@ -293,7 +282,7 @@ export function mountLocationSettingsApi(
       const sessionId = requireManagementSession(c);
       const answer = await gated(sessionId, async (tx) => {
         const rules = await readVenueReceiptLanguageRules(tx);
-        const [language] = await storedLanguages(tx, deps.cfg.locationId);
+        const [language] = await storedLanguages(tx);
         return { language, choices: rules.choices, fixed: rules.fixed ?? null };
       });
       return c.json(answer);
@@ -324,9 +313,7 @@ export function mountLocationSettingsApi(
   app.get("/management-api/venue-defaults", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      return c.json(
-        await gated(sessionId, (tx) => readVenueDefaults(tx, deps.cfg.locationId), "venue.view"),
-      );
+      return c.json(await gated(sessionId, readVenueDefaults, "venue.view"));
     }),
   );
   app.put("/management-api/venue-defaults", (c) =>
@@ -338,13 +325,13 @@ export function mountLocationSettingsApi(
         if ("receiptLanguage" in request) {
           if (typeof request.receiptLanguage !== "string")
             throw new AppError("management.request_invalid", { field: "receiptLanguage" });
-          await writeReceiptLanguage(tx, deps.cfg.locationId, request.receiptLanguage);
+          await writeReceiptLanguage(tx, request.receiptLanguage);
         }
         if ("defaultProductVatClass" in request)
           await saveCatalogueSettings(tx, {
             defaultProductVatClass: request.defaultProductVatClass,
           });
-        return readVenueDefaults(tx, deps.cfg.locationId);
+        return readVenueDefaults(tx);
       });
       return c.json(answer);
     }),

@@ -8,7 +8,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
-import { mountLocationSettingsApi } from "./location-settings-api.js";
+import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { readVenueDetails } from "./venue-details.js";
 
@@ -19,7 +19,7 @@ let original: string;
 
 function appWith(fiscal: FiscalContribution = realFiscal()): Hono {
   const app = new Hono();
-  mountLocationSettingsApi(app, { db: suite.db, cfg: venue.cfg, fiscal }, () => {});
+  mountVenueSettingsApi(app, { db: suite.db, fiscal }, () => {});
   return app;
 }
 function rename(body: unknown, cookie: string | null = venue.managerCookie, app = appWith()) {
@@ -33,7 +33,7 @@ async function taxpayer() {
   const [row] = await suite.db.select().from(tenants).where(eq(tenants.id, 1));
   return row!;
 }
-const model = () => withTransaction(suite.db, (tx) => readVenueDetails(tx, venue.cfg));
+const model = () => withTransaction(suite.db, (tx) => readVenueDetails(tx));
 
 beforeEach(async () => {
   venue = await setupVenue(suite.db);
@@ -104,7 +104,7 @@ describe("changing the taxpayer's legal name", () => {
     expect((await taxpayer()).legalName).toBe(original);
   });
 
-  it.each(["taxId", "country", "locationId", "fiscalTerritory"])(
+  it.each(["taxId", "country", "fiscalTerritory"])(
     "refuses a body carrying the read-only %s by name and writes nothing",
     async (field) => {
       const response = await rename({

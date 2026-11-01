@@ -2,9 +2,11 @@ import { and, eq, sql } from "drizzle-orm";
 import {
   locationBusinessDaySettings,
   locationDayCutoverChanges,
+  readVenueClock,
+  venueLocationId,
   type Transaction,
 } from "@waitron/db";
-import { readLocationClock, validateBusinessDay } from "@waitron/reporting";
+import { validateBusinessDay } from "@waitron/reporting";
 import {
   AppError,
   businessDayAt,
@@ -25,7 +27,6 @@ import { readVenueDetails } from "./venue-details.js";
 import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
 
-type Scope = { locationId: string };
 function invalid(field: string, reason: string): never {
   throw new AppError("venue.business_day_invalid", { field, reason });
 }
@@ -75,14 +76,11 @@ function startOf(input: unknown): { expectedClockRevision: number; dayCutover: s
 }
 export async function readBusinessDayClockModel(
   tx: Transaction,
-  cfg: Scope,
   at: Date,
 ): Promise<BusinessDayClockModel> {
-  const clock = await readLocationClock(tx, cfg.locationId);
-  const [settings] = await tx
-    .select()
-    .from(locationBusinessDaySettings)
-    .where(eq(locationBusinessDaySettings.locationId, cfg.locationId));
+  const clock = await readVenueClock(tx);
+  // Keyed by the venue's row id, so the table holds at most one row.
+  const [settings] = await tx.select().from(locationBusinessDaySettings).limit(1);
   const base = { clock, revision: settings?.revision ?? 0 };
   let currentBusinessDay: string;
   try {
@@ -112,7 +110,6 @@ function assertRevision(model: BusinessDayClockModel, revision: number): void {
 }
 async function protectHistory(
   tx: Transaction,
-  cfg: Scope,
   before: BusinessDayClock,
   candidate: BusinessDayClock,
   effectiveDay: string,
@@ -122,15 +119,15 @@ async function protectHistory(
   const newBoundary = businessDayBoundaryAt(candidate, effectiveDay);
   const earliest = oldBoundary < newBoundary ? oldBoundary : newBoundary;
   const { rows } = await tx.execute<{ closed: number; future: number }>(sql`
-    select exists(select 1 from daily_closes c join nodes n on n.id = c.node_id where n.location_id = ${cfg.locationId} and c.business_day >= ${previous}) as closed,
+    select exists(select 1 from daily_closes c where c.business_day >= ${previous}) as closed,
       exists(select 1 from (
-        select s.issued_at as at from sales s join nodes n on n.id = s.node_id where n.location_id = ${cfg.locationId}
-        union all select v.voided_at from sale_voids v join sales s on s.id = v.sale_id join nodes n on n.id = s.node_id where n.location_id = ${cfg.locationId}
-        union all select t.settled_at from tenders t join sales s on s.id = t.sale_id join nodes n on n.id = s.node_id where n.location_id = ${cfg.locationId}
-        union all select p.received_at from bill_payments p join working_orders w on w.id = p.working_order_id where w.location_id = ${cfg.locationId}
-        union all select r.completed_at from bill_payment_refunds r join bill_payments p on p.id = r.bill_payment_id join working_orders w on w.id = p.working_order_id where w.location_id = ${cfg.locationId} and r.state = 'completed'
-        union all select w.opened_at from working_orders w where w.location_id = ${cfg.locationId}
-        union all select k.created_at from kitchen_notices k join working_orders w on w.id = k.working_order_id where w.location_id = ${cfg.locationId}
+        select s.issued_at as at from sales s
+        union all select v.voided_at from sale_voids v
+        union all select t.settled_at from tenders t
+        union all select p.received_at from bill_payments p
+        union all select r.completed_at from bill_payment_refunds r where r.state = 'completed'
+        union all select w.opened_at from working_orders w
+        union all select k.created_at from kitchen_notices k
       ) where at >= ${earliest}) as future`);
   if (rows[0]!.closed) throw new AppError("venue.business_day_locked", { reason: "daily_close" });
   if (rows[0]!.future)
@@ -145,24 +142,23 @@ function view(clock: BusinessDayClock, businessDay: string) {
 }
 export async function previewBusinessDayStart(
   tx: Transaction,
-  cfg: Scope,
   input: unknown,
   at: Date,
 ): Promise<BusinessDayStartPreview> {
   const start = startOf(input);
-  const model = await readBusinessDayClockModel(tx, cfg, at);
+  const model = await readBusinessDayClockModel(tx, at);
   assertRevision(model, start.expectedClockRevision);
   refuseClockTransition(model.clock, start.dayCutover, at);
   const plan = planBusinessDayStart(model.clock, start.dayCutover, at);
   const effectiveDay = plan.effectiveBusinessDay;
-  await protectHistory(tx, cfg, model.clock, plan.candidate, effectiveDay);
+  await protectHistory(tx, model.clock, plan.candidate, effectiveDay);
   let conflicts: BusinessDayStartPreview["conflicts"] = [];
   let conflictCount = 0;
   try {
     // Measured from the start in force, not from a waiting change this Save replaces.
     await VENUE_SERVICE.assertBusinessDayClockChange(
       tx,
-      { locationId: locationId(cfg.locationId) },
+      { locationId: locationId(await venueLocationId(tx)) },
       plan.before,
       plan.candidate,
       effectiveDay,
@@ -181,31 +177,30 @@ export async function previewBusinessDayStart(
     backupDeadlines: { archive: null, cloud: null },
   };
 }
-async function bumpRevision(tx: Transaction, cfg: Scope, revision: number): Promise<void> {
+async function bumpRevision(tx: Transaction, venueId: string, revision: number): Promise<void> {
   await tx
     .insert(locationBusinessDaySettings)
-    .values({ locationId: cfg.locationId, revision: revision + 1 })
+    .values({ locationId: venueId, revision: revision + 1 })
     .onConflictDoUpdate({
       target: locationBusinessDaySettings.locationId,
       set: { revision: revision + 1 },
     });
 }
-function pendingScope(cfg: Scope, effectiveBusinessDay: string) {
+function pendingScope(venueId: string, effectiveBusinessDay: string) {
   return and(
-    eq(locationDayCutoverChanges.locationId, cfg.locationId),
+    eq(locationDayCutoverChanges.locationId, venueId),
     eq(locationDayCutoverChanges.effectiveBusinessDay, effectiveBusinessDay),
   );
 }
 export async function writeBusinessDayStart(
   tx: Transaction,
-  cfg: Scope,
   input: unknown,
   at: Date,
 ): Promise<{ changed: boolean; model: VenueDetailsModel }> {
   const proposal = proposalOf(input);
-  const model = await readBusinessDayClockModel(tx, cfg, at);
+  const model = await readBusinessDayClockModel(tx, at);
   assertRevision(model, proposal.expectedClockRevision);
-  const unchanged = async () => ({ changed: false, model: await readVenueDetails(tx, cfg, at) });
+  const unchanged = async () => ({ changed: false, model: await readVenueDetails(tx, at) });
   if (
     model.pending === null &&
     proposal.dayCutover === cutoverForBusinessDay(model.clock, model.currentBusinessDay!)
@@ -217,25 +212,26 @@ export async function writeBusinessDayStart(
   if (sameChanges(plan.candidate, model.clock)) return unchanged();
   refuseClockTransition(model.clock, proposal.dayCutover, at);
   for (const removed of plan.removed)
-    await protectHistory(tx, cfg, model.clock, plan.candidate, removed);
-  await protectHistory(tx, cfg, model.clock, plan.candidate, effectiveDay);
+    await protectHistory(tx, model.clock, plan.candidate, removed);
+  await protectHistory(tx, model.clock, plan.candidate, effectiveDay);
+  const venueId = await venueLocationId(tx);
   await VENUE_SERVICE.assertBusinessDayClockChange(
     tx,
-    { locationId: locationId(cfg.locationId) },
+    { locationId: locationId(venueId) },
     plan.before,
     plan.candidate,
     effectiveDay,
   );
   for (const removed of plan.removed)
-    await tx.delete(locationDayCutoverChanges).where(pendingScope(cfg, removed));
+    await tx.delete(locationDayCutoverChanges).where(pendingScope(venueId, removed));
   if (plan.candidate !== plan.before)
     await tx.insert(locationDayCutoverChanges).values({
-      locationId: cfg.locationId,
+      locationId: venueId,
       effectiveBusinessDay: effectiveDay,
       dayCutover: `${proposal.dayCutover}:00`,
     });
-  await bumpRevision(tx, cfg, model.revision);
-  return { changed: true, model: await readVenueDetails(tx, cfg, at) };
+  await bumpRevision(tx, venueId, model.revision);
+  return { changed: true, model: await readVenueDetails(tx, at) };
 }
 function sameChanges(left: BusinessDayClock, right: BusinessDayClock): boolean {
   const key = (clock: BusinessDayClock) =>

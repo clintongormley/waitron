@@ -8,7 +8,7 @@ import { venueFiscalSelection } from "@waitron/provisioning";
 import { fromRegistroRow } from "@waitron/fiscal-verifactu";
 import { decodeRegistroRow, type RegistroRow } from "@waitron/fiscal-verifactu/src/registro-row.js";
 import { checkChain, computeHuella, type RegistroAlta } from "@waitron/verifactu";
-import { mountLocationSettingsApi } from "./location-settings-api.js";
+import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { inTx, send } from "./testing/bill-venue.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
@@ -33,11 +33,10 @@ useVenueDb({
 
 function venueDetailsApp(): Hono {
   const app = new Hono();
-  mountLocationSettingsApi(
+  mountVenueSettingsApi(
     app,
     {
       db: venue.db,
-      cfg: venue.cfg,
       fiscal: venueFiscalSelection(ALL_MODULES, "ES-common").contribution!,
     },
     () => {},

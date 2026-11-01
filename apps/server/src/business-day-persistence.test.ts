@@ -142,7 +142,7 @@ describe("business-day timeline through cold restore and reset", () => {
         });
         for (const [index, moment] of moments.entries()) {
           const model = await withTransaction(restored.venue, (tx) =>
-            readVenueDetails(tx, venue.cfg, new Date(moment)),
+            readVenueDetails(tx, new Date(moment)),
           );
           expect(model.businessDayClock.revision).toBe(4);
           expect(model.businessDayClock.currentBusinessDay).toBe(

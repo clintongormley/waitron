@@ -425,12 +425,10 @@ describe("saved-zone payment transactions", () => {
           const capture = zoneDb.db.all<Record<string, unknown>>(
             sql`select * from payments where working_order_id = ${req.id}`,
           );
-          const model = await withTransaction(zoneDb.db, (tx) =>
-            readVenueDetails(tx, zoneVenue.cfg),
-          );
+          const model = await withTransaction(zoneDb.db, (tx) => readVenueDetails(tx));
           await expect(
             withTransaction(zoneDb.db, (tx) =>
-              writeVenueDetails(tx, zoneVenue.cfg, {
+              writeVenueDetails(tx, {
                 expected: model.details,
                 changes: { timeZone: "Atlantic/Canary" },
               }),

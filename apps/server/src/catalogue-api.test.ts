@@ -22,7 +22,7 @@ import {
 } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
-import { mountLocationSettingsApi } from "./location-settings-api.js";
+import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import { createCourse } from "./kitchen.js";
@@ -644,11 +644,10 @@ function mountApp(venueLocale = "es-ES", contentLanguageRules?: ContentLanguageR
 /** The catalogue routes beside the venue-defaults route, which saves the new-product VAT class. */
 function mountWithVenueDefaults(): Hono {
   const app = mountApp();
-  mountLocationSettingsApi(
+  mountVenueSettingsApi(
     app,
     {
       db: suite.db,
-      cfg: { locationId },
       fiscal: venueFiscalSelection(ALL_MODULES, "ES-common").contribution!,
     },
     noopLog,

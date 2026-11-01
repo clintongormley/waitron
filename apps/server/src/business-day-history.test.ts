@@ -42,7 +42,7 @@ import {
 } from "./testing/order-venue.js";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import { ALL_MODULES } from "./modules.js";
-import { mountLocationSettingsApi } from "./location-settings-api.js";
+import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import { mountReportApi } from "./report-api.js";
 import { listOrders } from "./orders-list.js";
 
@@ -55,11 +55,10 @@ beforeEach(async () => {
   venue = await provisionOrderVenue(suite.db);
   app = new Hono();
   mountReportApi(app, { db: suite.db, cfg: venue.cfg, venueLocale: "es-ES" }, () => {});
-  mountLocationSettingsApi(
+  mountVenueSettingsApi(
     app,
     {
       db: suite.db,
-      cfg: venue.cfg,
       now: () => new Date(),
       fiscal: venueFiscalSelection(ALL_MODULES, "ES-common").contribution!,
     },

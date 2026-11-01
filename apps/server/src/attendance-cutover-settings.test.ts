@@ -18,7 +18,7 @@ import {
   discoverAttendanceDays,
   nextAttendanceDay,
 } from "./attendance-discovery.js";
-import { mountLocationSettingsApi } from "./location-settings-api.js";
+import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 
@@ -71,11 +71,10 @@ it("an admitted future cutover change does not block activity on its already dis
     evaluatedRevision: 0,
   });
   const app = new Hono();
-  mountLocationSettingsApi(
+  mountVenueSettingsApi(
     app,
     {
       db: suite.db,
-      cfg: venue.cfg,
       now: () => new Date("2026-01-07T12:00:00Z"),
       fiscal: venueFiscalSelection(ALL_MODULES, "ES-common").contribution!,
     },
@@ -163,11 +162,10 @@ it("a Save that moves today's end makes attendance evaluate today up to the new 
     evaluatedRevision: 0,
   });
   const app = new Hono();
-  mountLocationSettingsApi(
+  mountVenueSettingsApi(
     app,
     {
       db: suite.db,
-      cfg: venue.cfg,
       now: () => saveAt,
       fiscal: venueFiscalSelection(ALL_MODULES, "ES-common").contribution!,
     },

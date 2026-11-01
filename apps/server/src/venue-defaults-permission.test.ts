@@ -10,7 +10,7 @@ import { venueFiscalSelection } from "@waitron/provisioning";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
-import { mountLocationSettingsApi } from "./location-settings-api.js";
+import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import "./errors.js";
 
 // No built-in role holds `venue.configure` without `venue.view` or without `catalogue.manage`, so
@@ -33,14 +33,13 @@ vi.mock("@waitron/identity", async (importOriginal) => {
 const PATH = "/management-api/venue-defaults";
 let managerCookie: string;
 let supervisorCookie: string;
-let locationId: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
-    [managerCookie, supervisorCookie, locationId] = await withTransaction(db, async (tx) => {
+    [managerCookie, supervisorCookie] = await withTransaction(db, async (tx) => {
       const cookieFor = async (role: "manager" | "supervisor") => {
         const [person] = await tx
           .insert(persons)
@@ -70,11 +69,10 @@ beforeEach(async () => {
 
 function app() {
   const app = new Hono();
-  mountLocationSettingsApi(
+  mountVenueSettingsApi(
     app,
     {
       db: suite.db,
-      cfg: { locationId },
       fiscal: venueFiscalSelection(ALL_MODULES, "ES-common").contribution!,
     },
     () => {},

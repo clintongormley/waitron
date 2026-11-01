@@ -12,7 +12,7 @@ import { venueFiscalSelection } from "@waitron/provisioning";
 import { ALL_MODULES } from "./modules.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import { mountLocationSettingsApi } from "./location-settings-api.js";
+import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { recordTillSaleOrchestration as recordTillSale } from "./testing/whole-payment-fixture.js";
@@ -53,11 +53,10 @@ beforeAll(async () => {
 });
 function app(locationId?: string) {
   const app = new Hono();
-  mountLocationSettingsApi(
+  mountVenueSettingsApi(
     app,
     {
       db: suite.db,
-      cfg: { ...venue.cfg, locationId: locationId ?? venue.cfg.locationId },
       fiscal: venueFiscalSelection(ALL_MODULES, "ES-common").contribution!,
     },
     () => {},
@@ -516,11 +515,7 @@ describe("receipt language", () => {
       },
     });
     const counted = new Hono();
-    mountLocationSettingsApi(
-      counted,
-      { db: counting, cfg: venue.cfg, fiscal: realFiscal() },
-      () => {},
-    );
+    mountVenueSettingsApi(counted, { db: counting, fiscal: realFiscal() }, () => {});
     const answers = [];
     for (const [path, init] of [
       [PATH, { headers: { cookie: venue.managerCookie } }],
@@ -554,24 +549,6 @@ describe("receipt language", () => {
     expect(anonymous.status).toBe(401);
     expect((await write({ receiptLanguage: "gl-ES" }, venue.staffCookie)).status).toBe(403);
     expect(await stored()).toEqual(["es-ES"]);
-  });
-
-  it("refuses a read and a write when the configured location does not exist", async () => {
-    const missing = app("no-such-location");
-    const answers = [
-      await missing.request(PATH, { headers: { cookie: venue.managerCookie } }),
-      await missing.request(WRITE_PATH, {
-        method: "PUT",
-        headers: { cookie: venue.managerCookie, "content-type": "application/json" },
-        body: JSON.stringify({ receiptLanguage: "gl-ES" }),
-      }),
-    ];
-    for (const response of answers) {
-      expect(response.status).toBe(400);
-      expect(await response.json()).toEqual({
-        error: { code: "management.request_invalid", params: { field: "locationId" } },
-      });
-    }
   });
 });
 
@@ -758,11 +735,7 @@ describe("venue defaults", () => {
       },
     });
     const counted = new Hono();
-    mountLocationSettingsApi(
-      counted,
-      { db: counting, cfg: venue.cfg, fiscal: realFiscal() },
-      () => {},
-    );
+    mountVenueSettingsApi(counted, { db: counting, fiscal: realFiscal() }, () => {});
     const answers: [number, number][] = [];
     await at("Madrid", ["es-ES"], async () => {
       for (const init of [
