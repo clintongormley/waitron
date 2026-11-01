@@ -236,10 +236,15 @@ describe("A803 switcher: the table screen's bill switcher", () => {
         const seen = capture(el, "new-bill");
         const host = switcher(el)!;
         const popup = host.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
-        await userEvent.click(host.shadowRoot!.querySelector("button")!);
+        const trigger = host.shadowRoot!.querySelector("button")!;
+        await userEvent.click(trigger);
 
         expect(popup.matches(":popover-open")).toBe(true);
-        expect(popup.getBoundingClientRect().bottom).toBeLessThanOrEqual(innerHeight);
+        const popupBox = popup.getBoundingClientRect();
+        const anchor = trigger.getBoundingClientRect();
+        expect(popupBox.top).toBeGreaterThanOrEqual(anchor.bottom - 0.5);
+        expect(popupBox.bottom).toBeLessThanOrEqual(innerHeight);
+        expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
         const newBill = host.querySelector<HTMLElement>("[data-new-bill]")!;
         newBill.scrollIntoView({ block: "nearest" });
         const box = newBill.getBoundingClientRect();

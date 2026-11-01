@@ -2503,7 +2503,7 @@ describe("till-app: table actions on the party", () => {
     });
   });
 
-  it("opens the bill the floor names once the bill on screen has gone with the table split off", async () => {
+  it("shows the staying party's remaining bill once the bill on screen has gone with the table split off", async () => {
     const atTwo = seated({}, { tableIds: ["t4", "t5"] });
     const table5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
     const reads = floorThat(

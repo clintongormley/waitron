@@ -504,6 +504,7 @@ it.each([
     await click(screen, `[data-bill-switcher] ${selector}`);
     await answer(app, "discard");
     await expect.poll(() => app.commands).toEqual([{ type, detail }]);
+    expect(app.protectionAtSubmit).toEqual([false]);
     expect(screen.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
     expect(unload()).toBe(false);
   },
@@ -517,6 +518,7 @@ it.each([
     const { app, screen } = await mount();
     await click(screen, `[data-bill-switcher] ${selector}`);
     await expect.poll(() => app.commands).toEqual([{ type, detail }]);
+    expect(screen.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
     expect((await question(app)).open).toBe(false);
   },
 );
