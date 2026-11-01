@@ -1,15 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { checkFailed } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
+import { seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { isRefusal } from "../unique-violation.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
-import { locations } from "./tenants.js";
 
 const ACTOR = "cccccccc-2222-4000-8000-000000000001";
 const AT = "2026-10-17T10:00:00.000Z";
@@ -17,24 +17,17 @@ const AT = "2026-10-17T10:00:00.000Z";
 describe("charged service cancellations", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
+  beforeAll(async () => {
+    await seedVenue(suite.db, {
+      name: "Dining room",
+      invoiceLocales: ["en"],
+      operationDescription: "Restaurant",
+    });
+  });
+
   async function fixture() {
     return withTransaction(suite.db, async (tx) => {
-      const [location] = await tx
-        .insert(locations)
-        .values({
-          name: "Dining room",
-          invoiceLocales: ["en"],
-          operationDescription: "Restaurant",
-        })
-        .returning();
-      const [bill] = await tx
-        .insert(workingOrders)
-        .values({
-          source: "dashboard",
-          locationId: location!.id,
-          orderNumber: 1,
-        })
-        .returning();
+      const bill = await seedWorkingOrder(tx, { source: "dashboard", orderNumber: 1 });
       const [line] = await tx
         .insert(workingOrderLines)
         .values({
@@ -49,7 +42,7 @@ describe("charged service cancellations", () => {
           lineTotal: 2250,
         })
         .returning();
-      return { bill: bill!, line: line! };
+      return { bill, line: line! };
     });
   }
 

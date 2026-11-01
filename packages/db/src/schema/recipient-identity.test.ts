@@ -1,21 +1,20 @@
 import { randomUUID } from "node:crypto";
-import { locationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { triggerRaised } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { captureError } from "../testing/errors.js";
-import { seedNode, seedTenant } from "../testing/seed.js";
+import { seedNode, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { TRANSITION_REFUSAL } from "../trigger-refusals.js";
 import { diningTables } from "./dining-tables.js";
 import { floorZones } from "./floor-zones.js";
 import { parties } from "./parties.js";
 import { invoiceSeries } from "./series.js";
-import { locations } from "./tenants.js";
+import { venueLocationId } from "../venue.js";
 
 const AT = "2026-10-28T12:00:00Z";
-const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
+let LOCATION: string;
 const IDENTITY_REFUSAL = "recipient identity is incomplete";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 let node = "";
@@ -35,14 +34,13 @@ const NONE: Identity = { value: null, kind: null, issuer: null };
 
 beforeEach(async () => {
   const db = suite.db;
-  await seedTenant(db);
-  await db.insert(locations).values({
-    id: LOCATION,
+  await seedVenue(db, {
     name: "Test venue",
     invoiceLocales: ["en"],
     operationDescription: "Restaurant services",
   });
-  node = await seedNode(db, locationId(LOCATION));
+  LOCATION = await venueLocationId(db);
+  node = await seedNode(db);
   const [seriesRow] = await db
     .insert(invoiceSeries)
     .values({ nodeId: node, code: "A" })

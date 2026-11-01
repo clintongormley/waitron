@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { locationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { checkFailed, refusalOn, triggerRaised } from "../constraint-target.js";
@@ -7,14 +6,14 @@ import { UNIQUE_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
 import { TENDER_REFUND_CHANGE_REFUSAL, TENDER_REFUND_DELETE_REFUSAL } from "../trigger-refusals.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { seedDevice, seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { sales, tenders } from "./sales.js";
 import { invoiceSeries } from "./series.js";
-import { locations, tenants } from "./tenants.js";
+import { venueLocationId } from "../venue.js";
 
-const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
+let LOCATION: string;
 const PERSON = "cccccccc-0000-4000-8000-000000000001";
 const AT = "2026-10-16T10:00:00.000Z";
 const REFUND = "dddddddd-0000-4000-8000-000000000001";
@@ -29,17 +28,14 @@ describe("settled-tender refund ledger", () => {
 
   beforeEach(async () => {
     const db = suite.db;
-    await db
-      .insert(tenants)
-      .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Refund fixture" });
-    await db.insert(locations).values({
-      id: LOCATION,
+    await seedVenue(db, {
       name: "Venue",
       invoiceLocales: ["es"],
       operationDescription: "Meals",
     });
-    nodeId = await seedNode(db, locationId(LOCATION));
-    ({ deviceId } = await seedDevice(db, { locationId: LOCATION }));
+    LOCATION = await venueLocationId(db);
+    nodeId = await seedNode(db);
+    ({ deviceId } = await seedDevice(db));
     const [series] = await db
       .insert(invoiceSeries)
       .values({ nodeId, code: "TR", purpose: "standard" })

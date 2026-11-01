@@ -1,23 +1,20 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { locationId as brandLocationId } from "@waitron/shared";
 import type { Transaction } from "../client.js";
 import { checkFailed } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
-import { seedDevice, seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { isRefusal } from "../unique-violation.js";
 import { orderGroupEvents, orderGroups } from "./order-groups.js";
-import { workingOrderLines, workingOrders } from "./orders.js";
-import { locations, tenants } from "./tenants.js";
+import { workingOrderLines } from "./orders.js";
 import { parties } from "./parties.js";
 
-const LOCATION = "bbbbbbbb-0000-4000-8000-000000000002";
-/** An order opened from the dashboard at `LOCATION`, needing no device. */
-const DASHBOARD = { source: "dashboard", deviceId: null, locationId: LOCATION } as const;
+/** An order opened from the dashboard, needing no device. */
+const DASHBOARD = { source: "dashboard", deviceId: null } as const;
 const OPERATOR = "bbbbbbbb-2222-4000-8000-000000000002";
 const MISSING = "bbbbbbbb-3333-4000-8000-0000000000ff";
 
@@ -32,15 +29,13 @@ describe("order_groups, order_group_events and working_order_lines.group_id", ()
 
   beforeAll(async () => {
     const db = suite.db;
-    await db.insert(tenants).values({ id: 1, country: "ES", taxId: "B00000000", legalName: "T" });
-    await db.insert(locations).values({
-      id: LOCATION,
+    await seedVenue(db, {
       name: "Room",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    nodeId = await seedNode(db, brandLocationId(LOCATION));
-    ({ deviceId } = await seedDevice(db, { locationId: LOCATION }));
+    nodeId = await seedNode(db);
+    ({ deviceId } = await seedDevice(db));
   });
 
   async function party(): Promise<string> {
@@ -68,11 +63,13 @@ describe("order_groups, order_group_events and working_order_lines.group_id", ()
   async function bill(partyId: string): Promise<string> {
     orderSeq += 1;
     return inTx(async (tx) => {
-      const [row] = await tx
-        .insert(workingOrders)
-        .values({ ...DASHBOARD, nodeId, orderNumber: orderSeq, partyId })
-        .returning({ id: workingOrders.id });
-      return row!.id;
+      const row = await seedWorkingOrder(tx, {
+        ...DASHBOARD,
+        nodeId,
+        orderNumber: orderSeq,
+        partyId,
+      });
+      return row.id;
     });
   }
 

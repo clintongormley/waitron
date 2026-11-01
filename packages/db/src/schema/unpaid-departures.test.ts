@@ -1,4 +1,3 @@
-import { locationId as brandLocationId } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
@@ -8,18 +7,15 @@ import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { withTransaction } from "../tenancy.js";
 import { captureError } from "../testing/errors.js";
-import { seedDevice, seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
-import { workingOrders } from "./orders.js";
 import { parties } from "./parties.js";
 import { sales } from "./sales.js";
 import { invoiceSeries } from "./series.js";
-import { locations, tenants } from "./tenants.js";
 import { unpaidDepartures } from "./unpaid-departures.js";
 
-const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
-/** An order opened from the dashboard at `LOCATION`, needing no device. */
-const DASHBOARD = { source: "dashboard", deviceId: null, locationId: LOCATION } as const;
+/** An order opened from the dashboard, needing no device. */
+const DASHBOARD = { source: "dashboard", deviceId: null } as const;
 const STAFF = "cccccccc-0000-4000-8000-000000000001";
 const SUPERVISOR = "cccccccc-0000-4000-8000-000000000002";
 const MISSING = "cccccccc-3333-4000-8000-0000000000ff";
@@ -39,22 +35,18 @@ describe("unpaid_departures", () => {
 
   beforeAll(async () => {
     const db = suite.db;
-    await db
-      .insert(tenants)
-      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant" }]);
-    await db.insert(locations).values({
-      id: LOCATION,
+    await seedVenue(db, {
       name: "Loc",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    nodeId = await seedNode(db, brandLocationId(LOCATION));
+    nodeId = await seedNode(db);
     const [series] = await db
       .insert(invoiceSeries)
       .values({ nodeId, code: "FA", purpose: "standard" })
       .returning({ id: invoiceSeries.id });
     seriesId = series!.id;
-    ({ deviceId } = await seedDevice(db, { locationId: LOCATION }));
+    ({ deviceId } = await seedDevice(db));
   });
 
   /** A party, one bill of it and that bill's unsettled invoice. */
@@ -66,17 +58,14 @@ describe("unpaid_departures", () => {
         .insert(parties)
         .values({ openedBy: STAFF })
         .returning({ id: parties.id });
-      const [bill] = await tx
-        .insert(workingOrders)
-        .values({
-          ...DASHBOARD,
-          nodeId,
-          orderNumber,
-          status: "placed",
-          openedAt: AT,
-          partyId: party!.id,
-        })
-        .returning({ id: workingOrders.id });
+      const bill = await seedWorkingOrder(tx, {
+        ...DASHBOARD,
+        nodeId,
+        orderNumber,
+        status: "placed",
+        openedAt: AT,
+        partyId: party!.id,
+      });
       const [sale] = await tx
         .insert(sales)
         .values({
@@ -93,10 +82,10 @@ describe("unpaid_departures", () => {
           invoiceLocales: ["es"],
           fiscalBackend: "verifactu",
           fiscalState: "recorded",
-          workingOrderId: bill!.id,
+          workingOrderId: bill.id,
         })
         .returning({ id: sales.id });
-      return { partyId: party!.id, billId: bill!.id, saleId: sale!.id };
+      return { partyId: party!.id, billId: bill.id, saleId: sale!.id };
     });
   }
 

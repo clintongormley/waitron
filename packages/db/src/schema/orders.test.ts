@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
@@ -17,10 +16,11 @@ import { useVenueDb } from "../testing/venue-db.js";
 import { deviceProfiles } from "./device-profiles.js";
 import { devices } from "./devices.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { seedDevice, seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
 import { catalogues, products } from "./catalogue.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
-import { locations, tenants } from "./tenants.js";
+import { locations } from "./tenants.js";
+import { venueLocationId } from "../venue.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
@@ -58,10 +58,14 @@ afterEach(async () => {
   });
 });
 
-const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
+let LOCATION_A: string;
 const AT = "2026-07-20T19:20:30+00:00";
 /** An order opened from the dashboard at location A: no device to seed. */
-const DASHBOARD_ORDER = { source: "dashboard", deviceId: null, locationId: LOCATION_A } as const;
+let DASHBOARD_ORDER: {
+  readonly source: "dashboard";
+  readonly deviceId: null;
+  readonly locationId: string;
+};
 
 let productA = "";
 let orderNumberSeq = 0;
@@ -72,19 +76,15 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
 }
 
 async function seed(db: Database): Promise<void> {
-  await db
-    .insert(tenants)
-    .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
-  await db.insert(locations).values([
-    {
-      id: LOCATION_A,
-      // Bilingual on purpose: a single-locale venue cannot detect a trigger
-      // that checks "at least one locale" instead of "exactly these".
-      name: "Fixture Location A",
-      invoiceLocales: ["es", "ca"],
-      operationDescription: "Hostelería",
-    },
-  ]);
+  await seedVenue(db, {
+    // Bilingual on purpose: a single-locale venue cannot detect a trigger
+    // that checks "at least one locale" instead of "exactly these".
+    name: "Fixture Location A",
+    invoiceLocales: ["es", "ca"],
+    operationDescription: "Hostelería",
+  });
+  LOCATION_A = await venueLocationId(db);
+  DASHBOARD_ORDER = { source: "dashboard", deviceId: null, locationId: LOCATION_A };
   const [catA] = await db
     .insert(catalogues)
     .values({ name: "Deli A" })
@@ -326,7 +326,7 @@ describe("working_orders", () => {
   });
 
   it("carries a nullable node_id column referencing nodes", async () => {
-    const node = await seedNode(db, brandLocationId(LOCATION_A));
+    const node = await seedNode(db);
     const meta = await rows<{ notnull: number }>(
       db,
       sql`select "notnull" from pragma_table_info('working_orders') where name = 'node_id'`,
@@ -405,7 +405,7 @@ describe("working_orders", () => {
   });
 
   it("records who opened an order and where: a device names itself, the dashboard names none", async () => {
-    const { deviceId } = await seedDevice(db, { locationId: LOCATION_A });
+    const { deviceId } = await seedDevice(db);
     const [fromDevice] = await db
       .insert(workingOrders)
       .values({
@@ -434,7 +434,7 @@ describe("working_orders", () => {
   });
 
   it("refuses an order from a job that names a device", async () => {
-    const { deviceId } = await seedDevice(db, { locationId: LOCATION_A });
+    const { deviceId } = await seedDevice(db);
     const error = await captureError(() =>
       db.insert(workingOrders).values({
         source: "kitchen_timer",

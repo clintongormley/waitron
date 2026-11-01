@@ -1,6 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { freshNif } from "../testing/seed.js";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
@@ -10,19 +8,12 @@ import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { seedDevice, seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
 import { sales } from "./sales.js";
 import { invoiceSeries } from "./series.js";
-import { locations, tenants } from "./tenants.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
-// Append-only links and sales retain their FK parents; each case uses a fresh fixture identity.
-beforeEach(() => {
-  LOCATION_A = randomUUID();
-});
-
-let LOCATION_A = randomUUID();
 const AT = "2026-07-20T19:20:30+00:00";
 
 let seriesA = "";
@@ -35,19 +26,13 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
 }
 
 async function seed(db: Database): Promise<void> {
-  await db
-    .insert(tenants)
-    .values([{ id: 1, country: "ES", taxId: freshNif(), legalName: "Fixture Tenant A" }]);
-  await db.insert(locations).values([
-    {
-      id: LOCATION_A,
-      name: "Fixture Location A",
-      invoiceLocales: ["es", "ca"],
-      operationDescription: "Hostelería",
-    },
-  ]);
-  nodeA = await seedNode(db, brandLocationId(LOCATION_A));
-  ({ deviceId: deviceA } = await seedDevice(db, { locationId: LOCATION_A }));
+  await seedVenue(db, {
+    name: "Fixture Location A",
+    invoiceLocales: ["es", "ca"],
+    operationDescription: "Hostelería",
+  });
+  nodeA = await seedNode(db);
+  ({ deviceId: deviceA } = await seedDevice(db));
   const [a] = await db
     .insert(invoiceSeries)
     .values({ nodeId: nodeA, code: "FA", purpose: "standard" })

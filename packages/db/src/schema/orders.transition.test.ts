@@ -1,11 +1,10 @@
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { locationId as brandLocationId } from "@waitron/shared";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { OPEN_PARENT_REFUSAL, TRANSITION_REFUSAL } from "../trigger-refusals.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
-import { seedDevice, seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { catalogues, products } from "./catalogue.js";
@@ -13,13 +12,14 @@ import { workingOrderLines, workingOrders } from "./orders.js";
 import { parties } from "./parties.js";
 import { invoiceSeries } from "./series.js";
 import { sales } from "./sales.js";
-import { locations, tenants } from "./tenants.js";
+import { locations } from "./tenants.js";
+import { venueLocationId } from "../venue.js";
 
 // A trigger's refusal carries its `RAISE(ABORT, …)` text and nothing else — no table, no column,
 // no constraint name — so it is compared by EQUALITY against the literal the migration owns
 // (`packages/db/src/trigger-refusals.ts`).
 
-const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
+let LOCATION_A: string;
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 // Matches LOCATION_A's invoice_locales (es, ca), so check_locales lets the draft line reach
@@ -118,26 +118,21 @@ describe("working_orders state machine (enforce_transition)", () => {
 
   beforeAll(async () => {
     const db = suite.db;
-    await db
-      .insert(tenants)
-      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
-    await db.insert(locations).values([
-      {
-        id: LOCATION_A,
-        name: "Fixture Location A",
-        invoiceLocales: ["es", "ca"],
-        operationDescription: "Hostelería",
-      },
-      {
-        id: LOCATION_B,
-        name: "Fixture Location B",
-        invoiceLocales: ["es", "ca"],
-        operationDescription: "Hostelería",
-      },
-    ]);
-    nodeA = await seedNode(db, brandLocationId(LOCATION_A));
-    ({ deviceId: deviceA } = await seedDevice(db, { locationId: LOCATION_A }));
-    ({ deviceId: deviceB } = await seedDevice(db, { locationId: LOCATION_A }));
+    await seedVenue(db, {
+      name: "Fixture Location A",
+      invoiceLocales: ["es", "ca"],
+      operationDescription: "Hostelería",
+    });
+    LOCATION_A = await venueLocationId(db);
+    nodeA = await seedNode(db);
+    ({ deviceId: deviceA } = await seedDevice(db));
+    ({ deviceId: deviceB } = await seedDevice(db));
+    await db.insert(locations).values({
+      id: LOCATION_B,
+      name: "Fixture Location B",
+      invoiceLocales: ["es", "ca"],
+      operationDescription: "Hostelería",
+    });
     const [catalogue] = await db
       .insert(catalogues)
       .values({ name: "Deli" })

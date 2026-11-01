@@ -3,15 +3,16 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
+import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { isRefusal } from "../unique-violation.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { orderGroupHoldStations } from "./order-group-hold-stations.js";
 import { orderGroups } from "./order-groups.js";
 import { parties } from "./parties.js";
-import { locations, tenants } from "./tenants.js";
+import { venueLocationId } from "../venue.js";
 
-const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
+let LOCATION: string;
 const STATION = "aaaaaaaa-0000-4000-8000-000000000004";
 const PARTY = "aaaaaaaa-0000-4000-8000-000000000006";
 const GROUP = "aaaaaaaa-0000-4000-8000-000000000007";
@@ -22,18 +23,12 @@ describe("order group hold stations schema", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   beforeEach(async () => {
-    await suite.db.insert(tenants).values({
-      id: 1,
-      country: "ES",
-      taxId: "B00000000",
-      legalName: "Fixture Tenant A",
-    });
-    await suite.db.insert(locations).values({
-      id: LOCATION,
+    await seedVenue(suite.db, {
       name: "Loc A",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
+    LOCATION = await venueLocationId(suite.db);
     await suite.db
       .insert(kitchenStations)
       .values({ id: STATION, locationId: LOCATION, name: "Kitchen A" });
