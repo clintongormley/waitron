@@ -5,7 +5,7 @@ import type { BillBalance, TabLine } from "../api/client.js";
 import { currentLocale } from "../i18n/t.js";
 import { paidQuantities } from "../state/bill-payment.js";
 import { tabLinePortionKey } from "../state/portion-groups.js";
-import { pickRows, type PickRow, type Picks } from "../state/portion-selection.js";
+import { pickGroups, pickRows, type PickRow, type Picks } from "../state/portion-selection.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./portion-picker.js";
 import type { TillPortionPicker } from "./portion-picker.js";
@@ -92,7 +92,7 @@ function rowsOf(lines: readonly TabLine[], paid: BillBalance | null, picks: Pick
       lines,
       paid === null ? null : (paidQuantities(paid).get(row.lineNo) ?? null),
     );
-  return pickRows(lines, keyOf, paid, new Set(), picks);
+  return pickRows(pickGroups(lines, keyOf, paid, new Set()), picks);
 }
 
 const nameOf = (row: PickRow) => row.members[0]!.name ?? "";

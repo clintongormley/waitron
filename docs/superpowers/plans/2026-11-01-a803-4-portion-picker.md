@@ -1471,3 +1471,8 @@ written; this section is the correction.
   the Task 5 fix; a direct case was added (`ada7185cb`), red with the filter deleted.
 - Task 11: a guide link to a section on the same page names the page
   (`table-service.md#move-dishes`); `guide-content.test.ts` refuses a bare `#move-dishes`.
+- Final review: `pickRows` is split. `pickGroups(lines, keyOf, balance, recalled)` groups the bill,
+  and the screen keeps that grouping until what it is drawn from changes (`#dishGroupsFor`); the
+  list of the bill's dishes shown while the Sent read is missing uses the same grouping.
+  `pickRows(groups, picks)` and `tidyPicks(before, groups, picks)` work out only the limits.
+  `pickedAmount`, called only by its tests, is removed.

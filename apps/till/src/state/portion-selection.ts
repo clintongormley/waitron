@@ -35,18 +35,31 @@ const ZERO = decimal("0");
 
 const times = (each: Decimal, count: number) => multiplyDecimal(each, decimal(String(count)));
 
+/** One group of {@link PickGroups}: what its row is drawn from whatever the picks. */
+interface PickGroup {
+  members: readonly TabLine[];
+  each: Decimal;
+  paid: boolean;
+}
+
+/** A bill's dishes grouped into Move dishes…' rows. The grouping does not depend on the picks, so
+ * one grouping serves every drawing of the rows until the bill is read again. */
+export interface PickGroups {
+  readonly groups: readonly PickGroup[];
+  /** The bill's total and what it has received or reserved; null with no balance read. */
+  readonly floor: { total: Decimal; kept: Decimal } | null;
+}
+
 /**
- * The bill's dishes as Move dishes… offers them. A dish recalled into a draft is left out; a dish
- * with any quantity paid is blocked `paid`; and a pick that would leave the bill's total below what
- * it has received or reserved is blocked `floor`. With no balance read, nothing is blocked.
+ * The bill's dishes as Move dishes… offers them. A dish recalled into a draft is left out, and a
+ * dish with any quantity paid makes its row paid.
  */
-export function pickRows(
+export function pickGroups(
   lines: readonly TabLine[],
   keyOf: (dish: TabLine) => string | null,
   balance: BillBalance | null,
   recalled: ReadonlySet<string>,
-  picks: Picks,
-): PickRow[] {
+): PickGroups {
   const dishes = lines.filter(
     (row) => (row.parentLineNo ?? null) === null && !recalled.has(row.id),
   );
@@ -59,43 +72,67 @@ export function pickRows(
     else siblings.push(row);
   }
   const paid = balance === null ? null : paidQuantities(balance);
-  const groups = portionGroups(dishes, keyOf, (row) => row.lineNo).map((members) => ({
+  const groups = portionGroups(dishes, keyOf, (row) => row.lineNo).map((members): PickGroup => ({
     members,
     each: billGross([members[0]!, ...(extras.get(members[0]!.lineNo) ?? [])]),
     paid:
       paid !== null &&
       members.some((member) => compareDecimal(decimal(paid.get(member.lineNo) ?? "0"), ZERO) > 0),
   }));
-  const pickedOf = (members: readonly TabLine[]) =>
-    members.filter((member) => picks.has(member.id)).length;
-  const pickedTotal = sumDecimals(
-    groups
+  return {
+    groups,
+    floor:
+      balance === null
+        ? null
+        : {
+            total: decimal(balance.total),
+            kept: moneyPlus(balance.received, balance.reserved),
+          },
+  };
+}
+
+const pickedOf = (members: readonly TabLine[], picks: Picks) =>
+  members.filter((member) => picks.has(member.id)).length;
+
+/** What the picks on unpaid rows take off the bill. */
+function pickedTotal(bill: PickGroups, picks: Picks): Decimal {
+  return sumDecimals(
+    bill.groups
       .filter((group) => !group.paid)
-      .map((group) => times(group.each, pickedOf(group.members))),
+      .map((group) => times(group.each, pickedOf(group.members, picks))),
   );
-  const kept = balance === null ? null : moneyPlus(balance.received, balance.reserved);
-  return groups.map(({ members, each, paid: isPaid }): PickRow => {
-    const picked = pickedOf(members);
-    let limit = members.length;
-    if (isPaid) limit = 0;
-    else if (balance !== null && kept !== null) {
-      let left = subtractDecimal(
-        decimal(balance.total),
-        subtractDecimal(pickedTotal, times(each, picked)),
-      );
-      limit = 0;
-      while (limit < members.length) {
-        left = subtractDecimal(left, each);
-        if (compareDecimal(left, kept) < 0) break;
-        limit++;
-      }
+}
+
+function rowOf(bill: PickGroups, group: PickGroup, picks: Picks, total: Decimal): PickRow {
+  const { members, each, paid } = group;
+  const picked = pickedOf(members, picks);
+  const floor = bill.floor;
+  let limit = members.length;
+  if (paid) limit = 0;
+  else if (floor !== null) {
+    let left = subtractDecimal(floor.total, subtractDecimal(total, times(each, picked)));
+    limit = 0;
+    while (limit < members.length) {
+      left = subtractDecimal(left, each);
+      if (compareDecimal(left, floor.kept) < 0) break;
+      limit++;
     }
-    let blocked: PickRow["blocked"] = null;
-    if (isPaid) blocked = { reason: "paid" };
-    else if (kept !== null && (picked > limit || (picked < members.length && picked >= limit)))
-      blocked = { reason: "floor", kept };
-    return { members, counted: members.length > 1, each, limit, blocked };
-  });
+  }
+  let blocked: PickRow["blocked"] = null;
+  if (paid) blocked = { reason: "paid" };
+  else if (floor !== null && (picked > limit || (picked < members.length && picked >= limit)))
+    blocked = { reason: "floor", kept: floor.kept };
+  return { members, counted: members.length > 1, each, limit, blocked };
+}
+
+/**
+ * The rows drawn over a set of picks: a paid row is blocked `paid`, and a pick that would leave the
+ * bill's total below what it has received or reserved is blocked `floor`. With no balance read,
+ * nothing is blocked.
+ */
+export function pickRows(bill: PickGroups, picks: Picks): PickRow[] {
+  const total = pickedTotal(bill, picks);
+  return bill.groups.map((group) => rowOf(bill, group, picks, total));
 }
 
 export function pickedCount(row: PickRow, picks: Picks): number {
@@ -117,47 +154,37 @@ export function toggleRow(row: PickRow, picks: Picks): Picks {
 }
 
 /**
- * The picks after a re-read. `before` is the rows last drawn; `rowsFor` draws the re-read bill's
- * rows over a set of picks, grouping them the same whatever the picks. Each row read before hands
- * its count to the unpaid row now holding most of its members (on a tie, the one drawn first), and
- * counts handed to one row add up. The rows then take their counts in the order they are drawn,
- * each its first members and never more than its limit over the picks already placed: together
- * they keep within the floor the rows' limits work out, and a row left short could not take one
- * more. An id in no row now (gone, or recalled into a draft) is dropped, and its row's count
- * stays, taken from the members left.
+ * The picks after a re-read. `before` is the rows last drawn; `bill` is the re-read bill's groups.
+ * Each row read before hands its count to the unpaid row now holding most of its members (on a tie,
+ * the one drawn first), and counts handed to one row add up. The rows then take their counts in
+ * the order they are drawn, each its first members and never more than its limit over the picks
+ * already placed: together they keep within the floor the rows' limits work out, and a row left
+ * short could not take one more. An id in no row now (gone, or recalled into a draft) is dropped,
+ * and its row's count stays, taken from the members left.
  */
-export function tidyPicks(
-  before: readonly PickRow[],
-  rowsFor: (picks: Picks) => readonly PickRow[],
-  picks: Picks,
-): Picks {
-  const after = rowsFor(new Set());
-  const counts = new Map<string, number>();
+export function tidyPicks(before: readonly PickRow[], bill: PickGroups, picks: Picks): Picks {
+  const counts = new Map<PickGroup, number>();
   for (const old of before) {
     const count = pickedCount(old, picks);
     if (count === 0) continue;
     const ids = new Set(old.members.map((member) => member.id));
-    let home: PickRow | undefined;
+    let home: PickGroup | undefined;
     let shared = 0;
-    for (const row of after) {
-      if (row.blocked?.reason === "paid") continue;
-      const held = row.members.filter((member) => ids.has(member.id)).length;
+    for (const group of bill.groups) {
+      if (group.paid) continue;
+      const held = group.members.filter((member) => ids.has(member.id)).length;
       if (held > shared) {
-        home = row;
+        home = group;
         shared = held;
       }
     }
-    if (home !== undefined) {
-      const key = home.members[0]!.id;
-      counts.set(key, (counts.get(key) ?? 0) + count);
-    }
+    if (home !== undefined) counts.set(home, (counts.get(home) ?? 0) + count);
   }
   let next: Picks = new Set();
-  for (const { members } of after) {
-    const count = counts.get(members[0]!.id);
+  for (const group of bill.groups) {
+    const count = counts.get(group);
     if (count === undefined) continue;
-    const row = rowsFor(next).find((drawn) => drawn.members[0]!.id === members[0]!.id)!;
-    next = setCount(row, count, next);
+    next = setCount(rowOf(bill, group, next, pickedTotal(bill, next)), count, next);
   }
   return next;
 }

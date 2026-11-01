@@ -143,8 +143,7 @@ async function step(el: TillTableOrderScreen, which: "dec" | "inc", id: string) 
   await picker(el).updateComplete;
 }
 
-/** Counts reads of the screen's bill lines: drawing Move dishes…' rows reads them once, and once
- * more per dish. */
+/** Counts reads of the screen's bill lines. */
 function countLineReads(el: TillTableOrderScreen): { count: number } {
   let owner: object | null = Object.getPrototypeOf(el);
   let accessor: PropertyDescriptor | undefined;
@@ -535,6 +534,28 @@ describe("A803 move dishes refresh:", () => {
     await picker(el).updateComplete;
     expect(picker(el).picks).toEqual(new Set());
     expect(confirm(el).disabled).toBe(true);
+  });
+
+  it("an update that changes nothing the rows are drawn from does not group the bill's dishes again", async () => {
+    const offerReads = { count: 0 };
+    const counted = (dish: TabLine): TabLine => {
+      const { menuItemId, ...rest } = dish;
+      return Object.defineProperty(rest, "menuItemId", {
+        enumerable: true,
+        get() {
+          offerReads.count++;
+          return menuItemId;
+        },
+      }) as TabLine;
+    };
+    const el = await mountScreen({ lines: [...CANAS, HAM].map(counted) });
+    await openMoveDishes(el);
+    await tick(el, "c1");
+    expect(offerReads.count).toBeGreaterThan(0);
+    offerReads.count = 0;
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(offerReads.count).toBe(0);
   });
 
   it("an update that changes nothing the rows are drawn from draws them no more often with every dish picked than with none", async () => {

@@ -5,7 +5,7 @@ import type { BillBalance, TabLine } from "../api/client.js";
 import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import { paidQuantities } from "../state/bill-payment.js";
 import { tabLinePortionKey } from "../state/portion-groups.js";
-import { pickRows, type PickRow, type Picks } from "../state/portion-selection.js";
+import { pickGroups, pickRows, type PickRow, type Picks } from "../state/portion-selection.js";
 import type { WtButton } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillPortionPicker } from "./portion-picker.js";
@@ -68,7 +68,7 @@ function rowsOf(lines: readonly TabLine[], paid: BillBalance | null, picks: Pick
       lines,
       paid === null ? null : (paidQuantities(paid).get(row.lineNo) ?? null),
     );
-  return pickRows(lines, keyOf, paid, new Set(), picks);
+  return pickRows(pickGroups(lines, keyOf, paid, new Set()), picks);
 }
 
 const CANAS = [line("c1", 1), line("c2", 2), line("c3", 3), line("c4", 4)];

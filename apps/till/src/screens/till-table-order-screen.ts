@@ -161,11 +161,13 @@ import type { PayLine, PayWay } from "../widgets/bill-pay-dialog.js";
 import "../widgets/dead-ends-section.js";
 import { PAY_WAYS, paidQuantities, payLines } from "../state/bill-payment.js";
 import { billHasUnsent, billUnsentText } from "../state/bill-unsent.js";
-import { portionGroups, sentSlicePortionKey, tabLinePortionKey } from "../state/portion-groups.js";
+import { sentSlicePortionKey, tabLinePortionKey } from "../state/portion-groups.js";
 import {
+  pickGroups,
   pickRows,
   pickedLineIds,
   tidyPicks,
+  type PickGroups,
   type PickRow,
   type Picks,
 } from "../state/portion-selection.js";
@@ -289,21 +291,45 @@ function samePicks(a: Picks, b: Picks): boolean {
   return a.size === b.size && [...a].every((id) => b.has(id));
 }
 
-/** What Move dishes… draws its rows from. */
-interface MoveDishesSources {
+/** What the list of the bill's dishes and Move dishes…' rows are grouped from. */
+interface DishSources {
   lines: readonly TabLine[];
   balance: BillBalance | null;
   allergy: PartyAllergyRead["snapshot"] | null;
   recalled: ReadonlySet<string>;
 }
 
-function sameSources(a: MoveDishesSources, b: MoveDishesSources): boolean {
+function sameSources(a: DishSources, b: DishSources): boolean {
   return (
     a.lines === b.lines &&
     a.balance === b.balance &&
     a.allergy === b.allergy &&
     samePicks(a.recalled, b.recalled)
   );
+}
+
+/** The key that groups a bill's dishes as the screen lists them. Portions also differ by what the
+ * list prints of each: its allergy mark and a whole payment. A part payment would print against
+ * one portion's count, so such a line stands alone. */
+function fallbackPortionKeys({
+  lines,
+  balance,
+  allergy,
+}: DishSources): (dish: TabLine) => string | null {
+  const paidOf = balance === null ? undefined : paidQuantities(balance);
+  return (dish) => {
+    const paid = paidOf?.get(dish.lineNo);
+    if (
+      paid !== undefined &&
+      compareDecimal(decimal(paid), decimal("0")) > 0 &&
+      compareDecimal(decimal(paid), decimal(dish.quantity)) < 0
+    )
+      return null;
+    return tabLinePortionKey(dish, lines, [
+      paid ?? null,
+      allergyGuestId(allergy, { kind: "working", id: dish.id }),
+    ]);
+  };
 }
 
 /** The element `node` renders inside: its slot, its parent, or the host of its shadow root. */
@@ -1279,7 +1305,8 @@ export class TillTableOrderScreen extends LitElement {
    * chosen. */
   @state() private moveDishesTo: string | null | undefined = undefined;
   /** The rows Move dishes… last drew, which a re-read's picks are tidied from. */
-  #moveDishesDrawn?: MoveDishesSources & { rows: readonly PickRow[] };
+  #moveDishesDrawn?: DishSources & { rows: readonly PickRow[] };
+  #dishGroups?: { sources: DishSources; groups: PickGroups };
   /** {@link moveDishesTo} while it is offered, as unsaved work last counted it. */
   #moveDishesCounted: string | null | undefined;
 
@@ -2595,14 +2622,8 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #sentFallback(): TemplateResult | typeof nothing {
-    const recalled = this.#recalledLineIds();
-    const dishes = this.lines.filter((line) => !this.#isChild(line) && !recalled.has(line.id));
-    if (dishes.length === 0) return nothing;
-    const groups = portionGroups(
-      dishes,
-      (dish) => this.#fallbackPortionKey(dish),
-      (dish) => dish.lineNo,
-    );
+    const groups = this.#dishGroupsFor(this.#dishSources()).groups.map((group) => group.members);
+    if (groups.length === 0) return nothing;
     // Bill lines lack partial serving quantities, so this fallback offers no actions.
     return html`<section class="sent-fallback" data-sent-fallback>
       <h2>${t("table.sent_title")}</h2>
@@ -2618,23 +2639,6 @@ export class TillTableOrderScreen extends LitElement {
         )}
       </ul>
     </section>`;
-  }
-
-  /** Portions also differ by what this list prints of each: its allergy mark and a whole payment.
-   * A part payment would print against one portion's count, so such a line stands alone. */
-  #fallbackPortionKey(dish: TabLine): string | null {
-    const balance = this.#balanceShown();
-    const paid = balance === null ? undefined : paidQuantities(balance).get(dish.lineNo);
-    if (
-      paid !== undefined &&
-      compareDecimal(decimal(paid), decimal("0")) > 0 &&
-      compareDecimal(decimal(paid), decimal(dish.quantity)) < 0
-    )
-      return null;
-    return tabLinePortionKey(dish, this.lines, [
-      paid ?? null,
-      allergyGuestId(this.#allergy()?.snapshot ?? null, { kind: "working", id: dish.id }),
-    ]);
   }
 
   /** `count` identical portions' line, shown once with its price multiplied; a dish's quantity is
@@ -5404,7 +5408,7 @@ export class TillTableOrderScreen extends LitElement {
     return fill(t(key), names);
   }
 
-  #moveDishesSources(): MoveDishesSources {
+  #dishSources(): DishSources {
     return {
       lines: this.lines,
       balance: this.#balanceShown(),
@@ -5413,12 +5417,24 @@ export class TillTableOrderScreen extends LitElement {
     };
   }
 
+  #dishGroupsFor(sources: DishSources): PickGroups {
+    const grouped = this.#dishGroups;
+    if (grouped !== undefined && sameSources(grouped.sources, sources)) return grouped.groups;
+    const groups = pickGroups(
+      sources.lines,
+      fallbackPortionKeys(sources),
+      sources.balance,
+      sources.recalled,
+    );
+    this.#dishGroups = { sources, groups };
+    return groups;
+  }
+
   #moveDishesRows(
     picks: Picks = this.moveDishesPicks,
-    sources: MoveDishesSources = this.#moveDishesSources(),
-    keyOf: (dish: TabLine) => string | null = (dish) => this.#fallbackPortionKey(dish),
+    sources: DishSources = this.#dishSources(),
   ): PickRow[] {
-    return pickRows(sources.lines, keyOf, sources.balance, sources.recalled, picks);
+    return pickRows(this.#dishGroupsFor(sources), picks);
   }
 
   /** A re-read can pay, recall or regroup picked dishes; the picks follow what is drawn now. A
@@ -5428,19 +5444,9 @@ export class TillTableOrderScreen extends LitElement {
     const drawn = this.#moveDishesDrawn;
     if (this.actionStep !== "move-dishes" || drawn === undefined || this.moveDishesPicks.size === 0)
       return;
-    const sources = this.#moveDishesSources();
+    const sources = this.#dishSources();
     if (sameSources(drawn, sources)) return;
-    // tidyPicks draws the rows again for each picked row; each dish's key costs a scan of the bill.
-    const keys = new Map<string, string | null>();
-    const keyOf = (dish: TabLine) => {
-      if (!keys.has(dish.id)) keys.set(dish.id, this.#fallbackPortionKey(dish));
-      return keys.get(dish.id)!;
-    };
-    const next = tidyPicks(
-      drawn.rows,
-      (picks) => this.#moveDishesRows(picks, sources, keyOf),
-      this.moveDishesPicks,
-    );
+    const next = tidyPicks(drawn.rows, this.#dishGroupsFor(sources), this.moveDishesPicks);
     if (samePicks(next, this.moveDishesPicks)) return;
     this.moveDishesPicks = next;
     this.#actionScope?.changed();
@@ -5463,7 +5469,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #moveDishesStep(): TemplateResult {
-    const sources = this.#moveDishesSources();
+    const sources = this.#dishSources();
     const rows = this.#moveDishesRows(this.moveDishesPicks, sources);
     this.#moveDishesDrawn = { ...sources, rows };
     const lineIds = pickedLineIds(rows, this.moveDishesPicks);

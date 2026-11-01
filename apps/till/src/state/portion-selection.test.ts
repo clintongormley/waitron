@@ -5,6 +5,7 @@ import { tabLineGross } from "./adjust-target.js";
 import { paidQuantities } from "./bill-payment.js";
 import { tabLinePortionKey } from "./portion-groups.js";
 import {
+  pickGroups,
   pickRows,
   pickedCount,
   pickedLineIds,
@@ -83,7 +84,7 @@ function rowsOf(
   picks: Picks = new Set(),
   recalled: ReadonlySet<string> = new Set(),
 ): PickRow[] {
-  return pickRows(lines, keyFor(lines, paid), paid, recalled, picks);
+  return pickRows(pickGroups(lines, keyFor(lines, paid), paid, recalled), picks);
 }
 
 /** `tidyPicks` over the rows drawn before and the re-read bill. */
@@ -94,7 +95,7 @@ function tidy(
   picks: Picks,
   recalled: ReadonlySet<string> = new Set(),
 ): Picks {
-  return tidyPicks(before, (drawn) => rowsOf(lines, paid, drawn, recalled), picks);
+  return tidyPicks(before, pickGroups(lines, keyFor(lines, paid), paid, recalled), picks);
 }
 
 const ids = (row: PickRow) => row.members.map((member) => member.id);
