@@ -1464,3 +1464,240 @@ it("a backup room note that cannot be deleted stops a Move, and a resumed Move, 
   expect(withoutNote(await snapshot(roots.stateDir))).toEqual(stateBefore);
   expect(await stateFiles()).toEqual(stateBytesBefore);
 });
+
+const RING = "ring bytes\nWAITRON_CREDENTIALS_KEY=c2VjcmV0\n";
+const RING_TEMP = /^\.secrets\.env\.set-aside-\d+-[0-9a-f-]{36}$/;
+async function realWriteRing(path: string, bytes: Buffer, mode: number) {
+  const handle = await fs.open(path, "wx", mode);
+  try {
+    await handle.writeFile(bytes);
+  } finally {
+    await handle.close();
+  }
+}
+const stemFolderOnState = (roots: Roots, record: StartAgainChoiceRecord) =>
+  join(roots.stateDir, START_AGAIN_SET_ASIDE_DIR, stemOf(record));
+
+it.each([
+  { mode: 0o600, label: "0600" },
+  { mode: 0o640, label: "0640" },
+])(
+  "a Move keeps a copy of the box's key ring in its stem folder on the state root: same bytes, the original's mode $label, the original unchanged",
+  async ({ mode }) => {
+    const attempt = await startAgainAttempt(await scratch());
+    const { roots } = attempt;
+    await foundEverywhere(roots);
+    await writeFile(join(roots.stateDir, "secrets.env"), RING, { mode });
+    await fs.chmod(join(roots.stateDir, "secrets.env"), mode);
+    const original = await fingerprints(roots.stateDir, ["secrets.env"]);
+
+    const record = await prepared(roots, attempt.administratorId);
+    await moveStartAgainUnits(roots, record);
+
+    const copy = join(stemFolderOnState(roots, record), "secrets.env");
+    expect(await readFile(copy, "utf8")).toBe(RING);
+    expect((await lstat(copy)).mode & 0o777).toBe(mode);
+    expect((await lstat(copy)).isFile()).toBe(true);
+    expect(await fingerprints(roots.stateDir, ["secrets.env"])).toEqual(original);
+    expect((await lstat(join(roots.stateDir, "secrets.env"))).mode & 0o777).toBe(mode);
+  },
+);
+
+it("on two filesystems the ring's copy is in the stem folder on the state root, even with no state unit to move", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  await writeFile(join(roots.venueDir, "venue.db"), "found database");
+  await writeFile(join(roots.stateDir, "secrets.env"), RING, { mode: 0o600 });
+  const venueDev = (async (path: string, options?: unknown) => {
+    const info = await fs.lstat(path, options as never);
+    if (path === roots.venueDir)
+      Object.defineProperty(info, "dev", { value: Number(info.dev) + 1 });
+    return info;
+  }) as typeof fs.lstat;
+  const record = await prepared(roots, attempt.administratorId, {
+    destinationsIo: { ...realIo, lstat: venueDev },
+  });
+  expect(record.setAside!.venue).toBe(`${START_AGAIN_SET_ASIDE_DIR}/${stemOf(record)}`);
+  // Only a venue unit: prepare made no stem folder on the state root.
+  await expect(lstat(stemFolderOnState(roots, record))).rejects.toMatchObject({ code: "ENOENT" });
+
+  await moveStartAgainUnits(roots, record);
+
+  expect(await readdir(stemFolderOnState(roots, record))).toEqual(["secrets.env"]);
+  expect((await lstat(stemFolderOnState(roots, record))).mode & 0o777).toBe(0o700);
+  expect(await readFile(join(stemFolderOnState(roots, record), "secrets.env"), "utf8")).toBe(RING);
+  expect(
+    await readFile(
+      join(roots.venueDir, START_AGAIN_SET_ASIDE_DIR, stemOf(record), "venue.db"),
+      "utf8",
+    ),
+  ).toBe("found database");
+  await expect(
+    lstat(join(roots.venueDir, START_AGAIN_SET_ASIDE_DIR, stemOf(record), "secrets.env")),
+  ).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("a cut while writing the ring's copy leaves no copy and moves nothing; the resume removes the half-written file and makes the copy before any further rename", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  const before = await foundEverywhere(roots);
+  await writeFile(join(roots.stateDir, "secrets.env"), RING, { mode: 0o600 });
+  const record = await prepared(roots, attempt.administratorId);
+  const stemFolder = stemFolderOnState(roots, record);
+  const venueBefore = await snapshot(roots.venueDir);
+  const cut: SetAsideIo = {
+    ...realIo,
+    writeRing: async (path, bytes) => {
+      await writeFile(path, bytes.subarray(0, 5));
+      throw errno("EIO");
+    },
+  };
+
+  await expect(moveStartAgainUnits(roots, record, cut)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+    reason: `set-aside failed: EIO state/${START_AGAIN_SET_ASIDE_DIR}/${stemOf(record)}/secrets.env`,
+  });
+  await expect(lstat(join(stemFolder, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
+  const left = (await readdir(stemFolder)).filter((name) => name !== "state" && name !== "venue");
+  expect(left).toHaveLength(1);
+  expect(left[0]).toMatch(RING_TEMP);
+  expect(await snapshot(roots.venueDir)).toEqual(venueBefore);
+
+  const order: string[] = [];
+  const recording: SetAsideIo = {
+    ...realIo,
+    writeRing: async (path, bytes, mode) => {
+      order.push(`write ${path.slice(stemFolder.length + 1).replace(/-\d+-.*$/, "")}`);
+      await realWriteRing(path, bytes, mode);
+    },
+    rename: async (from, to) => {
+      order.push(`rename ${to.slice(stemFolder.length + 1)}`);
+      await fs.rename(from, to);
+    },
+  };
+  expect(await resumeStartAgainSetAside(roots, recording)).toBe("resumed");
+
+  expect(order.slice(0, 2)).toEqual(["write .secrets.env.set-aside", "rename secrets.env"]);
+  expect(order.length).toBeGreaterThan(2);
+  expect((await readdir(stemFolder)).sort()).toEqual(["secrets.env", "state", "venue"]);
+  expect(await readFile(join(stemFolder, "secrets.env"), "utf8")).toBe(RING);
+  expect((await lstat(join(stemFolder, "secrets.env"))).mode & 0o777).toBe(0o600);
+  await expectAllAside(roots, record, before);
+});
+
+it("a leftover temporary ring file is removed by the next prepare; a folder, a link or another name is not", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
+  const old = join(roots.stateDir, START_AGAIN_SET_ASIDE_DIR, `1700000000000-${attempt.attemptId}`);
+  await mkdir(old, { recursive: true });
+  const temp = join(old, `.secrets.env.set-aside-12-${randomUUID()}`);
+  await writeFile(temp, "half");
+  const folderNamedLikeOne = join(old, `.secrets.env.set-aside-13-${randomUUID()}`);
+  await mkdir(folderNamedLikeOne);
+  const outside = join(await scratch(), "outside");
+  await writeFile(outside, "outside");
+  const linkNamedLikeOne = join(old, `.secrets.env.set-aside-14-${randomUUID()}`);
+  await fs.symlink(outside, linkNamedLikeOne);
+  const other = join(old, ".secrets.env.set-aside-other");
+  await writeFile(other, "kept");
+  await writeFile(join(old, "secrets.env"), "an earlier copy");
+
+  await prepared(roots, attempt.administratorId);
+
+  await expect(lstat(temp)).rejects.toMatchObject({ code: "ENOENT" });
+  expect((await lstat(folderNamedLikeOne)).isDirectory()).toBe(true);
+  expect((await lstat(linkNamedLikeOne)).isSymbolicLink()).toBe(true);
+  expect(await readFile(outside, "utf8")).toBe("outside");
+  expect(await readFile(other, "utf8")).toBe("kept");
+  expect(await readFile(join(old, "secrets.env"), "utf8")).toBe("an earlier copy");
+});
+
+it("a copy already in the stem folder is left as it is", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  await foundEverywhere(roots);
+  await writeFile(join(roots.stateDir, "secrets.env"), RING, { mode: 0o600 });
+  const record = await prepared(roots, attempt.administratorId);
+  const copy = join(stemFolderOnState(roots, record), "secrets.env");
+  await writeFile(copy, "already here", { mode: 0o600 });
+  const before = await fingerprints(stemFolderOnState(roots, record), ["secrets.env"]);
+
+  await moveStartAgainUnits(roots, record);
+
+  expect(await fingerprints(stemFolderOnState(roots, record), ["secrets.env"])).toEqual(before);
+});
+
+it("with no secrets.env in the state root the Move copies nothing and completes", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  const before = await foundEverywhere(roots);
+  const record = await prepared(roots, attempt.administratorId);
+  const writes: string[] = [];
+  const io: SetAsideIo = {
+    ...realIo,
+    writeRing: async (path) => {
+      writes.push(path);
+    },
+  };
+
+  await moveStartAgainUnits(roots, record, io);
+
+  expect(writes).toEqual([]);
+  expect((await readdir(stemFolderOnState(roots, record))).sort()).toEqual(["state", "venue"]);
+  await expectAllAside(roots, record, before);
+});
+
+it("a ring file that cannot be read, a copy that cannot be looked at, or a link at the stem folder on the state root refuses naming it, and moves nothing", async () => {
+  const unreadable = await startAgainAttempt(await scratch());
+  await foundEverywhere(unreadable.roots);
+  await mkdir(join(unreadable.roots.stateDir, "secrets.env"));
+  const first = await prepared(unreadable.roots, unreadable.administratorId);
+  const venueBefore = await snapshot(unreadable.roots.venueDir);
+  await expect(moveStartAgainUnits(unreadable.roots, first)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+    reason: "set-aside failed: EISDIR state/secrets.env",
+  });
+  expect(await snapshot(unreadable.roots.venueDir)).toEqual(venueBefore);
+
+  const hidden = await startAgainAttempt(await scratch());
+  await foundEverywhere(hidden.roots);
+  await writeFile(join(hidden.roots.stateDir, "secrets.env"), RING, { mode: 0o600 });
+  const second = await prepared(hidden.roots, hidden.administratorId);
+  const copy = join(stemFolderOnState(hidden.roots, second), "secrets.env");
+  const io: SetAsideIo = {
+    ...realIo,
+    lstat: (async (path: string, options?: unknown) => {
+      if (path === copy) throw errno("EACCES");
+      return fs.lstat(path, options as never);
+    }) as typeof fs.lstat,
+  };
+  await expect(moveStartAgainUnits(hidden.roots, second, io)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+    reason: `set-aside failed: EACCES state/${START_AGAIN_SET_ASIDE_DIR}/${stemOf(second)}/secrets.env`,
+  });
+  await expect(lstat(copy)).rejects.toMatchObject({ code: "ENOENT" });
+
+  const linked = await startAgainAttempt(await scratch());
+  const { roots } = linked;
+  await writeFile(join(roots.venueDir, "venue.db"), "found database");
+  await writeFile(join(roots.stateDir, "secrets.env"), RING, { mode: 0o600 });
+  const venueDev = (async (path: string, options?: unknown) => {
+    const info = await fs.lstat(path, options as never);
+    if (path === roots.venueDir)
+      Object.defineProperty(info, "dev", { value: Number(info.dev) + 1 });
+    return info;
+  }) as typeof fs.lstat;
+  const third = await prepared(roots, linked.administratorId, {
+    destinationsIo: { ...realIo, lstat: venueDev },
+  });
+  const elsewhere = await scratch();
+  await mkdir(join(roots.stateDir, START_AGAIN_SET_ASIDE_DIR), { recursive: true });
+  await fs.symlink(elsewhere, stemFolderOnState(roots, third));
+  await expect(moveStartAgainUnits(roots, third)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+    reason: `set-aside failed: symlink state/${START_AGAIN_SET_ASIDE_DIR}/${stemOf(third)}`,
+  });
+  expect(await readdir(elsewhere)).toEqual([]);
+  expect(await readFile(join(roots.venueDir, "venue.db"), "utf8")).toBe("found database");
+});
