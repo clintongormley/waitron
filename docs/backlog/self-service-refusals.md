@@ -1096,6 +1096,13 @@ Waitron fault, or offers its corresponding repair. Build that workflow with any 
 at the action. Changing the file/type, retrying or cancelling does not establish that every
 persistent refusal has a repair. The wording change does not qualify that missing workflow.
 
+**2026-11-01 review qualification:** the replacement-dialog cases now check the Spanish
+connection/file/type choices, certificate-retention statement and Save/Cancel meanings
+independently of the translation catalogue. They also reject an administrator or support
+referral. The existing retry, corrected-submission and cancellation assertions remain.
+These browser cases use a supplied request function; they do not qualify a live AEAT
+connection or a repair of persistent network/configuration failures.
+
 #### 2026-10-28 diagnosis audit
 
 The remaining work is a diagnostic workflow, rather than another wording change.

@@ -189,6 +189,7 @@ under `docs/backlog/`.
   sign-in, Stop and explicit copy at the action. It does not repair network/configuration
   problems or a persistent external refusal. Design the applicable repair choices without
   treating an HTTP status, another check or a completed query as proof of the cause.
+  Keep the installed certificate until a replacement passes its checks.
   [Remaining workflow](backlog/self-service-refusals.md#certificate).
 
 - **A1089: reconciliation alerts need a production caller and an evidence/decision route.** The
