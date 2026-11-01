@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ClockStopState, ClockWitness } from "@waitron/fiscal";
 import type { Transaction } from "@waitron/db";
+import { AppError } from "@waitron/shared";
 import { clockStartUp, tillClockCheck } from "./clock-start-up.js";
 
 const TX = { fake: "tx" } as unknown as Transaction;
@@ -92,12 +93,20 @@ describe("clockStartUp", () => {
 });
 
 describe("tillClockCheck", () => {
-  function check(state: ClockStopState | null, options: { files?: boolean } = {}) {
+  function check(
+    state: ClockStopState | null,
+    options: { files?: boolean; recordableThrows?: Error } = {},
+  ) {
     const startUp = clockStartUp({ primaryAtStart: true });
     const witnesses: ClockWitness[] = [];
     const backend = {
       assertRecordableAt: vi.fn((reading: { instant: Date }) => {
-        if (reading.instant.getTime() < FIRST_ISSUE_MS) throw new Error("fiscal.before_first");
+        if (options.recordableThrows !== undefined) throw options.recordableThrows;
+        if (reading.instant.getTime() < FIRST_ISSUE_MS)
+          throw new AppError("clock.unusable", {
+            clockAt: reading.instant.toISOString(),
+            offsetMinutes: 60,
+          });
       }),
       clockStopState: vi.fn(async () => state),
       readAuthorityTime: vi.fn(async () => null),
@@ -155,6 +164,13 @@ describe("tillClockCheck", () => {
   it("keeps the window open and offers the till at a reading no record could carry", async () => {
     const h = check(null);
     expect(await h.clockCheck(TX, IN_2001)).toBe(true);
+    expect(h.startUp.open()).toBe(true);
+  });
+
+  it("passes on an error of the seat's date check that is not clock.unusable, leaving the window open", async () => {
+    const failure = new Error("seat broke");
+    const h = check(null, { recordableThrows: failure });
+    await expect(h.clockCheck(TX, IN_2001)).rejects.toBe(failure);
     expect(h.startUp.open()).toBe(true);
   });
 

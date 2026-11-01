@@ -23,7 +23,13 @@ import { codeOf, createErrorBoundary, readJsonBody, readRawJsonBody } from "@wai
 import { AppError } from "@waitron/shared";
 import { confirmBody, requiredNameOf } from "./box-health-api.js";
 import { clockChallenges } from "./clock-challenges.js";
-import type { ClockSetRefusal, clockCorrection } from "./clock-correction.js";
+import {
+  EARLIEST_TARGET_MS,
+  LATEST_TARGET_MS,
+  wallMovedAgainstSteady,
+  type ClockSetRefusal,
+  type clockCorrection,
+} from "./clock-correction.js";
 import type { ClockStartUp } from "./clock-start-up.js";
 import type { Logger } from "./logger.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
@@ -63,11 +69,6 @@ const run = createErrorBoundary(
   },
   "box-clock.failed",
 );
-
-const EARLIEST_TARGET_MS = Date.UTC(2024, 9, 28);
-const LATEST_TARGET_MS = Date.UTC(2100, 0, 1);
-/** How far the wall clock may move against the steady clock before a comparison is stale. */
-const STALE_MS = 1_000;
 
 type Session = Awaited<ReturnType<typeof requireSession>>;
 
@@ -261,11 +262,13 @@ export function mountTillBoxClockApi(
                 const witnesses = boxClock.witnesses();
                 const now = clock.now();
                 // A set landed, or the wall clock stepped, after the reading: the comparison is void.
-                const drift =
-                  now.instant.getTime() -
-                  reading.instant.getTime() -
-                  (boxClock.steady() - steadyMs);
-                if (correction.steps() !== stepsSeen || !(Math.abs(drift) <= STALE_MS))
+                if (
+                  correction.steps() !== stepsSeen ||
+                  wallMovedAgainstSteady(
+                    { wallMs: reading.instant.getTime(), monoMs: steadyMs },
+                    { wallMs: now.instant.getTime(), monoMs: boxClock.steady() },
+                  )
+                )
                   refuse("stale");
                 const stop = await stopAt(tx, now, witnesses);
                 if (!stop.stopped) noStop();

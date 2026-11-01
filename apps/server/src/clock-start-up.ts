@@ -1,5 +1,6 @@
 import type { Transaction } from "@waitron/db";
 import type { ClockWitness, FiscalBackend, TrustedReading } from "@waitron/fiscal";
+import { codeOf } from "@waitron/server-kit";
 
 export interface ClockStartUp {
   /** True until a reader of the stop sees none holding; never true again in this process. Created
@@ -62,7 +63,8 @@ export function tillClockCheck(deps: {
     if (state === null) {
       try {
         deps.backend.assertRecordableAt(reading);
-      } catch {
+      } catch (error) {
+        if (codeOf(error) !== "clock.unusable") throw error;
         unusable = true;
       }
     }

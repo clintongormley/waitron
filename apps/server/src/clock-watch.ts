@@ -404,7 +404,7 @@ export function startClockWatch(deps: {
         deps.log("warn", "clock_watch.check_failed", { errorCode: codeOf(error) });
       }
       if (stopped) return;
-      // Revision 4: only AEAT sets the clock by itself; devices that disagree set nothing. With a
+      // Only AEAT sets the clock by itself; devices that disagree set nothing. With a
       // disproof left unrecorded the set could only be refused `pending_disproofs`.
       if (recorded && stop.proof === "contrary" && stop.contrary.authority !== null) {
         try {

@@ -22,8 +22,17 @@ const VERIFY_MS = 2_000;
 const STALE_MS = 1_000;
 /** A step this small is treated as the clock not having moved. */
 const MOVED_MS = 1_000;
-const EARLIEST_TARGET_MS = Date.UTC(2024, 9, 28);
-const LATEST_TARGET_MS = Date.UTC(2100, 0, 1);
+export const EARLIEST_TARGET_MS = Date.UTC(2024, 9, 28);
+export const LATEST_TARGET_MS = Date.UTC(2100, 0, 1);
+
+/** Whether the wall clock moved more than a second against the steady clock between two readings
+ * of both. */
+export function wallMovedAgainstSteady(
+  then: { wallMs: number; monoMs: number },
+  now: { wallMs: number; monoMs: number },
+): boolean {
+  return !(Math.abs(now.wallMs - then.wallMs - (now.monoMs - then.monoMs)) <= STALE_MS);
+}
 
 /** Told before and after every set. A throw from `stepComing` refuses the set; a throw from
  * `reanchor` keeps the step's row pending. */
@@ -202,9 +211,10 @@ export function clockCorrection(deps: {
   }
 
   function stale(input: ClockSetInput): boolean {
-    const sinceWall = wall() - input.measuredAt.wallMs;
-    const sinceSteady = monotonic() - input.measuredAt.monoMs;
-    return input.stepsSeen !== steps || !(Math.abs(sinceWall - sinceSteady) <= STALE_MS);
+    return (
+      input.stepsSeen !== steps ||
+      wallMovedAgainstSteady(input.measuredAt, { wallMs: wall(), monoMs: monotonic() })
+    );
   }
 
   /** The stop and the till's check, judged in one write-lock turn. */
