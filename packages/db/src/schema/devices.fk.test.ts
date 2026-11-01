@@ -24,7 +24,7 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
   let admin: Database;
 
   // Drizzle rather than raw SQL: the `$defaultFn` columns are JavaScript generators, not SQL
-  // DEFAULTs, and drizzle encodes `invoice_locales` as the JSON text the column holds.
+  // DEFAULTs.
   beforeAll(async () => {
     admin = suite.db;
     await seedVenue(admin, {

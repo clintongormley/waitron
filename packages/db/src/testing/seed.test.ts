@@ -83,10 +83,10 @@ describe("seedVenue", () => {
   });
 
   it("seedVenue writes the taxpayer and the one venue", async () => {
-    await seedVenue(db, { name: "Casa", timeZone: "Atlantic/Canary" });
+    await seedVenue(db, { name: "House", timeZone: "Atlantic/Canary" });
     expect(await readTenant(db)).not.toBeNull();
     expect(await readVenue(db)).toEqual({
-      name: "Casa",
+      name: "House",
       invoiceLocales: ["es"],
       operationDescription: "Restaurant",
       fiscalTerritory: "ES-common",
@@ -126,7 +126,6 @@ describe("seedNode", () => {
   });
 
   it("inserts one node for the tenant + location and returns its id", async () => {
-    // seedNode takes the location as given, so build it first: a node FKs it.
     await seedTenant(db);
     const [loc] = await db
       .insert(locations)
@@ -176,7 +175,6 @@ describe("seedKitchenStation", () => {
     db = suite.db;
   });
 
-  // Build the tenant + location the station FKs first (as seedNode's suite does), then seed the station.
   async function seedTenantAndLocation() {
     await seedTenant(db);
     const [loc] = await db
