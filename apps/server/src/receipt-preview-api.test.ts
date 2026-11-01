@@ -1112,11 +1112,7 @@ describe("the receipt preview's top block", () => {
       expect([sizes(result), result.marks.logo]).toEqual([[], null]);
     });
 
-    it.each(
-      UNTRUSTED_CASES.filter((c) => c.name !== "a department not in this location").map(
-        (c) => [c.name, c] as const,
-      ),
-    )(
+    it.each(UNTRUSTED_CASES.map((c) => [c.name, c] as const))(
       "a draft with no logo draws no logo while the stored settings cannot be trusted: %s",
       async (name, untrusted) => {
         await putThemeInUse(suite.db);
@@ -1185,9 +1181,7 @@ describe("the receipt preview's top block", () => {
     });
 
     it.each(
-      UNTRUSTED_CASES.filter(
-        (c) => c.name !== "the read throws" && c.name !== "a department not in this location",
-      ).map((c) => [c.name, c] as const),
+      UNTRUSTED_CASES.filter((c) => c.name !== "the read throws").map((c) => [c.name, c] as const),
     )(
       "a draft naming a logo draws it from its image while the stored settings cannot be trusted: %s",
       async (_name, untrusted) => {

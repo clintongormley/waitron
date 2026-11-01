@@ -562,8 +562,9 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedTenant(db);
     await seedLegacySellingUnits(db);
-    // One location, so the location↔menu routes have a `:locationId` to act on. Through the table
-    // definition: `locations.id` is a `$defaultFn` generator, which a raw insert never reaches.
+    // The venue's one `locations` row: the venue menu routes act on it and `venueCfg` names its id.
+    // Through the table definition: `locations.id` is a `$defaultFn` generator, which a raw insert
+    // never reaches.
     const [loc] = await db
       .insert(locations)
       .values({ name: "Main", invoiceLocales: ["es-ES"], operationDescription: "Venta" })

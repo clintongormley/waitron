@@ -1386,7 +1386,7 @@ describe("catalogue operations", () => {
     });
   });
 
-  it("lists a location's catalogue's active products only, with the category name resolved", async () => {
+  it("lists only the active products of the venue's menus, with the category name resolved", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "Deli" });
       const food = await createCategory(tx, { name: "Food" });
@@ -1528,7 +1528,7 @@ describe("catalogue operations", () => {
     });
   });
 
-  it("removes a member catalogue from a location's accessible set", async () => {
+  it("removes a member catalogue from the venue's menu list", async () => {
     await asTenant(async (tx) => {
       const main = await createCatalogue(tx, { name: "Main" });
       const lunch = await createCatalogue(tx, { name: "Lunch" });
@@ -1554,7 +1554,7 @@ describe("catalogue operations", () => {
   });
 
   // The default lives in `locations.catalogue_id`, never as a `location_catalogues` row, so the
-  // remove route cannot drop a location to zero sellable menus.
+  // remove route cannot drop the venue to zero sellable menus.
   it("removeCatalogueFromVenue never removes the default (it is not a member row)", async () => {
     await asTenant(async (tx) => {
       const main = await createCatalogue(tx, { name: "Main" });
@@ -1567,9 +1567,9 @@ describe("catalogue operations", () => {
   });
 
   // The management screen's read: EVERY tenant catalogue (sellable here or not), each flagged
-  // `sellable` (in this location's accessible set — default OR member) and `isDefault`. `shelf` is a
-  // catalogue the tenant owns but this location does not sell, so it must appear with `sellable:false`.
-  it("lists every tenant catalogue with sellable + default flags for a location", async () => {
+  // `sellable` (in the venue's menu list — default OR member) and `isDefault`. `shelf` is a
+  // catalogue the tenant owns but the venue does not sell, so it must appear with `sellable:false`.
+  it("lists every tenant catalogue with sellable + default flags", async () => {
     await asTenant(async (tx) => {
       const main = await createCatalogue(tx, { name: "Main" });
       const lunch = await createCatalogue(tx, { name: "Lunch" });
@@ -1603,7 +1603,7 @@ describe("catalogue operations", () => {
     });
   });
 
-  // No prior default (a freshly-provisioned location) → just set it, nothing to demote.
+  // No prior default (a freshly-provisioned venue) → just set it, nothing to demote.
   it("setVenueDefaultCatalogue sets the default when the venue had none", async () => {
     await asTenant(async (tx) => {
       const house = await createCatalogue(tx, { name: "Casa" });
@@ -1671,7 +1671,7 @@ describe("catalogue operations", () => {
     });
   });
 
-  it("returns [] for a location with no catalogue assigned", async () => {
+  it("returns [] for a venue with no catalogue assigned", async () => {
     await asTenant(async (tx) => {
       expect((await listAvailableProducts(tx)).products).toEqual([]);
     });
