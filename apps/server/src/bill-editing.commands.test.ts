@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   billEditStates,
+  kitchenStations,
   orderDraftEvents,
   orderDraftLines,
   orderDraftRecalledLines,
@@ -28,6 +29,7 @@ import type { BillEditExpected, BillEditState } from "./order-drafts.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { createTable } from "./testing/live-table.js";
 import { recallToDraft } from "./draft-recall.js";
+import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 
 import { submitGroups } from "./testing/group-submit-fixture.js";
 import { seatTable } from "./parties.js";
@@ -517,6 +519,33 @@ describe("bill editor in real save and takeover commands", () => {
       ownerName: saved.edit.editorName,
       edit: saved.edit,
     });
+  });
+
+  it("A773 requested lifecycle: Recall of a Requested dish loses to another editor, writing nothing", async () => {
+    const stationIds = (
+      await venue.db.select({ id: kitchenStations.id }).from(kitchenStations)
+    ).map((row) => row.id);
+    await inTx(venue, (tx) => setStationsWaitForPass(tx, true, stationIds));
+    try {
+      const p = await fixture();
+      const source = await sentDish(p);
+      const [item] = await venue.db
+        .select()
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderLineId, source.id));
+      expect(item).toMatchObject({ requestedAt: expect.any(String), firedAt: null });
+      const saved = await save(p.partyId, blank(p.tabId), [fresh()], venue.adminId);
+      const current = await inTx(venue, (tx) => readBillEditState(tx, p.tabId));
+      await refused(() => recall(p.partyId, source.id, current), "draft.taken_over", {
+        billId: p.tabId,
+        draftId: saved.draft!.id,
+        ownerId: venue.adminId,
+        ownerName: saved.edit.editorName,
+        edit: saved.edit,
+      });
+    } finally {
+      await inTx(venue, (tx) => setStationsWaitForPass(tx, false, stationIds));
+    }
   });
 
   it("first save loses to a rival Recall without creating a parallel outbox", async () => {
