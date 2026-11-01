@@ -158,20 +158,21 @@ for (const { tag } of journal.entries)
     join(previousFolder, `${tag}.sql`),
   );
 afterAll(() => rmSync(previousFolder, { recursive: true, force: true }));
-// Main's set before A1268, which refuses a venue holding working time (working-time-per-venue-migration.test.ts).
-const mainFolder = mkdtempSync(join(tmpdir(), "a10-4-main-response-"));
-mkdirSync(join(mainFolder, "meta"));
-const mainJournal = JSON.parse(
+// The set through 0011: 0013 refuses a venue holding working time
+// (working-time-per-venue-migration.test.ts).
+const through0011Folder = mkdtempSync(join(tmpdir(), "a10-4-through-0011-"));
+mkdirSync(join(through0011Folder, "meta"));
+const through0011Journal = JSON.parse(
   readFileSync(join(WORKFORCE_MIGRATIONS.migrationsFolder, "meta/_journal.json"), "utf8"),
 ) as { entries: { tag: string }[] };
-mainJournal.entries = mainJournal.entries.slice(0, 12);
-writeFileSync(join(mainFolder, "meta/_journal.json"), JSON.stringify(mainJournal));
-for (const { tag } of mainJournal.entries)
+through0011Journal.entries = through0011Journal.entries.slice(0, 12);
+writeFileSync(join(through0011Folder, "meta/_journal.json"), JSON.stringify(through0011Journal));
+for (const { tag } of through0011Journal.entries)
   copyFileSync(
     join(WORKFORCE_MIGRATIONS.migrationsFolder, `${tag}.sql`),
-    join(mainFolder, `${tag}.sql`),
+    join(through0011Folder, `${tag}.sql`),
   );
-afterAll(() => rmSync(mainFolder, { recursive: true, force: true }));
+afterAll(() => rmSync(through0011Folder, { recursive: true, force: true }));
 
 describe("populated A10-3 response-table upgrade", () => {
   const old = useVenueDb({
@@ -273,7 +274,7 @@ describe("populated A10-3 response-table upgrade", () => {
         )
         .rows.map((r) => r.name),
     };
-    await runMigrations(db, { ...WORKFORCE_MIGRATIONS, migrationsFolder: mainFolder });
+    await runMigrations(db, { ...WORKFORCE_MIGRATIONS, migrationsFolder: through0011Folder });
     expect(
       JSON.stringify(db.execute(sql`select * from time_entries order by sequence_no`).rows),
     ).toBe(before.entries);

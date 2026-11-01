@@ -26,8 +26,8 @@ Keep that separate from the working-time PDF/CSV. Build shift-template and avail
 A10-1 narrowed ordinary clock state to the latest live instant; A798-B slice 9b (Task 15a) reads it
 from each chain's latest entry through `time_entries_person_chain_idx`, and corrections only from that
 entry's time on. A10-1 also narrows targets and acknowledgments to their
-ids, and own records to that person before projection. Period summaries, location planned-versus-actual
-and pay-period closure still load their scoped complete history; future bounded reads must retain
+ids, and own records to that person before projection. Period summaries, planned-versus-actual
+and pay-period closure still load the venue's complete history; future bounded reads must retain
 late answers and corrections that move a session across period boundaries.
 
 Optimise the remaining period paths with their cross-window

@@ -511,7 +511,8 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "payments/0005_operator_script_source": {
     refused: ["DROP TABLE `payments`", "FOREIGN KEY constraint failed"],
   },
-  // Rebuilds the working-time tables without a location; every venue that recorded working time needs a reset (A1268).
+  // Rebuilds the working-time tables without a location; a venue holding working time is refused
+  // and needs a reset.
   "workforce/0013_working_time_per_venue": {
     refused: ["DROP TABLE `attendance_questions`", "FOREIGN KEY constraint failed"],
   },

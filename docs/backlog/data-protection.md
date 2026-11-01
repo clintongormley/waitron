@@ -123,8 +123,6 @@ by the answers):
   and Marta's copy shows the approved swap with no time. The alternative is to add the two shifts
   the swap names as `fromShift` and `toShift`, which shows Marta the times of a shift that is Ana's.
   Include them, yes or no?
-- **The working-time record of a box with more than one location** — only this node's location is
-  exported (S2b decision 6). Today provisioning refuses a second, different location.
 - **Measure the working-time, actions and adjustments parts, and the invoice customer's download,
   on a box.** The PDF renders on the thread that serves sales, which is why the box's figure
   matters. Measure the working-time read and PDF on a box.

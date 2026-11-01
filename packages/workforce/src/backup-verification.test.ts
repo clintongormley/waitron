@@ -28,7 +28,6 @@ const absent = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] }
 const at = "2026-01-05T09:00:00.000Z";
 const person = "10000000-0000-4000-8000-000000000001";
 const place = "10000000-0000-4000-8000-000000000002";
-const otherPlace = "10000000-0000-4000-8000-000000000003";
 const node = "10000000-0000-4000-8000-000000000004";
 const retired = "10000000-0000-4000-8000-000000000005";
 const codes = ["data", "chain", "head", "history"] as const;
@@ -39,10 +38,9 @@ beforeEach(async () => {
   for (const suite of [original, restored]) {
     await seedTenant(suite.db);
     await suite.db.insert(persons).values({ id: person, displayName: "Worker" });
-    await suite.db.insert(locations).values([
-      { id: place, name: "Main", invoiceLocales: ["en"], operationDescription: "Sale" },
-      { id: otherPlace, name: "Archive", invoiceLocales: ["en"], operationDescription: "Sale" },
-    ]);
+    await suite.db
+      .insert(locations)
+      .values([{ id: place, name: "Main", invoiceLocales: ["en"], operationDescription: "Sale" }]);
     await suite.db.insert(nodes).values([
       { id: node, locationId: place, name: "Current" },
       { id: retired, locationId: place, name: "Retired" },
@@ -370,7 +368,7 @@ describe("complete captured workforce backup evidence", () => {
     );
     invalid(await run(), "chain");
   });
-  it("detects damage on another location", async () => {
+  it("detects damage to a later entry in a node's chain", async () => {
     await both(
       `update time_entries set entry_hash='${"A".repeat(64)}' where node_id='${node}' and sequence_no=5`,
     );

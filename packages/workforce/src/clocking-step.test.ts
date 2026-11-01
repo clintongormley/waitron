@@ -252,7 +252,7 @@ describe("clocking across a backward step of the box's clock", () => {
   });
 
   it("reads the clock-in written after a step", async () => {
-    const p = await worker("residual");
+    const p = await worker("after step");
     await run((tx) => backend.clockIn(tx, at(p, "21:00")));
     await run((tx) => backend.clockOut(tx, at(p, "21:10")));
     // The clock is stepped back an hour.
