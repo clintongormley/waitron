@@ -537,12 +537,13 @@ export async function withDiskRecovery(input, consume);
 | 8 | `record-corrupt` | The record fails the format above. |
 | 8 | `record-mismatch` | The record's `diskUuid` differs from its file name. |
 | — | `io-failed` | Any other file error. |
+| — | `consumer-failed` | `consume` threw or rejected, with anything. |
 
 **`withKey`** takes the store's turn (Task 5) for the checks and the read, and releases it before calling `consume`. A slow consumer therefore never blocks a store, and a `consume` that calls `store` cannot deadlock. It then:
 - decodes the key into a fresh `Uint8Array` and awaits `consume`;
 - overwrites that array with zeros in `finally`;
 - returns `undefined` whatever `consume` returns;
-- rethrows a `consume` error unchanged.
+- refuses any `consume` failure as `consumer-failed`: a fresh refusal holding neither the consumer's error nor a `cause`, because that error may hold the key (Global Constraints).
 
 That array is the only copy this pull request zeros. Strings parsed from the file stay in memory until garbage collection, and nothing is claimed about their lifetime.
 
@@ -552,7 +553,7 @@ That array is the only copy this pull request zeros. Strings parsed from the fil
 
   **Reading**
   - `withKey hands consume exactly the stored 32 bytes, then the array is all zeros`.
-  - `a throwing consume → the same error rethrown, and the array still zeroed`.
+  - `a throwing consume → consumer-failed, holding neither its error nor a cause, and the array still zeroed`.
   - `withKey returns undefined even when consume returns a value`.
 
   **Review Focus 4: the mount check**
@@ -681,7 +682,7 @@ That array is the only copy this pull request zeros. Strings parsed from the fil
 - [ ] **Step 1: Write the sweep.** Run every path from Tasks 4 and 5, failures included:
   - each refusal reason;
   - each injected stage failure;
-  - a throwing `consume`;
+  - a throwing `consume` whose failure holds the key as hex, as base64 or as raw bytes in its message, as a property, or as the thrown value;
   - the fixed entry points.
 
   While doing so, spy on `console.*`, `process.stdout.write` and `process.stderr.write`. Collect every returned value and every thrown error's `message`, `stack`, `JSON.stringify(error)` and `util.inspect(error, { depth: 10 })`.

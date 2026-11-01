@@ -188,17 +188,25 @@ describe("withKey: reading", () => {
     expect(handed.every((byte) => byte === 0)).toBe(true);
   });
 
-  it("a throwing consume → the same error rethrown, and the array still zeroed", async () => {
+  it("a throwing consume → consumer-failed, holding neither its error nor a cause, and the array still zeroed", async () => {
     const f = await fixture();
-    const failure = new Error("consumer failed");
+    const failure = new Error(`tool failed for key ${hex(KEY)}`);
     let handed;
-    await expect(
-      f.make().withKey({ diskUuid: DISK_A }, async (key) => {
+    let error;
+    try {
+      await f.make().withKey({ diskUuid: DISK_A }, async (key) => {
         handed = key;
         expect(Uint8Array.from(key)).toEqual(KEY);
         throw failure;
-      }),
-    ).rejects.toBe(failure);
+      });
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toEqual(refused("consumer-failed"));
+    expect(error).not.toBe(failure);
+    expect(error.message).toBe("disk_recovery.refused");
+    expect(Object.keys(error).sort()).toEqual(["code", "reason"]);
+    expect("cause" in error).toBe(false);
     expect(handed.every((byte) => byte === 0)).toBe(true);
   });
 
@@ -1302,10 +1310,29 @@ describe("key-leak sweep", () => {
   /** Each scenario: what to set up, then which store options to use (from the fixture). */
   const scenarios = {
     "read: success": read(async () => {}, { expected: "fulfilled" }),
-    "read: throwing consume": read(async () => {}, {
-      expected: "consumer failed",
-      consume: async () => {
-        throw new Error("consumer failed");
+    "read: consumer-failed (hex in the message)": read(async () => {}, {
+      consume: async (key) => {
+        throw new Error(`tool failed for key ${hex(key)}`);
+      },
+    }),
+    "read: consumer-failed (base64 in the message)": read(async () => {}, {
+      consume: async (key) => {
+        throw new Error(`tool failed for key ${Buffer.from(key).toString("base64")}`);
+      },
+    }),
+    "read: consumer-failed (raw bytes in the message)": read(async () => {}, {
+      consume: async (key) => {
+        throw new Error(`tool failed for key ${Buffer.from(key).toString("latin1")}`);
+      },
+    }),
+    "read: consumer-failed (a copy of the key as a property)": read(async () => {}, {
+      consume: async (key) => {
+        throw Object.assign(new Error("tool failed"), { key: Uint8Array.from(key) });
+      },
+    }),
+    "read: consumer-failed (a copy of the key thrown)": read(async () => {}, {
+      consume: async (key) => {
+        throw Uint8Array.from(key);
       },
     }),
     "read: input-invalid (path)": read(async () => {}, { input: { diskUuid: "../x" } }),
@@ -1557,6 +1584,7 @@ describe("key-leak sweep", () => {
     "record-exists",
     "publication-unverified",
     "io-failed",
+    "consumer-failed",
   ];
 
   /** The outcome each scenario's label names: its refusal reason, or what its options say. */
@@ -1637,8 +1665,12 @@ describe("key-leak sweep", () => {
           fired: fires ? [fires] : [],
           ...(reason === "fulfilled" ? { returned: undefined } : {}),
         });
-        for (const text of outcome.texts)
+        for (const text of outcome.texts) {
           for (const form of formsIn(text)) leaks.push(`${label}: ${form}`);
+          const bytes = Buffer.from(text, "latin1");
+          for (const [name, raw] of RAW_FORMS)
+            if (bytes.indexOf(raw) !== -1) leaks.push(`${label}: ${name}`);
+        }
       };
       const fixtures = [];
       for (const [label, scenario] of Object.entries(scenarios)) {
@@ -1685,7 +1717,7 @@ describe("key-leak sweep", () => {
     expect(writes).toEqual([]);
     expect(outcomes).toStrictEqual(expected);
     expect([...new Set(outcomes.map(({ reason }) => reason))].sort()).toEqual(
-      [...REASONS, "fulfilled", "consumer failed"].sort(),
+      [...REASONS, "fulfilled"].sort(),
     );
   });
 });

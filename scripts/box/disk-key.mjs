@@ -319,6 +319,9 @@ export function createDiskRecoveryStore(deps) {
       const key = decodeKey(hex);
       try {
         await consume(key);
+      } catch {
+        // The consumer's error may hold the key in any form, so neither it nor a cause leaves here.
+        throw refusal("consumer-failed");
       } finally {
         key.fill(0);
       }
