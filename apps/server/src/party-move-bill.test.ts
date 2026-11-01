@@ -55,7 +55,8 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { createPrinter } from "@waitron/printing";
-import { attachPrinterToStation } from "./station-printers.js";
+import { attachPrinterToStation, detachPrinterFromStation } from "./station-printers.js";
+import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { needingMoving } from "./testing/floor-today-venue.js";
 import { numbersOf } from "./testing/bill-identities.js";
@@ -1180,6 +1181,69 @@ describe("the dishes of an open bill moved between service modes", () => {
     await move(ana.tabId, { tableId: mesa });
 
     expect((await lineRows(ana.tabId))[1]!.sentAt).toBeNull();
+  });
+});
+
+describe("A773 waiter request", () => {
+  it("requests a counter order's dish when it is seated at a free table and every station waits", async () => {
+    const orderId = await counterOrder(v, "Tarta");
+    const stations = v.db.all<{ id: string; active: number }>(
+      sql`select id, active from kitchen_stations`,
+    );
+    const stationIds = stations.map((station) => station.id);
+    const active = stations.filter((station) => station.active).map((station) => station.id);
+    const printerId = await inTx(v, async (tx) => {
+      await setStationsWaitForPass(tx, true, stationIds);
+      const { id } = await createPrinter(
+        tx,
+        { locationId: v.cfg.locationId },
+        {
+          name: `P-${randomUUID().slice(0, 8)}`,
+          transport: "cloud_poll",
+          pollId: `poll-${randomUUID()}`,
+        },
+      );
+      for (const stationId of active)
+        await attachPrinterToStation(tx, {
+          locationId: v.cfg.locationId,
+          stationId,
+          printerId: id,
+        });
+      return id;
+    });
+    try {
+      await move(
+        orderId,
+        { tableId: await v.table("Arrival table A773") },
+        {
+          submissionId: randomUUID(),
+          partyId: null,
+          otherPartyId: null,
+          allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+        },
+      );
+
+      const tickets = await inTx(v, (tx) =>
+        tx
+          .select({
+            requestedAt: ticketItems.requestedAt,
+            firedAt: ticketItems.firedAt,
+            passControlled: ticketItems.passControlled,
+          })
+          .from(ticketItems)
+          .where(eq(ticketItems.workingOrderId, orderId)),
+      );
+      expect(tickets).toEqual([
+        { requestedAt: expect.any(String), firedAt: null, passControlled: true },
+      ]);
+      expect(printedBy(printerId)).toEqual([]);
+    } finally {
+      await inTx(v, async (tx) => {
+        await setStationsWaitForPass(tx, false, stationIds);
+        for (const stationId of active)
+          await detachPrinterFromStation(tx, v.cfg, { stationId, printerId });
+      });
+    }
   });
 });
 

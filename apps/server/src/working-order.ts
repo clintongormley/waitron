@@ -31,8 +31,8 @@ import {
   freezeKitchenAllergyItems,
   refreshKitchenAllergyClashes,
 } from "./kitchen-allergy.js";
-import { passWaitingStations, requestStamps } from "./kitchen-release.js";
-import { initiatedAt, initiatedItem } from "./kitchen-phase.js";
+import { passWaitingStations, requestHeldItems, requestStamps } from "./kitchen-release.js";
+import { heldItem, initiatedAt, initiatedItem } from "./kitchen-phase.js";
 import {
   readLineCancellations,
   serviceQuantities,
@@ -2591,7 +2591,7 @@ async function releaseHeld(
   const pending = await tx
     .select({ id: ticketItems.id })
     .from(ticketItems)
-    .where(and(eq(ticketItems.workingOrderId, orderId), ticketScope, isNull(ticketItems.firedAt)))
+    .where(and(eq(ticketItems.workingOrderId, orderId), ticketScope, heldItem()))
     .limit(1);
   const pendingNoRoute = await heldNoRouteLines(tx, cfg, orderId, noRouteScope, routing);
   if (pending.length > 0 || pendingNoRoute.lines.length > 0) {
@@ -2601,15 +2601,12 @@ async function releaseHeld(
     if (partyId !== null) await assertPartyAllergyAnswered(tx, await survivingParty(tx, partyId));
   }
   const rerouted = await rerouteHeldAtRelease(tx, cfg, orderId, ticketScope, routing);
-  const firedItems = await tx
-    .update(ticketItems)
-    .set({ firedAt: firedNow, queuedAt: firedNow })
-    .where(and(eq(ticketItems.workingOrderId, orderId), ticketScope, isNull(ticketItems.firedAt)))
-    .returning({
-      workingOrderLineId: ticketItems.workingOrderLineId,
-      stationId: ticketItems.stationId,
-      quantity: ticketItems.quantity,
-    });
+  const { released: firedItems, requested } = await requestHeldItems(
+    tx,
+    orderId,
+    ticketScope,
+    firedNow,
+  );
   const noRoute = await heldNoRouteLines(tx, cfg, orderId, noRouteScope, routing);
   // Only an open order's lines can be removed, so only there is a sold-out line refused; a placed
   // order's held work is committed.
@@ -2618,6 +2615,7 @@ async function releaseHeld(
     cfg,
     orderId,
     firedItems,
+    requested,
     noRoute,
     firedNow,
     await isOpenOrder(tx, orderId),
@@ -2625,7 +2623,7 @@ async function releaseHeld(
     routing,
     rerouted,
   );
-  return firedItems.length + noRoute.lines.length;
+  return firedItems.length + requested.length + noRoute.lines.length;
 }
 
 // Only the items released by this write may print, so a retry cannot print them again.
@@ -2634,6 +2632,7 @@ async function finishRelease(
   cfg: TradingContext,
   orderId: string,
   fired: FiredItem[],
+  requested: FiredItem[],
   noRoute: { zoneId: string | null; lines: { id: string; courseId: string | null }[] },
   at: string,
   refuseSoldOut: boolean,
@@ -2643,6 +2642,7 @@ async function finishRelease(
 ): Promise<void> {
   const released = [
     ...fired.map((item) => item.workingOrderLineId),
+    ...requested.map((item) => item.workingOrderLineId),
     ...noRoute.lines.map((line) => line.id),
   ];
   if (refuseSoldOut) await assertSendable(tx, released);
@@ -2665,6 +2665,7 @@ async function finishRelease(
   );
   await freezeKitchenAllergyItems(tx, cfg, orderId, [
     ...fired,
+    ...requested,
     ...extras.filter((item) => item.firedAt !== null),
   ]);
   await enqueueKitchenTickets(tx, cfg, orderId, ordinary, { fire });
@@ -2842,6 +2843,7 @@ export async function sendLines(
     cfg,
     tabId,
     firedItems,
+    [],
     noRoute,
     firedNow,
     true,
