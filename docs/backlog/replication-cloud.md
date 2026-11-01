@@ -518,11 +518,12 @@ mirror's copy was found (not exhaustive). [Design §7.2](../superpowers/specs/20
 
 The owner approved the second revision on 2026-10-22 at about 02:40; the amendment adds his
 03:12 direction. Slice 4a landed as [#1990](https://github.com/clintongormley/waitron/pull/1990) on
-2026-10-24. Slice 3a ([plan](../superpowers/plans/2026-10-31-a947-3a-node-db.md)) moves what a box
-remembers about itself into its own `node.db`; the owner answered yes to both its questions on
-2026-10-31: the box's role is saved a moment after the switch's fiscal save, and a spare checks
-the main box's certificate fingerprint before it receives the venue's keys. Slices 3b onwards are
-still open; A1273 to A1284 are the loose ends slice 3a left.
+2026-10-24. Slice 3a ([plan](../superpowers/plans/2026-10-31-a947-3a-node-db.md)) landed as
+[#2371](https://github.com/clintongormley/waitron/pull/2371) on 2026-11-01: what a box remembers
+about itself is in its own `node.db`. The owner answered yes to both its questions on 2026-10-31:
+the box's role is saved a moment after the switch's fiscal save, and a spare checks the main box's
+certificate fingerprint before it receives the venue's keys. Slices 3b onwards are still open;
+A1273 to A1285, A1295 and A1296 are the loose ends slice 3a left.
 
 The owner, 2026-10-21: "For go live I want one box with failover to another
 local box." The [design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md) re-cuts

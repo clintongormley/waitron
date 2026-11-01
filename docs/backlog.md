@@ -5745,10 +5745,10 @@ outstanding on code that exists.
   [Design](superpowers/specs/2026-10-26-a1111-mirror-personal-sign-in-design.md)
 
 - **A947. Go-live on two local boxes.** The owner approved the revised design; slice 4a landed as
-  [#1990](https://github.com/clintongormley/waitron/pull/1990) on 2026-10-24. Slice 3a
-  ([plan](superpowers/plans/2026-10-31-a947-3a-node-db.md)) moves what a box remembers about itself
-  into its own `node.db`; the owner answered yes to both its questions on 2026-10-31. Slices 3b
-  onwards are still open. [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
+  [#1990](https://github.com/clintongormley/waitron/pull/1990) on 2026-10-24, and slice 3a
+  ([plan](superpowers/plans/2026-10-31-a947-3a-node-db.md)), which moves what a box remembers about
+  itself into its own `node.db`, as [#2371](https://github.com/clintongormley/waitron/pull/2371) on
+  2026-11-01. Slices 3b onwards are still open. [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
 
 - **A1273: the shared key ring has no rotation path to the spare.** A spare gets the main box's
   ring only when it joins. For slices 3b and 3c.
