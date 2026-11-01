@@ -773,8 +773,36 @@ file-progress line. An unset or empty selector emits no detail lines. Existing f
 start/end lines still feed the outer deadline's unfinished-file report.
 
 The dashboard shard selects A1230's three unfinished files and sets `DEBUG=pw:api`
-for Playwright's API log. This records reported phases and browser API calls; it
-does not sample a blocked renderer's JavaScript stack. Read the last event for
+for Playwright's API log. This records reported phases and browser API calls.
+
+The same reporter also samples a browser page that a file has kept busy. In a
+browser project it attaches Chrome's debugger to each test page as files start.
+Once a file has run 60 seconds without ending (checked every 5 seconds, once per
+file), it pauses each page whose frames show that file and prints
+`[file-progress] stack:` lines. There are three outcomes:
+
+- `its page was running JavaScript:` followed by up to 30 `at <function> <url>:<line>:<column>`
+  lines: the page's main thread was busy in that code. The positions are in the
+  code the browser was served, after Vite's transform, so they can differ from the
+  source file's lines.
+- `no JavaScript was running and the page answers (it is waiting, not blocked)`:
+  nothing paused within 3 seconds and the page answered a one-line evaluation, so
+  the test is waiting on something rather than blocking the page.
+- `no JavaScript paused and the page did not answer in 2s (the renderer is stuck
+  outside JavaScript)`: neither the pause nor the evaluation came back.
+
+A file no page shows gets one line saying so; a file in a project with no browser
+gets none, and a failure to attach is printed as a `stack:` line rather than
+thrown. Every pause is resumed, including one that arrives after the sample gave
+up: a pause sent to an idle page stays armed and would otherwise stop the page the
+next time it runs a script. Run on 1 November 2026 in `apps/dashboard` on Chromium
+with lowered thresholds: a click handler spinning forever printed a stack naming
+`spinForever`; a test awaiting a promise that never settles printed the waiting
+line, and that file's next case still passed; and
+`device-profiles-screen.clock.test.ts`, paused mid-run, still passed. The
+stuck-renderer line was seen only in the reporter's own tests, with a fake page.
+
+Read the last event for
 each file alongside the last browser call before assigning a cause. A hook that
 throws can emit `hook-start` without `hook-end`. Check later events before treating
 that unmatched start as a stall: in the native Vitest fixture used for the

@@ -2,6 +2,11 @@
 // it hung in. Vitest's default reporter, off a terminal, names a file only once it finishes.
 
 const PREFIX = "[file-progress]";
+const STACK = `${PREFIX} stack:`;
+const MAX_FRAMES = 30;
+const PAUSE_WAIT_MS = 3000;
+const ANSWER_WAIT_MS = 2000;
+const TIMED_OUT = Symbol("timed out");
 
 function label(testModule) {
   const project = testModule.project.name;
@@ -12,14 +17,26 @@ function seconds(ms) {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+function oneLine(text) {
+  return String(text).replace(/[\r\n\u2028\u2029]/g, " ");
+}
+
+function send(cdp, method, params) {
+  return Promise.resolve().then(() => cdp.send(method, params));
+}
+
 export default class FileProgressReporter {
   constructor({
     now = () => globalThis.performance.now(),
     write = (line) => process.stdout.write(`${line}\n`),
     setInterval: startInterval = globalThis.setInterval,
     clearInterval: stopInterval = globalThis.clearInterval,
+    setTimeout: startTimeout = globalThis.setTimeout,
+    clearTimeout: stopTimeout = globalThis.clearTimeout,
     intervalMs = 60_000,
     slowFileMs = 90_000,
+    stackCheckMs = 5000,
+    stackAfterMs = 60_000,
     traceFiles = (process.env.WAITRON_TEST_TRACE_FILES ?? "")
       .split(",")
       .map((path) => path.trim())
@@ -32,13 +49,25 @@ export default class FileProgressReporter {
     this.intervalMs = intervalMs;
     this.slowFileMs = slowFileMs;
     this.traceFiles = new Set(traceFiles);
+    this.startTimeout = startTimeout;
+    this.stopTimeout = stopTimeout;
+    this.stackCheckMs = stackCheckMs;
+    this.stackAfterMs = stackAfterMs;
     this.running = new Map();
+    this.modules = new Map();
+    this.sampled = new Set();
+    this.pages = new Map();
     this.timer = undefined;
+    this.stackTimer = undefined;
   }
 
-  onInit() {
+  onInit(vitest) {
     this.timer = this.startInterval(() => this.reportRunning(), this.intervalMs);
     this.timer.unref();
+    this.vitest = vitest;
+    if (!vitest) return;
+    this.stackTimer = this.startInterval(() => this.sampleStalledFiles(), this.stackCheckMs);
+    this.stackTimer.unref();
   }
 
   // Queued fires in the worker as it begins collecting the file, so an import that never
@@ -106,14 +135,118 @@ export default class FileProgressReporter {
 
   onTestRunEnd() {
     this.stopInterval(this.timer);
+    if (this.stackTimer !== undefined) this.stopInterval(this.stackTimer);
   }
 
   // Keyed by label, not by object: Vitest hands each hook a different TestModule for one file.
   started(testModule) {
+    this.attachPages();
     const key = label(testModule);
     if (this.running.has(key)) return;
     this.running.set(key, this.now());
+    this.modules.set(key, { moduleId: testModule.moduleId, project: testModule.project });
     this.write(`${PREFIX} start ${key}`);
+  }
+
+  stack(text) {
+    this.write(`${STACK} ${oneLine(text)}`);
+  }
+
+  attachPages() {
+    for (const project of this.vitest?.projects ?? []) {
+      const pages = project.browser?.provider?.pages;
+      if (!pages) continue;
+      for (const page of pages.values()) {
+        if (this.pages.has(page)) continue;
+        const debuggee = { page, cdp: undefined, scripts: new Map(), waiters: [] };
+        this.pages.set(page, debuggee);
+        this.attach(debuggee).catch((error) =>
+          this.stack(`could not attach to a browser page: ${error?.message ?? error}`),
+        );
+      }
+    }
+  }
+
+  async attach(debuggee) {
+    const cdp = await debuggee.page.context().newCDPSession(debuggee.page);
+    cdp.on("Debugger.scriptParsed", ({ scriptId, url }) => {
+      if (url) debuggee.scripts.set(scriptId, url);
+    });
+    // Always resume: a pause sent to an idle page stays armed and stops the page the next time
+    // any script runs, so an unanswered pause would freeze a healthy page.
+    cdp.on("Debugger.paused", ({ callFrames }) => {
+      const waiters = debuggee.waiters.splice(0);
+      for (const waiter of waiters) waiter(callFrames);
+      send(cdp, "Debugger.resume").catch(() => {});
+    });
+    await send(cdp, "Debugger.enable");
+    debuggee.cdp = cdp;
+  }
+
+  // Bounded and unref'd, so a page that never answers neither hangs a sample nor the process.
+  within(ms, promise) {
+    let timer;
+    const timeout = new Promise((resolve) => {
+      timer = this.startTimeout(() => resolve(TIMED_OUT), ms);
+      timer?.unref?.();
+    });
+    return Promise.race([promise, timeout]).finally(() => this.stopTimeout(timer));
+  }
+
+  sampleStalledFiles() {
+    const at = this.now();
+    for (const [key, startedAt] of this.running) {
+      const elapsed = at - startedAt;
+      if (elapsed < this.stackAfterMs || this.sampled.has(key)) continue;
+      this.sampled.add(key);
+      const head = `${key} has run ${seconds(elapsed)};`;
+      this.sampleFile(this.modules.get(key), head).catch((error) =>
+        this.stack(`${head} sampling failed: ${error?.message ?? error}`),
+      );
+    }
+  }
+
+  async sampleFile({ moduleId, project }, head) {
+    if (!project.browser?.provider?.pages) return;
+    const needle = encodeURIComponent(moduleId);
+    const showing = [...this.pages.values()].filter(
+      ({ cdp, page }) => cdp && page.frames().some((frame) => frame.url().includes(needle)),
+    );
+    if (showing.length === 0) {
+      this.stack(`${head} no browser page showed it, so no stack was taken`);
+      return;
+    }
+    await Promise.all(showing.map((debuggee) => this.samplePage(debuggee, head)));
+  }
+
+  async samplePage(debuggee, head) {
+    let waiter;
+    const paused = new Promise((resolve) => {
+      waiter = resolve;
+      debuggee.waiters.push(resolve);
+    });
+    send(debuggee.cdp, "Debugger.pause").catch(() => {});
+    const callFrames = await this.within(PAUSE_WAIT_MS, paused);
+    if (callFrames !== TIMED_OUT) {
+      this.stack(`${head} its page was running JavaScript:`);
+      for (const { functionName, url, location } of callFrames.slice(0, MAX_FRAMES)) {
+        const script = debuggee.scripts.get(location.scriptId) ?? url;
+        this.stack(
+          `  at ${functionName || "(anonymous)"} ${script}:${location.lineNumber + 1}:${location.columnNumber + 1}`,
+        );
+      }
+      return;
+    }
+    debuggee.waiters = debuggee.waiters.filter((pending) => pending !== waiter);
+    const answer = await this.within(
+      ANSWER_WAIT_MS,
+      send(debuggee.cdp, "Runtime.evaluate", { expression: "0" }),
+    );
+    this.stack(
+      answer === TIMED_OUT
+        ? `${head} no JavaScript paused and the page did not answer in ${ANSWER_WAIT_MS / 1000}s (the renderer is stuck outside JavaScript)`
+        : `${head} no JavaScript was running and the page answers (it is waiting, not blocked)`,
+    );
   }
 
   reportRunning() {
