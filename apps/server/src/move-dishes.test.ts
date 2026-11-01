@@ -418,6 +418,23 @@ describe("A803 move dishes: the moves that succeed", () => {
     expect((await rowsOf(p.bill2)).map((row) => [row.id, row.groupId])).toEqual([[paella, group]]);
   });
 
+  it("A803 move dishes: with the Paella recalled into a draft, the Flan beside it on the bill moves and the Paella stays", async () => {
+    const p = await party([dish("Paella"), dish("Flan")], "hold");
+    const [paella] = await dishIds(p.bill1, "Paella");
+    const [flan] = await dishIds(p.bill1, "Flan");
+    await recallIntoDraft(p.partyId, p.bill1, paella!);
+
+    await sendMove(
+      p.bill1,
+      p.bill2,
+      [flan!],
+      await readMove(p.partyId, p.bill1, p.bill2, adminId()),
+    );
+
+    expect(await dishIds(p.bill1)).toEqual([paella]);
+    expect(await dishIds(p.bill2)).toEqual([flan]);
+  });
+
   it("A803 move dishes: a bill with no party moves to a new counter order and copies its kitchen note", async () => {
     const id = await counterOrder(v, "Burger", "Flan");
     await inTx(v, (tx) => writeKitchenNote(tx, { workingOrderId: id }, 0, "All together"));
@@ -775,6 +792,20 @@ async function refused(run: () => Promise<unknown>, code: string, params?: unkno
 const adminId = () =>
   v.db.all<{ id: string }>(sql`select id from persons where role = 'admin'`)[0]!.id;
 
+/** The administrator recalls the held dish into a draft of its bill. */
+async function recallIntoDraft(partyId: string, billId: string, lineId: string) {
+  const command = await commandFor(v, partyId);
+  await inTx(v, async (tx) => {
+    await setChangesAfterSending(tx, "held-or-waiting");
+    return recallToDraft(tx, v.cfg, partyId, lineId, {
+      ...command,
+      operatorId: adminId(),
+      expectedEdit: await readBillEditState(tx, billId),
+      submissionId: randomUUID(),
+    });
+  });
+}
+
 /** `operatorId`'s saved, unsent Tarta on the bill: that person is now its editor. */
 async function saveTarta(partyId: string, billId: string, operatorId: string) {
   const expectedEdit = await inTx(v, (tx) => readBillEditState(tx, billId));
@@ -1013,16 +1044,7 @@ describe("A803 move dishes refuses, and changes nothing", () => {
   it("A803 move dishes refuses: a dish recalled into a draft is draft.out_of_date", async () => {
     const p = await party([dish("Paella"), dish("Flan")], "hold");
     const [paella] = await dishIds(p.bill1, "Paella");
-    const command = await commandFor(v, p.partyId);
-    await inTx(v, async (tx) => {
-      await setChangesAfterSending(tx, "held-or-waiting");
-      return recallToDraft(tx, v.cfg, p.partyId, paella!, {
-        ...command,
-        operatorId: adminId(),
-        expectedEdit: await readBillEditState(tx, p.bill1),
-        submissionId: randomUUID(),
-      });
-    });
+    await recallIntoDraft(p.partyId, p.bill1, paella!);
     const ask = await readMove(p.partyId, p.bill1, p.bill2, adminId());
     await refused(() => sendMove(p.bill1, p.bill2, [paella!], ask), "draft.out_of_date", {
       billId: p.bill1,

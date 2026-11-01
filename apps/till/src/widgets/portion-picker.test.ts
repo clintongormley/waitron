@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { decimal, formatMoney } from "@waitron/shared";
 import type { BillBalance, TabLine } from "../api/client.js";
 import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
@@ -430,12 +430,13 @@ describe("till-portion-picker", () => {
     expect(q(el, '[data-pick-amount="b1"]')!.textContent!.trim()).toBe(money("20.00"));
     expect(q(el, '[data-pick-amount="b5"]')!.textContent!.trim()).toBe(money("10.00"));
     expect(q(el, '[data-pick-amount="b7"]')!.textContent!.trim()).toBe(money("10.00"));
-    expect(text("b1")).toContain("Cheese");
+    // The browser's computed name: the dish and each extra must read as separate words.
+    const tickNamed = (name: RegExp) => page.getByRole("checkbox", { name }).element();
+    expect(tickNamed(/^Burger\s+Cheese\s/)).toBe(tick(el, "b1"));
+    expect(tickNamed(/^Burger\s+Bacon\s+Pickles\s/)).toBe(tick(el, "b5"));
+    expect(tickNamed(/^Burger\s+Onion ×2\s/)).toBe(tick(el, "b7"));
     expect(text("b1")).not.toContain("Bacon");
-    expect(text("b5")).toContain("Bacon");
-    expect(text("b5")).toContain("Pickles");
     expect(text("b5")).not.toContain("Cheese");
-    expect(text("b7")).toContain("Onion ×2");
     expect(text("b1")).not.toContain("×");
     expect(dec(el, "b1")!.getAttribute("aria-label")).toContain("Cheese");
     expect(inc(el, "b1")!.getAttribute("aria-label")).toContain("Cheese");

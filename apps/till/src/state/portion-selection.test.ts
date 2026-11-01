@@ -211,6 +211,23 @@ describe("A803 selection:", () => {
     expect(toggleRow(rowsOf(lines, paid, picks)[1]!, picks)).toEqual(picks);
   });
 
+  it("€0.35 with €0.05 received: with the three €0.05 Pan picked (exactly €0.15), the row of four €0.05 Olivas has limit exactly 3, which leaves exactly €0.05", () => {
+    const lines = [
+      ...["p1", "p2", "p3"].map((id, i) => dish(id, i + 1, "Pan", "0.05")),
+      ...["o1", "o2", "o3", "o4"].map((id, i) => dish(id, i + 4, "Olivas", "0.05")),
+    ];
+    const paid = balance("0.35", "0.05");
+    const [pan] = rowsOf(lines, paid);
+    const picks = toggleRow(pan!, new Set());
+    expect(sorted(picks)).toEqual(["p1", "p2", "p3"]);
+
+    const olivas = rowsOf(lines, paid, picks)[1]!;
+
+    expect(ids(olivas)).toEqual(["o1", "o2", "o3", "o4"]);
+    expect(olivas.limit).toBe(3);
+    expect(sorted(setCount(olivas, 4, picks))).toEqual(["o1", "o2", "o3", "p1", "p2", "p3"]);
+  });
+
   it("a contribution marks no dish paid", () => {
     const rows = rowsOf(fourCañas(), balance("20.00", "10.00"));
 
