@@ -266,9 +266,19 @@ it.each(["en", "es"] as const)(
         { locale },
       );
       expect(await page.locator("#connection-status").textContent()).toBe(guidance);
+      if (locale === "es") {
+        expect(await page.locator("#connection-status").textContent()).toBe(
+          "No se ha podido configurar la conexión. Elige Configurar conexión segura para reintentar. Si sigue fallando, detente aquí: esta página no puede reparar todos los problemas de certificados.",
+        );
+      }
       expect(await page.locator("#connection-continue").isVisible()).toBe(false);
       await page.locator("#connection-repair").click();
       await expect.poll(() => page.locator("#connection-error").textContent()).toBe(guidance);
+      if (locale === "es") {
+        expect(await page.locator("#connection-error").textContent()).toBe(
+          "No se ha podido configurar la conexión. Elige Configurar conexión segura para reintentar. Si sigue fallando, detente aquí: esta página no puede reparar todos los problemas de certificados.",
+        );
+      }
       expect(await page.locator("#connection-repair").isEnabled()).toBe(true);
       expect(await page.locator("#connection-continue").isVisible()).toBe(false);
       expect(await page.locator("body").textContent()).not.toContain("private filesystem details");
