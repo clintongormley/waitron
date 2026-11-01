@@ -138,6 +138,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
         name: "Bill 2 · Clint",
         items: [
           "Name this bill",
+          "Move dishes…",
           "Split by item",
           "Transfer items",
           "Merge bills",
@@ -315,7 +316,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
         const popup = menu(el).shadowRoot!.querySelector<HTMLElement>("[popover]")!;
         await userEvent.click(trigger);
 
-        expect(groups(el).flatMap((group) => group.items)).toHaveLength(15);
+        expect(groups(el).flatMap((group) => group.items)).toHaveLength(16);
         const box = popup.getBoundingClientRect();
         const anchor = trigger.getBoundingClientRect();
         expect(box.top).toBeGreaterThanOrEqual(anchor.bottom - 0.5);

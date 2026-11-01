@@ -163,6 +163,8 @@ import "../widgets/dead-ends-section.js";
 import { PAY_WAYS, paidQuantities, payLines } from "../state/bill-payment.js";
 import { billHasUnsent, billUnsentText } from "../state/bill-unsent.js";
 import { portionGroups, sentSlicePortionKey, tabLinePortionKey } from "../state/portion-groups.js";
+import { pickRows, pickedLineIds, type PickRow, type Picks } from "../state/portion-selection.js";
+import "../widgets/portion-picker.js";
 import { billControlStyles, billSwitcher, tableMenu } from "./table-bill-controls.js";
 
 /** The screen's own width, in CSS pixels, from which browsing and the draft show side by side.
@@ -227,7 +229,7 @@ function countsWholeUnits(line: OrderLine): boolean {
 
 /** The table actions that name a table: Move guests, Join a table and Move this bill. */
 type TableVerb = "move" | "join" | "move-bill";
-type ActionVerb = TableVerb | "merge" | "transfer" | "split";
+type ActionVerb = TableVerb | "merge" | "transfer" | "split" | "move-dishes";
 /** The pay section's controls by what a tap on one starts: the tender's Cash and Card, the
  * bill-payment ways and Pay the rest, or the handheld's Pay. */
 type PayControl = "tender" | "bill-pay" | "sheet";
@@ -389,7 +391,13 @@ class TabPayStore extends WorkingOrderStore {
 }
 
 type ActionStep =
-  "closed" | "pick" | "transfer-lines" | "split-lines" | "split-table" | "split-table-bill";
+  | "closed"
+  | "pick"
+  | "transfer-lines"
+  | "split-lines"
+  | "move-dishes"
+  | "split-table"
+  | "split-table-bill";
 
 @customElement("till-table-order-screen")
 export class TillTableOrderScreen extends LitElement {
@@ -802,7 +810,8 @@ export class TillTableOrderScreen extends LitElement {
 
       /* Native buttons, not wt-buttons: wt-button does not pass aria-pressed to its inner button. */
       .draft-select,
-      .transfer-line {
+      .transfer-line,
+      .move-dishes-to {
         min-width: var(--wt-tap-min);
         text-align: start;
       }
@@ -1272,6 +1281,10 @@ export class TillTableOrderScreen extends LitElement {
   /** Kept separate from the whole-line transfer picker so quantity choices cannot change that flow. */
   @state() private splitQuantities = new Map<number, string>();
   @state() private splitAttempted = false;
+  @state() private moveDishesPicks: Picks = new Set();
+  /** Where Move dishes… sends the picks: a bill's id, null for a new bill, undefined while none is
+   * chosen. */
+  @state() private moveDishesTo: string | null | undefined = undefined;
 
   readonly #actionId = {};
   #actionScope?: DraftScope<ActionDraft>;
@@ -4788,6 +4801,8 @@ export class TillTableOrderScreen extends LitElement {
     this.transferLineNos = new Set();
     this.splitQuantities = new Map();
     this.splitAttempted = false;
+    this.moveDishesPicks = new Set();
+    this.moveDishesTo = undefined;
   }
 
   #dispatch(type: string, detail: unknown): void {
@@ -4801,7 +4816,12 @@ export class TillTableOrderScreen extends LitElement {
       this.splitQuantities = new Map();
       this.splitAttempted = false;
     }
-    this.actionStep = verb === "split" ? "split-lines" : "pick";
+    if (verb === "move-dishes") {
+      this.moveDishesPicks = new Set();
+      this.moveDishesTo = undefined;
+    }
+    this.actionStep =
+      verb === "split" ? "split-lines" : verb === "move-dishes" ? "move-dishes" : "pick";
     this.#stepFocus = "step";
     this.#watchActions();
   }
@@ -5303,6 +5323,7 @@ export class TillTableOrderScreen extends LitElement {
         this.actionStep = "pick";
         break;
       case "split-lines":
+      case "move-dishes":
       case "split-table":
         this.#closeActions();
         break;
@@ -5349,6 +5370,8 @@ export class TillTableOrderScreen extends LitElement {
         return this.#transferLinesStep();
       case "split-lines":
         return this.#splitLinesStep();
+      case "move-dishes":
+        return this.#moveDishesStep();
       case "split-table":
       case "split-table-bill":
         return this.#splitTableStep();
@@ -5399,6 +5422,7 @@ export class TillTableOrderScreen extends LitElement {
     const verb = (name: ActionVerb, key: StringKey) =>
       action(name, key, () => this.#chooseVerb(name));
     const split = verb("split", "table.action_split");
+    const moveDishes = verb("move-dishes", "table.action_move_dishes");
     const pairVerbs = [
       verb("transfer", "table.action_transfer"),
       verb("merge", "table.action_merge_bills"),
@@ -5425,7 +5449,9 @@ export class TillTableOrderScreen extends LitElement {
               action("name-bill", "table.action_name_bill", () => this.#openBillNaming()),
               // The server refuses each of these on a presented or paid bill, and the pair verbs on
               // a bill holding a payment.
-              ...(shown.status !== "open" ? [] : shown.hasPayments ? [split] : lineVerbs),
+              ...(shown.status !== "open"
+                ? []
+                : [moveDishes, ...(shown.hasPayments ? [split] : lineVerbs)]),
               this.#movable() ? verb("move-bill", "table.action_move_bill") : nothing,
               this.#compBill(),
               ...this.#billDocumentItems(shown),
@@ -5673,6 +5699,86 @@ export class TillTableOrderScreen extends LitElement {
 
   #pickerQuantity(members: readonly TabLine[]): string {
     return members.length > 1 ? String(members.length) : this.#displayQty(members[0]!.quantity);
+  }
+
+  #moveDishesRows(picks: Picks = this.moveDishesPicks): PickRow[] {
+    return pickRows(
+      this.lines,
+      (dish) => this.#fallbackPortionKey(dish),
+      this.#balanceShown(),
+      new Set(),
+      picks,
+    );
+  }
+
+  #moveDishesStep(): TemplateResult {
+    const rows = this.#moveDishesRows();
+    const lineIds = pickedLineIds(rows, this.moveDishesPicks);
+    const canMove = lineIds.length > 0 && this.moveDishesTo !== undefined;
+    const shown = this.#shownBills().find((bill) => bill.workingOrderId === this.orderId);
+    const destination = (key: string, label: string, to: string | null) =>
+      html`<button
+        type="button"
+        class="option move-dishes-to"
+        data-move-dishes-to=${key}
+        aria-pressed=${this.moveDishesTo === to}
+        @click=${(event: Event) => {
+          if (!this.#actionControlCurrent(event)) return;
+          this.moveDishesTo = to;
+          this.#actionScope?.changed();
+        }}
+      >
+        ${label}
+      </button>`;
+    return html`<section class="actions" data-move-dishes>
+      <h2 tabindex="-1">
+        ${
+          shown === undefined
+            ? t("table.actions_title")
+            : fill(t("table.move_dishes_heading"), { bill: billLabel(shown) })
+        }
+      </h2>
+      <till-portion-picker
+        .rows=${rows}
+        .picks=${this.moveDishesPicks}
+        .nameOf=${(row: PickRow) => this.#nameForLine(row.members[0]!)}
+        .money=${(amount: string) => this.#money(amount)}
+        @portion-picks=${(event: CustomEvent<{ picks: string[] }>) => {
+          event.stopPropagation();
+          if (!this.#actionControlCurrent(event)) return;
+          this.moveDishesPicks = new Set(event.detail.picks);
+          this.#actionScope?.changed();
+        }}
+      ></till-portion-picker>
+      <h3 data-move-dishes-to-heading>${t("table.move_dishes_to")}</h3>
+      <div class="action-options">
+        ${this.#otherBills().map(({ bill }) =>
+          destination(bill.workingOrderId, billLabel(bill), bill.workingOrderId),
+        )}
+        ${destination("new", t("table.new_bill"), null)}
+      </div>
+      <wt-form-actions>
+        ${this.#backButton("cancel")}
+        <wt-button
+          data-move-dishes-confirm
+          variant=${canMove ? "primary" : "secondary"}
+          ?disabled=${!canMove}
+          @click=${(event: Event) => this.#confirmMoveDishes(event)}
+        >
+          ${t("table.move_dishes_confirm")}
+        </wt-button>
+      </wt-form-actions>
+    </section>`;
+  }
+
+  #confirmMoveDishes(event: Event): void {
+    if (!this.#actionControlCurrent(event)) return;
+    const lineIds = pickedLineIds(this.#moveDishesRows(), this.moveDishesPicks);
+    const toBillId = this.moveDishesTo;
+    if (lineIds.length === 0 || toBillId === undefined) return;
+    this.#retireActions();
+    this.#dispatch("move-dishes", { lineIds, toBillId });
+    this.#closeActions();
   }
 
   #splitLinesStep(): TemplateResult {
