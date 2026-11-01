@@ -55,7 +55,8 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { createPrinter } from "@waitron/printing";
-import { attachPrinterToStation } from "./station-printers.js";
+import { attachPrinterToStation, detachPrinterFromStation } from "./station-printers.js";
+import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { needingMoving } from "./testing/floor-today-venue.js";
 import { numbersOf } from "./testing/bill-identities.js";
@@ -1180,6 +1181,97 @@ describe("the dishes of an open bill moved between service modes", () => {
     await move(ana.tabId, { tableId: mesa });
 
     expect((await lineRows(ana.tabId))[1]!.sentAt).toBeNull();
+  });
+});
+
+describe("A773 waiter request", () => {
+  /** Every station waits for the pass and one printer serves every active station. */
+  async function everyStationWaiting(run: (printerId: string) => Promise<void>) {
+    const stations = v.db.all<{ id: string; active: number }>(
+      sql`select id, active from kitchen_stations`,
+    );
+    const stationIds = stations.map((station) => station.id);
+    const active = stations.filter((station) => station.active).map((station) => station.id);
+    const printerId = await inTx(v, async (tx) => {
+      await setStationsWaitForPass(tx, true, stationIds);
+      const { id } = await createPrinter(
+        tx,
+        { locationId: v.cfg.locationId },
+        {
+          name: `P-${randomUUID().slice(0, 8)}`,
+          transport: "cloud_poll",
+          pollId: `poll-${randomUUID()}`,
+        },
+      );
+      for (const stationId of active)
+        await attachPrinterToStation(tx, {
+          locationId: v.cfg.locationId,
+          stationId,
+          printerId: id,
+        });
+      return id;
+    });
+    try {
+      await run(printerId);
+    } finally {
+      await inTx(v, async (tx) => {
+        await setStationsWaitForPass(tx, false, stationIds);
+        for (const stationId of active)
+          await detachPrinterFromStation(tx, v.cfg, { stationId, printerId });
+      });
+    }
+  }
+
+  const requestStamps = (orderId: string) =>
+    inTx(v, (tx) =>
+      tx
+        .select({
+          requestedAt: ticketItems.requestedAt,
+          firedAt: ticketItems.firedAt,
+          passControlled: ticketItems.passControlled,
+        })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, orderId)),
+    );
+
+  it("requests a counter order's dish when it is seated at a free table and every station waits", async () => {
+    const orderId = await counterOrder(v, "Tarta");
+    await everyStationWaiting(async (printerId) => {
+      await move(
+        orderId,
+        { tableId: await v.table("Arrival table A773") },
+        {
+          submissionId: randomUUID(),
+          partyId: null,
+          otherPartyId: null,
+          allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+        },
+      );
+
+      expect(await requestStamps(orderId)).toEqual([
+        { requestedAt: expect.any(String), firedAt: null, passControlled: true },
+      ]);
+      expect(printedBy(printerId)).toEqual([]);
+    });
+  });
+
+  it("requests a counter order's dish when it joins a seated party and every station waits", async () => {
+    const mesa = await v.table("Occupied table A773");
+    const ana = await seat(v, mesa);
+    await order(v, ana.tabId, "Burger");
+    const anaTickets = await ticketsOf(ana.tabId);
+    expect(anaTickets).toEqual([expect.objectContaining({ firedAt: expect.any(String) })]);
+    const orderId = await counterOrder(v, "Tarta");
+    await everyStationWaiting(async (printerId) => {
+      const result = await move(orderId, { tableId: mesa });
+
+      expect(result).toEqual({ partyId: ana.partyId, billId: orderId });
+      expect(await requestStamps(orderId)).toEqual([
+        { requestedAt: expect.any(String), firedAt: null, passControlled: true },
+      ]);
+      expect(await ticketsOf(ana.tabId)).toEqual(anaTickets);
+      expect(printedBy(printerId)).toEqual([]);
+    });
   });
 });
 

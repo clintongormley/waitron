@@ -118,6 +118,14 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     expect(row!.showsRestOfOrder).toBe(false);
   });
 
+  it("A773 phases: a new station does not wait for the pass", async () => {
+    const id = await seedStation(LOCATION_A, "Pass waiting default");
+    const [row] = await inTx((tx) =>
+      tx.select().from(kitchenStations).where(eq(kitchenStations.id, id)),
+    );
+    expect(row!.waitsForPass).toBe(false);
+  });
+
   it("a station row given no printing choices groups identical dishes, prints no held work in advance, leaves MOVED slips null, is done one item at a time and allows changes while held or waiting", async () => {
     const id = await seedStation(LOCATION_A, "Printing defaults");
     const [row] = await inTx((tx) =>

@@ -2493,7 +2493,8 @@ check. No legacy move assertion was changed to hide this result.
 ## A773. Courses, groups and the pass
 
 **A773-2**, firing and the pass, has a [reviewed implementation plan](../superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
-with PRs B–D remaining. Old nonempty stamps remain in regression fixtures, outside the till's
+with PRs B–D remaining. PR B is cut into B1–B4 by a [slice plan](../superpowers/plans/2026-11-01-a773-2b-requested-release.md);
+B2–B4 remain, and no station can be set to wait for the pass until PR C. Old nonempty stamps remain in regression fixtures, outside the till's
 public contracts. Physical schema and configuration-transfer fields remain for Task 12.
 
 PRs B–D add Requested and scoped pass release, integrate the agreed columns and display policy,

@@ -6164,3 +6164,44 @@ describe("Fire now on one held dish", () => {
     },
   );
 });
+
+describe("A773 request kind of an edit's and an inserted group", () => {
+  it("gives the fired group a raised quantity starts added", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const first = (await submit(v, s.partyId, [{ release: "fire", lines: [line(v, "cold")] }]))
+      .groups[0]!.id;
+    const [cold] = await linesIn(s.partyId, first);
+    await changeLine(v, s.tabId, cold!.lineNo, { quantity: "2" }, MIA);
+    const { groups } = await groupsOf(s.partyId);
+    const added = groups.at(-1)!.id;
+    expect(added).not.toBe(first);
+    expect(await groupRow(added)).toMatchObject({ state: "fired", requestKind: "added" });
+  });
+
+  it("gives the held group a save of a held order starts next_course", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const first = (await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "steak")] }]))
+      .groups[0]!.id;
+    await saveWhole(v, s.tabId, [...(await keptLines(v, s.tabId)), line(v, "flan")], MIA);
+    const { groups } = await groupsOf(s.partyId);
+    const added = groups.at(-1)!.id;
+    expect(added).not.toBe(first);
+    expect(await groupRow(added)).toMatchObject({ state: "held", requestKind: "next_course" });
+  });
+
+  it("gives a held group inserted after another next_course", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const first = (await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "steak")] }]))
+      .groups[0]!.id;
+    const inserted = (
+      await submit(v, s.partyId, [
+        { release: "hold", lines: [line(v, "flan")], afterGroupId: first },
+      ])
+    ).groups[0]!.id;
+    expect(inserted).not.toBe(first);
+    expect(await groupRow(inserted)).toMatchObject({ state: "held", requestKind: "next_course" });
+  });
+});

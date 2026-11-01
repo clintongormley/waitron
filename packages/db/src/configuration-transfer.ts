@@ -67,6 +67,8 @@ export const CORE_CONFIGURATION_TRANSFER = {
       name: "kitchen_stations",
       leaveBehindWhenFalse: "active",
       locationColumns: ["location_id"],
+      // Left out until PR C exposes the setting: a bundle carrying it is refused.
+      omit: ["waits_for_pass"],
     },
     { name: "kitchen_courses", locationColumns: ["location_id"], leaveBehindWhenFalse: "active" },
     { name: "categories" },

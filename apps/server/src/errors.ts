@@ -878,8 +878,9 @@ declare module "@waitron/shared" {
     /** A move named a dish made at the sending till, always fired and ready; its station is its maker. */
     "ticket.made_here": { ticketItemId: string };
     /**
-     * A ticket-item bump was refused because the line is still HELD (`fired_at IS NULL`). Distinct
-     * from `ticket.invalid_transition`, an illegal move on a fired line.
+     * A ticket-item bump was refused because the item is not released yet (`fired_at` is null:
+     * held, or Requested and waiting for the pass). Distinct from `ticket.invalid_transition`, an
+     * illegal move on a fired line.
      */
     "ticket.item_held": { ticketItemId: string };
     /**

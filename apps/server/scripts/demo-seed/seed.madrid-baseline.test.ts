@@ -151,6 +151,32 @@ for (const locale of ["en", "es"] as const) {
         dflt_value: null,
         pk: 0,
       });
+      for (const [name, column, value] of [
+        [
+          "kitchen_stations",
+          { name: "waits_for_pass", type: "INTEGER", notnull: 1, dflt_value: "false", pk: 0 },
+          0,
+        ],
+        [
+          "ticket_items",
+          { name: "requested_at", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+          null,
+        ],
+        [
+          "ticket_items",
+          { name: "pass_controlled", type: "INTEGER", notnull: 1, dflt_value: "false", pk: 0 },
+          0,
+        ],
+        [
+          "order_groups",
+          { name: "request_kind", type: "TEXT", notnull: 1, dflt_value: "'new_order'", pk: 0 },
+          "new_order",
+        ],
+      ] as const) {
+        const table = expected[phase].tables[name]!;
+        table.columns.push(column);
+        for (const row of Object.values(table.rows)) row[column.name] = value;
+      }
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(expected[phase].tables));
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(phases[phase]!));
       for (const [name, actual] of Object.entries(canonical[phase].tables)) {

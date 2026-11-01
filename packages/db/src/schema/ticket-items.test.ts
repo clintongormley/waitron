@@ -167,6 +167,14 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     expect(row!.awayAt).not.toBeNull();
   });
 
+  it("A773 phases: a new ticket item has no request time and is not pass-controlled", async () => {
+    const { orderId, lineId } = await seedOrderLine(nodeA, productA);
+    const id = await seedTicket(nodeA, orderId, lineId, stationA);
+    const [row] = await inTx((tx) => tx.select().from(ticketItems).where(eq(ticketItems.id, id)));
+    expect(row!.requestedAt).toBeNull();
+    expect(row!.passControlled).toBe(false);
+  });
+
   it("defaults an item to not made here", async () => {
     const { orderId, lineId } = await seedOrderLine(nodeA, productA);
     const id = await seedTicket(nodeA, orderId, lineId, stationA);

@@ -133,6 +133,13 @@ describe("order_groups, order_group_events and working_order_lines.group_id", ()
     );
   });
 
+  it("A773 phases: a new group is a new order", async () => {
+    const partyId = await party();
+    const id = await group({ partyId });
+    const [row] = await inTx((tx) => tx.select().from(orderGroups).where(eq(orderGroups.id, id)));
+    expect(row!.requestKind).toBe("new_order");
+  });
+
   it("refuses a held group with a fired time, and accepts one without", async () => {
     const partyId = await party();
     const error = await captureError(() =>

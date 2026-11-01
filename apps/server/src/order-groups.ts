@@ -39,7 +39,7 @@ import {
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
+import type { OrderGroupRequestKind, Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import {
   AppError,
@@ -350,6 +350,14 @@ export async function placeGroups(
   const requestOfRow = expanded?.requestOfRow ?? [];
   const groupIds: string[] = [];
   const insertedAfter = new Map<string, string>();
+  const fireKind = groups.some(
+    (group) =>
+      group.release === "fire" &&
+      group.joinGroupId === undefined &&
+      group.afterGroupId === undefined,
+  )
+    ? await nextFireKind(tx, partyId)
+    : undefined;
   for (const group of groups) {
     let groupId: string;
     if (group.joinGroupId !== undefined) groupId = group.joinGroupId;
@@ -361,7 +369,14 @@ export async function placeGroups(
         operatorId,
       );
       insertedAfter.set(group.afterGroupId, groupId);
-    } else groupId = await startGroup(tx, partyId, group.release, operatorId);
+    } else
+      groupId = await startGroup(
+        tx,
+        partyId,
+        group.release,
+        operatorId,
+        group.release === "fire" ? fireKind! : "next_course",
+      );
     groupIds.push(groupId);
   }
   const groupOfLine = input.groups.flatMap((group, i) => group.lines.map(() => groupIds[i]!));
@@ -593,7 +608,7 @@ export async function fireHeldLine(
           { kind: "HOLD CHANGED", direction: "removed" },
         );
       }
-      const groupId = await startGroup(tx, partyId, "fire", args.operatorId, {
+      const groupId = await startGroup(tx, partyId, "fire", args.operatorId, "next_course", {
         at: routing.at.toISOString(),
         by: { personId: args.operatorId },
       });
@@ -1100,7 +1115,9 @@ export async function moveLinesToGroup(
         moves.map((m) => m.lineId),
       );
       const targetId =
-        target === "new" ? await startGroup(tx, partyId, "hold", args.operatorId) : target.groupId;
+        target === "new"
+          ? await startGroup(tx, partyId, "hold", args.operatorId, "next_course")
+          : target.groupId;
       const sources = new Set<string>();
       const splitsByBill = new Map<string, { lineNo: number; quantity: string }[]>();
       for (const { lineId, quantity } of moves) {
@@ -1330,6 +1347,7 @@ export async function startGroup(
   partyId: string,
   release: GroupRelease,
   operatorId: string,
+  requestKind: OrderGroupRequestKind,
   fired: { at: string; by: Firer } = { at: nowIso(), by: { personId: operatorId } },
 ): Promise<string> {
   const fire = release === "fire";
@@ -1345,9 +1363,23 @@ export async function startGroup(
       firedBy: fire && "personId" in fired.by ? fired.by.personId : null,
       firedByDeviceId: fire && "deviceId" in fired.by ? fired.by.deviceId : null,
       submittedBy: operatorId,
+      requestKind,
     })
     .returning({ id: orderGroups.id });
   return group!.id;
+}
+
+/** new_order while the party has no group other than removed ones; added after. */
+export async function nextFireKind(
+  tx: Transaction,
+  partyId: string,
+): Promise<"new_order" | "added"> {
+  const [group] = await tx
+    .select({ id: orderGroups.id })
+    .from(orderGroups)
+    .where(and(eq(orderGroups.partyId, partyId), ne(orderGroups.state, "removed")))
+    .limit(1);
+  return group === undefined ? "new_order" : "added";
 }
 
 export async function startGroupAfter(
@@ -1361,7 +1393,7 @@ export async function startGroupAfter(
     .select({ position: orderGroups.position })
     .from(orderGroups)
     .where(eq(orderGroups.id, afterGroupId));
-  const groupId = await startGroup(tx, partyId, "hold", operatorId);
+  const groupId = await startGroup(tx, partyId, "hold", operatorId, "next_course");
   await tx
     .update(orderGroups)
     .set({ position: sql`${orderGroups.position} + 1`, remindAt: null })
@@ -2482,19 +2514,24 @@ export async function groupArrivingDishes(
     }
   }
   const routing = immediate.length === 0 ? undefined : routingOnce(tx, cfg, new Date());
-  const fired = await groupArrived(
-    tx,
-    partyId,
-    billId,
-    [
-      ...released.map((line) => ({ id: line.id, firedAt: line.ticketFiredAt ?? line.sentAt })),
-      ...immediate.map((line) => ({ id: line.id, firedAt: routing!.at.toISOString() })),
-    ],
-    "fire",
-    operatorId,
-    firers,
-    attendance,
-  );
+  const firing = [
+    ...released.map((line) => ({ id: line.id, firedAt: line.ticketFiredAt ?? line.sentAt })),
+    ...immediate.map((line) => ({ id: line.id, firedAt: routing!.at.toISOString() })),
+  ];
+  const fired =
+    firing.length === 0
+      ? null
+      : await groupArrived(
+          tx,
+          partyId,
+          billId,
+          firing,
+          "fire",
+          await nextFireKind(tx, partyId),
+          operatorId,
+          firers,
+          attendance,
+        );
   if (immediate.length > 0)
     await fireOrderLines(
       tx,
@@ -2513,6 +2550,7 @@ export async function groupArrivingDishes(
         billId,
         lines.map((line) => ({ id: line.id, firedAt: null })),
         "hold",
+        "next_course",
         operatorId,
         firers,
         attendance,
@@ -2528,6 +2566,7 @@ async function groupArrived(
   billId: string,
   lines: readonly { id: string; firedAt: string | null }[],
   release: GroupRelease,
+  requestKind: OrderGroupRequestKind,
   operatorId: string,
   firers: ReadonlyMap<string, Firer>,
   attendance?: { recorder: AttendanceRecorder; at: string },
@@ -2539,7 +2578,7 @@ async function groupArrived(
     const first = lines.reduce((earliest, line) => (at(line) < at(earliest) ? line : earliest));
     fired = { at: at(first), by: firers.get(first.id) ?? { personId: operatorId } };
   }
-  const groupId = await startGroup(tx, partyId, release, operatorId, fired);
+  const groupId = await startGroup(tx, partyId, release, operatorId, requestKind, fired);
   const ids = lines.map((line) => line.id);
   await tx
     .update(workingOrderLines)
