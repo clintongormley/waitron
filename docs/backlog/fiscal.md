@@ -479,6 +479,19 @@ type; a correction from F2 to F1 therefore refuses the existing R5/F3 paths, whi
 F2 permits them. Void identity and origin come from the issued original, while its chain pointer
 uses the current head. These are synthetic storage and backend checks; no new remedy is enabled.
 
+**1 November 2026, Task 8 administrator action boundary.** The fiscal module grants
+`fiscal.remedy` to administrators only. `applyRecordCorrection` checks the live management
+session and the caller's server policy before creating a correction and its case-resolution event
+in one transaction. A retry with the same decision returns the saved record and event; changed
+facts under that action key are refused. Its checks include the target node and environment on
+replay. The synthetic cases retain original record and delivery rows, exercise two successive
+version cases and report a malformed predecessor without rewriting it.
+
+The public `POST /management-api/fiscal-records/remedy` route refuses every remedy kind.
+Client-supplied enablement and operator fields cannot grant authority. No production action is
+enabled: the successful HTTP request adapter and trusted node/clock binding, held-record release,
+staff cancellation/refund qualification and the live second-correction probe remain Task 8 work.
+
  Earlier
 Task 7 automatic-switch requirements below are historical; the 1 November decision supersedes them.
 

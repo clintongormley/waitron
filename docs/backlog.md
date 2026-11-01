@@ -396,7 +396,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   reconciliation rechecks after its network wait. Credit-note and substitution admission use the
   current corrected invoice type; voids keep the issued sale's origin. The row converter refuses
   optional library fields it cannot retain, including a caller-supplied submission reference.
-  Administrator actions, held-case resolution and the live second-correction probe remain unfinished.
+  The synthetic administrator operation appends one correction and a case-resolution event in one
+  transaction, and retries return that saved result. The public remedy route refuses all disputed
+  actions, including client-claimed enablement. Its successful request adapter, held-record release,
+  accounting/refund qualification and the live second-correction probe remain unfinished.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment

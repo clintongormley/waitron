@@ -92,6 +92,8 @@ declare module "@waitron/shared" {
     "fiscal.record_invalid": { fields: string[]; codes: string[] };
     "fiscal.record_already_corrected": { registroId: string };
     "fiscal.remedy_invalid": { registroId: string };
+    "fiscal.remedy_disabled": { kind: string };
+    "fiscal.remedy_request_invalid": Record<string, never>;
     "fiscal.fingerprint_mismatch": Record<string, never>;
 
     /**
