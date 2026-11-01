@@ -267,6 +267,15 @@ assertion names the design decision that changes it (§8 risk 7). Nothing else i
 
 ### A database with a second venue row
 
+**Amendment 2026-11-01 (watcher, 21:50).** When a slice's single-venue read makes another
+slice's cross-location test fail on its own second venue row, carry that test's cross-location
+half into the current slice and delete it. Remove the matching production check only if the
+remaining test halves require it, following the owning slice's instructions. Reuse one venue in
+shared fixtures for non-cross cases, with their assertions unchanged. Name each carried item and
+its owning slice in the PR and post an FYI to the lane's questions file. This replaces the stop
+instruction below for this case; a change to a non-cross assertion, an error code, fiscal bytes or
+a migration still needs a watcher decision.
+
 Once a function reads through the accessor, a test database holding two `locations` rows makes it
 throw `provisioning.second_venue`, and one holding none makes it throw `venue.not_found`. **Whichever
 slice first routes a reader that a suite exercises through the accessor, whatever slice that is,
@@ -1143,6 +1152,13 @@ predicate in `orderInvoicePrinters` (`apps/server/src/orders-list.ts`) and only 
 half of “refuses a receipt printer switched off, deleted or at another location, writing nothing”
 in `orders-invoice-deliveries.test.ts`. These move from S11a. The switched-off and deleted-printer
 refusals and their assertions stay; the separate A4 location predicate remains S11a's.
+
+**Amendment 2026-11-01 (watcher, 21:50).** S2-5 carries S6's other-location row of
+`department-receipt-draft.db.test.ts` and the two “a department not in this location” thermal-logo
+rows in `receipt-print.test.ts`. Shared non-cross logo fixtures in `receipt-print.test.ts` and
+`receipt-presentation.test.ts` reuse one venue. Keep the inactive-department, malformed-data,
+throwing-read and other logo assertions; change a production department check only if those
+retained cases require it. These are carried from S6 under the watcher's standing rule above.
 
 | | |
 | --- | --- |
@@ -2348,6 +2364,10 @@ Docs (Task S6b), the entries the change makes stale:
   gone.
 
 ### Task S6a: departments, zones, sale policy, order contexts, receipts, transfers, provisioning
+
+**Amendment 2026-11-01 (watcher, 21:50).** The department-draft other-location test row and
+two thermal-logo foreign-department rows moved to S2-5, together with the shared non-cross logo
+fixture cleanup, as recorded in S2's amendment. The remaining department checks stay in this task.
 
 - [ ] **Step 1: Failing tests** (scope-blind, `// A1301: deleted with cfg in S18`):
   - `packages/venue-service/src/operations.test.ts`: add `it("lists the venue's departments whatever location the scope names", …)`.
