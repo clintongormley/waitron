@@ -192,7 +192,12 @@ function checkRun(run) {
   checkRunDir(/** @type {RigRun} */ (run).runDir);
 }
 
-/** The run folder must still have the device and inode createRun saw; readLedger checks the run id. @param {RigRun} run */
+/**
+ * The run folder must still be a real folder with the device and inode createRun saw; readLedger
+ * checks the run id. A file system may give a symlink in its place the removed folder's inode, so a
+ * matching id alone is not enough.
+ * @param {RigRun} run
+ */
 async function checkRoot(run) {
   let stat;
   try {
@@ -201,7 +206,8 @@ async function checkRoot(run) {
     if (error.code === "ENOENT") throw rigError("run-dir-replaced");
     throw error;
   }
-  if (`${stat.dev}:${stat.ino}` !== run.rootId) throw rigError("run-dir-replaced");
+  if (!stat.isDirectory() || `${stat.dev}:${stat.ino}` !== run.rootId)
+    throw rigError("run-dir-replaced");
 }
 
 /**
@@ -406,7 +412,7 @@ export function planCleanup(resources) {
 
 /**
  * Cleans up exactly what the run's ledger records, in reverse order. Before each step it checks
- * again that the run folder has createRun's device and inode, that its ledger still names this
+ * again that the run folder is a real folder with createRun's device and inode, that its ledger still names this
  * run's id and reads back, that the step's path is reached through no symlink, that it is not
  * the ledger or its staging file under another name (resource-is-ledger), and that an image or
  * pid file path is a regular file or absent (resource-not-file); a step that

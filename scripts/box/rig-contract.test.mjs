@@ -299,6 +299,24 @@ const fakeAdapter = (failing = new Set()) => {
   };
 };
 
+/**
+ * The run folder replaced by a symlink to a folder holding this run's ledger, with the run record's
+ * rootId set to the symlink's own device and inode, as when a file system gives the symlink the
+ * removed folder's inode.
+ */
+const runSwappedForSymlink = async (imageNames) => {
+  const run = await freshRun();
+  const resources = imageNames.map((name) => ({ kind: "image", path: join(run.runDir, name) }));
+  const elsewhere = join(await scratch(), "elsewhere");
+  await fs.mkdir(elsewhere);
+  const planted = ledgerText(run.runDir, run.runId, resources);
+  await fs.writeFile(join(elsewhere, "ledger.json"), planted);
+  await fs.rm(run.runDir, { recursive: true });
+  await fs.symlink(elsewhere, run.runDir);
+  const link = await fs.lstat(run.runDir, { bigint: true });
+  return { run: { ...run, rootId: `${link.dev}:${link.ino}` }, elsewhere, planted };
+};
+
 /** A cleanup adapter whose removeFile really unlinks. */
 const unlinkingAdapter = () => {
   const { calls, adapter } = fakeAdapter();
@@ -515,6 +533,19 @@ describe("withRecorded", () => {
     await fs.writeFile(join(elsewhere, "ledger.json"), planted);
     await fs.rm(run.runDir, { recursive: true });
     await fs.symlink(elsewhere, run.runDir);
+    let called = false;
+    await expect(
+      withRecorded(run, { kind: "image", path: join(run.runDir, "disk.img") }, () => {
+        called = true;
+      }),
+    ).rejects.toThrow(refused("run-dir-replaced"));
+    expect(called).toBe(false);
+    expect(await fs.readdir(elsewhere)).toEqual(["ledger.json"]);
+    expect(await fs.readFile(join(elsewhere, "ledger.json"), "utf8")).toBe(planted);
+  });
+
+  it("a symlink in the run folder's place with the folder's device and inode → run-dir-replaced, nothing written there", async () => {
+    const { run, elsewhere, planted } = await runSwappedForSymlink([]);
     let called = false;
     await expect(
       withRecorded(run, { kind: "image", path: join(run.runDir, "disk.img") }, () => {
@@ -844,6 +875,21 @@ describe("loadLedger", () => {
     await fs.rm(run.runDir, { recursive: true });
     await fs.symlink(elsewhere, run.runDir);
     await expect(loadLedger(run)).rejects.toThrow(refused("run-dir-replaced"));
+  });
+
+  it("a symlink in the run folder's place with the folder's device and inode → run-dir-replaced", async () => {
+    const { run } = await runSwappedForSymlink(["a"]);
+    await expect(loadLedger(run)).rejects.toThrow(refused("run-dir-replaced"));
+  });
+
+  it("a regular file in the run folder's place with the folder's device and inode → run-dir-replaced", async () => {
+    const run = await freshRun();
+    await fs.rm(run.runDir, { recursive: true });
+    await fs.writeFile(run.runDir, "");
+    const file = await fs.lstat(run.runDir, { bigint: true });
+    await expect(loadLedger({ ...run, rootId: `${file.dev}:${file.ino}` })).rejects.toThrow(
+      refused("run-dir-replaced"),
+    );
   });
 
   it("an older run's record over a newer run at the same path, with the folder id matching → run-dir-replaced", async () => {
@@ -1177,6 +1223,15 @@ describe("runCleanup", () => {
     const { calls, adapter } = fakeAdapter();
     await expect(runCleanup(run, adapter)).rejects.toThrow(refused("run-dir-replaced"));
     expect(calls).toEqual([]);
+  });
+
+  it("a symlink in the run folder's place with the folder's device and inode → run-dir-replaced, no adapter calls", async () => {
+    const { run, elsewhere, planted } = await runSwappedForSymlink(["a"]);
+    const { calls, adapter } = fakeAdapter();
+    await expect(runCleanup(run, adapter)).rejects.toThrow(refused("run-dir-replaced"));
+    expect(calls).toEqual([]);
+    expect(await fs.readdir(elsewhere)).toEqual(["ledger.json"]);
+    expect(await fs.readFile(join(elsewhere, "ledger.json"), "utf8")).toBe(planted);
   });
 
   it("a recorded path whose parent became a symlink to outside → that step fails unrun, the rest run", async () => {

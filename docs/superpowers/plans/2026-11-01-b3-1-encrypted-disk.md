@@ -446,7 +446,7 @@ export async function runCleanup(run, adapter);
 **The ledger file** is `{"version":1,"runDir":"…","runId":"…","resources":[…]}` plus a newline, in canonical bytes.
 
 **`withRecorded` takes turns.** Calls on one run folder, through any copy of its `RigRun`, go through an in-process promise chain, so each rewrite of the ledger includes every earlier record. Inside its turn, a call:
-1. checks the run folder's `dev:ino` and that no symlink or file lies on the way to the path;
+1. checks that the run folder is a real folder with its `dev:ino` and that no symlink or file lies on the way to the path;
 2. creates `ledger.json.next` with `wx`, mode 0600 (the lock across processes);
 3. reads the ledger and checks the new resource against it and the file system;
 4. writes and flushes the staging file;
@@ -473,7 +473,7 @@ Contract notes from the per-task review (2026-11-01):
 | `reason` | When |
 | --- | --- |
 | `run-invalid` | The run record is not exactly `{ runDir, rootId, runId }` with text values. |
-| `run-dir-replaced` | The run folder is gone, has another `dev:ino`, its ledger names another `runId`, or it is a symlink at the final folder flush. |
+| `run-dir-replaced` | The run folder is gone, is not a real folder, has another `dev:ino`, its ledger names another `runId`, or it is a symlink at the final folder flush. |
 | `resource-invalid` | Not a known kind with exactly its one path field, as text. |
 | `resource-outside-run` | The path is not absolute, normal and strictly inside the run folder, holds a NUL, or has a part named `ledger.json` or `ledger.json.next` compared lower-cased. |
 | `resource-through-symlink` | A symlink or a file on the way to the path, or the path itself a symlink. |
