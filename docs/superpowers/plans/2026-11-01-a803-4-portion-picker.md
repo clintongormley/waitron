@@ -1422,3 +1422,51 @@ in `apps/server` over the 78 files of Task 1's GREEN command, Tests count read:
 **Task changes.** Task 7 split into 7a (⋮, panel, what Move sends) and 7b (unsaved picks,
 refreshes, recalled dishes); Task 9 split into 9a (screen) and 9b (app, client, words). Estimates
 rise to about 780 calls; no task is planned above 65.
+
+## Build record (4a, 2026-11-01)
+
+Where the build of 4a departed from the text above, or found it wrong. The text above is left as
+written; this section is the correction.
+
+**Pointers and wording (round-3 claim check of `ba3d3f781`).**
+- Task 1 "Why only there": `order-groups.ts:1125` (in `moveLinesToGroup`) moves part of a line to
+  another course group; `:1249` and `:1303` are in `splitHeldLineIntoUnits` and split a held line
+  into units.
+- Task 1's sweep does not select the five server files that split across bills through
+  `splitPartyBill`; they were run separately and pass. Since Task 2 the sweep selects 80 files, not
+  78: `move-dishes.test.ts` and `till-api.move-dishes.test.ts` match its pattern.
+- `carveLines` is reached through `carveOffLines` (`bill-actions.ts:191`, `:305`), not called there.
+- "Changed test checks": `till-app-table-service.test.ts:1369` is `:1370`. Task 7b: `ActionDraft`
+  is at `:235`; `readGrowingPortions` at `order-portions.ts:272`; the design-system no-party
+  sentence spans `:1081-1082`.
+- D16 reads spec §6 ("greys out a tick that would break it") differently: a tick that would break
+  the floor takes the first members that keep it and greys +; the tick itself is greyed only when
+  even one member would break it. This meets §6's aim, no refusal after Move, and is shown to the
+  owner with question 4.
+
+**Departures in the build.**
+- Task 3: a refund in progress is refused `bill.refund_in_progress`, not `order.payment_in_flight`
+  (`refuseRefundInProgress` runs first inside `refusePaymentInFlight`); the case pins that.
+- Task 4: the route-test fixture `billActionBody` learned `move-dishes`.
+- Task 5: `PickRow` gains `limit` (the most members the floor allows); `tidyPicks` takes the rows
+  drawn before and a function drawing the re-read rows over any picks
+  (`tidyPicks(before, rowsFor, picks)`), so that re-placed picks keep within the floor together
+  (Task 5 review I1).
+- Task 6: an unticked grouped row shows its count; the amount is the whole row's; `nameOf` has a
+  default; the stepper's + carries the floor reason.
+- Task 7a: the heading uses `billLabel`; destinations are native buttons with `aria-pressed`, in a
+  group labelled by "Move to".
+- Task 7b: a destination on its own counts as unsaved work, unless it is no longer offered. Picks
+  are re-placed only when the lines, the shown balance, the allergy answers or the recalled ids
+  change (300 lines, 60 rows: an update with no change went from 24.4 to 1.3 ms in Chromium).
+- Task 8: the new app test file uses the shared `test/allergy-app-fixture.ts`; the "Bill 2" case
+  moves to `bill-1` so the bills sort as the case needs; its set-ups need `simplifiedInvoiceLimit`
+  and `hasPayments`. Its commit message says 15 cases; the run showed 14 (21 after the review).
+  `tab.transfer_modifier_line` cannot be reached from the till: the picker's rows are dishes only
+  (`portion-selection.ts`), so no words were added for it.
+- Task 9b: its RED step cannot be red. The re-pointed rows assert the move-dishes handler, which
+  exists since Task 8; the check is the `rg` of the retired names, which prints nothing.
+- Task 10: the controls re-run found the paid filter in `pickRows`' picked total unreached since
+  the Task 5 fix; a direct case was added (`ada7185cb`), red with the filter deleted.
+- Task 11: a guide link to a section on the same page names the page
+  (`table-service.md#move-dishes`); `guide-content.test.ts` refuses a bare `#move-dishes`.
