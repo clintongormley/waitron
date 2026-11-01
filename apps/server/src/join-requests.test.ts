@@ -1809,9 +1809,10 @@ describe("deleted zone joins", () => {
 
 describe("a request stamped ahead of the clock, as after a backward step", () => {
   const stampAhead = (joinId: string, aheadMs: number) =>
-    suite.db.execute(
-      sql`update join_requests set created_at = ${new Date(Date.now() + aheadMs).toISOString()} where id = ${joinId}`,
-    );
+    suite.db
+      .update(joinRequests)
+      .set({ createdAt: new Date(Date.now() + aheadMs).toISOString() })
+      .where(eq(joinRequests.id, joinId));
 
   it("lapses once it lies further ahead than its fifteen minutes", async () => {
     const cfg = (await setupVenue(suite.db)).cfg;
