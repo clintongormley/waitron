@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceMadeHereStations,
+  orderGroups,
   parties,
   printJobs,
   ticketItems,
@@ -18,9 +19,12 @@ import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { OPERATOR } from "./testing/party-venue.js";
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { createCourse } from "./kitchen.js";
 import { fireGroup, readCurrentOrders, type CurrentOrders } from "./order-groups.js";
 import {
   fireOrderLines,
+  isReleased,
   markGroupServed,
   markServed,
   routingOnce,
@@ -119,6 +123,33 @@ async function lineOf(tx: Transaction, venue: Venue, product: "burger" | "water"
   );
   expect(found).toHaveLength(1);
   return found[0]!;
+}
+
+async function lineRow(tx: Transaction, lineId: string) {
+  const [row] = await tx
+    .select({
+      quantity: workingOrderLines.quantity,
+      servedQuantity: workingOrderLines.servedQuantity,
+      servedAt: workingOrderLines.servedAt,
+      sentAt: workingOrderLines.sentAt,
+      groupState: orderGroups.state,
+    })
+    .from(workingOrderLines)
+    .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+    .where(eq(workingOrderLines.id, lineId));
+  return row!;
+}
+
+/** `isReleased` over a ticketless line, read as `servableLines` reads it. */
+async function ticketlessReleased(tx: Transaction, lineId: string) {
+  const row = await lineRow(tx, lineId);
+  return isReleased({
+    groupState: row.groupState,
+    ticketItemId: null,
+    ticketFiredAt: null,
+    ticketMadeHere: null,
+    sentAt: row.sentAt,
+  });
 }
 
 async function item(tx: Transaction, itemId: string) {
@@ -372,6 +403,78 @@ describe("A773 requested lifecycle: serving", () => {
       await serve(tx, venue, burger.id);
       expect((await lineOf(tx, venue, "burger")).servedQuantity).toBe(1000);
       expect((await lineOf(tx, venue, "chips")).servedQuantity).toBe(1000);
+    });
+  });
+  it("sends a no-preparation water with a waiting burger in one group, and it reads released", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      await setStationsWaitForPass(tx, true, [venue.stations.grill]);
+      await fireNow(tx, venue, [dish(venue, "burger"), dish(venue, "water")]);
+      const burger = await lineOf(tx, venue, "burger");
+      const water = await lineOf(tx, venue, "water");
+      expect(water.itemId).toBeNull();
+      expect(await item(tx, burger.itemId!)).toMatchObject({ requestedAt: AT, firedAt: null });
+      expect((await lineRow(tx, water.id)).sentAt).toBe(AT);
+      expect(await ticketlessReleased(tx, water.id)).toBe(true);
+    });
+  });
+
+  it("sends a no-preparation water added later to a course whose burger waits, and it reads released", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      const first = await createCourse(tx, venue.cfg, { name: "First", displayOrder: 5 });
+      const later = await createCourse(tx, venue.cfg, { name: "Later", displayOrder: 6 });
+      await setStationsWaitForPass(tx, true, [venue.stations.grill]);
+      await addTabRound(tx, venue.cfg, venue.party.tabId, [
+        { ...dish(venue, "burger"), courseId: first.id, hold: true },
+        { ...dish(venue, "burger"), courseId: later.id, release: true },
+      ]);
+      const [held, requested] = (await lines(tx, venue)).filter(
+        (line) => line.productId === venue.products.burger,
+      );
+      expect(await item(tx, held!.itemId!)).toMatchObject({ requestedAt: null, firedAt: null });
+      expect(await item(tx, requested!.itemId!)).toMatchObject({
+        requestedAt: AT,
+        firedAt: null,
+      });
+
+      await addTabRound(tx, venue.cfg, venue.party.tabId, [
+        { ...dish(venue, "water"), courseId: later.id },
+      ]);
+      const water = await lineOf(tx, venue, "water");
+      expect(water.itemId).toBeNull();
+      expect((await lineRow(tx, water.id)).sentAt).toBe(AT);
+      expect(await ticketlessReleased(tx, water.id)).toBe(true);
+    });
+  });
+
+  it("serves and takes back one of two waiting burgers, with one portion of their chips", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      await setStationsWaitForPass(tx, true, [venue.stations.grill]);
+      await addTabRound(tx, venue.cfg, venue.party.tabId, [
+        { ...dish(venue, "burger", true), quantity: "2" },
+      ]);
+      const burger = await lineOf(tx, venue, "burger");
+      const chips = await lineOf(tx, venue, "chips");
+      const before = await item(tx, burger.itemId!);
+      expect(before).toMatchObject({ requestedAt: AT, firedAt: null });
+      expect(await item(tx, chips.itemId!)).toMatchObject({ firedAt: AT });
+      expect((await lineRow(tx, burger.id)).quantity).toBe(2000);
+      expect((await lineRow(tx, chips.id)).quantity).toBe(2000);
+
+      await serve(tx, venue, burger.id, "1");
+      expect(await lineRow(tx, burger.id)).toMatchObject({ servedQuantity: 1000, servedAt: null });
+      expect((await lineRow(tx, chips.id)).servedQuantity).toBe(1000);
+      expect(await item(tx, burger.itemId!)).toEqual(before);
+
+      await unserve(tx, venue, burger.id, "1");
+      expect((await lineRow(tx, burger.id)).servedQuantity).toBe(0);
+      expect((await lineRow(tx, chips.id)).servedQuantity).toBe(0);
+      expect(await item(tx, burger.itemId!)).toEqual(before);
     });
   });
 });

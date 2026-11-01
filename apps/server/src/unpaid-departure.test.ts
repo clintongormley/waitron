@@ -15,6 +15,7 @@ import {
   diningTables,
   floorZones,
   invoiceSeries,
+  kitchenStations,
   partyTables,
   parties,
   printJobs,
@@ -22,6 +23,7 @@ import {
   saleSettlements,
   sales,
   tenants,
+  ticketItems,
   unpaidDepartures,
   withTransaction,
 } from "@waitron/db";
@@ -48,6 +50,7 @@ import {
   type BillVenue,
 } from "./testing/bill-venue.js";
 import { readOrderRevision } from "./working-order.js";
+import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { mountTillApi } from "./till-api.js";
@@ -1565,6 +1568,52 @@ describe("what is refused", () => {
     expect(retried).toMatchObject({ status: 409, json: { code: "party.not_open" } });
     expect(registroCount(venue, party.tabId)).toBe(1);
     expect(await departuresOf(party.tabId)).toHaveLength(1);
+  });
+});
+
+describe("A773 requested lifecycle", () => {
+  it("refuses a bill holding a dish waiting for the pass, and writes nothing", async () => {
+    const stations = await inTx(venue, (tx) =>
+      tx
+        .select({ id: kitchenStations.id, waits: kitchenStations.waitsForPass })
+        .from(kitchenStations),
+    );
+    await inTx(venue, (tx) =>
+      setStationsWaitForPass(
+        tx,
+        true,
+        stations.map((station) => station.id),
+      ),
+    );
+    try {
+      const party = await seatedWith(venue, "Botella tinto");
+      const items = await inTx(venue, (tx) =>
+        tx
+          .select({ requestedAt: ticketItems.requestedAt, firedAt: ticketItems.firedAt })
+          .from(ticketItems)
+          .where(eq(ticketItems.workingOrderId, party.tabId)),
+      );
+      expect(items).toEqual([{ requestedAt: expect.any(String), firedAt: null }]);
+      const numbersBefore = nextInvoiceNumbers();
+
+      const answer = await depart(party.partyId, {
+        expectedPartyRevision: revisionOf(party.partyId),
+        reason: REASON,
+      });
+
+      expect(answer).toMatchObject({
+        status: 409,
+        json: { code: "unpaid_departure.unfired_dishes", params: { workingOrderId: party.tabId } },
+      });
+      await expectNothingWritten(party.partyId, party.tabId);
+      expect(await salesOf(party.tabId)).toEqual([]);
+      expect(nextInvoiceNumbers()).toEqual(numbersBefore);
+    } finally {
+      await inTx(venue, async (tx) => {
+        for (const station of stations)
+          await setStationsWaitForPass(tx, station.waits, [station.id]);
+      });
+    }
   });
 });
 
