@@ -1707,6 +1707,31 @@ stays within the existing total attempt budget. Run the server's
 `fiscal-certificate-diagnosis-runner.test.ts`
 and `fiscal-certificate-diagnosis-process.test.ts` together.
 
+## Compile a process-lifetime fixture before starting its cleanup clock
+
+A TypeScript loader can leave work running after the child has sent its result and closed its
+pipe. Compile a fixture once per suite when the case measures that child's exit. Keep the real
+dispatch code in the bundle, and retain separate cases that refuse a child held after its result.
+
+On 1 November 2026, A1303's Linux experiment started sixteen ordinary certificate fixtures with
+`tsx` under the process suite's existing 5,000 ms work and 200 ms cleanup bounds. Nine sent their
+47-byte result and closed the pipe, then received the parent's `SIGTERM` about 150 ms after the
+result. The same workload with a precompiled fixture completed all sixteen without a parent
+termination signal. A second cold-module experiment traced the loader's cache-directory scans;
+five children were interrupted, including two whose scans were still open when they were killed.
+Warm-cache and cache-disabled controls passed. These experiments reproduced the CI symptom;
+the historical failing CI runs did not record enough events to establish their exact ordering.
+
+`fiscal-certificate-diagnosis-process.test.ts` now compiles its fixture once before the suite.
+Its cache-housekeeping case delays a child's directory opening by 300 ms in an isolated cache.
+With the source fixture it received `interrupted`/`unavailable` after a valid result and parent
+`SIGTERM`; the standalone fixture completes. The original result, process-death, admission,
+cancellation, output-held and deadline assertions keep their existing bounds.
+
+Run it together with `fiscal-certificate-diagnosis-runner.test.ts` and
+`fiscal-certificate-diagnosis-bundle.test.ts`. The runner suite still launches the source fixture through `tsx`; this change does not
+qualify AEAT or alter the production runner.
+
 ## A deadline test must separate timer ordering from filesystem speed
 
 A test that gives a real file copy a short deadline also measures the machine running it.

@@ -3,35 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "CI, tests and developer tooling". This file holds
 their full text.
 
-## A1303. The certificate diagnosis child still loses its result on CI after A1257's fix.
-
-On 2026-11-01, PR #2375 (A1268, which touches no certificate code) failed `test-server (6)` in run
-[41315211519](https://github.com/clintongormley/waitron/actions/runs/41315211519/job/124874453696):
-`apps/server/src/fiscal-certificate-diagnosis-process.test.ts` > "resolves only after its exact
-child exits and permits the next attempt" received
-`{ outcome: "interrupted", reason: "unavailable", lastProgress: null }` where it expects
-`completed` with `{ value: "selected" }`; the case's marker file held one event. This is the same
-result as main run `41195102945` that A1257 (#2342, `a9b7beebbe`) attributed to a child's exit
-arriving before its pipe data, and the failing branch already contained that fix. So either that
-was not the only cause, or the drain does not cover this ordering. The other 20 cases in the file
-passed in the same run. A re-run of the failed job (attempt 2, job 124884090494) failed the same
-case the same way. Shard 6 held the same 58 files as main's passing run `41312042233`, none of them
-changed by #2375, and #2375 changes nothing the case or its child imports (an empty
-`git diff origin/main...HEAD` over the runner, dispatch, runtime, child fixture, test and
-`packages/fiscal`). Other branches' shard 6 passed in the same hour. Locally (macOS) the case
-passed 8 of 8 runs at load average 25, and 10 of 10 beside 30 busy `yes` processes, so it was not
-reproduced.
-
-The process suite now prints expanded marker rows and its real child's event timeline on
-failure: spawn, pipe byte counts, end/close, error codes, parent termination signals and exit
-status. It omits raw protocol content. To inspect a passing control, run
-`DIAGNOSIS_PROCESS_TRACE=1 pnpm --filter @waitron/server exec vitest run src/fiscal-certificate-diagnosis-process.test.ts --reporter=default`.
-The diagnostic change does not fix or establish the cause. Compare the next failing timeline
-with a passing control: did a result arrive, did the parent send a signal, and how did the child
-exit? Reproduce that ordering before changing the runner or its fixture. Keep the original
-assertions and deadlines. The testing guide's "A child's exit can precede its readable output"
-names the companion runner tests.
-
 ## Tests that read a built command's error output fail under Claude Code
 
 The command's stderr
