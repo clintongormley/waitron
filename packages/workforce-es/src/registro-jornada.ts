@@ -60,7 +60,6 @@ export interface RegistroDeJornada {
 export interface EntradaJornada {
   entryId: string;
   personId: string;
-  locationId: string;
   tipo: WorkforceEntryKind;
   tipoEntradaFaltante: ClockEntryKind | null;
   direccionCorreccion: "worker_request" | "manager_proposal" | null;
@@ -87,12 +86,7 @@ function historyForPeriod(record: TimeRecord, periodo: Period): EntradaJornada[]
   for (const { entry: e } of record.entries)
     for (const targetId of [e.correctsEntryId, e.extension?.respondsToEntryId]) {
       const target = targetId ? byId.get(targetId)?.entry : undefined;
-      if (
-        target === undefined ||
-        target.personId !== e.personId ||
-        target.locationId !== e.locationId
-      )
-        continue;
+      if (target === undefined || target.personId !== e.personId) continue;
       neighbours.set(e.entryId, [...(neighbours.get(e.entryId) ?? []), target.entryId]);
       neighbours.set(target.entryId, [...(neighbours.get(target.entryId) ?? []), e.entryId]);
     }
@@ -106,11 +100,7 @@ function historyForPeriod(record: TimeRecord, periodo: Period): EntradaJornada[]
       return (
         (date >= periodo.start && date < periodo.end) ||
         sessions.some(
-          (s) =>
-            s.personId === e.personId &&
-            s.locationId === e.locationId &&
-            e.eventAt >= s.startedAt &&
-            e.eventAt <= s.endedAt,
+          (s) => s.personId === e.personId && e.eventAt >= s.startedAt && e.eventAt <= s.endedAt,
         )
       );
     })
@@ -135,7 +125,6 @@ function historyForPeriod(record: TimeRecord, periodo: Period): EntradaJornada[]
       return {
         entryId: e.entryId,
         personId: e.personId,
-        locationId: e.locationId,
         tipo: e.entryKind,
         tipoEntradaFaltante: e.extension?.missingEntryKind ?? null,
         direccionCorreccion: e.extension?.direction ?? null,

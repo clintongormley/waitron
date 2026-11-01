@@ -6,7 +6,6 @@ import { ANOS_CONSERVACION, TITULARES_ACCESO, exportTimeRecord } from "./registr
 function session(personId: string, workDate: string, over: Partial<WorkSession> = {}): WorkSession {
   return {
     personId,
-    locationId: "loc-1",
     workDate,
     startedAt: `${workDate}T09:00:00Z`,
     startOffsetMinutes: 0,
@@ -102,7 +101,6 @@ describe("exportTimeRecord", () => {
       {
         entryId: "in-1",
         personId: "p1",
-        locationId: "loc-1",
         nodeId: "node-1",
         entryKind: "in",
         eventAt: "2026-01-05T09:00:00Z",
@@ -113,7 +111,6 @@ describe("exportTimeRecord", () => {
       {
         entryId: "out-1",
         personId: "p1",
-        locationId: "loc-1",
         nodeId: "node-1",
         entryKind: "out",
         eventAt: "2026-01-05T17:00:00Z",
@@ -124,7 +121,6 @@ describe("exportTimeRecord", () => {
       {
         entryId: "corr-1",
         personId: "p1",
-        locationId: "loc-1",
         nodeId: "node-1",
         entryKind: "correction",
         eventAt: "2026-01-05T18:00:00Z",

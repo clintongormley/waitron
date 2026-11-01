@@ -27,7 +27,6 @@ const ACCESS_HOLDER_LABELS: Record<TitularAcceso, string> = {
   inspeccion_trabajo: "Labour inspectorate",
 };
 const LABELS: Record<string, readonly [string, string]> = {
-  locationId: ["Workplace reference", "Referencia del centro"],
   locationName: ["Workplace", "Centro de trabajo"],
   periodStart: ["From", "Desde"],
   periodEnd: ["Before (excluded)", "Antes de (excluido)"],
@@ -94,7 +93,6 @@ const ENTRY_KEYS = [
   "entryId",
   "personId",
   "personName",
-  "locationId",
   "entryKind",
   "missingEntryKind",
   "correctionDirection",
@@ -153,7 +151,6 @@ export async function prepareTimeRecordExport(
     locale: input.locale,
   };
   const record = await new WorkforceBackend().timeRecord(tx, {
-    locationId: selected.locationId,
     personId: selected.personId,
     period: selected.period,
   });
@@ -249,7 +246,6 @@ export function formatTimeRecordExport(
         entryId: e.entryId,
         personId: e.personId,
         personName: name(e.personId),
-        locationId: e.locationId,
         entryKind: e.tipo,
         missingEntryKind: e.tipoEntradaFaltante,
         correctionDirection: e.direccionCorreccion,
@@ -332,17 +328,8 @@ export function formatTimeRecordExport(
   const sections = [
     section(
       "metadata",
-      [
-        "locationId",
-        "locationName",
-        "periodStart",
-        "periodEnd",
-        "audience",
-        "retainUntil",
-        "accessHolder",
-      ],
+      ["locationName", "periodStart", "periodEnd", "audience", "retainUntil", "accessHolder"],
       exported.titularesAcceso.map((accessHolder) => ({
-        locationId: input.locationId,
         locationName,
         periodStart: input.period.start,
         periodEnd: input.period.end,
@@ -366,10 +353,9 @@ export function formatTimeRecordExport(
     ),
     section(
       "closures",
-      ["closureId", "locationId", "periodStart", "periodEnd", "closedAt", "closureHash"],
+      ["closureId", "periodStart", "periodEnd", "closedAt", "closureHash"],
       exported.cierres!.map((c) => ({
         closureId: c.closureId,
-        locationId: c.locationId,
         periodStart: c.period.start,
         periodEnd: c.period.end,
         closedAt: c.closedAt,
@@ -431,10 +417,6 @@ export function formatTimeRecordExport(
       [
         "Automatic finishes count immediately. Worker acknowledgment is separate.",
         "Los fines automáticos cuentan de inmediato. La confirmación de la persona se muestra por separado.",
-      ][language]!,
-      [
-        "Chain position counts every entry its node recorded, for everyone, at every workplace, so one workplace's record can skip numbers.",
-        "La posición en la cadena cuenta todos los asientos que registró su nodo, de todas las personas y en todos los centros de trabajo, así que el registro de un centro puede saltarse números.",
       ][language]!,
       ...(input.audience === "representatives"
         ? [
