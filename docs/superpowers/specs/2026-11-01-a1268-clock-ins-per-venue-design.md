@@ -24,10 +24,13 @@ and its 2026-09-07 note). The owner's decision replaces the first reason. The se
 chain stays per node.
 
 What the per-location chain bought that the per-node chain loses: a location's entries could be
-verified as a chain on their own. Nothing uses that. The export (`apps/server/src/attendance-export-api.ts`)
-carries no hash, sequence or chain field — checked by `grep -n 'hash\|sequence\|chain'` over it,
-`record-period.ts` and `record-projection.ts`, which printed nothing — so filtering a node's chain by
-location still yields a correct record; the chain is verified whole, by node, by backup verification.
+verified as a chain on their own. The export carries no entry hash (its one hash is the pay-period
+closure's, whose chain D6 leaves alone; `grep -n -i 'hash' packages/workforce-es/src/record-export.ts`
+prints only `closureHash` lines), and the time chain is verified whole, by node, by backup
+verification. The export does show each entry's node and its position in
+the chain (`packages/workforce-es/src/record-export.ts`, "Chain position"), so after this item a
+location's export can skip position numbers where the box recorded entries for another location;
+the plan decides how the export says so.
 
 How often the difference shows today: a box serves one location (`nodes.location_id`,
 `apps/server/src/node-config.ts`), and the till admits only devices bound to it
