@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Database, NodeDatabase, Transaction } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import type { ClockStep, ClockStepRecorded, ClockStopState, TrustedReading } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import type { BackupManifest } from "./backup-manifest.js";
@@ -14,10 +14,7 @@ import { clockCorrection, latestClockStepFor } from "./clock-correction.js";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import type { StorageBackend, StoredObject } from "./storage-backend.js";
-
-const NODE_COPY = {
-  archiveTo: (path: string) => writeFile(path, "NODE"),
-} as unknown as NodeDatabase;
+import { STUB_NODE } from "./testing/node-copy.js";
 
 const DAY = 86_400_000;
 const START_MS = Date.parse("2026-09-05T00:00:00.000Z");
@@ -154,7 +151,7 @@ function box(options: { seatFails?: number } = {}) {
     runOnce({
       backends: [backend],
       db: {} as Database,
-      node: NODE_COPY,
+      node: STUB_NODE,
       modules: ALL_MODULES,
       environment: "preproduction",
       resolvers: {},
