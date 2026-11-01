@@ -546,8 +546,8 @@ declare module "@waitron/shared" {
      */
     "group.held_leaves_party": { tabId: string; lineNo: number };
     /**
-     * A line was sent on its own, or marked served, while its group is held or its kitchen item
-     * unreleased; it is released by firing the group.
+     * A line was named while its group is held, or marked served before the waiter has asked for
+     * it or while one of its extras is held.
      */
     "group.line_held": { tabId: string; lineNo: number };
     /** A payment was asked of a bill with nothing left to pay and no card pending on it. */

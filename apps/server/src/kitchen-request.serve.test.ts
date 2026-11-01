@@ -226,7 +226,7 @@ describe("A773 requested lifecycle: serving", () => {
     });
   });
 
-  it("takes back a served waiting dish, and a later release never sweeps it once served", async () => {
+  it("takes back a served waiting dish, and a later fire from the waiter leaves its kitchen item as it was and prints nothing", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {

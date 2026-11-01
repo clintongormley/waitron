@@ -1,6 +1,6 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { closingEditsForTest } from "./testing/party-close-fixture.js";
-import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
+import { addTabRound, setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { partyBillEditsForTest } from "./testing/table-action-fixture.js";
@@ -25,6 +25,7 @@ import {
   tenants,
   ticketItems,
   unpaidDepartures,
+  workingOrderLines,
   withTransaction,
 } from "@waitron/db";
 import { listOutstandingSales, recordCorrection } from "@waitron/core";
@@ -49,7 +50,7 @@ import {
   type Answer,
   type BillVenue,
 } from "./testing/bill-venue.js";
-import { readOrderRevision } from "./working-order.js";
+import { markServed, readOrderRevision } from "./working-order.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -1572,7 +1573,8 @@ describe("what is refused", () => {
 });
 
 describe("A773 requested lifecycle", () => {
-  it("refuses a bill holding a dish waiting for the pass, and writes nothing", async () => {
+  /** Runs `body` with every station waiting for the pass, then puts each station's setting back. */
+  async function whileStationsWait(body: () => Promise<void>): Promise<void> {
     const stations = await inTx(venue, (tx) =>
       tx
         .select({ id: kitchenStations.id, waits: kitchenStations.waitsForPass })
@@ -1586,14 +1588,61 @@ describe("A773 requested lifecycle", () => {
       ),
     );
     try {
+      await body();
+    } finally {
+      await inTx(venue, async (tx) => {
+        for (const station of stations)
+          await setStationsWaitForPass(tx, station.waits, [station.id]);
+      });
+    }
+  }
+
+  /** A seated party whose bill holds one line of two "Botella tinto" behind one kitchen item. */
+  async function seatedWithTwoBottles() {
+    const party = await seatedWith(venue);
+    await inTx(venue, (tx) =>
+      addTabRound(tx, venue.cfg, party.tabId, [
+        { menuItemId: venue.offerFor("Botella tinto"), quantity: "2" },
+      ]),
+    );
+    return party;
+  }
+
+  async function onlyLine(billId: string) {
+    const [line] = await inTx(venue, (tx) =>
+      tx
+        .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, billId)),
+    );
+    return line!;
+  }
+
+  async function serve(partyId: string, lineId: string, quantity: string): Promise<void> {
+    await inTx(venue, (tx) =>
+      markServed(tx, venue.cfg, partyId, [{ lineId, quantity }], {
+        operatorId: venue.operatorId,
+        submissionId: randomUUID(),
+        expectedPartyRevision: revisionOf(partyId),
+      }),
+    );
+  }
+
+  function kitchenTimes(billId: string) {
+    return inTx(venue, (tx) =>
+      tx
+        .select({ requestedAt: ticketItems.requestedAt, firedAt: ticketItems.firedAt })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, billId)),
+    );
+  }
+
+  it("refuses a bill holding a dish waiting for the pass, and writes nothing", async () => {
+    await whileStationsWait(async () => {
       const party = await seatedWith(venue, "Botella tinto");
-      const items = await inTx(venue, (tx) =>
-        tx
-          .select({ requestedAt: ticketItems.requestedAt, firedAt: ticketItems.firedAt })
-          .from(ticketItems)
-          .where(eq(ticketItems.workingOrderId, party.tabId)),
-      );
-      expect(items).toEqual([{ requestedAt: expect.any(String), firedAt: null }]);
+      expect(await kitchenTimes(party.tabId)).toEqual([
+        { requestedAt: expect.any(String), firedAt: null },
+      ]);
       const numbersBefore = nextInvoiceNumbers();
 
       const answer = await depart(party.partyId, {
@@ -1608,12 +1657,77 @@ describe("A773 requested lifecycle", () => {
       await expectNothingWritten(party.partyId, party.tabId);
       expect(await salesOf(party.tabId)).toEqual([]);
       expect(nextInvoiceNumbers()).toEqual(numbersBefore);
-    } finally {
-      await inTx(venue, async (tx) => {
-        for (const station of stations)
-          await setStationsWaitForPass(tx, station.waits, [station.id]);
+    });
+  });
+
+  it("records a bill whose waiting dish was served whole, and invoices it (D41)", async () => {
+    await whileStationsWait(async () => {
+      const party = await seatedWith(venue, "Botella tinto");
+      await serve(party.partyId, (await onlyLine(party.tabId)).id, "1");
+      expect(await kitchenTimes(party.tabId)).toEqual([
+        { requestedAt: expect.any(String), firedAt: null },
+      ]);
+
+      const answer = await depart(party.partyId, {
+        expectedPartyRevision: revisionOf(party.partyId),
+        reason: REASON,
       });
-    }
+
+      expect(answer).toMatchObject({ status: 200 });
+      expect(registroCount(venue, party.tabId)).toBe(1);
+      expect(await departuresOf(party.tabId)).toHaveLength(1);
+      expect((await partyState(party.partyId)).state).toBe("closed");
+    });
+  });
+
+  it("refuses a bill whose waiting dish was served only in part, and writes nothing", async () => {
+    await whileStationsWait(async () => {
+      const party = await seatedWithTwoBottles();
+      await serve(party.partyId, (await onlyLine(party.tabId)).id, "1");
+      expect(await kitchenTimes(party.tabId)).toEqual([
+        { requestedAt: expect.any(String), firedAt: null },
+      ]);
+
+      const answer = await depart(party.partyId, {
+        expectedPartyRevision: revisionOf(party.partyId),
+        reason: REASON,
+      });
+
+      expect(answer).toMatchObject({
+        status: 409,
+        json: { code: "unpaid_departure.unfired_dishes", params: { workingOrderId: party.tabId } },
+      });
+      await expectNothingWritten(party.partyId, party.tabId);
+    });
+  });
+
+  it("with no station waiting, still refuses a dish served whole and then recalled to held", async () => {
+    const party = await seatedWith(venue, "Botella tinto");
+    const line = await onlyLine(party.tabId);
+    await serve(party.partyId, line.id, "1");
+    const recalled = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/lines/recall`,
+      {
+        lineNos: [line.lineNo],
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)),
+      },
+    );
+    expect(recalled.status).toBe(200);
+    expect(await kitchenTimes(party.tabId)).toEqual([{ requestedAt: null, firedAt: null }]);
+
+    const answer = await depart(party.partyId, {
+      expectedPartyRevision: revisionOf(party.partyId),
+      reason: REASON,
+    });
+
+    expect(answer).toMatchObject({
+      status: 409,
+      json: { code: "unpaid_departure.unfired_dishes", params: { workingOrderId: party.tabId } },
+    });
+    await expectNothingWritten(party.partyId, party.tabId);
   });
 });
 

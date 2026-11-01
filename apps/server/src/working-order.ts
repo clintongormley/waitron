@@ -3739,9 +3739,9 @@ async function servableLines(
 }
 
 /**
- * Whether a dish line is released work, which is what serving needs. A made-here line is released
- * at its send, even in a held group. Other held-group and unfired lines wait; an ungrouped line
- * with no kitchen item needs a sent time.
+ * Whether a dish line is released work: the kitchen has it. A made-here line is released at its
+ * send, even in a held group. Other held-group and unfired lines wait; an ungrouped line with no
+ * kitchen item needs a sent time.
  */
 export function isReleased(
   line: Pick<
@@ -3782,6 +3782,7 @@ export function serviceRequested(
  * The named orders holding a dish the kitchen is not making: one never sent and holding no kitchen
  * item ({@link unsentDishLines}), or one that is not released work ({@link isReleased}) — held in
  * a group, or held or recalled by its kitchen item.
+ * A Requested dish served whole is not counted (D41).
  */
 export async function ordersWithUnfiredDish(
   tx: Transaction,
@@ -3797,7 +3798,9 @@ export async function ordersWithUnfiredDish(
       groupState: orderGroups.state,
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
+      ticketRequestedAt: ticketItems.requestedAt,
       ticketMadeHere: ticketItems.madeHere,
+      servedQuantity: workingOrderLines.servedQuantity,
     })
     .from(workingOrderLines)
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
@@ -3814,8 +3817,17 @@ export async function ordersWithUnfiredDish(
   );
   return new Set(
     lines
-      .filter((line) => line.quantity > (cancellations.get(line.id) ?? 0))
-      .filter((line) => (line.sentAt === null && line.ticketItemId === null) || !isReleased(line))
+      .filter((line) => {
+        const { active, remaining } = serviceQuantities(
+          line.quantity,
+          line.servedQuantity,
+          cancellations.get(line.id) ?? 0,
+        );
+        if (active === 0) return false;
+        if (line.sentAt === null && line.ticketItemId === null) return true;
+        if (isReleased(line)) return false;
+        return !(remaining === 0 && line.ticketRequestedAt !== null);
+      })
       .map((line) => line.workingOrderId),
   );
 }

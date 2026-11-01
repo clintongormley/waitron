@@ -1795,7 +1795,8 @@ export interface CurrentOrderRow {
   unitPrecision: number | null;
   servedQuantity: string;
   servedAt: string | null;
-  /** Released work, which alone can be marked served. */
+  /** Whether Serve is offered: the waiter has asked for the dish ({@link serviceRequested}) and
+   *  none of its extras is held. */
   released: boolean;
   /** Null for a dish with no kitchen item, such as one needing no preparation. */
   kitchen: CurrentOrderKitchen | null;

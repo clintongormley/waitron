@@ -16,6 +16,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   floorZones,
+  kitchenStations,
   serviceCommands,
   orderGroups,
   parties,
@@ -80,6 +81,7 @@ import {
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { setStationPrinting } from "./testing/station-printing.js";
+import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 
 // Cancellations, comps and discounts applied to an open bill (service plan Task 11, spec §7),
 // against a provisioned venue that files real Veri*Factu records.
@@ -964,6 +966,44 @@ describe("a cancel's approval (A758 D12, D13)", () => {
       { action: "cancel", stage: "held", requestedBy: venue.staffId, approvedBy: null },
     ]);
     expect(await rowsOf(venue, billId)).toEqual([]);
+  });
+
+  it("staff cancel a dish waiting for the pass with nobody's PIN, at stage unsent (D3)", async () => {
+    const stations = await inTx(venue, (tx) =>
+      tx
+        .select({ id: kitchenStations.id, waits: kitchenStations.waitsForPass })
+        .from(kitchenStations),
+    );
+    await inTx(venue, (tx) =>
+      setStationsWaitForPass(
+        tx,
+        true,
+        stations.map((station) => station.id),
+      ),
+    );
+    try {
+      const { billId } = await bill([{ name: "Burger" }]);
+      expect(
+        await inTx(venue, (tx) =>
+          tx
+            .select({ requestedAt: ticketItems.requestedAt, firedAt: ticketItems.firedAt })
+            .from(ticketItems)
+            .where(eq(ticketItems.workingOrderId, billId)),
+        ),
+      ).toEqual([{ requestedAt: expect.any(String), firedAt: null }]);
+      expect(await preview(billId, await cancel(billId))).toMatchObject({ needsApproval: null });
+
+      await adjust(billId, await cancel(billId));
+
+      expect(await recordedOn(billId)).toMatchObject([
+        { action: "cancel", stage: "unsent", requestedBy: venue.staffId, approvedBy: null },
+      ]);
+    } finally {
+      await inTx(venue, async (tx) => {
+        for (const station of stations)
+          await setStationsWaitForPass(tx, station.waits, [station.id]);
+      });
+    }
   });
 
   it("staff are refused a fired dish without a PIN, naming refunds", async () => {

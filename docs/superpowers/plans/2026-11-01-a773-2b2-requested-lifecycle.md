@@ -389,6 +389,28 @@ D1–D20 are the slice plan's and bind unchanged. These are B2's, dated 2026-11-
   "held" into "Requested", the fixture gains `requestedAt: null` and no assertion changes
   ("Changed test checks"). A fixture whose reader B2 does not change is left alone.
 
+- **D41 A Requested dish served whole does not block an unpaid departure** (2026-11-01, driver's
+  answer to B2.1 review Important 1; the driver's brief called it D40, a number this plan already
+  uses). After B2.1 a waiter can serve a Requested dish, and nothing then gives it a fire time:
+  the waiter's fire skips it and the pass's release excludes served work
+  (`2026-10-19-a773-2-firing-and-pass.md:94`). So `ordersWithUnfiredDish` refused the bill for
+  ever, with a refusal that asks staff to cancel food the guests ate. The rule: a line with a
+  kitchen item that is not released (`isReleased`), has a request time, and whose active
+  quantity (`serviceQuantities`, `line-service-state.ts:20`, as `finish-party-service.ts:149`
+  uses it) is fully served, is not counted. A line served only in part still refuses, and so does
+  every other unreleased line: D3 is otherwise unchanged and `isReleased` still reads `fired_at`.
+  The rule names the request time on purpose. Without it, a dish served whole and then recalled
+  with every pass setting off (`recallLines` clears both stamps and does not look at served
+  quantity) would stop refusing too, which `unpaid-departure.test.ts` "with no station waiting,
+  still refuses a dish served whole and then recalled to held" pins. A Requested item exists only
+  where a station waits (`requestStamps`, `kitchen-release.ts:34`), so with every pass setting
+  off nothing changes: the whole `unpaid-departure.test.ts` (68 passed, all but three cases with
+  every setting off) and B2.1's GREEN list plus `kitchen-request.cancel.test.ts` (11 files, 778
+  passed) are green. Controls: dropping the served condition turns "records a bill whose waiting
+  dish was served whole" red; loosening it to any served quantity turns "refuses a bill whose
+  waiting dish was served only in part" red; dropping the request-time condition turns the
+  recalled pin red.
+
 ## Departures from the outline and the master plan
 
 | Outline or master says | This plan | Why |
