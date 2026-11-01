@@ -47,6 +47,7 @@ import {
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { readLineCancellations } from "./line-service-state.js";
 import { advanceTicketItem, storedOrderTotal } from "./working-order.js";
+import { readPaidQuantities } from "./bill-payments.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import "./errors.js";
@@ -420,6 +421,36 @@ describe("A803 move dishes: the moves that succeed", () => {
     await move(p.partyId, p.bill1, p.bill2, [caña!]);
 
     expect(await dishIds(p.bill2, "Caña")).toEqual([caña]);
+    expect(await paymentsOf(v, p.bill2)).toEqual(payments);
+    const paid = await inTx(v, (tx) => readPaidQuantities(tx, p.bill2));
+    expect([...paid]).toEqual([[vino!.id, 1000]]);
+  });
+
+  it("A803 move dishes: onto Bill 2 holding a received €20 card payment, the Caña moves and the payment is unchanged", async () => {
+    const p = await party([dish("Caña"), dish("Burger")], "fire", [dish("Vino")]);
+    await inTx(v, (tx) =>
+      tx.insert(billPayments).values({
+        workingOrderId: p.bill2,
+        submissionId: randomUUID(),
+        fingerprint: "received card",
+        kind: "contribution",
+        method: "card",
+        applied: 2000,
+        state: "received",
+        receivedAt: "2026-11-01T10:00:00.000Z",
+        requestedBy: OPERATOR,
+        source: v.cfg.origin.source,
+        deviceId: v.cfg.origin.deviceId,
+      }),
+    );
+    const payments = await paymentsOf(v, p.bill2);
+    const before = await total(p.bill2);
+    const [caña] = await dishIds(p.bill1, "Caña");
+
+    await move(p.partyId, p.bill1, p.bill2, [caña!]);
+
+    expect(await dishIds(p.bill2, "Caña")).toEqual([caña]);
+    expect(await total(p.bill2)).toBe(before + 300);
     expect(await paymentsOf(v, p.bill2)).toEqual(payments);
   });
 
@@ -924,6 +955,51 @@ describe("A803 move dishes refuses, and changes nothing", () => {
     );
     await refused(() => move(p.partyId, p.bill1, p.bill2, [caña!]), "order.payment_in_flight", {
       workingOrderId: p.bill1,
+    });
+  });
+
+  it("A803 move dishes refuses: a card contribution still at the reader on the destination is order.payment_in_flight naming it", async () => {
+    const p = await party([dish("Caña", "2"), dish("Vino")], "fire", [dish("Agua")]);
+    const [caña] = await dishIds(p.bill1);
+    await inTx(v, (tx) =>
+      tx.insert(billPayments).values({
+        workingOrderId: p.bill2,
+        submissionId: randomUUID(),
+        fingerprint: "pending card",
+        kind: "contribution",
+        method: "card",
+        applied: 100,
+        state: "pending",
+        requestedBy: OPERATOR,
+        source: v.cfg.origin.source,
+        deviceId: v.cfg.origin.deviceId,
+      }),
+    );
+    await refused(() => move(p.partyId, p.bill1, p.bill2, [caña!]), "order.payment_in_flight", {
+      workingOrderId: p.bill2,
+    });
+  });
+
+  it("A803 move dishes refuses: a card refund in progress on the destination is bill.refund_in_progress naming it", async () => {
+    const p = await party([dish("Caña", "2"), dish("Vino")], "fire", [dish("Agua"), dish("Vino")]);
+    const paymentId = await cashContribution(v, p.bill2, "1.00");
+    const [caña] = await dishIds(p.bill1);
+    await inTx(v, (tx) =>
+      tx.insert(billPaymentRefunds).values({
+        billPaymentId: paymentId,
+        submissionId: randomUUID(),
+        fingerprint: "pending refund",
+        appliedAmount: 100,
+        reason: "error",
+        authorizedBy: adminId(),
+        requestedBy: adminId(),
+        source: v.cfg.origin.source,
+        deviceId: v.cfg.origin.deviceId,
+        state: "pending",
+      }),
+    );
+    await refused(() => move(p.partyId, p.bill1, p.bill2, [caña!]), "bill.refund_in_progress", {
+      workingOrderId: p.bill2,
     });
   });
 

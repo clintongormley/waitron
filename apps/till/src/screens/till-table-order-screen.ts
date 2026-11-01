@@ -4761,8 +4761,8 @@ export class TillTableOrderScreen extends LitElement {
     return null;
   }
 
-  /** The party's other open bills holding no payment, a pending one included, which merge
-   * offers, each with its name. The server decides whether it takes the chosen one. */
+  /** The party's other open bills holding no payment, pending or received, which merge offers,
+   * each with its name. The server decides whether it takes the chosen one. */
   #otherBills(): { bill: PartyBill; name: string }[] {
     return this.#otherOpenBills().filter(({ bill }) => !bill.hasPayments);
   }
