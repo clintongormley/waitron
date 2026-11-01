@@ -175,6 +175,25 @@ function entryKey(entry: Entry) {
     ...(entry.kind === "wait" ? [entry.targetMs] : []),
   ]);
 }
+export function conflictPreparationStatus(
+  values: readonly unknown[],
+  binding: OperationBinding,
+): { kind: "none" | "restart-required" } {
+  let selected = false;
+  for (const value of values)
+    for (const entry of parseState(value)) {
+      if (entry.binding.module !== binding.module || entry.binding.eventId !== binding.eventId)
+        continue;
+      if (
+        entry.binding.action !== binding.action ||
+        entry.binding.sourceId !== binding.sourceId ||
+        entry.binding.targetNodeId !== binding.targetNodeId
+      )
+        return refuse("event_mismatch");
+      if (entry.kind !== "wait") selected = true;
+    }
+  return { kind: selected ? "restart-required" : "none" };
+}
 export function publicHourSelectionHistory(values: readonly unknown[]): HourHistorySource {
   return {
     reference: "prepared-hours",

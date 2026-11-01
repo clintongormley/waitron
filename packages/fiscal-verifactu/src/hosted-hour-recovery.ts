@@ -14,6 +14,7 @@ import { createSetupHourClock, type SetupBrowserClockSample } from "./hour-setup
 import { testClockOptions } from "./hour-preparation.js";
 import type { HourHistorySource } from "./hour-history.js";
 import "./errors.js";
+import { conflictPreparationStatus } from "./hour-selection.js";
 
 function refuse(reason = "event_mismatch"): never {
   throw new AppError("sif.allocation_invalid", { reason });
@@ -82,6 +83,16 @@ function createHostedHourRecovery(
     const operation = { ...supplied, binding: Object.freeze({ ...supplied.binding }) };
     const check = () => operatorFor(operation);
     check();
+    if (
+      operation.binding.action === "conflict-switch" &&
+      exact(proposal, ["action"]) &&
+      proposal.action === "status"
+    )
+      return host.withPreparationState!(operation.binding, async (state) => {
+        const result = conflictPreparationStatus(state.history, operation.binding);
+        check();
+        return result;
+      });
     if (
       exact(proposal, ["action", "comparisonId"]) &&
       proposal.action === "select" &&

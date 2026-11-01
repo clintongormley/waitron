@@ -416,8 +416,11 @@ retired identities keep their evidence without stopping the replacement. New-mon
 fiscal builders stop active conflicts; captured charges and completed refunds retain their money facts,
 and successful requests replay. The internal live operation authenticates the current recovery key,
 uses the existing minute admission and activation writer, and validates exact committed replay.
-An interrupted uncommitted attempt cannot recreate its consumed process admission. Its public route
-and operator presentation remain unimplemented; this is not yet an available recovery procedure.
+An interrupted uncommitted attempt cannot recreate its consumed process admission. The module's key-only
+HTTPS route now prepares, switches and reconciles an exact event, with admission before parsing or key
+verification. Status reports a retained uncommitted selection as requiring a new attempt. The public
+browser entry, translated operator presentation and complete procedure qualification remain open;
+this is not yet an available recovery procedure.
 
 Corrective-record resolution, filing investigation, outside evidence and fencing for the other
 tasks, and the complete old-backup/new-hardware operational exercise remain queued. Earlier

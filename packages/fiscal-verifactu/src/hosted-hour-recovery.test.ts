@@ -596,3 +596,66 @@ it("refuses a selection that still carries an installation code", async () => {
     expect(f.history).toEqual([]);
   });
 });
+
+it("reports a retained conflict intent as restart-required after reconfiguration without clock or isolation admission", async () => {
+  const f = fixture();
+  const live = { ...binding, action: "conflict-switch" };
+  const operations = FISCAL_OPERATIONS.configure!(f.host);
+  await withOperationAuthority(live, key, async (authority) => {
+    const operation = { binding: live, authority };
+    const status = () => operations.recovery!(operation, { action: "status" }, { onBox: false });
+    expect(await status()).toEqual({ kind: "none" });
+    const comparison = await agreed(operations, operation);
+    const waiting = await operations.recovery!(
+      operation,
+      { action: "select", comparisonId: comparison.id },
+      { onBox: false },
+    );
+    expect(waiting).toMatchObject({ status: "waiting" });
+    expect(await status()).toEqual({ kind: "none" });
+    vi.setSystemTime(NOW + 120_000);
+    monotonic += 120_000;
+    const next = await agreed(operations, operation);
+    expect(
+      await operations.recovery!(
+        operation,
+        { action: "select", comparisonId: next.id },
+        { onBox: false },
+      ),
+    ).toMatchObject({ status: "selected" });
+  });
+  Object.assign(f.facts, { oldMachineOffline: false, noParallelRecovery: false });
+  const recreated = FISCAL_OPERATIONS.configure!({ ...f.host });
+  const before = structuredClone(f.history);
+  await withOperationAuthority(live, key, async (authority) => {
+    expect(
+      await recreated.recovery!(
+        { binding: live, authority },
+        { action: "status" },
+        { onBox: false },
+      ),
+    ).toEqual({ kind: "restart-required" });
+  });
+  expect(f.history).toEqual(before);
+});
+
+it("refuses a changed conflict binding on status rather than reporting no prior attempt", async () => {
+  const f = fixture();
+  const live = { ...binding, action: "conflict-switch" };
+  const operations = FISCAL_OPERATIONS.configure!(f.host);
+  await withOperationAuthority(live, key, async (authority) => {
+    const operation = { binding: live, authority };
+    const comparison = await agreed(operations, operation);
+    await operations.recovery!(
+      operation,
+      { action: "select", comparisonId: comparison.id },
+      { onBox: false },
+    );
+  });
+  const changed = { ...live, sourceId: "different-conflict" };
+  await withOperationAuthority(changed, key, async (authority) => {
+    await expect(
+      operations.recovery!({ binding: changed, authority }, { action: "status" }, { onBox: false }),
+    ).rejects.toMatchObject(refusal("event_mismatch"));
+  });
+});
