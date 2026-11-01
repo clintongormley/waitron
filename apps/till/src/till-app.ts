@@ -16021,6 +16021,45 @@ export class TillApp extends LitElement {
     await this.#reloadOrder();
   }
 
+  async #onMoveDishes(event: Event, confirmed?: BillComposition): Promise<void> {
+    const { lineIds, toBillId } = (
+      event as CustomEvent<{ lineIds: string[]; toBillId: string | null }>
+    ).detail;
+    if (this.activeTabId === undefined || lineIds.length === 0) return;
+    const asked =
+      confirmed ??
+      this.#billComposition(toBillId === null ? [this.activeTabId] : [this.activeTabId, toBillId]);
+    if (asked === null || !this.#billCompositionUnchanged(asked)) return;
+    if (
+      confirmed === undefined &&
+      (await this.#askDifferentPeople(() =>
+        this.#ownBillsChange(() => this.#onMoveDishes(event, asked)),
+      ))
+    )
+      return;
+    if (!this.#billCompositionUnchanged(asked)) return;
+    this.errorKey = undefined;
+    try {
+      const moved = await asked.api.moveDishes(asked.billId, lineIds, toBillId, {
+        ...asked.revisions,
+        expectedEdits: asked.expectedEdits,
+      });
+      if (!this.#billCompositionCurrent(asked)) return;
+      if (toBillId === null) this.#chooseBill(moved.billId);
+    } catch (error) {
+      if (!this.#billCompositionCurrent(asked)) return;
+      const code = (error as { code?: string } | undefined)?.code;
+      if (code === "tab.split_held_line") this.errorKey = "table.split_held_error";
+      else if (code === "draft.out_of_date" || code === "draft.taken_over")
+        this.errorKey = { code };
+      else await this.#onBillPairRefusal(error);
+      if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
+      return;
+    }
+    await this.#reloadOrder();
+    if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
+  }
+
   #finishCurrent(composition: BillComposition): boolean {
     return (
       this.isConnected &&
@@ -19623,6 +19662,7 @@ export class TillApp extends LitElement {
         @merge-bills=${(event: Event) => void this.#ownBillsChange(() => this.#onMergeBills(event))}
         @transfer-lines=${(event: Event) => void this.#ownBillsChange(() => this.#onTransferLines(event))}
         @split-lines=${(event: Event) => void this.#ownBillsChange(() => this.#onSplitLines(event))}
+        @move-dishes=${(event: Event) => void this.#ownBillsChange(() => this.#onMoveDishes(event))}
         @finish-table=${() => void this.#onFinishTable()}
         @record-unpaid-departure=${() => this.#onRecordUnpaidDeparture()}
         @cancel-credit-bill=${(event: Event) => this.#onCancelCreditBill(event)}

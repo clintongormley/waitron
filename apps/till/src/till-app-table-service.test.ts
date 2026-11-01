@@ -296,6 +296,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     mergeBills: vi.fn().mockResolvedValue(undefined),
     transferItems: vi.fn().mockResolvedValue(undefined),
     splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
+    moveDishes: vi.fn().mockResolvedValue({ billId: "wo-check" }),
     recordSale: vi.fn().mockResolvedValue(saleResult),
     logout: vi.fn().mockResolvedValue(undefined),
     listDrafts: drafts.listDrafts,
@@ -1150,6 +1151,7 @@ describe("till-app table ordering: a handheld's order screen with no table opene
     ["guests-party", { guestCount: 4 }, "setPartyGuests"],
     ["merge-bills", { fromBillId: "wo-9" }, "mergeBills"],
     ["transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] }, "transferItems"],
+    ["move-dishes", { lineIds: ["line-1"], toBillId: "wo-9" }, "moveDishes"],
     ["split-lines", { transfers: [{ lineNo: 1 }] }, "splitBill"],
     ["pay-tab", { method: "cash", amount: "10.00" }, "recordSale"],
   ] as const)("%s sends nothing to the server", async (type, detail, method) => {
@@ -1185,6 +1187,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
     ],
     ["send-lines", { lineNos: [1] }, "sendLines"],
     ["transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] }, "transferItems"],
+    ["move-dishes", { lineIds: ["line-1"], toBillId: "wo-9" }, "moveDishes"],
   ] as const)(
     "a %s refused because a card payment of the order is running says so",
     async (type, detail, method) => {
@@ -1230,6 +1233,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
     ["join-tables", { tableId: "t9" }, "joinTables"],
     ["merge-bills", { fromBillId: "wo-9" }, "mergeBills"],
     ["transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] }, "transferItems"],
+    ["move-dishes", { lineIds: ["line-1"], toBillId: "wo-9" }, "moveDishes"],
   ] as const)(
     "a refused %s shows table.error and re-reads neither the tab nor the floor",
     async (type, detail, method) => {
@@ -1350,6 +1354,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
 
   it.each([
     ["transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] }, "transferItems"],
+    ["move-dishes", { lineIds: ["line-1"], toBillId: "wo-9" }, "moveDishes"],
     ["split-lines", { transfers: [{ lineNo: 1 }] }, "splitBill"],
   ] as const)(
     "a %s refused because an item is already paid for says so in that code's own words",
