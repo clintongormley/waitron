@@ -11,7 +11,7 @@ import { CLOCK_WITNESS_MARGIN_MS } from "@waitron/fiscal";
 import { codeOf } from "@waitron/server-kit";
 import type { LatestClockStep } from "./backup-sweep.js";
 import type { BootReader } from "./boot-reader.js";
-import type { BoxHostClient } from "./box-host-client.js";
+import type { BoxHostClient, ClockSetAnswer as HostSetAnswer } from "./box-host-client.js";
 import type { EmailedIncident } from "./box-alert-email.js";
 import type { ClockWitnessStore } from "./clock-witnesses.js";
 import type { Logger } from "./logger.js";
@@ -264,7 +264,13 @@ export function clockCorrection(deps: {
     }
 
     // AEAT can answer, or the stop end, while the host's status and the anchors are awaited.
-    const rejudged = await admission(input);
+    let rejudged: Awaited<ReturnType<typeof admission>>;
+    try {
+      rejudged = await admission(input);
+    } catch (error) {
+      await reanchorAll();
+      throw error;
+    }
     const late = rejudged.refusal ?? personRefusal(input, rejudged.authoritySpoke);
     if (late !== null) {
       await reanchorAll();
@@ -283,7 +289,14 @@ export function clockCorrection(deps: {
     const targetMs = wallBefore + input.offsetMs;
     steps++;
     unwritten = "setting";
-    const answer = await deps.host.setClock({ targetMs, requester: input.requester });
+    let answer: HostSetAnswer;
+    try {
+      answer = await deps.host.setClock({ targetMs, requester: input.requester });
+    } catch (error) {
+      // The request may have reached the host, so the clock may have moved.
+      deps.log("warn", "clock_correction.set_threw", { errorCode: codeOf(error) });
+      answer = { available: false, reason: "lost" };
+    }
     const wallAfter = wall();
     const monoAfter = monotonic();
     const bootAfter = deps.boot.readBoot();

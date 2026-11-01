@@ -93,7 +93,14 @@ function withoutMethod<T extends { clockStopState?: unknown; confirmClockStep?: 
 }
 
 type HostBehaviour =
-  "sets" | "answers-unmoved" | "refuses" | "times-out-after-moving" | "times-out" | "missing";
+  | "sets"
+  | "answers-unmoved"
+  | "refuses"
+  | "times-out-after-moving"
+  | "times-out"
+  | "missing"
+  | "throws"
+  | "throws-after-moving";
 
 function harness(
   options: {
@@ -152,8 +159,14 @@ function harness(
         bootMs += takes;
         wallMs += takes;
         const behaviour = options.host ?? "sets";
-        if (behaviour === "sets" || behaviour === "times-out-after-moving")
+        if (
+          behaviour === "sets" ||
+          behaviour === "times-out-after-moving" ||
+          behaviour === "throws-after-moving"
+        )
           wallMs = input.targetMs + takes + (options.missByMs ?? 0);
+        if (behaviour === "throws" || behaviour === "throws-after-moving")
+          throw new Error("host client broke");
         if (behaviour === "sets" || behaviour === "answers-unmoved")
           return { available: true, beforeMs, afterMs: wallMs };
         if (behaviour === "refuses")
@@ -438,6 +451,17 @@ describe("the step not yet written, for the backups' hold", () => {
     const h = harness({ host: "refuses" });
     await h.correction.set(aeat(h));
     expect(h.correction.unwrittenStep()).toBeNull();
+  });
+
+  it("is null, with every anchor re-anchored, when the host client throws and the clock did not move", async () => {
+    const h = harness({ host: "throws" });
+    expect(await h.correction.set(aeat(h))).toEqual({ set: false, reason: "refused" });
+    expect(h.correction.unwrittenStep()).toBeNull();
+    expect(h.calls).toContain("reanchor");
+    expect(h.calls).not.toContain("confirmClockStep");
+    expect(h.log).toHaveBeenCalledWith("warn", "clock_correction.set_threw", {
+      errorCode: "unknown",
+    });
   });
 
   it("is null when the seat records no step", async () => {
@@ -746,6 +770,15 @@ describe("verifying the step", () => {
     expect(h.calls).toContain("reanchor");
   });
 
+  it("records an unverified step when the host client threw after the clock moved, as for a lost answer", async () => {
+    const h = harness({ host: "throws-after-moving" });
+    expect(await h.correction.set(aeat(h))).toEqual({ set: false, reason: "unverified" });
+    expect(h.seatCalls).toHaveLength(1);
+    expect(h.seatCalls[0]).toMatchObject({ verified: false, stepMs: H });
+    expect(h.calls).toContain("reanchor");
+    expect(h.correction.unwrittenStep()).toBeNull();
+  });
+
   it("answers host_unavailable when the host's socket was gone at the set, with the clock unmoved", async () => {
     const h = harness({ host: "missing" });
     expect(await h.correction.set(aeat(h))).toEqual({ set: false, reason: "host_unavailable" });
@@ -1023,6 +1056,35 @@ describe("AEAT answering while a person's set waits", () => {
     });
     expect(h.hostSets).toEqual([]);
     expect(h.calls).toContain("reanchor");
+  });
+  it("re-anchors every anchor and passes on the error when the till's check throws once the waits are over", async () => {
+    const calls: string[] = [];
+    const h = harness({
+      anchors: [
+        {
+          stepComing: async () => void calls.push("first.stepComing"),
+          reanchor: async () => void calls.push("first.reanchor"),
+        },
+        {
+          stepComing: async () => void calls.push("second.stepComing"),
+          reanchor: async () => void calls.push("second.reanchor"),
+        },
+      ],
+    });
+    const admit = vi
+      .fn<() => Promise<null>>()
+      .mockResolvedValueOnce(null)
+      .mockRejectedValue(new AppError("session.required", {}));
+    await expect(h.correction.set(byStaff(h, { admit }))).rejects.toMatchObject({
+      code: "session.required",
+    });
+    expect(h.hostSets).toEqual([]);
+    expect(calls).toEqual([
+      "first.stepComing",
+      "second.stepComing",
+      "first.reanchor",
+      "second.reanchor",
+    ]);
   });
 });
 
