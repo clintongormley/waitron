@@ -113,11 +113,15 @@ after part 1 lands, since it changes what the hours and correction screens show.
 
 - **PR 1 — one chain per node (D1, D2, D6's backup-verification split, D3's read).** Schema,
   migration, chain API, every `appendToChain` caller, `readLatestLiveEntry`'s subqueries, backup
-  verification, the tests that pin the old key. On a one-location box nothing visible changes.
-- **PR 2 — clock state and sessions per venue (D3's till change, D4, D5, D7).** Pairing per person,
-  the till refusal and message removed, end-of-day and automatic entries, corrections, hours reads,
-  the 9b residual test flipped to the fixed behaviour, guides if any sentence says per location
-  (the survey found none), the workforce spec's dated pointer.
+  verification, the tests that pin the old key, and the workforce spec's dated pointer. Slice 9b's
+  cross-location residual test flips here: with one chain per node, `readLatestLiveEntry` already
+  takes the last-written entry across locations. On a one-location box nothing visible changes.
+- **PR 2 — clock state and sessions per venue (D3's till change, D4, D5, D7).** The pairing
+  functions already pair per person; what splits sessions by location is callers that filter a
+  person's entries by location before pairing, the period record's grouping and one rule in the
+  correction check. PR 2 removes those, decides what a location's view of the record holds (the
+  plan's rule), removes the till refusal and message, and updates end-of-day, automatic entries,
+  corrections and hours reads, and any guide sentence that says per location (the survey found none).
 - **PR 3 — part 2 (§4)**, with its own plan.
 
 Each PR leaves `main` working on its own. Fiscal gates: none of this touches the fiscal core; the
