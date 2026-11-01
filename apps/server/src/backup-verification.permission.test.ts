@@ -113,7 +113,7 @@ it("real bundled verifier passes with workers denied while ordinary opens still 
     {
       encoding: "utf8",
       env: cleanEnv,
-      timeout: 30_000,
+      timeout: 180_000,
     },
   );
   expect(built.error).toBeUndefined();
@@ -186,7 +186,7 @@ it("real bundled verifier passes with workers denied while ordinary opens still 
   expect(logicalDatabase(f.databasePath)).toEqual(f.logical);
   expect(await readFile(f.deps.artifactPath)).toEqual(original);
   expect(await readdir(f.deps.scratchRoot)).toEqual([]);
-});
+}, 300_000);
 
 it.each(["directory removal", "query close"])(
   "%s uncertainty cannot pass verification",

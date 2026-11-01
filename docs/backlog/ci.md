@@ -1173,3 +1173,21 @@ The command was `node <checkout>/scripts/run-with-deadline.mjs 5 -- node -e
 `pathToFileURL(process.argv[1]).href`; those paths differed in the observed symlink invocation.
 Make entrypoint detection account for the physical path and retain both controls. This finding
 was recorded separately from the certificate-test repair; the wrapper is unchanged.
+
+## Real-source bundle tests repeat metadata work
+
+The permission verifier and certificate diagnosis suites run the real bundle CLI. Its release
+stamp reads Git three times, with 20 seconds allowed for each read. Its runtime descriptor
+subprocess then allows 60 seconds. A shared static build could avoid repeating those reads,
+but the certificate suite also builds request-specific wrappers after starting local servers.
+
+Measure selective shared setup that serves focused runs and shards without building unused
+fixtures or retaining stale outputs. Keep the real CLI stamp and permission assertions. A1271's
+trial built three static entries in one CLI invocation and in three invocations; it did not
+implement or qualify Vitest global setup. The comparison and reverse-order control are in the
+A1271 PR. The server suites' larger build limits do not remove repeated metadata work.
+
+Also review `scripts/backup-verification-runtime.test.mjs`, whose real-source CLI case still
+allows 60 seconds for the child and 120 seconds for the test. Reading the script shows the same
+metadata budget mismatch; no timeout failure in that root case was reproduced for A1271.
+Changing that root guard needs the owner's test-change review under the campaign rule.

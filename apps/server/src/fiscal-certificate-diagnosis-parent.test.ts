@@ -51,10 +51,10 @@ await runCertificateDiagnosisEntry(() => ({ diagnoseInChild: async (input, signa
   await run(
     "pnpm",
     ["exec", "node", "../../scripts/bundle-node.mjs", `${source}=${entry.pathname}`],
-    { timeout: 90_000, maxBuffer: 2_000_000 },
+    { timeout: 180_000, maxBuffer: 2_000_000 },
   );
   await rm(source);
-}, 100_000);
+}, 190_000);
 afterAll(async () => {
   if (root) await rm(root, { recursive: true, force: true });
 });

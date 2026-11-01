@@ -5737,6 +5737,12 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
+- **Real-source bundle builds still repeat metadata work across test files.**
+  Measure selective shared setup without building unused fixtures in focused runs; preserve each
+  suite's real CLI build and request-specific certificate fixtures. The root runtime-stamp CLI
+  case also has a 60-second child limit below its metadata subprocess budgets.
+  [Detail](backlog/ci.md#real-source-bundle-tests-repeat-metadata-work).
+
 - **A1251. Finish qualifying and reviewing historical PRs that skipped the Claude run-it review.**
   Exclude documentation-only changes, verified test-data/name renames and changes already reviewed.
   Review the remaining code and workflow changes, and address still-live findings in separate PRs.

@@ -31,9 +31,9 @@ beforeAll(async () => {
       `src/fiscal-certificate-diagnosis-entry.ts=${entry.pathname}`,
       `src/fiscal-certificate-diagnosis-runner.ts=${join(root, "host.js")}`,
     ],
-    { cwd: resolve("."), timeout: 90_000, maxBuffer: 2_000_000 },
+    { cwd: resolve("."), timeout: 180_000, maxBuffer: 2_000_000 },
   );
-}, 100_000);
+}, 190_000);
 afterAll(async () => {
   if (root) await rm(root, { recursive: true, force: true });
 });
@@ -80,7 +80,7 @@ await runCertificateDiagnosisEntry(id => {
 });`,
   );
   await run("pnpm", ["exec", "node", "../../scripts/bundle-node.mjs", `${source}=${fixture}`], {
-    timeout: 90_000,
+    timeout: 180_000,
     maxBuffer: 2_000_000,
   });
   await rm(source);
@@ -192,6 +192,7 @@ describe("shipped certificate diagnosis entry", () => {
         await server.close();
       }
     },
+    240_000,
   );
 
   it.each(["body", "cleanup"])(
@@ -246,5 +247,6 @@ describe("shipped certificate diagnosis entry", () => {
         await server.close();
       }
     },
+    240_000,
   );
 });
