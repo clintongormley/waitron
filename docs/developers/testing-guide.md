@@ -1115,9 +1115,10 @@ a YAML comment, or in a step an `if:` switches off, pass it.
 **The frozen-server stage.** Ten sales are timed with the S3 server up, then it is frozen with
 `SIGSTOP` (every call hangs rather than being refused) and ten more are timed. The slowest frozen sale
 must stay under the larger of one second and five times the slowest sale before the freeze. It never
-drives the side file to its limit. Its sales are recorded with `recordOneSale`
-(`apps/server/scripts/record-one-sale.ts`), which opens a second store with `exclusive: false` and so
-its own write queue, not the server's route and write queue. The next test reaches the limit.
+drives the side file to its limit. Its sales use `recordFixtureSale`
+(`apps/server/scripts/testing/sale.ts`) through the scenario's second store, opened with `exclusive: false` and its own write queue, rather than the server's route
+and write queue. The fixture takes an open database and always selects preproduction; it reads no
+venue path or deployment mode from the environment. The next test reaches the limit.
 
 **The stream pause test.** `apps/server/src/stream-pause.e2e.test.ts` needs the same two binaries
 and skips or fails without them the same way. Its steps live in
@@ -1680,7 +1681,7 @@ Litestream against it, then times the sales of three concurrent sellers on one t
 the server's own route against a bound while the side file passes a 16 MiB limit, the server folds
 it back and the pause holds — it does not observe whether a sale's write waited behind the fold-back
 rather than landing before it, nor time the fold-back of a 256 MiB file; the frozen-server stage of
-`apps/server/src/stream-loop.e2e.test.ts` records its sales through `recordOneSale`, a second store
+`apps/server/src/stream-loop.e2e.test.ts` records its sales through `recordFixtureSale` and a second store
 with its own write queue; both are skipped locally without their binaries (the stream loop test's
 section above); the bucket-copy cases in `apps/server/src/health.test.ts` hold `/health`.
 
@@ -3054,8 +3055,9 @@ check other suites' teardown.
 ## Keep a positional script's usage header before its imports
 
 Keep a positional script's leading `//` usage block before its imports.
-Guard: `apps/server/scripts/script-arguments.test.ts`, weaker than its name: it reads source counts,
-not argument order or an executed command. Its header reader stops at the first non-comment line.
+The [former argument guard](https://github.com/clintongormley/waitron/blob/790214ba8cdca2661e4ff70848b2f3c975af21df/apps/server/scripts/script-arguments.test.ts)
+read source counts, not argument order or an executed command. Its header reader stopped at the first
+non-comment line. A1008 retired it with its last command on 1 November 2026; the incident below is historical.
 
 A1003 ([PR #1973](https://github.com/clintongormley/waitron/pull/1973), 2026-10-22) put a helper
 import above each header. CI run `39759743880` and the local unchanged guard both reported two

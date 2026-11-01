@@ -1,5 +1,7 @@
 # A1154 changed test checks
 
+_2026-11-01, A1008: the one-sale operator command and its command-only tests are retired by owner decision. References below describe the earlier tree. Stream and fingerprint-refusal assertions remain, using an open-database preproduction fixture._
+
 > 2026-10-29: Start again no longer keeps the start-again note; the promotion's floor case now checks that a leftover note file is ignored (A1206).
 
 Historical review inventory, 2026-10-28. The owner authorizes removal of the obsolete registration command and action, preservation of restore/setup/promotion checks, fixture renames and one series per node. The 2026-10-05 standing decision permits equally strict checks of deliberately changed behavior. The exact two protected helper references were approved on 2026-10-28; every other protected byte remains unchanged.
@@ -8,7 +10,7 @@ Historical review inventory, 2026-10-28. The owner authorizes removal of the obs
 | --- | --- |
 | [apps/server/scripts/register-till.test.ts](https://github.com/clintongormley/waitron/blob/d11f4605d24485c030c290ef28c8b904cffe3f10/apps/server/scripts/register-till.test.ts) | Retired command-only suite; case inventory below. |
 | [apps/server/scripts/restore-allocation.test.ts](../../apps/server/scripts/restore-allocation.test.ts) | Remove retired-action variants or convert recovery arithmetic to restore/promote; retain assertions for surviving operations. |
-| [apps/server/scripts/script-arguments.test.ts](../../apps/server/scripts/script-arguments.test.ts) | Remove obsolete command parser cases; retain record-one-sale argument guard. |
+| [apps/server/scripts/script-arguments.test.ts](https://github.com/clintongormley/waitron/blob/790214ba8cdca2661e4ff70848b2f3c975af21df/apps/server/scripts/script-arguments.test.ts) | Remove obsolete command parser cases; retain record-one-sale argument guard. |
 | [apps/server/src/hour-promotion.test.ts](../../apps/server/src/hour-promotion.test.ts) | Retire command-specific cases; convert start-again floor case to an admitted-spare promotion; keep exact floor and row-equality assertions. |
 | [apps/server/src/provision-node-operation.test.ts](https://github.com/clintongormley/waitron/blob/d11f4605d24485c030c290ef28c8b904cffe3f10/apps/server/src/provision-node-operation.test.ts) | Retired command-only suite; case inventory below. |
 | [apps/server/src/provision-seed-order.test.ts](../../apps/server/src/provision-seed-order.test.ts) | Fixture/helper identifiers renamed; expected values and retained assertions preserved. |

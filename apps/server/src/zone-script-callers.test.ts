@@ -174,7 +174,7 @@ describe("saved-zone script callers", () => {
       ]);
     },
   );
-  it.each(["record-one-sale"])(
+  it.each(["sale-fixture"])(
     "built %s dates its actual new fiscal records in Madrid under a UTC host",
     async (name) => {
       const venue = await provision();
@@ -183,7 +183,17 @@ describe("saved-zone script callers", () => {
         preload,
         `const OriginalDate=Date;global.Date=class extends OriginalDate {constructor(...args){super(...(args.length?args:["2026-10-14T23:30:00Z"]))} static now(){return OriginalDate.parse("2026-10-14T23:30:00Z")}};`,
       );
-      const binary = await bundle(name, "", true);
+      const binary = await bundle(
+        name,
+        `
+        import { recordFixtureSale } from "../scripts/testing/sale.js";
+        import { openVenueDatabase } from "@waitron/db";
+        const [nodeId, seriesId, description, baseAmount, vatRate] = process.argv.slice(2);
+        const store = await openVenueDatabase(process.env.WAITRON_VENUE_DIR, {exclusive:false});
+        try { await recordFixtureSale(store.venue, {nodeId, seriesId, description, baseAmount, vatRate}); }
+        finally { await store.close(); }
+        `,
+      );
       const args = [venue.nodeId, venue.seriesId, "Soup", "1.00", "10.00"];
       const result = run(binary, args, { NODE_OPTIONS: `--require=${preload}` });
       expect(result).toEqual({ status: 0, output: expect.any(String) });

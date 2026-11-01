@@ -1,5 +1,7 @@
 # A444: date a completed meal by its end
 
+_2026-11-01, A1008: the one-sale operator command and its command-only tests are retired by owner decision. References below describe the earlier tree. Stream and fingerprint-refusal assertions remain, using an open-database preproduction fixture._
+
 An invoice issued after midnight must retain the day the meal ended. Keep that operation date
 separate from the actual issue date, and print both when they differ. Staff never enter, choose
 or confirm a date. The owner approved that rule on 27 October, about 07:45 CET, and clarified

@@ -1,5 +1,7 @@
 # A1003: Refuse a new record with a wrong fingerprint Implementation Plan
 
+_2026-11-01, A1008: the one-sale operator command and its command-only tests are retired by owner decision. References below describe the earlier tree. Stream and fingerprint-refusal assertions remain, using an open-database preproduction fixture._
+
 **Implementation update, 2026-10-22:** the owner approved exactly the two fiscal-test changes
 below at 08:15. The implementation is on `fix/a1003-fingerprint-refusal` and its finished PR
 requires owner landing. The draft approval gate and draft handoff below record the proposal

@@ -1,4 +1,7 @@
 > 2026-10-29, A1206: the start-again (never-reuse) note is retired, so the wipe adds nothing to a note.
+
+_2026-11-01, A1008: the one-sale operator command and its command-only tests are retired by owner decision. References below describe the earlier tree. Stream and fingerprint-refusal assertions remain, using an open-database preproduction fixture._
+
 >
 > 2026-10-30, slice 2 revision 6: no margin (A1206); a damaged setup database is deleted whatever the
 > damage (owner, 2026-10-29 ~11:00), except the limits the slice 2 plan's N1 lists; §2's

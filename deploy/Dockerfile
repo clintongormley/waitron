@@ -196,13 +196,8 @@ RUN install -d -o waitron -g waitron -m 0700 /var/lib/waitron \
     /var/lib/waitron/logs \
     /var/lib/waitron/backups
 
-# Named file by file rather than copying the whole of dist/, because dist/ also holds the demo
-# scripts (record-one-sale.js and friends) — and record-one-sale.js writes a real sale through the
-# real Veri*Factu backend into an append-only, hash-chained table, under any WAITRON_ENV including
-# production. A production image has no business carrying it. dist/package.json ({"type":"module"})
-# travels with the bundle so /app declares its own module system rather than inheriting one from a
-# walk up the filesystem. deploy-image-env.test.ts pins this list against package.json's
-# `waitron.commands`.
+# Copy only the runtime entries and declared operator commands. The bundle's package.json
+# declares /app's module system independently of the parent filesystem.
 COPY --from=build --chown=waitron:waitron /src/apps/server/dist/assets/ /app/assets/
 COPY --from=build --chown=waitron:waitron /src/apps/server/dist/guide/ /app/guide/
 COPY --from=build --chown=waitron:waitron \

@@ -3,6 +3,8 @@
 > **Implementation landed, 1 November 2026:** [#2369](https://github.com/clintongormley/waitron/pull/2369).
 > Earlier approval, build and landing status below records its stated date.
 
+_2026-11-01, A1008: the one-sale operator command and its command-only tests are retired by owner decision. References below describe the earlier tree. Stream and fingerprint-refusal assertions remain, using an open-database preproduction fixture._
+
 > **For agentic workers:** Use `superpowers:executing-plans` and implement inline, task by task. Read the TDD skill before writing implementation or tests. Checkboxes describe future work, not results. Do not dispatch implementation or review agents automatically.
 
 **Goal:** Admit trading only after validating the saved writing-location zone, provide restricted manager confirmation when that value is unusable, and date new invoices and ordinary tickets consistently without changing saved fiscal facts.

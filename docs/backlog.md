@@ -1023,6 +1023,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Sales classification and the menus plan — what they left open.** `Product.categoryId` and
   `primaryCategoryId` always hold the same value.
+  Include demo and readiness sales when finishing classification.
   [Detail](backlog/catalogue.md#sales-classification-and-the-menus-plan--what-they-left-open)
 
 - **Content languages and the image library (#339, #344) — what is left open.**

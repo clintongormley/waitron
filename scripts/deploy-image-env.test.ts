@@ -212,8 +212,6 @@ describe("the container image's environment", () => {
     for (const target of commands) {
       expect(copied).toContain(target.replace("./dist/", ""));
     }
-    // The demo scripts write real sales through the real fiscal backend into an append-only,
-    // hash-chained table. `dist/` holds them; the image must not.
     expect(copied).not.toContain("record-one-sale.js");
   });
 

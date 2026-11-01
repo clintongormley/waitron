@@ -1,5 +1,7 @@
 # A798-B slice 9c — a clock check at every start and after every change, with selling stopped while it waits (OUTLINE)
 
+_2026-11-01, A1008: the one-sale operator command and its command-only tests are retired by owner decision. References below describe the earlier tree. Stream and fingerprint-refusal assertions remain, using an open-database preproduction fixture._
+
 > **An outline, not a plan to dispatch** (round 1, I9). When slice 9c is taken, this file becomes a
 > full plan — tasks sized for one implementer each, exact files and focused commands, its "Changed
 > test checks" — and gets its own fresh-context plan review against the spec before its first
