@@ -357,10 +357,9 @@ describe("startup zone admission", () => {
         await refusal(await request(path), 409, "venue.time_zone_not_ready");
       const context = await request(PATH);
       expect(context.status).toBe(200);
-      expect(await context.json()).toMatchObject({
-        eligible: true,
-        nodeId: NODE,
-      });
+      const view = await context.json();
+      expect(view).toMatchObject({ eligible: true, nodeId: NODE });
+      expect(view).not.toHaveProperty("locationId");
       expect(readVenueDetails).not.toHaveBeenCalled();
       noDuties();
       const asset = await fetch(`${url}/manage/account?token=synthetic`, {
@@ -501,11 +500,9 @@ describe("startup zone admission", () => {
     expect(await (await request("/api/node")).json()).toEqual({ acceptingSales: false });
     const status = await request(PATH);
     expect(status.status).toBe(200);
-    expect(await status.json()).toMatchObject({
-      eligible: true,
-      category: "invalid",
-      nodeId: NODE,
-    });
+    const view = await status.json();
+    expect(view).toMatchObject({ eligible: true, category: "invalid", nodeId: NODE });
+    expect(view).not.toHaveProperty("locationId");
     noDuties();
     expect(readVenueDetails).not.toHaveBeenCalled();
   });

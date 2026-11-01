@@ -35,6 +35,18 @@ it("uses UTC when no venue is set up", async () => {
   }
 });
 
+it("refuses a second venue row rather than answering UTC", async () => {
+  const second = { ...venue, id: randomUUID(), name: "Second venue" };
+  await suite.db.insert(locations).values(second);
+  try {
+    await expect(readVenueTimeZone(suite.db)).rejects.toMatchObject({
+      code: "provisioning.second_venue",
+    });
+  } finally {
+    await suite.db.delete(locations).where(eq(locations.id, second.id));
+  }
+});
+
 it.each(["", "Not/AZone"])("uses UTC for an invalid stored zone %j", async (timeZone) => {
   await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, venue.id));
   try {
