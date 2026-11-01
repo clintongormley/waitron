@@ -14,7 +14,7 @@ import {
   type NodeDatabase,
   type Transaction,
 } from "@waitron/db";
-import { setNodeModeTx, setSingletonRoleTx } from "@waitron/node-db";
+import { setPrimaryRoleTx } from "@waitron/node-db";
 import { codeOf } from "@waitron/server-kit";
 import {
   isFencedStanding,
@@ -90,11 +90,7 @@ export function assertNotFenced(held: SignedMembershipDocument | null, nodeId: s
  */
 async function writePrimaryRole(deps: PromoteDeps): Promise<void> {
   try {
-    await withNodeTransaction(deps.node, async (tx) => {
-      // `mode` first, so the pair is never the `(mirror, primary)` that `node_mode_role_valid_ck` forbids.
-      await setNodeModeTx(tx, deps.nodeId, "primary");
-      await setSingletonRoleTx(tx, deps.nodeId, "primary");
-    });
+    await withNodeTransaction(deps.node, (tx) => setPrimaryRoleTx(tx, deps.nodeId));
   } catch (error) {
     // An engine refusal carries no code of ours, so its message is logged too. These statements
     // write only the mode, the role and the node id, so the message can hold nothing secret.

@@ -95,3 +95,11 @@ export async function setSingletonRoleTx(
       set: { singletonRole: role, updatedAt: now() },
     });
 }
+
+/** Makes one node the sole primary (mode and singleton role both `primary`) on a caller's node
+ * transaction; like the two writes it makes, it does not read the deployment stamp. */
+export async function setPrimaryRoleTx(tx: NodeTransaction, nodeId: string): Promise<void> {
+  // `mode` first, so the pair is never the `(mirror, primary)` that `node_mode_role_valid_ck` forbids.
+  await setNodeModeTx(tx, nodeId, "primary");
+  await setSingletonRoleTx(tx, nodeId, "primary");
+}

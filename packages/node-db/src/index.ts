@@ -14,6 +14,7 @@ export {
   readNodeMode,
   setNodeMode,
   setNodeModeTx,
+  setPrimaryRoleTx,
   setSingletonRole,
   setSingletonRoleTx,
 } from "./mode.js";

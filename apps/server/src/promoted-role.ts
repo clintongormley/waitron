@@ -4,7 +4,7 @@ import {
   type Database,
   type NodeDatabase,
 } from "@waitron/db";
-import { readNodeMode, setNodeModeTx, setSingletonRoleTx } from "@waitron/node-db";
+import { readNodeMode, setPrimaryRoleTx } from "@waitron/node-db";
 import { nodeSigningPublicKey, readNodeSigningKey, type KeyRing } from "@waitron/credentials";
 import { standingOf, verifyMembershipDocument } from "@waitron/membership";
 import type { Logger } from "./logger.js";
@@ -44,11 +44,7 @@ export async function finishPromotedRole(
   );
   if (!verified.valid) return "nothing";
 
-  await withNodeTransaction(deps.node, async (tx) => {
-    // `mode` first, so the pair is never the `(mirror, primary)` that `node_mode_role_valid_ck` forbids.
-    await setNodeModeTx(tx, deps.nodeId, "primary");
-    await setSingletonRoleTx(tx, deps.nodeId, "primary");
-  });
+  await withNodeTransaction(deps.node, (tx) => setPrimaryRoleTx(tx, deps.nodeId));
   deps.log("warn", "promotion.role_finished", { term: held.body.term });
   return "finished";
 }

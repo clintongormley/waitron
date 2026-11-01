@@ -16,6 +16,7 @@ import {
   readNodeMode,
   setNodeMode,
   setNodeModeTx,
+  setPrimaryRoleTx,
   setSingletonRole,
   setSingletonRoleTx,
 } from "./mode.js";
@@ -226,5 +227,38 @@ describe("the role in node.db", () => {
       sql`select updated_at from node_mode`,
     );
     expect(afterRole?.updated_at).not.toBe("2000-01-01T00:00:00.000Z");
+  });
+
+  it.each([
+    ["a mirror", "mirror", "secondary"],
+    ["a primary standing by as secondary", "primary", "secondary"],
+  ] as const)(
+    "makes %s the sole primary, inside the caller's transaction",
+    async (_label, mode, singletonRole) => {
+      suite.node.run(
+        sql`insert into node_mode (node_id, mode, singleton_role, updated_at)
+          values (${NODE}, ${mode}, ${singletonRole}, '2000-01-01T00:00:00.000Z')`,
+      );
+      await withNodeTransaction(suite.node, (tx) => setPrimaryRoleTx(tx, NODE));
+      expect(await readNodeMode(suite.node, NODE)).toEqual({
+        mode: "primary",
+        singletonRole: "primary",
+      });
+    },
+  );
+
+  it("makes a node with no row the sole primary, and leaves other nodes alone", async () => {
+    await withNodeTransaction(suite.node, async (tx) => {
+      await setNodeModeTx(tx, OTHER, "mirror");
+      await setPrimaryRoleTx(tx, NODE);
+    });
+    expect(await readNodeMode(suite.node, NODE)).toEqual({
+      mode: "primary",
+      singletonRole: "primary",
+    });
+    expect(await readNodeMode(suite.node, OTHER)).toEqual({
+      mode: "mirror",
+      singletonRole: "secondary",
+    });
   });
 });
