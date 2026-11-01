@@ -18,11 +18,12 @@ import { floorTodayJoins, floorTodayJoinTables, floorTodayTables } from "./schem
 import { floorZones } from "./schema/floor-zones.js";
 import { parties, partyTables } from "./schema/parties.js";
 import { locations } from "./schema/tenants.js";
-import { seedTenant } from "./testing/seed.js";
+import { seedVenue } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 import { withTransaction } from "./tenancy.js";
+import { venueLocationId } from "./venue.js";
 
-const LOCATION = "cccccccc-0000-4000-8000-000000000001";
+let LOCATION: string;
 const OTHER_LOCATION = "cccccccc-0000-4000-8000-000000000002";
 const OPERATOR = "cccccccc-2222-4000-8000-000000000001";
 
@@ -33,16 +34,18 @@ describe("party table labels", () => {
     withTransaction(suite.db, fn);
 
   beforeAll(async () => {
-    await seedTenant(suite.db);
-    await suite.db.insert(locations).values([
-      { id: LOCATION, name: "Room", invoiceLocales: ["es"], operationDescription: "Hostelería" },
-      {
-        id: OTHER_LOCATION,
-        name: "Other room",
-        invoiceLocales: ["es"],
-        operationDescription: "Hostelería",
-      },
-    ]);
+    await seedVenue(suite.db, {
+      name: "Room",
+      invoiceLocales: ["es"],
+      operationDescription: "Hostelería",
+    });
+    LOCATION = await venueLocationId(suite.db);
+    await suite.db.insert(locations).values({
+      id: OTHER_LOCATION,
+      name: "Other room",
+      invoiceLocales: ["es"],
+      operationDescription: "Hostelería",
+    });
   });
 
   /**

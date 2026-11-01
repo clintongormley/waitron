@@ -6,10 +6,11 @@ import { floorTodayTables } from "./schema/floor-plans.js";
 import { floorZones } from "./schema/floor-zones.js";
 import { locations } from "./schema/tenants.js";
 import { tableInService } from "./table-in-service.js";
-import { seedTenant } from "./testing/seed.js";
+import { seedVenue } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
+import { venueLocationId } from "./venue.js";
 
-const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
+let LOCATION: string;
 const ZONE = "bbbbbbbb-0000-4000-8000-000000000001";
 const OTHER_ZONE = "bbbbbbbb-0000-4000-8000-000000000002";
 const PRESENT = "cccccccc-0000-4000-8000-000000000001";
@@ -21,13 +22,12 @@ describe("table in service", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   beforeEach(async () => {
-    await seedTenant(suite.db);
-    await suite.db.insert(locations).values({
-      id: LOCATION,
+    await seedVenue(suite.db, {
       name: "Room",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
+    LOCATION = await venueLocationId(suite.db);
     await suite.db.insert(floorZones).values([
       { id: ZONE, locationId: LOCATION, name: "On" },
       { id: OTHER_ZONE, locationId: LOCATION, name: "Off", active: false },

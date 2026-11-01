@@ -4,36 +4,29 @@ import { allocateInvoiceNumber } from "./allocate-number.js";
 import type { Database } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { invoiceSeries } from "./schema/series.js";
-import { locations, tenants } from "./schema/tenants.js";
+import { locations } from "./schema/tenants.js";
 import { useVenueDb } from "./testing/venue-db.js";
-import { seedNode } from "./testing/seed.js";
+import { seedNode, seedVenue } from "./testing/seed.js";
 import { withTransaction } from "./tenancy.js";
 
-const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const UNKNOWN_SERIES = "00000000-0000-4000-8000-000000000000";
 
 let nodeA1 = "";
 
 async function seed(db: Database): Promise<void> {
-  await db
-    .insert(tenants)
-    .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
-  await db.insert(locations).values([
-    {
-      id: LOCATION_A,
-      name: "Fixture Location A",
-      invoiceLocales: ["es", "ca"],
-      operationDescription: "Hostelería",
-    },
-    {
-      id: LOCATION_B,
-      name: "Fixture Location B",
-      invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
-    },
-  ]);
-  nodeA1 = await seedNode(db, brandLocationId(LOCATION_A));
+  await seedVenue(db, {
+    name: "Fixture Location A",
+    invoiceLocales: ["es", "ca"],
+    operationDescription: "Hostelería",
+  });
+  nodeA1 = await seedNode(db);
+  await db.insert(locations).values({
+    id: LOCATION_B,
+    name: "Fixture Location B",
+    invoiceLocales: ["es"],
+    operationDescription: "Hostelería",
+  });
   await seedNode(db, brandLocationId(LOCATION_B));
 }
 

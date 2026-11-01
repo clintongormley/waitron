@@ -25,11 +25,11 @@ import {
 } from "./schema/floor-plans.js";
 import { floorZones } from "./schema/floor-zones.js";
 import { parties, partyTables } from "./schema/parties.js";
-import { locations } from "./schema/tenants.js";
-import { seedTenant } from "./testing/seed.js";
+import { seedVenue } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
+import { venueLocationId } from "./venue.js";
 
-const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
+let LOCATION: string;
 const ZONE = "bbbbbbbb-0000-4000-8000-000000000001";
 const LONG = "cccccccc-0000-4000-8000-000000000001";
 const COUNTER_3 = "cccccccc-0000-4000-8000-000000000003";
@@ -48,13 +48,12 @@ type Db = ReturnType<typeof useVenueDb>["db"];
 
 /** Long table joined from Counter 3, 4 and 5 in today's copy, beside a Plain table. */
 async function seedJoinedToday(db: Db): Promise<void> {
-  await seedTenant(db);
-  await db.insert(locations).values({
-    id: LOCATION,
+  await seedVenue(db, {
     name: "Room",
     invoiceLocales: ["es"],
     operationDescription: "Hostelería",
   });
+  LOCATION = await venueLocationId(db);
   await db.insert(floorZones).values({ id: ZONE, locationId: LOCATION, name: "Bar" });
   await db.insert(diningTables).values([
     { id: LONG, locationId: LOCATION, zoneId: ZONE, label: "Long table" },
@@ -298,13 +297,12 @@ describe("saved part", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   beforeEach(async () => {
-    await seedTenant(suite.db);
-    await suite.db.insert(locations).values({
-      id: LOCATION,
+    await seedVenue(suite.db, {
       name: "Room",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
+    LOCATION = await venueLocationId(suite.db);
     await suite.db.insert(floorZones).values({ id: ZONE, locationId: LOCATION, name: "Bar" });
     await suite.db.insert(floorPlanSets).values({ id: PLAN_SET, locationId: LOCATION });
     await suite.db
@@ -393,13 +391,12 @@ describe("a layout that stands a joined table's tables", () => {
    * Dinner places 4+5 and leaves 4 and 5 off, All off places none of the three.
    */
   beforeEach(async () => {
-    await seedTenant(suite.db);
-    await suite.db.insert(locations).values({
-      id: LOCATION,
+    await seedVenue(suite.db, {
       name: "Room",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
+    LOCATION = await venueLocationId(suite.db);
     await suite.db.insert(floorZones).values({ id: INSIDE, locationId: LOCATION, name: "Inside" });
     await suite.db
       .insert(floorPlanSets)

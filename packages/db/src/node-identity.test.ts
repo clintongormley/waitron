@@ -1,28 +1,11 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { locationId as brandLocationId } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
-import type { Database } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { readMembershipTrustSet, readNodePublicKeyTx, setNodePublicKey } from "./node-identity.js";
 import { withTransaction } from "./tenancy.js";
-import { locations } from "./schema/tenants.js";
-import { seedNode, seedTenant } from "./testing/seed.js";
+import { seedNode, seedVenue } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
-
-// Drizzle rather than raw SQL: drizzle encodes `invoiceLocales` as the JSON text the column holds,
-// and `locations.id` is a JavaScript `$defaultFn` generator that a raw insert never reaches.
-async function seedLocation(db: Database): Promise<ReturnType<typeof brandLocationId>> {
-  const [row] = await db
-    .insert(locations)
-    .values({
-      name: "Test location",
-      invoiceLocales: ["es"],
-      operationDescription: "Restaurant",
-    })
-    .returning({ id: locations.id });
-  return brandLocationId(row!.id);
-}
 
 describe("membership trust-set accessors", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -31,8 +14,8 @@ describe("membership trust-set accessors", () => {
 
   beforeEach(async () => {
     await suite.db.execute(sql`delete from nodes`);
-    await seedTenant(suite.db);
-    nodeId = await seedNode(suite.db, await seedLocation(suite.db));
+    await seedVenue(suite.db);
+    nodeId = await seedNode(suite.db);
   });
 
   it("readMembershipTrustSet omits a node whose public_key is null", async () => {
@@ -46,7 +29,7 @@ describe("membership trust-set accessors", () => {
 
   it("readMembershipTrustSet returns every keyed node (two-node topology)", async () => {
     // A second node in the SAME database, so both are in the trust set the read returns.
-    const nodeId2 = await seedNode(suite.db, await seedLocation(suite.db));
+    const nodeId2 = await seedNode(suite.db);
     await setNodePublicKey(suite.db, nodeId, "KEY_A");
     await setNodePublicKey(suite.db, nodeId2, "KEY_B");
     expect(await readMembershipTrustSet(suite.db)).toEqual({
@@ -56,7 +39,7 @@ describe("membership trust-set accessors", () => {
   });
 
   it("readNodePublicKeyTx reads the named node's key alone, and null for a keyless or unknown node", async () => {
-    const nodeId2 = await seedNode(suite.db, await seedLocation(suite.db));
+    const nodeId2 = await seedNode(suite.db);
     const read = (id: string) => withTransaction(suite.db, (tx) => readNodePublicKeyTx(tx, id));
     await setNodePublicKey(suite.db, nodeId2, "KEY_B");
     expect(await read(nodeId)).toBeNull();

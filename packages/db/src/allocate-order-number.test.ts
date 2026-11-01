@@ -1,14 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { allocateOrderNumber } from "./allocate-order-number.js";
 import type { Database } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
-import { locations, tenants } from "./schema/tenants.js";
 import { useVenueDb } from "./testing/venue-db.js";
-import { seedNode, seedTenant } from "./testing/seed.js";
+import { seedNode, seedVenue } from "./testing/seed.js";
 import { withTransaction } from "./tenancy.js";
-
-const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 
 // One counter per node. Two nodes give the independence test a real second
 // key — the property the park path depends on is that one register's
@@ -17,19 +13,13 @@ let nodeA1 = "";
 let nodeA2 = "";
 
 async function seed(db: Database): Promise<void> {
-  await db
-    .insert(tenants)
-    .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
-  await db.insert(locations).values([
-    {
-      id: LOCATION_A,
-      name: "Fixture Location A",
-      invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
-    },
-  ]);
-  nodeA1 = await seedNode(db, brandLocationId(LOCATION_A));
-  nodeA2 = await seedNode(db, brandLocationId(LOCATION_A));
+  await seedVenue(db, {
+    name: "Fixture Location A",
+    invoiceLocales: ["es"],
+    operationDescription: "Hostelería",
+  });
+  nodeA1 = await seedNode(db);
+  nodeA2 = await seedNode(db);
 }
 
 describe("allocateOrderNumber", () => {
@@ -78,19 +68,13 @@ const WRITERS = 20;
 describe("allocateOrderNumber under overlapping callers", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
-  // A FRESH location + node per case, leaving the rows independent of any other test's. The
-  // taxpayer row is a singleton, so `seedTenant` only makes sure it is there.
   async function freshTenantNode(db: Database): Promise<{ nodeId: string }> {
-    await seedTenant(db);
-    const [location] = await db
-      .insert(locations)
-      .values({
-        name: "Fixture Location",
-        invoiceLocales: ["es"],
-        operationDescription: "Hostelería",
-      })
-      .returning({ id: locations.id });
-    const nodeId = await seedNode(db, brandLocationId(location!.id));
+    await seedVenue(db, {
+      name: "Fixture Location",
+      invoiceLocales: ["es"],
+      operationDescription: "Hostelería",
+    });
+    const nodeId = await seedNode(db);
     return { nodeId };
   }
 

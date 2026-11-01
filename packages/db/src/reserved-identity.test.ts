@@ -3,7 +3,6 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { isAppError, locationId as brandLocationId } from "@waitron/shared";
 import type { LocationId } from "@waitron/shared";
 import type { Endorsement } from "@waitron/membership";
-import type { Database } from "./client.js";
 import {
   CORE_MIGRATIONS,
   insertReservedNodeTx,
@@ -17,10 +16,10 @@ import {
   withTransaction,
 } from "./index.js";
 import { invoiceSeries } from "./schema/series.js";
-import { locations } from "./schema/tenants.js";
 import { captureError } from "./testing/errors.js";
-import { seedNode, seedTenant } from "./testing/seed.js";
+import { seedNode, seedVenue } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
+import { venueLocationId } from "./venue.js";
 
 const ENDORSEMENT: Endorsement = {
   nodeId: "22222222-2222-2222-2222-222222222222",
@@ -29,20 +28,6 @@ const ENDORSEMENT: Endorsement = {
   signature: "sig",
 };
 const CLOUD_NODE = ENDORSEMENT.nodeId;
-
-// Drizzle rather than raw SQL: drizzle encodes `invoiceLocales` as the JSON text the column holds,
-// and `locations.id` is a JavaScript `$defaultFn` generator that a raw insert never reaches.
-async function seedLocation(db: Database): Promise<ReturnType<typeof brandLocationId>> {
-  const [row] = await db
-    .insert(locations)
-    .values({
-      name: "Test location",
-      invoiceLocales: ["es"],
-      operationDescription: "Restaurant",
-    })
-    .returning({ id: locations.id });
-  return brandLocationId(row!.id);
-}
 
 describe("reserved-identity accessors", () => {
   const suite = useVenueDb({
@@ -54,8 +39,8 @@ describe("reserved-identity accessors", () => {
   let locationId: LocationId;
 
   beforeAll(async () => {
-    await seedTenant(suite.db);
-    locationId = await seedLocation(suite.db);
+    await seedVenue(suite.db);
+    locationId = brandLocationId(await venueLocationId(suite.db));
   });
 
   it("insertReservedNodeTx persists a dormant node with its public key + endorsement", async () => {
@@ -77,7 +62,7 @@ describe("reserved-identity accessors", () => {
   });
 
   it("readNodeEndorsement returns null for a node with no endorsement (a primary)", async () => {
-    const bare = await seedNode(suite.db, locationId);
+    const bare = await seedNode(suite.db);
     expect(await readNodeEndorsement(suite.db, bare)).toBeNull();
   });
 
@@ -120,7 +105,7 @@ describe("reserved-identity accessors", () => {
   });
 
   it("readStandardSeriesId returns the node's standard series id, not the rectificative", async () => {
-    const node = await seedNode(suite.db, locationId);
+    const node = await seedNode(suite.db);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
         { nodeId: node, code: "F-42", purpose: "standard" },
@@ -139,14 +124,14 @@ describe("reserved-identity accessors", () => {
   });
 
   it("readStandardSeriesId throws series.no_standard_for_node when the node has none", async () => {
-    const bareNode = await seedNode(suite.db, locationId);
+    const bareNode = await seedNode(suite.db);
     const err = await captureError(() => readStandardSeriesId(suite.db, bareNode));
     expect(isAppError(err) && err.code).toBe("series.no_standard_for_node");
     expect(isAppError(err) && err.params).toEqual({ nodeId: bareNode });
   });
 
   it("readStandardSeriesId ignores a RETIRED standard series (a cold restore retires the old one)", async () => {
-    const node = await seedNode(suite.db, locationId);
+    const node = await seedNode(suite.db);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
         { nodeId: node, code: "FA", purpose: "standard" },
@@ -166,7 +151,7 @@ describe("reserved-identity accessors", () => {
   });
 
   it("readStandardSeriesId is LOUD on two live standard series (a data-integrity corruption)", async () => {
-    const node = await seedNode(suite.db, locationId);
+    const node = await seedNode(suite.db);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
         { nodeId: node, code: "X1", purpose: "standard" },
@@ -179,7 +164,7 @@ describe("reserved-identity accessors", () => {
   });
 
   it("readLiveSeriesIdTx reads the node's live rectificative series, not the standard", async () => {
-    const node = await seedNode(suite.db, locationId);
+    const node = await seedNode(suite.db);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
         { nodeId: node, code: "F-7", purpose: "standard" },
@@ -202,7 +187,7 @@ describe("reserved-identity accessors", () => {
   });
 
   it("readLiveSeriesIdTx reads a full invoice series separately from the ticket series", async () => {
-    const node = await seedNode(suite.db, locationId);
+    const node = await seedNode(suite.db);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
         { nodeId: node, code: "FS-7", purpose: "standard" },
@@ -218,7 +203,7 @@ describe("reserved-identity accessors", () => {
   });
 
   it("readLiveSeriesIdTx refuses a missing full series by its own domain code", async () => {
-    const node = await seedNode(suite.db, locationId);
+    const node = await seedNode(suite.db);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [{ nodeId: node, code: "FS-8", purpose: "standard" }]),
     );
@@ -230,7 +215,7 @@ describe("reserved-identity accessors", () => {
   });
 
   it("readLiveSeriesIdTx throws series.no_rectificative_for_node when the node has no live one", async () => {
-    const node = await seedNode(suite.db, locationId);
+    const node = await seedNode(suite.db);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [{ nodeId: node, code: "F-8", purpose: "standard" }]),
     );
@@ -242,7 +227,7 @@ describe("reserved-identity accessors", () => {
   });
 
   it("readLiveSeriesIdTx is LOUD on two live rectificative series", async () => {
-    const node = await seedNode(suite.db, locationId);
+    const node = await seedNode(suite.db);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
         { nodeId: node, code: "R-9", purpose: "rectificative" },
@@ -255,8 +240,8 @@ describe("reserved-identity accessors", () => {
   });
 
   it("retireNodeSeriesTx retires every LIVE series of the node and only those", async () => {
-    const node = await seedNode(suite.db, locationId);
-    const other = await seedNode(suite.db, locationId);
+    const node = await seedNode(suite.db);
+    const other = await seedNode(suite.db);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
         { nodeId: node, code: "FA", purpose: "standard" },
@@ -277,7 +262,7 @@ describe("reserved-identity accessors", () => {
   });
 
   it("insertNodeSeriesTx refuses duplicate codes within a batch with a domain error", async () => {
-    const node = await seedNode(suite.db, locationId);
+    const node = await seedNode(suite.db);
     await expect(
       withTransaction(suite.db, (tx) =>
         insertNodeSeriesTx(tx, node, [
@@ -289,7 +274,7 @@ describe("reserved-identity accessors", () => {
   });
 
   it("insertNodeSeriesTx inserts at next_number 1 and refuses a code the node holds, live OR retired", async () => {
-    const node = await seedNode(suite.db, locationId);
+    const node = await seedNode(suite.db);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [{ nodeId: node, code: "FA", purpose: "standard" }]),
     );
