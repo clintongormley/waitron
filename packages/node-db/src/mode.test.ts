@@ -6,6 +6,7 @@ import {
   captureError,
   engineErrorMessage,
   isRefusal,
+  readDeploymentEnvironment,
   stampDeployment,
   withNodeTransaction,
 } from "@waitron/db";
@@ -126,6 +127,13 @@ describe("the role in node.db", () => {
       mode: "mirror",
       singletonRole: "secondary",
     });
+  });
+
+  it("keeps the environment one per database, whichever node's role is written", async () => {
+    await stampDeployment(suite.db, "production");
+    await setNodeMode(handles(), NODE, "mirror");
+    await setSingletonRole(handles(), OTHER, "secondary");
+    expect(await readDeploymentEnvironment(suite.db)).toBe("production");
   });
 
   it("refuses the singleton duties on a mirror (node_mode_role_valid_ck)", async () => {

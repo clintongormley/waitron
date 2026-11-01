@@ -304,4 +304,14 @@ describe("node.db's backup verification", () => {
       });
     },
   );
+
+  it.each(["secrets/secrets.env", "secrets/trading.env"])(
+    "a key-less source cannot decide without %s",
+    async (name) => {
+      seedVenue(null);
+      await expect(run(undefined, { ...secretEntries, [name]: null })).rejects.toMatchObject({
+        reason: "secret_unavailable",
+      });
+    },
+  );
 });
