@@ -53,13 +53,16 @@ function dueNow(): { claimedAt: string; due: SQL } {
   // and cutoff read the clock of the one process that holds the venue file.
   const claimedAt = nowIso();
   const leaseCutoff = new Date(Date.parse(claimedAt) - PRINT_JOB_LEASE_MS).toISOString();
+  // A claim further ahead than the lease was stamped before the clock stepped back.
+  const leaseAhead = new Date(Date.parse(claimedAt) + PRINT_JOB_LEASE_MS).toISOString();
   return {
     claimedAt,
     due: sql`(
         j.status = 'queued'
         or (j.kind = 'document' and j.status = 'failed' and j.attempts < ${MAX_DELIVERY_ATTEMPTS})
         or (j.status = 'printing'
-            and (j.claimed_at is null or j.claimed_at < ${leaseCutoff}))
+            and (j.claimed_at is null or j.claimed_at < ${leaseCutoff}
+                 or j.claimed_at > ${leaseAhead}))
       )`,
   };
 }
