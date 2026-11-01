@@ -22,7 +22,7 @@ const RING: KeyRing = loadKeyRing({
 
 describe("seedTermZeroMembership", () => {
   const suite = useVenueDb({
-    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
     timeoutMs: 60_000,
   });
   let db: Database;

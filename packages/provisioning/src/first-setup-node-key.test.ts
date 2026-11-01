@@ -31,7 +31,7 @@ import {
 import { createFirstSetupNodeKeys, readFirstSetupStagedKey } from "./first-setup-node-key.js";
 
 const database = useVenueDb({
-  migrations: [CORE_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+  migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
 });
 const handles = () => ({ venue: database.db, node: database.node });
 const storedKeys = () => database.node.select().from(nodeRecoveryKey);

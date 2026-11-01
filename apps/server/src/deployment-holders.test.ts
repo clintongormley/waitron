@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createDeploymentHolders, refreshDeploymentHolders } from "./deployment-holders.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+  migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 

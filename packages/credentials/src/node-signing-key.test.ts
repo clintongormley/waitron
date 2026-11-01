@@ -63,7 +63,7 @@ describe("before the node set has run", () => {
 
 describe("the box's signing key in node.db", () => {
   const suite = useVenueDb({
-    migrations: [CORE_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+    migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
   });
 
   beforeEach(() => {

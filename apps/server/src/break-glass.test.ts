@@ -18,7 +18,7 @@ vi.mock("node:crypto", async (importOriginal) => {
 
 // The core set and node.db's own: mint and verify touch nothing else.
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+  migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 const handles = () => ({ venue: suite.db, node: suite.node });

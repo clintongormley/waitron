@@ -42,7 +42,7 @@ import { mintBreakGlassSecret } from "./break-glass.js";
 const modules = vi.hoisted(() => [] as WaitronModule[]);
 vi.mock("./modules.js", () => ({ ALL_MODULES: modules }));
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
 });
 const LOCATION = "e0000000-0000-4000-8000-000000000001";
 const PRIMARY = "e0000000-0000-4000-8000-000000000002";

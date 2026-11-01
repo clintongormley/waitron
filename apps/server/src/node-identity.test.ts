@@ -47,7 +47,7 @@ const RING: KeyRing = loadKeyRing({
 describe("node identity establishment", () => {
   const suite = useVenueDb({
     resetPerTest: false,
-    migrations: [CORE_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+    migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
     timeoutMs: 60_000,
   });
 

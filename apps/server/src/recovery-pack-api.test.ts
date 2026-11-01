@@ -12,7 +12,7 @@ import { mintBreakGlassSecret } from "./break-glass.js";
 import { mountRecoveryPackApi } from "./recovery-pack-api.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, NODE_MIGRATIONS],
 });
 const node = {
   nodeId: nodeId("cccccccc-cccc-4ccc-8ccc-cccccccccccc"),

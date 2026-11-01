@@ -32,7 +32,7 @@ describe("before any migration set has run", () => {
 
 describe("the node recovery-key check", () => {
   const suite = useVenueDb({
-    migrations: [CORE_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+    migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
   });
 
   it("reads null before anything is written", async () => {

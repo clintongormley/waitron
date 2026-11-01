@@ -14,7 +14,7 @@ vi.mock("node:crypto", async (original) => {
 const drawCodeIndex = vi.mocked(randomInt as (max: number) => number);
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+  migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
 });
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 

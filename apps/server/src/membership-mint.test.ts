@@ -25,7 +25,7 @@ const RING: KeyRing = loadKeyRing({
 describe("mintNextMembershipDocument", () => {
   const suite = useVenueDb({
     resetPerTest: false,
-    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
     timeoutMs: 60_000,
   });
 

@@ -49,7 +49,7 @@ const ownKeys = new Map<string, string>();
 // Two cases depend on `useVenueDb`'s default per-test reset: each expects no chart held, and would
 // otherwise read the chart an earlier case wrote.
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 

@@ -35,7 +35,7 @@ describe("before any migration set has run", () => {
 
 describe("node_mirror_link accessors", () => {
   const suite = useVenueDb({
-    migrations: [CORE_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+    migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
   });
 
   it("reads null before any write (a box nothing has adopted)", async () => {

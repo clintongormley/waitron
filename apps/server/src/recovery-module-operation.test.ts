@@ -18,7 +18,7 @@ import { withRecoveryModuleOperation } from "./recovery-module-operation.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, NODE_MIGRATIONS],
 });
 const target = {
   locationId: locationId("c0000000-0000-4000-8000-000000000001"),

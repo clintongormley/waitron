@@ -13,7 +13,7 @@ const NODE_TABLES = [
 ];
 
 describe("node.db's tables", () => {
-  const suite = useVenueDb({ migrations: [{ ...NODE_MIGRATIONS, database: "node" }] });
+  const suite = useVenueDb({ migrations: [NODE_MIGRATIONS] });
 
   it("creates the five tables in node.db and none in venue.db", () => {
     expect(migratedTableNames(suite.node)).toEqual(NODE_TABLES);

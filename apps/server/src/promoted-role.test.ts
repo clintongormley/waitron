@@ -35,7 +35,7 @@ type LogEntry = { level: string; event: string; detail: unknown };
 
 describe("finishPromotedRole", () => {
   const suite = useVenueDb({
-    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
     timeoutMs: 60_000,
   });
 

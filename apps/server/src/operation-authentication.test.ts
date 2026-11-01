@@ -19,7 +19,7 @@ vi.mock("node:crypto", async (importOriginal) =>
 );
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, NODE_MIGRATIONS],
 });
 const ADMIN = "a0000000-0000-4000-8000-000000000001";
 const OTHER = "a0000000-0000-4000-8000-000000000002";

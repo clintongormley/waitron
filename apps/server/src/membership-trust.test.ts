@@ -53,7 +53,7 @@ function signed(
 
 describe("the held document's check against the keys this box stores", () => {
   const suite = useVenueDb({
-    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
   });
 
   async function box(): Promise<{ db: Database; nodeId: string }> {

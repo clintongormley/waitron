@@ -11,7 +11,7 @@ import { mintBreakGlassSecret } from "./break-glass.js";
 import { createRecoveryPack } from "./recovery-pack.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+  migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
 });
 const handles = () => ({ venue: suite.db, node: suite.node });
 const node = {

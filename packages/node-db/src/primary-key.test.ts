@@ -27,7 +27,7 @@ describe("before any migration set has run", () => {
 
 describe("the main box's pinned public key", () => {
   const suite = useVenueDb({
-    migrations: [CORE_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+    migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
   });
 
   it("reads null before anything is pinned", async () => {

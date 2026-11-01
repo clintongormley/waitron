@@ -46,7 +46,7 @@ describe("a node file with no migration set applied", () => {
 
 describe("the role in node.db", () => {
   const suite = useVenueDb({
-    migrations: [CORE_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+    migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
   });
   const handles = () => ({ venue: suite.db, node: suite.node });
 

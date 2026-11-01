@@ -13,7 +13,7 @@ import { firstFiscalFixture, PASSWORD } from "../test/first-fiscal.js";
 import { createFirstSetupNodeKeys } from "./first-setup-node-key.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
+  migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
 });
 const handles = () => ({ venue: suite.db, node: suite.node });
 const fixtures: Awaited<ReturnType<typeof firstFiscalFixture>>[] = [];
