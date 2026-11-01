@@ -433,8 +433,8 @@ export function formatTimeRecordExport(
         "Los fines automáticos cuentan de inmediato. La confirmación de la persona se muestra por separado.",
       ][language]!,
       [
-        "Chain position counts every entry its node recorded, at every location, so one location's record can skip numbers.",
-        "La posición en la cadena cuenta todos los asientos que registró su nodo, en todos los locales, así que el registro de un local puede saltarse números.",
+        "Chain position counts every entry its node recorded, for everyone, at every workplace, so one workplace's record can skip numbers.",
+        "La posición en la cadena cuenta todos los asientos que registró su nodo, de todas las personas y en todos los centros de trabajo, así que el registro de un centro puede saltarse números.",
       ][language]!,
       ...(input.audience === "representatives"
         ? [

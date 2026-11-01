@@ -163,6 +163,8 @@ export const timeEntries = table(
     index("time_entries_person_event_idx").on(t.personId, t.eventAt),
     // A person's latest entry on each node, which decides their clock state (`readLatestLiveEntry`).
     index("time_entries_person_chain_idx").on(t.personId, t.nodeId, t.sequenceNo),
+    // Attendance discovery reads each node's entries at one location by position, on every pass.
+    index("time_entries_location_chain_idx").on(t.locationId, t.nodeId, t.sequenceNo),
     index("time_entries_corrects_entry_idx").on(t.correctsEntryId),
     // ±14h, the wall-offset domain `sales` uses.
     check("time_entries_event_offset_ck", sql`${t.eventOffsetMinutes} between -840 and 840`),

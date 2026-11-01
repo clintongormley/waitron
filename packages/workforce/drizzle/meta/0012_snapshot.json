@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "cea1000b-f58a-407e-9ad4-61f3cf936561",
+  "id": "aa90295c-41c0-4f88-a5c4-b5def10387d6",
   "prevId": "31a42494-8918-415f-8655-46db45b1d601",
   "tables": {
     "absences": {
@@ -2256,6 +2256,15 @@
           "name": "time_entries_person_chain_idx",
           "columns": [
             "person_id",
+            "node_id",
+            "sequence_no"
+          ],
+          "isUnique": false
+        },
+        "time_entries_location_chain_idx": {
+          "name": "time_entries_location_chain_idx",
+          "columns": [
+            "location_id",
             "node_id",
             "sequence_no"
           ],

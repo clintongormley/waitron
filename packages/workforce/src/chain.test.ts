@@ -131,6 +131,7 @@ describe("appendToChain", () => {
       appendToChain(tx, { nodeId: otherNode }, inputAt("2026-01-05T09:00:00Z", otherLocation)),
     );
     expect(other.sequenceNo).toBe(1);
+    expect((await readChain(suite.db, { nodeId: otherNode }))[0]?.isFirstEntry).toBe(true);
   });
 
   it("keeps one chain per node; two nodes at one location do not collide", async () => {

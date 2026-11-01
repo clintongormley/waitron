@@ -103,6 +103,22 @@ function rows(db: Database, table: "time_entries" | "workforce_chains") {
 function headColumns(db: Database) {
   return db.execute(sql`pragma table_info(workforce_chains)`).rows.map((row) => row.name);
 }
+/** What the migration must leave standing, or put back, whatever it does to the head table. */
+function schemaFacts(db: Database) {
+  return {
+    rebuildTables: db
+      .execute<{ name: string }>(sql`select name from sqlite_master where name like '__new_%'`)
+      .rows.map((row) => row.name),
+    timeEntryTriggers: db
+      .execute<{ name: string }>(
+        sql`select name from sqlite_master where type = 'trigger' and tbl_name = 'time_entries' order by name`,
+      )
+      .rows.map((row) => row.name),
+    positionIndex: db
+      .execute<{ name: string }>(sql`pragma index_info('time_entries_chain_position_uq')`)
+      .rows.map((row) => row.name),
+  };
+}
 
 describe("migrating a node whose entries are all at one location", () => {
   const suite = useVenueDb({ resetPerTest: false, migrations });
@@ -117,6 +133,8 @@ describe("migrating a node whose entries are all at one location", () => {
     const [{ location_id: _, ...headBefore }] = rows(suite.db, "workforce_chains") as [
       Record<string, unknown>,
     ];
+    const triggersBefore = schemaFacts(suite.db).timeEntryTriggers;
+    expect(triggersBefore).not.toEqual([]);
 
     removeChangeFeed(suite.db);
     await runMigrations(suite.db, WORKFORCE_MIGRATIONS);
@@ -124,6 +142,11 @@ describe("migrating a node whose entries are all at one location", () => {
     expect(rows(suite.db, "time_entries")).toEqual(entriesBefore);
     expect(headColumns(suite.db)).not.toContain("location_id");
     expect(rows(suite.db, "workforce_chains")).toEqual([headBefore]);
+    expect(schemaFacts(suite.db)).toEqual({
+      rebuildTables: [],
+      timeEntryTriggers: triggersBefore,
+      positionIndex: ["node_id", "sequence_no"],
+    });
     const appended = await suite.db.transaction((tx) =>
       appendToChain(
         tx,
@@ -157,6 +180,8 @@ describe("migrating a node with chains at two locations", () => {
     await seedChain(suite.db, { personId, locationId: otherPlace, nodeId: node }, ["in"]);
     const entriesBefore = rows(suite.db, "time_entries");
     const headsBefore = rows(suite.db, "workforce_chains");
+    const factsBefore = schemaFacts(suite.db);
+    expect(factsBefore.positionIndex).toEqual(["node_id", "location_id", "sequence_no"]);
 
     removeChangeFeed(suite.db);
     const error = await captureError(() => runMigrations(suite.db, WORKFORCE_MIGRATIONS));
@@ -167,5 +192,6 @@ describe("migrating a node with chains at two locations", () => {
     expect(rows(suite.db, "time_entries")).toEqual(entriesBefore);
     expect(rows(suite.db, "workforce_chains")).toEqual(headsBefore);
     expect(headColumns(suite.db)).toContain("location_id");
+    expect(schemaFacts(suite.db)).toEqual(factsBefore);
   });
 });

@@ -480,10 +480,12 @@ it.each([
 it("explains that a chain position counts its node's entries at every location", async () => {
   await day();
   const english =
-    "Chain position counts every entry its node recorded, at every location, so one location's record can skip numbers.";
+    "Chain position counts every entry its node recorded, for everyone, at every workplace, so one workplace's record can skip numbers.";
   const spanish =
-    "La posición en la cadena cuenta todos los asientos que registró su nodo, en todos los locales, así que el registro de un local puede saltarse números.";
-  expect((await doc({ locale: "en" })).notes).toContain(english);
+    "La posición en la cadena cuenta todos los asientos que registró su nodo, de todas las personas y en todos los centros de trabajo, así que el registro de un centro puede saltarse números.";
+  const standard = await doc({ locale: "en" });
+  expect(standard.notes[2]).toBe(english);
+  expect(standard.notes).toHaveLength(3);
   const representatives = await doc({ locale: "es", audience: "representatives" });
   expect(representatives.notes[2]).toBe(spanish);
   expect(representatives.notes).toHaveLength(4);

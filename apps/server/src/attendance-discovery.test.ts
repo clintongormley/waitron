@@ -358,6 +358,38 @@ describe("durable attendance discovery", () => {
       completed: true,
     });
   });
+  // Discovery reads every node's clock entries at a location on each pass, and the table only grows.
+  it("reads a location's clock entries through an index on location, node and position", async () => {
+    const { beginAttendanceDiscovery, discoverAttendanceDays } =
+      await import("./attendance-discovery.js");
+    await run((tx) => backend.clockIn(tx, event("2026-01-07T08:00:00Z")));
+    const plans: string[][] = [];
+    const planning = (tx: Transaction) =>
+      new Proxy(tx, {
+        get: (target, key, receiver) =>
+          key === "execute"
+            ? (query: ReturnType<typeof sql>) => {
+                plans.push(
+                  target
+                    .execute<{ detail: string }>(sql`explain query plan ${query}`)
+                    .rows.map((row) => row.detail),
+                );
+                return target.execute(query);
+              }
+            : Reflect.get(target, key, receiver),
+      });
+    await run((tx) =>
+      beginAttendanceDiscovery(planning(tx), { locationId, generation: "open-one" }),
+    );
+    await run((tx) => discoverAttendanceDays(planning(tx), scope()));
+    const clockPlans = plans.filter((plan) => plan.some((line) => /\btime_entries\b/.test(line)));
+    expect(clockPlans).not.toEqual([]);
+    for (const plan of clockPlans) {
+      expect(plan.filter((line) => /^SCAN time_entries\b/.test(line))).toEqual([]);
+      expect(plan.some((line) => line.includes("time_entries_location_chain_idx"))).toBe(true);
+    }
+  });
+
   it("dirties original and retimed days for a late approved correction without changing time rows", async () => {
     await run((tx) => backend.clockIn(tx, event("2026-01-05T08:00:00Z")));
     await run((tx) => backend.clockOut(tx, event("2026-01-05T17:00:00Z")));

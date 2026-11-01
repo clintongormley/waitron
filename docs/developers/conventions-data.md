@@ -4434,18 +4434,18 @@ stream's generations need no hold: they are aged by the bucket's own clock (the 
 
 **The working-time record across a step back** (Tasks 15a and 15b). Every clock action is still
 written as before, with the time the clock read; only how a person's state is worked out changed.
-`readLatestLiveEntry` (`packages/workforce/src/record-reads.ts`) takes, in each chain (one node and
-one location), the person's latest direct entry by its position (`sequence_no`), since within one
-chain a later position is a later write whatever the clock said; across chains, the latest of those
+`readLatestLiveEntry` (`packages/workforce/src/record-reads.ts`) takes, in each chain (one per node
+since A1268 PR 1), the person's latest direct entry by its position (`sequence_no`), since within one
+chain a later position is a later write whatever the clock said; across nodes, the latest of those
 by time (`compareEvents`); and an approved missing-entry correction dated after that entry decides
 instead, unless a clock action was written after the correction in the correction's own
 chain (for the clock-in read, a clock-in). The clocking routes (`currentState`, `packages/workforce/src/clocking.ts`), the till's
 state (`apps/server/src/till-clock-state.ts`) and the attendance reconcile's clock-in
 (`apps/server/src/attendance-discovery.ts`) all read it, so after a step back a person can clock out
 and in again and the till agrees. While the clock only moves forward and no correction is dated
-ahead of it, it answers what the old read did. Accepted: across chains times are still compared, so a move between two locations on one node
-inside the step can read wrong until real time passes the earlier entry (item A1268 makes the chain
-one per venue); the hours read, the end-of-day pass and the correction check still order by time.
+ahead of it, it answers what the old read did. A move between two locations on one node inside the
+step reads right, as both entries are in the node's one chain. Still open (A1268): the hours read,
+the end-of-day pass and the correction check order by time.
 Guards: `packages/workforce/src/clocking-step.test.ts`, `apps/server/src/till-clock-step.test.ts`.
 
 **The start-up window** (`apps/server/src/clock-start-up.ts`). The owner's rule (2026-10-31): when

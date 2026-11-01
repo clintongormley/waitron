@@ -437,7 +437,7 @@ describe("waitron-restore restore --from-archive", () => {
     expect(await readStreamSettings(suite.db, ring)).toBeNull();
     const expectedTenants = await suite.db.select().from(tenants);
     const expectedLocations = await suite.db.select().from(locations);
-    const chainKey = { nodeId: ids.node, locationId: ids.location };
+    const chainKey = { nodeId: ids.node };
     const expectedChain = await readChain(suite.db, chainKey);
     const expectedHead = await suite.db.select().from(workforceChains);
     expect(expectedChain.map((e) => e.sequenceNo)).toEqual([1, 2]);

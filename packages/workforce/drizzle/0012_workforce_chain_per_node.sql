@@ -18,5 +18,6 @@ ALTER TABLE `__new_workforce_chains` RENAME TO `workforce_chains`;--> statement-
 PRAGMA foreign_keys=ON;--> statement-breakpoint
 DROP INDEX `time_entries_person_chain_idx`;--> statement-breakpoint
 DROP INDEX `time_entries_chain_position_uq`;--> statement-breakpoint
+CREATE INDEX `time_entries_location_chain_idx` ON `time_entries` (`location_id`,`node_id`,`sequence_no`);--> statement-breakpoint
 CREATE INDEX `time_entries_person_chain_idx` ON `time_entries` (`person_id`,`node_id`,`sequence_no`);--> statement-breakpoint
 CREATE UNIQUE INDEX `time_entries_chain_position_uq` ON `time_entries` (`node_id`,`sequence_no`);
