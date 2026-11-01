@@ -6184,6 +6184,12 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   use them to locate the pending operation before changing test or product behavior.
   [Detail](backlog/ci.md#a1230-dashboard-shard-1s-blocked-operation-is-unknown).
 
+- **A1305 residual: what blocked the dashboard page on `device-profiles-screen.clock.test.ts` is
+  unknown.** The page's main thread stopped answering during a switch click; the reporter's
+  `[file-progress] stack:` lines will name the code at the next stall. Read them before changing
+  test or product behaviour.
+  [Detail](backlog/ci.md#a1305-the-dashboard-page-blocked-during-a-click-and-what-blocked-it-is-unknown).
+
 - **A1027 residual: the till shard's blocked operation is unknown.**
   [Detail](backlog/ci.md#the-till-shards-blocked-operation-is-unknown-a1027).
 

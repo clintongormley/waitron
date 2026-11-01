@@ -1131,9 +1131,39 @@ and enables Playwright API logging. On recurrence, preserve the whole failing lo
 read each selected file's last collected/case/hook event and any unfinished
 Playwright API call, then reproduce that wait. A completed collection event
 separates a loaded module from an assigned file; a case-start event precedes its
-beforeEach hooks. These events do not provide a browser JavaScript stack or name
-a pending application promise. Product behavior, test assertions, test deadlines
+beforeEach hooks. These events do not name a pending application promise. Since
+A1305, a file that runs 60 seconds also gets `[file-progress] stack:` lines from
+its browser page (see A1305 below). Product behavior, test assertions, test deadlines
 and shard counts have not changed in this diagnostic slice.
+
+## A1305: the dashboard page blocked during a click, and what blocked it is unknown
+
+Main CI run `41338680756` (`b0aa3502d`), job `124944000948`, `test-dashboard (4)`,
+reached its 360-second deadline on 1 November 2026 with only
+`src/screens/device-profiles-screen.clock.test.ts` unfinished. The file started at
+18:58:17. Its Playwright API log shows the click on the Clock in switch at 18:58:17.532
+log `performing click action` and never `click action done`: of the 83 clicks
+started between 18:58:17 and 18:58:32, 82 succeeded and that one failed, at
+18:58:32.166, when Playwright's timeout (the test's remaining 15 seconds) ran out on
+the Node side. That browser page made no further call before the deadline, and the
+file's two later cases never started.
+
+A blocked main thread explains that shape and a waiting test does not. On macOS,
+a test whose click handler loops forever never finished and its file never ended,
+as in CI; a test awaiting a promise that never settles failed at 15 seconds and its
+file's next case passed. What blocked the page in CI was not found: the clock file
+passed in 1,025 runs in batches of 25 (the file and 24 copies, three browser
+workers; 275 runs with coverage on) and in 28 runs beside its CI neighbours (17
+with coverage). Reading the click's path
+(`wt-switch`, the screen's capability toggle, the draft scope, `wt-dialog`) found
+no loop.
+
+The shared reporter now pauses a page whose file has run 60 seconds and prints its
+JavaScript stack, or says the page was waiting, or that it did not answer at all
+(`docs/developers/ci-and-gates.md`, "Trace selected cases and browser calls…"). On
+the next stall, read those lines first; they name the code, or rule JavaScript out.
+The earlier dashboard stall (A1230, above) left too little evidence to say whether
+it was the same.
 
 ## A1252: remaining server job time after the held-setup split
 
