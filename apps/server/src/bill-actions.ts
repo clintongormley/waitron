@@ -358,7 +358,7 @@ async function resolveMoveLines(
  * Move the chosen dishes, whole and with their extras, from an open bill to another bill of its
  * party, or to a new bill (a new counter order when the bill has none). The source may be partly
  * paid: a paid dish stays (`bill.line_paid`) and the source keeps at least what it has received. An
- * existing destination holds no payment. To a new bill, a dish the kitchen holds outside a held
+ * existing destination may hold payments and owes more afterwards. To a new bill, a dish the kitchen holds outside a held
  * group is refused `tab.split_held_line`, as `splitBill` refuses it.
  */
 export async function moveDishes(
@@ -378,7 +378,6 @@ export async function moveDishes(
       throw new AppError("bill.other_party", { workingOrderId: toBillId });
     }
     await requireBillOfParty(tx, path.partyId, toBillId);
-    await refuseBillWithPayments(tx, toBillId);
     await assertServiceModesMatch(tx, cfg, fromBillId, toBillId);
   }
   const { transfers, recalled } = await resolveMoveLines(tx, fromBillId, lineIds);

@@ -395,6 +395,34 @@ describe("A803 move dishes: the moves that succeed", () => {
     expect(await dishIds(p.bill2)).toEqual(cañas.slice(1));
   });
 
+  it("A803 move dishes: onto Bill 2 holding a €5 contribution, the Caña moves, Bill 2 owes more and its payment is unchanged", async () => {
+    const p = await party([dish("Caña"), dish("Burger")], "fire", [dish("Vino")]);
+    const paymentId = await cashContribution(v, p.bill2, "5.00");
+    const before = await total(p.bill2);
+    const [caña] = await dishIds(p.bill1, "Caña");
+    const payments = await paymentsOf(v, p.bill2);
+
+    await move(p.partyId, p.bill1, p.bill2, [caña!]);
+
+    expect(await dishIds(p.bill2, "Caña")).toEqual([caña]);
+    expect(await total(p.bill2)).toBe(before + 300);
+    expect(await paymentsOf(v, p.bill2)).toEqual(payments);
+    expect(payments.map((payment) => payment.id)).toEqual([paymentId]);
+  });
+
+  it("A803 move dishes: onto Bill 2 whose Vino is paid by item, the Caña moves and the Vino stays paid", async () => {
+    const p = await party([dish("Caña"), dish("Burger")], "fire", [dish("Vino"), dish("Agua")]);
+    const [vino] = await rowsOf(p.bill2);
+    await payItems(p.bill2, [vino!.lineNo], "30.00");
+    const payments = await paymentsOf(v, p.bill2);
+    const [caña] = await dishIds(p.bill1, "Caña");
+
+    await move(p.partyId, p.bill1, p.bill2, [caña!]);
+
+    expect(await dishIds(p.bill2, "Caña")).toEqual([caña]);
+    expect(await paymentsOf(v, p.bill2)).toEqual(payments);
+  });
+
   it("A803 move dishes: Bill 1 totals €52.00 with €40.00 received; moving €12.00 leaves €40.00, which is allowed", async () => {
     const p = await party([dish("Vino"), dish("Burger"), dish("Agua"), dish("Flan"), dish("Caña")]);
     expect(await total(p.bill1)).toBe(5200);
@@ -919,15 +947,6 @@ describe("A803 move dishes refuses, and changes nothing", () => {
     );
     await refused(() => move(p.partyId, p.bill1, p.bill2, [caña!]), "bill.refund_in_progress", {
       workingOrderId: p.bill1,
-    });
-  });
-
-  it("A803 move dishes refuses: a destination that has taken a payment is bill.payments_received", async () => {
-    const p = await party([dish("Caña")], "fire", [dish("Vino")]);
-    await cashContribution(v, p.bill2, "5.00");
-    const [caña] = await dishIds(p.bill1);
-    await refused(() => move(p.partyId, p.bill1, p.bill2, [caña!]), "bill.payments_received", {
-      workingOrderId: p.bill2,
     });
   });
 
