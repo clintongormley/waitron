@@ -50,7 +50,7 @@ function canonicalEntry(row: ProjectedRecordEntry) {
   };
 }
 
-function canonicalSession(s: WorkSession): Omit<WorkSession, "locationId"> {
+function canonicalSession(s: WorkSession): WorkSession {
   return {
     personId: s.personId,
     workDate: s.workDate,

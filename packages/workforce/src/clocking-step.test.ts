@@ -230,7 +230,6 @@ describe("clocking across a backward step of the box's clock", () => {
         (["07:00", "08:00"] as const).map((time, i) => ({
           nodeId,
           personId: p,
-          locationId,
           missingEntryKind: i === 0 ? ("in" as const) : ("out" as const),
           at: `2026-01-05T${time}:00Z`,
           offsetMinutes: 0,

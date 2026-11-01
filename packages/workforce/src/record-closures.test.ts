@@ -15,7 +15,6 @@ const row = (
   entryId,
   entryKind,
   personId: "worker",
-  locationId: "venue",
   nodeId: "box",
   eventAt: `2026-01-05T${hour}:00:00.000Z`,
   recordedAt: "2026-01-05T20:00:00.000Z",
@@ -39,7 +38,6 @@ function closure(entries: TimeEntryRecord[] = [start, end]): PayPeriodClosure {
   return {
     id: "closed-january",
     nodeId: "box",
-    locationId: "venue",
     period: january,
     clock: { timeZone: "UTC", dayCutover: "06:00", cutoverChanges: [] },
     scheduledCloseAt: "2026-02-01T06:00:00.000Z",

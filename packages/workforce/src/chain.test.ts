@@ -224,7 +224,6 @@ describe("appendToChain", () => {
     await suite.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")));
     const fork = {
       personId,
-      locationId,
       nodeId,
       entryKind: "out" as const,
       // Clears `time_entries_event_at_second_ck` and `time_entries_chaining_ck`, so the index is what

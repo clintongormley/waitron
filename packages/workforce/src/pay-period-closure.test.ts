@@ -38,7 +38,6 @@ beforeEach(async () => {
 });
 const event = (at: string, personId = worker) => ({
   nodeId,
-  locationId,
   personId,
   at,
   offsetMinutes: 0,
@@ -48,7 +47,6 @@ const close = (patch: Partial<Parameters<typeof api.closePayPeriod>[1]> = {}) =>
   run((tx) =>
     api.closePayPeriod(tx, {
       nodeId,
-      locationId,
       period,
       clock,
       now: "2026-11-01T05:00:00Z",
@@ -352,7 +350,6 @@ it("freezes missing-entry requests and competing disputes without inventing a se
     backend.requestCorrection(tx, {
       nodeId,
       personId: worker,
-      locationId,
       missingEntryKind: "in",
       at: "2026-10-05T09:00:00Z",
       offsetMinutes: 0,
@@ -365,7 +362,6 @@ it("freezes missing-entry requests and competing disputes without inventing a se
     backend.proposeCorrection(tx, {
       nodeId,
       personId: other,
-      locationId,
       missingEntryKind: "in",
       at: "2026-10-05T10:00:00Z",
       offsetMinutes: 0,
@@ -405,7 +401,6 @@ it("freezes accepted missing clock-in and clock-out entries with their requests"
       backend.requestCorrection(tx, {
         nodeId,
         personId: worker,
-        locationId,
         missingEntryKind,
         at,
         offsetMinutes: 0,
@@ -432,16 +427,12 @@ it("reads overlapping closures and verifies successive months on the same chain"
   expect(api.verifyPayPeriodClosures([second, first])).toEqual({ ok: true });
   expect(
     await api.readPayPeriodClosures(suite.db, {
-      locationId,
       period: { start: "2026-10-15", end: "2026-11-15" },
     }),
   ).toEqual([first, second]);
-  expect(await api.readPayPeriodClosures(suite.db, { locationId, period: nextPeriod })).toEqual([
-    second,
-  ]);
+  expect(await api.readPayPeriodClosures(suite.db, { period: nextPeriod })).toEqual([second]);
   expect(
     await api.readPayPeriodClosures(suite.db, {
-      locationId,
       period: { start: "2026-12-01", end: "2027-01-01" },
     }),
   ).toEqual([]);
@@ -451,7 +442,7 @@ it("reads and replays every person's frozen history when the caller's object als
   await automatic(other);
   const first = await close();
   expect(first.snapshot.summaries.map((s) => s.personId).sort()).toEqual([other, worker].sort());
-  const withPerson = { locationId, period, personId: worker };
+  const withPerson = { period, personId: worker };
   expect(await api.readPayPeriodClosures(suite.db, withPerson)).toEqual([first]);
   expect(
     await close({ personId: worker } as Partial<Parameters<typeof api.closePayPeriod>[1]>),

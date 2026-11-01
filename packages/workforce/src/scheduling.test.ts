@@ -828,14 +828,12 @@ describe("getPlannedVsActual", () => {
     await insertTimeEntry(suite.db, {
       nodeId: node,
       personId: person,
-      locationId: loc,
       entryKind: "in",
       eventAt: inAt,
     });
     await insertTimeEntry(suite.db, {
       nodeId: node,
       personId: person,
-      locationId: loc,
       entryKind: "out",
       eventAt: outAt,
     });

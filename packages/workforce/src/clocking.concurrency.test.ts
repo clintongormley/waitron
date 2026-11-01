@@ -69,7 +69,6 @@ describe("clockIn admits one of two concurrent same-person clock-ins", () => {
     await insertTimeEntry(suite.db, {
       nodeId,
       personId: otherPersonId,
-      locationId,
       eventAt: "2026-01-05T05:00:00Z",
     });
 

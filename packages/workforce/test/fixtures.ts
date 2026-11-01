@@ -240,7 +240,6 @@ export async function insertTimeEntry(
   params: {
     nodeId: string;
     personId: string;
-    locationId: string;
     entryKind?: WorkforceEntryKind;
     eventAt?: string;
     offsetMinutes?: number;

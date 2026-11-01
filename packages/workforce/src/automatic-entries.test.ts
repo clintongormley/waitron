@@ -24,7 +24,7 @@ let personId: string,
   nodeId: string,
   openEntryId: string;
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
-const event = (at: string) => ({ nodeId, personId, locationId, at, offsetMinutes: 0, origin });
+const event = (at: string) => ({ nodeId, personId, at, offsetMinutes: 0, origin });
 const input = () => ({ ...event("2026-01-05T17:00:00Z"), openEntryId });
 const confirm = (entryId: string, workerPersonId = personId) => ({
   nodeId,

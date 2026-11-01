@@ -34,7 +34,7 @@ beforeEach(async () => {
   [personId, manager, other] = rows.map((r) => r.id) as [string, string, string];
   await seedEmployment(suite.db, { personId });
 });
-const event = (at: string) => ({ nodeId, personId, locationId, at, offsetMinutes: 0, origin });
+const event = (at: string) => ({ nodeId, personId, at, offsetMinutes: 0, origin });
 it("refuses a missing clock-in overlapping the person's completed work", async () => {
   await day();
   await expect(
@@ -123,7 +123,6 @@ const targeted = (correctsEntryId: string, actorPersonId = personId) => ({
 const missing = (missingEntryKind: "in" | "out" = "out", at = "2026-01-05T18:00:00Z") => ({
   nodeId,
   personId,
-  locationId,
   missingEntryKind,
   at,
   offsetMinutes: 0,

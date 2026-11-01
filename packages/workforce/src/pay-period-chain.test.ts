@@ -7,7 +7,6 @@ function closure(over: Partial<PayPeriodClosure> = {}): PayPeriodClosure {
   const row: PayPeriodClosure = {
     id: "closure-one",
     nodeId: "node-one",
-    locationId: "location-one",
     period: { start: "2026-01-01", end: "2026-02-01" },
     clock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
     scheduledCloseAt: "2026-02-01T05:00:00.000Z",
@@ -125,7 +124,6 @@ const recorded: ProjectedRecordEntry = {
   entry: {
     entryId: "entry",
     personId: "p",
-    locationId: "l",
     nodeId: "n",
     entryKind: "out",
     eventAt: "2026-01-05T17:00:00.000Z",
@@ -153,7 +151,6 @@ const recorded: ProjectedRecordEntry = {
 };
 const session = {
   personId: "p",
-  locationId: "l",
   workDate: "2026-01-05",
   startedAt: "2026-01-05T09:00:00.000Z",
   startOffsetMinutes: 60,

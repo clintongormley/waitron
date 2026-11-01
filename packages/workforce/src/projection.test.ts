@@ -17,7 +17,6 @@ function entry(
   entryKind: WorkforceEntryKind,
   eventAt: string,
   opts: {
-    locationId?: string;
     nodeId?: string;
     offsetMinutes?: number;
     entryId?: string;
@@ -32,7 +31,6 @@ function entry(
   return {
     entryId: opts.entryId ?? `e${seq}`,
     personId,
-    locationId: opts.locationId ?? "loc-1",
     nodeId: opts.nodeId ?? "node-1",
     entryKind,
     eventAt,

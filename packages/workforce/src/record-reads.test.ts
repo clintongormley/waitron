@@ -77,11 +77,10 @@ async function correct(target: string, at: string) {
   return { request, answer };
 }
 async function freezeJanuary() {
-  const record = await run((tx) => backend.timeRecord(tx, { period: january, locationId }));
+  const record = await run((tx) => backend.timeRecord(tx, { period: january }));
   const row: Omit<PayPeriodClosure, "closureHash"> = {
     id: "018ee400-0000-7000-8000-000000000001",
     nodeId,
-    locationId,
     period: january,
     clock: { timeZone: "UTC", dayCutover: "06:00", cutoverChanges: [] },
     scheduledCloseAt: "2026-02-01T06:00:00.000Z",
@@ -252,7 +251,7 @@ it.each([
 ])("refuses a malformed explicit record query %j", async (patch) => {
   await expect(
     run((tx) =>
-      backend.timeRecord(tx, { period: january, personId, locationId, ...patch } as Parameters<
+      backend.timeRecord(tx, { period: january, personId, ...patch } as Parameters<
         WorkforceBackend["timeRecord"]
       >[1]),
     ),
@@ -265,7 +264,6 @@ it("does not automatically close a live in already closed by an approved missing
     backend.requestCorrection(tx, {
       nodeId,
       personId,
-      locationId,
       missingEntryKind: "out",
       at: "2026-01-05T17:00:00Z",
       offsetMinutes: 0,
@@ -282,7 +280,6 @@ it("does not automatically close a live in already closed by an approved missing
       backend.recordAutomaticClose(tx, {
         nodeId,
         personId,
-        locationId,
         openEntryId,
         at: "2026-01-05T18:00:00Z",
         offsetMinutes: 0,
@@ -297,7 +294,6 @@ it("lets an approved missing end close the prior live shift and permits the next
     backend.requestCorrection(tx, {
       nodeId,
       personId,
-      locationId,
       missingEntryKind: "out",
       at: "2026-01-05T17:00:00Z",
       offsetMinutes: 0,
@@ -337,11 +333,10 @@ async function twoPeopleClosedJanuary() {
     );
   const outs = await suite.db.select().from(timeEntries).where(eq(timeEntries.entryKind, "out"));
   const outOf = (subject: string) => outs.filter((e) => e.personId === subject)[0]!.id;
-  const record = await run((tx) => backend.timeRecord(tx, { period: january, locationId }));
+  const record = await run((tx) => backend.timeRecord(tx, { period: january }));
   const row: Omit<PayPeriodClosure, "closureHash"> = {
     id: "018ee400-0000-7000-8000-000000000002",
     nodeId,
-    locationId,
     period: january,
     clock: { timeZone: "UTC", dayCutover: "06:00", cutoverChanges: [] },
     scheduledCloseAt: "2026-02-01T06:00:00.000Z",

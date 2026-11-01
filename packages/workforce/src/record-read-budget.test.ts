@@ -127,7 +127,6 @@ it("does not decode another person's incomplete attribution during an own-record
       { nodeId },
       {
         personId,
-        locationId,
         entryKind: "in",
         eventAt: "2026-01-06T09:00:00Z",
         eventOffsetMinutes: 0,
@@ -184,7 +183,6 @@ it("uses an approved missing start as live state while ignoring its pending requ
     backend.requestCorrection(tx, {
       nodeId,
       personId: worker,
-      locationId,
       missingEntryKind: "in",
       at: "2026-01-06T09:00:00Z",
       offsetMinutes: 0,

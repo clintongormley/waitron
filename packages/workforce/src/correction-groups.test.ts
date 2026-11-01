@@ -43,7 +43,6 @@ function pair(
   return kinds.map((missingEntryKind, i) => ({
     nodeId,
     personId,
-    locationId,
     missingEntryKind,
     actorPersonId,
     origin,

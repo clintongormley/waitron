@@ -21,7 +21,6 @@ function entry(
     entryKind,
     eventAt,
     personId: "worker",
-    locationId: "venue",
     nodeId: "box",
     recordedAt: "2026-01-05T20:00:00.000Z",
     offsetMinutes: 0,
