@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, lt, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, lt, lte, notInArray, or, sql } from "drizzle-orm";
 import { isUniqueViolation, nowIso, type Transaction } from "@waitron/db";
 import { TERMINAL, type LedgerSnapshot } from "./derive.js";
 import type { RunPeriod } from "./duty.js";
@@ -104,9 +104,10 @@ export async function claimGap(
  */
 export async function claimRow(
   tx: Transaction,
-  params: { id: string; now: Date },
+  params: { id: string; now: Date; longestWaitMs: number },
 ): Promise<ClaimedRun | null> {
   const now = params.now.toISOString();
+  const ceiling = new Date(params.now.getTime() + params.longestWaitMs).toISOString();
   const [row] = await tx
     .update(scheduledRuns)
     .set({
@@ -123,9 +124,9 @@ export async function claimRow(
         eq(scheduledRuns.id, params.id),
         inArray(scheduledRuns.state, ["pending", "failed"]),
         // Inclusive: a row due at exactly `now` is claimable. `lt()` would silently defer it by a
-        // whole tick, and `derive` uses `<=` — the two must agree or the runner derives work it
-        // then refuses to claim.
-        sql`${scheduledRuns.nextAttemptAt} <= ${now}`,
+        // whole tick, and `derive` uses `<=` — the two must agree (`retryDue`) or the runner
+        // derives work it then refuses to claim.
+        or(lte(scheduledRuns.nextAttemptAt, now), gt(scheduledRuns.nextAttemptAt, ceiling)),
       ),
     )
     .returning(CLAIMED);
@@ -142,6 +143,7 @@ export async function reclaimStale(
 ): Promise<ClaimedRun | null> {
   const now = params.now.toISOString();
   const cutoff = new Date(params.now.getTime() - params.staleAfterMs).toISOString();
+  const ahead = new Date(params.now.getTime() + params.staleAfterMs).toISOString();
   const [row] = await tx
     .update(scheduledRuns)
     .set({
@@ -153,7 +155,8 @@ export async function reclaimStale(
       and(
         eq(scheduledRuns.id, params.id),
         eq(scheduledRuns.state, "running"),
-        lt(scheduledRuns.startedAt, cutoff),
+        // `claimLapsed` in `derive.ts`, which reports these rows stale.
+        or(lt(scheduledRuns.startedAt, cutoff), gt(scheduledRuns.startedAt, ahead)),
       ),
     )
     .returning(CLAIMED);

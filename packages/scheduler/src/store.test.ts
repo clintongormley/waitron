@@ -15,6 +15,8 @@ import { scheduledRuns } from "./schema/scheduled-runs.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 
 const DUTY = "test.duty";
+const DAY = 24 * 60 * 60 * 1000;
+const HOUR = 60 * 60 * 1000;
 const NOW = new Date("2026-07-25T04:00:00Z");
 const PERIOD = dayPeriod(new Date("2026-07-24T00:00:00Z"));
 
@@ -118,7 +120,7 @@ describe("claimRow", () => {
     const failed = snapshot.rows.find((r) => r.state === "failed")!;
     const later = new Date("2026-07-25T05:00:00Z");
     const claimed = await withTransaction(suite.db, (tx) =>
-      claimRow(tx, { id: failed.id, now: later }),
+      claimRow(tx, { id: failed.id, now: later, longestWaitMs: DAY }),
     );
     expect(claimed).toMatchObject({ attempts: 2 });
   });
@@ -142,7 +144,7 @@ describe("claimRow", () => {
       }),
     );
     const reclaimed = await withTransaction(suite.db, (tx) =>
-      claimRow(tx, { id: claimed!.id, now: boundary }),
+      claimRow(tx, { id: claimed!.id, now: boundary, longestWaitMs: DAY }),
     );
     expect(reclaimed).toMatchObject({ attempts: 2 });
   });
@@ -164,7 +166,7 @@ describe("claimRow", () => {
       }),
     );
     await withTransaction(suite.db, (tx) =>
-      claimRow(tx, { id: gap!.id, now: new Date("2026-07-25T04:20:00Z") }),
+      claimRow(tx, { id: gap!.id, now: new Date("2026-07-25T04:20:00Z"), longestWaitMs: DAY }),
     );
 
     const snapshot = await withTransaction(suite.db, (tx) =>
@@ -180,7 +182,7 @@ describe("claimRow", () => {
     );
     const running = snapshot.rows.find((r) => r.state === "running")!;
     const claimed = await withTransaction(suite.db, (tx) =>
-      claimRow(tx, { id: running.id, now: new Date("2026-07-25T06:00:00Z") }),
+      claimRow(tx, { id: running.id, now: new Date("2026-07-25T06:00:00Z"), longestWaitMs: DAY }),
     );
     expect(claimed).toBeNull();
   });
@@ -203,7 +205,7 @@ describe("claimRow", () => {
       }),
     );
     const tooSoon = await withTransaction(suite.db, (tx) =>
-      claimRow(tx, { id: claimed!.id, now: new Date(future.getTime() - 1) }),
+      claimRow(tx, { id: claimed!.id, now: new Date(future.getTime() - 1), longestWaitMs: DAY }),
     );
     expect(tooSoon).toBeNull();
   });
@@ -224,7 +226,7 @@ describe("claimRow", () => {
         .returning({ id: scheduledRuns.id }),
     );
     const claimed = await withTransaction(suite.db, (tx) =>
-      claimRow(tx, { id: inserted!.id, now: NOW }),
+      claimRow(tx, { id: inserted!.id, now: NOW, longestWaitMs: DAY }),
     );
     expect(claimed).toBeNull();
   });
@@ -446,7 +448,7 @@ describe("enqueueSuccessor", () => {
       (r) => new Date(r.periodFrom).getTime() === period.from.getTime() && r.generation === 1,
     )!;
     const gen1 = await withTransaction(suite.db, (tx) =>
-      claimRow(tx, { id: gen1Row.id, now: dueAt1 }),
+      claimRow(tx, { id: gen1Row.id, now: dueAt1, longestWaitMs: DAY }),
     );
     await withTransaction(suite.db, (tx) =>
       completeRun(tx, {
@@ -473,5 +475,71 @@ describe("enqueueSuccessor", () => {
       (r) => new Date(r.periodFrom).getTime() === period.from.getTime() && r.state === "pending",
     );
     expect(gen2Row).toMatchObject({ generation: 2 });
+  });
+});
+
+// After the clock steps back, a time written before the step lies ahead of the new clock by the
+// step's length; `derive` reports such a row due, so the claim must accept it too.
+describe("times stamped ahead of the clock", () => {
+  async function failedWithRetryAt(day: string, nextAttemptAt: Date): Promise<string> {
+    const claimed = await withTransaction(suite.db, (tx) =>
+      claimGap(tx, { duty: DUTY, period: dayPeriod(new Date(day)), now: NOW }),
+    );
+    await withTransaction(suite.db, (tx) =>
+      completeRun(tx, {
+        id: claimed!.id,
+        startedAt: claimed!.startedAt,
+        state: "failed",
+        summary: null,
+        errorCode: "unknown",
+        nextAttemptAt,
+        now: NOW,
+      }),
+    );
+    return claimed!.id;
+  }
+
+  it("claimRow claims a failed row whose retry lies further ahead than the longest wait", async () => {
+    const id = await failedWithRetryAt("2026-02-01T00:00:00Z", new Date(NOW.getTime() + 400 * DAY));
+    const claimed = await withTransaction(suite.db, (tx) =>
+      claimRow(tx, { id, now: NOW, longestWaitMs: HOUR / 2 }),
+    );
+    expect(claimed).toMatchObject({ attempts: 2 });
+  });
+
+  it("claimRow refuses a retry exactly the longest wait ahead", async () => {
+    const id = await failedWithRetryAt("2026-02-02T00:00:00Z", new Date(NOW.getTime() + HOUR / 2));
+    const claimed = await withTransaction(suite.db, (tx) =>
+      claimRow(tx, { id, now: NOW, longestWaitMs: HOUR / 2 }),
+    );
+    expect(claimed).toBeNull();
+  });
+
+  it("reclaimStale reclaims a running row started further ahead than staleAfterMs", async () => {
+    const claimed = await withTransaction(suite.db, (tx) =>
+      claimGap(tx, {
+        duty: DUTY,
+        period: dayPeriod(new Date("2026-02-03T00:00:00Z")),
+        now: new Date(NOW.getTime() + 400 * DAY),
+      }),
+    );
+    const reclaimed = await withTransaction(suite.db, (tx) =>
+      reclaimStale(tx, { id: claimed!.id, now: NOW, staleAfterMs: HOUR }),
+    );
+    expect(reclaimed).toMatchObject({ attempts: 2 });
+  });
+
+  it("reclaimStale refuses a running row started exactly staleAfterMs ahead", async () => {
+    const claimed = await withTransaction(suite.db, (tx) =>
+      claimGap(tx, {
+        duty: DUTY,
+        period: dayPeriod(new Date("2026-02-04T00:00:00Z")),
+        now: new Date(NOW.getTime() + HOUR),
+      }),
+    );
+    const reclaimed = await withTransaction(suite.db, (tx) =>
+      reclaimStale(tx, { id: claimed!.id, now: NOW, staleAfterMs: HOUR }),
+    );
+    expect(reclaimed).toBeNull();
   });
 });

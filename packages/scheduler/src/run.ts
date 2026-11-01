@@ -82,7 +82,7 @@ export async function runDue(deps: SchedulerDeps, now: Date): Promise<TickResult
       const snapshot = await withTransaction(deps.db, (tx) =>
         readSnapshot(tx, { duty: duty.name, horizonStart }),
       );
-      const derivation = derive(snapshot, now, deps);
+      const derivation = derive(snapshot, now, { ...deps, longestWaitMs: longestWait(deps, duty) });
       result.deferred += derivation.deferred;
       result.beyondHorizon += derivation.beyondHorizon;
       earliestFuture = Math.min(earliestFuture, derivation.nextDueAt.getTime());
@@ -148,7 +148,9 @@ async function runOne(
     if (work.kind === "gap") {
       return claimGap(tx, { duty: duty.name, period: work.period, now });
     }
-    if (work.kind === "claimable") return claimRow(tx, { id: work.row.id, now });
+    if (work.kind === "claimable") {
+      return claimRow(tx, { id: work.row.id, now, longestWaitMs: longestWait(deps, duty) });
+    }
     return reclaimStale(tx, { id: work.row.id, now, staleAfterMs: deps.staleAfterMs });
   });
   if (claimed === null) return null;
@@ -220,6 +222,19 @@ async function runOne(
     // and `nextAttemptAt` is written only for a failure.
     nextDueAt: enqueuedAt ?? nextAttemptAt,
   };
+}
+
+/**
+ * The furthest after its writing that a row of this duty is ever due: the last backoff before a
+ * park, a parked period's retry, or the duty's longest re-sweep. A retry time further ahead than
+ * this was written before the clock stepped back, and is due now (`retryDue`).
+ */
+export function longestWait(deps: SchedulerDeps, duty: PeriodDuty): number {
+  return Math.max(
+    deps.backoffBaseMs * 2 ** Math.max(0, deps.maxAttempts - 2),
+    duty.retryParkedAfterMs ?? 0,
+    duty.longestResweepMs ?? 0,
+  );
 }
 
 /** `attempts` was already incremented by the claim, so it is the number of attempts SPENT. */

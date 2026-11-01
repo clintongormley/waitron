@@ -464,3 +464,79 @@ describe("runDue", () => {
     });
   });
 });
+
+// After the clock steps back, a retry time written before the step lies ahead of the new clock by
+// the step's length. One further ahead than any wait the runner or the duty writes runs now.
+describe("runDue: retry times stamped ahead of the clock", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  // The longest backoff `runOne` writes: the last failure before a park.
+  const LONGEST_BACKOFF = DEFAULTS.backoffBaseMs * 2 ** (DEFAULTS.maxAttempts - 2);
+
+  async function insertRow(
+    values: { state: "failed" | "pending"; generation: number; attempts: number },
+    nextAttemptAt: Date,
+  ): Promise<void> {
+    const period = dayPeriod(new Date("2026-07-24T00:00:00Z"));
+    await withTransaction(db, (tx) =>
+      tx.insert(scheduledRuns).values({
+        duty: "test.duty",
+        periodFrom: period.from.toISOString(),
+        periodTo: period.to.toISOString(),
+        ...values,
+        nextAttemptAt: nextAttemptAt.toISOString(),
+      }),
+    );
+  }
+
+  it("retries a failed run whose retry lies further ahead than the longest backoff", async () => {
+    await insertRow(
+      { state: "failed", generation: 0, attempts: 1 },
+      new Date(NOW.getTime() + LONGEST_BACKOFF + 1),
+    );
+    const duty = new FakeDuty();
+    const result = await runDue(deps([duty]), NOW);
+    expect(duty.calls).toHaveLength(1);
+    expect(result.ran[0]).toMatchObject({ outcome: "succeeded", generation: 0 });
+  });
+
+  it("leaves a failed run whose retry is exactly the longest backoff ahead", async () => {
+    await insertRow(
+      { state: "failed", generation: 0, attempts: 1 },
+      new Date(NOW.getTime() + LONGEST_BACKOFF),
+    );
+    const duty = new FakeDuty();
+    await runDue(deps([duty]), NOW);
+    expect(duty.calls).toHaveLength(0);
+  });
+
+  it("runs a pending successor stamped 400 days ahead", async () => {
+    await insertRow(
+      { state: "pending", generation: 1, attempts: 0 },
+      new Date(NOW.getTime() + 400 * DAY),
+    );
+    const duty = Object.assign(new FakeDuty(), { retryParkedAfterMs: DAY, longestResweepMs: DAY });
+    const result = await runDue(deps([duty]), NOW);
+    expect(duty.calls).toHaveLength(1);
+    expect(result.ran[0]).toMatchObject({ outcome: "succeeded", generation: 1 });
+  });
+
+  it("leaves a pending successor a parked period's retry wait ahead", async () => {
+    await insertRow(
+      { state: "pending", generation: 1, attempts: 0 },
+      new Date(NOW.getTime() + DAY),
+    );
+    const duty = Object.assign(new FakeDuty(), { retryParkedAfterMs: DAY });
+    await runDue(deps([duty]), NOW);
+    expect(duty.calls).toHaveLength(0);
+  });
+
+  it("leaves a pending successor the duty's longest re-sweep ahead", async () => {
+    await insertRow(
+      { state: "pending", generation: 1, attempts: 0 },
+      new Date(NOW.getTime() + 2 * DAY),
+    );
+    const duty = Object.assign(new FakeDuty(), { longestResweepMs: 2 * DAY });
+    await runDue(deps([duty]), NOW);
+    expect(duty.calls).toHaveLength(0);
+  });
+});

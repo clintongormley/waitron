@@ -53,7 +53,9 @@ describe("resweepAfter", () => {
   // exist, so on its own it reports the next day boundary; `soon` is earlier than that boundary.
   it("reports the re-sweep it just enqueued as the next due time", async () => {
     const soon = new Date("2026-07-25T05:00:00Z");
-    const duty = new ResweepingDuty(DUTY, () => Promise.resolve({ summary: {}, resweepAfter: soon }));
+    const duty = new ResweepingDuty(DUTY, () =>
+      Promise.resolve({ summary: {}, resweepAfter: soon }),
+    );
     const result = await runDue(deps([duty]), NOW);
     expect(result.nextDueAt).toEqual(soon);
   });
@@ -103,7 +105,9 @@ describe("resweepAfter", () => {
   });
 
   it("does not re-run the period before its due time", async () => {
-    const duty = new ResweepingDuty(DUTY, () => Promise.resolve({ summary: {}, resweepAfter: TOMORROW }));
+    const duty = new ResweepingDuty(DUTY, () =>
+      Promise.resolve({ summary: {}, resweepAfter: TOMORROW }),
+    );
     await runDue(deps([duty]), NOW);
     const soon = await runDue(deps([duty]), new Date("2026-07-25T05:00:00Z"));
     expect(soon.ran).toEqual([]);

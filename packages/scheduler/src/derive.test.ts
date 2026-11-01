@@ -74,7 +74,12 @@ describe("horizonStartFor", () => {
   });
 });
 
-const CONFIG = { horizonDays: 30, maxPeriodsPerTick: 7, staleAfterMs: 3_600_000 };
+const CONFIG = {
+  horizonDays: 30,
+  maxPeriodsPerTick: 7,
+  staleAfterMs: 3_600_000,
+  longestWaitMs: DAY_MS,
+};
 
 function row(overrides: Partial<LedgerRow> & { periodFrom: string }): LedgerRow {
   return {
@@ -290,5 +295,78 @@ describe("derive: nextDueAt", () => {
       CONFIG,
     );
     expect(result.nextDueAt).toEqual(new Date("2026-07-25T06:00:00.000Z"));
+  });
+});
+
+// After the clock steps back, a time written before the step lies ahead of the new clock by the
+// step's length. A time further ahead than any wait the runner writes was written before such a
+// step, so it is due now rather than after the step's length.
+describe("derive: times stamped ahead of the clock", () => {
+  it("returns a failed row whose retry lies further ahead than the longest wait", () => {
+    const failed = row({
+      periodFrom: "2026-07-24T00:00:00.000Z",
+      state: "failed",
+      attempts: 1,
+      nextAttemptAt: new Date(NOW.getTime() + CONFIG.longestWaitMs + 1).toISOString(),
+    });
+    const result = derive(snapshot([failed]), NOW, CONFIG);
+    expect(result.due).toEqual([{ kind: "claimable", row: failed }]);
+    expect(result.nextDueAt).toEqual(new Date("2026-07-26T00:00:00.000Z"));
+  });
+
+  it("returns a pending re-sweep stamped 400 days ahead", () => {
+    const pending = row({
+      periodFrom: "2026-07-23T00:00:00.000Z",
+      generation: 1,
+      state: "pending",
+      attempts: 0,
+      nextAttemptAt: new Date(NOW.getTime() + 400 * DAY_MS).toISOString(),
+    });
+    const result = derive(snapshot([pending]), NOW, CONFIG);
+    expect(result.due).toContainEqual({ kind: "claimable", row: pending });
+  });
+
+  it("leaves a retry exactly the longest wait ahead alone", () => {
+    const at = new Date(NOW.getTime() + CONFIG.longestWaitMs);
+    const result = derive(
+      snapshot([
+        row({
+          periodFrom: "2026-07-24T00:00:00.000Z",
+          state: "failed",
+          attempts: 1,
+          nextAttemptAt: at.toISOString(),
+        }),
+      ]),
+      NOW,
+      CONFIG,
+    );
+    expect(result.due).toEqual([]);
+  });
+
+  it("reclaims a running row started further ahead than staleAfterMs", () => {
+    const stranded = row({
+      periodFrom: "2026-07-24T00:00:00.000Z",
+      state: "running",
+      attempts: 1,
+      startedAt: new Date(NOW.getTime() + CONFIG.staleAfterMs + 1).toISOString(),
+    });
+    const result = derive(snapshot([stranded]), NOW, CONFIG);
+    expect(result.due).toEqual([{ kind: "stale", row: stranded }]);
+  });
+
+  it("leaves a running row started exactly staleAfterMs ahead alone", () => {
+    const result = derive(
+      snapshot([
+        row({
+          periodFrom: "2026-07-24T00:00:00.000Z",
+          state: "running",
+          attempts: 1,
+          startedAt: new Date(NOW.getTime() + CONFIG.staleAfterMs).toISOString(),
+        }),
+      ]),
+      NOW,
+      CONFIG,
+    );
+    expect(result.due).toEqual([]);
   });
 });
