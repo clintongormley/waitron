@@ -194,7 +194,7 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => {
-  for (const store of open.splice(0)) await store.close();
+  for (const store of open.splice(0)) await store?.close();
   for (const dir of scratch.splice(0)) await rm(dir, { recursive: true, force: true });
 });
 
