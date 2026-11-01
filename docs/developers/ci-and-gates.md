@@ -409,7 +409,7 @@ Where each failure arrives differs, which is the part a session gets wrong:
 
 | package | what runs it | when a drop below 90 is seen |
 | --- | --- | --- |
-| `shared` | `mutation-shared` in `.github/workflows/ci.yml` | a pull request whose resolved scope contains the package; on `main` the scope is `global`, unless verified equal-tree PR CI is reused |
+| `shared` | four `mutation-shared` shards and `mutation-shared-aggregate` in `.github/workflows/ci.yml` | a pull request whose resolved scope contains the package; on `main` the scope is `global`, unless verified equal-tree PR CI is reused |
 | `ui-core` | the sharded `mutation-ui-core` matrix plus `mutation-ui-core-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand, on the merged score of the four shards — a branch that thins a UI test goes green and reddens the next night, and a LOCAL `pnpm --filter @waitron/ui-core mutation` prints a score and gates nothing |
 | `ui` | the sharded `mutation-ui` matrix plus `mutation-ui-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand, on the merged score of the thirty shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/ui mutation` prints a score and gates nothing |
 | `fiscal` | nothing in CI | only a local `pnpm --filter @waitron/fiscal mutation` |
@@ -446,6 +446,55 @@ instrumented copies the same way — `packages/fiscal/src/no-hardcoded-margin.te
 `mutate` list names, and reads `./*.ts` as raw text. `packages/ui-core` leaves out
 `src/theme/sources.test.ts` the same way, and `src/theme/*.sweep.test.ts` so a theme mutant does
 not rerun the sweeps. Only `packages/shared` was checked.
+
+### Shared mutation work is split across four whole-file shards
+
+A slow runner can use the whole ten-minute job budget while still making progress. On
+27 October 2026, run `40520210328` instrumented 2,090 mutants and passed its initial 827 tests
+in 37 seconds. Its progress advanced from 661 to 1,042 tested mutants over the final recorded
+140 seconds. A passing run of the same 2,090 mutants completed its initial tests in seven seconds.
+This supports a slow-execution diagnosis for that occurrence; it does not explain every timeout.
+
+On 1 November, A1272 read 240 recent CI runs and retained 100 jobs whose mutation command
+started. Of those, 98 succeeded in 147–262 seconds, with a median of 233 seconds. One was
+cancelled after 104 seconds; one exceeded six minutes (1% of the sample). Three job-list requests
+returned HTTP 502 and are absent from this observed sample. The long job, `124772914501` in
+run `41280853700`, completed installation 30 seconds after the job began, then remained in
+Stryker until cancellation. Its log request returned HTTP 404, so its internal wait remains unknown.
+Its job timestamps span 900 seconds even though its configured limit was ten minutes.
+
+`mutation-shared` uses `scripts/mutation-shard.mjs` to partition the package's unchanged `mutate`
+list across four jobs. Each target file belongs to one shard, with no line-range splits. The jobs
+retain their ten-minute limits. `stryker.ci.config.mjs` disables incremental results so an existing
+full report cannot contribute results outside a shard's selected files. The ordinary local
+`pnpm --filter @waitron/shared mutation` keeps its existing configuration and 90% floor.
+
+Each CI shard writes one JSON report and has no separate score floor. The five-minute
+`mutation-shared-aggregate` job requires four report directories and enforces 90% on their combined
+score. Both jobs report to `ci`; the aggregate uses the same shared-package and reuse conditions
+as the shards, and still runs after a failed shard to refuse incomplete reports. Downloads and
+uploads use the existing bounded two-attempt patterns. The download action keeps each artifact
+in its own directory because the aggregate counts those directories. No new Actions cache is added.
+
+A local cold comparison on the development Mac used two Stryker workers for the full run and
+for each shard. The full run took 131 seconds; the four shard commands took 42.12, 24.92, 25.76
+and 45.19 seconds including command startup. Their reports contain 738, 436, 470 and 503 mutants.
+The union contains exactly the full run's 2,147 mutant identities, once each, with identical statuses.
+Both scores are 94.83% (2,036 detected). Actual-report controls remove one shard or mark every
+mutant Survived; the aggregate refuses each. These local times do not measure a slow hosted runner.
+An earlier probe retained the full report through incremental mode and was discarded as evidence
+for independent shard reports before repeating this comparison with incremental mode off.
+
+`ROOT_SCOPE_CONSUMERS` names shared for both mutation helpers, so a future helper edit selects
+the package's CI work. The source-reader guard also recognises the literal mutation command,
+`FILES=$(node scripts/mutation-shard.mjs ...)`, and the aggregate's literal `--package` argument;
+computed names and other wrappers remain outside that text scan. A real-workspace scope probe
+selected `@waitron/shared` for each helper independently.
+
+The workflow case in `scripts/ci-workflow.test.mjs` reads text, not a hosted workflow. The real-tree
+case in `scripts/mutation-shard.test.mjs` requires four nonempty shards containing every shared
+source file once. `scripts/mutation-break-thresholds.test.mjs` imports the CI configuration and
+checks that it preserves the local mutation list and floor while disabling incremental reuse.
 
 ### Mutation testing runs nightly at 05:00 UTC
 

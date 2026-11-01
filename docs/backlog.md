@@ -5852,10 +5852,12 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   "copy the migrations, cut the journal, migrate to there" setup is also repeated across the
   `*-upgrade.test.ts` files with no shared helper.
 
-- **`mutation.yml`'s three report downloads still use `actions/download-artifact`** (left open by
-  A1216). `mutation-ui-core-aggregate`, `mutation-ui-aggregate` and `mutation-db-aggregate` fetch
-  `mutation-report-*-shard-*` directories, and `scripts/download-coverage-blobs.mjs` reads only
-  one-file artifacts. Nightly and manual dispatch only; download times unmeasured.
+- **The mutation report downloads still use `actions/download-artifact`** (left open by
+  A1216; shared added by A1272). `mutation-ui-core-aggregate`, `mutation-ui-aggregate`,
+  `mutation-db-aggregate` and CI's `mutation-shared-aggregate` fetch
+  `mutation-report-*-shard-*` directories. The coverage downloader accepts only coverage blob
+  names and writes one flat directory, while the mutation aggregate counts report directories.
+  Measure the mutation downloads before replacing their bounded action retries.
   [Receipt](developers/ci-and-gates.md#a-completed-transfer-can-still-leave-the-download-action-alive).
 
 For package distribution and the four-minute target, use the
@@ -5868,10 +5870,6 @@ For package distribution and the four-minute target, use the
 
 - **A1089 merge read-back: server coverage upload timed out.**
   [Detail](backlog/ci.md#a1089-merge-read-back-server-coverage-upload-timed-out).
-
-- **`mutation-shared` sometimes runs past its 10-minute job limit, where it usually takes about 3
-  minutes.** Seen twice, with no change to `packages/shared` behind either; the cause is unknown.
-  [Detail](backlog/ci.md#mutation-shared-sometimes-runs-past-its-10-minute-job-limit).
 
 - **The first fiscal-hour end-to-end file exceeds the four-minute job budget on slow CI runners.**
   Four successful main runs on 24 October measured the file alone at 248–250 seconds. Split or

@@ -1731,6 +1731,29 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
 });
 
 describe("the test shards", () => {
+  it("splits shared mutation work into four shards and gates their complete combined score at 90", () => {
+    const shard = job("mutation-shared").body.join("\n");
+    expect(job("mutation-shared").body).toContain("    timeout-minutes: 10");
+    expect(shard).toContain("shard: [1, 2, 3, 4]");
+    expect(shard).toContain("fail-fast: false");
+    expect(shard).toContain('FILES=$(node scripts/mutation-shard.mjs shared "$SHARD" "$TOTAL")');
+    expect(shard).toContain('if [ -z "$FILES" ]; then');
+    expect(shard).toContain(
+      'pnpm --filter @waitron/shared exec stryker run stryker.ci.config.mjs --mutate "$FILES"',
+    );
+    expect(shard).toContain("name: mutation-report-shared-shard-${{ matrix.shard }}");
+    expect(shard).toContain("path: packages/shared/reports/mutation/mutation.json");
+    const aggregate = job("mutation-shared-aggregate").body.join("\n");
+    expect(job("mutation-shared-aggregate").body).toContain("    timeout-minutes: 5");
+    expect(aggregate).toContain("needs: [changes, mutation-shared]");
+    expect(aggregate).toContain("pattern: mutation-report-shared-shard-*");
+    expect(aggregate).not.toContain("merge-multiple: true");
+    expect(aggregate).toContain(
+      "run: node scripts/mutation-aggregate.mjs mutation-reports --package shared --shards 4 --break 90",
+    );
+    expect(job("ci").body).toContain("      - mutation-shared-aggregate");
+  });
+
   // A case's `pnpm ls` calls run side by side; when the case ends, pass or fail, the ones still
   // running are killed.
   let pnpmCalls = new AbortController();

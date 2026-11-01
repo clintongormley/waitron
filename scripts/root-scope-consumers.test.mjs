@@ -29,6 +29,9 @@ import { PNPM_LS_SPAWN_TIMEOUT_MS, workspaceMembers } from "./workspace-members.
 // The diagnostic deadline wrapper also counts every literal quoted filter in its test command.
 // It skips full-line comments, but a step an `if:` switches off, or a line inside a heredoc, still counts,
 // and it does not check that the script runs before the tests.
+// Mutation jobs also count literal unquoted `pnpm --filter ... exec stryker run` commands,
+// `FILES=$(node scripts/mutation-shard.mjs ...)` and the aggregate's literal `--package` argument.
+// Other wrappers and computed package names remain invisible.
 //
 // The reporter half is weaker than its name as well: it reads ci.yml as TEXT, and counts a script
 // only in a `--reporter=` flag naming `scripts/<file>` (bare or under `$GITHUB_WORKSPACE/`) on a
@@ -118,13 +121,25 @@ function ciRunReaders(text, members) {
   const readers = new Map();
   for (const job of workflowJobs(text)) {
     const code = job.map((line) => line.trim()).filter((line) => !line.startsWith("#"));
-    const scripts = code.flatMap((line) => RUNS_ROOT_SCRIPT.exec(line)?.[1] ?? []);
+    const scripts = code.flatMap(
+      (line) =>
+        RUNS_ROOT_SCRIPT.exec(line)?.[1] ??
+        /^FILES=\$\(node (scripts\/mutation-shard\.mjs)\b/.exec(line)?.[1] ??
+        [],
+    );
     const dirs = code
       .flatMap((line) => {
         const wrapped =
           /^node scripts\/run-with-deadline\.mjs \d+ --diagnostics -- pnpm (.*\btest:(?:shard|coverage)\b)/.exec(
             line,
           );
+        const mutation = /^pnpm --filter (\S+) exec stryker run\b/.exec(line)?.[1];
+        const aggregate =
+          /^(?:-\s+)?(?:run:\s+)?node scripts\/mutation-aggregate\.mjs \S+ --package ([\w-]+)\b/.exec(
+            line,
+          )?.[1];
+        if (mutation) return mutation;
+        if (aggregate) return `@waitron/${aggregate}`;
         return wrapped
           ? [...wrapped[1].matchAll(/--filter "([^"]+)"/g)].map(([, name]) => name)
           : (TESTS_MEMBER.exec(line)?.[1] ?? []);
@@ -310,6 +325,26 @@ describe("rootScriptReaders", () => {
 });
 
 describe("ciRunReaders", () => {
+  it("attributes mutation selection and aggregation scripts to their tested package", () => {
+    const text = [
+      "jobs:",
+      "  mutation-shared:",
+      "    steps:",
+      "      - run: |",
+      '          FILES=$(node scripts/mutation-shard.mjs shared "$SHARD" "$TOTAL")',
+      '          pnpm --filter @waitron/shared exec stryker run stryker.ci.config.mjs --mutate "$FILES"',
+      "  mutation-shared-aggregate:",
+      "    steps:",
+      "      - run: node scripts/mutation-aggregate.mjs reports --package shared --shards 4 --break 90",
+    ].join("\n");
+    expect(ciRunReaders(text, [{ name: "@waitron/shared", dir: "packages/shared" }])).toEqual(
+      new Map([
+        ["scripts/mutation-aggregate.mjs", ["packages/shared"]],
+        ["scripts/mutation-shard.mjs", ["packages/shared"]],
+      ]),
+    );
+  });
+
   it("attributes the deadline runner to every explicitly selected browser member, including a pair", () => {
     const text = [
       "jobs:",
