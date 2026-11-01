@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./till-table-order-screen.js";
@@ -218,6 +219,39 @@ describe("A803 switcher: the table screen's bill switcher", () => {
 
     expect(switcher(el)).toBeNull();
   });
+
+  it.each([
+    [20, 390, 844],
+    [40, 375, 667],
+  ])(
+    "with %i bills at %ix%i the open list fits the window and scrolls + New bill fully into view",
+    async (count, width, height) => {
+      const frame = [innerWidth, innerHeight] as const;
+      await page.viewport(width, height);
+      try {
+        const bills = Array.from({ length: count }, (_, n) =>
+          partyBill(`wo-${n + 1}`, n + 1, "3.00"),
+        );
+        const el = await mountScreen(bills, "wo-1", { ...switcherParty, billCount: count });
+        const seen = capture(el, "new-bill");
+        const host = switcher(el)!;
+        const popup = host.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+        await userEvent.click(host.shadowRoot!.querySelector("button")!);
+
+        expect(popup.matches(":popover-open")).toBe(true);
+        expect(popup.getBoundingClientRect().bottom).toBeLessThanOrEqual(innerHeight);
+        const newBill = host.querySelector<HTMLElement>("[data-new-bill]")!;
+        newBill.scrollIntoView({ block: "nearest" });
+        const box = newBill.getBoundingClientRect();
+        expect(box.top).toBeGreaterThanOrEqual(0);
+        expect(box.bottom).toBeLessThanOrEqual(innerHeight);
+        await userEvent.click(newBill);
+        expect(seen).toEqual([{}]);
+      } finally {
+        await page.viewport(...frame);
+      }
+    },
+  );
 
   it("shows on a handheld too", async () => {
     const { el } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {

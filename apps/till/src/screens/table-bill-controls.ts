@@ -76,6 +76,7 @@ export function billSwitcher(options: BillSwitcherOptions): TemplateResult | typ
   return html`<wt-row-actions
     class="bill-switcher"
     data-bill-switcher
+    opens-below
     label=${shown === undefined ? closed : `${t("table.bills_title")}: ${closed}`}
   >
     <span slot="trigger"

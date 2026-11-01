@@ -1054,7 +1054,8 @@ status, the bill switcher and then the ⋮ (`billSwitcher` and `tableMenu`,
 `apps/till/src/screens/table-bill-controls.ts`), on every width, a handheld included; there is no
 Tab button and no side drawer.
 
-- **The switcher** is a `wt-row-actions`, drawn whenever the screen has a party (none without one).
+- **The switcher** is a `wt-row-actions` with `opens-below`, drawn whenever the screen has a party
+  (none without one), so a long list scrolls inside the window and + New bill can be reached.
   Its trigger part has a 1px `--wt-color-border` edge, `--wt-radius-md` corners and
   `--wt-color-surface`. The closed label is "Bill 1 · €38.50" for one bill and "Bill 2 · 3 bills ·
   Clint · €54.00" for several, where the count is the bills listed, not the highest number; a paid bill's
