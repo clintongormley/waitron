@@ -1,6 +1,7 @@
 import type { Transaction } from "@waitron/db";
 import type {
   ClockAdminConfirm,
+  ClockStep,
   ClockStepRequest,
   ClockWitness,
   FiscalBackend,
@@ -8,6 +9,7 @@ import type {
 } from "@waitron/fiscal";
 import { CLOCK_WITNESS_MARGIN_MS } from "@waitron/fiscal";
 import { codeOf } from "@waitron/server-kit";
+import type { LatestClockStep } from "./backup-sweep.js";
 import type { BootReader } from "./boot-reader.js";
 import type { BoxHostClient } from "./box-host-client.js";
 import type { EmailedIncident } from "./box-alert-email.js";
@@ -95,11 +97,15 @@ export function clockCorrection(deps: {
   /** Writes, in the turn and oldest first, the rows of steps that could not be written when they
    * happened. No set is made while one is pending, so they are always the latest steps. */
   writePending(): Promise<void>;
+  /** `"setting"` from just before the host is asked until its answer is judged; then the step
+   * made, until its row is written; otherwise null. */
+  unwrittenStep(): ClockStep | "setting" | null;
 } {
   const wall = deps.wall ?? (() => Date.now());
   const monotonic = deps.monotonic ?? (() => performance.now());
   const anchors: ClockAnchor[] = [];
   const pending: ClockStepRequest[] = [];
+  let unwritten: ClockStep | "setting" | null = null;
   let steps = 0;
   let turn: Promise<unknown> = Promise.resolve();
 
@@ -266,6 +272,7 @@ export function clockCorrection(deps: {
     const before = reading();
     const targetMs = wallBefore + input.offsetMs;
     steps++;
+    unwritten = "setting";
     const answer = await deps.host.setClock({ targetMs, requester: input.requester });
     const wallAfter = wall();
     const monoAfter = monotonic();
@@ -279,6 +286,7 @@ export function clockCorrection(deps: {
       answer.available && Math.abs(wallAfter - (targetMs + bootElapsed)) <= VERIFY_MS;
     const moved = Math.abs(stepMs) > MOVED_MS;
 
+    unwritten = verified || moved ? { confirmedAt: after.instant.toISOString(), stepMs } : null;
     const anchored = await reanchorAll();
     if (!verified && !moved) {
       deps.log("warn", "clock_correction.set_refused", {
@@ -309,6 +317,7 @@ export function clockCorrection(deps: {
     else {
       try {
         confirmationId = await write(request);
+        unwritten = null;
       } catch (error) {
         keep(request, error);
       }
@@ -330,6 +339,17 @@ export function clockCorrection(deps: {
           await write(pending[0]!);
           pending.shift();
         }
+        unwritten = null;
       }),
+    unwrittenStep: () => unwritten,
   };
+}
+
+/** The latest step for the backups' clock-step hold. The unwritten step is read first, so a row
+ * committed between the two reads is found by the second. */
+export function latestClockStepFor(
+  correction: { unwrittenStep(): ClockStep | "setting" | null },
+  recorded: () => Promise<ClockStep | null>,
+): () => Promise<LatestClockStep> {
+  return async () => correction.unwrittenStep() ?? (await recorded());
 }

@@ -10,7 +10,7 @@ import type {
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { ClockServiceStatus, ClockSetAnswer } from "./box-host-client.js";
-import { clockCorrection, type ClockAnchor } from "./clock-correction.js";
+import { clockCorrection, latestClockStepFor, type ClockAnchor } from "./clock-correction.js";
 
 const TX = { fake: "tx" } as unknown as Transaction;
 const S = 1_000;
@@ -117,6 +117,8 @@ function harness(
     statusMovesWallMs?: number;
     /** Runs while the host's status is read. */
     duringStatus?: () => void;
+    /** Runs while the host sets the clock. */
+    duringSet?: () => void;
     onCorrectedThrows?: boolean;
     /** Steady time the host takes to set. */
     setTakesMs?: number;
@@ -143,6 +145,7 @@ function harness(
       setClock: async (input): Promise<ClockSetAnswer> => {
         calls.push("setClock");
         hostSets.push(input);
+        options.duringSet?.();
         const beforeMs = wallMs;
         const takes = options.setTakesMs ?? 50;
         monoMs += takes;
@@ -394,6 +397,76 @@ describe("setting the box's clock", () => {
     expect(
       h.log.mock.calls.filter(([, event]) => event === "clock_correction.row_pending"),
     ).toHaveLength(1);
+  });
+});
+
+describe("the step not yet written, for the backups' hold", () => {
+  it("is setting while the host is asked, then null once the step's row is written", async () => {
+    const seen: unknown[] = [];
+    const h = harness({ duringSet: () => seen.push(h.correction.unwrittenStep()) });
+    seen.push(h.correction.unwrittenStep());
+    await h.correction.set(aeat(h));
+    seen.push(h.correction.unwrittenStep());
+    expect(seen).toEqual([null, "setting", null]);
+  });
+
+  it("is the step made while its row waits to be written, and null once writePending writes it", async () => {
+    const h = harness({ seatFails: 1 });
+    await h.correction.set(aeat(h));
+    expect(h.correction.unwrittenStep()).toEqual({ confirmedAt: SET_AT, stepMs: H });
+
+    await h.correction.writePending();
+    expect(h.correction.unwrittenStep()).toBeNull();
+  });
+
+  it("is the step made while its row waits for a failed re-anchoring", async () => {
+    const h = harness({
+      anchors: [
+        {
+          stepComing: async () => {},
+          reanchor: async () => {
+            throw new AppError("storage.disk_full", {});
+          },
+        },
+      ],
+    });
+    await h.correction.set(aeat(h));
+    expect(h.correction.unwrittenStep()).toEqual({ confirmedAt: SET_AT, stepMs: H });
+  });
+
+  it("is null when the host refused and the clock did not move", async () => {
+    const h = harness({ host: "refuses" });
+    await h.correction.set(aeat(h));
+    expect(h.correction.unwrittenStep()).toBeNull();
+  });
+
+  it("is null when the seat records no step", async () => {
+    const h = harness({ seat: "no-step" });
+    await h.correction.set(aeat(h));
+    expect(h.correction.unwrittenStep()).toBeNull();
+  });
+
+  it("is answered for the hold before the recorded step is read, and the recorded one only when none is unwritten", async () => {
+    const order: string[] = [];
+    let unwritten: { confirmedAt: string; stepMs: number } | "setting" | null = "setting";
+    const recorded = { confirmedAt: SET_AT, stepMs: H };
+    const latest = latestClockStepFor(
+      {
+        unwrittenStep: () => {
+          order.push("unwritten");
+          return unwritten;
+        },
+      },
+      async () => {
+        order.push("recorded");
+        return recorded;
+      },
+    );
+
+    expect(await latest()).toBe("setting");
+    unwritten = null;
+    expect(await latest()).toEqual(recorded);
+    expect(order).toEqual(["unwritten", "unwritten", "recorded"]);
   });
 });
 

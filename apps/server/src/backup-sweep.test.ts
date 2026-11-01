@@ -178,6 +178,22 @@ describe("runOnce (fan-out)", () => {
     expect(a.objects.has(ahead)).toBe(true);
   });
 
+  it("stores the archive and deletes nothing while the box is setting its clock", async () => {
+    const old = backupArchiveKey(new Date("2026-09-01T00:00:00Z"));
+    const a = new FakeBackend("a");
+    a.objects.set(old, Buffer.from("old"));
+
+    await runOnce({
+      ...deps([a]),
+      retain: 1,
+      retainDays: 1,
+      latestClockStep: async () => "setting",
+    });
+
+    expect(a.objects.size).toBe(2);
+    expect(a.objects.has(old)).toBe(true);
+  });
+
   it("stores the archive and deletes nothing when the step cannot be read, and logs why", async () => {
     const old = backupArchiveKey(new Date("2026-09-01T00:00:00Z"));
     const a = new FakeBackend("a");

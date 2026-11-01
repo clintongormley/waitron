@@ -14,7 +14,6 @@ import { createHash } from "node:crypto";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { openVenueDatabase, type SingletonRole, type VenueDatabase } from "@waitron/db";
-import type { ClockStep } from "@waitron/fiscal";
 import type { WaitronModule } from "@waitron/module";
 import { VENUE_FILE } from "@waitron/store";
 import { AppError } from "@waitron/shared";
@@ -32,7 +31,7 @@ import {
   unreadDestination,
   type DestinationStatus,
 } from "./backup-status.js";
-import { runBackupSweep, type DestinationResult } from "./backup-sweep.js";
+import { runBackupSweep, type DestinationResult, type LatestClockStep } from "./backup-sweep.js";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
 import type { BackupDestination, StorageBackend } from "./storage-backend.js";
 import type { DeploymentEnvironment } from "./config.js";
@@ -168,7 +167,7 @@ export interface BackupSupervisorDeps {
   /** Passed to each run as `installationStartedAt`; absent, a run deletes no old backup. */
   readInstallationStart?: () => Promise<Date | null>;
   /** Passed to each run as `latestClockStep`; absent, no archive is held across a step. */
-  latestClockStep?: () => Promise<ClockStep | null>;
+  latestClockStep?: () => Promise<LatestClockStep>;
   /** Passed to each run as `onArchivesDeleted`. */
   recordArchivesDeleted?: (deleted: readonly DeletableArchive[], at: Date) => Promise<void>;
   /** DI for tests; passed to each run. */

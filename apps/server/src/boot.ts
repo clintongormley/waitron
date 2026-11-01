@@ -307,7 +307,7 @@ import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxHealthApi } from "./box-health-api.js";
 import { clockCheckWaitingReader, clockStopReader, collectBoxHealth } from "./box-health.js";
 import { CLOCK_WATCH_MS, startClockWatch } from "./clock-watch.js";
-import { clockCorrection } from "./clock-correction.js";
+import { clockCorrection, latestClockStepFor } from "./clock-correction.js";
 import { clockSyncAlertSource } from "./clock-sync-alert.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
 import { readDiskUsage, type DiskUsage } from "./disk-usage.js";
@@ -2346,10 +2346,10 @@ async function bootServer(
   });
   // A write-lock turn, not a transaction: a run, or the free-space watch, on a nearly full disk must
   // still read it.
-  const latestClockStep = async () => {
+  const latestClockStep = latestClockStepFor(correction, async () => {
     const read = nodeBackend.latestClockStep?.bind(nodeBackend);
     return read === undefined ? null : db.withWriteLock(() => read(db));
-  };
+  });
   const backupSupervisor = new BackupSupervisor({
     buildConfig: async () =>
       loadBackupSettings({

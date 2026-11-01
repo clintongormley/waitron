@@ -77,7 +77,7 @@ export interface BackupSweepDeps {
   retain: number;
   /** The latest step the box made to its own clock, read once a run; absent, nothing is held
    * (see {@link clockStepHold}). */
-  latestClockStep?: () => Promise<ClockStep | null>;
+  latestClockStep?: () => Promise<LatestClockStep>;
   /** An artifact older than this many days is deleted even within the count cap. */
   retainDays: number;
   /** Node-stable, so a fleet spreads its `auto` backups across a window rather than firing together. */
@@ -355,16 +355,22 @@ export function clockStepHold(
   return { fromMs, toMs: nowMs + AHEAD_TOLERANCE_MS };
 }
 
-/** The hold now: everything when the step cannot be read (logged `backup.clock_step_unreadable`),
- * as an installation start that cannot be read deletes nothing. */
+/** A step the box made to its own clock, `"setting"` while the box is setting it and where it
+ * lands is not yet known, or null. */
+export type LatestClockStep = ClockStep | "setting" | null;
+
+/** The hold now: everything while the box is setting its clock, or when the step cannot be read
+ * (logged `backup.clock_step_unreadable`), as an installation start that cannot be read deletes
+ * nothing. */
 export async function readClockStepHold(
-  read: (() => Promise<ClockStep | null>) | undefined,
+  read: (() => Promise<LatestClockStep>) | undefined,
   nowMs: number,
   retainDays: number,
   log: Logger,
 ): Promise<ClockStepHold | "everything" | undefined> {
   try {
-    return clockStepHold((await read?.()) ?? null, nowMs, retainDays);
+    const step = (await read?.()) ?? null;
+    return step === "setting" ? "everything" : clockStepHold(step, nowMs, retainDays);
   } catch (err) {
     log("warn", "backup.clock_step_unreadable", { errorCode: codeOf(err), errno: errnoOf(err) });
     return "everything";

@@ -7,9 +7,8 @@ import {
   reportArchivesDeleted,
   type DeletableArchive,
 } from "./backup-room.js";
-import type { ClockStep } from "@waitron/fiscal";
 import type { StagingTurn } from "./backup-staging-turn.js";
-import { readClockStepHold } from "./backup-sweep.js";
+import { readClockStepHold, type LatestClockStep } from "./backup-sweep.js";
 import type { BackupRuntimeStatus } from "./backup-supervisor.js";
 import type { DeviceOf } from "./disk-usage.js";
 import { errnoOf } from "./errno.js";
@@ -27,7 +26,7 @@ export interface LowSpaceBackupDeps {
   backends: () => readonly Pick<StorageBackend, "id" | "localDir">[];
   installationStartedAt?: () => Promise<Date | null>;
   /** The latest step the box made to its own clock; absent, nothing is held (see `clockStepHold`). */
-  latestClockStep?: () => Promise<ClockStep | null>;
+  latestClockStep?: () => Promise<LatestClockStep>;
   /** The running backups' age cap, which bounds how long a step holds; unknown, nothing is deleted. */
   retainDays?: () => number | undefined;
   onArchivesDeleted?: (deleted: readonly DeletableArchive[], at: Date) => Promise<void>;

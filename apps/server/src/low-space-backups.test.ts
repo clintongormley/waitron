@@ -457,6 +457,20 @@ describe("lowSpaceBackupDeletion", () => {
       ]);
     });
 
+    it("deletes nothing while the box is setting its clock", async () => {
+      const f = await fixture();
+      const d = disk(f.paths, GIB);
+      const { deps: args, onArchivesDeleted } = deps(f, d.statfs, {
+        latestClockStep: async () => "setting",
+        retainDays: () => 30,
+      });
+
+      await lowSpaceBackupDeletion(args)(signal());
+
+      expect(f.paths.some(gone)).toBe(false);
+      expect(onArchivesDeleted).not.toHaveBeenCalled();
+    });
+
     it("deletes nothing when backups' retention days are not known", async () => {
       const f = await fixture();
       const d = disk(f.paths, GIB);
