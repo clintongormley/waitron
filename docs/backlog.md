@@ -374,19 +374,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   distinguishing case. Preserve both guards while adding that qualification.
   [Detail](backlog/fiscal.md#pin-the-early-recovery-source-refusal).
 
-- **W41s. Fiscal prevention and offline recovery** — stop issuance after a definite conflict on the active identity,
-  then require an administrator to switch it using the current recovery key. Automatic conflict switching is excluded
-  by the owner's 1 November decision. Task 7's [current-contract plan](superpowers/plans/2026-11-01-w41s-7-conflict-recovery.md)
-  covers that procedure. Filing replies now retain definite conflict observations independently of an existing case;
-  active-conflict preflights now stop new money and final builders refuse new records while captured money stays recoverable.
-  The key-authenticated live operation and its HTTPS route now support preparation, switching and exact committed replay;
-  a retained uncommitted selection reports that a new attempt is required. The public key-only browser flow now
-  has explicit switching, paced minute checks, exact-attempt reconciliation, Stop and draft protection, with English
-  and Spanish guidance. Issuance refusals now carry the module's recovery destination, including after
-  capture; the live HTTPS entry and captured-payment finalisation after the actual switch have local
-  integration checks. The operational runbook describes this procedure. Whole-branch review and CI
-  qualification remain before delivery. Corrective-record resolution, filing investigation, outside
-  evidence and fencing for the other tasks, and the complete old-backup/new-hardware exercise remain queued.
+- **W41s. Fiscal prevention and offline recovery** — corrective-record resolution, filing
+  investigation, outside evidence and fencing for the remaining tasks, and the complete
+  old-backup/new-hardware exercise remain queued.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment

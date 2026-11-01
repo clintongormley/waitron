@@ -406,24 +406,6 @@ guard or claiming the two checks are equivalent for every input. No combined-fau
 
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
-Task 7 must stop new issuance after a definite conflict on the active identity and offer an
-administrator a switch using fresh current recovery-key authentication. It must never switch
-automatically. The [current-contract plan](../superpowers/plans/2026-11-01-w41s-7-conflict-recovery.md)
-records the owner's 1 November decision and its permitted activation scope. Definite filing conflicts
-are retained in `fiscal_conflict_evidence`, including a later conflict on a record whose immutable case
-already exists. Active-conflict reads include historical definite cases and ignore case-resolution notes;
-retired identities keep their evidence without stopping the replacement. New-money preflights and final
-fiscal builders stop active conflicts; captured charges and completed refunds retain their money facts,
-and successful requests replay. The internal live operation authenticates the current recovery key,
-uses the existing minute admission and activation writer, and validates exact committed replay.
-An interrupted uncommitted attempt cannot recreate its consumed process admission. The module's key-only
-HTTPS route now prepares, switches and reconciles an exact event, with admission before parsing or key
-verification. Status reports a retained uncommitted selection as requiring a new attempt. The public
-key-only browser entry and translated refusal links now expose the procedure, with English/Spanish
-guidance in Box status, till notices and backup recovery. Local qualification includes real HTTPS
-boot and cold built-dashboard loading, and captured-payment completion once after an actual switch.
-Whole-branch reviews and current-head CI remain before delivery.
-
 Corrective-record resolution, filing investigation, outside evidence and fencing for the other
 tasks, and the complete old-backup/new-hardware operational exercise remain queued. Earlier
 Task 7 automatic-switch requirements below are historical; the 1 November decision supersedes them.
