@@ -273,7 +273,9 @@ describe("till-portion-picker", () => {
       const steak = tick(el, "s1");
       expect(steak.disabled).toBe(true);
       const reason = el.shadowRoot!.getElementById(steak.getAttribute("aria-describedby")!)!;
-      expect(reason.textContent!.trim()).toBe("€40.00 is already paid on this bill: move fewer dishes");
+      expect(reason.textContent!.trim()).toBe(
+        "€40.00 is already paid on this bill: move fewer dishes",
+      );
       setLocale("es-ES");
       await el.updateComplete;
       expect(reason.isConnected).toBe(true);
