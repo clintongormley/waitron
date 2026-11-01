@@ -922,7 +922,7 @@ file and the file is reported):
      plain `await seedVenue(…)`); otherwise reported.
 2. **Nodes.** `seedNode(R, A)` → `seedNode(R)`, only when `A` names the one seeded location: the
    identifier the insert writes as `id: X` (bare or in a brand call; `X` declared once in the file
-   and never reassigned after the insert), or `B.id` of its `const [B] = …returning()` with no
+   and never written, or a `let X;` written once before the insert), or `B.id` of its `const [B] = …returning()` with no
    projection. Any other argument (a literal, a property of a fixture, a value other than the
    insert's own id) is reported and left. The same test applies to rules 3 and 4's `locationId`.
 3. **Devices.** `seedDevice(R, { locationId: A, …rest })` (also shorthand `{ locationId }`) →
@@ -958,8 +958,8 @@ file and the file is reported):
 - an order binding read through a projection the full row does not reproduce;
 - a name the rewrite would add (`seedVenue`, `seedWorkingOrder`, `venueLocationId`) that the file
   already declares or imports from elsewhere;
-- an upgrade test (a file name containing `upgrade`): its database stops at an earlier migration,
-  so no location rule applies;
+- an upgrade test (a file name containing `upgrade`): its database can stop at an earlier
+  migration, so no location rule applies;
 - a file that writes its own `tenants` row (`insert(tenants)` / `insert into tenants`): `seedVenue`
   writes one too, so the order must be read by hand;
 - a file that defines its own `seedVenue` (`function seedVenue` or `const seedVenue`): the codemod
