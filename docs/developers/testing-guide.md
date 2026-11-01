@@ -3027,6 +3027,11 @@ and every `setItem` call against the full expected non-secret shape. The PIN che
 quotes, which distinguish a complete PIN value from digits inside the UUID. The original request,
 retry, approval and recovery assertions remain.
 
+The write check observes `Storage.prototype.setItem`; the final read observes only the refund's
+own key. In the 1 November retrospective probe, assigning a PIN to a different storage property
+still passed all 59 cases. Reading that key explicitly made both lost-answer cases fail. This
+test does not check that assignment path.
+
 
 ## Root receipt excerpts moved on 2026-10-23
 

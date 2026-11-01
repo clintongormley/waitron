@@ -5888,6 +5888,8 @@ For package distribution and the four-minute target, use the
 For browser storage checks, inspect the operation's own entry and every write, comparing complete
 values rather than PIN substrings inside random IDs. See the
 [testing guide](developers/testing-guide.md#check-stored-secrets-as-values-and-inspect-every-write).
+The cited refund test checks `setItem` calls and its own final entry; direct property assignments
+under another key fall outside that check.
 
 - **Tests that read a built command's error output fail under Claude Code.**
   Find which inherited variable lets the hint through and clear it in the cases' child environment.
