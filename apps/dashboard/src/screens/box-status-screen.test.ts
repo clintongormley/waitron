@@ -610,6 +610,7 @@ describe("dashboard-box-status-screen's Clock row during a payment stop", () => 
     lastRecordOffsetMinutes: 120,
     recordId: "rec-42",
     gapMs: 4_800_000,
+    startUp: false,
     proof: "confirmed",
     agreeing: {
       authority: {
@@ -721,6 +722,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     lastRecordOffsetMinutes: 120,
     recordId: "rec-42",
     gapMs: 4_800_000,
+    startUp: false,
     proof: "none",
     agreeing: { authority: null, devices: [] },
     contrary: { authority: null, devices: [] },

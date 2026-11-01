@@ -96,6 +96,7 @@ const PROOF_READY = health({
     lastRecordOffsetMinutes: 120,
     recordId: "rec-42",
     gapMs: 4_800_000,
+    startUp: false,
     proof: "ready",
     agreeing: {
       authority: {

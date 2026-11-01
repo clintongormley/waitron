@@ -2620,6 +2620,13 @@ async function bootServer(
   );
   const paymentsEnabled = setsToMigrate.some((module) => module.name === "payments");
   const fiscalOutbox = enabledFiscal.outbox;
+  const readClockStop = clockStopReader({
+    backend: nodeBackend,
+    witnesses: () => clockWitnesses.witnesses(),
+    clock: tillClock,
+    startUp: clockStart,
+  });
+  const readClockCheckWaiting = clockCheckWaitingReader({ backend: nodeBackend, clock: tillClock });
   mountBoxHealthApi(
     app,
     {
@@ -2662,12 +2669,8 @@ async function bootServer(
           leftovers: () => surveyLeftovers(leftoverDeps),
           paymentsEnabled,
           canFree: () => !isReadOnly(),
-          clockStop: clockStopReader({
-            backend: nodeBackend,
-            witnesses: () => clockWitnesses.witnesses(),
-            clock: tillClock,
-          }),
-          clockCheckWaiting: clockCheckWaitingReader({ backend: nodeBackend, clock: tillClock }),
+          clockStop: readClockStop,
+          clockCheckWaiting: readClockCheckWaiting,
         }),
       freeSpace: createSpaceFreer({
         ...leftoverDeps,

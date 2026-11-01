@@ -26,6 +26,7 @@ const seen = vi.hoisted(() => ({
   checkArgs: [] as Record<string, unknown>[],
   notedAuthority: [] as unknown[],
   onSamples: [] as (((sample: unknown) => void) | undefined)[],
+  stopReaders: [] as Record<string, unknown>[],
 }));
 
 vi.mock("./clock-start-up.js", async (importOriginal) => {
@@ -54,6 +55,17 @@ vi.mock("./box-staff-notices.js", async (importOriginal) => {
       seen.order.push("deviceNoticeSources");
       seen.noticeBoxes.push(args[0] as Record<string, unknown>);
       return actual.deviceNoticeSources(...args);
+    },
+  };
+});
+
+vi.mock("./box-health.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./box-health.js")>();
+  return {
+    ...actual,
+    clockStopReader: (...args: Parameters<typeof actual.clockStopReader>) => {
+      seen.stopReaders.push(args[0] as unknown as Record<string, unknown>);
+      return actual.clockStopReader(...args);
     },
   };
 });
@@ -112,6 +124,7 @@ beforeEach(async () => {
   seen.checkArgs.length = 0;
   seen.notedAuthority.length = 0;
   seen.onSamples.length = 0;
+  seen.stopReaders.length = 0;
   scratch = await mkdtemp(join(tmpdir(), "waitron-boot-clock-start-up-"));
 });
 
@@ -152,7 +165,7 @@ async function tradingEnv(role: "primary" | "secondary") {
 }
 
 describe("boot's clock start-up window", () => {
-  it("is opened on a primary before the tills' notice sources and handed to the watch and the tills only", async () => {
+  it("is opened on a primary before the tills' notice sources and handed to the watch, the tills and Box status's clock read", async () => {
     const env = await tradingEnv("primary");
     const server = await startServer(env, env);
     try {
@@ -170,6 +183,9 @@ describe("boot's clock start-up window", () => {
       expect(seen.checkArgs[0]!.startUp).toBe(window);
       expect(seen.checkArgs[0]!.backend).toBe(seen.watchArgs[0]!.backend);
       expect(seen.checkArgs[0]!.filesRecords).toBe(seen.watchArgs[0]!.filesRecords);
+      // Box status words a devices-only proof by the window the watch acts on.
+      expect(seen.stopReaders).toHaveLength(1);
+      expect(seen.stopReaders[0]!.startUp).toBe(window);
 
       expect(seen.onSamples).toHaveLength(1);
       const sample: AuthorityTimeSample = {

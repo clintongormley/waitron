@@ -168,6 +168,8 @@ describe("the running server's Box status read and free-space deletion", () => {
     });
 
     expect((await box.get()).clockStop).toMatchObject({ proof: "none", confirmation: null });
+    // A primary's start-up window is still open: the stop holds, so no read has closed it.
+    expect((await box.get()).clockStop?.startUp).toBe(true);
   });
 
   it("reads the box, frees its rotated logs, and shares one staging turn with its backups", async () => {

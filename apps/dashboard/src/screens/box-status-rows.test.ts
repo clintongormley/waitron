@@ -696,6 +696,7 @@ describe("the Clock row while payments are stopped for the clock", () => {
       },
       contrary: { authority: null, devices: [] },
       confirmation: null,
+      startUp: false,
       ...overrides,
     };
   }
@@ -784,6 +785,49 @@ describe("the Clock row while payments are stopped for the clock", () => {
       devicesProof(),
       t("box_status.clock.stop.ready"),
     ]);
+  });
+
+  it("never says proof is found for devices alone during start-up, and names who can confirm", () => {
+    const devices = clockStop().agreeing.devices;
+    const startUpLine =
+      "Waiting for proof that the clock is right: the tax agency's time (when the box sends it records), “Check the time” on a till, or an administrator's device. The box has just started, so two tills or handhelds are not enough.";
+    const devicesOnly = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({ agreeing: { authority: null, devices }, startUp: true }),
+    });
+    expect(devicesOnly.details).toEqual([
+      compared(),
+      t("box_status.clock.behind_chain_fix"),
+      devicesProof(),
+      startUpLine,
+    ]);
+    const none = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({ proof: "none", agreeing: NO_WITNESS, startUp: true }),
+    });
+    expect(none.details.at(-1)).toBe(startUpLine);
+    // The tax agency's agreement still ends the stop by itself during start-up.
+    const withAuthority = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({ startUp: true }),
+    });
+    expect(withAuthority.details.at(-1)).toBe(t("box_status.clock.stop.ready"));
+    const contrary = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({ proof: "contrary", agreeing: NO_WITNESS, startUp: true }),
+    });
+    expect(contrary.details.at(-1)).toBe(t("box_status.clock.stop.contrary"));
+  });
+
+  it("words the start-up wait in Spanish too", () => {
+    setLocale("es");
+    const clock = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({ proof: "none", agreeing: NO_WITNESS, startUp: true }),
+    });
+    expect(clock.details.at(-1)).toBe(
+      "Esperando una prueba de que la hora es correcta: la de Hacienda (si el equipo le envía registros), «Comprobar la hora» en una caja, o el dispositivo de un administrador. El equipo acaba de arrancar, así que no bastan dos cajas o terminales.",
+    );
   });
 
   it("says the box waits for proof while there is none", () => {

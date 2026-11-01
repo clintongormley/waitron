@@ -1891,6 +1891,8 @@ export interface ClockStopView {
     personName: string | null;
     confirmedAt: string;
   } | null;
+  /** While true, devices alone do not end the stop. */
+  startUp: boolean;
 }
 
 export type ClockStopDeviceView = ClockWitnessView & { label: string | null };

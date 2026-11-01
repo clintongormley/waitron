@@ -379,6 +379,12 @@ function clockStopDetails(health: BoxHealth): string[] {
 }
 
 function stopLine(stop: NonNullable<BoxHealth["clockStop"]>): string {
+  // The watch's own rule: during start-up only the tax agency or a person ends the stop.
+  const waitsForPerson =
+    stop.startUp &&
+    stop.agreeing.authority === null &&
+    (stop.proof === "none" || stop.proof === "ready");
+  if (waitsForPerson) return t("box_status.clock.stop.start_up");
   if (stop.proof !== "confirmed") return t(`box_status.clock.stop.${stop.proof}`);
   // The seat says "confirmed" only when a confirmation covers the reading.
   const confirmation = stop.confirmation!;
