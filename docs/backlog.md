@@ -2173,6 +2173,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   against Back with no gap. Both are the shared action panel's layout (`aside.action-panel` in
   `apps/till/src/screens/till-table-order-screen.ts`). Pictures `k2-panel-open`, `k5-move-active`
   (`~/waitron-campaign-c/a803-4-shots/`, not in the repository).
+  Since the grey reason gained ": move fewer dishes" (owner, 2026-11-01) it wraps onto two lines,
+  so Back and Move sit fully below the window at 1280×900 and are cut at the bottom at 390×844 in
+  Spanish (re-taken pictures `slice4a-paid-floor-long-names-destination.png`,
+  `slice4a-spanish-phone.png`).
 
 - **A1291. Another till's open Pay items list is not refreshed when dishes leave its bill (seen in
   A803 slice 4a's LOOK).** After a move, the dialog's totals updated but its list still showed the
