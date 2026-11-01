@@ -27,7 +27,7 @@ export async function billActionBody(
   path: string,
   body: unknown,
 ): Promise<unknown> {
-  const route = /^\/api\/bills\/([^/]+)\/(split|merge|transfer)$/.exec(path);
+  const route = /^\/api\/bills\/([^/]+)\/(split|merge|transfer|move-dishes)$/.exec(path);
   if (route === null || body === null || typeof body !== "object" || Array.isArray(body))
     return body;
   const ask = body as Record<string, unknown>;

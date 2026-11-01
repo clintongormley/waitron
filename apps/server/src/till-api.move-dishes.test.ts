@@ -223,6 +223,27 @@ describe("A803 move dishes route:", () => {
     expect(lineIdsOf(tabId)).toHaveLength(2);
   });
 
+  it("a body without toBillId is 400 management.request_invalid naming it, opening no bill", async () => {
+    const { partyId, tabId } = await seated("Paella", "Caña");
+    const [, caña] = lineIdsOf(tabId);
+    const body = await wellFormed(partyId, tabId, [caña!], null);
+    delete body.toBillId;
+    const revision = revisionOf(partyId);
+
+    const answer = await post(tabId, body);
+
+    expect(answer.status).toBe(400);
+    expect(answer.json).toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "toBillId" },
+    });
+    expect(revisionOf(partyId)).toBe(revision);
+    expect(lineIdsOf(tabId)).toHaveLength(2);
+    expect(
+      venue.db.all(sql`select id from working_orders where party_id = ${partyId}`),
+    ).toHaveLength(1);
+  });
+
   it("a destination that is not a UUID is 409 tab.not_open", async () => {
     const { partyId, tabId } = await seated("Paella", "Caña");
     const [, caña] = lineIdsOf(tabId);

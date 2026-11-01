@@ -4172,7 +4172,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // The path is the bill the dishes leave; a null `toBillId` opens a new bill of the party.
+  // The path is the bill the dishes leave.
   app.post("/api/bills/:id/move-dishes", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });

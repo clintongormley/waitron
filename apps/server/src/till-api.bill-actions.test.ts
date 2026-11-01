@@ -25,8 +25,9 @@ import { saveDraftForTest } from "./testing/draft-command-fixture.js";
 import "./errors.js";
 import { billActionBody, splitBill } from "./testing/bill-action-fixture.js";
 
-// The HTTP surface of split, merge and transfer between a party's bills (table actions plan,
-// Task 5): the session guard, the id and body screens, the answers and the status of each code.
+// The HTTP surface of split, merge and transfer between a party's bills: the session guard, the id
+// and body screens, the answers and the status of each code. Move-dishes joins the shared session
+// and screen rows; its own cases are in `till-api.move-dishes.test.ts`.
 // The verbs themselves are tested in `party-bill-actions.test.ts`.
 let venue: BillVenue;
 /** The operator's open session on `venue.cfg`'s device, which a bill payment is taken under. */
@@ -103,13 +104,27 @@ async function post(path: string, body: unknown, cookie = venue.cookie) {
   );
 }
 
-const ROUTES = ["split", "merge", "transfer"] as const;
+const ROUTES = ["split", "merge", "transfer", "move-dishes"] as const;
 type Route = (typeof ROUTES)[number];
+
+/** The id of the first line on the party's bill that is not `other`. */
+function firstLineBeside(other: string): string {
+  const [row] = venue.db.all<{ id: string }>(sql`
+    select l.id from working_order_lines l
+    join working_orders o on o.id = l.working_order_id
+    where o.party_id = (select party_id from working_orders where id = ${other})
+      and o.id <> ${other}
+    order by l.line_no limit 1
+  `);
+  return row!.id;
+}
 
 /** A well-formed body for the route, between the two bills. */
 function bodyFor(route: Route, other: string, extra: Record<string, unknown> = {}) {
   if (route === "split") return { transfers: [{ lineNo: 1 }], ...extra };
   if (route === "merge") return { fromBillId: other, ...extra };
+  if (route === "move-dishes")
+    return { toBillId: other, lineIds: [firstLineBeside(other)], ...extra };
   return { toBillId: other, transfers: [{ lineNo: 1 }], ...extra };
 }
 
