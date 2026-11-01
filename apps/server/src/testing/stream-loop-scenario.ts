@@ -11,7 +11,12 @@ import { setTimeout as delay } from "node:timers/promises";
 import { connect as tlsConnect } from "node:tls";
 import { eq } from "drizzle-orm";
 import { expect } from "vitest";
-import { loadKeyRing, putCredential } from "@waitron/credentials";
+import {
+  loadKeyRing,
+  nodeSigningPublicKey,
+  putCredential,
+  readNodeSigningKey,
+} from "@waitron/credentials";
 import {
   nodeSealedState,
   nodes,
@@ -25,7 +30,9 @@ import {
   registroSif,
   registrosFacturacion,
 } from "@waitron/fiscal-verifactu";
+import { verifySecretAsync } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { readRecoveryKeyVerifier } from "@waitron/node-db";
 import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { locationId, nodeId } from "@waitron/shared";
@@ -572,6 +579,21 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       expect(new X509Certificate(Buffer.from(leafInRow!.bytes)).serialNumber).toBe(
         leafB.serialNumber,
       );
+      // B's node.db is the dead box's, carried in the sealed state: had the rebuild kept another
+      // node.db, A's signing key would read as null here.
+      const ringB = loadKeyRing(
+        parseEnvFile(await readFile(join(dirsB.state, "secrets.env"), "utf8")),
+      );
+      const signingKey = await readNodeSigningKey(sealedB.node, ringB, a.nodeId);
+      expect(signingKey).not.toBeNull();
+      expect(nodeSigningPublicKey(signingKey!)).toBe(a.publicKey);
+      const [nodeRow] = await sealedB.venue
+        .select({ publicKey: nodes.publicKey })
+        .from(nodes)
+        .where(eq(nodes.id, a.nodeId));
+      expect(nodeRow!.publicKey).toBe(a.publicKey);
+      const verifier = await readRecoveryKeyVerifier(sealedB.node, a.nodeId);
+      expect(await verifySecretAsync(nodeSecret!, verifier!)).toBe(true);
     } finally {
       await sealedB.close();
     }
