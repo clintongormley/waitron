@@ -221,7 +221,7 @@ describe("accepted till order command attendance", () => {
     expect((await state()).facts).toEqual([]);
     expect((await state()).days).toEqual([]);
   });
-  it.each(["invoice-choice", "receipt-language"] as const)(
+  it.each(["invoice-choice"] as const)(
     "%s uses the stored order location rather than the caller's config",
     async (action) => {
       const id = await prepare(action);

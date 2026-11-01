@@ -6,7 +6,7 @@ import { withOperationAuthority, type OperationBinding } from "@waitron/module";
 import { recordSale } from "@waitron/core";
 import { locationId, seriesId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTenants, seedVenueNodes, TENANT_A } from "../test/fixtures.js";
 import { withHourAdmission } from "./allocation-envelope.js";
 import {
   readModuleAllocationSeries,
@@ -353,7 +353,7 @@ it("reads the newest fiscal record's time only through the floor reader, never t
   onTestFinished(() => {
     vi.useRealTimers();
   });
-  await seedTenants(suite.db);
+  await seedVenueNodes(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   const identity = "0CNNW";
   const issuedAt = "2026-10-16T11:40:00.000Z";

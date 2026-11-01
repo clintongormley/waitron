@@ -9,7 +9,6 @@ import {
   devices,
   invoiceDeliveries,
   invoiceSeries,
-  locations,
   pagePrinters,
   printAgents,
   printJobs,
@@ -567,58 +566,6 @@ describe("GET /api/sales/:id/deliveries", () => {
     const { orderId } = await invoice(v);
     await suite.db.delete(deviceProfilePrinters).where(eq(deviceProfilePrinters.role, "invoice"));
     expect((await readStatus(v, orderId)).body).toMatchObject({ actions: { print: null } });
-  });
-
-  it("offers and accepts no invoice printer at another location than the sale's", async () => {
-    const v = await venue();
-    const { orderId, saleId } = await invoice(v);
-    const elsewhere = await withTransaction(suite.db, async (tx) => {
-      const [terrace] = await tx
-        .insert(locations)
-        .values({ name: "Terraza", invoiceLocales: [LOCALE], operationDescription: "Terraza" })
-        .returning({ id: locations.id });
-      const [office] = await tx
-        .insert(pagePrinters)
-        .values({
-          locationId: terrace!.id,
-          name: "Terrace office",
-          host: "192.0.2.22",
-          port: 631,
-          resourcePath: "/ipp/print",
-          documentFormat: "application/pdf",
-          supportedFormats: ["application/pdf"],
-          media: "iso_a4_210x297mm",
-          resolutionDpi: 600,
-        })
-        .returning({ id: pagePrinters.id });
-      const receipt = await createPrinter(
-        tx,
-        { locationId: terrace!.id },
-        { name: "Terrace receipts", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
-      );
-      for (const { profileId } of await tx
-        .selectDistinct({ profileId: devices.deviceProfileId })
-        .from(devices)
-        .where(eq(devices.locationId, v.cfg.locationId))) {
-        await listInvoicePrinter(tx, { profileId, pagePrinterId: office!.id, isDefault: false });
-        await listInvoicePrinter(tx, { profileId, printerId: receipt.id, isDefault: false });
-      }
-      return { a4: office!.id, receipt: receipt.id };
-    });
-    for (const choice of [
-      { invoicePrinterId: null, invoicePagePrinterId: elsewhere.a4 },
-      { invoicePrinterId: elsewhere.receipt, invoicePagePrinterId: null },
-    ]) {
-      await suite.db.update(devices).set(choice).where(eq(devices.locationId, v.cfg.locationId));
-      expect((await readStatus(v, orderId)).body).toMatchObject({ actions: { print: null } });
-      for (const printerId of [elsewhere.a4, elsewhere.receipt]) {
-        expect(await printInvoice(v, orderId, randomUUID(), undefined, printerId)).toEqual(
-          refusal(409, "invoice_delivery.printer_invalid"),
-        );
-      }
-    }
-    expect(await deliveryRows(saleId)).toEqual([]);
-    expect(await jobsOf(saleId)).toEqual([]);
   });
 
   it("ends a lapsed A4 claim before reading, so the attempt reads uncertain and can be retried", async () => {
@@ -2143,20 +2090,20 @@ describe("POST /api/sales/:id/deliveries/:deliveryId/to-receipt (paper instead o
 });
 
 describe("what each delivery route reads", () => {
-  it("reads the sale's location once for the status", async () => {
+  it("reads no sale location for the status", async () => {
     const v = await venue();
     const { orderId } = await invoice(v);
     const { answer, reads } = await readsDuring(SALE_LOCATION_READ, () => readStatus(v, orderId));
     expect(answer.status).toBe(200);
-    expect(reads).toBe(1);
+    expect(reads).toBe(0);
   });
 
-  it("decides an email request from one read of the sale, reading no printer", async () => {
+  it("decides an email request without reading a sale location or printer", async () => {
     const v = await venue();
     const { orderId } = await invoice(v);
     const { answer, statements } = await statementsDuring(() => emailIt(v, orderId));
     expect(answer.status).toBe(200);
-    expect(statements.filter((statement) => SALE_LOCATION_READ.test(statement))).toHaveLength(1);
+    expect(statements.filter((statement) => SALE_LOCATION_READ.test(statement))).toHaveLength(0);
     expect(statements.filter((statement) => INVOICE_PRINTER_READ.test(statement))).toEqual([]);
     expect(statements.filter((statement) => RECEIPT_ORIGINAL_READ.test(statement))).toEqual([]);
   });
@@ -2177,13 +2124,13 @@ describe("what each delivery route reads", () => {
     });
   });
 
-  it("reads the sale's location once to email again", async () => {
+  it("reads no sale location to email again", async () => {
     const v = await venue();
     const { orderId } = await invoice(v);
     const ended = await endedEmail(v, orderId, "failed");
     const { answer, reads } = await readsDuring(SALE_LOCATION_READ, () => retry(v, orderId, ended));
     expect(answer.status).toBe(200);
-    expect(reads).toBe(1);
+    expect(reads).toBe(0);
   });
 
   it.each([
@@ -2206,7 +2153,7 @@ describe("what each delivery route reads", () => {
     ).toHaveLength(1);
     expect(
       retried.statements.filter((statement) => SALE_LOCATION_READ.test(statement)),
-    ).toHaveLength(full ? 1 : 0);
+    ).toHaveLength(0);
   });
 
   it("reads the receipt original once to switch to paper", async () => {

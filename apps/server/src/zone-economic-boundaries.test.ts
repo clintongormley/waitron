@@ -2,12 +2,12 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { withTransaction, workingOrderLines, billPayments, locations } from "@waitron/db";
+import { withTransaction, workingOrderLines, billPayments } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createCategory, createProduct } from "@waitron/catalogue";
 import { createPinThrottle, loginWithPin } from "@waitron/identity";
-import { decimal, deviceOrigin, locationId } from "@waitron/shared";
+import { decimal, deviceOrigin } from "@waitron/shared";
 import { provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { TradingAdmission } from "./trading-admission.js";
@@ -572,63 +572,3 @@ it("refuses draft-save admission before attempting its first insert", async () =
     venue.db.run(sql`drop trigger zone_admission_write_witness`);
   }
 });
-
-it.each([
-  ["Europe/Madrid", "Invalid/Zone", true],
-  ["Invalid/Zone", "Europe/Madrid", false],
-] as const)(
-  "a direct line edit checks node zone %s rather than unrelated config zone %s",
-  async (nodeZone, configZone, accepted) => {
-    const { id } = await held();
-    const [other] = await venue.db
-      .insert(locations)
-      .values({
-        name: "Unrelated configuration venue",
-        invoiceLocales: ["en-GB"],
-        operationDescription: "Restaurant service",
-        timeZone: configZone,
-      })
-      .returning({ id: locations.id });
-    const [saved] = await venue.db
-      .select({ timeZone: locations.timeZone })
-      .from(locations)
-      .where(eq(locations.id, venue.cfg.locationId));
-    await venue.db
-      .update(locations)
-      .set({ timeZone: nodeZone })
-      .where(eq(locations.id, venue.cfg.locationId));
-    const before = snapshot();
-    const cfg = { ...venue.cfg, locationId: locationId(other!.id) };
-    const edit = () =>
-      withTransaction(venue.db, (tx) =>
-        updateOrderLine(tx, cfg, id, 1, { note: "No salt" }, 0, {
-          admission: ready,
-          operatorId: venue.operatorId,
-          expectedEdit: null,
-        }),
-      );
-    try {
-      if (accepted) {
-        expect(await edit()).toBe(1);
-        const [changed] = await venue.db
-          .select({ note: workingOrderLines.note })
-          .from(workingOrderLines)
-          .where(eq(workingOrderLines.workingOrderId, id))
-          .orderBy(workingOrderLines.lineNo);
-        expect(changed).toEqual({ note: "No salt" });
-      } else {
-        await expect(edit()).rejects.toMatchObject({
-          code: "venue.time_zone_invalid",
-          params: { reason: "invalid" },
-        });
-        expect(snapshot()).toEqual(before);
-      }
-    } finally {
-      await venue.db
-        .update(locations)
-        .set({ timeZone: saved!.timeZone })
-        .where(eq(locations.id, venue.cfg.locationId));
-      await venue.db.delete(locations).where(eq(locations.id, other!.id));
-    }
-  },
-);

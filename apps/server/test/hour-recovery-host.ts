@@ -22,7 +22,7 @@ import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { readHourHistoryWithRecordFloor } from "@waitron/fiscal-verifactu/src/hour-history-reader.js";
 import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-preparation.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { seedVenueNodes, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { locationId, seriesId } from "@waitron/shared";
 import { mintBreakGlassKey } from "../src/break-glass.js";
@@ -113,7 +113,7 @@ beforeEach(async () => {
     result: "unavailable",
     reason: "offline",
   }));
-  await seedTenants(suite.db);
+  await seedVenueNodes(suite.db);
   await stampDeployment(suite.db, "preproduction");
   key = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, node.nodeId);
   value = null;

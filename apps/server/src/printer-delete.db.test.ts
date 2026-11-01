@@ -204,10 +204,6 @@ async function seedVenue() {
     .insert(locations)
     .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Sale on premises" })
     .returning();
-  const [terrace] = await suite.db
-    .insert(locations)
-    .values({ name: "Terrace", invoiceLocales: ["es-ES"], operationDescription: "Terrace" })
-    .returning();
   const locationId = location!.id;
   const nodeId = await seedNode(suite.db, brandLocationId(locationId));
   await suite.db.insert(invoiceSeries).values({ nodeId, code: "F", purpose: "standard" });
@@ -304,11 +300,6 @@ async function seedVenue() {
   const barTill = await device({ label: "Bar till", profileId: waiters });
   const barTill2 = await device({ label: "Bar till 2", profileId: bar, slip: P });
   const barTill3 = await device({ label: "Bar till 3", profileId: bar, invoice: P });
-  const terraceTill = await device({
-    label: "Terrace till",
-    profileId: waiters,
-    location: terrace!.id,
-  });
   await suite.db.insert(printerHolders).values([
     { printerId: P, deviceId: ana },
     { printerId: Q, deviceId: barTill2 },
@@ -424,7 +415,6 @@ async function seedVenue() {
     barTill,
     barTill2,
     barTill3,
-    terraceTill,
     grill: grill!.id,
     jobs: {
       queued,

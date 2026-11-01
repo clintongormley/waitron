@@ -11,7 +11,7 @@ import {
 } from "@waitron/module";
 import { locationId, seriesId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedVenueNodes, TENANT_A } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { createHourPreparation } from "./hour-preparation.js";
 import { createHourRecoveryPreparation } from "./hour-recovery-preparation.js";
@@ -116,7 +116,7 @@ beforeEach(async () => {
   monotonic = 0;
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-16T11:40:00Z"));
-  await seedTenants(suite.db);
+  await seedVenueNodes(suite.db);
   await stampDeployment(suite.db, "preproduction");
   const setup = createHourPreparation({
     ...store(),

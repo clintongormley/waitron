@@ -119,6 +119,24 @@ export async function seedTenants(db: Database): Promise<void> {
   ]);
 }
 
+export async function seedVenueNodes(db: Database): Promise<void> {
+  await db
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" })
+    .onConflictDoNothing({ target: tenants.id });
+  await db.insert(locations).values({
+    id: TENANT_A.locationId,
+    name: "Local principal",
+    invoiceLocales: ["es"],
+    operationDescription: "Venta en establecimiento",
+  });
+  await db.insert(nodes).values([
+    { id: TENANT_A.nodeId, locationId: TENANT_A.locationId, name: "Node 1" },
+    { id: TENANT_A.nodeId2, locationId: TENANT_A.locationId, name: "Node 2" },
+    { id: TENANT_B.nodeId, locationId: TENANT_A.locationId, name: "Node 1" },
+  ]);
+}
+
 /**
  * Advances a node's chain head to point at a fabricated-but-real `registros_facturacion` row,
  * standing in for "this node has actually sold something".

@@ -3,7 +3,7 @@ import { invoiceSeries, stampDeployment, withTransaction, type Database } from "
 import { recordSale } from "@waitron/core";
 import { withOperationAuthority } from "@waitron/module";
 import { locationId, seriesId } from "@waitron/shared";
-import { seedTenants, TENANT_A } from "./fixtures.js";
+import { seedVenueNodes, TENANT_A } from "./fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "./write-path-fixtures.js";
 import { createHourPreparation } from "../src/hour-preparation.js";
 import { activatePreparedModuleAllocation } from "../src/allocation-preparation.js";
@@ -27,7 +27,7 @@ export async function seedLiveConflict(
   clock: { wall(): number; monotonic(): number; advance(ms: number): void },
 ) {
   const node = liveConflictNode;
-  await seedTenants(db);
+  await seedVenueNodes(db);
   await stampDeployment(db, "preproduction");
   let state: unknown = null;
   const setup = createHourPreparation({

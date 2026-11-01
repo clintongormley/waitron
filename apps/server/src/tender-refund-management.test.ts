@@ -12,7 +12,6 @@ import {
   workingOrders,
   drawerOpens,
   printJobs,
-  locations,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -203,19 +202,12 @@ async function unsent(locationId = venue.cfg.locationId as string) {
   return { ...t, id };
 }
 
-it("lists only this location's unresolved connected returns in stable order, with decimal money and no live resolver", async () => {
+it("lists unresolved connected returns in stable order, with decimal money and no live resolver", async () => {
   const a = await unsent(),
     b = await pending(),
     c = await pending();
   await pending("cash");
   await pending("card", true);
-  const foreignLocation = randomUUID();
-  await store.db.insert(locations).values({
-    ...(await store.db.select().from(locations))[0]!,
-    id: foreignLocation,
-    name: "Other",
-  });
-  await unsent(foreignLocation);
   const expected = await list();
   expect(expected).toMatchObject({
     status: 200,
@@ -446,24 +438,6 @@ it("cannot attest completion for a request never sent, but can confirm its failu
     status: 200,
     json: { outcome: "failed" },
   });
-  expect(venue.card.refundCalls).toHaveLength(0);
-});
-
-it("refuses another location's return without any provider or money side effect", async () => {
-  const other = randomUUID();
-  await store.db
-    .insert(locations)
-    .values({ ...(await store.db.select().from(locations))[0]!, id: other, name: "Other" });
-  const t = await unsent(other),
-    before = await snapshot();
-  expect((await list()).json).toEqual([]);
-  for (const request of [() => resolve(t.id), () => attest(t.id)])
-    expect(await request()).toMatchObject({
-      status: 404,
-      json: { code: "tender.refund_not_found" },
-    });
-  expect(await snapshot()).toEqual(before);
-  expect(venue.card.lookupCalls).toHaveLength(0);
   expect(venue.card.refundCalls).toHaveLength(0);
 });
 

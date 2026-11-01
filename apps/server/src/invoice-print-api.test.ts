@@ -70,10 +70,19 @@ const clock: TrustedClock = {
 async function issue(full = true) {
   await seedTenant(suite.db);
   await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
-  const [location] = await suite.db
-    .insert(locations)
-    .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Sale on premises" })
-    .returning();
+  const [existing] = await suite.db.select().from(locations);
+  const location =
+    existing ??
+    (
+      await suite.db
+        .insert(locations)
+        .values({
+          name: "Bar",
+          invoiceLocales: ["es-ES"],
+          operationDescription: "Sale on premises",
+        })
+        .returning()
+    )[0]!;
   const nodeId = await seedNode(suite.db, locationId(location!.id));
   const [series] = await suite.db
     .insert(invoiceSeries)

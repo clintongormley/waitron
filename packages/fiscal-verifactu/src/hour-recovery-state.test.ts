@@ -6,7 +6,7 @@ import { withOperationAuthority, type OperationBinding } from "@waitron/module";
 import { recordSale } from "@waitron/core";
 import { locationId, seriesId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A, TENANT_B } from "../test/fixtures.js";
+import { seedTenants, seedVenueNodes, TENANT_A, TENANT_B } from "../test/fixtures.js";
 import { withHourAdmission } from "./allocation-envelope.js";
 import { withCollectedModuleAllocation } from "./allocation-operation.js";
 import { FISCAL_OPERATIONS } from "./index.js";
@@ -34,10 +34,10 @@ const read = (operation = binding, target = node) =>
   FISCAL_OPERATIONS.readRecoveryState!(suite.db, target, operation);
 afterEach(() => vi.useRealTimers());
 
-async function seed(configuration = bases) {
+async function seed(configuration = bases, seedParents = seedVenueNodes) {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-16T11:40:00Z"));
-  await seedTenants(suite.db);
+  await seedParents(suite.db);
   await stampDeployment(suite.db, "preproduction");
   const initial = { ...binding, action: "setup", eventId: "first", sourceId: "original" };
   await activate(initial, "0CNNW", "2026-10-16T11:40:00.000Z", configuration);
@@ -215,7 +215,7 @@ it("does not use another source's committed event as permission to replay", asyn
 });
 
 it("refuses a target location that differs from the stored node", async () => {
-  await seed();
+  await seed(bases, seedTenants);
   await expect(
     read(binding, { ...node, locationId: locationId(TENANT_B.locationId) }),
   ).rejects.toMatchObject({ code: "sif.allocation_invalid", params: { reason: "node_mismatch" } });
