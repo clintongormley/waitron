@@ -303,7 +303,7 @@ is not listed.
 Some ticks are grey, with the reason under the dish:
 
 - **Paid**: the dish is already paid, so it stays on this bill. Refund its payment first to move it.
-- **€40.00 is already paid on this bill**: moving this dish, or one more of the row, would leave the
+- **€40.00 is already paid on this bill: move fewer dishes**: moving this dish, or one more of the row, would leave the
   bill owing less than has been paid on it. The other dishes can still go.
 
 Under **Move to**, choose where the dishes go: one of the table's other bills that has no payment

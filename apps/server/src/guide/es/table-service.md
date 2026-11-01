@@ -319,7 +319,7 @@ Algunas casillas salen en gris, con el motivo debajo del plato:
 
 - **Pagado**: el plato ya está pagado, así que se queda en esta cuenta. Para moverlo, devuelve antes
   su pago.
-- **Ya se han pagado 40,00 € en esta cuenta**: mover este plato, o uno más de la fila, dejaría la
+- **Ya se han pagado 40,00 € en esta cuenta: mueve menos platos**: mover este plato, o uno más de la fila, dejaría la
   cuenta por debajo de lo que ya se ha pagado en ella. Los demás platos sí pueden pasar.
 
 En **Mover a**, elige adónde van los platos: otra de las cuentas de la mesa que aún no tenga ningún

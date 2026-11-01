@@ -273,13 +273,13 @@ describe("till-portion-picker", () => {
       const steak = tick(el, "s1");
       expect(steak.disabled).toBe(true);
       const reason = el.shadowRoot!.getElementById(steak.getAttribute("aria-describedby")!)!;
-      expect(reason.textContent!.trim()).toBe("€40.00 is already paid on this bill");
+      expect(reason.textContent!.trim()).toBe("€40.00 is already paid on this bill: move fewer dishes");
       setLocale("es-ES");
       await el.updateComplete;
       expect(reason.isConnected).toBe(true);
       const spanish = el.shadowRoot!.getElementById(steak.getAttribute("aria-describedby")!)!;
       expect(spanish.textContent!.trim()).toBe(
-        `Ya se han pagado ${formatMoney(decimal("40.00"), "es-ES")} en esta cuenta`,
+        `Ya se han pagado ${formatMoney(decimal("40.00"), "es-ES")} en esta cuenta: mueve menos platos`,
       );
     } finally {
       setLocale(previous);
@@ -299,7 +299,7 @@ describe("till-portion-picker", () => {
     expect(disabled(dec(el, "c1"))).toBe(false);
     const reasonId = tick(el, "c1").getAttribute("aria-describedby");
     const reason = el.shadowRoot!.getElementById(reasonId!)!.textContent!.trim();
-    expect(reason).toBe("€40.00 is already paid on this bill");
+    expect(reason).toBe("€40.00 is already paid on this bill: move fewer dishes");
     const plus = inc(el, "c1") as WtButton;
     await plus.updateComplete;
     expect(plus.shadowRoot!.querySelector("button")!.getAttribute("aria-description")).toBe(reason);
