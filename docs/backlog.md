@@ -253,11 +253,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   their exposure to the same date boundary has not been reproduced.
   [Reproduction and sources](developers/testing-guide.md#give-a-fake-fiscal-service-and-its-sample-one-controlled-clock).
 
-- **A696. Invoice issue dates and record offsets follow the process zone.**
-  Every new invoice date/offset, ordinary receipt and till must use the saved venue zone, DST included; old records stay unchanged.
-  Implementation and focused runtime checks are complete on the A696 branch; whole-branch review and current-head CI remain open before the owner lands its separate FULL fiscal PR.
-  [Detail](backlog/fiscal.md#a696-invoice-issue-dates-and-record-offsets-follow-the-process-zone).
-
 - **A444. A full invoice for a meal past midnight should carry the day the meal ends.** Automatic bill-close dating excludes Bill requested and staff date choice. Exact H2 scope approved; build waits for released A696/A739 integration and the fiscal-branch slot. Fiscal: the owner lands it.
   [Detail](backlog/fiscal.md#a444-a-full-invoice-for-a-meal-past-midnight-should-carry-the-day-the-meal-ends).
 - **Structured B2B invoices before the applicable 2027 or 2028 date.** Establish the issuer's threshold and recipient scope, then build structured exchange and required reporting. Current paper/email qualification stays separate.

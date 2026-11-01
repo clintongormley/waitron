@@ -8,18 +8,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "Fiscal records, invoices and the asesor". This file holds
 their full text.
 
-## A696. Invoice issue dates and record offsets follow the process zone
-
-Every new invoice date/offset, ordinary receipt and till must use the saved venue zone,
-DST included; old records stay unchanged. The owner approved the
-[startup design](../superpowers/specs/2026-10-20-a696-startup-zone-validation-design.md)
-on 21 October, including the minimal A166 country-zone list and creation/import checks first.
-Follow the [implementation plan](../superpowers/plans/2026-10-21-a696-startup-zone-validation.md):
-validate before trading, check every saved-zone writer and let a manager confirm only a
-missing/invalid zone. Implementation and runtime acceptance remain open; the separate FULL
-fiscal PR finishes green for the owner to land. Keep wider A166 work and A444 separate.
-[Detail](fiscal.md#walk-up-invoice-dates-follow-the-server-process-time-zone).
-
 ## A444. A full invoice for a meal past midnight should carry the day the meal ends
 
 A231's provisional rule uses the day the bill was opened. On 27 October the owner approved
@@ -130,6 +118,12 @@ minute-name rules A947 slice 4a added are covered by tests and hand-run deletion
 plan's Mutation section lists them). Decide whether it joins the mutation-tested packages.
 
 ## Walk-up invoice dates follow the server process time zone
+
+**1 November implementation update:** the A696 branch now prepares new invoice dates and record
+offsets from the writing node's saved venue zone. Its [coverage ledger](../superpowers/plans/2026-10-21-a696-startup-zone-validation.md#task-20-coverage-ledger)
+records the focused checks, current-main integration and remaining FULL PR qualification.
+The fiscal PR remains for owner landing. The 15 October observations below describe the earlier
+process-zone behavior; they are retained as historical receipts. Wider A166 and A444 remain open.
 
 Found during A693's test-only fix (2026-10-15). In an installed disposable copy,
 `transactional-series.test.ts` issued real walk-up invoices with the venue's stored

@@ -325,3 +325,12 @@ Local terminal logs, full test diff, integration assertion inventory, omitted-gu
 visual artifacts are retained in Lane E `receipts/a696-resume-20261101/`. Whole-branch review,
 normal push hook and required current-head CI remain pending at this checkpoint. This is a fiscal
 PR for owner landing; local focused passes alone do not complete the FULL PR checkbox above.
+
+
+**Backlog coordination, 1 November:** the owner lifted every file-overlap wait. The parent
+removes the completed A696 task from the backlog and adds a dated implementation pointer to its
+historical fiscal audit, preserving the audit bodies, decisions and every unrelated entry. This
+supersedes Task 20's reservation of that file for this status update only; it does not authorize
+changes to another lane's work. The separate fiscal PR still needs full review/CI qualification
+and owner landing. The watcher-requested A1242 and A1252 observations are recorded separately
+in the CI backlog; they change no product code.
