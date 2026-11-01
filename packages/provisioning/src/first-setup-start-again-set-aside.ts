@@ -133,7 +133,10 @@ export function setAsideFolderPaths(
 const stemFolderOf = (root: Root, folders: Record<Root, string>, destinations: Destinations) =>
   root === "state" || venueBesideState(destinations) ? dirname(folders[root]) : folders[root];
 
-/** Box-named empty probe folders a cut left, in each root and in any set-aside stem folder. */
+/**
+ * Box-named empty probe folders a cut left, in each root and in any set-aside stem folder, and
+ * half-written ring copies (plain files with this code's temporary name, in state-root stem folders).
+ */
 async function removeLeftoverProbes(roots: Roots, io: SetAsideIo): Promise<void> {
   const list = async (folder: string) => {
     try {
@@ -372,7 +375,7 @@ async function deleteNoteFirst(stateDir: string): Promise<void> {
  * the moved databases' sealed rows open only with it, and a later join replaces the ring whole.
  * Bytes and permission bits as they are; written under a temporary name, flushed, renamed and the
  * folder synced, so a cut leaves no copy or a whole one. A copy already there is left as it is; with
- * no ring file (a key from the environment) there is nothing to copy.
+ * no ring file there is nothing to copy.
  */
 async function keepRingCopy(roots: Roots, destinations: Destinations, io: SetAsideIo) {
   let label = `state/${RING}`;
@@ -503,7 +506,8 @@ export async function recordedStartAgainMove(
  * (the latest), finishes that Move piece by piece into the folders the record names. A piece at
  * its source exactly as recorded, with nothing at its destination, is renamed; one gone from its
  * source and at its destination exactly as recorded is already moved; anything else stops,
- * moving nothing more. Removes nothing but empty probe folders.
+ * moving nothing more. Removes nothing but empty probe folders and half-written ring copies (plain
+ * files with this code's temporary name, in state-root stem folders).
  */
 export async function resumeStartAgainSetAside(
   roots: Roots,

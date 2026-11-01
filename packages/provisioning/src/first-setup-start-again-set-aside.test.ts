@@ -1503,6 +1503,25 @@ it.each([
   },
 );
 
+it("the ring's copy keeps the original's mode 0640 under a umask of 077", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  await foundEverywhere(roots);
+  await writeFile(join(roots.stateDir, "secrets.env"), RING);
+  await fs.chmod(join(roots.stateDir, "secrets.env"), 0o640);
+
+  const record = await prepared(roots, attempt.administratorId);
+  const previous = process.umask(0o077);
+  try {
+    await moveStartAgainUnits(roots, record);
+  } finally {
+    process.umask(previous);
+  }
+
+  const copy = join(stemFolderOnState(roots, record), "secrets.env");
+  expect((await lstat(copy)).mode & 0o777).toBe(0o640);
+});
+
 it("on two filesystems the ring's copy is in the stem folder on the state root, even with no state unit to move", async () => {
   const attempt = await startAgainAttempt(await scratch());
   const { roots } = attempt;
