@@ -3256,6 +3256,44 @@ describe("TillApi", () => {
     );
   });
 
+  it.each([
+    ["a new bill", null],
+    ["an existing bill", "wo-dst"],
+  ] as const)(
+    "A803 move dishes client: moving to %s POSTs { lineIds, toBillId, revisions } to the /move-dishes route of the bill the dishes leave, answering the server's bill id",
+    async (_name, toBillId) => {
+      const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ billId: "wo-answer" }));
+      const expectedEdits = [
+        { billId: "wo-dst", editorVersion: 2, draftId: null, draftRevision: null },
+        { billId: "wo-src", editorVersion: 0, draftId: null, draftRevision: null },
+      ];
+
+      await expect(
+        new TillApi("", fetchStub).moveDishes("wo-src", ["line-1", "line-2"], toBillId, {
+          expectedPartyRevision: 4,
+          partyId: "v1",
+          expectedEdits,
+        }),
+      ).resolves.toEqual({ billId: "wo-answer" });
+
+      expect(fetchStub).toHaveBeenCalledWith(
+        "/api/bills/wo-src/move-dishes",
+        expect.objectContaining({
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            lineIds: ["line-1", "line-2"],
+            toBillId,
+            expectedPartyRevision: 4,
+            partyId: "v1",
+            expectedEdits,
+          }),
+        }),
+      );
+    },
+  );
+
   it("transferItems POSTs { toBillId, transfers } to the /transfer route of the bill the items leave", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
 
@@ -4647,6 +4685,23 @@ describe("TillApi: a seated party", () => {
         expectedPartyRevision: 3,
         partyId: "v1",
         expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+      },
+    ],
+    [
+      "moveDishes",
+      (api: TillApi) =>
+        api.moveDishes("wo-7", ["line-1"], null, {
+          expectedPartyRevision: 3,
+          partyId: "v1",
+          expectedEdits: [{ billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null }],
+        }),
+      "/api/bills/wo-7/move-dishes",
+      {
+        lineIds: ["line-1"],
+        toBillId: null,
+        expectedPartyRevision: 3,
+        partyId: "v1",
+        expectedEdits: [{ billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null }],
       },
     ],
   ] as const)("%s sends the party revisions it was given", async (_name, call, path, body) => {

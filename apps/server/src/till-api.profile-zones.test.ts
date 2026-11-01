@@ -195,6 +195,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/bills/:id/merge                               | order; body order      | refuses POST /api/bills/:id/merge (into), (from)     |
  * | PUT  /api/bills/:id/name | numbering party; order when it has none | refuses PUT /api/bills/:id/name, (no number); "naming a paid bill a merged party kept" |
  * | POST /api/bills/:id/transfer                            | order; body order      | refuses POST /api/bills/:id/transfer (from), (to)    |
+ * | POST /api/bills/:id/move-dishes                         | order; body order      | refuses POST /api/bills/:id/move-dishes (from), (to) |
  * | POST /api/bills/:id/move                                | order; body table/zone | refuses POST /api/bills/:id/move (bill), (table), (counter) |
  * | GET  /api/working-orders/:id/payments                   | order                  | refuses GET /api/working-orders/:id/payments         |
  * | POST /api/working-orders/:id/payments/preview           | order                  | refuses POST .../payments/preview                    |
@@ -1228,6 +1229,20 @@ const ROUTES: readonly Row[] = [
     "POST",
     (x) => `/api/bills/${x.restTab}/transfer`,
     (x) => ({ toBillId: x.deliTab, transfers: [] }),
+    deliTableZone,
+  ],
+  [
+    "POST /api/bills/:id/move-dishes (from)",
+    "POST",
+    (x) => `/api/bills/${x.deliTab}/move-dishes`,
+    (x) => ({ toBillId: x.restTab, lineIds: [] }),
+    deliTableZone,
+  ],
+  [
+    "POST /api/bills/:id/move-dishes (to)",
+    "POST",
+    (x) => `/api/bills/${x.restTab}/move-dishes`,
+    (x) => ({ toBillId: x.deliTab, lineIds: [] }),
     deliTableZone,
   ],
   [

@@ -4773,6 +4773,25 @@ export class TillApi {
   }
 
   /**
+   * Move whole dishes, named by line id, from one bill of a party to another, or to a new bill of
+   * the party when `toBillId` is null → `POST /api/bills/:fromBillId/move-dishes`, answering the
+   * bill they went to. Rejects, among others, `bill.line_paid`, `bill.payments_received`,
+   * `tab.line_not_found`, `draft.taken_over`, `party.out_of_date` and `sale.empty_basket`.
+   */
+  moveDishes(
+    fromBillId: string,
+    lineIds: readonly string[],
+    toBillId: string | null,
+    revisions: BillRevisions & { expectedEdits: BillEditExpected[] },
+  ): Promise<{ billId: string }> {
+    return this.#request(`/api/bills/${fromBillId}/move-dishes`, "POST", {
+      lineIds,
+      toBillId,
+      ...revisions,
+    });
+  }
+
+  /**
    * Move the chosen items from one untouched bill of a party to another →
    * `POST /api/bills/:fromBillId/transfer` (see {@link TabTransfer}). Rejects as
    * {@link mergeBills} does, and `bill.line_paid` and `sale.empty_basket`.
