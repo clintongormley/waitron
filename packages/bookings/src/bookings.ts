@@ -90,15 +90,21 @@ export async function createBooking(
   return { id: row!.id };
 }
 
+/** Names the venue's row only so `bookings_location_date_idx`, which leads with `location_id`, plans
+ *  the read; without it the day list scans every booking. */
+export function bookingsOnDay(tx: Transaction, venueLocation: string, date: string) {
+  return tx
+    .select()
+    .from(bookings)
+    .where(and(eq(bookings.locationId, venueLocation), eq(bookings.bookingDate, date)))
+    .orderBy(asc(bookings.bookingTime), asc(bookings.id));
+}
+
 export async function listBookings(
   tx: Transaction,
   { date }: { date: string },
 ): Promise<Booking[]> {
-  return tx
-    .select()
-    .from(bookings)
-    .where(eq(bookings.bookingDate, date))
-    .orderBy(asc(bookings.bookingTime), asc(bookings.id));
+  return bookingsOnDay(tx, await venueLocationId(tx), date);
 }
 
 export async function getBooking(tx: Transaction, id: string): Promise<Booking | undefined> {

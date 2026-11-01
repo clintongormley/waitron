@@ -14,6 +14,7 @@ import {
   floorZones,
   newId,
   nowIso,
+  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -28,6 +29,7 @@ import {
   cancelBooking,
   completeBooking,
   createBooking,
+  bookingsOnDay,
   getBooking,
   listBookings,
   markNoShow,
@@ -242,6 +244,23 @@ describe("createBooking + listBookings", () => {
     }
     const listed = await scoped(cfg, (tx) => listBookings(tx, { date: "2026-08-21" }));
     expect(listed.map((b) => b.bookingTime)).toEqual(["18:15:00", "18:15:00"]);
+  });
+
+  it("plans the day list on the location and date index, not a scan", async () => {
+    await setupVenue();
+    const plan = await withTransaction(db, async (tx) => {
+      const emitted = bookingsOnDay(tx, await venueLocationId(tx), "2026-08-21").toSQL();
+      const parts = emitted.sql.split("?");
+      const statement = sql.raw(`explain query plan ${parts[0]}`);
+      emitted.params.forEach((param, i) => {
+        statement.append(sql`${param}`);
+        statement.append(sql.raw(parts[i + 1]!));
+      });
+      return tx.execute<{ detail: string }>(statement);
+    });
+    const details = plan.rows.map((row) => row.detail);
+    expect(details.some((d) => d.includes("USING INDEX bookings_location_date_idx"))).toBe(true);
+    expect(details.some((d) => d.includes("SCAN bookings"))).toBe(false);
   });
 });
 
@@ -532,6 +551,25 @@ describe("seatBooking", () => {
     const { tabId } = await scoped(cfg, (tx) => seatBooking(tx, id, { tableId, seatedBy }, core));
     const b = await scoped(cfg, (tx) => getBooking(tx, id));
     expect(b).toMatchObject({ status: "seated", tabId, tableId });
+  });
+
+  it("refuses a req.tableId that names no table with table.not_found and leaves the booking booked", async () => {
+    const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
+    const { id } = await scoped(cfg, (tx) =>
+      createBooking(tx, {
+        bookingDate: "2026-08-20",
+        bookingTime: "20:00",
+        partySize: 2,
+        contactName: "Brown",
+        createdBy,
+      }),
+    );
+    const tableId = randomUUID();
+    await expect(
+      scoped(cfg, (tx) => seatBooking(tx, id, { tableId, seatedBy }, core)),
+    ).rejects.toMatchObject({ code: "table.not_found", params: { tableId } });
+    const b = await scoped(cfg, (tx) => getBooking(tx, id));
+    expect(b).toMatchObject({ status: "booked", tableId: null, tabId: null });
   });
 
   it("requires a table: booking.table_required when neither the booking nor req has one", async () => {

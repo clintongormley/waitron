@@ -463,6 +463,13 @@ function no longer reads the scope. It fails before the change. It is marked
 - **Second-location cases the code slices did not reach.** F slices leave every case that seeds a
   second location and list it in their commit; the schema slice that drops that table's `location_id`
   deletes any still standing.
+- **Indexes that lead with `location_id`.** A read that drops its location condition can no longer
+  use such an index: S9a measured `listBookings` going from `SEARCH … bookings_location_date_idx` to
+  `SCAN bookings` (the repo runs no `ANALYZE`). So `bookingsOnDay` (`packages/bookings/src/bookings.ts`)
+  keeps `location_id = venueLocationId(tx)`, pinned by "plans the day list on the location and date
+  index, not a scan" in `bookings.test.ts`. The slice that drops `bookings.location_id` rebuilds the
+  index on `(booking_date)` and deletes the condition; every other slice checks its own reads'
+  plans against the indexes on the tables it reads.
 - **The live-query table names** (`location_day_cutover_changes`, `{ type: "locations" }`) and the
   unique-index column lists (`columns: ["location_id", "name"]`) named as leftovers below go with
   S23 and S24.
