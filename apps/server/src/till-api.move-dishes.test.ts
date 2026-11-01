@@ -173,6 +173,17 @@ describe("A803 move dishes route:", () => {
     expect(lineIdsOf(second)).toHaveLength(2);
   });
 
+  it("a dish's id spelled in upper case moves that dish", async () => {
+    const { partyId, tabId } = await seated("Paella", "Caña");
+    const [, caña] = lineIdsOf(tabId);
+
+    const answer = await post(tabId, await wellFormed(partyId, tabId, [caña!.toUpperCase()], null));
+
+    expect(answer.status).toBe(200);
+    expect(lineIdsOf(answer.json.billId as string)).toEqual([caña]);
+    expect(lineIdsOf(tabId)).toHaveLength(1);
+  });
+
   it("401 without a session", async () => {
     const { partyId, tabId } = await seated("Paella", "Caña");
     const [, caña] = lineIdsOf(tabId);

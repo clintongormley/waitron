@@ -16,6 +16,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createPrinter } from "@waitron/printing";
 import { decimalToCents } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { SQL_VARIABLE_LIMIT } from "@waitron/store";
 import { kitchenNoteKey, readKitchenNotes, writeKitchenNote } from "@waitron/venue-service";
 import { moveDishes, splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -989,6 +990,16 @@ describe("A803 move dishes refuses, and changes nothing", () => {
     const [caña] = await dishIds(p.bill1);
     await refused(
       () => move(p.partyId, p.bill1, p.bill2, [caña!, caña!]),
+      "tab.transfer_duplicate_line",
+      { tabId: p.bill1, lineNo: await lineNoOf(p.bill1, caña!) },
+    );
+  });
+
+  it("A803 move dishes refuses: one id named more times than a statement can bind is tab.transfer_duplicate_line", async () => {
+    const p = await party([dish("Caña")]);
+    const [caña] = await dishIds(p.bill1);
+    await refused(
+      () => move(p.partyId, p.bill1, p.bill2, Array<string>(SQL_VARIABLE_LIMIT + 1).fill(caña!)),
       "tab.transfer_duplicate_line",
       { tabId: p.bill1, lineNo: await lineNoOf(p.bill1, caña!) },
     );

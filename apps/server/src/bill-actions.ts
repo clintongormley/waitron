@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
@@ -67,13 +67,16 @@ async function requireUnreservedTransfers(
       ),
     )
     .limit(1);
-  if (reserved !== undefined)
-    throw new AppError("draft.out_of_date", {
-      billId,
-      draftId: edit.draftId,
-      revision: edit.draftRevision,
-      edit,
-    });
+  if (reserved !== undefined) throw reservedRefusal(billId, edit);
+}
+
+function reservedRefusal(billId: string, edit: BillEditState): AppError {
+  return new AppError("draft.out_of_date", {
+    billId,
+    draftId: edit.draftId,
+    revision: edit.draftRevision,
+    edit,
+  });
 }
 
 type BillStatus = (typeof workingOrders.$inferSelect)["status"];
@@ -311,23 +314,31 @@ export async function transferItems(
   await enqueueMovedSlips(tx, cfg, before, toBillId, splitFrom);
 }
 
-/** The line numbers of `lineIds`, each a dish of `billId`, in the order named. */
+/**
+ * The line numbers of `lineIds`, each a dish of `billId`, in the order named, and whether any is
+ * recalled into a draft. The ids travel as one JSON value, so the statement binds one value however
+ * many ids are named.
+ */
 async function resolveMoveLines(
   tx: Transaction,
   billId: string,
   lineIds: readonly string[],
-): Promise<{ lineNo: number }[]> {
+): Promise<{ transfers: { lineNo: number }[]; recalled: boolean }> {
   const rows = await tx
     .select({
       id: workingOrderLines.id,
       lineNo: workingOrderLines.lineNo,
       parentLineId: workingOrderLines.parentLineId,
+      recalled: isRecalledDish(tx).mapWith(Boolean),
     })
     .from(workingOrderLines)
     .where(
       and(
         eq(workingOrderLines.workingOrderId, billId),
-        inArray(workingOrderLines.id, [...lineIds]),
+        inArray(
+          workingOrderLines.id,
+          sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
+        ),
       ),
     );
   const byId = new Map(rows.map((row) => [row.id, row]));
@@ -340,7 +351,7 @@ async function resolveMoveLines(
     return { lineNo: row.lineNo };
   });
   assertDistinctTransferLines(billId, transfers);
-  return transfers;
+  return { transfers, recalled: rows.some((row) => row.recalled) };
 }
 
 /**
@@ -370,19 +381,19 @@ export async function moveDishes(
     await refuseBillWithPayments(tx, toBillId);
     await assertServiceModesMatch(tx, cfg, fromBillId, toBillId);
   }
-  const transfers = await resolveMoveLines(tx, fromBillId, lineIds);
+  const { transfers, recalled } = await resolveMoveLines(tx, fromBillId, lineIds);
   const edits = await requireBillEditors(
     tx,
     toBillId === null ? [fromBillId] : [fromBillId, toBillId],
     command.operatorId,
     command.expectedEdits,
   );
-  await requireUnreservedTransfers(
-    tx,
-    fromBillId,
-    transfers,
-    edits.find((edit) => edit.billId === fromBillId)!,
-  );
+  if (recalled) {
+    throw reservedRefusal(
+      fromBillId,
+      edits.find((edit) => edit.billId === fromBillId)!,
+    );
+  }
 
   let destinationId = toBillId;
   if (destinationId === null) {

@@ -974,10 +974,10 @@ function requireOtherBill(value: unknown, field: string): string {
   return value;
 }
 
+/** A list of line ids: a non-UUID is the request's fault, not a line the bill lacks. */
 function requireLineIds(value: unknown): string[] {
   if (!Array.isArray(value)) throw invalid("lineIds");
-  for (const id of value) if (typeof id !== "string" || !isUuid(id)) throw invalid("lineIds");
-  return value as string[];
+  return value.map((id) => requireBodyUuid(id, "lineIds").toLowerCase());
 }
 
 /**
