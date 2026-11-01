@@ -26,7 +26,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   addProductToMenu,
@@ -230,7 +230,7 @@ async function setupVenue(): Promise<{
       unitPrice: "1.50",
       vatClass: "general",
     });
-    await assignCatalogueToLocation(tx, venue.locationId, cat.id);
+    await assignCatalogueToVenue(tx, cat.id);
     const menuItem = await addProductToMenu(tx, {
       menuId: cat.id,
       productId: product.id,
@@ -255,7 +255,7 @@ async function setupVenue(): Promise<{
       .insert(persons)
       .values({ displayName: "Responsable", pinHash: fixturePinHash("5555"), role: "supervisor" })
       .returning({ id: persons.id });
-    const { products: available } = await listAvailableProducts(tx, cfg.locationId);
+    const { products: available } = await listAvailableProducts(tx);
     for (const department of await tx
       .select({ id: departments.id })
       .from(departments)

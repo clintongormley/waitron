@@ -69,7 +69,7 @@ export async function offerProducts(
   const menuId = await ownMenu(tx);
   await offerMenuThroughZone(tx, cfg, zoneId, menuId);
 
-  const productIds = [...new Set(options.productIds ?? (await topLevelProducts(tx, cfg)))];
+  const productIds = [...new Set(options.productIds ?? (await topLevelProducts(tx)))];
   const offerByProduct = await placeOnTopLevel(tx, menuId, productIds);
   await publishWorkingMenu(tx, menuId);
 
@@ -188,8 +188,8 @@ async function ownMenu(tx: Transaction): Promise<string> {
   return existing?.id ?? (await createCatalogue(tx, { name: MENU_NAME })).id;
 }
 
-async function topLevelProducts(tx: Transaction, cfg: Cfg): Promise<string[]> {
-  const { ids } = await resolveAccessibleCatalogueIds(tx, cfg.locationId);
+async function topLevelProducts(tx: Transaction): Promise<string[]> {
+  const { ids } = await resolveAccessibleCatalogueIds(tx);
   if (ids.length === 0) return [];
   const rows = await tx
     .select({ id: products.id })

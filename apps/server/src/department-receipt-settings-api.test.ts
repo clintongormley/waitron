@@ -690,39 +690,24 @@ describe("replacement department receipt HTTP contract", () => {
       expect(await rows()).toEqual(concurrent);
     },
   );
-  it.each(["deleted", "other-location"])(
-    "refuses %s departments for both methods without writing",
-    async (kind) => {
-      const f = await fixture();
-      if (kind === "deleted")
-        await suite.db
-          .update(departments)
-          .set({ active: false })
-          .where(eq(departments.id, f.departmentId));
-      else {
-        const [other] = await suite.db
-          .insert(locations)
-          .values({
-            name: "Other",
-            invoiceLocales: ["es-ES"],
-            operationDescription: "Other bootstrap",
-          })
-          .returning();
-        f.cfg.locationId = locationId(other!.id);
-      }
-      const before = await rows();
-      await refusal(
-        await f.app.request(f.path, { headers: f.headers }),
-        404,
-        "department.not_found",
-        { departmentId: f.departmentId },
-      );
-      await refusal(await f.put(body()), 404, "department.not_found", {
-        departmentId: f.departmentId,
-      });
-      expect(await rows()).toEqual(before);
-    },
-  );
+  it("refuses deleted departments for both methods without writing", async () => {
+    const f = await fixture();
+    await suite.db
+      .update(departments)
+      .set({ active: false })
+      .where(eq(departments.id, f.departmentId));
+    const before = await rows();
+    await refusal(
+      await f.app.request(f.path, { headers: f.headers }),
+      404,
+      "department.not_found",
+      { departmentId: f.departmentId },
+    );
+    await refusal(await f.put(body()), 404, "department.not_found", {
+      departmentId: f.departmentId,
+    });
+    expect(await rows()).toEqual(before);
+  });
   it("refuses an unknown logo and never begins decoding", async () => {
     const f = await fixture();
     const before = await rows();

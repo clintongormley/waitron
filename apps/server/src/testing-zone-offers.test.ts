@@ -21,7 +21,7 @@ import {
 } from "@waitron/venue-service";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createExtraList,
@@ -76,7 +76,7 @@ async function seedVenue(db: Database): Promise<Venue> {
   };
   return withTransaction(db, async (tx) => {
     const menu = await createCatalogue(tx, { name: "Main menu" });
-    await assignCatalogueToLocation(tx, locationId, menu.id);
+    await assignCatalogueToVenue(tx, menu.id);
     const drinks = await createCategory(tx, { name: "Drinks" });
     const food = await createCategory(tx, { name: "Food" });
     const product = (name: string, unitPrice: string, categoryId: string | null) =>

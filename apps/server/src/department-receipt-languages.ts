@@ -14,7 +14,7 @@ export async function departmentReceiptLanguages(
   tx: Transaction,
   cfg: { locationId: LocationId },
 ): Promise<DepartmentReceiptLanguages> {
-  const { locale: receiptLanguage } = await readReceiptLanguage(tx, cfg.locationId);
+  const { locale: receiptLanguage } = await readReceiptLanguage(tx);
   const labelled = [
     ...new Set(
       COUNTRY_PACKS.flatMap((pack) =>

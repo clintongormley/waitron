@@ -55,7 +55,7 @@ import {
   createDepartment,
 } from "@waitron/venue-service";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -268,9 +268,9 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
       unitPrice: "1.50",
       vatClass: "general",
     });
-    await assignCatalogueToLocation(tx, venue.locationId, cat.id);
+    await assignCatalogueToVenue(tx, cat.id);
     return {
-      available: (await listAvailableProducts(tx, cfg.locationId)).products,
+      available: (await listAvailableProducts(tx)).products,
       offers: await offerProducts(tx, cfg, {
         orderStart: "counter",
         paidWhen: orderFlow,
@@ -3994,18 +3994,6 @@ describe("the theme's logo on thermal receipts", () => {
     expect(logos((await reprint(ticket)).payload)).toEqual([]);
   });
 
-  async function untrustedAt(cfg: DeviceRequestConfig, departmentId: string) {
-    const [foreign] = await suite.db
-      .insert(locations)
-      .values({
-        name: randomUUID(),
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Hospitality",
-      })
-      .returning({ id: locations.id });
-    return { departmentId, locationId: cfg.locationId, foreignLocationId: foreign!.id };
-  }
-
   async function expectTextOnlyReprint(job: { payload: Uint8Array }, cfg: DeviceRequestConfig) {
     expect(logos(job.payload)).toEqual([]);
     expect(decodeTicket(job.payload)).toContain("Agua mineral");
@@ -4018,7 +4006,7 @@ describe("the theme's logo on thermal receipts", () => {
     "prints no logo, not even the theme's, when the department's settings cannot be trusted: %s",
     async (_name, untrusted) => {
       const { cfg, departmentId, sell, documents, reprint } = await setupReceipt();
-      const at = await untrustedAt(cfg, departmentId);
+      const at = { departmentId };
       await storeDepartmentReceipt(departmentId, { logo: `${"b".repeat(64)}.png` }, OWN_PAIR);
       await putThemeInUse(suite.db);
       const ticket = await sell();
@@ -4042,7 +4030,7 @@ describe("the theme's logo on thermal receipts", () => {
     "a department with no logo of its own stops the theme's printing once it cannot be trusted: %s",
     async (_name, untrusted) => {
       const { cfg, departmentId, sell, documents, reprint } = await setupReceipt();
-      const at = await untrustedAt(cfg, departmentId);
+      const at = { departmentId };
       await putThemeInUse(suite.db);
       const ticket = await sell();
       const [original] = await documents();

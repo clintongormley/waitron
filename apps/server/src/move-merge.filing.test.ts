@@ -5,7 +5,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -156,8 +156,8 @@ async function setupVenue(): Promise<SeededVenue> {
       unitPrice: "2.00",
       vatClass: "general",
     });
-    await assignCatalogueToLocation(tx, venue.locationId, cat.id);
-    return (await listAvailableProducts(tx, cfg.locationId)).products;
+    await assignCatalogueToVenue(tx, cat.id);
+    return (await listAvailableProducts(tx)).products;
   });
   const cafe = available.find((p) => p.name === "Café")!;
   const agua = available.find((p) => p.name === "Agua")!;

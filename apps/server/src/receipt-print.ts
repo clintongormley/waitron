@@ -194,7 +194,7 @@ async function buildReceiptBytes(
   }) => console.warn("receipt.optional_read_failed", event);
   const header = await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId);
   const departmentId = header?.departmentId ?? null;
-  const current = await readReceiptLanguage(tx, cfg.locationId);
+  const current = await readReceiptLanguage(tx);
   const department =
     departmentId === null
       ? null

@@ -12,7 +12,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createExtraList,
@@ -219,7 +219,7 @@ async function setupVenue(): Promise<Venue> {
       LOCALE,
     );
     await writeProductModifiers(tx, productId.steak, [{ kind: "extras", id: extras.id }]);
-    await assignCatalogueToLocation(tx, venue.locationId, catalogue.id);
+    await assignCatalogueToVenue(tx, catalogue.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     // Bottled water is handed over at the bar: no kitchen ticket, only a sent stamp.
     await setRoutingCell(

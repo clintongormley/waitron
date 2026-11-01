@@ -47,14 +47,28 @@ async function venueRow(tx: Transaction): Promise<{ id: string; venue: Venue }> 
     })
     .from(locations)
     .limit(2);
+  const { id, ...venue } = theOneRow(rows);
+  return { id, venue };
+}
+
+function theOneRow<T>(rows: T[]): T {
   if (rows.length === 0) throw new AppError("venue.not_found", {});
   if (rows.length > 1) throw new AppError("provisioning.second_venue", {});
-  const { id, ...venue } = rows[0]!;
-  return { id, venue };
+  return rows[0]!;
 }
 
 export async function readVenue(tx: Transaction): Promise<Venue> {
   return (await venueRow(tx)).venue;
+}
+
+/** Reads no other column, so an invoice reprint that must not depend on the venue's current
+ * address can call it. */
+export async function readVenueInvoiceLocales(tx: Transaction): Promise<string[]> {
+  const rows = await tx
+    .select({ invoiceLocales: locations.invoiceLocales })
+    .from(locations)
+    .limit(2);
+  return theOneRow(rows).invoiceLocales;
 }
 
 function storedCutover(value: string): string {

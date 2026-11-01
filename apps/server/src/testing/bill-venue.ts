@@ -20,7 +20,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -194,7 +194,7 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
       });
       productIds.set(item.name, product.id);
     }
-    await assignCatalogueToLocation(tx, provisioned.locationId, cat.id);
+    await assignCatalogueToVenue(tx, cat.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const [person] = await tx
       .insert(persons)

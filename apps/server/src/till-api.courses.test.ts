@@ -19,7 +19,7 @@ import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/se
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -108,7 +108,7 @@ const suite = useVenueDb({
       await mk(PAN); // loose — no course assigned
       await setProductCourse(tx, cfg, sopa, ent.id);
       await setProductCourse(tx, cfg, filete, pri.id);
-      await assignCatalogueToLocation(tx, loc!.id, catalogue.id);
+      await assignCatalogueToVenue(tx, catalogue.id);
       counterOffers = await offerProducts(tx, cfg);
       tablesZoneId = (await offerProducts(tx, cfg, { zone: "tables" })).zoneId;
     });

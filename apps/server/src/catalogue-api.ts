@@ -14,9 +14,9 @@ import {
   type ContentLanguageRules,
   type Decimal,
 } from "@waitron/shared";
-import { withTransaction, type Database, type Transaction } from "@waitron/db";
+import { readVenueClock, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
-  addCatalogueToLocation,
+  addCatalogueToVenue,
   moveCatalogueItems,
   deleteCatalogueItems,
   summariseFolders,
@@ -64,7 +64,7 @@ import {
   type CategoryInput,
   createProduct,
   listCatalogues,
-  listCataloguesForLocation,
+  listCataloguesForVenue,
   listCategories,
   menuPrices,
   menuStatus,
@@ -92,8 +92,8 @@ import {
   extraListDependants,
   extraOfferUsageForUnitChange,
   listProducts,
-  removeCatalogueFromLocation,
-  setLocationDefaultCatalogue,
+  removeCatalogueFromVenue,
+  setVenueDefaultCatalogue,
   updateMenuDetails,
   updateMenuItem,
   listMenuVariants,
@@ -120,7 +120,6 @@ import { setProductCourse } from "./kitchen.js";
 import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { readLocationClock } from "@waitron/reporting";
 import { activationInstant, checkedTimeZone, localTimeOf } from "./menu-publication-time.js";
 import { kitchenStations } from "@waitron/db";
 import { inArray } from "drizzle-orm";
@@ -1143,7 +1142,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   );
 
   const venueTimeZone = async (tx: Transaction): Promise<string> =>
-    (await readLocationClock(tx, requireVenueCfg(deps).locationId)).timeZone;
+    (await readVenueClock(tx)).timeZone;
 
   app.post("/management-api/catalogues/:id/publications", (c) =>
     run(c, log, async () => {
@@ -1283,8 +1282,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   app.get("/management-api/locations/:locationId/catalogues", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const locationId = requireUuidParam(c.req.param("locationId"), "LocationId");
-      const rows = await gated(c, sessionId, (tx) => listCataloguesForLocation(tx, locationId));
+      const rows = await gated(c, sessionId, (tx) => listCataloguesForVenue(tx));
       return c.json(rows);
     }),
   );
@@ -1292,9 +1290,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   app.post("/management-api/locations/:locationId/catalogues", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const locationId = requireUuidParam(c.req.param("locationId"), "LocationId");
       const catalogueId = await requireCatalogueIdBody(c);
-      await gated(c, sessionId, (tx) => addCatalogueToLocation(tx, locationId, catalogueId));
+      await gated(c, sessionId, (tx) => addCatalogueToVenue(tx, catalogueId));
       return c.body(null, 204);
     }),
   );
@@ -1302,9 +1299,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   app.delete("/management-api/locations/:locationId/catalogues/:catalogueId", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const locationId = requireUuidParam(c.req.param("locationId"), "LocationId");
       const catalogueId = requireUuidParam(c.req.param("catalogueId"), "CatalogueId");
-      await gated(c, sessionId, (tx) => removeCatalogueFromLocation(tx, locationId, catalogueId));
+      await gated(c, sessionId, (tx) => removeCatalogueFromVenue(tx, catalogueId));
       return c.body(null, 204);
     }),
   );
@@ -1312,9 +1308,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   app.put("/management-api/locations/:locationId/default-catalogue", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const locationId = requireUuidParam(c.req.param("locationId"), "LocationId");
       const catalogueId = await requireCatalogueIdBody(c);
-      await gated(c, sessionId, (tx) => setLocationDefaultCatalogue(tx, locationId, catalogueId));
+      await gated(c, sessionId, (tx) => setVenueDefaultCatalogue(tx, catalogueId));
       return c.body(null, 204);
     }),
   );

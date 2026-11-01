@@ -26,7 +26,7 @@ import {
   updateProduct,
   createProduct,
   createCatalogue,
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
 } from "@waitron/catalogue";
 import { readBillEditState } from "./bill-editing.js";
 import { submitGroups } from "./order-groups.js";
@@ -284,7 +284,7 @@ it("A964 language boundaries preserve saved receipt-language card bytes and fisc
       unitPrice: "1234.56",
       vatClass: "general",
     });
-    await assignCatalogueToLocation(tx, cfg.locationId, cat.id);
+    await assignCatalogueToVenue(tx, cat.id);
     const offered = await offerProducts(tx, cfg);
     return { zoneId: offered.zoneId, menuItemId: offered.offerFor(product.id) };
   });

@@ -7,7 +7,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { tenders, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -158,7 +158,7 @@ beforeAll(async () => {
       unitPrice: "1.00",
       vatClass: "general",
     });
-    await assignCatalogueToLocation(tx, cfg.locationId, cat.id);
+    await assignCatalogueToVenue(tx, cat.id);
     const offers = await offerProducts(tx, cfg);
     return { menuItemId: offers.offerFor(product.id), zoneId: offers.zoneId };
   }));

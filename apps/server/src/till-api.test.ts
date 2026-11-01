@@ -48,8 +48,8 @@ import {
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import type { ReceiptConfig } from "@waitron/layouts";
 import {
-  addCatalogueToLocation,
-  assignCatalogueToLocation,
+  addCatalogueToVenue,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createExtraList,
@@ -198,7 +198,7 @@ const suite = useVenueDb({
           vatClass: "general",
           allergens: { sulphites: {} },
         });
-        await assignCatalogueToLocation(tx, loc!.id, cat.id);
+        await assignCatalogueToVenue(tx, cat.id);
 
         const cat2 = await createCatalogue(tx, { name: "Happy Hour" });
         const p2 = await createProduct(tx, {
@@ -209,7 +209,7 @@ const suite = useVenueDb({
           unitPrice: "2.50",
           vatClass: "general",
         });
-        await addCatalogueToLocation(tx, loc!.id, cat2.id);
+        await addCatalogueToVenue(tx, cat2.id);
 
         const [department] = await tx
           .insert(departments)
@@ -2162,8 +2162,8 @@ describe("zone-offer catalogue routes", () => {
 
   it("reads the location's accessible menus and product values", async () => {
     const catalogue = await withTransaction(suite.db, async (tx) => ({
-      menus: await listAccessibleCatalogues(tx, cfg.locationId),
-      products: (await listAvailableProducts(tx, cfg.locationId)).products,
+      menus: await listAccessibleCatalogues(tx),
+      products: (await listAvailableProducts(tx)).products,
     }));
     expect(catalogue).toEqual({
       menus: [

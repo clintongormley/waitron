@@ -1116,15 +1116,7 @@ describe("the theme's logo on the A4 invoice", () => {
     const departmentId = await department();
     if (own) await ownLogo(departmentId);
     const saleId = await saleIn(backend, departmentId);
-    const [foreign] = await suite.db
-      .insert(locations)
-      .values({
-        name: randomUUID(),
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Hospitality",
-      })
-      .returning({ id: locations.id });
-    const at = { departmentId, locationId: venue.cfg.locationId, foreignLocationId: foreign!.id };
+    const at = { departmentId };
     await putThemeInUse(suite.db);
     const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {

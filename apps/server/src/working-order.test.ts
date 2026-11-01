@@ -37,7 +37,7 @@ import type { AllergenMap, Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   addProductToMenu,
@@ -60,7 +60,7 @@ import {
   seriesId as brandSeriesId,
 } from "@waitron/shared";
 import type { OrderFlow } from "./till-config.js";
-import type { TradingContext, DeviceRequestConfig } from "./trading-context.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
 import {
   advanceTicket,
   advanceTicketItem,
@@ -212,7 +212,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
         unitPrice: "2.00",
         vatClass: "general",
       });
-      await assignCatalogueToLocation(tx, locationId, cat.id);
+      await assignCatalogueToVenue(tx, cat.id);
       const premium = await createCatalogue(tx, { name: "Carta premium" });
       const cafeOffer = await addProductToMenu(tx, {
         menuId: cat.id,
@@ -1294,12 +1294,9 @@ async function readOrder(id: string): Promise<{
  * of the persisted `line_total` column, so a held total computed from the NET base fails
  * against it (2 × 1.50 gross is 3.00 here, not the net 2.48 the fiscal line carries).
  */
-async function grossBasketTotal(
-  cfg: DeviceRequestConfig,
-  lines: { productId: string; quantity: string }[],
-): Promise<string> {
+async function grossBasketTotal(lines: { productId: string; quantity: string }[]): Promise<string> {
   return withTransaction(db, async (tx) => {
-    const { products: available } = await listAvailableProducts(tx, cfg.locationId);
+    const { products: available } = await listAvailableProducts(tx);
     const byId = new Map(available.map((p) => [p.id, p]));
     // A catalogue row is not priceable as read: its customer-facing text is resolved from
     // `name`/`customerName` by `product-presentation.ts` first, exactly as `priceOrderLines` does.
@@ -1380,8 +1377,8 @@ describe("listHeldOrders", () => {
     // `priceBasket(sameItems, "2026-09-27").total`, computed independently of the persisted column — NOT the
     // summed net base. A: 1.50 × 2 = 3.00 gross; B: 1.50 + 6.00 = 7.50. Both asserted as literals AND against the pricer, so the test fails if the held
     // total ever reverts to net (2.48 ≠ 3.00) or if the pricer itself drifts.
-    const grossA = await grossBasketTotal(cfg, linesA);
-    const grossB = await grossBasketTotal(cfg, linesB);
+    const grossA = await grossBasketTotal(linesA);
+    const grossB = await grossBasketTotal(linesB);
     expect(grossA).toBe("3.00");
     expect(grossB).toBe("7.50");
 
@@ -2786,7 +2783,7 @@ describe("updateHeldOrder", () => {
     // replaced lines (`priceBasket(newLines, "2026-09-27").total`, computed independently of the persisted column) —
     // agua 2.00 + café 1.50 = 3.50 gross, where the parked cafe×2 was 3.00. Asserting against the
     // gross pricer (not the summed line_total column) is what fails if the held total reverts to net.
-    const grossAfter = await grossBasketTotal(cfg, newLines);
+    const grossAfter = await grossBasketTotal(newLines);
     expect(grossAfter).toBe("3.50");
     const [afterSummary] = await listHeldOrders({ db }, cfg);
     expect(afterSummary!.counts.ordered).toBe(
@@ -7421,30 +7418,6 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
       await expect(
         addRound(tx, cfg, tabId, [{ productId: cafe, quantity: "1", courseId: missing }]),
       ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: missing } });
-    });
-  });
-
-  it("rejects a DIFFERENT venue's course of the same tenant with course.not_found", async () => {
-    const { cfg, catalogueId } = await setupVenue();
-    await withTransaction(db, async (tx) => {
-      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const cafe = await makeProduct(tx, cfg, catalogueId, {});
-      const tabId = await openEmptyTab(tx, cfg);
-      // A second venue in the same database, and a course that lives there. The by-id FK on
-      // working_order_lines.course_id would ACCEPT it, but requireLiveCourse is
-      // location-scoped, so the cross-venue override is refused.
-      const location2Id = randomUUID();
-      await tx.insert(locations).values({
-        id: location2Id,
-        name: "Barra 2",
-        invoiceLocales: [LOCALE],
-        operationDescription: "Venta en establecimiento",
-      });
-      const cfg2: TradingContext = { ...cfg, locationId: brandLocationId(location2Id) };
-      const foreign = await createCourse(tx, cfg2, { name: "Entrantes", displayOrder: 0 });
-      await expect(
-        addRound(tx, cfg, tabId, [{ productId: cafe, quantity: "1", courseId: foreign.id }]),
-      ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: foreign.id } });
     });
   });
 

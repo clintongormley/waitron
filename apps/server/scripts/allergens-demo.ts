@@ -16,7 +16,7 @@ import type { Database } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   ALLERGEN_CODES,
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -139,7 +139,7 @@ async function main(): Promise<void> {
   const store = await openVenueDatabase(venueDir);
   const db = store.venue;
   try {
-    const venue = await seedVenue(db, "Europe/Madrid");
+    await seedVenue(db, "Europe/Madrid");
 
     await withTransaction(db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Delicatessen" });
@@ -193,11 +193,11 @@ async function main(): Promise<void> {
         vatClass: "reduced",
       });
 
-      await assignCatalogueToLocation(tx, venue.locationId, cat.id);
+      await assignCatalogueToVenue(tx, cat.id);
     });
 
     const products = await withTransaction(db, async (tx) => {
-      return (await listAvailableProducts(tx, venue.locationId)).products;
+      return (await listAvailableProducts(tx)).products;
     });
 
     console.log("allergens-demo: allergens authored on the catalogue, read back for the till");

@@ -19,7 +19,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { listStationNotices } from "@waitron/venue-service";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -116,7 +116,7 @@ async function setupVenue(): Promise<Seeded> {
       unitPrice: "24.90",
       vatClass: "reduced",
     });
-    await assignCatalogueToLocation(tx, locationId, cat.id);
+    await assignCatalogueToVenue(tx, cat.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     offersByCfg.set(cfg, offers);
     const t1 = await createTable(tx, cfg, { label: "T1", zoneId: offers.zoneId });

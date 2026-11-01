@@ -22,7 +22,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -178,7 +178,7 @@ async function setupVenue(): Promise<Seeded> {
       unitPrice: "0.50",
       vatClass: "reduced",
     });
-    await assignCatalogueToLocation(tx, locationId, cat.id);
+    await assignCatalogueToVenue(tx, cat.id);
     return { cafeId: cafe.id, aguaId: agua.id, baconId: bacon.id };
   });
   offersByCfg.set(

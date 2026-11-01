@@ -25,7 +25,7 @@ import {
   createCategory,
   createProduct,
   createExtraList,
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   writeProductModifiers,
 } from "@waitron/catalogue";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -630,7 +630,7 @@ describe("A669 atomic submit", () => {
         "es-ES",
       );
       await writeProductModifiers(tx, dish.id, [{ kind: "extras", id: list.id }]);
-      await assignCatalogueToLocation(tx, v.cfg.locationId, cat.id);
+      await assignCatalogueToVenue(tx, cat.id);
       const offers = await offerProducts(tx, v.cfg, {
         zone: { zoneId: v.tables.zoneId },
         orderStart: "table",

@@ -73,7 +73,7 @@ useVenueDb({
     v = await setupPartyVenue(db);
     const made = await inTx(v, async (tx) => ({
       counter: await offerProducts(tx, v.cfg, { zone: "counter" }),
-      products: (await listAvailableProducts(tx, v.cfg.locationId)).products,
+      products: (await listAvailableProducts(tx)).products,
     }));
     counter = made.counter;
     productIds = new Map(made.products.map((p) => [p.name, p.id]));

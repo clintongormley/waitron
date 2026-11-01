@@ -16,7 +16,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createExtraList,
@@ -207,7 +207,7 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
       LOCALE,
     );
     await writeProductModifiers(tx, burger.id, [{ kind: "extras", id: extras.id }]);
-    await assignCatalogueToLocation(tx, venue.locationId, menu.id);
+    await assignCatalogueToVenue(tx, menu.id);
     return {
       categories: { bebidas, alcoholicas, cocteles, licores, cafes, comida, anadidos },
       products: {

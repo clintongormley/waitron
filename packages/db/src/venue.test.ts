@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Transaction } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { catalogues } from "./schema/catalogue.js";
@@ -6,7 +6,13 @@ import { locationDayCutoverChanges } from "./schema/business-day-clock.js";
 import { locations } from "./schema/tenants.js";
 import { withTransaction } from "./tenancy.js";
 import { useVenueDb } from "./testing/venue-db.js";
-import { readVenue, readVenueClock, readVenueClockAndPlace, venueLocationId } from "./venue.js";
+import {
+  readVenue,
+  readVenueClock,
+  readVenueClockAndPlace,
+  readVenueInvoiceLocales,
+  venueLocationId,
+} from "./venue.js";
 
 describe("the venue accessor", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -94,6 +100,26 @@ describe("the venue accessor", () => {
     expect((await withTransaction(suite.db, readVenueClock)).timeZone).toBe("Invalid/Zone");
   });
 
+  it("reads the invoice languages in their saved order, selecting no other column", async () => {
+    await insertVenue({ invoiceLocales: ["gl-ES", "es-ES"], addressLine1: "Calle Mayor 1" });
+    const statements: string[] = [];
+    const session = (
+      suite.db as unknown as { session: { prepareQuery: (...a: unknown[]) => unknown } }
+    ).session;
+    const original = session.prepareQuery.bind(session);
+    const spy = vi.spyOn(session, "prepareQuery").mockImplementation((...args) => {
+      const { sql } = args[0] as { sql: string };
+      if (sql.startsWith("select")) statements.push(sql);
+      return original(...args);
+    });
+    try {
+      expect(await withTransaction(suite.db, readVenueInvoiceLocales)).toEqual(["gl-ES", "es-ES"]);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(statements).toEqual(['select "invoice_locales" from "locations" limit ?']);
+  });
+
   it("returns the venue's row id", async () => {
     const id = await insertVenue();
 
@@ -104,6 +130,7 @@ describe("the venue accessor", () => {
     ["readVenue", readVenue],
     ["readVenueClock", readVenueClock],
     ["readVenueClockAndPlace", readVenueClockAndPlace],
+    ["readVenueInvoiceLocales", readVenueInvoiceLocales],
     ["venueLocationId", venueLocationId],
   ])("%s", (_name, read) => {
     it("refuses with no venue", async () => {

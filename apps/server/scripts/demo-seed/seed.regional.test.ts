@@ -152,7 +152,7 @@ for (const [province, postalCode, invoiceLocale] of [
       } finally {
         await rm(root, { recursive: true });
       }
-      const available = (await listAvailableProducts(suite.db, venue.locationId)).products;
+      const available = (await listAvailableProducts(suite.db)).products;
       expect(available.some((p) => p.name === expected.sausage.staff)).toBe(true);
       expect(available.some((p) => p.name === expected.wine)).toBe(true);
       const input = vi.mocked(seedSales).mock.calls.at(-1)![1];
@@ -184,7 +184,7 @@ it("records a forced regional-only pool through the unchanged fiscal seat", asyn
     departmentTradingNames: selection.identity.departmentTradingNames,
     dataSet: selection.dataSet,
   });
-  const product = (await listAvailableProducts(suite.db, venue.locationId)).products.find(
+  const product = (await listAvailableProducts(suite.db)).products.find(
     (p) => p.name === expected.sausage.staff,
   )!;
   const { count } = await seedSales(suite.db, {
@@ -332,7 +332,7 @@ for (const locale of ["en", "es"] as const)
       await rm(root, { recursive: true });
     }
     for (const row of rows) expect(row.image).toMatch(/^[0-9a-f]{64}\.webp$/);
-    const available = (await listAvailableProducts(suite.db, venue.locationId)).products;
+    const available = (await listAvailableProducts(suite.db)).products;
     const pool = vi.mocked(seedSales).mock.calls.at(-1)![1].products;
     expect(pool.map((p) => p.id).sort()).toEqual(available.map((p) => p.id).sort());
     for (const name of [
@@ -415,7 +415,7 @@ it.each([
     dataSet,
     departmentTradingNames: identity.departmentTradingNames,
   });
-  const available = (await listAvailableProducts(suite.db, venue.locationId)).products;
+  const available = (await listAvailableProducts(suite.db)).products;
   const product = available.find((p) => p.name === name)!;
   expect(product, name).toBeDefined();
   const { count } = await seedSales(suite.db, {
@@ -562,7 +562,7 @@ for (const locale of ["en", "es"] as const)
       await rm(root, { recursive: true });
     }
     for (const row of rows) expect(row.image).toMatch(/^[0-9a-f]{64}\.webp$/);
-    const available = (await listAvailableProducts(suite.db, venue.locationId)).products;
+    const available = (await listAvailableProducts(suite.db)).products;
     const pool = vi.mocked(seedSales).mock.calls.at(-1)![1].products;
     expect(pool.map((p) => p.id).sort()).toEqual(available.map((p) => p.id).sort());
     for (const name of [
@@ -616,7 +616,7 @@ it.each([
     dataSet,
     departmentTradingNames: identity.departmentTradingNames,
   });
-  const available = (await listAvailableProducts(suite.db, venue.locationId)).products;
+  const available = (await listAvailableProducts(suite.db)).products;
   const product = available.find((p) => p.name === name)!;
   expect(product, name).toBeDefined();
   const { count } = await seedSales(suite.db, {

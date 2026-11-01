@@ -11,7 +11,7 @@ import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -74,7 +74,7 @@ const suite = useVenueDb({
         unitPrice: "1.50",
         vatClass: "general",
       });
-      await assignCatalogueToLocation(tx, loc!.id, cat.id);
+      await assignCatalogueToVenue(tx, cat.id);
       const zoneOffers = await offerProducts(tx, cfg, { zone: "tables" });
       return { zoneId: zoneOffers.zoneId, cafeId: p.id, cafe: zoneOffers.offerFor(p.id) };
     });

@@ -7,7 +7,7 @@ import { locations, products, withTransaction, workingOrderLines } from "@waitro
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createExtraList,
   createProduct,
@@ -39,7 +39,7 @@ async function arrange() {
       .set({ invoiceLocales: ["es-ES", "en-GB"] })
       .where(eq(locations.id, venue.cfg.locationId));
     const catalogue = await createCatalogue(tx, { name: "Fallback catalogue" });
-    await assignCatalogueToLocation(tx, venue.cfg.locationId, catalogue.id);
+    await assignCatalogueToVenue(tx, catalogue.id);
     const [unit] = await tx
       .insert(units)
       .values({

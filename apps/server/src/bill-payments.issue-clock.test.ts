@@ -8,7 +8,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { billPayments, locations, withTransaction, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -170,7 +170,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       });
       productIds.set(item.name, product.id);
     }
-    await assignCatalogueToLocation(tx, provisioned.locationId, cat.id);
+    await assignCatalogueToVenue(tx, cat.id);
     const printer = await createPrinter(
       tx,
       { locationId: cfg.locationId },

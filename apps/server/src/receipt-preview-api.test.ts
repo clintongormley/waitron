@@ -999,11 +999,7 @@ describe("the receipt preview's top block", () => {
       await clearThemes(suite.db);
     });
 
-    const at = () => ({
-      departmentId,
-      locationId: venue.cfg.locationId,
-      foreignLocationId: randomUUID(),
-    });
+    const at = () => ({ departmentId });
     const readableNoLogo = () =>
       suite.db
         .insert(departmentReceipts)

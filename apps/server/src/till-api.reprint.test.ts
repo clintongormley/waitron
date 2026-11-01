@@ -9,7 +9,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { assignCatalogueToLocation, createCatalogue, createProduct } from "@waitron/catalogue";
+import { assignCatalogueToVenue, createCatalogue, createProduct } from "@waitron/catalogue";
 import { createPrinter } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
@@ -74,7 +74,7 @@ const suite = useVenueDb({
         unitPrice: "1.50",
         vatClass: "general",
       });
-      await assignCatalogueToLocation(tx, loc!.id, catalogue.id);
+      await assignCatalogueToVenue(tx, catalogue.id);
       cafeOffer = (await offerProducts(tx, cfg)).offerFor(cafe.id);
     });
   },

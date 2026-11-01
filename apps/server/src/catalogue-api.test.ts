@@ -1365,8 +1365,8 @@ describe("mountCatalogueApi — location menus", () => {
   // file for the whole file); every catalogue a test creates gets a fresh id. Reset both so the tests
   // are order-independent. `locationId` is set by the shared setup, which runs before this beforeEach.
   beforeEach(async () => {
-    await suite.db.execute(sql`delete from location_catalogues where location_id = ${locationId}`);
-    await suite.db.execute(sql`update locations set catalogue_id = null where id = ${locationId}`);
+    await suite.db.execute(sql`delete from location_catalogues`);
+    await suite.db.execute(sql`update locations set catalogue_id = null`);
   });
 
   const cataloguesPath = () => `/management-api/locations/${locationId}/catalogues`;
@@ -1489,43 +1489,6 @@ describe("mountCatalogueApi — location menus", () => {
     const res = await send(app, "POST", cataloguesPath(), { body: { catalogueId: "not-a-uuid" } });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
-  });
-
-  it("GET with a non-uuid locationId → shared.invalid_id 400", async () => {
-    const res = await send(mountApp(), "GET", "/management-api/locations/not-a-uuid/catalogues");
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
-  });
-
-  describe.each([
-    ["POST", "catalogues"],
-    ["PUT", "default-catalogue"],
-  ] as const)("%s …/%s at a location that does not exist", (method, leaf) => {
-    const unknownLocationPath = (missing: string) => `/management-api/locations/${missing}/${leaf}`;
-
-    it("answers 404 location.not_found with a real catalogue", async () => {
-      const app = mountApp();
-      const house = await createCatalogueVia(app, `House ${crypto.randomUUID()}`);
-      const missing = crypto.randomUUID();
-      const res = await send(app, method, unknownLocationPath(missing), {
-        body: { catalogueId: house },
-      });
-      expect(res.status).toBe(404);
-      expect(await res.json()).toMatchObject({
-        error: { code: "location.not_found", params: { locationId: missing } },
-      });
-    });
-
-    it("answers 404 location.not_found, not catalogue.not_found, with an unknown catalogue", async () => {
-      const missing = crypto.randomUUID();
-      const res = await send(mountApp(), method, unknownLocationPath(missing), {
-        body: { catalogueId: crypto.randomUUID() },
-      });
-      expect(res.status).toBe(404);
-      expect(await res.json()).toMatchObject({
-        error: { code: "location.not_found", params: { locationId: missing } },
-      });
-    });
   });
 });
 

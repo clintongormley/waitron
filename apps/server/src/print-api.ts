@@ -1362,7 +1362,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         resolution: requireEnum(body.resolution, "resolution", printResolution.enumValues),
       };
       const result = await gated(sessionId, async (tx) => {
-        const { locale } = await readReceiptLanguage(tx, deps.cfg.locationId);
+        const { locale } = await readReceiptLanguage(tx);
         const payload = formatSampleReceipt(printer, deps.receiptQrText, locale);
         return enqueuePrintJob(tx, deps.cfg, id, payload);
       });

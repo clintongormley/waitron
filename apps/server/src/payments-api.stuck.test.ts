@@ -14,7 +14,7 @@ import {
 } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -207,8 +207,8 @@ async function setup(
       unitPrice: "1.50",
       vatClass: "general",
     });
-    await assignCatalogueToLocation(tx, venue.locationId, cat.id);
-    const available = (await listAvailableProducts(tx, cfg.locationId)).products;
+    await assignCatalogueToVenue(tx, cat.id);
+    const available = (await listAvailableProducts(tx)).products;
     const offers = await offerProducts(tx, cfg);
     const cafe = available.find((p) => p.name === "Café")!;
     const [mgr] = await tx

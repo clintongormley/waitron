@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -67,7 +67,7 @@ useVenueDb({
         });
         product.set(name, created.id);
       }
-      await assignCatalogueToLocation(tx, venue.cfg.locationId, cat.id);
+      await assignCatalogueToVenue(tx, cat.id);
       const productIds = [...product.values()];
       counter = await offerProducts(tx, venue.cfg, { productIds });
       tables = await offerProducts(tx, venue.cfg, { zone: "tables", productIds });

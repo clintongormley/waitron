@@ -26,7 +26,7 @@ import {
   removeMember,
   addShortcut,
   addProducts,
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   assignProductUnit,
   buildMenuDocument,
   createCatalogue,
@@ -250,7 +250,7 @@ async function setupLunch(): Promise<Lunch> {
       LOCALE,
     );
     await writeProductModifiers(tx, burger.id, [{ kind: "options", id: punto.id }]);
-    await assignCatalogueToLocation(tx, venue.locationId, lunch.id);
+    await assignCatalogueToVenue(tx, lunch.id);
     const lemonadeOffer = await addProductToMenu(tx, { menuId: lunch.id, productId: lemonade.id });
     const burgerOffer = await addProductToMenu(tx, { menuId: lunch.id, productId: burger.id });
 

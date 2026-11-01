@@ -26,7 +26,6 @@ import {
   invoiceSeries,
   invoiceDeliveries,
   pagePrinters,
-  locations,
   tenders,
   tenantReceipts,
   tenants,
@@ -37,7 +36,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -234,7 +233,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       });
       productIds.set(item.name, product.id);
     }
-    await assignCatalogueToLocation(tx, provisioned.locationId, cat.id);
+    await assignCatalogueToVenue(tx, cat.id);
     const printer = await createPrinter(
       tx,
       { locationId: cfg.locationId },
@@ -2668,26 +2667,16 @@ describe("the invoice at full payment", () => {
     expect(saved!.invoiceDelivery).toEqual({ medium: "receipt" });
   });
 
-  it.each(["active", "disabled", "other-location", "missing"] as const)(
+  it.each(["active", "disabled", "missing"] as const)(
     "stages only an active local A4 destination: %s",
     async (kind) => {
       const billId = await tabWith("Caña");
-      const otherLocationId = randomUUID();
-      if (kind === "other-location")
-        await inTx((tx) =>
-          tx.insert(locations).values({
-            id: otherLocationId,
-            name: "Other",
-            invoiceLocales: ["es-ES"],
-            operationDescription: "Restaurant",
-          }),
-        );
       const pagePrinterId = randomUUID();
       if (kind !== "missing")
         await inTx(async (tx) => {
           await tx.insert(pagePrinters).values({
             id: pagePrinterId,
-            locationId: kind === "other-location" ? otherLocationId : venue.cfg.locationId,
+            locationId: venue.cfg.locationId,
             name: "Office",
             host: pagePrinterId,
             port: 631,
@@ -2698,11 +2687,7 @@ describe("the invoice at full payment", () => {
             resolutionDpi: 300,
             active: kind !== "disabled",
           });
-          await tillInvoicePrinter(
-            tx,
-            pagePrinterId,
-            kind === "other-location" ? otherLocationId : venue.cfg.locationId,
-          );
+          await tillInvoicePrinter(tx, pagePrinterId, venue.cfg.locationId);
         });
       const request = {
         revision: 0,

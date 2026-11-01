@@ -20,13 +20,12 @@ import {
   type Database,
   type VenueDatabase,
 } from "@waitron/db";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules, parseModuleConfig } from "@waitron/module";
 import { savePrivacyContact } from "@waitron/provisioning";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -603,7 +602,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           unitPrice: "1.50",
           vatClass: "general",
         });
-        await assignCatalogueToLocation(tx, brandLocationId(cfg.locationId), catalogue.id);
+        await assignCatalogueToVenue(tx, catalogue.id);
         const offers = await offerProducts(tx, { locationId: cfg.locationId });
         return offers.offerFor(water.id);
       });

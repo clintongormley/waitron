@@ -26,7 +26,7 @@ import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/se
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -98,7 +98,7 @@ const suite = useVenueDb({
         unitPrice: "1.50",
         vatClass: "general",
       });
-      await assignCatalogueToLocation(tx, loc!.id, cat.id);
+      await assignCatalogueToVenue(tx, cat.id);
       return p;
     });
     cafeId = product.id;

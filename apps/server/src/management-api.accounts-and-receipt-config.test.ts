@@ -2209,16 +2209,9 @@ describe("Management API — a credential change checks the current password bef
 
 const departmentReceiptPath = (id: string) =>
   `/management-api/venue-service/departments/${id}/receipt`;
-async function departmentFixture(active = true, elsewhere = false): Promise<string> {
+async function departmentFixture(active = true): Promise<string> {
   await suite.db.update(contentLanguages).set({ languages: ["es", "ca", "gl", "eu"] });
-  let locationId = venueCfg!.locationId as string;
-  if (elsewhere) {
-    const [row] = await suite.db
-      .insert(locations)
-      .values({ name: "Elsewhere", invoiceLocales: [LOCALE], operationDescription: "Meals" })
-      .returning();
-    locationId = row!.id;
-  }
+  const locationId = venueCfg!.locationId as string;
   const [row] = await suite.db
     .insert(departments)
     .values({
@@ -2386,11 +2379,11 @@ describe("independent department receipt routes", () => {
     },
   );
 
-  it.each(["missing", "other-location"])("refuses %s department on GET and PUT", async (kind) => {
+  it("refuses missing department on GET and PUT", async () => {
     await setupTenant();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
-    const id = kind === "missing" ? randomUUID() : await departmentFixture(true, true);
+    const id = randomUUID();
     for (const res of [
       await app.request(departmentReceiptPath(id), { headers: { cookie } }),
       await putTrim(app, cookie, departmentReceiptPath(id), { receipt: {} }),

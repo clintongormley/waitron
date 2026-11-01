@@ -6,7 +6,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withTransaction } from "@waitron/db";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -57,7 +57,7 @@ useVenueDb({
         vatClass: "general",
       });
       dishId = dish.id;
-      await assignCatalogueToLocation(tx, venue.cfg.locationId, catalogue.id);
+      await assignCatalogueToVenue(tx, catalogue.id);
       counter = await offerProducts(tx, venue.cfg, { productIds: [dishId] });
     });
     const first = await send(venue.app, venue.cookie, "POST", "/api/sales", {

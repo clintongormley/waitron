@@ -330,19 +330,7 @@ describe("the theme's logo on the ticket view", () => {
     const { light } = await themeImages();
     const ownImage = own ? await libraryImage("Own") : null;
     if (ownImage) await f.authored({ logo: ownImage.filename });
-    const [foreign] = await suite.db
-      .insert(locations)
-      .values({
-        name: randomUUID(),
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Hospitality",
-      })
-      .returning({ id: locations.id });
-    const at = {
-      departmentId: f.departmentId,
-      locationId: f.cfg.locationId,
-      foreignLocationId: foreign!.id,
-    };
+    const at = { departmentId: f.departmentId };
     const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       const control = await f.read();

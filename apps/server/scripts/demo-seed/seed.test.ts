@@ -256,8 +256,8 @@ describe("seedDemoRestaurant", () => {
   it("refuses a production environment before writing anything", async () => {
     const venue = await provisionVenue();
     const before = await withTransaction(suite.db, async (tx) => ({
-      menus: (await listAccessibleCatalogues(tx, venue.locationId)).length,
-      products: (await listAvailableProducts(tx, venue.locationId)).products.length,
+      menus: (await listAccessibleCatalogues(tx)).length,
+      products: (await listAvailableProducts(tx)).products.length,
     }));
     vi.stubEnv("WAITRON_ENV", "production");
 
@@ -272,8 +272,8 @@ describe("seedDemoRestaurant", () => {
     ).rejects.toMatchObject({ code: "deployment.demo_data_refused" });
 
     const after = await withTransaction(suite.db, async (tx) => ({
-      menus: (await listAccessibleCatalogues(tx, venue.locationId)).length,
-      products: (await listAvailableProducts(tx, venue.locationId)).products.length,
+      menus: (await listAccessibleCatalogues(tx)).length,
+      products: (await listAvailableProducts(tx)).products.length,
       sales: (
         await tx.execute<{ n: number }>(sql`select cast(count(*) as integer) as n from sales`)
       ).rows[0]!.n,
@@ -297,7 +297,7 @@ describe("seedDemoRestaurant", () => {
         select id, name from kitchen_stations where location_id = ${venue.locationId}`);
       const { rows: zones } = await tx.execute<{ id: string; name: string }>(sql`
         select id, name from floor_zones where location_id = ${venue.locationId}`);
-      const { products } = await listAvailableProducts(tx, venue.locationId);
+      const { products } = await listAvailableProducts(tx);
       const drink = products.find((product) => product.name === "House Negroni")!;
       const dish = products.find((product) => product.name === "Sirloin")!;
       const downstairs = zones.find((zone) => zone.name === "Downstairs bar")!;
@@ -334,7 +334,7 @@ describe("seedDemoRestaurant", () => {
         ]),
       );
 
-      const [menu] = await listAccessibleCatalogues(tx, venue.locationId);
+      const [menu] = await listAccessibleCatalogues(tx);
       const folder = await createCategory(tx, { name: "Test-only packaged snacks" });
       const snack = await createProduct(tx, {
         catalogueId: menu!.id,
@@ -434,7 +434,7 @@ describe("seedDemoRestaurant", () => {
         where location_id = ${venue.locationId} and name = 'Upstairs bar'`);
       const { rows: stations } = await tx.execute<{ id: string; name: string }>(sql`
         select id, name from kitchen_stations where location_id = ${venue.locationId}`);
-      const { products } = await listAvailableProducts(tx, venue.locationId);
+      const { products } = await listAvailableProducts(tx);
       const drink = products.find((product) => product.name === "House Negroni")!;
       for (const [instant, stationName] of [
         ["2026-10-02T18:00:00Z", "Downstairs bar"],
@@ -462,8 +462,8 @@ describe("seedDemoRestaurant", () => {
     });
 
     const read = await withTransaction(suite.db, async (tx) => {
-      const menus = await listAccessibleCatalogues(tx, venue.locationId);
-      const { products } = await listAvailableProducts(tx, venue.locationId);
+      const menus = await listAccessibleCatalogues(tx);
+      const { products } = await listAvailableProducts(tx);
       const { rows: tableRows } = await tx.execute<{ n: number }>(
         sql`select cast(count(*) as integer) as n from dining_tables`,
       );
@@ -882,7 +882,7 @@ describe("seedDemoRestaurant", () => {
 
     const read = await withTransaction(suite.db, async (tx) => ({
       languages: await readContentLanguages(tx, "en"),
-      products: (await listAvailableProducts(tx, venue.locationId)).products,
+      products: (await listAvailableProducts(tx)).products,
     }));
     expect(read.languages).toEqual({ defaultLanguage: "es", languages: ["es", "en"] });
     expect(read.products.some((product) => product.name === "Salad")).toBe(true);

@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createExtraList,
@@ -428,7 +428,7 @@ export async function provisionAdjustmentVenue(
       LOCALE,
     );
     await writeProductModifiers(tx, productIds.get("Pizza")!, [{ kind: "extras", id: extras.id }]);
-    await assignCatalogueToLocation(tx, provisioned.locationId, cat.id);
+    await assignCatalogueToVenue(tx, cat.id);
     const tables = await offerProducts(tx, cfg, { zone: "tables" });
     await setRoutingCell(
       tx,

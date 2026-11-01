@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import {
   addProductToMenu,
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -158,8 +158,8 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
         vatClass: "general",
       });
     }
-    await assignCatalogueToLocation(tx, venue.locationId, cat.id);
-    const available = (await listAvailableProducts(tx, cfg.locationId)).products;
+    await assignCatalogueToVenue(tx, cat.id);
+    const available = (await listAvailableProducts(tx)).products;
     const offers = {
       tables: await offerProducts(tx, cfg, { zone: "tables" }),
       counter: await offerProducts(tx, cfg, { zone: "counter" }),

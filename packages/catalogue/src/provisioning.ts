@@ -1,5 +1,10 @@
-import { eq, sql } from "drizzle-orm";
-import { catalogues, locationCatalogues, locations, tenants } from "@waitron/db";
+import {
+  catalogues,
+  locationCatalogues,
+  readTenant,
+  readVenue,
+  venueLocationId,
+} from "@waitron/db";
 import type { ModuleProvisioning } from "@waitron/module";
 import {
   getCountryPack,
@@ -12,6 +17,7 @@ import { catalogueSettings } from "./schema/settings.js";
 import type { VatClass } from "./vat-rates.js";
 import { contentLanguages } from "./schema/menu.js";
 import { createMenuShell } from "./menu-structure.js";
+import { assignCatalogueToVenue } from "./operations.js";
 import { unitSeedStates, units } from "./schema/units.js";
 import { STARTER_MENU_NAMES, STARTER_UNIT_NAMES } from "./starter-content.js";
 
@@ -51,19 +57,10 @@ const NEW_VENUE_DEFAULT_COLOR = "#abcced";
 export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
   seed: {
     summary: "Create the venue's initial menu and content languages",
-    async run(tx, node) {
-      const [location] = await tx
-        .select({
-          catalogueId: locations.catalogueId,
-          area: locations.province,
-          invoiceLocales: locations.invoiceLocales,
-          country: tenants.country,
-        })
-        .from(locations)
-        .innerJoin(tenants, eq(tenants.id, 1))
-        .where(eq(locations.id, node.locationId));
-      const country = location?.country;
-      const area = location?.area;
+    async run(tx) {
+      const venue = await readVenue(tx);
+      const country = (await readTenant(tx))?.country;
+      const area = venue.province;
       const defaultProductVatClass =
         (country === undefined ? undefined : getCountryPack(country)?.defaultProductVatClass) ??
         "general";
@@ -97,7 +94,7 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
       const starter = resolveInstalledStarterLanguages({
         country,
         area,
-        receiptLocale: location?.invoiceLocales[0],
+        receiptLocale: venue.invoiceLocales[0],
       });
       if (claimed.length > 0) {
         await tx.insert(units).values(
@@ -116,7 +113,7 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
           }),
         );
       }
-      let catalogueId = location?.catalogueId ?? null;
+      let catalogueId = venue.defaultCatalogueId;
       if (catalogueId === null) {
         const [created] = await tx
           .insert(catalogues)
@@ -124,13 +121,11 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
           .returning({ id: catalogues.id, name: catalogues.name });
         catalogueId = created!.id;
         await createMenuShell(tx, catalogueId, created!.name);
-        await tx.execute(sql`
-          update locations set catalogue_id = ${catalogueId}
-          where id = ${node.locationId}`);
+        await assignCatalogueToVenue(tx, catalogueId);
       }
       await tx
         .insert(locationCatalogues)
-        .values({ locationId: node.locationId, catalogueId })
+        .values({ locationId: await venueLocationId(tx), catalogueId })
         .onConflictDoNothing();
       return "initial menu ready";
     },

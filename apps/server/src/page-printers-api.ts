@@ -146,7 +146,7 @@ export function mountPagePrintersApi(app: Hono, deps: PagePrintersApiDeps, log: 
           );
         if (printer === undefined) throw new AppError("page_printer.not_found", {});
         if (printer.agentId === null) throw new AppError("page_printer.no_agent", {});
-        const { locale } = await readReceiptLanguage(tx, deps.locationId);
+        const { locale } = await readReceiptLanguage(tx);
         return locale;
       });
       // Register the in-memory page only after the database turn commits.

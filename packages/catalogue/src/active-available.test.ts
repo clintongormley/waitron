@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   addProductToMenu,
   listAvailableProducts,
@@ -19,13 +19,12 @@ import { seedVenue, useCatalogueDb } from "../test/fixtures.js";
 const fx = useCatalogueDb();
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
-let locationId = "";
 let catalogueId = "";
 let productId = "";
 let body: ProductEditorInput;
 
 beforeEach(async () => {
-  locationId = (await seedVenue(fx.db)).locationId;
+  await seedVenue(fx.db);
   await run(async (tx) => {
     const menu = await createCatalogue(tx, { name: "Deli" });
     catalogueId = menu.id;
@@ -65,7 +64,7 @@ beforeEach(async () => {
       productId,
       grossPrice: "5.00",
     });
-    await assignCatalogueToLocation(tx, locationId, menu.id);
+    await assignCatalogueToVenue(tx, menu.id);
   });
 });
 
@@ -82,7 +81,7 @@ async function reads() {
       editor: { active: editor.active, available: editor.available },
       listed: { active: listed!.active, available: listed!.available },
       offers: (await listMenuOffers(tx, [catalogueId])).map((offer) => offer.productId),
-      sellable: (await listAvailableProducts(tx, locationId)).products.map((p) => p.id),
+      sellable: (await listAvailableProducts(tx)).products.map((p) => p.id),
     };
   });
 }

@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import type { Database } from "@waitron/db";
+import { invoiceSeries, type Database } from "@waitron/db";
+import { seedNode } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -281,7 +282,13 @@ describe("a restored database whose only record is on another node's chain", () 
     timeoutMs: 60_000,
     setup: async (db) => {
       open = await openVenue(db);
-      const other = await seedFiscalRegistro(db);
+      const nodeId = await seedNode(db);
+      const seriesId = randomUUID();
+      await db.insert(invoiceSeries).values({ id: seriesId, nodeId, code: "A" });
+      const other = await seedFiscalRegistro(db, {
+        ids: { locationId: open.venue.cfg.locationId, nodeId, seriesId },
+        reuseExistingParents: true,
+      });
       expect(other.nodeId).not.toBe(open.venue.cfg.nodeId);
       recordAt = latest(db)!.at;
     },

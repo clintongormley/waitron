@@ -21,7 +21,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   assignProductUnit,
   clearProductUnit,
   createCatalogue,
@@ -235,7 +235,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
       vatClass: "general",
       kitchenName: "COLD BAR",
     });
-    await assignCatalogueToLocation(tx, venue.locationId, cat.id);
+    await assignCatalogueToVenue(tx, cat.id);
     const zone = await tx.execute<{ id: string }>(sql`
       select zone_id as id from zone_service_policies
       where location_id = ${cfg.locationId}
@@ -287,7 +287,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
          where location_id = ${cfg.locationId} and is_default))`);
     await publishWorkingMenu(tx, cat.id);
     return {
-      available: (await listAvailableProducts(tx, cfg.locationId)).products,
+      available: (await listAvailableProducts(tx)).products,
       zoneId: zone.rows[0]!.id,
       waterOfferId: offer.id,
       waterProductId: water.id,
@@ -844,7 +844,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
         unitPrice: "1.50",
         vatClass: "general",
       });
-      await assignCatalogueToLocation(tx, venue.locationId, cat.id);
+      await assignCatalogueToVenue(tx, cat.id);
       return product.id;
     });
     const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, cfg));
@@ -1244,7 +1244,7 @@ describe("ordering extras and options — parent + child lines", () => {
       await writeProductModifiers(tx, combo.id, [{ kind: "options", id: salsaList.id }]);
       await writeProductModifiers(tx, plato.id, [{ kind: "extras", id: guarnicionList.id }]);
 
-      await assignCatalogueToLocation(tx, venue.locationId, cat.id);
+      await assignCatalogueToVenue(tx, cat.id);
       return {
         burgerId: burger.id,
         menuProductId: menu.id,

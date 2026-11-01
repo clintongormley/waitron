@@ -10,7 +10,7 @@ import { deviceProfiles, sales, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   addProductToMenu,
@@ -156,7 +156,7 @@ async function setupVenue(): Promise<{
       unitPrice: "1.50",
       vatClass: "general",
     });
-    await assignCatalogueToLocation(tx, venue.locationId, cat.id);
+    await assignCatalogueToVenue(tx, cat.id);
     const menuItem = await addProductToMenu(tx, {
       menuId: cat.id,
       productId: created.id,
@@ -183,7 +183,7 @@ async function setupVenue(): Promise<{
       .insert(persons)
       .values({ displayName: "Cajera", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
-    const available = (await listAvailableProducts(tx, cfg.locationId)).products;
+    const available = (await listAvailableProducts(tx)).products;
     return {
       product: {
         ...available.find((p) => p.pricingUnit === "each")!,

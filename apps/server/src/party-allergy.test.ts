@@ -13,7 +13,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { savePartyAllergy, setRoutingCell } from "@waitron/venue-service";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createExtraList,
@@ -185,7 +185,7 @@ async function nutritionProducts() {
       "es-ES",
     );
     await writeProductModifiers(tx, parent.id, [{ kind: "extras", id: list.id }]);
-    await assignCatalogueToLocation(tx, v.cfg.locationId, catalogue.id);
+    await assignCatalogueToVenue(tx, catalogue.id);
     const offers = await offerProducts(tx, v.cfg, {
       zone: { zoneId: v.tables.zoneId },
       orderStart: "table",

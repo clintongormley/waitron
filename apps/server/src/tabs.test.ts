@@ -34,7 +34,7 @@ import { departments, listStationNotices } from "@waitron/venue-service";
 import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createExtraList,
@@ -146,7 +146,7 @@ async function setupVenue(): Promise<Seeded> {
         unitPrice: "2.00",
         vatClass: "general",
       });
-      await assignCatalogueToLocation(tx, locationId, cat.id);
+      await assignCatalogueToVenue(tx, cat.id);
       const cafeMenuItem = await addProductToMenu(tx, {
         menuId: cat.id,
         productId: cafe.id,

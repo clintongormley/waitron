@@ -6,11 +6,11 @@ export * from "./units.js";
 // `updateProductSkippingNameCheck` and `writeProductVariantsSkippingNameCheck` skip the
 // unique-name rule and are kept out of the package entry point.
 export {
-  addCatalogueToLocation,
+  addCatalogueToVenue,
   addProductToMenu,
   applyDietDerivation,
   applyRecipeDerivation,
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   catalogueExists,
   createCatalogue,
   createProduct,
@@ -19,15 +19,15 @@ export {
   listAccessibleCatalogues,
   listAvailableProducts,
   listCatalogues,
-  listCataloguesForLocation,
+  listCataloguesForVenue,
   listMenuOffers,
   listProducts,
   menuPrices,
   readInvoiceLocales,
   readReceiptLanguage,
-  removeCatalogueFromLocation,
+  removeCatalogueFromVenue,
   resolveAccessibleCatalogueIds,
-  setLocationDefaultCatalogue,
+  setVenueDefaultCatalogue,
   updateMenuDetails,
   updateMenuItem,
   updateProduct,
@@ -38,7 +38,6 @@ export type {
   Catalogue,
   CreateProductInput,
   ListedVariant,
-  LocationCatalogue,
   MenuItem,
   MenuOffer,
   MenuOfferVariant,
@@ -50,6 +49,7 @@ export type {
   OfferedOptionsList,
   Product,
   UpdateProductInput,
+  VenueCatalogue,
 } from "./operations.js";
 export { foldName } from "./name-uniqueness.js";
 export * from "./content-languages.js";
