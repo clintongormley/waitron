@@ -2922,6 +2922,10 @@ export class TillApp extends LitElement {
   /** Bills reads numbered up to this were sent before this till learned of the bill it chose to
    * show ({@link #chooseBill}), so a bill missing from one of them has not gone. */
   #billChosenRead = 0;
+  /** Set when Split a table took the bill on screen, the bills read after it failed, and no bill known
+   * before it stayed: the next bills read for this party on this visit that lists a bill shows
+   * {@link billToShow}'s choice ({@link #followBillsRead}). */
+  #billAfterSplit?: { partyId: string; visit: number };
   /** This till's own merges, moves and splits holding the window ({@link #ownBillsChange}), and how
    * many times one has taken it: a background bills read neither starts while one holds it nor
    * counts if one took it while the read was out, so it cannot say the bill this till itself moved
@@ -11959,7 +11963,8 @@ export class TillApp extends LitElement {
    * {@link billToShow}'s choice and says so, or, with no bill left, says that alone and offers no
    * New order; no bill is made. Nothing is written to the bill that went: lines typed on it and not
    * saved are kept for the waiter to review on the bill now shown. On `opening`, a party the floor
-   * named no bill for takes the rule's choice with nothing said.
+   * named no bill for takes the rule's choice with nothing said, as does a party waiting on
+   * {@link #billAfterSplit}.
    */
   async #followBillsRead(
     answer: ReadBills,
@@ -11977,10 +11982,15 @@ export class TillApp extends LitElement {
       return;
     const gone = this.activeTabId;
     const next = billToShow(gone, bills);
-    if (next === gone || (gone === undefined && !opening)) return;
+    const afterSplit =
+      gone === undefined &&
+      this.#billAfterSplit?.partyId === partyId &&
+      this.#billAfterSplit.visit === this.#orderVisit;
+    if (next === gone || (gone === undefined && !opening && !afterSplit)) return;
     const session = this.#operatorSession;
     const sync = this.#draftSync;
     this.activeTabId = next;
+    this.#billAfterSplit = undefined;
     if (gone !== undefined) {
       const was = [...bills, ...before].find((bill) => bill.workingOrderId === gone);
       const numbered = was !== undefined && was.billNumber !== null;
@@ -15624,8 +15634,11 @@ export class TillApp extends LitElement {
         undefined,
         read ?? known.filter((bill) => bill.workingOrderId !== billId),
       );
-      if (next === undefined) this.activeTabId = undefined;
-      else this.#chooseBill(next);
+      if (next !== undefined) this.#chooseBill(next);
+      else {
+        this.activeTabId = undefined;
+        if (read === null) this.#billAfterSplit = { partyId: party.id, visit: this.#orderVisit };
+      }
     }
     await this.#loadLinesAndBills();
     if (

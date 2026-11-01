@@ -3394,6 +3394,128 @@ describe("A803 action results: the bill on screen after a table action", () => {
     expect(tableOrder(el)!.billGone).toBeNull();
     expect(await nextSavedBill(el)).toBe("wo-10");
   });
+
+  /** Opens table 2, whose party's only bill is wo-8, and splits table 3 off with that bill. Each
+   * bills read after the split takes the next of `reads`, the last repeating; an Error is thrown. */
+  async function splitOffOnlyBill(reads: (PartyBill[] | Error)[]) {
+    let floorAfter = false;
+    const t3 = { id: "t3", label: "3" };
+    const before = { revision: 3, openingBillId: "wo-8", tableIds: ["t2", "t3"] };
+    const mounted = await mountApp({
+      getTablesState: vi.fn(async () =>
+        floorAfter
+          ? [
+              seated(openTable, { revision: 4, openingBillId: null, tableIds: ["t2"] }),
+              seated(t3, { id: "v-new", revision: 0, openingBillId: null, tableIds: ["t3"] }),
+            ]
+          : [seated(openTable, before), seated(t3, before)],
+      ),
+      getPartyBills: vi.fn(async () => {
+        if (!floorAfter) return [partyBill("wo-8", "v-2", 1)];
+        const answer = reads.length > 1 ? reads.shift()! : reads[0]!;
+        if (answer instanceof Error) throw answer;
+        return answer;
+      }),
+      splitTable: vi.fn(async () => {
+        floorAfter = true;
+        return { partyId: "v-new", billId: "wo-8" };
+      }),
+    });
+    const screen = await toTableOrder(mounted.el);
+    emit(screen, "split-table", { tableId: "t3", billId: "wo-8" });
+    await flush(mounted.el);
+    await flush(mounted.el);
+    return mounted;
+  }
+
+  async function nameParty(el: TillApp, name: string): Promise<void> {
+    emit(tableOrder(el)!, "name-party", { name });
+    await flush(el);
+    await flush(el);
+  }
+
+  it("Split a table giving away the staying party's only bill shows the empty bill the server made for it once a bills read succeeds after one that failed", async () => {
+    const reads: (PartyBill[] | Error)[] = [
+      new TypeError("Failed to fetch"),
+      [partyBill("wo-new", "v-2", 2)],
+    ];
+    const { el } = await splitOffOnlyBill(reads);
+
+    expect(reads).toHaveLength(1);
+    expect(tableOrder(el)!.bills.map((bill) => bill.workingOrderId)).toEqual(["wo-new"]);
+    expect(tableOrder(el)!.orderId).toBe("wo-new");
+    expect(tableOrder(el)!.billGone).toBeNull();
+    expect(await nextSavedBill(el)).toBe("wo-new");
+  });
+
+  it("Split a table giving away the staying party's only bill shows the server's new bill at a later successful bills read, after every read the split made failed", async () => {
+    const reads: (PartyBill[] | Error)[] = [
+      new TypeError("Failed to fetch"),
+      new TypeError("Failed to fetch"),
+      [partyBill("wo-new", "v-2", 2)],
+    ];
+    const { el } = await splitOffOnlyBill(reads);
+    expect(reads).toHaveLength(1);
+    expect(tableOrder(el)!.orderId).toBeUndefined();
+
+    await nameParty(el, "Ana");
+
+    expect(tableOrder(el)!.orderId).toBe("wo-new");
+    expect(tableOrder(el)!.billGone).toBeNull();
+    expect(await nextSavedBill(el)).toBe("wo-new");
+  });
+
+  it("Split a table's wait for the staying party's new bill ends once a bill is shown: that bill gone with none left later stays so", async () => {
+    const reads: (PartyBill[] | Error)[] = [
+      new TypeError("Failed to fetch"),
+      [partyBill("wo-new", "v-2", 2)],
+    ];
+    const { el } = await splitOffOnlyBill(reads);
+    expect(tableOrder(el)!.orderId).toBe("wo-new");
+
+    reads.splice(0, reads.length, []);
+    await nameParty(el, "Ana");
+    expect(tableOrder(el)!.orderId).toBeUndefined();
+    expect(tableOrder(el)!.billGone).not.toBeNull();
+
+    reads.splice(0, reads.length, [partyBill("wo-9", "v-2", 3)]);
+    await nameParty(el, "Eva");
+    expect(tableOrder(el)!.bills.map((bill) => bill.workingOrderId)).toEqual(["wo-9"]);
+    expect(tableOrder(el)!.orderId).toBeUndefined();
+  });
+
+  it("Split a table whose bills read afterwards succeeds listing no bill waits for none: a bill read later is not chosen", async () => {
+    const reads: (PartyBill[] | Error)[] = [[]];
+    const { el } = await splitOffOnlyBill(reads);
+    expect(tableOrder(el)!.orderId).toBeUndefined();
+
+    reads.splice(0, reads.length, [partyBill("wo-9", "v-2", 3)]);
+    await nameParty(el, "Ana");
+    expect(tableOrder(el)!.bills.map((bill) => bill.workingOrderId)).toEqual(["wo-9"]);
+    expect(tableOrder(el)!.orderId).toBeUndefined();
+  });
+
+  it("Split a table's wait for the staying party's new bill ends when the waiter leaves the table: on a later visit to the party with no bill, a bill read later is not chosen", async () => {
+    const reads: (PartyBill[] | Error)[] = [
+      new TypeError("Failed to fetch"),
+      new TypeError("Failed to fetch"),
+      [],
+    ];
+    const { el } = await splitOffOnlyBill(reads);
+    expect(reads).toHaveLength(1);
+    expect(tableOrder(el)!.orderId).toBeUndefined();
+
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    await openFromFloor(el, openTable);
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBeUndefined();
+
+    reads.splice(0, reads.length, [partyBill("wo-9", "v-2", 3)]);
+    await nameParty(el, "Ana");
+    expect(tableOrder(el)!.bills.map((bill) => bill.workingOrderId)).toEqual(["wo-9"]);
+    expect(tableOrder(el)!.orderId).toBeUndefined();
+  });
 });
 
 describe("A803 new bill: the switcher's + New bill and switching bills", () => {
