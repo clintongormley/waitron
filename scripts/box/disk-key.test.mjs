@@ -100,7 +100,6 @@ const REAL_IO = {
   writeFile: fs.writeFile,
   rename: fs.rename,
   unlink: fs.unlink,
-  readdir: fs.readdir,
   syncFile: (path) => syncPath(path, constants.O_RDONLY),
   syncDirectory: (path) => syncPath(path, constants.O_RDONLY | constants.O_DIRECTORY),
 };

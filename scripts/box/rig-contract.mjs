@@ -2,6 +2,7 @@ import * as fs from "node:fs/promises";
 import { constants } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
+import { exactRecord } from "./upgrades/contracts.mjs";
 
 /**
  * @typedef {{ runDir: string, rootId: string, runId: string }} RigRun
@@ -20,13 +21,12 @@ import { isAbsolute, join, resolve } from "node:path";
  *   library's own ledger write too: a run folder swapped for a symlink after the checks sends the
  *   staging file into the symlink's target and, when the target holds a copy of this run's ledger,
  *   the rename as well; only the final no-follow flush of the run folder then refuses, after the
- *   write. A real adapter (Linux; none is built in this pull request) must therefore open every
- *   path beneath the run folder without following a symlink: openat2 from a handle on the run
- *   folder with RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS. It must also check that a VM's process is
- *   the one this run started before stopping it.
+ *   write. A real adapter must therefore open every path beneath the run folder without following
+ *   a symlink: openat2 from a handle on the run folder with RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS.
+ *   It must also check that a VM's process is the one this run started before stopping it.
  */
 
-/** Case names the argument parser recognises. None is runnable yet: each needs the Linux recipe and rig adapter. */
+/** Case names the argument parser recognises. */
 export const RIG_CASES = Object.freeze([
   "layout",
   "seal-a",
@@ -147,17 +147,6 @@ const KINDS = Object.freeze({
     call: (/** @type {CleanupAdapter} */ a, /** @type {string} */ p) => a.stopVm(p),
   },
 });
-
-/** @param {unknown} value @param {string[]} keys */
-function exactRecord(value, keys) {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    Object.keys(value).length === keys.length &&
-    keys.every((key) => Object.hasOwn(value, key))
-  );
-}
 
 /** @param {unknown} value @returns {{resource: RigResource, path: string, kind: (typeof KINDS)[keyof typeof KINDS]} | null} */
 function resourceShape(value) {

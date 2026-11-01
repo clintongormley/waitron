@@ -1,3 +1,5 @@
+import { exactRecord } from "./upgrades/contracts.mjs";
+
 /**
  * @typedef {{ state: 'valid'|'damaged'|'absent', subsystem: string|null, uuid: string|null }} HeaderObservation
  *   subsystem/uuid are non-null exactly when state === 'valid'; uuid is lowercase canonical.
@@ -51,17 +53,6 @@ function invalid() {
     code: "disk.observation_invalid",
     reason: "observation-invalid",
   });
-}
-
-/** @param {unknown} value @param {string[]} keys */
-function exactRecord(value, keys) {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    Object.keys(value).length === keys.length &&
-    keys.every((key) => Object.hasOwn(value, key))
-  );
 }
 
 /** @param {unknown} value */

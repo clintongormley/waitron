@@ -1,6 +1,7 @@
 import * as fs from "node:fs/promises";
 import { constants } from "node:fs";
 import { join } from "node:path";
+import { exactRecord } from "./upgrades/contracts.mjs";
 
 /**
  * @typedef {object} HostStateIdentity  what the mount check saw
@@ -15,7 +16,6 @@ import { join } from "node:path";
  * @property {typeof fs.writeFile} writeFile
  * @property {typeof fs.rename} rename
  * @property {typeof fs.unlink} unlink
- * @property {typeof fs.readdir} readdir
  * @property {(path:string) => Promise<void>} syncFile
  * @property {(path:string) => Promise<void>} syncDirectory
  *
@@ -60,7 +60,6 @@ const defaultIo = {
   writeFile: fs.writeFile,
   rename: fs.rename,
   unlink: fs.unlink,
-  readdir: fs.readdir,
   syncFile: (path) => syncPath(path, OPEN_FILE, true),
   syncDirectory: (path) =>
     syncPath(path, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW, false),
@@ -85,17 +84,6 @@ function isRefusal(error) {
 /** @param {unknown} value */
 function isUuid(value) {
   return typeof value === "string" && UUID.test(value);
-}
-
-/** @param {unknown} value @param {string[]} keys */
-function exactRecord(value, keys) {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    Object.keys(value).length === keys.length &&
-    keys.every((key) => Object.hasOwn(value, key))
-  );
 }
 
 /** @param {string} hex */
@@ -338,7 +326,7 @@ const fixedStore = createDiskRecoveryStore({
 });
 
 /**
- * Fixed production entry points. No inspectHostState adapter exists until the Linux rig, so both
+ * Fixed production entry points. No inspectHostState adapter exists, so for valid input both
  * refuse "mount-unverified" before any file call.
  * @param {{diskUuid:string, key:Uint8Array}} input
  */

@@ -505,7 +505,7 @@ export const HOST_ROOT; // "/var/lib/waitron-host"
  * @property {number} ownerUid  0 in production; tests pass process.getuid()
  * @property {() => Promise<HostStateIdentity>} inspectHostState
  * @property {DiskRecoveryIo} [io]  test-only override of the file operations, default node:fs/promises:
- *   one object with lstat, open, mkdir, writeFile, rename, unlink, syncFile, syncDirectory, readdir,
+ *   one object with lstat, open, mkdir, writeFile, rename, unlink, syncFile, syncDirectory,
  *   so a test can count calls, fail any one, or alter one path's lstat answer.
  * @typedef {object} DiskRecoveryStore
  * @property {(input:{diskUuid:string, key:Uint8Array}) => Promise<void>} store   Task 5
