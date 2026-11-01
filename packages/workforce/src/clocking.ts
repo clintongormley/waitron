@@ -54,7 +54,6 @@ export interface ClockEventInput {
   /** The recording node, whose chain the entry is appended to. */
   nodeId: string;
   personId: string;
-  locationId: string;
   at: string;
   offsetMinutes: number;
   /** The device it was captured on, or the job that recorded it (`dashboard` for a manual entry). */
@@ -226,7 +225,7 @@ export class WorkforceBackend {
     query: { locationId: string; period: Period },
   ): Promise<PlannedVsActual[]> {
     const plannedShifts = await this.plannedShiftsInPeriod(tx, query.locationId, query.period);
-    const entries = await this.entriesForLocation(tx, query.locationId);
+    const entries = await readRecordedEntries(tx, {});
     const sessions = projectWorkSessions(entries).filter(
       (s) => s.workDate >= query.period.start && s.workDate < query.period.end,
     );
@@ -266,9 +265,6 @@ export class WorkforceBackend {
     }));
   }
 
-  private entriesForLocation(tx: Transaction, locationId: string): Promise<TimeEntryRecord[]> {
-    return readRecordedEntries(tx, { locationId });
-  }
   timeRecord(tx: Transaction, query: TimeRecordQuery): Promise<TimeRecord> {
     return readTimeRecord(tx, query);
   }
@@ -618,7 +614,6 @@ export class WorkforceBackend {
       { nodeId: input.nodeId },
       {
         personId: input.personId,
-        locationId: input.locationId,
         entryKind,
         eventAt: input.at,
         eventOffsetMinutes: input.offsetMinutes,

@@ -35,15 +35,13 @@ beforeEach(async () => {
   await seedEmployment(suite.db, { personId });
 });
 const event = (at: string) => ({ nodeId, personId, locationId, at, offsetMinutes: 0, origin });
-it("refuses a missing clock-in overlapping the person's completed work at another location", async () => {
+it("refuses a missing clock-in overlapping the person's completed work", async () => {
   await day();
-  const second = await seedLocation(suite.db);
   await expect(
     run((tx) =>
       backend.requestCorrection(tx, {
         nodeId,
         personId,
-        locationId: second,
         missingEntryKind: "in",
         at: "2026-01-05T10:00:00Z",
         offsetMinutes: 0,
@@ -61,13 +59,11 @@ it("refuses a missing clock-in overlapping the person's completed work at anothe
     ).sessions.map((s) => s.workedMinutes),
   ).toEqual([480]);
 });
-it("rechecks other locations before approving a previously nonoverlapping missing clock-in", async () => {
-  const second = await seedLocation(suite.db);
+it("rechecks the person's later entries before approving a previously nonoverlapping missing clock-in", async () => {
   const request = await run((tx) =>
     backend.requestCorrection(tx, {
       nodeId,
       personId,
-      locationId: second,
       missingEntryKind: "in",
       at: "2026-01-05T10:00:00Z",
       offsetMinutes: 0,
@@ -83,9 +79,8 @@ it("rechecks other locations before approving a previously nonoverlapping missin
     ),
   ).rejects.toMatchObject({ code: "correction.invalid" });
 });
-it("accepts a separate-location missing session after the existing shift ends", async () => {
+it("accepts a separate missing session after the existing shift ends", async () => {
   await day();
-  const second = await seedLocation(suite.db);
   for (const [missingEntryKind, at] of [
     ["in", "2026-01-05T18:00:00Z"],
     ["out", "2026-01-05T20:00:00Z"],
@@ -94,7 +89,6 @@ it("accepts a separate-location missing session after the existing shift ends", 
       backend.requestCorrection(tx, {
         nodeId,
         personId,
-        locationId: second,
         missingEntryKind,
         at,
         offsetMinutes: 0,
@@ -110,10 +104,7 @@ it("accepts a separate-location missing session after the existing shift ends", 
   const record = await run((tx) =>
     backend.timeRecord(tx, { period: { start: "2026-01-01", end: "2026-02-01" }, personId }),
   );
-  expect(record.sessions.map((s) => [s.locationId, s.workedMinutes])).toEqual([
-    [locationId, 480],
-    [second, 120],
-  ]);
+  expect(record.sessions.map((s) => s.workedMinutes)).toEqual([480, 120]);
 });
 async function day(end = true) {
   await run((tx) => backend.clockIn(tx, event("2026-01-05T09:00:00Z")));
@@ -319,16 +310,11 @@ describe("two-party correction decisions", () => {
     expect(await minutes()).toBe(450);
     await intact();
   });
-  it.each(["person", "location", "actor"])(
+  it.each(["person", "actor"])(
     "refuses an unknown %s using the existing existence helper",
     async (missingField) => {
       const id = "00000000-0000-4000-8000-000000000088";
-      const patch =
-        missingField === "person"
-          ? { personId: id }
-          : missingField === "location"
-            ? { locationId: id }
-            : { actorPersonId: id };
+      const patch = missingField === "person" ? { personId: id } : { actorPersonId: id };
       await unchangedRefusal(
         () =>
           run((tx) =>
@@ -570,38 +556,32 @@ describe("two-party correction decisions", () => {
       "correction.invalid",
     );
   });
-  it.each([
-    "before_start",
-    "duplicate_end",
-    "bad_kind",
-    "mixed_target",
-    "other_subject",
-    "null_location",
-  ])("refuses structural missing or retiming error %s", async (kind) => {
-    const target = await day();
-    const input =
-      kind === "before_start"
-        ? { ...targeted(target), at: "2026-01-05T08:00:00Z" }
-        : kind === "duplicate_end"
-          ? missing()
-          : kind === "bad_kind"
-            ? { ...missing(), missingEntryKind: "correction" }
-            : kind === "mixed_target"
-              ? { ...missing(), correctsEntryId: target }
-              : kind === "other_subject"
-                ? { ...targeted(target), personId: other }
-                : { ...missing(), locationId: null };
-    await unchangedRefusal(
-      () =>
-        run((tx) =>
-          backend.requestCorrection(
-            tx,
-            input as Parameters<WorkforceBackend["requestCorrection"]>[1],
+  it.each(["before_start", "duplicate_end", "bad_kind", "mixed_target", "other_subject"])(
+    "refuses structural missing or retiming error %s",
+    async (kind) => {
+      const target = await day();
+      const input =
+        kind === "before_start"
+          ? { ...targeted(target), at: "2026-01-05T08:00:00Z" }
+          : kind === "duplicate_end"
+            ? missing()
+            : kind === "bad_kind"
+              ? { ...missing(), missingEntryKind: "correction" }
+              : kind === "mixed_target"
+                ? { ...missing(), correctsEntryId: target }
+                : { ...targeted(target), personId: other };
+      await unchangedRefusal(
+        () =>
+          run((tx) =>
+            backend.requestCorrection(
+              tx,
+              input as Parameters<WorkforceBackend["requestCorrection"]>[1],
+            ),
           ),
-        ),
-      "correction.invalid",
-    );
-  });
+        "correction.invalid",
+      );
+    },
+  );
   it("allows a missing whole session to be approved in chronological order", async () => {
     const start = await run((tx) =>
       backend.requestCorrection(tx, missing("in", "2026-01-05T09:00:00Z")),

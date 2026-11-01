@@ -217,26 +217,23 @@ it("keeps another node's proposal and answer attached to the original worker day
   expect(record.sessions[0]!.workedMinutes).toBe(540);
   expect(record.entries.find((e) => e.entry.entryId === request)!.entry.nodeId).toBe(second);
 });
-it("keeps split shifts and two locations scoped without another worker's entries", async () => {
+it("keeps split shifts scoped without another worker's entries", async () => {
   await day();
-  const second = await seedLocation(suite.db);
-  await run((tx) => backend.clockIn(tx, event("2026-01-05T18:00:00Z", personId, second)));
-  await run((tx) => backend.clockOut(tx, event("2026-01-05T20:00:00Z", personId, second)));
+  await run((tx) => backend.clockIn(tx, event("2026-01-05T18:00:00Z")));
+  await run((tx) => backend.clockOut(tx, event("2026-01-05T20:00:00Z")));
   await run((tx) => backend.clockIn(tx, event("2026-01-05T09:00:00Z", other)));
   await run((tx) => backend.clockOut(tx, event("2026-01-05T17:00:00Z", other)));
   const record = await query();
   expect(record.sessions.map((s) => s.workedMinutes)).toEqual([480, 120]);
   expect(record.entries.every((e) => e.entry.personId === personId)).toBe(true);
-  const scoped = await run((tx) =>
-    backend.timeRecord(tx, { period: january, personId, locationId: second }),
-  );
-  expect(scoped.sessions.map((s) => s.workedMinutes)).toEqual([120]);
-  expect(scoped.entries).toHaveLength(2);
 });
-it("rejects an unscoped record query", async () => {
-  await expect(run((tx) => backend.timeRecord(tx, { period: january }))).rejects.toMatchObject({
-    code: "attendance.invalid",
-  });
+it("reads the venue's record when no person is named", async () => {
+  await day();
+  await run((tx) => backend.clockIn(tx, event("2026-01-05T09:00:00Z", other)));
+  await run((tx) => backend.clockOut(tx, event("2026-01-05T17:00:00Z", other)));
+  const record = await run((tx) => backend.timeRecord(tx, { period: january }));
+  expect(record.sessions.map((s) => s.personId).sort()).toEqual([personId, other].sort());
+  expect(record.entries).toHaveLength(4);
 });
 it("includes the end of a session starting in the period and ending in the next month", async () => {
   await run((tx) => backend.clockIn(tx, event("2026-01-31T23:00:00Z")));
@@ -422,14 +419,13 @@ it("gives one person exactly the full closure read cut to her in JavaScript", as
 it("gives one person each closure's snapshot cut to her", async () => {
   const { closureId } = await twoPeopleClosedJanuary();
   const { full, own } = await run(async (tx) => ({
-    full: await readClosures(tx, { locationId, period: january }),
+    full: await readClosures(tx, { period: january }),
     own: await readTimeRecord(tx, { period: january, personId }),
   }));
   const snapshot = full[0]!.snapshot;
   expect(own.closures).toEqual([
     {
       closureId,
-      locationId,
       period: january,
       closedAt: full[0]!.closedAt,
       closureHash: full[0]!.closureHash,

@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError, jobOrigin, type Origin } from "@waitron/shared";
-import { assertLocationExists, assertPersonExists } from "./body-ids.js";
+import { assertPersonExists } from "./body-ids.js";
 import { appendToChain, type TimeEntryAppend } from "./chain.js";
 import { readRecordedEntries } from "./record-reads.js";
 import { compareEvents, effectiveClockEntries, isClockEntry } from "./effective-entries.js";
@@ -10,8 +10,7 @@ import type { CorrectionStatus, TimeEntryRecord } from "./projection.js";
 import "./errors.js";
 
 export type CorrectionTarget =
-  | { correctsEntryId: string }
-  | { personId: string; locationId: string; missingEntryKind: ClockEntryKind };
+  { correctsEntryId: string } | { personId: string; missingEntryKind: ClockEntryKind };
 export type CorrectionRequestInput = CorrectionTarget & {
   nodeId: string;
   at: string;
@@ -133,7 +132,6 @@ function assertDecisionPair(requests: readonly TimeEntryRecord[]): void {
     requests.some(
       (r) =>
         r.personId !== first.personId ||
-        r.locationId !== first.locationId ||
         r.nodeId !== first.nodeId ||
         r.recordedByPersonId !== first.recordedByPersonId ||
         r.extension?.direction !== first.extension?.direction,
@@ -158,12 +156,10 @@ export function correctionGroupCanApply(
         r.entryKind !== "correction" ||
         r.correctionStatus !== "requested" ||
         r.personId !== first.personId ||
-        r.locationId !== first.locationId ||
         r.extension?.direction !== first.extension?.direction ||
         entries.some(
           (e) =>
             e.personId === r.personId &&
-            e.locationId === r.locationId &&
             e.entryKind === "correction" &&
             e.extension?.respondsToEntryId === r.entryId,
         ),
@@ -176,9 +172,7 @@ export function correctionGroupCanApply(
   const additions: TimeEntryRecord[] = [];
   for (const request of requests) {
     const target = request.correctsEntryId
-      ? effective.find(
-          (e) => e.entryId === request.correctsEntryId && e.locationId === request.locationId,
-        )
+      ? effective.find((e) => e.entryId === request.correctsEntryId)
       : undefined;
     if (request.correctsEntryId && (!target || targets.has(request.correctsEntryId))) return false;
     const kind = target?.entryKind ?? request.extension?.missingEntryKind;
@@ -229,7 +223,6 @@ function validateChange(
             e.correctionStatus === "requested" &&
             !entries.some((answer) => answer.extension?.respondsToEntryId === e.entryId) &&
             e.personId === change.personId &&
-            e.locationId === change.locationId &&
             !e.correctsEntryId &&
             e.extension?.missingEntryKind === counterpart &&
             e.eventAt < change.eventAt,
@@ -252,14 +245,10 @@ async function prepareRequest(
   const isManager = MANAGER_ROLES.has((await roleOf(tx, input.actorPersonId))!);
   if (explicitProposal && !isManager)
     throw new AppError("correction.not_permitted", { personId: input.actorPersonId });
-  let personId: string,
-    locationId: string,
-    correctsEntryId: string | null,
-    missingEntryKind: ClockEntryKind | null;
+  let personId: string, correctsEntryId: string | null, missingEntryKind: ClockEntryKind | null;
   if ("correctsEntryId" in input) {
     if (
       "personId" in input ||
-      "locationId" in input ||
       "missingEntryKind" in input ||
       typeof input.correctsEntryId !== "string"
     )
@@ -270,20 +259,18 @@ async function prepareRequest(
       !(target.entryKind === "correction" && target.correctionStatus === "approved")
     )
       correctionInvalid("invalid_target_kind");
-    ({ personId, locationId } = target);
+    ({ personId } = target);
     correctsEntryId = target.entryId;
     missingEntryKind = null;
   } else {
     if (
       typeof input.personId !== "string" ||
-      typeof input.locationId !== "string" ||
       !["in", "out", "break_start", "break_end"].includes(input.missingEntryKind)
     )
       correctionInvalid("missing_target_shape");
-    ({ personId, locationId, missingEntryKind } = input);
+    ({ personId, missingEntryKind } = input);
     correctsEntryId = null;
     await assertPersonExists(tx, personId, "personId");
-    await assertLocationExists(tx, locationId);
   }
   if (
     (!isManager && input.actorPersonId !== personId) ||
@@ -301,7 +288,6 @@ async function prepareRequest(
   const change: TimeEntryRecord = {
     entryId: "pending",
     personId,
-    locationId,
     nodeId: input.nodeId,
     entryKind: "correction",
     eventAt,
@@ -316,7 +302,6 @@ async function prepareRequest(
     change,
     entry: {
       personId,
-      locationId,
       entryKind: "correction",
       eventAt,
       eventOffsetMinutes: input.offsetMinutes,
@@ -378,7 +363,6 @@ async function prepareDecision(
     request,
     entry: {
       personId: request.personId,
-      locationId: request.locationId,
       entryKind: "correction",
       eventAt: request.eventAt,
       eventOffsetMinutes: request.offsetMinutes,

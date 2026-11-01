@@ -152,12 +152,18 @@ it("reports both closed periods when a session moves between months", () => {
 });
 it("does not invent an amendment for unchanged or unrelated records", () => {
   expect(projectTimeRecord([start, end], [closure()]).closedPeriodImpacts).toEqual([]);
-  const elsewhere = [start, end, change].map((e) => ({ ...e, locationId: "other-venue" }));
+  const elsewhere = [start, end, change].map((e, i) => ({
+    ...e,
+    entryId: `february-${e.entryId}`,
+    correctsEntryId: e.correctsEntryId && `february-${e.correctsEntryId}`,
+    eventAt: e.eventAt.replace("2026-01-05", "2026-02-05"),
+    sequenceNo: 10 + i,
+  }));
   const record = projectTimeRecord([...elsewhere, start, end], [closure()]);
   expect(record.closedPeriodImpacts).toEqual([]);
   expect(
     record.entries
-      .filter((e) => e.entry.locationId === "other-venue")
+      .filter((e) => e.entry.entryId.startsWith("february-"))
       .every((e) => e.closedPeriodIds.length === 0),
   ).toBe(true);
 });

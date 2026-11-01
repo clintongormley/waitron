@@ -14,7 +14,6 @@ import "./errors.js";
 export interface AutomaticCloseInput {
   nodeId: string;
   personId: string;
-  locationId: string;
   openEntryId: string;
   at: string;
   offsetMinutes: number;
@@ -46,15 +45,10 @@ export async function recordAutomaticClose(
   if (
     open === undefined ||
     open.entryKind !== "in" ||
-    open.locationId !== input.locationId ||
-    after.some((e) => e.entryKind === "in" || e.entryKind === "out") ||
-    live.at(-1)!.locationId !== input.locationId
+    after.some((e) => e.entryKind === "in" || e.entryKind === "out")
   )
     throw new AppError("attendance.not_pending", { entryId: input.openEntryId });
-  const effectiveLatest = effectiveClockEntries(entries)
-    .filter((e) => e.locationId === input.locationId)
-    .sort(compareEvents)
-    .at(-1)!;
+  const effectiveLatest = effectiveClockEntries(entries).sort(compareEvents).at(-1)!;
   if (
     eventAt <= open.eventAt ||
     (effectiveLatest.entryKind === "in"
@@ -68,7 +62,6 @@ export async function recordAutomaticClose(
     { nodeId: input.nodeId },
     {
       personId: input.personId,
-      locationId: input.locationId,
       entryKind: "out",
       eventAt,
       eventOffsetMinutes: input.offsetMinutes,
@@ -83,17 +76,13 @@ export async function recordAutomaticClose(
       },
     },
   );
-  const afterEntries = await readRecordedEntries(tx, {
-    personId: input.personId,
-    locationId: input.locationId,
-  });
+  const afterEntries = await readRecordedEntries(tx, { personId: input.personId });
   const end = afterEntries.find((e) => e.entryId === id)!;
   const session = projectWorkSessions(afterEntries).find((s) => s.endedAt === eventAt);
   if (session !== undefined) {
     const next = new Date(`${session.workDate}T00:00:00Z`);
     next.setUTCDate(next.getUTCDate() + 1);
     const [closure] = await readClosures(tx, {
-      locationId: input.locationId,
       period: { start: session.workDate, end: next.toISOString().slice(0, 10) },
     });
     if (closure !== undefined)
@@ -133,7 +122,6 @@ export async function confirmAutomaticEntry(
     { nodeId: input.nodeId },
     {
       personId: target.personId,
-      locationId: target.locationId,
       entryKind: "confirmation",
       eventAt: target.eventAt,
       eventOffsetMinutes: target.offsetMinutes,

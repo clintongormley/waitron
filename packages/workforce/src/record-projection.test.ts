@@ -221,7 +221,7 @@ describe("inspectable record projection", () => {
       "accepted-out",
     ]);
   });
-  it.each(["personId", "locationId"] as const)(
+  it.each(["personId"] as const)(
     "does not follow a correction or confirmation into another %s",
     (field) => {
       const foreign = { ...answer, [field]: "other" };

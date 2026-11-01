@@ -15,7 +15,7 @@ export function isClockEntry(entry: TimeEntryRecord): boolean {
   return ["in", "out", "break_start", "break_end"].includes(entry.entryKind);
 }
 export function sameSubject(a: TimeEntryRecord, b: TimeEntryRecord): boolean {
-  return a.personId === b.personId && a.locationId === b.locationId;
+  return a.personId === b.personId;
 }
 export function originalEntry(
   entry: TimeEntryRecord,

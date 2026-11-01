@@ -45,10 +45,7 @@ export function projectTimeRecord(
   const effectiveIds = new Set(effectiveClockEntries(entries).map((e) => e.entryId));
   const record: TimeRecord = {
     sessions: projectWorkSessions(entries).sort(
-      (a, b) =>
-        a.personId.localeCompare(b.personId) ||
-        a.startedAt.localeCompare(b.startedAt) ||
-        a.locationId.localeCompare(b.locationId),
+      (a, b) => a.personId.localeCompare(b.personId) || a.startedAt.localeCompare(b.startedAt),
     ),
     entries: [...entries].sort(compareRecording).map((entry) => {
       const group = groups.get(recordRoot(entry, byId).entryId)!;
@@ -73,27 +70,16 @@ export function projectTimeRecord(
     closedPeriodImpacts: [],
   };
   for (const closure of [...closures].sort(
-    (a, b) =>
-      a.period.start.localeCompare(b.period.start) ||
-      a.locationId.localeCompare(b.locationId) ||
-      a.id.localeCompare(b.id),
+    (a, b) => a.period.start.localeCompare(b.period.start) || a.id.localeCompare(b.id),
   )) {
     record.closures.push({
       closureId: closure.id,
-      locationId: closure.locationId,
       period: closure.period,
       closedAt: closure.closedAt,
       closureHash: closure.closureHash,
       snapshot: structuredClone(closure.snapshot),
     });
-    const current = recordInPeriod(
-      {
-        ...record,
-        sessions: record.sessions.filter((s) => s.locationId === closure.locationId),
-        entries: record.entries.filter((e) => e.entry.locationId === closure.locationId),
-      },
-      closure.period,
-    );
+    const current = recordInPeriod(record, closure.period);
     const frozenEntries = closure.snapshot.entries;
     const frozenById = new Map(frozenEntries.map((e) => [e.entry.entryId, e.entry]));
     const roots = new Set([
@@ -101,11 +87,7 @@ export function projectTimeRecord(
       ...frozenEntries.map((e) => recordRoot(e.entry, frozenById).entryId),
     ]);
     for (const row of record.entries)
-      if (
-        row.entry.locationId === closure.locationId &&
-        roots.has(recordRoot(row.entry, byId).entryId)
-      )
-        row.closedPeriodIds.push(closure.id);
+      if (roots.has(recordRoot(row.entry, byId).entryId)) row.closedPeriodIds.push(closure.id);
     const people = new Set([
       ...closure.snapshot.sessions.map((s) => s.personId),
       ...frozenEntries.map((e) => e.entry.personId),

@@ -262,7 +262,6 @@ describe("automatic closes and worker confirmation", () => {
     "invalid",
     "fractional",
     "wrong_person",
-    "wrong_location",
     "wrong_origin",
   ])("refuses automatic close %s before an append", async (kind) => {
     const patch =
@@ -278,9 +277,7 @@ describe("automatic closes and worker confirmation", () => {
                 ? { offsetMinutes: 0.5 }
                 : kind === "wrong_person"
                   ? { personId: other }
-                  : kind === "wrong_location"
-                    ? { locationId: await seedLocation(suite.db) }
-                    : { origin: deviceOrigin("00000000-0000-4000-8000-000000000001") };
+                  : { origin: deviceOrigin("00000000-0000-4000-8000-000000000001") };
     await unchanged(
       () =>
         run((tx) =>

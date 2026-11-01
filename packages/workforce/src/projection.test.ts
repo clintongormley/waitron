@@ -73,7 +73,6 @@ describe("projectWorkSessions", () => {
     expect(sessions).toEqual([
       {
         personId: "p1",
-        locationId: "loc-1",
         workDate: "2026-01-05",
         startedAt: "2026-01-05T09:00:00Z",
         startOffsetMinutes: 0,
