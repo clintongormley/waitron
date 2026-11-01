@@ -1452,8 +1452,9 @@ written; this section is the correction.
   drawn before and a function drawing the re-read rows over any picks
   (`tidyPicks(before, rowsFor, picks)`), so that re-placed picks keep within the floor together
   (Task 5 review I1).
-- Task 6: an unticked grouped row shows its count; the amount is the whole row's; `nameOf` has a
-  default; the stepper's + carries the floor reason.
+- Task 6: an unticked grouped row shows its count; `nameOf` has a default; the stepper's + carries
+  the floor reason. The amount was the whole row's until the LOOK (Task 12) compared it with board
+  08; a ticked row now shows what its picked dishes take off the bill.
 - Task 7a: the heading uses `billLabel`; destinations are native buttons with `aria-pressed`, in a
   group labelled by "Move to".
 - Task 7b: a destination on its own counts as unsaved work, unless it is no longer offered. Picks

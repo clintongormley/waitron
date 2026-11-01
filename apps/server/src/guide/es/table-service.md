@@ -310,8 +310,8 @@ parte de ella ya esté pagada.
 
 El panel, con la cuenta como título, por ejemplo **Mover platos de Cuenta 1**, muestra los platos
 de la cuenta. Marca un plato para moverlo; sus extras van con él. Los platos iguales comparten una
-fila, por ejemplo **4 × Caña**: al marcar la fila se toman todos, y **−** y **+** fijan después
-cuántos, como **2 de 4**. Un plato al peso solo tiene la casilla, porque pasa entero. Un plato que
+fila, por ejemplo **Caña** con un **4** al lado: al marcar la fila se toman todos, y **−** y **+**
+fijan después cuántos, como **2 de 4**, con el importe de los que se mueven. Un plato al peso solo tiene la casilla, porque pasa entero. Un plato que
 alguien está cambiando en un pedido sin enviar no aparece.
 
 Algunas casillas salen en gris, con el motivo debajo del plato:
@@ -329,10 +329,12 @@ dice **Envía los artículos en espera a cocina antes de pasarlos a otra cuenta*
 pásalos a otra de las cuentas de la mesa. Si mueves los últimos platos sin pagar de una cuenta
 pagada en parte, la cuenta queda pagada del todo y se emite su factura.
 
-Si alguien paga un plato en otra caja mientras el panel está abierto, la caja rechaza el cambio con
-el motivo, por ejemplo **Este artículo ya está pagado, así que no se puede cambiar, mover ni cobrar
-otra vez. Devuelve antes su pago**, y no se mueve nada. Si el cambio dejara la cuenta por debajo de
-lo que ya se ha pagado, la caja dice cuánto y ofrece **Devolver {amount}**. Si otra persona tiene
+Si alguien paga un plato en otra caja mientras el panel está abierto, su fila pasa a **Pagado**
+cuando la caja vuelve a leer la cuenta, y ese plato deja de estar entre los que elegiste. Si tocas
+**Mover** antes, la caja rechaza el cambio con el motivo, por ejemplo **Este artículo ya está
+pagado, así que no se puede cambiar, mover ni cobrar otra vez. Devuelve antes su pago**, y no se
+mueve nada. Si el cambio dejara la cuenta por debajo de lo que ya se ha pagado, la caja dice cuánto
+y ofrece un botón **Devolver** por ese importe. Si otra persona tiene
 platos sin enviar en alguna de las dos cuentas, toma antes su pedido. Abre otra vez **Mover
 platos…** para elegir de nuevo.
 

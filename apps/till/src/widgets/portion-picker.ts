@@ -129,7 +129,7 @@ export class TillPortionPicker extends LitElement {
     const reason = this.#reason(row);
     const reasonId = `pick-reason-${id}`;
     const amount = toScale(
-      multiplyDecimal(decimal(row.each), decimal(String(row.members.length))),
+      multiplyDecimal(decimal(row.each), decimal(String(count > 0 ? count : row.members.length))),
       MONEY_SCALE,
     );
     return html`<div class="row" data-pick-row=${id}>

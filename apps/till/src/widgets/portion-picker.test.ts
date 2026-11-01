@@ -382,4 +382,17 @@ describe("till-portion-picker", () => {
     expect(empty.el.shadowRoot!.textContent).toContain(t("table.move_dishes_none"));
     expect(empty.el.shadowRoot!.querySelector('input[type="checkbox"]')).toBeNull();
   });
+
+  it("A803 picker: a ticked row shows the amount of the dishes moving, €10.00 at 2 of 4 Cañas", async () => {
+    const { el } = await picker(CANAS, null, new Set(["c1", "c2"]));
+    expect(q(el, '[data-pick-amount="c1"]')!.textContent!.trim()).toBe(money("10.00"));
+    await userEvent.click(inc(el, "c1")!);
+    await el.updateComplete;
+    expect(q(el, '[data-pick-amount="c1"]')!.textContent!.trim()).toBe(money("15.00"));
+  });
+
+  it("A803 picker: with no dishes, there is no tick", async () => {
+    const empty = await picker([]);
+    expect(empty.el.shadowRoot!.querySelector('input[type="checkbox"]')).toBeNull();
+  });
 });

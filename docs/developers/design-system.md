@@ -5779,7 +5779,8 @@ Move dishes… draws the bill's dishes through `till-portion-picker`
 (`pickRows`, `apps/till/src/state/portion-selection.ts`) and emits `portion-picks` with the picked
 line ids; the screen keeps the picks in its action draft scope, so leaving with picks asks first. A
 row is one dish, or [identical portions](#identical-portions-share-one-row) with their count; its
-extras are in its amount and move with it. A dish recalled into an unsent order is left out.
+amount, extras included, is what its picked dishes take off the bill, or the whole row's while none
+is picked. A dish recalled into an unsent order is left out.
 
 - **A tick** is a native checkbox labelled with the dish's name. Ticking a row takes every member
   the floor allows; ticking a ticked row clears it. A row of several takes a − / "2 of 4" / +

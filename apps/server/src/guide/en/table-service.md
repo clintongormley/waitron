@@ -293,8 +293,9 @@ the **⋮** menu and choose **Move dishes…**. It is there for a table's bill t
 when part of it is paid.
 
 The panel, headed with the bill, such as **Move dishes from Bill 1**, lists the bill's dishes. Tick
-a dish to move it; its extras go with it. Identical dishes share one row, such as **4 × Caña**:
-ticking the row takes all of them, and **−** and **+** then set how many, shown as **2 of 4**. A
+a dish to move it; its extras go with it. Identical dishes share one row, such as **Caña** with a
+**4** beside it: ticking the row takes all of them, and **−** and **+** then set how many, shown as
+**2 of 4**, with the amount of those moving. A
 weighed dish has a tick only, because it moves whole. A dish someone is changing in an unsent order
 is not listed.
 
@@ -312,10 +313,12 @@ items to the kitchen before moving them to another bill**, send them first, or m
 the table's other bills instead. Moving the last unpaid dishes off a part-paid bill leaves it paid
 in full, and its invoice is issued.
 
-If someone paid a dish on another till while the panel was open, the move is refused with the
-reason, such as **This item has already been paid for, so it cannot be changed, moved or charged
-again. Refund its payment first**, and nothing moves. If the move would leave the bill owing less
-than has been paid, the till says how much and offers **Refund {amount}**. If someone else has
+If someone pays a dish on another till while the panel is open, its row turns **Paid** when the
+till next reads the bill, and that dish drops out of what you picked. If you tap **Move** before
+then, the move is refused with the reason, such as **This item has already been paid for, so it
+cannot be changed, moved or charged again. Refund its payment first**, and nothing moves. If the
+move would leave the bill owing less than has been paid, the till says how much and offers a
+**Refund** button for that amount. If someone else has
 unsent dishes on either bill, take over their order first. Open **Move dishes…** again to choose
 afresh.
 
