@@ -280,6 +280,7 @@ it.each(["en", "es"] as const)(
         );
       }
       expect(await page.locator("#connection-repair").isEnabled()).toBe(true);
+      expect(await page.locator("#connection-repair").isVisible()).toBe(true);
       expect(await page.locator("#connection-continue").isVisible()).toBe(false);
       expect(await page.locator("body").textContent()).not.toContain("private filesystem details");
       expect(await page.locator("input,form,textarea,select").count()).toBe(0);

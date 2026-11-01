@@ -1183,6 +1183,12 @@ sentence or the installer referral fails the Spanish case. Run
 `pnpm --filter @waitron/server exec vitest run src/connection-bootstrap-page.test.ts -t 'refused layout|refusal stays retryable|nonhealthy reply'`.
 These browser cases use synthetic HTTP answers; they do not qualify certificate-file recovery.
 
+The same review found that an enabled repair button could be hidden. Hiding it only after a
+failed request from an initially refused layout left all 24 current page cases passing. The
+refused-layout cases now require the button to stay visible as well as enabled; that fault fails
+both locale cases, and restoring the page script passes all 24. This does not exercise a repair
+of the refused file layout.
+
 ### boot-recovery
 
 **Boot recovery must offer choices instead of an installer referral.** Recheck the cause-specific
