@@ -6,7 +6,7 @@ import { bookings } from "./schema/bookings.js";
 import { venueWallClockAt } from "./wall-clock.js";
 
 export const BOOKINGS_TABLE_REMOVAL: TableRemoval = {
-  async deleteRefusals(tx, cfg, tableIds) {
+  async deleteRefusals(tx, _cfg, tableIds) {
     if (tableIds.length === 0) return [];
     const rows = await tx
       .select({
@@ -19,7 +19,6 @@ export const BOOKINGS_TABLE_REMOVAL: TableRemoval = {
       .from(bookings)
       .where(
         and(
-          eq(bookings.locationId, cfg.locationId),
           inArray(bookings.tableId, [...tableIds]),
           inArray(bookings.status, ["booked", "seated"]),
         ),
@@ -31,10 +30,10 @@ export const BOOKINGS_TABLE_REMOVAL: TableRemoval = {
       targets: [{ id: row.id, name: `${row.contactName} · ${row.date} ${row.time.slice(0, 5)}` }],
     }));
   },
-  async refuse(tx, cfg, tableIds, now) {
+  async refuse(tx, _cfg, tableIds, now) {
     const refusals = new Map<string, AppError>();
     if (tableIds.length === 0) return refusals;
-    const { date: venueToday } = await venueWallClockAt(tx, cfg.locationId, now);
+    const { date: venueToday } = await venueWallClockAt(tx, now);
     const booked = await tx
       .select({
         tableId: bookings.tableId,
@@ -43,7 +42,6 @@ export const BOOKINGS_TABLE_REMOVAL: TableRemoval = {
       .from(bookings)
       .where(
         and(
-          eq(bookings.locationId, cfg.locationId),
           inArray(bookings.tableId, [...tableIds]),
           eq(bookings.status, "booked"),
           gte(bookings.bookingDate, venueToday),

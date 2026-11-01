@@ -1,19 +1,18 @@
-// Booking operations run on the caller's transaction. Creation and day lists use the
-// configured location; table assignments also check that location. Route handlers
-// own authorization. A by-id read or write needs only the id.
+// Booking operations run on the caller's transaction. Route handlers own authorization.
 import "./errors.js";
 import { and, asc, eq, inArray, sql, type InferSelectModel } from "drizzle-orm";
-import { savedPart, tableInService, diningTables, type Transaction } from "@waitron/db";
+import {
+  savedPart,
+  tableInService,
+  diningTables,
+  venueLocationId,
+  type Transaction,
+} from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import type { LocationId } from "@waitron/shared";
 import type { CoreServices } from "@waitron/module";
 import { bookings } from "./schema/bookings.js";
 
 export type Booking = InferSelectModel<typeof bookings>;
-
-export interface BookingConfig {
-  locationId: LocationId;
-}
 
 export interface CreateBookingInput {
   bookingDate: string;
@@ -49,20 +48,13 @@ function storedTime(value: string): string {
 /** `bookingDate` stands in for the business day `savedPart` is asked about. */
 async function requireActiveTable(
   tx: Transaction,
-  locationId: LocationId,
   tableId: string,
   bookingDate: string | null,
 ): Promise<void> {
   const [table] = await tx
     .select({ part: sql<number>`${savedPart(diningTables.id, bookingDate)}` })
     .from(diningTables)
-    .where(
-      and(
-        eq(diningTables.id, tableId),
-        tableInService(diningTables.id),
-        eq(diningTables.locationId, locationId),
-      ),
-    );
+    .where(and(eq(diningTables.id, tableId), tableInService(diningTables.id)));
   if (table === undefined) {
     throw new AppError("table.not_found", { tableId });
   }
@@ -73,19 +65,18 @@ async function requireActiveTable(
 
 export async function createBooking(
   tx: Transaction,
-  cfg: BookingConfig,
   input: CreateBookingInput,
 ): Promise<{ id: string }> {
   if (input.partySize <= 0) {
     throw new AppError("booking.invalid", { partySize: input.partySize });
   }
   if (input.tableId !== undefined) {
-    await requireActiveTable(tx, cfg.locationId, input.tableId, input.bookingDate);
+    await requireActiveTable(tx, input.tableId, input.bookingDate);
   }
   const [row] = await tx
     .insert(bookings)
     .values({
-      locationId: cfg.locationId,
+      locationId: await venueLocationId(tx),
       bookingDate: input.bookingDate,
       bookingTime: storedTime(input.bookingTime),
       partySize: input.partySize,
@@ -101,29 +92,22 @@ export async function createBooking(
 
 export async function listBookings(
   tx: Transaction,
-  cfg: BookingConfig,
   { date }: { date: string },
 ): Promise<Booking[]> {
   return tx
     .select()
     .from(bookings)
-    .where(and(eq(bookings.locationId, cfg.locationId), eq(bookings.bookingDate, date)))
+    .where(eq(bookings.bookingDate, date))
     .orderBy(asc(bookings.bookingTime), asc(bookings.id));
 }
 
-export async function getBooking(
-  tx: Transaction,
-  cfg: BookingConfig,
-  id: string,
-): Promise<Booking | undefined> {
-  void cfg;
+export async function getBooking(tx: Transaction, id: string): Promise<Booking | undefined> {
   const [row] = await tx.select().from(bookings).where(eq(bookings.id, id));
   return row;
 }
 
 export async function updateBooking(
   tx: Transaction,
-  cfg: BookingConfig,
   id: string,
   patch: UpdateBookingPatch,
 ): Promise<void> {
@@ -141,12 +125,7 @@ export async function updateBooking(
     const dateChanges =
       patch.bookingDate !== undefined && patch.bookingDate !== stored?.bookingDate;
     if (tableId !== null && (tableChanges || dateChanges)) {
-      await requireActiveTable(
-        tx,
-        cfg.locationId,
-        tableId,
-        patch.bookingDate ?? stored?.bookingDate ?? null,
-      );
+      await requireActiveTable(tx, tableId, patch.bookingDate ?? stored?.bookingDate ?? null);
     }
   }
   const updated = await tx
@@ -174,12 +153,10 @@ export async function updateBooking(
 
 async function advanceStatus(
   tx: Transaction,
-  cfg: BookingConfig,
   id: string,
   from: readonly ("booked" | "seated" | "completed" | "no_show" | "cancelled")[],
   to: "seated" | "completed" | "no_show" | "cancelled",
 ): Promise<void> {
-  void cfg;
   const updated = await tx
     .update(bookings)
     .set({ status: to })
@@ -195,24 +172,16 @@ async function advanceStatus(
   throw new AppError("booking.invalid_transition", { bookingId: id });
 }
 
-export async function cancelBooking(
-  tx: Transaction,
-  cfg: BookingConfig,
-  id: string,
-): Promise<void> {
-  await advanceStatus(tx, cfg, id, ["booked", "seated"], "cancelled");
+export async function cancelBooking(tx: Transaction, id: string): Promise<void> {
+  await advanceStatus(tx, id, ["booked", "seated"], "cancelled");
 }
 
-export async function markNoShow(tx: Transaction, cfg: BookingConfig, id: string): Promise<void> {
-  await advanceStatus(tx, cfg, id, ["booked"], "no_show");
+export async function markNoShow(tx: Transaction, id: string): Promise<void> {
+  await advanceStatus(tx, id, ["booked"], "no_show");
 }
 
-export async function completeBooking(
-  tx: Transaction,
-  cfg: BookingConfig,
-  id: string,
-): Promise<void> {
-  await advanceStatus(tx, cfg, id, ["seated"], "completed");
+export async function completeBooking(tx: Transaction, id: string): Promise<void> {
+  await advanceStatus(tx, id, ["seated"], "completed");
 }
 
 /**
@@ -221,12 +190,11 @@ export async function completeBooking(
  */
 export async function seatBooking(
   tx: Transaction,
-  cfg: BookingConfig,
   id: string,
   req: { tableId?: string; seatedBy: string },
   core: CoreServices,
 ): Promise<{ tabId: string }> {
-  const booking = await getBooking(tx, cfg, id);
+  const booking = await getBooking(tx, id);
   if (booking === undefined) {
     throw new AppError("booking.not_found", { bookingId: id });
   }
@@ -236,19 +204,6 @@ export async function seatBooking(
   const tableId = req.tableId ?? booking.tableId;
   if (tableId === null || tableId === undefined) {
     throw new AppError("booking.table_required", {});
-  }
-  // Only the location is checked here: `seatTable` refuses a missing or inactive table itself,
-  // keeping `table.inactive` distinct.
-  if (req.tableId !== undefined) {
-    const [inLocation] = await tx
-      .select({ id: diningTables.id })
-      .from(diningTables)
-      .where(
-        and(eq(diningTables.id, req.tableId), eq(diningTables.locationId, booking.locationId)),
-      );
-    if (inLocation === undefined) {
-      throw new AppError("table.not_found", { tableId: req.tableId });
-    }
   }
   // A throw from or after `seatTable` relies on the caller's transaction to roll back what it
   // opened.

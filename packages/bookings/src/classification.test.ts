@@ -87,7 +87,7 @@ describe("booking change interests", () => {
     });
     try {
       const { id } = await withTransaction(suite.db, (tx) =>
-        createBooking(tx, cfg, {
+        createBooking(tx, {
           tableId: oldId,
           bookingDate: "2026-10-11",
           bookingTime: "20:00",
@@ -105,7 +105,7 @@ describe("booking change interests", () => {
         },
       ]);
       events.length = 0;
-      await withTransaction(suite.db, (tx) => updateBooking(tx, cfg, id, { tableId: newId }));
+      await withTransaction(suite.db, (tx) => updateBooking(tx, id, { tableId: newId }));
       expect(events).toEqual([
         {
           resources: [
@@ -121,7 +121,7 @@ describe("booking change interests", () => {
         },
       ]);
       events.length = 0;
-      await withTransaction(suite.db, (tx) => cancelBooking(tx, cfg, id));
+      await withTransaction(suite.db, (tx) => cancelBooking(tx, id));
       expect(events).toEqual([
         {
           resources: [
