@@ -4139,6 +4139,11 @@ it.each(["en-GB", "es-ES"])(
         expect(await bottomOf(el)).toBe(codeMessage("passkey.verification_failed")),
       );
       if (locale === "en-GB") expect(await bottomOf(el)).not.toContain("administrator");
+      expect(await bottomOf(el)).toBe(
+        locale === "en-GB"
+          ? "Could not verify the passkey. Try again."
+          : "No se pudo verificar la passkey. Vuelve a intentarlo.",
+      );
       expect(loggedIn).toHaveLength(0);
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=use-password]")!.click();
       await el.updateComplete;
@@ -4147,6 +4152,10 @@ it.each(["en-GB", "es-ES"])(
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
       await vi.waitFor(() => expect(loggedIn).toHaveLength(1));
       expect(loggedIn[0]).toMatchObject({ personId: "p1", loginMethod: "password" });
+      expect(api.login).toHaveBeenCalledExactlyOnceWith({
+        email: "owner@x.com",
+        password: "correct horse battery",
+      });
     } finally {
       setLocale(previousLocale);
     }
