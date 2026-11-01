@@ -8,6 +8,19 @@ import { main, transformSource } from "./a1301-seed-codemod.mjs";
 const OUTSIDE = "apps/server/src/x.test.ts";
 const lines = (...rows) => rows.join("\n") + "\n";
 const SEED = `import { seedVenue } from "@waitron/db/testing/seed.js";`;
+const HELPER = "locations insert inside a helper function or loop: no location rule applied";
+const NOT_VENUE = "location argument does not name the seeded venue: not dropped";
+const EARLY = "LOC may be read before seedVenue assigns it";
+const VENUE_IMPORT = `import { venueLocationId } from "@waitron/db";`;
+/** A file seeding `LOC` in a top-level beforeAll, with `body` after the insert in that hook. */
+const seeded = (...body) =>
+  lines(
+    `const LOC = "a";`,
+    `beforeAll(async () => {`,
+    `  await db.insert(locations).values({ id: LOC, name: "V" });`,
+    ...body.map((line) => `  ${line}`),
+    `});`,
+  );
 
 describe("rule 1: the venue row", () => {
   it("rewrites the statement form", () => {
@@ -164,6 +177,92 @@ describe("rule 1: the venue row", () => {
       ).output,
     ).toBe(lines(SEED, `await seedVenue(db);`));
   });
+
+  it("rewrites inserts on a transaction receiver as written, inside a file-level hook's callback", () => {
+    const input = lines(
+      `const LOC = "a";`,
+      `beforeAll(async () => {`,
+      `  await withTransaction(db, async (tx) => {`,
+      `    await tx.insert(locations).values({ id: LOC, name: "V" });`,
+      `    await tx.insert(workingOrders).values({ locationId: LOC, orderNumber: 1 });`,
+      `  });`,
+      `});`,
+      `it("x", () => use(LOC));`,
+    );
+    expect(transformSource(OUTSIDE, input)).toEqual({
+      output: lines(
+        `import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";`,
+        `import { venueLocationId } from "@waitron/db";`,
+        `let LOC: string;`,
+        `beforeAll(async () => {`,
+        `  await withTransaction(db, async (tx) => {`,
+        `    await seedVenue(tx, { name: "V" });`,
+        `    LOC = await venueLocationId(tx);`,
+        `    await seedWorkingOrder(tx, { orderNumber: 1 });`,
+        `  });`,
+        `});`,
+        `it("x", () => use(LOC));`,
+      ),
+      edits: 2,
+      left: [],
+    });
+  });
+
+  it("removes an id constant only when its initializer is a literal", () => {
+    const venue = (initializer) =>
+      lines(
+        `const LOC = ${initializer};`,
+        `beforeAll(async () => {`,
+        `  await db.insert(locations).values({ id: LOC, name: "V" });`,
+        `});`,
+      );
+    for (const initializer of [
+      `sideEffect()`,
+      `(events.push("x"), "a")`,
+      "`a${b}`",
+      `-1`,
+      `brandLocationId("a")`,
+    ]) {
+      expect(transformSource(OUTSIDE, venue(initializer))).toEqual({
+        output: venue(initializer),
+        edits: 0,
+        left: [{ line: 3, reason: "id constant's initializer is not a literal: not removed" }],
+      });
+    }
+    for (const initializer of [`"a"`, `7`, "`a`", `"a" as const`, `("a" satisfies string)`]) {
+      expect(transformSource(OUTSIDE, venue(initializer)).output).toBe(
+        lines(SEED, `beforeAll(async () => {`, `  await seedVenue(db, { name: "V" });`, `});`),
+      );
+    }
+  });
+
+  it("declares a retained id without a type in a JavaScript file", () => {
+    const input = seeded().replace(`});\n`, `});\nit("x", () => use(LOC));\n`);
+    const check = (text) =>
+      spawnSync(process.execPath, ["--check", "--input-type=module"], { input: text }).status;
+    for (const path of ["apps/server/src/x.test.mjs", "a.test.js", "a.test.cjs"]) {
+      const output = transformSource(path, input).output;
+      expect(output).toContain(`let LOC;\n`);
+      expect(check(output)).toBe(0);
+    }
+    // The check discriminates: the TypeScript output fails it.
+    expect(check(transformSource(OUTSIDE, input).output)).not.toBe(0);
+  });
+
+  it("removes only the id constant's own statement from a line it shares", () => {
+    for (const [before, after] of [
+      [`const KEEP = 42; const LOC = "a";`, `const KEEP = 42;`],
+      [`const LOC = "a";   const KEEP = 42;`, `const KEEP = 42;`],
+      [`  const LOC = "a"; // the venue`, `  // the venue`],
+    ]) {
+      expect(
+        transformSource(
+          OUTSIDE,
+          lines(before, `await db.insert(locations).values({ id: LOC });`, `use(KEEP);`),
+        ).output,
+      ).toBe(lines(SEED, after, `await seedVenue(db);`, `use(KEEP);`));
+    }
+  });
 });
 
 describe("rules 2-4: nodes, devices and orders", () => {
@@ -233,6 +332,111 @@ describe("rules 2-4: nodes, devices and orders", () => {
         `const order = await seedWorkingOrder(db);`,
       ),
     );
+  });
+
+  it("reports an order whose binding is read through a returning projection", () => {
+    const input = seeded(
+      `const [o] = await db.insert(workingOrders).values({ locationId: LOC, orderNumber: 1 }).returning({ orderId: workingOrders.id });`,
+      `use(o.orderId);`,
+    );
+    expect(transformSource(OUTSIDE, input)).toEqual({
+      output: lines(
+        SEED,
+        VENUE_IMPORT,
+        `let LOC: string;`,
+        `beforeAll(async () => {`,
+        `  await seedVenue(db, { name: "V" });`,
+        `  LOC = await venueLocationId(db);`,
+        `  const [o] = await db.insert(workingOrders).values({ locationId: LOC, orderNumber: 1 }).returning({ orderId: workingOrders.id });`,
+        `  use(o.orderId);`,
+        `});`,
+      ),
+      edits: 1,
+      left: [
+        {
+          line: 4,
+          reason: "order binding read through a returning(…) projection: not rewritten",
+        },
+      ],
+    });
+    const unread = seeded(
+      `const [o] = await db.insert(workingOrders).values({ locationId: LOC, orderNumber: 1 }).returning({ orderId: workingOrders.id });`,
+    );
+    expect(transformSource(OUTSIDE, unread).output).toContain(
+      `const o = await seedWorkingOrder(db, { orderNumber: 1 });`,
+    );
+  });
+
+  it("rewrites an order whose projection keeps column names and whose binding is read only by those names", () => {
+    const insert = (projection) =>
+      `const [o] = await db.insert(workingOrders).values({ locationId: LOC, orderNumber: 1 }).returning(${projection});`;
+    const input = seeded(
+      insert(`{ id: workingOrders.id, orderNumber: schema.workingOrders.orderNumber }`),
+      `use(o.id, o!.orderNumber, o?.id);`,
+    );
+    expect(transformSource(OUTSIDE, input)).toEqual({
+      output: lines(
+        `import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";`,
+        `beforeAll(async () => {`,
+        `  await seedVenue(db, { name: "V" });`,
+        `  const o = await seedWorkingOrder(db, { orderNumber: 1 });`,
+        `  use(o.id, o.orderNumber, o?.id);`,
+        `});`,
+      ),
+      edits: 2,
+      left: [],
+    });
+    const PROJECTION = "order binding read through a returning(…) projection: not rewritten";
+    const reported = [
+      [`{ orderId: workingOrders.id }`, `use(o.orderId);`],
+      [`{ orderId: workingOrders.id }`, `use(o.id);`],
+      [`{ id: workingOrders.id }`, `expect(o).toEqual({ id: "x" });`],
+      [`{ id: workingOrders.id }`, `use(o!);`],
+      [`{ id: workingOrders.id }`, `use(o.orderNumber);`],
+      [`{ id: workingOrders.id }`, `use(o["id"]);`],
+      [`{ id: workingOrders.id }`, `use((o).id);`],
+      [`{ id: orders.id }`, `use(o.id);`],
+      [`{ id: other.workingOrders.id }`, `use(o.id);`],
+      [`{ id: workingOrders.id.inner }`, `use(o.id);`],
+      [`{ id: workingOrders["id"] }`, `use(o.id);`],
+      [`{ id }`, `use(o.id);`],
+      [`{ ...cols }`, `use(o.id);`],
+      [`{ ["id"]: workingOrders.id }`, `use(o.id);`],
+      [`{ id() {} }`, `use(o.id);`],
+      [`cols`, `use(o.id);`],
+      [`{ id: workingOrders.id }, extra`, `use(o.id);`],
+    ];
+    for (const [projection, read] of reported) {
+      const result = transformSource(OUTSIDE, seeded(insert(projection), read));
+      expect(result.left, projection + " " + read).toEqual([{ line: 4, reason: PROJECTION }]);
+      expect(result.output).toContain(insert(projection));
+    }
+  });
+
+  it("drops the non-null assertion directly on a rewritten order's binding, and no other", () => {
+    const result = transformSource(
+      OUTSIDE,
+      lines(
+        `import { fixture } from "./fixtures.js";`,
+        VENUE_IN,
+        `const [order] = await db.insert(workingOrders).values({ locationId: LOC }).returning();`,
+        `const [kept] = await db.insert(workingOrders).values({ locationId: fixture.id }).returning();`,
+        `use(order!.id, order!, (order)!.id, kept!.id, other!.id);`,
+        `await db.insert(workingOrders).values({ locationId: LOC, parentId: order!.id });`,
+      ),
+    );
+    expect(result.output).toBe(
+      lines(
+        `import { fixture } from "./fixtures.js";`,
+        `import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";`,
+        VENUE_OUT,
+        `const order = await seedWorkingOrder(db);`,
+        `const [kept] = await db.insert(workingOrders).values({ locationId: fixture.id }).returning();`,
+        `use(order.id, order, (order)!.id, kept!.id, other!.id);`,
+        `await seedWorkingOrder(db, { parentId: order!.id });`,
+      ),
+    );
+    expect(result.left).toEqual([{ line: 5, reason: NOT_VENUE }]);
   });
 });
 
@@ -549,139 +753,6 @@ describe("what it reports and leaves", () => {
       { line: 3, reason: "LOC may be read before seedVenue assigns it" },
     ]);
   });
-});
-
-describe("rule 5: imports", () => {
-  it("imports from relative paths inside packages/db, in the file's quote style", () => {
-    const input = lines(
-      `import { it } from 'vitest';`,
-      `const LOC = 'a';`,
-      `beforeAll(async () => {`,
-      `  await db.insert(locations).values({ id: LOC, name: 'V' });`,
-      `  use(LOC);`,
-      `});`,
-    );
-    expect(transformSource("/repo/packages/db/src/x.test.ts", input).output).toBe(
-      lines(
-        `import { it } from 'vitest';`,
-        `import { seedVenue } from './testing/seed.js';`,
-        `import { venueLocationId } from './venue.js';`,
-        `let LOC: string;`,
-        `beforeAll(async () => {`,
-        `  await seedVenue(db, { name: 'V' });`,
-        `  LOC = await venueLocationId(db);`,
-        `  use(LOC);`,
-        `});`,
-      ),
-    );
-  });
-
-  it("adds to an existing @waitron/db import and removes emptied specifiers", () => {
-    const input = lines(
-      `import { locationId as brandLocationId, type LocationId } from "@waitron/shared";`,
-      `import { locations, readVenue } from "@waitron/db";`,
-      `import type { Unused } from "./unused.js";`,
-      `import { workingOrders, sales } from "./schema.js";`,
-      `import { aaa, zzz } from "@waitron/db/testing/seed.js";`,
-      `const LOC = "a" as LocationId;`,
-      `await db.insert(locations).values({ id: LOC });`,
-      `await seedNode(db, brandLocationId(LOC));`,
-      `await db.insert(workingOrders).values({ locationId: LOC, orderNumber: 1 });`,
-      `it("x", () => use(LOC, sales, readVenue));`,
-    );
-    expect(transformSource(OUTSIDE, input).output).toBe(
-      lines(
-        `import { readVenue, venueLocationId } from "@waitron/db";`,
-        `import type { Unused } from "./unused.js";`,
-        `import { sales } from "./schema.js";`,
-        `import { aaa, seedVenue, seedWorkingOrder, zzz } from "@waitron/db/testing/seed.js";`,
-        `let LOC: string;`,
-        `await seedVenue(db);`,
-        `LOC = await venueLocationId(db);`,
-        `await seedNode(db);`,
-        `await seedWorkingOrder(db, { orderNumber: 1 });`,
-        `it("x", () => use(LOC, sales, readVenue));`,
-      ),
-    );
-  });
-
-  it("removes brand helpers the rewrite left unused, and keeps an import already present", () => {
-    const input = lines(
-      `import { locationId as brandLocationId } from "@waitron/shared";`,
-      `import type { LocationId } from "@waitron/shared";`,
-      `import * as schema from "./schema.js";`,
-      `import "./side-effect.js";`,
-      `import { seedVenue } from "@waitron/db/testing/seed.js";`,
-      `const LOC = "a";`,
-      `await db.insert(locations).values({ id: LOC, name: "V" });`,
-      `await seedNode(db, brandLocationId(LOC) as LocationId);`,
-    );
-    expect(transformSource(OUTSIDE, input).output).toBe(
-      lines(
-        `import * as schema from "./schema.js";`,
-        `import "./side-effect.js";`,
-        SEED,
-        `await seedVenue(db, { name: "V" });`,
-        `await seedNode(db);`,
-      ),
-    );
-  });
-});
-
-describe("main", () => {
-  let dir;
-  let out;
-  beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "a1301-codemod-"));
-    out = [];
-  });
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
-
-  const source = lines(
-    `await db.insert(locations).values({ name: "V" });`,
-    `await db.insert(nodes).values({});`,
-    `const SEED_SCRIPT = 1;`,
-  );
-
-  it("reports and writes nothing without --write", () => {
-    const file = join(dir, "a.test.mjs");
-    writeFileSync(file, source);
-    const before = readFileSync(file);
-    expect(main([file], { stdout: (line) => out.push(line) })).toBe(0);
-    expect(readFileSync(file).equals(before)).toBe(true);
-    expect(out).toEqual([`${file}:2: raw insert(nodes)`, `${file}: 1 edit`]);
-  });
-
-  it("writes the rewrite with --write, and never opens a fiscal pair file", () => {
-    const file = join(dir, "a.test.ts");
-    writeFileSync(file, source);
-    const fiscal = join(dir, "packages/fiscal-verifactu/src/inmutabilidad.test.ts");
-    expect(main(["--write", file, fiscal], { stdout: (line) => out.push(line) })).toBe(0);
-    expect(readFileSync(file, "utf8")).toBe(
-      lines(
-        SEED,
-        `await seedVenue(db, { name: "V" });`,
-        `await db.insert(nodes).values({});`,
-        `const SEED_SCRIPT = 1;`,
-      ),
-    );
-    expect(out).toEqual([
-      `${file}:2: raw insert(nodes)`,
-      `${file}: 1 edit`,
-      `${fiscal}:1: fiscal pair file: never rewritten`,
-      `${fiscal}: 0 edits`,
-    ]);
-  });
-
-  it("prints to the console by default", () => {
-    const file = join(dir, "b.test.ts");
-    writeFileSync(file, lines(`use(1);`));
-    expect(main([file])).toBe(0);
-  });
-});
-
-describe("review round 1", () => {
-  const HELPER = "locations insert inside a helper function or loop: no location rule applied";
 
   it("counts the rows of a multi-row array, so no location rule applies", () => {
     const input = lines(
@@ -745,179 +816,26 @@ describe("review round 1", () => {
     }
   });
 
-  it("rewrites inserts on a transaction receiver as written, inside a file-level hook's callback", () => {
-    const input = lines(
-      `const LOC = "a";`,
-      `beforeAll(async () => {`,
-      `  await withTransaction(db, async (tx) => {`,
-      `    await tx.insert(locations).values({ id: LOC, name: "V" });`,
-      `    await tx.insert(workingOrders).values({ locationId: LOC, orderNumber: 1 });`,
-      `  });`,
-      `});`,
-      `it("x", () => use(LOC));`,
+  it("applies no location rule to an upgrade test", () => {
+    const input = seeded(
+      `await seedNode(db, LOC);`,
+      `await db.insert(workingOrders).values({ locationId: LOC, orderNumber: 1 });`,
     );
-    expect(transformSource(OUTSIDE, input)).toEqual({
-      output: lines(
-        `import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";`,
-        `import { venueLocationId } from "@waitron/db";`,
-        `let LOC: string;`,
-        `beforeAll(async () => {`,
-        `  await withTransaction(db, async (tx) => {`,
-        `    await seedVenue(tx, { name: "V" });`,
-        `    LOC = await venueLocationId(tx);`,
-        `    await seedWorkingOrder(tx, { orderNumber: 1 });`,
-        `  });`,
-        `});`,
-        `it("x", () => use(LOC));`,
-      ),
-      edits: 2,
-      left: [],
-    });
-  });
-
-  it("reports an id constant a sibling describe could read before the seed assigns it", () => {
-    const input = lines(
-      `const LOC = "a";`,
-      `describe("A", () => {`,
-      `  beforeEach(async () => {`,
-      `    await db.insert(locations).values({ id: LOC });`,
-      `  });`,
-      `});`,
-      `describe("B", () => {`,
-      `  it("reads", () => use(LOC));`,
-      `});`,
-    );
-    expect(transformSource(OUTSIDE, input)).toEqual({
+    expect(transformSource("packages/db/src/schema-upgrade.test.ts", input)).toEqual({
       output: input,
       edits: 0,
-      left: [{ line: 4, reason: "LOC may be read before seedVenue assigns it" }],
+      left: [
+        {
+          line: 1,
+          reason:
+            "upgrade test: its database stops at an earlier migration, so no location rule applied",
+        },
+      ],
     });
-    const inTest = lines(
-      `const LOC = "a";`,
-      `it("seeds", async () => {`,
-      `  await db.insert(locations).values({ id: LOC });`,
-      `  use(LOC);`,
-      `});`,
-    );
-    expect(transformSource(OUTSIDE, inTest).left).toEqual([
-      { line: 3, reason: "LOC may be read before seedVenue assigns it" },
-    ]);
-  });
-
-  it("reports an id constant a beforeAll reads while the seed runs in beforeEach", () => {
-    const input = lines(
-      `const LOC = "a";`,
-      `beforeAll(() => use(LOC));`,
-      `beforeEach(async () => {`,
-      `  await db.insert(locations).values({ id: LOC });`,
-      `});`,
-      `it("reads", () => use(LOC));`,
-    );
-    expect(transformSource(OUTSIDE, input)).toEqual({
-      output: input,
-      edits: 0,
-      left: [{ line: 4, reason: "LOC may be read before seedVenue assigns it" }],
-    });
-    const fine = lines(
-      `const LOC = "a";`,
-      `beforeEach(async () => {`,
-      `  await db.insert(locations).values({ id: LOC });`,
-      `});`,
-      `it("reads", () => use(LOC));`,
-    );
-    expect(transformSource(OUTSIDE, fine).output).toBe(
-      lines(
-        SEED,
-        `import { venueLocationId } from "@waitron/db";`,
-        `let LOC: string;`,
-        `beforeEach(async () => {`,
-        `  await seedVenue(db);`,
-        `  LOC = await venueLocationId(db);`,
-        `});`,
-        `it("reads", () => use(LOC));`,
-      ),
-    );
-  });
-
-  it("adds no duplicate of a helper name the file already declares or imports from elsewhere", () => {
-    const collision = (name) =>
-      `${name} is already declared or imported from elsewhere: rule not applied`;
-    const venueHelper = lines(
-      `import { venueLocationId } from "./helpers.js";`,
-      `const LOC = "a";`,
-      `beforeAll(async () => {`,
-      `  await db.insert(locations).values({ id: LOC });`,
-      `});`,
-      `it("x", () => use(LOC));`,
-    );
-    expect(transformSource(OUTSIDE, venueHelper)).toEqual({
-      output: venueHelper,
-      edits: 0,
-      left: [{ line: 4, reason: collision("venueLocationId") }],
-    });
-    const localVenueHelper = venueHelper.replace(
-      `import { venueLocationId } from "./helpers.js";`,
-      `function venueLocationId() {}`,
-    );
-    expect(transformSource(OUTSIDE, localVenueHelper).left).toEqual([
-      { line: 4, reason: collision("venueLocationId") },
-    ]);
-    const seedVenueImport = lines(
-      `import { seedVenue } from "./venue-helpers.js";`,
-      `const L = "a";`,
-      `await db.insert(locations).values({ id: L, name: "V" });`,
-      `await db.insert(workingOrders).values({ locationId: L, orderNumber: 1 });`,
-    );
-    expect(transformSource(OUTSIDE, seedVenueImport)).toEqual({
-      output: lines(
-        `import { seedVenue } from "./venue-helpers.js";`,
-        `import { seedWorkingOrder } from "@waitron/db/testing/seed.js";`,
-        `const L = "a";`,
-        `await db.insert(locations).values({ id: L, name: "V" });`,
-        `await seedWorkingOrder(db, { orderNumber: 1 });`,
-      ),
-      edits: 1,
-      left: [{ line: 3, reason: collision("seedVenue") }],
-    });
-    const orderImport = lines(
-      `import seedWorkingOrder from "./orders.js";`,
-      `await db.insert(locations).values({ name: "V" });`,
-      `await db.insert(workingOrders).values({ locationId: L, orderNumber: 1 });`,
-    );
-    expect(transformSource(OUTSIDE, orderImport)).toEqual({
-      output: lines(
-        `import seedWorkingOrder from "./orders.js";`,
-        SEED,
-        `await seedVenue(db, { name: "V" });`,
-        `await db.insert(workingOrders).values({ locationId: L, orderNumber: 1 });`,
-      ),
-      edits: 1,
-      left: [{ line: 3, reason: collision("seedWorkingOrder") }],
-    });
-    const namespaced = orderImport.replace(
-      `import seedWorkingOrder from "./orders.js";`,
-      `import * as seedWorkingOrder from "./orders.js";`,
-    );
-    expect(transformSource(OUTSIDE, namespaced).left).toEqual([
-      { line: 3, reason: collision("seedWorkingOrder") },
-    ]);
   });
 });
 
-describe("review round 2", () => {
-  const NOT_VENUE = "location argument does not name the seeded venue: not dropped";
-  const EARLY = "LOC may be read before seedVenue assigns it";
-  const VENUE_IMPORT = `import { venueLocationId } from "@waitron/db";`;
-  /** A file seeding `LOC` in a top-level beforeAll, with `body` after the insert in that hook. */
-  const seeded = (...body) =>
-    lines(
-      `const LOC = "a";`,
-      `beforeAll(async () => {`,
-      `  await db.insert(locations).values({ id: LOC, name: "V" });`,
-      ...body.map((line) => `  ${line}`),
-      `});`,
-    );
-
+describe("which location arguments name the venue", () => {
   it("drops a location argument only when it names the venue row's id", () => {
     const input = lines(
       `import { locationId as brandLocationId, type LocationId } from "@waitron/shared";`,
@@ -1126,66 +1044,71 @@ describe("review round 2", () => {
       expect(result.output).toContain("seedNode(db, ");
     }
   });
+});
 
-  it("reports an order whose binding is read through a returning projection", () => {
-    const input = seeded(
-      `const [o] = await db.insert(workingOrders).values({ locationId: LOC, orderNumber: 1 }).returning({ orderId: workingOrders.id });`,
-      `use(o.orderId);`,
+describe("an id constant read before the seed assigns it", () => {
+  it("reports an id constant a sibling describe could read before the seed assigns it", () => {
+    const input = lines(
+      `const LOC = "a";`,
+      `describe("A", () => {`,
+      `  beforeEach(async () => {`,
+      `    await db.insert(locations).values({ id: LOC });`,
+      `  });`,
+      `});`,
+      `describe("B", () => {`,
+      `  it("reads", () => use(LOC));`,
+      `});`,
     );
     expect(transformSource(OUTSIDE, input)).toEqual({
-      output: lines(
-        SEED,
-        VENUE_IMPORT,
-        `let LOC: string;`,
-        `beforeAll(async () => {`,
-        `  await seedVenue(db, { name: "V" });`,
-        `  LOC = await venueLocationId(db);`,
-        `  const [o] = await db.insert(workingOrders).values({ locationId: LOC, orderNumber: 1 }).returning({ orderId: workingOrders.id });`,
-        `  use(o.orderId);`,
-        `});`,
-      ),
-      edits: 1,
-      left: [
-        {
-          line: 4,
-          reason: "order binding read through a returning(…) projection: not rewritten",
-        },
-      ],
+      output: input,
+      edits: 0,
+      left: [{ line: 4, reason: "LOC may be read before seedVenue assigns it" }],
     });
-    const unread = seeded(
-      `const [o] = await db.insert(workingOrders).values({ locationId: LOC, orderNumber: 1 }).returning({ orderId: workingOrders.id });`,
+    const inTest = lines(
+      `const LOC = "a";`,
+      `it("seeds", async () => {`,
+      `  await db.insert(locations).values({ id: LOC });`,
+      `  use(LOC);`,
+      `});`,
     );
-    expect(transformSource(OUTSIDE, unread).output).toContain(
-      `const o = await seedWorkingOrder(db, { orderNumber: 1 });`,
-    );
+    expect(transformSource(OUTSIDE, inTest).left).toEqual([
+      { line: 3, reason: "LOC may be read before seedVenue assigns it" },
+    ]);
   });
 
-  it("removes an id constant only when its initializer is a literal", () => {
-    const venue = (initializer) =>
+  it("reports an id constant a beforeAll reads while the seed runs in beforeEach", () => {
+    const input = lines(
+      `const LOC = "a";`,
+      `beforeAll(() => use(LOC));`,
+      `beforeEach(async () => {`,
+      `  await db.insert(locations).values({ id: LOC });`,
+      `});`,
+      `it("reads", () => use(LOC));`,
+    );
+    expect(transformSource(OUTSIDE, input)).toEqual({
+      output: input,
+      edits: 0,
+      left: [{ line: 4, reason: "LOC may be read before seedVenue assigns it" }],
+    });
+    const fine = lines(
+      `const LOC = "a";`,
+      `beforeEach(async () => {`,
+      `  await db.insert(locations).values({ id: LOC });`,
+      `});`,
+      `it("reads", () => use(LOC));`,
+    );
+    expect(transformSource(OUTSIDE, fine).output).toBe(
       lines(
-        `const LOC = ${initializer};`,
-        `beforeAll(async () => {`,
-        `  await db.insert(locations).values({ id: LOC, name: "V" });`,
+        SEED,
+        `import { venueLocationId } from "@waitron/db";`,
+        `let LOC: string;`,
+        `beforeEach(async () => {`,
+        `  await seedVenue(db);`,
+        `  LOC = await venueLocationId(db);`,
         `});`,
-      );
-    for (const initializer of [
-      `sideEffect()`,
-      `(events.push("x"), "a")`,
-      "`a${b}`",
-      `-1`,
-      `brandLocationId("a")`,
-    ]) {
-      expect(transformSource(OUTSIDE, venue(initializer))).toEqual({
-        output: venue(initializer),
-        edits: 0,
-        left: [{ line: 3, reason: "id constant's initializer is not a literal: not removed" }],
-      });
-    }
-    for (const initializer of [`"a"`, `7`, "`a`", `"a" as const`, `("a" satisfies string)`]) {
-      expect(transformSource(OUTSIDE, venue(initializer)).output).toBe(
-        lines(SEED, `beforeAll(async () => {`, `  await seedVenue(db, { name: "V" });`, `});`),
-      );
-    }
+        `it("reads", () => use(LOC));`,
+      ),
+    );
   });
 
   it("reports an id constant an earlier hook of the same kind reads", () => {
@@ -1275,50 +1198,226 @@ describe("review round 2", () => {
       ),
     );
   });
+});
 
-  it("declares a retained id without a type in a JavaScript file", () => {
-    const input = seeded().replace(`});\n`, `});\nit("x", () => use(LOC));\n`);
-    const check = (text) =>
-      spawnSync(process.execPath, ["--check", "--input-type=module"], { input: text }).status;
-    for (const path of ["apps/server/src/x.test.mjs", "a.test.js", "a.test.cjs"]) {
-      const output = transformSource(path, input).output;
-      expect(output).toContain(`let LOC;\n`);
-      expect(check(output)).toBe(0);
-    }
-    // The check discriminates: the TypeScript output fails it.
-    expect(check(transformSource(OUTSIDE, input).output)).not.toBe(0);
-  });
-
-  it("removes only the id constant's own statement from a line it shares", () => {
-    for (const [before, after] of [
-      [`const KEEP = 42; const LOC = "a";`, `const KEEP = 42;`],
-      [`const LOC = "a";   const KEEP = 42;`, `const KEEP = 42;`],
-      [`  const LOC = "a"; // the venue`, `  // the venue`],
-    ]) {
-      expect(
-        transformSource(
-          OUTSIDE,
-          lines(before, `await db.insert(locations).values({ id: LOC });`, `use(KEEP);`),
-        ).output,
-      ).toBe(lines(SEED, after, `await seedVenue(db);`, `use(KEEP);`));
-    }
-  });
-
-  it("applies no location rule to an upgrade test", () => {
-    const input = seeded(
-      `await seedNode(db, LOC);`,
-      `await db.insert(workingOrders).values({ locationId: LOC, orderNumber: 1 });`,
+describe("rule 5: imports", () => {
+  it("imports from relative paths inside packages/db, in the file's quote style", () => {
+    const input = lines(
+      `import { it } from 'vitest';`,
+      `const LOC = 'a';`,
+      `beforeAll(async () => {`,
+      `  await db.insert(locations).values({ id: LOC, name: 'V' });`,
+      `  use(LOC);`,
+      `});`,
     );
-    expect(transformSource("packages/db/src/schema-upgrade.test.ts", input)).toEqual({
-      output: input,
+    expect(transformSource("/repo/packages/db/src/x.test.ts", input).output).toBe(
+      lines(
+        `import { it } from 'vitest';`,
+        `import { seedVenue } from './testing/seed.js';`,
+        `import { venueLocationId } from './venue.js';`,
+        `let LOC: string;`,
+        `beforeAll(async () => {`,
+        `  await seedVenue(db, { name: 'V' });`,
+        `  LOC = await venueLocationId(db);`,
+        `  use(LOC);`,
+        `});`,
+      ),
+    );
+  });
+
+  it("adds to an existing @waitron/db import and removes emptied specifiers", () => {
+    const input = lines(
+      `import { locationId as brandLocationId, type LocationId } from "@waitron/shared";`,
+      `import { locations, readVenue } from "@waitron/db";`,
+      `import type { Unused } from "./unused.js";`,
+      `import { workingOrders, sales } from "./schema.js";`,
+      `import { aaa, zzz } from "@waitron/db/testing/seed.js";`,
+      `const LOC = "a" as LocationId;`,
+      `await db.insert(locations).values({ id: LOC });`,
+      `await seedNode(db, brandLocationId(LOC));`,
+      `await db.insert(workingOrders).values({ locationId: LOC, orderNumber: 1 });`,
+      `it("x", () => use(LOC, sales, readVenue));`,
+    );
+    expect(transformSource(OUTSIDE, input).output).toBe(
+      lines(
+        `import { readVenue, venueLocationId } from "@waitron/db";`,
+        `import type { Unused } from "./unused.js";`,
+        `import { sales } from "./schema.js";`,
+        `import { aaa, seedVenue, seedWorkingOrder, zzz } from "@waitron/db/testing/seed.js";`,
+        `let LOC: string;`,
+        `await seedVenue(db);`,
+        `LOC = await venueLocationId(db);`,
+        `await seedNode(db);`,
+        `await seedWorkingOrder(db, { orderNumber: 1 });`,
+        `it("x", () => use(LOC, sales, readVenue));`,
+      ),
+    );
+  });
+
+  it("removes brand helpers the rewrite left unused, and keeps an import already present", () => {
+    const input = lines(
+      `import { locationId as brandLocationId } from "@waitron/shared";`,
+      `import type { LocationId } from "@waitron/shared";`,
+      `import * as schema from "./schema.js";`,
+      `import "./side-effect.js";`,
+      `import { seedVenue } from "@waitron/db/testing/seed.js";`,
+      `const LOC = "a";`,
+      `await db.insert(locations).values({ id: LOC, name: "V" });`,
+      `await seedNode(db, brandLocationId(LOC) as LocationId);`,
+    );
+    expect(transformSource(OUTSIDE, input).output).toBe(
+      lines(
+        `import * as schema from "./schema.js";`,
+        `import "./side-effect.js";`,
+        SEED,
+        `await seedVenue(db, { name: "V" });`,
+        `await seedNode(db);`,
+      ),
+    );
+  });
+
+  it("adds no duplicate of a helper name the file already declares or imports from elsewhere", () => {
+    const collision = (name) =>
+      `${name} is already declared or imported from elsewhere: rule not applied`;
+    const venueHelper = lines(
+      `import { venueLocationId } from "./helpers.js";`,
+      `const LOC = "a";`,
+      `beforeAll(async () => {`,
+      `  await db.insert(locations).values({ id: LOC });`,
+      `});`,
+      `it("x", () => use(LOC));`,
+    );
+    expect(transformSource(OUTSIDE, venueHelper)).toEqual({
+      output: venueHelper,
       edits: 0,
-      left: [
-        {
-          line: 1,
-          reason:
-            "upgrade test: its database stops at an earlier migration, so no location rule applied",
-        },
-      ],
+      left: [{ line: 4, reason: collision("venueLocationId") }],
     });
+    const localVenueHelper = venueHelper.replace(
+      `import { venueLocationId } from "./helpers.js";`,
+      `function venueLocationId() {}`,
+    );
+    expect(transformSource(OUTSIDE, localVenueHelper).left).toEqual([
+      { line: 4, reason: collision("venueLocationId") },
+    ]);
+    const seedVenueImport = lines(
+      `import { seedVenue } from "./venue-helpers.js";`,
+      `const L = "a";`,
+      `await db.insert(locations).values({ id: L, name: "V" });`,
+      `await db.insert(workingOrders).values({ locationId: L, orderNumber: 1 });`,
+    );
+    expect(transformSource(OUTSIDE, seedVenueImport)).toEqual({
+      output: lines(
+        `import { seedVenue } from "./venue-helpers.js";`,
+        `import { seedWorkingOrder } from "@waitron/db/testing/seed.js";`,
+        `const L = "a";`,
+        `await db.insert(locations).values({ id: L, name: "V" });`,
+        `await seedWorkingOrder(db, { orderNumber: 1 });`,
+      ),
+      edits: 1,
+      left: [{ line: 3, reason: collision("seedVenue") }],
+    });
+    const orderImport = lines(
+      `import seedWorkingOrder from "./orders.js";`,
+      `await db.insert(locations).values({ name: "V" });`,
+      `await db.insert(workingOrders).values({ locationId: L, orderNumber: 1 });`,
+    );
+    expect(transformSource(OUTSIDE, orderImport)).toEqual({
+      output: lines(
+        `import seedWorkingOrder from "./orders.js";`,
+        SEED,
+        `await seedVenue(db, { name: "V" });`,
+        `await db.insert(workingOrders).values({ locationId: L, orderNumber: 1 });`,
+      ),
+      edits: 1,
+      left: [{ line: 3, reason: collision("seedWorkingOrder") }],
+    });
+    const namespaced = orderImport.replace(
+      `import seedWorkingOrder from "./orders.js";`,
+      `import * as seedWorkingOrder from "./orders.js";`,
+    );
+    expect(transformSource(OUTSIDE, namespaced).left).toEqual([
+      { line: 3, reason: collision("seedWorkingOrder") },
+    ]);
+  });
+});
+
+describe("main", () => {
+  let dir;
+  let out;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "a1301-codemod-"));
+    out = [];
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  const source = lines(
+    `await db.insert(locations).values({ name: "V" });`,
+    `await db.insert(nodes).values({});`,
+    `const SEED_SCRIPT = 1;`,
+  );
+
+  it("reports and writes nothing without --write", () => {
+    const file = join(dir, "a.test.mjs");
+    writeFileSync(file, source);
+    const before = readFileSync(file);
+    expect(main([file], { stdout: (line) => out.push(line) })).toBe(0);
+    expect(readFileSync(file).equals(before)).toBe(true);
+    expect(out).toEqual([`${file}:2: raw insert(nodes)`, `${file}: 1 edit`]);
+  });
+
+  it("writes the rewrite with --write, and never opens a fiscal pair file", () => {
+    const file = join(dir, "a.test.ts");
+    writeFileSync(file, source);
+    const fiscal = join(dir, "packages/fiscal-verifactu/src/inmutabilidad.test.ts");
+    expect(main(["--write", file, fiscal], { stdout: (line) => out.push(line) })).toBe(0);
+    expect(readFileSync(file, "utf8")).toBe(
+      lines(
+        SEED,
+        `await seedVenue(db, { name: "V" });`,
+        `await db.insert(nodes).values({});`,
+        `const SEED_SCRIPT = 1;`,
+      ),
+    );
+    expect(out).toEqual([
+      `${file}:2: raw insert(nodes)`,
+      `${file}: 1 edit`,
+      `${fiscal}:1: fiscal pair file: never rewritten`,
+      `${fiscal}: 0 edits`,
+    ]);
+  });
+
+  it("prints to the console by default", () => {
+    const file = join(dir, "b.test.ts");
+    writeFileSync(file, lines(`use(1);`));
+    expect(main([file])).toBe(0);
+  });
+
+  const USAGE = "usage: node scripts/a1301-seed-codemod.mjs [--write] <file…>";
+
+  it("prints its usage and returns 2 without a file, or with a flag other than --write", () => {
+    const file = join(dir, "a.test.ts");
+    writeFileSync(file, source);
+    for (const argv of [[], ["--write"], ["--wirte", file], [file, "--write", "--dry-run"]]) {
+      const err = [];
+      const io = { stdout: (line) => out.push(line), stderr: (line) => err.push(line) };
+      expect(main(argv, io)).toBe(2);
+      expect(err).toEqual([USAGE]);
+    }
+    expect(out).toEqual([]);
+    expect(readFileSync(file, "utf8")).toBe(source);
+  });
+
+  it("reports a file it cannot read and returns 2 before writing any file", () => {
+    const file = join(dir, "a.test.ts");
+    writeFileSync(file, source);
+    const missing = join(dir, "missing.test.ts");
+    const err = [];
+    const io = { stdout: (line) => out.push(line), stderr: (line) => err.push(line) };
+    expect(main(["--write", file, missing], io)).toBe(2);
+    expect(err).toEqual([
+      `a1301-seed-codemod: ENOENT: no such file or directory, open '${missing}'`,
+    ]);
+    expect(out).toEqual([]);
+    expect(readFileSync(file, "utf8")).toBe(source);
   });
 });

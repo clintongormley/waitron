@@ -127,12 +127,47 @@ function insertTable(node) {
   ) {
     return undefined;
   }
-  const [table] = node.arguments;
+  return tableName(node.arguments[0]);
+}
+
+/** The table `T` names when it is `name` or `schema.name`. */
+function tableName(table) {
   if (ts.isIdentifier(table)) return table.text;
   if (ts.isPropertyAccessExpression(table) && ts.isIdentifier(table.expression)) {
     return table.expression.text === "schema" ? table.name.text : undefined;
   }
   return undefined;
+}
+
+/**
+ * The keys of a `returning({ k: workingOrders.k, … })` projection whose every key is the column
+ * property it reads, so the whole row carries the same value under each; otherwise undefined.
+ */
+function columnNamedKeys(returning) {
+  const [projection] = returning.arguments;
+  if (returning.arguments.length !== 1 || !ts.isObjectLiteralExpression(projection))
+    return undefined;
+  const keys = new Set();
+  for (const property of projection.properties) {
+    if (!ts.isPropertyAssignment(property)) return undefined;
+    const key = keyOf(property);
+    const column = property.initializer;
+    const named =
+      ts.isPropertyAccessExpression(column) &&
+      tableName(column.expression) === "workingOrders" &&
+      column.name.text === key;
+    if (!named) return undefined;
+    keys.add(key);
+  }
+  return keys;
+}
+
+/** True when every reference is `B.k` or `B!.k` with `k` in `keys`. */
+function readsOnlyKeys(uses, keys) {
+  return uses.every((use) => {
+    const value = ts.isNonNullExpression(use.parent) ? use.parent : use;
+    return ts.isPropertyAccessExpression(value.parent) && keys.has(value.parent.name.text);
+  });
 }
 
 /** `R.insert(T).values(arg)`, optionally `.tail(…)`, under an `await`. */
@@ -204,21 +239,25 @@ function isReference(node) {
   return true;
 }
 
-function references(sourceFile, name) {
-  const found = [];
-  walk(sourceFile, (node) => {
-    if (ts.isIdentifier(node) && node.text === name && !insideImport(node) && isReference(node)) {
-      found.push(node);
-    }
-  });
-  return found;
-}
+/** Each parse's identifier references outside its imports, by name: built once per parse. */
+const referenceIndexes = new WeakMap();
 
-function insideImport(node) {
-  for (let current = node; current; current = current.parent) {
-    if (ts.isImportDeclaration(current)) return true;
+function references(sourceFile, name) {
+  let index = referenceIndexes.get(sourceFile);
+  if (!index) {
+    index = new Map();
+    const visit = (node) => {
+      if (ts.isImportDeclaration(node)) return;
+      if (ts.isIdentifier(node) && isReference(node)) {
+        if (!index.has(node.text)) index.set(node.text, []);
+        index.get(node.text).push(node);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sourceFile);
+    referenceIndexes.set(sourceFile, index);
   }
-  return false;
+  return index.get(name) ?? [];
 }
 
 /** True when `node` is assigned (also inside a destructuring target), stepped, or a loop variable. */
@@ -402,8 +441,12 @@ function moduleConst(sourceFile, name) {
   return undefined;
 }
 
+function covered(start, end, ranges) {
+  return ranges.some((range) => start >= range.start && end <= range.end);
+}
+
 function inside(node, ranges) {
-  return ranges.some((range) => node.getStart() >= range.start && node.end <= range.end);
+  return covered(node.getStart(), node.end, ranges);
 }
 
 function lineIndent(text, position) {
@@ -455,9 +498,11 @@ function namedImports(declaration) {
   return bindings && ts.isNamedImports(bindings) ? bindings : undefined;
 }
 
-/** Removes the import specifiers the rewrite left with no reference. */
-function removeEmptiedImports(original, text, file) {
-  const before = parse(file, original);
+/**
+ * Removes the import specifiers the rewrite left with no reference. `before` is the parse of the
+ * original text; returns the new text, and its parse when that is still current.
+ */
+function removeEmptiedImports(before, text, file) {
   const usedBefore = new Set();
   for (const statement of before.statements) {
     if (!ts.isImportDeclaration(statement)) continue;
@@ -468,7 +513,7 @@ function removeEmptiedImports(original, text, file) {
       }
     }
   }
-  const after = parse(file, text);
+  const after = text === before.text ? before : parse(file, text);
   const edits = [];
   for (const statement of after.statements) {
     const named = ts.isImportDeclaration(statement) ? namedImports(statement) : undefined;
@@ -488,12 +533,12 @@ function removeEmptiedImports(original, text, file) {
       });
     }
   }
-  return applyEdits(text, edits);
+  return edits.length === 0 ? { text, parsed: after } : { text: applyEdits(text, edits) };
 }
 
-/** Adds `names` (by module) to the file's imports, or as new import lines after the last one. */
-function addImports(text, file, wanted, quote) {
-  const sourceFile = parse(file, text);
+/** Adds `names` (by module) to the imports of `sourceFile`, or as new lines after the last one. */
+function addImports(sourceFile, wanted, quote) {
+  const text = sourceFile.text;
   const imports = sourceFile.statements.filter(ts.isImportDeclaration);
   const edits = [];
   const fresh = [];
@@ -541,6 +586,7 @@ export function transformSource(path, source) {
   const left = [];
   const edits = [];
   const removed = [];
+  const bangs = [];
   const needs = { seedVenue: false, seedWorkingOrder: false, venueLocationId: false };
   const report = (node, reason) =>
     left.push({ line: sourceFile.getLineAndCharacterOfPosition(node.getStart()).line + 1, reason });
@@ -723,12 +769,18 @@ export function transformSource(path, source) {
     if (collides("seedWorkingOrder", modules.seed)) {
       return report(insert, collision("seedWorkingOrder"));
     }
-    const projected = context.binding && chain.tailCall.arguments.length > 0;
-    if (projected && references(sourceFile, context.binding).length > 0) {
-      return report(insert, REASON.projection);
+    const uses = context.binding ? references(sourceFile, context.binding) : [];
+    if (context.binding && chain.tailCall.arguments.length > 0) {
+      const keys = columnNamedKeys(chain.tailCall);
+      if (uses.length > 0 && !(keys && readsOnlyKeys(uses, keys))) {
+        return report(insert, REASON.projection);
+      }
     }
     if (!namesVenue(propertyValue(location))) return report(insert, REASON.notVenue);
     removed.push({ start: location.getStart(), end: location.end });
+    for (const use of uses) {
+      if (ts.isNonNullExpression(use.parent)) bangs.push({ start: use.end, end: use.parent.end });
+    }
     const call = `await ${callText("seedWorkingOrder", insert, carriedObject(chain.arg, [location]))}`;
     edits.push({
       start: context.start,
@@ -859,12 +911,15 @@ export function transformSource(path, source) {
     }
   }
 
-  let output = removeEmptiedImports(source, applyEdits(source, edits), file);
+  // A `!` inside a span another edit replaces stays: that edit rewrites from the original text.
+  for (const bang of bangs) {
+    if (!covered(bang.start, bang.end, edits)) edits.push({ ...bang, text: "" });
+  }
+  const trimmed = removeEmptiedImports(sourceFile, applyEdits(source, edits), file);
   const firstImport = sourceFile.statements.find(ts.isImportDeclaration);
   const quote = firstImport?.moduleSpecifier.getText().startsWith("'") ? "'" : '"';
-  output = addImports(
-    output,
-    file,
+  const output = addImports(
+    trimmed.parsed ?? parse(file, trimmed.text),
     [
       [modules.seed, ["seedVenue", "seedWorkingOrder"].filter((name) => needs[name])],
       [modules.venue, needs.venueLocationId ? ["venueLocationId"] : []],
@@ -875,16 +930,29 @@ export function transformSource(path, source) {
   return { output, edits: count, left };
 }
 
-export function main(argv, { stdout = console.log } = {}) {
+export function main(argv, { stdout = console.log, stderr = console.error } = {}) {
   const write = argv.includes("--write");
-  for (const path of argv.filter((arg) => arg !== "--write")) {
-    const result = isFiscalPair(path.replaceAll("\\", "/"))
-      ? transformSource(path, "")
-      : transformSource(path, readFileSync(path, "utf8"));
+  const paths = argv.filter((arg) => arg !== "--write");
+  if (paths.length === 0 || paths.some((arg) => arg.startsWith("--"))) {
+    stderr("usage: node scripts/a1301-seed-codemod.mjs [--write] <file…>");
+    return 2;
+  }
+  // Every file is read before any is written, so an unreadable one leaves the others untouched.
+  const sources = [];
+  try {
+    for (const path of paths) {
+      sources.push(isFiscalPair(path.replaceAll("\\", "/")) ? "" : readFileSync(path, "utf8"));
+    }
+  } catch (error) {
+    stderr(`a1301-seed-codemod: ${error.message}`);
+    return 2;
+  }
+  paths.forEach((path, index) => {
+    const result = transformSource(path, sources[index]);
     for (const entry of result.left) stdout(`${path}:${entry.line}: ${entry.reason}`);
     stdout(`${path}: ${result.edits} edit${result.edits === 1 ? "" : "s"}`);
     if (write && result.edits > 0) writeFileSync(path, result.output);
-  }
+  });
   return 0;
 }
 
