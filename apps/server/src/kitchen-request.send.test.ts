@@ -430,7 +430,29 @@ describe("A773 waiter request: send", () => {
     });
   });
 
-  it("every advance refuses or skips a requested item", async () => {
+  it("a later round stays held in a course whose dishes are all held", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      await setStationsWaitForPass(tx, true, [venue.stations.grill]);
+      const starters = await createCourse(tx, venue.cfg, { name: "Starters", displayOrder: 0 });
+      const mains = await createCourse(tx, venue.cfg, { name: "Mains", displayOrder: 1 });
+      await addTabRound(tx, venue.cfg, venue.party.tabId, [
+        { ...burgerLine(venue), courseId: starters.id },
+        { ...burgerLine(venue), courseId: mains.id },
+      ]);
+      const first = await items(tx, venue.party.tabId);
+      expect(first.map(kitchenPhase).sort()).toEqual(["held", "requested"]);
+      await addTabRound(tx, venue.cfg, venue.party.tabId, [
+        { ...burgerLine(venue), courseId: mains.id },
+      ]);
+      const [later] = (await items(tx, venue.party.tabId)).filter(
+        (row) => !first.some((earlier) => earlier.id === row.id),
+      );
+      expect(kitchenPhase(later!)).toBe("held");
+    });
+  });
+
+  it("advancing a ticket, an item or a group refuses or skips a requested item", async () => {
     const venue = await setupSplitExtrasVenue();
     const { item, groupId } = await withTransaction(db, async (tx) => {
       await submitGroups(tx, venue.cfg, venue.party.partyId, {

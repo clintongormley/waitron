@@ -2223,14 +2223,14 @@ export async function fireLines(
 
   const courseByLine = new Map(lines.map((line) => [line.id, line.courseId ?? null]));
 
-  // `anyFired` lets a later round join a course the waiter already initiated; `itemCount` includes prior rounds
+  // `anyInitiated` lets a later round join a course the waiter already initiated; `itemCount` includes prior rounds
   // when choosing the earliest course.
   const courseRows = await tx
     .select({
       id: kitchenCourses.id,
       displayOrder: kitchenCourses.displayOrder,
       // Arrives as the number 1 or 0, never a boolean: test its truthiness, never with `===`.
-      anyFired: sql<boolean>`max(${initiatedItem()} and not ${ticketItems.madeHere})`,
+      anyInitiated: sql<boolean>`max(${initiatedItem()} and not ${ticketItems.madeHere})`,
       itemCount: sql<number>`cast(count(${ticketItems.id}) as int)`,
     })
     .from(kitchenCourses)
@@ -2241,7 +2241,9 @@ export async function fireLines(
     .where(eq(kitchenCourses.locationId, cfg.locationId))
     .groupBy(kitchenCourses.id, kitchenCourses.displayOrder);
 
-  const firedCourseIds = new Set(courseRows.filter((row) => row.anyFired).map((row) => row.id));
+  const initiatedCourseIds = new Set(
+    courseRows.filter((row) => row.anyInitiated).map((row) => row.id),
+  );
 
   // The order's earliest course, over prior rounds and this batch. A line with no course never
   // enters the set.
@@ -2269,7 +2271,7 @@ export async function fireLines(
         line.release === true ||
         (line.hold !== true &&
           (courseId === null ||
-            firedCourseIds.has(courseId) ||
+            initiatedCourseIds.has(courseId) ||
             displayOrderByCourse.get(courseId) === earliestDisplayOrder));
       // A no-preparation line has no kitchen station or ticket item.
       if (maker?.kind === "no_preparation" && stationFor(line) === null) {
