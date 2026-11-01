@@ -2978,6 +2978,9 @@ go):
   be a full invoice, or to whom, until they open the Full invoice editor. Neither §3.5 nor D4/D8/D9
   names a new place. The screen case is deleted; the app case reads the data handed to the screen.
   Possible answers: show the choice under the foot's Full invoice button, or in the switcher's row.
+  _(2026-11-01: the owner chose the line under the foot's Full invoice button. The screen case is
+  restored at `till-table-order-screen.bill-payments.test.ts:196`, reading "Cliente SL · B12345674",
+  and the app check at `till-app-bill-payments.test.ts:575`.)_
 
 ### Task 11c review answers (2026-10-31, `a803-3-reviews/task-11c.md`)
 

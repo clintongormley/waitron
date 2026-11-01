@@ -8,7 +8,8 @@ saved choice lets the bill grow above the simplified-invoice limit. Paying the t
 issues the invoice; recording an unpaid departure also issues it, leaving the amount unpaid.
 
 **Full invoice** is in the bill's payment area below the order, and in the **⋮** menu under the
-bill's name; both open the same form for the bill on screen. Neither is offered once the bill is
+bill's name; both open the same form for the bill on screen. Once a customer is chosen, their name
+and identifier show under the payment area's **Full invoice**. Neither is offered once the bill is
 paid or an invoice has been issued for it. Turning a paid bill into a full invoice would correct an
 invoice already issued, and Waitron does not offer that correction yet.
 

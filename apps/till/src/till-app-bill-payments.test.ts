@@ -572,11 +572,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
       invoiceType: "F1",
       recipient,
     });
-    // Q5e: nothing on the table screen shows a saved recipient once the drawer goes; this reads
-    // the bill the app handed the screen instead.
-    expect(order.bills.find((bill) => bill.workingOrderId === "wo-4")?.recipient?.legalName).toBe(
-      "Ana García",
-    );
+    expect(text(order.shadowRoot!.querySelector("[data-invoice-choice]"))).toContain("Ana García");
   });
 
   it("reports a bill refresh failure after saving a full-invoice recipient", async () => {

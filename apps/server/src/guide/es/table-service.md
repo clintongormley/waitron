@@ -9,9 +9,10 @@ la cuenta se emite la factura; al registrar que se han ido sin pagar también se
 pendiente de pago.
 
 **Factura completa** está en la zona de cobro de la cuenta, debajo del pedido, y en el menú **⋮**,
-bajo el nombre de la cuenta; las dos abren el mismo formulario para la cuenta en pantalla. Ninguna
-aparece cuando la cuenta ya está pagada o ya se ha emitido su factura. Convertir una cuenta pagada en
-factura completa sería corregir una factura ya emitida, y Waitron todavía no ofrece esa corrección.
+bajo el nombre de la cuenta; las dos abren el mismo formulario para la cuenta en pantalla. Cuando
+ya has elegido un cliente, su nombre y su identificador aparecen debajo de **Factura completa**, en
+la zona de cobro. Ninguna aparece cuando la cuenta ya está pagada o ya se ha emitido su factura.
+Convertir una cuenta pagada en factura completa sería corregir una factura ya emitida, y Waitron todavía no ofrece esa corrección.
 
 El cobro de mostrador todavía no puede emitir una factura completa. Mantén el pedido del cliente
 en una cuenta de mesa y usa los pagos de esa cuenta. Tramitar un pedido de mostrador por sí solo

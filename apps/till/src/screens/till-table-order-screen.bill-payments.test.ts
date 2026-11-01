@@ -52,6 +52,17 @@ const untouched: PartyBill = {
 };
 const partlyPaid: PartyBill = { ...untouched, outstanding: "39.00", hasPayments: true };
 
+const chosen: PartyBill = {
+  ...partlyPaid,
+  invoiceType: "F1",
+  recipient: {
+    taxId: "B12345674",
+    legalName: "Cliente SL",
+    address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+    countryCode: "ES",
+  },
+};
+
 function line(over: Partial<TabLine>): TabLine {
   return {
     changesAfterSending: null,
@@ -182,6 +193,38 @@ describe("till-table-order-screen: the ways to pay part of a bill", () => {
     },
   );
 
+  it("shows a saved full-invoice customer under the foot's Full invoice button", async () => {
+    const el = await mountScreen({ bills: [chosen], billBalance: balance(), fullInvoices: true });
+
+    const line = el.shadowRoot!.querySelector("[data-bill-payments] [data-invoice-choice]");
+    expect(text(line)).toBe("Cliente SL · B12345674");
+    expect(
+      line!.previousElementSibling?.querySelector("[data-choose-bill-invoice]"),
+    ).not.toBeNull();
+  });
+
+  it("shows no customer under Full invoice for a bill with no saved full-invoice choice", async () => {
+    const el = await mountScreen({
+      bills: [partlyPaid],
+      billBalance: balance(),
+      fullInvoices: true,
+    });
+
+    expect(
+      el.shadowRoot!.querySelector("[data-choose-bill-invoice]:not([data-table-menu] *)"),
+    ).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-invoice-choice]")).toBeNull();
+  });
+
+  it("shows no customer once a bill is paid, where Full invoice is not offered", async () => {
+    const el = await mountScreen({
+      bills: [{ ...chosen, status: "settled", outstanding: "0.00", receiptAvailable: true }],
+      fullInvoices: true,
+    });
+
+    expect(el.shadowRoot!.querySelector("[data-invoice-choice]")).toBeNull();
+  });
+
   it("opens a contribution of what a partly paid bill still owes from the sentence saying to take the rest", async () => {
     const el = await mountScreen({ bills: [partlyPaid], billBalance: balance() });
     const asked = capture<BillPayDetail>(el, "bill-pay");
@@ -245,6 +288,18 @@ describe("till-table-order-screen: Pay on a handheld (A796 default 2)", () => {
     expect(el.shadowRoot!.querySelectorAll("[data-pay-sheet]")).toHaveLength(1);
     expect(el.shadowRoot!.querySelector("[data-pay-rest]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-open-bill-pay]")).toBeNull();
+  });
+
+  it("shows an open bill's saved full-invoice customer under the handheld's Full invoice button", async () => {
+    const el = await mountScreen({
+      handheld: true,
+      bills: [{ ...untouched, invoiceType: "F1", recipient: chosen.recipient }],
+      fullInvoices: true,
+    });
+
+    expect(text(el.shadowRoot!.querySelector("[data-invoice-choice]"))).toBe(
+      "Cliente SL · B12345674",
+    );
   });
 
   it("draws one Pay for a presented bill, which asks for the presented bill's sheet", async () => {

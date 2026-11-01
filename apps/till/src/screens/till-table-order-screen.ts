@@ -612,6 +612,12 @@ export class TillTableOrderScreen extends LitElement {
         margin-top: var(--wt-space-2);
       }
 
+      .bill-invoice {
+        margin: var(--wt-space-1) 0 0;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+
       .line-paid {
         display: block;
         font-size: var(--wt-font-size-sm);
@@ -4206,38 +4212,45 @@ export class TillTableOrderScreen extends LitElement {
     >`;
   }
 
-  /** For a bill still owing: Full invoice while full invoices are on and no sale is filed, and the
-   * receipt's language when several are offered. */
+  /** For a bill still owing: Full invoice while full invoices are on and no sale is filed, with the
+   * saved full-invoice customer under it, and the receipt's language when several are offered. */
   #billChoices(bill: PartyBill | undefined): TemplateResult | typeof nothing {
     if (bill === undefined || !owing(bill)) return nothing;
     const invoice = this.fullInvoices && bill.invoiceNumber === undefined;
     if (!invoice && this.receiptLanguages.length < 2) return nothing;
     const target = { workingOrderId: bill.workingOrderId, revision: bill.revision };
     return html`<div class="bill-choices">
+        ${
+          invoice
+            ? html`<wt-button
+                variant="secondary"
+                data-choose-bill-invoice
+                .disabled=${this.busy}
+                @click=${() => this.#dispatch("choose-bill-invoice", target)}
+                >${t("invoice.full")}</wt-button
+              >`
+            : nothing
+        }${
+          this.receiptLanguages.length < 2
+            ? nothing
+            : html`<wt-button
+                variant="secondary"
+                data-choose-bill-language
+                .disabled=${this.busy}
+                @click=${() => this.#dispatch("choose-bill-receipt-language", target)}
+                >${receiptLanguageLabel(
+                  shownReceiptLanguage(bill.receiptLanguage, this.receiptLanguages),
+                )}</wt-button
+              >`
+        }
+      </div>
       ${
-        invoice
-          ? html`<wt-button
-              variant="secondary"
-              data-choose-bill-invoice
-              .disabled=${this.busy}
-              @click=${() => this.#dispatch("choose-bill-invoice", target)}
-              >${t("invoice.full")}</wt-button
-            >`
+        invoice && bill.invoiceType === "F1" && bill.recipient !== null
+          ? html`<p class="bill-invoice" data-invoice-choice>
+              ${bill.recipient.legalName} · ${bill.recipient.taxId}
+            </p>`
           : nothing
-      }${
-        this.receiptLanguages.length < 2
-          ? nothing
-          : html`<wt-button
-              variant="secondary"
-              data-choose-bill-language
-              .disabled=${this.busy}
-              @click=${() => this.#dispatch("choose-bill-receipt-language", target)}
-              >${receiptLanguageLabel(
-                shownReceiptLanguage(bill.receiptLanguage, this.receiptLanguages),
-              )}</wt-button
-            >`
-      }
-    </div>`;
+      }`;
   }
 
   /** The balance read, when it is the bill on screen's. */

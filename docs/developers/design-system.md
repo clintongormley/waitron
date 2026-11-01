@@ -1091,9 +1091,10 @@ Tab button and no side drawer.
   1024×768 and at 390×844); this bill's total; "Still to pay at this table" with the party's
   outstanding, only with a party; then the pay section. For an open owing bill on a wide screen the
   pay section holds exactly `till-tender-pay`'s Cash and Card (no Park and no Full invoice of its
-  own), the bill's Full invoice, its receipt language when two or more are offered, and Pay items,
-  Contribute and Split equally. A part-paid bill shows what it still owes, Pay the rest, the bill's
-  choices and the pay ways. A handheld shows one Pay and the bill's choices. Comp the bill is never
+  own), the bill's Full invoice (with a saved full-invoice customer's name and identifier in a
+  small muted line under the bill's choices), its receipt language when two or more are offered,
+  and Pay items, Contribute and Split equally. A part-paid bill shows what it still owes, Pay the
+  rest, the bill's choices and the pay ways. A handheld shows one Pay and the bill's choices. Comp the bill is never
   in the foot.
 
 Guards: `apps/till/src/screens/till-table-order-screen.bill-switcher.test.ts`,
