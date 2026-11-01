@@ -97,6 +97,14 @@ it("serves the cold recovery URL and authenticates its enabled module route at r
   });
   expect(cold.status).toBe(200);
   expect(await cold.text()).toBe("<html><body>recovery-dashboard-entry</body></html>");
+  await expect(
+    fetch(`http://127.0.0.1:${port}/api/module-recovery/fiscal-verifactu/conflict`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+      signal: AbortSignal.timeout(2000),
+    }),
+  ).rejects.toBeInstanceOf(TypeError);
   const inspect = (recoveryKey: string) =>
     fetch(`${origin}/api/module-recovery/fiscal-verifactu/conflict`, {
       ...via,

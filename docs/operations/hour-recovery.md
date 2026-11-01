@@ -21,6 +21,13 @@ as recovery. Keep the page open during its countdown. Its automatic checks run n
 every five seconds; when the wait ends, compare clocks again. Review the selected identity and
 choose **Switch identity** explicitly. No countdown or background task activates it for you.
 
+The request limit is shared by everyone using this box's recovery route: 60 admitted requests
+per fixed one-minute window, with at most two requests running. The recovery key does not bypass
+that limit. Invalid TLS, origin or site checks are refused before this budget is used. Other devices can keep recovery unavailable by sending accepted HTTPS requests or holding their
+bodies open. Close other recovery pages and stop those requests, or isolate untrusted devices on the
+venue network, before retrying. **Stop** ends this page's work; it does not clear the box's shared
+request budget. This limit bounds admitted work, not availability under hostile network traffic.
+
 The switch uses the live database. It keeps your orders, payments and issued records, retires the
 old identity and series from further issuance, and starts the new series at one. It leaves the
 original rejected record rejected and its filing case open. It neither restores a backup nor fixes

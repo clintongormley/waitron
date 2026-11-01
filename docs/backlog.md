@@ -374,6 +374,15 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   distinguishing case. Preserve both guards while adding that qualification.
   [Detail](backlog/fiscal.md#pin-the-early-recovery-source-refusal).
 
+- **Pin key rotation between the live recovery preparation reads.** Keep the existing commit-time
+  check and add a case that specifically fails when an earlier preparation recheck is deleted.
+  [Detail](backlog/fiscal.md#pin-key-rotation-between-recovery-preparation-reads).
+
+- **Reconcile the protected fiscal write-path test's old policy quotation.** Its header still says
+  no fiscal condition blocks a sale; the approved local conflict stop is an exception. Keep its
+  behavioral assertions and protected-file scope intact.
+  [Detail](backlog/fiscal.md#protected-write-path-test-policy-quotation).
+
 - **W41s. Fiscal prevention and offline recovery** — corrective-record resolution, filing
   investigation, outside evidence and fencing for the remaining tasks, and the complete
   old-backup/new-hardware exercise remain queued.

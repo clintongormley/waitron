@@ -9,6 +9,10 @@ export const CONFLICT_RECOVERY_STRINGS = {
     "conflict_recovery.key_refused":
       "The recovery key was refused. Enter the current key and try again.",
     "conflict_recovery.failed": "The request could not be completed. Try again or choose Stop.",
+    "conflict_recovery.connection_refused":
+      "Recovery needs a direct secure connection to this box. Open this box's HTTPS recovery address directly in your browser, then try again or choose Stop.",
+    "conflict_recovery.not_primary":
+      "This box cannot write invoices in its current role. Choose Stop, then open recovery on the main box your tills use.",
     "conflict_recovery.no_conflict": "This box has no active invoice identity conflict.",
     "conflict_recovery.explanation":
       "New invoices are stopped because this box's invoice identity conflicts with a filing response. A copied box, an old box still issuing invoices or another invoicing product may be using the same identity.",
@@ -50,6 +54,10 @@ export const CONFLICT_RECOVERY_STRINGS = {
       "La clave de recuperación se ha rechazado. Introduce la clave actual e inténtalo de nuevo.",
     "conflict_recovery.failed":
       "No se ha podido completar la solicitud. Inténtalo de nuevo o elige Detener.",
+    "conflict_recovery.connection_refused":
+      "La recuperación necesita una conexión segura directa con este equipo. Abre su dirección HTTPS de recuperación directamente en el navegador y vuelve a intentarlo, o elige Detener.",
+    "conflict_recovery.not_primary":
+      "Este equipo no puede emitir facturas con su función actual. Elige Detener y abre la recuperación en el equipo principal que usan tus terminales.",
     "conflict_recovery.no_conflict":
       "Esta caja no tiene ningún conflicto activo de identidad de facturación.",
     "conflict_recovery.explanation":

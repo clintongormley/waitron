@@ -688,6 +688,53 @@ describe("active fiscal conflict stops new money", () => {
     );
   }
 
+  for (const flow of ["prepay", "ticket_then_pay"] as const) {
+    it.each(["fiscal.huella_divergente", "fiscal.duplicado_anulado"] as const)(
+      `refuses a parked connected-card order before collection in ${flow} after %s`,
+      async (cause) => {
+        const { cfg, cafe } = await setupVenue(flow);
+        await originalSale(cfg, cafe);
+        const id = randomUUID();
+        await parkOrder({ db: suite.db }, cfg, {
+          id,
+          zoneId: cafe.zoneId,
+          lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        });
+        await seedConflict(cfg, cause);
+        const series = await suite.db.select().from(invoiceSeries);
+        const records = await suite.db.execute(sql`select * from registros_facturacion`);
+        const jobs = await suite.db.select().from(printJobs);
+        const provider = new FakePaymentProvider(suite.db);
+        const refusal = await payWorkingOrderIntegrated(
+          { db: suite.db, backend, clock, provider, sayCardChargedNotRecorded: true },
+          cfg,
+          { id, lines: [] },
+        ).then(
+          () => null,
+          (error: unknown) => error,
+        );
+        expect({
+          refusal,
+          collections: provider.collectCalls.length,
+          payments: await paymentCount(id),
+        }).toMatchObject({
+          refusal: {
+            code: "sif.allocation_invalid",
+            params: { reason: "conflict_requires_administrator" },
+          },
+          collections: 0,
+          payments: 0,
+        });
+        expect(await saleCount(id)).toBe(0);
+        expect(await orderState(id)).toEqual({ status: "open", settledAtSet: false });
+        expect(await suite.db.select().from(invoiceSeries)).toEqual(series);
+        expect(await suite.db.execute(sql`select * from registros_facturacion`)).toEqual(records);
+        expect(await suite.db.select().from(printJobs)).toEqual(jobs);
+        expect(provider.refundCalls).toEqual([]);
+      },
+    );
+  }
+
   it("capture_finishes_after_conflict: keeps the charge unfiled and never charges the retry", async () => {
     const { cfg, cafe } = await setupVenue();
     await originalSale(cfg, cafe);

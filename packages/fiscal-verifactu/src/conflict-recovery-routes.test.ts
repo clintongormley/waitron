@@ -207,7 +207,7 @@ it("refuses transport before parsing or authenticating", async () => {
   expect(await response.json()).toMatchObject({ error: { code: "module.operation_invalid" } });
   expect(m.authenticated).not.toHaveBeenCalled();
 });
-it("admission refuses before transport, body parsing and authentication", async () => {
+it("admission refuses before body parsing and authentication on an accepted transport", async () => {
   const m = mount({
     admission: async () => {
       throw new AppError("module.operation_invalid", { module: "admission" });
@@ -215,7 +215,6 @@ it("admission refuses before transport, body parsing and authentication", async 
   });
   const response = await m.app.request(PATH, {
     method: "POST",
-    headers: { "x-test-refuse-transport": "yes" },
     body: "not json",
   });
   expect(await response.json()).toMatchObject({

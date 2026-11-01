@@ -2353,6 +2353,12 @@ and the CA certificate, and `node-entry.test.ts` fetches the recovery listener's
 
 ## Test provider HTTP refusals through the real client, as well as a throwing fake seat.
 
+The dashboard request primitive retains structured details as `{code, params, status}`; the till
+client flattens them. On 1 November 2026, W41s-7's new recovery-refusal checks initially threw flat
+`reason` fields and passed against matching UI code. Replaying HTTP envelopes through the real
+`createRequest` exposed three failures. The component now reads `params.reason`, and the checks
+exercise the HTTP parser. Read the client boundary before choosing a refusal fixture's shape.
+
 The SumUp unpair route's fake proved that a thrown error preserved the local reader, but the HTTP
 client silently accepted 401/403/409. The reader-deletion regressions now reject those responses
 and separately retain the already-absent 404 retry

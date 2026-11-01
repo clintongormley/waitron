@@ -217,6 +217,7 @@ export class ConflictRecovery extends LitElement {
       if (generation !== this.#generation) return;
       this.cancelWait();
       const code = codeOf(error);
+      const reason = (error as { params?: { reason?: unknown } } | null)?.params?.reason;
       if (code === "promotion.break_glass_invalid") {
         this.offline = false;
         this.noParallel = false;
@@ -224,11 +225,27 @@ export class ConflictRecovery extends LitElement {
         this.active = null;
         this.selection = null;
         this.refusal = this.t("conflict_recovery.key_refused");
+      } else if (code === "sif.allocation_invalid" && reason === "uncertain_prior_activation") {
+        this.selection = null;
+        this.uncertain = true;
+        this.refusal = this.t("conflict_recovery.uncertain");
+      } else if (
+        code === "sif.allocation_invalid" &&
+        (reason === "old_machine_active" || reason === "parallel_recovery")
+      ) {
+        this.offline = false;
+        this.noParallel = false;
+        this.selection = null;
+        this.refusal = this.t("conflict_recovery.confirm");
       } else
         this.refusal = this.t(
-          code === "recovery.rate_limited"
-            ? "conflict_recovery.limited"
-            : "conflict_recovery.failed",
+          code === "authorization.not_permitted"
+            ? "conflict_recovery.connection_refused"
+            : code === "node.read_only"
+              ? "conflict_recovery.not_primary"
+              : code === "recovery.rate_limited"
+                ? "conflict_recovery.limited"
+                : "conflict_recovery.failed",
         );
     } finally {
       if (generation === this.#generation) {

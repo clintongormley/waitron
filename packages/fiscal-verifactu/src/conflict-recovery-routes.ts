@@ -124,9 +124,9 @@ export function mountConflictRecovery(app: Hono, ctx: ModuleRouteContext, log: L
   );
   app.post("/api/module-recovery/fiscal-verifactu/conflict", (c) => {
     c.header("Cache-Control", "no-store");
-    return boundary(c, log, () =>
-      bridge.withAdmission(async () => {
-        bridge.requireHttps(c);
+    return boundary(c, log, () => {
+      bridge.requireHttps(c);
+      return bridge.withAdmission(async () => {
         const request = parseConflictRequest(await readJsonBody<unknown>(c));
         if (request === null)
           return c.json(
@@ -164,7 +164,7 @@ export function mountConflictRecovery(app: Hono, ctx: ModuleRouteContext, log: L
             return c.json({ error: { code: error.code, params: error.params } }, 401);
           throw error;
         }
-      }),
-    );
+      });
+    });
   });
 }

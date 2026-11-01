@@ -35,6 +35,9 @@ describe.each(["light", "dark"] as const)("conflict recovery accessibility %s", 
           "key-refused",
           "rate-limited",
           "clock-refused",
+          "not-primary",
+          "connection-refused",
+          "isolation-refused",
         ] as const) {
           sessionStorage.removeItem("vf-conflict-attempt");
           await mountThemed("<div></div>", theme);
@@ -45,6 +48,10 @@ describe.each(["light", "dark"] as const)("conflict recovery accessibility %s", 
             options?: import("@waitron/dashboard-kit").RequestOptions,
           ) => {
             const body = raw as ConflictRequest;
+            if (mode === "not-primary") throw { code: "node.read_only" };
+            if (mode === "connection-refused") throw { code: "authorization.not_permitted" };
+            if (mode === "isolation-refused" && body.command.kind === "prepare")
+              throw { code: "sif.allocation_invalid", params: { reason: "old_machine_active" } };
             if (mode === "key-refused") throw { code: "promotion.break_glass_invalid" };
             if (mode === "rate-limited") throw { code: "recovery.rate_limited" };
             if (body.command.kind === "status") {
@@ -103,7 +110,9 @@ describe.each(["light", "dark"] as const)("conflict recovery accessibility %s", 
             await (field as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
             await userEvent.fill(field.shadowRoot!.querySelector("input")!, "CURRENT_PRIVATE_KEY");
             await userEvent.click(q("inspect"));
-            if (!["key-refused", "rate-limited"].includes(mode))
+            if (
+              !["key-refused", "rate-limited", "not-primary", "connection-refused"].includes(mode)
+            )
               await vi.waitFor(() =>
                 expect(screen.shadowRoot!.querySelector("[data-conflict]")).not.toBeNull(),
               );
@@ -112,9 +121,15 @@ describe.each(["light", "dark"] as const)("conflict recovery accessibility %s", 
                 expect(screen.shadowRoot!.querySelector("wt-form-actions")!.error).not.toBe(""),
               );
             if (
-              ["waiting", "selected", "busy", "complete", "uncertain", "clock-refused"].includes(
-                mode,
-              )
+              [
+                "waiting",
+                "selected",
+                "busy",
+                "complete",
+                "uncertain",
+                "clock-refused",
+                "isolation-refused",
+              ].includes(mode)
             ) {
               for (const field of screen.shadowRoot!.querySelectorAll("wt-switch")) {
                 await field.updateComplete;
@@ -125,7 +140,7 @@ describe.each(["light", "dark"] as const)("conflict recovery accessibility %s", 
                 await vi.waitFor(() =>
                   expect(screen.shadowRoot!.querySelector("[data-wait]")).not.toBeNull(),
                 );
-              else if (mode === "clock-refused")
+              else if (mode === "clock-refused" || mode === "isolation-refused")
                 await vi.waitFor(() =>
                   expect(screen.shadowRoot!.querySelector("wt-form-actions")!.error).not.toBe(""),
                 );

@@ -271,6 +271,25 @@ it.each<Record<string, string>>([
   expect((await m.send({}, { headers, raw: "not-json" })).status).toBe(403);
   expect(m.parses).toBe(0);
 });
+it.each([
+  ["plaintext", { tls: false as const }],
+  ["foreign origin", { headers: { Origin: "https://elsewhere.test" } }],
+] as const)(
+  "a refused %s transport does not spend the shared request budget",
+  async (_name, options) => {
+    const m = mounted();
+    const hash = vi.spyOn(identity, "verifySecretAsync");
+    for (let i = 0; i < 60; i++) {
+      expect((await m.send(request(), options)).status).toBe(403);
+    }
+    expect(m.parses).toBe(0);
+    expect(hash).not.toHaveBeenCalled();
+    expect((await m.send(request())).status).toBe(200);
+    expect(m.parses).toBe(1);
+    expect(hash).toHaveBeenCalledTimes(1);
+  },
+);
+
 it("the real admission gate bounds wrong-key work before parsing, verifier reads and hashing", async () => {
   const m = mounted();
   const hashes = vi.spyOn(identity, "verifySecretAsync");

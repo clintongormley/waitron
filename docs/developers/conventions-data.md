@@ -3808,6 +3808,15 @@ and the internet are never on the sale path of whichever node is primary: record
 the outbox drains later; a card falls back to 4G, a standalone terminal or cash. Fiscal submission
 is an outbox, never inline.
 
+A definite invoice-identity conflict already retained in the local database is a separate stop on
+new issuance and new money. Its preflight reads local rows; it does not wait for an external filing
+request. The owner-approved [administrator procedure](../operations/hour-recovery.md#switch-a-running-box-after-an-invoice-identity-conflict)
+uses the current recovery key, the same minute/second-clock/history admission as restore, and an
+explicit switch through the existing activation writer. It starts new series and a chain without
+changing issued records or closing the original rejected case. Automatic switching is excluded.
+The local conflict, pre-capture and captured-payment paths run in the conflict issuance/recovery
+suites named in that procedure.
+
 What a till DOES need is the one node accepting sales. INTENDED: the on-site box when the internet
 is down, a promoted cloud when the box is dead (which needs the internet), box-down AND
 internet-down together being no failover — the MVP's accepted case. TODAY there is none of it: a

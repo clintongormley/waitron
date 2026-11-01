@@ -2,6 +2,7 @@ import { active, input, committed, prepared } from "../../test/conflict-browser-
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { render } from "lit";
 import {
+  createRequest,
   currentLocale,
   setLocale,
   type DashboardRequest,
@@ -513,4 +514,117 @@ it("reconciles a lost activation reply using the exact event and conflict withou
   expect(calls.at(-1)!.command).toEqual({ kind: "status" });
   expect(calls.at(-1)!.eventId).toBe(calls.at(-2)!.eventId);
   expect(calls.at(-1)!.conflict).toEqual(calls.at(-2)!.conflict);
+});
+
+it.each(["connection.failed", "promotion.break_glass_invalid"])(
+  "ignores a late %s failure after Stop and a new key inspection",
+  async (code) => {
+    let reject!: (error: unknown) => void;
+    const held = new Promise((_resolve, refuse) => {
+      reject = refuse;
+    });
+    let first = true;
+    const { screen } = await mount(async () => {
+      if (first) {
+        first = false;
+        return held;
+      }
+      return { kind: "status", active: [active], event: { kind: "none" } };
+    });
+    await key(screen, "old-key");
+    await click(screen, "inspect");
+    await click(screen, "stop");
+    await key(screen, "new-key");
+    await click(screen, "inspect");
+    await vi.waitFor(() =>
+      expect(screen.shadowRoot!.querySelector("[data-conflict]")).not.toBeNull(),
+    );
+    reject({ code });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await screen.updateComplete;
+    expect(
+      screen.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!.value,
+    ).toBe("new-key");
+    expect(screen.shadowRoot!.querySelector("[data-conflict]")).not.toBeNull();
+    expect(
+      (screen.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string })
+        .error,
+    ).toBe("");
+  },
+);
+
+function refusedHttp(code: string, reason?: string) {
+  return createRequest({
+    fetchImpl: async () =>
+      new Response(
+        JSON.stringify({ error: { code, params: reason === undefined ? {} : { reason } } }),
+        {
+          status: code === "authorization.not_permitted" ? 403 : 409,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+  });
+}
+
+it.each([
+  { code: "authorization.not_permitted", words: "HTTPS recovery address directly" },
+  { code: "node.read_only", words: "cannot write invoices" },
+  {
+    code: "sif.allocation_invalid",
+    reason: "old_machine_active",
+    words: "Confirm both isolation answers",
+  },
+  {
+    code: "sif.allocation_invalid",
+    reason: "parallel_recovery",
+    words: "Confirm both isolation answers",
+  },
+])("explains an actionable recovery refusal: $code/$reason", async ({ code, reason, words }) => {
+  const request = refusedHttp(code, reason);
+  const { screen } = await mount((body) =>
+    reason !== undefined && body.command.kind === "status"
+      ? Promise.resolve({ kind: "status", active: [active], event: { kind: "none" } })
+      : request("/api/module-recovery/fiscal-verifactu/conflict", "POST", body),
+  );
+  await key(screen, "current-key");
+  await click(screen, "inspect");
+  if (reason !== undefined) {
+    await vi.waitFor(() =>
+      expect(screen.shadowRoot!.querySelector("[data-conflict]")).not.toBeNull(),
+    );
+    await compare(screen);
+  }
+  await vi.waitFor(() =>
+    expect(
+      (screen.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string })
+        .error,
+    ).toContain(words),
+  );
+  expect(screen.shadowRoot!.querySelector("[data-action=stop]")).not.toBeNull();
+});
+
+it("reconciles an uncertain preparation before offering a new attempt", async () => {
+  const { screen, calls } = await mount(async (body) => {
+    if (body.command.kind === "prepare")
+      return refusedHttp("sif.allocation_invalid", "uncertain_prior_activation")(
+        "/api/module-recovery/fiscal-verifactu/conflict",
+        "POST",
+        body,
+      );
+    return { kind: "status", active: [active], event: { kind: "none" } };
+  });
+  await inspect(screen);
+  const eventId = calls[0]!.eventId;
+  await compare(screen);
+  await vi.waitFor(() =>
+    expect(screen.shadowRoot!.querySelector("[data-action=inspect]")).not.toBeNull(),
+  );
+  expect(screen.shadowRoot!.querySelector("[data-action=again]")).toBeNull();
+  await click(screen, "inspect");
+  await vi.waitFor(() =>
+    expect(screen.shadowRoot!.querySelector("[data-action=again]")).not.toBeNull(),
+  );
+  expect(calls.at(-1)!.eventId).toBe(eventId);
+  expect(calls.at(-1)!.command).toEqual({ kind: "status" });
+  expect(calls.filter((call) => call.command.kind === "activate")).toEqual([]);
 });
