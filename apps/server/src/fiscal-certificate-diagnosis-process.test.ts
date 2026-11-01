@@ -1,19 +1,34 @@
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { build } from "esbuild";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCertificateDiagnosisRunner } from "./fiscal-certificate-diagnosis-runner.js";
 import { certificateDiagnosisRuntime } from "./fiscal-certificate-diagnosis-runtime.js";
 
 const lifetime = vi.hoisted(() => ({
   events: [] as Record<string, unknown>[],
+  cachePreload: "",
+  cacheRoot: "",
 }));
 vi.mock("node:child_process", async (importOriginal) => {
   const real = await importOriginal<typeof import("node:child_process")>();
   return {
     ...real,
     spawn: (...args: Parameters<typeof real.spawn>) => {
-      const child = real.spawn(...args);
+      const [command, argv, options] = args;
+      const child = real.spawn(
+        command,
+        [...(lifetime.cachePreload ? ["--import", lifetime.cachePreload] : []), ...argv],
+        {
+          ...options,
+          env: {
+            ...options?.env,
+            ...(lifetime.cacheRoot ? { TMPDIR: lifetime.cacheRoot } : {}),
+          },
+        },
+      );
       const record = (event: string, fields: Record<string, unknown> = {}) =>
         lifetime.events.push({ atMs: performance.now(), event, pid: child.pid, ...fields });
       record("spawn");
@@ -41,9 +56,31 @@ vi.mock("node:child_process", async (importOriginal) => {
 });
 
 let root: string;
+let fixtureRoot: string | undefined;
+let fixtureEntry: URL;
+beforeAll(async () => {
+  fixtureRoot = await mkdtemp(join(tmpdir(), "diagnosis-process-fixture-"));
+  fixtureEntry = pathToFileURL(join(fixtureRoot, "child.mjs"));
+  // Compile once so TypeScript cache housekeeping cannot consume a child's shutdown budget.
+  await build({
+    entryPoints: [
+      fileURLToPath(new URL("./testing/certificate-diagnosis-child.ts", import.meta.url)),
+    ],
+    outfile: fileURLToPath(fixtureEntry),
+    bundle: true,
+    platform: "node",
+    format: "esm",
+    target: "node26",
+  });
+});
+afterAll(async () => {
+  if (fixtureRoot !== undefined) await rm(fixtureRoot, { recursive: true, force: true });
+});
 const runners: ReturnType<typeof createCertificateDiagnosisRunner>[] = [];
 beforeEach(async () => {
   lifetime.events.length = 0;
+  lifetime.cachePreload = "";
+  lifetime.cacheRoot = "";
   root = await mkdtemp(join(tmpdir(), "diagnosis-process-"));
 });
 afterEach(async ({ task }) => {
@@ -66,8 +103,8 @@ afterEach(async ({ task }) => {
 function runner(workMs = 5_000, cleanupMs = 200, monotonicNow?: () => number) {
   const value = createCertificateDiagnosisRunner({
     fiscalId: "fixture",
-    entry: new URL("./testing/certificate-diagnosis-child.ts", import.meta.url),
-    execArgv: ["--import", import.meta.resolve("tsx")],
+    entry: fixtureEntry,
+    execArgv: [],
     workMs,
     cleanupMs,
     monotonicNow,
@@ -103,6 +140,37 @@ describe("owned certificate child lifetime", () => {
       }, signal()),
     ).resolves.toEqual({ result: { outcome: "completed", value: { value: "selected" } } });
     await expect(value.attempt(async () => "next", signal())).resolves.toBe("next");
+  });
+
+  it("keeps TypeScript cache housekeeping outside the child cleanup bound", async () => {
+    const cacheRoot = await mkdtemp(join(tmpdir(), "diagnosis-transform-cache-"));
+    lifetime.cacheRoot = cacheRoot;
+    lifetime.cachePreload =
+      "data:text/javascript," +
+      encodeURIComponent(`
+        import { promises } from "node:fs";
+        const opendir = promises.opendir;
+        promises.opendir = async (...args) => {
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          return opendir(...args);
+        };
+      `);
+    const value = runner();
+    const marker = join(root, "cache-control");
+    try {
+      await expect(
+        value.attempt(
+          async (runChild, abort) => ({
+            result: await runChild({ mode: "normal", marker, value: "selected" }, abort),
+          }),
+          signal(),
+        ),
+      ).resolves.toEqual({ result: { outcome: "completed", value: { value: "selected" } } });
+      gone((await records(marker))[0]!.pid);
+    } finally {
+      await value.stop();
+      await rm(cacheRoot, { recursive: true, force: true });
+    }
   });
 
   it.each(["block", "ignore-term", "body", "cleanup"])(
