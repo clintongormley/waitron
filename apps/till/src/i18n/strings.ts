@@ -1816,7 +1816,7 @@ export const en = {
   "box_time.agrees":
     "The box's clock says {box}, and this device agrees. If that is the right time, confirm it: payments start again. Every manager is told it was you.",
   "box_time.not_now": "Not now",
-  "box_time.use_till": "Use this device's time",
+  "box_time.use_till": "Use this time",
   "box_time.time_right": "The time is right",
   "box_time.set_to": "The box's clock is set to {after}.",
   "box_time.confirmed": "The box's time is confirmed.",

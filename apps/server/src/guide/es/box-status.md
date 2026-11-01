@@ -180,14 +180,15 @@ Mientras el equipo está en marcha, una parada así es también un aviso en la c
 [correo](box-status.md#emails) a todas las personas que pueden gestionar el sistema, también a los
 administradores. La campana te envía a esta página. El correo dice que un administrador puede
 poner la hora desde su propio móvil u ordenador en esta página, y cuándo puede hacerlo cualquier
-empleado desde una caja ([justo después de un arranque](box-status.md#clock-at-start)).
+empleado desde una caja (durante el [arranque](box-status.md#clock-at-start)).
 
 Hay tres salidas:
 
 - **Poner la hora bien.** En un equipo que se pone en hora por internet, conectarlo a internet le
   permite corregir la hora por sí solo. Si no, un equipo que envía registros a Hacienda pone su
   reloj con la hora de Hacienda por sí solo cuando puede conectar con ella, un administrador puede ponerlo desde su propio móvil u
-  ordenador, y justo después de un arranque un empleado puede ponerlo desde una caja, como explican
+  ordenador, y durante el arranque, si el equipo no puede obtener la hora de Hacienda, un empleado
+  puede ponerlo desde una caja, como explican
   los párrafos siguientes. Esto termina la parada salvo que la última venta lleve una hora
   equivocada, posterior a la real.
 - **Confirmar la hora del equipo**, cuando la hora del equipo es correcta y fue la última venta la
@@ -364,7 +365,7 @@ con la fecha que marca el reloj del equipo. Entonces nada puede confirmar la hor
 puede pedir la hora a Hacienda, porque con una fecha tan temprana no puede comprobar su certificado.
 La salida es poner la hora bien: en un equipo que se pone en hora por internet, conectándolo a
 internet; si no, un administrador la pone con **Comprobar con la hora de este dispositivo** o,
-justo después de un arranque, un empleado desde una caja.
+durante el [arranque](box-status.md#clock-at-start), un empleado desde una caja.
 
 Cada vez que el equipo pone su reloj en hora, sea quien sea o lo que sea que lo puso, la campana
 tiene un aviso que lo dice, con la hora de antes y la de después y cuánto se movió el reloj, por

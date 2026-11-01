@@ -1161,8 +1161,9 @@ EDITED to pass and is not on this list is a STOP, unless the spec changes what i
    run 2026-10-31, printed this file and `recovery-surface.test.ts`, whose lines are about a
    different page and are not touched.) *(Task 17a.)* The same case's expected text changes again:
    "if the box has just started" and "except just after a start" become "if the box started with
-   payments stopped and the tax agency does not answer" and "except when the box started with
-   payments stopped: then two tills are not enough", because the till is offered only while a stop
+   payments stopped and the tax agency does not answer (or the box does not send it records)" and
+   "except when the box started with payments stopped: then two tills are not enough, and, in the
+   same case, a staff member confirms it", because the till is offered only while a stop
    found at start-up lasts and, for this stop, once the tax agency has not answered or cannot be
    asked (`apps/server/src/clock-start-up.ts`, `tillMayOffer` and `admit`).
 
@@ -3578,16 +3579,21 @@ Added after Task 17's LOOK (shots in `~/waitron-campaign-b/a798-9b-shots/`). Bui
 
 1. The till's `host_unavailable` refusal ended "If this device's time agrees with the box's, you
    can still confirm it", with only Close offered. The till meets `host_unavailable` only when its
-   time differs from the box's: an agreeing time is confirmed without asking the host
+   time differs from the box's by the box's measure (the till's own 60-second test allows nothing
+   for the round trip, so a till 59.9 s off may still be asked "The time is right" and meet it):
+   an agreeing time is confirmed without asking the host
    (`apps/server/src/till-box-clock-api.ts`, the `CLOCK_WITNESS_MARGIN_MS` branch). The sentence
    goes, in English and Spanish.
 2. The dashboard's set refused `same_machine` kept "Use this time". `same_machine` joins
-   `SET_ENDS_THE_QUESTION`, and a fresh challenge refused `same_machine` or `not_stopped` during a
-   set ends the question too (`CHECK_ENDS_THE_QUESTION`).
+   `SET_ENDS_THE_QUESTION`, and a fresh challenge refused `same_machine` during a set ends the
+   question too (`CHECK_ENDS_THE_QUESTION`; the challenge route refuses nothing else,
+   `apps/server/src/box-health-api.ts`, `/api/box/clock-challenge`).
 3. At 390 wide in Spanish the till's "Ahora no" wrapped to two lines, squeezed by "Usar la hora de
    este dispositivo": `wt-form-actions` keeps its cancel button out of the wrapping group. The
-   Spanish button becomes "Usar esta hora", the dashboard's words for the same act after the same
-   question; the guide quotes it. A browser case checks each button's label is one line at 390, in
+   button becomes "Use this time" / "Usar esta hora", the dashboard's words for the same act after
+   the same question; the guides quote it. English changes too (per-task review I1): at 390 its old
+   label left 21 px, about 10% of the labels' width, and CI draws the till's text about 10% wider
+   (`docs/backlog.md`, run 39069802267); with the buttons set in Verdana the English case wrapped. A browser case checks each button's label is one line at 390, in
    both languages, for both questions.
 4. The dashboard's Spanish `witnessed` refusal said "Agencia Tributaria"; every other clock
    sentence says "Hacienda". A case holds every Spanish `box_status.clock*` sentence to that.
@@ -3601,7 +3607,9 @@ Added after Task 17's LOOK (shots in `~/waitron-campaign-b/a798-9b-shots/`). Bui
 7. The `clock.unusable` and `clock.behind_chain` emails said a staff member can act from a till
    "if the box has just started". They now say "if the box started with its clock wrong" and, for
    the stop behind the last sale, "if the box started with payments stopped and the tax agency does
-   not answer" (changed test check 9). The guides' paraphrases follow. Not changed:
+   not answer (or the box does not send it records)" (changed test check 9; `tillMayOffer` also
+   offers a till when the box cannot ask). The guides' paraphrases say "during start-up", the
+   term their own section defines. Not changed:
    `clock.behind_chain`'s inline bullets, which main already sends.
 
 Focused commands: `pnpm --filter @waitron/till exec vitest run src/widgets/box-time-dialog.test.ts`,

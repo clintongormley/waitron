@@ -170,14 +170,15 @@ While the box is running, a stop like this is also an alert in the bell and an
 [email](box-status.md#emails) to everyone who can manage the system, administrators included. The
 bell sends you to this page. The email says that an administrator can set the clock from their own
 phone or computer on this page, and when any staff member can do it from a till instead
-([just after a start](box-status.md#clock-at-start)).
+(during [start-up](box-status.md#clock-at-start)).
 
 There are three ways out:
 
 - **Set the clock right.** On a box that keeps its clock in time over the internet, connecting it to
   the internet lets it correct the clock by itself. Otherwise a box that sends records to the tax
   agency sets its clock from the tax agency's time by itself when it can reach it, an administrator can set it from their
-  own phone or computer, and just after a start a staff member can set it from a till, as the
+  own phone or computer, and during start-up, if the box cannot get the tax agency's time, a staff
+  member can set it from a till, as the
   paragraphs below explain. This ends the stop unless the latest sale itself carries a wrong, later
   time.
 - **Confirm the box's clock**, when the box's clock is right and it was the latest sale that was
@@ -343,8 +344,8 @@ box's clock is wrong** instead, and the bell says so too, with the date the box'
 Nothing can confirm the clock then, and the box cannot ask the tax agency for its time, because
 with a date that early it cannot check the tax agency's certificate. The way out is to set the
 clock right: on a box kept in time over the internet, by connecting it to the internet; otherwise
-an administrator sets it with **Check with this device's time**, or, just after a start, a staff
-member from a till.
+an administrator sets it with **Check with this device's time**, or, during
+[start-up](box-status.md#clock-at-start), a staff member from a till.
 
 Each time the box sets its clock, whoever or whatever set it, the bell has an alert saying so, with
 the time before and after and how far the clock moved, for example **The box's clock was set from

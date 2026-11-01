@@ -76,7 +76,7 @@ what is sent, so if the till's time is wrong too, correct it in the till's own s
 check again.
 
 - When the two times are more than a minute apart, it asks **Use this device's time?** Press **Use
-  this device's time** to set the box's clock to the till's time; payments start again. Press **Not
+  this time** to set the box's clock to the till's time; payments start again. Press **Not
   now** to leave it.
 - When they agree, it asks you to confirm that the box's time is right. Press **The time is right**
   if it is; payments start again on the box's clock. Press **Not now** to leave it.

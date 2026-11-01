@@ -1445,10 +1445,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       }
     });
 
-    it.each([
-      ["same_machine", "box_status.clock.admin.refused.same_machine"],
-      ["not_stopped", "box_status.clock.admin.refused.not_stopped"],
-    ] as const)(
+    it.each([["same_machine", "box_status.clock.admin.refused.same_machine"]] as const)(
       "words a challenge refused as %s during a set as the check's own refusal, leaving Close",
       async (reason, key) => {
         deviceNow(DEVICE_AT);

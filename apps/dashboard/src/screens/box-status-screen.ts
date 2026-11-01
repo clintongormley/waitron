@@ -71,8 +71,8 @@ const SET_ENDS_THE_QUESTION: ReadonlySet<string> = new Set([
 ]);
 
 /** The check's own refusals, met by a set's fresh challenge, that a second press could only meet
- * again. */
-const CHECK_ENDS_THE_QUESTION: ReadonlySet<string> = new Set(["same_machine", "not_stopped"]);
+ * again; the challenge route refuses nothing else. */
+const CHECK_ENDS_THE_QUESTION: ReadonlySet<string> = new Set(["same_machine"]);
 
 /** LOCAL copy of `IDLE_TIMEOUT_MS` (`packages/identity/src/management-session.ts:13`): a step
  * past it either way ends the dashboard session that asked for it. */

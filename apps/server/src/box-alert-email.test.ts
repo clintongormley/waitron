@@ -96,10 +96,16 @@ describe("the clock stop emails' till offer", () => {
     },
   );
 
-  it("offers a till for a behind-the-last-sale stop only when the tax agency does not answer", () => {
+  it("offers a till for a behind-the-last-sale stop only when the tax agency cannot answer", () => {
     const { en, es } = BOX_EMAIL_WORDS["clock.behind_chain"];
-    expect(en.text.match(/the tax agency does not answer/g)).toHaveLength(2);
-    expect(es.text.match(/Hacienda no responde/g)).toHaveLength(2);
+    expect(en.text).toContain(
+      "the tax agency does not answer (or the box does not send it records), any staff member",
+    );
+    expect(en.text).toContain("and, in the same case, a staff member confirms it");
+    expect(es.text).toContain(
+      "Hacienda no responde (o el equipo no le envía registros), cualquier empleado",
+    );
+    expect(es.text).toContain("y, en ese mismo caso, un empleado la confirma");
   });
 });
 
