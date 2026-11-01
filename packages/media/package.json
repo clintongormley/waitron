@@ -25,12 +25,12 @@
     "@waitron/ui": "workspace:*",
     "@waitron/venue-service": "workspace:*",
     "drizzle-orm": "^0.45.4",
-    "hono": "^4.13.13",
+    "hono": "^4.13.14",
     "lit": "^3.2.0",
     "sharp": "^0.35.5"
   },
   "devDependencies": {
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "@vitest/browser-playwright": "^4.1.12",
     "@vitest/coverage-v8": "^4.1.12",
     "@waitron/migrations": "workspace:*",
