@@ -437,6 +437,14 @@ upgrade, allowing only the new null link, then checks update and delete refusals
 Correction payload persistence, administrator-only remedy operations, held-case
 resolution and the real AEAT second-correction proof remain part of Task 8 before publication.
 Disputed production remedies stay disabled pending Q35/Q37/Q38/Q40 or a case-specific owner decision.
+
+**1 November 2026, Task 8 receipt replay check.** The receipt lookup explicitly selects the
+original issued alta by its empty correction link. `record-version-receipt.test.ts` stores
+three versions with different issuer names, VAT and totals, then compares the replay with the
+original receipt under both ordinary and reversed unordered-query traversal. Before that
+filter, the reversed traversal returned the second correction's figures. This check covers
+receipt replay, not the remaining current-version filing and remedy decisions.
+
  Earlier
 Task 7 automatic-switch requirements below are historical; the 1 November decision supersedes them.
 

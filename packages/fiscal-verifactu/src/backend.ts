@@ -374,6 +374,7 @@ export class VerifactuBackend implements FiscalBackend {
       select *
       from registros_facturacion
       where sale_id = ${saleId} and tipo_registro = 'alta'
+        and corrects_registro_id is null
       limit 1
     `);
     const raw = rows[0];
