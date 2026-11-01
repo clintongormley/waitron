@@ -146,6 +146,23 @@ it("reads retained dormant state with exactly five keys", () => {
     readRetainedHourDormant([{ version: 1, entries: [], dormant: [state] }], reserveBinding),
   ).toEqual(state);
 });
+it.each([false, true])(
+  "refuses obsolete six-key dormant state with a valid entry present: %s",
+  (withValidEntry) => {
+    const state = {
+      kind: "hour-dormant",
+      version: 1,
+      binding: reserveBinding,
+      scope: { taxpayerNif: "89890001K", environment: "preproduction" },
+      bases,
+    };
+    const obsolete = { ...state, locationId: primary.locationId };
+    const dormant = withValidEntry ? [obsolete, state] : [obsolete];
+    expect(() =>
+      readRetainedHourDormant([{ version: 1, entries: [], dormant }], reserveBinding),
+    ).toThrow(expect.objectContaining({ code: "sif.allocation_invalid" }));
+  },
+);
 it("admits a dormant standby with complete configuration and no fiscal name or hour intent", async () => {
   const before = await rows();
   const reserved = await reserve();
