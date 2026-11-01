@@ -271,7 +271,7 @@ it("binds reserve to the primary actually read by the host", async () => {
     attempt("reserve", (tx, operation) =>
       lifecycle().reserve(
         tx,
-        { ...primary, nodeId: TENANT_B.nodeId, locationId: locationId(TENANT_B.locationId) },
+        { ...primary, nodeId: TENANT_B.nodeId, locationId: primary.locationId },
         standby,
         operation,
       ),

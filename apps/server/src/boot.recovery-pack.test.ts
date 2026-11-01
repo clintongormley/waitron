@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { eq, sql } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { invoiceSeries, locations, nodes, stampDeployment, withTransaction } from "@waitron/db";
+import { invoiceSeries, nodes, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { persons, startManagementSession } from "@waitron/identity";
@@ -40,7 +40,6 @@ const bases = [
 it("the actual trading listener downloads the named node key and signed register without bucket or subscription", async () => {
   await seedTenants(suite.db);
   await suite.db.delete(nodes).where(eq(nodes.id, TENANT_B.nodeId));
-  await suite.db.delete(locations).where(eq(locations.id, TENANT_B.locationId));
   await suite.db.update(nodes).set({ filingModule: "verifactu" }).where(eq(nodes.id, node.nodeId));
   await stampDeployment(suite.db, "preproduction");
   await seedFixtureSif(suite.db, {

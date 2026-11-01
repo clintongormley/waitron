@@ -29,9 +29,7 @@ it.each(["archive", "bucket"] as const)(
   "%s entry preserves old identities and first-drain payloads before the next saved-zone issue",
   async (kind) => {
     vi.setSystemTime(new Date("2026-10-15T12:00:00Z"));
-    // The shared fixture seeds a second venue row, which the daily close's clock read refuses.
-    await suite.db.delete(nodes).where(eq(nodes.locationId, TENANT_B.locationId));
-    await suite.db.delete(locations).where(eq(locations.id, TENANT_B.locationId));
+    await suite.db.delete(nodes).where(eq(nodes.id, TENANT_B.nodeId));
     await recoveryInvoices();
     const [standard] = await suite.db
       .select()

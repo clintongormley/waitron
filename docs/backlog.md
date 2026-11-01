@@ -6453,7 +6453,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   shapes and reports the rest, so F2–F5 can start. S5 landed (#2386): the default and extra menus
   and the receipt languages are read from the one venue (`readVenueInvoiceLocales` in `@waitron/db`
   reads the languages alone), the menu routes moved to `/management-api/venue/…`, and
-  `location.not_found` is gone. S9 landed (#2389): bookings and staffing read the venue; staffing's season,
+  `location.not_found` is gone. S3 removes the fiscal module's location checks,
+  reads the venue for certificates and recovery documents, removes the dormant state's location id,
+  and makes its shared fiscal fixtures reuse one venue. The contract's node location ids remain for
+  S18; the schema changes remain for S20–S28. S9 landed (#2389): bookings and staffing read the venue; staffing's season,
   day-plan and month reads still hand venue-service a `{ locationId }` scope, which S6 and S8 leave as
   an ignored `_cfg` and S18 removes, and its rota verbs keep theirs for the workforce roster calls S13
   changes. The working-time slices have their

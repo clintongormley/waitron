@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { locations, nodes, withTransaction } from "@waitron/db";
+import { nodes, withTransaction } from "@waitron/db";
 import { withNodeTransaction } from "@waitron/db";
 import { setRecoveryKeyTx } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -51,7 +51,6 @@ it("serves the cold recovery URL and authenticates its enabled module route at r
   });
   await withTransaction(suite.db, async (tx) => {
     await tx.delete(nodes).where(eq(nodes.id, TENANT_B.nodeId));
-    await tx.delete(locations).where(eq(locations.id, TENANT_B.locationId));
   });
   const key = "synthetic-boot-current-recovery-key";
   await withNodeTransaction(suite.node, (tx) =>

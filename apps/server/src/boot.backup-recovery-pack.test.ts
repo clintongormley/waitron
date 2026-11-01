@@ -6,7 +6,6 @@ import { expect, it } from "vitest";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import {
   invoiceSeries,
-  locations,
   nodes,
   setNodePublicKey,
   stampDeployment,
@@ -78,7 +77,6 @@ const BUCKET = {
 async function seedVenue(): Promise<void> {
   await seedTenants(suite.db);
   await suite.db.delete(nodes).where(eq(nodes.id, TENANT_B.nodeId));
-  await suite.db.delete(locations).where(eq(locations.id, TENANT_B.locationId));
   await suite.db.update(nodes).set({ filingModule: "verifactu" }).where(eq(nodes.id, node.nodeId));
   await stampDeployment(suite.db, "preproduction");
   await seedFixtureSif(suite.db, {

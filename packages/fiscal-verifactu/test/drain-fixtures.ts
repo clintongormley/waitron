@@ -363,7 +363,7 @@ export async function collideAtAeat(
 }
 
 /**
- * Adds a SECOND, independent chain — a new location and node with its own live SIF registration, so
+ * Adds a SECOND, independent chain — a new node with its own live SIF registration, so
  * its own `sif_id` — under an ALREADY-seeded venue, with one pending alta at `secuencia`.
  */
 export async function seedSecondChain(
@@ -371,14 +371,20 @@ export async function seedSecondChain(
   seeded: SeededDrain,
   secuencia: number,
 ): Promise<{ registroId: string; facturaKey: string }> {
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: "Sala B",
-      invoiceLocales: ["es"],
-      operationDescription: "Venta en establecimiento",
-    })
-    .returning({ id: locations.id });
+  const existing = await db.select({ id: locations.id }).from(locations).limit(2);
+  const location =
+    existing.length === 1
+      ? existing[0]!
+      : (
+          await db
+            .insert(locations)
+            .values({
+              name: "Sala B",
+              invoiceLocales: ["es"],
+              operationDescription: "Venta en establecimiento",
+            })
+            .returning({ id: locations.id })
+        )[0]!;
   const [node] = await db
     .insert(nodes)
     .values({ locationId: location!.id, name: "Node B" })
@@ -420,14 +426,20 @@ export async function seedIndependentChain(
   db: Database,
   params: { sifId: string; secuencia: number; entorno?: Entorno | null },
 ): Promise<{ registroId: string; facturaKey: string }> {
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: "Sala Z",
-      invoiceLocales: ["es"],
-      operationDescription: "Venta en establecimiento",
-    })
-    .returning({ id: locations.id });
+  const existing = await db.select({ id: locations.id }).from(locations).limit(2);
+  const location =
+    existing.length === 1
+      ? existing[0]!
+      : (
+          await db
+            .insert(locations)
+            .values({
+              name: "Sala Z",
+              invoiceLocales: ["es"],
+              operationDescription: "Venta en establecimiento",
+            })
+            .returning({ id: locations.id })
+        )[0]!;
   const [node] = await db
     .insert(nodes)
     .values({ locationId: location!.id, name: "Node Z" })
@@ -480,14 +492,20 @@ export async function seedPinnedChain(
     entorno?: Entorno;
   },
 ): Promise<{ chain: SeededDrain; registroIds: string[] }> {
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: `Sala ${params.sifId.slice(0, 4)}`,
-      invoiceLocales: ["es"],
-      operationDescription: "Venta en establecimiento",
-    })
-    .returning({ id: locations.id });
+  const existing = await db.select({ id: locations.id }).from(locations).limit(2);
+  const location =
+    existing.length === 1
+      ? existing[0]!
+      : (
+          await db
+            .insert(locations)
+            .values({
+              name: `Sala ${params.sifId.slice(0, 4)}`,
+              invoiceLocales: ["es"],
+              operationDescription: "Venta en establecimiento",
+            })
+            .returning({ id: locations.id })
+        )[0]!;
   const [node] = await db
     .insert(nodes)
     .values({ locationId: location!.id, name: `Node ${params.sifId.slice(0, 4)}` })
