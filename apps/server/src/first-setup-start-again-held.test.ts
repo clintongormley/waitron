@@ -104,7 +104,7 @@ function nodeHoldings(f: Pick<Held, "roots">) {
   }
 }
 
-it("in the held state, Start again deletes a node.db holding the node set's tables and the attempt's recovery-key check", async () => {
+it("in the held state, Start again deletes a node.db holding the node set's tables and the attempt's recovery-key check and signing key", async () => {
   const f = await heldSetup({ recovery: false });
   expect(nodeHoldings(f)).toEqual({
     __drizzle_migrations_node: 1,
@@ -112,7 +112,7 @@ it("in the held state, Start again deletes a node.db holding the node set's tabl
     node_mode: 0,
     node_primary_key: 0,
     node_recovery_key: 1,
-    node_signing_key: 0,
+    node_signing_key: 1,
   });
   const { ids, actions } = await withoutSignIn(f);
   await expect(actions.startAgainFirstSetup(ids)).resolves.toBeUndefined();

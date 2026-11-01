@@ -155,7 +155,7 @@ beforeEach(async () => {
 });
 async function promotionApp() {
   await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror");
-  await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, TARGET);
+  await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, TARGET);
   const holders = createDeploymentHolders("mirror", "secondary");
   const app = new Hono();
   mountPromoteApi(app, {
@@ -185,10 +185,11 @@ async function promotionApp() {
   return app;
 }
 async function bundleApp() {
-  await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, PRIMARY);
+  await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, PRIMARY);
   const app = new Hono();
   mountMirrorBundleApi(app, {
     appDb: suite.db,
+    node: suite.node,
     ring: RING,
     stateDir: stateDir!,
     relayUrl: "https://relay.test",

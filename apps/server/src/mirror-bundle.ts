@@ -9,6 +9,7 @@ import {
   readTenant,
   withTransaction,
   type Database,
+  type NodeDatabase,
 } from "@waitron/db";
 import {
   endorseKey,
@@ -66,6 +67,7 @@ export interface MirrorBundle {
 // `ring` unseals the primary's identity private key, which signs the standby's endorsement.
 export interface AssembleDeps {
   appDb: Database;
+  node: NodeDatabase;
   ring: KeyRing;
   stateDir: string;
   relayUrl: string;
@@ -174,7 +176,7 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
         return { modules: states, series };
       }),
     ),
-    readNodeIdentityKey(deps.appDb, deps.ring),
+    readNodeIdentityKey(deps.node, deps.ring, deps.designated.nodeId),
     readFile(caCertPath(deps.stateDir), "utf8"),
   ]);
 

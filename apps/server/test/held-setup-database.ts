@@ -135,10 +135,14 @@ export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSet
       recoverProvision: (request) => recoverProvisionedVenue(held.venue, request, host.modules),
       seedDemo: async () => {},
       establishIdentity: async (nodeId) => {
-        await establishNodeIdentity({ ownerDb: held.venue, ring }, nodeId);
+        await establishNodeIdentity({ ownerDb: held.venue, node: held.node, ring }, nodeId);
       },
       seedMembership: async (nodeId) => {
-        await seedTermZeroMembership({ db: held.venue, ring }, nodeId, "https://test.example");
+        await seedTermZeroMembership(
+          { db: held.venue, node: held.node, ring },
+          nodeId,
+          "https://test.example",
+        );
       },
       persistTrading: async (settings) => {
         if (options.tradingSettings === true)

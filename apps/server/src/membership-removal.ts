@@ -9,6 +9,7 @@ import {
   readNodeMembership,
   withTransaction,
   type Database,
+  type NodeDatabase,
   type Transaction,
 } from "@waitron/db";
 import {
@@ -169,6 +170,7 @@ export async function listServers(db: Database, selfNodeId: string): Promise<Ser
 
 export interface RemovalDeps {
   readonly db: Database;
+  readonly node: NodeDatabase;
   readonly ring: KeyRing;
   /** This node: the chart's signer, and the one that must be its serving primary. */
   readonly nodeId: string;
@@ -211,7 +213,7 @@ async function writeChartInRounds<T>(
     if (!next.write) return next.result;
 
     const document = await mintNextMembershipDocument(
-      { db: deps.db, ring: deps.ring },
+      { db: deps.db, node: deps.node, ring: deps.ring },
       {
         heldDocument: held,
         nodes: next.nodes,

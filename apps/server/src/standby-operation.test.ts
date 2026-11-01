@@ -94,6 +94,7 @@ function regime(
 function bundleDeps() {
   return {
     appDb: suite.db,
+    node: suite.node,
     ring: RING,
     stateDir: stateDir!,
     relayUrl: "https://relay.test",
@@ -193,7 +194,7 @@ it("does not promote or open series after the standby's outside source refuses",
 async function mirror(activate: StandbyProvisioning["activate"]) {
   await suite.db.insert(nodes).values({ id: TARGET, locationId: LOCATION, name: "Standby" });
   await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror");
-  await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, TARGET);
+  await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, TARGET);
   return {
     db: suite.db,
     node: suite.node,
@@ -223,7 +224,7 @@ async function activateSeries(tx: Transaction, node: ProvisionedNode) {
 
 describe("opaque authenticated standby carriers", () => {
   it("delivers the named standby and reserve authority to its module", async () => {
-    await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, PRIMARY);
+    await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, PRIMARY);
     let received: ModuleOperationInput | undefined;
     modules.push(
       regime(async (_tx, primary, standby, operation) => {
@@ -254,7 +255,7 @@ describe("opaque authenticated standby carriers", () => {
   it.each(["module", "action", "targetNodeId"] as const)(
     "rejects mismatched reserve %s before module writes",
     async (key) => {
-      await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, PRIMARY);
+      await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, PRIMARY);
       let entered = false;
       modules.push(
         regime(async () => {
@@ -338,7 +339,7 @@ describe("opaque authenticated standby carriers", () => {
   it("activates a dormant module before reading series and commits with the role change", async () => {
     await suite.db.insert(nodes).values({ id: TARGET, locationId: LOCATION, name: "Standby" });
     await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror");
-    await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, TARGET);
+    await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, TARGET);
     const scope = { ...binding, action: "promote" };
     const module = regime(
       async () => ({ state: {} }),
@@ -627,7 +628,7 @@ describe("opaque authenticated standby carriers", () => {
   });
 
   it("snapshots reserve input before waiting for a prior transaction", async () => {
-    await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, PRIMARY);
+    await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, PRIMARY);
     modules.push(
       regime(async (_tx, _primary, _standby, operation) => {
         expect(operation).toBeDefined();
@@ -665,7 +666,7 @@ describe("opaque authenticated standby carriers", () => {
   });
 
   it("rolls back a reservation write when authority expires during its await", async () => {
-    await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, PRIMARY);
+    await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, PRIMARY);
     let enter!: () => void;
     let release!: () => void;
     const entered = new Promise<void>((resolve) => {
@@ -801,7 +802,7 @@ describe("opaque authenticated standby carriers", () => {
 });
 
 it("collects the outside reservation before entering the bundle's write transaction", async () => {
-  await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, PRIMARY);
+  await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, PRIMARY);
   const module = regime(async (tx, _primary, _standby, operation) => {
     expect(operation?.input).toEqual({ prepared: "reservation" });
     expect((await tx.select().from(locations))[0]?.name).toBe("Source checked");
@@ -911,7 +912,7 @@ it("refuses a carrier that smuggles invoice series beside a module that opens th
 });
 
 it("refuses a reservation contribution that opens series before its declared activation", async () => {
-  await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, PRIMARY);
+  await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, PRIMARY);
   modules.push(
     fakeModule(binding.module, {
       provisioning: {
@@ -963,7 +964,7 @@ it.each(["reserve", "establish"])(
       targetNodeId: action === "reserve" ? TARGET : args.standby.nodeId,
     };
     if (action === "reserve")
-      await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, PRIMARY);
+      await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, PRIMARY);
     let enter!: () => void;
     let release!: () => void;
     const entered = new Promise<void>((resolve) => {

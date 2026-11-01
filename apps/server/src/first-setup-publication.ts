@@ -62,9 +62,10 @@ export async function withFirstSetupPublication<T>(
       node: opened.node,
       ring,
       recoverProvision: (request) => recoverProvisionedVenue(db, request, host.modules),
-      establishIdentity: (nodeId) => establishNodeIdentity({ ownerDb: db, ring }, nodeId),
+      establishIdentity: (nodeId) =>
+        establishNodeIdentity({ ownerDb: db, node: opened.node, ring }, nodeId),
       seedMembership: (nodeId) =>
-        seedTermZeroMembership({ db, ring }, nodeId, config.advertisedOrigin),
+        seedTermZeroMembership({ db, node: opened.node, ring }, nodeId, config.advertisedOrigin),
       persistTrading: async (settings) => {
         await writeTradingEnv(roots.stateDir, {
           ...settings,

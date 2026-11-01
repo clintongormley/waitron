@@ -130,7 +130,11 @@ async function fixture(realEntry = false, withoutBookings = false) {
         throw new Error("interrupted publication");
       },
       seedMembership: (nodeId) =>
-        seedTermZeroMembership({ db: suite.db, ring }, nodeId, "https://test.example"),
+        seedTermZeroMembership(
+          { db: suite.db, node: suite.node, ring },
+          nodeId,
+          "https://test.example",
+        ),
       persistTrading: async () => {
         publications++;
       },
@@ -155,7 +159,8 @@ async function fixture(realEntry = false, withoutBookings = false) {
           ...deps,
           provision: undefined,
           assertFiscalReady: undefined,
-          establishIdentity: (nodeId) => establishNodeIdentity({ ownerDb: suite.db, ring }, nodeId),
+          establishIdentity: (nodeId) =>
+            establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, nodeId),
         });
       },
       requestRestart: () => {

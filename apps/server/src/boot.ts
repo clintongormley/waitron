@@ -1470,9 +1470,10 @@ async function bootServer(
             req,
             hooks,
           ),
-        establishIdentity: (nodeId) => establishNodeIdentity({ ownerDb: db, ring }, nodeId),
+        establishIdentity: (nodeId) =>
+          establishNodeIdentity({ ownerDb: db, node: store.node, ring }, nodeId),
         seedMembership: (nodeId) =>
-          seedTermZeroMembership({ db, ring }, nodeId, config.advertisedOrigin),
+          seedTermZeroMembership({ db, node: store.node, ring }, nodeId, config.advertisedOrigin),
         // Handed to the fiscal contribution's `provisioningSecret.seal` seat, so boot imports no
         // regime package.
         db,
@@ -1653,6 +1654,7 @@ async function bootServer(
     : await runFirstStart({
         stateDir: config.stateDir,
         db,
+        node: store.node,
         ring,
         nodeId: config.node.nodeId,
         contactUrl: config.advertisedOrigin,
@@ -2414,6 +2416,7 @@ async function bootServer(
   // waiting for the bucket, so a bucket that never answers cannot hold boot or a sale.
   const streamHost = new StreamHost({
     db,
+    node: store.node,
     ring,
     nodeId: tradingContext.nodeId,
     venueDir: config.venueDir,
@@ -2707,10 +2710,14 @@ async function bootServer(
   );
 
   // Mounted on every node: `retireSelf`'s own guards refuse a serving node.
-  mountBoxRetireApi(app, { appDb: db, ring, nodeId: tradingContext.nodeId }, log);
+  mountBoxRetireApi(app, { appDb: db, node: store.node, ring, nodeId: tradingContext.nodeId }, log);
   // Mounted on every node: a mirror or fenced node's read-only gate refuses the removal, and a
   // node that is not the chart's serving primary refuses it itself.
-  mountMembershipRemovalApi(app, { db, ring, nodeId: tradingContext.nodeId }, log);
+  mountMembershipRemovalApi(
+    app,
+    { db, node: store.node, ring, nodeId: tradingContext.nodeId },
+    log,
+  );
 
   mountRecoveryBundleApi(app, { db, stateDir: config.stateDir, now }, log);
   const documentEvidence: RecoveryDocumentEvidence = (module) =>
@@ -2880,6 +2887,7 @@ async function bootServer(
       app,
       {
         appDb: db,
+        node: store.node,
         ring,
         stateDir: config.stateDir,
         // https: the mirror reaches the box's own certificate end-to-end through the tunnel.

@@ -17,14 +17,13 @@ import type { FirstFiscalHost } from "./setup-first-fiscal-api.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
 import type { FirstSetupOwnerAttempt } from "./first-setup-owner.js";
 import { parseEmailSettings } from "./email-settings-api.js";
-import { NODE_KEY_PURPOSE } from "./node-identity.js";
 import {
   isMembershipDocument,
   signBytes,
   verifyBytes,
   verifyMembershipDocument,
 } from "@waitron/membership";
-import { putCredential, tryGetCredential } from "@waitron/credentials";
+import { putCredential, readNodeSigningKey } from "@waitron/credentials";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import "./errors.js";
 
@@ -231,24 +230,23 @@ export async function publishCheckedFirstFiscal(
       publishIdentity: async (result, state) => {
         const identity = async () => ({
           trust: await readMembershipTrustSet(deps.db!),
-          credential: await withTransaction(deps.db!, (tx) =>
-            tryGetCredential(tx, deps.ring!, { purpose: NODE_KEY_PURPOSE }),
-          ),
+          privateKey: await readNodeSigningKey(deps.node!, deps.ring!, result.nodeId),
         });
         let own = await identity();
-        if (own.trust[result.nodeId] === undefined && own.credential === null) {
+        // Establishing reuses a key already sealed, so a run interrupted between the two saves
+        // finishes stamping it.
+        if (own.trust[result.nodeId] === undefined) {
           await deps.establishIdentity!(result.nodeId);
           own = await identity();
         }
         const publicKey = own.trust[result.nodeId];
-        if (publicKey === undefined || own.credential === null) conflict();
+        if (publicKey === undefined || own.privateKey === null) conflict();
         const challenge = JSON.stringify([
           "waitron.first-setup-node-check",
           state.frozen.attemptId,
           result.nodeId,
         ]);
-        if (!verifyBytes(challenge, signBytes(challenge, own.credential.privateKey!), publicKey))
-          conflict();
+        if (!verifyBytes(challenge, signBytes(challenge, own.privateKey), publicKey)) conflict();
         let membership = await readNodeMembershipRow(deps.db!);
         if (membership === null) {
           await deps.seedMembership!(result.nodeId);

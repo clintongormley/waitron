@@ -126,12 +126,15 @@ async function fixture(fault?: string) {
     recoverProvision: (req) => recoverProvisionedVenue(suite.db, req, host.modules),
     seedDemo: async () => {},
     establishIdentity: async (nodeId) => {
-      await establishNodeIdentity({ ownerDb: suite.db, ring: deps.ring! }, nodeId);
+      await establishNodeIdentity(
+        { ownerDb: suite.db, node: suite.node, ring: deps.ring! },
+        nodeId,
+      );
       crash("identity");
     },
     seedMembership: async (nodeId) => {
       await seedTermZeroMembership(
-        { db: suite.db, ring: deps.ring! },
+        { db: suite.db, node: suite.node, ring: deps.ring! },
         nodeId,
         "https://test.example",
       );

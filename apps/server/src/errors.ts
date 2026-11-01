@@ -141,6 +141,12 @@ declare module "@waitron/shared" {
     /** No node with this id. The id is a caller-supplied uuid, not a secret. */
     "node.not_found": { id: string };
     /**
+     * Establishing the box's identity found `nodes.public_key` naming a different key from the
+     * signing key this box holds in `node.db`. Only a fault in Waitron produces it, so screens
+     * show their generic text.
+     */
+    "node.identity_mismatch": Record<string, never>;
+    /**
      * A write reached a node running as a read-only MIRROR (node.db's
      * `node_mode.mode = 'mirror'`): the read-only gate (`read-only-gate.ts`) refuses every non-GET,
      * and the invoice customer search and download refuse their GETs too. Cleared by promotion,

@@ -8,6 +8,8 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, expect, it } from "vitest";
 import { openVenueDatabase, runMigrations, withNodeTransaction } from "@waitron/db";
 import { NODE_CLASSIFICATION, NODE_MIGRATIONS, setRecoveryKeyTx } from "@waitron/node-db";
+import { loadKeyRing, sealNodeSigningKeyTx } from "@waitron/credentials";
+import { generateNodeKeyPair } from "@waitron/membership";
 import {
   NODE_ROWS_A_FIRST_SETUP_WRITES,
   assertStartAgainAllowedOnDisk,
@@ -22,6 +24,7 @@ afterEach(async () => {
 });
 const ATTEMPT = { attemptId: randomUUID(), frozenDigest: "a".repeat(64) };
 const NODE_ID = randomUUID();
+const RING = loadKeyRing({ WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64") });
 const notReady = (reason: string) => ({ code: "setup.not_ready", params: {}, reason });
 const sha = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 
@@ -54,6 +57,17 @@ async function recoveryKeyRow(roots: { venueDir: string }, nodeId = NODE_ID) {
   try {
     await withNodeTransaction(store.node, (tx) =>
       setRecoveryKeyTx(tx, nodeId, "scrypt$verifier", "Olive"),
+    );
+  } finally {
+    await store.close();
+  }
+}
+
+async function sealedSigningKey(roots: { venueDir: string }) {
+  const store = await openVenueDatabase(roots.venueDir);
+  try {
+    await withNodeTransaction(store.node, (tx) =>
+      sealNodeSigningKeyTx(tx, RING, NODE_ID, generateNodeKeyPair().privateKey),
     );
   } finally {
     await store.close();
@@ -100,6 +114,14 @@ async function files(dir: string) {
 it.each<[string, (roots: { venueDir: string }) => Promise<void>]>([
   ["only the node set's tables and its journal, as a setup-mode start leaves it", async () => {}],
   ["the attempt's recovery-key check", (roots) => recoveryKeyRow(roots)],
+  ["the attempt's signing key, sealed", (roots) => sealedSigningKey(roots)],
+  [
+    "the attempt's recovery-key check and signing key, as a first setup's publication leaves it",
+    async (roots) => {
+      await recoveryKeyRow(roots);
+      await sealedSigningKey(roots);
+    },
+  ],
 ])(
   "Start again accepts a node.db holding %s, names it in the marker and deletes it",
   async (_name, seed) => {
@@ -169,7 +191,16 @@ it.each<[string, string, string]>([
     `insert into node_recovery_key values ('${randomUUID()}', 'v', 'Other', '2026-10-31T00:00:00.000Z')`,
     "node.db holds another node's row: node_recovery_key",
   ],
-  ["a signing key", signingKeyRow(NODE_ID), "node.db holds a row: node_signing_key"],
+  [
+    "two signing keys",
+    `${signingKeyRow(NODE_ID)}, ('${randomUUID()}', x'00', zeroblob(12), zeroblob(16), 1, '2026-10-31T00:00:00.000Z')`,
+    "node.db holds a row: node_signing_key",
+  ],
+  [
+    "another node's signing key",
+    signingKeyRow(randomUUID()),
+    "node.db holds another node's row: node_signing_key",
+  ],
 ])(
   "Start again refuses a migrated node.db holding %s, and nothing changes",
   async (_name, sql, reason) => {

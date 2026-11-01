@@ -110,10 +110,14 @@ async function fixture(certificate?: { pfxBase64: string; passphrase: string; ce
         interrupt = false;
         throw new Error("synthetic after commit");
       }
-      await establishNodeIdentity({ ownerDb: suite.db, ring }, nodeId);
+      await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, nodeId);
     },
     seedMembership: (nodeId) =>
-      seedTermZeroMembership({ db: suite.db, ring }, nodeId, "https://test.example"),
+      seedTermZeroMembership(
+        { db: suite.db, node: suite.node, ring },
+        nodeId,
+        "https://test.example",
+      ),
     persistTrading: async () => {
       await publicationProbe?.();
       const verifier = await readRecoveryKeyVerifier(suite.node, staged.key.nodeId);

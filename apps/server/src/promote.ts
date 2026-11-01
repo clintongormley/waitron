@@ -123,7 +123,7 @@ export async function promoteLocalSecondaryToPrimary(
   const held = await readNodeMembership(deps.db);
   assertNotFenced(held, deps.nodeId);
   const document = await mintNextMembershipDocument(
-    { db: deps.db, ring: deps.ring },
+    { db: deps.db, node: deps.node, ring: deps.ring },
     {
       heldDocument: held,
       nodes: nextStandings(held?.body.nodes ?? [], deps.nodeId),
@@ -217,7 +217,7 @@ export async function promoteMirrorToPrimary(
   const held = await readNodeMembership(deps.db);
   assertNotFenced(held, deps.nodeId);
   const document = await mintNextMembershipDocument(
-    { db: deps.db, ring: deps.ring },
+    { db: deps.db, node: deps.node, ring: deps.ring },
     {
       heldDocument: held,
       nodes: nextStandings(held?.body.nodes ?? [], deps.nodeId),

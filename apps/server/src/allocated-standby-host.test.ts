@@ -142,7 +142,7 @@ beforeEach(async () => {
     );
     await db.insert(invoiceSeries).values(bases.map((base) => ({ ...base, nodeId: PRIMARY })));
   }
-  await establishNodeIdentity({ ownerDb: primary.db, ring: RING }, PRIMARY);
+  await establishNodeIdentity({ ownerDb: primary.db, node: primary.node, ring: RING }, PRIMARY);
 });
 function joinRequest(targetNodeId: string, action: string) {
   const binding = {
@@ -191,6 +191,7 @@ async function reserve(standby = generateStandbyIdentity()) {
   const bundle = await withOperationAuthority(held.binding, held.operatorId, (authority) =>
     assembleMirrorBundle({
       appDb: primary.db,
+      node: primary.node,
       ring: RING,
       stateDir: stateDir!,
       relayUrl: "https://relay.test",
@@ -454,6 +455,7 @@ it("a refused public adoption retains its independently signed reservation witho
           return withOperationAuthority(held.binding, held.operatorId, (authority) =>
             assembleMirrorBundle({
               appDb: primary.db,
+              node: primary.node,
               ring: RING,
               stateDir: stateDir!,
               relayUrl: "https://relay.test",

@@ -124,7 +124,7 @@ it.each(["account", "key"])(
       boxCaPem: "unused-ca",
       originNodeId: SOURCE,
     });
-    await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, NODE);
+    await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, NODE);
     const credentials =
       method === "account"
         ? { personId: ADMIN, password: PASSWORD }

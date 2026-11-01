@@ -125,7 +125,7 @@ function selfDoc(standing: "sell-only" | "serving-primary"): SignedMembershipDoc
 }
 
 /** Includes a node identity, so a promote has a key to sign with. */
-async function seedTillIdentity(db: Database): Promise<void> {
+async function seedTillIdentity(db: Database, node: NodeDatabase): Promise<void> {
   // `onConflictDoNothing` is untargeted: nothing here reads the result.
   await db
     .insert(tenants)
@@ -158,7 +158,7 @@ async function seedTillIdentity(db: Database): Promise<void> {
       role: "admin",
     })
     .onConflictDoNothing();
-  await establishNodeIdentity({ ownerDb: db, ring: RING }, TILL_ENV.WAITRON_NODE_ID);
+  await establishNodeIdentity({ ownerDb: db, node, ring: RING }, TILL_ENV.WAITRON_NODE_ID);
 }
 
 /** A mirror holding its own dormant identity. */
@@ -257,7 +257,7 @@ beforeAll(async () => {
 
   [appVenueDir, appDb, appNode] = await migratedVenue();
   [mirrorVenueDir, mirrorDb, mirrorNode] = await migratedVenue();
-  await seedTillIdentity(appDb);
+  await seedTillIdentity(appDb, appNode);
   // No `node_mode` row: `readNodeMode` reads it as ('primary', 'primary').
   await stampDeployment(appDb, "production");
 }, 180_000);

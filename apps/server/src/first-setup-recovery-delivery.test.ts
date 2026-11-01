@@ -146,9 +146,14 @@ async function fixture(publicDocumentSeat = true) {
       );
     },
     recoverProvision: (req) => recoverProvisionedVenue(suite.db, req, host.modules),
-    establishIdentity: (nodeId) => establishNodeIdentity({ ownerDb: suite.db, ring }, nodeId),
+    establishIdentity: (nodeId) =>
+      establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, nodeId),
     seedMembership: (nodeId) =>
-      seedTermZeroMembership({ db: suite.db, ring }, nodeId, "https://test.example"),
+      seedTermZeroMembership(
+        { db: suite.db, node: suite.node, ring },
+        nodeId,
+        "https://test.example",
+      ),
     persistTrading: async () => {
       publications++;
     },

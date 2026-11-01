@@ -8,6 +8,7 @@ import {
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { verifyMembershipDocument } from "@waitron/membership";
 import { locationId as brandLocationId, type NodeId } from "@waitron/shared";
@@ -21,7 +22,7 @@ const RING: KeyRing = loadKeyRing({
 
 describe("seedTermZeroMembership", () => {
   const suite = useVenueDb({
-    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
+    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
     timeoutMs: 60_000,
   });
   let db: Database;
@@ -39,11 +40,15 @@ describe("seedTermZeroMembership", () => {
       })
       .returning({ id: locations.id });
     nodeId = await seedNode(db, brandLocationId(loc!.id));
-    await establishNodeIdentity({ ownerDb: db, ring: RING }, nodeId);
+    await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, nodeId);
   }, 60_000);
 
   it("seeds a signed term-0 document naming this node serving-primary", async () => {
-    await seedTermZeroMembership({ db, ring: RING }, nodeId, "https://box.deli.test");
+    await seedTermZeroMembership(
+      { db, node: suite.node, ring: RING },
+      nodeId,
+      "https://box.deli.test",
+    );
     const held = await readNodeMembership(db);
     expect(held?.body.term).toBe(0);
     expect(held?.body.nodes).toEqual([

@@ -7,9 +7,17 @@ import {
   CREDENTIALS_MIGRATIONS,
   loadKeyRing,
   putCredential,
+  sealNodeSigningKeyTx,
   type KeyRing,
 } from "@waitron/credentials";
-import { CORE_MIGRATIONS, withTransaction, writeNodeMembership, type Database } from "@waitron/db";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
+import {
+  CORE_MIGRATIONS,
+  withNodeTransaction,
+  withTransaction,
+  writeNodeMembership,
+  type Database,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { buildNextMembershipDocument, generateNodeKeyPair } from "@waitron/membership";
 import {
@@ -53,7 +61,7 @@ const generationOf = (view: ReturnType<StreamHost["status"]>): string =>
 
 describe("the live copy's wiring", () => {
   const suite = useVenueDb({
-    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
+    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
     timeoutMs: 60_000,
   });
   let db: Database;
@@ -64,6 +72,7 @@ describe("the live copy's wiring", () => {
   const runtime = (overrides: Partial<StreamHostDeps> = {}) =>
     new StreamHost({
       db,
+      node: suite.node,
       ring: RING,
       nodeId: NODE_ID,
       venueDir: stateDir!,
@@ -82,11 +91,8 @@ describe("the live copy's wiring", () => {
 
   // useVenueDb empties the migrated tables after each case, so their rows are written per case.
   beforeEach(async () => {
-    await withTransaction(db, (tx) =>
-      putCredential(tx, RING, {
-        purpose: "membership.node_key",
-        value: { privateKey: keys.privateKey },
-      }),
+    await withNodeTransaction(suite.node, (tx) =>
+      sealNodeSigningKeyTx(tx, RING, NODE_ID, keys.privateKey),
     );
   });
 

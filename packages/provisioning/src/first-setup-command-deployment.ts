@@ -2,13 +2,20 @@ import { createHash, createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseEnv, isDeepStrictEqual } from "node:util";
-import { loadKeyRing, putCredential, tryGetCredential } from "@waitron/credentials";
+import {
+  loadKeyRing,
+  nodeSigningPublicKey,
+  putCredential,
+  readNodeSigningKey,
+  sealNodeSigningKeyTx,
+} from "@waitron/credentials";
 import {
   applicationVersion,
   readMembershipTrustSet,
   readNodeMembershipRow,
   setNodePublicKeyTx,
   stampDeployment,
+  withNodeTransaction,
   withTransaction,
   writeNodeMembership,
   type Database,
@@ -52,7 +59,6 @@ import {
 } from "./configuration-transfer.js";
 import "./errors.js";
 
-const keyPurpose = "membership.node_key";
 function conflict(): never {
   throw new AppError("setup.attempt_uncertain", {});
 }
@@ -184,11 +190,9 @@ export function createFirstSetupCommandDeployment(options: {
         throw new AppError("setup.not_ready", {});
       }
       const config = selection.config;
-      const identity = async () => ({
+      const identity = async (nodeId: string) => ({
         trust: await readMembershipTrustSet(db),
-        credential: await withTransaction(db, (tx) =>
-          tryGetCredential(tx, ring, { purpose: keyPurpose }),
-        ),
+        privateKey: await readNodeSigningKey(node, ring, nodeId),
       });
       const digest = firstSetupPublicationDigest(state, settings);
       publication = { digest, settings, ring };
@@ -204,21 +208,25 @@ export function createFirstSetupCommandDeployment(options: {
             );
           },
           publishIdentity: async (result, current) => {
-            let own = await identity();
-            if (own.trust[result.nodeId] === undefined && own.credential === null) {
-              const pair = generateNodeKeyPair();
-              await withTransaction(db, async (tx) => {
-                await putCredential(tx, ring, {
-                  purpose: keyPurpose,
-                  value: { privateKey: pair.privateKey },
-                });
-                await setNodePublicKeyTx(tx, result.nodeId, pair.publicKey);
+            let own = await identity(result.nodeId);
+            if (own.trust[result.nodeId] === undefined) {
+              // node.db is saved before venue.db here, the reverse of every other two-file change:
+              // a stamped public key with no private key behind it could never sign as this box.
+              const sealed = await withNodeTransaction(node, async (tx) => {
+                const held = await readNodeSigningKey(tx, ring, result.nodeId);
+                if (held !== null) return held;
+                const generated = generateNodeKeyPair().privateKey;
+                await sealNodeSigningKeyTx(tx, ring, result.nodeId, generated);
+                return generated;
               });
-              own = await identity();
+              await withTransaction(db, (tx) =>
+                setNodePublicKeyTx(tx, result.nodeId, nodeSigningPublicKey(sealed)),
+              );
+              own = await identity(result.nodeId);
             }
             const publicKey = own.trust[result.nodeId];
-            const privateKey = own.credential?.privateKey;
-            if (publicKey === undefined || typeof privateKey !== "string") conflict();
+            const privateKey = own.privateKey;
+            if (publicKey === undefined || privateKey === null) conflict();
             const challenge = JSON.stringify([
               "waitron.first-setup-node-check",
               current.frozen.attemptId,

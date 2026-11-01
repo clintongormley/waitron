@@ -166,7 +166,7 @@ async function setupVenue(): Promise<{
     locationId: venue.locationId,
     nodeId: venue.nodeId,
   };
-  await establishNodeIdentity({ ownerDb: db, ring: RING }, designated.nodeId);
+  await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, designated.nodeId);
   const primaryPublicKey = (await readMembershipTrustSet(db))[designated.nodeId]!;
   const adminPersonId = await withTransaction(db, async (tx) => {
     const r = await tx.execute<{ id: string }>(sql`select id from persons where role = 'admin'`);
@@ -196,6 +196,7 @@ function mountApp(designated: AdoptResult, relayUrl: string | undefined, log?: L
     app,
     {
       appDb: db,
+      node: suite.node,
       ring: RING,
       stateDir,
       relayUrl,
@@ -1025,7 +1026,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       expect(refused.status).toBe(409);
 
       const clearance = await clearRemovedMachine(
-        { db, ring: RING, nodeId: designated.nodeId, log: () => {} },
+        { db, node: suite.node, ring: RING, nodeId: designated.nodeId, log: () => {} },
         { targetNodeId: removed, personId: adminPersonId },
       );
       expect(clearance.cleared).toBe(true);
@@ -1104,7 +1105,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       (designated: AdoptResult, adminPersonId: string, standbyNodeId: string) =>
       async (): Promise<void> => {
         await removeUnjoinedStandby(
-          { db, ring: RING, nodeId: designated.nodeId, log: () => {} },
+          { db, node: suite.node, ring: RING, nodeId: designated.nodeId, log: () => {} },
           { targetNodeId: standbyNodeId, personId: adminPersonId },
         );
       };

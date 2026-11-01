@@ -377,7 +377,7 @@ describe("real mirror promotion with a dormant fiscal seat", () => {
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
   });
   async function realPromotion() {
-    await establishNodeIdentity({ ownerDb: suite.db, ring }, target.nodeId);
+    await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, target.nodeId);
     const module = fakeModule("fiscal-verifactu", {
       provisioning: {
         standby: {
@@ -445,7 +445,7 @@ describe("real mirror promotion with a dormant fiscal seat", () => {
   });
 
   it("rolls the actual signed activation back with a refused promotion document", async () => {
-    await establishNodeIdentity({ ownerDb: suite.db, ring }, target.nodeId);
+    await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, target.nodeId);
     const before = await snapshot();
     await suite.db.execute(
       sql`create trigger refuse_chart before insert on node_membership begin select raise(abort, 'test chart refusal'); end`,

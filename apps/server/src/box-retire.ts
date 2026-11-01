@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { KeyRing } from "@waitron/credentials";
 import { retireSelf } from "./retire.js";
@@ -12,6 +12,7 @@ import type { Logger } from "./logger.js";
 
 export type BoxRetireDeps = {
   appDb: Database;
+  node: NodeDatabase;
   /** The box key ring — unseals this node's identity key so the minted eviction can be signed. */
   ring: KeyRing;
   /** THIS (departing) node — the node that becomes `evicted`, the eviction document's signer, and
@@ -53,6 +54,7 @@ export function mountBoxRetireApi(app: Hono, deps: BoxRetireDeps, log: Logger): 
       });
       const result = await retireSelf({
         appDb: deps.appDb,
+        node: deps.node,
         ring: deps.ring,
         nodeId: deps.nodeId,
         log,

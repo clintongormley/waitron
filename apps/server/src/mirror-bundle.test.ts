@@ -104,13 +104,14 @@ async function setupVenue(): Promise<AdoptResult> {
     locationId: venue.locationId,
     nodeId: venue.nodeId,
   };
-  await establishNodeIdentity({ ownerDb: db, ring: RING }, designated.nodeId);
+  await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, designated.nodeId);
   return designated;
 }
 
 function baseDeps() {
   return {
     appDb: db,
+    node: suite.node,
     ring: RING,
     stateDir,
     relayUrl: "https://relay.test:9000/",

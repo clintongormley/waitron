@@ -447,14 +447,14 @@ export async function clearStartAgainMarker(venueDir: string): Promise<void> {
 
 /**
  * The most rows a first setup attempt may leave in each node.db table, each of them the attempt's
- * own node's: its recovery-key check (`installStagedNodeKey`).
+ * own node's: its recovery-key check (`installStagedNodeKey`) and its signing key (publication).
  */
 export const NODE_ROWS_A_FIRST_SETUP_WRITES: Readonly<Record<string, number>> = {
   [getTableName(nodeMode)]: 0,
   [getTableName(nodeMirrorLink)]: 0,
   [getTableName(nodePrimaryKey)]: 0,
   [getTableName(nodeRecoveryKey)]: 1,
-  [getTableName(nodeSigningKey)]: 0,
+  [getTableName(nodeSigningKey)]: 1,
 };
 
 /**

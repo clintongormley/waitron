@@ -9,6 +9,7 @@ import {
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { endorseKey, generateNodeKeyPair, verifyMembershipDocument } from "@waitron/membership";
 import { locationId as brandLocationId } from "@waitron/shared";
@@ -24,7 +25,7 @@ const RING: KeyRing = loadKeyRing({
 describe("mintNextMembershipDocument", () => {
   const suite = useVenueDb({
     resetPerTest: false,
-    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
+    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
     timeoutMs: 60_000,
   });
 
@@ -43,7 +44,7 @@ describe("mintNextMembershipDocument", () => {
       })
       .returning({ id: locations.id });
     nodeId = await seedNode(db, brandLocationId(loc!.id));
-    await establishNodeIdentity({ ownerDb: db, ring: RING }, nodeId);
+    await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, nodeId);
   }, 60_000);
 
   it("carries the signer's stored endorsement without the caller passing it", async () => {
@@ -53,7 +54,7 @@ describe("mintNextMembershipDocument", () => {
     await db.update(nodes).set({ endorsement }).where(eq(nodes.id, nodeId));
     try {
       const doc = await mintNextMembershipDocument(
-        { db, ring: RING },
+        { db, node: suite.node, ring: RING },
         {
           heldDocument: null,
           nodes: [{ nodeId, contactUrl: "", standing: "serving-primary" }],
@@ -72,7 +73,7 @@ describe("mintNextMembershipDocument", () => {
 
   it("carries no endorsement when the signer's row holds none", async () => {
     const doc = await mintNextMembershipDocument(
-      { db, ring: RING },
+      { db, node: suite.node, ring: RING },
       {
         heldDocument: null,
         nodes: [{ nodeId, contactUrl: "", standing: "serving-primary" }],

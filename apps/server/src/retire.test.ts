@@ -13,6 +13,7 @@ import {
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, type KeyRing } from "@waitron/credentials";
 import {
@@ -38,7 +39,7 @@ const CARRIER_ID = "carrier-1";
 // Two cases depend on `useVenueDb`'s default per-test reset: each expects no chart held, and would
 // otherwise read the chart an earlier case wrote.
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, { ...NODE_MIGRATIONS, database: "node" }],
   timeoutMs: 60_000,
 });
 
@@ -65,10 +66,10 @@ async function fencedNode(): Promise<{
     })
     .returning({ id: locations.id });
   const nodeId = await seedNode(db, brandLocationId(loc!.id));
-  await establishNodeIdentity({ ownerDb: db, ring: RING }, nodeId);
+  await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, nodeId);
   return {
     nodeId,
-    deps: (log) => ({ appDb: db, ring: RING, nodeId, log }),
+    deps: (log) => ({ appDb: db, node: suite.node, ring: RING, nodeId, log }),
   };
 }
 

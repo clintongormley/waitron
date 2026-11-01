@@ -9,6 +9,7 @@ import {
   readNodeMembership,
   withTransaction,
   type Database,
+  type NodeDatabase,
 } from "@waitron/db";
 import { withMember } from "@waitron/membership";
 import {
@@ -38,6 +39,7 @@ import type { Logger } from "./logger.js";
 // `relayUrl` is `undefined` when no tunnel is configured; the route then refuses `mirror.no_relay`.
 export interface MirrorBundleApiDeps {
   appDb: Database;
+  node: NodeDatabase;
   ring: KeyRing;
   stateDir: string;
   relayUrl: string | undefined;
@@ -108,6 +110,7 @@ export function mountMirrorBundleApi(
 
         const bundle = await assembleMirrorBundle({
           appDb: deps.appDb,
+          node: deps.node,
           ring: deps.ring,
           stateDir: deps.stateDir,
           relayUrl: deps.relayUrl,
@@ -175,7 +178,7 @@ async function appendStandbyToChart(
     refuseRemovedStandby(held, standbyNodeId);
     refuseFullChart(held, standbyNodeId);
     const document = await mintNextMembershipDocument(
-      { db: deps.appDb, ring: deps.ring },
+      { db: deps.appDb, node: deps.node, ring: deps.ring },
       {
         heldDocument: held,
         nodes: withMember(held?.body.nodes ?? [], standbyNodeId, standbyContactUrl),

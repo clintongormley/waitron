@@ -144,7 +144,7 @@ beforeEach(async () => {
   await primary.db
     .insert(persons)
     .values({ id: ADMIN, displayName: "Administrator", role: "admin", passwordHash: HASH });
-  await establishNodeIdentity({ ownerDb: primary.db, ring: RING }, PRIMARY);
+  await establishNodeIdentity({ ownerDb: primary.db, node: primary.node, ring: RING }, PRIMARY);
 });
 function joinRequest(targetNodeId: string, action: string) {
   const binding = {
@@ -193,6 +193,7 @@ async function reserve(standby = generateStandbyIdentity()) {
   const app = new Hono();
   mountMirrorBundleApi(app, {
     appDb: primary.db,
+    node: primary.node,
     ring: RING,
     stateDir: stateDir!,
     relayUrl: "https://relay.test",

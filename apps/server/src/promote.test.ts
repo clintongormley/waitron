@@ -160,7 +160,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
       .returning({ id: locations.id });
     const nodeId = await seedNode(db, brandLocationId(loc!.id));
     await setSingletonRole({ venue: db, node: suite.node }, nodeId, "secondary");
-    await establishNodeIdentity({ ownerDb: db, ring: RING }, nodeId);
+    await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, nodeId);
     const holders = createDeploymentHolders("primary", "secondary");
     return {
       db,

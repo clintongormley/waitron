@@ -3,7 +3,7 @@ import {
   type MembershipNode,
   type SignedMembershipDocument,
 } from "@waitron/membership";
-import { readNodeEndorsement, type Database } from "@waitron/db";
+import { readNodeEndorsement, type Database, type NodeDatabase } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { readNodeIdentityKey } from "./node-identity.js";
@@ -28,7 +28,7 @@ export const CHART_MINT_REFUSALS: Record<string, ContentfulStatusCode> = {
  * caller's job.
  */
 export async function mintNextMembershipDocument(
-  deps: { db: Database; ring: KeyRing },
+  deps: { db: Database; node: NodeDatabase; ring: KeyRing },
   args: {
     heldDocument: SignedMembershipDocument | null;
     nodes: readonly MembershipNode[];
@@ -37,7 +37,7 @@ export async function mintNextMembershipDocument(
     revoked?: readonly string[];
   },
 ): Promise<SignedMembershipDocument> {
-  const signerPrivateKey = await readNodeIdentityKey(deps.db, deps.ring);
+  const signerPrivateKey = await readNodeIdentityKey(deps.node, deps.ring, args.signerNodeId);
   const endorsement = await readNodeEndorsement(deps.db, args.signerNodeId);
   return buildNextMembershipDocument({
     heldDocument: args.heldDocument,

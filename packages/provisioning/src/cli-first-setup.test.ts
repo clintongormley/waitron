@@ -1221,9 +1221,9 @@ it("a missing private node key cannot finish interrupted command publication", a
   );
   const before = (await f.runtime.store.read())!;
   const counters = await venue.db.select().from(invoiceSeries);
-  const { deleteCredential } = await import("@waitron/credentials");
-  const { withTransaction, readMembershipTrustSet } = await import("@waitron/db");
-  await withTransaction(venue.db, (tx) => deleteCredential(tx, { purpose: "membership.node_key" }));
+  const { nodeSigningKey } = await import("@waitron/node-db");
+  const { withNodeTransaction, readMembershipTrustSet } = await import("@waitron/db");
+  await withNodeTransaction(venue.node, (tx) => tx.delete(nodeSigningKey));
   const trust = await readMembershipTrustSet(venue.db);
   expect(trust[before.frozen.nodeId]).toEqual(expect.any(String));
   f.interrupt(false);
@@ -1235,6 +1235,54 @@ it("a missing private node key cannot finish interrupted command publication", a
   await expect(readFile(join(f.root, "state/trading.env"))).rejects.toMatchObject({
     code: "ENOENT",
   });
+});
+
+it("a setup interrupted after the key was sealed and before it was stamped stamps it on the next run, and the stamped key matches", async () => {
+  const f = await realActivationFixture();
+  const { loadKeyRing, readNodeSigningKey, sealNodeSigningKeyTx } =
+    await import("@waitron/credentials");
+  const { withNodeTransaction, readMembershipTrustSet, readNodeMembershipRow } =
+    await import("@waitron/db");
+  const { generateNodeKeyPair } = await import("@waitron/membership");
+  const ring = loadKeyRing({ WAITRON_CREDENTIALS_KEY: f.env.WAITRON_CREDENTIALS_KEY });
+  const sealed = generateNodeKeyPair();
+  let interruptIdentity = true;
+  const real = f.deps.firstSetupDeployment!;
+  f.deps.firstSetupDeployment = (options) => {
+    const deployment = real(options);
+    const publication = deployment.publication;
+    return {
+      ...deployment,
+      publication: async (state) => {
+        const result = await publication(state);
+        const publishIdentity = result.deps.publishIdentity;
+        return {
+          ...result,
+          deps: {
+            ...result.deps,
+            publishIdentity: async (written, current) => {
+              if (!interruptIdentity) return publishIdentity(written, current);
+              interruptIdentity = false;
+              await withNodeTransaction(options.node, (tx) =>
+                sealNodeSigningKeyTx(tx, ring, written.nodeId, sealed.privateKey),
+              );
+              throw new Error("synthetic after seal");
+            },
+          },
+        };
+      },
+    };
+  };
+  await expect(runCliPastWait(f.args, f.deps)).rejects.toThrow("synthetic after seal");
+  const nodeId = (await f.runtime.store.read())!.frozen.nodeId;
+  expect((await readMembershipTrustSet(venue.db))[nodeId]).toBeUndefined();
+  expect(await readNodeMembershipRow(venue.db)).toBeNull();
+
+  expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
+
+  expect((await f.runtime.store.read())!.status).toBe("complete");
+  expect((await readMembershipTrustSet(venue.db))[nodeId]).toBe(sealed.publicKey);
+  expect(await readNodeSigningKey(venue.node, ring, nodeId)).toBe(sealed.privateKey);
 });
 
 async function unpreparedDeploymentFixture(

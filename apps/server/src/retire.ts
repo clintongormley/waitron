@@ -1,6 +1,11 @@
 import "./errors.js";
 import { AppError } from "@waitron/shared";
-import { persistNodeMembershipIfNewer, readNodeMembership, type Database } from "@waitron/db";
+import {
+  persistNodeMembershipIfNewer,
+  readNodeMembership,
+  type Database,
+  type NodeDatabase,
+} from "@waitron/db";
 import {
   evictNode,
   isFencedStanding,
@@ -14,6 +19,7 @@ import type { Logger } from "./logger.js";
 
 export interface RetireDeps {
   readonly appDb: Database;
+  readonly node: NodeDatabase;
   /** Unseals this node's identity private key to sign the minted document. */
   readonly ring: KeyRing;
   /** The departing node: the one that becomes `evicted`, and the document's signer. */
@@ -52,7 +58,7 @@ export async function retireSelf(deps: RetireDeps): Promise<RetireResult> {
   }
 
   const document = await mintNextMembershipDocument(
-    { db: deps.appDb, ring: deps.ring },
+    { db: deps.appDb, node: deps.node, ring: deps.ring },
     {
       heldDocument: held,
       nodes: evictNode(held!.body.nodes, deps.nodeId),

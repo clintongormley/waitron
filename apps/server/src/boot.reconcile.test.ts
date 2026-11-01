@@ -264,7 +264,7 @@ describe("returned-box membership reconciliation at boot", () => {
     await stampDeployment(db, "preproduction");
     // This node can sign, so a first start that ran would move the term.
     await establishNodeIdentity(
-      { ownerDb: db, ring: loadKeyRing(KEY_ENV) },
+      { ownerDb: db, node: nodeDb, ring: loadKeyRing(KEY_ENV) },
       TILL_ENV.WAITRON_NODE_ID,
     );
     await seedHeldChart(db, 1);

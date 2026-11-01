@@ -59,7 +59,7 @@ async function primary(): Promise<Primary> {
   const db = suite.db;
   const venue = await setupVenue(db);
   const nodeId = venue.cfg.nodeId;
-  await establishNodeIdentity({ ownerDb: db, ring: RING }, nodeId);
+  await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, nodeId);
   const publicKey = (await readMembershipTrustSet(db))[nodeId]!;
   const { adminPersonId, token } = await withTransaction(db, async (tx) => {
     const rows = tx.all<{ id: string }>(sql`select id from persons where role = 'admin'`);
@@ -70,7 +70,7 @@ async function primary(): Promise<Primary> {
   const lines: Primary["lines"] = [];
   const log: Logger = (level, event, fields) => lines.push({ level, event, fields });
   const app = new Hono();
-  mountMembershipRemovalApi(app, { db, ring: RING, nodeId }, log);
+  mountMembershipRemovalApi(app, { db, node: suite.node, ring: RING, nodeId }, log);
   return {
     db,
     nodeId,
@@ -88,7 +88,7 @@ async function primary(): Promise<Primary> {
 async function holdChart(p: Primary, nodes: readonly MembershipNode[]): Promise<void> {
   const held = await readNodeMembership(p.db);
   const document = await mintNextMembershipDocument(
-    { db: p.db, ring: RING },
+    { db: p.db, node: suite.node, ring: RING },
     { heldDocument: held, nodes, signerNodeId: p.nodeId },
   );
   await writeNodeMembership(p.db, document);
@@ -154,7 +154,7 @@ async function holdChartRevoking(
 ): Promise<void> {
   const held = await readNodeMembership(p.db);
   const document = await mintNextMembershipDocument(
-    { db: p.db, ring: RING },
+    { db: p.db, node: suite.node, ring: RING },
     { heldDocument: held, nodes, signerNodeId: p.nodeId, revoked },
   );
   await writeNodeMembership(p.db, document);

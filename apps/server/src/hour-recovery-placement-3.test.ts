@@ -351,6 +351,7 @@ describe("selected-hour admission before archive placement", () => {
       await establishNodeIdentity(
         {
           ownerDb: suite.db,
+          node: suite.node,
           ring: loadKeyRing({
             WAITRON_CREDENTIALS_KEY: credentialKey,
             WAITRON_CREDENTIALS_KEY_VERSION: "1",

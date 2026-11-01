@@ -256,8 +256,15 @@ describe("startServer, against a migrated venue directory", () => {
     const db = venue.store.venue;
     await seedTradingVenue(db);
     const ring = loadKeyRing(KEY_ENV);
-    await establishNodeIdentity({ ownerDb: db, ring }, TILL_ENV.WAITRON_NODE_ID);
-    await seedTermZeroMembership({ db, ring }, TILL_ENV.WAITRON_NODE_ID, "https://old-box.example");
+    await establishNodeIdentity(
+      { ownerDb: db, node: venue.store.node, ring },
+      TILL_ENV.WAITRON_NODE_ID,
+    );
+    await seedTermZeroMembership(
+      { db, node: venue.store.node, ring },
+      TILL_ENV.WAITRON_NODE_ID,
+      "https://old-box.example",
+    );
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-first-start-"));
     await writeFile(
@@ -319,9 +326,12 @@ describe("startServer, against a migrated venue directory", () => {
       const db = venue.store.venue;
       await seedTradingVenue(db);
       const ring = loadKeyRing(KEY_ENV);
-      await establishNodeIdentity({ ownerDb: db, ring }, TILL_ENV.WAITRON_NODE_ID);
+      await establishNodeIdentity(
+        { ownerDb: db, node: venue.store.node, ring },
+        TILL_ENV.WAITRON_NODE_ID,
+      );
       await seedTermZeroMembership(
-        { db, ring },
+        { db, node: venue.store.node, ring },
         TILL_ENV.WAITRON_NODE_ID,
         "https://old-box.example",
       );
@@ -405,9 +415,12 @@ describe("startServer, against a migrated venue directory", () => {
       const db = venue.store.venue;
       await seedTradingVenue(db);
       const ring = loadKeyRing(KEY_ENV);
-      await establishNodeIdentity({ ownerDb: db, ring }, TILL_ENV.WAITRON_NODE_ID);
+      await establishNodeIdentity(
+        { ownerDb: db, node: venue.store.node, ring },
+        TILL_ENV.WAITRON_NODE_ID,
+      );
       await seedTermZeroMembership(
-        { db, ring },
+        { db, node: venue.store.node, ring },
         TILL_ENV.WAITRON_NODE_ID,
         "https://old-box.example",
       );

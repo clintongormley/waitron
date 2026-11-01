@@ -106,6 +106,7 @@ function buildApp(nodeId: string): Hono {
     app,
     {
       appDb: suite.db,
+      node: suite.node,
       ring: RING,
       nodeId,
     },
@@ -144,7 +145,7 @@ describe("POST /api/box/retire", () => {
     ({ nodeId } = await setupTenant());
     // Establish the node identity so the mint on the happy path has a key to sign with; harmless to
     // the refusal paths, which return before any mint.
-    await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, nodeId);
+    await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, nodeId);
     managerCookie = await login(buildApp(nodeId), MANAGER_EMAIL);
   });
 

@@ -67,6 +67,7 @@ async function fixture() {
       devMode: true,
       firstFiscal: host,
       db: venue.db,
+      node: venue.node,
       ring,
       provision: (req, beforeTransaction) =>
         provisionVenue(
@@ -85,9 +86,14 @@ async function fixture() {
         ),
       recoverProvision: (req) => recoverProvisionedVenue(venue.db, req, host.modules),
       seedDemo: async () => {},
-      establishIdentity: (id) => establishNodeIdentity({ ownerDb: venue.db, ring }, id),
+      establishIdentity: (id) =>
+        establishNodeIdentity({ ownerDb: venue.db, node: venue.node, ring }, id),
       seedMembership: (id) =>
-        seedTermZeroMembership({ db: venue.db, ring }, id, "https://test.example"),
+        seedTermZeroMembership(
+          { db: venue.db, node: venue.node, ring },
+          id,
+          "https://test.example",
+        ),
       persistTrading: async () => {},
       requestRestart: () => {},
     },
