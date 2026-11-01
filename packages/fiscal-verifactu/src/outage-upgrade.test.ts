@@ -6,7 +6,7 @@ import { sql } from "drizzle-orm";
 import { runMigrations } from "@waitron/db";
 import { applyMigrationSet, useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { insertPendingAlta, seedPendingEnvios } from "../test/drain-fixtures.js";
+import { seedPreReplacementRegistro } from "../test/pre-replacement-fixture.js";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 
 let directory: string | undefined;
@@ -48,20 +48,15 @@ afterAll(async () => {
 });
 
 it("adds clean outage defaults to populated predecessor sidecars without changing fiscal bytes", async () => {
-  const seeded = await seedPendingEnvios(suite.db, { count: 0 });
-  const { registroId } = await insertPendingAlta(suite.db, {
-    ...seeded,
-    secuencia: 1,
-    huella: "1".repeat(64),
-    fecha: "2026-07-20",
-    entorno: "production",
-  });
+  const { registroId } = await seedPreReplacementRegistro(suite.db);
   await suite.db
     .execute(sql`insert into envios (registro_id, estado, intentos, incidencia, proximo_intento_en)
     values (${registroId}, 'pendiente', 3, 1, '2026-07-21T00:00:00.000Z')`);
   await suite.db.execute(sql`insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
     values (1, '2026-07-21T00:01:00.000Z', 60)`);
-  const before = (await suite.db.execute(sql`select * from registros_facturacion`)).rows;
+  const before = (await suite.db.execute(sql`select * from registros_facturacion`)).rows.map(
+    (row) => ({ ...row, corrects_registro_id: null }),
+  );
   await runMigrations(suite.db, FISCAL_MIGRATIONS);
   expect((await suite.db.execute(sql`select * from fiscal_conflict_evidence`)).rows).toEqual([]);
   expect(

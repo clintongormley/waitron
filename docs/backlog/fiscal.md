@@ -432,7 +432,9 @@ number and issue date. Its nullable `corrects_registro_id` names the version it 
 a unique index permits one replacement per version, and the invoice-identity index applies
 only to originals. This permits successive corrections without updating earlier records.
 The generated storage migration adds the column and replaces indexes; it does not rebuild
-the table. Correction payload persistence, administrator-only remedy operations, held-case
+the table. Its populated-predecessor test compares every venue data row before and after the
+upgrade, allowing only the new null link, then checks update and delete refusals on the original.
+Correction payload persistence, administrator-only remedy operations, held-case
 resolution and the real AEAT second-correction proof remain part of Task 8 before publication.
 Disputed production remedies stay disabled pending Q35/Q37/Q38/Q40 or a case-specific owner decision.
  Earlier
