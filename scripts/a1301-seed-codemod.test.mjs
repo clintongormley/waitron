@@ -351,9 +351,15 @@ describe("what it reports and leaves", () => {
       `nodeId = await seedNode(db, L);`,
     );
     expect(transformSource(OUTSIDE, input)).toEqual({
-      output: input.replace("seedNode(db, L)", "seedNode(db)"),
-      edits: 1,
-      left: [{ line: 1, reason: "defines its own seedVenue: no import added" }],
+      output: input,
+      edits: 0,
+      left: [
+        { line: 1, reason: "defines its own seedVenue: no import added" },
+        {
+          line: 2,
+          reason: "locations insert inside a helper function or loop: no location rule applied",
+        },
+      ],
     });
     const arrow = lines(`const seedVenue = async () => {};`);
     expect(transformSource(OUTSIDE, arrow).left).toEqual([
@@ -403,7 +409,7 @@ describe("what it reports and leaves", () => {
       ],
       [
         `await db.insert(locations).values(VALUES);`,
-        "locations insert in a shape the codemod does not rewrite",
+        "locations insert of an unknown number of rows: no location rule applied",
       ],
       [
         `const rows = await db.insert(locations).values({ name: "V" });`,
@@ -413,7 +419,10 @@ describe("what it reports and leaves", () => {
         `db.insert(locations).values({ name: "V" });`,
         "locations insert in a shape the codemod does not rewrite",
       ],
-      [`await db.insert(locations);`, "locations insert in a shape the codemod does not rewrite"],
+      [
+        `await db.insert(locations);`,
+        "locations insert of an unknown number of rows: no location rule applied",
+      ],
       [
         `await db.insert(locations).values({ name: "V" }).where(x);`,
         "locations insert in a shape the codemod does not rewrite",
@@ -530,7 +539,9 @@ describe("what it reports and leaves", () => {
       `  it("y", () => use(LOC));`,
       `});`,
     );
-    expect(transformSource(OUTSIDE, deferred).left).toEqual([]);
+    expect(transformSource(OUTSIDE, deferred).left).toEqual([
+      { line: 3, reason: "LOC may be read before seedVenue assigns it" },
+    ]);
   });
 });
 
@@ -659,5 +670,264 @@ describe("main", () => {
     const file = join(dir, "b.test.ts");
     writeFileSync(file, lines(`use(1);`));
     expect(main([file])).toBe(0);
+  });
+});
+
+describe("review round 1", () => {
+  const HELPER = "locations insert inside a helper function or loop: no location rule applied";
+
+  it("counts the rows of a multi-row array, so no location rule applies", () => {
+    const input = lines(
+      `await db.insert(locations).values([{ name: "A" }, { name: "B" }]);`,
+      `nodeId = await seedNode(db, B);`,
+    );
+    expect(transformSource(OUTSIDE, input)).toEqual({
+      output: input,
+      edits: 0,
+      left: [{ line: 1, reason: "one of 2 locations inserts: no location rule applied" }],
+    });
+  });
+
+  it("treats an array with a spread as an unknown number of rows", () => {
+    const input = lines(
+      `await db.insert(locations).values([...ROWS]);`,
+      `nodeId = await seedNode(db, B);`,
+    );
+    expect(transformSource(OUTSIDE, input)).toEqual({
+      output: input,
+      edits: 0,
+      left: [
+        {
+          line: 1,
+          reason: "locations insert of an unknown number of rows: no location rule applied",
+        },
+      ],
+    });
+  });
+
+  it("skips every location rule when an insert sits in a helper function or loop", () => {
+    const cases = [
+      [
+        `async function seedLocation(db) {`,
+        `  await db.insert(locations).values({ name: "A" });`,
+        `}`,
+      ],
+      [
+        `const location = async () => {`,
+        `  await db.insert(locations).values({ name: "A" });`,
+        `};`,
+      ],
+      [`for (const name of NAMES) {`, `  await db.insert(locations).values({ name });`, `}`],
+      [`NAMES.forEach(async (name) => {`, `  await db.insert(locations).values({ name });`, `});`],
+      [
+        `const helpers = {`,
+        `  async seed() { await db.run("insert into locations (name) values ('A')"); },`,
+        `};`,
+      ],
+    ];
+    for (const shape of cases) {
+      const input = lines(
+        ...shape,
+        `nodeId = await seedNode(db, await seedLocation(db));`,
+        `await seedDevice(db, { locationId: L });`,
+      );
+      const result = transformSource(OUTSIDE, input);
+      expect(result.output).toBe(input);
+      expect(result.edits).toBe(0);
+      expect(result.left).toContainEqual({ line: 2, reason: HELPER });
+    }
+  });
+
+  it("rewrites inserts on a transaction receiver as written, inside a file-level hook's callback", () => {
+    const input = lines(
+      `const LOC = "a";`,
+      `beforeAll(async () => {`,
+      `  await withTransaction(db, async (tx) => {`,
+      `    await tx.insert(locations).values({ id: LOC, name: "V" });`,
+      `    await tx.insert(workingOrders).values({ locationId: LOC, orderNumber: 1 });`,
+      `  });`,
+      `});`,
+      `it("x", () => use(LOC));`,
+    );
+    expect(transformSource(OUTSIDE, input)).toEqual({
+      output: lines(
+        `import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";`,
+        `import { venueLocationId } from "@waitron/db";`,
+        `let LOC: string;`,
+        `beforeAll(async () => {`,
+        `  await withTransaction(db, async (tx) => {`,
+        `    await seedVenue(tx, { name: "V" });`,
+        `    LOC = await venueLocationId(tx);`,
+        `    await seedWorkingOrder(tx, { orderNumber: 1 });`,
+        `  });`,
+        `});`,
+        `it("x", () => use(LOC));`,
+      ),
+      edits: 2,
+      left: [],
+    });
+  });
+
+  it("reports a location argument with side effects and leaves that call", () => {
+    const NOT_PLAIN = "location argument is not a plain value: not dropped";
+    const input = lines(
+      `import { locationId as brandLocationId, type LocationId } from "@waitron/shared";`,
+      `await db.insert(locations).values({ name: "V" });`,
+      `nodeId = await seedNode(db, await seedLocation(db));`,
+      `await seedDevice(db, { locationId: makeId(LOC) });`,
+      `await db.insert(workingOrders).values({ locationId: ids[0], orderNumber: 1 });`,
+      `await seedNode(db, brandLocationId(venue!.loc.id) as LocationId);`,
+      `await seedNode(db, (LOC));`,
+      `await seedNode(db, 7);`,
+      `await seedDevice(db, { label: "x", locationId: \`l\` });`,
+      `await seedNode(db, brandLocationId(a, b));`,
+      `await seedNode(db, brandLocationId(make()));`,
+      `await seedNode(db, this.loc);`,
+    );
+    expect(transformSource(OUTSIDE, input)).toEqual({
+      output: lines(
+        `import { locationId as brandLocationId } from "@waitron/shared";`,
+        SEED,
+        `await seedVenue(db, { name: "V" });`,
+        `nodeId = await seedNode(db, await seedLocation(db));`,
+        `await seedDevice(db, { locationId: makeId(LOC) });`,
+        `await db.insert(workingOrders).values({ locationId: ids[0], orderNumber: 1 });`,
+        `await seedNode(db);`,
+        `await seedNode(db);`,
+        `await seedNode(db);`,
+        `await seedDevice(db, { label: "x" });`,
+        `await seedNode(db, brandLocationId(a, b));`,
+        `await seedNode(db, brandLocationId(make()));`,
+        `await seedNode(db, this.loc);`,
+      ),
+      edits: 5,
+      left: [3, 4, 5, 10, 11, 12].map((line) => ({ line, reason: NOT_PLAIN })),
+    });
+  });
+
+  it("reports an id constant a sibling describe could read before the seed assigns it", () => {
+    const input = lines(
+      `const LOC = "a";`,
+      `describe("A", () => {`,
+      `  beforeEach(async () => {`,
+      `    await db.insert(locations).values({ id: LOC });`,
+      `  });`,
+      `});`,
+      `describe("B", () => {`,
+      `  it("reads", () => use(LOC));`,
+      `});`,
+    );
+    expect(transformSource(OUTSIDE, input)).toEqual({
+      output: input,
+      edits: 0,
+      left: [{ line: 4, reason: "LOC may be read before seedVenue assigns it" }],
+    });
+    const inTest = lines(
+      `const LOC = "a";`,
+      `it("seeds", async () => {`,
+      `  await db.insert(locations).values({ id: LOC });`,
+      `  use(LOC);`,
+      `});`,
+    );
+    expect(transformSource(OUTSIDE, inTest).left).toEqual([
+      { line: 3, reason: "LOC may be read before seedVenue assigns it" },
+    ]);
+  });
+
+  it("reports an id constant a beforeAll reads while the seed runs in beforeEach", () => {
+    const input = lines(
+      `const LOC = "a";`,
+      `beforeAll(() => use(LOC));`,
+      `beforeEach(async () => {`,
+      `  await db.insert(locations).values({ id: LOC });`,
+      `});`,
+      `it("reads", () => use(LOC));`,
+    );
+    expect(transformSource(OUTSIDE, input)).toEqual({
+      output: input,
+      edits: 0,
+      left: [{ line: 4, reason: "LOC may be read before seedVenue assigns it" }],
+    });
+    const fine = lines(
+      `const LOC = "a";`,
+      `beforeEach(async () => {`,
+      `  await db.insert(locations).values({ id: LOC });`,
+      `});`,
+      `it("reads", () => use(LOC));`,
+    );
+    expect(transformSource(OUTSIDE, fine).output).toBe(
+      lines(
+        SEED,
+        `import { venueLocationId } from "@waitron/db";`,
+        `let LOC: string;`,
+        `beforeEach(async () => {`,
+        `  await seedVenue(db);`,
+        `  LOC = await venueLocationId(db);`,
+        `});`,
+        `it("reads", () => use(LOC));`,
+      ),
+    );
+  });
+
+  it("adds no duplicate of a helper name the file already declares or imports from elsewhere", () => {
+    const collision = (name) =>
+      `${name} is already declared or imported from elsewhere: rule not applied`;
+    const venueHelper = lines(
+      `import { venueLocationId } from "./helpers.js";`,
+      `const LOC = "a";`,
+      `beforeAll(async () => {`,
+      `  await db.insert(locations).values({ id: LOC });`,
+      `});`,
+      `it("x", () => use(LOC));`,
+    );
+    expect(transformSource(OUTSIDE, venueHelper)).toEqual({
+      output: venueHelper,
+      edits: 0,
+      left: [{ line: 4, reason: collision("venueLocationId") }],
+    });
+    const localVenueHelper = venueHelper.replace(
+      `import { venueLocationId } from "./helpers.js";`,
+      `function venueLocationId() {}`,
+    );
+    expect(transformSource(OUTSIDE, localVenueHelper).left).toEqual([
+      { line: 4, reason: collision("venueLocationId") },
+    ]);
+    const seedVenueImport = lines(
+      `import { seedVenue } from "./venue-helpers.js";`,
+      `await db.insert(locations).values({ name: "V" });`,
+      `await db.insert(workingOrders).values({ locationId: L, orderNumber: 1 });`,
+    );
+    expect(transformSource(OUTSIDE, seedVenueImport)).toEqual({
+      output: lines(
+        `import { seedVenue } from "./venue-helpers.js";`,
+        `import { seedWorkingOrder } from "@waitron/db/testing/seed.js";`,
+        `await db.insert(locations).values({ name: "V" });`,
+        `await seedWorkingOrder(db, { orderNumber: 1 });`,
+      ),
+      edits: 1,
+      left: [{ line: 2, reason: collision("seedVenue") }],
+    });
+    const orderImport = lines(
+      `import seedWorkingOrder from "./orders.js";`,
+      `await db.insert(locations).values({ name: "V" });`,
+      `await db.insert(workingOrders).values({ locationId: L, orderNumber: 1 });`,
+    );
+    expect(transformSource(OUTSIDE, orderImport)).toEqual({
+      output: lines(
+        `import seedWorkingOrder from "./orders.js";`,
+        SEED,
+        `await seedVenue(db, { name: "V" });`,
+        `await db.insert(workingOrders).values({ locationId: L, orderNumber: 1 });`,
+      ),
+      edits: 1,
+      left: [{ line: 3, reason: collision("seedWorkingOrder") }],
+    });
+    const namespaced = orderImport.replace(
+      `import seedWorkingOrder from "./orders.js";`,
+      `import * as seedWorkingOrder from "./orders.js";`,
+    );
+    expect(transformSource(OUTSIDE, namespaced).left).toEqual([
+      { line: 3, reason: collision("seedWorkingOrder") },
+    ]);
   });
 });

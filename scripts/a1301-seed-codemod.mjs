@@ -47,7 +47,27 @@ const REASON = {
   orderShape: "workingOrders insert in a shape the codemod does not rewrite",
   orderNoLocation: "workingOrders insert without a locationId key",
   idNotConst: "id is not a module-level const",
+  helper: "locations insert inside a helper function or loop: no location rule applied",
+  unknownRows: "locations insert of an unknown number of rows: no location rule applied",
+  notPlain: "location argument is not a plain value: not dropped",
 };
+
+const collision = (name) =>
+  `${name} is already declared or imported from elsewhere: rule not applied`;
+
+/** Brand helpers whose call around a plain value is itself a plain value (`locationId(…)`). */
+const BRAND_HELPER = /^(as|brand|to)?locationid$/i;
+
+const TEST_CALLS = new Set([
+  "describe",
+  "it",
+  "test",
+  "beforeAll",
+  "beforeEach",
+  "afterAll",
+  "afterEach",
+]);
+const LOOP_METHODS = new Set(["map", "forEach", "flatMap"]);
 
 function isFiscalPair(file) {
   return (
@@ -184,6 +204,59 @@ function rootName(expression) {
     current = current.expression;
   }
   return current.text;
+}
+
+/**
+ * True when `node` may run more than once per seeding: inside a loop, a declared function or
+ * method, a function not passed straight to a call, or a callback handed to `map`/`forEach`.
+ */
+function insideHelperOrLoop(node) {
+  for (let current = node.parent; !ts.isSourceFile(current); current = current.parent) {
+    if (ts.isIterationStatement(current, false)) return true;
+    if (!ts.isFunctionLike(current)) continue;
+    if (!ts.isArrowFunction(current) && !ts.isFunctionExpression(current)) return true;
+    const call = current.parent;
+    if (!ts.isCallExpression(call) || !call.arguments.includes(current)) return true;
+    const callee = call.expression;
+    if (ts.isPropertyAccessExpression(callee) && LOOP_METHODS.has(callee.name.text)) return true;
+  }
+  return false;
+}
+
+/** How many rows `R.insert(locations)` writes, or undefined when that cannot be read. */
+function rowCount(insert) {
+  const access = insert.parent;
+  const call = access.parent;
+  if (!ts.isPropertyAccessExpression(access) || access.name.text !== "values") return undefined;
+  const [arg] = call.arguments;
+  if (ts.isObjectLiteralExpression(arg)) return 1;
+  if (!ts.isArrayLiteralExpression(arg) || arg.elements.some(ts.isSpreadElement)) return undefined;
+  return arg.elements.length;
+}
+
+/** The hook a statement runs in: `{ ok }` is false unless it is the file's top level or a
+ * `beforeAll`/`beforeEach` written directly at the top level. */
+function placement(statement) {
+  for (let current = statement.parent; !ts.isSourceFile(current); current = current.parent) {
+    if (!ts.isFunctionLike(current)) continue;
+    const call = current.parent;
+    const name = ts.isCallExpression(call) ? rootName(call.expression) : undefined;
+    if (name === "beforeAll" || name === "beforeEach") {
+      const topLevel = ts.isExpressionStatement(call.parent) && ts.isSourceFile(call.parent.parent);
+      return { ok: topLevel && ts.isIdentifier(call.expression), hook: name };
+    }
+    if (TEST_CALLS.has(name)) return { ok: false };
+  }
+  return { ok: true };
+}
+
+function insideHook(node, hook) {
+  for (let current = node.parent; !ts.isSourceFile(current); current = current.parent) {
+    if (ts.isFunctionLike(current) && ts.isCallExpression(current.parent)) {
+      if (rootName(current.parent.expression) === hook) return true;
+    }
+  }
+  return false;
 }
 
 /** True when `node` runs as the module loads: outside every function but `describe` bodies. */
@@ -350,6 +423,12 @@ export function transformSource(path, source) {
   const seedDevices = [];
   let ownTenants = false;
   let localSeedVenue = false;
+  const declared = new Map();
+  const brandHelpers = new Set();
+  const declare = (name, module) => {
+    if (!declared.has(name)) declared.set(name, []);
+    declared.get(name).push(module);
+  };
 
   walk(sourceFile, (node) => {
     const table = insertTable(node);
@@ -372,6 +451,22 @@ export function transformSource(path, source) {
       if (node.expression.text === "seedNode") seedNodes.push(node);
       if (node.expression.text === "seedDevice") seedDevices.push(node);
     }
+    if (ts.isImportDeclaration(node)) {
+      const module = node.moduleSpecifier.text;
+      const clause = node.importClause;
+      if (clause?.name) declare(clause.name.text, undefined);
+      const bindings = clause?.namedBindings;
+      if (bindings && ts.isNamespaceImport(bindings)) declare(bindings.name.text, undefined);
+      for (const element of namedImports(node)?.elements ?? []) {
+        declare(element.name.text, module);
+        if (BRAND_HELPER.test((element.propertyName ?? element.name).text)) {
+          brandHelpers.add(element.name.text);
+        }
+      }
+    }
+    if ((ts.isFunctionDeclaration(node) || ts.isVariableDeclaration(node)) && node.name) {
+      if (ts.isIdentifier(node.name)) declare(node.name.text, undefined);
+    }
     const defined =
       (ts.isFunctionDeclaration(node) || ts.isVariableDeclaration(node)) &&
       node.name &&
@@ -384,12 +479,53 @@ export function transformSource(path, source) {
   });
 
   for (const raw of rawLocations) report(raw, REASON.rawSql);
-  const total = locationInserts.length + rawLocations.length;
-  if (total > 1) {
-    for (const node of [...locationInserts, ...rawLocations]) {
+  const sites = [...locationInserts, ...rawLocations];
+  const uncountable = [];
+  let total = 0;
+  for (const node of sites) {
+    const rows = locationInserts.includes(node) ? rowCount(node) : 1;
+    if (insideHelperOrLoop(node)) uncountable.push([node, REASON.helper]);
+    else if (rows === undefined) uncountable.push([node, REASON.unknownRows]);
+    else total += rows;
+  }
+  for (const [node, reason] of uncountable) report(node, reason);
+  if (uncountable.length > 0) total = Number.NaN;
+  else if (total > 1) {
+    for (const node of sites) {
       report(node, `one of ${total} locations inserts: no location rule applied`);
     }
   }
+
+  const modules = importSpecifiers(file);
+  const collides = (name, module) =>
+    (declared.get(name) ?? []).some((declaredFrom) => declaredFrom !== module);
+
+  const isPlain = (expression) => {
+    if (
+      ts.isIdentifier(expression) ||
+      ts.isStringLiteralLike(expression) ||
+      ts.isNumericLiteral(expression)
+    ) {
+      return true;
+    }
+    if (
+      ts.isPropertyAccessExpression(expression) ||
+      ts.isNonNullExpression(expression) ||
+      ts.isAsExpression(expression) ||
+      ts.isParenthesizedExpression(expression)
+    ) {
+      return isPlain(expression.expression);
+    }
+    return (
+      ts.isCallExpression(expression) &&
+      ts.isIdentifier(expression.expression) &&
+      brandHelpers.has(expression.expression.text) &&
+      expression.arguments.length === 1 &&
+      isPlain(expression.arguments[0])
+    );
+  };
+  const propertyValue = (property) =>
+    ts.isShorthandPropertyAssignment(property) ? property.name : property.initializer;
 
   const dropArguments = (call) => {
     const span = { start: call.arguments[0].end, end: call.arguments.end, text: "" };
@@ -438,6 +574,10 @@ export function transformSource(path, source) {
       ? chain.tail === "returning"
       : [undefined, "returning"].includes(chain.tail);
     if (!context || !tailOk) return report(insert, REASON.orderShape);
+    if (!isPlain(propertyValue(location))) return report(insert, REASON.notPlain);
+    if (collides("seedWorkingOrder", modules.seed)) {
+      return report(insert, collision("seedWorkingOrder"));
+    }
     removed.push({ start: location.getStart(), end: location.end });
     const call = `await ${callText("seedWorkingOrder", insert, carriedObject(chain.arg, [location]))}`;
     edits.push({
@@ -449,6 +589,7 @@ export function transformSource(path, source) {
   };
 
   const rewriteVenue = (insert) => {
+    if (collides("seedVenue", modules.seed)) return report(insert, collision("seedVenue"));
     const chain = valuesChain(insert);
     const tailOk = [undefined, "returning", "onConflictDoNothing"].includes(chain?.tail);
     if (!chain || !tailOk) return report(insert, REASON.locationShape);
@@ -484,6 +625,17 @@ export function transformSource(path, source) {
         return report(insert, `${name} is read at module load, before seedVenue assigns it`);
       }
       keepConstant = still.length > 0;
+      if (keepConstant) {
+        const where = placement(context.statement);
+        const early =
+          where.hook === "beforeEach" && still.some((node) => insideHook(node, "beforeAll"));
+        if (!where.ok || early) {
+          return report(insert, `${name} may be read before seedVenue assigns it`);
+        }
+        if (collides("venueLocationId", modules.venue)) {
+          return report(insert, collision("venueLocationId"));
+        }
+      }
       edits.push(
         keepConstant
           ? { start: constant.getStart(), end: constant.end, text: `let ${name}: string;` }
@@ -512,6 +664,10 @@ export function transformSource(path, source) {
   if (total === 1) {
     for (const call of seedNodes) {
       if (call.arguments.length !== 2) continue;
+      if (!isPlain(call.arguments[1])) {
+        report(call, REASON.notPlain);
+        continue;
+      }
       dropArguments(call);
       count += 1;
     }
@@ -520,6 +676,10 @@ export function transformSource(path, source) {
       if (!options || !ts.isObjectLiteralExpression(options)) continue;
       const index = options.properties.findIndex((property) => keyOf(property) === "locationId");
       if (index === -1) continue;
+      if (!isPlain(propertyValue(options.properties[index]))) {
+        report(call, REASON.notPlain);
+        continue;
+      }
       if (options.properties.length === 1) dropArguments(call);
       else {
         const span = { ...elementSpan(options.properties, index), text: "" };
@@ -543,7 +703,6 @@ export function transformSource(path, source) {
   }
 
   let output = removeEmptiedImports(source, applyEdits(source, edits), file);
-  const modules = importSpecifiers(file);
   const firstImport = sourceFile.statements.find(ts.isImportDeclaration);
   const quote = firstImport?.moduleSpecifier.getText().startsWith("'") ? "'" : '"';
   output = addImports(
