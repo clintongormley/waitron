@@ -4,6 +4,9 @@
 [Plan](../../../superpowers/plans/2026-10-26-b3-usb-installer.md) ·
 [Owner-decision FYI](question.txt)
 
+> 2026-11-01: the owner authorised the build, cut one pull request at a time; PR 1's plan:
+> [2026-11-01-b3-1-encrypted-disk.md](../../../superpowers/plans/2026-11-01-b3-1-encrypted-disk.md).
+
 The owner approved the design with changes on 26 October: no setup codes or new private setup
 continuation grants; the disk key on every later recovery sheet; and a Waitron recovery screen
 on the box and over the network. Prepare runs on the same box, then a freshly authenticated

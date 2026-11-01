@@ -1,3 +1,5 @@
+> 2026-11-01: the owner authorised the build; PR 1's plan and its re-map against main: [2026-11-01-b3-1-encrypted-disk.md](../plans/2026-11-01-b3-1-encrypted-disk.md).
+
 > **Later A950 authority, 29 October 2026:** the owner approved its [implementation plan](../plans/2026-10-29-a950-automatic-upgrades.md), option A. The earlier pending-plan note below is superseded. B3 host, hardware and trust prerequisites remain.
 
 # B3 — The bootable USB installer
