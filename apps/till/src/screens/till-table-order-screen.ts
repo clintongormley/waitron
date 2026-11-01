@@ -39,7 +39,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
 import { keyed } from "lit/directives/keyed.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles, focusFirstInvalid } from "@waitron/ui";
+import { baseStyles } from "@waitron/ui";
 import "../widgets/fired-ago.js";
 import "../widgets/sent-orders.js";
 import type { SentLineInfo, SentReorderDetail } from "../widgets/sent-orders.js";
@@ -131,7 +131,6 @@ import type {
   TabLine,
   TableState,
   TableParty,
-  TabTransfer,
   TillCourse,
   TillProduct,
   TillZoneMenu,
@@ -162,7 +161,17 @@ import type { PayLine, PayWay } from "../widgets/bill-pay-dialog.js";
 import "../widgets/dead-ends-section.js";
 import { PAY_WAYS, paidQuantities, payLines } from "../state/bill-payment.js";
 import { billHasUnsent, billUnsentText } from "../state/bill-unsent.js";
-import { portionGroups, sentSlicePortionKey, tabLinePortionKey } from "../state/portion-groups.js";
+import { sentSlicePortionKey, tabLinePortionKey } from "../state/portion-groups.js";
+import {
+  pickGroups,
+  pickRows,
+  pickedLineIds,
+  tidyPicks,
+  type PickGroups,
+  type PickRow,
+  type Picks,
+} from "../state/portion-selection.js";
+import "../widgets/portion-picker.js";
 import { billControlStyles, billSwitcher, tableMenu } from "./table-bill-controls.js";
 
 /** The screen's own width, in CSS pixels, from which browsing and the draft show side by side.
@@ -227,16 +236,15 @@ function countsWholeUnits(line: OrderLine): boolean {
 
 /** The table actions that name a table: Move guests, Join a table and Move this bill. */
 type TableVerb = "move" | "join" | "move-bill";
-type ActionVerb = TableVerb | "merge" | "transfer" | "split";
+type ActionVerb = TableVerb | "merge" | "move-dishes";
 /** The pay section's controls by what a tap on one starts: the tender's Cash and Card, the
  * bill-payment ways and Pay the rest, or the handheld's Pay. */
 type PayControl = "tender" | "bill-pay" | "sheet";
 
 interface ActionDraft {
   tableId: string | null;
-  toBillId: string | null;
-  lines: Set<number>;
-  quantities: Map<number, string>;
+  picks: Picks;
+  moveTo: string | null | undefined;
 }
 
 /** Move this bill's choice: to a table, with who the picker showed seated there, or to the counter. */
@@ -277,6 +285,51 @@ interface DraftMoveOpening {
   api: TillApi | undefined;
   epoch: number;
   selected: readonly OrderLine[];
+}
+
+function samePicks(a: Picks, b: Picks): boolean {
+  return a.size === b.size && [...a].every((id) => b.has(id));
+}
+
+/** What the list of the bill's dishes and Move dishes…' rows are grouped from. */
+interface DishSources {
+  lines: readonly TabLine[];
+  balance: BillBalance | null;
+  allergy: PartyAllergyRead["snapshot"] | null;
+  recalled: ReadonlySet<string>;
+}
+
+function sameSources(a: DishSources, b: DishSources): boolean {
+  return (
+    a.lines === b.lines &&
+    a.balance === b.balance &&
+    a.allergy === b.allergy &&
+    samePicks(a.recalled, b.recalled)
+  );
+}
+
+/** The key that groups a bill's dishes as the screen lists them. Portions also differ by what the
+ * list prints of each: its allergy mark and a whole payment. A part payment would print against
+ * one portion's count, so such a line stands alone. */
+function fallbackPortionKeys({
+  lines,
+  balance,
+  allergy,
+}: DishSources): (dish: TabLine) => string | null {
+  const paidOf = balance === null ? undefined : paidQuantities(balance);
+  return (dish) => {
+    const paid = paidOf?.get(dish.lineNo);
+    if (
+      paid !== undefined &&
+      compareDecimal(decimal(paid), decimal("0")) > 0 &&
+      compareDecimal(decimal(paid), decimal(dish.quantity)) < 0
+    )
+      return null;
+    return tabLinePortionKey(dish, lines, [
+      paid ?? null,
+      allergyGuestId(allergy, { kind: "working", id: dish.id }),
+    ]);
+  };
 }
 
 /** The element `node` renders inside: its slot, its parent, or the host of its shadow root. */
@@ -388,8 +441,7 @@ class TabPayStore extends WorkingOrderStore {
   }
 }
 
-type ActionStep =
-  "closed" | "pick" | "transfer-lines" | "split-lines" | "split-table" | "split-table-bill";
+type ActionStep = "closed" | "pick" | "move-dishes" | "split-table" | "split-table-bill";
 
 @customElement("till-table-order-screen")
 export class TillTableOrderScreen extends LitElement {
@@ -589,10 +641,6 @@ export class TillTableOrderScreen extends LitElement {
         gap: var(--wt-space-2);
       }
 
-      .qty {
-        color: var(--wt-color-text-muted);
-      }
-
       .line-total {
         font-variant-numeric: tabular-nums;
       }
@@ -709,20 +757,6 @@ export class TillTableOrderScreen extends LitElement {
         gap: var(--wt-space-2);
       }
 
-      /* The muted grey fails contrast on the picked line's primary fill. */
-      .transfer-line[aria-pressed="true"] .qty {
-        color: inherit;
-      }
-
-      .split-line-row {
-        display: grid;
-        gap: var(--wt-space-2);
-      }
-
-      .split-quantity {
-        margin-inline-start: var(--wt-space-4);
-      }
-
       .split-stepper {
         display: flex;
         align-items: center;
@@ -802,7 +836,7 @@ export class TillTableOrderScreen extends LitElement {
 
       /* Native buttons, not wt-buttons: wt-button does not pass aria-pressed to its inner button. */
       .draft-select,
-      .transfer-line {
+      .move-dishes-to {
         min-width: var(--wt-tap-min);
         text-align: start;
       }
@@ -1107,7 +1141,7 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Boolean }) takesCash = true;
   /** Mounted inside a card host, which supplies the header. */
   @property({ type: Boolean }) embedded = false;
-  /** The move and join target lists read this; merge and transfer offer {@link bills}. */
+  /** The move and join target lists read this; merge and Move dishes… offer {@link bills}. */
   @property({ attribute: false }) tables: TableState[] = [];
   /** The floor's zones, whose service mode decides whether a free table there may take guests. */
   @property({ attribute: false }) zones: FloorZone[] = [];
@@ -1266,12 +1300,15 @@ export class TillTableOrderScreen extends LitElement {
     refusal: { field: "staying" | "leaving"; message: string } | null;
     prompt?: object;
   } | null = null;
-  @state() private transferToBillId: string | null = null;
-  /** A NEW Set is assigned on every mutation so Lit re-renders (a Set is not deeply reactive). */
-  @state() private transferLineNos = new Set<number>();
-  /** Kept separate from the whole-line transfer picker so quantity choices cannot change that flow. */
-  @state() private splitQuantities = new Map<number, string>();
-  @state() private splitAttempted = false;
+  @state() private moveDishesPicks: Picks = new Set();
+  /** Where Move dishes… sends the picks: a bill's id, null for a new bill, undefined while none is
+   * chosen. */
+  @state() private moveDishesTo: string | null | undefined = undefined;
+  /** The rows Move dishes… last drew, which a re-read's picks are tidied from. */
+  #moveDishesDrawn?: DishSources & { rows: readonly PickRow[] };
+  #dishGroups?: { sources: DishSources; groups: PickGroups };
+  /** {@link moveDishesTo} while it is offered, as unsaved work last counted it. */
+  #moveDishesCounted: string | null | undefined;
 
   readonly #actionId = {};
   #actionScope?: DraftScope<ActionDraft>;
@@ -1292,16 +1329,14 @@ export class TillTableOrderScreen extends LitElement {
   #actionPayload(): ActionDraft {
     return {
       tableId: this.splitTableId,
-      toBillId: this.transferToBillId,
-      lines: new Set(this.transferLineNos),
-      quantities: new Map(this.splitQuantities),
+      picks: new Set(this.moveDishesPicks),
+      moveTo: this.#moveDishesChosen(),
     };
   }
 
   #watchActions(): void {
     if (
-      this.actionVerb !== "split" &&
-      this.actionVerb !== "transfer" &&
+      this.actionVerb !== "move-dishes" &&
       this.actionStep !== "split-table" &&
       this.actionStep !== "split-table-bill"
     ) {
@@ -1316,24 +1351,13 @@ export class TillTableOrderScreen extends LitElement {
       id: this.#actionId,
       parent: this,
       current: () => this.#actionPayload(),
-      snapshot: (value) => ({
-        ...value,
-        lines: new Set(value.lines),
-        quantities: new Map(value.quantities),
-      }),
+      snapshot: (value) => ({ ...value, picks: new Set(value.picks) }),
       equal: (a, b) =>
-        a.tableId === b.tableId &&
-        a.toBillId === b.toBillId &&
-        a.lines.size === b.lines.size &&
-        [...a.lines].every((line) => b.lines.has(line)) &&
-        a.quantities.size === b.quantities.size &&
-        [...a.quantities].every(([line, quantity]) => b.quantities.get(line) === quantity),
+        a.tableId === b.tableId && a.moveTo === b.moveTo && samePicks(a.picks, b.picks),
       restore: (value) => {
         this.splitTableId = value.tableId;
-        this.transferToBillId = value.toBillId;
-        this.transferLineNos = new Set(value.lines);
-        this.splitQuantities = new Map(value.quantities);
-        this.splitAttempted = false;
+        this.moveDishesPicks = new Set(value.picks);
+        this.moveDishesTo = value.moveTo;
       },
     });
     this.#actionScope.commit(this.#actionBaseline);
@@ -1931,7 +1955,7 @@ export class TillTableOrderScreen extends LitElement {
       );
       this.#lineByNo = new Map(this.lines.map((line) => [line.lineNo, line]));
     }
-    this.#tidyPickedPortions();
+    this.#tidyMovePicks();
     // A tab switch must not carry a half-open action flow across: its targets belong to the OLD tab.
     if (changed.has("orderId") && changed.get("orderId") !== undefined) {
       this.#closeActions();
@@ -1942,6 +1966,7 @@ export class TillTableOrderScreen extends LitElement {
     }
     this.#watchServe();
     this.#watchActions();
+    this.#countMoveDestination();
     if (changed.has("busy") && this.busy) this.#actionScope?.changed();
     this.#shownBill = this.bills.find((bill) => bill.workingOrderId === this.orderId);
     if (
@@ -2125,15 +2150,6 @@ export class TillTableOrderScreen extends LitElement {
    * product. */
   #isChild(line: TabLine): boolean {
     return (line.parentLineNo ?? null) !== null;
-  }
-
-  /** The server will not move part of a dish line with extras (`carveLines`). A portion is one
-   * whole dish, so only a dish that is not one can be asked to part. */
-  #holdsDishWithExtrasToPart(): boolean {
-    return this.lines.some(
-      (line) =>
-        line.portion !== true && this.lines.some((extra) => extra.parentLineNo === line.lineNo),
-    );
   }
 
   #nameFor(productId: string | null): string {
@@ -2595,52 +2611,34 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
-  #sentFallback(): TemplateResult | typeof nothing {
-    const recalled = new Set(
+  /** The bill lines recalled into this person's draft or another person's. */
+  #recalledLineIds(): Set<string> {
+    return new Set(
       [
         ...(this.#draftStore?.lines ?? []),
         ...this.otherDrafts.flatMap((draft) => draft.lines),
       ].flatMap((line) => (line.source === undefined ? [] : [line.source.line.id])),
     );
-    const dishes = this.lines.filter((line) => !this.#isChild(line) && !recalled.has(line.id));
-    if (dishes.length === 0) return nothing;
-    const groups = portionGroups(
-      dishes,
-      (dish) => this.#fallbackPortionKey(dish),
-      (dish) => dish.lineNo,
-    );
+  }
+
+  #sentFallback(): TemplateResult | typeof nothing {
+    const { groups } = this.#dishGroupsFor(this.#dishSources());
+    if (groups.length === 0) return nothing;
     // Bill lines lack partial serving quantities, so this fallback offers no actions.
     return html`<section class="sent-fallback" data-sent-fallback>
       <h2>${t("table.sent_title")}</h2>
       <ul>
         ${groups.map(
-          ({ 0: dish, length: count }) =>
+          ({ members: { 0: dish, length: count }, extras }) =>
             html`<li data-sent-fallback-line=${dish!.id}>
               ${this.#sentFallbackLine(dish!, count)}
               <ul>
-                ${this.lines.filter((line) => line.parentLineNo === dish!.lineNo).map((extra) => html`<li data-sent-fallback-extra=${extra.id}>${this.#sentFallbackLine(extra, count)}</li>`)}
+                ${extras.map((extra) => html`<li data-sent-fallback-extra=${extra.id}>${this.#sentFallbackLine(extra, count)}</li>`)}
               </ul>
             </li>`,
         )}
       </ul>
     </section>`;
-  }
-
-  /** Portions also differ by what this list prints of each: its allergy mark and a whole payment.
-   * A part payment would print against one portion's count, so such a line stands alone. */
-  #fallbackPortionKey(dish: TabLine): string | null {
-    const balance = this.#balanceShown();
-    const paid = balance === null ? undefined : paidQuantities(balance).get(dish.lineNo);
-    if (
-      paid !== undefined &&
-      compareDecimal(decimal(paid), decimal("0")) > 0 &&
-      compareDecimal(decimal(paid), decimal(dish.quantity)) < 0
-    )
-      return null;
-    return tabLinePortionKey(dish, this.lines, [
-      paid ?? null,
-      allergyGuestId(this.#allergy()?.snapshot ?? null, { kind: "working", id: dish.id }),
-    ]);
   }
 
   /** `count` identical portions' line, shown once with its price multiplied; a dish's quantity is
@@ -4763,16 +4761,18 @@ export class TillTableOrderScreen extends LitElement {
     return null;
   }
 
-  /** The party's other open bills holding no payment, a pending one included, which merge and
-   * transfer offer, each with its name. The server decides whether it takes the chosen one. */
+  /** The party's other open bills holding no payment, pending or received, which merge offers,
+   * each with its name. The server decides whether it takes the chosen one. */
   #otherBills(): { bill: PartyBill; name: string }[] {
+    return this.#otherOpenBills().filter(({ bill }) => !bill.hasPayments);
+  }
+
+  /** The party's other open bills, one holding a payment included, which Move dishes… offers. */
+  #otherOpenBills(): { bill: PartyBill; name: string }[] {
     const party = this.party;
     if (party === null) return [];
     return this.#shownBills().flatMap((bill) =>
-      bill.workingOrderId !== this.orderId &&
-      bill.partyId === party.id &&
-      bill.status === "open" &&
-      !bill.hasPayments
+      bill.workingOrderId !== this.orderId && bill.partyId === party.id && bill.status === "open"
         ? [{ bill, name: this.#billName(bill) }]
         : [],
     );
@@ -4784,10 +4784,8 @@ export class TillTableOrderScreen extends LitElement {
     this.actionStep = "closed";
     this.actionVerb = null;
     this.splitTableId = null;
-    this.transferToBillId = null;
-    this.transferLineNos = new Set();
-    this.splitQuantities = new Map();
-    this.splitAttempted = false;
+    this.moveDishesPicks = new Set();
+    this.moveDishesTo = undefined;
   }
 
   #dispatch(type: string, detail: unknown): void {
@@ -4797,11 +4795,11 @@ export class TillTableOrderScreen extends LitElement {
   #chooseVerb(verb: ActionVerb): void {
     this.#relocationPrompt = null;
     this.actionVerb = verb;
-    if (verb === "split") {
-      this.splitQuantities = new Map();
-      this.splitAttempted = false;
+    if (verb === "move-dishes") {
+      this.moveDishesPicks = new Set();
+      this.moveDishesTo = undefined;
     }
-    this.actionStep = verb === "split" ? "split-lines" : "pick";
+    this.actionStep = verb === "move-dishes" ? "move-dishes" : "pick";
     this.#stepFocus = "step";
     this.#watchActions();
   }
@@ -5067,202 +5065,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #pickBill(bill: PartyBill): void {
-    if (this.actionVerb === "merge") {
-      this.#dispatch("merge-bills", { fromBillId: bill.workingOrderId });
-      this.#closeActions();
-    } else {
-      this.transferToBillId = bill.workingOrderId;
-      this.actionStep = "transfer-lines";
-      this.#actionScope?.changed();
-    }
-  }
-
-  /** Transfer items' and Split bill's rows: dishes only, identical portions as one row whose
-   * members are in line-number order. */
-  #pickerRows(): TabLine[][] {
-    return portionGroups(
-      this.lines.filter((line) => !this.#isChild(line)),
-      (dish) => this.#fallbackPortionKey(dish),
-      (dish) => dish.lineNo,
-    );
-  }
-
-  /** A refresh can regroup the pickers' rows. A grouped Transfer row is then picked whole or not
-   * at all, and a grouped Split row's picks become its first portions, as many as were picked, so
-   * a row never sends what it does not show. */
-  #tidyPickedPortions(): void {
-    if (this.actionStep !== "transfer-lines" && this.actionStep !== "split-lines") return;
-    const groups = this.#pickerRows().filter((members) => members.length > 1);
-    if (this.actionStep === "transfer-lines") {
-      const picked = this.transferLineNos;
-      const partly = groups.filter(
-        (members) =>
-          members.some((member) => picked.has(member.lineNo)) &&
-          !members.every((member) => picked.has(member.lineNo)),
-      );
-      if (partly.length === 0) return;
-      const next = new Set(picked);
-      for (const member of partly.flat()) next.delete(member.lineNo);
-      this.transferLineNos = next;
-    } else {
-      let next: Map<number, string> | undefined;
-      for (const members of groups) {
-        const count = members.filter((member) => this.splitQuantities.has(member.lineNo)).length;
-        if (
-          members.every(
-            (member, index) => this.splitQuantities.has(member.lineNo) === index < count,
-          )
-        )
-          continue;
-        next ??= new Map(this.splitQuantities);
-        members.forEach((member, index) => {
-          if (index < count) next!.set(member.lineNo, this.#displayQty(member.quantity));
-          else next!.delete(member.lineNo);
-        });
-      }
-      if (next === undefined) return;
-      this.splitQuantities = next;
-    }
-    this.#actionScope?.changed();
-  }
-
-  /** A grouped row picks or drops every member. */
-  #toggleTransferLine(members: readonly TabLine[], event: Event): void {
-    if (!this.#actionControlCurrent(event)) return;
-    const next = new Set(this.transferLineNos);
-    const selected = members.every((member) => next.has(member.lineNo));
-    for (const member of members) {
-      if (selected) next.delete(member.lineNo);
-      else next.add(member.lineNo);
-    }
-    this.transferLineNos = next;
-    this.#actionScope?.changed();
-  }
-
-  /** Moves whole lines only, so every entry is `{ lineNo }` with no `quantity`. */
-  #confirmTransfer(event: Event): void {
-    if (!this.#actionControlCurrent(event)) return;
-    if (this.transferToBillId === null || this.transferLineNos.size === 0) return;
-    const transfers: TabTransfer[] = this.lines
-      .filter((line) => this.transferLineNos.has(line.lineNo))
-      .map((line) => ({ lineNo: line.lineNo }));
-    this.#retireActions();
-    this.#dispatch("transfer-lines", { toBillId: this.transferToBillId, transfers });
-    this.#closeActions();
-  }
-
-  /** A grouped row picks every member whole, or drops every member. */
-  #toggleSplitLine(members: readonly TabLine[], event: Event): void {
-    if (!this.#actionControlCurrent(event)) return;
-    const next = new Map(this.splitQuantities);
-    const selected = members.some((member) => next.has(member.lineNo));
-    for (const member of members) {
-      if (selected) next.delete(member.lineNo);
-      else next.set(member.lineNo, this.#displayQty(member.quantity));
-    }
-    this.splitQuantities = next;
-    this.#actionScope?.changed();
-  }
-
-  /** A grouped row's count is how many of its members are picked; its first ones are, each whole
-   * ({@link #tidyPickedPortions} keeps it so after a refresh). */
-  #stepSplitGroup(members: readonly TabLine[], delta: -1 | 1, event: Event): void {
-    if (!this.#actionControlCurrent(event)) return;
-    const count =
-      members.filter((member) => this.splitQuantities.has(member.lineNo)).length + delta;
-    if (count < 1) return;
-    const next = new Map(this.splitQuantities);
-    members.forEach((member, index) => {
-      if (index < count) next.set(member.lineNo, this.#displayQty(member.quantity));
-      else next.delete(member.lineNo);
-    });
-    this.splitQuantities = next;
-    this.#actionScope?.changed();
-  }
-
-  #setSplitQuantity(lineNo: number, quantity: string): void {
-    const next = new Map(this.splitQuantities);
-    next.set(lineNo, quantity);
-    this.splitQuantities = next;
-    this.#actionScope?.changed();
-  }
-
-  #stepSplitQuantity(line: TabLine, delta: -1 | 1, event: Event): void {
-    if (!this.#actionControlCurrent(event)) return;
-    const current = decimal(
-      this.splitQuantities.get(line.lineNo) ?? this.#displayQty(line.quantity),
-    );
-    const next =
-      delta === -1 ? subtractDecimal(current, decimal("1")) : addDecimal(current, decimal("1"));
-    if (compareDecimal(next, decimal("1")) < 0 || compareDecimal(next, decimal(line.quantity)) > 0)
-      return;
-    this.#setSplitQuantity(line.lineNo, next);
-  }
-
-  #splitPrecision(line: TabLine): number {
-    return line.unitPrecision ?? 3;
-  }
-
-  #splitQuantityError(line: TabLine): string {
-    const value = this.splitQuantities.get(line.lineNo) ?? "";
-    const precision = this.#splitPrecision(line);
-    const pattern =
-      precision === 0 ? /^[1-9]\d*$/ : new RegExp(`^(?:0|[1-9]\\d*)(?:\\.\\d{1,${precision}})?$`);
-    if (!pattern.test(value)) {
-      return t(
-        precision === 0 ? "table.split_quantity_whole_error" : "table.split_quantity_decimal_error",
-      );
-    }
-    try {
-      const quantity = decimal(value);
-      if (
-        compareDecimal(quantity, decimal("0")) <= 0 ||
-        compareDecimal(quantity, decimal(line.quantity)) > 0
-      ) {
-        return t(
-          precision === 0
-            ? "table.split_quantity_whole_error"
-            : "table.split_quantity_decimal_error",
-        );
-      }
-    } catch {
-      return t(
-        precision === 0 ? "table.split_quantity_whole_error" : "table.split_quantity_decimal_error",
-      );
-    }
-    return "";
-  }
-
-  #splitErrors(): string[] {
-    return this.lines
-      .filter((line) => !this.#isChild(line) && this.splitQuantities.has(line.lineNo))
-      .map((line) => this.#splitQuantityError(line))
-      .filter((error) => error !== "");
-  }
-
-  /** Full quantities omit `quantity`; partial plain dishes carry their exact selected decimal. Modifier
-   * children are absent from the picker and move with their whole parent on the server. */
-  async #confirmSplit(event: Event): Promise<void> {
-    if (!this.#actionControlCurrent(event)) return;
-    if (this.splitQuantities.size === 0) return;
-    this.splitAttempted = true;
-    if (this.#splitErrors().length > 0) {
-      await this.updateComplete;
-      const form = this.shadowRoot!.querySelector("[data-split-lines]");
-      if (form !== null) await focusFirstInvalid(form);
-      return;
-    }
-    const transfers: TabTransfer[] = this.lines
-      .filter((line) => !this.#isChild(line) && this.splitQuantities.has(line.lineNo))
-      .map((line) => {
-        const quantity = this.splitQuantities.get(line.lineNo)!;
-        return compareDecimal(decimal(quantity), decimal(line.quantity)) === 0
-          ? { lineNo: line.lineNo }
-          : { lineNo: line.lineNo, quantity };
-      });
-    if (transfers.length === 0) return;
-    this.#retireActions();
-    this.#dispatch("split-lines", { transfers });
+    this.#dispatch("merge-bills", { fromBillId: bill.workingOrderId });
     this.#closeActions();
   }
 
@@ -5297,12 +5100,7 @@ export class TillTableOrderScreen extends LitElement {
       case "pick":
         this.#closeActions();
         break;
-      case "transfer-lines":
-        this.transferToBillId = null;
-        this.transferLineNos = new Set();
-        this.actionStep = "pick";
-        break;
-      case "split-lines":
+      case "move-dishes":
       case "split-table":
         this.#closeActions();
         break;
@@ -5345,10 +5143,8 @@ export class TillTableOrderScreen extends LitElement {
         return nothing;
       case "pick":
         return this.#targetPicker();
-      case "transfer-lines":
-        return this.#transferLinesStep();
-      case "split-lines":
-        return this.#splitLinesStep();
+      case "move-dishes":
+        return this.#moveDishesStep();
       case "split-table":
       case "split-table-bill":
         return this.#splitTableStep();
@@ -5398,12 +5194,8 @@ export class TillTableOrderScreen extends LitElement {
       </wt-button>`;
     const verb = (name: ActionVerb, key: StringKey) =>
       action(name, key, () => this.#chooseVerb(name));
-    const split = verb("split", "table.action_split");
-    const pairVerbs = [
-      verb("transfer", "table.action_transfer"),
-      verb("merge", "table.action_merge_bills"),
-    ];
-    const lineVerbs = [split, ...pairVerbs];
+    const moveDishes = verb("move-dishes", "table.action_move_dishes");
+    const merge = verb("merge", "table.action_merge_bills");
     const tableMoves = [
       verb("join", "table.action_join"),
       verb("move", "table.action_move_guests"),
@@ -5412,7 +5204,7 @@ export class TillTableOrderScreen extends LitElement {
     if (party === null)
       return tableMenu({
         billHeading: t("floor.unsent_bill_unnumbered"),
-        billItems: lineVerbs,
+        billItems: [merge],
         tableItems: tableMoves,
       });
     const shown = this.#shownBills().find((bill) => bill.workingOrderId === this.orderId);
@@ -5423,9 +5215,11 @@ export class TillTableOrderScreen extends LitElement {
           ? []
           : [
               action("name-bill", "table.action_name_bill", () => this.#openBillNaming()),
-              // The server refuses each of these on a presented or paid bill, and the pair verbs on
-              // a bill holding a payment.
-              ...(shown.status !== "open" ? [] : shown.hasPayments ? [split] : lineVerbs),
+              // The server refuses both on a presented or paid bill, and Merge bills on a bill
+              // holding a payment.
+              ...(shown.status !== "open"
+                ? []
+                : [moveDishes, ...(shown.hasPayments ? [] : [merge])]),
               this.#movable() ? verb("move-bill", "table.action_move_bill") : nothing,
               this.#compBill(),
               ...this.#billDocumentItems(shown),
@@ -5534,13 +5328,7 @@ export class TillTableOrderScreen extends LitElement {
     }));
     const emptyKey = "table.no_other_bills";
     return html`<section class="actions" data-target-picker>
-      <h2 tabindex="-1">
-        ${
-          this.actionVerb === "merge"
-            ? this.#billsHeading("table.merge_into", { bill: this.orderId })
-            : this.#billsHeading("table.transfer_from", { bill: this.orderId })
-        }
-      </h2>
+      <h2 tabindex="-1">${this.#billsHeading("table.merge_into", { bill: this.orderId })}</h2>
       ${
         targets.length === 0
           ? html`<p class="empty">${t(emptyKey)}</p>`
@@ -5622,193 +5410,137 @@ export class TillTableOrderScreen extends LitElement {
     return fill(t(key), names);
   }
 
-  #transferLinesStep(): TemplateResult {
-    const canConfirm = this.transferToBillId !== null && this.transferLineNos.size > 0;
-    // Dishes only. `carveOffLines` REFUSES a directly named child with `tab.transfer_modifier_line`
-    // and cascades a dish's children with the dish instead (`apps/server/src/working-order.ts`), so
-    // offering a child row here only buys a refusal.
-    const rows = this.#pickerRows();
-    return html`<section class="actions" data-transfer-lines>
-      <h2 tabindex="-1">
-        ${this.#billsHeading("table.transfer_from_to", {
-          from: this.orderId,
-          to: this.transferToBillId,
-        })}
-      </h2>
-      ${
-        rows.length === 0
-          ? html`<p class="empty">${t("table.transfer_no_lines")}</p>`
-          : html`<div class="action-options">
-              ${rows.map((members) => this.#transferLineRow(members))}
-            </div>`
-      }
-      <wt-button
-        class="transfer-confirm"
-        data-transfer-confirm
-        variant=${canConfirm ? "primary" : "secondary"}
-        ?disabled=${!canConfirm}
-        @click=${(event: Event) => this.#confirmTransfer(event)}
+  #dishSources(): DishSources {
+    return {
+      lines: this.lines,
+      balance: this.#balanceShown(),
+      allergy: this.#allergy()?.snapshot ?? null,
+      recalled: this.#recalledLineIds(),
+    };
+  }
+
+  #dishGroupsFor(sources: DishSources): PickGroups {
+    const grouped = this.#dishGroups;
+    if (grouped !== undefined && sameSources(grouped.sources, sources)) return grouped.groups;
+    const groups = pickGroups(
+      sources.lines,
+      fallbackPortionKeys(sources),
+      sources.balance,
+      sources.recalled,
+    );
+    this.#dishGroups = { sources, groups };
+    return groups;
+  }
+
+  #moveDishesRows(
+    picks: Picks = this.moveDishesPicks,
+    sources: DishSources = this.#dishSources(),
+  ): PickRow[] {
+    return pickRows(this.#dishGroupsFor(sources), picks);
+  }
+
+  /** A re-read can pay, recall or regroup picked dishes; the picks follow what is drawn now. A
+   * recall into this person's draft changes the draft store in place, so the recalled dishes are
+   * compared by id rather than by a changed property. */
+  #tidyMovePicks(): void {
+    const drawn = this.#moveDishesDrawn;
+    if (this.actionStep !== "move-dishes" || drawn === undefined || this.moveDishesPicks.size === 0)
+      return;
+    const sources = this.#dishSources();
+    if (sameSources(drawn, sources)) return;
+    const next = tidyPicks(drawn.rows, this.#dishGroupsFor(sources), this.moveDishesPicks);
+    if (samePicks(next, this.moveDishesPicks)) return;
+    this.moveDishesPicks = next;
+    this.#actionScope?.changed();
+  }
+
+  /** The chosen destination while it is still offered: a re-read can take a bill out of the party's
+   * bills or present it after it was chosen. */
+  #moveDishesChosen(): string | null | undefined {
+    const to = this.moveDishesTo;
+    if (to === null || to === undefined) return to;
+    return this.#otherOpenBills().some(({ bill }) => bill.workingOrderId === to) ? to : undefined;
+  }
+
+  /** A re-read that stops or starts offering the chosen destination changes what is unsaved. */
+  #countMoveDestination(): void {
+    const chosen = this.#moveDishesChosen();
+    if (chosen === this.#moveDishesCounted) return;
+    this.#moveDishesCounted = chosen;
+    this.#actionScope?.changed();
+  }
+
+  #moveDishesStep(): TemplateResult {
+    const sources = this.#dishSources();
+    const rows = this.#moveDishesRows(this.moveDishesPicks, sources);
+    this.#moveDishesDrawn = { ...sources, rows };
+    const lineIds = pickedLineIds(rows, this.moveDishesPicks);
+    const chosen = this.#moveDishesChosen();
+    const canMove = lineIds.length > 0 && chosen !== undefined;
+    const shown = this.#shownBills().find((bill) => bill.workingOrderId === this.orderId);
+    const destination = (key: string, label: string, to: string | null) =>
+      html`<button
+        type="button"
+        class="option move-dishes-to"
+        data-move-dishes-to=${key}
+        aria-pressed=${chosen === to}
+        @click=${(event: Event) => {
+          if (!this.#actionControlCurrent(event)) return;
+          this.moveDishesTo = to;
+          this.#actionScope?.changed();
+        }}
       >
-        ${t("table.transfer_confirm")}
-      </wt-button>
-      ${this.#backButton()}
-    </section>`;
-  }
-
-  #transferLineRow(members: readonly TabLine[]): TemplateResult {
-    const line = members[0]!;
-    const name = this.#nameForLine(line);
-    const selected = members.every((member) => this.transferLineNos.has(member.lineNo));
-    return html`<button
-      type="button"
-      class="option transfer-line"
-      data-transfer-line=${line.lineNo}
-      aria-pressed=${selected}
-      @click=${(event: Event) => this.#toggleTransferLine(members, event)}
-    >
-      <span aria-hidden="true">${selected ? "☑" : "☐"}</span> ${name}
-      <span class="qty">${this.#pickerQuantity(members)}</span>
-    </button>`;
-  }
-
-  #pickerQuantity(members: readonly TabLine[]): string {
-    return members.length > 1 ? String(members.length) : this.#displayQty(members[0]!.quantity);
-  }
-
-  #splitLinesStep(): TemplateResult {
-    const rows = this.#pickerRows();
-    const errors = this.splitAttempted ? this.#splitErrors() : [];
-    return html`<section class="actions" data-split-lines>
-      <h2 tabindex="-1">${t("table.split_pick_lines")}</h2>
-      ${
-        this.#holdsDishWithExtrasToPart()
-          ? html`<p data-split-help>${t("table.split_options_together")}</p>`
-          : nothing
-      }
-      ${
-        rows.length === 0
-          ? html`<p class="empty">${t("table.split_no_lines")}</p>`
-          : html`<div class="action-options">
-              ${rows.map((members) => this.#splitLineRow(members))}
-            </div>`
-      }
-      <wt-form-actions .error=${errors.length > 0 ? t("form.fix_fields") : ""}>
+        ${label}
+      </button>`;
+    return html`<section class="actions" data-move-dishes>
+      <h2 tabindex="-1">
+        ${
+          shown === undefined
+            ? t("table.actions_title")
+            : fill(t("table.move_dishes_heading"), { bill: billLabel(shown) })
+        }
+      </h2>
+      <till-portion-picker
+        .rows=${rows}
+        .picks=${this.moveDishesPicks}
+        .nameOf=${(line: TabLine) => this.#nameForLine(line)}
+        .money=${(amount: string) => this.#money(amount)}
+        @portion-picks=${(event: CustomEvent<{ picks: string[] }>) => {
+          event.stopPropagation();
+          if (!this.#actionControlCurrent(event)) return;
+          this.moveDishesPicks = new Set(event.detail.picks);
+          this.#actionScope?.changed();
+        }}
+      ></till-portion-picker>
+      <h3 id="move-dishes-to-heading" data-move-dishes-to-heading>${t("table.move_dishes_to")}</h3>
+      <div class="action-options" role="group" aria-labelledby="move-dishes-to-heading">
+        ${this.#otherOpenBills().map(({ bill }) =>
+          destination(bill.workingOrderId, billLabel(bill), bill.workingOrderId),
+        )}
+        ${destination("new", t("table.new_bill"), null)}
+      </div>
+      <wt-form-actions>
         ${this.#backButton("cancel")}
         <wt-button
-          class="transfer-confirm"
-          data-split-confirm
-          variant=${this.splitQuantities.size === 0 ? "secondary" : "primary"}
-          ?disabled=${this.splitQuantities.size === 0 || errors.length > 0}
-          @click=${(event: Event) => void this.#confirmSplit(event)}
+          data-move-dishes-confirm
+          variant=${canMove ? "primary" : "secondary"}
+          ?disabled=${!canMove}
+          @click=${(event: Event) => this.#confirmMoveDishes(event)}
         >
-          ${t("table.split_confirm")}
+          ${t("table.move_dishes_confirm")}
         </wt-button>
       </wt-form-actions>
     </section>`;
   }
 
-  #splitLineRow(members: readonly TabLine[]): TemplateResult {
-    const line = members[0]!;
-    const selected = this.splitQuantities.has(line.lineNo);
-    const quantity = this.splitQuantities.get(line.lineNo) ?? this.#displayQty(line.quantity);
-    const name = this.#nameForLine(line);
-    const error = this.splitAttempted && selected ? this.#splitQuantityError(line) : "";
-    const grouped = members.length > 1;
-    return html`<div class="split-line-row">
-      <button
-        type="button"
-        class="option transfer-line"
-        data-split-line=${line.lineNo}
-        aria-pressed=${selected}
-        @click=${(event: Event) => this.#toggleSplitLine(members, event)}
-      >
-        <span aria-hidden="true">${selected ? "☑" : "☐"}</span> ${name}
-        <span class="qty">${this.#pickerQuantity(members)}</span>
-      </button>
-      ${
-        selected && grouped
-          ? this.#splitGroupQuantity(members, name)
-          : selected
-            ? this.#splitPrecision(line) === 0
-              ? this.#splitEachQuantity(line, name, quantity)
-              : html`<wt-input
-                  class="split-quantity"
-                  data-split-quantity=${line.lineNo}
-                  name=${`split-quantity-${line.lineNo}`}
-                  decimal-locale=${currentLocale()}
-                  required
-                  .label=${t("table.split_quantity")}
-                  .value=${quantity}
-                  .error=${error}
-                  @wt-change=${(event: Event) => {
-                    event.stopPropagation();
-                    if (!this.#actionControlCurrent(event)) return;
-                    this.#setSplitQuantity(
-                      line.lineNo,
-                      (event as CustomEvent<{ value: string }>).detail.value,
-                    );
-                  }}
-                ></wt-input>`
-            : nothing
-      }
-    </div>`;
-  }
-
-  #splitGroupQuantity(members: readonly TabLine[], name: string): TemplateResult {
-    const line = members[0]!;
-    const count = members.filter((member) => this.splitQuantities.has(member.lineNo)).length;
-    return html`<div class="split-quantity split-stepper">
-      <span>${t("table.split_quantity")}</span>
-      <wt-button
-        variant="ghost"
-        size="sm"
-        data-split-dec=${line.lineNo}
-        aria-label=${`${t("basket.decrease")} ${name}`}
-        ?disabled=${count <= 1}
-        @click=${(event: Event) => this.#stepSplitGroup(members, -1, event)}
-      >
-        <span aria-hidden="true">−</span>
-      </wt-button>
-      <span class="split-count" data-split-count=${line.lineNo}>${count}</span>
-      <wt-button
-        variant="ghost"
-        size="sm"
-        data-split-inc=${line.lineNo}
-        aria-label=${`${t("basket.increase")} ${name}`}
-        ?disabled=${count >= members.length}
-        @click=${(event: Event) => this.#stepSplitGroup(members, 1, event)}
-      >
-        <span aria-hidden="true">+</span>
-      </wt-button>
-    </div>`;
-  }
-
-  #splitEachQuantity(line: TabLine, name: string, quantity: string): TemplateResult {
-    const current = decimal(quantity);
-    return html`<div class="split-quantity split-stepper">
-      <span>${t("table.split_quantity")}</span>
-      <wt-button
-        variant="ghost"
-        size="sm"
-        data-split-dec=${line.lineNo}
-        aria-label=${`${t("basket.decrease")} ${name}`}
-        ?disabled=${compareDecimal(current, decimal("1")) <= 0}
-        @click=${(event: Event) => this.#stepSplitQuantity(line, -1, event)}
-      >
-        <span aria-hidden="true">−</span>
-      </wt-button>
-      <span class="split-count" data-split-count=${line.lineNo}>${quantity}</span>
-      <wt-button
-        variant="ghost"
-        size="sm"
-        data-split-inc=${line.lineNo}
-        aria-label=${`${t("basket.increase")} ${name}`}
-        ?disabled=${compareDecimal(current, decimal(line.quantity)) >= 0}
-        @click=${(event: Event) => this.#stepSplitQuantity(line, 1, event)}
-      >
-        <span aria-hidden="true">+</span>
-      </wt-button>
-    </div>`;
+  #confirmMoveDishes(event: Event): void {
+    if (!this.#actionControlCurrent(event)) return;
+    const lineIds = pickedLineIds(this.#moveDishesRows(), this.moveDishesPicks);
+    const toBillId = this.#moveDishesChosen();
+    if (lineIds.length === 0 || toBillId === undefined) return;
+    this.#retireActions();
+    this.#dispatch("move-dishes", { lineIds, toBillId });
+    this.#closeActions();
   }
 
   #backButton(slot?: string): TemplateResult {

@@ -1250,6 +1250,8 @@ an operator configuration choice, not a code defect; flagged for the asesor, not
   `Split (soon)` placeholder (`apps/till/src/i18n/strings.ts`).
   > **Update, 2026-10-02 (#1042).** That suite now runs on SQLite and passes (3 of 3), and the till no
   > longer shows `Split (soon)`: `apps/till/src/i18n/strings.ts` offers `Split by item`.
+  > **Update, 2026-11-01 (A803 slice 4a).** Split by item is gone; the till splits through **Move
+  > dishes…** → **+ New bill** (`POST /api/bills/:id/move-dishes`).
 - **Guests who split the MONEY on one bill** are one operation. Either one invoice (with the payments
   as separate tenders, which the pay path does not yet support — `payWorkingOrder` takes a single
   `tender`), or the art. 14.2.a) duplicado route with a per-person base/cuota split. Open — Q17.

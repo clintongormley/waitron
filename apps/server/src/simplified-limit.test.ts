@@ -773,6 +773,32 @@ describe("an edit that grows an order", () => {
     expect(storedLines(mainBill)).toEqual(["1:1000"]);
     expect(storedLines(secondBill)).toEqual(["1:2000"]);
   });
+
+  it("moving dishes onto a bill that would go over the limit is refused, and both keep their lines", async () => {
+    const { partyId, mainBill, secondBill } = await twoBills({ Céntimo: 1 }, { Lote: 1 });
+    const lineIds = venue.db
+      .all<{ id: string }>(
+        sql`select id from working_order_lines where working_order_id = ${secondBill}`,
+      )
+      .map((row) => row.id);
+    const before = written();
+    const answer = await send(
+      limited,
+      venue.cookie,
+      "POST",
+      `/api/bills/${secondBill}/move-dishes`,
+      await observedBillActionBody(venue.db, `/api/bills/${secondBill}/move-dishes`, {
+        lineIds,
+        toBillId: mainBill,
+        expectedPartyRevision: partyRevision(partyId),
+      }),
+    );
+    expect(answer.status).toBe(409);
+    expect(answer.json).toMatchObject({ ...REFUSED, params: { total: "3000.01" } });
+    expect(storedLines(mainBill)).toEqual(["1:1000"]);
+    expect(storedLines(secondBill)).toEqual(["1:1000"]);
+    expect(written()).toEqual(before);
+  });
 });
 
 describe("growing a bill with a saved full-invoice choice", () => {

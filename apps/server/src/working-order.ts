@@ -4699,6 +4699,24 @@ async function carveLines(
       partials.push({ line, quantity: t.quantity, children });
     }
   }
+  // A measured (weighed) portion is one dish and leaves its bill whole (spec §3.1); A1196 keeps
+  // the in-bill splits.
+  if (fromTabId !== toTabId && partials.length > 0) {
+    const portionOf = await readGrowingPortions(
+      tx,
+      partials.map(({ line }) => line.id),
+    );
+    const cut = partials
+      .filter(({ line }) => portionOf.get(line.id)?.measured === true)
+      .sort((a, b) => a.line.lineNo - b.line.lineNo)[0];
+    if (cut !== undefined) {
+      throw new AppError("tab.transfer_quantity_invalid", {
+        tabId: fromTabId,
+        lineNo: cut.line.lineNo,
+        quantity: cut.quantity,
+      });
+    }
+  }
   // A split keeps the source row, so its paid quantity may stay there while unpaid units move.
   await refusePaidLines(
     tx,

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
@@ -67,13 +67,16 @@ async function requireUnreservedTransfers(
       ),
     )
     .limit(1);
-  if (reserved !== undefined)
-    throw new AppError("draft.out_of_date", {
-      billId,
-      draftId: edit.draftId,
-      revision: edit.draftRevision,
-      edit,
-    });
+  if (reserved !== undefined) throw reservedRefusal(billId, edit);
+}
+
+function reservedRefusal(billId: string, edit: BillEditState): AppError {
+  return new AppError("draft.out_of_date", {
+    billId,
+    draftId: edit.draftId,
+    revision: edit.draftRevision,
+    edit,
+  });
 }
 
 type BillStatus = (typeof workingOrders.$inferSelect)["status"];
@@ -309,4 +312,112 @@ export async function transferItems(
   await bumpRevision(tx, [fromBillId, toBillId]);
   await assertBillInvariant(tx, [fromBillId]);
   await enqueueMovedSlips(tx, cfg, before, toBillId, splitFrom);
+}
+
+/**
+ * The line numbers of `lineIds`, each a dish of `billId`, in the order named, and whether any is
+ * recalled into a draft. The ids travel as one JSON value, so they take one bound value however many
+ * are named.
+ */
+async function resolveMoveLines(
+  tx: Transaction,
+  billId: string,
+  lineIds: readonly string[],
+): Promise<{ transfers: { lineNo: number }[]; recalled: boolean }> {
+  const rows = await tx
+    .select({
+      id: workingOrderLines.id,
+      lineNo: workingOrderLines.lineNo,
+      parentLineId: workingOrderLines.parentLineId,
+      recalled: isRecalledDish(tx).mapWith(Boolean),
+    })
+    .from(workingOrderLines)
+    .where(
+      and(
+        eq(workingOrderLines.workingOrderId, billId),
+        inArray(
+          workingOrderLines.id,
+          sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
+        ),
+      ),
+    );
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const transfers = lineIds.map((lineId) => {
+    const row = byId.get(lineId);
+    if (row === undefined) throw new AppError("tab.line_not_found", { tabId: billId, lineId });
+    if (row.parentLineId !== null) {
+      throw new AppError("tab.transfer_modifier_line", { tabId: billId, lineNo: row.lineNo });
+    }
+    return { lineNo: row.lineNo };
+  });
+  assertDistinctTransferLines(billId, transfers);
+  return { transfers, recalled: rows.some((row) => row.recalled) };
+}
+
+/**
+ * Move the chosen dishes, whole and with their extras, from an open bill to another bill of its
+ * party, or to a new bill (a new counter order when the bill has none). The source may be partly
+ * paid: a paid dish stays (`bill.line_paid`) and the source keeps at least what it has received. An
+ * existing destination may hold payments and owes more afterwards. To a new bill, a dish the kitchen holds outside a held
+ * group is refused `tab.split_held_line`, as `splitBill` refuses it.
+ */
+export async function moveDishes(
+  tx: Transaction,
+  cfg: OriginConfig,
+  fromBillId: string,
+  toBillId: string | null,
+  lineIds: readonly string[],
+  command: BillCommand & { expectedEdits: BillEditExpected[] },
+): Promise<{ billId: string }> {
+  if (lineIds.length === 0) throw new AppError("sale.empty_basket", {});
+  if (toBillId === fromBillId) throw new AppError("tab.transfer_self", { tabId: fromBillId });
+  const path = await guardPathParty(tx, fromBillId, command);
+  refuseClosedBill(fromBillId, path.status);
+  if (toBillId !== null) {
+    if (path.partyId === null) {
+      throw new AppError("bill.other_party", { workingOrderId: toBillId });
+    }
+    await requireBillOfParty(tx, path.partyId, toBillId);
+    await assertServiceModesMatch(tx, cfg, fromBillId, toBillId);
+  }
+  const { transfers, recalled } = await resolveMoveLines(tx, fromBillId, lineIds);
+  const edits = await requireBillEditors(
+    tx,
+    toBillId === null ? [fromBillId] : [fromBillId, toBillId],
+    command.operatorId,
+    command.expectedEdits,
+  );
+  if (recalled) {
+    throw reservedRefusal(
+      fromBillId,
+      edits.find((edit) => edit.billId === fromBillId)!,
+    );
+  }
+
+  let destinationId = toBillId;
+  if (destinationId === null) {
+    destinationId = randomUUID();
+    await createOpenOrder(tx, cfg, destinationId, [], await orderTableLabel(tx, cfg, fromBillId), {
+      partyId: path.partyId,
+      existingService: true,
+      copyServiceContextFrom: fromBillId,
+    });
+    if (path.partyId === null)
+      await inheritKitchenNote(
+        tx,
+        cfg,
+        { workingOrderId: fromBillId },
+        { workingOrderId: destinationId },
+        "copy",
+      );
+  }
+  const before = await readSentWork(tx, fromBillId);
+  const { splitFrom } = await carveOffLines(tx, cfg, fromBillId, destinationId, transfers, {
+    refuseHeld: toBillId === null,
+    actorId: command.operatorId,
+  });
+  await bumpRevision(tx, [fromBillId, destinationId]);
+  await assertBillInvariant(tx, [fromBillId]);
+  await enqueueMovedSlips(tx, cfg, before, destinationId, splitFrom);
+  return { billId: destinationId };
 }

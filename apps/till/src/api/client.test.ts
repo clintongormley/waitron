@@ -3256,40 +3256,43 @@ describe("TillApi", () => {
     );
   });
 
-  it("transferItems POSTs { toBillId, transfers } to the /transfer route of the bill the items leave", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+  it.each([
+    ["a new bill", null],
+    ["an existing bill", "wo-dst"],
+  ] as const)(
+    "A803 move dishes client: moving to %s POSTs { lineIds, toBillId, revisions } to the /move-dishes route of the bill the dishes leave, answering the server's bill id",
+    async (_name, toBillId) => {
+      const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ billId: "wo-answer" }));
+      const expectedEdits = [
+        { billId: "wo-dst", editorVersion: 2, draftId: null, draftRevision: null },
+        { billId: "wo-src", editorVersion: 0, draftId: null, draftRevision: null },
+      ];
 
-    await expect(
-      new TillApi("", fetchStub).transferItems(
-        "wo-src",
-        "wo-dst",
-        [{ lineNo: 1 }, { lineNo: 2, quantity: "1.000" }],
-        {
-          expectedEdits: [
-            { billId: "wo-dst", editorVersion: 0, draftId: null, draftRevision: null },
-            { billId: "wo-src", editorVersion: 0, draftId: null, draftRevision: null },
-          ],
-        },
-      ),
-    ).resolves.toBeUndefined();
-
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/bills/wo-src/transfer",
-      expect.objectContaining({
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          toBillId: "wo-dst",
-          transfers: [{ lineNo: 1 }, { lineNo: 2, quantity: "1.000" }],
-          expectedEdits: [
-            { billId: "wo-dst", editorVersion: 0, draftId: null, draftRevision: null },
-            { billId: "wo-src", editorVersion: 0, draftId: null, draftRevision: null },
-          ],
+      await expect(
+        new TillApi("", fetchStub).moveDishes("wo-src", ["line-1", "line-2"], toBillId, {
+          expectedPartyRevision: 4,
+          partyId: "v1",
+          expectedEdits,
         }),
-      }),
-    );
-  });
+      ).resolves.toEqual({ billId: "wo-answer" });
+
+      expect(fetchStub).toHaveBeenCalledWith(
+        "/api/bills/wo-src/move-dishes",
+        expect.objectContaining({
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            lineIds: ["line-1", "line-2"],
+            toBillId,
+            expectedPartyRevision: 4,
+            partyId: "v1",
+            expectedEdits,
+          }),
+        }),
+      );
+    },
+  );
 
   it("A803 bill names: setBillName PUTs the name, the party, its revision and the bill's editor expectation to the bill's /name route", async () => {
     const fetchStub = vi
@@ -3316,28 +3319,6 @@ describe("TillApi", () => {
       }),
     );
     expect(result).toEqual({ revision: 4, billNumber: 2, billName: "Clint" });
-  });
-
-  it("splitBill POSTs the chosen lines to the bill's /split route and answers the new bill's id", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ billId: "wo-new" }));
-
-    const result = await new TillApi("", fetchStub).splitBill("wo-7", [{ lineNo: 1 }], {
-      expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
-    });
-
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/bills/wo-7/split",
-      expect.objectContaining({
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          transfers: [{ lineNo: 1 }],
-          expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
-        }),
-      }),
-    );
-    expect(result).toEqual({ billId: "wo-new" });
   });
 
   it("mergeBills surfaces a refusal as { code }", async () => {
@@ -4611,42 +4592,20 @@ describe("TillApi: a seated party", () => {
       },
     ],
     [
-      "transferItems",
+      "moveDishes",
       (api: TillApi) =>
-        api.transferItems("wo-src", "wo-dst", [{ lineNo: 1 }], {
+        api.moveDishes("wo-7", ["line-1"], null, {
           expectedPartyRevision: 3,
           partyId: "v1",
-          expectedEdits: [
-            { billId: "wo-dst", editorVersion: 0, draftId: null, draftRevision: null },
-            { billId: "wo-src", editorVersion: 0, draftId: null, draftRevision: null },
-          ],
+          expectedEdits: [{ billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null }],
         }),
-      "/api/bills/wo-src/transfer",
+      "/api/bills/wo-7/move-dishes",
       {
-        toBillId: "wo-dst",
-        transfers: [{ lineNo: 1 }],
+        lineIds: ["line-1"],
+        toBillId: null,
         expectedPartyRevision: 3,
         partyId: "v1",
-        expectedEdits: [
-          { billId: "wo-dst", editorVersion: 0, draftId: null, draftRevision: null },
-          { billId: "wo-src", editorVersion: 0, draftId: null, draftRevision: null },
-        ],
-      },
-    ],
-    [
-      "splitBill",
-      (api: TillApi) =>
-        api.splitBill("wo-7", [{ lineNo: 1 }], {
-          expectedPartyRevision: 3,
-          partyId: "v1",
-          expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
-        }),
-      "/api/bills/wo-7/split",
-      {
-        transfers: [{ lineNo: 1 }],
-        expectedPartyRevision: 3,
-        partyId: "v1",
-        expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+        expectedEdits: [{ billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null }],
       },
     ],
   ] as const)("%s sends the party revisions it was given", async (_name, call, path, body) => {

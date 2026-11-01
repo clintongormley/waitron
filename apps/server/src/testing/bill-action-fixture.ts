@@ -3,6 +3,7 @@ import { readBillEditState } from "../bill-editing.js";
 import {
   mergeBills as merge,
   mergeCheckedBills as checked,
+  moveDishes as moveLines,
   splitBill as split,
   transferItems as transfer,
   type BillCommand,
@@ -26,17 +27,23 @@ export async function billActionBody(
   path: string,
   body: unknown,
 ): Promise<unknown> {
-  const route = /^\/api\/bills\/([^/]+)\/(split|merge|transfer)$/.exec(path);
+  const route = /^\/api\/bills\/([^/]+)\/(split|merge|transfer|move-dishes)$/.exec(path);
   if (route === null || body === null || typeof body !== "object" || Array.isArray(body))
     return body;
   const ask = body as Record<string, unknown>;
   const billId = route[1]!;
   if (route[2] === "split") return { expectedEdit: await readBillEditState(tx, billId), ...ask };
   const other = route[2] === "merge" ? ask.fromBillId : ask.toBillId;
-  const expectedEdits: BillEditExpected[] = [];
-  for (const id of [...new Set([billId, ...(typeof other === "string" ? [other] : [])])].sort())
-    expectedEdits.push(await readBillEditState(tx, id));
-  return { expectedEdits, ...ask };
+  return {
+    expectedEdits: await editsFor(tx, [billId, ...(typeof other === "string" ? [other] : [])]),
+    ...ask,
+  };
+}
+
+async function editsFor(tx: Transaction, billIds: string[]): Promise<BillEditExpected[]> {
+  const edits: BillEditExpected[] = [];
+  for (const id of [...new Set(billIds)].sort()) edits.push(await readBillEditState(tx, id));
+  return edits;
 }
 
 export async function splitBill(
@@ -60,13 +67,23 @@ export async function transferItems(
   transfers: Parameters<typeof transfer>[4],
   command: BillCommand & { expectedEdits?: BillEditExpected[] },
 ) {
-  const expectedEdits: BillEditExpected[] = [];
-  if (command.expectedEdits === undefined)
-    for (const id of [...new Set([from, into])].sort())
-      expectedEdits.push(await readBillEditState(tx, id));
   return transfer(tx, cfg, from, into, transfers, {
     ...command,
-    expectedEdits: command.expectedEdits ?? expectedEdits,
+    expectedEdits: command.expectedEdits ?? (await editsFor(tx, [from, into])),
+  });
+}
+
+export async function moveDishes(
+  tx: Transaction,
+  cfg: OriginConfig,
+  from: string,
+  to: string | null,
+  lineIds: readonly string[],
+  command: BillCommand & { expectedEdits?: BillEditExpected[] },
+) {
+  return moveLines(tx, cfg, from, to, lineIds, {
+    ...command,
+    expectedEdits: command.expectedEdits ?? (await editsFor(tx, to === null ? [from] : [from, to])),
   });
 }
 
@@ -79,16 +96,12 @@ export async function mergeBills(
   command: BillCommand & { expectedEdits?: BillEditExpected[] },
   attendance?: OrderAttendance,
 ) {
-  const expectedEdits: BillEditExpected[] = [];
-  if (command.expectedEdits === undefined)
-    for (const id of [...new Set([into, from])].sort())
-      expectedEdits.push(await readBillEditState(tx, id));
   return merge(
     tx,
     cfg,
     into,
     from,
-    { ...command, expectedEdits: command.expectedEdits ?? expectedEdits },
+    { ...command, expectedEdits: command.expectedEdits ?? (await editsFor(tx, [into, from])) },
     attendance,
   );
 }
@@ -102,12 +115,8 @@ export async function mergeCheckedBills(
     expectedEdits?: BillEditExpected[];
   },
 ) {
-  const expectedEdits: BillEditExpected[] = [];
-  if (known.expectedEdits === undefined)
-    for (const id of [...new Set([into, from])].sort())
-      expectedEdits.push(await readBillEditState(tx, id));
   return checked(tx, cfg, into, from, {
     ...known,
-    expectedEdits: known.expectedEdits ?? expectedEdits,
+    expectedEdits: known.expectedEdits ?? (await editsFor(tx, [into, from])),
   });
 }

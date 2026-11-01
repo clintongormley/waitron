@@ -98,6 +98,7 @@ describe("late issuance rolls back its initiating command", () => {
     "adjustment",
     "line cancellation",
     "bill split",
+    "bill move-dishes",
     "draft save",
     "draft split",
     "draft submit",
@@ -106,7 +107,9 @@ describe("late issuance rolls back its initiating command", () => {
     const [first, second] = await suite.db.select().from(products);
     if (first?.unitPrice == null || second?.unitPrice == null)
       throw new Error("fixture needs priced products");
-    const reduces = ["adjustment", "line cancellation", "bill split"].includes(kind);
+    const reduces = ["adjustment", "line cancellation", "bill split", "bill move-dishes"].includes(
+      kind,
+    );
     const billId = await tabWith(venue, first.name, ...(reduces ? [second.name] : []));
     const [bill] = await suite.db.select().from(workingOrders).where(eq(workingOrders.id, billId));
     const partyId = bill!.partyId!;
@@ -204,6 +207,14 @@ describe("late issuance rolls back its initiating command", () => {
           expectedPartyRevision: party!.revision,
           expectedEdit: edit,
           transfers: [{ lineNo: 2 }],
+        };
+      } else if (kind === "bill move-dishes") {
+        path = `/api/bills/${billId}/move-dishes`;
+        body = {
+          expectedPartyRevision: party!.revision,
+          expectedEdits: [edit],
+          lineIds: [lines.find((line) => line.lineNo === 2)!.id],
+          toBillId: null,
         };
       } else if (kind === "line cancellation") {
         path = `/api/parties/${partyId}/lines/${lines[1]!.id}/cancel-item`;

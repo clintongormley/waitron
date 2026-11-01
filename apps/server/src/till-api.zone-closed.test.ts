@@ -286,6 +286,52 @@ describe("existing service in a closed zone", () => {
     ).toEqual([{ status: "open" }]);
   });
 
+  it("moves a stored party bill's dishes to a new bill", async () => {
+    const v = await venue();
+    const seated = await seat(v);
+    const added = await request(v, "POST", `/api/parties/${seated.partyId}/groups`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: seated.revision,
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+      groups: [
+        { lines: [line(v), { menuItemId: v.offerFor("Tarta"), quantity: "1" }], release: "fire" },
+      ],
+    });
+    expect(added.status).toBe(200);
+    const [party] = await suite.db.select().from(parties).where(eq(parties.id, seated.partyId));
+    const [tarta] = await suite.db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(
+        and(eq(workingOrderLines.workingOrderId, seated.tabId), eq(workingOrderLines.lineNo, 2)),
+      );
+    at("23:45");
+    const answer = await request(
+      v,
+      "POST",
+      `/api/bills/${seated.tabId}/move-dishes`,
+      await observedBillActionBody(v.db, `/api/bills/${seated.tabId}/move-dishes`, {
+        partyId: seated.partyId,
+        expectedPartyRevision: party!.revision,
+        lineIds: [tarta!.id],
+        toBillId: null,
+      }),
+    );
+    expect(answer.status).toBe(200);
+    expect(
+      await suite.db
+        .select({ status: workingOrders.status })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, answer.json.billId as string)),
+    ).toEqual([{ status: "open" }]);
+    expect(
+      await suite.db
+        .select({ billId: workingOrderLines.workingOrderId })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.id, tarta!.id)),
+    ).toEqual([{ billId: answer.json.billId }]);
+  });
+
   it("splits joined tables without admitting a new service", async () => {
     const v = await venue();
     const seated = await seat(v);

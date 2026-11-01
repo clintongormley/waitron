@@ -752,8 +752,9 @@ Left open:
 - An extra counts its dish's percentage under a reason's per-line cap, and a dish the largest
   of its extras', which errs toward refusing. **Next action:** none unless staff find it gets
   in the way.
-- **Only give-aways and discounts split part of a dish with its extras.** Splitting a bill,
-  transferring items and moving part of a dish to another group still refuse a partial move
+- **Only give-aways and discounts split part of a dish with its extras.** The server's split and
+  transfer routes (no till caller since A803 slice 4a) and moving part of a dish to another group
+  still refuse a partial move
   of a line with extras (`tab.transfer_modifier_line`): part of a weighed dish.
   **Next action:** decide whether those partial moves should split extras too.
 - **`pressEscape` in `packages/ui/src/components/wt-dialog.test.ts` waits a fixed 50 ms after
@@ -2725,14 +2726,15 @@ row; whether the basket merges them before it is saved was not re-checked.
 ## A1193. Choosing which portions of a grouped row an action takes, and Fire now on a grouped row
 
 On a till row that groups identical portions, Comp and Void take a count and act on the last
-portions still active; Mark served (from the row's details) and Split by item's count take the
-first; Transfer items takes the whole row. A plain tap on a Sent row serves all of it without
+portions still active; Mark served (from the row's details) and Move dishes…'s count take the
+first. A plain tap on a Sent row serves all of it without
 asking (seen in slice 1's LOOK; the guide says so). On the kitchen screen a grouped row's tap and
 Move act on every portion, so one of two identical portions cannot be bumped or moved alone there.
 Fire now on a grouped row fires only its first portion, because the server's fire route names one
 line and firing members one by one would start a fire group and a ticket for each. Choices the
 build review left for the owner: accept, word the button differently on a grouped row, or let the
-route take a list. Slice 4's picker is planned as the way to choose which portions.
+route take a list. Slice 4a's picker (Move dishes…) takes a row's first portions and is for moves
+only; comp, void and Fire now are unchanged.
 
 ## A1199. On the counter, Cancel and Comp of one extra on a retrieved table bill are refused
 

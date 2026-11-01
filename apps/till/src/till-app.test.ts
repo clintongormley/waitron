@@ -523,8 +523,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     moveGuests: vi.fn().mockResolvedValue({ partyId: "v-2", billIds: ["wo-7"] }),
     joinTables: vi.fn().mockResolvedValue({ partyId: "v-2", billIds: ["wo-7"] }),
     mergeBills: vi.fn().mockResolvedValue(undefined),
-    transferItems: vi.fn().mockResolvedValue(undefined),
-    splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
+    moveDishes: vi.fn().mockResolvedValue({ billId: "wo-check" }),
     logout: vi.fn().mockResolvedValue(undefined),
     listDrafts: drafts.listDrafts,
     saveDraft: drafts.saveDraft,
@@ -10038,25 +10037,25 @@ describe("till-app", () => {
         expect(getTablesState).toHaveBeenCalledTimes(2);
       });
 
-      it("transfer-lines moves selected lines out then reloads this tab's lines AND the floor", async () => {
+      it("move-dishes to another bill moves the picked dishes out then reloads this tab's lines AND the floor", async () => {
         drafts.bills.add("wo-9");
-        const transferItems = vi.fn().mockResolvedValue(undefined);
+        const moveDishes = vi.fn().mockResolvedValue({ billId: "wo-9" });
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
         const { el } = await mountApp({
           getTablesState,
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines,
-          transferItems,
+          moveDishes,
           getPartyBills: vi.fn().mockResolvedValue([smallPartyBill]),
         });
         const screen = await toTableOrder(el, openTable);
         expect(getTabLines).toHaveBeenCalledTimes(1);
 
-        emit(screen, "transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] });
+        emit(screen, "move-dishes", { lineIds: ["line-1"], toBillId: "wo-9" });
         await flush(el);
 
-        expect(transferItems).toHaveBeenCalledWith("wo-7", "wo-9", [{ lineNo: 1 }], {
+        expect(moveDishes).toHaveBeenCalledWith("wo-7", ["line-1"], "wo-9", {
           expectedPartyRevision: 3,
           partyId: "v-2",
           expectedEdits: [
@@ -10068,29 +10067,29 @@ describe("till-app", () => {
         expect(getTablesState).toHaveBeenCalledTimes(2);
       });
 
-      it("requires staff confirmation before transferring lines off a bill over €3,000", async () => {
+      it("requires staff confirmation before moving dishes off a bill over €3,000 to another bill", async () => {
         drafts.bills.add("wo-9");
-        const transferItems = vi.fn().mockResolvedValue(undefined);
+        const moveDishes = vi.fn().mockResolvedValue({ billId: "wo-9" });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([largeOpenTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines: vi.fn().mockResolvedValue({ lines: [largeTabLine], revision: 0 }),
           getPartyBills: vi.fn().mockResolvedValue([largePartyBill]),
-          transferItems,
+          moveDishes,
         });
         const screen = await toTableOrder(el, largeOpenTable);
 
-        emit(screen, "transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] });
+        emit(screen, "move-dishes", { lineIds: ["line-1"], toBillId: "wo-9" });
         await flush(el);
 
         expect(el.shadowRoot!.querySelector("[data-confirm-different-people]")).not.toBeNull();
-        expect(transferItems).not.toHaveBeenCalled();
+        expect(moveDishes).not.toHaveBeenCalled();
 
         el.shadowRoot!.querySelector<HTMLElement>(
           "[data-confirm-different-people] [data-confirm]",
         )!.click();
         await flush(el);
-        expect(transferItems).toHaveBeenCalledWith("wo-7", "wo-9", [{ lineNo: 1 }], {
+        expect(moveDishes).toHaveBeenCalledWith("wo-7", ["line-1"], "wo-9", {
           expectedPartyRevision: 3,
           partyId: "v-2",
           expectedEdits: [
@@ -10102,12 +10101,12 @@ describe("till-app", () => {
 
       it("refuses a bill action after its party leaves the table", async () => {
         drafts.bills.add("wo-9");
-        const transferItems = vi.fn().mockResolvedValue(undefined);
+        const moveDishes = vi.fn().mockResolvedValue({ billId: "wo-9" });
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
         const { el } = await mountApp({
           getTablesState,
           listZones: vi.fn().mockResolvedValue([floorZone]),
-          transferItems,
+          moveDishes,
           getPartyBills: vi.fn().mockResolvedValue([smallPartyBill]),
           getBillBalance: vi.fn().mockResolvedValue({
             workingOrderId: "wo-7",
@@ -10126,15 +10125,15 @@ describe("till-app", () => {
         emit(screen, "merge-bills", { fromBillId: "wo-9" });
         await flush(el);
 
-        emit(tableOrder(el)!, "transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] });
+        emit(tableOrder(el)!, "move-dishes", { lineIds: ["line-1"], toBillId: "wo-9" });
         await flush(el);
 
-        expect(transferItems).not.toHaveBeenCalled();
+        expect(moveDishes).not.toHaveBeenCalled();
         expect(tableOrder(el)!.orderId).toBe("wo-7");
       });
 
-      it("split-lines switches pay and later receipt actions to the bill split off", async () => {
-        const splitBill = vi.fn().mockResolvedValue({ billId: "wo-check" });
+      it("move-dishes to a new bill switches pay and later receipt actions to the new bill", async () => {
+        const moveDishes = vi.fn().mockResolvedValue({ billId: "wo-check" });
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
         const recordSale = vi.fn().mockResolvedValue(saleResult);
@@ -10143,9 +10142,9 @@ describe("till-app", () => {
           getTablesState,
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines,
-          splitBill,
+          moveDishes,
           getPartyBills: vi.fn(async () =>
-            splitBill.mock.calls.length === 0
+            moveDishes.mock.calls.length === 0
               ? [smallPartyBill]
               : [smallPartyBill, { ...smallPartyBill, workingOrderId: "wo-check", billNumber: 2 }],
           ),
@@ -10154,13 +10153,13 @@ describe("till-app", () => {
         });
         const screen = await toTableOrder(el, openTable);
 
-        emit(screen, "split-lines", { transfers: [{ lineNo: 1 }] });
+        emit(screen, "move-dishes", { lineIds: ["line-1"], toBillId: null });
         await flush(el);
 
-        expect(splitBill).toHaveBeenCalledWith("wo-7", [{ lineNo: 1 }], {
+        expect(moveDishes).toHaveBeenCalledWith("wo-7", ["line-1"], null, {
           expectedPartyRevision: 3,
           partyId: "v-2",
-          expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+          expectedEdits: [{ billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null }],
         });
         expect(getTabLines).toHaveBeenLastCalledWith("wo-check");
         expect(tableOrder(el)!.orderId).toBe("wo-check");
@@ -10184,82 +10183,55 @@ describe("till-app", () => {
         expect(reprint).toHaveBeenCalledWith("wo-check");
       });
 
-      it("requires staff confirmation before splitting a bill over €3,000 and cancels without writing", async () => {
-        const splitBill = vi.fn().mockResolvedValue({ billId: "wo-check" });
+      it("requires staff confirmation before moving dishes off a bill over €3,000 to a new bill and cancels without writing", async () => {
+        const moveDishes = vi.fn().mockResolvedValue({ billId: "wo-check" });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([largeOpenTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines: vi.fn().mockResolvedValue({ lines: [largeTabLine], revision: 0 }),
           getPartyBills: vi.fn().mockResolvedValue([largePartyBill]),
-          splitBill,
+          moveDishes,
         });
         const screen = await toTableOrder(el, largeOpenTable);
 
-        emit(screen, "split-lines", { transfers: [{ lineNo: 1 }] });
+        emit(screen, "move-dishes", { lineIds: ["line-1"], toBillId: null });
         await flush(el);
 
         const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-confirm-different-people]");
         expect(dialog).not.toBeNull();
-        expect(splitBill).not.toHaveBeenCalled();
+        expect(moveDishes).not.toHaveBeenCalled();
 
         dialog!.querySelector<HTMLElement>("[data-cancel]")!.click();
         await flush(el);
         expect(el.shadowRoot!.querySelector("[data-confirm-different-people]")).toBeNull();
-        expect(splitBill).not.toHaveBeenCalled();
+        expect(moveDishes).not.toHaveBeenCalled();
 
-        emit(screen, "split-lines", { transfers: [{ lineNo: 1 }] });
+        emit(screen, "move-dishes", { lineIds: ["line-1"], toBillId: null });
         await flush(el);
         el.shadowRoot!.querySelector<HTMLElement>(
           "[data-confirm-different-people] [data-confirm]",
         )!.click();
         await flush(el);
-        expect(splitBill).toHaveBeenCalledWith("wo-7", [{ lineNo: 1 }], {
+        expect(moveDishes).toHaveBeenCalledWith("wo-7", ["line-1"], null, {
           expectedPartyRevision: 3,
           partyId: "v-2",
-          expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+          expectedEdits: [{ billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null }],
         });
       });
 
-      it("a modifier-dish partial split refusal keeps the origin open and explains the full-line rule", async () => {
-        const splitBill = vi.fn().mockRejectedValue({ code: "tab.transfer_modifier_line" });
+      it("a refusal to move held kitchen work to a new bill keeps the origin open and says to send it first", async () => {
+        const moveDishes = vi.fn().mockRejectedValue({ code: "tab.split_held_line" });
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines,
-          splitBill,
+          moveDishes,
           getPartyBills: vi.fn().mockResolvedValue([smallPartyBill]),
         });
         const screen = await toTableOrder(el, openTable);
 
-        emit(screen, "split-lines", { transfers: [{ lineNo: 1, quantity: "1" }] });
-        await flush(el);
-
-        expect(splitBill).toHaveBeenCalledWith("wo-7", [{ lineNo: 1, quantity: "1" }], {
-          expectedPartyRevision: 3,
-          partyId: "v-2",
-          expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
-        });
-        expect(tableOrder(el)!.orderId).toBe("wo-7");
-        expect(getTabLines).toHaveBeenCalledTimes(1);
-        expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
-          t("table.split_modifier_error"),
-        );
-      });
-
-      it("a refusal to split held kitchen work keeps the origin open and says to send it first", async () => {
-        const splitBill = vi.fn().mockRejectedValue({ code: "tab.split_held_line" });
-        const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
-        const { el } = await mountApp({
-          getTablesState: vi.fn().mockResolvedValue([openTable]),
-          listZones: vi.fn().mockResolvedValue([floorZone]),
-          getTabLines,
-          splitBill,
-          getPartyBills: vi.fn().mockResolvedValue([smallPartyBill]),
-        });
-        const screen = await toTableOrder(el, openTable);
-
-        emit(screen, "split-lines", { transfers: [{ lineNo: 1 }] });
+        emit(screen, "move-dishes", { lineIds: ["line-1"], toBillId: null });
         await flush(el);
 
         expect(tableOrder(el)!.orderId).toBe("wo-7");

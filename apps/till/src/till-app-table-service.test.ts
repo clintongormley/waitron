@@ -294,8 +294,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     setPartyName: vi.fn().mockResolvedValue({ revision: 4, name: "Ana" }),
     setPartyGuests: vi.fn().mockResolvedValue({ revision: 4, guestCount: 4 }),
     mergeBills: vi.fn().mockResolvedValue(undefined),
-    transferItems: vi.fn().mockResolvedValue(undefined),
-    splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
+    moveDishes: vi.fn().mockResolvedValue({ billId: "wo-check" }),
     recordSale: vi.fn().mockResolvedValue(saleResult),
     logout: vi.fn().mockResolvedValue(undefined),
     listDrafts: drafts.listDrafts,
@@ -1149,8 +1148,7 @@ describe("till-app table ordering: a handheld's order screen with no table opene
     ["name-party", { name: "Ana" }, "setPartyName"],
     ["guests-party", { guestCount: 4 }, "setPartyGuests"],
     ["merge-bills", { fromBillId: "wo-9" }, "mergeBills"],
-    ["transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] }, "transferItems"],
-    ["split-lines", { transfers: [{ lineNo: 1 }] }, "splitBill"],
+    ["move-dishes", { lineIds: ["line-1"], toBillId: "wo-9" }, "moveDishes"],
     ["pay-tab", { method: "cash", amount: "10.00" }, "recordSale"],
   ] as const)("%s sends nothing to the server", async (type, detail, method) => {
     const { el, screen } = await toEmptyOrderScreen();
@@ -1184,7 +1182,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
       "updateOrderLine",
     ],
     ["send-lines", { lineNos: [1] }, "sendLines"],
-    ["transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] }, "transferItems"],
+    ["move-dishes", { lineIds: ["line-1"], toBillId: "wo-9" }, "moveDishes"],
   ] as const)(
     "a %s refused because a card payment of the order is running says so",
     async (type, detail, method) => {
@@ -1229,7 +1227,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
   it.each([
     ["join-tables", { tableId: "t9" }, "joinTables"],
     ["merge-bills", { fromBillId: "wo-9" }, "mergeBills"],
-    ["transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] }, "transferItems"],
+    ["move-dishes", { lineIds: ["line-1"], toBillId: "wo-9" }, "moveDishes"],
   ] as const)(
     "a refused %s shows table.error and re-reads neither the tab nor the floor",
     async (type, detail, method) => {
@@ -1348,10 +1346,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
     },
   );
 
-  it.each([
-    ["transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] }, "transferItems"],
-    ["split-lines", { transfers: [{ lineNo: 1 }] }, "splitBill"],
-  ] as const)(
+  it.each([["move-dishes", { lineIds: ["line-1"], toBillId: "wo-9" }, "moveDishes"]] as const)(
     "a %s refused because an item is already paid for says so in that code's own words",
     async (type, detail, method) => {
       const { el } = await mountApp({
@@ -1367,18 +1362,18 @@ describe("till-app table ordering: refused and failed table actions", () => {
     },
   );
 
-  it("a split refused for any other reason shows table.error and keeps paying the original tab", async () => {
+  it("a move to a new bill refused for any other reason shows table.error and keeps paying the original tab", async () => {
     const { el } = await mountApp({
-      splitBill: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
+      moveDishes: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
     });
     const screen = await toTableOrder(el);
 
-    emit(screen, "split-lines", { transfers: [{ lineNo: 1 }] });
+    emit(screen, "move-dishes", { lineIds: ["line-1"], toBillId: null });
     await flush(el);
 
     const text = banner(el)!.textContent!;
     expect(text).toContain(t("table.error"));
-    expect(text).not.toContain(t("table.split_modifier_error"));
+    expect(text).not.toContain(t("table.split_held_error"));
 
     emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "3.00" });
     await flush(el);

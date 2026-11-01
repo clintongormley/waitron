@@ -150,7 +150,7 @@ import {
 } from "./parties.js";
 import { finishPartyService } from "./finish-party-service.js";
 import { parseFinishCancellations } from "./finish-party-input.js";
-import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
+import { mergeBills, moveDishes, splitBill, transferItems } from "./bill-actions.js";
 import type { BillCommand } from "./bill-actions.js";
 import { billNameZoneSubject, setBillName } from "./bill-identities.js";
 import { moveBill, moveWouldSend, previewBillMoveAllergy } from "./move-bill.js";
@@ -972,6 +972,12 @@ function requireOtherBill(value: unknown, field: string): string {
     throw new AppError("tab.not_open", { tabId: String(value) });
   }
   return value;
+}
+
+/** A list of line ids: a non-UUID is the request's fault, not a line the bill lacks. */
+function requireLineIds(value: unknown): string[] {
+  if (!Array.isArray(value)) throw invalid("lineIds");
+  return value.map((id) => requireBodyUuid(id, "lineIds").toLowerCase());
 }
 
 /**
@@ -4159,6 +4165,46 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             [billId, split.billId],
           );
           return split;
+        },
+        log,
+      );
+      return c.json(result);
+    }),
+  );
+
+  // The path is the bill the dishes leave.
+  app.post("/api/bills/:id/move-dishes", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const { personId } = session;
+      const cfg = requestCfg(deps.cfg, session);
+      const fromBillId = requireTabParam(c.req.param("id"));
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const lineIds = requireLineIds(body.lineIds);
+      const toBillId = body.toBillId === null ? null : requireOtherBill(body.toBillId, "toBillId");
+      const command = billCommand(personId, body);
+      const saleCfg = sendingCfg(cfg, c, session.device);
+      const result = await withIssuanceTransaction(
+        deps.db,
+        async (tx) => {
+          await checkZones(tx, deps.cfg, session, [
+            { orderId: fromBillId },
+            ...(toBillId === null ? [] : [{ orderId: toBillId }]),
+          ]);
+          const moved = await moveDishes(tx, cfg, fromBillId, toBillId, lineIds, {
+            ...command,
+            expectedEdits: parseBillEditExpecteds(body.expectedEdits),
+          });
+          await issueIfFullyPaid(tx, fiscal, saleCfg, fromBillId, personId);
+          await captureKitchenActivity(
+            tx,
+            deps.attendance === undefined
+              ? undefined
+              : { recorder: deps.attendance, clock: deps.clock },
+            personId,
+            [fromBillId, moved.billId],
+          );
+          return moved;
         },
         log,
       );

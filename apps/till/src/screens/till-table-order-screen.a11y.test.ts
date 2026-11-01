@@ -9,7 +9,6 @@ import { openDraftLine, resized } from "./till-table-order-screen.test-helpers.j
 import { sentPanelFor } from "./till-table-order-screen.sent.test-helpers.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
-import { t } from "../i18n/t.js";
 import {
   cleanupWidgets,
   expectNoA11yViolations,
@@ -806,7 +805,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations in the transfer picker and in the items it offers to transfer", async () => {
+  it("has no violations in the Move dishes panel, before and after a dish and a bill to move to are chosen", async () => {
     const { el, host } = await mountWidget<TillTableOrderScreen>(
       "till-table-order-screen",
       {
@@ -829,16 +828,20 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     );
     el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
     await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>('[data-action="transfer"]')!.click();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-action="move-dishes"]')!.click();
     await el.updateComplete;
-    const target = el.shadowRoot!.querySelector<HTMLElement>('[data-target="wo-3"]');
-    if (target === null) throw new Error("the scan must include a bill to transfer to");
+    const target = el.shadowRoot!.querySelector<HTMLElement>('[data-move-dishes-to="wo-3"]');
+    if (target === null) throw new Error("the scan must include a bill to move dishes to");
     await expectNoA11yViolations(host);
 
+    const picker = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "[data-move-dishes] till-portion-picker",
+    )!;
+    await picker.updateComplete;
+    picker.shadowRoot!.querySelector<HTMLElement>("[data-pick]")!.click();
     target.click();
     await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>('[data-transfer-line="1"]')!.click();
-    await el.updateComplete;
+    await picker.updateComplete;
     await expectNoA11yViolations(host);
   });
 
@@ -949,83 +952,54 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     });
   });
 
-  it("has no violations in the split quantity picker", async () => {
-    const splitLines: TabLine[] = [
-      { ...lines[0]!, quantity: "4.000" },
-      { ...lines[1]!, lineNo: 2, productId: "jamon", quantity: "0.750", unitPrecision: 3 },
+  it("has no violations in the Move dishes panel with a grouped row stepped down and a weighed dish ticked", async () => {
+    const dishes: TabLine[] = [
+      ...[1, 2, 3].map((lineNo) => ({
+        ...lines[0]!,
+        id: `portion-${lineNo}`,
+        lineNo,
+        quantity: "1.000",
+        portion: true,
+      })),
+      {
+        ...lines[0]!,
+        id: "jamon",
+        lineNo: 4,
+        productId: "jamon",
+        quantity: "0.750",
+        unitPrecision: 3,
+        portion: true,
+      },
     ];
     const { el, host } = await mountWidget<TillTableOrderScreen>(
       "till-table-order-screen",
-      { products: [...products, weightProduct], lines: splitLines, orderId: "wo-1" },
+      {
+        products: [...products, weightProduct],
+        lines: dishes,
+        orderId: "wo-2",
+        party,
+        bills: partyBills,
+      },
       theme,
     );
     el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
     await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>('[data-action="split"]')!.click();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-action="move-dishes"]')!.click();
     await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>('[data-split-line="1"]')!.click();
-    el.shadowRoot!.querySelector<HTMLElement>('[data-split-line="2"]')!.click();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await el.updateComplete;
-    await expectNoA11yViolations(host);
-  });
-
-  it("A803 portion grouping: has no violations in a grouped split row's stepper", async () => {
-    const portions: TabLine[] = [1, 2, 3].map((lineNo) => ({
-      ...lines[0]!,
-      id: `portion-${lineNo}`,
-      lineNo,
-      quantity: "1.000",
-      portion: true,
-    }));
-    const { el, host } = await mountWidget<TillTableOrderScreen>(
-      "till-table-order-screen",
-      { products, lines: portions, orderId: "wo-1" },
-      theme,
-    );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
-    await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>('[data-action="split"]')!.click();
-    await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>('[data-split-line="1"]')!.click();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector('[data-split-count="1"]')!.textContent!.trim()).toBe("3");
-    await expectNoA11yViolations(host);
-  });
-
-  it("has no violations with a bad split quantity refused", async () => {
-    const splitLines: TabLine[] = [
-      { ...lines[0]!, productId: "jamon", quantity: "0.750", unitPrecision: 3 },
-    ];
-    const { el, host } = await mountWidget<TillTableOrderScreen>(
-      "till-table-order-screen",
-      { products: [...products, weightProduct], lines: splitLines, orderId: "wo-1" },
-      theme,
-    );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
-    await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>('[data-action="split"]')!.click();
-    await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>('[data-split-line="1"]')!.click();
-    await el.updateComplete;
-    const field = el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
-      '[data-split-quantity="1"]',
+    const picker = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "[data-move-dishes] till-portion-picker",
     )!;
-    const input = field.shadowRoot!.querySelector("input")!;
-    input.value = "0";
-    input.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true }));
+    await picker.updateComplete;
+    picker.shadowRoot!.querySelector<HTMLElement>('[data-pick="portion-1"]')!.click();
+    await picker.updateComplete;
+    picker.shadowRoot!.querySelector<HTMLElement>('[data-pick-dec="portion-1"]')!.click();
+    await picker.updateComplete;
+    picker.shadowRoot!.querySelector<HTMLElement>('[data-pick="jamon"]')!.click();
     await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>("[data-split-confirm]")!.click();
-    await el.updateComplete;
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await el.updateComplete;
-    const actions = el.shadowRoot!.querySelector<
-      HTMLElement & { error: string; updateComplete: Promise<unknown> }
-    >("[data-split-lines] wt-form-actions")!;
-    await actions.updateComplete;
-    expect(actions.error).toBe(t("form.fix_fields"));
-    expect(field.error).not.toBe("");
+    await picker.updateComplete;
+    expect(picker.shadowRoot!.querySelector('[data-pick-count="portion-1"]')!.textContent).toBe(
+      "2 of 3",
+    );
     await expectNoA11yViolations(host);
   });
 });

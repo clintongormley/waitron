@@ -687,11 +687,12 @@ bill or guests into that zone is refused. Accepting a department transfer into i
 before resolving the request or changing its bill (`acceptDepartmentTransfer` in
 `packages/venue-service/src/department-transfers.ts`; the closed-destination case in
 `packages/venue-service/src/department-transfers.test.ts`). Notes, decreases, payment and splitting
-existing bills or joined tables remain possible. Bills and guests can move within the closed zone
-or out to an open zone (`moveGuests` in `table-actions.ts`, `adoptZone` in `move-bill.ts`, and the
-split and same-zone/outbound cases in `till-api.zone-closed.test.ts`). A presented bill moved on
-its own into another party or to a free table in the closed zone takes its service context, because
-`adoptZone` refuses a closed zone only for an open bill. Printing existing orders remains
+existing bills (moving dishes to a new bill included) or joined tables remain possible. Bills and
+guests can move within the closed zone or out to an open zone (`moveGuests` in `table-actions.ts`,
+`adoptZone` in `move-bill.ts`, and the split, move-dishes-to-a-new-bill and same-zone/outbound
+cases in `till-api.zone-closed.test.ts`). A presented bill moved on its own into another party or
+to a free table in the closed zone takes its service context, because `adoptZone` refuses a closed
+zone only for an open bill. Printing existing orders remains
 possible: `/api/orders/:id/reprint` in `apps/server/src/till-api.ts` checks profile zone access through
 `apps/server/src/zone-access.ts` and enqueues through `reprintOrderTickets` in
 `apps/server/src/kitchen-print.ts`.

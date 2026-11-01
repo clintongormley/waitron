@@ -356,7 +356,6 @@ import type {
   StaffMember,
   SubmittedDraft,
   TabLine,
-  TabTransfer,
   TableState,
   TableParty,
   TicketState,
@@ -667,6 +666,13 @@ function isBillMoneyRefusal(error: unknown): boolean {
   const code = (error as { code?: unknown } | undefined)?.code;
   return typeof code === "string" && BILL_MONEY_REFUSALS.has(code);
 }
+
+const DESTINATION_REFUSALS: ReadonlySet<string> = new Set([
+  "order.payment_in_flight",
+  "bill.refund_in_progress",
+  "bill.presented",
+  "bill.paid",
+]);
 
 /** A table refusal as said: a move that would leave the bill owing less than it has received names
  * by how much, with the offer to give that back first. */
@@ -1390,8 +1396,9 @@ interface WaitingOrderMove {
  * screen, with a second message when something else failed since. */
 type CounterError =
   | StringKey
-  /** `tableId`: the table a refusal names, for wording that names it. */
-  | { code: string; menuId?: string; tableId?: string }
+  /** `tableId`: the table a refusal names, for wording that names it; `bill`: the label of the
+   * bill it names when that is not the bill on screen. */
+  | { code: string; menuId?: string; tableId?: string; bill?: string }
   | { billPayments: string }
   | { replacedGroups: string }
   /** `lineChange`: refused for a change to a line, not a move of items. */
@@ -1471,6 +1478,9 @@ function errorText(
       if (table !== undefined)
         return tableSentence(table, "floor.needs_moving_first", "floor.needs_moving_first_named");
     }
+    const bill = error.bill;
+    if (bill !== undefined)
+      return fill(t("table.refused_on_bill"), { bill, message: codeMessage(error.code) });
     return codeMessage(error.code);
   }
   if ("billNameTakenOver" in error)
@@ -15775,10 +15785,12 @@ export class TillApp extends LitElement {
   }
 
   /** `service_zone.mode_incompatible`'s own words are about a table; between two bills it means
-   * the two are served in different ways. */
+   * the two are served in different ways. `draft.out_of_date` and `draft.taken_over` show their own
+   * words. */
   async #onBillPairRefusal(error: unknown): Promise<void> {
-    if ((error as { code?: string } | undefined)?.code === "service_zone.mode_incompatible")
-      this.errorKey = "table.bills_served_differently";
+    const code = (error as { code?: string } | undefined)?.code;
+    if (code === "service_zone.mode_incompatible") this.errorKey = "table.bills_served_differently";
+    else if (code === "draft.out_of_date" || code === "draft.taken_over") this.errorKey = { code };
     else if (isBillMoneyRefusal(error)) await this.#onBillMoneyRefusal(error);
     else await this.#onTableRefusal(error);
   }
@@ -15955,70 +15967,69 @@ export class TillApp extends LitElement {
     await pending.proceed();
   }
 
-  async #onTransferLines(event: Event, confirmed?: BillComposition): Promise<void> {
-    const { toBillId, transfers } = (
-      event as CustomEvent<{ toBillId: string; transfers: TabTransfer[] }>
+  async #onMoveDishes(event: Event, confirmed?: BillComposition): Promise<void> {
+    const { lineIds, toBillId } = (
+      event as CustomEvent<{ lineIds: string[]; toBillId: string | null }>
     ).detail;
-    if (this.activeTabId === undefined || transfers.length === 0) return;
-    const asked = confirmed ?? this.#billComposition([this.activeTabId, toBillId]);
+    if (this.activeTabId === undefined || lineIds.length === 0) return;
+    const asked =
+      confirmed ??
+      this.#billComposition(toBillId === null ? [this.activeTabId] : [this.activeTabId, toBillId]);
     if (asked === null || !this.#billCompositionUnchanged(asked)) return;
     if (
       confirmed === undefined &&
       (await this.#askDifferentPeople(() =>
-        this.#ownBillsChange(() => this.#onTransferLines(event, asked)),
+        this.#ownBillsChange(() => this.#onMoveDishes(event, asked)),
       ))
     )
       return;
     if (!this.#billCompositionUnchanged(asked)) return;
     this.errorKey = undefined;
     try {
-      await asked.api.transferItems(asked.billId, toBillId, transfers, {
+      const moved = await asked.api.moveDishes(asked.billId, lineIds, toBillId, {
         ...asked.revisions,
         expectedEdits: asked.expectedEdits,
       });
+      if (!this.#billCompositionCurrent(asked)) return;
+      if (toBillId === null) this.#chooseBill(moved.billId);
     } catch (error) {
       if (!this.#billCompositionCurrent(asked)) return;
-      await this.#onBillPairRefusal(error);
+      const code = (error as { code?: string } | undefined)?.code;
+      if (code === "tab.split_held_line") this.errorKey = "table.split_held_error";
+      else {
+        const destination = this.#refusedDestination(error, toBillId);
+        await this.#onBillPairRefusal(error);
+        // Set by the await above; the compiler still holds the undefined assigned before the call.
+        const said = this.errorKey as CounterError | undefined;
+        if (
+          destination !== undefined &&
+          this.#billCompositionCurrent(asked) &&
+          typeof said === "object" &&
+          "code" in said &&
+          said.code === code
+        )
+          this.errorKey = { ...said, bill: destination };
+      }
       if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
       return;
     }
-    if (!this.#billCompositionCurrent(asked)) return;
     await this.#reloadOrder();
     if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
   }
 
-  async #onSplitLines(event: Event, confirmed?: BillComposition): Promise<void> {
-    const { transfers } = (event as CustomEvent<{ transfers: TabTransfer[] }>).detail;
-    if (this.activeTabId === undefined) return;
-    const asked = confirmed ?? this.#billComposition([this.activeTabId]);
-    if (asked === null || !this.#billCompositionUnchanged(asked)) return;
+  /** The label of the destination bill when a move is refused for its state: the code's own words
+   * speak of "this order" or "this bill", and the bill on screen is the one the dishes leave. */
+  #refusedDestination(error: unknown, toBillId: string | null): string | undefined {
+    const refused = error as { code?: unknown; workingOrderId?: unknown } | undefined;
     if (
-      confirmed === undefined &&
-      (await this.#askDifferentPeople(() =>
-        this.#ownBillsChange(() => this.#onSplitLines(event, asked)),
-      ))
+      toBillId === null ||
+      refused?.workingOrderId !== toBillId ||
+      typeof refused.code !== "string" ||
+      !DESTINATION_REFUSALS.has(refused.code)
     )
-      return;
-    if (!this.#billCompositionUnchanged(asked)) return;
-    this.errorKey = undefined;
-    try {
-      const split = await asked.api.splitBill(asked.billId, transfers, {
-        ...asked.revisions,
-        expectedEdit: asked.expectedEdits[0]!,
-      });
-      if (!this.#billCompositionCurrent(asked)) return;
-      this.#chooseBill(split.billId);
-    } catch (error) {
-      if (!this.#billCompositionCurrent(asked)) return;
-      const code = (error as { code?: string }).code;
-      if (code === "tab.transfer_modifier_line") this.errorKey = "table.split_modifier_error";
-      else if (code === "tab.split_held_line") this.errorKey = "table.split_held_error";
-      else if (isBillMoneyRefusal(error)) await this.#onBillMoneyRefusal(error);
-      else await this.#onTableRefusal(error);
-      if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
-      return;
-    }
-    await this.#reloadOrder();
+      return undefined;
+    const bill = this.partyBills.find((each) => each.workingOrderId === toBillId);
+    return bill === undefined ? undefined : billLabel(bill);
   }
 
   #finishCurrent(composition: BillComposition): boolean {
@@ -19621,8 +19632,7 @@ export class TillApp extends LitElement {
         @name-bill=${(event: Event) => void this.#onNameBill(event)}
         @guests-party=${(event: Event) => void this.#onGuestsParty(event)}
         @merge-bills=${(event: Event) => void this.#ownBillsChange(() => this.#onMergeBills(event))}
-        @transfer-lines=${(event: Event) => void this.#ownBillsChange(() => this.#onTransferLines(event))}
-        @split-lines=${(event: Event) => void this.#ownBillsChange(() => this.#onSplitLines(event))}
+        @move-dishes=${(event: Event) => void this.#ownBillsChange(() => this.#onMoveDishes(event))}
         @finish-table=${() => void this.#onFinishTable()}
         @record-unpaid-departure=${() => this.#onRecordUnpaidDeparture()}
         @cancel-credit-bill=${(event: Event) => this.#onCancelCreditBill(event)}

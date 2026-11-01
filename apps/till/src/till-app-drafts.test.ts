@@ -296,11 +296,11 @@ function stubApi(overrides: Record<string, unknown> = {}) {
   } as Record<string, ReturnType<typeof vi.fn>>;
 }
 
-/** A bills read in which a split's new bill, `wo-check`, joins the party it was split from once the
- * split has been sent. */
+/** A bills read in which a new bill, `wo-check`, joins the party once dishes have been sent to a new
+ * bill. */
 function billsAfterSplit() {
   return floorPartyBills(undefined, (partyId) =>
-    (api.splitBill?.mock.calls ?? []).some(([, , ask]) => ask?.partyId === partyId)
+    (api.moveDishes?.mock.calls ?? []).some(([, , , ask]) => ask?.partyId === partyId)
       ? ["wo-check"]
       : [],
   );
@@ -1445,10 +1445,10 @@ describe("till-app: a table's draft is kept on the server", () => {
     expect(server.drafts[0]!.lines.map((line) => line.courseId)).toEqual(["mains"]);
   });
 
-  it("keeps unsent dishes on their original bill when a sent dish is split off", async () => {
+  it("keeps unsent dishes on their original bill when a sent dish moves to a new bill", async () => {
     const { el } = await mountApp({
       getPartyBills: billsAfterSplit(),
-      splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
+      moveDishes: vi.fn().mockResolvedValue({ billId: "wo-check" }),
       getTabLines: vi.fn().mockResolvedValue({
         lines: [
           {
@@ -1474,7 +1474,7 @@ describe("till-app: a table's draft is kept on the server", () => {
     });
     const order = await openTable(el);
     await tap(el, "Beer");
-    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
+    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: null });
     await flush(el);
 
     expect(tableOrder(el)!.orderId).toBe("wo-check");
@@ -3439,7 +3439,7 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
 
   describe("when the next person has split a bill off before the save answers", () => {
     const splitting = () => ({
-      splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
+      moveDishes: vi.fn().mockResolvedValue({ billId: "wo-check" }),
       mergeBills: vi.fn().mockResolvedValue(undefined),
       getPartyBills: billsAfterSplit(),
     });
@@ -3456,9 +3456,9 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
       await flush(el);
       emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
       await flush(el);
-      emit(tableOrder(el)!, "split-lines", { transfers: [{ lineNo: 1 }] });
+      emit(tableOrder(el)!, "move-dishes", { lineIds: ["line-1"], toBillId: null });
       await flush(el);
-      expect(api.splitBill).toHaveBeenCalledOnce();
+      expect(api.moveDishes).toHaveBeenCalledOnce();
       expect(tableOrder(el)!.orderId).toBe("wo-check");
       answer();
       await flush(el, 8);

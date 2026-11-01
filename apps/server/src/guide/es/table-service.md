@@ -194,13 +194,13 @@ va con ella, y la cuenta y la cocina saben siempre qué hamburguesa es cuál.
 Mientras los platos son iguales sigues viendo una sola fila, **2 × Hamburguesa**, en la cuenta y en
 **Enviado**. La fila se separa en cuanto un plato cambia, por ejemplo cuando se sirve una hamburguesa
 o se le aplica un descuento. Al tocar una fila en **Enviado** se marca entera como servida; **Marcar
-servido** en los detalles de la fila pregunta cuántos. **Dividir por artículo** te
-deja elegir cuántos platos de una fila pasan a la cuenta nueva, cada uno con sus extras, mientras que
-**Transferir artículos** mueve la fila entera. **Descuento** y **Cancelar** actúan sobre la fila y te
-dejan elegir cuántos de sus platos.
+servido** en los detalles de la fila pregunta cuántos. [**Mover platos…**](table-service.md#move-dishes) te deja
+elegir cuántos platos de una fila pasan a otra cuenta, cada uno con sus extras. **Descuento** y
+**Cancelar** actúan sobre la fila y te dejan elegir cuántos de sus platos.
 
 Un plato al peso es distinto, porque cada uno se pesa por separado: si añades dos veces el mismo
-plato al peso tienes dos líneas, no una del doble de peso. En una mesa o en el mostrador puedes añadir hasta 99 unidades de un mismo plato cada vez.
+plato al peso tienes dos líneas, no una del doble de peso, y un plato al peso pasa entero a otra
+cuenta. En una mesa o en el mostrador puedes añadir hasta 99 unidades de un mismo plato cada vez.
 
 En el mostrador, un pedido que aparcas y vuelves a abrir muestra sus 2 × Hamburguesa como una sola
 fila mientras no se haya pagado nada de él.
@@ -259,9 +259,9 @@ siempre al final de la lista: abre una cuenta nueva y vacía en la mesa y la pon
 
 Todo lo demás que haces en la mesa está en el menú **⋮**, junto al selector, en dos partes. La
 primera, con el nombre de la cuenta en pantalla como título, por ejemplo **Cuenta 2 · Clint**, actúa
-solo sobre esa cuenta: **Poner nombre a esta cuenta**, **Dividir por artículo**, **Transferir
-artículos**, **Juntar cuentas**, **Mover esta cuenta**, **Descuento en la cuenta**, **Factura
-completa**, **Copia del ticket** y **Cancelar y abonar**, cada una cuando corresponde a la cuenta.
+solo sobre esa cuenta: **Poner nombre a esta cuenta**, **Mover platos…**, **Juntar cuentas**,
+**Mover esta cuenta**, **Descuento en la cuenta**, **Factura completa**, **Copia del ticket** y
+**Cancelar y abonar**, cada una cuando corresponde a la cuenta.
 La segunda, **Toda la mesa**, actúa sobre todos los de la mesa: **Alergias**, **Poner nombre a los
 clientes**, **Comensales**, **Marcar cuenta pedida para …** con el nombre del grupo (una vez pedida,
 **Anular la petición de cuenta de …**), **Separar una mesa** (cuando el grupo ocupa más de una
@@ -301,6 +301,45 @@ Si eliges **Cerrar mesa** con una cuenta aún sin pagar, la caja indica **Hay un
 sin pagar. Cóbrala antes de cerrar la mesa** encima del pie. **Cobrar esta cuenta** pone en pantalla
 una cuenta sin pagar para que la cobres, y **Registrar salida sin pagar** registra que los clientes
 se fueron sin pagar.
+
+## Mover platos a otra cuenta {#move-dishes}
+
+Cuando un cliente decide pagar sus propias bebidas, pasa esos platos a una cuenta suya. Abre el menú
+**⋮** y elige **Mover platos…**. Está disponible en una cuenta de mesa que sigue abierta, aunque
+parte de ella ya esté pagada.
+
+El panel, con la cuenta como título, por ejemplo **Mover platos de Cuenta 1**, muestra los platos
+de la cuenta, cada uno con sus extras bajo el nombre, y un plato al peso con su peso, por ejemplo
+**Jamón ibérico ×0,32**. Marca un plato para moverlo; sus extras van con él. Los platos iguales comparten una
+fila, por ejemplo **Caña** con un **4** al lado: al marcar la fila se toman todos, o tantos como permitan los pagos de la cuenta, y **−** y **+**
+fijan después cuántos, como **2 de 4**, con el importe de los que se mueven. Un plato al peso solo tiene la casilla, porque pasa entero. Un plato que
+alguien está cambiando en un pedido sin enviar no aparece.
+
+Algunas casillas salen en gris, con el motivo debajo del plato:
+
+- **Pagado**: el plato ya está pagado, así que se queda en esta cuenta. Para moverlo, devuelve antes
+  su pago.
+- **Ya se han pagado 40,00 € en esta cuenta: mueve menos platos**: mover este plato, o uno más de la fila, dejaría la
+  cuenta por debajo de lo que ya se ha pagado en ella. Los demás platos sí pueden pasar.
+
+En **Mover a**, elige adónde van los platos: otra de las cuentas abiertas de la mesa, o **+ Cuenta
+nueva**. Una cuenta que ya ha recibido un pago simplemente debe más después. **Mover** sigue apagado hasta que marques un plato y elijas adónde va.
+Después de moverlos, una cuenta nueva se pone en pantalla; si los pasas a otra cuenta, esta sigue en
+pantalla. Cada plato conserva su curso y sigue enviado, marchado o servido como estaba. Si la caja
+dice **Envía los artículos en espera a cocina antes de pasarlos a otra cuenta**, envíalos antes, o
+pásalos a otra de las cuentas de la mesa. Si mueves los últimos platos sin pagar de una cuenta
+pagada en parte, la cuenta queda pagada del todo y se emite su factura.
+
+Si alguien paga un plato en otra caja mientras el panel está abierto, su fila pasa a **Pagado**
+cuando la caja vuelve a leer la cuenta, y ese plato deja de estar entre los que elegiste. Si tocas
+**Mover** antes, la caja rechaza el cambio con el motivo, por ejemplo **Este artículo ya está
+pagado, así que no se puede cambiar, mover ni cobrar otra vez. Devuelve antes su pago**, y no se
+mueve nada. Si el cambio dejara la cuenta por debajo de lo que ya se ha pagado, la caja dice cuánto
+y ofrece un botón **Devolver** por ese importe. Si se rechaza el cambio porque la cuenta que
+elegiste tiene un cobro o una devolución con tarjeta en curso, o porque entretanto se ha presentado
+o pagado, la caja nombra esa cuenta antes del motivo, por ejemplo **Cuenta 2: Esta cuenta ya está
+pagada**. Si otra persona tiene platos sin enviar en alguna de las dos cuentas, toma antes su
+pedido. Abre otra vez **Mover platos…** para elegir de nuevo.
 
 ## Poner nombre a una cuenta {#bill-names}
 
