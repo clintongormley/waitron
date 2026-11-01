@@ -61,7 +61,6 @@ export const ticketItems = table(
     /* v8 ignore start */
     courseId: id("course_id").references(() => kitchenCourses.id),
     /* v8 ignore stop */
-    // NULL = HELD: the item cannot advance until it is fired.
     firedAt: tsString("fired_at"),
     requestedAt: tsString("requested_at"),
     passControlled: flag("pass_controlled").notNull().default(false),

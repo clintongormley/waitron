@@ -544,8 +544,8 @@ export function initiatedItem(): SQL;  // requested_at is not null or fired_at i
 `packages/db/src/index.ts` adds `type OrderGroupRequestKind` to its `./schema/order-groups.js`
 export block (`:124-129`).
 
-The comment beside `request_kind` follows its siblings' form: the writers' type refuses another
-value; a CHECK would rebuild this table. No other comment is added.
+`request_kind` carries no comment (Task 1 review, M3: its siblings' form names a run-time refusal
+this column does not have).
 
 - [ ] **Failing tests.**
   - `packages/db/src/schema/ticket-items.test.ts`, inside the existing suite and its fixture:

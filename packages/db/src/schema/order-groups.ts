@@ -46,7 +46,6 @@ export const orderGroups = table(
     remindAt: tsString("remind_at"),
     // When this group's advance HOLD ticket was queued for a printer; null if none was.
     holdPrintedAt: tsString("hold_printed_at"),
-    // The writers' `OrderGroupRequestKind` refuses another value; a CHECK would rebuild this table.
     requestKind: label("request_kind")
       .$type<OrderGroupRequestKind>()
       .notNull()
