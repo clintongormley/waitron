@@ -32,7 +32,7 @@ import {
   refreshKitchenAllergyClashes,
 } from "./kitchen-allergy.js";
 import { passWaitingStations, requestStamps } from "./kitchen-release.js";
-import { initiatedItem } from "./kitchen-phase.js";
+import { initiatedAt, initiatedItem } from "./kitchen-phase.js";
 import {
   readLineCancellations,
   serviceQuantities,
@@ -1925,7 +1925,9 @@ interface DishKitchenPlace {
   dishLineId: string;
   stationId: string | null;
   courseId: string | null;
-  firedAt: string | null;
+  /** For a stored dish, initiatedAt(its ticket); the waiter's time when this write initiates it;
+   *  null while held. */
+  initiatedAt: string | null;
 }
 
 /** Insert records only for extra lines whose own station differs from their dish's destination. */
@@ -1938,7 +1940,13 @@ export async function insertSplitExtras(
   routing: RoutingOnce,
   keepAllergies?: ReadonlyMap<string, TicketAllergyCopy>,
 ): Promise<
-  { workingOrderLineId: string; stationId: string; firedAt: string | null; quantity: number }[]
+  {
+    workingOrderLineId: string;
+    stationId: string;
+    requestedAt: string | null;
+    firedAt: string | null;
+    quantity: number;
+  }[]
 > {
   if (dishes.length === 0) return [];
   const byDish = new Map(dishes.map((dish) => [dish.dishLineId, dish]));
@@ -1980,12 +1988,24 @@ export async function insertSplitExtras(
     })),
   );
   const madeHere = await readMadeHereStations(tx, cfg.sendingDeviceId);
+  const waiting = await passWaitingStations(
+    tx,
+    [...decisions.values()].flatMap((decision) =>
+      decision.kind === "made" ? [decision.stationId] : [],
+    ),
+  );
   const values = fresh.flatMap((extra) => {
     const decision = decisions.get(extra.id);
     if (decision?.kind !== "made") return [];
     const dish = byDish.get(extra.parentLineId!)!;
     const here = madeHere.has(decision.stationId);
-    const firedAt = here ? routing.at.toISOString() : dish.firedAt;
+    const at = routing.at.toISOString();
+    const stamps = requestStamps({
+      at: here ? at : (dish.initiatedAt ?? at),
+      initiated: dish.initiatedAt !== null,
+      madeHere: here,
+      waits: waiting.has(decision.stationId),
+    });
     return [
       {
         nodeId: cfg.nodeId,
@@ -1995,10 +2015,10 @@ export async function insertSplitExtras(
         courseId: dish.courseId,
         note: null,
         quantity: extra.quantity,
-        firedAt,
+        ...stamps,
         madeHere: here,
         state: here ? ("ready" as const) : ("queued" as const),
-        readyAt: here ? firedAt : null,
+        readyAt: here ? stamps.firedAt : null,
       },
     ];
   });
@@ -2011,6 +2031,7 @@ export async function insertSplitExtras(
           id: ticketItems.id,
           workingOrderLineId: ticketItems.workingOrderLineId,
           stationId: ticketItems.stationId,
+          requestedAt: ticketItems.requestedAt,
           firedAt: ticketItems.firedAt,
           quantity: ticketItems.quantity,
           madeHere: ticketItems.madeHere,
@@ -2021,13 +2042,16 @@ export async function insertSplitExtras(
     await freezeKitchenAllergies(
       tx,
       cfg,
-      inserted.filter((row) => !row.madeHere && row.firedAt !== null).map((row) => row.id),
+      inserted
+        .filter((row) => !row.madeHere && (row.firedAt ?? row.requestedAt) !== null)
+        .map((row) => row.id),
     );
     return inserted
       .filter((row) => !row.madeHere)
       .map((row) => ({
         workingOrderLineId: row.workingOrderLineId,
         stationId: row.stationId,
+        requestedAt: row.requestedAt,
         firedAt: row.firedAt,
         quantity: row.quantity!,
       }));
@@ -2254,7 +2278,7 @@ export async function fireLines(
           dishLineId: line.id,
           stationId: null,
           courseId,
-          firedAt: courseFired ? firedAt : null,
+          initiatedAt: courseFired ? firedAt : null,
         });
         return null;
       }
@@ -2272,7 +2296,7 @@ export async function fireLines(
         dishLineId: line.id,
         stationId,
         courseId,
-        firedAt: fired ? firedAt : null,
+        initiatedAt: fired ? firedAt : null,
       });
       return {
         initiated: courseFired,
@@ -2340,7 +2364,7 @@ export async function fireLines(
   }
   await attachKitchenAllergyCopies(tx, inserted, options.keepAllergies);
 
-  const firingDishes = dishPlaces.filter((dish) => dish.firedAt !== null);
+  const firingDishes = dishPlaces.filter((dish) => dish.initiatedAt !== null);
   const releasedExtras =
     firingDishes.length === 0
       ? []
@@ -2632,7 +2656,7 @@ async function finishRelease(
       dishLineId: line.id,
       stationId: null,
       courseId: line.courseId,
-      firedAt: at,
+      initiatedAt: at,
     })),
     routing,
   );
@@ -5434,6 +5458,7 @@ interface EditableLine {
   adjusted: boolean;
   ticket: {
     id: string;
+    requestedAt: string | null;
     firedAt: string | null;
     state: TicketState;
     stationId: string;
@@ -5648,6 +5673,7 @@ async function readEditableOrder(
       groupState: orderGroups.state,
       creditedTo: workingOrderLines.creditedTo,
       ticketId: ticketItems.id,
+      requestedAt: ticketItems.requestedAt,
       firedAt: ticketItems.firedAt,
       state: ticketItems.state,
       stationId: ticketItems.stationId,
@@ -5688,6 +5714,7 @@ async function readEditableOrder(
         ? null
         : {
             id: row.ticketId,
+            requestedAt: row.requestedAt,
             firedAt: row.firedAt,
             state: row.state!,
             stationId: row.stationId!,
@@ -6523,12 +6550,12 @@ async function applyLineEdits(
       dishLineId: parent.id,
       stationId: parent.ticket?.stationId ?? null,
       courseId: parent.ticket?.courseId ?? parent.courseId,
-      firedAt:
+      initiatedAt:
         parent.ticket !== null
-          ? parent.ticket.firedAt
+          ? initiatedAt(parent.ticket)
           : parent.groupState === "held" ||
               parent.children.some(
-                (child) => child.ticket !== null && child.ticket.firedAt === null,
+                (child) => child.ticket !== null && initiatedAt(child.ticket) === null,
               )
             ? null
             : routing.at.toISOString(),
