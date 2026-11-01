@@ -86,7 +86,7 @@ async function ask(
 }
 const snapshot = () => ({
   entries: suite.db.all(sql`select * from time_entries order by id`),
-  heads: suite.db.all(sql`select * from workforce_chains order by node_id, location_id`),
+  heads: suite.db.all(sql`select * from workforce_chains order by node_id`),
   closures: suite.db.all(sql`select * from pay_period_closures order by id`),
   questions: suite.db.all(sql`select * from attendance_questions order by id`),
   mail: suite.db.all(sql`select * from attendance_mail order by id`),

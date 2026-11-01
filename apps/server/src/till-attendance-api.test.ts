@@ -116,7 +116,7 @@ async function snapshot() {
     rows: await suite.db.select().from(timeEntries),
     questions: await suite.db.select().from(attendanceQuestions),
     commands: suite.db.all(sql`select * from attendance_response_commands order by id`),
-    heads: suite.db.all(sql`select * from workforce_chains order by node_id, location_id`),
+    heads: suite.db.all(sql`select * from workforce_chains order by node_id`),
   };
 }
 async function pending() {

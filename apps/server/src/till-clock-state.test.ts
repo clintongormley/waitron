@@ -90,7 +90,7 @@ describe("till own clock state", () => {
       withTransaction(suite.db, (tx) =>
         appendToChain(
           tx,
-          { nodeId, locationId },
+          { nodeId },
           {
             personId,
             locationId,
@@ -139,7 +139,7 @@ describe("till own clock state", () => {
     const automatic = await withTransaction(suite.db, (tx) =>
       appendToChain(
         tx,
-        { nodeId, locationId },
+        { nodeId },
         {
           personId,
           locationId,
@@ -161,7 +161,7 @@ describe("till own clock state", () => {
     await withTransaction(suite.db, (tx) =>
       appendToChain(
         tx,
-        { nodeId, locationId },
+        { nodeId },
         {
           personId,
           locationId,
@@ -278,7 +278,7 @@ describe("till own clock state", () => {
       withTransaction(suite.db, (tx) =>
         appendToChain(
           tx,
-          { locationId, nodeId: node },
+          { nodeId: node },
           {
             personId,
             locationId,

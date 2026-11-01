@@ -156,7 +156,7 @@ beforeAll(async () => {
     await suite.db.transaction((tx) =>
       appendToChain(
         tx,
-        { nodeId: ids.node, locationId: ids.location },
+        { nodeId: ids.node },
         {
           personId,
           locationId: ids.location,

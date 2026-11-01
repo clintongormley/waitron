@@ -144,6 +144,11 @@ for (const locale of ["en", "es"] as const) {
       const parties = expected[phase].tables.parties!;
       parties.columns = parties.columns.filter((column) => column.name !== "main_bill_id");
       parties.foreignKeys = parties.foreignKeys.filter((key) => key.from !== "main_bill_id");
+      const chains = expected[phase].tables.workforce_chains!;
+      chains.columns = chains.columns.filter((column) => column.name !== "location_id");
+      chains.foreignKeys = chains.foreignKeys
+        .filter((key) => key.from !== "location_id")
+        .map((key, id) => ({ ...key, id }));
       expected[phase].tables.webauthn_challenges!.columns.push({
         name: "purpose",
         type: "TEXT",

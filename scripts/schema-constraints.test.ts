@@ -340,7 +340,6 @@ const EXPECTED_FOREIGN_KEYS = [
   ["order_portion_events", ["portion_id"], "order_portions"],
   ["webauthn_credentials", ["person_id"], "persons"],
   ["workforce_chains", ["last_entry_id"], "time_entries"],
-  ["workforce_chains", ["location_id"], "locations"],
   ["workforce_chains", ["node_id"], "nodes"],
   ["working_line_contexts", ["menu_item_id"], "menu_items"],
   ["working_line_contexts", ["menu_version_id"], "menu_versions"],

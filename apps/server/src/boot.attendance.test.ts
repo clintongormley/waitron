@@ -217,7 +217,6 @@ for (const enabled of [true, false]) {
             beforeServerStarts();
             const before = await readChain(suite.db, {
               nodeId: f.venue.cfg.nodeId,
-              locationId: f.venue.cfg.locationId,
             });
             const generation = (await suite.db.select().from(attendanceSourceState)).find(
               (s) => s.recordKind === "scan",
@@ -235,7 +234,6 @@ for (const enabled of [true, false]) {
             expect(
               await readChain(suite.db, {
                 nodeId: f.venue.cfg.nodeId,
-                locationId: f.venue.cfg.locationId,
               }),
             ).toEqual(before);
             expect(sender).toHaveBeenCalledTimes(1);

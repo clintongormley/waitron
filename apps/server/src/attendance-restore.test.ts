@@ -102,7 +102,7 @@ async function settle(db: Database) {
 }
 async function snapshot(db: Database) {
   return {
-    chain: await readChain(db, { nodeId, locationId }),
+    chain: await readChain(db, { nodeId }),
     questions: await db.select().from(attendanceQuestions),
     mail: await db.select().from(attendanceMail),
     days: await db.select().from(attendanceDayWork),

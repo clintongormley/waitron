@@ -104,7 +104,7 @@ async function command() {
 function snapshot() {
   return {
     entries: suite.db.all(sql`select * from time_entries order by id`),
-    heads: suite.db.all(sql`select * from workforce_chains order by node_id, location_id`),
+    heads: suite.db.all(sql`select * from workforce_chains order by node_id`),
     questions: suite.db.all(sql`select * from attendance_questions order by id`),
     mail: suite.db.all(sql`select * from attendance_mail order by id`),
   };

@@ -249,7 +249,6 @@ describe("signed-in own till clock routes", () => {
     expect(await count()).toBe(1);
     const rows = await readChain(suite.db, {
       nodeId: venue.cfg.nodeId,
-      locationId: venue.cfg.locationId,
     });
     expect(verifyChain(rows)).toEqual({ ok: true });
   });
@@ -284,7 +283,6 @@ describe("signed-in own till clock routes", () => {
     expect((await request("in")).status).toBe(200);
     const rows = await readChain(suite.db, {
       nodeId: venue.cfg.nodeId,
-      locationId: venue.cfg.locationId,
     });
     expect(rows.map((r) => [r.eventAt, r.eventOffsetMinutes])).toEqual([
       [instant.toISOString(), offset],
@@ -321,7 +319,6 @@ describe("signed-in own till clock routes", () => {
     }
     const chain = await readChain(suite.db, {
       nodeId: venue.cfg.nodeId,
-      locationId: venue.cfg.locationId,
     });
     expect(
       chain.map((row) => [
@@ -412,7 +409,6 @@ describe("signed-in own till clock routes", () => {
     expect(await response.json()).toMatchObject({ state: "out", activeLocationId: null });
     const rows = await readChain(suite.db, {
       nodeId: venue.cfg.nodeId,
-      locationId: venue.cfg.locationId,
     });
     expect(rows.map((r) => [r.entryKind, r.eventAt])).toEqual([
       ["in", "2026-01-05T09:00:00.000Z"],
