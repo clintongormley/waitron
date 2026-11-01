@@ -35,6 +35,7 @@ import {
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { refreshDeploymentHolders, type DeploymentHolders } from "./deployment-holders.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
+import { finishPromotedRole } from "./promoted-role.js";
 import type { Logger } from "./logger.js";
 
 /**
@@ -81,7 +82,8 @@ export function assertNotFenced(held: SignedMembershipDocument | null, nodeId: s
 /**
  * Writes this node's primary role to node.db after the venue save has committed. The role follows
  * the venue save rather than sharing its transaction because the two live in different files; a
- * failure here is logged and rethrown, and each caller decides what it means.
+ * failure here is logged and rethrown, and each caller decides what it means. A role left behind is
+ * finished from the committed chart by `finishPromotedRole`, at the next call or the next start.
  */
 async function writePrimaryRole(deps: PromoteDeps): Promise<void> {
   try {
@@ -96,12 +98,17 @@ async function writePrimaryRole(deps: PromoteDeps): Promise<void> {
   }
 }
 
+function roleRepairDeps(deps: PromoteDeps) {
+  return { venue: deps.db, node: deps.node, ring: deps.ring, nodeId: deps.nodeId, log: deps.log };
+}
+
 /**
  * Local secondary to primary: the node already sells, so this claims the singleton duties only.
  * Idempotent: an already-primary node is a no-op. The checks and the mint run before the venue
  * transaction that writes the new membership document; the role in node.db follows it. A failed
  * role write rejects, because this runs in-process with no restart, so returning normally would
- * report a promotion the running box does not act on.
+ * report a promotion the running box does not act on; a second call finishes that role without
+ * minting another term.
  */
 export async function promoteLocalSecondaryToPrimary(
   deps: PromoteDeps,
@@ -111,6 +118,11 @@ export async function promoteLocalSecondaryToPrimary(
 
   // Fresh state, so a re-run after a half-completed promote sees what landed.
   await refreshDeploymentHolders(deps.node, deps.nodeId, deps.holders);
+  if ((await finishPromotedRole(roleRepairDeps(deps))) === "finished") {
+    await refreshDeploymentHolders(deps.node, deps.nodeId, deps.holders);
+    deps.log("info", "promotion.completed", { target: "local_secondary" });
+    return { alreadyPrimary: false };
+  }
 
   if (deps.holders.mode.current === "mirror") {
     // Refused with a clean code; the `(mirror, primary)` CHECK is only the backstop.
@@ -189,8 +201,8 @@ export async function commitMirrorPromotionTx(
 /**
  * The module activation, trading-series checks and membership document share one venue
  * transaction, which first refuses an unstamped venue.db; the role in node.db follows it. The
- * caller restarts only on `{ alreadyPrimary: false }`, and still does when the role write fails,
- * leaving node.db's role as it was.
+ * caller restarts only on `{ alreadyPrimary: false }`, and still does when the role write fails:
+ * the start that follows finishes the role from the committed chart, and so does a second call.
  */
 export async function promoteMirrorToPrimary(
   deps: MirrorPromoteDeps,
@@ -200,6 +212,11 @@ export async function promoteMirrorToPrimary(
   const supplied = snapshotModuleOperations(deps.moduleOperations);
 
   await refreshDeploymentHolders(deps.node, deps.nodeId, deps.holders);
+  if ((await finishPromotedRole(roleRepairDeps(deps))) === "finished") {
+    await refreshDeploymentHolders(deps.node, deps.nodeId, deps.holders);
+    deps.log("info", "promotion.completed", { target: "mirror" });
+    return { alreadyPrimary: false, seriesId: await readStandardSeriesId(deps.db, deps.nodeId) };
+  }
 
   if (deps.holders.mode.current === "primary") {
     const seriesId = await readStandardSeriesId(deps.db, deps.nodeId);

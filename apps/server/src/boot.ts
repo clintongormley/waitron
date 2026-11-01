@@ -63,6 +63,7 @@ import {
   type SingletonRole,
 } from "@waitron/db";
 import { readMirrorLink, readNodeMode, setSingletonRole } from "@waitron/node-db";
+import { finishPromotedRole } from "./promoted-role.js";
 import { credentialProvisioned, loadKeyRing, tenantCredentials } from "@waitron/credentials";
 import { registerModulePermissions, withPassiveManagementRead } from "@waitron/identity";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
@@ -1579,12 +1580,13 @@ async function bootServer(
   const node: NodeConfig = { ...config.node, locationId: nodeLocationId };
   assertSingleOperationalVenue(await readOperationalVenueIds(db), nodeLocationId);
 
-  // Nothing reaches here as a `mirror` today: `adoptFromPrimary` writes `mode='mirror'` together with
-  // the adoption-pending latch, and the branch above returns while it is set.
+  await assertRestoredMembershipReadable(config.stateDir, db);
+  // Not a self-promotion: it applies a promotion this box already committed and signed with its own
+  // key, whose role write was lost. Before the peer reconciliation, which stays demote-only.
+  await finishPromotedRole({ venue: db, node: store.node, ring, nodeId: config.node.nodeId, log });
   // Both deployment axes from ONE read of the row, so the initial holder pair is never torn: two
   // separate reads could straddle a concurrent promotion and yield an impossible `(mirror, primary)`.
   const initialAxes = await readNodeMode(store.node, config.node.nodeId);
-  await assertRestoredMembershipReadable(config.stateDir, db);
   // A returned box that died before it was fenced would otherwise boot with a stale chart and SELL
   // while the promoted cloud is also primary — two nodes filing under one NIF (CLAUDE.md §5). So a
   // non-mirror node with a configured cloud peer best-effort fetches the peer's signed chart and

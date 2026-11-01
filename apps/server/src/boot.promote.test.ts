@@ -23,7 +23,12 @@ import {
 } from "@waitron/db";
 import { readNodeMode, setNodeMode, setSingletonRole, writeMirrorLink } from "@waitron/node-db";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
-import type { Endorsement, SignedMembershipDocument } from "@waitron/membership";
+import {
+  generateNodeKeyPair,
+  signDocumentBody,
+  type Endorsement,
+  type SignedMembershipDocument,
+} from "@waitron/membership";
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
@@ -235,10 +240,16 @@ const TICK_ENV = {
   WAITRON_SKIP_RETRY_MS: "250",
 };
 
+/** A prior test may have promoted the shared directory's node. Its chart goes too, or the start
+ * would finish that promotion's role from it. */
+async function resetLocalSecondary(): Promise<void> {
+  await setSingletonRole({ venue: appDb, node: appNode }, TILL_ENV.WAITRON_NODE_ID, "secondary");
+  await appDb.execute(sql`delete from node_membership`);
+}
+
 describe("historical promote: local secondary → primary, live", () => {
   it("does not file as a secondary, then files on the next tick after a live promote — tills answer throughout", async () => {
-    // A prior test may have flipped the shared directory's singleton_role to 'primary'.
-    await setSingletonRole({ venue: appDb, node: appNode }, TILL_ENV.WAITRON_NODE_ID, "secondary");
+    await resetLocalSecondary();
     const seeded = await seedFiscalWork();
     const { registroIds } = seeded;
     const port = await freePort();
@@ -289,7 +300,7 @@ describe("historical promote: local secondary → primary, live", () => {
   }, 60_000);
 
   it("refuses an unattested promote and keeps filing off", async () => {
-    await setSingletonRole({ venue: appDb, node: appNode }, TILL_ENV.WAITRON_NODE_ID, "secondary");
+    await resetLocalSecondary();
     const seeded = await seedFiscalWork();
     const { registroIds } = seeded;
     const port = await freePort();
@@ -484,6 +495,141 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
       killSpy.mockRestore();
       vi.unstubAllEnvs();
       await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+});
+
+describe("a mirror's promotion whose role write is lost", () => {
+  async function bootMirror(
+    venueDir: string,
+    stateDir: string,
+    nodeId: string,
+    extraEnv: Record<string, string> = {},
+  ) {
+    return startServer({
+      ...KEY_ENV,
+      ...extraEnv,
+      ...TICK_ENV,
+      WAITRON_NODE_ID: nodeId,
+      WAITRON_VENUE_DIR: venueDir,
+      WAITRON_HTTP_PORT: String(await freePort()),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_STATE_DIR: stateDir,
+    });
+  }
+
+  async function writeStatus(): Promise<number> {
+    const response = await fetch(`http://127.0.0.1:${httpPort()}/management-api/catalogues`, {
+      method: "POST",
+      body: "{}",
+    });
+    return response.status;
+  }
+
+  it("a promotion whose role write is lost finishes at the next start, activating once", async () => {
+    const [venueDir, db, node] = await migratedVenue();
+    const seed = await seedMirrorIdentity(db, node);
+    const secret = await mintBreakGlassSecret({ venue: db, node }, seed.nodeId);
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-lost-role-"));
+    writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
+    const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
+    for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
+    await node.execute(
+      sql`create trigger refuse_role_update before update on node_mode begin select raise(abort, 'role refused'); end`,
+    );
+    await node.execute(
+      sql`create trigger refuse_role_insert before insert on node_mode begin select raise(abort, 'role refused'); end`,
+    );
+
+    const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
+    try {
+      const first = await bootMirror(venueDir, stateDir, seed.nodeId, allocationEnv);
+      try {
+        const request = seed.fixture.request("promote");
+        const response = await fetch(`http://127.0.0.1:${httpPort()}/management-api/promote`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            oldNodeNeutralised: true,
+            breakGlass: secret,
+            moduleOperation: { binding: request.binding, input: request.input },
+          }),
+        });
+        expect(response.status, await response.clone().text()).toBe(200);
+        expect(((await response.json()) as { alreadyPrimary: boolean }).alreadyPrimary).toBe(false);
+        await delay(50);
+        expect(killSpy).toHaveBeenCalledWith(process.pid, "SIGTERM");
+      } finally {
+        await first.close();
+      }
+      await node.execute(sql`drop trigger refuse_role_update`);
+      await node.execute(sql`drop trigger refuse_role_insert`);
+      expect(await readNodeMode(node, seed.nodeId)).toEqual({
+        mode: "mirror",
+        singletonRole: "secondary",
+      });
+
+      const second = await bootMirror(venueDir, stateDir, seed.nodeId, allocationEnv);
+      try {
+        expect(await readNodeMode(node, seed.nodeId)).toEqual({
+          mode: "primary",
+          singletonRole: "primary",
+        });
+        expect(await writeStatus()).toBe(401);
+      } finally {
+        await second.close();
+      }
+      const live = await db.execute<{ id: string }>(
+        sql`select id from registro_sif where node_id = ${seed.nodeId} and revocado_en is null`,
+      );
+      expect(live.rows).toHaveLength(1);
+    } finally {
+      await delay(50);
+      killSpy.mockRestore();
+      vi.unstubAllEnvs();
+      await rm(stateDir, { recursive: true, force: true });
+      await rm(venueDir, { recursive: true, force: true });
+    }
+  }, 90_000);
+
+  it("a held document naming this box the main box but signed with another key does not move it", async () => {
+    const [venueDir, db, node] = await migratedVenue();
+    const seed = await seedMirrorIdentity(db, node);
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-forged-chart-"));
+    writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
+    const forger = generateNodeKeyPair();
+    const body = {
+      term: 4,
+      nodes: [
+        {
+          nodeId: MIRROR_ORIGIN_NODE_ID,
+          contactUrl: "https://old",
+          standing: "sell-only" as const,
+        },
+        { nodeId: seed.nodeId, contactUrl: "", standing: "serving-primary" as const },
+      ],
+    };
+    await writeNodeMembership(db, {
+      body,
+      signerNodeId: seed.nodeId,
+      signature: signDocumentBody(body, forger.privateKey),
+      endorsements: [],
+    });
+
+    try {
+      const server = await bootMirror(venueDir, stateDir, seed.nodeId);
+      try {
+        expect(await readNodeMode(node, seed.nodeId)).toEqual({
+          mode: "mirror",
+          singletonRole: "secondary",
+        });
+        expect(await writeStatus()).toBe(403);
+      } finally {
+        await server.close();
+      }
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+      await rm(venueDir, { recursive: true, force: true });
     }
   }, 60_000);
 });

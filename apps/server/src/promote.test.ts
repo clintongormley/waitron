@@ -349,6 +349,33 @@ describe("promoteLocalSecondaryToPrimary", () => {
     expect((await readNodeMembership(db))?.body.term).toBe(4);
   });
 
+  it("a second call after a lost role write finishes the role and mints no second term", async () => {
+    const { db, deps, nodeId } = await localSecondary();
+    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-node-1"));
+    const { log, entries } = recordingLog();
+
+    const first = await captureError(() =>
+      promoteLocalSecondaryToPrimary(
+        { ...deps(log), node: nodeFailingNextWrite(suite.node) },
+        { oldNodeNeutralised: true },
+      ),
+    );
+    expect((first as Error).message).toBe("node.db write refused");
+    const termAfterFirst = (await readNodeMembership(db))?.body.term;
+
+    const d = deps(log);
+    const second = await promoteLocalSecondaryToPrimary(d, { oldNodeNeutralised: true });
+
+    expect(second).toEqual({ alreadyPrimary: false });
+    expect(await readNodeMode(suite.node, nodeId)).toEqual({
+      mode: "primary",
+      singletonRole: "primary",
+    });
+    expect(d.holders.singletonRole.current).toBe("primary");
+    expect((await readNodeMembership(db))?.body.term).toBe(termAfterFirst);
+    expect(entries.map((entry) => entry.event)).toContain("promotion.role_finished");
+  });
+
   it("refuses an unstamped venue.db with deployment.not_stamped, saving nothing in either file", async () => {
     const { db, deps, nodeId } = await localSecondary();
     await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-node-1"));
@@ -727,6 +754,29 @@ describe("promoteMirrorToPrimary", () => {
       mode: "mirror",
       singletonRole: "secondary",
     });
+  });
+
+  it("a second call after a lost role write finishes the role and mints no second term", async () => {
+    const { db, deps, nodeId, standardSeriesId } = await mirror();
+    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary"));
+    const { log, entries } = recordingLog();
+
+    const first = await promoteMirrorToPrimary(
+      { ...deps(log), node: nodeFailingNextWrite(suite.node) },
+      { oldNodeNeutralised: true },
+    );
+    expect(first).toEqual({ alreadyPrimary: false, seriesId: standardSeriesId });
+    const termAfterFirst = (await readNodeMembership(db))?.body.term;
+
+    const second = await promoteMirrorToPrimary(deps(log), { oldNodeNeutralised: true });
+
+    expect(second).toEqual({ alreadyPrimary: false, seriesId: standardSeriesId });
+    expect(await readNodeMode(suite.node, nodeId)).toEqual({
+      mode: "primary",
+      singletonRole: "primary",
+    });
+    expect((await readNodeMembership(db))?.body.term).toBe(termAfterFirst);
+    expect(entries.map((entry) => entry.event)).toContain("promotion.role_finished");
   });
 
   it("still asks for a restart when node.db can be neither written nor read after the venue save", async () => {
