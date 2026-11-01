@@ -15616,10 +15616,14 @@ export class TillApp extends LitElement {
     if (!live()) return;
     this.#rememberOrderParty();
     if (billId !== null && this.activeTabId === billId) {
+      const known = this.partyBills;
       const { bills: read } = await this.#loadPartyBills(undefined, false);
       if (!live()) return;
       this.billGone = null;
-      const next = billToShow(undefined, read ?? []);
+      const next = billToShow(
+        undefined,
+        read ?? known.filter((bill) => bill.workingOrderId !== billId),
+      );
       if (next === undefined) this.activeTabId = undefined;
       else this.#chooseBill(next);
     }

@@ -3339,6 +3339,61 @@ describe("A803 action results: the bill on screen after a table action", () => {
     expect(tableOrder(el)!.orderId).toBe("wo-10");
     expect(await nextSavedBill(el)).toBe("wo-10");
   });
+
+  it("Split a table giving away the bill on screen still shows the staying party's lowest-numbered owing bill when the bills read after it fails once", async () => {
+    let floorAfter = false;
+    let failed = false;
+    const t3 = { id: "t3", label: "3" };
+    const before = { revision: 3, openingBillId: "wo-8", tableIds: ["t2", "t3"] };
+    const { el } = await mountApp({
+      getTablesState: vi.fn(async () =>
+        floorAfter
+          ? [
+              seated(openTable, { revision: 4, openingBillId: null, tableIds: ["t2"] }),
+              seated(t3, { id: "v-new", revision: 0, openingBillId: null, tableIds: ["t3"] }),
+            ]
+          : [seated(openTable, before), seated(t3, before)],
+      ),
+      getPartyBills: vi.fn(async () => {
+        if (floorAfter && !failed) {
+          failed = true;
+          throw new TypeError("Failed to fetch");
+        }
+        return floorAfter
+          ? [
+              partyBill("wo-9", "v-2", 3),
+              partyBill("wo-10", "v-2", 2),
+              partyBill("wo-7", "v-2", 1, "settled"),
+            ]
+          : [
+              partyBill("wo-9", "v-2", 3),
+              partyBill("wo-8", "v-2", 4),
+              partyBill("wo-10", "v-2", 2),
+              partyBill("wo-7", "v-2", 1, "settled"),
+            ];
+      }),
+      splitTable: vi.fn(async () => {
+        floorAfter = true;
+        return { partyId: "v-new", billId: "wo-8" };
+      }),
+    });
+    const screen = await toTableOrder(el);
+    expect(screen.orderId).toBe("wo-8");
+
+    emit(screen, "split-table", { tableId: "t3", billId: "wo-8" });
+    await flush(el);
+    await flush(el);
+
+    expect(failed).toBe(true);
+    expect(tableOrder(el)!.bills.map((bill) => bill.workingOrderId)).toEqual([
+      "wo-9",
+      "wo-10",
+      "wo-7",
+    ]);
+    expect(tableOrder(el)!.orderId).toBe("wo-10");
+    expect(tableOrder(el)!.billGone).toBeNull();
+    expect(await nextSavedBill(el)).toBe("wo-10");
+  });
 });
 
 describe("A803 new bill: the switcher's + New bill and switching bills", () => {
