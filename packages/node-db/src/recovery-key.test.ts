@@ -9,7 +9,12 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { NODE_MIGRATIONS } from "./migrations.js";
-import { readRecoveryKeyName, readRecoveryKeyVerifier, setRecoveryKeyTx } from "./recovery-key.js";
+import {
+  readRecoveryKey,
+  readRecoveryKeyName,
+  readRecoveryKeyVerifier,
+  setRecoveryKeyTx,
+} from "./recovery-key.js";
 
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const OTHER = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
@@ -21,6 +26,7 @@ describe("before any migration set has run", () => {
   it("reads null for both the verifier and the name when the table itself is absent", async () => {
     expect(await readRecoveryKeyVerifier(bare.node, NODE)).toBeNull();
     expect(await readRecoveryKeyName(bare.node, NODE)).toBeNull();
+    expect(await readRecoveryKey(bare.node, NODE)).toBeNull();
   });
 });
 
@@ -32,6 +38,22 @@ describe("the node recovery-key check", () => {
   it("reads null before anything is written", async () => {
     expect(await readRecoveryKeyVerifier(suite.node, NODE)).toBeNull();
     expect(await readRecoveryKeyName(suite.node, NODE)).toBeNull();
+    expect(await readRecoveryKey(suite.node, NODE)).toBeNull();
+  });
+
+  it("reads the verifier and name together, on a caller's node transaction too", async () => {
+    await withNodeTransaction(suite.node, async (tx) => {
+      await setRecoveryKeyTx(tx, NODE, "scrypt$aa$bb", "2026-10-31-first");
+      expect(await readRecoveryKey(tx, NODE)).toEqual({
+        verifier: "scrypt$aa$bb",
+        keyName: "2026-10-31-first",
+      });
+    });
+    expect(await readRecoveryKey(suite.node, NODE)).toEqual({
+      verifier: "scrypt$aa$bb",
+      keyName: "2026-10-31-first",
+    });
+    expect(await readRecoveryKey(suite.node, OTHER)).toBeNull();
   });
 
   it("round-trips the verifier and name written on a caller's node transaction", async () => {
@@ -86,6 +108,10 @@ describe("the node recovery-key check", () => {
     suite.node.run(sql`update node_recovery_key set key_name = ${blank} where node_id = ${NODE}`);
     expect(await readRecoveryKeyName(suite.node, NODE)).toBeNull();
     expect(await readRecoveryKeyVerifier(suite.node, NODE)).toBe("scrypt$aa$bb");
+    expect(await readRecoveryKey(suite.node, NODE)).toEqual({
+      verifier: "scrypt$aa$bb",
+      keyName: null,
+    });
   });
 
   it("permits at most one row per node — the primary key refuses a second", async () => {

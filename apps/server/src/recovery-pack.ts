@@ -5,7 +5,7 @@ import {
   type NodeDatabase,
   type Transaction,
 } from "@waitron/db";
-import { readRecoveryKeyName, readRecoveryKeyVerifier } from "@waitron/node-db";
+import { readRecoveryKey, readRecoveryKeyVerifier } from "@waitron/node-db";
 import { verifySecretAsync } from "@waitron/identity";
 import type { ProvisionedNode, WaitronModule } from "@waitron/module";
 import { AppError } from "@waitron/shared";
@@ -70,8 +70,9 @@ export async function createRecoveryPack(
   return withNodeTransaction(deps.nodeDb, (nodeTx) =>
     withTransaction(deps.db, async (tx) => {
       await deps.authorize?.(tx);
-      if ((await readRecoveryKeyVerifier(nodeTx, node.nodeId)) !== verifier) return invalidKey();
-      const name = await readRecoveryKeyName(nodeTx, node.nodeId);
+      const key = await readRecoveryKey(nodeTx, node.nodeId);
+      if (key?.verifier !== verifier) return invalidKey();
+      const name = key.keyName;
       if (name === null) return refuse("key_name_missing");
       const snapshots: Record<string, unknown> = {};
       for (const module of modules) {

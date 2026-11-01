@@ -11,12 +11,7 @@ import {
   withNodeTransaction,
   withTransaction,
 } from "@waitron/db";
-import {
-  readRecoveryKeyName,
-  readRecoveryKeyVerifier,
-  setRecoveryKeyTx,
-  type VenueAndNodeHandles,
-} from "@waitron/node-db";
+import { readRecoveryKey, setRecoveryKeyTx, type VenueAndNodeHandles } from "@waitron/node-db";
 import { generatePassword } from "./identifiers.js";
 import { newBreakGlassKeyName } from "./server-key-name.js";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
@@ -183,10 +178,9 @@ export function createFirstSetupNodeKeys(options: Options) {
         // Pack 1 is saved in venue.db first and the key in node.db after it, so an interruption
         // between them leaves pack 1 with no key, which the next run finishes.
         await withNodeTransaction(db.node, async (nodeTx) => {
-          const verifier = await readRecoveryKeyVerifier(nodeTx, stage.nodeId);
-          const name = await readRecoveryKeyName(nodeTx, stage.nodeId);
-          const keyStaged = verifier === stage.verifier && name === stage.name;
-          if (verifier !== null && !keyStaged) uncertain();
+          const key = await readRecoveryKey(nodeTx, stage.nodeId);
+          const keyStaged = key?.verifier === stage.verifier && key.keyName === stage.name;
+          if (key !== null && !keyStaged) uncertain();
           await withTransaction(db.venue, async (tx) => {
             const pack = await readRecoveryPack(tx, stage.nodeId, 1);
             if (pack !== null) {

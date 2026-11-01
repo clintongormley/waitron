@@ -12,7 +12,7 @@ import {
   type Database,
   type NodeDatabase,
 } from "@waitron/db";
-import { readRecoveryKeyName, readRecoveryKeyVerifier } from "@waitron/node-db";
+import { readRecoveryKey, readRecoveryKeyVerifier } from "@waitron/node-db";
 import type { OperationBinding, OperationClient, WaitronModule } from "@waitron/module";
 import {
   assertNoStartAgainDeletion,
@@ -1354,13 +1354,10 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             await existingTarget(entry.record);
             const current = await openVenueDatabase(target.venueDir);
             try {
+              const key = await readRecoveryKey(current.node, entry.session.binding.targetNodeId);
               if (
-                (await readRecoveryKeyVerifier(
-                  current.node,
-                  entry.session.binding.targetNodeId,
-                )) !== entry.provedVerifier ||
-                (await readRecoveryKeyName(current.node, entry.session.binding.targetNodeId)) !==
-                  entry.session.preview.nodeRecoveryKeyName
+                (key?.verifier ?? null) !== entry.provedVerifier ||
+                (key?.keyName ?? null) !== entry.session.preview.nodeRecoveryKeyName
               )
                 conflict();
               await withTransaction(current.venue, async (tx) =>
