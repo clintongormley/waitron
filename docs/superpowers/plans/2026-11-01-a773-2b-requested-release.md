@@ -993,6 +993,11 @@ Task 5b. No other exported signature changes.
      `passControlled` true); no new job at the Grill or Pass printer. (b) is the case the
      both-stamps-null guard exists for: Grill no longer waits, so only `heldItem()` keeps the
      second update off the burger, however "the rest" is written (round 3, I-C).
+     **Amended 2026-11-01 (Task 6 review, M3):** once `requestHeldItems` reads stations from held
+     rows only, a release with nothing held runs no request update, so (a) also holds a second
+     burger at Grill and names it in the same release: it becomes Requested at the later time
+     while the first burger's row stays identical. Without it the "first update without
+     `heldItem()`" control below cannot go red.
   6. Rerouted before it is stamped (round 3, M7). A held group's burger at Grill; Grill is then
      closed for the day (as `src/station-move.test.ts` closes a station) and the burger's product
      now routes to Kitchen; Kitchen waits, Grill does not; `fireGroup`: the burger's `stationId`
