@@ -35,7 +35,7 @@ it("leaves an unfinished outside attempt when the process is killed inside its c
         fileURLToPath(new URL("../../../scripts/bundle-node.mjs", import.meta.url)),
         `${entry}=${script}`,
       ],
-      { encoding: "utf8", timeout: 30_000 },
+      { encoding: "utf8", timeout: 180_000 },
     );
     expect(bundled.stderr).not.toContain("ERROR");
     expect(bundled.status).toBe(0);
@@ -95,4 +95,4 @@ it("leaves an unfinished outside attempt when the process is killed inside its c
     await exited;
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 240_000);

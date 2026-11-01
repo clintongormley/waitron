@@ -5787,8 +5787,8 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 ### CI, tests and developer tooling
 
 - **Real-source bundle tests repeat metadata work.**
-  Measure selective shared setup and audit remaining smaller build limits in the fiscal crash,
-  recovery PDF, provisioning CLI and root runtime tests.
+  Measure selective shared setup and audit the remaining smaller build limits in the recovery
+  PDF and provisioning CLI tests.
   [Detail](backlog/ci.md#real-source-bundle-tests-repeat-metadata-work).
 
 - **A1251. Finish qualifying and reviewing historical PRs that skipped the Claude run-it review.**
