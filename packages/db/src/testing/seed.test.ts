@@ -4,21 +4,35 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import type { Database } from "../client.js";
 import { useVenueDb } from "./venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
+import { catalogues } from "../schema/catalogue.js";
 import { deviceProfiles } from "../schema/device-profiles.js";
 import { devices } from "../schema/devices.js";
 import { kitchenStations } from "../schema/kitchen-stations.js";
+import { nodes } from "../schema/nodes.js";
 import { locations } from "../schema/tenants.js";
-import { freshNif, seedDevice, seedKitchenStation, seedNode, seedTenant } from "./seed.js";
+import { readTenant } from "../read-tenant.js";
+import { readVenue, venueLocationId } from "../venue.js";
+import {
+  freshNif,
+  seedDevice,
+  seedKitchenStation,
+  seedNode,
+  seedTenant,
+  seedVenue,
+  seedWorkingOrder,
+} from "./seed.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 // Each case gets empty mutable fixture tables while sharing the migrated database.
 afterEach(async () => {
+  await suite.db.execute(sql`delete from working_orders`);
   await suite.db.execute(sql`delete from devices`);
   await suite.db.execute(sql`delete from device_profiles`);
   await suite.db.execute(sql`delete from kitchen_stations`);
   await suite.db.execute(sql`delete from nodes`);
   await suite.db.execute(sql`delete from locations`);
+  await suite.db.execute(sql`delete from catalogues`);
   await suite.db.execute(sql`delete from tenants`);
 });
 
@@ -60,6 +74,48 @@ describe("seedTenant", () => {
   });
 });
 
+describe("seedVenue", () => {
+  let db: Database;
+
+  beforeEach(async () => {
+    db = suite.db;
+  });
+
+  it("seedVenue writes the taxpayer and the one venue", async () => {
+    await seedVenue(db, { name: "Casa", timeZone: "Atlantic/Canary" });
+    expect(await readTenant(db)).not.toBeNull();
+    expect(await readVenue(db)).toEqual({
+      name: "Casa",
+      invoiceLocales: ["es"],
+      operationDescription: "Restaurant",
+      fiscalTerritory: "ES-common",
+      addressLine1: null,
+      addressLine2: null,
+      postalCode: null,
+      city: null,
+      province: null,
+      timeZone: "Atlantic/Canary",
+      dayCutover: "06:00:00",
+      defaultCatalogueId: null,
+    });
+  });
+
+  it("seedVenue writes defaultCatalogueId as the venue's catalogue", async () => {
+    const [catalogue] = await db
+      .insert(catalogues)
+      .values({ name: "Menu" })
+      .returning({ id: catalogues.id });
+    await seedVenue(db, { defaultCatalogueId: catalogue!.id });
+    expect((await readVenue(db)).defaultCatalogueId).toBe(catalogue!.id);
+  });
+
+  it("seedVenue refuses a second venue", async () => {
+    await seedVenue(db);
+    const existing = await venueLocationId(db);
+    await expect(seedVenue(db)).rejects.toThrow(existing);
+  });
+});
+
 describe("seedNode", () => {
   let db: Database;
 
@@ -86,6 +142,16 @@ describe("seedNode", () => {
     );
     expect((result.rows[0] as { n: number }).n).toBe(1);
   });
+
+  it("seedNode with no location puts the node at the venue", async () => {
+    await seedVenue(db);
+    const node = await seedNode(db);
+    const [row] = await db
+      .select({ locationId: nodes.locationId })
+      .from(nodes)
+      .where(eq(nodes.id, node));
+    expect(row!.locationId).toBe(await venueLocationId(db));
+  });
 });
 
 describe("seedKitchenStation", () => {
@@ -96,7 +162,7 @@ describe("seedKitchenStation", () => {
   });
 
   // Build the tenant + location the station FKs first (as seedNode's suite does), then seed the station.
-  async function seedVenue() {
+  async function seedTenantAndLocation() {
     await seedTenant(db);
     const [loc] = await db
       .insert(locations)
@@ -110,7 +176,7 @@ describe("seedKitchenStation", () => {
   }
 
   it("defaults to a DEFAULT station named 'Cocina' and returns its id", async () => {
-    const { location } = await seedVenue();
+    const { location } = await seedTenantAndLocation();
     const id = await seedKitchenStation(db, { locationId: location });
     // Read through the table rather than as raw SQL: SQLite stores a flag as 0/1 and only the
     // column's own mapping turns it back into a boolean.
@@ -122,7 +188,7 @@ describe("seedKitchenStation", () => {
   });
 
   it("honours an overridden name and is_default", async () => {
-    const { location } = await seedVenue();
+    const { location } = await seedTenantAndLocation();
     const id = await seedKitchenStation(db, {
       locationId: location,
       name: "Barra",
@@ -198,5 +264,38 @@ describe("seedDevice", () => {
       })
       .from(deviceProfiles);
     expect(profiles).toEqual([{ formFactor: "phone-portrait", capabilities: ["take-cash"] }]);
+  });
+
+  it("seedDevice with no locationId puts the device at the venue", async () => {
+    await seedVenue(db);
+    const { deviceId } = await seedDevice(db);
+    const [row] = await db
+      .select({ locationId: devices.locationId })
+      .from(devices)
+      .where(eq(devices.id, deviceId));
+    expect(row!.locationId).toBe(await venueLocationId(db));
+  });
+});
+
+describe("seedWorkingOrder", () => {
+  let db: Database;
+
+  beforeEach(async () => {
+    db = suite.db;
+  });
+
+  it("seedWorkingOrder writes an open order at the venue", async () => {
+    await seedVenue(db);
+    const venueId = await venueLocationId(db);
+    const order = await seedWorkingOrder(db);
+    expect(order).toMatchObject({
+      status: "open",
+      source: "dashboard",
+      orderNumber: 1,
+      locationId: venueId,
+    });
+    const node = await seedNode(db);
+    const overridden = await seedWorkingOrder(db, { orderNumber: 7, nodeId: node });
+    expect(overridden).toMatchObject({ orderNumber: 7, nodeId: node, locationId: venueId });
   });
 });
