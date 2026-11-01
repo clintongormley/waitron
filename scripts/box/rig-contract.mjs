@@ -23,7 +23,8 @@ import { exactRecord } from "./upgrades/contracts.mjs";
  *   the rename as well; only the final no-follow flush of the run folder then refuses, after the
  *   write. A real adapter must therefore open every path beneath the run folder without following
  *   a symlink: openat2 from a handle on the run folder with RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS.
- *   It must also check that a VM's process is the one this run started before stopping it.
+ *   It must also check that a VM's process is the one this run started before stopping it, and
+ *   that a mount at a recorded target is the one this run made before unmounting it.
  */
 
 /** Case names the argument parser recognises. */

@@ -457,7 +457,7 @@ Only then does the turn end and `step` run, outside the turn. A step may therefo
 
 **`loadLedger` refuses with `ledger-invalid`** when `ledger.json` is a symlink, missing, or not a regular file (it is opened with `O_NONBLOCK`, so a FIFO is refused rather than waited on), when the bytes are not canonical, when `runDir` differs from the folder being read, on an unknown kind or key, when a path has a part named like the ledger or its staging file in any letter case, or when any path is outside `runDir` or under `/dev/`.
 
-**Stopping a VM.** The real `CleanupAdapter` (Linux) must check that a VM's process is the one this run started before stopping it. That belongs to the Linux pull request.
+**Stopping a VM.** The real `CleanupAdapter` (Linux) must check that a VM's process is the one this run started before stopping it, and that a mount at a recorded target is the one this run made before unmounting it. That belongs to the Linux pull request.
 
 Contract notes from the per-task review (2026-11-01):
 - **Run checks.** `withRecorded`, `loadLedger` and `runCleanup` check the run as text first (`run-invalid`, then Task 2's `run-dir-*` reasons), then `lstat` the run folder: anything but a real folder whose `dev:ino` equals `rootId` is `run-dir-replaced`.
