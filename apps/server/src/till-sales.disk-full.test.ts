@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -123,7 +124,7 @@ async function placedOrder(...names: string[]): Promise<string> {
     lines: names.map((name) => ({ menuItemId: venue.offerFor(name), quantity: "1" })),
     operatorId: venue.operatorId,
   });
-  await placeOrder(deps, venue.cfg, id, venue.operatorId);
+  await placeOrder({ ...deps, admission: testTradingAdmission() }, venue.cfg, id, venue.operatorId);
   return id;
 }
 
@@ -298,7 +299,12 @@ describe("the sale routes while the full-disk stop holds", () => {
     const settle = async (disk: DiskFullState) => {
       const id = await placedOrder("Tarta");
       await issueOrderInvoice(
-        { db: venue.db, backend: venue.backend, clock: venue.clock },
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
         venue.cfg,
         id,
         venue.operatorId,

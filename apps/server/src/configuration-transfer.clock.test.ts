@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { deviceProfiles, withTransaction } from "@waitron/db";
+import { locations, deviceProfiles, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { getDeviceProfile, profileAllows } from "@waitron/layouts";
 import { persons } from "@waitron/identity";
@@ -93,3 +93,72 @@ it("round-trips the clock-in capability and still refuses a shared display", asy
     expect(profileAllows((await getDeviceProfile(tx, kitchen!.id))!, "clock-in")).toBe(false);
   });
 });
+
+it.each(["request", "artifact"] as const)(
+  "validates the %s zone independently during configuration provisioning",
+  async (invalidSide) => {
+    const at = new Date("2026-01-05T09:00:00Z");
+    const venue = await createClockVenue(source.db, () => at);
+    const versions = await schemaVersionsByModule(
+      { venue: source.db, node: source.node },
+      ALL_MODULES,
+    );
+    const exported = await exportConfigurationTables(source.db, ALL_MODULES);
+    const [operator] = await source.db
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.role, "admin"));
+    const bundle = {
+      ...(await buildConfigurationBundle(
+        source.db,
+        { ...venue.cfg, sourceOperatorId: operator!.id },
+        ALL_MODULES,
+        at,
+        versions,
+      )),
+      ...exported,
+    };
+    const request: VenueRequest = {
+      country: "ES",
+      taxId: "B20202020",
+      legalName: "Imported restaurant",
+      location: {
+        name: "Imported venue",
+        fiscalTerritory: "ES-common",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Restaurant",
+        addressLine1: "Main street 2",
+        addressLine2: null,
+        postalCode: "28013",
+        city: "Madrid",
+        province: "Madrid",
+        timeZone: "Europe/Madrid",
+        dayCutover: "05:00",
+      },
+      seriesCode: "A",
+      rectificativeSeriesCode: "R",
+      admin: {
+        displayName: "Owner",
+        pinHash: "scrypt$00$00",
+        passwordHash: "scrypt$00$00",
+        email: "owner@example.test",
+      },
+    };
+    if (invalidSide === "request") request.location.timeZone = "Europe/London";
+    else bundle.venue.location.timeZone = "Europe/London";
+    const run = async () =>
+      applyVenue(planVenue(request, ALL_MODULES), {
+        db: target.db,
+        modules: ALL_MODULES,
+        beforeCommit: (tx, installed) =>
+          importConfigurationTables(tx, bundle, installed, ALL_MODULES, versions),
+      });
+    const refusal = await run().catch((error: unknown) => error);
+    expect(await target.db.select().from(locations)).toEqual([]);
+    expect(await target.db.select().from(persons)).toEqual([]);
+    expect(refusal).toMatchObject({
+      code: "venue.time_zone_invalid",
+      params: { reason: "country" },
+    });
+  },
+);

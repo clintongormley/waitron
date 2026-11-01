@@ -835,9 +835,7 @@ export class TillTicketView extends LitElement {
           </div>
           <div class="meta-row">
             <span class="meta-label">${labels.date}</span>
-            <span
-              >${issueDate(r.issuedAt, format, r.invoiceType === "F1" ? r.issuedOffsetMinutes : undefined)}</span
-            >
+            <span>${issueDate(r.issuedAt, format, r.issuedOffsetMinutes)}</span>
           </div>
           ${
             r.invoiceType === "F1" && r.operationDate !== undefined

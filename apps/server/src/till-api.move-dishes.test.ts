@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { writePartyAllergy } from "@waitron/venue-service";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -123,7 +124,7 @@ function post(fromBillId: string, body: unknown, cookie = venue.cookie) {
 
 async function contribute(billId: string, amount: string): Promise<void> {
   await takeBillPayment(
-    { db: venue.db, backend: venue.backend, clock: venue.clock },
+    { db: venue.db, backend: venue.backend, clock: venue.clock, admission: testTradingAdmission() },
     venue.cfg,
     billId,
     {
@@ -298,7 +299,12 @@ describe("A803 move dishes route:", () => {
     const { partyId, tabId } = await seated("Paella", "Caña");
     const [paella] = lineIdsOf(tabId);
     await takeBillPayment(
-      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      {
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+        admission: testTradingAdmission(),
+      },
       venue.cfg,
       tabId,
       {

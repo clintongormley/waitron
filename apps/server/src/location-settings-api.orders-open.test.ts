@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedOrderSender } from "./testing/order-writer-fixture.js";
 import { observedRelocationSender } from "./testing/table-action-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
@@ -482,7 +483,12 @@ describe("a receipt-language change while orders are open", () => {
       });
       expect(parked.status).toBe(200);
       await issueOrderInvoice(
-        { db: venue.db, backend: venue.backend, clock: venue.clock },
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
         venue.cfg,
         id,
         venue.operatorId,

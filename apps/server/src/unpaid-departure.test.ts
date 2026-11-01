@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { closingEditsForTest } from "./testing/party-close-fixture.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -1061,6 +1062,7 @@ describe("two departures at once, and a failure part-way", () => {
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: venue.db,
         backend: failing,
         clock: venue.clock,
@@ -1775,7 +1777,12 @@ describe("the guests its invoice's receipts print", () => {
 
   it("stores the party's count on an invoice issued unpaid without a departure", async () => {
     const party = await seatedFor(3, "Botella tinto");
-    await issueOrderInvoice(venue, venue.cfg, party.tabId, venue.operatorId);
+    await issueOrderInvoice(
+      { ...venue, admission: testTradingAdmission() },
+      venue.cfg,
+      party.tabId,
+      venue.operatorId,
+    );
     expect(await guestsRowsOf(party.tabId)).toEqual([{ guests: 3 }]);
   });
 });

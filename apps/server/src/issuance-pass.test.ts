@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateHeldOrder, placeOrder } from "./testing/order-writer-fixture.js";
 import { floorTodayTables } from "@waitron/db";
@@ -345,14 +346,14 @@ function stubProvider(onCollect: () => Promise<void>): PaymentProvider {
 }
 
 function cardDeps(provider: PaymentProvider): IntegratedPayDeps {
-  return { ...deps(), provider, readerRef: "reader_1" };
+  return { admission: testTradingAdmission(), ...deps(), provider, readerRef: "reader_1" };
 }
 
 describe("what a filed sale line records about its product", () => {
   it("records a dish's product, gross, menu and its reporting chain", async () => {
     const v = await setupVenue();
     const id = randomUUID();
-    await recordTillSale(deps(), v.cfg, {
+    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       workingOrderId: id,
       zoneId: v.counter.zoneId,
       lines: [{ menuItemId: v.counter.offerFor(v.products.negroni), quantity: "2" }],
@@ -378,7 +379,7 @@ describe("what a filed sale line records about its product", () => {
   it("records a variant as itself, its parent, and the parent's chain when it sets none", async () => {
     const v = await setupVenue();
     const id = randomUUID();
-    await recordTillSale(deps(), v.cfg, {
+    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       workingOrderId: id,
       zoneId: v.counter.zoneId,
       lines: [
@@ -403,7 +404,7 @@ describe("what a filed sale line records about its product", () => {
   it("classifies an extras pick by its own product, keeps its dish link, and leaves the free-text category as the dish's", async () => {
     const v = await setupVenue();
     const id = randomUUID();
-    await recordTillSale(deps(), v.cfg, {
+    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       workingOrderId: id,
       zoneId: v.counter.zoneId,
       lines: [
@@ -440,7 +441,7 @@ describe("what a filed sale line records about its product", () => {
   it("records an Uncategorised product with an empty chain", async () => {
     const v = await setupVenue();
     const id = randomUUID();
-    await recordTillSale(deps(), v.cfg, {
+    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       workingOrderId: id,
       zoneId: v.counter.zoneId,
       lines: [{ menuItemId: v.counter.offerFor(v.products.pan), quantity: "1" }],
@@ -456,7 +457,7 @@ describe("what a filed sale line records about its product", () => {
   it("keeps the snapshot as filed after the category is renamed and moved", async () => {
     const v = await setupVenue();
     const id = randomUUID();
-    await recordTillSale(deps(), v.cfg, {
+    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       workingOrderId: id,
       zoneId: v.counter.zoneId,
       lines: [{ menuItemId: v.counter.offerFor(v.products.negroni), quantity: "1" }],
@@ -487,7 +488,7 @@ describe("the snapshot is taken when the line is added, on every till filing pat
       ]),
     );
 
-    await payWorkingOrder(deps(), v.cfg, {
+    await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       id: tabId,
       lines: [],
       tender: { method: "cash", amount: "18.00" },
@@ -509,12 +510,12 @@ describe("the snapshot is taken when the line is added, on every till filing pat
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
     const revision = await withTransaction(suite.db, (tx) => readOrderRevision(tx, id));
-    await updateHeldOrder({ db: suite.db }, v.cfg, id, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, v.cfg, id, {
       lines: [{ workingOrderLineId: kept!.id, ...negroni }, negroni],
       revision,
     });
 
-    await payWorkingOrder(deps(), v.cfg, {
+    await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       id,
       lines: [],
       tender: { method: "cash", amount: "18.00" },
@@ -543,7 +544,7 @@ describe("the snapshot is taken when the line is added, on every till filing pat
       updateCategory(tx, v.categories.anadidos.id, { parentId: v.categories.comida.id }),
     );
 
-    await payWorkingOrder(deps(), v.cfg, {
+    await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       id,
       lines: [],
       tender: { method: "cash", amount: "10.75" },
@@ -565,7 +566,7 @@ describe("the snapshot is taken when the line is added, on every till filing pat
       splitPartyBill(tx, v.cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
     );
 
-    await payWorkingOrder(deps(), v.cfg, {
+    await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       id: checkId,
       lines: [],
       tender: { method: "cash", amount: "9.00" },
@@ -587,19 +588,29 @@ describe("the snapshot is taken when the line is added, on every till filing pat
       });
     await park(before);
     await park(parkedBefore);
-    await placeOrder(deps(), v.cfg, before, OPERATOR);
+    await placeOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, before, OPERATOR);
     await moveCocktailsToSpirits(v);
     await park(parkedAfter);
 
-    await collectOrder(deps(), v.cfg, {
+    await collectOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       id: before,
       lines: [],
       tender: { method: "cash", amount: "9.00" },
     });
-    await placeOrder(deps(), v.cfg, parkedBefore, OPERATOR);
-    await placeOrder(deps(), v.cfg, parkedAfter, OPERATOR);
+    await placeOrder(
+      { ...deps(), admission: testTradingAdmission() },
+      v.cfg,
+      parkedBefore,
+      OPERATOR,
+    );
+    await placeOrder(
+      { ...deps(), admission: testTradingAdmission() },
+      v.cfg,
+      parkedAfter,
+      OPERATOR,
+    );
     for (const id of [parkedBefore, parkedAfter]) {
-      await collectOrder(deps(), v.cfg, {
+      await collectOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
         id,
         lines: [],
         tender: { method: "cash", amount: "9.00" },
@@ -619,10 +630,10 @@ describe("the snapshot is taken when the line is added, on every till filing pat
       zoneId: v.counter.zoneId,
       lines: [{ menuItemId: v.counter.offerFor(v.products.negroni), quantity: "1" }],
     });
-    await placeOrder(deps(), v.cfg, id, OPERATOR);
+    await placeOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, id, OPERATOR);
     await moveCocktailsToSpirits(v);
 
-    await collectOrder(deps(), v.cfg, {
+    await collectOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       id,
       lines: [],
       tender: { method: "cash", amount: "9.00" },
@@ -696,7 +707,7 @@ describe("the snapshot is taken when the line is added, on every till filing pat
       lines: [{ menuItemId: v.counter.offerFor(v.products.negroni), quantity: "1" }],
       tender: { method: "cash" as const, amount: "9.00" },
     };
-    await recordTillSale(deps(), v.cfg, sale);
+    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, sale);
     const filed = await filedLines(id);
     await moveCocktailsToSpirits(v);
 
@@ -705,7 +716,7 @@ describe("the snapshot is taken when the line is added, on every till filing pat
     try {
       await reprintSale(deps(), v.cfg, id);
       await printSaleReceipt(deps(), v.cfg, id, false);
-      await recordTillSale(deps(), v.cfg, sale);
+      await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, sale);
     } finally {
       prepare.restore();
     }

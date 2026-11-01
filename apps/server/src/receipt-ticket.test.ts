@@ -101,17 +101,23 @@ const TRIM: ReceiptTrim = {
 };
 
 describe("saved F1 issue offset", () => {
-  it("retains F2 date rendering even when the payload carries an issue offset", () => {
+  it.each([
+    [120, "15 Oct 2026, 01:30"],
+    [0, "14 Oct 2026, 23:30"],
+  ])("prints the recorded F2 issue offset %s", (offset, want) => {
     const input = {
-      result: { ...FILED_SALE, invoiceType: "F2" as const },
+      result: {
+        ...FILED_SALE,
+        invoiceType: "F2" as const,
+        issuedAt: "2026-10-14T23:30:00.000Z",
+        issuedOffsetMinutes: offset,
+      },
       issuer: ISSUER,
       receipt: {},
-      invoiceLocale: "es-ES",
+      invoiceLocale: "en-GB",
       printer: PRINTER_80,
     };
-    expect(
-      formatReceipt({ ...input, result: { ...input.result, issuedOffsetMinutes: 60 } }),
-    ).toEqual(formatReceipt(input));
+    expect(printedLines(formatReceipt(input)).join(" ").replace(/\s+/g, " ")).toContain(want);
   });
 
   it.each(

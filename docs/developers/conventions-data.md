@@ -3348,6 +3348,13 @@ the suite catches a missing wait for every other duty.
 
 The landing listener, started last, is the one step not on the list.
 
+On 2026-10-22, A696's `boot.failed-start.test.ts` case “aborts and awaits a started cloud
+worker when snapshot initialization throws” failed with an un-aborted worker signal. Cloud
+undos were registered only after all three initializers returned. Each now registers its own
+abort-and-wait immediately; restoring the earlier registration block in an installed disposable
+checkout reproduces that assertion failure. The complete failed-start file passes 31 cases.
+This receipt covers that initializer boundary, not every possible duty failure.
+
 **What the guard does not see.** `apps/server/src/boot.failed-start.test.ts` is weaker than its
 name — it covers only the duties it names, so a new one that forgets is seen by nothing. Removing
 `await loop` still passes, so not every stop is proven to finish before the store closes.
@@ -5587,6 +5594,16 @@ the retired command's separator. Text extensions are case-sensitive. The fiscal 
 ordinary and private identifiers; quoted property keys remain string literals and are not
 identifier checks. These limits also apply to source comments and prose that use different words.
 
+On 1 November, A696's pre-push guard found an obsolete location setting and a fiscal test fixture
+still named for a till. Removing the unused setting and renaming the fixture preserves its
+assertions; focused guard40, server30 and fiscal30 cases pass. A further text search found another
+obsolete setting immediately after an escaped newline inside a template literal. The text regex
+misses it because it reads the source escape rather than the decoded newline: a direct
+`inspectSource` probe reports one failure for the plain spelling and none after the escape.
+That guard gap remains in the CI backlog. The fixture itself now uses only the supported node
+identity. The full first hook failed one of10,091 cases; its earlier format/lint passes do not
+qualify the blocked push. Logs: Lane E `receipts/a696-resume-20261101/`.
+
 
 ## Root receipts moved on 2026-10-31
 
@@ -5648,3 +5665,26 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 - **The node owns the fiscal identity, chain and invoice series; a till is a cash register.**
   Guard: `scripts/no-till-as-issuer.test.ts`, weaker than its name: reads text; misses the same idea
   under another word (terminal, device, caja) and in prose. Limits: [conventions-data.md](conventions-data.md#the-node-owns-fiscal-identity).
+
+
+## Saved-zone validity uses the stored spelling
+
+A696's 1 November whole-branch review found that the input classifier trimmed a saved zone before
+admitting it. Other readers passed the raw column to Intl. A saved `" Europe/Madrid"` or
+`"Europe/Madrid "` therefore admitted ordinary boot duties but was ineligible for repair.
+The real boot/context/confirmation command first failed six new cases; the direct fiscal caller
+resolved instead of refusing two cases. Provisioning reuse reached `business_day.clock_invalid`
+instead of its zone preflight refusal. These experiments reproduce the boundary mismatch without
+asserting that every raw reader was exercised.
+
+`classifyTimeZone` continues normalizing new input, including the original padded-input case.
+`classifySavedTimeZone` asks the runtime about the stored spelling. Raw context, fiscal clocks,
+provisioning reuse, completed recovery packs and recovery comparison consume the latter; request,
+candidate and country-list inputs retain normalization. Missing blanks, runtime-supported aliases
+and unexpected runtime failures retain their separate outcomes. Repair stores an explicitly chosen
+canonical name; old raw rows are not silently rewritten. The focused shared, boot, repair,
+provisioning and recovery tests retain legitimate controls as well as the padded refusals.
+
+The admission check is not a universal audit of every timezone consumer or boot duty. The boot
+suite names the duties it observes. Raw readers beyond these exercised paths remain outside that
+receipt. Commands, red/green logs and full review are in Lane E `receipts/a696-resume-20261101/`.

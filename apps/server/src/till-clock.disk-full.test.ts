@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { FiscalBackend } from "@waitron/fiscal";
@@ -34,6 +35,7 @@ function clockIn(disk: DiskFullState) {
   mountTillApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: suite.db,
       cfg: venue.cfg,
       workforceEnabled: true,

@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
@@ -64,8 +65,14 @@ async function placedTarta(zoneId: string, issued = false): Promise<string> {
     zoneId,
     operatorId: venue.operatorId,
   });
-  if (issued) await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
-  await placeOrder(deps, venue.cfg, id, venue.operatorId);
+  if (issued)
+    await issueOrderInvoice(
+      { ...deps, admission: testTradingAdmission() },
+      venue.cfg,
+      id,
+      venue.operatorId,
+    );
+  await placeOrder({ ...deps, admission: testTradingAdmission() }, venue.cfg, id, venue.operatorId);
   return id;
 }
 
@@ -87,7 +94,7 @@ async function retarget(billId: string, zoneId: string): Promise<void> {
 
 function collectCash(billId: string) {
   return collectOrder(
-    { db: venue.db, backend: venue.backend, clock: venue.clock },
+    { admission: testTradingAdmission(), db: venue.db, backend: venue.backend, clock: venue.clock },
     venue.cfg,
     { id: billId, lines: [], tender: { method: "cash", amount: "20.00" } },
     venue.operatorId,
@@ -206,7 +213,12 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     const { billId, saleId } = await correctedTarta();
 
     await collectOrder(
-      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
       venue.cfg,
       { id: billId, lines: [], tender: { method: "card", amount: "18.00" } },
       venue.operatorId,
@@ -272,7 +284,12 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     const { billId, saleId } = await correctedTarta(wholeInvoice);
 
     await collectOrder(
-      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
       venue.cfg,
       { id: billId, lines: [], tender: { method: "card", amount: "18.00" } },
       venue.operatorId,
@@ -298,7 +315,12 @@ describe("collecting an invoice that carries a corrective invoice", () => {
 
     await expect(
       collectOrder(
-        { db: venue.db, backend: venue.backend, clock: venue.clock },
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
         venue.cfg,
         { id: billId, lines: [], tender: { method: "cash", amount: "not-money" } },
         venue.operatorId,

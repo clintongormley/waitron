@@ -1,5 +1,7 @@
 import type { RecipientIdentifierType } from "@waitron/country-packs";
 import { withIssuanceTransaction } from "@waitron/core";
+import { prepareIssueClock } from "@waitron/fiscal";
+import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import {
   newCustomerPresentation,
   newCustomerText,
@@ -380,8 +382,8 @@ export async function captureOrderService(
   );
 }
 
-/** `db` plus the fiscal backend and trusted clock that a path filing a sale needs. */
 export interface TillSaleDeps {
+  admission: TradingAdmission;
   db: Database;
   backend: FiscalBackend;
   clock: TrustedClock;
@@ -6768,7 +6770,7 @@ export async function setWorkingOrderLabel(
  * the save. A save given `issue` may issue the bill's invoice, so it must name who saves.
  */
 export async function updateHeldOrder(
-  deps: WorkingOrderDeps,
+  deps: WorkingOrderDeps & { admission: TradingAdmission },
   cfg: TradingContext,
   id: string,
   req: UpdateHeldOrderRequest,
@@ -6776,7 +6778,7 @@ export async function updateHeldOrder(
   attendance?: OrderAttendance,
 ): Promise<number>;
 export async function updateHeldOrder(
-  deps: WorkingOrderDeps,
+  deps: WorkingOrderDeps & { admission: TradingAdmission },
   cfg: TradingContext,
   id: string,
   req: UpdateHeldOrderRequest & { operatorId: string },
@@ -6784,7 +6786,7 @@ export async function updateHeldOrder(
   attendance?: OrderAttendance,
 ): Promise<number>;
 export async function updateHeldOrder(
-  deps: WorkingOrderDeps,
+  deps: WorkingOrderDeps & { admission: TradingAdmission },
   cfg: TradingContext,
   id: string,
   req: UpdateHeldOrderRequest,
@@ -6792,6 +6794,7 @@ export async function updateHeldOrder(
   attendance?: OrderAttendance,
 ): Promise<number> {
   return withIssuanceTransaction(deps.db, async (tx) => {
+    await requireEconomicWrite(tx, cfg, deps.admission);
     const { label, locationId } = await requireEditableOrder(tx, id, req.revision);
     await requireOrderBillEditor(tx, id, {
       operatorId: req.operatorId,
@@ -6880,9 +6883,11 @@ export async function updateOrderLine(
   lineNo: number,
   patch: OrderLinePatch,
   revision: number,
-  authority: OrderEditAuthority,
+  authority: OrderEditAuthority & { admission: TradingAdmission },
   attendance?: OrderAttendance,
 ): Promise<number> {
+  // Line edits retain the order's location; admission follows the writing node.
+  await requireEconomicWrite(tx, { nodeId: cfg.nodeId }, authority.admission);
   const { locationId } = await requireEditableOrder(tx, orderId, revision);
   await requireOrderBillEditor(tx, orderId, authority);
   const operatorId = authority.operatorId;
@@ -7047,7 +7052,11 @@ export async function priceForIssuance(
   return {
     id,
     identities: order.identities,
-    ...issueMoment(clock, await issuancePass(tx, cfg, id, order), backend),
+    ...issueMoment(
+      await prepareIssueClock(tx, cfg, clock),
+      await issuancePass(tx, cfg, id, order),
+      backend,
+    ),
   };
 }
 
@@ -7072,8 +7081,10 @@ export async function issueUnpaidInvoice(
   cfg: DeviceRequestConfig,
   invoice: PricedInvoice,
   operatorId: string,
+  admission: TradingAdmission,
   log?: Logger,
 ): Promise<IssuedInvoice> {
+  await requireEconomicWrite(tx, cfg, admission);
   const { id, priced, clock } = invoice;
   const selected = await selectOrderInvoice(tx, backend, cfg, id, priced.total);
   const language = await saleLanguageFor(tx, cfg.locationId, selected.receiptLocale, {
@@ -7213,6 +7224,7 @@ async function cancelPlaced(
 ): Promise<void> {
   const authz = { sessionId: operator.sessionId, override };
   return withIssuanceTransaction(deps.db, async (tx) => {
+    await requireEconomicWrite(tx, cfg, deps.admission);
     const [locked] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)

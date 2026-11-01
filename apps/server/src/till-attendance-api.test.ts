@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -640,6 +641,7 @@ it("the real till mount shares the existing device override throttle with attend
   mountTillApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: suite.db,
       cfg: venue.cfg,
       clock: { ...clock, now: () => ({ ...clock.now(), instant }) },

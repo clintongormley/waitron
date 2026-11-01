@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { setImmediate as yieldTurn } from "node:timers/promises";
 import { eq } from "drizzle-orm";
@@ -287,7 +288,7 @@ describe("a bill payment re-checks the device and the sign-in inside its write",
     const before = await writes(billId, till);
 
     const result = await takeBillPayment(
-      fiscal(),
+      { ...fiscal(), admission: testTradingAdmission() },
       till.cfg,
       billId,
       wholeBill("cash"),
@@ -306,7 +307,13 @@ describe("a bill payment re-checks the device and the sign-in inside its write",
     const till = await freshTill();
     const billId = await bill();
 
-    await takeBillPayment(fiscal(), till.cfg, billId, wholeBill("card"), till.operator);
+    await takeBillPayment(
+      { ...fiscal(), admission: testTradingAdmission() },
+      till.cfg,
+      billId,
+      wholeBill("card"),
+      till.operator,
+    );
 
     const after = await writes(billId, till);
     expect(after.payments).toHaveLength(1);
@@ -321,7 +328,15 @@ describe("a bill payment re-checks the device and the sign-in inside its write",
     await disable(till.cfg.origin.deviceId);
 
     await expect
-      .soft(takeBillPayment(fiscal(), till.cfg, billId, wholeBill("cash"), till.operator))
+      .soft(
+        takeBillPayment(
+          { ...fiscal(), admission: testTradingAdmission() },
+          till.cfg,
+          billId,
+          wholeBill("cash"),
+          till.operator,
+        ),
+      )
       .rejects.toMatchObject({ code: "session.required" });
     expectNothingWritten(before, await writes(billId, till));
   });
@@ -333,7 +348,15 @@ describe("a bill payment re-checks the device and the sign-in inside its write",
     await switchOffOutOfBand(till.cfg.origin.deviceId);
 
     await expect
-      .soft(takeBillPayment(fiscal(), till.cfg, billId, wholeBill("cash"), till.operator))
+      .soft(
+        takeBillPayment(
+          { ...fiscal(), admission: testTradingAdmission() },
+          till.cfg,
+          billId,
+          wholeBill("cash"),
+          till.operator,
+        ),
+      )
       .rejects.toMatchObject({ code: "device.unauthorized" });
     expectNothingWritten(before, await writes(billId, till));
   });
@@ -345,7 +368,15 @@ describe("a bill payment re-checks the device and the sign-in inside its write",
     await inTx((tx) => deleteDevice(tx, venue.cfg, till.cfg.origin.deviceId));
 
     await expect
-      .soft(takeBillPayment(fiscal(), till.cfg, billId, wholeBill("card"), till.operator))
+      .soft(
+        takeBillPayment(
+          { ...fiscal(), admission: testTradingAdmission() },
+          till.cfg,
+          billId,
+          wholeBill("card"),
+          till.operator,
+        ),
+      )
       .rejects.toMatchObject({ code: "session.required" });
     // Delete clears the till's printer choices, so no job could be queued either way.
     const after = await writes(billId, till);
@@ -368,7 +399,15 @@ describe("a bill payment re-checks the device and the sign-in inside its write",
       .where(eq(sessions.id, till.operator.sessionId));
 
     await expect
-      .soft(takeBillPayment(fiscal(), till.cfg, billId, wholeBill("cash"), till.operator))
+      .soft(
+        takeBillPayment(
+          { ...fiscal(), admission: testTradingAdmission() },
+          till.cfg,
+          billId,
+          wholeBill("cash"),
+          till.operator,
+        ),
+      )
       .rejects.toMatchObject({ code: "session.required" });
     expectNothingWritten(before, await writes(billId, till));
   });
@@ -384,7 +423,15 @@ describe("a bill payment re-checks the device and the sign-in inside its write",
       .where(eq(devices.id, till.cfg.origin.deviceId));
 
     await expect
-      .soft(takeBillPayment(fiscal(), till.cfg, billId, wholeBill("cash"), till.operator))
+      .soft(
+        takeBillPayment(
+          { ...fiscal(), admission: testTradingAdmission() },
+          till.cfg,
+          billId,
+          wholeBill("cash"),
+          till.operator,
+        ),
+      )
       .rejects.toMatchObject({ code: "session.required" });
     expectNothingWritten(before, await writes(billId, till));
   });
@@ -399,7 +446,7 @@ describe("a bill payment re-checks the device and the sign-in inside its write",
     await expect
       .soft(
         takeReaderBillPayment(
-          { ...fiscal(), provider },
+          { admission: testTradingAdmission(), ...fiscal(), provider },
           till.cfg,
           billId,
           { ...wholeBill("card"), entry: "reader", externalRef: undefined },
@@ -415,13 +462,27 @@ describe("a bill payment re-checks the device and the sign-in inside its write",
     const till = await freshTill();
     const billId = await bill();
     const request = wholeBill("cash");
-    await takeBillPayment(fiscal(), till.cfg, billId, request, till.operator);
+    await takeBillPayment(
+      { ...fiscal(), admission: testTradingAdmission() },
+      till.cfg,
+      billId,
+      request,
+      till.operator,
+    );
     const taken = await writes(billId, till);
     expect(taken.billPayments).toMatchObject([{ state: "received" }]);
     await switchOffOutOfBand(till.cfg.origin.deviceId);
 
     await expect
-      .soft(takeBillPayment(fiscal(), till.cfg, billId, request, till.operator))
+      .soft(
+        takeBillPayment(
+          { ...fiscal(), admission: testTradingAdmission() },
+          till.cfg,
+          billId,
+          request,
+          till.operator,
+        ),
+      )
       .rejects.toMatchObject({ code: "device.unauthorized" });
     expect(await writes(billId, till)).toEqual(taken);
   });
@@ -433,7 +494,7 @@ describe("a bill payment re-checks the device and the sign-in inside its write",
     const release = provider.holdNextCollect();
 
     const answer = takeReaderBillPayment(
-      { ...fiscal(), provider },
+      { admission: testTradingAdmission(), ...fiscal(), provider },
       till.cfg,
       billId,
       { ...wholeBill("card"), entry: "reader", externalRef: undefined },
@@ -467,13 +528,25 @@ describe("a bill payment re-checks the device and the sign-in inside its write",
     const till = await freshTill();
     const billId = await bill();
     const request = wholeBill("cash");
-    const first = await takeBillPayment(fiscal(), till.cfg, billId, request, till.operator);
+    const first = await takeBillPayment(
+      { ...fiscal(), admission: testTradingAdmission() },
+      till.cfg,
+      billId,
+      request,
+      till.operator,
+    );
     const taken = await writes(billId, till);
     expect(taken.billPayments).toMatchObject([{ state: "received" }]);
     expect(taken.sales).toHaveLength(1);
     const operator = await signBackIn(till);
 
-    const retry = await takeBillPayment(fiscal(), till.cfg, billId, request, operator);
+    const retry = await takeBillPayment(
+      { ...fiscal(), admission: testTradingAdmission() },
+      till.cfg,
+      billId,
+      request,
+      operator,
+    );
 
     expect(retry.outcome).toBe("received");
     expect(retry.payment.id).toBe(first.payment.id);
@@ -486,7 +559,7 @@ describe("a bill payment re-checks the device and the sign-in inside its write",
     const provider = new FakePaymentProvider(suite.db);
     const request = { ...wholeBill("card"), entry: "reader" as const, externalRef: undefined };
     const first = await takeReaderBillPayment(
-      { ...fiscal(), provider },
+      { admission: testTradingAdmission(), ...fiscal(), provider },
       till.cfg,
       billId,
       request,
@@ -498,7 +571,7 @@ describe("a bill payment re-checks the device and the sign-in inside its write",
     const operator = await signBackIn(till);
 
     const retry = await takeReaderBillPayment(
-      { ...fiscal(), provider },
+      { admission: testTradingAdmission(), ...fiscal(), provider },
       till.cfg,
       billId,
       request,

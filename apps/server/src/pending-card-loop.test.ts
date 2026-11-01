@@ -1,7 +1,36 @@
 import { describe, expect, it, vi } from "vitest";
 import * as recovery from "./pending-card-recovery.js";
+import { TradingAdmission } from "./trading-admission.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 
 describe("the independent pending-card loop", () => {
+  it("does not enter provider or release duties until its pass is admitted", async () => {
+    const controller = new AbortController();
+    const admission = new TradingAdmission();
+    admission.repairOnly("invalid");
+    const economicWrites: string[] = [],
+      log = vi.fn();
+    let sleeps = 0;
+    const deps = {
+      admission,
+      signal: controller.signal,
+      now: () => new Date(),
+      log,
+      pass: async () => {
+        economicWrites.push("provider pass");
+        return { duties: [], nextDueAt: null };
+      },
+      sleep: async () => {
+        if (++sleeps === 1) admission.admit();
+        else controller.abort();
+      },
+    };
+    await recovery.runPendingCardLoop(deps);
+    expect(economicWrites).toEqual(["provider pass"]);
+    expect(log).toHaveBeenCalledWith("error", "pass.threw", {
+      errorCode: "venue.time_zone_not_ready",
+    });
+  });
   it.each([null, new Date("2026-10-18T00:00:00Z")])(
     "checks immediately and again within a minute when the fiscal next due is %s",
     async (nextDueAt) => {
@@ -9,6 +38,7 @@ describe("the independent pending-card loop", () => {
       const controller = new AbortController();
       const calls: string[] = [];
       await recovery.runPendingCardLoop({
+        admission: testTradingAdmission(),
         now: () => new Date("2026-10-17T00:00:00Z"),
         signal: controller.signal,
         log: () => {},
@@ -33,6 +63,7 @@ describe("the independent pending-card loop", () => {
     let passes = 0;
     const waits: number[] = [];
     await recovery.runPendingCardLoop({
+      admission: testTradingAdmission(),
       now: () => new Date("2026-10-17T00:00:00Z"),
       signal: controller.signal,
       log,
@@ -58,6 +89,7 @@ describe("the independent pending-card loop", () => {
       return { duties: [], nextDueAt: null };
     });
     await recovery.runPendingCardLoop({
+      admission: testTradingAdmission(),
       now: () => new Date(),
       signal: controller.signal,
       log: () => {},

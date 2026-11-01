@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./trading-admission.js";
 import { placeOrder } from "./order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -114,8 +115,13 @@ export async function placedIssuedBill(venue: OrderVenue, ...names: string[]): P
     zoneId: venue.counterZone,
     operatorId: venue.operatorId,
   });
-  await placeOrder(deps, venue.cfg, id, venue.operatorId);
-  await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
+  await placeOrder({ ...deps, admission: testTradingAdmission() }, venue.cfg, id, venue.operatorId);
+  await issueOrderInvoice(
+    { ...deps, admission: testTradingAdmission() },
+    venue.cfg,
+    id,
+    venue.operatorId,
+  );
   return id;
 }
 

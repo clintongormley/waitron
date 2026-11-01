@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedTableActionBody } from "./testing/table-action-fixture.js";
 import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -514,8 +515,18 @@ describe("money on a moved bill", () => {
       zoneId: ticketThenPayZone,
       operatorId: venue.operatorId,
     });
-    await placeOrder(deps, venue.cfg, id, venue.operatorId);
-    await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
+    await placeOrder(
+      { ...deps, admission: testTradingAdmission() },
+      venue.cfg,
+      id,
+      venue.operatorId,
+    );
+    await issueOrderInvoice(
+      { ...deps, admission: testTradingAdmission() },
+      venue.cfg,
+      id,
+      venue.operatorId,
+    );
     const issued = venue.db.all<{ id: string }>(
       sql`select id from sales where working_order_id = ${id}`,
     );
@@ -642,8 +653,18 @@ describe("paying a moved bill, by its state", () => {
       zoneId: ticketThenPayZone,
       operatorId: venue.operatorId,
     });
-    await placeOrder(deps, venue.cfg, id, venue.operatorId);
-    await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
+    await placeOrder(
+      { ...deps, admission: testTradingAdmission() },
+      venue.cfg,
+      id,
+      venue.operatorId,
+    );
+    await issueOrderInvoice(
+      { ...deps, admission: testTradingAdmission() },
+      venue.cfg,
+      id,
+      venue.operatorId,
+    );
     const issued = venue.db.all<{ id: string }>(
       sql`select id from sales where working_order_id = ${id}`,
     );

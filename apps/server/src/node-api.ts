@@ -4,6 +4,7 @@ import { standingOf, type NodeStanding, type SignedMembershipDocument } from "@w
 import type { DeploymentEnvironment } from "./config.js";
 import { createErrorBoundary } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
+import type { TradingAdmissionView } from "./trading-admission.js";
 
 export interface NodeApiDeps {
   nodeId: string;
@@ -12,6 +13,7 @@ export interface NodeApiDeps {
    * promoted-but-not-restarted process must keep answering false.
    */
   acceptingSales: boolean;
+  readTradingAdmission?: () => TradingAdmissionView;
   /** Echoed so a till can refuse to follow a server in a different environment from the one it was
    * provisioned into. */
   environment: DeploymentEnvironment;
@@ -40,6 +42,10 @@ export function mountNodeApi(app: Hono, deps: NodeApiDeps, log: Logger): void {
 
   app.get("/api/node", (c) =>
     run(c, log, async () => {
+      c.header("cache-control", "no-store");
+      const admission = deps.readTradingAdmission?.();
+      if (admission !== undefined && admission.state !== "ready")
+        return c.json({ acceptingSales: false });
       const held = await deps.readMembership();
       const body: NodeProbe = {
         nodeId: deps.nodeId,

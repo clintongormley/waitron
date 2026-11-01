@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer, type AddressInfo, type Socket } from "node:net";
 import { tmpdir } from "node:os";
@@ -655,6 +656,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: v.db,
         backend: v.backend,
         clock: v.clock,

@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./trading-admission.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { setRoutingCell, writePartyAllergy } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
@@ -479,7 +480,19 @@ export async function provisionAdjustmentVenue(
     return `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
   };
   const app = new Hono();
-  mountTillApi(app, { db, backend, clock, cfg, secureCookies: false, venueLocale: LOCALE }, quiet);
+  mountTillApi(
+    app,
+    {
+      admission: testTradingAdmission(),
+      db,
+      backend,
+      clock,
+      cfg,
+      secureCookies: false,
+      venueLocale: LOCALE,
+    },
+    quiet,
+  );
   return {
     db,
     backend,

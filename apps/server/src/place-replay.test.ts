@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -63,7 +64,7 @@ const place = (
   expectedEdit: Parameters<typeof placeOrder>[4] = null,
 ) =>
   placeOrder(
-    { db: suite.db, backend: venue.backend, clock: venue.clock },
+    { admission: testTradingAdmission(), db: suite.db, backend: venue.backend, clock: venue.clock },
     venue.cfg,
     orderId,
     operatorId,
@@ -178,6 +179,7 @@ describe("a repeated place", () => {
     await expect(
       placeOrder(
         {
+          admission: testTradingAdmission(),
           db: suite.db,
           backend: venue.backend,
           clock: venue.clock,

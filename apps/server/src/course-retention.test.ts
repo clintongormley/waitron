@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedOrderWriteBody } from "./testing/order-writer-fixture.js";
 import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
@@ -137,7 +138,15 @@ async function setup() {
   const app = new Hono();
   mountTillApi(
     app,
-    { db, backend: {} as FiscalBackend, clock, cfg, secureCookies: false, venueLocale: "es-ES" },
+    {
+      admission: testTradingAdmission(),
+      db,
+      backend: {} as FiscalBackend,
+      clock,
+      cfg,
+      secureCookies: false,
+      venueLocale: "es-ES",
+    },
     () => {},
   );
   async function session(person: typeof ana, pin: string) {

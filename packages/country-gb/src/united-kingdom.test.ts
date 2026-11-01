@@ -18,3 +18,13 @@ describe("UNITED_KINGDOM", () => {
     });
   });
 });
+
+describe("country time-zone choices", () => {
+  it("lists its defaults and administrative-area suggestions explicitly", () => {
+    expect(UNITED_KINGDOM.timeZones).toStrictEqual(["Europe/London"]);
+    expect(UNITED_KINGDOM.timeZones).toContain(UNITED_KINGDOM.defaultTimeZone);
+    for (const area of UNITED_KINGDOM.administrativeAreas) {
+      if (area.timeZone !== undefined) expect(UNITED_KINGDOM.timeZones).toContain(area.timeZone);
+    }
+  });
+});

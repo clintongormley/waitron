@@ -163,11 +163,19 @@ describe("till-ticket-view", () => {
     expect(el.shadowRoot!.querySelector("[data-test=open-drawer]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=reprint]")).not.toBeNull();
   });
-  it("retains F2 date rendering even when the payload carries an issue offset", async () => {
-    const baseline = await mount({ invoiceType: "F2" });
-    const want = baseline.el.shadowRoot!.querySelectorAll(".meta-row")[1]!.textContent;
-    const { el } = await mount({ invoiceType: "F2", issuedOffsetMinutes: 60 });
-    expect(el.shadowRoot!.querySelectorAll(".meta-row")[1]!.textContent).toBe(want);
+  it.each([
+    [120, "15 Oct 2026, 01:30"],
+    [0, "14 Oct 2026, 23:30"],
+  ])("shows saved F2 issue offset %s independently of the browser", async (offset, want) => {
+    const { el } = await mount({
+      invoiceType: "F2",
+      locale: "en-GB",
+      issuedAt: "2026-10-14T23:30:00.000Z",
+      issuedOffsetMinutes: offset,
+    });
+    expect(el.shadowRoot!.querySelectorAll(".meta-row")[1]!.textContent).toContain(want);
+    expect(el.shadowRoot!.querySelector(".recipient")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".domicile")).toBeNull();
   });
   it.each([
     [60, "1 mar 2026, 00:05"],

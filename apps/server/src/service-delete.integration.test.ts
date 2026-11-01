@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -1061,13 +1062,23 @@ it.each(["zone", "department"] as const)(
     await expect(remove()).rejects.toMatchObject({ code: "table.delivery_in_progress" });
     expect(await run(completeSnapshot)).toEqual(unpaid);
     await placeOrder(
-      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
       venue.cfg,
       delivery,
       venue.operator.personId,
     );
     await collectOrder(
-      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
       venue.cfg,
       { id: delivery, lines: [], tender: { method: "cash", amount: "2.00" } },
       venue.operator,

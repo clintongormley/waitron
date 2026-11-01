@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -215,7 +216,12 @@ async function argsFor(tx: Transaction, billId: string, ask: Ask): Promise<Adjus
 
 function adjust(billId: string, ask: Ask) {
   return inTx(venue, async (tx) =>
-    applyAdjustment(tx, venue.cfg, await argsFor(tx, billId, ask), venue.venueLocale),
+    applyAdjustment(
+      tx,
+      venue.cfg,
+      { ...(await argsFor(tx, billId, ask)), admission: testTradingAdmission() },
+      venue.venueLocale,
+    ),
   );
 }
 
@@ -263,7 +269,7 @@ async function outcomeOf(billId: string) {
   const rows = await rowsOf(venue, billId);
   const due = toScale(sumDecimals(rows.map((row) => decimal(row.lineTotal))), 2);
   const result = await payWorkingOrder(
-    { db: venue.db, backend: venue.backend, clock: venue.clock },
+    { admission: testTradingAdmission(), db: venue.db, backend: venue.backend, clock: venue.clock },
     venue.cfg,
     { id: billId, tender: { method: "cash", amount: due }, lines: [] },
   );
@@ -548,8 +554,15 @@ async function invoiceOf(billId: string) {
           deviceId: venue.cfg.origin.deviceId,
         })
         .returning();
-      return (await completeBillPayment(tx, venue, venue.cfg, payment!.id, new Date())).invoice!
-        .lines;
+      return (
+        await completeBillPayment(
+          tx,
+          { ...venue, admission: testTradingAdmission() },
+          venue.cfg,
+          payment!.id,
+          new Date(),
+        )
+      ).invoice!.lines;
     });
   } finally {
     await inTx(venue, (tx) =>
@@ -1120,10 +1133,20 @@ describe("A803 portions: a replayed row request", () => {
     );
 
     const first = await inTx(venue, (tx) =>
-      applyAdjustment(tx, venue.cfg, args, venue.venueLocale),
+      applyAdjustment(
+        tx,
+        venue.cfg,
+        { ...args, admission: testTradingAdmission() },
+        venue.venueLocale,
+      ),
     );
     const again = await inTx(venue, (tx) =>
-      applyAdjustment(tx, venue.cfg, args, venue.venueLocale),
+      applyAdjustment(
+        tx,
+        venue.cfg,
+        { ...args, admission: testTradingAdmission() },
+        venue.venueLocale,
+      ),
     );
 
     expect(again).toEqual(first);
@@ -2025,7 +2048,11 @@ describe("A803 portions: a copy of a portion keeps the lines its discounts cover
         lineNo,
         { quantity },
         await readOrderRevision(tx, billId),
-        { operatorId: venue.managerId, expectedEdit: await readBillEditState(tx, billId) },
+        {
+          admission: testTradingAdmission(),
+          operatorId: venue.managerId,
+          expectedEdit: await readBillEditState(tx, billId),
+        },
       ),
     );
   }
@@ -2653,6 +2680,7 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
         bill.partyId,
         lineId,
         {
+          admission: testTradingAdmission(),
           expectedEdit: await readBillEditState(tx, bill.billId),
           reasonId: venue.reasonId.houseVoid,
           expectedPartyRevision: party!.revision,
@@ -2669,11 +2697,20 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
   async function paid(bill: Bill) {
     const rows = await rowsOf(venue, bill.billId);
     const due = toScale(sumDecimals(rows.map((row) => decimal(row.lineTotal))), 2);
-    await payWorkingOrder({ db: venue.db, backend: venue.backend, clock: venue.clock }, venue.cfg, {
-      id: bill.billId,
-      tender: { method: "cash", amount: due },
-      lines: [],
-    });
+    await payWorkingOrder(
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
+      venue.cfg,
+      {
+        id: bill.billId,
+        tender: { method: "cash", amount: due },
+        lines: [],
+      },
+    );
     const [sale] = await inTx(venue, (tx) =>
       tx.select().from(sales).where(eq(sales.workingOrderId, bill.billId)),
     );
@@ -3208,6 +3245,7 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
         draft!.id,
         venue.managerId,
         {
+          admission: testTradingAdmission(),
           expectedEdit,
           submissionId: randomUUID(),
           revision: expectedEdit.draftRevision!,
@@ -3377,6 +3415,7 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
           expectedEdit.draftId!,
           venue.managerId,
           {
+            admission: testTradingAdmission(),
             expectedEdit,
             submissionId: randomUUID(),
             revision: expectedEdit.draftRevision!,
@@ -3405,7 +3444,9 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
       submissionId: randomUUID(),
     });
     const first = await args();
-    const listed = await inTx(venue, (tx) => finishPartyService(tx, venue.cfg, first)).then(
+    const listed = await inTx(venue, (tx) =>
+      finishPartyService(tx, venue.cfg, { ...first, admission: testTradingAdmission() }),
+    ).then(
       () => [],
       (error: { code: string; params: { dishes: UnservedDish[] } }) => {
         expect(error.code).toBe("party.unserved_dishes");
@@ -3421,6 +3462,7 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
     const { jobs } = await newJobs(() =>
       inTx(venue, (tx) =>
         finishPartyService(tx, venue.cfg, {
+          admission: testTradingAdmission(),
           ...confirmed,
           cancellations: listed.map((dish) => ({
             lineId: dish.lineId,
@@ -3576,7 +3618,11 @@ describe("A803 portions: the extras of a row of identical portions", () => {
               second.lineNo,
               { extras },
               await readOrderRevision(tx, billId),
-              { operatorId: venue.staffId, expectedEdit: await readBillEditState(tx, billId) },
+              {
+                admission: testTradingAdmission(),
+                operatorId: venue.staffId,
+                expectedEdit: await readBillEditState(tx, billId),
+              },
             ),
           );
       }

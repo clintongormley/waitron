@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -129,7 +130,7 @@ async function split(p: Fixture, expectedEdit: BillEditExpected, quantity?: stri
       venue.cfg,
       p.tabId,
       [{ lineNo: p.dish.lineNo, ...(quantity === undefined ? {} : { quantity }) }],
-      ask,
+      { ...ask, admission: testTradingAdmission() },
     ),
   );
 }

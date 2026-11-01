@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
+import { setLocale } from "../i18n/t.js";
 import type { ReceiptPresentation } from "@waitron/shared";
 import type { TillSaleResult } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -40,7 +42,10 @@ const header = (el: TillTicketView) =>
   [...el.shadowRoot!.querySelector(".issuer")!.children].map((node) =>
     node instanceof HTMLImageElement ? node.getAttribute("src") : node.textContent!.trim(),
   );
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  setLocale("en-GB");
+});
 
 describe("per-answer receipt presentation", () => {
   it("uses the answer's immutable current logo URL and retains the earlier answer after replacement", async () => {
@@ -155,3 +160,59 @@ describe("per-answer receipt presentation", () => {
     ]);
   });
 });
+
+for (const locale of ["en-GB", "es-ES"] as const) {
+  for (const theme of ["light", "dark"] as const) {
+    for (const width of [390, 1280]) {
+      it(`keeps recorded F2 dates on reprint in ${locale}/${theme}/${width}`, async () => {
+        const previous = { width: window.innerWidth, height: window.innerHeight };
+        try {
+          await page.viewport(width, 1000);
+          setLocale(locale);
+          const { el } = await mountWidget<TillTicketView>(
+            "till-ticket-view",
+            {
+              historical: true,
+              invoiceLocale: locale,
+              result: {
+                ...facts,
+                locale,
+                invoiceType: "F2",
+                issuedAt: "2026-10-14T23:30:00.000Z",
+                issuedOffsetMinutes: 120,
+              },
+              issuer,
+            },
+            theme,
+          );
+          for (const offset of [120, 0]) {
+            el.result = { ...el.result!, issuedOffsetMinutes: offset };
+            await el.updateComplete;
+            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+            const expected = new Intl.DateTimeFormat(locale, {
+              dateStyle: "medium",
+              timeStyle: "short",
+              timeZone: "UTC",
+            })
+              .formatToParts(
+                new Date(offset === 120 ? "2026-10-15T01:30:00Z" : "2026-10-14T23:30:00Z"),
+              )
+              .map((part) => (part.type === "hour" ? part.value.padStart(2, "0") : part.value))
+              .join("");
+            expect(el.shadowRoot!.querySelectorAll(".meta-row")[1]!.textContent).toContain(
+              expected,
+            );
+            expect(el.shadowRoot!.querySelector(".recipient")).toBeNull();
+            expect(el.shadowRoot!.querySelector(".domicile")).toBeNull();
+            expect(el.shadowRoot!.querySelector("[data-test=reprint]")).not.toBeNull();
+            await page.screenshot({
+              path: `__screenshots__/a696-recorded-offset/${locale}-${theme}-${width}-${offset}.png`,
+            });
+          }
+        } finally {
+          await page.viewport(previous.width, previous.height);
+        }
+      });
+    }
+  }
+}

@@ -1,4 +1,4 @@
-import { leaveCoordinatorFor, navigationGuardFor } from "@waitron/ui";
+import { chooseTheme, leaveCoordinatorFor, navigationGuardFor } from "@waitron/ui";
 import { commands, page, userEvent } from "vitest/browser";
 import { applyTokens, currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
@@ -9101,4 +9101,268 @@ describe("the Users screen's administrator sign-in, pressed for real", () => {
     await expect.poll(() => login(el)).toBeTruthy();
     expect(staff(el)).toBeNull();
   });
+});
+
+describe("startup zone repair", () => {
+  it.each(["staff", "manager"])("mounts %s repair before ordinary loaders", async (role) => {
+    history.replaceState(null, "", "/manage/sales");
+    const start = vi.fn();
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        role,
+        permissions: role === "manager" ? ["venue.configure"] : [],
+        tradingAdmission: { state: "invalid" },
+      }),
+      getVenueZoneRepair: vi.fn().mockResolvedValue({
+        legalName: "Deli Test SL",
+        country: "ES",
+        province: "08",
+        category: "invalid",
+        eligible: true,
+        clockRevision: 2,
+        choices: ["Europe/Madrid", "Atlantic/Canary"],
+        suggestion: "Europe/Madrid",
+        admission: { state: "invalid" },
+        clock: { dayCutover: "06:00", cutoverChanges: [] },
+      }),
+      getVenueDetails: vi.fn(),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api,
+      request: stubRequest,
+      liveUpdates: { start, stop: vi.fn() },
+    });
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("dashboard-venue-zone-repair"))
+      .not.toBeNull();
+    expect(start).not.toHaveBeenCalled();
+    for (const method of [
+      "getContentLanguages",
+      "listAlerts",
+      "getVenueTheme",
+      "getVenueDetails",
+      "getSalesPeriod",
+    ] as const)
+      expect(api[method]).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("aside")).toBeNull();
+    expect(el.shadowRoot!.textContent).toContain("Deli Test SL");
+    const repair = el.shadowRoot!.querySelector("dashboard-venue-zone-repair")!;
+    await expect
+      .poll(() => !!repair.shadowRoot?.querySelector("[name=timeZone]"))
+      .toBe(role === "manager");
+    expect(api.getVenueZoneRepair).toHaveBeenCalledTimes(role === "manager" ? 1 : 0);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=zone-logout]")!.click();
+    await expect.poll(() => login(el)).not.toBeNull();
+    expect(api.logout).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not reopen repair from a session response older than logout", async () => {
+    let answer!: (value: unknown) => void;
+    const api = stubApi({
+      getMe: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      ),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    window.dispatchEvent(
+      new CustomEvent("waitron-session-invalid", {
+        detail: { code: "management_session.expired" },
+      }),
+    );
+    answer({ ...meResponse, tradingAdmission: { state: "invalid" } });
+    await flush(el);
+    expect(login(el)).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("dashboard-venue-zone-repair")).toBeNull();
+  });
+});
+
+it("retains repair on browser history changes without mounting ordinary screens", async () => {
+  const api = stubApi({
+    getMe: vi.fn().mockResolvedValue({
+      ...meResponse,
+      permissions: [],
+      tradingAdmission: { state: "invalid" },
+    }),
+  });
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("dashboard-venue-zone-repair"))
+    .not.toBeNull();
+  history.pushState(null, "", "/manage/sales");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("dashboard-venue-zone-repair")).not.toBeNull();
+  expect(sales(el)).toBeNull();
+  expect(api.getContentLanguages).not.toHaveBeenCalled();
+});
+
+it("keeps the newer session status when an older probe finishes last", async () => {
+  const resolvers: ((value: unknown) => void)[] = [];
+  const read = vi
+    .fn()
+    .mockResolvedValueOnce({
+      ...meResponse,
+      permissions: [],
+      tradingAdmission: { state: "invalid" },
+    })
+    .mockImplementation(() => new Promise((resolve) => resolvers.push(resolve)));
+  const api = stubApi({ getMe: read });
+  const start = vi.fn();
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+    api,
+    request: stubRequest,
+    liveUpdates: { start, stop: vi.fn() },
+  });
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("dashboard-venue-zone-repair"))
+    .not.toBeNull();
+  window.dispatchEvent(new Event("visibilitychange"));
+  document.dispatchEvent(new Event("visibilitychange"));
+  document.dispatchEvent(new Event("visibilitychange"));
+  await expect.poll(() => resolvers.length).toBe(2);
+  resolvers[1]!({
+    ...meResponse,
+    permissions: [],
+    tradingAdmission: { state: "restart_required" },
+  });
+  await flush(el);
+  resolvers[0]!({ ...meResponse, tradingAdmission: { state: "ready" } });
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("dashboard-venue-zone-repair")).not.toBeNull();
+  expect(start).not.toHaveBeenCalled();
+});
+
+it("switches repair language locally without requesting a forbidden profile write", async () => {
+  const api = stubApi({
+    getMe: vi.fn().mockResolvedValue({
+      ...meResponse,
+      locale: "en-GB",
+      sessionDefault: "en-GB",
+      permissions: [],
+      tradingAdmission: { state: "invalid" },
+    }),
+  });
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("dashboard-venue-zone-repair"))
+    .not.toBeNull();
+  el.shadowRoot!.querySelector("wt-language-chooser")!.dispatchEvent(
+    new CustomEvent("wt-locale-selected", {
+      detail: { code: "es-ES" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await expect.poll(() => currentLocale()).toBe("es-ES");
+  expect(api.putLocale).not.toHaveBeenCalled();
+});
+it("expires a dirty repair session without retaining its draft or leave question", async () => {
+  const status = {
+    eligible: true,
+    category: "invalid",
+    choices: ["Europe/Madrid"],
+    suggestion: "Europe/Madrid",
+    country: "ES",
+    province: null,
+    clockRevision: 0,
+    admission: { state: "invalid" },
+    clock: { dayCutover: "06:00", cutoverChanges: [] },
+  };
+  const api = stubApi({
+    getMe: vi.fn().mockResolvedValue({
+      ...meResponse,
+      permissions: ["venue.configure"],
+      tradingAdmission: { state: "invalid" },
+    }),
+    getVenueZoneRepair: vi.fn().mockResolvedValue(status),
+  });
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+  await expect
+    .poll(() =>
+      el
+        .shadowRoot!.querySelector("dashboard-venue-zone-repair")
+        ?.shadowRoot?.querySelector("[name=timeZone]"),
+    )
+    .toBeTruthy();
+  const repair = el.shadowRoot!.querySelector("dashboard-venue-zone-repair")!;
+  repair.shadowRoot!.querySelector("[name=timeZone]")!.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "Europe/Madrid" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await repair.updateComplete;
+  const before = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(before);
+  expect(before.defaultPrevented).toBe(true);
+  window.dispatchEvent(
+    new CustomEvent("waitron-session-invalid", { detail: { code: "management_session.expired" } }),
+  );
+  await expect.poll(() => login(el)).not.toBeNull();
+  const after = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(after);
+  expect(after.defaultPrevented).toBe(false);
+  expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  expect(el.shadowRoot!.querySelector("dashboard-venue-zone-repair")).toBeNull();
+});
+
+describe.each(["light", "dark"] as const)("staff zone repair in %s", (theme) => {
+  it.each([
+    ["en-GB", "Sign in as a manager", "signs you out"],
+    ["es-ES", "Iniciar sesión como responsable", "cerrará tu sesión"],
+  ])(
+    "offers staff a manager sign-in from zone repair in %s and opens login after signing them out",
+    async (locale, label, explanation) => {
+      chooseTheme(theme);
+      const api = stubApi({
+        getMe: vi.fn().mockResolvedValue({
+          ...meResponse,
+          locale,
+          sessionDefault: locale,
+          role: "staff",
+          permissions: [],
+          tradingAdmission: { state: "invalid" },
+        }),
+      });
+      const { el } = await mountWidget<DashboardApp>(
+        "dashboard-app",
+        { api, request: stubRequest },
+        theme,
+      );
+      await expect
+        .poll(() => el.shadowRoot!.querySelector("dashboard-venue-zone-repair"))
+        .not.toBeNull();
+      const button = el.shadowRoot!.querySelector<HTMLElement>("[data-test=zone-sign-in]");
+      expect(button).not.toBeNull();
+      expect(button!.textContent).toContain(label);
+      expect(
+        el.shadowRoot!.querySelector("[data-test=zone-sign-in-explanation]")!.textContent,
+      ).toContain(explanation);
+      const viewport = { width: innerWidth, height: innerHeight };
+      try {
+        for (const width of [390, 1280]) {
+          await page.viewport(width, 900);
+          await el.updateComplete;
+          expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
+          await page.screenshot({
+            path: `__screenshots__/a696-sign-in/${locale}-${theme}-${width}.png`,
+            fullPage: true,
+          });
+        }
+      } finally {
+        chooseTheme("device");
+        await page.viewport(viewport.width, viewport.height);
+      }
+      button!.click();
+      await expect.poll(() => login(el)).not.toBeNull();
+      expect(api.logout).toHaveBeenCalledOnce();
+      expect(el.shadowRoot!.querySelector("dashboard-venue-zone-repair")).toBeNull();
+      expect(api.getContentLanguages).not.toHaveBeenCalled();
+    },
+  );
 });

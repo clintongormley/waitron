@@ -440,3 +440,13 @@ it.each(["15", "27", "32", "36"])("selects the Galician demo only in province %s
   expect(area.defaultContentLocale).toBe("gl-ES");
   expect(area.fixedReceiptLocale).toBeUndefined();
 });
+
+describe("country time-zone choices", () => {
+  it("lists its defaults and administrative-area suggestions explicitly", () => {
+    expect(SPAIN.timeZones).toStrictEqual(["Europe/Madrid", "Atlantic/Canary"]);
+    expect(SPAIN.timeZones).toContain(SPAIN.defaultTimeZone);
+    for (const area of SPAIN.administrativeAreas) {
+      if (area.timeZone !== undefined) expect(SPAIN.timeZones).toContain(area.timeZone);
+    }
+  });
+});

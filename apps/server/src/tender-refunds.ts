@@ -1,4 +1,5 @@
 import { eq, or } from "drizzle-orm";
+import { requireEconomicWrite } from "./trading-admission.js";
 import { tenderRefunds, tenders, type Transaction } from "@waitron/db";
 import type { PinAttempts } from "@waitron/identity";
 import { payments, recordManualRefund } from "@waitron/payments";
@@ -70,6 +71,7 @@ export async function beginSettledTenderRefund(
     request,
     operator,
     async (tx, authorization) => {
+      await requireEconomicWrite(tx, cfg, deps.admission);
       const reading = deps.clock.now();
       const createdAt = reading.instant.toISOString();
       const begun = await reserveTenderRefund(

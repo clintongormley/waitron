@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { recallLines, updateOrderLine } from "./testing/order-writer-fixture.js";
 import { setRoutingCell } from "@waitron/venue-service";
@@ -412,11 +413,15 @@ async function expectRefusedWithNothingWritten(
 }
 
 async function pay(v: Venue, billId: string, amount: string): Promise<void> {
-  await payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
-    id: billId,
-    lines: [],
-    tender: { method: "cash", amount },
-  });
+  await payWorkingOrder(
+    { admission: testTradingAdmission(), db: suite.db, backend, clock },
+    v.cfg,
+    {
+      id: billId,
+      lines: [],
+      tender: { method: "cash", amount },
+    },
+  );
 }
 
 /** A party with Croquetas ×4 fired. */

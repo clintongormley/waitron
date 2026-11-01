@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./trading-admission.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -155,6 +156,7 @@ export async function provisionSignedInTill<S extends TillSeed>(
   mountTillApi(
     app,
     {
+      admission: testTradingAdmission(),
       db,
       backend,
       clock,

@@ -1,4 +1,5 @@
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -102,7 +103,12 @@ type Ask = Partial<Omit<AdjustmentArgs, "amount">> & {
  * void for a cancel). */
 async function adjust(billId: string, ask: Ask) {
   return inTx(venue, async (tx) =>
-    applyAdjustment(tx, venue.cfg, await argsFor(tx, billId, ask), venue.venueLocale),
+    applyAdjustment(
+      tx,
+      venue.cfg,
+      { ...(await argsFor(tx, billId, ask)), admission: testTradingAdmission() },
+      venue.venueLocale,
+    ),
   );
 }
 
@@ -196,11 +202,15 @@ function portions(count: number, ...rows: (string | null)[][]) {
 /** Pays the whole bill in cash, filing its invoice; answers the sale and its lines. */
 async function payAll(billId: string) {
   const due = total(await rowsOf(venue, billId));
-  await payWorkingOrder({ db: venue.db, backend: venue.backend, clock: venue.clock }, venue.cfg, {
-    id: billId,
-    tender: { method: "cash", amount: due },
-    lines: [],
-  });
+  await payWorkingOrder(
+    { admission: testTradingAdmission(), db: venue.db, backend: venue.backend, clock: venue.clock },
+    venue.cfg,
+    {
+      id: billId,
+      tender: { method: "cash", amount: due },
+      lines: [],
+    },
+  );
   const [sale] = await inTx(venue, (tx) =>
     tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
   );
@@ -467,7 +477,12 @@ describe("the receipt (ruling R13)", () => {
     const billId = await compBurgerAndDiscountBottle();
 
     const ticket = await payWorkingOrder(
-      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
       venue.cfg,
       { id: billId, tender: { method: "cash", amount: "29.50" }, lines: [] },
     );
@@ -499,6 +514,7 @@ describe("the receipt (ruling R13)", () => {
 
     const paid = await payWorkingOrderIntegrated(
       {
+        admission: testTradingAdmission(),
         db: venue.db,
         backend: venue.backend,
         clock: venue.clock,
@@ -528,6 +544,7 @@ describe("the receipt (ruling R13)", () => {
 
     const paid = await payWorkingOrderIntegrated(
       {
+        admission: testTradingAdmission(),
         db: venue.db,
         backend: venue.backend,
         clock: venue.clock,
@@ -917,7 +934,7 @@ describe("a cancel's approval (A758 D12, D13)", () => {
   /** A bill whose one Burger nothing has sent or held. */
   async function unsentBill(): Promise<string> {
     const { billId } = await bill([]);
-    await updateHeldOrder({ db: venue.db }, venue.cfg, billId, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db: venue.db }, venue.cfg, billId, {
       revision: (await stateOf(billId)).order!.revision,
       lines: [{ menuItemId: venue.item("Burger"), quantity: "1" }],
       operatorId: venue.staffId,
@@ -1031,10 +1048,20 @@ describe("retries (plan D8)", () => {
     );
 
     const first = await inTx(venue, (tx) =>
-      applyAdjustment(tx, venue.cfg, args, venue.venueLocale),
+      applyAdjustment(
+        tx,
+        venue.cfg,
+        { ...args, admission: testTradingAdmission() },
+        venue.venueLocale,
+      ),
     );
     const again = await inTx(venue, (tx) =>
-      applyAdjustment(tx, venue.cfg, args, venue.venueLocale),
+      applyAdjustment(
+        tx,
+        venue.cfg,
+        { ...args, admission: testTradingAdmission() },
+        venue.venueLocale,
+      ),
     );
 
     expect(again).toEqual(first);
@@ -1043,7 +1070,12 @@ describe("retries (plan D8)", () => {
     const before = await stateOf(billId);
     await expect(
       inTx(venue, (tx) =>
-        applyAdjustment(tx, venue.cfg, { ...args, amount: decimal("6.00") }, venue.venueLocale),
+        applyAdjustment(
+          tx,
+          venue.cfg,
+          { admission: testTradingAdmission(), ...args, amount: decimal("6.00") },
+          venue.venueLocale,
+        ),
       ),
     ).rejects.toMatchObject({
       code: "submission.id_reused",
@@ -1081,7 +1113,7 @@ describe("split rows and groups (plan D19)", () => {
   it("records a line nothing has sent or held as unsent", async () => {
     // Saving a party's empty bill as an order adds lines no group holds and nothing sends.
     const { billId } = await bill([]);
-    await updateHeldOrder({ db: venue.db }, venue.cfg, billId, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db: venue.db }, venue.cfg, billId, {
       revision: (await stateOf(billId)).order!.revision,
       lines: [{ menuItemId: venue.item("Burger"), quantity: "1" }],
       operatorId: venue.staffId,
@@ -1259,7 +1291,7 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
 
   it("leaves the Burger added to a comped line nothing sent or held unsent too", async () => {
     const { billId } = await bill([]);
-    await updateHeldOrder({ db: venue.db }, venue.cfg, billId, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db: venue.db }, venue.cfg, billId, {
       revision: (await stateOf(billId)).order!.revision,
       lines: [{ menuItemId: venue.item("Burger"), quantity: "1" }],
       operatorId: venue.staffId,
@@ -1277,7 +1309,7 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
 
   it("clears the chosen station on added units of an adjusted unsent line", async () => {
     const { billId } = await bill([]);
-    await updateHeldOrder({ db: venue.db }, venue.cfg, billId, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db: venue.db }, venue.cfg, billId, {
       revision: (await stateOf(billId)).order!.revision,
       lines: [{ menuItemId: venue.item("Burger"), quantity: "1", makeAt: venue.stationId }],
       operatorId: venue.staffId,
@@ -1610,11 +1642,14 @@ describe("the reason as it was (plan D20)", () => {
       applyAdjustment(
         tx,
         venue.cfg,
-        await argsFor(tx, billId, {
-          lineId,
-          action: "comp",
-          reasonId: venue.reasonId.complaint,
-        }),
+        {
+          ...(await argsFor(tx, billId, {
+            lineId,
+            action: "comp",
+            reasonId: venue.reasonId.complaint,
+          })),
+          admission: testTradingAdmission(),
+        },
         "en-GB",
       ),
     );
@@ -3233,7 +3268,12 @@ describe("part of a dish with extras (B11d)", () => {
     });
 
     const ticket = await payWorkingOrder(
-      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
       venue.cfg,
       { id: billId, tender: { method: "cash", amount: "10.50" }, lines: [] },
     );
@@ -3331,7 +3371,12 @@ describe("what an adjustment reads (B11d)", () => {
     return inTx(venue, async (tx) => {
       const args = await argsFor(tx, billId, ask);
       const probe = counting(tx);
-      await applyAdjustment(probe.tx, venue.cfg, args, venue.venueLocale);
+      await applyAdjustment(
+        probe.tx,
+        venue.cfg,
+        { ...args, admission: testTradingAdmission() },
+        venue.venueLocale,
+      );
       return probe.counts;
     });
   }
@@ -3973,10 +4018,20 @@ describe("a counter order (B11c)", () => {
     );
 
     const first = await inTx(venue, (tx) =>
-      applyAdjustment(tx, venue.cfg, args, venue.venueLocale),
+      applyAdjustment(
+        tx,
+        venue.cfg,
+        { ...args, admission: testTradingAdmission() },
+        venue.venueLocale,
+      ),
     );
     const again = await inTx(venue, (tx) =>
-      applyAdjustment(tx, venue.cfg, args, venue.venueLocale),
+      applyAdjustment(
+        tx,
+        venue.cfg,
+        { ...args, admission: testTradingAdmission() },
+        venue.venueLocale,
+      ),
     );
 
     expect(again).toEqual(first);
@@ -4060,7 +4115,7 @@ describe("a counter order (B11c)", () => {
     const [burger] = await rowsOf(venue, orderId);
     await adjust(orderId, { lineId: burger!.id, action: "comp" });
 
-    await updateHeldOrder({ db: venue.db }, venue.cfg, orderId, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db: venue.db }, venue.cfg, orderId, {
       revision: (await counterStateOf(orderId)).order!.revision,
       lines: [
         { workingOrderLineId: burger!.id, menuItemId: venue.item("Burger"), quantity: "1" },
@@ -4078,7 +4133,12 @@ describe("a counter order (B11c)", () => {
   it("refuses a placed counter order as tab.not_open, writing nothing", async () => {
     const orderId = await parked(ticketZone, "Burger");
     await placeOrder(
-      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
       venue.cfg,
       orderId,
       venue.staffId,

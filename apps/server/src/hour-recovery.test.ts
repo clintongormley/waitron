@@ -195,7 +195,7 @@ it.each([
   ["unsupported territory", "ES", "ES-canary", "Atlantic/Canary"],
   ["unreadable zone", "ES", "ES-common", "Invalid/Zone"],
 ] as const)(
-  "grants no filing selection for %s",
+  "selects the recovery module only for a supported recorded jurisdiction: %s",
   async (_name, country, fiscalTerritory, timeZone) => {
     await suite.db.update(tenants).set({ country });
     await suite.db
@@ -203,7 +203,15 @@ it.each([
       .set({ fiscalTerritory, timeZone })
       .where(eq(locations.id, LOCATION));
     const f = await archive();
-    expect((await previewRecoveryArchive(deps(f.artifact))).fiscalSelection).toBeUndefined();
+    const selection = (await previewRecoveryArchive(deps(f.artifact))).fiscalSelection;
+    if (_name === "unreadable zone")
+      expect(selection).toEqual({
+        country: "ES",
+        fiscalTerritory: "ES-common",
+        timeZone: "Invalid/Zone",
+        module: "fiscal-verifactu",
+      });
+    else expect(selection).toBeUndefined();
   },
 );
 

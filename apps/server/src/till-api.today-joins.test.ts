@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
 import { observedTableActionBody } from "./testing/table-action-fixture.js";
 import { observedClosingBody } from "./testing/party-close-fixture.js";
@@ -60,6 +61,7 @@ beforeAll(async () => {
   mountTillApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: v.db,
       backend: v.backend,
       clock,

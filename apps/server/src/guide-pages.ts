@@ -1,5 +1,6 @@
 import { STAFF_GUIDE_TITLE } from "./i18n/staff.js";
 import { PURCHASES_GUIDE_TITLE } from "./i18n/guide-purchases.js";
+import { TIME_ZONE_GUIDE } from "./i18n/time-zone-guide.js";
 import { createHash } from "node:crypto";
 import type { Context, Hono } from "hono";
 import { GUIDE_LANGUAGES, GUIDE_PAGES, guideRoot, readGuide } from "./guide-catalogue.js";
@@ -83,6 +84,7 @@ const GUIDE_TEXT: { en: GuideWords; es: GuideWords & { missingTwin: string } } =
       "till-notices": TILL_NOTICES_GUIDE_TITLE.en,
       "box-status": BOX_STATUS_GUIDE_TITLE.en,
       "backup-recovery": BACKUP_RECOVERY_GUIDE_TITLE.en,
+      "time-zone": TIME_ZONE_GUIDE.en.name,
     },
     notFoundTitle: "Page not found",
     notFound: "There is no guide page at this address.",
@@ -105,6 +107,7 @@ const GUIDE_TEXT: { en: GuideWords; es: GuideWords & { missingTwin: string } } =
       "till-notices": TILL_NOTICES_GUIDE_TITLE.es,
       "box-status": BOX_STATUS_GUIDE_TITLE.es,
       "backup-recovery": BACKUP_RECOVERY_GUIDE_TITLE.es,
+      "time-zone": TIME_ZONE_GUIDE.es.name,
     },
     missingTwin: "Esta página aún no está en español. Se muestra en inglés.",
     notFoundTitle: "Página no encontrada",

@@ -8,11 +8,24 @@ import { paymentAttemptIsLive, payWorkingOrderIntegratedOrchestration } from "./
 import type { TillSaleDeps } from "./working-order.js";
 import type { TradingContext } from "./trading-context.js";
 import { realSleep, runLoop, type LoopDeps } from "./loop.js";
+import type { TradingAdmission } from "./trading-admission.js";
 
 export function runPendingCardLoop(
-  deps: Pick<LoopDeps, "pass" | "now" | "signal" | "log"> & { sleep?: LoopDeps["sleep"] },
+  deps: Pick<LoopDeps, "pass" | "now" | "signal" | "log"> & {
+    admission: TradingAdmission;
+    sleep?: LoopDeps["sleep"];
+  },
 ): Promise<void> {
-  return runLoop({ ...deps, sleep: deps.sleep ?? realSleep, minTickMs: 5000, maxTickMs: 60_000 });
+  return runLoop({
+    ...deps,
+    pass: async (now) => {
+      deps.admission.require();
+      return deps.pass(now);
+    },
+    sleep: deps.sleep ?? realSleep,
+    minTickMs: 5000,
+    maxTickMs: 60_000,
+  });
 }
 
 export interface AutomaticCardRecoveryDeps extends TillSaleDeps {
@@ -23,6 +36,7 @@ export interface AutomaticCardRecoveryDeps extends TillSaleDeps {
 export async function recoverAutomaticCardPayments(
   deps: AutomaticCardRecoveryDeps,
 ): Promise<{ filed: number; errors: { paymentId: string; error: string }[] }> {
+  deps.admission.require();
   const pending = await withTransaction(deps.db, (tx) =>
     tx
       .select({

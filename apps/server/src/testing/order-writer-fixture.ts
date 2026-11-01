@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./trading-admission.js";
 import { eq } from "drizzle-orm";
 import { withTransaction, workingOrders, type Transaction, type Database } from "@waitron/db";
 import { readBillEditState } from "../bill-editing.js";
@@ -83,7 +84,7 @@ export async function updateOrderLine(
     lineNo,
     patch,
     revision,
-    await authority(tx, id, operatorId),
+    { ...(await authority(tx, id, operatorId)), admission: testTradingAdmission() },
     attendance,
   );
 }

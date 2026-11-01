@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 /**
  * The assembled device join-and-accept flow, with `device-api` and `join-api` mounted on one app
  * sharing ONE `PairingMode` holder, as `boot.ts` wires them: the window one surface opens is the
@@ -587,6 +588,7 @@ describe("a disabled device comes back as the same device", () => {
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: suite.db,
         // Neither is reached: signing in files nothing and reads no clock.
         backend: {} as FiscalBackend,

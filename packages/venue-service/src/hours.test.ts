@@ -499,6 +499,7 @@ describe("Hours with the holiday store", () => {
       countryCode: "ZZ",
       defaultLocale: "en-GB",
       defaultTimeZone: "Europe/Madrid",
+      timeZones: ["Europe/Madrid"],
       invoiceLocales: ["en-GB"],
       moduleIds: [],
       availableForVenueSetup: false,

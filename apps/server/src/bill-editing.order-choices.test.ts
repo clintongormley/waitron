@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -120,7 +121,12 @@ function run(
       });
     case "place":
       return placeOrder(
-        { db: venue.db, backend: venue.backend, clock: venue.clock },
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
         venue.cfg,
         p.id,
         operatorId,

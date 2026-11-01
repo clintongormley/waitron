@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -91,6 +92,7 @@ async function fixture() {
   mountTillApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: v.db,
       cfg: v.cfg,
       backend: v.backend,

@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateOrderLine, placeOrder } from "./testing/order-writer-fixture.js";
 import { departments, departmentReceipts } from "@waitron/venue-service";
@@ -271,7 +272,17 @@ function integratedDeps(
     db: app,
     poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
   });
-  return { deps: { db: app, backend, clock, provider, readerRef: "reader_1" }, client };
+  return {
+    deps: {
+      admission: testTradingAdmission(),
+      db: app,
+      backend,
+      clock,
+      provider,
+      readerRef: "reader_1",
+    },
+    client,
+  };
 }
 
 function cannedProvider(
@@ -848,12 +859,16 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const id = randomUUID();
     const provider = new SimulatorPaymentProvider(suite.db);
 
-    const out = await payWorkingOrderIntegrated({ db: suite.db, backend, clock, provider }, cfg, {
-      id,
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
-      simulationOutcome: "captured",
-    });
+    const out = await payWorkingOrderIntegrated(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock, provider },
+      cfg,
+      {
+        id,
+        zoneId: cafe.zoneId,
+        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        simulationOutcome: "captured",
+      },
+    );
 
     expect(out.outcome).toBe("captured");
     if (out.outcome !== "captured") throw new Error("unreachable");
@@ -876,12 +891,16 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const app = suite.db;
     const provider = new SimulatorPaymentProvider(app);
     const id = randomUUID();
-    const out = await payWorkingOrderIntegrated({ db: app, backend, clock, provider }, cfg, {
-      id,
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
-      simulationOutcome: "captured",
-    });
+    const out = await payWorkingOrderIntegrated(
+      { admission: testTradingAdmission(), db: app, backend, clock, provider },
+      cfg,
+      {
+        id,
+        zoneId: cafe.zoneId,
+        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        simulationOutcome: "captured",
+      },
+    );
 
     expect(out.outcome).toBe("captured");
     expect(await saleCount(id)).toBe(1);
@@ -898,7 +917,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const id = randomUUID();
     const operatorId = "cccccccc-0000-4000-8000-00000000000a";
     await payWorkingOrderIntegrated(
-      { db: app, backend, clock, provider },
+      { admission: testTradingAdmission(), db: app, backend, clock, provider },
       cfg,
       {
         id,
@@ -922,12 +941,16 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const app = suite.db;
     const provider = new SimulatorPaymentProvider(app);
     const id = randomUUID();
-    const out = await payWorkingOrderIntegrated({ db: app, backend, clock, provider }, cfg, {
-      id,
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
-      simulationOutcome: "declined",
-    });
+    const out = await payWorkingOrderIntegrated(
+      { admission: testTradingAdmission(), db: app, backend, clock, provider },
+      cfg,
+      {
+        id,
+        zoneId: cafe.zoneId,
+        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+        simulationOutcome: "declined",
+      },
+    );
 
     expect(out).toEqual({ outcome: "declined" });
     expect(await saleCount(id)).toBe(0);
@@ -1272,7 +1295,12 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     });
     // Placing files no fiscal document under ticket_then_pay, and fires the order to the default
     // station.
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      id,
+      OPERATOR,
+    );
     expect(await saleCount(id)).toBe(0);
     expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
     expect(await stationQueueOrderIds(station)).toEqual([id]);
@@ -1340,12 +1368,23 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       zoneId: cafe.zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      id,
+      OPERATOR,
+    );
 
     // The second Pay files the sale from the first card's charge; the first's `recordSale` is then
     // refused by `sales_working_order_id_key` and replays that sale's ticket.
     const { provider, reader, second } = chargedThenFiledBySecondPay(cfg);
-    const deps: IntegratedPayDeps = { db: app, backend, clock, provider };
+    const deps: IntegratedPayDeps = {
+      admission: testTradingAdmission(),
+      db: app,
+      backend,
+      clock,
+      provider,
+    };
 
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 
@@ -1374,7 +1413,13 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     // The provider reports `captured` but wrote no `payments` row, so the association throws
     // `payment.not_found`: P3 must re-raise it, and the sale must roll back.
     const provider = cannedProvider(() => Promise.resolve(), "captured");
-    const deps: IntegratedPayDeps = { db: app, backend, clock, provider };
+    const deps: IntegratedPayDeps = {
+      admission: testTradingAdmission(),
+      db: app,
+      backend,
+      clock,
+      provider,
+    };
 
     await expect(
       payWorkingOrderIntegrated(deps, cfg, {
@@ -1406,6 +1451,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });
     const deps: IntegratedPayDeps = {
+      admission: testTradingAdmission(),
       db: app,
       backend: fake,
       clock,
@@ -1694,7 +1740,12 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
       zoneId: cafe.zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      id,
+      OPERATOR,
+    );
     await withTransaction(suite.db, async (tx) => {
       await insertCapturedPayment(tx, {
         origin: cfg.origin,
@@ -1768,14 +1819,23 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       label: "Mesa 7",
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      id,
+      OPERATOR,
+    );
 
     const readers = [new FakePaymentProvider(suite.db), new FakePaymentProvider(suite.db)];
     const releases = readers.map((reader) => reader.holdNextCollect());
     const req = { id, lines: [] };
     const paying = Promise.allSettled(
       readers.map((provider) =>
-        payWorkingOrderIntegrated({ db: suite.db, backend, clock, provider }, cfg, req),
+        payWorkingOrderIntegrated(
+          { admission: testTradingAdmission(), db: suite.db, backend, clock, provider },
+          cfg,
+          req,
+        ),
       ),
     );
     await expect.poll(() => readers.map((reader) => reader.collectCalls.length)).toContain(1);
@@ -1839,8 +1899,18 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
       zoneId: cafe.zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
-    await issueOrderInvoice({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      id,
+      OPERATOR,
+    );
+    await issueOrderInvoice(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      id,
+      OPERATOR,
+    );
     return { id, saleId: await saleIdFor(id) };
   }
 
@@ -1925,7 +1995,13 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
     // The second Pay settles the invoice from the first card's charge; the first's `settleSale`
     // then refuses with `sale.already_settled`, and it replays rather than settling twice.
     const { provider, reader, second } = chargedThenFiledBySecondPay(cfg);
-    const deps: IntegratedPayDeps = { db: app, backend, clock, provider };
+    const deps: IntegratedPayDeps = {
+      admission: testTradingAdmission(),
+      db: app,
+      backend,
+      clock,
+      provider,
+    };
 
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 
@@ -1954,7 +2030,13 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
     // The provider reports `captured` but wrote no `payments` row, so the association throws
     // `payment.not_found`: it must be re-raised, and the settlement rolled back.
     const provider = cannedProvider(() => Promise.resolve(), "captured");
-    const deps: IntegratedPayDeps = { db: app, backend, clock, provider };
+    const deps: IntegratedPayDeps = {
+      admission: testTradingAdmission(),
+      db: app,
+      backend,
+      clock,
+      provider,
+    };
 
     await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toMatchObject({
       code: "payment.not_found",
@@ -2296,11 +2378,15 @@ describe("an order being paid by card cannot be changed from another device (pla
   it("refuses a round, a line edit and a void while the reader runs; the capture then files and clears the mark", async () => {
     const t = await twoTabs();
     const provider = new PausedSimulator(suite.db);
-    const paying = payWorkingOrderIntegrated({ db: suite.db, backend, clock, provider }, t.cfg, {
-      id: t.tabId,
-      lines: [],
-      simulationOutcome: "captured",
-    });
+    const paying = payWorkingOrderIntegrated(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock, provider },
+      t.cfg,
+      {
+        id: t.tabId,
+        lines: [],
+        simulationOutcome: "captured",
+      },
+    );
     await provider.entered;
 
     expect(await markOf(t.tabId)).not.toBeNull();
@@ -2334,11 +2420,15 @@ describe("an order being paid by card cannot be changed from another device (pla
   it("a declined card clears the mark, and the order takes a round, an edit and a void again", async () => {
     const t = await twoTabs();
     const provider = new PausedSimulator(suite.db);
-    const paying = payWorkingOrderIntegrated({ db: suite.db, backend, clock, provider }, t.cfg, {
-      id: t.tabId,
-      lines: [],
-      simulationOutcome: "declined",
-    });
+    const paying = payWorkingOrderIntegrated(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock, provider },
+      t.cfg,
+      {
+        id: t.tabId,
+        lines: [],
+        simulationOutcome: "declined",
+      },
+    );
     await provider.entered;
     expect(await markOf(t.tabId)).not.toBeNull();
     provider.release();
@@ -2356,10 +2446,14 @@ describe("an order being paid by card cannot be changed from another device (pla
     provider.collect = () => Promise.reject(new Error("reader unreachable"));
 
     await expect(
-      payWorkingOrderIntegrated({ db: suite.db, backend, clock, provider }, t.cfg, {
-        id: t.tabId,
-        lines: [],
-      }),
+      payWorkingOrderIntegrated(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock, provider },
+        t.cfg,
+        {
+          id: t.tabId,
+          lines: [],
+        },
+      ),
     ).rejects.toThrow("reader unreachable");
     expect(await markOf(t.tabId)).toBeNull();
     for (const write of writes(t, t.tabId)) await write();
@@ -2369,7 +2463,7 @@ describe("an order being paid by card cannot be changed from another device (pla
     const t = await twoTabs();
     const first = new PausedSimulator(suite.db);
     const firstPay = payWorkingOrderIntegrated(
-      { db: suite.db, backend, clock, provider: first },
+      { admission: testTradingAdmission(), db: suite.db, backend, clock, provider: first },
       t.cfg,
       { id: t.tabId, lines: [], simulationOutcome: "captured" },
     );
@@ -2381,10 +2475,14 @@ describe("an order being paid by card cannot be changed from another device (pla
       return Promise.resolve();
     }, "captured");
     await expect(
-      payWorkingOrderIntegrated({ db: suite.db, backend, clock, provider: second }, t.cfg, {
-        id: t.tabId,
-        lines: [],
-      }),
+      payWorkingOrderIntegrated(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock, provider: second },
+        t.cfg,
+        {
+          id: t.tabId,
+          lines: [],
+        },
+      ),
     ).rejects.toMatchObject({
       code: "order.payment_in_flight",
       params: { workingOrderId: t.tabId },
@@ -2403,11 +2501,15 @@ describe("an order being paid by card cannot be changed from another device (pla
   it("the loop never releases the mark of an attempt still running in this process, however old", async () => {
     const t = await twoTabs();
     const provider = new PausedSimulator(suite.db);
-    const paying = payWorkingOrderIntegrated({ db: suite.db, backend, clock, provider }, t.cfg, {
-      id: t.tabId,
-      lines: [],
-      simulationOutcome: "captured",
-    });
+    const paying = payWorkingOrderIntegrated(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock, provider },
+      t.cfg,
+      {
+        id: t.tabId,
+        lines: [],
+        simulationOutcome: "captured",
+      },
+    );
     await provider.entered;
     // Far older than any reader waits: only the attempt being live can keep it.
     await setMark(t.tabId, "2020-01-01T00:00:00.000Z");
@@ -2440,7 +2542,14 @@ describe("an order being paid by card cannot be changed from another device (pla
         incidents: () => Promise.resolve(false),
         poll: { maxAttempts: 2, intervalMs: 0, sleep: () => Promise.resolve() },
       });
-      const deps: IntegratedPayDeps = { db: suite.db, backend, clock, provider, readerRef: "rdr" };
+      const deps: IntegratedPayDeps = {
+        admission: testTradingAdmission(),
+        db: suite.db,
+        backend,
+        clock,
+        provider,
+        readerRef: "rdr",
+      };
       client.stallNext();
       expect(await payWorkingOrderIntegrated(deps, t.cfg, { id: t.tabId, lines: [] })).toEqual({
         outcome: "timeout",
@@ -2519,7 +2628,14 @@ describe("an order being paid by card cannot be changed from another device (pla
       try {
         expect(
           await payWorkingOrderIntegrated(
-            { db: suite.db, backend, clock, provider: new SimulatorPaymentProvider(suite.db), log },
+            {
+              admission: testTradingAdmission(),
+              db: suite.db,
+              backend,
+              clock,
+              provider: new SimulatorPaymentProvider(suite.db),
+              log,
+            },
             t.cfg,
             { id: t.tabId, lines: [], simulationOutcome: "declined" },
           ),
@@ -2549,10 +2665,14 @@ describe("an order being paid by card cannot be changed from another device (pla
       const drop = refuseRelease(t.tabId);
       try {
         await expect(
-          payWorkingOrderIntegrated({ db: suite.db, backend, clock, provider, log }, t.cfg, {
-            id: t.tabId,
-            lines: [],
-          }),
+          payWorkingOrderIntegrated(
+            { admission: testTradingAdmission(), db: suite.db, backend, clock, provider, log },
+            t.cfg,
+            {
+              id: t.tabId,
+              lines: [],
+            },
+          ),
         ).rejects.toThrow("reader unreachable");
       } finally {
         drop();
@@ -2566,7 +2686,13 @@ describe("an order being paid by card cannot be changed from another device (pla
     await setMark(t.tabId, "2026-09-26T10:00:00.000Z");
 
     const out = await payWorkingOrderIntegrated(
-      { db: suite.db, backend, clock, provider: new SimulatorPaymentProvider(suite.db) },
+      {
+        admission: testTradingAdmission(),
+        db: suite.db,
+        backend,
+        clock,
+        provider: new SimulatorPaymentProvider(suite.db),
+      },
       t.cfg,
       { id: t.tabId, lines: [], simulationOutcome: "captured" },
     );
@@ -2580,7 +2706,7 @@ describe("an order being paid by card cannot be changed from another device (pla
     await setMark(t.tabId, "2026-09-26T10:00:00.000Z");
 
     await expect(
-      payWorkingOrder({ db: suite.db, backend, clock }, t.cfg, {
+      payWorkingOrder({ admission: testTradingAdmission(), db: suite.db, backend, clock }, t.cfg, {
         id: t.tabId,
         lines: [],
         tender: { method: "cash", amount: "10.00" },
@@ -2700,13 +2826,22 @@ describe("an order being paid by card cannot be changed from another device (pla
       zoneId: cafe.zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
-    const provider = new PausedSimulator(suite.db);
-    const paying = payWorkingOrderIntegrated({ db: suite.db, backend, clock, provider }, cfg, {
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
       id,
-      lines: [],
-      simulationOutcome: "captured",
-    });
+      OPERATOR,
+    );
+    const provider = new PausedSimulator(suite.db);
+    const paying = payWorkingOrderIntegrated(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock, provider },
+      cfg,
+      {
+        id,
+        lines: [],
+        simulationOutcome: "captured",
+      },
+    );
     await provider.entered;
 
     expect(await markOf(id)).toBeNull();
@@ -2756,8 +2891,18 @@ describe("a party's bill request goes when a card or collect settles its last ow
 
   /** Place the tab and seed an outstanding invoice for settlement tests. */
   async function placed(cfg: DeviceRequestConfig, tabId: string): Promise<void> {
-    await placeOrder({ db: suite.db, backend, clock }, cfg, tabId, OPERATOR);
-    await issueOrderInvoice({ db: suite.db, backend, clock }, cfg, tabId, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      tabId,
+      OPERATOR,
+    );
+    await issueOrderInvoice(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      tabId,
+      OPERATOR,
+    );
     expect(await outstandingSalesFor()).toHaveLength(1);
   }
 
@@ -2787,7 +2932,7 @@ describe("a party's bill request goes when a card or collect settles its last ow
 
   async function payInCash(cfg: DeviceRequestConfig, tabId: string, log?: Logger): Promise<void> {
     await payWorkingOrder(
-      { db: suite.db, backend, clock, log },
+      { admission: testTradingAdmission(), db: suite.db, backend, clock, log },
       cfg,
       { id: tabId, lines: [], tender: { method: "cash", amount: "1.50" } },
       OPERATOR,
@@ -2801,7 +2946,7 @@ describe("a party's bill request goes when a card or collect settles its last ow
     log?: Logger,
   ): Promise<void> {
     await collectOrder(
-      { db: suite.db, backend, clock, log },
+      { admission: testTradingAdmission(), db: suite.db, backend, clock, log },
       cfg,
       { id: tabId, lines: [], tender: { method: "cash", amount: "1.50" } },
       OPERATOR,
@@ -2978,7 +3123,11 @@ describe("integrated answer receipt presentation", () => {
       simulationOutcome: "captured" as const,
     };
     const deps = { db: suite.db, backend, clock, provider };
-    const first = await payWorkingOrderIntegrated(deps, cfg, req);
+    const first = await payWorkingOrderIntegrated(
+      { ...deps, admission: testTradingAdmission() },
+      cfg,
+      req,
+    );
     expect(first.outcome).toBe("captured");
     if (first.outcome !== "captured") throw new Error("Expected capture");
     expect(first.ticket.receiptTrim).toEqual({ headerSubtitle: "Connected subtitle" });
@@ -2986,7 +3135,11 @@ describe("integrated answer receipt presentation", () => {
     suite.db.run(
       sql`update department_receipts set receipt = '{}' where department_id = ${departmentId}`,
     );
-    const replay = await payWorkingOrderIntegrated(deps, cfg, req);
+    const replay = await payWorkingOrderIntegrated(
+      { ...deps, admission: testTradingAdmission() },
+      cfg,
+      req,
+    );
     expect(replay.outcome).toBe("captured");
     if (replay.outcome !== "captured") throw new Error("Expected replay");
     expect(replay.ticket.receiptTrim).toEqual({});
@@ -3044,8 +3197,18 @@ describe("receipt presentation across invoice-first and recovery paths", () => {
           zoneId: cafe.zoneId,
           lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
         });
-        await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
-        await issueOrderInvoice({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
+        await placeOrder(
+          { admission: testTradingAdmission(), db: suite.db, backend, clock },
+          cfg,
+          id,
+          OPERATOR,
+        );
+        await issueOrderInvoice(
+          { admission: testTradingAdmission(), db: suite.db, backend, clock },
+          cfg,
+          id,
+          OPERATOR,
+        );
       } else if (recovered) {
         await withTransaction(suite.db, (tx) =>
           createOpenOrder(tx, cfg, id, [{ menuItemId: cafe.menuItemId, quantity: "1" }], null, {

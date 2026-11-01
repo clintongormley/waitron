@@ -72,6 +72,7 @@ import "@waitron/ui/src/components/wt-language-chooser.js";
 import "@waitron/ui/src/components/wt-theme-chooser.js";
 import "@waitron/ui/src/components/wt-demo-bar.js";
 import "./screens/login-screen.js";
+import "./screens/venue-zone-repair.js";
 import "./screens/profile-screen.js";
 import type { ProfileScreen } from "./screens/profile-screen.js";
 import "./screens/my-schedule-screen.js";
@@ -121,6 +122,7 @@ import type {
   DashboardApi,
   DiskStopResponse,
   PersonRole,
+  TradingAdmissionView,
 } from "./api/client.js";
 import { diskStopMessage } from "./i18n/disk-stop-words.js";
 import {
@@ -1046,6 +1048,8 @@ export class DashboardApp extends LitElement {
     },
   });
   #signingOut = false;
+  #sessionRead = 0;
+  @state() private tradingAdmission: TradingAdmissionView = { state: "ready" };
 
   readonly #onSessionInvalid = (event: Event): void => {
     const detail = (event as CustomEvent<{ code?: unknown; generation?: number }>).detail;
@@ -1248,12 +1252,15 @@ export class DashboardApp extends LitElement {
     const generation = this.sessionGeneration;
     const localeChoice = this.#sessionLocaleChoice;
     const wasAuthenticated = this.sessionRole !== undefined;
+    const read = ++this.#sessionRead;
     try {
       const me = await this.api.getMe();
-      if (!this.isConnected || generation !== this.sessionGeneration) return;
+      if (!this.isConnected || generation !== this.sessionGeneration || read !== this.#sessionRead)
+        return;
       this.#applyMe(me, preference, localeChoice === this.#sessionLocaleChoice);
     } catch (error) {
-      if (!this.isConnected || generation !== this.sessionGeneration) return;
+      if (!this.isConnected || generation !== this.sessionGeneration || read !== this.#sessionRead)
+        return;
       const code = codeOf(error);
       if (
         wasAuthenticated ||
@@ -1287,6 +1294,7 @@ export class DashboardApp extends LitElement {
       onboardingIntent?: "demo" | "prepare" | "live";
       sessionExpiresInSeconds?: number;
       sessionIdleTimeoutSeconds?: number;
+      tradingAdmission?: TradingAdmissionView;
     },
     preference: PendingLoginPreference | undefined,
     mayApplyLocale: boolean,
@@ -1319,26 +1327,32 @@ export class DashboardApp extends LitElement {
       );
     }
     this.sessionRole = me.role;
-    this.#startLiveUpdates();
     this.#sessionPermissions = me.permissions;
     this.#permissionContinuation.notify();
     // A plain field: redraw so the screens given a permission see the change.
     this.requestUpdate();
     this.onboardingIntent = me.onboardingIntent;
-    // Activate the enabled modules before resolving the permitted screen, so a URL naming an enabled
-    // module's screen id is recognised while a disabled module's is not.
-    this.#activate(me.modules);
-    this.#applyRequestedScreen(this.#url.read("dashboard"));
     this.#venueLocale = me.venueLocale;
     this.venueName = me.venueName;
     const remainingSeconds = me.sessionExpiresInSeconds ?? 30 * 60;
     this.sessionIdleTimeoutSeconds = me.sessionIdleTimeoutSeconds ?? 30 * 60;
     this.#scheduleSessionExpiry(remainingSeconds);
     this.#broadcastSessionDeadline(Date.now() + remainingSeconds * 1000);
-    this.#writeCurrentUrl(true);
-    // A person's own choice wins; otherwise their browser's language, which the server has already
-    // floored at the venue default for a browser asking for a language we do not ship.
     if (mayApplyLocale) setLocale(resolveActiveLocale(me.locale, me.sessionDefault));
+    const admission = me.tradingAdmission ?? { state: "ready" };
+    if (admission.state !== this.tradingAdmission.state) this.tradingAdmission = admission;
+    if (admission.state !== "ready") {
+      this.liveUpdates?.stop();
+      this.#languageQueries.release("getContentLanguages");
+      this.#venueThemeQueries.release("getVenueTheme");
+      this.#clearAlerts();
+      this.screen = "zone-repair";
+      return;
+    }
+    this.#startLiveUpdates();
+    this.#activate(me.modules);
+    this.#applyRequestedScreen(this.#url.read("dashboard"));
+    this.#writeCurrentUrl(true);
     this.#loadContentLanguages();
     this.#watchAlerts();
     this.#watchDiskStop();
@@ -1359,6 +1373,7 @@ export class DashboardApp extends LitElement {
   }
 
   #startLiveUpdates(): void {
+    if (this.tradingAdmission.state !== "ready") return;
     // The screen is drawn only once this read answers; a stream started sooner lacks its watches.
     if (!this.contentLanguagesReady && this.contentLanguageError === null) return;
     if (this.#liveAccountEpoch === this.sessionGeneration) return;
@@ -1742,6 +1757,10 @@ export class DashboardApp extends LitElement {
       proceed: async () => {
         // Probes from before or during this write must not restore the old preference.
         this.#sessionLocaleChoice += 1;
+        if (this.screen === "zone-repair") {
+          if (this.isConnected && generation === this.sessionGeneration) setLocale(code);
+          return;
+        }
         try {
           await this.api.putLocale(code);
           if (!this.isConnected || generation !== this.sessionGeneration) return;
@@ -1840,6 +1859,40 @@ export class DashboardApp extends LitElement {
           </div>
         </div>
       `;
+    }
+    if (this.screen === "zone-repair") {
+      return html`${this.leaveConfirmation()}
+        <div
+          class="login-page"
+          @wt-locale-selected=${(event: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(event)}
+        >
+          ${this.#banner(false, false)}
+          <main class="body">
+            <dashboard-venue-zone-repair
+              .api=${this.api}
+              .canConfigure=${this.#sessionPermissions.includes("venue.configure")}
+              .admission=${this.tradingAdmission}
+              .sessionKey=${`${this.myPersonId}:${this.sessionGeneration}`}
+              .reload=${this.reload}
+            ></dashboard-venue-zone-repair>
+            ${
+              !this.#sessionPermissions.includes("venue.configure")
+                ? html`<p data-test="zone-sign-in-explanation">
+                      ${t("zone_repair.sign_in_explanation")}
+                    </p>
+                    <wt-button data-test="zone-sign-in" @click=${() => void this.#onLogout()}
+                      >${t("zone_repair.sign_in")}</wt-button
+                    >`
+                : nothing
+            }
+            <wt-button
+              data-test="zone-logout"
+              variant="secondary"
+              @click=${() => void this.#onLogout()}
+              >${t("action.logout")}</wt-button
+            >
+          </main>
+        </div>`;
     }
     return html`
       <div
@@ -2333,6 +2386,11 @@ export class DashboardApp extends LitElement {
    * including the one a profile save triggers while the URL still reads "profile". The cost: a module
    * disabled server-side while the modal is open is not re-gated until the next navigation. */
   #applyRequestedScreen(requested: string | null): void {
+    if (this.tradingAdmission.state !== "ready") {
+      this.profileOpen = false;
+      this.screen = "zone-repair";
+      return;
+    }
     if (requested === "printing-rules") {
       const destination = this.#permittedScreen("prep-stations");
       this.#url.write(
@@ -2363,7 +2421,12 @@ export class DashboardApp extends LitElement {
   }
 
   readonly #onHistory = (): void => {
-    if (this.screen === "login" || this.sessionRole === undefined) return;
+    if (
+      this.screen === "login" ||
+      this.sessionRole === undefined ||
+      this.tradingAdmission.state !== "ready"
+    )
+      return;
     this.#applyRequestedScreen(this.#url.read("dashboard"));
     this.#writeCurrentUrl(true);
     this.drawerOpen = false;

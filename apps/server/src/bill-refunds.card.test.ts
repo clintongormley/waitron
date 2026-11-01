@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedOrderSender } from "./testing/order-writer-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -96,6 +97,7 @@ function managerApp(clock: TrustedClock = systemClock()): Hono {
   mountPaymentsApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: venue.db,
       backend: venue.backend,
       clock,
@@ -216,6 +218,7 @@ async function heldSendOf(paymentId: string) {
 
 const runLoop = (clock: TrustedClock = systemClock()) =>
   settlePendingBillPayments({
+    admission: testTradingAdmission(),
     db: venue.db,
     backend: venue.backend,
     clock,
@@ -819,6 +822,8 @@ describe("the provider refunds another refund of the payment already accounts fo
         {
           db: venue.db,
           backend: venue.backend,
+          admission: testTradingAdmission(),
+          cfg: venue.cfg,
           clock: systemClock(),
           refundProviderFor: () => Promise.resolve(venue.card),
         },
@@ -866,6 +871,8 @@ describe("the provider refunds another refund of the payment already accounts fo
         {
           db: venue.db,
           backend: venue.backend,
+          admission: testTradingAdmission(),
+          cfg: venue.cfg,
           clock: systemClock(),
           refundProviderFor: () => Promise.resolve(venue.card),
         },
@@ -937,6 +944,8 @@ describe("the provider's refunds read before the first send", () => {
         {
           db: venue.db,
           backend: venue.backend,
+          admission: testTradingAdmission(),
+          cfg: venue.cfg,
           clock: systemClock(),
           refundProviderFor: () => Promise.resolve(venue.card),
         },
@@ -950,6 +959,8 @@ describe("the provider's refunds read before the first send", () => {
         {
           db: venue.db,
           backend: venue.backend,
+          admission: testTradingAdmission(),
+          cfg: venue.cfg,
           clock: systemClock(),
           refundProviderFor: () => Promise.resolve(venue.card),
         },
@@ -1067,6 +1078,7 @@ describe("design §8 test 21: never sent, sent but not found, and the key window
     );
 
     const pass = await settlePendingBillPayments({
+      admission: testTradingAdmission(),
       db: venue.db,
       backend: venue.backend,
       clock: systemClock(),
@@ -1713,6 +1725,8 @@ describe("a refund the provider here cannot answer for", () => {
       {
         db: venue.db,
         backend: venue.backend,
+        admission: testTradingAdmission(),
+        cfg: venue.cfg,
         clock: systemClock(),
         ...(refundProviderFor === undefined ? {} : { refundProviderFor }),
       },
@@ -1786,6 +1800,7 @@ describe("a refund the provider here cannot answer for", () => {
     const { paymentId, refundId } = await pendingRefund();
 
     const pass = await settlePendingBillPayments({
+      admission: testTradingAdmission(),
       db: venue.db,
       backend: venue.backend,
       clock: systemClock(),
@@ -1823,6 +1838,8 @@ describe("a refund the provider here cannot answer for", () => {
       {
         db: venue.db,
         backend: venue.backend,
+        admission: testTradingAdmission(),
+        cfg: venue.cfg,
         clock: systemClock(),
         refundProviderFor: partial({}),
       },
@@ -1938,7 +1955,12 @@ describe("design §8 test 23: the invoice waits for the refund", () => {
     const issued = await inTx(venue, (tx) =>
       issueIfFullyPaid(
         tx,
-        { db: venue.db, backend: venue.backend, clock: venue.clock },
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
         venue.cfg,
         billId,
       ),

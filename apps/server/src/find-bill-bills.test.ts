@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { abandonHeldOrder } from "./testing/order-writer-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -185,7 +186,12 @@ describe("Find Bills SQL paging", () => {
     const party = await seatedWith(venue, "Tarta");
     const placed = await parked(venue, "Pulpo");
     await placeOrder(
-      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
       venue.cfg,
       placed,
       venue.operatorId,
@@ -274,7 +280,12 @@ describe("Find Bills SQL paging", () => {
     await parkedBy(venue, venue.operatorId, "Caña");
     const placed = await parkedBy(venue, venue.supervisorId, "Caña");
     await placeOrder(
-      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
       venue.cfg,
       placed,
       venue.supervisorId,

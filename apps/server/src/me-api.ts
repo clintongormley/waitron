@@ -49,6 +49,7 @@ import {
   requireUuidParam,
 } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
+import type { TradingAdmissionView } from "./trading-admission.js";
 import type { OnboardingIntent } from "./trading-config.js";
 import { AccountEmailFailure, type AccountEmailSender } from "./account-email.js";
 import { modulesNamed } from "./modules.js";
@@ -58,6 +59,7 @@ import { timeRecordPersonalData } from "./personal-data-time-record.js";
 
 export interface MeApiDeps {
   db: Database;
+  readTradingAdmission?: () => TradingAdmissionView;
   describeShifts?: WaitronModule["describeShifts"];
   cfg: { nodeId: string };
   /** The language the dashboard defaults to before a signed-in person's own preference is known. */
@@ -338,6 +340,9 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       // `permissions` and `modules` are a client-side hint, never a substitute for each route's own
       // gate.
       return c.json({
+        ...(deps.readTradingAdmission === undefined
+          ? {}
+          : { tradingAdmission: deps.readTradingAdmission() }),
         personId,
         role,
         email,

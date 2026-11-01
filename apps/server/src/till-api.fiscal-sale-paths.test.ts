@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { randomUUID } from "node:crypto";
@@ -264,6 +265,7 @@ async function setupVenue(): Promise<{
  * cookie rides the non-TLS `app.request`. */
 function apiDeps(cfg: TradingContext): TillApiDeps {
   return {
+    admission: testTradingAdmission(),
     db: suite.db,
     backend,
     clock,
@@ -312,6 +314,7 @@ function fakePool(_cfg: TradingContext, client: FakeStripe): CardProviderPool {
  * seat, exactly as boot does. */
 function apiDepsWithPool(cfg: TradingContext, pool: CardProviderPool): TillApiDeps {
   return {
+    admission: testTradingAdmission(),
     db: suite.db,
     backend,
     clock,
@@ -1267,6 +1270,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
           mountTillApi(
             app,
             {
+              admission: testTradingAdmission(),
               db: suite.db,
               backend,
               clock,
@@ -1293,6 +1297,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: suite.db,
         backend,
         clock,
@@ -1331,6 +1336,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: suite.db,
         backend,
         clock,
@@ -1381,6 +1387,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: suite.db,
         backend,
         clock,
@@ -1435,6 +1442,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: suite.db,
         backend,
         clock,
@@ -1486,6 +1494,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: suite.db,
         backend,
         clock,
@@ -1518,6 +1527,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: suite.db,
         backend,
         clock,
@@ -1751,6 +1761,7 @@ describe("GET /api/till (per-device card provider, over HTTP)", () => {
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: suite.db,
         backend,
         clock,

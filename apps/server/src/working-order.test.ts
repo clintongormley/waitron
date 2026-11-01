@@ -1,4 +1,5 @@
 import { fireTableKitchenOrder } from "./testing/kitchen-table-order.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { abandonHeldOrder, addTabRound } from "./testing/order-writer-fixture.js";
 import {
   recallLines,
@@ -332,7 +333,7 @@ async function updateProducts(
   },
 ): Promise<number> {
   const offers = await counterOffers(cfg);
-  return updateHeldOrder({ db }, cfg, id, {
+  return updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
     ...req,
     revision: req.revision ?? (await revisionOf(id)),
     lines: offers.toOfferLines(req.lines),
@@ -2067,7 +2068,7 @@ describe("updateHeldOrder", () => {
     await db.execute(sql`
       update extra_list_items set price = 400 where list_id = ${extra.listId}`);
     await withTransaction(db, republishMenus);
-    await updateHeldOrder({ db }, cfg, id, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
       revision: await revisionOf(id),
       lines: [
         {
@@ -2173,7 +2174,7 @@ describe("updateHeldOrder", () => {
     );
     const dishes = before.filter((line) => line.parent_line_id === null).map((line) => line.id);
     const edit = async (quantity: string) =>
-      updateHeldOrder({ db }, cfg, id, {
+      updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
         revision: await revisionOf(id),
         lines: heldRow(dishes, quantity, { menuItemId: premiumCafeOfferId, extras }),
       });
@@ -2204,7 +2205,7 @@ describe("updateHeldOrder", () => {
     );
 
     await expect(
-      updateHeldOrder({ db }, cfg, id, {
+      updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
         revision: await revisionOf(id),
         lines: [
           {
@@ -2230,7 +2231,7 @@ describe("updateHeldOrder", () => {
         tx.update(products).set(patch).where(eq(products.id, cafeId)),
       );
       const edit = async (quantity: string) =>
-        updateHeldOrder({ db }, cfg, id, {
+        updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
           revision: await revisionOf(id),
           lines: [
             { workingOrderLineId: before[0]!.id, menuItemId: premiumCafeOfferId, quantity, extras },
@@ -2322,7 +2323,7 @@ describe("updateHeldOrder", () => {
       },
     ]);
 
-    await updateHeldOrder({ db }, cfg, seeded.tabId, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, seeded.tabId, {
       revision: await revisionOf(seeded.tabId),
       operatorId: OPERATOR,
       lines: [
@@ -2428,7 +2429,7 @@ describe("updateHeldOrder", () => {
       });
       expect((await catalogue.readContentLanguages(db, LOCALE)).defaultLanguage).toBe("ca");
 
-      await updateHeldOrder({ db }, cfg, seeded.tabId, {
+      await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, seeded.tabId, {
         revision: await revisionOf(seeded.tabId),
         operatorId: OPERATOR,
         lines: [
@@ -2551,7 +2552,7 @@ describe("updateHeldOrder", () => {
       await republishMenus(tx);
     });
     const edit = async (dishes: string, picks: number) =>
-      updateHeldOrder({ db }, cfg, id, {
+      updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
         revision: await revisionOf(id),
         lines: [
           {
@@ -2597,7 +2598,7 @@ describe("updateHeldOrder", () => {
     await db.execute(sql`
       update menu_items set gross_price = 900 where id = ${premiumCafeOfferId}`);
 
-    await updateHeldOrder({ db }, cfg, id, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
       revision: await revisionOf(id),
       lines: [
         {
@@ -2648,7 +2649,7 @@ describe("updateHeldOrder", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
     await expect(
-      updateHeldOrder({ db }, cfg, id, {
+      updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
         revision: await revisionOf(id),
         lines: [
           {
@@ -2678,7 +2679,7 @@ describe("updateHeldOrder", () => {
 
     await db.execute(sql`
       update menu_items set gross_price = 900 where id = ${premiumCafeOfferId}`);
-    await updateHeldOrder({ db }, cfg, id, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
       revision: await revisionOf(id),
       lines: [
         {
@@ -2718,7 +2719,7 @@ describe("updateHeldOrder", () => {
       lines: [{ menuItemId: premiumCafeOfferId, quantity: "1" }],
     });
 
-    await updateHeldOrder({ db }, cfg, id, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
       revision: await revisionOf(id),
       lines: [{ menuItemId: premiumCafeOfferId, quantity: "2" }],
     });
@@ -2824,12 +2825,15 @@ describe("updateHeldOrder", () => {
     const UUID_NOT_IN_CAT = "00000000-0000-0000-0000-000000000000";
 
     await expect(
-      updateHeldOrder({ db }, cfg, id, { revision: await revisionOf(id), lines: [] }),
+      updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
+        revision: await revisionOf(id),
+        lines: [],
+      }),
     ).rejects.toMatchObject({
       code: "sale.empty_basket",
     });
     await expect(
-      updateHeldOrder({ db }, cfg, id, {
+      updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
         revision: await revisionOf(id),
         lines: [{ menuItemId: UUID_NOT_IN_CAT, quantity: "1" }],
       }),
@@ -4369,7 +4373,12 @@ describe("an order whose card payment is in flight (plan D22)", () => {
     const { cfg, id, before } = await payingHeldOrder("ticket_then_pay");
 
     await expect(
-      placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR),
+      placeOrder(
+        { admission: testTradingAdmission(), db, backend: stubBackend, clock: stubClock },
+        cfg,
+        id,
+        OPERATOR,
+      ),
     ).rejects.toMatchObject({ code: "order.payment_in_flight", params: { workingOrderId: id } });
     await unchanged(id, before);
   });
@@ -4386,7 +4395,12 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
 
     const id = randomUUID();
     await parkProducts(cfg, { id, lines: [line(cafe)] });
-    await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db, backend: stubBackend, clock: stubClock },
+      cfg,
+      id,
+      OPERATOR,
+    );
 
     const items = await withTransaction(db, async (tx) => {
       return ticketItemsFor(tx, id);
@@ -4420,7 +4434,12 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
       ).map((row) => row.sentAt !== null);
     expect(await sentAt()).toEqual([false, false]);
 
-    await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db, backend: stubBackend, clock: stubClock },
+      cfg,
+      id,
+      OPERATOR,
+    );
 
     expect(await sentAt()).toEqual([true, true]);
     // Counter Send releases both recorded courses.
@@ -4457,7 +4476,12 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
           .orderBy(workingOrderLines.lineNo)
       ).map((item) => item.firedAt !== null);
 
-    await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db, backend: stubBackend, clock: stubClock },
+      cfg,
+      id,
+      OPERATOR,
+    );
     expect(await fired()).toEqual([true, true]);
     await withTransaction(db, async (tx) =>
       fireOrderLines(
@@ -4492,7 +4516,12 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
     });
     const id = randomUUID();
     await parkProducts(cfg, { id, lines: [line(cafe), line(postre)] });
-    await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db, backend: stubBackend, clock: stubClock },
+      cfg,
+      id,
+      OPERATOR,
+    );
     await db.execute(sql`update products set available = 0 where id = ${postre}`);
     const revision = async () =>
       (
@@ -4533,7 +4562,12 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
     await db.execute(sql`update products set available = 0 where id = ${cafe}`);
 
     await expect(
-      placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR),
+      placeOrder(
+        { admission: testTradingAdmission(), db, backend: stubBackend, clock: stubClock },
+        cfg,
+        id,
+        OPERATOR,
+      ),
     ).rejects.toMatchObject({ code: "product.unavailable", params: { productId: cafe } });
     const [order] = await db
       .select({ status: workingOrders.status })
@@ -7645,7 +7679,7 @@ describe("frozen answers through a fractional quantity edit", () => {
       await db.execute(sql`update products set unit_price = 9900 where id = ${cafeId}`);
       await db.execute(sql`update menu_items set gross_price = 9900 where id = ${cafeOfferId}`);
 
-      await updateHeldOrder({ db }, cfg, result.id, {
+      await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, result.id, {
         revision: await revisionOf(result.id),
         lines: [
           {
@@ -8179,7 +8213,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
       update menu_items set gross_price = 9900 where id = ${premiumCafeOfferId}`);
     await withTransaction(db, republishMenus);
 
-    await updateHeldOrder({ db }, cfg, id, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
       revision: await revisionOf(id),
       lines: [
         {
@@ -8530,7 +8564,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
     await withTransaction(db, republishMenus);
 
     // Same dish, same quantity, a DIFFERENT label off the same list.
-    await updateHeldOrder({ db }, cfg, id, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
       revision: await revisionOf(id),
       lines: [
         {
@@ -8635,7 +8669,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
       update menu_items set gross_price = 9900 where id = ${premiumCafeOfferId}`);
     await withTransaction(db, republishMenus);
 
-    await updateHeldOrder({ db }, cfg, id, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
       revision: await revisionOf(id),
       lines: [
         {
@@ -8700,7 +8734,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
       .orderBy(workingOrderLines.lineNo);
 
     await expect(
-      updateHeldOrder({ db }, cfg, id, {
+      updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
         revision: await revisionOf(id),
         lines: [
           {
@@ -8730,7 +8764,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
 
-    await updateHeldOrder({ db }, cfg, id, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
       revision: await revisionOf(id),
       lines: [{ workingOrderLineId: before[0]!.id, menuItemId: premiumCafeOfferId, quantity: "2" }],
     });
@@ -9799,7 +9833,7 @@ describe("a variant is sold as the product it is", () => {
       .select({ id: workingOrderLines.id })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
-    await updateHeldOrder({ db }, cfg, id, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
       revision: await revisionOf(id),
       lines: [
         {
@@ -9852,7 +9886,7 @@ describe("a variant is sold as the product it is", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
     await db.update(products).set({ unitPrice: 900 }).where(eq(products.id, wine.wine125));
-    await updateHeldOrder({ db }, cfg, id, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
       revision: await revisionOf(id),
       lines: [
         {
@@ -10172,7 +10206,7 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
       await republishMenus(tx);
     });
     const edit = async (quantity: string) =>
-      updateHeldOrder({ db }, cfg, id, {
+      updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
         revision: await revisionOf(id),
         lines: [{ workingOrderLineId: parked!.id, menuItemId: cafeOfferId, quantity }],
       });

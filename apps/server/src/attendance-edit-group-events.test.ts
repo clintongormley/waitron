@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { updateHeldOrder, updateOrderLine } from "./testing/order-writer-fixture.js";
 import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
@@ -156,7 +157,7 @@ async function command(
     }));
   if (action === "add-group") lines.push({ menuItemId: v.offerFor("Pulpo"), quantity: "1" });
   return updateHeldOrder(
-    { db: suite.db },
+    { admission: testTradingAdmission(), db: suite.db },
     v.cfg,
     p.tabId,
     {

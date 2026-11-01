@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -32,7 +33,7 @@ describe("whole-order instructions and issued customer documents", () => {
       const fiscal = vi.spyOn(v.backend, "recordSale");
       const workingOrderId = randomUUID();
       const ticket = await recordTillSale(
-        { db: v.db, backend: v.backend, clock: v.clock },
+        { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
         v.cfg,
         {
           workingOrderId,
@@ -162,7 +163,13 @@ describe("whole-order instructions and issued customer documents", () => {
           deviceId: v.cfg.origin.deviceId,
         })
         .returning();
-      await completeBillPayment(tx, v, v.cfg, payment!.id, new Date());
+      await completeBillPayment(
+        tx,
+        { ...v, admission: testTradingAdmission() },
+        v.cfg,
+        payment!.id,
+        new Date(),
+      );
     });
     expect(fiscal).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(fiscal.mock.calls[0]![1])).not.toContain("KITCHEN-ONLY");

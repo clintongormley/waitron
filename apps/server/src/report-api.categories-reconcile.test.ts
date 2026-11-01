@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -182,12 +183,12 @@ describe("the category report reconciles with the till's sales", () => {
     const deps = { db: suite.db, backend, clock };
 
     // Two walk-up sales, and an order parked and then paid.
-    await recordTillSale(deps, cfg, {
+    await recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
       zoneId: offers.zoneId,
       lines: [line(products.cola, "3"), line(products.water, "1"), line(products.bread, "2")],
       tender: { method: "cash", amount: "50.00" },
     });
-    await recordTillSale(deps, cfg, {
+    await recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
       zoneId: offers.zoneId,
       lines: [line(products.olives, "1"), line(products.water, "2")],
       tender: { method: "card", amount: "0" },
@@ -205,7 +206,7 @@ describe("the category report reconciles with the till's sales", () => {
         },
       ),
     );
-    await payWorkingOrder(deps, cfg, {
+    await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
       id: parked,
       lines: [],
       tender: { method: "cash", amount: "50.00" },

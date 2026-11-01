@@ -103,7 +103,7 @@ it.each([
   ["postal-code", "28014"],
   ["city", "Alcalá de Henares"],
   ["province", "Barcelona"],
-  ["time-zone", "UTC"],
+  ["time-zone", "Atlantic/Canary"],
   ["day-cutover", "04:30"],
 ] as const)(
   "the real CLI refuses a changed %s and preserves venue identity and series",

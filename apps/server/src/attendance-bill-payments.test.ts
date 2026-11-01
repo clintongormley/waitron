@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { billPayments, newId, withTransaction } from "@waitron/db";
@@ -77,7 +78,13 @@ function at(instant: string) {
 const operations = () => suite.db.select().from(attendanceOperationFacts);
 const provider = () => new SimulatorPaymentProvider(suite.db);
 const reader = (p: SimulatorPaymentProvider, request = ask(true)) =>
-  takeReaderBillPayment({ ...deps(), provider: p }, v.cfg, billId, request, collector);
+  takeReaderBillPayment(
+    { admission: testTradingAdmission(), ...deps(), provider: p },
+    v.cfg,
+    billId,
+    request,
+    collector,
+  );
 function evidence(paymentId: string, outcome: string) {
   return {
     source: "bill-payment",
@@ -98,7 +105,13 @@ describe("accepted bill payment attendance", () => {
     async (method) => {
       at("2026-01-05T11:00:00.987Z");
       const request = method === "cash" ? ask() : { ...ask(true), entry: "manual" as const };
-      const result = await takeBillPayment(deps(), v.cfg, billId, request, collector);
+      const result = await takeBillPayment(
+        { ...deps(), admission: testTradingAdmission() },
+        v.cfg,
+        billId,
+        request,
+        collector,
+      );
       expect(result.payment.state).toBe("received");
       expect(result.balance.outstanding).toBe("11.00");
       expect(await operations()).toEqual([
@@ -129,12 +142,26 @@ describe("accepted bill payment attendance", () => {
   it("a cash replay neither captures again nor moves the original instant", async () => {
     at("2026-01-05T11:00:00Z");
     const request = ask();
-    const first = await takeBillPayment(deps(), v.cfg, billId, request, collector);
+    const first = await takeBillPayment(
+      { ...deps(), admission: testTradingAdmission() },
+      v.cfg,
+      billId,
+      request,
+      collector,
+    );
     const before = await operations();
     at("2026-01-06T18:00:00Z");
-    expect((await takeBillPayment(deps(), v.cfg, billId, request, collector)).payment.id).toBe(
-      first.payment.id,
-    );
+    expect(
+      (
+        await takeBillPayment(
+          { ...deps(), admission: testTradingAdmission() },
+          v.cfg,
+          billId,
+          request,
+          collector,
+        )
+      ).payment.id,
+    ).toBe(first.payment.id);
     expect(await operations()).toEqual(before);
     expect(before).toHaveLength(1);
   });
@@ -146,7 +173,13 @@ describe("accepted bill payment attendance", () => {
       throw new AppError("attendance.invalid", { reason: "evidence failure" });
     };
     await expect(
-      takeBillPayment(deps(rejected), v.cfg, billId, ask(), collector),
+      takeBillPayment(
+        { ...deps(rejected), admission: testTradingAdmission() },
+        v.cfg,
+        billId,
+        ask(),
+        collector,
+      ),
     ).rejects.toMatchObject({ code: "attendance.invalid" });
     expect(await suite.db.select().from(billPayments)).toEqual([]);
     expect(await operations()).toEqual([]);
@@ -155,7 +188,7 @@ describe("accepted bill payment attendance", () => {
 
   it("without a recorder a payment succeeds without workforce operations", async () => {
     const result = await takeBillPayment(
-      { db: suite.db, backend: v.backend, clock: v.clock },
+      { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
       v.cfg,
       billId,
       ask(),
@@ -229,7 +262,11 @@ describe("accepted bill payment attendance", () => {
     const first = await reader(p);
     expect(first.payment.state).toBe("pending");
     at("2026-01-06T18:00:00Z");
-    const pass = await settlePendingBillPayments({ ...deps(), cfg: v.cfg });
+    const pass = await settlePendingBillPayments({
+      admission: testTradingAdmission(),
+      ...deps(),
+      cfg: v.cfg,
+    });
     expect(pass.received).toBe(1);
     expect(await operations()).toEqual([
       { sequence: 1, ...evidence(first.payment.id, "qualifying") },
@@ -243,10 +280,17 @@ describe("accepted bill payment attendance", () => {
     await expect(reader(p)).rejects.toThrow("unknown outcome");
     const [pending] = await suite.db.select().from(billPayments);
     await withTransaction(suite.db, (tx) =>
-      completeBillPayment(tx, deps(), v.cfg, pending!.id, new Date("2026-01-06T18:00:00Z"), {
-        attestedBy: OPERATOR,
-        note: "Charged",
-      }),
+      completeBillPayment(
+        tx,
+        { ...deps(), admission: testTradingAdmission() },
+        v.cfg,
+        pending!.id,
+        new Date("2026-01-06T18:00:00Z"),
+        {
+          attestedBy: OPERATOR,
+          note: "Charged",
+        },
+      ),
     );
     expect(await operations()).toEqual([{ sequence: 1, ...evidence(pending!.id, "qualifying") }]);
   });
@@ -283,7 +327,13 @@ describe("bill payments refused before the reader", () => {
     const p = provider();
     const collect = vi.spyOn(p, "collect");
     await expect(
-      takeReaderBillPayment({ ...deps(), provider: p, disk }, v.cfg, billId, ask(true), collector),
+      takeReaderBillPayment(
+        { admission: testTradingAdmission(), ...deps(), provider: p, disk },
+        v.cfg,
+        billId,
+        ask(true),
+        collector,
+      ),
     ).rejects.toMatchObject({ code: "storage.disk_full" });
     expect(collect).not.toHaveBeenCalled();
     expect(await suite.db.select().from(billPayments)).toEqual([]);
@@ -302,7 +352,13 @@ describe("bill payments refused before the reader", () => {
     const p = provider();
     const collect = vi.spyOn(p, "collect");
     await expect(
-      takeReaderBillPayment({ ...deps(), provider: p, disk }, v.cfg, billId, ask(true), collector),
+      takeReaderBillPayment(
+        { admission: testTradingAdmission(), ...deps(), provider: p, disk },
+        v.cfg,
+        billId,
+        ask(true),
+        collector,
+      ),
     ).rejects.toMatchObject({ code: "storage.disk_full" });
     expect(collect).not.toHaveBeenCalled();
     const [failed] = await suite.db.select().from(billPayments);
@@ -315,7 +371,15 @@ describe("bill payments refused before the reader", () => {
     const p = provider();
     const collect = vi.spyOn(p, "collect");
     await expect(reader(p)).rejects.toMatchObject({ code: "clock.unusable" });
-    await expect(takeBillPayment(deps(), v.cfg, billId, ask(), collector)).rejects.toMatchObject({
+    await expect(
+      takeBillPayment(
+        { ...deps(), admission: testTradingAdmission() },
+        v.cfg,
+        billId,
+        ask(),
+        collector,
+      ),
+    ).rejects.toMatchObject({
       code: "clock.unusable",
     });
     expect(collect).not.toHaveBeenCalled();

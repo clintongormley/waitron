@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
@@ -69,7 +70,12 @@ async function fullInvoice(placed = false): Promise<{ billId: string; saleId: st
   const billId = await parked(venue, "Caña");
   if (placed)
     await placeOrder(
-      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
       venue.cfg,
       billId,
       venue.operatorId,

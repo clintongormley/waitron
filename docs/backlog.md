@@ -253,11 +253,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   their exposure to the same date boundary has not been reproduced.
   [Reproduction and sources](developers/testing-guide.md#give-a-fake-fiscal-service-and-its-sample-one-controlled-clock).
 
-- **A696. Invoice issue dates and record offsets follow the process zone.**
-  Every new invoice date/offset, ordinary receipt and till must use the saved venue zone, DST included; old records stay unchanged.
-  Implementation and runtime acceptance remain open; the separate FULL fiscal PR finishes green for the owner to land.
-  [Detail](backlog/fiscal.md#a696-invoice-issue-dates-and-record-offsets-follow-the-process-zone).
-
 - **A444. A full invoice for a meal past midnight should carry the day the meal ends.** Automatic bill-close dating excludes Bill requested and staff date choice. Exact H2 scope approved; build waits for released A696/A739 integration and the fiscal-branch slot. Fiscal: the owner lands it.
   [Detail](backlog/fiscal.md#a444-a-full-invoice-for-a-meal-past-midnight-should-carry-the-day-the-meal-ends).
 - **Structured B2B invoices before the applicable 2027 or 2028 date.** Establish the issuer's threshold and recipient scope, then build structured exchange and required reporting. Current paper/email qualification stays separate.
@@ -5406,10 +5401,6 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   row and gives a time each sale was made before instead (A1088 decision 8). Slice 9c's clock
   checks are the first place a real time could be worked out. Left open by A1088.
 
-- **The adviser's file writes invoice dates that follow the server's own time zone until A696 is
-  built**: the file writes the stored issue date, which follows the process zone today (A1088
-  decision 7). Left open by A1088. [A696](backlog/fiscal.md#walk-up-invoice-dates-follow-the-server-process-time-zone)
-
 - **The bell's and the Alerts screen's Mark handled take no note**, and the Alerts screen's Handled
   tab shows no notes; only the Box status page writes and shows them (A1088 decision 4). Left open
   by A1088.
@@ -6019,9 +6010,10 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   Qualify its entrypoint check with symlink and physical-path controls, then make both run the
   child. [Observed reproduction](backlog/ci.md#deadline-command-through-a-directory-symlink).
 
-- **A1242: qualify publishing after reused CI and the differing-tree fallback on real main pushes.**
-  Retain real main run ids proving publication after reuse and the full suite after an unequal-tree
-  merge.
+- **The node-identity text guard misses a retired setting after an escaped newline.**
+  Inspect decoded string/template values as well as raw text, retaining legitimate negative and
+  historical controls. The A696 fixtures themselves are corrected; the scanner gap remains.
+  [Reproduction](backlog/ci.md#retired-settings-after-a-source-escape).
 
 - **A1213. Does a re-run till shard's report reach `test-till-merge`?** Seen once, not proven, in
   A1125's CI (#2238, 2026-10-29), while the merge still used the download action. Since A1216 the
@@ -6134,12 +6126,11 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **`apps/server/src/invoice-pdf.test.ts` took 162 s on one CI run**
   [Detail](backlog/ci.md#the-invoice-pdf-test-took-162-s-on-one-ci-run).
 
-- **A1252. Qualify three main runs after splitting the held-setup suite.**
-  The split retains A1131's three fresh-box restore cases from PR #2335.
-  The final PR run still has complete jobs above the target; see the
-  [timings and remaining work](backlog/ci.md#a1252-remaining-server-job-time-after-the-held-setup-split).
-  Read three later main runs that execute every server shard; each job should
-  take at most about 4.5 minutes, or name the slow suite and its cause.
+- **A1252. Bring the remaining server jobs to about 4.5 minutes.**
+  Three later full main observations are complete; their maximum jobs take 278, 292 and 306 seconds.
+  Investigate the named backup, restore and first-fiscal setup suites plus job setup time before
+  choosing further packing or suite work. Preserve the held split and every behavioural assertion.
+  [Measurements and remaining work](backlog/ci.md#a1252-remaining-server-job-time-after-the-held-setup-split).
   [Method](developers/ci-and-gates.md#refresh-after-the-held-setup-suites-grew).
 
 - **The server's duration table needs a staleness warning.** Flag missing files and

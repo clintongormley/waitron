@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -123,11 +124,16 @@ function run(p: Fixture, op: Operation, ask: Ask) {
           venue.cfg,
           p.partyId,
           p.parent.id,
-          { ...ask, note: undefined },
+          { admission: testTradingAdmission(), ...ask, note: undefined },
           venue.staffId,
         )
       : op === "apply"
-        ? applyAdjustment(tx, venue.cfg, ask, venue.venueLocale)
+        ? applyAdjustment(
+            tx,
+            venue.cfg,
+            { ...ask, admission: testTradingAdmission() },
+            venue.venueLocale,
+          )
         : previewAdjustment(tx, ask, venue.venueLocale),
   );
 }
@@ -315,7 +321,14 @@ for (const target of ["parent", "extra", "bill"] as const)
       ...(target === "bill" ? { percentBp: 1000 } : {}),
     };
     await expect(
-      inTx(venue, (tx) => applyAdjustment(tx, venue.cfg, adjustment, venue.venueLocale)),
+      inTx(venue, (tx) =>
+        applyAdjustment(
+          tx,
+          venue.cfg,
+          { ...adjustment, admission: testTradingAdmission() },
+          venue.venueLocale,
+        ),
+      ),
     ).rejects.toMatchObject({ code: "draft.out_of_date", params: stale(current) });
     expect(frozen()).toEqual(before);
   });
@@ -333,6 +346,7 @@ it("Discard still resolves its own recalled family and releases the bill", async
       current.draftId!,
       venue.staffId,
       {
+        admission: testTradingAdmission(),
         expectedEdit: current,
         submissionId: randomUUID(),
         revision: current.draftRevision!,
@@ -392,7 +406,14 @@ for (const op of ["preview", "apply"] as const)
       const result = await inTx(venue, (tx) => previewAdjustment(tx, ask, venue.venueLocale));
       expect(result.reduction).toBe("9.00");
     } else {
-      await inTx(venue, (tx) => applyAdjustment(tx, venue.cfg, ask, venue.venueLocale));
+      await inTx(venue, (tx) =>
+        applyAdjustment(
+          tx,
+          venue.cfg,
+          { ...ask, admission: testTradingAdmission() },
+          venue.venueLocale,
+        ),
+      );
       const [after] = await venue.db
         .select()
         .from(workingOrderLines)
@@ -424,6 +445,7 @@ it("Discard rolls back released reservations when its normal adjustment refuses"
         current.draftId!,
         venue.staffId,
         {
+          admission: testTradingAdmission(),
           expectedEdit: current,
           submissionId: randomUUID(),
           revision: current.draftRevision!,
@@ -461,7 +483,14 @@ for (const action of ["cancel", "comp", "discount_percent"] as const)
     const preview = await inTx(venue, (tx) => previewAdjustment(tx, ask, venue.venueLocale));
     expect(preview.reduction).toBe(action === "comp" || action === "cancel" ? "12.00" : "3.60");
     expect(frozen()).toEqual(previewBefore);
-    await inTx(venue, (tx) => applyAdjustment(tx, venue.cfg, ask, venue.venueLocale));
+    await inTx(venue, (tx) =>
+      applyAdjustment(
+        tx,
+        venue.cfg,
+        { ...ask, admission: testTradingAdmission() },
+        venue.venueLocale,
+      ),
+    );
     const after = await edit(p.billId);
     expect(after).toEqual({ ...current, draftRevision: current.draftRevision! + 1 });
     const drafts = await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId));
@@ -492,6 +521,7 @@ it("the last owned-source removal closes its draft and releases only that bill",
       tx,
       venue.cfg,
       {
+        admission: testTradingAdmission(),
         ...base,
         orderId: p.billId,
         ...p.row,
@@ -530,7 +560,14 @@ for (const kind of ["wrong", "null", "malformed"] as const)
     };
     const before = frozen();
     await expect(
-      inTx(venue, (tx) => applyAdjustment(tx, venue.cfg, ask as never, venue.venueLocale)),
+      inTx(venue, (tx) =>
+        applyAdjustment(
+          tx,
+          venue.cfg,
+          { ...ask, admission: testTradingAdmission() } as never,
+          venue.venueLocale,
+        ),
+      ),
     ).rejects.toMatchObject(
       kind === "wrong"
         ? { code: "draft.out_of_date", params: stale(current) }
@@ -592,7 +629,14 @@ it("removing the last recalled source keeps a remaining fresh dish owned", async
     reasonId: venue.reasonId.houseVoid,
     approver: { personId: venue.supervisorId, pin: PINS.supervisor },
   };
-  await inTx(venue, (tx) => applyAdjustment(tx, venue.cfg, ask, venue.venueLocale));
+  await inTx(venue, (tx) =>
+    applyAdjustment(
+      tx,
+      venue.cfg,
+      { ...ask, admission: testTradingAdmission() },
+      venue.venueLocale,
+    ),
+  );
   expect(await edit(p.billId)).toEqual({
     ...saved!.edit,
     draftRevision: saved!.edit.draftRevision! + 1,
@@ -613,7 +657,14 @@ it("a new editor acquires the bill after source cancellation without reopening i
     reasonId: venue.reasonId.houseVoid,
     approver: { personId: venue.supervisorId, pin: PINS.supervisor },
   };
-  const outcome = await inTx(venue, (tx) => applyAdjustment(tx, venue.cfg, ask, venue.venueLocale));
+  const outcome = await inTx(venue, (tx) =>
+    applyAdjustment(
+      tx,
+      venue.cfg,
+      { ...ask, admission: testTradingAdmission() },
+      venue.venueLocale,
+    ),
+  );
   const next = await save(p, venue.managerId);
   expect(next.edit).toMatchObject({
     editorId: venue.managerId,
@@ -622,7 +673,14 @@ it("a new editor acquires the bill after source cancellation without reopening i
   expect(next.edit.draftId).not.toBe(current.draftId);
   const before = frozen();
   await expect(
-    inTx(venue, (tx) => applyAdjustment(tx, venue.cfg, ask, venue.venueLocale)),
+    inTx(venue, (tx) =>
+      applyAdjustment(
+        tx,
+        venue.cfg,
+        { ...ask, admission: testTradingAdmission() },
+        venue.venueLocale,
+      ),
+    ),
   ).resolves.toEqual(outcome);
   expect(frozen()).toEqual(before);
   const [closed] = await venue.db
@@ -647,7 +705,14 @@ it("a matching draft marker cannot authorize a source reserved by a different dr
   const ask = { ...(await request(p, current, "apply")), sourceDraftId: current.draftId! };
   const before = frozen();
   await expect(
-    inTx(venue, (tx) => applyAdjustment(tx, venue.cfg, ask, venue.venueLocale)),
+    inTx(venue, (tx) =>
+      applyAdjustment(
+        tx,
+        venue.cfg,
+        { ...ask, admission: testTradingAdmission() },
+        venue.venueLocale,
+      ),
+    ),
   ).rejects.toMatchObject({ code: "draft.out_of_date", params: stale(current) });
   expect(frozen()).toEqual(before);
 });
@@ -658,7 +723,14 @@ it("an explicit source context must name the current draft even when its sent ta
   const ask = { ...(await request(p, saved.edit, "apply")), sourceDraftId: randomUUID() };
   const before = frozen();
   await expect(
-    inTx(venue, (tx) => applyAdjustment(tx, venue.cfg, ask, venue.venueLocale)),
+    inTx(venue, (tx) =>
+      applyAdjustment(
+        tx,
+        venue.cfg,
+        { ...ask, admission: testTradingAdmission() },
+        venue.venueLocale,
+      ),
+    ),
   ).rejects.toMatchObject({ code: "draft.out_of_date", params: stale(saved.edit) });
   expect(frozen()).toEqual(before);
 });

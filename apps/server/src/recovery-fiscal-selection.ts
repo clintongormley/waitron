@@ -29,11 +29,6 @@ export function recoveryFiscalSelection(
     jurisdiction.modules === undefined
   )
     return;
-  try {
-    new Intl.DateTimeFormat("en", { timeZone: venue.timeZone });
-  } catch {
-    return;
-  }
   const saved = entries.find((entry) => entry.name === "secrets/modules.json");
   if (saved === undefined) return;
   let selected: WaitronModule[];

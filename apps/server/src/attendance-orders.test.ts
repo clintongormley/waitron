@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { abandonHeldOrder } from "./testing/order-writer-fixture.js";
 import {
   updateHeldOrder,
@@ -119,7 +120,7 @@ async function act(
   if (action === "park") return parkOrder({ db: suite.db }, v.cfg, request(id, worker), attendance);
   if (action === "save")
     return updateHeldOrder(
-      { db: suite.db },
+      { admission: testTradingAdmission(), db: suite.db },
       v.cfg,
       id,
       {
@@ -320,7 +321,7 @@ describe("accepted order attendance", () => {
     ).toBe(1);
     expect(
       await updateHeldOrder(
-        { db: suite.db },
+        { admission: testTradingAdmission(), db: suite.db },
         v.cfg,
         id,
         {

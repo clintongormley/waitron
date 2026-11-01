@@ -242,6 +242,7 @@ describe("a running venue's account email clock", () => {
           details: { ...model.details, timeZone: "UTC" },
           businessDayClock: {
             ...model.businessDayClock,
+            revision: model.businessDayClock.revision + 1,
             clock: { ...model.businessDayClock.clock, timeZone: "UTC" },
           },
         };

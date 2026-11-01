@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedOrderSender } from "./testing/order-writer-fixture.js";
 import {
   recallLines,
@@ -84,6 +85,7 @@ function api(attendance?: AttendanceRecorder) {
   mountTillApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: suite.db,
       cfg: v.cfg,
       backend: v.backend,
@@ -128,7 +130,7 @@ async function prepare(action: Action) {
     await withTransaction(suite.db, (tx) => advanceTicketItem(tx, v.cfg, ticket!.id, "preparing"));
   if (action === "hand-over") {
     await placeOrder(
-      { db: suite.db, backend: v.backend, clock: v.clock },
+      { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
       v.cfg,
       party.tabId,
       v.adminId,

@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -114,6 +115,7 @@ const noopLog: Logger = () => {};
 
 function deps(db: Database): TillApiDeps {
   return {
+    admission: testTradingAdmission(),
     db,
     backend: {} as FiscalBackend, // never called: the reprint route files no fiscal doc
     clock: systemClock(),

@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
@@ -165,7 +166,7 @@ async function snapshot(partyId: string, billIds: string[]) {
 /** A cash contribution of `amount` towards the bill: the bill is then partly paid. */
 async function contribute(billId: string, amount: string): Promise<string> {
   const result = await takeBillPayment(
-    { db: v.db, backend: v.backend, clock: v.clock },
+    { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
     v.cfg,
     billId,
     {
@@ -190,7 +191,7 @@ async function refundInFull(billId: string, paymentId: string): Promise<void> {
     loginWithPin(tx, { deviceId, personId: adminId, pin: "1234" }),
   );
   await refundBillPayment(
-    { db: v.db, backend: v.backend, clock: v.clock },
+    { db: v.db, backend: v.backend, admission: testTradingAdmission(), cfg, clock: v.clock },
     cfg,
     billId,
     paymentId,
@@ -282,7 +283,7 @@ describe("split a bill", () => {
     const { partyId, tabId } = await seat(v, await v.table("Mesa 6"));
     await order(v, tabId, "Burger", "Vino");
     await takeBillPayment(
-      { db: v.db, backend: v.backend, clock: v.clock },
+      { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
       v.cfg,
       tabId,
       {

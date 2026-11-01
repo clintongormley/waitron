@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -53,6 +54,7 @@ describe("initial kitchen notes on ordering paths", () => {
       mountTillApi(
         app,
         {
+          admission: testTradingAdmission(),
           ...deps(),
           cfg: v.cfg,
           secureCookies: false,
@@ -100,12 +102,22 @@ describe("initial kitchen notes on ordering paths", () => {
         tender: { method, amount: "12.00" },
         kitchenNote: "All together; train at 14:30",
       };
-      const ticket = await recordTillSale(deps(), v.cfg, req, v.operator);
+      const ticket = await recordTillSale(
+        { ...deps(), admission: testTradingAdmission() },
+        v.cfg,
+        req,
+        v.operator,
+      );
       expect(await note(id)).toMatchObject({ note: "All together; train at 14:30", revision: 1 });
       expect(JSON.stringify(ticket)).not.toContain("All together; train at 14:30");
       await inTx(v, (tx) => writeKitchenNote(tx, { workingOrderId: id }, 1, "New departure time"));
       expect(
-        await recordTillSale(deps(), v.cfg, { ...req, kitchenNote: "Stale retry" }, v.operator),
+        await recordTillSale(
+          { ...deps(), admission: testTradingAdmission() },
+          v.cfg,
+          { ...req, kitchenNote: "Stale retry" },
+          v.operator,
+        ),
       ).toEqual(ticket);
       expect(await note(id)).toMatchObject({ note: "New departure time", revision: 2 });
     },
@@ -125,13 +137,18 @@ describe("initial kitchen notes on ordering paths", () => {
       lines: lines(),
       kitchenNote: "All together before the train",
     };
-    const result = await payWorkingOrderIntegrated({ ...deps(), provider }, v.cfg, req, v.operator);
+    const result = await payWorkingOrderIntegrated(
+      { admission: testTradingAdmission(), ...deps(), provider },
+      v.cfg,
+      req,
+      v.operator,
+    );
     expect(result.outcome).toBe("captured");
     expect(await note(id)).toMatchObject({ note: "All together before the train", revision: 1 });
     await inTx(v, (tx) => writeKitchenNote(tx, { workingOrderId: id }, 1, "Later update"));
     expect(
       await payWorkingOrderIntegrated(
-        { ...deps(), provider },
+        { admission: testTradingAdmission(), ...deps(), provider },
         v.cfg,
         { ...req, kitchenNote: "Stale retry" },
         v.operator,

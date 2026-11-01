@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -154,6 +155,7 @@ function systemClock(): TrustedClock {
 
 function deps(db: Database): TillApiDeps {
   return {
+    admission: testTradingAdmission(),
     db,
     // Never called: no route this suite drives files a fiscal doc under the `prepay` cfg.
     backend: {} as FiscalBackend,

@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
@@ -309,6 +310,7 @@ describe("the invoice waits for the refund (design §8 test 23)", () => {
     ]);
 
     await settlePendingBillPayments({
+      admission: testTradingAdmission(),
       db: venue.db,
       backend: venue.backend,
       clock: systemClock(),

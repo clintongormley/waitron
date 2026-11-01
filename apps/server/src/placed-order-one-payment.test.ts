@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { deviceId as brandDeviceId } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -59,7 +60,12 @@ async function placed(kind: Kind): Promise<string> {
   expect(parked.status).toBe(200);
   if (kind === "invoiced") {
     await issueOrderInvoice(
-      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
       { ...venue.cfg, origin: { source: "device", deviceId: brandDeviceId(venue.deviceId) } },
       id,
       venue.operatorId,
@@ -251,7 +257,14 @@ describe("a placed order's collect while its card is in flight", () => {
 /** A card payment of `id` through the orchestration, with `provider` as its reader. */
 function payWith(provider: FakePaymentProvider, id: string, disk?: DiskFullState) {
   return payWorkingOrderIntegratedOrchestration(
-    { db: venue.db, backend: venue.backend, clock: venue.clock, provider, disk },
+    {
+      admission: testTradingAdmission(),
+      db: venue.db,
+      backend: venue.backend,
+      clock: venue.clock,
+      provider,
+      disk,
+    },
     venue.cfg,
     { id, lines: [] },
   );

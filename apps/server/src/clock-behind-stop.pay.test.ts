@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
@@ -155,8 +156,13 @@ async function placedIssuedOrder(clock: TrustedClock): Promise<string> {
     zoneId: counter.zoneId,
     operatorId: venue.operatorId,
   });
-  await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
-  await placeOrder(deps, venue.cfg, id, venue.operatorId);
+  await issueOrderInvoice(
+    { ...deps, admission: testTradingAdmission() },
+    venue.cfg,
+    id,
+    venue.operatorId,
+  );
+  await placeOrder({ ...deps, admission: testTradingAdmission() }, venue.cfg, id, venue.operatorId);
   return id;
 }
 

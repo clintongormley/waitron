@@ -1,5 +1,6 @@
 import { IssuanceRefusal, withIssuanceTransaction } from "@waitron/core";
 import { and, eq, isNull, sql } from "drizzle-orm";
+import { requireEconomicWrite } from "./trading-admission.js";
 import { billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { recordIncidentOnce } from "@waitron/core";
@@ -93,6 +94,7 @@ export async function settleFromProviderRow(
   now: Date,
   raisedBy: AlertOrigin,
 ): Promise<SettledFromRow> {
+  await requireEconomicWrite(tx, deps.cfg, deps.admission);
   const [payment] = await tx.select().from(billPayments).where(eq(billPayments.id, billPaymentId));
   // Read in the transaction: a P1 registers its payment as live in its own, which this one excludes.
   if (payment?.state !== "pending" || billPaymentIsLive(deps.db, billPaymentId)) {
@@ -160,6 +162,7 @@ export async function settleFromProviderRow(
 export async function settlePendingBillPayments(
   deps: BillPaymentsLoopDeps,
 ): Promise<BillPaymentsPass> {
+  deps.admission.require();
   const pending = await withTransaction(deps.db, (tx) =>
     tx
       .select({ id: billPayments.id })
@@ -212,6 +215,7 @@ async function raiseSettleFailed(
   now: Date,
 ): Promise<void> {
   await withTransaction(deps.db, async (tx) => {
+    await requireEconomicWrite(tx, deps.cfg, deps.admission);
     const [payment] = await tx
       .select()
       .from(billPayments)
@@ -285,9 +289,10 @@ async function settlePendingBillRefunds(
       }
       if (now.getTime() - Date.parse(refund.createdAt) > REFUND_UNRESOLVED_AFTER_MS) {
         pass.refundsUnresolved += 1;
-        await withTransaction(deps.db, (tx) =>
-          raiseRefundUnresolved(tx, refund, workingOrderId, now),
-        );
+        await withTransaction(deps.db, async (tx) => {
+          await requireEconomicWrite(tx, deps.cfg, deps.admission);
+          return raiseRefundUnresolved(tx, refund, workingOrderId, now);
+        });
       }
     } catch (error) {
       pass.errors.push({ refundId: id, error: String(error) });

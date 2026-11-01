@@ -362,6 +362,10 @@ called weaker than its name, the topic file lists what it does not see.
 
 ### Data, modules and migrations — [conventions-data.md](docs/developers/conventions-data.md#root-detail-moved-on-2026-10-26)
 
+- **Validate a saved time zone as stored; normalize new input separately.** Cost: a padded name
+  admitted duties while repair refused it. Guards: `packages/shared/src/time-zone.test.ts` and
+  `apps/server/src/boot.zone-admission.test.ts` (the latter covers named duties only).
+  [Receipt](docs/developers/conventions-data.md#saved-zone-validity-uses-the-stored-spelling).
 - **Default optional request fields only when absent, and check enum types before comparing values.**
   Explicit null and coerced arrays passed modifier validation. A field whose null is itself a value
   is deliberately outside the rule — an extras list's `maxPicks`, an extras item's `maxQuantity`,

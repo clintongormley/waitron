@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import crypto, { randomUUID } from "node:crypto";
 import { syncBuiltinESMExports } from "node:module";
 import { eq } from "drizzle-orm";
@@ -73,11 +74,15 @@ async function pay(billId: string) {
   const total = (await rowsOf(venue, billId))
     .reduce((sum, line) => sum + Number(line.lineTotal), 0)
     .toFixed(2);
-  await payWorkingOrder({ db: venue.db, backend: venue.backend, clock: venue.clock }, venue.cfg, {
-    id: billId,
-    tender: { method: "cash", amount: total },
-    lines: [],
-  });
+  await payWorkingOrder(
+    { admission: testTradingAdmission(), db: venue.db, backend: venue.backend, clock: venue.clock },
+    venue.cfg,
+    {
+      id: billId,
+      tender: { method: "cash", amount: total },
+      lines: [],
+    },
+  );
 }
 
 async function finish(partyId: string, billIds: string[]) {
@@ -184,6 +189,7 @@ describe("a finished party's dishes are checked against its family's bills' zone
     const water = p.lines.find((line) => line.name === "Water")!;
     const moved = await inTx(venue, async (tx) =>
       splitBill(tx, venue.cfg, p.billId, [{ lineNo: water.lineNo }], {
+        admission: testTradingAdmission(),
         operatorId: venue.staffId,
         expectedPartyRevision: await revisionOf(p.partyId),
         expectedEdit: await readBillEditState(tx, p.billId),
@@ -219,6 +225,7 @@ describe("a finished party's dishes are checked against its family's bills' zone
         const water = p.lines.find((line) => line.name === "Water")!;
         const moved = await inTx(venue, async (tx) =>
           splitBill(tx, venue.cfg, p.billId, [{ lineNo: water.lineNo }], {
+            admission: testTradingAdmission(),
             operatorId: venue.staffId,
             expectedPartyRevision: await revisionOf(p.partyId),
             expectedEdit: await readBillEditState(tx, p.billId),

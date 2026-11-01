@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
@@ -55,6 +56,7 @@ beforeEach(async () => {
   mountPaymentsApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: store.db,
       cfg: venue.cfg,
       clock: venue.clock,
@@ -608,7 +610,14 @@ it("takes one live resolver before provider I/O and refuses competing manager ac
 it("uses the transaction-owning confirmed-outcome helper without a second provider send", async () => {
   const t = await pending();
   const result = await attestTenderRefund(
-    { db: store.db, backend: venue.backend, clock: venue.clock, attendance: recordAttendanceFact },
+    {
+      db: store.db,
+      backend: venue.backend,
+      admission: testTradingAdmission(),
+      cfg: venue.cfg,
+      clock: venue.clock,
+      attendance: recordAttendanceFact,
+    },
     t.id,
     "failed",
     { attestedBy: venue.adminId, note },

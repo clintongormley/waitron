@@ -50,7 +50,7 @@ function venue(
       postalCode: "28013",
       city: "Madrid",
       province: "Madrid",
-      timeZone: "Europe/Madrid",
+      timeZone: territory.country === "GB" ? "Europe/London" : "Europe/Madrid",
       dayCutover: "05:00",
     },
     seriesCode: "A",

@@ -1,4 +1,5 @@
 import { locationId as brandLocationId } from "@waitron/shared";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -231,7 +232,15 @@ async function venueWith(
   const app = new Hono();
   mountTillApi(
     app,
-    { db, backend, clock, cfg, secureCookies: false, venueLocale: "es-ES" },
+    {
+      admission: testTradingAdmission(),
+      db,
+      backend,
+      clock,
+      cfg,
+      secureCookies: false,
+      venueLocale: "es-ES",
+    },
     () => {},
   );
   const device = await enrolDeviceForTest(db, cfg, { name: "Barra", profileId });
@@ -488,8 +497,18 @@ describe("a bill paid in parts and an unpaid invoice file the location's languag
       operatorId: venue.operatorId,
     });
     await takePrinted(suite.db);
-    await placeOrder(deps, venue.cfg, id, venue.operatorId);
-    await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
+    await placeOrder(
+      { ...deps, admission: testTradingAdmission() },
+      venue.cfg,
+      id,
+      venue.operatorId,
+    );
+    await issueOrderInvoice(
+      { ...deps, admission: testTradingAdmission() },
+      venue.cfg,
+      id,
+      venue.operatorId,
+    );
     await printSaleReceipt(deps, venue.cfg, id, false);
     expect(await saleRow(suite.db, id)).toEqual({ locale: "ca-ES", invoiceLocales: ["ca-ES"] });
     const receipt = await takeReceipt(suite.db);
@@ -520,12 +539,16 @@ describe("a card-reader sale files and prints in the location's language when th
     const { venue, deps, zoneId, menuItemId } = await catalanCounter();
     const id = randomUUID();
 
-    const out = await payWorkingOrderIntegrated(deps, venue.cfg, {
-      id,
-      zoneId,
-      lines: [{ menuItemId, quantity: "1" }],
-      simulationOutcome: "captured",
-    });
+    const out = await payWorkingOrderIntegrated(
+      { ...deps, admission: testTradingAdmission() },
+      venue.cfg,
+      {
+        id,
+        zoneId,
+        lines: [{ menuItemId, quantity: "1" }],
+        simulationOutcome: "captured",
+      },
+    );
 
     expect(out.outcome).toBe("captured");
     if (out.outcome !== "captured") throw new Error("unreachable");
@@ -552,7 +575,11 @@ describe("a card-reader sale files and prints in the location's language when th
       });
     });
 
-    const out = await payWorkingOrderIntegrated(deps, venue.cfg, { id, lines: [] });
+    const out = await payWorkingOrderIntegrated(
+      { ...deps, admission: testTradingAdmission() },
+      venue.cfg,
+      { id, lines: [] },
+    );
 
     expect(out.outcome).toBe("captured");
     if (out.outcome !== "captured") throw new Error("unreachable");
@@ -1088,7 +1115,7 @@ describe("a sale prints its goods in the default content language its lines stor
         .returning();
       return completeBillPayment(
         tx,
-        { db: suite.db, backend: v.backend, clock },
+        { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock },
         v.cfg,
         payment!.id,
         AT,
@@ -1245,7 +1272,13 @@ describe("the receipt language staff choose is saved on the order", () => {
       zoneId,
       operatorId: venue.operatorId,
     });
-    if (placed) await placeOrder(deps, venue.cfg, id, venue.operatorId);
+    if (placed)
+      await placeOrder(
+        { ...deps, admission: testTradingAdmission() },
+        venue.cfg,
+        id,
+        venue.operatorId,
+      );
     return id;
   }
 
@@ -1391,7 +1424,12 @@ describe("the receipt language staff choose is saved on the order", () => {
     const venue = await choosingVenue();
     const id = await counterOrder(venue, true);
     const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
-    await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
+    await issueOrderInvoice(
+      { ...deps, admission: testTradingAdmission() },
+      venue.cfg,
+      id,
+      venue.operatorId,
+    );
     const before = await orderRow(venue, id);
     expect(before.status).toBe("placed");
 
@@ -1644,6 +1682,7 @@ describe("a sale files in the receipt language saved on its order", () => {
       expect(await statusOf(venue, billId)).toBe("open");
 
       const pass = await settlePendingBillPayments({
+        admission: testTradingAdmission(),
         db: venue.db,
         backend: venue.backend,
         clock: venue.clock,
@@ -1707,11 +1746,15 @@ describe("a sale files in the receipt language saved on its order", () => {
         provider: new SimulatorPaymentProvider(venue.db),
       };
 
-      const out = await payWorkingOrderIntegrated(deps, venue.cfg, {
-        id,
-        lines: [],
-        simulationOutcome: "captured",
-      });
+      const out = await payWorkingOrderIntegrated(
+        { ...deps, admission: testTradingAdmission() },
+        venue.cfg,
+        {
+          id,
+          lines: [],
+          simulationOutcome: "captured",
+        },
+      );
 
       expect(out.outcome).toBe("captured");
       expect(out.outcome === "captured" && out.ticket).toMatchObject({
@@ -1743,7 +1786,11 @@ describe("a sale files in the receipt language saved on its order", () => {
         provider: new SimulatorPaymentProvider(venue.db),
       };
 
-      const out = await payWorkingOrderIntegrated(deps, venue.cfg, { id, lines: [] });
+      const out = await payWorkingOrderIntegrated(
+        { ...deps, admission: testTradingAdmission() },
+        venue.cfg,
+        { id, lines: [] },
+      );
 
       expect(out.outcome).toBe("captured");
       expect(out.outcome === "captured" && out.ticket).toMatchObject({
@@ -1792,6 +1839,7 @@ describe("a sale files in the receipt language saved on its order", () => {
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: venue.db,
         backend: venue.backend,
         clock: venue.clock,
@@ -1832,11 +1880,15 @@ describe("a sale files in the receipt language saved on its order", () => {
       provider: new SimulatorPaymentProvider(venue.db),
     };
 
-    const out = await payWorkingOrderIntegrated(deps, venue.cfg, {
-      id,
-      lines: [],
-      simulationOutcome: "captured",
-    });
+    const out = await payWorkingOrderIntegrated(
+      { ...deps, admission: testTradingAdmission() },
+      venue.cfg,
+      {
+        id,
+        lines: [],
+        simulationOutcome: "captured",
+      },
+    );
 
     expect(out.outcome).toBe("captured");
     expect(await filed(venue, id)).toEqual({
@@ -1943,7 +1995,12 @@ describe("a sale files in the receipt language saved on its order", () => {
     async function placedTarta(venue: BillVenue): Promise<string> {
       const { id } = await parkedTarta(venue);
       const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
-      await placeOrder(deps, venue.cfg, id, venue.operatorId);
+      await placeOrder(
+        { ...deps, admission: testTradingAdmission() },
+        venue.cfg,
+        id,
+        venue.operatorId,
+      );
       return id;
     }
 
@@ -1964,7 +2021,13 @@ describe("a sale files in the receipt language saved on its order", () => {
         return collect(params);
       };
       const pay = payWorkingOrderIntegrated(
-        { db: venue.db, backend: venue.backend, clock: venue.clock, provider: simulator },
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+          provider: simulator,
+        },
         venue.cfg,
         { id, lines: [], receiptLanguage: language, simulationOutcome: "captured" },
       );
@@ -2088,6 +2151,7 @@ describe("a sale files in the receipt language saved on its order", () => {
         const id = await placedTarta(venue);
         const declined = await payWorkingOrderIntegrated(
           {
+            admission: testTradingAdmission(),
             db: venue.db,
             backend: venue.backend,
             clock: venue.clock,
@@ -2232,7 +2296,12 @@ describe("a sale files in the receipt language saved on its order", () => {
         const venue = await barcelonaVenue();
         const id = await placedTarta(venue);
         const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
-        await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
+        await issueOrderInvoice(
+          { ...deps, admission: testTradingAdmission() },
+          venue.cfg,
+          id,
+          venue.operatorId,
+        );
         const before = await orderRow(venue, id);
         const [path, body] = request(id);
 
@@ -2288,6 +2357,7 @@ describe("a sale files in the receipt language saved on its order", () => {
       mountPaymentsApi(
         management,
         {
+          admission: testTradingAdmission(),
           db: venue.db,
           backend: venue.backend,
           clock: venue.clock,

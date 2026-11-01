@@ -14,6 +14,7 @@ const pack: CountryPack = {
   countryCode: "XY",
   defaultLocale: "xy-XY",
   defaultTimeZone: "Europe/Example",
+  timeZones: ["Europe/Example"],
   invoiceLocales: ["xy-XY", "en-GB"],
   moduleIds: ["example"],
   availableForVenueSetup: true,

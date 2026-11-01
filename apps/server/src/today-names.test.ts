@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -97,6 +98,7 @@ beforeAll(async () => {
   mountTillApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: v.db,
       backend: v.backend,
       clock,
@@ -649,12 +651,16 @@ async function deliveredCounterOrder(zoneId: string, tableId: string): Promise<s
     });
   await setZone("counter", "prepay");
   const id = randomUUID();
-  await payWorkingOrder({ db: v.db, backend: v.backend, clock: v.clock }, v.cfg, {
-    id,
-    lines: [{ menuItemId: v.item("Burger"), quantity: "1" }],
-    tender: { method: "cash", amount: "50.00" },
-    deliveryTableId: tableId,
-  });
+  await payWorkingOrder(
+    { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
+    v.cfg,
+    {
+      id,
+      lines: [{ menuItemId: v.item("Burger"), quantity: "1" }],
+      tender: { method: "cash", amount: "50.00" },
+      deliveryTableId: tableId,
+    },
+  );
   await setZone(saved!.orderStart, saved!.paidWhen);
   expect(await sentCount(id)).toBe(1);
   return id;

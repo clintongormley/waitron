@@ -1135,5 +1135,10 @@
   "src/working-order.many-tickets.test.ts": 36.6,
   "src/working-order.pay-and-dispatch.test.ts": 28.5,
   "src/working-order.test.ts": 49.9,
-  "src/zone-access.finished-party.test.ts": 9.6
+  "src/zone-access.finished-party.test.ts": 9.6,
+  "src/zone-process-matrix.bills.test.ts": 89,
+  "src/zone-process-matrix.callers.test.ts": 107,
+  "src/zone-process-matrix.core.test.ts": 88.1,
+  "src/zone-process-matrix.orders.test.ts": 97.3,
+  "src/zone-process-matrix.test.ts": 27.8
 }

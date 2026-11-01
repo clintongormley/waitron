@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -475,6 +476,7 @@ beforeAll(async () => {
   mountTillApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: suite.db,
       backend: v.backend,
       clock: v.clock,

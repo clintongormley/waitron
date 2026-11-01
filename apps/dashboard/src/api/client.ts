@@ -77,6 +77,37 @@ export type DetailReason =
   | "holiday_geography"
   | "clock_effects"
   | "business_day_history";
+export type TradingAdmissionView = {
+  state: "ready" | "unchecked" | "missing" | "invalid" | "restart_required";
+};
+export interface ZoneRepairView {
+  nodeId: string;
+  locationId: string;
+  legalName: string;
+  country: string;
+  province: string | null;
+  category: "missing" | "invalid" | "valid";
+  eligible: boolean;
+  clockRevision: number;
+  timeZone?: string;
+  choices: readonly string[];
+  suggestion: string | null;
+  admission: TradingAdmissionView;
+  clock: {
+    dayCutover: string;
+    cutoverChanges: { effectiveBusinessDay: string; dayCutover: string }[];
+  };
+  preview?: {
+    at: string;
+    timeZone: string;
+    civilDate: string;
+    timeOfDay: string;
+    offsetMinutes: number;
+    businessDay: string;
+    dayCutover: string;
+  };
+}
+
 export interface VenueDetailsModel {
   businessDayClock: BusinessDayClockModel;
   details: VenueDetailValues;
@@ -3444,6 +3475,24 @@ export class DashboardApi {
 
   // ── Receipt-trim configuration ────────────────────────────────────────────────────────────────
 
+  getVenueZoneRepair(timeZone?: string): Promise<ZoneRepairView> {
+    const query = timeZone === undefined ? "" : `?timeZone=${encodeURIComponent(timeZone)}`;
+    return this.#request(
+      `/management-api/venue-details/time-zone-repair${query}`,
+      "GET",
+      undefined,
+      { passive: true },
+    );
+  }
+
+  confirmVenueZone(input: {
+    timeZone: string;
+    expectedClockRevision: number;
+    confirmed: true;
+  }): Promise<{ repaired: true; clockRevision: number; admission: "restart_required" }> {
+    return this.#request("/management-api/venue-details/time-zone-repair", "POST", input);
+  }
+
   getVenueDetails(): Promise<VenueDetailsModel> {
     return this.#request("/management-api/venue-details", "GET");
   }
@@ -4219,6 +4268,7 @@ export class DashboardApi {
   // (`apps/server/src/me-api.ts`).
 
   getMe(options?: RequestOptions): Promise<{
+    tradingAdmission?: TradingAdmissionView;
     personId: string;
     role: PersonRole;
     email: string | null;
@@ -4233,6 +4283,7 @@ export class DashboardApi {
     sessionIdleTimeoutSeconds?: number;
   }> {
     return this.#request<{
+      tradingAdmission?: TradingAdmissionView;
       personId: string;
       role: PersonRole;
       email: string | null;

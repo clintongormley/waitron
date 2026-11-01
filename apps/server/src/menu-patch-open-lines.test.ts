@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -157,7 +158,7 @@ async function patchBeer(v: Venue): Promise<{ before: string; after: string }> {
 async function addLine(v: Venue, id: string, menuVersionId: string) {
   const kept = await stored(id);
   const revision = await withTransaction(suite.db, (tx) => readOrderRevision(tx, id));
-  return updateHeldOrder({ db: suite.db }, v.cfg, id, {
+  return updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, v.cfg, id, {
     lines: [
       ...kept.map((line) => ({
         workingOrderLineId: line.id,

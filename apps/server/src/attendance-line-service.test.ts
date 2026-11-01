@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
 import { recallLines } from "./testing/order-writer-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -51,6 +52,7 @@ function api(attendance?: AttendanceRecorder) {
   mountTillApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: suite.db,
       cfg: v.cfg,
       backend: v.backend,

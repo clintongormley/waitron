@@ -1051,9 +1051,9 @@ describe("the header rows: order, number and date (A754)", () => {
   ): ReceiptElement => ({ kind: "amount", caption, amount: value, indent: 0, ...extra });
 
   it.each([
-    { paperWidth: undefined, date: () => receiptDateTime(ISSUED, "es-ES") },
-    { paperWidth: "80mm" as const, date: () => receiptDateTime(ISSUED, "es-ES") },
-    { paperWidth: "58mm" as const, date: () => receiptDateTimeNumeric(ISSUED, "es-ES") },
+    { paperWidth: undefined, date: () => receiptDateTime(ISSUED, "es-ES", 120) },
+    { paperWidth: "80mm" as const, date: () => receiptDateTime(ISSUED, "es-ES", 120) },
+    { paperWidth: "58mm" as const, date: () => receiptDateTimeNumeric(ISSUED, "es-ES", 120) },
   ])("puts the number and the date on one row on paper $paperWidth", ({ paperWidth, date }) => {
     expect(date()).toMatch(
       paperWidth === "58mm" ? /^1[78]\/08\/2026 \d{2}:34$/u : /ago 2026, \d{2}:34$/u,
@@ -1088,7 +1088,7 @@ describe("the header rows: order, number and date (A754)", () => {
     };
 
     it("prints a four-digit counter and the numeric date on one line on 58 mm", () => {
-      const date = receiptDateTimeNumeric(ISSUED, "es-ES");
+      const date = receiptDateTimeNumeric(ISSUED, "es-ES", 120);
       expect(printedHeader("58mm", "A-0CZZW/9999")).toEqual([
         "Mesa 6               Pedido 41",
         `A-0CZZW/9999  ${date}`,
@@ -1096,7 +1096,7 @@ describe("the header rows: order, number and date (A754)", () => {
     });
 
     it("moves the date to its own right-aligned line on 58 mm at five digits, cutting nothing", () => {
-      const date = receiptDateTimeNumeric(ISSUED, "es-ES");
+      const date = receiptDateTimeNumeric(ISSUED, "es-ES", 120);
       expect(printedHeader("58mm", "A-0CZZW/10000")).toEqual([
         "Mesa 6               Pedido 41",
         "A-0CZZW/10000",
@@ -1106,10 +1106,10 @@ describe("the header rows: order, number and date (A754)", () => {
 
     it("fits a ten-digit counter beside the longest Spanish date on 80 mm", () => {
       const september = "2026-09-28T20:34:00.000Z";
-      const date = receiptDateTime(september, "es-ES");
+      const date = receiptDateTime(september, "es-ES", 120);
       for (let month = 0; month < 12; month++) {
         const other = new Date(Date.UTC(2026, month, 28, 20, 34)).toISOString();
-        expect(date.length).toBeGreaterThanOrEqual(receiptDateTime(other, "es-ES").length);
+        expect(date.length).toBeGreaterThanOrEqual(receiptDateTime(other, "es-ES", 120).length);
       }
       expect(printedHeader("80mm", "A-0CZZW/9999999999", september)).toEqual([
         "Mesa 6                           Pedido 41",
@@ -1134,7 +1134,7 @@ describe("the header rows: order, number and date (A754)", () => {
       ).toEqual([
         amount("Mesa 6", "Pedido 41", { gap: 2 }),
         amount(heading, "FF/1"),
-        amount("Fecha", receiptDateTime(ISSUED, "es-ES")),
+        amount("Fecha", receiptDateTime(ISSUED, "es-ES", -480)),
         amount("Fecha de operación", "16 ago 2026"),
       ]);
     },
@@ -1408,5 +1408,54 @@ describe("identical dishes on the receipt (A803)", () => {
       ["1", "Caña", "1,36"],
       ["1", "Caña", "1,36"],
     ]);
+  });
+});
+
+describe("recorded issue offsets on plain F2 receipts", () => {
+  it.each(["58mm", "80mm"] as const)("prints the recorded midnight on %s", (paperWidth) => {
+    for (const [offset, day, time] of [
+      [120, "15", "01:30"],
+      [0, "14", "23:30"],
+    ] as const) {
+      const result = {
+        ...withoutOperationDate(),
+        invoiceType: "F2" as const,
+        issuedAt: "2026-10-14T23:30:00.000Z",
+        issuedOffsetMinutes: offset,
+        qr: "",
+      };
+      delete result.recipient;
+      const input = { ...FULL_INVOICE_DOCUMENT_FIXTURE, invoiceLocale: "en-GB", result };
+      const bytes = formatReceipt({ ...input, printer: { paperWidth, resolution: "180dpi" } });
+      const printed = printedLines(bytes).join(" ").replace(/\s+/g, " ");
+      expect(printed).toContain(
+        paperWidth === "58mm" ? `${day}/10/2026 ${time}` : `${day} Oct 2026, ${time}`,
+      );
+      const document = buildReceiptDocument({ ...input, paperWidth });
+      expect(document.elements).toContainEqual(
+        expect.objectContaining({
+          kind: "amount",
+          caption: result.invoiceNumber,
+          amount: paperWidth === "58mm" ? `${day}/10/2026 ${time}` : `${day} Oct 2026, ${time}`,
+        }),
+      );
+    }
+  });
+
+  it("uses the recorded offset in the separate date row too", () => {
+    const document = buildReceiptDocument({
+      ...FULL_INVOICE_DOCUMENT_FIXTURE,
+      invoiceLocale: "en-GB",
+      result: {
+        ...FULL_INVOICE_DOCUMENT_FIXTURE.result,
+        invoiceType: "F2",
+        issuedAt: "2026-10-14T23:30:00.000Z",
+        issuedOffsetMinutes: 120,
+        operationDate: "2026-10-13",
+      },
+    });
+    expect(document.elements).toContainEqual(
+      expect.objectContaining({ kind: "amount", amount: "15 Oct 2026, 01:30" }),
+    );
   });
 });

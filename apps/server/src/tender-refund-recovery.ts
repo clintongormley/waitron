@@ -1,4 +1,5 @@
 import { and, eq, or, sql } from "drizzle-orm";
+import { requireEconomicWrite } from "./trading-admission.js";
 import { tenderRefunds, withTransaction } from "@waitron/db";
 import { refundLookupGapMs } from "./bill-payments-loop.js";
 import { raiseTenderRefundUnresolved } from "./bill-refund-alerts.js";
@@ -22,6 +23,7 @@ const pendingConnected = and(
 export async function recoverTenderRefunds(
   deps: TenderRefundDeps,
 ): Promise<{ pending: number; nextDueAt: Date | null }> {
+  deps.admission.require();
   const reading = deps.clock.now();
   const now = reading.instant;
   const instant = now.toISOString();
@@ -59,6 +61,7 @@ export async function recoverTenderRefunds(
   const results = await Promise.allSettled(
     batch.map(async ({ id }) => {
       const work = await withTransaction(deps.db, async (tx) => {
+        await requireEconomicWrite(tx, deps.cfg, deps.admission);
         const [row] = await tx.select().from(tenderRefunds).where(eq(tenderRefunds.id, id));
         if (row?.state !== "pending") return false;
         const live = tenderRefundIsLive(deps.db, id);
@@ -85,6 +88,7 @@ export async function recoverTenderRefunds(
       });
       if (work) await resumeTenderRefund(deps, id, "loop");
       await withTransaction(deps.db, async (tx) => {
+        await requireEconomicWrite(tx, deps.cfg, deps.admission);
         const [row] = await tx.select().from(tenderRefunds).where(eq(tenderRefunds.id, id));
         if (row?.state === "pending" && now.getTime() - Date.parse(row.createdAt) > UNRESOLVED_MS)
           await raiseTenderRefundUnresolved(tx, row, now);

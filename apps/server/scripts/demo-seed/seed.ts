@@ -1,3 +1,4 @@
+import { readIssueZone } from "@waitron/fiscal";
 import { readBusinessDayScheduleRevision } from "@waitron/venue-service";
 // Sales are seeded after the main transaction commits, because each sale opens its own transaction
 // and reads the committed products.
@@ -74,6 +75,7 @@ export async function seedDemoRestaurant(
 ): Promise<SeedDemoResult> {
   const { locationId } = venue;
   demoSeedEnvironment(process.env);
+  await withTransaction(db, (tx) => readIssueZone(tx, venue));
 
   const { products, invoiceLocale, passStationIds } = await withTransaction(db, async (tx) => {
     const { productsByImage, menuIds, stationIds } = await seedCatalogues(tx, {

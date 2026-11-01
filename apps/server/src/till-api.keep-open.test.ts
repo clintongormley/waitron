@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -155,6 +156,7 @@ beforeEach(async () => {
   mountTillApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: suite.db,
       backend: v.backend,
       clock: v.clock,

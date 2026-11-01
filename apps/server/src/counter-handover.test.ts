@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
@@ -106,8 +107,19 @@ async function parked(mode: CounterFixture, ...names: string[]): Promise<string>
 /** A counter order sent to the kitchen without payment. */
 async function placed(mode: CounterFixture, ...names: string[]): Promise<string> {
   const id = await parked(mode, ...names);
-  await placeOrder(deps(), venue.cfg, id, venue.operatorId);
-  if (mode === "issued") await issueOrderInvoice(deps(), venue.cfg, id, venue.operatorId);
+  await placeOrder(
+    { ...deps(), admission: testTradingAdmission() },
+    venue.cfg,
+    id,
+    venue.operatorId,
+  );
+  if (mode === "issued")
+    await issueOrderInvoice(
+      { ...deps(), admission: testTradingAdmission() },
+      venue.cfg,
+      id,
+      venue.operatorId,
+    );
   return id;
 }
 
@@ -255,7 +267,12 @@ describe("handing over a counter order sent without payment", () => {
     );
     const context = await inTx(venue, (tx) => VENUE_SERVICE.findOrderContext(tx, venue.cfg, id));
     expect(context?.serviceMode).toBe("ticket_then_pay");
-    await placeOrder(deps(), venue.cfg, id, venue.operatorId);
+    await placeOrder(
+      { ...deps(), admission: testTradingAdmission() },
+      venue.cfg,
+      id,
+      venue.operatorId,
+    );
     const before = await orderRow(id);
     expect(before.status).toBe("placed");
     expect(before.partyId).not.toBeNull();
@@ -292,7 +309,7 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
 
 /** Pays a placed order in cash through the till's collect. */
 function collectCash(id: string, amount = "50.00") {
-  return collectOrder(deps(), venue.cfg, {
+  return collectOrder({ ...deps(), admission: testTradingAdmission() }, venue.cfg, {
     id,
     lines: [],
     tender: { method: "cash", amount },
@@ -302,7 +319,7 @@ function collectCash(id: string, amount = "50.00") {
 /** Pays a placed order on the card reader through the till's integrated card collect. */
 async function collectByCard(id: string): Promise<void> {
   const out = await payWorkingOrderIntegrated(
-    { ...deps(), provider: venue.card },
+    { admission: testTradingAdmission(), ...deps(), provider: venue.card },
     venue.cfg,
     { id, lines: [] },
     venue.operatorId,
@@ -317,7 +334,11 @@ async function collectByCard(id: string): Promise<void> {
 async function collectByCardAfterLostReply(id: string): Promise<void> {
   venue.card.crashNextCollect("captured");
   await expect(
-    payWorkingOrderIntegrated({ ...deps(), provider: venue.card }, venue.cfg, { id, lines: [] }),
+    payWorkingOrderIntegrated(
+      { admission: testTradingAdmission(), ...deps(), provider: venue.card },
+      venue.cfg,
+      { id, lines: [] },
+    ),
   ).rejects.toThrow(/process stopped/);
   await collectByCard(id);
 }
@@ -502,7 +523,7 @@ describe("paying a pay-first counter order", () => {
   it("a pay-first order paid by card before it was sent records no handover, and stays waiting and on its station queue", async () => {
     const id = randomUUID();
     const out = await payWorkingOrderIntegrated(
-      { ...deps(), provider: venue.card },
+      { admission: testTradingAdmission(), ...deps(), provider: venue.card },
       venue.cfg,
       {
         id,
@@ -522,7 +543,7 @@ describe("paying a pay-first counter order", () => {
 describe("paying a counter order never sent, in a mode that sends before payment", () => {
   async function payInFull(id: string, submissionId: string, amount: string) {
     return takeBillPayment(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       venue.cfg,
       id,
       {
@@ -560,7 +581,7 @@ describe("paying a counter order never sent, in a mode that sends before payment
   it("can hand over a paid ticket_then_pay walk-up once its dish has been sent", async () => {
     const id = randomUUID();
     await payWorkingOrder(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       venue.cfg,
       {
         id,
@@ -582,7 +603,7 @@ describe("paying a counter order never sent, in a mode that sends before payment
   it("still refuses to hand over a paid walk-up whose only dish goes to no station (ticket.not_fired)", async () => {
     const id = randomUUID();
     await payWorkingOrder(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       venue.cfg,
       {
         id,
@@ -616,7 +637,7 @@ describe("payment and handover in either order end with the same facts", () => {
   it("pay then hand over (prepay), and hand over then pay (ticket_then_pay)", async () => {
     const paidFirst = randomUUID();
     await payWorkingOrder(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       venue.cfg,
       {
         id: paidFirst,
@@ -676,7 +697,7 @@ describe("POST /api/orders/:id/collect with a submission id (retry-safe)", () =>
     expect(refused.json).toMatchObject({ code: "working_order.not_settled" });
 
     await payWorkingOrder(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       venue.cfg,
       { id, lines: [], tender: { method: "cash", amount: "50.00" } },
       venue.operatorId,
@@ -768,7 +789,7 @@ describe("GET /api/orders/counter-waiting", () => {
   async function paidPrepay(): Promise<string> {
     const id = randomUUID();
     await payWorkingOrder(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       venue.cfg,
       {
         id,
@@ -801,7 +822,12 @@ describe("GET /api/orders/counter-waiting", () => {
       await tx.execute(sql`
         update working_order_lines set name = 'Cake' where working_order_id = ${sent}`);
     });
-    await placeOrder(deps(), venue.cfg, sent, venue.operatorId);
+    await placeOrder(
+      { ...deps(), admission: testTradingAdmission() },
+      venue.cfg,
+      sent,
+      venue.operatorId,
+    );
     const handedOver = await placed("issued", "Tarta");
     await markCollected({ db: venue.db }, venue.cfg, handedOver);
     const sentPrepay = await placed("prepay", "Tarta");
@@ -867,7 +893,12 @@ describe("GET /api/orders/counter-waiting", () => {
     venue.db.run(
       sql`update working_order_lines set parent_line_id = ${queued} where id = ${extra}`,
     );
-    await placeOrder(deps(), venue.cfg, id, venue.operatorId);
+    await placeOrder(
+      { ...deps(), admission: testTradingAdmission() },
+      venue.cfg,
+      id,
+      venue.operatorId,
+    );
     await collectCash(id, "100.00");
     expect((await orderRow(id)).status).toBe("settled");
     const stationOf = new Map(
@@ -964,12 +995,17 @@ describe("GET /api/orders/counter-waiting", () => {
     await markCollected({ db: venue.db }, venue.cfg, collected);
     const open = await parked("ticket_then_pay", "Tarta");
     const tableBill = await tabWith(venue, "Paella");
-    await placeOrder(deps(), venue.cfg, tableBill, venue.operatorId);
+    await placeOrder(
+      { ...deps(), admission: testTradingAdmission() },
+      venue.cfg,
+      tableBill,
+      venue.operatorId,
+    );
     const abandoned = await parked("ticket_then_pay", "Tarta");
     venue.db.run(sql`update working_orders set status = 'abandoned' where id = ${abandoned}`);
     const paidUnfired = randomUUID();
     await payWorkingOrder(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       venue.cfg,
       {
         id: paidUnfired,
@@ -1081,7 +1117,12 @@ describe("GET /api/working-orders/:id/placed", () => {
     const id = await parked("ticket_then_pay", "Tarta", "Caña");
     const open = await send(venue.app, venue.cookie, "GET", `/api/working-orders/${id}`);
     expect(open.status).toBe(200);
-    await placeOrder(deps(), venue.cfg, id, venue.operatorId);
+    await placeOrder(
+      { ...deps(), admission: testTradingAdmission() },
+      venue.cfg,
+      id,
+      venue.operatorId,
+    );
 
     const answer = await read(id);
 
@@ -1101,7 +1142,12 @@ describe("GET /api/working-orders/:id/placed", () => {
     const paid = await placed("ticket_then_pay", "Tarta");
     await collectCash(paid);
     const tableBill = await tabWith(venue, "Paella");
-    await placeOrder(deps(), venue.cfg, tableBill, venue.operatorId);
+    await placeOrder(
+      { ...deps(), admission: testTradingAdmission() },
+      venue.cfg,
+      tableBill,
+      venue.operatorId,
+    );
 
     for (const id of [open, paid, tableBill, randomUUID(), "not-a-uuid"]) {
       const answer = await read(id);

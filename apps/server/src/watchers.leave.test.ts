@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -101,7 +102,7 @@ describe("what takes a paid table bill's dishes off today's kitchen screens", ()
     const { partyId, tabId } = await seat(v, await v.table("Mesa 2"));
     await orderForParty(v, partyId, ["Burger"], tabId);
     await takeBillPayment(
-      { db: v.db, backend: v.backend, clock: v.clock },
+      { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
       v.cfg,
       tabId,
       {

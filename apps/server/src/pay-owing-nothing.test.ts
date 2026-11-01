@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -371,7 +372,7 @@ async function presentedGivenAway(): Promise<string> {
     operatorId: venue.operatorId,
   });
   await giveAway(venue, id, 1);
-  await placeOrder(deps, venue.cfg, id, venue.operatorId);
+  await placeOrder({ ...deps, admission: testTradingAdmission() }, venue.cfg, id, venue.operatorId);
   expect(await statusOf(venue, id)).toBe("placed");
   expect(registroCount(venue, id)).toBe(0);
   return id;

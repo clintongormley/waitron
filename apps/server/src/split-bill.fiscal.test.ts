@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 // The fiscal half of split-bill: paying a carved check files its own registro, the items partition
 // across the checks, and a repeated pay replays rather than files twice.
 import { beforeAll, describe, expect, it } from "vitest";
@@ -271,7 +272,10 @@ describe("split-bill: pay each check files its own registro", () => {
     const { cfg } = seeded;
     const deps = { db: suite.db, backend, clock };
 
-    const { a, b, c, rA, rB, rC } = await splitIntoThreeChecks(seeded, deps);
+    const { a, b, c, rA, rB, rC } = await splitIntoThreeChecks(seeded, {
+      ...deps,
+      admission: testTradingAdmission(),
+    });
 
     // (1) EXACTLY THREE registros_facturacion for this tenant — one per check, none from the origin.
     const rows = await asApp(cfg, (tx) => tx.select().from(registrosFacturacion));
@@ -332,7 +336,11 @@ describe("split-bill: pay each check files its own registro", () => {
     const { cfg } = seeded;
     const deps = { db: suite.db, backend, clock };
 
-    const { tabId, a, b, c, rA, rB, rC } = await splitIntoThreeChecks(seeded, deps, "grouped");
+    const { tabId, a, b, c, rA, rB, rC } = await splitIntoThreeChecks(
+      seeded,
+      { ...deps, admission: testTradingAdmission() },
+      "grouped",
+    );
 
     const { registros, originLines, filed } = await asApp(cfg, async (tx) => ({
       registros: await tx.select({ id: registrosFacturacion.id }).from(registrosFacturacion),
@@ -379,7 +387,10 @@ describe("split-bill: pay each check files its own registro", () => {
     const { cfg } = seeded;
     const deps = { db: suite.db, backend, clock };
 
-    const { tabId, a } = await splitIntoThreeChecks(seeded, deps);
+    const { tabId, a } = await splitIntoThreeChecks(seeded, {
+      ...deps,
+      admission: testTradingAdmission(),
+    });
 
     const { originLines, filed, filedForOrigin } = await asApp(cfg, async (tx) => {
       // The emptied origin: 0 working_order_lines, and it files NOTHING (never paid → no sales row).
@@ -445,12 +456,12 @@ describe("split-bill: pay each check files its own registro", () => {
     // Pay the SAME check twice, sequentially (a lost-response retry): the second pay sees `settled`
     // and replays the existing ticket rather than filing again — a check gets the same replay as any
     // tab.
-    const first = await payWorkingOrder(deps, cfg, {
+    const first = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
       id: checkId,
       tender: { method: "cash", amount: "2.00" },
       lines: [],
     });
-    const second = await payWorkingOrder(deps, cfg, {
+    const second = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
       id: checkId,
       tender: { method: "cash", amount: "2.00" },
       lines: [],

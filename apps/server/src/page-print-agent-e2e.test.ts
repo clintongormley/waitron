@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { printOverIpp } from "@waitron/print-agent-app/ipp-print.js";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -323,7 +324,15 @@ async function venue() {
   );
   mountTillApi(
     app,
-    { db: suite.db, backend, clock, cfg, secureCookies: false, venueLocale: "es-ES" },
+    {
+      admission: testTradingAdmission(),
+      db: suite.db,
+      backend,
+      clock,
+      cfg,
+      secureCookies: false,
+      venueLocale: "es-ES",
+    },
     () => {},
   );
   mountNodeApi(

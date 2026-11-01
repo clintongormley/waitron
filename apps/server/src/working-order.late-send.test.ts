@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -575,7 +576,7 @@ describe("a raised quantity of a stored line", () => {
       .where(eq(workingOrders.id, id))) as [{ revision: number }];
     at("14:05");
     await expect(
-      updateHeldOrder({ db: suite.db }, v.cfg, id, {
+      updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, v.cfg, id, {
         revision,
         expectedEdit: null,
         lines: [

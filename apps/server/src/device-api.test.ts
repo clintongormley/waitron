@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 /** The device join, enrolment and management surface end to end. */
 import { randomUUID } from "node:crypto";
@@ -125,7 +126,7 @@ async function fireOrder(venue: Venue): Promise<{ orderId: string; items: string
     label: "Table 7",
   });
   await placeOrder(
-    { db: suite.db, backend, clock },
+    { admission: testTradingAdmission(), db: suite.db, backend, clock },
     await deviceRequestCfg(suite.db, venue.cfg),
     orderId,
     OPERATOR,

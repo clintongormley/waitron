@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { decimal } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -99,16 +100,31 @@ function run(
   const ask = request(p, expectedEdit, mode);
   if (mode === "reader" || mode === "reader-placed")
     return payWorkingOrderIntegratedOrchestration(
-      { ...deps(), provider: venue.card },
+      { admission: testTradingAdmission(), ...deps(), provider: venue.card },
       venue.cfg,
       ask as IntegratedPayRequest,
       operatorId,
     );
   if (mode === "collect")
-    return collectOrderOrchestration(deps(), venue.cfg, ask as PayWorkingOrderRequest, operatorId);
+    return collectOrderOrchestration(
+      { ...deps(), admission: testTradingAdmission() },
+      venue.cfg,
+      ask as PayWorkingOrderRequest,
+      operatorId,
+    );
   if (mode === "sale")
-    return recordTillSaleOrchestration(deps(), venue.cfg, ask as TillSaleRequest, operatorId);
-  return payWorkingOrder(deps(), venue.cfg, ask as PayWorkingOrderRequest, operatorId);
+    return recordTillSaleOrchestration(
+      { ...deps(), admission: testTradingAdmission() },
+      venue.cfg,
+      ask as TillSaleRequest,
+      operatorId,
+    );
+  return payWorkingOrder(
+    { ...deps(), admission: testTradingAdmission() },
+    venue.cfg,
+    ask as PayWorkingOrderRequest,
+    operatorId,
+  );
 }
 
 describe.each(modes)("%s whole payment bill authority", (mode) => {
@@ -153,16 +169,31 @@ describe.each(modes)("%s whole payment bill authority", (mode) => {
       const attempt =
         mode === "reader" || mode === "reader-placed"
           ? payWorkingOrderIntegratedOrchestration(
-              { ...deps(), provider: venue.card },
+              { admission: testTradingAdmission(), ...deps(), provider: venue.card },
               venue.cfg,
               ask as IntegratedPayRequest,
               operator,
             )
           : mode === "collect"
-            ? collectOrderOrchestration(deps(), venue.cfg, ask as PayWorkingOrderRequest, operator)
+            ? collectOrderOrchestration(
+                { ...deps(), admission: testTradingAdmission() },
+                venue.cfg,
+                ask as PayWorkingOrderRequest,
+                operator,
+              )
             : mode === "sale"
-              ? recordTillSaleOrchestration(deps(), venue.cfg, ask as TillSaleRequest, operator)
-              : payWorkingOrder(deps(), venue.cfg, ask as PayWorkingOrderRequest, operator);
+              ? recordTillSaleOrchestration(
+                  { ...deps(), admission: testTradingAdmission() },
+                  venue.cfg,
+                  ask as TillSaleRequest,
+                  operator,
+                )
+              : payWorkingOrder(
+                  { ...deps(), admission: testTradingAdmission() },
+                  venue.cfg,
+                  ask as PayWorkingOrderRequest,
+                  operator,
+                );
       await expect(attempt).rejects.toMatchObject({
         code: "management.request_invalid",
         params: {
@@ -230,15 +261,27 @@ describe.each(modes)("%s whole payment bill authority", (mode) => {
     const ask = request(p, null, mode);
     const result = mode.startsWith("reader")
       ? await payWorkingOrderIntegratedOrchestration(
-          { ...deps(), provider: venue.card },
+          { admission: testTradingAdmission(), ...deps(), provider: venue.card },
           venue.cfg,
           ask as IntegratedPayRequest,
         )
       : mode === "collect"
-        ? await collectOrderOrchestration(deps(), venue.cfg, ask as PayWorkingOrderRequest)
+        ? await collectOrderOrchestration(
+            { ...deps(), admission: testTradingAdmission() },
+            venue.cfg,
+            ask as PayWorkingOrderRequest,
+          )
         : mode === "sale"
-          ? await recordTillSaleOrchestration(deps(), venue.cfg, ask as TillSaleRequest)
-          : await payWorkingOrder(deps(), venue.cfg, ask as PayWorkingOrderRequest);
+          ? await recordTillSaleOrchestration(
+              { ...deps(), admission: testTradingAdmission() },
+              venue.cfg,
+              ask as TillSaleRequest,
+            )
+          : await payWorkingOrder(
+              { ...deps(), admission: testTradingAdmission() },
+              venue.cfg,
+              ask as PayWorkingOrderRequest,
+            );
     expect(result).toMatchObject(
       mode.startsWith("reader")
         ? { outcome: "captured", ticket: { total: "35.00" } }

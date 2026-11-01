@@ -222,6 +222,7 @@ async function issueRecovery(
  * absent from this table answers 400.
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
+  "venue.time_zone_not_ready": 409,
   "management_session.required": 401,
   "management_session.expired": 401,
   "password.invalid": 401,

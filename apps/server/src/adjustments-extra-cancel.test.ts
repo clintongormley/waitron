@@ -1,4 +1,5 @@
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { writePartyAllergy } from "@waitron/venue-service";
 import { readBillEditState } from "./bill-editing.js";
 import { updateHeldOrder } from "./testing/order-writer-fixture.js";
@@ -192,6 +193,7 @@ async function gherkinsCancel(
 ): Promise<Command> {
   const lineId = await lineIdOf(venue, billId, 4);
   return inTx(venue, async (tx) => ({
+    admission: testTradingAdmission(),
     orderId: billId,
     expectedEdit: await readBillEditState(tx, billId),
     submissionId: randomUUID(),
@@ -678,7 +680,7 @@ describe("cancelling an extra of a held dish (B11g)", () => {
             note: null,
             operatorId: venue.staffId,
           }));
-          await inTx(venue, (tx) => apply(tx, command));
+          await inTx(venue, (tx) => apply(tx, { ...command, admission: testTradingAdmission() }));
         }
       });
 
@@ -730,7 +732,7 @@ describe("cancelling an extra of a dish the kitchen does not have (B11g)", () =>
       });
     });
     const billId = seated.tabId;
-    await updateHeldOrder({ db: venue.db }, venue.cfg, billId, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db: venue.db }, venue.cfg, billId, {
       revision: await inTx(venue, (tx) => revisionOf(tx, billId)),
       lines: [withSides(offer.hamburger)],
       operatorId: venue.staffId,

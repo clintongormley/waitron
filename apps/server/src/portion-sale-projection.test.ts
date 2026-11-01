@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import {
@@ -634,6 +635,7 @@ describe("A803 monetary comparison: operations on portions through the real path
       tx,
       cfg,
       {
+        admission: testTradingAdmission(),
         orderId: billId,
         expectedEdit: await readBillEditState(tx, billId),
         submissionId: randomUUID(),
@@ -952,6 +954,7 @@ describe("A803 monetary comparison: a whole-bill discount over registered portio
       tx,
       cfg,
       {
+        admission: testTradingAdmission(),
         orderId: billId,
         expectedEdit: await readBillEditState(tx, billId),
         submissionId: randomUUID(),

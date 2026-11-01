@@ -1,4 +1,5 @@
 import { receiptLabelsFor } from "@waitron/country-packs";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
 import { observedPaymentBody } from "./testing/bill-payment-fixture.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
@@ -373,6 +374,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
   mountTillApi(
     app,
     {
+      admission: testTradingAdmission(),
       db,
       backend,
       clock,
@@ -4494,6 +4496,7 @@ describe("the limit on wrong refund PINs", () => {
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: suite.db,
         backend,
         clock,
@@ -4929,6 +4932,7 @@ describe("a reader payment on a device that changes profile while it is starting
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: suite.db,
         backend,
         clock,
@@ -5304,6 +5308,7 @@ describe("a refund's supervisor PIN is checked before the write lock is taken", 
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: suite.db,
         backend,
         clock,

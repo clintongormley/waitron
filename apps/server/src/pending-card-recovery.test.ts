@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { updateOrderLine, placeOrder } from "./testing/order-writer-fixture.js";
 import { eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
@@ -22,6 +23,7 @@ import { recoverAutomaticCardPayments } from "./pending-card-recovery.js";
 import { provisionBillVenue, statusOf, tabWith, tendersOfBill } from "./testing/bill-venue.js";
 import type { BillVenue } from "./testing/bill-venue.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
+import { TradingAdmission } from "./trading-admission.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -30,8 +32,20 @@ const suite = useVenueDb({
 
 async function retained(venue: BillVenue, manual = false, issued = false, placed = false) {
   const id = await tabWith(venue, "Caña");
-  if (issued) await issueOrderInvoice(venue, venue.cfg, id, venue.operatorId);
-  if (placed) await placeOrder(venue, venue.cfg, id, venue.operatorId);
+  if (issued)
+    await issueOrderInvoice(
+      { ...venue, admission: testTradingAdmission() },
+      venue.cfg,
+      id,
+      venue.operatorId,
+    );
+  if (placed)
+    await placeOrder(
+      { ...venue, admission: testTradingAdmission() },
+      venue.cfg,
+      id,
+      venue.operatorId,
+    );
   const paymentRef = randomUUID();
   await withTransaction(venue.db, async (tx) => {
     await insertCapturedPayment(tx, {
@@ -68,6 +82,61 @@ function recoveryDeps(venue: BillVenue) {
 }
 
 describe("automatic card capture recovery", () => {
+  it("refuses a closed pass before loading providers or touching retained captures", async () => {
+    const venue = await provisionBillVenue(suite.db);
+    const { id, paymentRef } = await retained(venue);
+    const deps = recoveryDeps(venue);
+    const get = vi.spyOn(deps.pool, "get");
+    const before = await getPaymentByRef(suite.db, { provider: "stripe", paymentRef });
+    const admission = new TradingAdmission();
+    admission.repairOnly("invalid");
+    let refusal: unknown;
+    try {
+      await recoverAutomaticCardPayments({ ...deps, admission });
+    } catch (error) {
+      refusal = error;
+    }
+    expect(get).not.toHaveBeenCalled();
+    expect(await getPaymentByRef(suite.db, { provider: "stripe", paymentRef })).toEqual(before);
+    expect(await suite.db.select().from(sales)).toEqual([]);
+    expect(refusal).toMatchObject({
+      code: "venue.time_zone_not_ready",
+      params: { reason: "invalid" },
+    });
+    admission.admit();
+    expect(await recoverAutomaticCardPayments({ ...deps, admission })).toEqual({
+      filed: 1,
+      errors: [],
+    });
+    expect(await suite.db.select().from(sales).where(eq(sales.workingOrderId, id))).toHaveLength(1);
+    expect(deps.collect).not.toHaveBeenCalled();
+  });
+  it("retains captured evidence when admission closes after the worker acquires its provider", async () => {
+    const venue = await provisionBillVenue(suite.db);
+    const { id, paymentRef } = await retained(venue);
+    const deps = recoveryDeps(venue),
+      admission = testTradingAdmission();
+    const before = await getPaymentByRef(suite.db, { provider: "stripe", paymentRef });
+    deps.pool.get = async () => {
+      admission.requireRestart();
+      return deps.provider;
+    };
+    expect(await recoverAutomaticCardPayments({ ...deps, admission })).toEqual({
+      filed: 0,
+      errors: [{ paymentId: before!.id, error: "AppError: venue.time_zone_not_ready" }],
+    });
+    expect(await getPaymentByRef(suite.db, { provider: "stripe", paymentRef })).toEqual(before);
+    expect(await suite.db.select().from(sales)).toEqual([]);
+    expect(deps.collect).not.toHaveBeenCalled();
+    deps.pool.get = async () => deps.provider;
+    admission.admit();
+    expect(await recoverAutomaticCardPayments({ ...deps, admission })).toEqual({
+      filed: 1,
+      errors: [],
+    });
+    expect(await suite.db.select().from(sales).where(eq(sales.workingOrderId, id))).toHaveLength(1);
+    expect(deps.collect).not.toHaveBeenCalled();
+  });
   it.each([
     { issued: false, placed: false },
     { issued: true, placed: false },
@@ -81,8 +150,12 @@ describe("automatic card capture recovery", () => {
       expect(await statusOf(venue, id)).toBe(placed ? "placed" : "open");
       const deps = recoveryDeps(venue);
       const fiscal = vi.spyOn(venue.backend, "recordSale");
-      expect(await recoverAutomaticCardPayments(deps)).toEqual({ filed: 1, errors: [] });
-      expect(await recoverAutomaticCardPayments(deps)).toEqual({ filed: 0, errors: [] });
+      expect(
+        await recoverAutomaticCardPayments({ ...deps, admission: testTradingAdmission() }),
+      ).toEqual({ filed: 1, errors: [] });
+      expect(
+        await recoverAutomaticCardPayments({ ...deps, admission: testTradingAdmission() }),
+      ).toEqual({ filed: 0, errors: [] });
       expect(await statusOf(venue, id)).toBe("settled");
       expect(await suite.db.select().from(sales).where(eq(sales.workingOrderId, id))).toHaveLength(
         1,
@@ -96,7 +169,9 @@ describe("automatic card capture recovery", () => {
     const venue = await provisionBillVenue(suite.db);
     const { id } = await retained(venue, true);
     const deps = recoveryDeps(venue);
-    expect(await recoverAutomaticCardPayments(deps)).toEqual({ filed: 0, errors: [] });
+    expect(
+      await recoverAutomaticCardPayments({ ...deps, admission: testTradingAdmission() }),
+    ).toEqual({ filed: 0, errors: [] });
     expect(await statusOf(venue, id)).toBe("open");
     expect(deps.collect).not.toHaveBeenCalled();
   });
@@ -107,7 +182,10 @@ describe("automatic card capture recovery", () => {
     await retained(venue);
     const deps = recoveryDeps(venue);
     vi.spyOn(venue.backend, "recordSale").mockRejectedValueOnce(new Error("filing refused"));
-    const first = await recoverAutomaticCardPayments(deps);
+    const first = await recoverAutomaticCardPayments({
+      ...deps,
+      admission: testTradingAdmission(),
+    });
     expect(first.filed).toBe(1);
     expect(first.errors).toEqual([
       { paymentId: expect.any(String), error: "Error: filing refused" },
@@ -118,7 +196,9 @@ describe("automatic card capture recovery", () => {
       .where(eq(payments.id, first.errors[0]!.paymentId));
     expect(unfiled?.state).toBe("captured");
     expect(unfiled?.saleId).toBeNull();
-    expect(await recoverAutomaticCardPayments(deps)).toEqual({ filed: 1, errors: [] });
+    expect(
+      await recoverAutomaticCardPayments({ ...deps, admission: testTradingAdmission() }),
+    ).toEqual({ filed: 1, errors: [] });
     expect(await suite.db.select().from(sales)).toHaveLength(2);
     expect(deps.collect).not.toHaveBeenCalled();
   });
@@ -131,7 +211,10 @@ describe("automatic card capture recovery", () => {
       new AppError("storage.disk_full", {}),
     );
 
-    const answer = await recoverAutomaticCardPayments(deps);
+    const answer = await recoverAutomaticCardPayments({
+      ...deps,
+      admission: testTradingAdmission(),
+    });
 
     expect(answer.filed).toBe(0);
     expect(answer.errors).toEqual([
@@ -151,7 +234,9 @@ describe("automatic card capture recovery", () => {
         .where(eq(payments.paymentRef, paymentRef));
       return deps.provider;
     };
-    expect(await recoverAutomaticCardPayments(deps)).toEqual({ filed: 0, errors: [] });
+    expect(
+      await recoverAutomaticCardPayments({ ...deps, admission: testTradingAdmission() }),
+    ).toEqual({ filed: 0, errors: [] });
     expect(await suite.db.select().from(sales)).toEqual([]);
     expect(deps.collect).not.toHaveBeenCalled();
   });
@@ -171,6 +256,7 @@ describe("automatic card capture recovery", () => {
       },
     });
     const result = await recoverAutomaticCardPayments({
+      admission: testTradingAdmission(),
       ...venue,
       pool: { get: async () => provider },
     });
@@ -224,13 +310,20 @@ describe("automatic card capture recovery", () => {
         readerRef: "reader_live",
         pool: { get: async () => provider },
       };
-      const paying = pay(deps, venue.cfg, { id, lines: [] }, venue.operatorId);
+      const paying = pay(
+        { ...deps, admission: testTradingAdmission() },
+        venue.cfg,
+        { id, lines: [] },
+        venue.operatorId,
+      );
       let initialRead: ReturnType<typeof vi.spyOn> | undefined;
       try {
         await entered;
         if (stale)
           initialRead = vi.spyOn(tillSale, "paymentAttemptIsLive").mockReturnValueOnce(false);
-        expect(await recoverAutomaticCardPayments(deps)).toEqual({ filed: 0, errors: [] });
+        expect(
+          await recoverAutomaticCardPayments({ ...deps, admission: testTradingAdmission() }),
+        ).toEqual({ filed: 0, errors: [] });
         expect(await suite.db.select().from(sales)).toEqual([]);
       } finally {
         initialRead?.mockRestore();
@@ -238,7 +331,9 @@ describe("automatic card capture recovery", () => {
         await paying;
       }
       expect(await paying).toEqual({ outcome: "timeout" });
-      expect(await recoverAutomaticCardPayments(deps)).toEqual({ filed: 1, errors: [] });
+      expect(
+        await recoverAutomaticCardPayments({ ...deps, admission: testTradingAdmission() }),
+      ).toEqual({ filed: 1, errors: [] });
       expect(await statusOf(venue, id)).toBe("settled");
     },
   );
@@ -263,7 +358,14 @@ describe("automatic card capture recovery", () => {
       provider,
       readerRef: "reader_late",
     };
-    expect(await pay(deps, cfg, { id, lines: [], tip: "0.50" }, venue.operatorId)).toEqual({
+    expect(
+      await pay(
+        { ...deps, admission: testTradingAdmission() },
+        cfg,
+        { id, lines: [], tip: "0.50" },
+        venue.operatorId,
+      ),
+    ).toEqual({
       outcome: "timeout",
     });
     const [pending] = await suite.db.select().from(payments).where(eq(payments.workingOrderId, id));
@@ -278,7 +380,9 @@ describe("automatic card capture recovery", () => {
         updateOrderLine(tx, cfg, id, 1, { note: "changed while unknown" }, order!.revision),
       ),
     ).rejects.toMatchObject({ code: "order.payment_in_flight" });
-    await expect(pay(deps, cfg, { id, lines: [] }, venue.operatorId)).rejects.toMatchObject({
+    await expect(
+      pay({ ...deps, admission: testTradingAdmission() }, cfg, { id, lines: [] }, venue.operatorId),
+    ).rejects.toMatchObject({
       code: "order.payment_in_flight",
     });
     expect(await suite.db.select().from(sales).where(eq(sales.workingOrderId, id))).toEqual([]);
@@ -291,7 +395,13 @@ describe("automatic card capture recovery", () => {
         async () => [provider],
         () => {},
       ),
-      () => recoverAutomaticCardPayments({ ...deps, cfg, pool: { get: async () => provider } }),
+      () =>
+        recoverAutomaticCardPayments({
+          admission: testTradingAdmission(),
+          ...deps,
+          cfg,
+          pool: { get: async () => provider },
+        }),
       () => "primary",
       log,
     );

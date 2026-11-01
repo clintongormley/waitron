@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, isNull, sql } from "drizzle-orm";
@@ -14,6 +15,7 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedNode } from "@waitron/db/testing/seed.js";
 import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import { getCredential, loadKeyRing, tryGetCredential, type KeyRing } from "@waitron/credentials";
 import { createStripeCardProvider, type MakeStripe } from "@waitron/payments-stripe";
@@ -77,6 +79,7 @@ function nextName(prefix: string): string {
 }
 
 interface Venue {
+  nodeId: string;
   locationId: string;
   managerCookie: string;
   staffCookie: string;
@@ -92,11 +95,13 @@ async function seedVenue(): Promise<Venue> {
     .insert(locations)
     .values({
       name: "Barra",
+      timeZone: "Europe/Madrid",
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
     })
     .returning({ id: locations.id });
   const locationId = loc!.id;
+  const writingNodeId = await seedNode(suite.db, brandLocationId(locationId));
   const { managerSid, staffSid } = await withTransaction(suite.db, async (tx) => {
     const [mgr] = await tx
       .insert(persons)
@@ -113,6 +118,7 @@ async function seedVenue(): Promise<Venue> {
     return { managerSid: managerSession.token, staffSid: staffSession.token };
   });
   return {
+    nodeId: writingNodeId,
     locationId,
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSid}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSid}`,
@@ -200,7 +206,7 @@ function saleDeps() {
 
 function cfgOf(venue: Venue): TradingContext {
   return {
-    nodeId: brandNodeId(randomUUID()),
+    nodeId: brandNodeId(venue.nodeId),
     locationId: brandLocationId(venue.locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
@@ -219,6 +225,7 @@ function mountApp(
   mountPaymentsApi(
     app,
     {
+      admission: testTradingAdmission(),
       db,
       ...saleDeps(),
       cfg: cfgOf(venue),
@@ -911,6 +918,7 @@ describe("an injected fetch is threaded to the seat", () => {
     mountPaymentsApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: suite.db,
         ...saleDeps(),
         cfg: cfgOf(venue),
@@ -1020,6 +1028,7 @@ describe("add reader — races with a concurrent disconnect", () => {
     mountPaymentsApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: suite.db,
         ...saleDeps(),
         cfg: cfgOf(venue),
@@ -1081,6 +1090,7 @@ describe("unpair reader — retryable after a failed vendor unpair", () => {
     mountPaymentsApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: suite.db,
         ...saleDeps(),
         cfg: cfgOf(venue),

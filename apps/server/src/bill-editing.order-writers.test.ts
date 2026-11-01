@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -104,7 +105,7 @@ async function run(
 ) {
   const authority = { operatorId, expectedEdit };
   if (op === "whole")
-    return updateHeldOrder({ db: venue.db }, venue.cfg, p.id, {
+    return updateHeldOrder({ admission: testTradingAdmission(), db: venue.db }, venue.cfg, p.id, {
       operatorId,
       expectedEdit,
       revision: p.revision,
@@ -127,7 +128,7 @@ async function run(
           p.line.lineNo,
           { note: "changed" },
           p.revision,
-          authority,
+          { ...authority, admission: testTradingAdmission() },
         );
       case "course":
         return setLineCourse(tx, venue.cfg, p.id, p.line.lineNo, null, authority);

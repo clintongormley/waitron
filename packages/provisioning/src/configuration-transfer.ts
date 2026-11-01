@@ -1,3 +1,4 @@
+import { requireCountryTimeZone } from "@waitron/country-packs";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import {
@@ -531,7 +532,6 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
     "name",
     "operationDescription",
     "fiscalTerritory",
-    "timeZone",
     "dayCutover",
     "fireControl",
   ];
@@ -557,6 +557,7 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
   ) {
     throw new AppError("setup.request_invalid", { field: "artifact" });
   }
+  requireCountryTimeZone(venue.country as string, location.timeZone);
   return value as unknown as ConfigurationBundle;
 }
 
@@ -611,6 +612,7 @@ export function validateConfigurationBundle(
   modules: readonly WaitronModule[],
   targetVersions: Readonly<Record<string, number>>,
 ): void {
+  const timeZone = requireCountryTimeZone(bundle.venue.country, bundle.venue.location.timeZone);
   const expectedModules = new Set(modules.map((module) => module.name));
   if (Object.keys(bundle.modules).some((name) => !expectedModules.has(name))) {
     throw new AppError("setup.request_invalid", { field: "modules" });
@@ -627,7 +629,7 @@ export function validateConfigurationBundle(
   }
   const exported = {
     createdAt: new Date(bundle.createdAt),
-    timeZone: bundle.venue.location.timeZone,
+    timeZone,
     dayCutover: bundle.venue.location.dayCutover.slice(0, 5),
   };
   for (const module of modules) {

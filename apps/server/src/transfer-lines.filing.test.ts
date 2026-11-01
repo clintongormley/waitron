@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -252,12 +253,12 @@ describe("H2 — after a partial transfer, each tab files its OWN single registr
 
     // A now holds café×3; B holds café×4 + café×1. `lines: []` files from the stored locked lines.
     const deps = { db: suite.db, backend, clock };
-    const paidA = await payWorkingOrder(deps, cfg, {
+    const paidA = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
       id: tabA,
       lines: [],
       tender: { method: "cash", amount: "20.00" },
     });
-    const paidB = await payWorkingOrder(deps, cfg, {
+    const paidB = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
       id: tabB,
       lines: [],
       tender: { method: "cash", amount: "20.00" },

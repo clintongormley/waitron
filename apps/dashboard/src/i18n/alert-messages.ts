@@ -33,6 +33,10 @@ export const ALERT_MESSAGES: Readonly<
     }
   >
 > = {
+  "venue.time_zone_repaired": {
+    en: "A manager confirmed the venue time zone: {timeZone}.",
+    es: "Un responsable ha confirmado la zona horaria del local: {timeZone}.",
+  },
   "fiscal.clock_drift": {
     en: "The server's last clock comparison with AEAT differed by {seconds} seconds. Check its date and time; you can continue selling.",
     es: "La última comparación del reloj del servidor con la AEAT mostró una diferencia de {seconds} segundos. Comprueba su fecha y hora; puedes seguir vendiendo.",

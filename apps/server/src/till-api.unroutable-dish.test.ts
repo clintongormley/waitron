@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { updateOrderLine, placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -92,6 +93,7 @@ beforeEach(async () => {
   mountTillApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: suite.db,
       backend: v.backend,
       clock: v.clock,
@@ -534,7 +536,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     });
 
     await takeBillPayment(
-      { db: v.db, backend: v.backend, clock: v.clock },
+      { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
       v.cfg,
       id,
       {
@@ -564,6 +566,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
 
     const out = await payWorkingOrderIntegrated(
       {
+        admission: testTradingAdmission(),
         db: suite.db,
         backend: v.backend,
         clock: v.clock,
@@ -600,7 +603,13 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     );
 
     const out = await payWorkingOrderIntegrated(
-      { db: suite.db, backend: v.backend, clock: v.clock, provider },
+      {
+        admission: testTradingAdmission(),
+        db: suite.db,
+        backend: v.backend,
+        clock: v.clock,
+        provider,
+      },
       v.cfg,
       { id, lines: [] },
     );
@@ -738,6 +747,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       const out = await withAlertRefused(() =>
         payWorkingOrderIntegrated(
           {
+            admission: testTradingAdmission(),
             db: suite.db,
             backend: v.backend,
             clock: v.clock,
@@ -783,7 +793,13 @@ describe("paying a pay-first order, or an open counter order in a zone that send
 
       const out = await withAlertRefused(() =>
         payWorkingOrderIntegrated(
-          { db: suite.db, backend: v.backend, clock: v.clock, provider },
+          {
+            admission: testTradingAdmission(),
+            db: suite.db,
+            backend: v.backend,
+            clock: v.clock,
+            provider,
+          },
           v.cfg,
           { id, lines: [] },
         ),
@@ -806,7 +822,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
 
       await withAlertRefused(() =>
         takeBillPayment(
-          { db: v.db, backend: v.backend, clock: v.clock },
+          { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
           v.cfg,
           id,
           {
@@ -1233,6 +1249,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     const id = randomUUID();
     const out = await payWorkingOrderIntegrated(
       {
+        admission: testTradingAdmission(),
         db: suite.db,
         backend: v.backend,
         clock: v.clock,
@@ -1373,7 +1390,12 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       zoneId: v.counter.zoneId,
       lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: chosen }],
     });
-    await placeOrder({ db: suite.db, backend: v.backend, clock: v.clock }, v.cfg, id, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
+      v.cfg,
+      id,
+      OPERATOR,
+    );
     const response = await app.request("/api/dead-ends/order", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: session },
@@ -1392,7 +1414,12 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       zoneId: v.counter.zoneId,
       lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: chosen }],
     });
-    await placeOrder({ db: suite.db, backend: v.backend, clock: v.clock }, v.cfg, id, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
+      v.cfg,
+      id,
+      OPERATOR,
+    );
     const [line] = await inTx(v, (tx) =>
       tx
         .select({ id: workingOrderLines.id })

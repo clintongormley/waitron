@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -286,11 +287,15 @@ describe("joinTables → one bill", () => {
     expect(await partyAtTable(t2)).toBe(join.partyId); // the join put t2 in the one tab's party
 
     // Pay the one tab (a retrieved open order files from its stored locked lines).
-    await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
-      id: tabId,
-      lines: [],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id: tabId,
+        lines: [],
+        tender: { method: "cash", amount: "5.00" },
+      },
+    );
 
     expect(await saleCount(tabId)).toBe(1); // exactly one bill for both tables
     expect(await orderState(tabId)).toMatchObject({ status: "settled" });
@@ -322,11 +327,15 @@ describe("parties combined, bills merged → one registro (H2)", () => {
     expect(await saleCount(fromTab)).toBe(0);
 
     // Pay the merged intoTab → exactly one sale + one chained registro for the combined bill.
-    await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
-      id: intoTab,
-      lines: [],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id: intoTab,
+        lines: [],
+        tender: { method: "cash", amount: "5.00" },
+      },
+    );
     expect(await saleCount(intoTab)).toBe(1);
     expect(await registroCount(intoTab)).toBe(1);
     expect(await registroCount(fromTab)).toBe(0);
@@ -357,11 +366,15 @@ describe("tables joined across parties, bills merged → one bill covering both 
     expect(await partyAtTable(tFrom)).toBe(join.partyId);
     expect(await partyAtTable(tInto)).toBe(join.partyId);
 
-    await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
-      id: intoTab,
-      lines: [],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id: intoTab,
+        lines: [],
+        tender: { method: "cash", amount: "5.00" },
+      },
+    );
     expect(await saleCount(intoTab)).toBe(1); // one bill for both tables
     expect(await saleCount(fromTab)).toBe(0); // the abandoned source files nothing
     expect(await orderState(fromTab)).toMatchObject({ status: "abandoned" });

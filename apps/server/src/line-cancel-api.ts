@@ -122,7 +122,13 @@ export function mountLineCancelApi(
   run: Run,
   pinThrottle: PinThrottle,
 ): void {
-  const fiscal = { db: deps.db, backend: deps.backend, clock: deps.clock, log };
+  const fiscal = {
+    db: deps.db,
+    backend: deps.backend,
+    admission: deps.admission,
+    clock: deps.clock,
+    log,
+  };
   app.get("/api/parties/:id/lines/:lineId/cancellation", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders", passive: true });
@@ -228,6 +234,7 @@ export function mountLineCancelApi(
               lineId,
               {
                 ...ask,
+                admission: deps.admission,
                 approver: withCheck(ask.approver, checked),
                 refundApprovedBy: refund?.viaOverride === true ? refund.authorizedBy : null,
               },

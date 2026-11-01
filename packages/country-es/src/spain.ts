@@ -317,6 +317,7 @@ export const SPAIN: CountryPack = {
   defaultProductVatClass: "reduced",
   defaultLocale: "es-ES",
   defaultTimeZone: "Europe/Madrid",
+  timeZones: ["Europe/Madrid", "Atlantic/Canary"],
   invoiceLocales: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
   receiptLabels: SPAIN_RECEIPT_LABELS,
   officialLocales: ["es-ES", "ca-ES", "ca-ES-valencia", "gl-ES", "eu-ES"],

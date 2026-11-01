@@ -1158,6 +1158,10 @@ and shard counts have not changed in this diagnostic slice.
 
 ## A1252: remaining server job time after the held-setup split
 
+**Coordination, 1 November at 12:45:** the watcher closed A1252 after its split and three
+observations, and assigned the remaining over-270-second work to **A1297**. The measurements
+below remain receipts for that follow-up; they do not mean A1252 is still open.
+
 On 31 October 2026, [PR #2341](https://github.com/clintongormley/waitron/pull/2341)
 landed the held-setup split, preserving all 73 cases, including A1131's three
 fresh-box restore cases. Its final [CI run 41200533986](https://github.com/clintongormley/waitron/actions/runs/41200533986)
@@ -1183,12 +1187,50 @@ the rest of the job's recorded duration.
 | test-server (20) | 271 | 236 | 35 | `src/first-setup-backup-resume-authority.test.ts` (141.6) |
 | test-server (16) | 275 | 231 | 44 | `src/hour-recovery-placement-2.test.ts` (160.4) |
 
-Keep the three later main-run observations open. Count runs that execute every
-server shard; a run that reuses PR evidence supplies no new server timing.
-Retain whole-job, test-step and per-file times when a job exceeds the target.
-Use those measurements to choose further packing or suite-setup work while
-preserving every behavioural assertion. The measurements above do not establish
-a cause for every over-budget group.
+**1 November follow-up:** the three natural full main observations now exist:
+[41288426367](https://github.com/clintongormley/waitron/actions/runs/41288426367),
+[41278766733](https://github.com/clintongormley/waitron/actions/runs/41278766733) and
+[41272334746](https://github.com/clintongormley/waitron/actions/runs/41272334746).
+Each successfully executes all 20 ordinary server shards. Their maximum whole jobs
+are 278, 292 and 306 seconds, respectively. The observation wait is complete; the
+all-jobs target still has residual work.
+
+| Run / shard | Whole job (s) | Test step (s) | Setup and cleanup (s) | Longest file (s) |
+| --- | ---: | ---: | ---: | --- |
+| 41288426367 / 3 | 276 | 230 | 46 | `first-setup-backup-resume-publication.test.ts` (177.8) |
+| 41288426367 / 10 | 276 | 225 | 51 | `first-setup-backup-recovery-preparation.test.ts` (149.8) |
+| 41288426367 / 19 | 278 | 236 | 42 | `restore-emergency-crash.e2e.test.ts` (123.7); `first-setup-backup-lease.test.ts` also takes 118.3 |
+| 41278766733 / 11 | 292 | 250 | 42 | `first-setup-backup-reopen.test.ts` (174.1); `first-setup-database-holdings-damage.test.ts` also takes 147.4 |
+| 41272334746 / 5 | 306 | 239 | 67 | `first-fiscal-hour.e2e.test.ts` (183.1) |
+
+The first three rows cover every over-270-second job in the latest run; the final
+two identify the longest job in each older observation. Retain whole-job,
+test-step and per-file times when choosing further packing or suite-setup work,
+with every behavioural assertion preserved. These measurements identify
+contributors; they do not establish the cause of every aggregate delay.
+
+**A696 observation, 1 November:** [PR CI 41305909069](https://github.com/clintongormley/waitron/actions/runs/41305909069)
+passes at `4b85799d4`, after the branch's process matrix is split from one 348-second file
+into five files retaining all 18 cases. The five files take 14.8–99.1 seconds. Their containing
+jobs take 196, 204, 265, 269 and 294 seconds. The 294-second job's largest files are `boot.test.ts`
+(126.7), `first-setup-database-holdings.test.ts` (123.2) and
+`zone-process-matrix.callers.test.ts` (99.1). Nine server jobs exceed 270 seconds; the maximum is
+329, with `first-fiscal-hour.e2e.test.ts` (213.2) and `boot.setup-routes.test.ts` (168.8) its largest
+files. These are measured contributors, not a controlled causal comparison. This PR observation
+is additional evidence, not a replacement for the three main observations above. The remaining
+packing/setup work stays open. Lane E retains the exact twenty job logs, complete durations and
+per-file measurements under `receipts/a696-resume-20261101/`.
+
+A1242's separate publication/fallback qualification is complete. Main run
+[41282000200](https://github.com/clintongormley/waitron/actions/runs/41282000200)
+reuses successful PR run 41281175428, reports `code=true`, and successfully pushes
+both `:main` images. PR #2365's tested head tree
+`b5eeb91d4b82ec128a9c356e03f0330b780884e2` differs from its main squash tree
+`bc1116107149662396b1b46ff1900d791c91bf9f`; main run 41278766733 reports
+`reuse=false` and runs the full global suite successfully. Earlier post-fix run
+41183258278 and docs run 41183408052 both report `code=false`, with publication
+skipped. The API tree pairs, job scopes and publication logs are retained in
+Lane E `receipts/a696-resume-20261101/`.
 
 
 ## Deadline command through a directory symlink
@@ -1224,3 +1266,20 @@ Audit these remaining CLI callers and their containing test or hook deadlines. B
 - `packages/provisioning/src/cli-entry.test.ts`: a 120-second build limit leaves no allowance
   beyond the metadata subprocess budgets for compilation. No timeout failure was reproduced.
 
+
+
+## Retired settings after a source escape
+
+On 1 November, A696's first normal pre-push run failed
+`scripts/no-till-as-issuer.test.ts`: the old branch retained an obsolete location override and
+one fiscal fixture still used a till identifier. Both are corrected without changing the guard.
+A whole-source text search found the same retired override in another fixture's template literal,
+immediately after an escaped newline. `inspectSource` reports the plain spelling but misses the
+escaped-prefix form: the raw source has no word boundary where the decoded value has a newline.
+The corrected fixture preserves its wrong-node restore input and all existing assertions.
+
+Extend the spelling check to decoded string/template values, without dropping raw-text checks or
+its legitimate negative/historical controls. Add the missing escaped-prefix case and a positive
+control first. This branch records the scanner gap; it does not claim a new guard fix.
+The two-way probe and blocked-hook output are in Lane E
+`receipts/a696-resume-20261101/retired-setting-escape-control.log` and `push-1.log`.

@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { closingEditsForTest } from "./testing/party-close-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -162,8 +163,20 @@ async function act(
   id: string,
   attendance: AttendanceRecorder = recordAttendanceFact,
 ) {
-  if (action === "place") return placeOrder(deps(attendance), v.cfg, id, worker);
-  return cancelPlacedOrder(deps(attendance), v.cfg, id, "Guest left", operator());
+  if (action === "place")
+    return placeOrder(
+      { ...deps(attendance), admission: testTradingAdmission() },
+      v.cfg,
+      id,
+      worker,
+    );
+  return cancelPlacedOrder(
+    { ...deps(attendance), admission: testTradingAdmission() },
+    v.cfg,
+    id,
+    "Guest left",
+    operator(),
+  );
 }
 describe("amendment attendance in the command transaction", () => {
   it.each(["place", "cancel"] as const)(
@@ -171,7 +184,12 @@ describe("amendment attendance in the command transaction", () => {
     async (action) => {
       const id = await parked();
       if (action === "cancel")
-        await placeOrder({ db: suite.db, backend: v.backend, clock: v.clock }, v.cfg, id, OPERATOR);
+        await placeOrder(
+          { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
+          v.cfg,
+          id,
+          OPERATOR,
+        );
       await act(action, id);
       await expectFact(id, action === "place" ? "order_placed" : "order_cancelled");
       expect(
@@ -184,7 +202,12 @@ describe("amendment attendance in the command transaction", () => {
     async (action) => {
       const id = await parked();
       if (action === "cancel")
-        await placeOrder({ db: suite.db, backend: v.backend, clock: v.clock }, v.cfg, id, OPERATOR);
+        await placeOrder(
+          { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
+          v.cfg,
+          id,
+          OPERATOR,
+        );
       const before = await state();
       await expect(act(action, id, refuse)).rejects.toMatchObject({ code: "attendance.invalid" });
       expect(await state()).toEqual(before);
@@ -195,7 +218,12 @@ describe("amendment attendance in the command transaction", () => {
     async (action) => {
       const id = await parked();
       if (action === "cancel")
-        await placeOrder({ db: suite.db, backend: v.backend, clock: v.clock }, v.cfg, id, OPERATOR);
+        await placeOrder(
+          { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
+          v.cfg,
+          id,
+          OPERATOR,
+        );
       await act(action, id);
       const before = await state();
       vi.spyOn(v.clock, "now").mockImplementation(() => {
@@ -240,9 +268,22 @@ describe("amendment attendance in the command transaction", () => {
   });
   it("an empty cancellation reason changes neither command nor attendance", async () => {
     const id = await parked();
-    await placeOrder({ db: suite.db, backend: v.backend, clock: v.clock }, v.cfg, id, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
+      v.cfg,
+      id,
+      OPERATOR,
+    );
     const before = await state();
-    await expect(cancelPlacedOrder(deps(), v.cfg, id, " ", operator())).rejects.toMatchObject({
+    await expect(
+      cancelPlacedOrder(
+        { ...deps(), admission: testTradingAdmission() },
+        v.cfg,
+        id,
+        " ",
+        operator(),
+      ),
+    ).rejects.toMatchObject({
       code: "working_order.reason_required",
     });
     expect(await state()).toEqual(before);
@@ -250,8 +291,14 @@ describe("amendment attendance in the command transaction", () => {
   it("legacy place and cancel omit attendance writes", async () => {
     const id = await parked();
     const legacy = { db: suite.db, backend: v.backend, clock: v.clock };
-    await placeOrder(legacy, v.cfg, id, worker);
-    await cancelPlacedOrder(legacy, v.cfg, id, "Guest left", operator());
+    await placeOrder({ ...legacy, admission: testTradingAdmission() }, v.cfg, id, worker);
+    await cancelPlacedOrder(
+      { ...legacy, admission: testTradingAdmission() },
+      v.cfg,
+      id,
+      "Guest left",
+      operator(),
+    );
     expect((await state()).facts).toEqual([]);
     expect((await state()).days).toEqual([]);
     expect((await state()).amendments.map((r) => r.kind)).toEqual([
@@ -270,7 +317,10 @@ describe("amendment attendance in the command transaction", () => {
         run(async (tx) =>
           recordUnpaidDeparture(
             tx,
-            deps(rejected ? refuse : recordAttendanceFact),
+            {
+              ...deps(rejected ? refuse : recordAttendanceFact),
+              admission: testTradingAdmission(),
+            },
             v.cfg,
             partyId,
             {
@@ -316,11 +366,17 @@ describe("amendments without workforce installed", () => {
       lines: [{ menuItemId: venue.counterItem("Burger"), quantity: "1" }],
     });
     const legacy = { db: withoutWorkforce.db, backend: venue.backend, clock: venue.clock };
-    await placeOrder(legacy, venue.cfg, id, OPERATOR);
-    await cancelPlacedOrder(legacy, venue.cfg, id, "Guest left", {
-      ...venue.operator,
-      attempts: overridePinAttempts(createPinThrottle(), "disabled"),
-    });
+    await placeOrder({ ...legacy, admission: testTradingAdmission() }, venue.cfg, id, OPERATOR);
+    await cancelPlacedOrder(
+      { ...legacy, admission: testTradingAdmission() },
+      venue.cfg,
+      id,
+      "Guest left",
+      {
+        ...venue.operator,
+        attempts: overridePinAttempts(createPinThrottle(), "disabled"),
+      },
+    );
     expect(
       (await withoutWorkforce.db.select().from(workingOrders).where(eq(workingOrders.id, id)))[0]!
         .status,

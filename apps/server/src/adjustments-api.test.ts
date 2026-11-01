@@ -1,4 +1,5 @@
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
@@ -532,6 +533,7 @@ describe("approval through the route (plan D6)", () => {
       mountTillApi(
         app,
         {
+          admission: testTradingAdmission(),
           db: venue.db,
           backend: venue.backend,
           clock: venue.clock,
@@ -786,7 +788,7 @@ describe("a cancel's approval through the route (A758 D12, D13)", () => {
 
   it("applies a staff member's cancel of an unsent dish with no PIN", async () => {
     const { billId, revision } = await billWith(venue, []);
-    await updateHeldOrder({ db: venue.db }, venue.cfg, billId, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db: venue.db }, venue.cfg, billId, {
       expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
       revision,
       lines: [{ menuItemId: venue.item("Burger"), quantity: "1" }],
@@ -1250,6 +1252,7 @@ describe("what the till reads", () => {
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: venue.db,
         backend: venue.backend,
         clock: venue.clock,

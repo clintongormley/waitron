@@ -46,6 +46,9 @@ not link to or serve those guides.
 
 ## Make the new series
 
+If the backup has no usable time zone, the clock comparison and a reissued recovery pack
+show UTC. Recovery keeps the saved zone unchanged.
+
 There is no "last hour" question (`recovery-hour.browser.test.ts`, "asks no last-hour question and
 offers no clock confirmation"). Press **Compare clocks**: the box compares its own clock with the
 clock of the device showing the page and with the internet's, by itself; nobody types a time. A

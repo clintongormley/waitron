@@ -1,4 +1,5 @@
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
@@ -95,6 +96,7 @@ async function compOne(venue: Venue) {
       tx,
       venue.cfg,
       {
+        admission: testTradingAdmission(),
         expectedEdit: await readBillEditState(tx, venue.party.tabId),
         orderId: venue.party.tabId,
         submissionId: randomUUID(),

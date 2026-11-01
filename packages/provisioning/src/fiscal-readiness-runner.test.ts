@@ -587,6 +587,7 @@ it.each([false, true])(
     const { request } = await import("../test/first-setup-request.js");
     const requestVenue = {
       ...request,
+      location: { ...request.location, timeZone: "Atlantic/Canary" },
       admin: {
         displayName: "Elena",
         email: "elena@example.test",
@@ -739,5 +740,172 @@ it("a supplied disposable hour keeps its node and one sample across a readiness 
     ]);
   } finally {
     sample.close();
+  }
+});
+
+describe("saved-zone readiness clocks", () => {
+  function argsFor(stateDir: string) {
+    const selected = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
+    const modules = enabledModules(ALL_MODULES, selected.config);
+    const contribution = {
+      ...selected.contribution!,
+      activationReadiness: "accepted-test-submission" as const,
+      drain: vi.fn(async () => ({ ...emptyDrainResult(), recordsAccepted: 1 })),
+    };
+    const clock = vi.fn(() => ({
+      now: () => ({
+        instant: new Date("2026-07-14T23:30:00Z"),
+        offsetMinutes: 0,
+        confident: true,
+        confidence: "anchored" as const,
+        anchorAgeSeconds: 0,
+      }),
+      anchor: () => {
+        throw new Error("unused anchor");
+      },
+      currentAnchor: () => null,
+    }));
+    return {
+      stateDir,
+      venue,
+      modules,
+      contribution,
+      clock,
+      secret: undefined,
+      ring: {} as never,
+      readinessInput: fiscalReadinessInput({
+        venue,
+        contribution,
+        secret: undefined,
+        moduleVersions: { core: 1 },
+        applicationVersion: "zone-clock-test",
+      }),
+      now: () => new Date("2026-08-20T12:00:00Z"),
+    };
+  }
+  function samplePath(args: ReturnType<typeof argsFor>) {
+    return join(
+      args.stateDir,
+      `fiscal-readiness-db-${fiscalReadinessDatabaseKey(args.readinessInput)}`,
+      "venue.db",
+    );
+  }
+  it("acquires one issue clock and dates the sample from its own London zone, independent of tender time", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "readiness-saved-clock-"));
+    dirs.push(stateDir);
+    const args = argsFor(stateDir);
+    await expect(submit(args)).resolves.toEqual({ status: "accepted" });
+    expect(args.clock).toHaveBeenCalledTimes(1);
+    const db = new DatabaseSync(samplePath(args));
+    try {
+      expect(db.prepare("select issued_at, issued_offset_minutes from sales").all()).toEqual([
+        { issued_at: "2026-07-14T23:30:00.000Z", issued_offset_minutes: 60 },
+      ]);
+    } finally {
+      db.close();
+    }
+    args.clock.mockClear();
+    await expect(submit(args)).resolves.toEqual({ status: "accepted" });
+    expect(args.clock).not.toHaveBeenCalled();
+  });
+  it.each(["Invalid/Zone", ""])(
+    "refuses a reused sample's saved %j zone before drain",
+    async (zone) => {
+      const stateDir = await mkdtemp(join(tmpdir(), "readiness-reused-zone-"));
+      dirs.push(stateDir);
+      const args = argsFor(stateDir);
+      await submit(args);
+      const db = new DatabaseSync(samplePath(args));
+      let before: unknown[];
+      try {
+        before = db.prepare("select * from sales").all();
+        db.prepare("update locations set time_zone = ?").run(zone);
+      } finally {
+        db.close();
+      }
+      args.contribution.drain.mockClear();
+      args.clock.mockClear();
+      await expect(submit(args)).rejects.toMatchObject({
+        code: "venue.time_zone_invalid",
+        params: { reason: zone === "" ? "missing" : "invalid" },
+      });
+      expect(args.contribution.drain).not.toHaveBeenCalled();
+      expect(args.clock).not.toHaveBeenCalled();
+      const after = new DatabaseSync(samplePath(args));
+      try {
+        expect(after.prepare("select * from sales").all()).toEqual(before!);
+      } finally {
+        after.close();
+      }
+    },
+  );
+  it("refuses a fresh bad zone without issuing a sample", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "readiness-fresh-zone-"));
+    dirs.push(stateDir);
+    const args = argsFor(stateDir);
+    await expect(
+      submit({
+        ...args,
+        venue: { ...venue, location: { ...venue.location, timeZone: "Invalid/Zone" } },
+      }),
+    ).rejects.toMatchObject({ code: "venue.time_zone_invalid" });
+    expect(args.clock).not.toHaveBeenCalled();
+    expect(args.contribution.drain).not.toHaveBeenCalled();
+  });
+});
+
+it("refuses the saved bad zone of a reused readiness venue that has no sample yet", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "readiness-empty-reused-zone-"));
+  dirs.push(stateDir);
+  const selected = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
+  const modules = enabledModules(ALL_MODULES, selected.config);
+  const contribution = {
+    ...selected.contribution!,
+    activationReadiness: "accepted-test-submission" as const,
+    drain: vi.fn(async () => emptyDrainResult()),
+  };
+  const input = fiscalReadinessInput({
+    venue,
+    contribution,
+    secret: undefined,
+    moduleVersions: { core: 1 },
+    applicationVersion: "empty-reuse",
+  });
+  const directory = join(stateDir, `fiscal-readiness-db-${fiscalReadinessDatabaseKey(input)}`);
+  const { applyMigrations, manifestSets, migrationOptionsFor } =
+    await import("@waitron/migrations");
+  const { openVenueDatabase } = await import("@waitron/db");
+  const { applyVenue, planVenue } = await import("@waitron/provisioning");
+  await applyMigrations(directory, migrationOptionsFor(manifestSets(), null));
+  const store = await openVenueDatabase(directory);
+  try {
+    await applyVenue(planVenue(venue, modules), { db: store.venue, modules });
+    const { sql } = await import("drizzle-orm");
+    await store.venue.execute(sql`update locations set time_zone = 'Invalid/Zone'`);
+  } finally {
+    await store.close();
+  }
+  const clock = vi.fn(() => {
+    throw new Error("must not acquire issue clock");
+  });
+  await expect(
+    submit({
+      stateDir,
+      venue,
+      modules,
+      contribution,
+      readinessInput: input,
+      secret: undefined,
+      ring: {} as never,
+      clock,
+    }),
+  ).rejects.toMatchObject({ code: "venue.time_zone_invalid" });
+  expect(clock).not.toHaveBeenCalled();
+  expect(contribution.drain).not.toHaveBeenCalled();
+  const rows = new DatabaseSync(join(directory, "venue.db"));
+  try {
+    expect(rows.prepare("select * from sales").all()).toEqual([]);
+  } finally {
+    rows.close();
   }
 });

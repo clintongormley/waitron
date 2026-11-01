@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -65,11 +66,20 @@ async function fixture(paid = true, release: "hold" | "fire" = "hold", extras = 
     { release, shape: "grouped" },
   );
   if (paid)
-    await payWorkingOrder({ db: venue.db, backend: venue.backend, clock: venue.clock }, venue.cfg, {
-      id: p.billId,
-      tender: { method: "cash", amount: "26.00" },
-      lines: [],
-    });
+    await payWorkingOrder(
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
+      venue.cfg,
+      {
+        id: p.billId,
+        tender: { method: "cash", amount: "26.00" },
+        lines: [],
+      },
+    );
   const [party] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
   return {
     ...p,

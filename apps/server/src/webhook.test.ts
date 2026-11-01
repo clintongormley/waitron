@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, withTransaction, workingOrders } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, nodes, withTransaction, workingOrders } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
@@ -15,6 +15,7 @@ import { createHealthState, healthApp } from "./health.js";
 import { provisionBillVenue, send, tabWith } from "./testing/bill-venue.js";
 import { hostedWebhookSecretFrom, mountWebhook } from "./webhook.js";
 import type { WebhookDeps } from "./webhook.js";
+import { TradingAdmission } from "./trading-admission.js";
 import {
   signStripeBody,
   stripeSessionEvent,
@@ -40,10 +41,13 @@ function collect(
 }
 
 function deps(db: Database): WebhookDeps {
+  const admission = new TradingAdmission();
+  admission.admit();
   return {
     db,
     ring,
     nodeId: "11111111-1111-4111-8111-111111111111",
+    admission,
     environment: "preproduction",
     // The HMAC double ignores the secret key; verification depends only on `webhookSecret`.
     makeStripe: () => verifyingStripe(),
@@ -68,6 +72,11 @@ async function seedInitiated(
     .values({ name: "Counter", invoiceLocales: ["es"], operationDescription: "Retail" })
     .returning({ id: locations.id });
   const { deviceId } = await seedDevice(db, { locationId: loc!.id });
+  await db.insert(nodes).values({
+    id: "11111111-1111-4111-8111-111111111111",
+    locationId: loc!.id,
+    name: "Webhook node",
+  });
   const [wo] = await db
     .insert(workingOrders)
     .values({ source: "device", deviceId, locationId: loc!.id, orderNumber: 1 })
@@ -239,7 +248,7 @@ describe("while the box's clock reads behind its last sale", () => {
       }),
     );
     const app = new Hono();
-    mountWebhook(app, deps(venueSuite.db), collect([]));
+    mountWebhook(app, { ...deps(venueSuite.db), nodeId: venue.cfg.nodeId }, collect([]));
 
     const body = stripeSessionEvent({
       type: "checkout.session.completed",
@@ -255,7 +264,7 @@ describe("while the box's clock reads behind its last sale", () => {
   });
 });
 
-describe("the signature is the sole gate", () => {
+describe("signature verification", () => {
   it("refuses a bad signature with 400 and settles nothing", async () => {
     const seeded = await seedInitiated(suite.db, { webhookSecret: "whsec_gate" });
     const app = new Hono();

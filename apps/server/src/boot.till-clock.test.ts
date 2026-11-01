@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { once } from "node:events";
 import { request as httpsRequest } from "node:https";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
@@ -158,6 +159,7 @@ describe("mounted till clock source", () => {
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: suite.db,
         cfg: venue.cfg,
         clock: { ...system, now: () => ({ ...system.now(), instant: at }) },
@@ -196,6 +198,7 @@ describe("clock handler absence with identity and workforce absent", () => {
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: suite.db,
         backend: makeFiscalBackend(
           ALL_MODULES.filter((m) => m.name === "fiscal-none"),

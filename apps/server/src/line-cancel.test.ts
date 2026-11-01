@@ -1,4 +1,5 @@
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
@@ -99,11 +100,15 @@ async function servePaid(order: Fixture, quantity: string) {
 
 async function paidWithServing(quantity: string) {
   const order = await fixture();
-  await payWorkingOrder({ db: venue.db, backend: venue.backend, clock: venue.clock }, venue.cfg, {
-    id: order.billId,
-    tender: { method: "cash", amount: "36.00" },
-    lines: [],
-  });
+  await payWorkingOrder(
+    { admission: testTradingAdmission(), db: venue.db, backend: venue.backend, clock: venue.clock },
+    venue.cfg,
+    {
+      id: order.billId,
+      tender: { method: "cash", amount: "36.00" },
+      lines: [],
+    },
+  );
   await servePaid(order, quantity);
   return order;
 }
@@ -130,7 +135,14 @@ async function askFor(
 }
 function cancel(order: Fixture, ask: CancelItemAsk) {
   return inTx(venue, (tx) =>
-    cancelItem(tx, venue.cfg, order.partyId, order.parent.id, ask, venue.staffId),
+    cancelItem(
+      tx,
+      venue.cfg,
+      order.partyId,
+      order.parent.id,
+      { ...ask, admission: testTradingAdmission() },
+      venue.staffId,
+    ),
   );
 }
 async function snapshot(order: Fixture) {
@@ -384,6 +396,7 @@ describe("Cancel item service command", () => {
         tx,
         venue.cfg,
         {
+          admission: testTradingAdmission(),
           expectedEdit: original.expectedEdit,
           orderId: order.billId,
           expectedRevision: original.expectedBillRevision,
@@ -863,7 +876,12 @@ describe("Cancel item service command", () => {
     async (release) => {
       const order = await fixture(release);
       await payWorkingOrder(
-        { db: venue.db, backend: venue.backend, clock: venue.clock },
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
         venue.cfg,
         {
           id: order.billId,
@@ -957,12 +975,26 @@ describe("Cancel item service command", () => {
     const before = await snapshot(order);
     await expect(
       inTx(venue, (tx) =>
-        cancelItem(tx, venue.cfg, order.partyId, order.extra!.id, ask, venue.staffId),
+        cancelItem(
+          tx,
+          venue.cfg,
+          order.partyId,
+          order.extra!.id,
+          { ...ask, admission: testTradingAdmission() },
+          venue.staffId,
+        ),
       ),
     ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "lineId" } });
     await expect(
       inTx(venue, (tx) =>
-        cancelItem(tx, venue.cfg, other.partyId, order.parent.id, ask, venue.staffId),
+        cancelItem(
+          tx,
+          venue.cfg,
+          other.partyId,
+          order.parent.id,
+          { ...ask, admission: testTradingAdmission() },
+          venue.staffId,
+        ),
       ),
     ).rejects.toMatchObject({ code: "bill.other_party" });
     expect(await snapshot(order)).toEqual(before);
@@ -993,7 +1025,12 @@ describe("Cancel item service command", () => {
       try {
         const order = await fixture("hold");
         await payWorkingOrder(
-          { db: venue.db, backend: venue.backend, clock: venue.clock },
+          {
+            admission: testTradingAdmission(),
+            db: venue.db,
+            backend: venue.backend,
+            clock: venue.clock,
+          },
           venue.cfg,
           {
             id: order.billId,
@@ -1092,7 +1129,12 @@ describe("Cancel item service command", () => {
         { release: "hold" },
       );
       await payWorkingOrder(
-        { db: venue.db, backend: venue.backend, clock: venue.clock },
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
         venue.cfg,
         { id: order.billId, tender: { method: "cash", amount: "47.99" }, lines: [] },
       );
@@ -1127,6 +1169,7 @@ describe("Cancel item service command", () => {
             order.partyId,
             line.id,
             {
+              admission: testTradingAdmission(),
               quantity: "1",
               expectedEdit: await readBillEditState(tx, order.billId),
               outcome: "keep_charge",
@@ -1175,7 +1218,14 @@ describe("Cancel item service command", () => {
     const failure = new Error("rollback after cancellation");
     await expect(
       inTx(venue, async (tx) => {
-        await cancelItem(tx, venue.cfg, order.partyId, order.parent.id, ask, venue.staffId);
+        await cancelItem(
+          tx,
+          venue.cfg,
+          order.partyId,
+          order.parent.id,
+          { ...ask, admission: testTradingAdmission() },
+          venue.staffId,
+        );
         throw failure;
       }),
     ).rejects.toBe(failure);
@@ -1192,7 +1242,15 @@ describe("Cancel item service command", () => {
     const attendance = { recorder: recordAttendanceFact, clock: venue.clock };
     const command = () =>
       inTx(venue, (tx) =>
-        cancelItem(tx, venue.cfg, order.partyId, order.parent.id, ask, venue.staffId, attendance),
+        cancelItem(
+          tx,
+          venue.cfg,
+          order.partyId,
+          order.parent.id,
+          { ...ask, admission: testTradingAdmission() },
+          venue.staffId,
+          attendance,
+        ),
       );
     await command();
     const facts = await inTx(venue, (tx) => tx.select().from(attendanceOperationFacts));
@@ -1257,11 +1315,20 @@ describe("Cancel item service command", () => {
 
 describe("What a cancel records for refunds", () => {
   async function pay(billId: string, amount: string) {
-    await payWorkingOrder({ db: venue.db, backend: venue.backend, clock: venue.clock }, venue.cfg, {
-      id: billId,
-      tender: { method: "cash", amount },
-      lines: [],
-    });
+    await payWorkingOrder(
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
+      venue.cfg,
+      {
+        id: billId,
+        tender: { method: "cash", amount },
+        lines: [],
+      },
+    );
   }
   async function adjust(order: Fixture, args: { action: "comp" }) {
     const ask = await askFor(order);
@@ -1270,6 +1337,7 @@ describe("What a cancel records for refunds", () => {
         tx,
         venue.cfg,
         {
+          admission: testTradingAdmission(),
           expectedEdit: ask.expectedEdit,
           orderId: order.billId,
           expectedRevision: ask.expectedBillRevision,
@@ -1471,6 +1539,7 @@ describe("What a cancel records for refunds", () => {
         order.billId,
         [{ lineNo: order.parent.lineNo, quantity: "2" }],
         {
+          admission: testTradingAdmission(),
           partyId: order.partyId,
           expectedPartyRevision: party!.revision,
           operatorId: venue.staffId,

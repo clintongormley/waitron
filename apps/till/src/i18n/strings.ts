@@ -7,6 +7,10 @@ export const en = {
     "The till is served over HTTPS with the venue box's own certificate, which this device does not recognise yet. Install the box's certificate, then reopen the till.",
   "trust.open_setup": "Open the setup page for instructions",
 
+  "venue.time_zone_wait": "Trading is starting. Wait and try again.",
+  "venue.time_zone_confirm": "Trading is stopped. Ask a manager to confirm the venue time zone.",
+  "venue.time_zone_restart": "The time zone was saved. Wait for restart, then reload.",
+
   "service.open": "Open",
   "service.open_until": "Open · until {time}",
   "service.printer_unknown": "Receipt printer status unknown",
@@ -1866,6 +1870,12 @@ export const es: Record<StringKey, string> = {
   "trust.explanation":
     "La caja se sirve por HTTPS con el certificado del servidor del local, que este dispositivo todavía no reconoce. Instala el certificado del servidor y vuelve a abrir la caja.",
   "trust.open_setup": "Abre la página de configuración para ver las instrucciones",
+
+  "venue.time_zone_wait": "El servicio se está iniciando. Espera y vuelve a intentarlo.",
+  "venue.time_zone_confirm":
+    "El servicio está detenido. Pide a un responsable que confirme la zona horaria del local.",
+  "venue.time_zone_restart":
+    "La zona horaria se ha guardado. Espera al reinicio y vuelve a cargar.",
 
   "service.open": "Abierto",
   "service.open_until": "Abierto · hasta las {time}",

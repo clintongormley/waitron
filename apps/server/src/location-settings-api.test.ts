@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { eq } from "drizzle-orm";
 import { departments, departmentReceipts } from "@waitron/venue-service";
 import { mountDepartmentReceiptSettingsApi } from "./department-receipt-api.js";
@@ -116,11 +117,15 @@ async function sell() {
     resolveClient: () => Promise.reject(new Error("A local sale must not contact AEAT")),
   });
   const saleCfg = await deviceRequestCfg(suite.db, venue.cfg);
-  return recordTillSale({ db: suite.db, backend, clock }, saleCfg, {
-    zoneId: offers.zoneId,
-    lines: [{ menuItemId: offers.offerFor(venue.cafeId), quantity: "1" }],
-    tender: { method: "cash", amount: "1.50" },
-  });
+  return recordTillSale(
+    { admission: testTradingAdmission(), db: suite.db, backend, clock },
+    saleCfg,
+    {
+      zoneId: offers.zoneId,
+      lines: [{ menuItemId: offers.offerFor(venue.cafeId), quantity: "1" }],
+      tender: { method: "cash", amount: "1.50" },
+    },
+  );
 }
 
 describe("department invoice settings", () => {

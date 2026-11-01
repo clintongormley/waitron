@@ -1,4 +1,6 @@
 import { withIssuanceTransaction } from "@waitron/core";
+import { prepareIssueClock } from "@waitron/fiscal";
+import { requireEconomicWrite } from "./trading-admission.js";
 import { parseBillEditExpected, requireOrderBillEditor } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
@@ -63,7 +65,7 @@ import type {
   BillFunds,
 } from "./bill-allocation.js";
 import { issuancePass } from "./issuance-pass.js";
-import { issueMoment } from "./issue-moment.js";
+import { issueMoment, pinnedAt } from "./issue-moment.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
@@ -667,6 +669,7 @@ async function issueWhenFullyPaid(
     guestCount?: GuestCountChoice;
   },
 ): Promise<{ invoice: TillSaleResult | null; total?: Decimal }> {
+  await requireEconomicWrite(tx, cfg, deps.admission);
   const notYet = { invoice: null, total: options.total };
   const [order] = await tx
     .select({
@@ -696,7 +699,7 @@ async function issueWhenFullyPaid(
     refuseUnsentUnavailable: options.moneyMoved !== true,
   });
   const { priced, clock } = issueMoment(
-    deps.clock,
+    await prepareIssueClock(tx, cfg, deps.clock),
     await issuancePass(tx, cfg, workingOrderId, stored),
     deps.backend,
   );
@@ -1059,13 +1062,13 @@ export async function findSubmission(
  */
 async function beginBillPayment(
   tx: Transaction,
-  backend: TillSaleDeps["backend"],
+  deps: BillPaymentDeps,
   cfg: DeviceRequestConfig,
   workingOrderId: string,
   req: BillPaymentRequest,
   operator: { personId: string; sessionId: string },
   state: "received" | "pending",
-  reading: { instant: Date; offsetMinutes: number },
+  read: TillSaleDeps["clock"]["now"],
   refusals: { diskFull: () => boolean; log?: Logger },
   attendance?: AttendanceRecorder,
 ): Promise<{ replay: PaymentRow } | { payment: PaymentRow; total: Decimal }> {
@@ -1086,7 +1089,11 @@ async function beginBillPayment(
   if (earlier.refund !== undefined) {
     throw new AppError("submission.id_reused", { submissionId: req.submissionId });
   }
-  await backend.refuseWhileClockBehind(tx, reading);
+  deps.admission.require();
+  const reading = read();
+  if (!Number.isFinite(reading.instant.getTime()))
+    throw new AppError("venue.time_zone_conversion_failed", { reason: "invalid_instant" });
+  await deps.backend.refuseWhileClockBehind(tx, reading);
 
   await requireOpenBill(tx, workingOrderId);
   await requireOrderBillEditor(tx, workingOrderId, {
@@ -1099,9 +1106,9 @@ async function beginBillPayment(
   const held = await readPaymentMoney(tx, [workingOrderId]);
   const { request, items } = await allocationRequestFor(tx, workingOrderId, req, held);
   const total = await storedOrderTotal(tx, workingOrderId);
-  backend.assertRecordableAt(reading);
+  deps.backend.assertRecordableAt(reading);
   if (refusals.diskFull()) refuseForDiskStop(refusals.log, workingOrderId);
-  await selectOrderInvoice(tx, backend, cfg, workingOrderId, total);
+  await selectOrderInvoice(tx, deps.backend, cfg, workingOrderId, total);
   await readSaleOperationDescription(tx, cfg, { kind: "order", orderId: workingOrderId });
   const allocation = confirmAllocation(
     fundsOf(workingOrderId, total, held),
@@ -1110,6 +1117,8 @@ async function beginBillPayment(
     { applied: decimal(req.applied), tip: decimal(req.tip) },
   );
 
+  await requireEconomicWrite(tx, cfg, deps.admission);
+  if (state === "pending") await prepareIssueClock(tx, cfg, pinnedAt(deps.clock, reading));
   const [payment] = await tx
     .insert(billPayments)
     .values({
@@ -1193,22 +1202,21 @@ export async function takeBillPayment(
   return withIssuanceTransaction(
     deps.db,
     async (tx) => {
-      const reading = deps.clock.now();
-      const receivedAt = reading.instant;
       const begun = await beginBillPayment(
         tx,
-        deps.backend,
+        deps,
         cfg,
         workingOrderId,
         req,
         operator,
         "received",
-        reading,
+        () => deps.clock.now(),
         { diskFull: () => preRead || (deps.disk?.noted() ?? false), log: deps.log },
         deps.attendance,
       );
       if ("replay" in begun) return resultOf(tx, deps, cfg, begun.replay, null);
       const { payment } = begun;
+      const receivedAt = new Date(payment.receivedAt!);
       const printers = printerLookup(tx, cfg.origin);
       if (req.method === "card") {
         await recordManualCardPayment(tx, {
@@ -1351,6 +1359,7 @@ export async function completeBillPayment(
   attestation?: Attestation,
   guestCount?: GuestCountChoice,
 ): Promise<{ payment: PaymentRow; invoice: TillSaleResult | null; total?: Decimal }> {
+  await requireEconomicWrite(tx, cfg, deps.admission);
   const [payment] = await tx
     .update(billPayments)
     .set({
@@ -1444,13 +1453,13 @@ export async function takeReaderBillPayment(
     const begun = await withTransaction(deps.db, async (tx) => {
       const started = await beginBillPayment(
         tx,
-        deps.backend,
+        deps,
         cfg,
         workingOrderId,
         req,
         operator,
         "pending",
-        deps.clock.now(),
+        () => deps.clock.now(),
         { diskFull: () => preRead || (deps.disk?.noted() ?? false), log: deps.log },
         deps.attendance,
       );
@@ -1487,9 +1496,16 @@ export async function takeReaderBillPayment(
       });
     } catch (error) {
       if (isAppError(error) && REFUSED_START.has(error.code)) {
-        await withTransaction(deps.db, (tx) =>
-          failBillPayment(tx, payment.id, deps.clock.now().instant, undefined, deps.attendance),
-        );
+        await withTransaction(deps.db, async (tx) => {
+          await requireEconomicWrite(tx, cfg, deps.admission);
+          return failBillPayment(
+            tx,
+            payment.id,
+            deps.clock.now().instant,
+            undefined,
+            deps.attendance,
+          );
+        });
       }
       throw collectFailure(deps, workingOrderId, error);
     }
@@ -1519,6 +1535,7 @@ export async function takeReaderBillPayment(
       );
     }
     return await withTransaction(deps.db, async (tx) => {
+      await requireEconomicWrite(tx, cfg, deps.admission);
       if (!NOT_CHARGED.has(result.state)) {
         return { ...(await resultOf(tx, deps, cfg, payment, null)), outcome: "timeout" };
       }

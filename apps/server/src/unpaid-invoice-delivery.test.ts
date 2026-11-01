@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
@@ -131,7 +132,14 @@ async function syntheticSelection(orderId: string) {
 
 function issue(tx: Transaction, orderId: string) {
   return priceForIssuance(tx, venue.clock, venue.backend, venue.cfg, orderId).then((invoice) =>
-    issueUnpaidInvoice(tx, venue.backend, venue.cfg, invoice, venue.operatorId),
+    issueUnpaidInvoice(
+      tx,
+      venue.backend,
+      venue.cfg,
+      invoice,
+      venue.operatorId,
+      testTradingAdmission(),
+    ),
   );
 }
 

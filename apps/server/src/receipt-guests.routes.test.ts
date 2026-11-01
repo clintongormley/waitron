@@ -1,4 +1,5 @@
 import { locationId as brandLocationId } from "@waitron/shared";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { writePartyAllergy } from "@waitron/venue-service";
 import { observedWholePaymentBody } from "./testing/whole-payment-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -216,6 +217,7 @@ async function venue(db: Database): Promise<Venue> {
   mountTillApi(
     app,
     {
+      admission: testTradingAdmission(),
       db,
       backend,
       clock,
@@ -428,7 +430,7 @@ async function placedCounterOrder(v: Venue): Promise<string> {
     zoneId: v.counterZone,
     operatorId: v.staffId,
   });
-  await placeOrder(deps, v.cfg, id, v.staffId);
+  await placeOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, id, v.staffId);
   return id;
 }
 
@@ -453,7 +455,12 @@ async function collect(
 /** {@link partyOfFourBill}, placed, with no invoice yet. */
 async function placedPartyBill(v: Venue): Promise<string> {
   const billId = await partyOfFourBill(v);
-  await placeOrder({ db: v.db, backend: v.backend, clock }, v.cfg, billId, v.staffId);
+  await placeOrder(
+    { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock },
+    v.cfg,
+    billId,
+    v.staffId,
+  );
   return billId;
 }
 
@@ -659,7 +666,13 @@ async function lostCapture(v: Venue, id: string): Promise<void> {
 /** Files a captured payment as the recovery loop and the manager's resolve do: no till request, no guests. */
 async function recover(v: Venue, id: string) {
   return payWorkingOrderIntegratedOrchestration(
-    { db: v.db, backend: v.backend, clock, provider: new SimulatorPaymentProvider(v.db) },
+    {
+      admission: testTradingAdmission(),
+      db: v.db,
+      backend: v.backend,
+      clock,
+      provider: new SimulatorPaymentProvider(v.db),
+    },
     v.cfg,
     { id, lines: [] },
   );
@@ -710,7 +723,12 @@ describe("/api/pay with nothing to charge on a placed party bill", () => {
   it("stores the chosen count", async () => {
     const v = await venue(suite.db);
     const billId = await partyBill(v, 4, { menuItemId: v.tableFreeItemId, quantity: "1" });
-    await placeOrder({ db: v.db, backend: v.backend, clock }, v.cfg, billId, v.staffId);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock },
+      v.cfg,
+      billId,
+      v.staffId,
+    );
     const pay = await payByReader(v, { lines: [], guestCount: 2 }, { id: billId });
     expect(pay.status).toBe(200);
     expect((pay.body as { outcome: string }).outcome).toBe("captured");

@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -255,6 +256,7 @@ async function setup(
   mountPaymentsApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: suite.db,
       backend,
       clock,
@@ -647,7 +649,14 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
     expect(saleIdsFor(orderId)).toEqual([]);
 
     const paid = await payWorkingOrderIntegrated(
-      { db: suite.db, backend, clock, provider: v.provider, readerRef: "reader_1" },
+      {
+        admission: testTradingAdmission(),
+        db: suite.db,
+        backend,
+        clock,
+        provider: v.provider,
+        readerRef: "reader_1",
+      },
       v.cfg,
       { id: orderId, lines: [] },
     );
@@ -836,7 +845,14 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
     const v = await setup({ client: new WaitingStripe() });
     const orderId = await openOrder(v);
     const paying = payWorkingOrderIntegrated(
-      { db: suite.db, backend, clock, provider: v.provider, readerRef: "reader_1" },
+      {
+        admission: testTradingAdmission(),
+        db: suite.db,
+        backend,
+        clock,
+        provider: v.provider,
+        readerRef: "reader_1",
+      },
       v.cfg,
       { id: orderId, lines: [] },
     );
@@ -1592,7 +1608,7 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
       }),
     };
     const paying = takeReaderBillPayment(
-      { db: suite.db, backend, clock, provider: card },
+      { admission: testTradingAdmission(), db: suite.db, backend, clock, provider: card },
       v.cfg,
       orderId,
       {
@@ -2222,7 +2238,12 @@ describe("whole-order attendance on manager recovery", () => {
     };
     fake.stallNextCollect();
     expect(
-      await payWorkingOrderIntegrated(paymentDeps, v.cfg, { id: orderId, lines: [] }, worker!.id),
+      await payWorkingOrderIntegrated(
+        { ...paymentDeps, admission: testTradingAdmission() },
+        v.cfg,
+        { id: orderId, lines: [] },
+        worker!.id,
+      ),
     ).toEqual({ outcome: "timeout" });
     const [old] = await suite.db.select().from(attendanceOperationFacts);
     const [payment] = await suite.db.select().from(payments);
@@ -2235,7 +2256,7 @@ describe("whole-order attendance on manager recovery", () => {
         fake.stallNextCollect();
         expect(
           await payWorkingOrderIntegrated(
-            paymentDeps,
+            { ...paymentDeps, admission: testTradingAdmission() },
             v.cfg,
             { id: orderId, lines: [] },
             v.managerId,
@@ -2276,7 +2297,14 @@ describe("whole-order attendance on manager recovery", () => {
         fake.stallNextCollect();
         expect(
           await payWorkingOrderIntegrated(
-            { db: suite.db, backend, clock, provider: fake, attendance: recordAttendanceFact },
+            {
+              admission: testTradingAdmission(),
+              db: suite.db,
+              backend,
+              clock,
+              provider: fake,
+              attendance: recordAttendanceFact,
+            },
             v.cfg,
             { id: orderId, lines: [] },
             worker!.id,

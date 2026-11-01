@@ -29,6 +29,7 @@ import { createClockWitnessStore, type ClockWitnessStore } from "./clock-witness
 import { DEVICE_COOKIE } from "./device-session.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { mountTillApi } from "./till-api.js";
 import { systemClock } from "./till-backend.js";
@@ -282,6 +283,7 @@ async function stoppedBox(
     app,
     {
       db: venue.db,
+      admission: testTradingAdmission(),
       backend,
       clock,
       cfg: venue.cfg,

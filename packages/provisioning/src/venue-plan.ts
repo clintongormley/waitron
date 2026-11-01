@@ -1,3 +1,4 @@
+import { requireCountryTimeZone } from "@waitron/country-packs";
 import { AppError, assertSupportedLocale } from "@waitron/shared";
 import { resolveInstalledStarterLanguages, starterName } from "@waitron/country-packs";
 import { DEFAULT_DEVICE_PROFILES, type CapabilityFlag, type FormFactor } from "@waitron/layouts";
@@ -148,6 +149,7 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
       fiscalTerritory: request.location.fiscalTerritory,
     });
   }
+  const timeZone = requireCountryTimeZone(country, request.location.timeZone);
   // `persons.locale` only refuses an empty string, so a code the apps have no catalogue for would
   // be stored. `setPersonLocale` refuses one too.
   const adminLocale =
@@ -197,7 +199,7 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
       postalCode: request.location.postalCode,
       city: request.location.city,
       province: request.location.province,
-      timeZone: request.location.timeZone,
+      timeZone,
       dayCutover,
       stationName: starterName(STARTER_STATION_NAMES, DEFAULT_STATION_NAME, staffLanguage),
     },

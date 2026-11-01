@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import { tmpdir, type networkInterfaces } from "node:os";
@@ -1268,6 +1269,7 @@ describe("a deleted reader", () => {
     mountPaymentsApi(
       paymentsApp,
       {
+        admission: testTradingAdmission(),
         db: suite.db,
         backend: venue.backend,
         clock: venue.clock,

@@ -1,4 +1,5 @@
 export { VerifactuBackend } from "./backend.js";
+export { prepareFiscalVoidClock } from "./void-issue-clock.js";
 export type { VerifactuBackendOptions } from "./backend.js";
 export { FISCAL_ALERTS } from "./alerts.js";
 export { FISCAL_STAFF_NOTICES } from "./staff-notices.js";

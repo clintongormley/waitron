@@ -1,7 +1,8 @@
 import { VALENCIA_DEMO_TEXT, GALICIA_DEMO_TEXT } from "@waitron/country-packs/demo/testing";
 import { countryNameFor, receiptCountryNameFor } from "./registry.js";
 import { findAdministrativeArea, resolveFiscalJurisdiction } from "@waitron/country";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as registry from "./registry.js";
 import {
   COUNTRY_PACKS,
   FISCAL_TERRITORIES,
@@ -415,4 +416,49 @@ describe("recipient countries without installed packs", () => {
 it("names countries in English for a stored English receipt with English words", () => {
   expect(receiptCountryNameFor("ES", "en-GB")).toBe("Spain");
   expect(receiptCountryNameFor("FR", "en-GB")).toBe("France");
+});
+
+describe("country time-zone policy", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it.each([
+    ["ES", "Europe/Madrid", "Europe/Madrid"],
+    [" es ", " Atlantic/Canary ", "Atlantic/Canary"],
+    ["GB", "GB", "Europe/London"],
+    ["GB", "Europe/Belfast", "Europe/London"],
+  ])("allows %s creation with %s", (country, value, expected) => {
+    expect(registry.requireCountryTimeZone(country, value)).toBe(expected);
+  });
+
+  it.each([
+    ["ES", undefined, "missing"],
+    ["ES", null, "missing"],
+    ["ES", "", "missing"],
+    ["ES", "   ", "missing"],
+    ["ES", "Invalid/Zone", "invalid"],
+    ["ES", "+02:00", "invalid"],
+    ["ES", 12, "invalid"],
+    ["ES", "Europe/London", "country"],
+    ["ES", "US/Eastern", "country"],
+    ["GB", "Europe/Madrid", "country"],
+    ["XX", "Europe/London", "country"],
+  ])("refuses %s creation with %j for %s", (country, value, reason) => {
+    expect(() => registry.requireCountryTimeZone(country, value)).toThrowError(
+      expect.objectContaining({ code: "venue.time_zone_invalid", params: { reason } }),
+    );
+  });
+
+  it("does not enable unsupported fiscal territories when a zone is allowed", () => {
+    expect(registry.requireCountryTimeZone("ES", "Atlantic/Canary")).toBe("Atlantic/Canary");
+    expect(findFiscalModules("ES-canary")).toBeUndefined();
+    expect(getVenueSetupCountryPack("GB")).toBeUndefined();
+  });
+
+  it("propagates formatter failure instead of classifying the venue as repairable", () => {
+    const failure = new Error("formatter unavailable");
+    vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function () {
+      throw failure;
+    });
+    expect(() => registry.requireCountryTimeZone("ES", "Europe/Madrid")).toThrow(failure);
+  });
 });

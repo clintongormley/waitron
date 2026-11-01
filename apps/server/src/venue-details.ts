@@ -1,9 +1,9 @@
 import { eq, sql } from "drizzle-orm";
-import { locations, tenants, type Transaction } from "@waitron/db";
+import { locations, tenants, locationBusinessDaySettings, type Transaction } from "@waitron/db";
 import { findAdministrativeArea, findAdministrativeAreaByPostalCode } from "@waitron/country";
 import { getCountryPack } from "@waitron/country-packs";
 import { readBusinessDayClockModel } from "./business-day-start.js";
-import { AppError, cutoverForBusinessDay } from "@waitron/shared";
+import { AppError, classifyTimeZone, cutoverForBusinessDay } from "@waitron/shared";
 import type {
   VenueDetailField,
   VenueDetailsModel,
@@ -66,11 +66,8 @@ function equivalent(field: VenueDetailField, value: string | null, country: stri
       : (findAdministrativeArea(pack, normalized)?.code ?? normalized);
   }
   if (field === "timeZone") {
-    try {
-      return new Intl.DateTimeFormat("en-GB", { timeZone: normalized }).resolvedOptions().timeZone;
-    } catch {
-      return normalized;
-    }
+    const zone = classifyTimeZone(normalized);
+    return zone.kind === "valid" ? zone.timeZone : normalized;
   }
   if (field === "dayCutover" && /^([01]\d|2[0-3]):[0-5]\d(?::00)?$/.test(normalized))
     return normalized.slice(0, 5);
@@ -194,13 +191,9 @@ export async function writeVenueDetails(
     )
       invalid(field, "length");
     if (field === "timeZone") {
-      try {
-        normalized = new Intl.DateTimeFormat("en-GB", { timeZone: normalized! }).resolvedOptions()
-          .timeZone;
-      } catch {
-        invalid(field, "time_zone");
-      }
-      if (/^[+-]/.test(normalized!)) invalid(field, "time_zone");
+      const zone = classifyTimeZone(normalized);
+      if (zone.kind !== "valid") invalid(field, "time_zone");
+      normalized = zone.timeZone;
     }
     if (field === "dayCutover") {
       if (!/^([01]\d|2[0-3]):[0-5]\d(?::00)?$/.test(normalized!)) invalid(field, "cutover");
@@ -257,5 +250,12 @@ export async function writeVenueDetails(
   }
   if (Object.keys(delta).length === 0) return { changed: false, model };
   await tx.update(locations).set(delta).where(eq(locations.id, cfg.locationId));
+  if (delta.timeZone !== undefined) {
+    const revision = model.businessDayClock.revision + 1;
+    await tx
+      .insert(locationBusinessDaySettings)
+      .values({ locationId: cfg.locationId, revision })
+      .onConflictDoUpdate({ target: locationBusinessDaySettings.locationId, set: { revision } });
+  }
   return { changed: true, model: await readVenueDetails(tx, cfg, at) };
 }

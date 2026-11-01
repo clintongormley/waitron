@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
@@ -186,7 +187,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
         p.partyId,
         p.draft.id,
         venue.staffId,
-        body,
+        { ...body, admission: testTradingAdmission() },
         venue.venueLocale,
         undefined,
         attendance,
@@ -211,7 +212,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
           p.partyId,
           p.draft.id,
           venue.staffId,
-          body,
+          { ...body, admission: testTradingAdmission() },
           venue.venueLocale,
           undefined,
           attendance,
@@ -242,7 +243,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
           p.partyId,
           p.draft.id,
           venue.staffId,
-          body,
+          { ...body, admission: testTradingAdmission() },
           venue.venueLocale,
           undefined,
           {

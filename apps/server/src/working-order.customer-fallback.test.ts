@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -188,7 +189,7 @@ describe("future order customer fallback", () => {
     const id = randomUUID();
     const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
     const issued = await recordTillSaleOrchestration(
-      deps,
+      { ...deps, admission: testTradingAdmission() },
       venue.cfg,
       {
         workingOrderId: id,

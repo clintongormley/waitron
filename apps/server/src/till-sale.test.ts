@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateHeldOrder, updateOrderLine } from "./testing/order-writer-fixture.js";
 import { floorTodayTables } from "@waitron/db";
@@ -346,21 +347,21 @@ describe("recordTillSale", () => {
       .where(eq(products.id, variantIds!.fuera));
     const deps = { db: suite.db, backend, clock };
     await expect(
-      recordTillSale(deps, cfg, {
+      recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
         zoneId,
         lines: [{ menuItemId: waterOfferId, quantity: "1" }],
         tender: { method: "cash", amount: "4.10" },
       }),
     ).rejects.toMatchObject({ code: "product.variant_required" });
     await expect(
-      recordTillSale(deps, cfg, {
+      recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
         zoneId,
         lines: [{ menuItemId: waterOfferId, variantId: variantIds!.fuera, quantity: "1" }],
         tender: { method: "cash", amount: "4.80" },
       }),
     ).rejects.toMatchObject({ code: "product.variant_unavailable" });
 
-    const result = await recordTillSale(deps, cfg, {
+    const result = await recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
       zoneId,
       lines: [{ menuItemId: waterOfferId, variantId: variantIds!.double, quantity: "2" }],
       tender: { method: "cash", amount: "8.20" },
@@ -418,11 +419,15 @@ describe("recordTillSale", () => {
       await setMenuVariants(tx, waterOfferId, []);
       await republishMenus(tx);
     });
-    const result = await recordTillSale({ db: suite.db, backend, clock }, cfg, {
-      zoneId,
-      lines: [{ menuItemId: waterOfferId, variantId: variantIds!.fuera, quantity: "1" }],
-      tender: { method: "cash", amount: "3.80" },
-    });
+    const result = await recordTillSale(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        zoneId,
+        lines: [{ menuItemId: waterOfferId, variantId: variantIds!.fuera, quantity: "1" }],
+        tender: { method: "cash", amount: "3.80" },
+      },
+    );
     expect(result.total).toBe("3.80");
   });
 
@@ -437,13 +442,13 @@ describe("recordTillSale", () => {
     });
     const deps = { db: suite.db, backend, clock };
     await expect(
-      recordTillSale(deps, cfg, {
+      recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
         zoneId,
         lines: [{ menuItemId: waterOfferId, variantId: variantIds!.double, quantity: "1" }],
         tender: { method: "cash", amount: "4.10" },
       }),
     ).rejects.toMatchObject({ code: "product.variant_unavailable" });
-    const result = await recordTillSale(deps, cfg, {
+    const result = await recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
       zoneId,
       lines: [{ menuItemId: waterOfferId, quantity: "1" }],
       tender: { method: "cash", amount: "2.25" },
@@ -453,11 +458,15 @@ describe("recordTillSale", () => {
 
   it("prints the parent and variant customer names on the receipt line", async () => {
     const { cfg, zoneId, waterOfferId, variantIds } = await setupVenue({ variants: true });
-    const result = await recordTillSale({ db: suite.db, backend, clock }, cfg, {
-      zoneId,
-      lines: [{ menuItemId: waterOfferId, variantId: variantIds!.double, quantity: "1" }],
-      tender: { method: "cash", amount: "4.10" },
-    });
+    const result = await recordTillSale(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        zoneId,
+        lines: [{ menuItemId: waterOfferId, variantId: variantIds!.double, quantity: "1" }],
+        tender: { method: "cash", amount: "4.10" },
+      },
+    );
 
     const paper = printedLines(
       formatReceipt({
@@ -534,11 +543,15 @@ describe("recordTillSale", () => {
       ]);
     });
 
-    const result = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
-      id: workingOrderId,
-      lines: [],
-      tender: { method: "cash", amount: "8.90" },
-    });
+    const result = await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id: workingOrderId,
+        lines: [],
+        tender: { method: "cash", amount: "8.90" },
+      },
+    );
     expect(result.total).toBe("8.90");
     const stored = await suite.db.execute<StoredNames>(sql`
       select name, variant_name, kitchen_name, variant_kitchen_name, descriptions,
@@ -567,11 +580,15 @@ describe("recordTillSale", () => {
   it("files a walk-up from the selected zone's menu price and stores its attribution", async () => {
     const { cfg, zoneId, waterOfferId } = await setupVenue();
 
-    const result = await recordTillSale({ db: suite.db, backend, clock }, cfg, {
-      zoneId,
-      lines: [{ menuItemId: waterOfferId, quantity: "2" }],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    const result = await recordTillSale(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        zoneId,
+        lines: [{ menuItemId: waterOfferId, quantity: "2" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+    );
 
     expect(result.total).toBe("4.50");
     const snapshots = await suite.db.execute<{
@@ -604,11 +621,15 @@ describe("recordTillSale", () => {
       await republishMenus(tx);
     });
 
-    const result = await recordTillSale({ db: suite.db, backend, clock }, cfg, {
-      zoneId,
-      lines: [{ menuItemId: waterOfferId, quantity: "2" }],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    const result = await recordTillSale(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        zoneId,
+        lines: [{ menuItemId: waterOfferId, quantity: "2" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+    );
 
     expect(result.total).toBe("3.00");
   });
@@ -617,11 +638,15 @@ describe("recordTillSale", () => {
     const { cfg, available, zoneId, offers } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
 
-    const result = await recordTillSale({ db: suite.db, backend, clock }, cfg, {
-      zoneId,
-      lines: [{ menuItemId: offers.offerFor(each.id), quantity: "2" }],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    const result = await recordTillSale(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        zoneId,
+        lines: [{ menuItemId: offers.offerFor(each.id), quantity: "2" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+    );
 
     expect(result.total).toBe("3.00");
     expect(result.tender).toEqual({ method: "cash", change: "2.00" }); // 5.00 tendered − 3.00
@@ -642,16 +667,20 @@ describe("recordTillSale", () => {
     const each = available.find((p) => p.pricingUnit === "each")!;
 
     // An extra `unitPrice` smuggled past the type must not change the filed total.
-    const result = await recordTillSale({ db: suite.db, backend, clock }, cfg, {
-      zoneId,
-      lines: [
-        { menuItemId: offers.offerFor(each.id), quantity: "1", unitPrice: "0.01" } as unknown as {
-          menuItemId: string;
-          quantity: string;
-        },
-      ],
-      tender: { method: "cash", amount: "1.50" },
-    });
+    const result = await recordTillSale(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        zoneId,
+        lines: [
+          { menuItemId: offers.offerFor(each.id), quantity: "1", unitPrice: "0.01" } as unknown as {
+            menuItemId: string;
+            quantity: string;
+          },
+        ],
+        tender: { method: "cash", amount: "1.50" },
+      },
+    );
 
     expect(result.total).toBe("1.50"); // 1 × 1.50 gross, NOT the browser's 0.01
     expect(result.tender).toEqual({ method: "cash", change: "0.00" });
@@ -664,11 +693,15 @@ describe("recordTillSale", () => {
     const deps = { db: suite.db, backend, clock };
 
     await expect(
-      recordTillSale(deps, cfg, { zoneId, lines: [], tender: { method: "cash", amount: "0" } }),
+      recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
+        zoneId,
+        lines: [],
+        tender: { method: "cash", amount: "0" },
+      }),
     ).rejects.toMatchObject({ code: "sale.empty_basket" });
 
     await expect(
-      recordTillSale(deps, cfg, {
+      recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
         zoneId,
         lines: [{ menuItemId: UUID_NOT_IN_CAT, quantity: "1" }],
         tender: { method: "cash", amount: "1" },
@@ -681,7 +714,7 @@ describe("recordTillSale", () => {
     // Every tender but cash and card is refused; the cast is how an untrusted till sends one.
     for (const method of ["voucher", "transfer", "other"] as const) {
       await expect(
-        recordTillSale(deps, cfg, {
+        recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
           zoneId,
           lines: [{ menuItemId: offers.offerFor(each.id), quantity: "1" }],
           tender: { method: method as unknown as "cash", amount: "1.50" },
@@ -691,7 +724,7 @@ describe("recordTillSale", () => {
 
     // 1.00 tendered against a 1.50 total.
     await expect(
-      recordTillSale(deps, cfg, {
+      recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
         zoneId,
         lines: [{ menuItemId: offers.offerFor(each.id), quantity: "1" }],
         tender: { method: "cash", amount: "1.00" },
@@ -711,11 +744,15 @@ describe("recordTillSale", () => {
       await fake.registerNode(tx, cfg.nodeId);
     });
 
-    const result = await recordTillSale({ db: suite.db, backend: fake, clock }, cfg, {
-      zoneId,
-      lines: [{ menuItemId: offers.offerFor(each.id), quantity: "1" }],
-      tender: { method: "cash", amount: "1.50" },
-    });
+    const result = await recordTillSale(
+      { admission: testTradingAdmission(), db: suite.db, backend: fake, clock },
+      cfg,
+      {
+        zoneId,
+        lines: [{ menuItemId: offers.offerFor(each.id), quantity: "1" }],
+        tender: { method: "cash", amount: "1.50" },
+      },
+    );
 
     expect(result.qr).toBe("");
     expect(result.qrText).toBeUndefined();
@@ -825,12 +862,16 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
     });
     const workingOrderId = randomUUID();
 
-    const result = await payWorkingOrder({ db: suite.db, backend, clock }, driftedCfg, {
-      id: workingOrderId,
-      zoneId,
-      lines: [{ menuItemId, quantity: "1" }],
-      tender: { method: "cash", amount: "1.50" },
-    });
+    const result = await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      driftedCfg,
+      {
+        id: workingOrderId,
+        zoneId,
+        lines: [{ menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "1.50" },
+      },
+    );
     expect(result.invoiceNumber).toMatch(/^A\/\d+$/);
 
     const { woLines, slLines } = await withTransaction(suite.db, async (tx) => {
@@ -862,12 +903,16 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
     });
     const workingOrderId = randomUUID();
 
-    await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
-      id: workingOrderId,
-      zoneId,
-      lines: [{ menuItemId, quantity: "1" }],
-      tender: { method: "cash", amount: "1.50" },
-    });
+    await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id: workingOrderId,
+        zoneId,
+        lines: [{ menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "1.50" },
+      },
+    );
 
     const { lines, defaultLanguage } = await withTransaction(suite.db, async (tx) => ({
       lines: await tx
@@ -894,12 +939,16 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
     expect(defaultLanguage).toBe("es");
     const workingOrderId = randomUUID();
 
-    await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
-      id: workingOrderId,
-      zoneId,
-      lines: [{ menuItemId, quantity: "1" }],
-      tender: { method: "cash", amount: "1.50" },
-    });
+    await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id: workingOrderId,
+        zoneId,
+        lines: [{ menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "1.50" },
+      },
+    );
 
     const { woLines, slLines } = await withTransaction(suite.db, async (tx) => {
       const [sale] = await tx
@@ -931,7 +980,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
     const operatorId = "cccccccc-0000-4000-8000-00000000000a";
 
     await payWorkingOrder(
-      { db: suite.db, backend, clock },
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
       {
         id: workingOrderId,
@@ -1247,7 +1296,11 @@ describe("ordering extras and options — parent + child lines", () => {
       tender: { method: "cash", amount: "20.00" },
       workingOrderId,
     } satisfies TillSaleRequest;
-    const result = await recordTillSale({ db: suite.db, backend, clock }, v.cfg, request);
+    const result = await recordTillSale(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      v.cfg,
+      request,
+    );
     const paper = printedLines(
       formatReceipt({
         result,
@@ -1267,24 +1320,32 @@ describe("ordering extras and options — parent + child lines", () => {
       await clearProductUnit(tx, v.baconId);
       await deleteUnit(tx, unit!.id);
     });
-    const replay = await recordTillSale({ db: suite.db, backend, clock }, v.cfg, request);
+    const replay = await recordTillSale(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      v.cfg,
+      request,
+    );
     expect(replay.lines[1]).toMatchObject({ soldInEach: true, quantity: "3" });
   });
 
   it("keeps a whole-millilitre extra as an amount and unit on a real sale", async () => {
     const v = await setupModifierVenue(true);
-    const result = await recordTillSale({ db: suite.db, backend, clock }, v.cfg, {
-      zoneId: v.zoneId,
-      lines: [
-        {
-          menuItemId: v.offerFor(v.burgerId),
-          quantity: "1",
-          extras: extrasPick(v, [{ productId: v.quesoId, quantity: 1 }]),
-        },
-      ],
-      tender: { method: "cash", amount: "20.00" },
-      workingOrderId: randomUUID(),
-    });
+    const result = await recordTillSale(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      v.cfg,
+      {
+        zoneId: v.zoneId,
+        lines: [
+          {
+            menuItemId: v.offerFor(v.burgerId),
+            quantity: "1",
+            extras: extrasPick(v, [{ productId: v.quesoId, quantity: 1 }]),
+          },
+        ],
+        tender: { method: "cash", amount: "20.00" },
+        workingOrderId: randomUUID(),
+      },
+    );
     const paper = printedLines(
       formatReceipt({
         result,
@@ -1305,21 +1366,25 @@ describe("ordering extras and options — parent + child lines", () => {
     const v = await setupModifierVenue();
     const workingOrderId = randomUUID();
 
-    const result = await recordTillSale({ db: suite.db, backend, clock }, v.cfg, {
-      zoneId: v.zoneId,
-      lines: [
-        {
-          menuItemId: v.offerFor(v.burgerId),
-          quantity: "1",
-          extras: extrasPick(v, [
-            { productId: v.baconId, quantity: 1 },
-            { productId: v.quesoId, quantity: 1 },
-          ]),
-        },
-      ],
-      tender: { method: "cash", amount: "20.00" },
-      workingOrderId,
-    });
+    const result = await recordTillSale(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      v.cfg,
+      {
+        zoneId: v.zoneId,
+        lines: [
+          {
+            menuItemId: v.offerFor(v.burgerId),
+            quantity: "1",
+            extras: extrasPick(v, [
+              { productId: v.baconId, quantity: 1 },
+              { productId: v.quesoId, quantity: 1 },
+            ]),
+          },
+        ],
+        tender: { method: "cash", amount: "20.00" },
+        workingOrderId,
+      },
+    );
 
     // 9.00 dish + 0.50 bacon + 0.75 queso = 10.25 gross.
     expect(result.total).toBe("10.25");
@@ -1377,19 +1442,23 @@ describe("ordering extras and options — parent + child lines", () => {
     const v = await setupModifierVenue();
     const workingOrderId = randomUUID();
 
-    const result = await recordTillSale({ db: suite.db, backend, clock }, v.cfg, {
-      zoneId: v.zoneId,
-      // Two burgers, each carrying Bacon ×3 → the Bacon child is priced dish(2) × pick(3) = 6.
-      lines: [
-        {
-          menuItemId: v.offerFor(v.burgerId),
-          quantity: "2",
-          extras: extrasPick(v, [{ productId: v.baconId, quantity: 3 }]),
-        },
-      ],
-      tender: { method: "cash", amount: "30.00" },
-      workingOrderId,
-    });
+    const result = await recordTillSale(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      v.cfg,
+      {
+        zoneId: v.zoneId,
+        // Two burgers, each carrying Bacon ×3 → the Bacon child is priced dish(2) × pick(3) = 6.
+        lines: [
+          {
+            menuItemId: v.offerFor(v.burgerId),
+            quantity: "2",
+            extras: extrasPick(v, [{ productId: v.baconId, quantity: 3 }]),
+          },
+        ],
+        tender: { method: "cash", amount: "30.00" },
+        workingOrderId,
+      },
+    );
 
     // 9.00 × 2 dish = 18.00, plus 0.50 × 6 Bacon = 3.00 → 21.00 gross.
     expect(result.total).toBe("21.00");
@@ -1538,20 +1607,24 @@ describe("ordering extras and options — parent + child lines", () => {
       };
     });
 
-    const result = await recordTillSale({ db: suite.db, backend, clock }, v.cfg, {
-      zoneId: v.zoneId,
-      lines: [
-        {
-          menuItemId: seeded.dishOfferId,
-          quantity: "1",
-          extras: [
-            { listId: seeded.listId, picks: [{ productId: seeded.variantId, quantity: 1 }] },
-          ],
-        },
-      ],
-      tender: { method: "cash", amount: "10.00" },
-      workingOrderId,
-    });
+    const result = await recordTillSale(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      v.cfg,
+      {
+        zoneId: v.zoneId,
+        lines: [
+          {
+            menuItemId: seeded.dishOfferId,
+            quantity: "1",
+            extras: [
+              { listId: seeded.listId, picks: [{ productId: seeded.variantId, quantity: 1 }] },
+            ],
+          },
+        ],
+        tender: { method: "cash", amount: "10.00" },
+        workingOrderId,
+      },
+    );
     const child = (await filedLinesOf(workingOrderId)).find((line) => line.parentLineId !== null)!;
     return { total: result.total, child };
   }
@@ -1595,18 +1668,22 @@ describe("ordering extras and options — parent + child lines", () => {
     const v = await setupModifierVenue();
     const workingOrderId = randomUUID();
 
-    await recordTillSale({ db: suite.db, backend, clock }, v.cfg, {
-      zoneId: v.zoneId,
-      lines: [
-        {
-          menuItemId: v.offerFor(v.menuProductId),
-          quantity: "1",
-          options: [{ listId: v.sizeListId, labelId: v.sizeLabelGrandeId }],
-        },
-      ],
-      tender: { method: "cash", amount: "20.00" },
-      workingOrderId,
-    });
+    await recordTillSale(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      v.cfg,
+      {
+        zoneId: v.zoneId,
+        lines: [
+          {
+            menuItemId: v.offerFor(v.menuProductId),
+            quantity: "1",
+            options: [{ listId: v.sizeListId, labelId: v.sizeLabelGrandeId }],
+          },
+        ],
+        tender: { method: "cash", amount: "20.00" },
+        workingOrderId,
+      },
+    );
 
     // A walk-up files from the price `createOpenOrder` returns, not the stored lock, so the answers
     // must ride on that price too.
@@ -1639,11 +1716,15 @@ describe("ordering extras and options — parent + child lines", () => {
 
     // No basket, so this files from the stored lock: the answers reach the sale only if that read
     // carries `working_order_lines.option_snapshots`.
-    await payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
-      id: workingOrderId,
-      lines: [],
-      tender: { method: "cash", amount: "20.00" },
-    });
+    await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      v.cfg,
+      {
+        id: workingOrderId,
+        lines: [],
+        tender: { method: "cash", amount: "20.00" },
+      },
+    );
 
     const filed = await filedLinesOf(workingOrderId);
     expect(filed.map((line) => line.optionSnapshots)).toEqual([
@@ -1655,18 +1736,22 @@ describe("ordering extras and options — parent + child lines", () => {
     const v = await setupModifierVenue();
     const workingOrderId = randomUUID();
 
-    await recordTillSale({ db: suite.db, backend, clock }, v.cfg, {
-      zoneId: v.zoneId,
-      lines: [
-        {
-          menuItemId: v.offerFor(v.burgerId),
-          quantity: "2",
-          extras: extrasPick(v, [{ productId: v.baconId, quantity: 1 }]),
-        },
-      ],
-      tender: { method: "cash", amount: "30.00" },
-      workingOrderId,
-    });
+    await recordTillSale(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      v.cfg,
+      {
+        zoneId: v.zoneId,
+        lines: [
+          {
+            menuItemId: v.offerFor(v.burgerId),
+            quantity: "2",
+            extras: extrasPick(v, [{ productId: v.baconId, quantity: 1 }]),
+          },
+        ],
+        tender: { method: "cash", amount: "30.00" },
+        workingOrderId,
+      },
+    );
 
     // Bacon is offered at 0.50 by the list but is a 3.00 product at its OWN reduced rate where the
     // burger is general, so each column shows it came from the frozen pick. 0.50 gross at 10% is
@@ -1732,11 +1817,15 @@ describe("ordering extras and options — parent + child lines", () => {
     });
 
     // RETRIEVE + PAY with no basket, so the children are re-priced from their stored lock.
-    const result = await payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
-      id: workingOrderId,
-      lines: [],
-      tender: { method: "cash", amount: "20.00" },
-    });
+    const result = await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      v.cfg,
+      {
+        id: workingOrderId,
+        lines: [],
+        tender: { method: "cash", amount: "20.00" },
+      },
+    );
 
     expect(result.total).toBe(preview.total);
     expect(result.vatBreakdown).toEqual(
@@ -1827,7 +1916,7 @@ describe("ordering extras and options — parent + child lines", () => {
     await park(edited, "1", 1);
     await withTransaction(suite.db, (tx) => gainActiveVariant(tx, v.baconId));
     const pay = (id: string) =>
-      payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
+      payWorkingOrder({ admission: testTradingAdmission(), db: suite.db, backend, clock }, v.cfg, {
         id,
         lines: [],
         tender: { method: "cash", amount: "50.00" },
@@ -1840,7 +1929,7 @@ describe("ordering extras and options — parent + child lines", () => {
       .select({ id: workingOrderLines.id })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, edited));
-    await updateHeldOrder({ db: suite.db }, v.cfg, edited, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, v.cfg, edited, {
       revision: await revisionOf(edited),
       lines: [{ workingOrderLineId: dish!.id, menuItemId: v.offerFor(v.burgerId), quantity: "2" }],
     });
@@ -1881,7 +1970,7 @@ describe("ordering extras and options — parent + child lines", () => {
       .where(eq(workingOrderLines.workingOrderId, id));
     const lineOf = (productId: string) => parked.find((line) => line.productId === productId)!.id;
     // The burger is re-sent unchanged but without the Bacon, which the till cannot name.
-    await updateHeldOrder({ db: suite.db }, v.cfg, id, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, v.cfg, id, {
       revision: await revisionOf(id),
       lines: [
         {
@@ -1903,11 +1992,15 @@ describe("ordering extras and options — parent + child lines", () => {
       .where(eq(workingOrderLines.workingOrderId, id));
     expect(stored.map((line) => line.productId).sort()).toEqual([v.burgerId, v.jamonId].sort());
     // Hamburguesa 9.00 + 0.2 kg of Jamón at 24.90, and no Bacon.
-    const result = await payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "50.00" },
-    });
+    const result = await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      v.cfg,
+      {
+        id,
+        lines: [],
+        tender: { method: "cash", amount: "50.00" },
+      },
+    );
     expect(result.total).toBe("13.98");
     expect((await filedLinesOf(id)).filter((line) => line.parentLineId !== null)).toEqual([]);
   });
@@ -1942,11 +2035,15 @@ describe("ordering extras and options — parent + child lines", () => {
       return tabId;
     });
 
-    const result = await payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
-      id: tabId,
-      lines: [],
-      tender: { method: "cash", amount: "20.00" },
-    });
+    const result = await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      v.cfg,
+      {
+        id: tabId,
+        lines: [],
+        tender: { method: "cash", amount: "20.00" },
+      },
+    );
     expect(result.total).toBe("10.25");
     expect(result.lines).toHaveLength(3);
 
@@ -1986,11 +2083,15 @@ describe("ordering extras and options — parent + child lines", () => {
       return tabId;
     });
 
-    const result = await recordTillSale({ db: suite.db, backend, clock }, v.cfg, {
-      lines: [],
-      tender: { method: "cash", amount: "20.00" },
-      workingOrderId: tabId,
-    });
+    const result = await recordTillSale(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      v.cfg,
+      {
+        lines: [],
+        tender: { method: "cash", amount: "20.00" },
+        workingOrderId: tabId,
+      },
+    );
     // Files the tab's stored burger line (9.00 gross), never a `sale.empty_basket` refusal.
     expect(result.total).toBe("9.00");
     expect(result.lines).toHaveLength(1);
@@ -2035,11 +2136,15 @@ describe("ordering extras and options — parent + child lines", () => {
       return tabId;
     });
 
-    const result = await payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
-      id: tabId,
-      lines: [],
-      tender: { method: "cash", amount: "30.00" },
-    });
+    const result = await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      v.cfg,
+      {
+        id: tabId,
+        lines: [],
+        tender: { method: "cash", amount: "30.00" },
+      },
+    );
     // Two dishes (9.00 each) + queso (0.75) = 18.75, unchanged by line_no compaction.
     expect(result.total).toBe("18.75");
     expect(result.lines).toHaveLength(3);
@@ -2074,7 +2179,7 @@ describe("ordering extras and options — parent + child lines", () => {
 
     // (a) a list the dish does not attach → extras.invalid naming the offending field.
     await expect(
-      recordTillSale(deps, v.cfg, {
+      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
         zoneId: v.zoneId,
         lines: [
           {
@@ -2089,7 +2194,7 @@ describe("ordering extras and options — parent + child lines", () => {
 
     // (a2) a pick naming a product the attached list does not offer → extras.invalid.
     await expect(
-      recordTillSale(deps, v.cfg, {
+      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
         zoneId: v.zoneId,
         lines: [
           {
@@ -2104,7 +2209,7 @@ describe("ordering extras and options — parent + child lines", () => {
 
     // (b) an ACTIVE options list (Tamaño) left unanswered → options.label_required.
     await expect(
-      recordTillSale(deps, v.cfg, {
+      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
         zoneId: v.zoneId,
         lines: [{ menuItemId: v.offerFor(v.menuProductId), quantity: "1", options: [] }],
         tender: { method: "cash", amount: "20.00" },
@@ -2117,7 +2222,7 @@ describe("ordering extras and options — parent + child lines", () => {
     // (b2) more picks than the list's own cap (Extras allows three; bacon ×3 plus queso is four) →
     // extras.limit_exceeded.
     await expect(
-      recordTillSale(deps, v.cfg, {
+      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
         zoneId: v.zoneId,
         lines: [
           {
@@ -2139,7 +2244,7 @@ describe("ordering extras and options — parent + child lines", () => {
     // (c) an extras pick on a WEIGHED dish is refused (`soldBy: "weight"`): a child is priced
     // dishQuantity × pickQuantity, so 0.250 kg of ham would bill a quarter of a rasher.
     await expect(
-      recordTillSale(deps, v.cfg, {
+      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
         zoneId: v.zoneId,
         lines: [
           {
@@ -2157,7 +2262,7 @@ describe("ordering extras and options — parent + child lines", () => {
 
     // (d) fewer picks than a list's floor (Guarnición demands two, one sent) → extras.limit_exceeded.
     await expect(
-      recordTillSale(deps, v.cfg, {
+      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
         zoneId: v.zoneId,
         lines: [
           {
@@ -2199,7 +2304,7 @@ describe("ordering extras and options — parent + child lines", () => {
 
     for (const quantity of ["0.5", "1"]) {
       await expect(
-        recordTillSale(deps, v.cfg, {
+        recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
           zoneId: v.zoneId,
           lines: [
             {
@@ -2281,7 +2386,7 @@ describe("ordering extras and options — parent + child lines", () => {
     const burger = v.offerFor(v.burgerId);
 
     // A new sale, with the extras field absent and empty: 0.5 × 9.00 + 9.00.
-    const sale = await recordTillSale(deps, v.cfg, {
+    const sale = await recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
       zoneId: v.zoneId,
       lines: [
         { menuItemId: burger, quantity: "0.5" },
@@ -2298,9 +2403,15 @@ describe("ordering extras and options — parent + child lines", () => {
         zoneId: v.zoneId,
       }),
     );
-    expect((await payWorkingOrder(deps, v.cfg, { id: heldId, lines: [], tender })).total).toBe(
-      "4.50",
-    );
+    expect(
+      (
+        await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, {
+          id: heldId,
+          lines: [],
+          tender,
+        })
+      ).total,
+    ).toBe("4.50");
 
     // A table round, then a change of the sent line that answers the extras lists with nothing and
     // raises its quantity: 1.5 × 9.00.
@@ -2316,13 +2427,19 @@ describe("ordering extras and options — parent + child lines", () => {
         "cccccccc-0000-4000-8000-00000000000b",
       ),
     );
-    expect((await payWorkingOrder(deps, v.cfg, { id: tabId, lines: [], tender })).total).toBe(
-      "13.50",
-    );
+    expect(
+      (
+        await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, {
+          id: tabId,
+          lines: [],
+          tender,
+        })
+      ).total,
+    ).toBe("13.50");
 
     // A pick on the required list is still refused.
     await expect(
-      recordTillSale(deps, v.cfg, {
+      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
         zoneId: v.zoneId,
         lines: [
           {
@@ -2347,7 +2464,7 @@ describe("ordering extras and options — parent + child lines", () => {
     const refused = { code: "extras.limit_exceeded", params: { extraListId: panId } };
 
     await expect(
-      recordTillSale(deps, v.cfg, {
+      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
         zoneId: v.zoneId,
         lines: [{ menuItemId: burger, quantity: "1" }],
         tender: { method: "cash", amount: "50.00" },
@@ -2379,7 +2496,7 @@ describe("ordering extras and options — parent + child lines", () => {
     };
 
     // A new sale: 250 × 9.00.
-    const sale = await recordTillSale(deps, v.cfg, {
+    const sale = await recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
       zoneId: v.zoneId,
       lines: [{ menuItemId: burger, quantity: "250" }],
       tender,
@@ -2393,9 +2510,15 @@ describe("ordering extras and options — parent + child lines", () => {
         zoneId: v.zoneId,
       }),
     );
-    expect((await payWorkingOrder(deps, v.cfg, { id: heldId, lines: [], tender })).total).toBe(
-      "2250.00",
-    );
+    expect(
+      (
+        await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, {
+          id: heldId,
+          lines: [],
+          tender,
+        })
+      ).total,
+    ).toBe("2250.00");
 
     // A table round, then a change of the sent line that answers the extras lists with nothing and
     // raises its quantity: 300 × 9.00. A change that picks from the required list is refused.
@@ -2416,9 +2539,15 @@ describe("ordering extras and options — parent + child lines", () => {
         "cccccccc-0000-4000-8000-00000000000c",
       ),
     );
-    expect((await payWorkingOrder(deps, v.cfg, { id: tabId, lines: [], tender })).total).toBe(
-      "2700.00",
-    );
+    expect(
+      (
+        await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, {
+          id: tabId,
+          lines: [],
+          tender,
+        })
+      ).total,
+    ).toBe("2700.00");
 
     // A new sale with a pick is refused, with no sale or fiscal record written.
     const written = async () =>
@@ -2430,7 +2559,7 @@ describe("ordering extras and options — parent + child lines", () => {
       ).rows;
     const before = await written();
     await expect(
-      recordTillSale(deps, v.cfg, {
+      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
         zoneId: v.zoneId,
         lines: [{ menuItemId: burger, quantity: "250", extras: pan }],
         tender,
@@ -2445,7 +2574,7 @@ describe("ordering extras and options — parent + child lines", () => {
     const deps = { db: suite.db, backend, clock };
 
     // 2 × 9.00 dish + 2 × 1.00 Pan.
-    const sale = await recordTillSale(deps, v.cfg, {
+    const sale = await recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
       zoneId: v.zoneId,
       lines: [
         {
@@ -2478,15 +2607,21 @@ describe("ordering extras and options — parent + child lines", () => {
     });
 
     await withTransaction(suite.db, (tx) => updateProduct(tx, v.baconId, { available: false }));
-    await expect(recordTillSale(deps, v.cfg, burgerWith(v.baconId))).rejects.toMatchObject({
+    await expect(
+      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, burgerWith(v.baconId)),
+    ).rejects.toMatchObject({
       code: "extras.invalid",
       params: { field: "productId" },
     });
     // The control: the same list still sells the item that is both Active and Available.
-    await expect(recordTillSale(deps, v.cfg, burgerWith(v.quesoId))).resolves.toBeDefined();
+    await expect(
+      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, burgerWith(v.quesoId)),
+    ).resolves.toBeDefined();
 
     await suite.db.execute(sql`update products set active = 0 where id = ${v.quesoId}`);
-    await expect(recordTillSale(deps, v.cfg, burgerWith(v.quesoId))).rejects.toMatchObject({
+    await expect(
+      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, burgerWith(v.quesoId)),
+    ).rejects.toMatchObject({
       code: "extras.invalid",
       params: { field: "productId" },
     });
@@ -2499,7 +2634,7 @@ describe("ordering extras and options — parent + child lines", () => {
     // An active list must be answered, and a withdrawn label is not an answer — so a till holding a
     // stale menu is refused rather than selling the dish with nothing chosen.
     await expect(
-      recordTillSale(deps, v.cfg, {
+      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
         zoneId: v.zoneId,
         lines: [{ menuItemId: v.offerFor(v.comboId), quantity: "1", options: [] }],
         tender: { method: "cash", amount: "10.00" },
@@ -2509,7 +2644,7 @@ describe("ordering extras and options — parent + child lines", () => {
       params: { optionListId: v.salsaListId },
     });
     await expect(
-      recordTillSale(deps, v.cfg, {
+      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
         zoneId: v.zoneId,
         lines: [
           {
@@ -2569,7 +2704,7 @@ describe("ordering extras and options — parent + child lines", () => {
       .where(and(eq(workingOrderLines.workingOrderId, id), isNull(workingOrderLines.parentLineId)));
     const lineOf = (productId: string) => dishes.find((line) => line.productId === productId)!.id;
 
-    await updateHeldOrder({ db: suite.db }, v.cfg, id, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, v.cfg, id, {
       revision: await revisionOf(id),
       lines: [
         {
@@ -2583,11 +2718,15 @@ describe("ordering extras and options — parent + child lines", () => {
         { menuItemId: v.offerFor(v.jamonId), quantity: "0.1" },
       ],
     });
-    const result = await payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "50.00" },
-    });
+    const result = await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      v.cfg,
+      {
+        id,
+        lines: [],
+        tender: { method: "cash", amount: "50.00" },
+      },
+    );
     // What each stored line was added at — Menú 12.00, Hamburguesa 9.00 + Bacon 0.50, Bacon 3.00 —
     // and the new 0.1 kg of Jamón at 24.90.
     expect(result.total).toBe("26.99");
@@ -2633,7 +2772,7 @@ describe("ordering extras and options — parent + child lines", () => {
       .select({ id: workingOrderLines.id })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
-    await updateHeldOrder({ db: suite.db }, v.cfg, id, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, v.cfg, id, {
       revision: await revisionOf(id),
       lines: [
         {
@@ -2644,11 +2783,15 @@ describe("ordering extras and options — parent + child lines", () => {
         },
       ],
     });
-    const result = await payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "20.00" },
-    });
+    const result = await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      v.cfg,
+      {
+        id,
+        lines: [],
+        tender: { method: "cash", amount: "20.00" },
+      },
+    );
     // 9.00 + Bacon at the published 0.50, not the list's new 0.90.
     expect(result.total).toBe("9.50");
   });
@@ -2723,12 +2866,24 @@ describe("ordering extras and options — parent + child lines", () => {
     const deps = { db: suite.db, backend, clock };
     const tender = { method: "cash" as const, amount: "20.00" };
     // 9.00 + Bacon 0.50; and 9.00 + 11.00: the prices each line was added at.
-    expect((await payWorkingOrder(deps, v.cfg, { id: heldId, lines: [], tender })).total).toBe(
-      "9.50",
-    );
-    expect((await payWorkingOrder(deps, v.cfg, { id: tabId, lines: [], tender })).total).toBe(
-      "20.00",
-    );
+    expect(
+      (
+        await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, {
+          id: heldId,
+          lines: [],
+          tender,
+        })
+      ).total,
+    ).toBe("9.50");
+    expect(
+      (
+        await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, {
+          id: tabId,
+          lines: [],
+          tender,
+        })
+      ).total,
+    ).toBe("20.00");
     const filedVersions = (id: string) =>
       suite.db
         .select({ menuVersionId: saleLines.menuVersionId })
@@ -2795,7 +2950,7 @@ describe("per-answer receipt presentation", () => {
         tender: { method, amount: "10.00" },
       };
       const deps = { db: suite.db, backend, clock };
-      const first = await recordTillSale(deps, cfg, req);
+      const first = await recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, req);
       expect(first).toMatchObject({
         receiptTrim: {
           headerSubtitle: "Department subtitle",
@@ -2826,7 +2981,7 @@ describe("per-answer receipt presentation", () => {
         .update(locations)
         .set({ addressLine1: "Current street" })
         .where(eq(locations.id, cfg.locationId));
-      const replay = await recordTillSale(deps, cfg, req);
+      const replay = await recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, req);
       expect(replay).toMatchObject({
         receiptTrim: {
           footerMessage: "New department footer",
@@ -2959,7 +3114,11 @@ describe("receipt presentation sources", () => {
         lines: [{ menuItemId: waterOfferId, quantity: "1" }],
         tender: { method: "cash", amount: "10.00" },
       };
-      await recordTillSale({ db: suite.db, backend, clock }, cfg, req);
+      await recordTillSale(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        cfg,
+        req,
+      );
       const [saved] = await suite.db.select().from(saleReceiptHeaders);
       const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
       const hiddenVenue = source !== "department";
@@ -3027,11 +3186,15 @@ describe("receipt presentation address failure", () => {
       .mockRejectedValue(new Error("current address read refused"));
     const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
-      const ticket = await recordTillSale({ db: suite.db, backend, clock }, cfg, {
-        zoneId,
-        lines: [{ menuItemId: waterOfferId, quantity: "1" }],
-        tender: { method: "cash", amount: "10.00" },
-      });
+      const ticket = await recordTillSale(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        cfg,
+        {
+          zoneId,
+          lines: [{ menuItemId: waterOfferId, quantity: "1" }],
+          tender: { method: "cash", amount: "10.00" },
+        },
+      );
       expect(ticket.receiptTrim).toEqual({ headerSubtitle: "Surviving subtitle" });
       expect(ticket.venueAddress).toEqual([]);
       expect(ticket.total).toBe("2.25");
@@ -3048,5 +3211,42 @@ describe("receipt presentation address failure", () => {
       address.mockRestore();
       warning.mockRestore();
     }
+  });
+});
+
+describe("saved-zone immediate replay", () => {
+  it("returns the saved cash invoice while admission is closed without a new issue reading", async () => {
+    const { cfg, waterOfferId } = await setupVenue();
+    const admission = testTradingAdmission();
+    const reading = clock.now();
+    const source: TrustedClock = {
+      ...clock,
+      now: () => ({ ...reading, instant: new Date("2026-10-14T23:30:00Z"), offsetMinutes: 0 }),
+    };
+    const id: string = randomUUID();
+    const req = {
+      id,
+      lines: [{ menuItemId: waterOfferId, quantity: "1" }],
+      tender: { method: "cash" as const, amount: "2.25" },
+    };
+    const first = await payWorkingOrder(
+      { db: suite.db, backend, clock: source, admission },
+      cfg,
+      req,
+    );
+    const before = await suite.db.select().from(registrosFacturacion);
+    expect(before).toHaveLength(1);
+    expect(before[0]).toMatchObject({ fechaExpedicionFactura: "2026-10-15", offsetMinutos: 120 });
+    admission.requireRestart();
+    const unreadable = {
+      ...source,
+      now: () => {
+        throw new Error("replay must not read a new clock");
+      },
+    };
+    expect(
+      await payWorkingOrder({ db: suite.db, backend, clock: unreadable, admission }, cfg, req),
+    ).toEqual(first);
+    expect(await suite.db.select().from(registrosFacturacion)).toEqual(before);
   });
 });

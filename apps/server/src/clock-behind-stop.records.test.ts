@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -469,6 +470,7 @@ describe("an unpaid departure", () => {
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: venue.db,
         backend: venue.backend,
         clock: clockAt(behind),
@@ -511,7 +513,12 @@ describe("a cancel's credit", () => {
     expect(parked.status).toBe(200);
     if (issued) {
       await issueOrderInvoice(
-        { db: venue.db, backend: venue.backend, clock: clockAt(now) },
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: clockAt(now),
+        },
         { ...venue.cfg, origin: { source: "device", deviceId: brandDeviceId(venue.deviceId) } },
         id,
         venue.operatorId,

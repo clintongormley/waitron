@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedClosingBody } from "./testing/party-close-fixture.js";
 import { abandonHeldOrder } from "./testing/order-writer-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -257,6 +258,7 @@ beforeAll(async () => {
   mountTillApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: suite.db,
       liveEvents,
       cfg: v.cfg,
@@ -567,9 +569,14 @@ describe("department transfer till writes", () => {
     const cfg = requestCfg(v.cfg, f.source);
     const invoice = await withTransaction(suite.db, async (tx) => {
       const priced = await priceForIssuance(tx, v.clock, v.backend, cfg, f.tab);
-      return issueUnpaidInvoice(tx, v.backend, cfg, priced, personId);
+      return issueUnpaidInvoice(tx, v.backend, cfg, priced, personId, testTradingAdmission());
     });
-    await placeOrder({ db: suite.db, backend: v.backend, clock: v.clock }, cfg, f.tab, personId);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
+      cfg,
+      f.tab,
+      personId,
+    );
     async function history() {
       return withTransaction(suite.db, async (tx) => {
         const lineRows = await tx
@@ -902,7 +909,7 @@ describe("department transfer durable reads", () => {
     f.tab = await counterOrder(v, "Burger");
     await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
     await placeOrder(
-      { db: suite.db, backend: v.backend, clock: v.clock },
+      { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
       requestCfg(v.cfg, f.source),
       f.tab,
       personId,
@@ -1074,7 +1081,7 @@ describe("department transfer read boundaries", () => {
     f.tab = await counterOrder(v, "Burger");
     await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
     await placeOrder(
-      { db: suite.db, backend: v.backend, clock: v.clock },
+      { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
       requestCfg(v.cfg, f.source),
       f.tab,
       personId,
@@ -1134,7 +1141,7 @@ describe("department transfer read boundaries", () => {
         .set({ quantity: 2000 })
         .where(eq(workingOrderLines.workingOrderId, f.tab));
       await placeOrder(
-        { db: suite.db, backend: v.backend, clock: v.clock },
+        { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
         requestCfg(v.cfg, f.source),
         f.tab,
         personId,
@@ -1442,6 +1449,7 @@ it("releases transfer streams when their server bus shuts down", async () => {
   mountTillApi(
     isolated,
     {
+      admission: testTradingAdmission(),
       db: suite.db,
       backend: v.backend,
       clock: v.clock,
@@ -1595,7 +1603,7 @@ describe("department transfer tab lifecycle", () => {
         await takeIntoParty(tx, v.cfg, f.tab, party.partyId, f.az);
         await numberBill(tx, f.tab, party.partyId);
         const priced = await priceForIssuance(tx, v.clock, v.backend, v.cfg, f.tab);
-        await issueUnpaidInvoice(tx, v.backend, v.cfg, priced, personId);
+        await issueUnpaidInvoice(tx, v.backend, v.cfg, priced, personId, testTradingAdmission());
         await tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, f.tab));
         if (absorbed) {
           const root = await openParty(tx, {
@@ -1679,7 +1687,7 @@ describe("department transfer tab lifecycle", () => {
     f.tab = await counterOrder(v, "Agua");
     await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
     await placeOrder(
-      { db: suite.db, backend: v.backend, clock: v.clock },
+      { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
       requestCfg(v.cfg, f.source),
       f.tab,
       personId,
@@ -1734,7 +1742,7 @@ describe("department transfer tab lifecycle", () => {
     });
     const invoice = await withTransaction(suite.db, async (tx) => {
       const priced = await priceForIssuance(tx, v.clock, v.backend, v.cfg, f.tab);
-      return issueUnpaidInvoice(tx, v.backend, v.cfg, priced, personId);
+      return issueUnpaidInvoice(tx, v.backend, v.cfg, priced, personId, testTradingAdmission());
     });
     const before = await suite.db.select().from(sales).where(eq(sales.workingOrderId, f.tab));
     expect(before).toMatchObject([{ total: 0 }]);
@@ -1764,9 +1772,9 @@ describe("department transfer tab lifecycle", () => {
       if (kind.startsWith("issued")) {
         await withTransaction(suite.db, async (tx) => {
           const priced = await priceForIssuance(tx, v.clock, v.backend, v.cfg, f.tab);
-          await issueUnpaidInvoice(tx, v.backend, v.cfg, priced, personId);
+          await issueUnpaidInvoice(tx, v.backend, v.cfg, priced, personId, testTradingAdmission());
         });
-        await placeOrder(deps, v.cfg, f.tab, personId);
+        await placeOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, f.tab, personId);
       }
       const id = await pending(f);
       if (kind.endsWith("recovery"))
@@ -1784,7 +1792,7 @@ describe("department transfer tab lifecycle", () => {
       const before = await suite.db.select().from(sales).where(eq(sales.workingOrderId, f.tab));
       const pay = () =>
         payWorkingOrderIntegrated(
-          deps,
+          { ...deps, admission: testTradingAdmission() },
           v.cfg,
           { id: f.tab, lines: [], simulationOutcome: "captured" },
           personId,
@@ -1812,14 +1820,15 @@ describe("department transfer tab lifecycle", () => {
       if (kind === "issued")
         await withTransaction(suite.db, async (tx) => {
           const priced = await priceForIssuance(tx, v.clock, v.backend, v.cfg, f.tab);
-          await issueUnpaidInvoice(tx, v.backend, v.cfg, priced, personId);
+          await issueUnpaidInvoice(tx, v.backend, v.cfg, priced, personId, testTradingAdmission());
         });
-      if (kind === "issued") await placeOrder(deps, v.cfg, f.tab, personId);
+      if (kind === "issued")
+        await placeOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, f.tab, personId);
       const id = await pending(f);
       const pay = () =>
         kind === "bill"
           ? takeBillPayment(
-              deps,
+              { ...deps, admission: testTradingAdmission() },
               v.cfg,
               f.tab,
               {
@@ -1834,7 +1843,7 @@ describe("department transfer tab lifecycle", () => {
               operator,
             )
           : (kind === "issued" ? collectOrder : payWorkingOrder)(
-              deps,
+              { ...deps, admission: testTradingAdmission() },
               v.cfg,
               { id: f.tab, lines: [], tender: { method: "cash", amount: "2.00" } },
               personId,
@@ -1905,7 +1914,7 @@ describe("human transfer identities", () => {
     f.tab = await counterOrder(v, "Burger");
     await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
     await placeOrder(
-      { db: suite.db, backend: v.backend, clock: v.clock },
+      { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
       requestCfg(v.cfg, f.source),
       f.tab,
       personId,
@@ -1948,7 +1957,7 @@ describe("human transfer identities", () => {
     f.tab = await counterOrder(v, "Burger", "Paella");
     await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
     await placeOrder(
-      { db: suite.db, backend: v.backend, clock: v.clock },
+      { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
       requestCfg(v.cfg, f.source),
       f.tab,
       personId,

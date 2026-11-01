@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
 import { observedTableActionBody } from "./testing/table-action-fixture.js";
@@ -75,6 +76,7 @@ beforeAll(async () => {
   mountTillApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: v.db,
       backend: v.backend,
       clock,

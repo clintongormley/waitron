@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 
@@ -323,6 +324,7 @@ function systemClock(): TrustedClock {
 
 function deps(db: Database): TillApiDeps {
   return {
+    admission: testTradingAdmission(),
     db,
     // Only the clock check: every sale this suite makes is refused before it reaches filing.
     backend: {

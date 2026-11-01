@@ -17,6 +17,7 @@ export const GUIDE_PAGES = [
   "till-notices",
   "box-status",
   "backup-recovery",
+  "time-zone",
 ] as const;
 
 export function guideRoot(): string {

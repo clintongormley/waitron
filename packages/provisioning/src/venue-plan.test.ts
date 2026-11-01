@@ -496,3 +496,34 @@ describe("describeVenueAction", () => {
     expect(line).not.toContain("0ddba11");
   });
 });
+
+describe("country zone planning", () => {
+  it.each([
+    [undefined, "missing"],
+    [null, "missing"],
+    ["", "missing"],
+    ["  ", "missing"],
+    [120, "invalid"],
+    ["+02:00", "invalid"],
+    ["Invalid/Zone", "invalid"],
+    ["Europe/London", "country"],
+  ])("refuses zone %j before producing actions", (timeZone, reason) => {
+    const input = request();
+    expect(() =>
+      planVenue(
+        { ...input, location: { ...input.location, timeZone: timeZone as string } },
+        MODULES,
+      ),
+    ).toThrow(expect.objectContaining({ code: "venue.time_zone_invalid", params: { reason } }));
+  });
+  it("stores the normalized country zone in its action", () => {
+    const input = request();
+    const actions = planVenue(
+      { ...input, location: { ...input.location, timeZone: " Europe/Madrid " } },
+      MODULES,
+    );
+    expect(actions.find((action) => action.kind === "create-location")).toMatchObject({
+      timeZone: "Europe/Madrid",
+    });
+  });
+});

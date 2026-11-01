@@ -121,3 +121,14 @@ it("refuses a replacement key with the same version and a changed encrypted arti
     code: "recovery.passphrase_invalid",
   });
 });
+
+it("refuses an excluded bundle zone before staging and preserves the earlier artifact", async () => {
+  const { root, artifact } = await staged();
+  const replacement = configurationBundle();
+  replacement.venue.location.timeZone = "Europe/Madrid";
+  const encoded = encodeConfigurationBundle(replacement, passphrase);
+  await expect(
+    stageConfigurationImport(root, ring, encoded, passphrase, async () => {}),
+  ).rejects.toMatchObject({ code: "venue.time_zone_invalid", params: { reason: "country" } });
+  expect((await readStagedConfigurationImport(root, ring))!.artifact).toEqual(artifact);
+});

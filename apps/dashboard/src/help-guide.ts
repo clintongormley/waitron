@@ -1,6 +1,7 @@
 import { currentLocale } from "./i18n/t.js";
 
 export const GUIDE_LINKS = {
+  "venue.time-zone": { page: "time-zone", section: "confirm" },
   "products.selling-unit": { page: "products", section: "selling-unit" },
   "products.course": { page: "products", section: "course" },
   "products.variants": { page: "products", section: "variants" },

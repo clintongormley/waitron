@@ -4,7 +4,7 @@ import { ALL_MODULES } from "@waitron/composition";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
-import { withTransaction } from "@waitron/db";
+import { locations, nodes, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { hashPassword, loginManager, loginManagerById, type TotpKeyRing } from "@waitron/identity";
@@ -16,6 +16,8 @@ import {
   seriesId as brandSeriesId,
 } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
+import { applyVenue as applyDirectVenue } from "./venue-apply.js";
+import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { planVenue, type VenueRequest } from "./venue-plan.js";
 import { applyAllocatedTestVenue as applyVenue } from "../test/allocated-venue.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
@@ -232,3 +234,174 @@ describe("the onboarding-provisioned admin authenticates by email", () => {
     ).rejects.toMatchObject({ code: "password.invalid" });
   });
 });
+
+describe("direct action country zone preflight", () => {
+  it.each([
+    [undefined, "missing"],
+    [null, "missing"],
+    ["", "missing"],
+    ["  ", "missing"],
+    [120, "invalid"],
+    ["+02:00", "invalid"],
+    ["Invalid/Zone", "invalid"],
+    ["Europe/London", "country"],
+  ])("refuses zone %j before module preparation or any seed", async (timeZone, reason) => {
+    let preparations = 0;
+    let seeds = 0;
+    const module = fakeModule("zone-probe", {
+      operations: {
+        prepare: async (operation, run) => {
+          preparations++;
+          return run(operation);
+        },
+      },
+      provisioning: {
+        seed: {
+          summary: "zone probe",
+          run: async () => {
+            seeds++;
+            return "seeded";
+          },
+        },
+      },
+    });
+    const actions = planVenue(request(), [module]);
+    for (const action of actions)
+      if (action.kind === "create-location") action.timeZone = timeZone as string;
+    const refusal = await applyDirectVenue(actions, {
+      db: suite.db,
+      modules: [module],
+      moduleInputs: new Map([
+        [module.name, { eventId: "zone-test", sourceId: "zone-test", input: {} }],
+      ]),
+    }).catch((error: unknown) => error);
+    expect(await suite.db.select().from(locations)).toEqual([]);
+    expect(await suite.db.select().from(tenants)).toEqual([]);
+    expect(await suite.db.select().from(nodes)).toEqual([]);
+    expect({ preparations, seeds }).toEqual({ preparations: 0, seeds: 0 });
+    expect(refusal).toMatchObject({ code: "venue.time_zone_invalid", params: { reason } });
+  });
+
+  it("checks every create-location action before the first seed", async () => {
+    let seeds = 0;
+    const module = fakeModule("zone-probe", {
+      provisioning: {
+        seed: {
+          summary: "zone probe",
+          run: async () => {
+            seeds++;
+            return "seeded";
+          },
+        },
+      },
+    });
+    const actions = planVenue(request(), [module]);
+    const location = actions.find((action) => action.kind === "create-location")!;
+    actions.push({ ...location, timeZone: "Europe/London" });
+    const refusal = await applyDirectVenue(actions, { db: suite.db, modules: [module] }).catch(
+      (error: unknown) => error,
+    );
+    expect(seeds).toBe(0);
+    expect(await suite.db.select().from(locations)).toEqual([]);
+    expect(refusal).toMatchObject({
+      code: "venue.time_zone_invalid",
+      params: { reason: "country" },
+    });
+  });
+
+  it.each(["Invalid/Zone", " Europe/Madrid", "Europe/Madrid "])(
+    "refuses saved %j before reuse conversion without repairing it",
+    async (timeZone) => {
+      const actions = planVenue(request(), []);
+      const venue = await applyDirectVenue(actions, { db: suite.db, modules: [] });
+      await withTransaction(suite.db, async (tx) => {
+        await tx.execute(
+          sql`update locations set time_zone = ${timeZone} where id = ${venue.locationId}`,
+        );
+      });
+      const before = (await suite.db.execute(sql`select * from locations`)).rows;
+      const refusal = await applyDirectVenue(actions, { db: suite.db, modules: [] }).catch(
+        (error: unknown) => error,
+      );
+      expect((await suite.db.execute(sql`select * from locations`)).rows).toEqual(before);
+      expect(refusal).toMatchObject({
+        code: "venue.time_zone_invalid",
+        params: { reason: "invalid" },
+      });
+    },
+  );
+
+  it("normalizes a direct action without mutating its caller", async () => {
+    const actions = planVenue(request(), []);
+    const action = actions.find((action) => action.kind === "create-location")!;
+    action.timeZone = " Europe/Madrid ";
+    await applyDirectVenue(actions, { db: suite.db, modules: [] });
+    expect(await suite.db.select({ timeZone: locations.timeZone }).from(locations)).toEqual([
+      { timeZone: "Europe/Madrid" },
+    ]);
+    expect(action.timeZone).toBe(" Europe/Madrid ");
+  });
+});
+
+it("rechecks saved zone inside the transaction after outside preparation", async () => {
+  let preparations = 0;
+  let seeds = 0;
+  const module = fakeModule("zone-probe", {
+    operations: {
+      prepare: async (operation, run) => {
+        preparations++;
+        const installed = await applyDirectVenue(planVenue(request(), []), {
+          db: suite.db,
+          modules: [],
+        });
+        await withTransaction(suite.db, async (tx) => {
+          await tx.execute(
+            sql`update locations set time_zone = 'Invalid/Zone' where id = ${installed.locationId}`,
+          );
+        });
+        return run(operation);
+      },
+    },
+    provisioning: {
+      seed: {
+        summary: "zone probe",
+        run: async () => {
+          seeds++;
+          return "seeded";
+        },
+      },
+    },
+  });
+  await expect(
+    applyDirectVenue(planVenue(request(), [module]), {
+      db: suite.db,
+      modules: [module],
+      moduleInputs: new Map([
+        [module.name, { eventId: "zone-test", sourceId: "zone-test", input: {} }],
+      ]),
+    }),
+  ).rejects.toMatchObject({ code: "venue.time_zone_invalid", params: { reason: "invalid" } });
+  expect({ preparations, seeds }).toEqual({ preparations: 1, seeds: 0 });
+  expect(await suite.db.select({ timeZone: locations.timeZone }).from(locations)).toEqual([
+    { timeZone: "Invalid/Zone" },
+  ]);
+});
+
+it.each(["Europe/London", "US/Eastern"])(
+  "does not treat the valid saved zone %s as repair eligibility",
+  async (timeZone) => {
+    const actions = planVenue(request(), []);
+    const installed = await applyDirectVenue(actions, { db: suite.db, modules: [] });
+    await withTransaction(suite.db, async (tx) => {
+      await tx.execute(
+        sql`update locations set time_zone = ${timeZone} where id = ${installed.locationId}`,
+      );
+    });
+    await expect(applyDirectVenue(actions, { db: suite.db, modules: [] })).rejects.toMatchObject({
+      code: "provisioning.second_venue",
+    });
+    expect(await suite.db.select({ timeZone: locations.timeZone }).from(locations)).toEqual([
+      { timeZone },
+    ]);
+  },
+);

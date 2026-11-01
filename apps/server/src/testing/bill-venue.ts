@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./trading-admission.js";
 import { observedClosingBody } from "./party-close-fixture.js";
 import { observedWholePaymentBody } from "./whole-payment-fixture.js";
 import { observedPaymentBody } from "./bill-payment-fixture.js";
@@ -284,6 +285,7 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db,
         backend,
         clock: at,
@@ -514,8 +516,14 @@ export async function placedCounterBillMovedTo(
     zoneId,
     operatorId: venue.operatorId,
   });
-  if (issued) await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
-  await placeOrder(deps, venue.cfg, id, venue.operatorId);
+  if (issued)
+    await issueOrderInvoice(
+      { ...deps, admission: testTradingAdmission() },
+      venue.cfg,
+      id,
+      venue.operatorId,
+    );
+  await placeOrder({ ...deps, admission: testTradingAdmission() }, venue.cfg, id, venue.operatorId);
   const [row] = venue.db.all<{ revision: number }>(
     sql`select revision from parties where id = ${party.partyId}`,
   );

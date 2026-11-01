@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { closingEditsForTest } from "./testing/party-close-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -49,6 +50,7 @@ function api(attendance?: AttendanceRecorder) {
   mountTillApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: suite.db,
       cfg: v.cfg,
       backend: v.backend,
@@ -155,7 +157,7 @@ describe("remaining accepted order attendance", () => {
     async (refused) => {
       const p = await seatedWith(v, "Ensalada");
       await placeOrder(
-        { db: suite.db, backend: v.backend, clock: v.clock },
+        { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
         v.cfg,
         p.tabId,
         v.adminId,

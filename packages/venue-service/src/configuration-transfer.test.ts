@@ -26,6 +26,7 @@ function holidayPack(localEntryLimit: number): CountryPack {
     countryCode: "ZZ",
     defaultLocale: "en-GB",
     defaultTimeZone: "Europe/Madrid",
+    timeZones: ["Europe/Madrid"],
     invoiceLocales: ["en-GB"],
     moduleIds: [],
     availableForVenueSetup: false,

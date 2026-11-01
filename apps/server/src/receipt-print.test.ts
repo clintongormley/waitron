@@ -2,6 +2,7 @@ import { writeContentLanguages } from "@waitron/catalogue";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { deletePrinter } from "./printer-delete.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { recordSale } from "@waitron/core";
 import { reserveInvoiceDelivery } from "./invoice-delivery.js";
@@ -480,7 +481,7 @@ describe("the words around a receipt's QR come from the venue's fiscal backend",
     const printerId = await makePrinter(cfg);
     await configureReceipt(cfg, { mode: "auto", printerId });
     const ticket = await recordTillSale(
-      { db: suite.db, backend: backendForSale, clock },
+      { admission: testTradingAdmission(), db: suite.db, backend: backendForSale, clock },
       cfg,
       {
         zoneId,
@@ -540,7 +541,7 @@ it.each(["en-GB", "ca-ES"])(
       zoneId,
       lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
     });
-    await placeOrder(deps(), cfg, id, OPERATOR);
+    await placeOrder({ ...deps(), admission: testTradingAdmission() }, cfg, id, OPERATOR);
     const jobs = (await printJobsFor(cfg)).filter((job) => job.printerId === printerId);
     expect(jobs).toHaveLength(1);
     const ticket = decodeTicket(new Uint8Array(jobs[0]!.payload));
@@ -575,7 +576,7 @@ it("prints one non-fiscal numbered collection ticket when a pay-on-collection or
       )
     ).rows,
   ).toEqual([{ service_mode: "ticket_then_pay" }]);
-  await placeOrder(deps(), cfg, id, OPERATOR);
+  await placeOrder({ ...deps(), admission: testTradingAdmission() }, cfg, id, OPERATOR);
 
   const jobs = (await printJobsFor(cfg)).filter((job) => job.printerId === printerId);
   expect(jobs).toHaveLength(1);
@@ -592,7 +593,9 @@ it("prints one non-fiscal numbered collection ticket when a pay-on-collection or
   expect(opensDrawer(new Uint8Array(jobs[0]!.payload))).toBe(false);
   expect(await registroCount(cfg)).toBe(0);
   expect(await drawerOpensFor(cfg)).toEqual([]);
-  await expect(placeOrder(deps(), cfg, id, OPERATOR)).resolves.toEqual({
+  await expect(
+    placeOrder({ ...deps(), admission: testTradingAdmission() }, cfg, id, OPERATOR),
+  ).resolves.toEqual({
     id,
     status: "placed",
   });
@@ -619,7 +622,7 @@ it("a counter order paid at collection records its flow but prints no collection
       )
     ).rows,
   ).toEqual([{ service_mode: "ticket_then_pay" }]);
-  await placeOrder(deps(), cfg, id, OPERATOR);
+  await placeOrder({ ...deps(), admission: testTradingAdmission() }, cfg, id, OPERATOR);
   expect((await printJobsFor(cfg)).filter((job) => job.printerId === printerId)).toEqual([]);
   expect(await registroCount(cfg)).toBe(0);
   expect(await drawerOpensFor(cfg)).toEqual([]);
@@ -642,7 +645,7 @@ it("prints a separate numbered collection ticket when a prepaid order is paid", 
   });
 
   await recordTillSale(
-    deps(),
+    { ...deps(), admission: testTradingAdmission() },
     cfg,
     { workingOrderId: id, lines: [], tender: { method: "cash", amount: "2.00" } },
     OPERATOR,
@@ -657,7 +660,7 @@ it("prints a separate numbered collection ticket when a prepaid order is paid", 
   expect(collection).not.toContain("TOTAL");
   expect(await registroCount(cfg)).toBe(1);
   await recordTillSale(
-    deps(),
+    { ...deps(), admission: testTradingAdmission() },
     cfg,
     { workingOrderId: id, lines: [], tender: { method: "cash", amount: "2.00" } },
     OPERATOR,
@@ -692,7 +695,7 @@ it("a prepaid cash sale reads the device's printers once for its collection tick
     const selects = vi.spyOn(suite.db, "select");
     try {
       await recordTillSale(
-        deps(),
+        { ...deps(), admission: testTradingAdmission() },
         cfg,
         { workingOrderId: id, lines: [], tender: { method: "cash", amount: "2.00" } },
         operatorId,
@@ -741,7 +744,7 @@ it("a cash bill payment that pays the bill in full reads the device's printers o
   let printerReads: number;
   try {
     const { invoice } = await takeBillPayment(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       cfg,
       tabId,
       {
@@ -799,7 +802,7 @@ describe("receipt grouping after table changes", () => {
       });
       if (orderFlow === "prepay") {
         await recordTillSale(
-          deps(),
+          { ...deps(), admission: testTradingAdmission() },
           cfg,
           {
             workingOrderId: orderId,
@@ -809,12 +812,18 @@ describe("receipt grouping after table changes", () => {
           OPERATOR,
         );
       } else {
-        if (orderFlow === "issued") await issueOrderInvoice(deps(), cfg, orderId, OPERATOR);
-        await placeOrder(deps(), cfg, orderId, OPERATOR);
+        if (orderFlow === "issued")
+          await issueOrderInvoice(
+            { ...deps(), admission: testTradingAdmission() },
+            cfg,
+            orderId,
+            OPERATOR,
+          );
+        await placeOrder({ ...deps(), admission: testTradingAdmission() }, cfg, orderId, OPERATOR);
         if (orderFlow === "issued") await printSaleReceipt(deps(), cfg, orderId, false);
         if (orderFlow === "ticket_then_pay") {
           await collectOrder(
-            deps(),
+            { ...deps(), admission: testTradingAdmission() },
             cfg,
             {
               id: orderId,
@@ -837,7 +846,7 @@ describe("receipt grouping after table changes", () => {
       await reprintSale({ db: suite.db, backend }, cfg, orderId);
       if (orderFlow === "issued") {
         const collected = await collectOrder(
-          deps(),
+          { ...deps(), admission: testTradingAdmission() },
           cfg,
           {
             id: orderId,
@@ -872,7 +881,7 @@ describe("receipt original and copy tracking", () => {
     await configureReceipt(cfg, { printerId });
     const workingOrderId = randomUUID();
     await recordTillSale(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
         workingOrderId,
@@ -924,7 +933,7 @@ describe("simplified invoice original requests", () => {
       await configureReceipt(cfg, { printerId });
       const workingOrderId = randomUUID();
       await recordTillSale(
-        deps(),
+        { ...deps(), admission: testTradingAdmission() },
         cfg,
         {
           workingOrderId,
@@ -958,7 +967,7 @@ describe("simplified invoice original requests", () => {
     const { cfg, each, zoneId } = await setupVenue();
     const workingOrderId = randomUUID();
     const ticket = await recordTillSale(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
         workingOrderId,
@@ -993,7 +1002,7 @@ describe("cash payment drawer separation", () => {
     const printerId = await makePrinter(cfg, { hasCashDrawer: false });
     await configureReceipt(cfg, { mode: "auto", printerId });
     const result = await recordTillSale(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
         zoneId,
@@ -1018,7 +1027,7 @@ describe("cash payment drawer separation", () => {
       const printerId = await makePrinter(cfg);
       await configureReceipt(cfg, { mode, printerId });
       await recordTillSale(
-        deps(),
+        { ...deps(), admission: testTradingAdmission() },
         cfg,
         {
           zoneId,
@@ -1054,7 +1063,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     });
 
     await recordTillSale(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
         zoneId,
@@ -1083,7 +1092,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     });
     await configureReceipt(cfg, { mode: "auto", printerId });
     await recordTillSale(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
         zoneId,
@@ -1117,7 +1126,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     await configureReceipt(cfg, { mode: "auto", printerId });
 
     const result = await recordTillSale(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
         zoneId,
@@ -1174,7 +1183,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     });
 
     await recordTillSale(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
         zoneId,
@@ -1198,7 +1207,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     await configureReceipt(cfg, { mode: "auto", printerId });
 
     await recordTillSale(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
         zoneId: base.zoneId,
@@ -1219,7 +1228,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     await configureReceipt(cfg, { mode: "auto", printerId });
 
     await recordTillSale(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
         zoneId,
@@ -1257,7 +1266,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     await configureReceipt(cfg, { mode: "auto", printerId });
 
     await recordTillSale(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
         zoneId,
@@ -1279,7 +1288,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     await configureReceipt(cfg, { mode: "auto", printerId });
 
     await recordTillSale(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
         zoneId,
@@ -1300,7 +1309,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     const printerId = await makePrinter(cfg);
     await configureReceipt(cfg, { mode: "auto", printerId });
 
-    await recordTillSale(deps(), cfg, {
+    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, cfg, {
       zoneId,
       lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
       tender: { method: "card", amount: "1.50" },
@@ -1318,7 +1327,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     await configureReceipt(cfg, { mode: "on_request", printerId });
 
     await recordTillSale(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
         zoneId,
@@ -1347,7 +1356,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     await configureReceipt(cfg, { mode: "on_request", printerId });
 
     await recordTillSale(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
         zoneId,
@@ -1368,7 +1377,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     await configureReceipt(cfg, { mode: "on_request", printerId });
 
     await recordTillSale(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
         zoneId,
@@ -1387,7 +1396,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     const { cfg, each, zoneId } = await setupVenue();
     // Default mode is 'auto'; leave receipt_printer_id NULL.
     await recordTillSale(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
         zoneId,
@@ -1410,7 +1419,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     await configureReceipt(cfg, { mode: "auto", printerId });
 
     const result = await recordTillSale(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
         zoneId,
@@ -1432,7 +1441,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     await configureReceipt(cfg, { mode: "auto", printerId });
 
     // No operator: the kick and its audit row are skipped; the customer receipt still prints.
-    await recordTillSale(deps(), cfg, {
+    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, cfg, {
       zoneId,
       lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
       tender: { method: "cash", amount: "1.50" },
@@ -1458,8 +1467,8 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
         zoneId: base.zoneId,
         lines: [{ menuItemId: base.each.menuItemId, quantity: "1" }],
       });
-      await placeOrder(deps(), cfg, id, OPERATOR);
-      await issueOrderInvoice(deps(), cfg, id, OPERATOR);
+      await placeOrder({ ...deps(), admission: testTradingAdmission() }, cfg, id, OPERATOR);
+      await issueOrderInvoice({ ...deps(), admission: testTradingAdmission() }, cfg, id, OPERATOR);
       await printSaleReceipt(deps(), cfg, id, false);
       const jobs = await printJobsFor(cfg);
       expect(jobs).toHaveLength(1);
@@ -1482,8 +1491,8 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
         zoneId: base.zoneId,
         lines: [{ menuItemId: base.each.menuItemId, quantity: "1" }],
       });
-      await placeOrder(deps(), cfg, id, OPERATOR);
-      await issueOrderInvoice(deps(), cfg, id, OPERATOR);
+      await placeOrder({ ...deps(), admission: testTradingAdmission() }, cfg, id, OPERATOR);
+      await issueOrderInvoice({ ...deps(), admission: testTradingAdmission() }, cfg, id, OPERATOR);
       await printSaleReceipt(deps(), cfg, id, false);
       const issuedJobs = await printJobsFor(cfg);
       expect(issuedJobs).toHaveLength(1);
@@ -1502,7 +1511,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       expect(await drawerOpensFor(cfg)).toEqual([]);
 
       await collectOrder(
-        deps(),
+        { ...deps(), admission: testTradingAdmission() },
         cfg,
         { id, lines: [], tender: { method: "cash", amount: "2.00" } },
         OPERATOR,
@@ -1547,7 +1556,7 @@ describe("every device whose profile allows the drawer opens its chosen drawer",
     method: "cash" | "card" = "cash",
   ): Promise<void> {
     await recordTillSale(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
         zoneId: product.zoneId,
@@ -1680,10 +1689,16 @@ describe("every device whose profile allows the drawer opens its chosen drawer",
           zoneId,
           lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         });
-        await placeOrder(deps(), till, id, OPERATOR);
-        if (orderFlow === "issued") await issueOrderInvoice(deps(), till, id, OPERATOR);
+        await placeOrder({ ...deps(), admission: testTradingAdmission() }, till, id, OPERATOR);
+        if (orderFlow === "issued")
+          await issueOrderInvoice(
+            { ...deps(), admission: testTradingAdmission() },
+            till,
+            id,
+            OPERATOR,
+          );
         await collectOrder(
-          deps(),
+          { ...deps(), admission: testTradingAdmission() },
           till,
           { id, lines: [], tender: { method: "cash", amount: "2.00" } },
           OPERATOR,
@@ -1726,7 +1741,7 @@ describe("the drawer follows the device's drawer choice, not its receipt printer
     workingOrderId: string = randomUUID(),
   ): Promise<void> {
     await recordTillSale(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
         workingOrderId,
@@ -1927,7 +1942,7 @@ describe("a receipt reprint and the printer's alert (A167)", () => {
     method: "card" | "cash" = "card",
   ): Promise<{ saleId: string; workingOrderId: string }> {
     await recordTillSale(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       venue.cfg,
       {
         zoneId: venue.zoneId,
@@ -2182,7 +2197,7 @@ describe("receipt issuer", () => {
         sql`update departments set trading_name = 'Deli Counter' where location_id = ${cfg.locationId}`,
       ),
     );
-    const filed = await recordTillSale(deps(), cfg, {
+    const filed = await recordTillSale({ ...deps(), admission: testTradingAdmission() }, cfg, {
       zoneId,
       lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
       tender: { method: "card", amount: "1.50" },
@@ -2216,7 +2231,7 @@ describe("receipt issuer", () => {
   it("leaves a manual till reprint unqueued when its taxpayer row is missing", async () => {
     const { cfg, each, zoneId } = await setupVenue();
     await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter(cfg) });
-    const filed = await recordTillSale(deps(), cfg, {
+    const filed = await recordTillSale({ ...deps(), admission: testTradingAdmission() }, cfg, {
       zoneId,
       lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
       tender: { method: "card", amount: "1.50" },
@@ -2233,7 +2248,7 @@ describe("receipt issuer", () => {
   it("prints the taxpayer's own name and NIF when the ticket carries no filed issuer", async () => {
     const { cfg, each, zoneId } = await setupVenue();
     await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter(cfg) });
-    const filed = await recordTillSale(deps(), cfg, {
+    const filed = await recordTillSale({ ...deps(), admission: testTradingAdmission() }, cfg, {
       zoneId,
       lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
       tender: { method: "card", amount: "1.50" },
@@ -2593,7 +2608,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
 
   async function sellOne(cfg: DeviceRequestConfig, each: { menuItemId: string }, zoneId: string) {
     return recordTillSale(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
         zoneId,
@@ -3459,7 +3474,7 @@ describe("department receipt presentation on thermal jobs", () => {
       .where(eq(departmentSalePolicies.departmentId, departmentId!));
     const sell = () =>
       recordTillSale(
-        deps(),
+        { ...deps(), admission: testTradingAdmission() },
         cfg,
         {
           zoneId,
@@ -3634,7 +3649,7 @@ describe("department receipt presentation on thermal jobs", () => {
         .select({ id: invoiceSeries.id, nextNumber: invoiceSeries.nextNumber })
         .from(invoiceSeries);
       const replay = await recordTillSale(
-        deps(),
+        { ...deps(), admission: testTradingAdmission() },
         cfg,
         {
           workingOrderId: sold[0]!.workingOrderId!,
@@ -3684,7 +3699,7 @@ describe("department receipt presentation on thermal jobs", () => {
       .set({ addressLine1: "Current street" })
       .where(eq(locations.id, cfg.locationId));
     const replay = await recordTillSale(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
         workingOrderId: sale!.workingOrderId!,
@@ -3849,7 +3864,7 @@ describe("the theme's logo on thermal receipts", () => {
       .where(eq(zoneServicePolicies.zoneId, zoneId));
     const sell = () =>
       recordTillSale(
-        deps(),
+        { ...deps(), admission: testTradingAdmission() },
         cfg,
         {
           zoneId,
@@ -4077,7 +4092,7 @@ it("keeps the original history after printer deletion and prints a marked copy o
   await configureReceipt(cfg, { printerId: firstPrinter });
   const workingOrderId = randomUUID();
   const ticket = await recordTillSale(
-    deps(),
+    { ...deps(), admission: testTradingAdmission() },
     cfg,
     {
       workingOrderId,
@@ -4137,9 +4152,9 @@ describe("A964 collection language", () => {
         });
         const submit = () =>
           mode === "ticket_then_pay"
-            ? placeOrder(deps(), cfg, id, OPERATOR)
+            ? placeOrder({ ...deps(), admission: testTradingAdmission() }, cfg, id, OPERATOR)
             : recordTillSale(
-                deps(),
+                { ...deps(), admission: testTradingAdmission() },
                 cfg,
                 { workingOrderId: id, lines: [], tender: { method: "cash", amount: "2.00" } },
                 OPERATOR,
