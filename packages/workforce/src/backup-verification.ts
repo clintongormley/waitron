@@ -115,7 +115,6 @@ function entry(row: BackupRow): VerifiableEntry {
   return {
     sequenceNo: integer(row, "sequence_no"),
     personId: text(row, "person_id"),
-    locationId: text(row, "location_id"),
     nodeId: text(row, "node_id"),
     entryKind: text(row, "entry_kind"),
     eventAt: instant(row, "event_at"),

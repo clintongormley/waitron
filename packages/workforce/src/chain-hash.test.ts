@@ -14,7 +14,6 @@ function content(over: Partial<EntryHashInput> = {}): EntryHashInput {
   return {
     sequenceNo: 1,
     personId: "11111111-1111-4111-8111-111111111111",
-    locationId: "22222222-2222-4222-8222-222222222222",
     nodeId: "99999999-9999-4999-8999-999999999999",
     entryKind: "in",
     eventAt: "2026-01-05T09:00:00Z",
@@ -74,7 +73,6 @@ describe("computeEntryHash", () => {
   it.each([
     ["sequenceNo", { sequenceNo: 2 }],
     ["personId", { personId: "33333333-3333-4333-8333-333333333333" }],
-    ["locationId", { locationId: "44444444-4444-4444-8444-444444444444" }],
     ["nodeId", { nodeId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }],
     ["entryKind", { entryKind: "out" }],
     ["eventAt", { eventAt: "2026-01-05T09:00:01Z" }],
@@ -96,7 +94,6 @@ describe("computeEntryHash", () => {
     const base: EntryHashInput = {
       sequenceNo: 1,
       personId: "p1",
-      locationId: "L1",
       nodeId: "N1",
       entryKind: "in",
       eventAt: "2026-09-07T08:00:00.000Z",
@@ -135,7 +132,6 @@ describe("computeEntryHash", () => {
     // rather than echoing the function.
     const canonical =
       "SequenceNo=1&PersonId=11111111-1111-4111-8111-111111111111" +
-      "&LocationId=22222222-2222-4222-8222-222222222222" +
       "&NodeId=99999999-9999-4999-8999-999999999999&EntryKind=in" +
       "&EventAtMs=1767603600000&RecordedAtMs=1767603600000&EventOffsetMinutes=0" +
       "&RecordedByPersonId=11111111-1111-4111-8111-111111111111" +

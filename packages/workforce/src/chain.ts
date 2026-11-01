@@ -120,7 +120,6 @@ async function attemptAppend(
   const entryHash = computeEntryHash({
     sequenceNo,
     personId: entry.personId,
-    locationId: entry.locationId,
     nodeId: key.nodeId,
     entryKind: entry.entryKind,
     eventAt,
@@ -245,7 +244,6 @@ export async function readChain(
     .select({
       sequenceNo: timeEntries.sequenceNo,
       personId: timeEntries.personId,
-      locationId: timeEntries.locationId,
       nodeId: timeEntries.nodeId,
       entryKind: timeEntries.entryKind,
       eventAt: timeEntries.eventAt,

@@ -22,7 +22,6 @@ const extension = {
 const content: EntryHashInput = {
   sequenceNo: 1,
   personId: "p",
-  locationId: "l",
   nodeId: "n",
   entryKind: "in",
   eventAt: "2026-01-05T09:00:00.000Z",

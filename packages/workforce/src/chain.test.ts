@@ -122,10 +122,7 @@ describe("appendToChain", () => {
       appendToChain(tx, { nodeId }, inputAt("2026-01-05T10:00:00Z", otherLocation)),
     );
     const chain = await readChain(suite.db, { nodeId });
-    expect(chain.map((e) => [e.locationId, e.sequenceNo])).toEqual([
-      [locationId, 1],
-      [otherLocation, 2],
-    ]);
+    expect(chain.map((e) => e.sequenceNo)).toEqual([1, 2]);
     expect(verifyChain(chain)).toEqual({ ok: true });
     const other = await suite.db.transaction((tx) =>
       appendToChain(tx, { nodeId: otherNode }, inputAt("2026-01-05T09:00:00Z", otherLocation)),

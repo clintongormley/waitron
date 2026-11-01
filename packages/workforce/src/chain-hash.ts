@@ -7,7 +7,6 @@ export interface EntryHashInput {
   /** The entry's 1-based position within its node's chain. */
   sequenceNo: number;
   personId: string;
-  locationId: string;
   /** Hashed so a row cannot be re-pointed at another node's chain undetected. This digest is ours to
    * define; CLAUDE.md §5's rule against hashing our own metadata is about the FISCAL digest. */
   nodeId: string;
@@ -64,7 +63,6 @@ function canonicalString(input: EntryHashInput): string {
   const basic = joinFields([
     ["SequenceNo", String(input.sequenceNo)],
     ["PersonId", input.personId],
-    ["LocationId", input.locationId],
     ["NodeId", input.nodeId],
     ["EntryKind", input.entryKind],
     ["EventAtMs", String(Date.parse(input.eventAt))],
