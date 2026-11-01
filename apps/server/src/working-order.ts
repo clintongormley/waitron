@@ -2790,7 +2790,6 @@ export async function sendLines(
   const heldGroupLineIdSet = new Set(heldGroupLineIds);
   // An empty list fires every HELD line of the tab outside a held group.
   const namedLineIds = namedLines.map((line) => line.id);
-  // One clock reading for both stamps: `queued_at` is what every age on the boards is measured from.
   const firedNow = routing.at.toISOString();
   const ticketScope =
     lineNos.length === 0

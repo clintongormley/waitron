@@ -60,7 +60,7 @@ export async function requestHeldItems(
   const stations = await tx
     .selectDistinct({ stationId: ticketItems.stationId })
     .from(ticketItems)
-    .where(inScope);
+    .where(held);
   const waiting = await passWaitingStations(
     tx,
     stations.map((row) => row.stationId),

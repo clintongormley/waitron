@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   orderGroups,
@@ -340,21 +340,34 @@ describe("A773 waiter request: release", () => {
         .where(eq(ticketItems.workingOrderId, venue.party.tabId));
       expect(requested).toMatchObject({ firedAt: null, passControlled: true });
       const requestedAt = requested!.requestedAt!;
+      await addTabRound(tx, venue.cfg, venue.party.tabId, [
+        { ...dish(venue, "burger"), hold: true },
+      ]);
+      const [held] = await tx
+        .select()
+        .from(ticketItems)
+        .where(
+          and(eq(ticketItems.workingOrderId, venue.party.tabId), isNull(ticketItems.requestedAt)),
+        );
       const before = await jobCounts(tx, venue);
+      const laterAt = new Date(Date.parse(requestedAt) + 60_000);
       const later = () =>
         fireOrderLines(
           tx,
           venue.cfg,
           venue.party.tabId,
-          [requested!.workingOrderLineId],
+          [requested!.workingOrderLineId, held!.workingOrderLineId],
           undefined,
-          routingOnce(tx, venue.cfg, new Date(Date.parse(requestedAt) + 60_000)),
+          routingOnce(tx, venue.cfg, laterAt),
         );
       const row = async () =>
         tx.select().from(ticketItems).where(eq(ticketItems.id, requested!.id));
 
       await later();
       expect(await row()).toEqual([requested]);
+      expect(await tx.select().from(ticketItems).where(eq(ticketItems.id, held!.id))).toEqual([
+        { ...held, requestedAt: laterAt.toISOString(), passControlled: true },
+      ]);
       expect(await jobCounts(tx, venue)).toEqual(before);
 
       await setStationsWaitForPass(tx, false, [venue.stations.grill]);
