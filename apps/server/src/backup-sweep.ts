@@ -426,8 +426,9 @@ export async function pruneBackend(
 /**
  * Takes a copy at once, then sleeps toward each next fire in chunks of at most `MAX_SLEEP_MS`, so a
  * step of the clock is noticed within the hour: a step forward past the fire fires then, and a step
- * back that leaves the fire further ahead than the schedule puts one works the fire out again. A failed tick is logged with its code, never its message,
- * which could carry a path; an abort mid-tick is a cancellation, not a failure.
+ * back that leaves the fire further ahead than the schedule puts one works the fire out again. A
+ * failed tick is logged with its code, never its message, which could carry a path; an abort
+ * mid-tick is a cancellation, not a failure.
  */
 export async function runBackupSweep(deps: BackupSweepDeps): Promise<void> {
   const now = deps.now ?? (() => new Date());
@@ -438,12 +439,14 @@ export async function runBackupSweep(deps: BackupSweepDeps): Promise<void> {
     while (!deps.signal.aborted) {
       // Inside the try: a `readClock` rejection must not end the backup loop.
       let fireAt: number;
+      let computedAt: number;
       try {
         const clock =
           deps.schedule.kind === "wall-clock"
             ? await deps.readClock()
             : { timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] };
-        fireAt = nextFireMs(deps.schedule, clock, now(), deps.jitterSeed);
+        computedAt = now().getTime();
+        fireAt = nextFireMs(deps.schedule, clock, new Date(computedAt), deps.jitterSeed);
       } catch (err) {
         if (deps.signal.aborted) break;
         deps.log("warn", "backup.schedule_failed", { errorCode: codeOf(err) });
@@ -453,11 +456,15 @@ export async function runBackupSweep(deps: BackupSweepDeps): Promise<void> {
       deps.onScheduled?.(fireAt);
       // `fireAt` is fixed for the cycle, so a time zone or cutover change lands at the next fire.
       // Never recompute it mid-wait: an interval schedule's next fire is `now + ms`, so each wake
-      // would push it out again. The one exception is a `fireAt` the clock stepped back from.
+      // would push it out again. The one exception is a `fireAt` the clock stepped back from: the
+      // clock reads earlier than when the fire was worked out, and the fire lies further ahead
+      // than the schedule puts one. Without the first, a fire past the bound with no step (a
+      // two-hour change of the clocks) would be worked out again at every turn, never sleeping.
       const longestAhead = longestFireAheadMs(deps.schedule);
       let steppedBack = false;
       while (!deps.signal.aborted && now().getTime() < fireAt) {
-        if (fireAt - now().getTime() > longestAhead) {
+        const nowMs = now().getTime();
+        if (nowMs < computedAt && fireAt - nowMs > longestAhead) {
           steppedBack = true;
           break;
         }

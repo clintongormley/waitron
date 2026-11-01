@@ -173,9 +173,12 @@ async function runOne(
 
   const outcome = errorCode === null ? "succeeded" : parkOrRetry(deps, claimed);
   const nextAttemptAt = outcome === "failed" ? backoff(deps, claimed, now) : null;
+  // A re-sweep later than `longestWait` would read as stamped before a step back and run at every
+  // tick, so a duty that asks for more than it declares gets the limit.
   const successorDueAt =
     outcome === "succeeded"
-      ? resweepAfter
+      ? resweepAfter &&
+        new Date(Math.min(resweepAfter.getTime(), now.getTime() + longestWait(deps, duty)))
       : outcome === "parked" && duty.retryParkedAfterMs !== undefined
         ? new Date(now.getTime() + duty.retryParkedAfterMs)
         : undefined;

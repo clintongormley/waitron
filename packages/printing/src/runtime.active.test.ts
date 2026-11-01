@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   locations,
@@ -157,6 +157,30 @@ describe("a print job's claim stamped ahead of the clock", () => {
       claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
     );
     expect(reclaimed.map((j) => j.id)).toEqual([jobId]);
+  });
+
+  describe("under a fixed clock", () => {
+    const NOW = new Date("2026-11-01T12:00:00.000Z");
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    for (const [aheadMs, claimedAgain] of [
+      [PRINT_JOB_LEASE_MS, false],
+      [PRINT_JOB_LEASE_MS + 1, true],
+    ] as const) {
+      it(`${claimedAgain ? "claims again" : "leaves"} a job whose claim lies ${aheadMs} ms ahead`, async () => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(NOW);
+        const { cfg, agentId, jobId } = await claimedJobStampedAt(
+          new Date(NOW.getTime() + aheadMs),
+        );
+        const reclaimed = await withTransaction(suite.db, (tx: Transaction) =>
+          claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+        );
+        expect(reclaimed.map((j) => j.id)).toEqual(claimedAgain ? [jobId] : []);
+      });
+    }
   });
 
   // The claim reads the clock after this stamp, so the stamp is at most the lease ahead of it.

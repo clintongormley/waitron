@@ -22,6 +22,7 @@ import {
 } from "./backup-sweep.js";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
 import type { BackupSchedule } from "./backup-config.js";
+import { longestFireAheadMs, nextFireMs } from "./backup-schedule.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
 import { backupArchiveKey, parseBackupArchiveKey } from "./backup-keys.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
@@ -964,6 +965,58 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
         );
         expect(deadlines.length === 1).toBe(kept);
       }
+    });
+
+    it("keeps a 03:00 deadline through a step back that leaves it exactly as far ahead as a daily fire can be, and not a millisecond more", async () => {
+      // 12:00Z → 03:00 Madrid is 14 h ahead; a daily fire can lie 49 h ahead.
+      for (const [stepMs, kept] of [
+        [35 * HOUR, true],
+        [35 * HOUR + 1, false],
+      ] as const) {
+        const { deadlines } = await archivesAfterStep(
+          { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 0 } },
+          "2026-11-03T12:00:00Z",
+          stepMs,
+        );
+        expect(deadlines[0]).toBe(Date.parse("2026-11-04T02:00:00Z"));
+        expect(deadlines.length === 1).toBe(kept);
+      }
+    });
+
+    it("sleeps toward a fire that lies further ahead than the bound when the clock did not step", async () => {
+      // Antarctica/Troll changes its clocks by two hours, so a day start moved from 00:00 to
+      // 23:59 across that night puts the automatic fire 54 minutes past the bound, with no step.
+      const clock = {
+        timeZone: "Antarctica/Troll",
+        dayCutover: "00:00",
+        cutoverChanges: [{ effectiveBusinessDay: "2026-10-26", dayCutover: "23:59" }],
+      };
+      const schedule: BackupSchedule = { kind: "wall-clock", days: "daily", at: "auto" };
+      const now = Date.parse("2026-10-24T22:41:00Z");
+      expect(nextFireMs(schedule, clock, new Date(now), "loop-node") - now).toBeGreaterThan(
+        longestFireAheadMs(schedule),
+      );
+      const controller = new AbortController();
+      let reads = 0;
+      const sleeps: number[] = [];
+      await runBackupSweep(
+        loopDeps(new FakeBackend("troll"), {
+          signal: controller.signal,
+          now: () => new Date(now),
+          log: vi.fn(),
+          schedule,
+          readClock: async () => {
+            reads++;
+            if (reads >= 5) controller.abort();
+            return clock;
+          },
+          sleep: async (ms) => {
+            sleeps.push(ms);
+            controller.abort();
+          },
+        }),
+      );
+      expect({ reads, sleeps }).toEqual({ reads: 1, sleeps: [HOUR] });
     });
   });
 

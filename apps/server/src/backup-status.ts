@@ -82,15 +82,19 @@ function freshness(
   staleAfterMs: number,
   now: Date,
 ): DestinationStatus {
-  // The listing is newest-first.
-  const newest = objects.find(({ key }) => parseBackupArchiveKey(key) !== null);
-  if (newest === undefined) return unreadDestination(id, null);
+  // The listing is newest-first. A local folder's mtimes come from the box's clock, so after a
+  // step back an archive can sit further ahead than staleAfterMs; it says nothing about how
+  // recent the last backup is, so the newest archive not that far ahead is judged instead.
+  const archives = objects.filter(({ key }) => parseBackupArchiveKey(key) !== null);
+  if (archives.length === 0) return unreadDestination(id, null);
+  const judged = archives.find(({ mtimeMs }) => mtimeMs - now.getTime() <= staleAfterMs);
+  const newest = judged ?? archives[0]!;
   const ageMs = now.getTime() - newest.mtimeMs;
   return {
     id,
     lastBackupAt: new Date(newest.mtimeMs).toISOString(),
     ageSeconds: Math.floor(ageMs / 1000),
-    stale: ageMs > staleAfterMs,
+    stale: judged === undefined || ageMs > staleAfterMs,
     readErrorCode: null,
   };
 }

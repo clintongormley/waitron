@@ -36,6 +36,19 @@ function snapshotOf(): Promise<LedgerSnapshot> {
 }
 
 describe("resweepAfter", () => {
+  it("enqueues a re-sweep asked for later than the duty declares at the declared limit", async () => {
+    const duty = new ResweepingDuty(DUTY, () =>
+      Promise.resolve({
+        summary: {},
+        resweepAfter: new Date(NOW.getTime() + 2 * (TOMORROW.getTime() - NOW.getTime())),
+      }),
+    );
+    await runDue(deps([duty]), NOW);
+
+    const pending = (await snapshotOf()).rows.filter((r) => r.state === "pending");
+    expect(pending.map((r) => r.nextAttemptAt)).toEqual([TOMORROW.toISOString()]);
+  });
+
   it("enqueues the next generation of the SAME period, due when asked", async () => {
     const duty = new ResweepingDuty(DUTY, () =>
       Promise.resolve({ summary: { gated: 1 }, resweepAfter: TOMORROW }),

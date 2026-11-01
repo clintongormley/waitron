@@ -509,6 +509,13 @@ describe("runDue: retry times stamped ahead of the clock", () => {
     expect(duty.calls).toHaveLength(0);
   });
 
+  it("wakes at the retry time of a failed run whose retry lies within the longest backoff", async () => {
+    const retryAt = new Date(NOW.getTime() + LONGEST_BACKOFF);
+    await insertRow({ state: "failed", generation: 0, attempts: 1 }, retryAt);
+    const result = await runDue(deps([new FakeDuty()]), NOW);
+    expect(result.nextDueAt).toEqual(retryAt);
+  });
+
   it("runs a pending successor stamped 400 days ahead", async () => {
     await insertRow(
       { state: "pending", generation: 1, attempts: 0 },

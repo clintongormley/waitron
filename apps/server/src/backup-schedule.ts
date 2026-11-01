@@ -6,7 +6,7 @@ import { businessDayBoundaryAt, type BusinessDayClock } from "@waitron/shared";
 export type ScheduleClock = BusinessDayClock;
 
 export const AUTO_MARGIN_MINUTES = 30;
-/** The longest single sleep, so a step of the clock is noticed within the hour. */
+/** The longest single sleep, so a step of the clock is noticed within the hour (`runBackupSweep`). */
 export const MAX_SLEEP_MS = 60 * 60 * 1000;
 const AUTO_JITTER_MINUTES = 10;
 
