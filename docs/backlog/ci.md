@@ -3,6 +3,21 @@
 The open entries are listed in [the backlog](../backlog.md), under "CI, tests and developer tooling". This file holds
 their full text.
 
+## A1303. The certificate diagnosis child still loses its result on CI after A1257's fix.
+
+On 2026-11-01, PR #2375 (A1268, which touches no certificate code) failed `test-server (6)` in run
+[41315211519](https://github.com/clintongormley/waitron/actions/runs/41315211519/job/124874453696):
+`apps/server/src/fiscal-certificate-diagnosis-process.test.ts` > "resolves only after its exact
+child exits and permits the next attempt" received
+`{ outcome: "interrupted", reason: "unavailable", lastProgress: null }` where it expects
+`completed` with `{ value: "selected" }`; the case's marker file held one event. This is the same
+result as main run `41195102945` that A1257 (#2342, `a9b7beebbe`) attributed to a child's exit
+arriving before its pipe data, and the failing branch already contained that fix. So either that
+was not the only cause, or the drain does not cover this ordering. The other 20 cases in the file
+passed in the same run. Next action: add pipe and exit timeline diagnostics the failing case
+prints on CI (the testing guide's "A child's exit can precede its readable output" names the
+runner and process suites), reproduce, and fix the cause.
+
 ## Tests that read a built command's error output fail under Claude Code
 
 The command's stderr
