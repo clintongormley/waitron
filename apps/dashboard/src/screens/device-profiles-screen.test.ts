@@ -1404,11 +1404,11 @@ describe("device-profiles-screen kitchen screens", () => {
   it.each([
     [
       "en",
-      "Saved. Pantalla Pase no longer shows Deli. Pantalla Bar no longer shows Pass screen, Terrace.",
+      "Saved. Serving hatch no longer shows Deli. Bar display no longer shows Pass screen, Terrace.",
     ],
     [
       "es",
-      "Guardado. Pantalla Pase ya no muestra Deli. Pantalla Bar ya no muestra Pantalla de pase, Terrace.",
+      "Guardado. Serving hatch ya no muestra Deli. Bar display ya no muestra Pantalla de pase, Terrace.",
     ],
   ] as const)("names the devices a save narrowed, in %s", async (locale, expected) => {
     const previous = currentLocale();
@@ -1420,12 +1420,12 @@ describe("device-profiles-screen kitchen screens", () => {
           narrowedDevices: [
             {
               deviceId: "dv1",
-              deviceName: "Pantalla Pase",
+              deviceName: "Serving hatch",
               lost: { screens: [], stations: [{ id: "s9", name: "Deli" }], zones: [] },
             },
             {
               deviceId: "dv2",
-              deviceName: "Pantalla Bar",
+              deviceName: "Bar display",
               lost: { screens: ["pass"], stations: [], zones: [{ id: "z2", name: "Terrace" }] },
             },
           ],
@@ -1455,7 +1455,7 @@ describe("device-profiles-screen kitchen screens", () => {
           narrowedDevices: [
             {
               deviceId: "dv1",
-              deviceName: "Pantalla {lost}",
+              deviceName: "Display {lost}",
               lost: { screens: [], stations: [{ id: "s9", name: "Deli" }], zones: [] },
             },
           ],
@@ -1465,7 +1465,7 @@ describe("device-profiles-screen kitchen screens", () => {
       await flush(el);
       await save(el);
       await flush(el);
-      expect(text(el, "narrowed-devices")).toBe("Saved. Pantalla {lost} no longer shows Deli.");
+      expect(text(el, "narrowed-devices")).toBe("Saved. Display {lost} no longer shows Deli.");
     } finally {
       setLocale(previous);
     }
@@ -1477,7 +1477,7 @@ describe("device-profiles-screen kitchen screens", () => {
       narrowedDevices: [
         {
           deviceId: "dv1",
-          deviceName: "Pantalla Pase",
+          deviceName: "Serving hatch",
           lost: { screens: [], stations: [{ id: "s1", name: "Grill" }], zones: [] },
         },
       ],
