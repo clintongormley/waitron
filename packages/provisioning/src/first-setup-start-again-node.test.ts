@@ -96,9 +96,13 @@ function damageNodeIndexes(roots: { venueDir: string }) {
     node.close();
   }
   expect(pages.length).toBeGreaterThan(0);
+  // A valid but empty index leaf: an indexed count then reads zero rows instead of failing.
+  const emptyLeaf = Buffer.alloc(size);
+  emptyLeaf[0] = 0x0a;
+  emptyLeaf.writeUInt16BE(size & 0xffff, 5);
   const fd = openSync(path, "r+");
   try {
-    for (const page of pages) writeSync(fd, Buffer.alloc(size, 0xab), 0, size, size * (page - 1));
+    for (const page of pages) writeSync(fd, emptyLeaf, 0, size, size * (page - 1));
   } finally {
     closeSync(fd);
   }
