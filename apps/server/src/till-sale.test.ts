@@ -3182,7 +3182,7 @@ describe("receipt presentation address failure", () => {
       })
       .where(eq(departmentReceipts.departmentId, department!.id));
     const address = vi
-      .spyOn(venueAddressReads, "readLocationAddress")
+      .spyOn(venueAddressReads, "readVenueAddress")
       .mockRejectedValue(new Error("current address read refused"));
     const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
@@ -3204,7 +3204,7 @@ describe("receipt presentation address failure", () => {
       expect(warning.mock.calls).toEqual([
         [
           "receipt.optional_read_failed",
-          { operation: "readLocationAddress", code: "receipt.read_failed" },
+          { operation: "readVenueAddress", code: "receipt.read_failed" },
         ],
       ]);
     } finally {

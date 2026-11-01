@@ -24,7 +24,7 @@ export async function departmentReceiptLanguages(
   ];
   return {
     receiptLanguage,
-    languages: await readOfferedReceiptLanguages(tx, cfg),
+    languages: await readOfferedReceiptLanguages(tx),
     storageLanguages: [...new Set([receiptLanguage, ...labelled])],
   };
 }

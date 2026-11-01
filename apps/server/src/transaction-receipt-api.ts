@@ -61,7 +61,7 @@ export function mountTransactionReceiptApi(
         if (
           language !== undefined &&
           language !== ticket.locale &&
-          !(await readOfferedReceiptLanguages(tx, cfg)).includes(language)
+          !(await readOfferedReceiptLanguages(tx)).includes(language)
         )
           throw new AppError("management.request_invalid", { field: "language" });
         const printer = await resolveReceiptPrinter(tx, cfg.origin);

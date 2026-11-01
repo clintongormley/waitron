@@ -3,7 +3,7 @@ import { readReceiptLanguage } from "@waitron/catalogue";
 import { resolveReceiptTrim, type ReceiptPresentation } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import type { TradingContext } from "./trading-context.js";
-import { readLocationAddress } from "./venue-address.js";
+import { readVenueAddress } from "./venue-address.js";
 import { readPresentations } from "@waitron/media";
 import { readVenueLogoName } from "./receipt-venue-logo.js";
 
@@ -36,9 +36,9 @@ export async function readReceiptPresentation(
         );
   let venueAddress: string[] = [];
   try {
-    venueAddress = await readLocationAddress(tx, cfg.locationId);
+    venueAddress = await readVenueAddress(tx);
   } catch {
-    diagnostic({ operation: "readLocationAddress", code: "receipt.read_failed" });
+    diagnostic({ operation: "readVenueAddress", code: "receipt.read_failed" });
   }
   const receiptTrim = resolveReceiptTrim(
     department?.receipt ?? null,

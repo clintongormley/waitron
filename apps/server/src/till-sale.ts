@@ -930,7 +930,7 @@ export async function printSaleReceipt(
       .where(eq(sales.workingOrderId, workingOrderId));
     if (language !== undefined && language !== existing?.locale) {
       // The sale's own language stays accepted after the venue stops offering it.
-      const offered = await readOfferedReceiptLanguages(tx, { locationId: cfg.locationId });
+      const offered = await readOfferedReceiptLanguages(tx);
       if (!offered.includes(language)) {
         throw new AppError("management.request_invalid", { field: "language" });
       }
@@ -991,7 +991,7 @@ async function fileImmediateSale(
   const settledAt = clock.now().instant;
 
   const selected = await selectOrderInvoice(tx, deps.backend, cfg, workingOrderId, priced.total);
-  const language = await saleLanguageFor(tx, cfg.locationId, selected.receiptLocale, {
+  const language = await saleLanguageFor(tx, selected.receiptLocale, {
     log: deps.log,
     workingOrderId,
   });
@@ -1629,7 +1629,7 @@ async function finalizeCapture(
           deps.backend,
         );
         const selected = await selectOrderInvoice(tx, deps.backend, cfg, req.id, priced.total);
-        const language = await saleLanguageFor(tx, cfg.locationId, selected.receiptLocale, {
+        const language = await saleLanguageFor(tx, selected.receiptLocale, {
           log: deps.log,
           workingOrderId: req.id,
         });
@@ -1808,7 +1808,7 @@ async function finalizeRecovery(
         .where(eq(payments.id, captured.id));
       const origin = storedDeviceOrigin(startedOn!);
       const selected = await selectOrderInvoice(tx, deps.backend, cfg, req.id, priced.total);
-      const language = await saleLanguageFor(tx, cfg.locationId, selected.receiptLocale, {
+      const language = await saleLanguageFor(tx, selected.receiptLocale, {
         log: deps.log,
         workingOrderId: req.id,
       });

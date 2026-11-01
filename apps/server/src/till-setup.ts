@@ -80,9 +80,7 @@ async function readSetupFields(tx: Transaction, deps: TillSetupDeps, device: Dev
       });
     }
   }
-  const receiptLanguages = await readOfferedReceiptLanguages(tx, {
-    locationId: deps.cfg.locationId,
-  });
+  const receiptLanguages = await readOfferedReceiptLanguages(tx);
   /* v8 ignore start */
   if (taxpayer === null) {
     // Unreachable once provisioned: the taxpayer row exists.

@@ -15,7 +15,7 @@ import type { Logger } from "./logger.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { drawLogoRasters } from "./receipt-logo.js";
 import type { TradingContext } from "./trading-context.js";
-import { readLocationAddress } from "./venue-address.js";
+import { readVenueAddress } from "./venue-address.js";
 import { departmentReceiptLanguages } from "./department-receipt-languages.js";
 import { checkedDepartmentReceiptWrite } from "./department-receipt-draft.js";
 
@@ -84,7 +84,7 @@ export function mountDepartmentReceiptSettingsApi(
             ? { ...stored, operationDescription: cfg.operationDescriptionDefault }
             : stored;
         const policy = await VENUE_SERVICE.readDepartmentReceiptPolicy(tx, cfg, id);
-        const venueAddress = await readLocationAddress(tx, cfg.locationId);
+        const venueAddress = await readVenueAddress(tx);
         return {
           receipt,
           policy,

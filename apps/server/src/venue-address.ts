@@ -1,5 +1,4 @@
-import { eq } from "drizzle-orm";
-import { locations, type Transaction } from "@waitron/db";
+import { readVenue, type Transaction } from "@waitron/db";
 import type { ReceiptConfig } from "@waitron/layouts";
 
 export interface VenueAddress {
@@ -39,28 +38,11 @@ export function receiptAddressLines(
 
 export async function readReceiptAddress(
   tx: Transaction,
-  locationId: string,
   receipt: Pick<ReceiptConfig, "printAddress">,
 ): Promise<string[]> {
-  return receiptAddressLines(receipt, await readAddress(tx, locationId));
+  return receiptAddressLines(receipt, await readVenue(tx));
 }
 
-/** The location's address lines whatever the receipt's switch says; none for an unknown location. */
-export async function readLocationAddress(tx: Transaction, locationId: string): Promise<string[]> {
-  const row = await readAddress(tx, locationId);
-  return row === undefined ? [] : addressLines(row);
-}
-
-async function readAddress(tx: Transaction, locationId: string): Promise<VenueAddress | undefined> {
-  const [row] = await tx
-    .select({
-      addressLine1: locations.addressLine1,
-      addressLine2: locations.addressLine2,
-      postalCode: locations.postalCode,
-      city: locations.city,
-      province: locations.province,
-    })
-    .from(locations)
-    .where(eq(locations.id, locationId));
-  return row;
+export async function readVenueAddress(tx: Transaction): Promise<string[]> {
+  return addressLines(await readVenue(tx));
 }

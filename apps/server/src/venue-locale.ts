@@ -1,7 +1,5 @@
 // No `import "./errors.js"`: this file throws no AppError code.
-import { eq } from "drizzle-orm";
 import {
-  locations,
   readTenant,
   readVenue,
   withTransaction,
@@ -101,69 +99,58 @@ export function offeredReceiptLanguages(
   return offered;
 }
 
-/** A location's receipt language (the first of its `invoice_locales`), the whole list, and its
- * province, in one read. */
-async function locationLanguageIn(
+async function venueLanguageIn(
   tx: Transaction,
-  locationId: string,
 ): Promise<{ locale: string; invoiceLocales: string[]; area: string | null }> {
-  const [row] = await tx
-    .select({ invoiceLocales: locations.invoiceLocales, province: locations.province })
-    .from(locations)
-    .where(eq(locations.id, locationId));
-  const locale = row?.invoiceLocales[0];
-  // As `readReceiptLanguage` (@waitron/catalogue), with the province in the same read.
-  if (locale === undefined) throw new Error(`locationLanguageIn: no location ${locationId}`);
-  return { locale, invoiceLocales: row!.invoiceLocales, area: row!.province };
+  const venue = await readVenue(tx);
+  return {
+    locale: venue.invoiceLocales[0]!,
+    invoiceLocales: venue.invoiceLocales,
+    area: venue.province,
+  };
 }
 
 async function offeredIn(
   tx: Transaction,
-  location: { locale: string; area: string | null },
+  venue: { locale: string; area: string | null },
 ): Promise<[string, ...string[]]> {
   const { choices } = resolveInstalledReceiptLanguageRules({
     country: await countryIn(tx),
-    area: location.area,
+    area: venue.area,
   });
-  const { languages } = contentLanguagesOr(await readSavedContentLanguages(tx), location.locale);
-  return offeredReceiptLanguages(location.locale, choices, languages);
+  const { languages } = contentLanguagesOr(await readSavedContentLanguages(tx), venue.locale);
+  return offeredReceiptLanguages(venue.locale, choices, languages);
 }
 
-/** {@link offeredReceiptLanguages} for a location, read in the caller's transaction: the location's
- * receipt language is always the first entry. With no saved content languages, only the location's
+/** {@link offeredReceiptLanguages} for a venue, read in the caller's transaction: the venue's
+ * receipt language is always the first entry. With no saved content languages, only the venue's
  * receipt language is offered. */
-export async function readOfferedReceiptLanguages(
-  tx: Transaction,
-  params: { locationId: string },
-): Promise<[string, ...string[]]> {
-  return offeredIn(tx, await locationLanguageIn(tx, params.locationId));
+export async function readOfferedReceiptLanguages(tx: Transaction): Promise<[string, ...string[]]> {
+  return offeredIn(tx, await venueLanguageIn(tx));
 }
 
 /**
  * The `locale` and `invoiceLocales` a sale is filed with, given the receipt language saved on its
- * order (`stored`, undefined for none): the chosen language after the location's first, so the list's
- * first entry stays the location's first, a key the line descriptions are stored under and the one
- * the goods are read by (`namesLocale`). A saved language the location no longer offers files in
- * the location's receipt language and logs a warning: a sale is never refused for its language.
+ * order (`stored`, undefined for none): the chosen language after the venue's first, so the list's
+ * first entry stays the venue's first, a key the line descriptions are stored under and the one
+ * the goods are read by (`namesLocale`). A saved language the venue no longer offers files in
+ * the venue's receipt language and logs a warning: a sale is never refused for its language.
  */
 export async function saleLanguageFor(
   tx: Transaction,
-  locationId: string,
   stored: string | undefined,
   warn: { log: Logger | undefined; workingOrderId: string },
 ): Promise<{ locale: string; invoiceLocales: string[] }> {
-  const location = await locationLanguageIn(tx, locationId);
-  const filedIn = { locale: location.locale, invoiceLocales: location.invoiceLocales };
-  if (stored === undefined || stored === location.locale) return filedIn;
-  if (!(await offeredIn(tx, location)).includes(stored)) {
+  const venue = await venueLanguageIn(tx);
+  const filedIn = { locale: venue.locale, invoiceLocales: venue.invoiceLocales };
+  if (stored === undefined || stored === venue.locale) return filedIn;
+  if (!(await offeredIn(tx, venue)).includes(stored)) {
     warn.log?.("warn", "receipt_language.not_offered", {
       workingOrderId: warn.workingOrderId,
       language: stored,
-      filedIn: location.locale,
+      filedIn: venue.locale,
     });
     return filedIn;
   }
-  // `locations_invoice_locales_len` holds the location's list to one or two entries, so whenever
-  // that list holds `stored` this pair IS that list.
-  return { locale: stored, invoiceLocales: [location.locale, stored] };
+  return { locale: stored, invoiceLocales: [venue.locale, stored] };
 }
