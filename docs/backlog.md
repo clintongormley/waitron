@@ -6338,7 +6338,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Device-profile samples still need cleanup, including printer-loading, accessibility states
   and departments. The unsaved-profile suite still has a Spanish narrowed-device sample.
   The `devices-screen.test.ts` suite still needs its
-  disabled-device, till, pairing, returning-device station and printer sample names cleaned.
+  disabled-device, till, pairing, kitchen-screen profile, returning-device station and printer
+  sample names cleaned.
   The order-delivery suite still uses `Barra` and `Oficina` as printer sample names.
   Menu-preview accessibility states still use `Terraza` as a sample menu name.
   Audit the remaining `Terraza` occurrences in the menu-screen, look-card and equipment-label

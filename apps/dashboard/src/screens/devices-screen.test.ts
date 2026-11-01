@@ -58,7 +58,7 @@ afterEach(() => vi.restoreAllMocks());
 const stations: Station[] = [
   {
     id: "s1",
-    name: "Kitchen",
+    name: "Hot line",
     isDefault: true,
     active: true,
     showsRestOfOrder: false,
@@ -91,7 +91,7 @@ const devices: DeviceRow[] = [
         everyStation: false,
         everyZone: true,
         profileEveryStation: true,
-        stations: [{ id: "s1", name: "Kitchen", available: true, switchedOff: false }],
+        stations: [{ id: "s1", name: "Hot line", available: true, switchedOff: false }],
         zones: null,
       },
     ],
@@ -502,7 +502,7 @@ describe("devices-screen", () => {
     expect(deepText(el, "[data-test=device-profile-d1]")).toBe("Counter till");
     // What a device shows reads out its kitchen screens by name, not by id.
     expect(deepText(el, "[data-test=device-screen-d1-station]")).toBe(
-      `${t("device_profiles.kitchen_screen.station", "es-ES")}: Kitchen`,
+      `${t("device_profiles.kitchen_screen.station", "es-ES")}: Hot line`,
     );
     expect(deepText(el, "[data-test=device-status-d1]")).toBe(t("devices.status_active", "es-ES"));
     // Last-seen is the timestamp formatted to the minute, not the raw ISO string.
@@ -5906,7 +5906,7 @@ describe("a device's kitchen screens", () => {
         const kind = (k: "station" | "pass" | "pass_monitor") =>
           t(`device_profiles.kitchen_screen.${k}`);
         expect(deepText(el, "[data-test=device-screen-k1-station]")).toBe(
-          `${kind("station")}: Kitchen, Drinks`,
+          `${kind("station")}: Hot line, Drinks`,
         );
         expect(deepText(el, "[data-test=device-screen-t1-pass]")).toBe(
           `${kind("pass")}: ${every} · Terraza`,
@@ -5915,7 +5915,7 @@ describe("a device's kitchen screens", () => {
           `${kind("pass_monitor")}: ${every} · ${everyZone}`,
         );
         expect(deepText(el, "[data-test=device-screen-k2-station]")).toBe(
-          `${kind("station")}: Kitchen ${gone}`,
+          `${kind("station")}: Hot line ${gone}`,
         );
 
         vi.mocked(api.listDevices).mockResolvedValue([
@@ -5934,7 +5934,7 @@ describe("a device's kitchen screens", () => {
         liveData.invalidate([{ type: "devices", id: "k2" }]);
         await vi.waitFor(() =>
           expect(deepText(el, "[data-test=device-screen-k2-station]")).toBe(
-            `${kind("station")}: Kitchen, Deli`,
+            `${kind("station")}: Hot line, Deli`,
           ),
         );
       } finally {
@@ -5960,7 +5960,7 @@ describe("a device's kitchen screens", () => {
     });
     await flush(el);
     expect(deepText(el, "[data-test=device-screen-k2-station]")).toBe(
-      `${t("device_profiles.kitchen_screen.station")}: Kitchen ${t("devices.readout_gone_one").split("{names}").join("Deli $&")}`,
+      `${t("device_profiles.kitchen_screen.station")}: Hot line ${t("devices.readout_gone_one").split("{names}").join("Deli $&")}`,
     );
   });
 });
