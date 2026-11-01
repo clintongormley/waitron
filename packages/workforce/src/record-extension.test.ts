@@ -87,6 +87,7 @@ it("round-trips an automatic end with no human recorder and verifies its hash", 
       { nodeId, locationId },
       {
         personId,
+        locationId,
         entryKind: "out",
         eventAt: "2026-01-05T17:00:00.000Z",
         eventOffsetMinutes: 0,
@@ -125,6 +126,7 @@ it("confirmation leaves the last captured out as the current state", async () =>
       { nodeId, locationId },
       {
         personId,
+        locationId,
         entryKind: "confirmation",
         eventAt: "2026-01-05T18:00:00.000Z",
         eventOffsetMinutes: 0,
@@ -157,6 +159,7 @@ it.each([undefined, false])(
           { nodeId, locationId },
           {
             personId,
+            locationId,
             entryKind: "in",
             eventAt: "2026-01-05T09:00:00.000Z",
             eventOffsetMinutes: 0,
@@ -187,6 +190,7 @@ it("refuses a self-approval flag on an ordinary clock entry without changing the
         { nodeId, locationId },
         {
           personId,
+          locationId,
           entryKind: "in",
           eventAt: "2026-01-05T09:00:00Z",
           eventOffsetMinutes: 0,

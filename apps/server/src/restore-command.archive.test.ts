@@ -159,6 +159,7 @@ beforeAll(async () => {
         { nodeId: ids.node, locationId: ids.location },
         {
           personId,
+          locationId: ids.location,
           entryKind: at.endsWith("09:00:00Z") ? "in" : "out",
           eventAt: at,
           eventOffsetMinutes: 0,
@@ -496,6 +497,7 @@ describe("waitron-restore restore --from-archive", () => {
       const appended = await db.transaction((tx) =>
         appendToChain(tx, chainKey, {
           personId,
+          locationId: ids.location,
           entryKind: "in",
           eventAt: "2026-10-02T09:00:00Z",
           eventOffsetMinutes: 0,

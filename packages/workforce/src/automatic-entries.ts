@@ -68,6 +68,7 @@ export async function recordAutomaticClose(
     { nodeId: input.nodeId, locationId: input.locationId },
     {
       personId: input.personId,
+      locationId: input.locationId,
       entryKind: "out",
       eventAt,
       eventOffsetMinutes: input.offsetMinutes,
@@ -132,6 +133,7 @@ export async function confirmAutomaticEntry(
     { nodeId: input.nodeId, locationId: target.locationId },
     {
       personId: target.personId,
+      locationId: target.locationId,
       entryKind: "confirmation",
       eventAt: target.eventAt,
       eventOffsetMinutes: target.offsetMinutes,

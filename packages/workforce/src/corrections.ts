@@ -316,6 +316,7 @@ async function prepareRequest(
     change,
     entry: {
       personId,
+      locationId,
       entryKind: "correction",
       eventAt,
       eventOffsetMinutes: input.offsetMinutes,
@@ -378,6 +379,7 @@ async function prepareDecision(
     request,
     entry: {
       personId: request.personId,
+      locationId: request.locationId,
       entryKind: "correction",
       eventAt: request.eventAt,
       eventOffsetMinutes: request.offsetMinutes,

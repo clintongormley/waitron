@@ -252,6 +252,7 @@ export async function insertTimeEntry(
       { nodeId: params.nodeId, locationId: params.locationId },
       {
         personId: params.personId,
+        locationId: params.locationId,
         entryKind: params.entryKind ?? "in",
         eventAt: params.eventAt ?? "2026-01-05T09:00:00Z",
         eventOffsetMinutes: params.offsetMinutes ?? 0,

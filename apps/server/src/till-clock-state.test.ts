@@ -93,6 +93,7 @@ describe("till own clock state", () => {
           { nodeId, locationId },
           {
             personId,
+            locationId,
             entryKind: "correction",
             eventAt: at,
             eventOffsetMinutes: 60,
@@ -141,6 +142,7 @@ describe("till own clock state", () => {
         { nodeId, locationId },
         {
           personId,
+          locationId,
           entryKind: "out",
           eventAt: "2026-01-05T10:00:00Z",
           eventOffsetMinutes: 60,
@@ -162,6 +164,7 @@ describe("till own clock state", () => {
         { nodeId, locationId },
         {
           personId,
+          locationId,
           entryKind: "confirmation",
           eventAt: "2026-01-05T12:00:00Z",
           eventOffsetMinutes: 60,
@@ -278,6 +281,7 @@ describe("till own clock state", () => {
           { locationId, nodeId: node },
           {
             personId,
+            locationId,
             entryKind,
             eventAt: at,
             eventOffsetMinutes: 60,

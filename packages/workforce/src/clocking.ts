@@ -618,6 +618,7 @@ export class WorkforceBackend {
       { nodeId: input.nodeId, locationId: input.locationId },
       {
         personId: input.personId,
+        locationId: input.locationId,
         entryKind,
         eventAt: input.at,
         eventOffsetMinutes: input.offsetMinutes,

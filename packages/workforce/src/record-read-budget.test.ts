@@ -127,6 +127,7 @@ it("does not decode another person's incomplete attribution during an own-record
       { nodeId, locationId },
       {
         personId,
+        locationId,
         entryKind: "in",
         eventAt: "2026-01-06T09:00:00Z",
         eventOffsetMinutes: 0,

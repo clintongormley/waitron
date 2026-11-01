@@ -185,6 +185,7 @@ describe("attendance obligations follow current clock and planning evidence", ()
         { nodeId: f.nodeId, locationId: f.locationId },
         {
           personId: f.personId,
+          locationId: f.locationId,
           entryKind: "in",
           eventAt: "2026-01-06T09:00:00.000Z",
           eventOffsetMinutes: 0,

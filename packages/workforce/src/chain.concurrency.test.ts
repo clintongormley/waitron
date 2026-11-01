@@ -42,6 +42,7 @@ function key(location = locationId, node = nodeId): ChainKey {
 function inputAt(at: string): TimeEntryAppend {
   return {
     personId,
+    locationId,
     entryKind: "in",
     eventAt: at,
     eventOffsetMinutes: 0,

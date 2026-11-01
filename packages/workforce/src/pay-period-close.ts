@@ -40,6 +40,7 @@ export async function appendClosureMarker(
     { nodeId, locationId: target.locationId },
     {
       personId: target.personId,
+      locationId: target.locationId,
       entryKind: "confirmation",
       eventAt: target.eventAt,
       eventOffsetMinutes: target.offsetMinutes,

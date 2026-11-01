@@ -27,6 +27,7 @@ export interface ChainKey {
 /** The chain fields and `recorded_at` are computed by `appendToChain`, never supplied. */
 export interface TimeEntryAppend {
   personId: string;
+  locationId: string;
   entryKind: WorkforceEntryKind;
   eventAt: string;
   eventOffsetMinutes: number;
@@ -124,7 +125,7 @@ async function attemptAppend(
   const entryHash = computeEntryHash({
     sequenceNo,
     personId: entry.personId,
-    locationId: key.locationId,
+    locationId: entry.locationId,
     nodeId: key.nodeId,
     entryKind: entry.entryKind,
     eventAt,
@@ -145,7 +146,7 @@ async function attemptAppend(
     .insert(timeEntries)
     .values({
       personId: entry.personId,
-      locationId: key.locationId,
+      locationId: entry.locationId,
       nodeId: key.nodeId,
       entryKind: entry.entryKind,
       eventAt,

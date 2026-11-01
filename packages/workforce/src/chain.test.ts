@@ -49,9 +49,10 @@ function key(location = locationId, node = nodeId): ChainKey {
   return { nodeId: node, locationId: location };
 }
 
-function inputAt(at: string): TimeEntryAppend {
+function inputAt(at: string, location = locationId): TimeEntryAppend {
   return {
     personId,
+    locationId: location,
     entryKind: "in",
     eventAt: at,
     eventOffsetMinutes: 0,
@@ -116,7 +117,11 @@ describe("appendToChain", () => {
     const otherNode = await seedNode(suite.db, brandLocationId(otherLocation));
     await suite.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")));
     await suite.db.transaction((tx) =>
-      appendToChain(tx, key(otherLocation, otherNode), inputAt("2026-01-05T09:00:00Z")),
+      appendToChain(
+        tx,
+        key(otherLocation, otherNode),
+        inputAt("2026-01-05T09:00:00Z", otherLocation),
+      ),
     );
     expect((await readChain(suite.db, key())).map((e) => e.sequenceNo)).toEqual([1]);
     const other = await readChain(suite.db, key(otherLocation, otherNode));
@@ -388,6 +393,7 @@ describe("appendToChain commits the correction and capture content to the hash",
     const base = await suite.db.transaction((tx) =>
       appendToChain(tx, key(), {
         personId,
+        locationId,
         entryKind: "in",
         eventAt: "2026-01-05T09:00:00Z",
         eventOffsetMinutes: 0,
@@ -398,6 +404,7 @@ describe("appendToChain commits the correction and capture content to the hash",
     await suite.db.transaction((tx) =>
       appendToChain(tx, key(), {
         personId,
+        locationId,
         entryKind: "correction",
         eventAt: "2026-01-05T18:00:00Z",
         eventOffsetMinutes: 0,

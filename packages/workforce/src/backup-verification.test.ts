@@ -55,6 +55,7 @@ beforeEach(async () => {
         { nodeId, locationId },
         {
           personId: person,
+          locationId,
           entryKind: "in",
           eventAt: at,
           eventOffsetMinutes: 60,
@@ -271,6 +272,7 @@ describe("complete captured workforce backup evidence", () => {
         { nodeId: retired, locationId: place },
         {
           personId: person,
+          locationId: place,
           entryKind: "in",
           eventAt: at,
           eventOffsetMinutes: 0,
