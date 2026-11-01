@@ -75,6 +75,7 @@ describe("the user guides", () => {
       "open",
       "rows",
       "retry-now",
+      "invoice-conflict",
       "free-space",
       "out-of-space",
       "clock-behind",

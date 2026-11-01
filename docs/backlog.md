@@ -380,8 +380,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   covers that procedure. Filing replies now retain definite conflict observations independently of an existing case;
   active-conflict preflights now stop new money and final builders refuse new records while captured money stays recoverable.
   The key-authenticated live operation and its HTTPS route now support preparation, switching and exact committed replay;
-  a retained uncommitted selection reports that a new attempt is required. The public browser entry, operator presentation
-  and complete procedure qualification remain open. Corrective-record resolution, filing investigation, outside
+  a retained uncommitted selection reports that a new attempt is required. The public key-only browser flow now
+  has explicit switching, paced minute checks, exact-attempt reconciliation, Stop and draft protection, with English
+  and Spanish Box status guidance. Recovery links in issuance refusals, live HTTPS cold-boot qualification,
+  captured-payment finalisation after the actual switch and the operational runbook remain open. Corrective-record resolution, filing investigation, outside
   evidence and fencing for the other tasks, and the complete old-backup/new-hardware exercise remain queued.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 

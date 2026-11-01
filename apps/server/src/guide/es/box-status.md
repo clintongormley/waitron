@@ -85,6 +85,30 @@ Los registros parados después de que Hacienda rechazara varios seguidos por el 
 liberan con **Reintentar ahora**. El equipo sigue intentando el primero de ellos cada hora, y el
 aviso de la campana explica por qué se pararon.
 
+## Recupera una identidad de facturación en conflicto {#invoice-conflict}
+
+Si este equipo deja de emitir facturas porque su identidad entra en conflicto con una respuesta
+de envío, mantén desconectado cualquier equipo antiguo o copiado. Una identidad nueva no impide
+que otra máquina siga vendiendo.
+
+Abre `/manage/recovery/fiscal-conflict` en este equipo mediante HTTPS. Necesitas su clave de
+recuperación actual; iniciar sesión en el panel no sustituye esa clave. Escríbela y elige
+**Consultar conflicto** para ver la factura y la identidad afectadas. Confirma que has desconectado
+el equipo antiguo o copiado y que nadie más lo está recuperando, y elige **Comparar relojes**.
+
+Si no hay un minuto disponible, espera la cuenta atrás. La página vuelve a comprobarlo cada cinco
+segundos. Cuando termine la espera, compara los relojes otra vez. Comprueba la identidad elegida y
+pulsa **Cambiar identidad**. La cuenta atrás nunca la cambia por ti. Se conservan tus pedidos,
+pagos e historial; el registro rechazado sigue rechazado y su incidencia sigue abierta.
+
+Si se pierde la respuesta, la página consulta el resultado del mismo intento. Un resultado sin
+confirmar no significa que la identidad haya cambiado. Usa **Consultar conflicto** para volver a
+comprobarlo con la clave actual. Elige **Iniciar otro intento** solo cuando la página lo ofrezca;
+escribe la clave otra vez y repite la comparación de relojes. **Detener** borra la clave y tus
+confirmaciones y detiene las comprobaciones de esta página. No puede deshacer un cambio ya
+confirmado en el equipo: si detuviste la página mientras lo enviaba, ábrela otra vez para consultar
+el resultado.
+
 ## Libera espacio en el equipo {#free-space}
 
 El botón **Liberar** de la fila **Espacio en disco** muestra cuánto puede liberar antes de que lo

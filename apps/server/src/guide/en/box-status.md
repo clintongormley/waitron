@@ -81,6 +81,28 @@ Records stopped after the tax agency refused several records in a row for the sa
 released by **Retry now**. The box keeps trying the first of them every hour, and the bell's alert
 says why they stopped.
 
+## Recover an invoice identity conflict {#invoice-conflict}
+
+If this box stops issuing invoices because its identity conflicts with a filing response, keep
+any old or copied box offline. A new identity does not stop another machine from selling.
+
+Open `/manage/recovery/fiscal-conflict` on this box over HTTPS. You need its current recovery key;
+signing in to the dashboard does not replace that key. Enter the key and choose **Check conflict**
+to see the affected invoice and identity. Confirm that the old or copied box is offline and that
+nobody else is recovering it, then choose **Compare clocks**.
+
+If a minute is unavailable, wait for the countdown. The page checks again every five seconds.
+When the wait ends, compare the clocks again. Check the selected identity, then choose **Switch
+identity** yourself. The countdown never switches it for you. Your existing orders, payments and
+history are kept; the rejected record stays rejected and its case stays open.
+
+If the answer is lost, the page checks the same attempt's result. An unconfirmed result is not a
+successful switch. Use **Check conflict** to check again with the current key. Choose **Start a new
+attempt** only when the page offers it; enter the key again and repeat the clock comparison.
+**Stop** clears your entered key and confirmations and stops this page's checks. It cannot undo
+a switch already committed on the box, so reopen the page and check its result if you stopped
+while it was sending.
+
 ## Free space on the box {#free-space}
 
 The **Free** button on the **Disk space** row shows how much it can free before you press it, for

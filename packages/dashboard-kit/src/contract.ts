@@ -136,6 +136,10 @@ interface DashboardContributionBase {
   settingsPanels?: readonly DashboardSettingsPanel[];
   calendarViews?: readonly DashboardCalendarView[];
   searchDestinations?: readonly DashboardSearchDestination[];
+  publicPages?: readonly {
+    path: string;
+    create(ctx: { request: DashboardRequest; locale: "en" | "es" }): DashboardScreenHandle;
+  }[];
 }
 
 /** One module's dashboard contribution. */
