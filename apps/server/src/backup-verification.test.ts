@@ -224,7 +224,10 @@ describe("complete backup verification", () => {
           name: "node",
           semanticsVersion: 1,
           status: "passed",
-          checks: [{ code: "data", status: "passed" }],
+          checks: [
+            { code: "data", status: "passed" },
+            { code: "secret", status: "passed" },
+          ],
         },
       ],
       status: "passed",

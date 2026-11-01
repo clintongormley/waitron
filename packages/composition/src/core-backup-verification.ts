@@ -71,6 +71,7 @@ export const CORE_BACKUP_VERIFICATION: BackupVerificationContribution = {
         after: context.after,
         nodeId: context.source.nodeId,
         privateKey: credential?.privateKey ?? null,
+        nodeCopyHoldsSource: false,
       }))
         ? "passed"
         : "invalid";

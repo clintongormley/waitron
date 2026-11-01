@@ -289,10 +289,6 @@ export async function verifyCoreBackupData(input: {
 }
 
 async function keylessMembership(query: BackupQuery, nodeId: string): Promise<boolean> {
-  if (await hasTable(query, "node_roles")) {
-    if (await first(query, "select 1 from node_roles where node_id = ? limit 1", [nodeId]))
-      return false;
-  }
   for await (const row of query.rows(
     "select endorsement from nodes where endorsement is not null",
   )) {
@@ -339,6 +335,8 @@ export async function verifyBackupMembershipIdentity(input: {
   after: BackupQuery;
   nodeId: string;
   privateKey: string | null;
+  /** The backup's node copy holds a role or recovery key for this node, so it is no key-less source. */
+  nodeCopyHoldsSource: boolean;
 }): Promise<boolean> {
   if (!(await hasTable(input.before, "nodes")) || !(await hasTable(input.after, "nodes")))
     return false;
@@ -357,6 +355,7 @@ export async function verifyBackupMembershipIdentity(input: {
       before.public_key === null &&
       before.endorsement === null &&
       after.endorsement === null &&
+      !input.nodeCopyHoldsSource &&
       (await keylessMembership(input.before, input.nodeId)) &&
       (await keylessMembership(input.after, input.nodeId))
     );

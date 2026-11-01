@@ -295,7 +295,9 @@ async function reconcileModules(
   }
   for (const { module, verification } of inventory) {
     const onNode = module.migrations.database === "node";
-    // With no node copy the node module finds no tables and no journal, and is refused below.
+    // With no node copy the node module finds no tables and no journal. A manifest naming it is
+    // refused below; one that does not is refused below only while the module's `targetOnly` is
+    // `unsupported`.
     const copy = onNode ? (node?.tables ?? new Map<string, BackupRow>()) : tables;
     const version = Object.hasOwn(source, module.name) ? source[module.name]! : null;
     const material = verification.entries.filter((e) => !HOST_ENTRIES.includes(e.name));

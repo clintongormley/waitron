@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { runMigrations } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { ALL_MODULES } from "@waitron/composition";
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
 import type { BackupVerificationContribution, WaitronModule } from "@waitron/module";
 import { buildBackupVerificationTarget } from "./backup-verification-target.js";
@@ -188,6 +189,9 @@ describe("strict backup compatibility", () => {
         backup: {
           verification: policy(["node_things"], {
             entries: [{ name: "node.dump", presence: "required" }],
+            // The real node module's choice, so a manifest that does not name it is judged as it.
+            targetOnly: ALL_MODULES.find((m) => m.name === "node")!.backup!.verification!
+              .targetOnly,
           }),
         },
       });
@@ -222,6 +226,16 @@ describe("strict backup compatibility", () => {
       addNodeModule();
       await carryNodeCopy();
       await expect(run()).resolves.toBe("passed");
+    });
+    it("refuses a manifest that does not name it, with no node copy", async () => {
+      addNodeModule();
+      manifest = {
+        ...manifest,
+        modules: Object.fromEntries(
+          Object.entries(manifest.modules).filter(([name]) => name !== "node"),
+        ),
+      };
+      await expect(run()).resolves.toBe("unsupported");
     });
     it("refuses a backup that carries no node copy", async () => {
       addNodeModule();

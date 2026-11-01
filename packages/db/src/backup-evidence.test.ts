@@ -667,9 +667,15 @@ describe("backup membership private/public identity", () => {
       );
     }
   }
-  const verify = (key: string | null = privateKey) =>
+  const verify = (key: string | null = privateKey, nodeCopyHoldsSource = false) =>
     queries(before.db, after.db, (a, b) =>
-      verifyBackupMembershipIdentity({ before: a, after: b, nodeId: "source", privateKey: key }),
+      verifyBackupMembershipIdentity({
+        before: a,
+        after: b,
+        nodeId: "source",
+        privateKey: key,
+        nodeCopyHoldsSource,
+      }),
     );
 
   it("matching source identity passes without signing generating or writing", async () => {
@@ -742,10 +748,7 @@ describe("backup membership private/public identity", () => {
   it("explicit keyless source is accepted only without membership obligations", async () => {
     seed(null);
     expect(await verify(null)).toBe(true);
-    before.db.run(
-      sql`insert into node_roles (node_id,mode,updated_at) values ('source','primary','2026-10-20T00:00:00Z')`,
-    );
-    expect(await verify(null)).toBe(false);
+    expect(await verify(null, true)).toBe(false);
   });
   it("keyless source with retained endorsement refuses", async () => {
     seed(null);
@@ -837,7 +840,13 @@ describe("backup membership private/public identity", () => {
     expect(await verify()).toBe(false);
     expect(
       await queries(before.db, after.db, (a, b) =>
-        verifyBackupMembershipIdentity({ before: a, after: b, nodeId: "unrecorded", privateKey }),
+        verifyBackupMembershipIdentity({
+          before: a,
+          after: b,
+          nodeId: "unrecorded",
+          privateKey,
+          nodeCopyHoldsSource: false,
+        }),
       ),
     ).toBe(false);
   });
@@ -860,7 +869,13 @@ describe("membership source with no captured table or optional membership state"
     ]) {
       expect(
         await queries(a!, b!, (before, after) =>
-          verifyBackupMembershipIdentity({ before, after, nodeId: "source", privateKey: null }),
+          verifyBackupMembershipIdentity({
+            before,
+            after,
+            nodeId: "source",
+            privateKey: null,
+            nodeCopyHoldsSource: false,
+          }),
         ),
       ).toBe(false);
     }
@@ -868,7 +883,13 @@ describe("membership source with no captured table or optional membership state"
   it("admits an explicit keyless node before optional membership tables exist", async () => {
     expect(
       await queries(keyless.db, keyless.db, (before, after) =>
-        verifyBackupMembershipIdentity({ before, after, nodeId: "source", privateKey: null }),
+        verifyBackupMembershipIdentity({
+          before,
+          after,
+          nodeId: "source",
+          privateKey: null,
+          nodeCopyHoldsSource: false,
+        }),
       ),
     ).toBe(true);
   });
