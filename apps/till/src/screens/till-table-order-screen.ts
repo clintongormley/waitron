@@ -2386,8 +2386,9 @@ export class TillTableOrderScreen extends LitElement {
             bills: this.bills,
             billId: this.orderId,
             newBillBusy: this.newBillBusy,
-            onSwitch: (workingOrderId) => this.#dispatch("switch-bill", { workingOrderId }),
-            onNewBill: () => this.#dispatch("new-bill", {}),
+            onSwitch: (workingOrderId) =>
+              this.#leavingActions(() => this.#dispatch("switch-bill", { workingOrderId })),
+            onNewBill: () => this.#leavingActions(() => this.#dispatch("new-bill", {})),
           })}
           ${this.#tableMenu()} ${this.#floorBackButton()}
         </div>
@@ -5354,9 +5355,14 @@ export class TillTableOrderScreen extends LitElement {
     }
   }
 
-  /** A ⋮ item that leaves an open step asks first, as Back does, while the step holds a choice. */
   #fromMenu(event: Event, choose: () => void): void {
     if (!this.#actionControlCurrent(event)) return;
+    this.#leavingActions(choose);
+  }
+
+  /** A ⋮ item or switcher choice that leaves an open step asks first, as Back does, while the step
+   * holds a choice. */
+  #leavingActions(choose: () => void): void {
     if (!this.#actionScope) {
       choose();
       return;
