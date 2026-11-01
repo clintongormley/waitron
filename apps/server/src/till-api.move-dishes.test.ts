@@ -146,6 +146,34 @@ function salesOf(billId: string) {
   `);
 }
 
+function pay(billId: string, body: Record<string, unknown>) {
+  return send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
+    submissionId: randomUUID(),
+    tip: "0.00",
+    ...body,
+  });
+}
+
+function paymentsRead(billId: string) {
+  return send(venue.app, venue.cookie, "GET", `/api/working-orders/${billId}/payments`);
+}
+
+/** The names on the bill's invoice lines and the amounts of its tenders, in cents. */
+function invoiced(billId: string): { names: string[]; tenders: number[] } {
+  const names = venue.db
+    .all<{ name: string }>(
+      sql`select name from sale_lines where sale_id in (select id from sales where working_order_id = ${billId})`,
+    )
+    .map((row) => row.name);
+  const tenders = venue.db
+    .all<{ amount: number }>(
+      sql`select amount from tenders where sale_id in (select id from sales where working_order_id = ${billId})`,
+    )
+    .map((row) => row.amount)
+    .sort((a, b) => a - b);
+  return { names, tenders };
+}
+
 describe("A803 move dishes route:", () => {
   it("moving to a new bill answers 200 with the new bill's id", async () => {
     const { partyId, tabId } = await seated("Paella", "Caña");
@@ -373,5 +401,85 @@ describe("A803 move dishes route:", () => {
     expect(await statusOf(venue, tabId)).toBe("open");
     expect(registroCount(venue, tabId)).toBe(0);
     expect(salesOf(tabId)).toEqual([]);
+  });
+
+  it.each([
+    ["cash", { method: "cash", tendered: "35.00" }],
+    ["a hand-keyed card", { method: "card", entry: "manual" }],
+    ["a reader card", { method: "card", entry: "reader" }],
+  ])(
+    "a dish moved onto a bill whose Paella is paid by item in %s leaves that payment as it was, and paying the rest files one invoice holding the moved dish and both payments",
+    async (_, tender) => {
+      const { partyId, tabId } = await seated("Paella", "Caña", "Chuletón", "Tarta");
+      const { billId: destination } = await inTx(venue, (tx) =>
+        splitBill(tx, venue.cfg, tabId, [{ lineNo: 1 }, { lineNo: 2 }], {
+          expectedPartyRevision: revisionOf(partyId),
+          operatorId: venue.operatorId,
+        }),
+      );
+      const paid = await pay(destination, {
+        kind: "items",
+        lines: [{ lineNo: 1 }],
+        applied: "35.00",
+        ...tender,
+      });
+      expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+      const before = await paymentsRead(destination);
+      expect(before.json).toMatchObject({ total: "38.00", received: "35.00", outstanding: "3.00" });
+      const [, tarta] = lineIdsOf(tabId);
+
+      const moved = await post(tabId, await wellFormed(partyId, tabId, [tarta!], destination));
+
+      expect(moved.status, JSON.stringify(moved.json)).toBe(200);
+      const after = await paymentsRead(destination);
+      expect(after.json).toMatchObject({ total: "56.00", received: "35.00", outstanding: "21.00" });
+      expect(after.json.payments).toEqual(before.json.payments);
+      expect(after.json.paidLines).toEqual(before.json.paidLines);
+      expect(lineIdsOf(destination)).toContain(tarta);
+      expect(registroCount(venue, destination)).toBe(0);
+
+      const rest = await pay(destination, {
+        kind: "contribution",
+        amount: "21.00",
+        method: "cash",
+        tendered: "21.00",
+        applied: "21.00",
+      });
+
+      expect(rest.status, JSON.stringify(rest.json)).toBe(200);
+      expect(await statusOf(venue, destination)).toBe("settled");
+      expect(registroCount(venue, destination)).toBe(1);
+      expect(salesOf(destination).map((sale) => sale.total)).toEqual(["5600"]);
+      expect(invoiced(destination).names).toContain("Tarta");
+      expect(invoiced(destination).tenders).toEqual([2100, 3500]);
+    },
+  );
+
+  it("a move that leaves the source paid in full files its invoice alone, and the part-paid destination stays open", async () => {
+    const { partyId, tabId } = await seated("Paella", "Caña", "Chuletón");
+    const { billId: destination } = await inTx(venue, (tx) =>
+      splitBill(tx, venue.cfg, tabId, [{ lineNo: 3 }], {
+        expectedPartyRevision: revisionOf(partyId),
+        operatorId: venue.operatorId,
+      }),
+    );
+    await contribute(tabId, "35.00");
+    await contribute(destination, "1.00");
+    const [, caña] = lineIdsOf(tabId);
+
+    const moved = await post(tabId, await wellFormed(partyId, tabId, [caña!], destination));
+
+    expect(moved.status, JSON.stringify(moved.json)).toBe(200);
+    expect(await statusOf(venue, tabId)).toBe("settled");
+    expect(registroCount(venue, tabId)).toBe(1);
+    expect(salesOf(tabId).map((sale) => sale.total)).toEqual(["3500"]);
+    expect(await statusOf(venue, destination)).toBe("open");
+    expect(registroCount(venue, destination)).toBe(0);
+    expect(salesOf(destination)).toEqual([]);
+    expect((await paymentsRead(destination)).json).toMatchObject({
+      total: "28.00",
+      received: "1.00",
+      outstanding: "27.00",
+    });
   });
 });
