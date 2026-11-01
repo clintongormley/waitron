@@ -370,7 +370,7 @@ Slice 2 treats a throw as "write nothing".
 - Produces the exports below. Task 3 extends the same file.
 
 ```js
-/** Case names the argument parser recognises. None is runnable yet: each needs the Linux recipe and rig adapter, and a later PR wires it. */
+/** Case names the argument parser recognises. */
 export const RIG_CASES; // ["layout","seal-a","seal-b","seal-d","seal-f","seal-g","seal-i","preboot-local","preboot-headless","preboot-two-boxes","preboot-tamper"]
 /** @param {readonly string[]} argv  arguments after the script name @returns {{caseName: string, runDir: string}} */
 export function parseRigArgs(argv);
@@ -392,7 +392,7 @@ export async function createRun(runDir);
 | `run-dir-exists` | `EEXIST`, whether the folder is empty or not. |
 | `run-dir-parent-missing` | The parent folder does not exist. |
 
-**`createRun`** calls `fs.mkdir(runDir, { mode: 0o700 })` without `recursive`, so "does it exist?" and "create it" are one atomic step. It then writes `ledger.json` (Task 3's format with `resources: []`) using `wx`. `RigRun` is `{ runDir, rootId }`, where `rootId` is `"<dev>:<ino>"` from `lstat`.
+**`createRun`** calls `fs.mkdir(runDir, { mode: 0o700 })` without `recursive`, so "does it exist?" and "create it" are one atomic step. It then writes `ledger.json` (Task 3's format with `resources: []`) using `wx`. `RigRun` is `{ runDir, rootId, runId }`, where `rootId` is `"<dev>:<ino>"` from `lstat` and `runId` is 32 random hex characters, also kept in the ledger, because a file system may give a new folder a removed folder's inode.
 
 - [ ] **Step 1: Write the failing tests.**
   - `parses --case layout --run-dir <abs> in either order`.
@@ -403,7 +403,7 @@ export async function createRun(runDir);
   - `existing empty folder → run-dir-exists`, with its mode unchanged.
   - `existing non-empty folder → run-dir-exists`, with its file unchanged.
   - `missing parent → run-dir-parent-missing`, and nothing created.
-  - `fresh path → the folder has mode & 0o777 === 0o700 and ledger.json holds {"version":1,"runDir":…,"resources":[]}`.
+  - `fresh path → the folder has mode & 0o777 === 0o700 and ledger.json holds {"version":1,"runDir":…,"runId":…,"resources":[]}`.
 - [ ] **Step 2: Run red.** `pnpm exec vitest run scripts/box/rig-contract.test.mjs`.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run green**, then run the coverage command.
@@ -429,30 +429,33 @@ export async function createRun(runDir);
  *   | {kind:'vm', pidFile:string}} RigResource   every path absolute, normalised, strictly inside runDir, with no part named ledger.json or ledger.json.next in any letter case
  * @typedef {{action:'stop-vm', pidFile:string}|{action:'unmount', target:string}
  *   |{action:'detach-loops', image:string}|{action:'remove-file', path:string}} CleanupStep
+ * @typedef {CleanupStep & { reason: string }} FailedStep   reason: the refusal's reason, or adapter-failed
  * @typedef {{ stopVm(pidFile:string):Promise<void>, unmount(target:string):Promise<void>,
  *   detachLoops(image:string):Promise<void>, removeFile(path:string):Promise<void> }} CleanupAdapter
  */
-/** Durably records the resource, then runs step. step never runs if recording fails. Calls on one RigRun take turns. */
+/** Durably records the resource, then runs step. step never runs if recording fails. Calls on one run folder take turns in this process; the staging file keeps other processes out. */
 export async function withRecorded(run, resource, step);
 /** Checks the run, then reads and strictly validates its ledger.json; refuses any resource outside runDir. @returns {Promise<readonly RigResource[]>} */
 export async function loadLedger(run);
 /** Pure: reverse recording order; image → remove-file, loop → detach-loops, mount → unmount, vm → stop-vm. */
 export function planCleanup(resources);
-/** Loads the run's ledger itself and runs every step even after failures. @returns {Promise<{status:'clean'|'incomplete', failed: readonly CleanupStep[]}>} */
+/** Loads the run's ledger itself and runs every step even after failures. @returns {Promise<{status:'clean'|'incomplete', failed: readonly FailedStep[]}>} */
 export async function runCleanup(run, adapter);
 ```
 
-**The ledger file** is `{"version":1,"runDir":"…","resources":[…]}` plus a newline, in canonical bytes.
+**The ledger file** is `{"version":1,"runDir":"…","runId":"…","resources":[…]}` plus a newline, in canonical bytes.
 
-**`withRecorded` takes turns.** Calls on one `RigRun` go through an in-process promise chain, so each rewrite of the ledger includes every earlier record. Inside its turn, a call rewrites the ledger in four steps:
-1. write `ledger.json.next` with `wx`, mode 0600;
-2. flush that file;
-3. rename it over `ledger.json`;
-4. flush the folder.
+**`withRecorded` takes turns.** Calls on one run folder, through any copy of its `RigRun`, go through an in-process promise chain, so each rewrite of the ledger includes every earlier record. Inside its turn, a call:
+1. checks the run folder's `dev:ino` and that no symlink or file lies on the way to the path;
+2. creates `ledger.json.next` with `wx`, mode 0600 (the lock across processes);
+3. reads the ledger and checks the new resource against it and the file system;
+4. writes and flushes the staging file;
+5. renames it over `ledger.json`;
+6. flushes the folder.
 
 Only then does the turn end and `step` run, outside the turn. A step may therefore record its own sub-resources without deadlocking.
 
-**`loadLedger` refuses with `ledger-invalid`** when `ledger.json` is a symlink, missing, or not a regular file (it is opened with `O_NONBLOCK`, so a FIFO is refused rather than waited on), when the bytes are not canonical, when `runDir` differs from the folder being read, on an unknown kind or key, or when any path is outside `runDir` or under `/dev/`.
+**`loadLedger` refuses with `ledger-invalid`** when `ledger.json` is a symlink, missing, or not a regular file (it is opened with `O_NONBLOCK`, so a FIFO is refused rather than waited on), when the bytes are not canonical, when `runDir` differs from the folder being read, on an unknown kind or key, when a path has a part named like the ledger or its staging file in any letter case, or when any path is outside `runDir` or under `/dev/`.
 
 **Stopping a VM.** The real `CleanupAdapter` (Linux) must check that a VM's process is the one this run started before stopping it. That belongs to the Linux pull request.
 
@@ -461,13 +464,31 @@ Contract notes from the per-task review (2026-11-01):
 - **Symlinks on the way.** A resource path reached through an existing symlink is refused when recorded (`resource-through-symlink`); at cleanup that step fails without reaching the adapter. A path with any part named `ledger.json` or `ledger.json.next`, compared lower-cased, is refused as `resource-outside-run` before any file call, because a case-insensitive file system opens `LEDGER.JSON` as the ledger. At cleanup, a step whose path has the device and inode of the ledger or its staging file (a hard link, or a name the lower-casing misses) fails as `resource-is-ledger` without reaching the adapter.
 - **Recording is not ownership.** Inside the turn, holding the staging-file lock, `withRecorded` refuses a resource the ledger already holds (`resource-duplicate`), a loop whose image is not a recorded image (`loop-image-unrecorded`), and an image or pid file path that already exists in any form (`resource-exists`), because cleanup removes or reads it. A mount's folder must exist before its step, so it is not refused for existing. A process running as the same user can still create a path between that check and the step. At cleanup, an image or pid file path that exists but is not a regular file fails as `resource-not-file` without reaching the adapter.
 - **Cleanup takes no plan.** `runCleanup(run, adapter)` loads the ledger and re-checks the run folder and each path before every step; `planCleanup` stays pure and refuses unknown or inherited kinds.
-- **Across processes.** The append opens `ledger.json.next` with `wx` before reading the ledger, so the staging file is the lock: a second process gets `EEXIST`, and a staging file left by a crash refuses every later record until removed.
+- **Across processes.** The append opens `ledger.json.next` with `wx` before reading the ledger, so the staging file is the lock: a second process is refused `ledger-busy`, and a staging file left by a crash refuses every later record until removed. `runCleanup` never removes it; it reports it as a failed `remove-file` with reason `ledger-busy`.
+- **A ledger naming another run's `runId`** is refused as `run-dir-replaced`.
 - **The real adapter's duty (not built in this pull request).** These checks go by path; the Linux adapter must open every path beneath the run folder without following a symlink, with `openat2` and `RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS`.
+
+**Task 3's refusals** use `code: "rig.refused"`, beside Task 2's `run-dir-relative` and `run-dir-unsafe`:
+
+| `reason` | When |
+| --- | --- |
+| `run-invalid` | The run record is not exactly `{ runDir, rootId, runId }` with text values. |
+| `run-dir-replaced` | The run folder is gone, has another `dev:ino`, its ledger names another `runId`, or it is a symlink at the final folder flush. |
+| `resource-invalid` | Not a known kind with exactly its one path field, as text. |
+| `resource-outside-run` | The path is not absolute, normal and strictly inside the run folder, holds a NUL, or has a part named `ledger.json` or `ledger.json.next` in any letter case. |
+| `resource-through-symlink` | A symlink or a file on the way to the path, or the path itself a symlink. |
+| `resource-duplicate` | The ledger already holds this kind and path. |
+| `loop-image-unrecorded` | A loop whose image is not a recorded image. |
+| `resource-exists` | An image or pid file path that already exists. |
+| `ledger-busy` | `ledger.json.next` exists. |
+| `ledger-invalid` | `ledger.json` fails the checks above. |
+
+A failed cleanup step's `reason` is one of those refusals, or `resource-is-ledger` (the path is the ledger or its staging file by device and inode), `resource-not-file` (an image or pid file path that exists but is not a regular file), or `adapter-failed` for any other error.
 
 - [ ] **Step 1: Write the failing tests.**
   - `step sees its resource already in ledger.json on disk` (the test reads the file inside `step`).
   - `two concurrent withRecorded calls → the ledger holds both resources`.
-  - `the ledger write fails (ledger.json.next pre-created as a folder) → step never called, ledger unchanged`.
+  - `the lock already taken (ledger.json.next present) → ledger-busy, step never called, ledger unchanged`.
   - `resource outside runDir → rig.refused "resource-outside-run"`.
   - `/dev/loop0 as an image path → resource-outside-run`.
   - `loadLedger refuses a ledger edited to name /etc/passwd → ledger-invalid`.
