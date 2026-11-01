@@ -14,7 +14,7 @@ describe("NODE_CLASSIFICATION", () => {
   it("gives each table the reason that names its node id", () => {
     for (const entry of NODE_CLASSIFICATION) {
       expect(entry.reason).toBe(
-        "this box's own row, in node.db, which is never streamed; keyed by this box's node id, which this box's own reads and writes name",
+        "this box's own row, in node.db, which is never streamed; keyed by this box's node id",
       );
     }
   });

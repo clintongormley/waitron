@@ -656,7 +656,8 @@ restructuring wider than a review fix:
   the store an option that refuses a missing `node.db`.
 - The rule "take `node.db`'s lock outside `venue.db`'s" lives only in comments at four nesting
   sites; one `withVenueAndNodeTransaction` helper would enforce it.
-- `collectStateParts`'s `snapshotNode` callback is the same expression at three of four callers.
+- `collectStateParts`'s `snapshotNode` callback is the same expression at two of its callers
+  (`backup-sweep.ts`, `sealed-state.ts`).
 
 ## A1279: a local secondary promotes only over a chart it signed itself
 

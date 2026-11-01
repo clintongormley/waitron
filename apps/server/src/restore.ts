@@ -221,7 +221,7 @@ function nodeSetApplied(path: string): boolean {
       copy.prepare(`select 1 from ${quoteIdent(journal)} limit 1`).get() !== undefined
     );
   } catch (error) {
-    // A copy that is not a database at all lacks the node set's tables too.
+    // Any copy SQLite cannot open or read, a non-database included, is refused as incomplete.
     if (error instanceof Error && "code" in error && error.code === "ERR_SQLITE_ERROR")
       return false;
     throw error;
