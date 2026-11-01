@@ -5,8 +5,9 @@ import ts from "typescript";
 
 // Moves a test file onto the shared venue seed helpers (A1301 F1): `seedVenue` for its one
 // `locations` row, `seedNode`/`seedDevice` without a location, `seedWorkingOrder` for an order.
-// Every rule applies only to a file holding exactly one `locations` insert; what it cannot rewrite
-// it reports as `path:line: reason` for a hand edit. It splices text by node positions and never
+// Every rule applies only to a file holding exactly one `locations` insert, and never to an upgrade
+// test, whose database stops at an earlier migration than the helpers read; what it cannot prove
+// safe to rewrite it reports as `path:line: reason` for a hand edit. It splices text by node positions and never
 // reprints the tree, so `prettier --write` tidies afterwards.
 //
 // Usage: node scripts/a1301-seed-codemod.mjs [--write] <file…>   (without --write, writes nothing)
@@ -49,7 +50,10 @@ const REASON = {
   idNotConst: "id is not a module-level const",
   helper: "locations insert inside a helper function or loop: no location rule applied",
   unknownRows: "locations insert of an unknown number of rows: no location rule applied",
-  notPlain: "location argument is not a plain value: not dropped",
+  notVenue: "location argument does not name the seeded venue: not dropped",
+  projection: "order binding read through a returning(…) projection: not rewritten",
+  idNotLiteral: "id constant's initializer is not a literal: not removed",
+  upgrade: "upgrade test: its database stops at an earlier migration, so no location rule applied",
 };
 
 const collision = (name) =>
@@ -68,6 +72,21 @@ const TEST_CALLS = new Set([
   "afterEach",
 ]);
 const LOOP_METHODS = new Set(["map", "forEach", "flatMap"]);
+const DECLARATIONS = [
+  ts.isVariableDeclaration,
+  ts.isBindingElement,
+  ts.isParameter,
+  ts.isFunctionDeclaration,
+  ts.isFunctionExpression,
+  ts.isClassDeclaration,
+  ts.isClassExpression,
+  ts.isEnumDeclaration,
+  ts.isImportSpecifier,
+  ts.isImportClause,
+  ts.isNamespaceImport,
+  ts.isImportEqualsDeclaration,
+];
+const INCREMENTS = new Set([ts.SyntaxKind.PlusPlusToken, ts.SyntaxKind.MinusMinusToken]);
 
 function isFiscalPair(file) {
   return (
@@ -76,8 +95,12 @@ function isFiscalPair(file) {
   );
 }
 
+function isJavaScript(file) {
+  return /\.[cm]?js$/.test(file);
+}
+
 function parse(file, source) {
-  const kind = /\.m?js$/.test(file) ? ts.ScriptKind.JS : ts.ScriptKind.TS;
+  const kind = isJavaScript(file) ? ts.ScriptKind.JS : ts.ScriptKind.TS;
   return ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, kind);
 }
 
@@ -126,7 +149,7 @@ function valuesChain(insert) {
     end = next.parent;
   }
   if (!ts.isAwaitExpression(end.parent)) return undefined;
-  return { arg: valuesCall.arguments[0], tail, awaitNode: end.parent };
+  return { arg: valuesCall.arguments[0], tail, tailCall: end, awaitNode: end.parent };
 }
 
 /** The statement holding `await <chain>`: a plain statement, or `const [B] = await <chain>`. */
@@ -198,6 +221,71 @@ function insideImport(node) {
   return false;
 }
 
+/** True when `node` is assigned (also inside a destructuring target), stepped, or a loop variable. */
+function isWrite(node) {
+  if (INCREMENTS.has(node.parent.operator)) return true;
+  for (let child = node, current = node.parent; !ts.isSourceFile(current);) {
+    const kind = current.operatorToken?.kind;
+    const assigns = kind >= ts.SyntaxKind.FirstAssignment && kind <= ts.SyntaxKind.LastAssignment;
+    if (assigns && current.left === child) return true;
+    if (ts.isForInOrOfStatement(current) && current.initializer === child) return true;
+    child = current;
+    current = current.parent;
+  }
+  return false;
+}
+
+/**
+ * True when `name` is declared exactly once in the file, as an import, a parameter or a variable,
+ * and holds one value from before `position` on: never written, or a `let` written once before it.
+ */
+function soleValue(sourceFile, name, position) {
+  const declarations = [];
+  const writes = [];
+  walk(sourceFile, (node) => {
+    const declares = DECLARATIONS.some((is) => is(node));
+    if (declares && node.name && ts.isIdentifier(node.name) && node.name.text === name) {
+      declarations.push(node);
+    }
+    if (ts.isIdentifier(node) && node.text === name && isWrite(node)) writes.push(node);
+  });
+  if (declarations.length !== 1) return false;
+  const [declaration] = declarations;
+  if (ts.isImportSpecifier(declaration) || ts.isImportClause(declaration)) return true;
+  if (ts.isParameter(declaration) || ts.isBindingElement(declaration)) return writes.length === 0;
+  if (!ts.isVariableDeclaration(declaration)) return false;
+  if (declaration.initializer) return writes.length === 0;
+  return writes.length === 1 && writes[0].getStart() < position;
+}
+
+/** `expression` without the wrappers that change no value: parentheses, `as`, `satisfies`, `!`. */
+function stripTypeOnly(expression) {
+  let current = expression;
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isSatisfiesExpression(current) ||
+    ts.isNonNullExpression(current)
+  ) {
+    current = current.expression;
+  }
+  return current;
+}
+
+function isLiteral(expression) {
+  const value = stripTypeOnly(expression);
+  return ts.isStringLiteralLike(value) || ts.isNumericLiteral(value);
+}
+
+/** The name a function is called by: a declared function, or one a variable holds. */
+function helperName(fn) {
+  if (ts.isFunctionDeclaration(fn)) return fn.name?.text;
+  const parent = fn.parent;
+  const held =
+    ts.isVariableDeclaration(parent) && parent.initializer === fn && ts.isIdentifier(parent.name);
+  return held ? parent.name.text : undefined;
+}
+
 function rootName(expression) {
   let current = expression;
   while (ts.isCallExpression(current) || ts.isPropertyAccessExpression(current)) {
@@ -250,13 +338,43 @@ function placement(statement) {
   return { ok: true };
 }
 
-function insideHook(node, hook) {
+/**
+ * True when `node` may run before `seed` (a statement at the top level, or in a hook written
+ * directly at the top level) finishes. `at` is the position compared with the seed inside the
+ * seed's own hook. With its default hook order, Vitest runs a file's `beforeAll` hooks, then for
+ * each test its `beforeEach` hooks, each kind in source order and a describe's after its parent's. A function called by
+ * name is judged at each place the file names it; any other function value is judged where it is
+ * created, since it cannot run before that.
+ */
+function runsBefore(node, at, seed, seedHook, seen) {
   for (let current = node.parent; !ts.isSourceFile(current); current = current.parent) {
-    if (ts.isFunctionLike(current) && ts.isCallExpression(current.parent)) {
-      if (rootName(current.parent.expression) === hook) return true;
+    if (!ts.isFunctionLike(current)) continue;
+    const call = current.parent;
+    if (ts.isCallExpression(call) && call.arguments.includes(current)) {
+      const name = rootName(call.expression);
+      if (name === "describe") return true;
+      if (name === "beforeAll" || name === "beforeEach") {
+        return hookRunsBefore(call, name, at, seed, seedHook);
+      }
+      if (TEST_CALLS.has(name)) return false;
+      continue;
     }
+    const helper = helperName(current);
+    if (helper === undefined) continue;
+    if (seen.has(helper)) return false;
+    seen.add(helper);
+    return references(node.getSourceFile(), helper).some((use) =>
+      runsBefore(use, use.getStart(), seed, seedHook, seen),
+    );
   }
-  return false;
+  return true;
+}
+
+function hookRunsBefore(call, hook, at, seed, seedHook) {
+  if (call.getStart() <= seed.getStart() && seed.end <= call.end) return at < seed.end;
+  if (hook === "beforeAll" && seedHook === "beforeEach") return true;
+  const topLevel = ts.isExpressionStatement(call.parent) && ts.isSourceFile(call.parent.parent);
+  return hook === seedHook && topLevel && call.getStart() < seed.getStart();
 }
 
 /** True when `node` runs as the module loads: outside every function but `describe` bodies. */
@@ -293,9 +411,20 @@ function lineIndent(text, position) {
   return /^[ \t]*/.exec(text.slice(lineStart))[0];
 }
 
-/** Whole lines from `start` to `end`, with the leading comments directly above `start`. */
+/**
+ * Removes `node`: its whole line, with the leading comments directly above, when nothing else
+ * shares the line; otherwise only its own text and the blanks that separate it from its neighbours.
+ */
 function lineRemoval(text, node, withComments) {
   let start = node.getStart();
+  let end = node.end;
+  const lineStart = text.lastIndexOf("\n", start - 1) + 1;
+  const before = text.slice(lineStart, start);
+  const after = /^[ \t]*/.exec(text.slice(end))[0];
+  const nextChar = text[end + after.length];
+  if (/\S/.test(before)) return { start: start - /[ \t]*$/.exec(before)[0].length, end, text: "" };
+  if (nextChar !== undefined && nextChar !== "\n")
+    return { start, end: end + after.length, text: "" };
   if (withComments) {
     const comments = ts.getLeadingCommentRanges(text, node.getFullStart()) ?? [];
     for (const comment of comments.reverse()) {
@@ -304,7 +433,7 @@ function lineRemoval(text, node, withComments) {
     }
   }
   start = text.lastIndexOf("\n", start - 1) + 1;
-  let end = node.end;
+  end += after.length;
   if (text[end] === "\n") end += 1;
   if (text[end] === "\n" && text[start - 1] === "\n" && text[start - 2] === "\n") end += 1;
   return { start, end, text: "" };
@@ -482,11 +611,16 @@ export function transformSource(path, source) {
   const sites = [...locationInserts, ...rawLocations];
   const uncountable = [];
   let total = 0;
-  for (const node of sites) {
-    const rows = locationInserts.includes(node) ? rowCount(node) : 1;
-    if (insideHelperOrLoop(node)) uncountable.push([node, REASON.helper]);
-    else if (rows === undefined) uncountable.push([node, REASON.unknownRows]);
-    else total += rows;
+  if (posix.basename(file).includes("upgrade")) {
+    left.push({ line: 1, reason: REASON.upgrade });
+    total = Number.NaN;
+  } else {
+    for (const node of sites) {
+      const rows = locationInserts.includes(node) ? rowCount(node) : 1;
+      if (insideHelperOrLoop(node)) uncountable.push([node, REASON.helper]);
+      else if (rows === undefined) uncountable.push([node, REASON.unknownRows]);
+      else total += rows;
+    }
   }
   for (const [node, reason] of uncountable) report(node, reason);
   if (uncountable.length > 0) total = Number.NaN;
@@ -500,32 +634,44 @@ export function transformSource(path, source) {
   const collides = (name, module) =>
     (declared.get(name) ?? []).some((declaredFrom) => declaredFrom !== module);
 
-  const isPlain = (expression) => {
-    if (
-      ts.isIdentifier(expression) ||
-      ts.isStringLiteralLike(expression) ||
-      ts.isNumericLiteral(expression)
-    ) {
-      return true;
-    }
-    if (
-      ts.isPropertyAccessExpression(expression) ||
-      ts.isNonNullExpression(expression) ||
-      ts.isAsExpression(expression) ||
-      ts.isParenthesizedExpression(expression)
-    ) {
-      return isPlain(expression.expression);
-    }
-    return (
-      ts.isCallExpression(expression) &&
-      ts.isIdentifier(expression.expression) &&
-      brandHelpers.has(expression.expression.text) &&
-      expression.arguments.length === 1 &&
-      isPlain(expression.arguments[0])
-    );
-  };
   const propertyValue = (property) =>
     ts.isShorthandPropertyAssignment(property) ? property.name : property.initializer;
+  /** `expression` with value-preserving wrappers and brand helper calls (`locationId(…)`) removed. */
+  const unwrap = (expression) => {
+    const value = stripTypeOnly(expression);
+    const branded =
+      ts.isCallExpression(value) &&
+      ts.isIdentifier(value.expression) &&
+      brandHelpers.has(value.expression.text) &&
+      value.arguments.length === 1;
+    return branded ? unwrap(value.arguments[0]) : value;
+  };
+
+  // What provably names the one seeded location: the identifier its insert writes as `id`, and the
+  // binding of `const [B] = await …returning()`, each bound once in the file and never reassigned.
+  const identity = {};
+  const venue = total === 1 && locationInserts.length === 1 && valuesChain(locationInserts[0]);
+  const venueRow =
+    venue && (ts.isArrayLiteralExpression(venue.arg) ? venue.arg.elements[0] : venue.arg);
+  if (venueRow && ts.isObjectLiteralExpression(venueRow) && !propertyProblem(venueRow)) {
+    const position = locationInserts[0].getStart();
+    const id = venueRow.properties.find((property) => keyOf(property) === "id");
+    const value = id && propertyValue(id) && unwrap(propertyValue(id));
+    if (value && ts.isIdentifier(value) && soleValue(sourceFile, value.text, position)) {
+      identity.name = value.text;
+    }
+    const binding = statementOf(venue.awaitNode)?.binding;
+    const wholeRow = venue.tail === "returning" && venue.tailCall.arguments.length === 0;
+    if (binding && wholeRow && soleValue(sourceFile, binding, position)) identity.binding = binding;
+  }
+  const namesVenue = (expression) => {
+    if (expression === undefined) return false;
+    const value = unwrap(expression);
+    if (ts.isIdentifier(value)) return value.text === identity.name;
+    if (!ts.isPropertyAccessExpression(value) || value.name.text !== "id") return false;
+    const row = stripTypeOnly(value.expression);
+    return ts.isIdentifier(row) && row.text === identity.binding;
+  };
 
   const dropArguments = (call) => {
     const span = { start: call.arguments[0].end, end: call.arguments.end, text: "" };
@@ -574,10 +720,14 @@ export function transformSource(path, source) {
       ? chain.tail === "returning"
       : [undefined, "returning"].includes(chain.tail);
     if (!context || !tailOk) return report(insert, REASON.orderShape);
-    if (!isPlain(propertyValue(location))) return report(insert, REASON.notPlain);
     if (collides("seedWorkingOrder", modules.seed)) {
       return report(insert, collision("seedWorkingOrder"));
     }
+    const projected = context.binding && chain.tailCall.arguments.length > 0;
+    if (projected && references(sourceFile, context.binding).length > 0) {
+      return report(insert, REASON.projection);
+    }
+    if (!namesVenue(propertyValue(location))) return report(insert, REASON.notVenue);
     removed.push({ start: location.getStart(), end: location.end });
     const call = `await ${callText("seedWorkingOrder", insert, carriedObject(chain.arg, [location]))}`;
     edits.push({
@@ -612,6 +762,9 @@ export function transformSource(path, source) {
       name = ts.isIdentifier(value) ? value.text : undefined;
       constant = name && moduleConst(sourceFile, name);
       if (!constant) return report(insert, REASON.idNotConst);
+      if (!isLiteral(constant.declarationList.declarations[0].initializer)) {
+        return report(insert, REASON.idNotLiteral);
+      }
       gone.push({ start: idProperty.getStart(), end: idProperty.end });
     }
     if (context.binding) {
@@ -627,9 +780,9 @@ export function transformSource(path, source) {
       keepConstant = still.length > 0;
       if (keepConstant) {
         const where = placement(context.statement);
-        const early =
-          where.hook === "beforeEach" && still.some((node) => insideHook(node, "beforeAll"));
-        if (!where.ok || early) {
+        const early = (node) =>
+          runsBefore(node, node.getStart(), context.statement, where.hook, new Set());
+        if (!where.ok || still.some(early)) {
           return report(insert, `${name} may be read before seedVenue assigns it`);
         }
         if (collides("venueLocationId", modules.venue)) {
@@ -638,7 +791,11 @@ export function transformSource(path, source) {
       }
       edits.push(
         keepConstant
-          ? { start: constant.getStart(), end: constant.end, text: `let ${name}: string;` }
+          ? {
+              start: constant.getStart(),
+              end: constant.end,
+              text: `let ${name}${isJavaScript(file) ? "" : ": string"};`,
+            }
           : lineRemoval(source, constant, true),
       );
     }
@@ -664,8 +821,8 @@ export function transformSource(path, source) {
   if (total === 1) {
     for (const call of seedNodes) {
       if (call.arguments.length !== 2) continue;
-      if (!isPlain(call.arguments[1])) {
-        report(call, REASON.notPlain);
+      if (!namesVenue(call.arguments[1])) {
+        report(call, REASON.notVenue);
         continue;
       }
       dropArguments(call);
@@ -676,8 +833,8 @@ export function transformSource(path, source) {
       if (!options || !ts.isObjectLiteralExpression(options)) continue;
       const index = options.properties.findIndex((property) => keyOf(property) === "locationId");
       if (index === -1) continue;
-      if (!isPlain(propertyValue(options.properties[index]))) {
-        report(call, REASON.notPlain);
+      if (!namesVenue(propertyValue(options.properties[index]))) {
+        report(call, REASON.notVenue);
         continue;
       }
       if (options.properties.length === 1) dropArguments(call);
