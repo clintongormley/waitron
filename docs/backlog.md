@@ -6457,11 +6457,14 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   shapes and reports the rest, so F2–F5 can start. S5 landed (#2386): the default and extra menus
   and the receipt languages are read from the one venue (`readVenueInvoiceLocales` in `@waitron/db`
   reads the languages alone), the menu routes moved to `/management-api/venue/…`, and
-  `location.not_found` is gone. S13–S15 can start now that A1268 has landed (#2375), S18 waits for S2–S17, and the schema
+  `location.not_found` is gone. The working-time slices have their own plan, written against
+  A1268's merged diff (#2375): S13, S14, S15 (three pull requests) and S12d, lane B's, landed in
+  that order. S18 waits for S2–S17, and the schema
   slices S20–S28 get a plan of their own, which first settles what the venue id sent to Cloud and
   naming the backup folder becomes.
   [Design](superpowers/specs/2026-11-01-a1301-remove-location-design.md),
-  [plan](superpowers/plans/2026-11-01-a1301-remove-location.md)
+  [plan](superpowers/plans/2026-11-01-a1301-remove-location.md),
+  [working-time plan](superpowers/plans/2026-11-02-a1301-working-time-slices.md)
 
 - **A1301 S5 left "location" in files other slices own.** Two parameters in
   `packages/catalogue/src/operations.ts` are named `_locationId` and never read; they go when S2's
