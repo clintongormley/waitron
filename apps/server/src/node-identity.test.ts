@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { sql } from "drizzle-orm";
 import {
   loadKeyRing,
   readNodeSigningKey,
@@ -54,6 +55,7 @@ describe("node identity establishment", () => {
   let node: NodeDatabase;
   let nodeId: NodeId;
   let otherNodeId: NodeId;
+  let locationId: ReturnType<typeof brandLocationId>;
 
   beforeAll(async () => {
     db = suite.db;
@@ -67,8 +69,9 @@ describe("node identity establishment", () => {
         operationDescription: "Venta en establecimiento",
       })
       .returning({ id: locations.id });
-    nodeId = await seedNode(db, brandLocationId(loc!.id));
-    otherNodeId = await seedNode(db, brandLocationId(loc!.id));
+    locationId = brandLocationId(loc!.id);
+    nodeId = await seedNode(db, locationId);
+    otherNodeId = await seedNode(db, locationId);
   }, 60_000);
 
   it("establishNodeIdentity stamps a public key that becomes the sole trust anchor", async () => {
@@ -133,6 +136,22 @@ describe("node identity establishment", () => {
       purpose: "membership.node_key",
       field: "privateKey",
     });
+  });
+
+  it("stamps nothing in venue.db when node.db refuses to seal the key", async () => {
+    const unsealedNodeId = await seedNode(db, locationId);
+    await node.execute(
+      sql.raw(`create trigger refuse_signing_key before insert on node_signing_key
+        begin select raise(abort, 'refused by test'); end`),
+    );
+    try {
+      await expect(
+        establishNodeIdentity({ ownerDb: db, node, ring: RING }, unsealedNodeId),
+      ).rejects.toThrow("refused by test");
+      expect((await readMembershipTrustSet(db))[unsealedNodeId]).toBeUndefined();
+    } finally {
+      await node.execute(sql`drop trigger if exists refuse_signing_key`);
+    }
   });
 
   it("refuses node.identity_mismatch when the venue names a different public key", async () => {

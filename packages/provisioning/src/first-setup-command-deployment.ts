@@ -210,8 +210,9 @@ export function createFirstSetupCommandDeployment(options: {
           publishIdentity: async (result, current) => {
             let own = await identity(result.nodeId);
             if (own.trust[result.nodeId] === undefined) {
-              // node.db is saved before venue.db here, the reverse of every other two-file change:
-              // a stamped public key with no private key behind it could never sign as this box.
+              // node.db is saved before venue.db, as everywhere a signing key is first made (here,
+              // the server's node identity and adopt): a stamped public key with no private key
+              // behind it could never sign as this box.
               const sealed = await withNodeTransaction(node, async (tx) => {
                 const held = await readNodeSigningKey(tx, ring, result.nodeId);
                 if (held !== null) return held;

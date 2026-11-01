@@ -1285,6 +1285,23 @@ it("a setup interrupted after the key was sealed and before it was stamped stamp
   expect(await readNodeSigningKey(venue.node, ring, nodeId)).toBe(sealed.privateKey);
 });
 
+it("a setup whose node.db refuses to seal the key stamps no public key in venue.db", async () => {
+  const f = await realActivationFixture();
+  const { sql } = await import("drizzle-orm");
+  const { readMembershipTrustSet } = await import("@waitron/db");
+  await venue.node.execute(
+    sql.raw(`create trigger refuse_signing_key before insert on node_signing_key
+      begin select raise(abort, 'refused by test'); end`),
+  );
+  try {
+    await expect(runCliPastWait(f.args, f.deps)).rejects.toThrow("refused by test");
+    const nodeId = (await f.runtime.store.read())!.frozen.nodeId;
+    expect((await readMembershipTrustSet(venue.db))[nodeId]).toBeUndefined();
+  } finally {
+    await venue.node.execute(sql`drop trigger if exists refuse_signing_key`);
+  }
+});
+
 async function unpreparedDeploymentFixture(
   environment: "production" | "preproduction" = "preproduction",
 ) {

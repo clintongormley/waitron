@@ -1,7 +1,6 @@
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Database } from "@waitron/db";
-import type { KeyRing } from "@waitron/credentials";
 import "@waitron/module";
 import type { WaitronModule } from "@waitron/module";
 import { codeOf } from "@waitron/server-kit";
@@ -93,7 +92,6 @@ type EstablishArgs = {
  */
 export async function runFinishAdoption(deps: {
   ownerDb: Database;
-  ring: KeyRing;
   stateDir: string;
   modules: readonly WaitronModule[];
   establish?: (args: EstablishArgs) => Promise<void>;

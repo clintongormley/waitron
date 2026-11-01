@@ -42,8 +42,8 @@ export async function establishNodeIdentity(
   deps: EstablishIdentityDeps,
   nodeId: string,
 ): Promise<void> {
-  // node.db is saved before venue.db here, the reverse of every other two-file change: a stamped
-  // public key with no private key behind it would leave the box unable to sign as itself.
+  // node.db is saved before venue.db, as everywhere a signing key is first made (here, first setup
+  // and adopt): a stamped public key with no private key behind it could never sign as this box.
   const privateKey = await withNodeTransaction(deps.node, async (tx) => {
     const sealed = await readNodeSigningKey(tx, deps.ring, nodeId);
     if (sealed !== null) return sealed;

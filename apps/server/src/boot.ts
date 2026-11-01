@@ -1538,7 +1538,6 @@ async function bootServer(
     app.get("/api/box/status", (c) => c.json({ adoption: "pending" }, 200));
     const finishWorker = runFinishAdoption({
       ownerDb: db,
-      ring,
       stateDir: config.stateDir,
       modules: setsToMigrate,
       log,

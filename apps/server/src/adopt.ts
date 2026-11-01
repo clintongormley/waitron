@@ -129,8 +129,9 @@ export async function adoptFromPrimary(
   await hooks.beforeFirstWrite();
   await stampDeployment(deps.ownerDb, bundle.environment);
   // The role and the link are written together, so node.db never holds a mirror with no link.
-  // The key is sealed here, before finishing adoption puts its public half in venue.db: a public
-  // key with no private half would be worse than the reverse.
+  // The key is sealed here, before finishing adoption puts its public half in venue.db, as
+  // everywhere a signing key is first made: a public key with no private half could never sign as
+  // this box.
   await withNodeTransaction(deps.ownerNode, async (tx) => {
     await setNodeModeTx(tx, standby.nodeId, "mirror");
     await sealNodeSigningKeyTx(tx, deps.ring, standby.nodeId, standby.privateKey);

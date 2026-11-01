@@ -193,14 +193,9 @@ it("a pending allocated adoption refuses without creating a selling identity and
   await writePendingAdoption(stateDir, pending);
   const before = await state();
   const events: unknown[] = [];
-  const ring = loadKeyRing({
-    WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 4).toString("base64"),
-    WAITRON_CREDENTIALS_KEY_VERSION: "1",
-  });
   for (let retry = 0; retry < 2; retry += 1) {
     await runFinishAdoption({
       ownerDb: suite.db,
-      ring,
       stateDir,
       modules,
       log: (level, event, fields) => {
