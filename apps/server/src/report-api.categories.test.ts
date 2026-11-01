@@ -539,7 +539,7 @@ describe("POST /management-api/reports/categories/print", () => {
 
   // The second location lives only inside its case, and goes in a `finally`: every other case
   // reads the one venue. A1301 S11c deletes the case with the check it proves.
-  let elsewhere: { locationId: string; printerId: string } | undefined;
+  let elsewhere: { locationId: string; printerId?: string } | undefined;
   const elsewherePrinter = async (): Promise<string> => {
     const [other] = await suite.db
       .insert(locations)
@@ -549,6 +549,7 @@ describe("POST /management-api/reports/categories/print", () => {
         operationDescription: "Venta en establecimiento",
       })
       .returning({ id: locations.id });
+    elsewhere = { locationId: other!.id };
     const [row] = await suite.db
       .insert(printers)
       .values({
@@ -560,7 +561,7 @@ describe("POST /management-api/reports/categories/print", () => {
         paperWidth: "80mm",
       })
       .returning({ id: printers.id });
-    elsewhere = { locationId: other!.id, printerId: row!.id };
+    elsewhere.printerId = row!.id;
     return row!.id;
   };
 
@@ -569,15 +570,16 @@ describe("POST /management-api/reports/categories/print", () => {
     ["another location's printer", elsewherePrinter],
     ["an unknown printer", () => Promise.resolve(randomUUID())],
   ])("404 printer.not_found for %s, enqueuing nothing", async (_case, printerId) => {
-    const id = await printerId();
     try {
+      const id = await printerId();
       const res = await print({ from: DAY1, to: DAY1, mode: "current", printerId: id });
       expect(res.status).toBe(404);
       expect(await errorOf(res)).toMatchObject({ code: "printer.not_found", params: { id } });
       expect(await jobsOn(id)).toEqual([]);
     } finally {
       if (elsewhere !== undefined) {
-        await suite.db.delete(printers).where(eq(printers.id, elsewhere.printerId));
+        if (elsewhere.printerId !== undefined)
+          await suite.db.delete(printers).where(eq(printers.id, elsewhere.printerId));
         await suite.db.delete(locations).where(eq(locations.id, elsewhere.locationId));
         elsewhere = undefined;
       }

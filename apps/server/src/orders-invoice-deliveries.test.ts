@@ -216,12 +216,14 @@ async function withElsewhereOffice(act: (elsewhere: string) => Promise<void>) {
       })
       .returning({ id: locations.id }),
   );
-  const elsewhere = await extraOffice("Terraza", terrace!.id);
+  let elsewhere: string | undefined;
   try {
+    elsewhere = await extraOffice("Terraza", terrace!.id);
     await act(elsewhere);
   } finally {
     await inTx(venue, async (tx) => {
-      await tx.delete(pagePrinters).where(eq(pagePrinters.id, elsewhere));
+      if (elsewhere !== undefined)
+        await tx.delete(pagePrinters).where(eq(pagePrinters.id, elsewhere));
       await tx.delete(locations).where(eq(locations.id, terrace!.id));
     });
   }
@@ -1052,17 +1054,18 @@ describe("dashboard print on a receipt printer", () => {
           { name, transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
         ),
       );
-    const off = (await make("Apagada")).id;
-    const deleted = (await make("Borrada")).id;
-    const elsewhere = (await make("Terraza", terrace!.id)).id;
-    await inTx(venue, async (tx) => {
-      await tx.update(printers).set({ active: false }).where(eq(printers.id, off));
-      await tx
-        .update(printers)
-        .set({ active: false, deletedAt: new Date().toISOString() })
-        .where(eq(printers.id, deleted));
-    });
+    let elsewhere: string | undefined;
     try {
+      const off = (await make("Apagada")).id;
+      const deleted = (await make("Borrada")).id;
+      elsewhere = (await make("Terraza", terrace!.id)).id;
+      await inTx(venue, async (tx) => {
+        await tx.update(printers).set({ active: false }).where(eq(printers.id, off));
+        await tx
+          .update(printers)
+          .set({ active: false, deletedAt: new Date().toISOString() })
+          .where(eq(printers.id, deleted));
+      });
       for (const printerId of [off, deleted, elsewhere]) {
         expect(
           await printInvoice(venue.adminDashboard, billId, printBody(randomUUID(), printerId)),
@@ -1073,7 +1076,7 @@ describe("dashboard print on a receipt printer", () => {
     } finally {
       // The second location goes: every later case reads the one venue.
       await inTx(venue, async (tx) => {
-        await tx.delete(printers).where(eq(printers.id, elsewhere));
+        if (elsewhere !== undefined) await tx.delete(printers).where(eq(printers.id, elsewhere));
         await tx.delete(locations).where(eq(locations.id, terrace!.id));
       });
     }

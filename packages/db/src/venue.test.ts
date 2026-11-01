@@ -107,20 +107,20 @@ describe("the venue accessor", () => {
     ["venueLocationId", venueLocationId],
   ])("%s", (_name, read) => {
     it("refuses with no venue", async () => {
-      await expect(withTransaction(suite.db, read)).rejects.toMatchObject({
-        code: "venue.not_found",
-        params: {},
-      });
+      const error: unknown = await withTransaction(suite.db, read).catch((caught) => caught);
+      expect(error).toMatchObject({ code: "venue.not_found" });
+      // toMatchObject reads `params: {}` as "any params"; the params must be empty.
+      expect((error as { params: unknown }).params).toEqual({});
     });
 
     it("refuses with two venues", async () => {
       await insertVenue();
       await insertVenue({ name: "Second" });
 
-      await expect(withTransaction(suite.db, read)).rejects.toMatchObject({
-        code: "provisioning.second_venue",
-        params: {},
-      });
+      const error: unknown = await withTransaction(suite.db, read).catch((caught) => caught);
+      expect(error).toMatchObject({ code: "provisioning.second_venue" });
+      // toMatchObject reads `params: {}` as "any params"; the params must be empty.
+      expect((error as { params: unknown }).params).toEqual({});
     });
   });
 });
