@@ -144,11 +144,33 @@ for (const locale of ["en", "es"] as const) {
       const parties = expected[phase].tables.parties!;
       parties.columns = parties.columns.filter((column) => column.name !== "main_bill_id");
       parties.foreignKeys = parties.foreignKeys.filter((key) => key.from !== "main_bill_id");
-      const chains = expected[phase].tables.workforce_chains!;
-      chains.columns = chains.columns.filter((column) => column.name !== "location_id");
-      chains.foreignKeys = chains.foreignKeys
-        .filter((key) => key.from !== "location_id")
-        .map((key, id) => ({ ...key, id }));
+      for (const name of ["workforce_chains", "time_entries", "pay_period_closures"]) {
+        const table = expected[phase].tables[name]!;
+        table.columns = table.columns.filter((column) => column.name !== "location_id");
+        const kept = table.foreignKeys.filter((key) => key.from !== "location_id");
+        const ids = [...new Set(kept.map((key) => key.id))];
+        table.foreignKeys = kept.map((key) => ({ ...key, id: ids.indexOf(key.id) }));
+      }
+      // Workforce 0013's rebuild writes self_approved before author_kind; the capture has it
+      // last, where 0006's ALTER added it.
+      const entryColumns = expected[phase].tables.time_entries!.columns;
+      const selfApproved = entryColumns.splice(
+        entryColumns.findIndex((column) => column.name === "self_approved"),
+        1,
+      );
+      entryColumns.splice(
+        entryColumns.findIndex((column) => column.name === "author_kind"),
+        0,
+        ...selfApproved,
+      );
+      const commandLocation = expected[phase].tables.attendance_response_commands!.columns.find(
+        (column) => column.name === "location_id",
+      )!;
+      commandLocation.notnull = 0;
+      const questions = expected[phase].tables.attendance_questions!;
+      questions.foreignKeys = questions.foreignKeys.filter(
+        (key) => !(key.table === "time_entries" && key.from === "location_id"),
+      );
       expected[phase].tables.webauthn_challenges!.columns.push({
         name: "purpose",
         type: "TEXT",

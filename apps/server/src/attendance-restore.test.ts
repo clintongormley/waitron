@@ -64,7 +64,6 @@ beforeEach(async () => {
   await withTransaction(suite.db, async (tx) => {
     await new WorkforceBackend().clockIn(tx, {
       nodeId,
-      locationId,
       personId,
       at: "2026-01-05T09:00:00Z",
       offsetMinutes: 60,

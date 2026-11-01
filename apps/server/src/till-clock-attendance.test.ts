@@ -80,7 +80,6 @@ describe("own clock reconciliation at the business-day boundary", () => {
         withTransaction(suite.db, (tx) =>
           appendToChain(tx, venue.cfg, {
             personId: venue.personId,
-            locationId: venue.cfg.locationId,
             entryKind: "correction",
             eventAt: at,
             eventOffsetMinutes: 60,

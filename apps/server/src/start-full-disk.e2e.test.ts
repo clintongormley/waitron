@@ -299,7 +299,6 @@ describe("the Box status read and free-space deletion on a real full disk", () =
     await withTransaction(db, (tx) =>
       new WorkforceBackend().clockIn(tx, {
         nodeId,
-        locationId: main!.id,
         personId: manager.personId,
         offsetMinutes: 60,
         origin: jobOrigin("dashboard"),
