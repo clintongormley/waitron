@@ -12,8 +12,16 @@ amended; "§N" below means a section of it). Research inputs: `~/waitron-campaig
 
 **Plan head:** main `0160250f67` (2026-11-01). Five writers read the code in parallel, so line
 numbers were read at the head each slice section names: main `abfe271663`, or A696's branch
-`origin/feat/a696-startup-zone-validation` at `7e824ae233` (PR #2369, still open; it lands before
-S1). Every implementer re-reads the lines at their own head before editing.
+`origin/feat/a696-startup-zone-validation` (PR #2369, still open; it lands before S1). **A696's
+head is `623a2d59c4`**, rebased onto `abfe271663`; the first draft read it at `7e824ae233`.
+`git diff --name-only 7e824ae233 623a2d59c4` lists 54 files. Of the files this plan cites, only
+`apps/server/src/working-order.ts`, `till-api.ts`, `till-api.profile-actions.test.ts`,
+`till-api.profile-zones.test.ts`, `docs/backlog.md`, `docs/backlog/till.md` and
+`docs/developers/conventions-data.md` are among them, and every line this plan cites at A696's head
+in those files was re-read at `623a2d59c4`. Every other cited file is byte-identical at the two
+heads, so "A696's head" below means `623a2d59c4`. Every implementer re-reads the lines at their own
+head before editing, and **deletes a test case by its title, never by its line number**: a
+deletion list's line number only says where the title stood at the cited head.
 
 **Tech stack:** TypeScript, drizzle over SQLite (`node:sqlite`), Vitest 4 (browser mode for the
 dashboard, till and setup app), pnpm workspace.
@@ -22,20 +30,25 @@ dashboard, till and setup app), pnpm workspace.
 
 The design's readers should know these; each is explained where it bites.
 
-1. **Three readers move from S1 to S2.** `saleLanguageFor` and `readOfferedReceiptLanguages`
-   (`apps/server/src/venue-locale.ts`) and `readLocationAddress` (`apps/server/src/venue-address.ts`)
-   are called from files on the invoice path, so S2 (owner-landed) changes them and all their callers
-   (Task S2-5). S1 does not touch them.
+1. **Four readers move from S1 to S2.** `saleLanguageFor` and `readOfferedReceiptLanguages`
+   (`apps/server/src/venue-locale.ts`), and `readLocationAddress` and `readReceiptAddress`
+   (`apps/server/src/venue-address.ts`) are called from files on the invoice path, so S2
+   (owner-landed) changes them and all their callers (Task S2-5). S1 does not touch them.
+   `readReceiptAddress`'s caller `receipt-print.ts:214` sits inside `buildReceiptBytes`
+   (`:173-182`, "Use the filed issuer where available"), which prints the sale's own ticket, a
+   simplified invoice: the same rule (a) that moves `readLocationAddress`.
 2. **Files and lines moved between slices** — see "Files moved from the design's slice" below:
    `record-export-types.ts` to S14; `mirror-bundle.ts`, `mirror-bundle-fetch.ts`, `table-removal.ts`
    and `ApplyResult.locationId` to S18; the rota warnings query and route to S13; the whole restore
    preview rename `locationName` → `venueName` to S16; the device admission checks in S11 and S13
-   files to S12a; deleting `GET /management-api/locations` becomes S12d, which waits for S15.
+   files, the two refund-path device checks among them, to S12a; deleting
+   `GET /management-api/locations` becomes S12d, which waits for S15.
 3. **S4's refusal code is `mirror.venue_not_copied`**, not the design's proposed
    `adoption.venue_not_copied`: no `adoption.*` error code exists, and the registry names an adopted
    standby's refusals `mirror.*`.
 4. **`apps/server/src/first-fiscal-setup.e2e.test.ts` is edited by S16**, limited to the lines that
-   build the setup request (246-254 and 368 at A696's head), with no assertion changed; S16's PR names
+   build the setup request (246-254 and 368 at A696's head). One assertion line (`:248`) is
+   re-pointed at the same value under a new name, and no assertion's value changes; S16's PR names
    it. S17 later deletes its `fireControl` check, because `fireControl` leaves the bundle (§2.1).
 5. **A new error code, `venue.not_found`**, is what the accessor throws on a database with no venue
    row (setup has not run). Two or more rows throw the existing `provisioning.second_venue`.
@@ -48,6 +61,25 @@ The design's readers should know these; each is explained where it bites.
 8. **Code slices do not wait for the fixture slices** (rule "A database with a second venue row"
    below), and overlap with an open pull request is never a reason to wait: whoever lands second
    rebases.
+9. **`venueLocationId` has two uses beyond filling a column, both in S2-3.** The design gives the
+   helper one use (§6): filling a `location_id` column a slice still writes. S2-3 also builds the
+   venue-service seats' scope from it in `invoice-email-contact.ts`, and fills
+   `InvoiceDeliverySale.locationId` with it for the two printer offers S10b and S11a still filter
+   (fold notes 3 and 9). S18 deletes both.
+10. **S16 edits two docs the design gives to S17.** `CLAUDE.md` (the configuration-bundle rule) and
+    `docs/developers/conventions-data.md` name `LocationDraft`, `CLAIM_LOCATION_FIELDS` and
+    `exact(raw.location, …)`, which S16 deletes; S16 changes those identifiers only (CLAUDE.md §6:
+    a change updates the docs it makes stale), and S17 rewrites the two rules as the design says.
+11. **One fixture task changes a reader.** F2a switches the test helper
+    `packages/venue-service/src/testing/zone-menus.ts` (`:75-79`) from reading `locations.dayCutover`
+    by `cfg.locationId` to `readVenueClock(tx)`'s day start. The F slices otherwise change no reader
+    (design §6, "The test fixtures"); this one is a test helper that reads a venue setting, and no
+    code slice owns it.
+12. **S4's host-file reset may not be needed.** Design §4 ("Host files") resets a box holding
+    `<state>/pending-adoption.json`. `readPendingAdoption` parses the file with no key check
+    (`apps/server/src/finish-adoption.ts:66-75`), so an old record's `locationId` may simply be
+    ignored. Task S4-2 Step 1 runs an old-shaped file through it; its result decides the PR's first
+    line.
 
 ## Goal
 
@@ -81,8 +113,9 @@ Not covered, and why:
 - **S13, S14, S15** wait for A1268 (#2375, lane B) to land, because A1268 removes the location from
   clock-ins, entries, closures and both working-time hashes itself (§6, "How A1301 meets A1268");
   each of these slices removes only what A1268 leaves, so its plan is written against A1268's merged
-  diff. **S14** also waits for the owner's answer to question 4 (§7). Lines this plan hands them are
-  in "Notes for the S13–S15 plans" below.
+  diff. The owner answered question 4 (§7) on 2026-11-01 (~15:55): (a), the export names the
+  workplace by the venue's name alone, so **S14** now waits only for A1268 to land. Lines this plan
+  hands them are in "Notes for the S13–S15 plans" below.
 - **S18** (contract and type cleanup) waits for S2–S17, and **S19**'s text sweep runs after S18 (its
   plan-only backlog part may run now).
 - **S20–S28** (the schema slices and the reset window) are a separate plan, written once F1–F5 and
@@ -98,29 +131,33 @@ invoice records point at by foreign key (§6). The lane lands the rest.
 | Slice | Tasks | Depends on | Lands | Review | Branch |
 | --- | --- | --- | --- | --- | --- |
 | S1 | 4 (S1a–S1d) | A696 (#2369) landed | lane | FULL | `refactor/a1301-s1-venue-accessor` |
-| F1 | 4 (F1a–F1d) | S1 | lane | FULL | `refactor/a1301-f1-seed-helpers` |
+| F1 | 5 (F1a, F1b1, F1b2, F1c, F1d) | S1 | lane | FULL | `refactor/a1301-f1-seed-helpers` |
 | S2 | 5 (S2-1–S2-5) | S1 | **owner** (a, b) | FULL | `refactor/a1301-s2-invoice-inputs` |
 | S3 | 4 (S3-1–S3-4) | S1; reuses S2-1 Step 1 if S2 is ahead, else S3-4 does it | **owner** (c) | FULL | `refactor/a1301-s3-fiscal-verifactu` |
 | S4 | 2 (S4-1, S4-2) | S1; must land before S25 | **owner** (c) | FULL | `refactor/a1301-s4-adoption-refusal` |
 | S5 | 2 (S5-1, S5-2) | S1 | lane | FULL | `refactor/a1301-s5-catalogue` |
-| S6 | 2 (S6a, S6b) | S5 | lane | FULL | `refactor/a1301-s6-venue-service-service` |
-| S7 | 1 | S6 | lane | FULL | `refactor/a1301-s7-floor` |
-| S8 | 1 | S1; runs alongside S5–S7 | lane | FULL | `refactor/a1301-s8-venue-service-calendar` |
-| S9 | 2 (S9a, S9b) | S1 | lane | LIGHT | `refactor/a1301-s9-staffing-bookings` |
-| S10 | 3 (S10a–S10c) | S1 | lane | LIGHT | `refactor/a1301-s10-printing-layouts` |
-| S11 | 3 (S11a–S11c) | S1 | lane | LIGHT | `refactor/a1301-s11-orders-kitchen-refunds` |
+| S6 | 2 (S6a, S6b) | S1 | lane | FULL | `refactor/a1301-s6-venue-service-service` |
+| S7 | 1 | S1 | lane | FULL | `refactor/a1301-s7-floor` |
+| S8 | 1 | S1 | lane | FULL | `refactor/a1301-s8-venue-service-calendar` |
+| S9 | 2 (S9a, S9b) | S1 | lane | FULL | `refactor/a1301-s9-staffing-bookings` |
+| S10 | 3 (S10a–S10c) | S1 | lane | FULL | `refactor/a1301-s10-printing-layouts` |
+| S11 | 3 (S11a–S11c) | S1 | lane | FULL | `refactor/a1301-s11-orders-kitchen-refunds` |
 | S12 | 3 (S12a–S12c) | S1 | lane | FULL | `refactor/a1301-s12-devices-joins-admission` |
 | S12d | 1 | **S15** (not in this plan) | lane | FULL | `refactor/a1301-s12d-locations-route` |
-| S16 | 6 (S16a–S16f) | S1 | **owner** (c) | FULL | `refactor/a1301-s16-setup-venue-fields` |
-| S17 | 2 (S17a, S17b) | S16 | lane | FULL | `refactor/a1301-s17-bundle-venue-fields` |
+| S16 | 7 (S16a–S16e, S16f1, S16f2) | S1 | **owner** (c) | FULL | `refactor/a1301-s16-setup-venue-fields` |
+| S17 | 3 (S17a1, S17a2, S17b) | S16 | lane | FULL | `refactor/a1301-s17-bundle-venue-fields` |
 | F2 | 7 (F2a–F2g) | F1 | lane | LIGHT | `refactor/a1301-f2-package-fixtures` |
 | F3 | 4 (F3a–F3d) | F1 | lane | LIGHT | `refactor/a1301-f3-server-fixtures-a-f` |
-| F4 | 4 (F4a–F4d) | F1 | lane | LIGHT | `refactor/a1301-f4-server-fixtures-g-r` |
-| F5 | 5 (F5a–F5e) | F1 | lane | LIGHT | `refactor/a1301-f5-server-fixtures-s-z` |
+| F4 | 5 (F4a–F4c, F4d1, F4d2) | F1 | lane | LIGHT | `refactor/a1301-f4-server-fixtures-g-r` |
+| F5 | 6 (F5a, F5b, F5c1, F5c2, F5d, F5e) | F1 | lane | LIGHT | `refactor/a1301-f5-server-fixtures-s-z` |
 
-65 tasks in all. Order within S5–S8: **S1 → S5 → S6 → S7, with S8 alongside** (S6's
-`department-receipt-languages.ts` change builds on S5's; S7 edits `department-transfers.ts`, an S6
-file). S9, S10, S11, S12, S16 and F1 start once S1 has landed, in parallel, in different lanes.
+70 tasks in all. **S2–S12 (not S12d), S16 and F1 start once S1 has landed**, in parallel, in
+different lanes, and land in any order; S5–S8 included. No one of S5, S6, S7 needs another to compile: S6 does not
+edit S5's line in `department-receipt-languages.ts` (its done-check allows it until S5 lands), and
+S7's edit in S6's `department-transfers.ts` is confined to `summarizeTransfers` and its four calls,
+whose `cfg` feeds only the `orderTableLabels` call S7 changes (`:504-544`, `:571-644` at
+`623a2d59c4`) and which S6 does not touch. Their shared files are an overlap, and overlap is a
+rebase, never a wait (owner's coordination rule, 2026-11-01).
 
 - **Owner lands:** S2 (a, b), S3 (c), S4 (c), S16 (c). Owner-landed slices wait for the owner at
   landing, not at build.
@@ -134,17 +171,17 @@ slice section says which trigger applies.
 
 | What | Design's slice | Now | Why |
 | --- | --- | --- | --- |
-| `saleLanguageFor`, `readOfferedReceiptLanguages` (`apps/server/src/venue-locale.ts`), `readLocationAddress` (`apps/server/src/venue-address.ts`), and every caller, including `department-receipt-api.ts:87` | S1 | S2 (Task S2-5) | Their callers `till-sale.ts`, `bill-payments.ts`, `working-order.ts` and `receipt-presentation.ts` store and print an invoice record (rule a). |
+| `saleLanguageFor`, `readOfferedReceiptLanguages` (`apps/server/src/venue-locale.ts`), `readLocationAddress`, `readReceiptAddress` (`apps/server/src/venue-address.ts`), and every caller, including `department-receipt-api.ts:87`, `receipt-print.ts:214` and `receipt-preview-api.ts:381` | S1 | S2 (Task S2-5) | Their callers `till-sale.ts`, `bill-payments.ts`, `working-order.ts`, `receipt-presentation.ts` and `receipt-print.ts` (`buildReceiptBytes`, the sale's own ticket) store and print an invoice record (rule a). |
 | `packages/shared/src/record-export-types.ts` (`RecordExportInput.locationId`) | S2 | S14 (not in this plan) | It is the art. 34.9 working-time export's input (read by `packages/module/src/record-export.ts:7`, `packages/workforce-es/src/record-export.ts:156` and `apps/server/src/personal-data-time-record.ts:40`), not an invoice record. Until S14, S12c fills it with `venueLocationId(tx)`. |
 | `apps/server/src/mirror-bundle.ts`, `apps/server/src/mirror-bundle-fetch.ts` | S3 | S18 (not in this plan) | Their four matches fill the module contract's `ProvisionedNode` and `AdoptResult.designated.locationId`, which `adopt.ts:205` needs for the mirror's `trading.env` until S18 removes `NodeConfig.locationId`. The design's "join bundle loses `locationId`" is met inside the fiscal module's dormant state (S3-3). |
 | `apps/server/src/table-removal.ts` | S7 | S18 (not in this plan) | Every matching line builds the `{ locationId }` argument of the module contract's `TableRemoval` hooks (`packages/module/src/module.ts:148-174`). |
 | `ApplyResult.locationId` (`packages/provisioning/src/venue-apply.ts:61`) | none | S18 (not in this plan) | Read by `persistTrading`, the demo scripts and many test helpers; it goes with `ProvisionedNode.locationId`. |
 | The rota warnings query and route: `packages/staffing/src/dashboard/client.ts` (`:147-159`), `packages/staffing/src/dashboard/rota-view.ts` (`:416`), `apps/server/src/workforce-api.ts:133-136`, and the lines that feed them, `packages/staffing/src/rota.ts:85,363` and `staffing-types.ts:113` | S9 (the two dashboard files), S13 (the route) | S13 (not in this plan) | The query sends `?locationId=` to a route that refuses a request without it; `roster.draft_exists`'s detail type is `packages/workforce/src/errors.ts:45`, also thrown by `packages/workforce/src/clocking.ts:314,342`. |
 | The restore preview rename `locationName` → `venueName`: `apps/server/src/restore-stream.ts` (`RestoredVenue`, `:46,221`), `apps/server/src/errors.ts` (`restore.stream_venue_unconfirmed`), `apps/server/src/restore-command.ts:509`, `scripts/personal-log-params.test.ts:125`, `apps/setup/src/setup-app.ts:493-496`, `apps/setup/src/screens/restore-bucket-screen.ts` and their tests | S12 (`restore-stream.ts`), S16, S18 (`errors.ts`) | S16 (Task S16c) | One value fed by two slices' files; it is renamed once. S12c keeps only `restore-stream.ts`'s lookup of the restored venue row by no id. |
-| The device admission checks `device.locationId !== cfg.locationId` in `line-cancel-api.ts:47`, `order-kitchen-note-api.ts:61-62`, `party-allergy-api.ts:109-110` (S11 files) and the `admit` location refusal in `till-attendance-api.ts:101-102`, `till-clock-api.ts:79-80` (S13 files) | S11, S13 | S12a | `DeviceBinding.locationId` cannot go while any of them reads it; the design gives admission and `admit` to S12. |
+| The device admission checks `device.locationId !== cfg.locationId` in `line-cancel-api.ts:47`, `order-kitchen-note-api.ts:61-62`, `party-allergy-api.ts:109-110` (S11 files); the refund-path device checks `eq(devices.locationId, cfg.locationId)` → `device.unauthorized` in `tender-refund-api.ts:72` and `tender-refund-authorization.ts:105` (S11 files); and the `admit` location refusal in `till-attendance-api.ts:101-102`, `till-clock-api.ts:79-80` (S13 files) | S11, S13 | S12a | `DeviceBinding.locationId` cannot go while any of them reads it; the design gives admission and `admit` to S12. The two refund checks refuse a device by its location on the cash and card refund path, so they belong with the other admission refusals under S12a's review. |
 | Deleting `GET /management-api/locations` and the dashboard's `getLocations` (`apps/server/src/workforce-api.ts:108-118`, `apps/dashboard/src/api/client.ts`, `apps/dashboard/src/api/live-queries.ts:492`) | S12 | S12d, which depends on S15 | Its last user is `apps/dashboard/src/screens/planned-actual-screen.ts:99`, S15's location picker. |
 | `packages/fiscal-verifactu/src/testing/seed.ts`, `test/fixtures.ts`, `test/drain-fixtures.ts`, `test/certificate-diagnosis-parent-fixtures.ts` | F2 by glob | S3 | The file assignment's summary gives them to S3 (S3-1 and S3-4); F2 leaves them. |
-| `packages/provisioning/test/first-setup-request.ts`, `start-again-attempt.ts` (S16a), `configuration-bundle.ts` (S17a) | F2 | S16, S17 | They build the setup request and the bundle, whose shapes those slices change. |
+| `packages/provisioning/test/first-setup-request.ts`, `start-again-attempt.ts` (S16a), `configuration-bundle.ts` (S17a1) | F2 | S16, S17 | They build the setup request and the bundle, whose shapes those slices change. |
 
 ## Rules every slice follows
 
@@ -236,7 +273,23 @@ suite that then fails with `provisioning.second_venue` or `venue.not_found`:**
 - a case that exists only to prove a cross-location refusal is DELETED with its check, and named in
   the PR (the rule above);
 - any other suite is changed to seed one venue — F1's `seedVenue` if F1 has landed, else by reusing
-  the first row — without changing an assertion. Never make the accessor pick one row.
+  the first row — without changing an assertion. Never make the accessor pick one row;
+- **another slice's case in a shared database.** In a suite that shares one database across cases
+  (`resetPerTest: false`), a case can seed a second `locations` row to prove a check that another,
+  not yet landed slice removes. This slice may not delete that case (its check is not this
+  slice's), but the row breaks every later case once this slice reads through the accessor. So this
+  slice makes that case delete the rows it inserted, in a `finally` at its end, changing no
+  assertion, and names the case in its PR; the owning slice still deletes the case with its check.
+  This edit is allowed in the drawer suites (S10's list) too. If the case's **own** assertions then
+  fail because of its own second row, this slice stops and lands after the owning slice instead.
+  Eleven `apps/server` suites with `resetPerTest: false` insert `locations` two or more times at
+  `623a2d59c4` (`bill-payments-api`, `floor-delete`, `orders-api`, `orders-invoice-deliveries`,
+  `report-api.categories`, `restore`, `restore-stream`, `station-move`, `venue-locale`,
+  `venue-time-zone`, `workforce-api`, each `.test.ts`). One known case: in the drawer suite
+  `bill-payments-api.test.ts`, "stages only the local active A4 printer over HTTP: %s" (its
+  `"other-location"` row, `:1971`) and "answers no invoice printer when the location has none, only
+  another location's or a disabled one" (`:2091`) are S2-3's to delete; S10a or S11a, whichever
+  lands before S2, makes them clean up.
 
 Find the suites before running: `git grep -c -E 'insert\((schema\.)?locations\)|seedVenue\(|seedLocation\(|insertLocation\(' -- <test files>`
 and read every file that prints 2 or more. Several suites share one database across cases
@@ -256,7 +309,7 @@ slices.**
 - **A caller in a file of an owner-landed slice (S2, S3, S4, S16) that has not landed yet is not
   edited by a lane slice.** The reader keeps an ignored parameter for that caller — the `_cfg`
   pattern of `narrowDeviceKitchenScreens` and `assertKitchenDisplayHasScreen`
-  (`packages/venue-service/src/kitchen-screens.ts:892,925` at `7e824ae233`): renamed with a leading
+  (`packages/venue-service/src/kitchen-screens.ts:892,925` at `623a2d59c4`): renamed with a leading
   underscore and never read; optional when it is the last parameter, so the slice's other callers can
   already drop it. The owner slice drops the argument when it lands after. Once the owner slice has
   landed, the lane slice edits that call itself, argument only, and names it in its PR.
@@ -329,11 +382,28 @@ function no longer reads the scope. It fails before the change. It is marked
   `venueLocationId` line S2-3 adds to `invoice-email-contact.ts` for the venue-service seats' scope.
 - The `ctx.locationId` field S10a keeps, ignored, on `claimPrintJobs` for `invoice-print.ts:62` if S2
   has not dropped it.
+- `TradingConfig.locationId` (`apps/server/src/trading-config.ts:20`), left over from #2198: still
+  declared, but `writeTradingEnv` (`:31-42` at main `0160250f67`) writes `WAITRON_NODE_ID`,
+  `WAITRON_ENV` and the two optional settings, never the location. S18 holds the file
+  (`file-assignment.tsv:361`); Waitron Cloud's two `writeTradingEnv` callers stop passing it then
+  ("Cloud follow-up" below).
+- **Before S18 removes `TradingContext.locationId`:** the open design point "the venue's stable id"
+  under "Carried to the schema plan" must be settled, because that field is today's Cloud pairing
+  value and backup folder name.
 
 ## Notes for the S13–S15 plans
 
 - S13 takes the rota warnings query and route (table above).
 - S14 takes `RecordExportInput.locationId`; S12c fills it with `venueLocationId(tx)` meanwhile.
+- S14 builds the owner's answer to question 4, (a): the export's opening table names the venue once
+  (`Workplace | From | Before (excluded) | …`, the name from `readVenue`), and the entries and
+  closures tables carry no workplace column; no official workplace code is added. Its plan reads
+  A1268's merged `packages/workforce-es/src/record-export.ts` first, so the two do not collide: at
+  #2375's head `8eddd1a4f7` (open, unchanged since 14:15) the reference column is still declared
+  (`:30`) and filled per entry (`:252`) and per closure (`:372`), and #2375's only change to the file
+  adds the skip-numbers note (`git diff $(git merge-base origin/main 8eddd1a4f7) 8eddd1a4f7 --
+  packages/workforce-es/src/record-export.ts`: 4 lines added). If A1268's revision removes the
+  entries' and closures' fills, S14 drops only what is left.
 - S12d starts once S15 has removed `planned-actual-screen.ts`'s `getLocations` watch.
 - The dashboard and till attendance/hours fixture helpers (`apps/dashboard/test/{attendance,hours,manager-hours}-fixtures.ts`,
   `apps/till/test/{attendance-fixtures,clock-app,hours-fixtures}.ts`) are API mocks; they change with
@@ -354,10 +424,22 @@ function no longer reads the scope. It fails before the change. It is marked
   `REMOVED_TABLES` do today). S28 needs a new transform for a table dropped with rows: `REMOVED_TABLES`
   requires the dropped table to have held none (`seed.madrid-baseline.test.ts:125-130`), and
   `locations` held one in the `provisioned` and `seeded` phases.
-- **Open design point: what replaces the location id as the backup bucket key.**
-  `apps/server/src/restore-stream.ts:217` reads `locations where id = venueId`, where `venueId` is the
-  backup settings' venue id (`:180-187`), so the bucket layout is keyed by a `locations.id`. No slice
-  says what keys it once S28 drops the table.
+- **OPEN DESIGN POINT, to settle before S18: the venue's stable id.** Two things are keyed today by
+  the `locations` row's id, and no slice says what keys them once S28 drops the table:
+  - **the backup bucket.** Every stream and backup-settings call passes
+    `venueId: tradingContext.locationId` (`apps/server/src/boot.ts:2372,2749,2823,2843,2860` at main
+    `0160250f67`), which names the bucket folder `venues/<venueId>/`
+    (`packages/stream/src/names.ts:26-28`); and `apps/server/src/restore-stream.ts:217` reads
+    `locations where id = venueId`, where `venueId` is the backup settings' venue id (`:180-187`).
+  - **Waitron Cloud's pairing value.** At pairing the box sends
+    `localVenueId: tradingContext.locationId` (`boot.ts:2759,2768` at main; `:2884,2893` at A696's
+    head) and signs it into the pairing bytes (`apps/server/src/cloud-client.ts:269-276`); Cloud keeps
+    it and keys its stream pointers by it ("Cloud follow-up" below).
+  S18 removes `TradingContext.locationId` and S25 drops `nodes.location_id`, so the decision is
+  needed before S18. Neither `localVenueId` nor `cloud-client.ts` is in `file-assignment.tsv`: the
+  area grep does not match `localVenueId`. **Controller's recommendation:** the venue keeps a stable
+  id that a restore carries — today's location id moved onto the venue row — so the bucket folder
+  and Cloud's pairing value do not change.
 - **S17's interim import rule** (a column whose foreign key points at `locations` is set to
   `venueLocationId(tx)`) goes when the columns go; S28's `venueLocationId` grep finds it.
 - **Second-location cases the code slices did not reach.** F slices leave every case that seeds a
@@ -380,9 +462,9 @@ it, so none of them takes or passes a location id. Rename `location-settings-api
 
 - **Depends on:** A696 (#2369) landed.
 - **Lands:** lane. None of rules a–d applies: the daily-close hash's clock is a hash of its own, not
-  an invoice record, and its value does not change (§6). S1 deliberately does not touch the three
+  an invoice record, and its value does not change (§6). S1 deliberately does not touch the four
   readers whose callers sit on the invoice path (see "Left for S2").
-- **Lines** were read at A696's head `7e824ae233`.
+- **Lines** were read at A696's head (`7e824ae233`, re-checked at `623a2d59c4`; header).
 - **Branch:** `refactor/a1301-s1-venue-accessor`.
 - **Review path:** FULL — a cross-package contract (a new `@waitron/db` API every later slice uses).
 - **Guards:** code guards.
@@ -438,14 +520,20 @@ export function venueLocationId(tx: Transaction): Promise<string>;
   two or more rows → `AppError("provisioning.second_venue", {})`. Read with one
   `select id from locations limit 2`.
 - **Error codes.** `venue.not_found` is new, declared in `packages/db/src/errors.ts` as
-  `Record<string, never>`; it means "this database has no venue yet" (setup has not run). It names
+  `Record<string, never>`. Its registry comment says what it covers: no venue row, **or no taxpayer
+  row** — S1 also throws it where today's code refuses a missing `tenants` row
+  (`venue-details.ts:88-89`, `location-settings-api.ts`'s `withTaxpayer` `:146-149`,
+  `venue-zone-context.ts:49-50` at `623a2d59c4`) — both meaning setup has not run, a state a set-up
+  box reaches only through a fault in Waitron (CLAUDE.md §3, the refusal rule's exception for a state
+  only a bug can produce). It names
   the domain (`venue.*`), not the package (CLAUDE.md §3; `packages/shared/src/errors.ts` header).
   `provisioning.second_venue` already exists (`packages/provisioning/src/errors.ts:65`) and keeps its
   name and meaning (§3); `@waitron/db` cannot import provisioning, so `packages/db/src/errors.ts`
   declares it again with identical params, as it already does for `setup.request_invalid` ("Declared
   with identical params in `apps/server/src/errors.ts`"). `venue.ts` imports `"./errors.js"`, which
-  the barrel already reaches (`scripts/errors-reachable.test.ts`). No dashboard wording is added:
-  neither code can reach a screen on a box that has been set up.
+  the barrel already reaches (`scripts/errors-reachable.test.ts`). No dashboard wording is added,
+  though S1c's settings routes answer `venue.not_found` as 409: both codes are identified at their
+  registry entries as a fault, the exception above.
 - **Why `string`, not `LocationId`, from `venueLocationId`:** S18 deletes the `LocationId` type before
   S28 deletes this helper. A caller that needs the brand (today's venue-service functions) writes
   `locationId(await venueLocationId(tx))`.
@@ -467,7 +555,7 @@ The TSV's 18 S1 files, at A696's head (`git grep -n -E "$P" "${REF}" -- <file>`)
 | `packages/reporting/src/record-daily-close.ts` | 1 | `:40` message "must match the node location" → "must match the venue's time zone" |
 | `apps/server/src/venue-locale.ts` | 41 | `readVenueLocale(db, { override? })`, `readVenueContentLanguageRules(db)`, `readVenueReceiptLanguageRules(tx)` take no location; `geographyIn(tx)` reads `readVenue`; **left for S2 (Task S2-5)**: `locationLanguageIn`, `readOfferedReceiptLanguages`, `saleLanguageFor` |
 | `apps/server/src/venue-time-zone.ts` | 9 | `readVenueTimeZone(db)`; "UTC" when `venue.not_found` (as today for a missing row) or the zone is unknown |
-| `apps/server/src/venue-address.ts` | 19 | `LocationAddress` → `VenueAddress` (a type name only, shared with `addressLines` and `receiptAddressLines`); `readReceiptAddress(tx, receipt)` takes the address from `readVenue`; **left for S2 (Task S2-5)**: `readLocationAddress` and its private `readAddress`, which S2 replaces with `readVenueAddress(tx)` |
+| `apps/server/src/venue-address.ts` | 19 | `LocationAddress` → `VenueAddress` (a type name only, shared with `addressLines` and `receiptAddressLines`); **left for S2 (Task S2-5)**: `readReceiptAddress`, `readLocationAddress` and their private `readAddress`, which S2 replaces with readers of `readVenue` (amendment 1) |
 | `apps/server/src/venue-details.ts` | 19 | `readVenueDetails(tx, at?)`, `writeVenueDetails(tx, input, at?)`; reads `readVenue`; writes `locations`/`locationBusinessDaySettings` keyed by `await venueLocationId(tx)`; `"locationId"` leaves `readOnlyVenueFields`; the two `management.request_invalid { field: "locationId" }` refusals (`:82-89`) become `venue.not_found` |
 | `apps/server/src/business-day-start.ts` | 26 | `Scope` type goes; `readBusinessDayClockModel(tx, at)`, `previewBusinessDayStart(tx, input, at)`, `writeBusinessDayStart(tx, input, at)`; `readVenueClock`; the `n.location_id = …`/`w.location_id = …` filters at `:125-133` go (one venue holds every node and order); writes keyed by `await venueLocationId(tx)`; `VENUE_SERVICE.assertBusinessDayClockChange` gets `{ locationId: locationId(await venueLocationId(tx)) }` until S8 |
 | `apps/server/src/location-settings-api.ts` | 30 | renamed `venue-settings-api.ts`, `mountLocationSettingsApi` → `mountVenueSettingsApi`, `deps.cfg` goes; receipt language read from `readVenue(tx).invoiceLocales` and written by `venueLocationId`; `ordersBlockingReceiptLanguage` counts every open order (no location filter); `withTaxpayer`/`storedLanguages` refuse `venue.not_found` (boundary maps it to 409) instead of `management.request_invalid { field: "locationId" }` |
@@ -481,8 +569,6 @@ Files outside the TSV's S1 list that S1 edits, each only at the named call site:
 - `apps/server/src/boot.ts` (S18's file): `:1773` `readVenueLocale`, `:1817`/`:2251` `readVenueTimeZone`,
   `:1946` `readVenueContentLanguageRules`, `:2268` the settings mount, `:219` its import. `:1779`'s
   `scope` keeps its `locationId` (it is `IssueScope`, S2's type).
-- `apps/server/src/receipt-print.ts:214` (S10), `receipt-preview-api.ts:381` (S11):
-  `readReceiptAddress(tx, receipt)`.
 - `apps/server/src/errors.ts:59-67`: `locationId` out of `venue.time_zone_repaired`.
 - `apps/dashboard/src/api/client.ts:85`: `locationId` out of `ZoneRepairView`.
 - `apps/dashboard/src/i18n/strings.ts:586-595` and `:4347-4356`: the 16 `location_settings.*` lines
@@ -496,18 +582,21 @@ Named by the design but with nothing to change: `venue-zone-repair-api.ts` and `
 
 **Left for S2, on purpose.** `readOfferedReceiptLanguages` and `saleLanguageFor` (`venue-locale.ts`)
 are called from `till-sale.ts:938,999,1633,1812`, `bill-payments.ts:722` and `working-order.ts:7090`,
-and `readLocationAddress` (`venue-address.ts`) from `receipt-presentation.ts:39` — files on the path
-that stores and prints an invoice record (rule a). Changing their signatures would make S1
-owner-landed. Task S2-5 converts the three and every caller (also `department-receipt-api.ts:87`,
-`department-receipt-languages.ts:27`, `tender-refund-api.ts:222`, `till-setup.ts:83`,
-`transaction-receipt-api.ts:64`, `working-order.ts:4476`), then deletes `readLocationAddress` in
-favour of a new `readVenueAddress(tx)`. S1 touches neither the three readers nor their callers.
+`readLocationAddress` (`venue-address.ts`) from `receipt-presentation.ts:39`, and
+`readReceiptAddress` from `receipt-print.ts:214` (inside `buildReceiptBytes`, the sale's own ticket)
+— files on the path that stores and prints an invoice record (rule a). Changing their signatures
+would make S1 owner-landed. Task S2-5 converts the four and every caller (also
+`department-receipt-api.ts:87`, `department-receipt-languages.ts:27`, `receipt-preview-api.ts:381`,
+`tender-refund-api.ts:222`, `till-setup.ts:83`, `transaction-receipt-api.ts:64`,
+`working-order.ts:4476`), then deletes `readLocationAddress` in favour of a new
+`readVenueAddress(tx)`. S1 touches neither the four readers nor their callers.
 
 ### Task S1a — the accessor, and reporting's clocks
 
 **Files:** Create `packages/db/src/venue.ts`, `packages/db/src/venue.test.ts`. Modify
 `packages/db/src/errors.ts`, `packages/db/src/index.ts`, `packages/reporting/src/business-day.ts`,
-`overdue-orders.ts`, `record-daily-close.ts`, `packages/reporting/src/business-day.test.ts`.
+`overdue-orders.ts`, `record-daily-close.ts`, `packages/reporting/src/business-day.test.ts`, and
+`apps/server/src/orders-api.test.ts` (one case deleted, Step 4).
 
 **Interfaces — Produces:** the API above.
 
@@ -550,17 +639,31 @@ favour of a new `readVenueAddress(tx)`. S1 touches neither the three readers nor
   `pnpm --filter @waitron/reporting exec vitest run` (the package is small),
   `pnpm --filter @waitron/db typecheck`, `pnpm --filter @waitron/reporting typecheck`, and from the root
   `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/workspace-cycles.test.ts`.
+  **Then the server suites that reach `resolveVenueClock`.** S1a touches no `apps/server` source,
+  but `resolveVenueClock` now reads through the accessor, and the server calls it
+  (`orders-api.ts:163,213`, `report-api.ts:188`, `backup-deletion-alert.ts:29`, `boot.ts:2509,3387`,
+  and the demo scripts `daily-close-demo.ts:257`, `modelo-303-demo.ts:556`, at `623a2d59c4`). Check
+  free memory, then run every server test that reaches it with
+  `pnpm --filter @waitron/server exec vitest run <files…>`, the files from
+  `git grep -l -E 'resolveVenueClock|mountOrdersApi|mountReportApi|backup-deletion-alert|recordDailyClose' -- 'apps/server/**/*.test.ts'`
+  (24 at `623a2d59c4`; read each file's `Tests` count). Handle each `provisioning.second_venue` or
+  `venue.not_found` failure by the header's rule "A database with a second venue row". One case is
+  known: `orders-api.test.ts`'s "dates reads and staff reprint visibility by the data node, keeping
+  writes at the own location" (`:455` at `623a2d59c4`) inserts a second location and node to show
+  reads dated by the data node's location while writes go to the other; it exists only for two
+  locations, so S1a deletes it, named in the commit. That file shares one database across cases
+  (`resetPerTest: false`, `:38`), so its second row would otherwise break the cases after it.
 - [ ] **Step 5: Done-check** on `packages/reporting/src/{business-day,overdue-orders,record-daily-close,index}.ts`
   — may print only `readLocationClock`, `readLocationClockAndPlace`, `LocationPlace` and their query
   (S18), the `locations`/`locationDayCutoverChanges` table identifiers (S23), and `venueLocationId`.
-  `pnpm format:check`. Commit: `git commit -s -m "db: one reader for the venue's settings and clock, and an interim helper for its row id"`.
+  `pnpm format:check`. Commit: `git commit -s -m "db: one reader for the venue's settings and clock, and an interim helper for its row id"`,
+  naming the deleted `orders-api.test.ts` case in the body.
 
 ### Task S1b — the venue readers and A696's zone code
 
 **Files:** Modify `apps/server/src/venue-locale.ts`, `venue-time-zone.ts`, `venue-address.ts`,
 `venue-zone-context.ts`, `venue-zone-repair.ts`, `errors.ts` (`:59-67`), `boot.ts` (`:1773`,
-`:1817`, `:1946`, `:2251` only), `receipt-print.ts:214`, `receipt-preview-api.ts:381`;
-`apps/dashboard/src/api/client.ts:85`. Tests:
+`:1817`, `:1946`, `:2251` only); `apps/dashboard/src/api/client.ts:85`. Tests:
 `apps/server/src/venue-locale.test.ts`, `venue-time-zone.test.ts`, `venue-address.test.ts`,
 `venue-zone-context.test.ts`, `venue-zone-repair.test.ts`, `venue-zone-repair-api.test.ts`,
 `boot.box-emails.test.ts`, `boot.zone-admission.test.ts`, `zone-clock-stop-interaction.test.ts`, and
@@ -568,8 +671,7 @@ the dashboard's `screens/venue-zone-repair{,.a11y,.unsaved}.test.ts` and `api/ve
 
 **Interfaces — Consumes:** S1a's API. **Produces:** `readVenueLocale(db, { override?: string })`,
 `readVenueContentLanguageRules(db)`, `readVenueReceiptLanguageRules(tx)`, `readVenueTimeZone(db)`,
-`readReceiptAddress(tx, receipt)`, `type VenueAddress`,
-`ZoneContext` without `locationId`, `ZoneRepairView` without `locationId`.
+`type VenueAddress`, `ZoneContext` without `locationId`, `ZoneRepairView` without `locationId`.
 
 - [ ] **Step 1: Write the failing tests** (change the existing ones to the new signatures first):
   - `venue-time-zone.test.ts`: "reads the venue's stored time zone" calls `readVenueTimeZone(suite.db)`;
@@ -577,13 +679,12 @@ the dashboard's `screens/venue-zone-repair{,.a11y,.unsaved}.test.ts` and `api/ve
     `:33` "uses UTC when the location is missing", which passed a random id — same answer, the
     missing thing is now the venue); "uses UTC for an invalid stored zone" (`:36-52`) updates the one
     row's zone instead of inserting a second row (a second row would now refuse).
-  - `venue-address.test.ts`: `readReceiptAddress(tx, receipt)` reads the one venue's address (the
-    receipt's `printAddress` switch still decides); a database with no venue makes it refuse
-    `venue.not_found`. The `readLocationAddress` cases stay as they are (S2-5's).
+  - `venue-address.test.ts`: only the type name changes; the `readReceiptAddress` and
+    `readLocationAddress` cases stay as they are (S2-5's).
   - `venue-locale.test.ts`: the geography readers take no location; their expected locales unchanged.
     The `readOfferedReceiptLanguages` case at `:202-209` stays as it is (S2's).
   - `venue-zone-context.test.ts`: `toEqual` at `:83-91` loses `locationId` from the expected context;
-    the no-taxpayer case (`:152-158`) expects `{ code: "venue.not_found" }` instead of reason
+    the no-taxpayer case (`:155-161`) expects `{ code: "venue.not_found" }` instead of reason
     `location` (§2.4: no code throws reason `location` after S1 and S2). Add "refuses with no venue
     row" → `venue.not_found`.
   - `venue-zone-repair.test.ts` / `venue-zone-repair-api.test.ts`: the repaired incident's params and
@@ -601,7 +702,7 @@ the dashboard's `screens/venue-zone-repair{,.a11y,.unsaved}.test.ts` and `api/ve
   `readZoneContext(tx, scope: IssueScope)`'s signature (S2 changes `IssueScope`); it ignores
   `scope.locationId`.
 - [ ] **Step 5: Run** step 2's command, then
-  `pnpm --filter @waitron/server exec vitest run src/boot.zone-admission.test.ts src/boot.box-emails.test.ts src/zone-clock-stop-interaction.test.ts src/zone-restored-boot.test.ts src/receipt-print.test.ts src/receipt-preview-api.test.ts`
+  `pnpm --filter @waitron/server exec vitest run src/boot.zone-admission.test.ts src/boot.box-emails.test.ts src/zone-clock-stop-interaction.test.ts src/zone-restored-boot.test.ts`
   (any of these that does not exist at S1's head is skipped by name; read the `Tests` count). A
   failure `provisioning.second_venue` or `venue.not_found` is handled by the header's rule "A
   database with a second venue row". Check free memory, then
@@ -610,7 +711,7 @@ the dashboard's `screens/venue-zone-repair{,.a11y,.unsaved}.test.ts` and `api/ve
   root `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/personal-log-params.test.ts scripts/english-only.test.ts`.
 - [ ] **Step 6: Done-check** over this task's five `venue-*.ts` files — may print only
   `locationLanguageIn`, `readOfferedReceiptLanguages`, `saleLanguageFor` and their `locations`
-  query (S2), `readLocationAddress` and its query (S2), table identifiers (`locations`,
+  query (S2), `readReceiptAddress`, `readLocationAddress` and their query (S2), table identifiers (`locations`,
   `locationBusinessDaySettings`, `locationDayCutoverChanges`; S23), and `venueLocationId` calls.
   `pnpm format:check`. Commit: `git commit -s -m "server: the venue readers and the zone repair read the venue, not a location id"`.
 
@@ -877,11 +978,11 @@ file and the file is reported):
 - [ ] **Step 4: Run** step 2's command — PASS; `pnpm --filter @waitron/db typecheck`.
 - [ ] **Step 5: Commit** `git commit -s -m "db testing: seed the venue, and nodes, devices and orders at it"`.
 
-### Task F1b — the codemod, and `packages/db/src/schema/[a-k]*` tests
+### Task F1b1 — the codemod and its test
 
-**Files:** Create `scripts/a1301-seed-codemod.mjs`, `scripts/a1301-seed-codemod.test.mjs`. Modify the
-20 files `/usr/bin/grep '^packages/db/src/schema/[a-k]' ~/waitron-campaign/a1301/fa/fx-any.txt` lists
-(155 matching lines by `git grep -c -w -E 'locationId|location_id|locations|LocationId'`).
+**Files:** Create `scripts/a1301-seed-codemod.mjs`, `scripts/a1301-seed-codemod.test.mjs`. Split from
+the first draft's F1b (review 1a, I5): writing a compiler-API codemod to full branch coverage is one
+implementer's task, and running it over twenty files is another.
 
 - [ ] **Step 1: Write the failing test** `scripts/a1301-seed-codemod.test.mjs`, one case per rule and
   per report reason above, each an input string and the exact expected output (or the expected
@@ -900,20 +1001,27 @@ file and the file is reported):
 - [ ] **Step 4: Run** it — PASS; then
   `pnpm exec vitest run --coverage --coverage.include=scripts/a1301-seed-codemod.mjs scripts/a1301-seed-codemod.test.mjs`
   — the per-file table shows at least 98/98/98/95 for the codemod (read the table, not the exit
-  status). `pnpm exec vitest run scripts/english-only.test.ts`.
-- [ ] **Step 5: Run the codemod** on the 20 files: report mode first, save the report, then
+  status). `pnpm exec vitest run scripts/english-only.test.ts`. `pnpm format:check`. Commit:
+  `git commit -s -m "scripts: a codemod that moves tests onto the shared venue seed helpers"`.
+
+### Task F1b2 — `packages/db/src/schema/[a-k]*` tests
+
+**Files:** the 20 files `/usr/bin/grep '^packages/db/src/schema/[a-k]' ~/waitron-campaign/a1301/fa/fx-any.txt`
+lists (155 matching lines by `git grep -c -w -E 'locationId|location_id|locations|LocationId'`).
+
+- [ ] **Step 1: Run the codemod** (Task F1b1's) on the 20 files: report mode first, save the report, then
   `--write`, then `pnpm exec prettier --write <files>`. Hand-edit each reported site by the recipes.
   Expected leftovers in this bucket: the second rows in `schema/devices.test.ts` (`LOCATION_B`, `:19`,
   `:46`), `schema/dining-tables.test.ts` (`:17`, `:35`) and `schema/kitchen-stations.test.ts`
   (`:16`, `:33`); `schema/floor-zones.test.ts` and `schema/drawer-opens.test.ts` insert `locations`
   twice each — read whether the second is a cross-location case (left) or a second test's own seed
   (converted); whole-file: `schema/business-day-clock.test.ts` (the side tables S23 replaces).
-- [ ] **Step 6: Run** `pnpm --filter @waitron/db exec vitest run src/schema/[a-k]*` (the shell
+- [ ] **Step 2: Run** `pnpm --filter @waitron/db exec vitest run src/schema/[a-k]*` (the shell
   expands the glob; read the `Tests` count) and `pnpm --filter @waitron/db typecheck`. Compare the
   test count with the same run on the base commit: equal (F1 deletes no case).
-- [ ] **Step 7: Done-check** for these 20 files:
+- [ ] **Step 3: Done-check** for these 20 files:
   `git grep -n -E 'insert\((schema\.)?locations\)|insert into "?locations|seedNode\([^)]*,|locationId: [A-Za-z_]+[,}]' -- <files>`
-  prints only the leftovers named in step 5 and `location_id` fills of a table a later schema slice
+  prints only the leftovers named in Step 1 and `location_id` fills of a table a later schema slice
   owns (each taking its value from `venueLocationId`). `pnpm format:check`. Commit:
   `git commit -s -m "db tests: the schema tests a–k seed the venue through the helpers (codemod a1301-seed-codemod)"`.
 
@@ -932,7 +1040,7 @@ budget).
   `schema/page-printers.test.ts` (two inserts); whole-file: `schema/location-catalogues.test.ts`
   (S23's table).
 - [ ] **Step 3: Run** step 1's command — same `Tests` count, all passing; `pnpm --filter @waitron/db typecheck`.
-- [ ] **Step 4: Done-check** as F1b step 7 over these files. `pnpm format:check`. Commit:
+- [ ] **Step 4: Done-check** as F1b2 Step 3 over these files. `pnpm format:check`. Commit:
   `git commit -s -m "db tests: the schema tests l–z seed the venue through the helpers"`.
 
 ### Task F1d — the `packages/db/src/*.test.ts` files
@@ -954,8 +1062,8 @@ budget).
 - [ ] **Step 3: Run** the 15 files — same `Tests` count; `pnpm --filter @waitron/db typecheck`.
 - [ ] **Step 4: Done-check for the slice.**
   `git grep -n -E 'insert\((schema\.)?locations\)|insert into "?locations' -- 'packages/db/*.test.ts'`
-  prints only: the files left whole above and in F1b/F1c, `src/testing/seed.test.ts`'s own cases, and
-  the second-location rows named in F1b/F1c. List them in the PR body. `pnpm format:check`. Commit:
+  prints only: the files left whole above and in F1b2/F1c, `src/testing/seed.test.ts`'s own cases, and
+  the second-location rows named in F1b2/F1c. List them in the PR body. `pnpm format:check`. Commit:
   `git commit -s -m "db tests: the remaining db tests seed the venue through the helpers"`.
 
 ### F1 open PRs touching the same files
@@ -990,14 +1098,15 @@ the same value read today; Task S2-1 proves that for the hashed one.
 | --- | --- | --- | --- | --- |
 | Issue zone → `offsetMinutes` | `readIssueZone`: `nodes.location_id` → `locations.time_zone` (`packages/fiscal/src/issue-clock.ts:7-23`); `prepareIssueClock` freezes `timeZoneOffsetMinutes(zone, instant)` (`:25-38`) | `readVenue(tx).timeZone`, the same `locations` row until S23 | `recordSale` takes one reading (`packages/core/src/record-sale.ts:274`), stores `issued_offset_minutes` (`:313`) and hands `issuedAt`/`offsetMinutes` to the backend (`:364-365`); `VerifactuBackend.recordSale` puts them in `FechaExpedicionFactura` and `generadoEn`/`offsetMinutes` (`packages/fiscal-verifactu/src/backend.ts:296,311-312`), which `appendToChain` (`:315`) hashes as `FechaHoraHusoGenRegistro` and stores (`registro-row.ts:130`, column `schema/registros.ts:93`). Annulments: `prepareFiscalVoidClock` → `prepareIssueClock({ nodeId })` (`void-issue-clock.ts:24`) → `recordVoid`'s `now` (`backend.ts:420`) → `FechaExpedicionFacturaAnulada` (`:429-431`) and `generadoEn`/`offsetMinutes` (`:436-437`) | **None.** Same zone string from the same row, so the same offset at every instant. Task S2-1's test pins the record text across a daylight-saving change, before and after, with a control |
 | Operation description fallback | `operationDescriptionFor`: the supplied text, else `locations.operation_description` through `devices.location_id` or `nodes.location_id` (`sale-location.ts:12-32`) | the supplied text, else `readVenue(tx).operationDescription` | `record-sale.ts:348-353` → `descriptionOfOperation` (`:366`) → `DescripcionOperacion` (`backend.ts:303`; corrections `:528`, substitutions `:651`) → stored `descripcion_operacion` (`registro-row.ts:157`, `schema/registros.ts:76`) → read back into the AEAT body (`registro-row.ts:394`). Not a huella input (`registro-row.ts:391-393` and the design's §3 probe: `SAME` for a changed description, `DIFFERENT` for the control) | **None.** Production routes always supply a description (fiscal-check.md path 1); the fallback paths read the same row's same text |
-| Full-invoice operation date | `working_orders.location_id` → `locations.time_zone` (`record-sale.ts:275-282`), formatted at `:288-295` | `readVenue(tx).timeZone`, the raw saved string as today (not re-classified) | `sales.operation_date` (`:314`); printed on a full invoice. Not sent to AEAT: `git grep -n -E 'operationDate\|FechaOperacion' 7e824ae233 -- packages/fiscal-verifactu/src/backend.ts packages/fiscal/src/backend.ts` prints nothing | **None.** Same zone, same date |
+| Full-invoice operation date | `working_orders.location_id` → `locations.time_zone` (`record-sale.ts:275-282`), formatted at `:288-295` | `readVenue(tx).timeZone`, the raw saved string as today (not re-classified) | `sales.operation_date` (`:314`); printed on a full invoice. Not sent to AEAT: `git grep -n -E 'operationDate\|FechaOperacion' 623a2d59c4 -- packages/fiscal-verifactu/src/backend.ts packages/fiscal/src/backend.ts` prints nothing | **None.** Same zone, same date |
 | Invoice document language, address, email contact, printer offer | the sale's node's location (`invoice-document.ts:39-49,101`; `invoice-delivery-status.ts:142-146`; `invoice-delivery-actions.ts:130-137`); receipt language and address through `saleLanguageFor`, `readOfferedReceiptLanguages`, `readLocationAddress` | the box's own `cfg`, the venue (`readVenue`, Task S2-5), or no filter (one venue) | printed or emailed document text only. The issuer is the filed record's legal name and NIF, else `tenants` (`invoice-document.ts:86-93`), never a location | Document text only, same text; no fiscal record |
 
 Plainly: **no byte of an invoice record, huella, chain, invoice number or AEAT wire field changes in
 S2**, provided `readVenue` returns the single `locations` row's `time_zone` and
 `operation_description` unchanged (S1's contract).
 
-Lines in S2, S3 and S4 were read at A696's head `7e824ae233` unless they say main. A696 lands before
+Lines in S2, S3 and S4 were read at A696's head (`7e824ae233`, re-checked at `623a2d59c4`; header)
+unless they say main. A696 lands before
 S1, and these slices start after S1, so these are the lines the implementer meets (give or take S1's
 edits). Every task in S2, S3 and S4 runs the fiscal pair unedited.
 
@@ -1015,7 +1124,7 @@ Two things the golden case does and does not check, so nobody leans on it for mo
 ### Files
 
 From the TSV (`file-assignment.tsv`, slice `S2`), grouped by task. Lines are the pattern's matches at
-`7e824ae233`.
+A696's head (`623a2d59c4`).
 
 **Task S2-1 — the issue zone**
 
@@ -1035,7 +1144,7 @@ From the TSV (`file-assignment.tsv`, slice `S2`), grouped by task. Lines are the
   the ignored parameters left, and S19 sweeps the rest.
 - No edit, callers that pass `cfg` (whose extra `locationId` the narrower `IssueScope` ignores until
   S18 removes it): `apps/server/src/till-sale.ts:987,1194,1628,1780`, `bill-payments.ts:702,1121`,
-  `cancel-credit.ts:54`, `working-order.ts:7038`, `trading-admission.ts:32`,
+  `cancel-credit.ts:54`, `working-order.ts:7056`, `trading-admission.ts:32`,
   `packages/fiscal-verifactu/src/void-issue-clock.ts:24` (its own `mismatch` at `:22-23` compares a
   sale's node with its record's node and stays, design §2.4).
 - Test helpers the golden case needs before readers refuse two venue rows (see "The second venue row"
@@ -1094,13 +1203,22 @@ From the TSV (`file-assignment.tsv`, slice `S2`), grouped by task. Lines are the
   `locationId`).
 - **Not S2's:** `orderInvoicePrinters`' two `locationId` filters (`orders-list.ts:717-735`) are
   S11a's; `tillInvoicePrinters`' `sale` parameter and `resolveInvoicePrinter`'s `at`
-  (`till-api.ts:2486-2508`, `receipt-print.ts:112-128`) are S10b's. They keep reading
+  (`till-api.ts:2496-2514` at `623a2d59c4`, `receipt-print.ts:112-128`) are S10b's. They keep reading
   `InvoiceDeliverySale.locationId`, which now holds the venue's row id, so they still offer every
   printer until those slices drop the filters.
 - `apps/server/src/invoice-print.ts:62` — `ctx.locationId` is forwarded to `claimPrintJobs`
   (`:66-70`, `packages/printing`), whose location filter S10a removes. S10a keeps an ignored
   optional `locationId?` on `claimPrintJobs`' context for this call while S2 has not landed; S2
   drops the field here (and S10a does it itself, argument only, if S2 has landed first).
+  **Dropping it from `claimInvoicePrintJobs`' context type forces its two callers**, both lane
+  files: `apps/server/src/print-api.ts:707-713` (`locationId: deps.cfg.locationId`) and
+  `apps/server/src/demo-printer.ts:195-199` (`locationId`), at `623a2d59c4`. The type requires the
+  field today (`invoice-print.ts:62`), so whichever of S2-3 and S10c lands second edits these two
+  calls: with the field gone from the type, an object literal still naming it does not compile
+  (`TS2353 … 'locationId' does not exist`), and with the field kept, a call without it does not
+  either (`TS2345 … Property 'locationId' is missing`); a `tsc6 --noEmit --strict` probe of the
+  context's shape printed both, and its control (field in the type and in the call) compiled. S2-3 removes `locationId` from
+  both calls, argument only, if S10c has landed or not (S10c's text says what it passes meanwhile).
 
 **Task S2-4 — the fiscal demo scripts**
 
@@ -1153,11 +1271,36 @@ or dates a sale fails. Two kinds exist:
 - Produces: `type IssueScope = { nodeId: string }`; `readIssueZone(tx, scope): Promise<string>` and
   `prepareIssueClock(tx, scope, source): Promise<TrustedClock>` keep their names and return types.
 
-- [ ] **Step 1: Fold the two fiscal-verifactu seed helpers onto one row.**
-  `insertLocationNodeSeries` (`test/fixtures.ts:222-243`) and `insertLocation`
-  (`src/testing/seed.ts:72-83`) first `select id from locations`; with one row they return its id,
-  with none they insert as today. Run the fiscal pair: PASS, `git diff` of the pair empty. Commit
-  (`test(fiscal-verifactu): seed one venue row per database`).
+- [ ] **Step 1: Fold the two fiscal-verifactu seed helpers onto one row, and delete the two
+  second-location cases in `void-issue-clock.test.ts`.**
+  - `insertLocationNodeSeries` (`test/fixtures.ts:222-243`) and `insertLocation`
+    (`src/testing/seed.ts:72-83`) first read `select id from locations limit 2`. With **no** row they
+    insert as today. With **one** row they return its id and insert nothing. With **two or more**
+    they insert as today: such a database already holds a second venue, so this step changes nothing
+    for it, and the header's rule handles it when a reader refuses it. A second call in one database
+    now reuses the first call's row, so the venue's name, invoice languages and description are the
+    first helper's.
+  - The helpers are shared well beyond the fiscal pair. 32 test files call `seedTenantWithSif`, 11
+    of them two or more times (`clock-behind.restart.test.ts` 5 times; `clock-stop-incidents`,
+    `drain`, `reconcile`, `start-again-holdings` and `void-issue-clock` 3 times each; counted with
+    `git grep -c 'seedTenantWithSif(' -- '*.test.ts'` at `623a2d59c4`). Outside the package, 45 test
+    files import one of the two helper files (41 in `apps/server`, one each in
+    `packages/composition` and `packages/provisioning`, and `scripts/fiscal-allocation-migration.test.ts`
+    and `scripts/fiscal-certificate-migration.test.ts`):
+    `git grep -l -E 'fiscal-verifactu/(src/)?testing/seed|fiscal-verifactu/test/fixtures' -- '*.test.ts' ':!packages/fiscal-verifactu/**'`.
+  - Delete `void-issue-clock.test.ts`'s "resolves the original node rather than another location or
+    the first node" (`:95-118`: it inserts an "Unrelated" location and tells the nodes apart only by
+    their locations' zones) and "validates the saved original node's location even without a server
+    admission holder" (`:195-212`). Both exist only for a second location, and the check they prove
+    is the one this task removes. Deleting them here, before Step 2's pin, keeps Step 3's run free of
+    a second row and makes Step 8's check exact.
+  - Run, after checking free memory: the whole package
+    (`pnpm --filter @waitron/fiscal-verifactu test`; it also runs browser tests; read the `Tests`
+    count), then the 45 outside files with each package's `pnpm --filter <pkg> exec vitest run
+    <files…>` (the two root `scripts/` files with `pnpm exec vitest run <files…>`). A failure is
+    classified by the header's rule "A database with a second venue row" and named in the commit;
+    any other failure is a defect. The fiscal pair: PASS, `git diff` of the pair empty. Commit
+    (`test(fiscal-verifactu): seed one venue row per database`).
 
 - [ ] **Step 2: Write the pinning test, BEFORE any source change.** In
   `void-issue-clock.test.ts`, a new `describe("the venue's zone across a daylight-saving change")`
@@ -1197,10 +1340,9 @@ or dates a sale fails. Two kinds exist:
     to prove a cross-location refusal (design §6, "deleted, not rewritten"). The `"node"` row stays.
   - `scope` (`:18,30`) becomes `{ nodeId }`; the `:54,66,167` updates of `locations` drop their
     `where eq(locations.id, scope.locationId!)` (one row).
-  In `void-issue-clock.test.ts`: delete `:95-118` ("resolves the original node rather than another
-  location…", which seeds a second location) and `:195-212` ("validates the saved original node's
-  location…"). Both exist only for a second location. `:80-94` and the `mismatch` case at `:189-193`
-  (sale node versus record node) stay unedited.
+  `void-issue-clock.test.ts` is not edited in this step (Step 1 already deleted its two
+  second-location cases); its `:80-94` and the `mismatch` case (sale node versus record node) stay
+  unedited.
   Run `pnpm --filter @waitron/fiscal exec vitest run src/issue-clock.test.ts`: the new case FAILS
   with `venue.time_zone_target_invalid` reason `location`.
 
@@ -1222,9 +1364,9 @@ or dates a sale fails. Two kinds exist:
   files). Record both outputs' failing line in the commit message.
 
 - [ ] **Step 8: Prove "before and after".** `git diff --exit-code <Step 3 commit> -- packages/fiscal-verifactu/src/void-issue-clock.test.ts`
-  must show only Step 4's deletions (the describe from Step 2 unchanged): run
-  `git diff <Step 3 commit> -- packages/fiscal-verifactu/src/void-issue-clock.test.ts | /usr/bin/grep -c '^+'`
-  and check every added line is one of Step 4's edits. Then the fiscal pair: PASS, unedited.
+  prints nothing and exits 0: the file, Step 2's describe included, is byte-for-byte the one the
+  unchanged code passed in Step 3, and the changed code passed it in Step 6. Then the fiscal pair:
+  PASS, unedited.
 
 - [ ] **Step 9: Wider runs.** The files that call the zone code at A696:
   `pnpm --filter @waitron/server exec vitest run src/trading-admission.test.ts src/bill-payments.issue-clock.test.ts src/zone-core-capabilities.test.ts src/zone-preservation.test.ts src/zone-preservation.restore.test.ts src/receipt-issuer.test.ts`.
@@ -1244,7 +1386,7 @@ or dates a sale fails. Two kinds exist:
 
 **Files:** as listed; tests `packages/core/src/record-sale.test.ts` (and `record-correction.test.ts`,
 `record-substitution.test.ts` if they name `sale-location`; at A696 `git grep -l -E
-'operationDescriptionFor|sale-location' 7e824ae233 -- 'packages/core/src/*.test.ts'` prints nothing).
+'operationDescriptionFor|sale-location' 623a2d59c4 -- 'packages/core/src/*.test.ts'` prints nothing).
 
 **Interfaces.** Produces `operationDescriptionFor(tx: Transaction, supplied?: string):
 Promise<string>` in `packages/core/src/operation-description.ts`.
@@ -1301,8 +1443,11 @@ Promise<string>` in `packages/core/src/operation-description.ts`.
     of `:173` stays;
   - `invoice-document.test.ts:1119-1127` — the `foreign` location in `expectNoLogoOnceUntrusted`:
     delete the foreign-location branch only;
-  - `bill-payments-api.test.ts:1970` and `:2091` — the `"other-location"` rows and the "only another
-    location's" clause.
+  - `bill-payments-api.test.ts`: the `"other-location"` row of "stages only the local active A4
+    printer over HTTP: %s" (`:1971` at `623a2d59c4`), and the "only another location's" clause of
+    "answers no invoice printer when the location has none, only another location's or a disabled
+    one" (`:2091`). If S10a or S11a landed first, those two cases already clean up their second row
+    (header, "A database with a second venue row"); the deletion removes that clean-up with them.
   A case above that still passes after this task, because the check it proves is a printer offer's
   filter (S10b's or S11a's), is left for that slice. Each deletion's commit line names the test.
   **Changed, not deleted:**
@@ -1338,8 +1483,8 @@ Promise<string>` in `packages/core/src/operation-description.ts`.
 
 ### Task S2-5: the receipt-language and address readers read the venue (moved from S1)
 
-The three readers S1 leaves (header, "Files moved from the design's slice"): their signatures,
-their insides and every caller. Lines at `7e824ae233`.
+The four readers S1 leaves (header, "Files moved from the design's slice"): their signatures,
+their insides and every caller. Lines at `623a2d59c4`.
 
 **Files:**
 
@@ -1350,13 +1495,16 @@ their insides and every caller. Lines at `7e824ae233`.
   `venue.not_found`); comments say "the venue's".
 - `apps/server/src/venue-address.ts` — `readLocationAddress(tx, locationId)` (`:49`) and its private
   `readAddress` (`:54-68`) are replaced by `readVenueAddress(tx): Promise<string[]>`, built from
-  `readVenue(tx)` with S1's `addressLines`.
+  `readVenue(tx)` with S1's `addressLines`; `readReceiptAddress(tx, locationId, receipt)`
+  (`:40-46`) becomes `readReceiptAddress(tx, receipt)`, taking the address from `readVenue(tx)`
+  (the receipt's `printAddress` switch still decides, through `receiptAddressLines`).
 - Invoice-path callers (S2's own files): `till-sale.ts:938,999,1633,1812`, `bill-payments.ts:722`,
   `receipt-presentation.ts:39`.
 - Lane-file callers, argument only (header rule): `working-order.ts:4476,7090` (S11),
   `department-receipt-api.ts:18,87` (S6: the import and the call become `readVenueAddress`),
-  `department-receipt-languages.ts:27` (S6), `tender-refund-api.ts:222` and
-  `transaction-receipt-api.ts:64` (S11), `till-setup.ts:83` (S12).
+  `department-receipt-languages.ts:27` (S6), `tender-refund-api.ts:222`,
+  `transaction-receipt-api.ts:64` and `receipt-preview-api.ts:381` (S11), `receipt-print.ts:214`
+  (S10; inside `buildReceiptBytes`, which prints the sale's ticket), `till-setup.ts:83` (S12).
 - If S5 has landed, `departmentReceiptLanguages`' `cfg` (`department-receipt-languages.ts:15`) is
   now unused: drop it, and its callers' argument (`department-receipt-api.ts:73-75`,
   `department-receipt-draft.ts:34`, `receipt-preview-api.ts:314`). If S5 has not landed, `cfg` still
@@ -1366,7 +1514,8 @@ their insides and every caller. Lines at `7e824ae233`.
 
 **Interfaces — Produces:** `readOfferedReceiptLanguages(tx): Promise<[string, ...string[]]>`,
 `saleLanguageFor(tx, stored, warn): Promise<{ locale; invoiceLocales }>`,
-`readVenueAddress(tx): Promise<string[]>`. Return shapes unchanged.
+`readVenueAddress(tx): Promise<string[]>`, `readReceiptAddress(tx, receipt): Promise<string[]>`.
+Return shapes unchanged.
 
 - [ ] **Step 1: Failing tests.** In `apps/server/src/venue-locale.test.ts`: "offers the venue's
   receipt languages without being told a location" calls `readOfferedReceiptLanguages(tx)` on the
@@ -1376,7 +1525,9 @@ their insides and every caller. Lines at `7e824ae233`.
   signatures read `undefined` as the id (`TypeError` on `params.locationId`, and
   `locationLanguageIn: no location`). In `apps/server/src/venue-address.test.ts`: "reads the venue's
   address lines" calls `readVenueAddress(tx)` and expects the one venue's lines; fails before (not
-  exported).
+  exported). Same file: `readReceiptAddress(tx, receipt)` reads the one venue's address when the
+  receipt's `printAddress` is on and none when it is off, and a database with no venue makes it
+  refuse `venue.not_found`; fails before (the old signature takes the receipt as the id).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/venue-locale.test.ts src/venue-address.test.ts`
   — FAIL as described.
 - [ ] **Step 3: Delete** the cases in those two files that pass an id naming no row or another
@@ -1385,7 +1536,7 @@ their insides and every caller. Lines at `7e824ae233`.
   and name each in the commit.
 - [ ] **Step 4: Implement** the files above, then the callers.
 - [ ] **Step 5: Run** step 2's command, then
-  `pnpm --filter @waitron/server exec vitest run src/receipt-presentation.test.ts src/department-receipt-api.test.ts src/department-receipt-languages.test.ts src/tender-refund-api.test.ts src/transaction-receipt-api.test.ts src/till-setup.test.ts src/invoice-document.test.ts src/bill-payments-api.test.ts src/till-sale-integrated.test.ts`
+  `pnpm --filter @waitron/server exec vitest run src/receipt-presentation.test.ts src/receipt-print.test.ts src/receipt-preview-api.test.ts src/department-receipt-api.test.ts src/department-receipt-languages.test.ts src/tender-refund-api.test.ts src/transaction-receipt-api.test.ts src/till-setup.test.ts src/invoice-document.test.ts src/bill-payments-api.test.ts src/till-sale-integrated.test.ts`
   (drop a name `ls` does not find; read each `Tests` count) — PASS. A
   `provisioning.second_venue` or `venue.not_found` failure: the header's rule. Fiscal pair PASS,
   unedited. `pnpm --filter @waitron/server typecheck`; code guards; `pnpm format:check`.
@@ -1442,7 +1593,7 @@ Nothing. Traced:
 ### Files
 
 TSV slice `S3`, 26 files, split as the summary proposes (§4: S3a/S3b/S3c) with S3b cut in two.
-Matching lines at `7e824ae233`, excluding the `allocation` words the pattern also matches
+Matching lines at A696's head (`623a2d59c4`), excluding the `allocation` words the pattern also matches
 (`git grep -n -P '(?<![Aa]l)(locationId|location_id|\blocations?\b|LocationId)'`).
 
 **Task S3-1 — certificates (S3a)**
@@ -1451,7 +1602,10 @@ Matching lines at `7e824ae233`, excluding the `allocation` words the pattern als
   `FiscalCertificateDiagnosisDeps`, the `read`, `install`, `alerts` and `reminders.claim` deps.
 - `packages/fiscal-verifactu/src/certificate-install.ts:3,56,90-98,190` — `InstallDeps.locationId`
   goes; `venueTimeZone(tx)` reads `readVenue(tx).timeZone` and still answers `"UTC"` for a zone name
-  `Intl` refuses (`:97-101`).
+  `Intl` refuses (`:97-101`). With no venue row it also still answers `"UTC"`, as today's reader
+  does for a missing row (`:96`): it catches `venue.not_found`, as S1's `readVenueTimeZone` does,
+  so the certificate alert and reminder loops keep today's answer on a box before setup. Two venue
+  rows (`provisioning.second_venue`) still refuse.
 - `certificate-alerts.ts:16,21`, `certificate-card.ts:34,72`, `certificate-diagnosis.ts:95`
   (passes `deps.db`, a `Database`, where `venueTimeZone` types a `Transaction`; a `Database` is
   assignable to `Transaction`, S1), `certificate-reminders.ts:59,65` — deps lose `locationId`;
@@ -1519,11 +1673,13 @@ else; the seat implementations keep the contract's `ProvisionedNode` parameter t
 
 - [ ] **Step 1: Failing test.** In `certificate-install.test.ts`, replace `:629-637` ("reads the
   location's zone, and UTC for a missing location or an unknown zone") with "reads the venue's zone,
-  and UTC for an unknown zone": `venueTimeZone(tx)` is `"Europe/Madrid"`; after `update locations set
-  time_zone = 'Mars/Olympus'` it is `"UTC"`. The `:634` line (another id → UTC) is deleted: it exists
-  only for a second location. Run `pnpm --filter @waitron/fiscal-verifactu exec vitest run
-  src/certificate-install.test.ts`: FAILS — with no id the old reader finds no row and answers
-  `"UTC"` where `"Europe/Madrid"` is expected (Vitest does not typecheck, so the red is behavioural).
+  and UTC with no venue row or an unknown zone": at the case's start, before its
+  `seedTenantNodeSif`, `venueTimeZone(tx)` is `"UTC"` (no venue row: the missing-row half of `:634`,
+  which passed an id naming no row, now asks the same question of the venue); after the seed it is
+  `"Europe/Madrid"`; after `update locations set time_zone = 'Mars/Olympus'` it is `"UTC"`. Run
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/certificate-install.test.ts`: FAILS —
+  given no id, the old reader does not answer `"Europe/Madrid"` (Vitest does not typecheck, so the
+  red is behavioural). The no-venue line passes before and after: it pins that S3 keeps the answer.
 - [ ] **Step 2: Implement** the files listed; fix the forced callers.
 - [ ] **Step 3: Run** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/certificate-install.test.ts src/certificate-alerts.test.ts src/certificate-card.test.ts src/certificate-reminders.test.ts src/certificate-diagnosis.concurrency.test.ts src/certificate-install.concurrency.test.ts src/certificate-install.default-transport.test.ts src/certificate-dates.test.ts`
   and `pnpm --filter @waitron/server exec vitest run src/fiscal-certificate-api.test.ts src/certificate-reminder-worker.test.ts src/box-health-api.test.ts src/alert-sources.test.ts`
@@ -1577,14 +1733,17 @@ else; the seat implementations keep the contract's `ProvisionedNode` parameter t
 
 ### Task S3-4: the fiscal-verifactu test helpers hold one venue row
 
-- [ ] **Step 1:** Change the helpers listed. A helper's change is a test-fixture change; it must not
-  change a test's assertion. Run the whole package once, because 40-odd test files import these
-  helpers (fiscal-check.md, "Test files with domain-location lines"):
-  `pnpm --filter @waitron/fiscal-verifactu test` — check free memory first
-  (`memory_pressure | grep free`): the package also runs browser tests. Read the `Tests` count.
-- [ ] **Step 2:** Every failure is either a cross-location test Tasks S3-2 and S3-3 missed (delete it and
-  name it) or a test that relied on two rows by accident (fold it onto one). Fiscal pair PASS
-  unedited. `pnpm format:check`.
+- [ ] **Step 1: Measure first.** At S3-3's commit, before changing a helper, run the whole package
+  once (`pnpm --filter @waitron/fiscal-verifactu test`; check free memory first,
+  `memory_pressure | grep free`: the package also runs browser tests) and record the `Tests` count.
+  Then change the helpers listed (a helper's change is a test-fixture change; it must not change a
+  test's assertion), run the package again, and write down the failing files: that list is this
+  task's work. If it holds more than about 15 files, commit the helper change and the first half
+  of the list, and hand the rest to a fresh implementer with the list (header, "Execution notes").
+- [ ] **Step 2:** Every failure on the list is either a cross-location test Tasks S3-2 and S3-3
+  missed (delete it and name it) or a test that relied on two rows by accident (fold it onto one).
+  Re-run the package: the `Tests` count equals Step 1's first count minus the cases deleted here,
+  each named. Fiscal pair PASS unedited. `pnpm format:check`.
 - [ ] **Step 3: Done-check** `git grep -n -E 'insert\(locations\)' -- packages/fiscal-verifactu/src/testing packages/fiscal-verifactu/test`
   prints only the guarded first-row inserts. Commit `-s`.
 
@@ -1614,27 +1773,31 @@ loses `locationId`.
 | Lands | **owner**, rule (c): the path that writes an invoicing-system identity |
 | Branch | `refactor/a1301-s4-adoption-refusal` |
 | Review path | **FULL** (fiscal identity, cross-package contract), two Codex angles |
-| Reset | a box holding `<state>/pending-adoption.json` is reset (design §4); in practice every adopted mirror |
+| Reset | design §4 resets a box holding `<state>/pending-adoption.json` (in practice every adopted mirror). Task S4-2 Step 1 tests whether that is needed: `readPendingAdoption` parses the file with no key check (`finish-adoption.ts:66-75`), so an old record's `locationId` may be ignored. The PR's first line follows that run (amendment 12) |
 
 ### The refusal code, settled against the registry
 
 **`mirror.venue_not_copied`**, `Record<string, never>`, registered in `apps/server/src/errors.ts`
-beside the other `mirror.*` codes (`:1121-1160` at `7e824ae233`: `mirror.not_provisioned`,
+beside the other `mirror.*` codes (from `:1125` at `623a2d59c4`: `mirror.not_provisioned`,
 `mirror.standby_invalid`, `mirror.vault_not_empty`, …). The design's proposal `adoption.venue_not_copied`
 is not taken:
 
-- no `adoption.*` code exists in any registry — `git grep -n -E '"adoption\.' 7e824ae233 --
+- no `adoption.*` code exists in any registry — `git grep -n -E '"adoption\.' 623a2d59c4 --
   'apps/server/src/errors.ts' 'packages/*/src/errors.ts'` prints nothing; `adoption.established` and
   `adoption.establish_failed` are log event names (`finish-adoption.ts:124,128`), not codes;
 - the house rule is "a code names the DOMAIN CONCEPT" (`apps/server/src/errors.ts:12-14`), and the
   registry already names an adopted standby's refusals `mirror.*`;
-- `git grep -n venue_not_copied 7e824ae233` prints nothing, so the name is free.
+- `git grep -n venue_not_copied 623a2d59c4` prints only the design's S4 row (which proposes
+  `adoption.venue_not_copied`), so the name is free.
 
 Doc comment for the registry entry (one sentence, an invariant): "An adopted mirror's standby
 identity was not established because this database holds no venue row; nothing copies the main
 box's rows to a mirror yet." It is a log-only code: no screen shows it, so it needs no dashboard
-or setup wording (`scripts/errors-reachable.test.ts` checks it is thrown from a file that imports
-`./errors.js`; `reserved-identity.ts:21` already does).
+or setup wording. What refuses a code missing from the registry is the server's typecheck:
+`AppError`'s code is `keyof ErrorParams` (`packages/shared/src/errors.ts:68,76,85`), which
+`apps/server/src/errors.ts:25-26` augments. `scripts/errors-reachable.test.ts` does not cover it:
+it walks only `packages/*/src` (`PACKAGES_DIR`, `:21`; `:52-59`) and checks that a package's
+`errors.ts` is reachable from its barrel, never `apps/server` or a throw site.
 
 ### Where the check sits and what it reads
 
@@ -1700,7 +1863,14 @@ keeps its signature in this task.
   Add a second case with the fiscal module, built as `:68-89` builds it
   (`preparedReservation`, `allocatedStandbyModules`), deleting the venue row after the fixture is
   prepared, and also expecting `select count(*) from fiscal_reservations` to be unchanged — the
-  dormant-standby state the design's §3 worries about. Run
+  dormant-standby state the design's §3 worries about. The fixture's primary `nodes` row points at
+  the venue row (`preparedReservation`, `reserved-identity.test.ts:266-283`, insert at `:272`) and
+  that key has no delete action (`0000_baseline.sql:59`, `ON DELETE no action`), so a plain
+  `delete from locations` fails with `FOREIGN KEY constraint failed` before the check is reached.
+  Delete it with foreign keys off: `pragma foreign_keys = off`, the delete, `pragma foreign_keys =
+  on`, outside any transaction (the pragma does nothing inside one), leaving the primary node
+  dangling as an adopted mirror's would; the per-test reset clears it. The three expectations above
+  stay as written. Run
   `pnpm --filter @waitron/server exec vitest run src/reserved-identity.test.ts`: both FAIL — today
   the error is the engine's `FOREIGN KEY constraint failed` (errcode 787, `finish-adoption.ts:38-40`),
   which has no `code`.
@@ -1719,9 +1889,15 @@ keeps its signature in this task.
      `alter table nodes_scratch rename to nodes`, `pragma foreign_keys = on`;
   4. assert `pragma foreign_key_list(nodes)` lists no row whose `table` is `locations`, and that
      `pragma foreign_key_check` prints nothing.
-  If the rename is refused by a trigger reading `nodes` (design §4 found none in the drizzle SQL,
-  but code-made triggers are not in that scan), drop and recreate that trigger around the rebuild
-  in the test, and name it in the commit.
+  Before step 3, read `select name, sql from sqlite_master where type = 'trigger' and tbl_name =
+  'nodes'` and recreate each trigger it lists after the rename: `drop table nodes` drops a trigger
+  defined on `nodes`, and `useVenueDb`'s reset plan, built once in `beforeAll`
+  (`packages/db/src/testing/venue-db.ts:207`), replays `drop trigger "<name>"` with no `if exists`
+  (`:134`), so a lost trigger would fail `afterEach`. `nodes` is classified `state`, not
+  append-only (`packages/db/src/classification.ts:107`), and the drizzle SQL creates no trigger on
+  it, so the list is expected to be empty; the read is there because code-made triggers are not in
+  that scan. If the rename is refused by a trigger that reads `nodes` from another table, drop and
+  recreate that trigger around the rebuild in the test, and name it in the commit.
   Then the same case as Step 1's first: tenant seeded, **no** `locations` row, `locationId` set to
   `randomUUID()`. Expect `mirror.venue_not_copied` and zero `nodes` rows.
   Run `pnpm --filter @waitron/server exec vitest run src/reserved-identity.no-venue-key.test.ts`
@@ -1756,6 +1932,13 @@ keeps its signature in this task.
   (`expect(pending.locationId).toBe(DESIGNATED.locationId)`) with
   `expect(pending).not.toHaveProperty("locationId")` — the design decision is §4 "Host files": the
   pending record names no location. Run it: FAIL (`adopt.ts:196` writes it).
+  Add, in `finish-adoption.test.ts`, "finishes a pending record written before this change": write a
+  `pending-adoption.json` in today's shape (with `locationId`) and run `runFinishAdoption` with a
+  stub `establish` that records its argument; expect the stub called once with no `locationId` key
+  (`toEqual` on the whole argument) and no `adoption.establish_failed` from parsing. It passes once
+  Step 2 lands if the old file is simply ignored; then the PR's first line names **no** reset for
+  `pending-adoption.json`. If it fails, the reset stays and the PR's first line names it (design §4,
+  "Host files"). Record which in the PR description (amendment 12).
 - [ ] **Step 2: Implement** the Task S4-2 changes in `adopt.ts`, `finish-adoption.ts`,
   `reserved-identity.ts` and the forced caller. Fixtures lose the field: `finish-adoption.test.ts:31`
   and `:168` (the real-database case keeps inserting its venue row, which the check now reads); the
@@ -1771,7 +1954,10 @@ keeps its signature in this task.
   > failover*).
 
   The measurement the old comment recorded (errcode 787) moves to the commit message, with Task S4-1
-  Step 2's output as its replacement receipt. Check the three setup comments that point here
+  Step 2's output as its replacement receipt. In the same step, `finish-adoption.ts:109`'s "establish
+  FIRST (its inserts FK to the venue's rows)" also rests on the foreign key: cut its parenthesis,
+  keeping the ordering reason ("the file must survive a throw in either step so the next boot
+  retries"). Check the four setup comments that point here
   (`apps/setup/src/screens/done-screen.ts:88`, `restore-screen.ts:33`, `role-screen.ts:11`,
   `setup-app.ts:1783`) still read true; they name `PendingAdoption` and the header, not the cause.
 - [ ] **Step 4: Runs** as Task S4-1 Step 5, plus `src/boot.mirror.test.ts src/boot.failed-start.test.ts
@@ -1785,13 +1971,14 @@ keeps its signature in this task.
 None of #2373, #2375, #2376, #2377 touches `adopt.ts`, `finish-adoption.ts`, either
 `reserved-identity.ts` or `tenant-guard.ts`; #2373 touches `apps/server/src/errors.ts` (a registry
 append; rebase). Checked by intersecting each PR's `gh pr diff <n> --name-only` with the files above;
-#2369's list (too large for `gh pr diff`) by `git diff --name-only <merge-base> 7e824ae233`.
+#2369's list (too large for `gh pr diff`) by `git diff --name-only abfe271663 623a2d59c4` (its
+merge base and head), which names none of them.
 
 ---
 
 ## Notes shared by S5–S8
 
-Lines in S5–S8 were read at main `abfe271663`; A696's lines at `7e824ae233`. Open-PR lists come from
+Lines in S5–S8 were read at main `abfe271663`; A696's lines at A696's head (`623a2d59c4`; header). Open-PR lists come from
 `gh pr list --state open --json number,headRefName,files`, completed with
 `gh api repos/{owner}/{repo}/pulls/<n>/files --paginate` because `gh pr list` stops at 100 files a
 PR (#2369 has 381, #2373 has 131).
@@ -1827,8 +2014,8 @@ management routes move from `/management-api/locations/:locationId/…` to
 nothing can name a missing location any more. The tables stay `locations.catalogue_id` and
 `location_catalogues` until S23 renames them.
 
-- **Depends on:** S1. It lands before S6 (S6's `department-receipt-languages.ts` change builds on
-  it): S1 → S5 → S6 → S7.
+- **Depends on:** S1. S5, S6, S7 and S8 land in any order (header, "Dependencies"): S6 leaves S5's
+  `department-receipt-languages.ts:17` call for S5, and the overlap is a rebase.
 - **Lands:** lane. None of rules a–d applies. Three call lines sit in S2's files
   (`invoice-document.ts:101`, `receipt-presentation.ts:21`, `apps/server/scripts/demo-seed/seed.ts:109-110`):
   under the header's rule "Calls into another slice's file", S5 does not edit them while S2 has not
@@ -1925,7 +2112,11 @@ Consumes S1's `readVenue`, `venueLocationId`, `readVenueClock`.
 - [ ] **Step 4: Rewrite the callers with a codemod.** Write the codemod in the worktree's scratch
   directory (outside the repository tree) and run it over
   `git grep -l -E '(assignCatalogueToLocation|setLocationDefaultCatalogue|addCatalogueToLocation|removeCatalogueFromLocation|listCataloguesForLocation|resolveAccessibleCatalogueIds|listAccessibleCatalogues|listAvailableProducts|readInvoiceLocales|readReceiptLanguage|LocationCatalogue)' -- apps packages ':!packages/catalogue/src/operations.ts' ':!apps/server/src/invoice-document.ts' ':!apps/server/src/receipt-presentation.ts' ':!apps/server/scripts/demo-seed/seed.ts'`
-  (the three S2 files are excluded while S2 has not landed).
+  (the three S2 files are excluded while S2 has not landed). Add `':!apps/dashboard/**' ':!apps/till/**'`
+  to that list: the dashboard's API client has a method of the same name whose arguments are not
+  `(tx, location, …)` — `setLocationDefaultCatalogue(locationId, catalogueId)`
+  (`apps/dashboard/src/api/client.ts:3167`, called at `client.test.ts:655`) — and deleting its
+  second argument would delete the menu id. Task S5-2 changes the dashboard client by hand.
   It does exactly this for single-line calls: rename as in the Files table, and delete the second
   argument (`fn(tx, X, Y)` → `fnNew(tx, Y)`; `fn(tx, X)` → `fn(tx)`). Then run
   `pnpm --filter @waitron/catalogue typecheck && pnpm --filter @waitron/server typecheck && pnpm --filter @waitron/dashboard typecheck`
@@ -2021,7 +2212,8 @@ Clock reads use `readVenueClock(tx)`. Rows still written with a `location_id` ge
 local functions drop it. The checks that refused "another location's" department, zone, station,
 course, period, order or device go with their tests.
 
-- **Depends on:** S5 (and so S1). S5 has already removed `readReceiptLanguage`'s id.
+- **Depends on:** S1. It lands before or after S5 and S7 (header, "Dependencies"); S6 does not
+  edit `department-receipt-languages.ts:17`, S5's call.
 - **Lands:** lane. None of rules a–d applies.
 - **Branch:** `refactor/a1301-s6-venue-service-service`
 - **Review path:** FULL. It removes the location scope from by-id reads and writes ("tenant
@@ -2066,7 +2258,7 @@ land in either order.
 | `packages/venue-service/src/course-delete-settings.ts` | 19 | Filter goes. `_cfg`. |
 | `apps/server/src/department-receipt-api.ts` | 18, 87 | Nothing for S6: both lines (the `readLocationAddress` import and call) are Task S2-5's, which replaces them with `readVenueAddress(tx)` (header, "Files moved from the design's slice"). |
 | `apps/server/src/department-receipt-draft.ts` | 10, 22 | `cfg: { locationId: LocationId }` stays. It is spread into the seat's `readDepartmentReceipt` scope at line 35 (seat contract, S18). Nothing changes here unless S5's cascade left something unused. |
-| `apps/server/src/department-receipt-languages.ts` | 4, 15, 17 | `:17` done by S5; `:4`, `:15` and `:27` (`cfg` for `readOfferedReceiptLanguages`) go with S5 or S2-5, whichever lands second. S6 only confirms the done-check. |
+| `apps/server/src/department-receipt-languages.ts` | 4, 15, 17 | `:17` is S5's call, changed by S5 whenever it lands; `:4`, `:15` and `:27` (`cfg` for `readOfferedReceiptLanguages`) go with S5 or S2-5, whichever lands second. S6 only confirms the done-check. |
 | `apps/server/src/department-transfer-api.ts` | 270 | The `workingOrders.locationId` filter goes. |
 
 **Task S6b** (13 source files, about 98 matching lines):
@@ -2105,7 +2297,12 @@ Docs (Task S6b), the entries the change makes stale:
   - Same file: add `it("creates a department on the venue's row whatever location the scope names", …)`.
     It calls `createDepartment(tx, { locationId: brandLocationId(randomUUID()) }, { name: "Bar" })`
     and expects the stored `departments.location_id` to equal `await venueLocationId(tx)`. Today it
-    is refused by the foreign key.
+    is refused by the foreign key. The venue here has no default menu (`operations.test.ts`'s
+    `seedLocation`, `:406-416`, sets no `catalogue_id`), and the case must keep it so: with a
+    default menu, `createDepartment` goes on to `placeOpenPeriod` (`operations.ts:222-223`), which
+    calls `replaceMenuWeek` (`menu-timetable.ts:90`), whose `readLocationClock(tx, cfg.locationId)`
+    (`:477`, S8's line) throws `reporting: no location <id>` for an unknown id
+    (`packages/reporting/src/business-day.ts:189`) until S8 lands.
   - `packages/venue-service/src/department-receipts.test.ts`: add a case. It expects
     `receiptDefaultDepartment(tx, { locationId: brandLocationId(randomUUID()) })` to return the
     venue's default department. Today it returns none.
@@ -2133,7 +2330,8 @@ Docs (Task S6b), the entries the change makes stale:
   It may print: `operations.ts:45` and `:64` (`VenueScope`), `operations.ts` `columns: ["location_id", "name"]` (×2),
   `provisioning.ts` `target: [floorZones.locationId, …]`, `department-transfers.ts:534` (S7),
   `department-receipt-draft.ts:10,22` (seat scope, S18), `department-receipt-api.ts:18,87` and
-  `department-receipt-languages.ts:4,15` until S2-5 lands, and `venueLocationId` calls.
+  `department-receipt-languages.ts:4,15` until S2-5 lands, `department-receipt-languages.ts:17` until
+  S5 lands, and `venueLocationId` calls.
 - [ ] **Step 7: Commit** (`git commit -s`).
 
 ### Task S6b: kitchen, stations, routing, floor layouts, deletes
@@ -2185,8 +2383,10 @@ from `readVenueClock(tx)`. `orderTableLabels` loses its `locationId` parameter, 
 follows. The cross-location refusals ("another venue's zone/table as not found") go with their
 tests.
 
-- **Depends on:** S6 (and so S1): it changes `department-transfers.ts:532-534` (an S6 file) and
-  `summarizeTransfers`'s now-unused `cfg`.
+- **Depends on:** S1. It changes `department-transfers.ts:532-534` (an S6 file) and drops
+  `summarizeTransfers`'s now-unused `cfg` (`:504`) and its four calls (`:571,582,609,644` at
+  `623a2d59c4`): `cfg` feeds only the `orderTableLabels` call there, and S6 touches neither, so S7
+  lands before or after S6 (overlap only).
 - **Lands:** lane. None of rules a–d applies.
 - **Branch:** `refactor/a1301-s7-floor`
 - **Review path:** FULL. It removes the location scope from by-id reads, and changes a
@@ -2383,8 +2583,8 @@ Docs: `docs/backlog.md:1480-1483`. "also reads the tenant, location and holiday 
 
 ## Rules shared by S9–S12
 
-Lines in S9–S12 were read at main `abfe271663` unless they say otherwise; A696's lines at
-`7e824ae233`. Each file's lines were read with the design's pattern (`git grep -n -E "$P" -- <file>`).
+Lines in S9–S12 were read at main `abfe271663` unless they say otherwise; A696's lines at A696's
+head (`623a2d59c4`; header). Each file's lines were read with the design's pattern (`git grep -n -E "$P" -- <file>`).
 These rules add to the header's; a task's own text overrides them only where it says so.
 
 1. **Reads lose the location filter; writes fill the column from the venue.** A query that filters
@@ -2397,7 +2597,7 @@ These rules add to the header's; a task's own text overrides them only where it 
 3. **Readers other slices own** keep their signature here (header, "Calls into another slice's
    file"): `readReceiptLanguage`, `readInvoiceLocales` — S5; `readOfferedReceiptLanguages`,
    `saleLanguageFor`, `checkedInvoiceChoiceDelivery`, `readSaleOperationDescription`,
-   `prepareIssueClock` — S2; `readReceiptAddress` — S1, already changed when these slices start;
+   `prepareIssueClock`, `readReceiptAddress` — S2;
    `orderTableLabels` — S7; `VENUE_SERVICE.*` and the seasons and day-plan readers — S6/S8; the
    workforce roster backend — S13; `RecordExportInput` — S14; a module seat's `cfg` such as
    `FloorAnnotator` — S18.
@@ -2429,8 +2629,10 @@ day "at another location".
 - **Depends on:** S1. No server caller matches (the TSV places no `apps/server` file in S9).
 - **Lands:** lane (no owner rule a–d applies).
 - **Branch:** `refactor/a1301-s9-staffing-bookings`.
-- **Review path:** LIGHT. No risk trigger: no fiscal path, no migration, no auth, no
-  cross-package contract change (the module seats keep their shape; see S9a).
+- **Review path:** FULL — a by-id read: S9a stops checking a booking's table by its location
+  (`requireActiveTable`, `bookings.ts:49-70`) and deletes `seatBooking`'s in-location block, the
+  same "tenant isolation or a by-id read" trigger that makes S5–S8 FULL. No fiscal path, migration
+  or auth; the module seats keep their shape (see S9a).
 
 ### Files (14 in the TSV; the two dashboard files moved to S13)
 
@@ -2463,8 +2665,8 @@ day "at another location".
 - [ ] **Step 1: failing test.** In `wall-clock.test.ts`, add "reads the clock in the venue's zone
   without being told a location": set the one venue's `time_zone` to `Pacific/Auckland`, call
   `venueWallClockAt(tx, new Date("2026-03-01T12:00:00Z"))`, expect `{ date: "2026-03-02", time:
-  "01:00" }`. Before the change the `Date` lands in the `locationId` slot, matches no row and the
-  default zone answers `2026-03-01`.
+  "01:00" }`. Before the change the `Date` lands in the `locationId` slot, so it matches no row and
+  `now` is `undefined`: the default zone answers today's date, not `2026-03-02`.
 - [ ] **Step 2:** run `pnpm --filter @waitron/bookings exec vitest run src/wall-clock.test.ts` —
   FAIL on the date.
 - [ ] **Step 3: implement** the table above. Rewrite the test calls with a codemod (the tests pass
@@ -2543,8 +2745,12 @@ the server's printing routes stop passing the server's location around.
 - **Lands:** lane. Design §6: "S10 (the print agent's job claim) … [is a] lane slice …: an invoice
   delivery is not an invoice record, and neither slice changes an invoice byte."
 - **Branch:** `refactor/a1301-s10-printing-layouts`.
-- **Review path:** LIGHT by the trigger list. Two paths need named suites kept green unedited
-  (below): the drawer (CLAUDE.md §5) and the invoice receipt claim (`claimInvoicePrintJobs`).
+- **Review path:** FULL — a cross-package contract: S10 deletes `PrintConfig` and
+  `PrintAgentConfig` from `@waitron/printing`'s exports (`index.ts:5,9`) and removes `locationId`
+  from `@waitron/layouts`' exported `PrinterInfo`, `ListedPrinter` and `PrinterEquipment`, which
+  `apps/server` reads; and it edits the code that queues `drawer` jobs (CLAUDE.md §5). Two paths
+  need named suites kept green unedited (below): the drawer and the invoice receipt claim
+  (`claimInvoicePrintJobs`).
 
 **Drawer jobs (CLAUDE.md §5).** S10 touches the code that queues `drawer` jobs
 (`apps/server/src/receipt-print.ts:409,557,648,674`, `apps/server/src/print-api.ts:1247`) and the
@@ -2567,12 +2773,12 @@ the cash refund case in `apps/server/src/till-api.profile-actions.test.ts`, the 
 | `packages/printing/src/agent.ts` | `PrintAgentConfig` (`:10-12`) deleted with whatever passes it |
 | `packages/layouts/src/device-equipment.ts` | `DeviceState.device.locationId` (`:82`), `PrinterInfo.locationId` (`:101`), `ListedPrinter.locationId` (`:113`), `PrinterEquipment.devices[].locationId` (`:120`) and their selects (`:146`, `:162`, `:165`, `:213`, `:230`, `:343`, `:515`) go; the default rule drops `row.locationId === device.locationId` (`:191`); `selectDevicePrinter` drops both location conditions (`:377`, `:401`, `:406`); `listedAt(tx, profileId)` drops its `or(...)` location condition (`:525-541`) — safe because `device_profile_printers_target_ck` (`packages/db/src/schema/device-profile-printers.ts:57-60`) makes exactly one of the two ids non-null and each has its foreign key; the per-location cache in the resettle loop (`:597-603`) becomes one `listedAt` call; comments `:569`, `:585` |
 | `packages/layouts/src/device-printers.ts` | comment `:157` |
-| `apps/server/src/receipt-print.ts` | `printConfig` (`:42-43`) deleted; `resolveInvoicePrinter(tx, origin)` loses `at` (`:114-127`; its one caller passing `at` is `tillInvoicePrinters`, `till-api.ts:2501`, which S2-3 leaves to S10b); `:197` (`readReceiptLanguage`) is S5's call, which S5 edits; `:214` (`readReceiptAddress`) was changed by S1; the cash-refund drawer lookup drops `eq(tenderRefunds.locationId, cfg.locationId)` (`:628`) and keeps its device, node, method and state conditions |
-| `apps/server/src/print-api.ts` | `locations` import (`:19`) and the test page's zone read (`:1331-1334`) → `readVenue(tx).timeZone`; the agent claim's `locationId` (`:711`) and its TODO (`:648`) go; `mountPagePrintersApi`/`mountPagePrintApi` get no `locationId` (`:1044`, `:1059`); demo-printer jobs list drops its filter (`:1392`); `attachPrinterToStation` call (`:1547`) follows S11b; comment `:579`; `:1365` (`readReceiptLanguage`) is S5's call |
+| `apps/server/src/receipt-print.ts` | `printConfig` (`:42-43`) deleted; `resolveInvoicePrinter(tx, origin)` loses `at` (`:114-127`; its one caller passing `at` is `tillInvoicePrinters`, `till-api.ts:2501`, which S2-3 leaves to S10b); `:197` (`readReceiptLanguage`) is S5's call, which S5 edits; `:214` (`readReceiptAddress`) is S2-5's call (inside `buildReceiptBytes`, the sale's ticket), left; the cash-refund drawer lookup drops `eq(tenderRefunds.locationId, cfg.locationId)` (`:628`) and keeps its device, node, method and state conditions |
+| `apps/server/src/print-api.ts` | `locations` import (`:19`) and the test page's zone read (`:1331-1334`) → `readVenue(tx).timeZone`; the agent claim's TODO (`:648`) goes; its `locationId: deps.cfg.locationId` (`:711`) stays while S2 has not landed, because `claimInvoicePrintJobs`' context type requires it (`invoice-print.ts:62`; S2-3 drops the field and this argument together), and goes here, argument only, if S2 has landed; `mountPagePrintersApi`/`mountPagePrintApi` get no `locationId` (`:1044`, `:1059`); demo-printer jobs list drops its filter (`:1392`); `attachPrinterToStation` call (`:1547`) follows S11b; comment `:579`; `:1365` (`readReceiptLanguage`) is S5's call |
 | `apps/server/src/page-printers.ts` | every function loses `locationId` (`:27`, `:45`, `:112`, `:131`); `inLocation` (`:106-108`) becomes an id match; the agent-of-this-location check (`:60`) and printer filter (`:79`) go; insert `:95` fills `venueLocationId(tx)` |
 | `apps/server/src/page-printers-api.ts` | `deps.locationId` (`:38`) and its uses (`:86`, `:120`, `:143`, `:167`, `:190-191`); `:149` (`readReceiptLanguage`) is S5's call |
 | `apps/server/src/page-print-api.ts` | `deps.locationId` (`:53`, `:158`, `:165`) |
-| `apps/server/src/demo-printer.ts` | `locationId` parameters (`:30`, `:131`, `:189`, `:219`) go; printer and agent lookups drop the filter (`:39`, `:74`); inserts fill `venueLocationId(tx)` (`:58`, `:84`); `routeToDemoPrinter(tx, printerId)` (`:92`) and the stations read (`:178`); `deliverDemoPrinterJobs(db, identity)` (`:228`) |
+| `apps/server/src/demo-printer.ts` | `locationId` parameters (`:30`, `:131`, `:189`, `:219`) go; printer and agent lookups drop the filter (`:39`, `:74`); inserts fill `venueLocationId(tx)` (`:58`, `:84`); `routeToDemoPrinter(tx, printerId)` (`:92`) and the stations read (`:178`); `deliverDemoPrinterJobs(db, identity)` (`:186-190`, called at `:228`): while S2 has not landed, its `claimInvoicePrintJobs` call (`:195-199`) passes `locationId: await venueLocationId(tx)` in place of the dropped parameter (the context type requires it; S2-3 drops it), and passes nothing once S2 has landed |
 | `apps/server/src/station-outputs-down.ts` | `stationPrintersDown(tx, now, …)`, `stationScreensDark(tx, now)`, `stationsWithWaitingDishes(tx, now, …)` lose `locationId` (`:52`, `:91`, `:108`, `:129`) and their filters (`:71`, `:119`, `:216`); the brand import (`:15`) and the local parameter **named `venueLocationId`** (`:141`, `:147`, `:181`) go — it would read as S1's helper in every later done-check. `:147` passes a scope to a venue-service reader (S6): rule 3 |
 | `apps/server/src/print-job-trouble.ts` | `options.locationId` (`:109-133`) goes |
 | `apps/server/src/box-staff-notices.ts` | `deps.locationId` (`:137`, `:142`, `:157`); comment `:134` |
@@ -2625,10 +2831,17 @@ then it types `createPrinter`'s ignored `_cfg`).
 - [ ] **Step 2:** `pnpm --filter @waitron/printing exec vitest run src/runtime.eligibility.test.ts` — FAIL.
 - [ ] **Step 3: implement** the package rows above, then the callers. The test call sites are many
   (`git grep -c -E '(createPrinter|updatePrinter|deactivatePrinter|listPrinters|enqueuePrintJob|claimPrintJobs|claimInvoicePrintJobs)\(' -- '*.test.ts'`
-  summed to 371 lines in 81 files at `abfe271663`): write a small codemod that removes the
-  second argument of these calls, run it, then fix what typecheck still reports by hand. While S2
-  has not landed it leaves `createPrinter(` calls and `claimInvoicePrintJobs(` calls alone (the
-  ignored parameters above), and skips `invoice-print.ts` and `apps/server/scripts/demo-seed/seed.ts`.
+  summed to 371 lines in 79 files at `abfe271663` and at `623a2d59c4`): write a small codemod that
+  removes the second argument of these calls, run it over `apps/server` and `packages` only, then
+  fix what typecheck still reports by hand. `apps/dashboard`'s API client has methods of the same
+  names whose second argument is not a location (`api.updatePrinter("p1", patch)`,
+  `client.test.ts:2520`; `client-routes.test.ts:820`), so the codemod skips `apps/dashboard` and
+  `apps/till`. While S2 has not landed it leaves `createPrinter(` calls and
+  `claimInvoicePrintJobs(` calls alone (the ignored parameters above), and skips `invoice-print.ts`
+  and `apps/server/scripts/demo-seed/seed.ts`. **Hand-over point:** if the task passes about 100
+  tool calls before the codemod has run, commit the package change with its own tests green
+  (Steps 1–2 and the package half of Step 3) and hand the codemod and the callers to a fresh
+  implementer (header, "Execution notes").
 - [ ] **Step 4: delete** `runtime.eligibility.test.ts:97` ("does NOT claim a network_tcp job for an
   agent in a DIFFERENT venue") and `runtime.test.ts:357` ("…DIFFERENT venue (venue scope)") with
   their second-location seeds; `apps/server/src/invoice-page-print.test.ts:272` ("does not claim
@@ -2677,7 +2890,7 @@ tests `packages/layouts/src/device-equipment.db.test.ts`, `device-printers.db.te
   vitest run …`, server ones with `pnpm --filter @waitron/server exec vitest run …`) — PASS, drawer
   cases unedited; code guards; typecheck `@waitron/layouts`, `@waitron/server`; `pnpm format:check`.
 - [ ] **Step 6: done-check** over the four owned files: `receipt-print.ts` prints only `:197`
-  (S5's call) if S5 has not landed.
+  (S5's call) until S5 lands and `:214` (S2-5's call) until S2 lands.
 - [ ] **Step 7: commit** "A device's printers are the venue's printers (A1301 S10b)".
 
 ### Task S10c: the server's printing routes
@@ -2714,9 +2927,10 @@ name)`, `disablePagePrinter(tx, id, now?)`; `routeToDemoPrinter(tx, printerId)`.
   for the dashboard file, check free memory first (`memory_pressure | grep free`, CLAUDE.md §2)
   and run `pnpm --filter @waitron/dashboard exec vitest run src/widgets/page-printers-panel.test.ts`;
   code guards; typecheck `@waitron/server`, `@waitron/dashboard`; `pnpm format:check`.
-- [ ] **Step 6: done-check** over the twelve files: `print-api.ts` prints only `:1365` (S5);
+- [ ] **Step 6: done-check** over the twelve files: `print-api.ts` prints only `:1365` (S5) and,
+  until S2 lands, `:711` (`claimInvoicePrintJobs`' `locationId`);
   `page-printers-api.ts` only `:149` (S5); `demo-printer.ts` only `routeToDemoPrinter`'s ignored
-  `_locationId` while S2 has not landed; `station-outputs-down.ts` only the S6 scope line;
+  `_locationId` and the `claimInvoicePrintJobs` call's `venueLocationId` while S2 has not landed; `station-outputs-down.ts` only the S6 scope line;
   `printers-screen.ts` only `window.location.origin` and `location.href`.
 - [ ] **Step 7: commit** "Printing routes serve the venue, not a location (A1301 S10c)".
 
@@ -2742,28 +2956,33 @@ from the venue. `station.no_default` loses its `locationId` detail (design §5).
   files (listed per task), and a lane rebases around them.
 - **Lands:** lane. The one invoice-path call in its area is S2's (below), so no owner rule applies.
 - **Branch:** `refactor/a1301-s11-orders-kitchen-refunds`.
-- **Review path:** LIGHT by the trigger list (no fiscal byte, migration, auth or concurrency
-  change). The admission checks in three S11 files move to S12a (below), so S11 changes no
-  admission rule.
+- **Review path:** FULL — a by-id read and a cross-package contract: S11 stops scoping orders,
+  stations, courses and refunds by id to a location, and S11b changes `@waitron/db`'s
+  `nextStationColour` export (the reason S7 is FULL). The admission checks in five S11 files —
+  three `device.locationId !== cfg.locationId` checks and the two refund-path device filters — move
+  to S12a (below), so S11 changes no admission rule.
+- **The design's "`packages/recipes`, `packages/payments` leftovers":** none. The design grep over
+  their non-test sources (`git grep -n -E "$P" -- packages/recipes/src packages/payments/src ':!*.test.ts'`)
+  prints nothing at `623a2d59c4`; their test helpers are F2's.
 
-**What S11 leaves to S2: `working-order.ts:7038`.** At `abfe271663` line 7038 is the comment
-`/** Price an order's invoice for {@link issueUnpaidInvoice}. Writes nothing. */`, above
-`priceForIssuance` (`:7039-7052`), whose body at `:7050` is
-`...issueMoment(clock, await issuancePass(tx, cfg, id, order), backend),`. The design's `:7038` is
-A696's numbering: on `7e824ae233`, `apps/server/src/working-order.ts:7038` is
-`await prepareIssueClock(tx, cfg, clock),` inside the same `priceForIssuance`
-(`git show origin/feat/a696-startup-zone-validation:apps/server/src/working-order.ts | sed -n 7025,7044p`).
-After A696 lands, **S11 leaves the `prepareIssueClock(tx, cfg, clock)` call in `priceForIssuance`
-to S2**, whatever its line number is then. S11 also leaves, inside `issueUnpaidInvoice`,
-`saleLanguageFor(tx, cfg.locationId, …)` (`:7079`, the filed invoice's language) and
-`readSaleOperationDescription` (`:7083`) — both on the invoice path, S2's functions (`saleLanguageFor`
-moved from S1, Task S2-5) — and
-`checkedInvoiceChoiceDelivery(…, { locationId: order.locationId, … })` (`:4427`, S2's
-`invoice-delivery*.ts`).
+**What S11 leaves to S2: the design's `working-order.ts:7038`.** The design's `:7038` is A696's
+numbering at `7e824ae233`. At A696's head `623a2d59c4` the same line is `:7056`,
+`await prepareIssueClock(tx, cfg, clock),` inside `priceForIssuance` (`:7044`)
+(`git show origin/feat/a696-startup-zone-validation:apps/server/src/working-order.ts | sed -n 7043,7062p`);
+at `abfe271663`, before A696, line 7038 is the comment above `priceForIssuance`.
+**S11 leaves the `prepareIssueClock(tx, cfg, clock)` call in `priceForIssuance` to S2**, whatever its
+line number is then. S11 also leaves, inside `issueUnpaidInvoice`, `saleLanguageFor(tx,
+cfg.locationId, …)` (`:7090` at `623a2d59c4`, the filed invoice's language) and
+`readSaleOperationDescription` (`:7094`) — both on the invoice path, S2's functions (`saleLanguageFor`
+moved from S1, Task S2-5) — and `checkedInvoiceChoiceDelivery(…, { locationId: order.locationId, … })`
+(`:4426-4429`, S2's `invoice-delivery*.ts`).
 
 **Admission lines handed to S12a.** `line-cancel-api.ts:47`, `order-kitchen-note-api.ts:61-62` and
 `party-allergy-api.ts:109-110` are the device-location admission check
-(`device.locationId !== deps.cfg.locationId` → `device.unauthorized`). They go with
+(`device.locationId !== deps.cfg.locationId` → `device.unauthorized`). The refund path holds the
+same rule in another form: `tender-refund-api.ts:72` and `tender-refund-authorization.ts:105` select
+the device with `eq(devices.locationId, cfg.locationId)` and throw `device.unauthorized` when no row
+comes back (`tender-refund-api.ts:65-76`, `tender-refund-authorization.ts:98-109`). All five go with
 `DeviceBinding.locationId` in S12a, which the design names for "admission". S11 leaves them.
 
 ### Task S11a: orders and bills
@@ -2825,8 +3044,12 @@ S18 file; one line, with its comment `:834-838` cut to the first two sentences).
   `finish-party*.test.ts`, `unpaid-departure.test.ts`, `party-allergy*.test.ts`,
   `adjustments-apply.test.ts`, `floor-annotations.test.ts`, `floor-today-state.test.ts`,
   `floor-today-store.test.ts` (the last three call `listTablesWithState` positionally) — PASS;
-  code guards (`errors-reachable` sees the registry change); `pnpm --filter @waitron/server
-  typecheck`; `pnpm format:check`.
+  code guards; `pnpm --filter @waitron/server typecheck`, which is what checks the registry change
+  (`AppError`'s code is `keyof ErrorParams`, `packages/shared/src/errors.ts:68,76,85`, augmented by
+  `apps/server/src/errors.ts:25-26`; `errors-reachable` reads only `packages/*`); `pnpm format:check`.
+  **Hand-over point:** S11a has 16 files and about 20 suite globs. If it passes about 100 tool calls
+  before Step 5, commit at a typechecking point with the files done so far listed, and hand the rest
+  to a fresh implementer (header, "Execution notes").
 - [ ] **Step 6: done-check** over the sixteen files: prints only `venueLocationId`, the "Left"
   lines of `working-order.ts`, and (until S12a) the three admission lines.
 - [ ] **Step 7: commit** "Orders and bills stop scoping by location (A1301 S11a)".
@@ -2852,7 +3075,7 @@ S18 file; one line, with its comment `:834-838` cut to the first two sentences).
 | `station-move.ts` | order filter `:314`; `:336` (`VENUE_SERVICE.stationStates`, S6) left |
 | `station-printers.ts` | `attachPrinterToStation(tx, { stationId, printerId })` (`:25-34`); `cfg: PrintConfig` params (`:50`, `:66`, `:85`, `:108`) go; filters `:91`, `:115`; crossing `print-api.ts:1547` and the F5 helpers `apps/server/src/testing/{adjustment-venue.ts:373,kitchen-allergy-fixture.ts:86,split-extras-venue.ts:96,113}` |
 | `station-today-api.ts` | `openDishCount(tx, id)` (`:67`, `:138`; defined in `station-closing.ts`) |
-| `station-colour.ts` | `nextStationColour(tx)` (`:8-13`). Its caller `packages/provisioning/src/venue-apply.ts:307` is S16's file: while S16 has not landed, `nextStationColour` keeps an ignored optional `_locationId?: string` for it and S16 drops the argument; if S16 has landed, S11b edits the call, argument only |
+| `station-colour.ts` | `nextStationColour(tx)` (`:8-13`). Its caller `packages/provisioning/src/venue-apply.ts:307` (`:325` at `623a2d59c4`) is S16's file: while S16 has not landed, `nextStationColour` keeps an ignored optional `_locationId?: string` for it and S16 drops the argument; if S16 has landed, S11b edits the call, argument only |
 
 **Produces:** `nextStationColour(tx)`; `attachPrinterToStation(tx, { stationId, printerId })`;
 `openDishCount(tx, stationId)`.
@@ -2888,7 +3111,8 @@ S18 file; one line, with its comment `:834-838` cut to the first two sentences).
 **Files (15):** `apps/server/src/bill-refunds.ts`, `payments-api.ts`, `tender-refund-api.ts`,
 `tender-refund-authorization.ts`, `tender-refund-reservation.ts`, `tender-refund-sends.ts`,
 `tender-refunds.ts`, `receipt-guests.ts`, `receipt-order.ts`, `receipt-preview-api.ts`,
-`report-api.ts`, `line-cancel-api.ts` (nothing left after S12a); `packages/adjustments/src/routes.ts`,
+`report-api.ts`, `line-cancel-api.ts` (nothing left after S12a; `tender-refund-authorization.ts`
+likewise); `packages/adjustments/src/routes.ts`,
 `provisioning.ts`, `dashboard/adjustment-report-screen.ts`.
 
 | File | What changes |
@@ -2898,11 +3122,11 @@ S18 file; one line, with its comment `:834-838` cut to the first two sentences).
 | `tender-refund-sends.ts` | `readStuckTenderRefund` loses `locationId?` and its mismatch refusal (`:209-212`); `:195` (a refund's location copied onward) goes |
 | `tender-refunds.ts` | `:131` copies a refund's location onward: goes |
 | `tender-refund-reservation.ts` | the refund insert fills `venueLocationId(tx)` (`:239`) |
-| `tender-refund-api.ts` | device filter `:72`; print call `:230-232` (S10a) |
-| `tender-refund-authorization.ts` | device filter `:105` |
+| `tender-refund-api.ts` | print call `:230-232` (S10a). The device filter `:72` is S12a's (admission) |
+| `tender-refund-authorization.ts` | nothing left after S12a (its device filter `:105` is S12a's); listed for the done-check |
 | `receipt-guests.ts` | `cfg: { locationId: LocationId }` (`:5`, `:31`) — the parameter goes if that was its only field |
 | `receipt-order.ts` | `:53` (`orderTableLabels`, S7) left |
-| `receipt-preview-api.ts` | `activeReceiptSettings(tx)` (`:119-123`) and its call (`:329`); comment `:70`; `:381` (`readReceiptAddress`) was changed by S1; `:314`'s `departmentReceiptLanguages` argument goes with S5 or S2-5 |
+| `receipt-preview-api.ts` | `activeReceiptSettings(tx)` (`:119-123`) and its call (`:329`); comment `:70`; `:381` (`readReceiptAddress`) is S2-5's call, left; `:314`'s `departmentReceiptLanguages` argument goes with S5 or S2-5 |
 | `report-api.ts` | `cfg` type keeps `nodeId` only (`:57-58`); `countOpenTables(tx)` drops the `nodes` join and its `nodeId` parameter (`:142-158`, design `report-api.ts:155`); printer filter `:211`; print call `:409` (S10a); comment `:253` |
 | `packages/adjustments/src/routes.ts` | `reportInput(tx, range)` reads `readVenueClock` (`:21`, `:194-200`, `:224`, `:240`) |
 | `packages/adjustments/src/provisioning.ts` | the province and invoice locales come from `readVenue(tx)` (`:7`, `:86-91`) instead of `locations` by `node.locationId` |
@@ -2917,10 +3141,8 @@ S18 file; one line, with its comment `:834-838` cut to the first two sentences).
   finds no node and counts `0`.
 - [ ] **Step 2:** `pnpm --filter @waitron/server exec vitest run src/report-api.overview.test.ts` — FAIL.
 - [ ] **Step 3: implement** the table.
-- [ ] **Step 4: delete or trim:** `tender-refund-authorization.test.ts:307` ("rejects a device moved
-  to a different location"); `tender-refund-reservation.test.ts:452` ("refuses a sale in a different
+- [ ] **Step 4: delete or trim:** `tender-refund-reservation.test.ts:452` ("refuses a sale in a different
   location"); `tender-refund-management.test.ts:450` ("refuses another location's return…");
-  `tender-refund-api.test.ts:235` (`it.each` — drop the variant that moves the device at `:279`);
   `receipt-preview-drafts.test.ts:220` is a department case (S6), left. Read
   `report-api.categories.test.ts:465` ("lists this location's active printers…"): drop only a
   second-location printer if it seeds one.
@@ -2929,8 +3151,9 @@ S18 file; one line, with its comment `:834-838` cut to the first two sentences).
   `receipt-order*.test.ts`, `receipt-preview*.test.ts`, `report-api*.test.ts`; and
   `pnpm --filter @waitron/adjustments exec vitest run` — PASS; code guards; typecheck
   `@waitron/server`, `@waitron/adjustments`; `pnpm format:check`.
-- [ ] **Step 6: done-check** over the fifteen files: prints only `venueLocationId`, the S7 and S1
-  calls named above, and (until S12a) `line-cancel-api.ts:47`.
+- [ ] **Step 6: done-check** over the fifteen files: prints only `venueLocationId`, the S7 call
+  named above, `receipt-preview-api.ts:381` (S2-5's) until S2 lands, and until S12a lands
+  `line-cancel-api.ts:47`, `tender-refund-api.ts:72` and `tender-refund-authorization.ts:105`.
 - [ ] **Step 7: commit** "Refunds, receipts and reports stop scoping by location (A1301 S11c)".
 
 ### Open PRs touching S11's files
@@ -2967,18 +3190,25 @@ the design's slice").
 
 **Admission suites that stay green unedited** (CLAUDE.md §3, "A device's profile and the signed-in
 person must both allow a till action"): `apps/server/src/till-api.profile-actions.test.ts` and
-`apps/server/src/till-api.profile-zones.test.ts`. Neither holds a location-mismatch case
-(`grep -n -i location` prints only a map row about attendance and two fixture inserts,
-`till-api.profile-actions.test.ts:495` and `till-api.profile-zones.test.ts:1667`, which are F5's).
-Their refusing cases must pass with no assertion edited; the maps at the top of each file do not
-change, because no route is added or removed. The drawer suites listed under S10 also stay green:
+`apps/server/src/till-api.profile-zones.test.ts`. Neither holds a location-mismatch case. At
+`623a2d59c4`, `grep -n -i location` prints, in `profile-actions`, one map row (`:74`, naming a test
+title's `locationId=` query, S13's) and a kitchen-station insert (`:497`); and in `profile-zones`,
+five map rows reading "none: own attendance at configured device location" (`:94-98`) and a
+kitchen-station insert (`:1669`). The two inserts are a module table's own rows (category 5 under
+"The fixture slices F2–F5", the schema slices'), and the fixture grep `FX` selects neither file.
+Their refusing cases must pass with no assertion edited, and no route is added or removed. **One
+comment-only edit is allowed:** S12a deletes the `admit` location refusal those five
+`profile-zones` rows describe, so it rewords them to "none: own attendance" (CLAUDE.md §6: a change
+updates the words it makes stale); `git diff` of that file shows those five comment lines and
+nothing else, and `profile-actions` is not edited. The drawer suites listed under S10 also stay green:
 S12a touches `till-api.ts` routes that take cash.
 
 ### Task S12a: device admission
 
 **Files:** `apps/server/src/device-session.ts`, `device-zones.ts`, `till-api.ts` (`:1034`,
 `:2937-2938`, `:3465-3466`, `:1438`), crossings `line-cancel-api.ts:47`,
-`order-kitchen-note-api.ts:61-62`, `party-allergy-api.ts:109-110` (S11 files) and the two `admit`
+`order-kitchen-note-api.ts:61-62`, `party-allergy-api.ts:109-110`, the refund-path device filters
+`tender-refund-api.ts:72` and `tender-refund-authorization.ts:105` (S11 files), and the two `admit`
 functions `till-attendance-api.ts:101-102`, `till-clock-api.ts:79-80` (S13 files; design §6 "Device
 admission by location (`admit`) — out of A1268 — S12").
 
@@ -2987,7 +3217,7 @@ admission by location (`admit`) — out of A1268 — S12").
 | `device-session.ts` | `DeviceBinding.locationId` (`:98`), `deviceBindingColumns.locationId` (`:108`) and `toDeviceBinding`'s copy (`:155`) go |
 | `device-zones.ts` | `currentZoneDevice(tx, session)` — the `cfg` parameter (`:11`) and the location refusal (`:16`) go |
 | `till-api.ts` | the three `device.locationId !== deps.cfg.locationId` refusals (`:1034`, `:2937-2938`, `:3465-3466`); `:1438` (`locationId: current.locationId` into the attendance recorder) per rule 4 |
-| crossings | the same refusal in `line-cancel-api.ts:47`, `order-kitchen-note-api.ts:61-62`, `party-allergy-api.ts:109-110`; the `attendance.not_permitted` location refusal in both `admit`s |
+| crossings | the same refusal in `line-cancel-api.ts:47`, `order-kitchen-note-api.ts:61-62`, `party-allergy-api.ts:109-110`; the refund path's device selects drop `eq(devices.locationId, cfg.locationId)` (`tender-refund-api.ts:72`, `tender-refund-authorization.ts:105`) and keep the device id and the retired-profile condition, so a missing or retired device still throws `device.unauthorized`; the `attendance.not_permitted` location refusal in both `admit`s |
 
 **Produces:** `DeviceBinding` without `locationId`; `currentZoneDevice(tx, session)`.
 
@@ -3007,18 +3237,29 @@ admission by location (`admit`) — out of A1268 — S12").
   `till-attendance-api.test.ts:229` and `till-hours-api.test.ts:89` (`it.each` — drop the
   `"location"` variant, `:260`, `:125`); `till-clock-api.test.ts:148` (drop `"location"`, `:192`)
   and `:426` (keep revoked person and ended session, drop "device moved to another location",
-  `:441`). Every other variant of those `it.each` tables stays as it is.
+  `:441`); `tender-refund-authorization.test.ts`'s "rejects a device moved to a different location"
+  (`:307`) and the `"moved"` variant of `tender-refund-api.test.ts`'s "refuses %s
+  session/device/profile access on list, create, status and retry" (`:235`). Every other variant of
+  those `it.each` tables stays as it is (the refund tables' `"device"`, `"deleted"`, `"retired"`
+  variants keep the device refusal covered).
 - [ ] **Step 5:** run `pnpm --filter @waitron/server exec vitest run src/till-api.profile-actions.test.ts
   src/till-api.profile-zones.test.ts` FIRST and confirm `git diff --stat` shows neither file
   changed; then `device-session*.test.ts`, `device-zones*.test.ts`, `till-api.allergy*.test.ts`,
   `till-api.kitchen-note.test.ts`, `line-cancel*.test.ts`, `order-kitchen-note*.test.ts`,
   `party-allergy*.test.ts`, `till-attendance-api.test.ts`, `till-hours-api.test.ts`,
-  `till-clock-api.test.ts`, `till-api.receipt.test.ts`, `till-api.fiscal-sale-paths.test.ts` —
-  PASS; code guards; `pnpm --filter @waitron/server typecheck`; `pnpm format:check`.
-- [ ] **Step 6: done-check:** `git grep -n -E 'locationId !== (deps\.)?cfg\.locationId' -- 'apps/server/src/*.ts' ':!*.test.ts'`
-  prints nothing (at `abfe271663` it prints nine lines: `device-zones.ts:16`,
+  `till-clock-api.test.ts`, `till-api.receipt.test.ts`, `till-api.fiscal-sale-paths.test.ts`,
+  `tender-refund-api.test.ts`, `tender-refund-authorization.test.ts`, and the drawer suites listed
+  under S10 (the refund routes take cash) — PASS; code guards; `pnpm --filter @waitron/server
+  typecheck`; `pnpm format:check`.
+- [ ] **Step 6: done-check:** `git grep -n -E 'locationId !== (deps\.)?cfg\.locationId|eq\(devices\.locationId, (deps\.)?cfg\.locationId\)' -- 'apps/server/src/*.ts' ':!*.test.ts'`
+  prints only the two non-admission filters below, read to confirm each still refuses nothing. At
+  `623a2d59c4` it prints thirteen lines: the eleven this task removes (`device-zones.ts:16`,
   `line-cancel-api.ts:47`, `order-kitchen-note-api.ts:61`, `party-allergy-api.ts:109`,
-  `till-api.ts:1034,2937,3465`, `till-attendance-api.ts:101`, `till-clock-api.ts:79`).
+  `tender-refund-api.ts:72`, `tender-refund-authorization.ts:105`, `till-api.ts:1037,2963,3492`,
+  `till-attendance-api.ts:101`, `till-clock-api.ts:79`), and two that are not admission:
+  `working-order.ts:1688` (S11a's, it picks the device's profile to choose a new order's zone and
+  refuses nothing) and `station-outputs-down.ts:216` (S10c's, it lists the dark kitchen screens).
+  Either may already be gone if its slice landed first.
 - [ ] **Step 7: commit** "A device is admitted by its profile and person, not by a location (A1301 S12a)".
 
 ### Task S12b: devices, joins, promotion, till start read
@@ -3029,7 +3270,7 @@ admission by location (`admit`) — out of A1268 — S12").
 
 | File | What changes |
 | --- | --- |
-| `device.ts` | the profile switch's select (`:305`) loses `locationId`; `:326` passes a scope to `VENUE_SERVICE.narrowDeviceKitchenScreens` (S6): rule 3 — fill it from `cfg` if the function has one, else leave the line for S6 and note it; `DEVICE_NAME_UNIQUE` (`:47-51`) names the key's real columns until S26 changes the key, so it stays (schema-shaped, S26) |
+| `device.ts` | the profile switch's select (`:305`) loses `locationId`; `:326` passes a scope to `VENUE_SERVICE.narrowDeviceKitchenScreens`, which already ignores it (`_cfg: VenueScope`, `packages/venue-service/src/kitchen-screens.ts:892` at `623a2d59c4`), so the call passes `{ locationId: brandLocationId(await venueLocationId(tx)) }` now and S18 removes it with the seat's `cfg`; `DEVICE_NAME_UNIQUE` (`:47-51`) names the key's real columns until S26 changes the key, so it stays (schema-shaped, S26) |
 | `device-api.ts` | `stationsHere(tx)` and `worksStation`'s filter (`:1071`, `:1077-1081`); `stationPrintersDown` call (`:565`, S10c); the `Pick<TradingContext, "locationId">` parameters (`:1000`, `:1015`, `:1030`, `:1061`) stay only where they are forwarded to `VENUE_SERVICE.readDeviceKitchenScreens` (S6); comment `:1076` |
 | `device-equipment.ts` | whatever S10b did not already remove (`:292`, `:370-380`) |
 | `device-levers.ts` | order filter `:47` |
@@ -3053,7 +3294,7 @@ admission by location (`admit`) — out of A1268 — S12").
   PASS; `till-api.profile-actions.test.ts` and `till-api.profile-zones.test.ts` again, unedited;
   code guards; `pnpm --filter @waitron/server typecheck`; `pnpm format:check`.
 - [ ] **Step 6: done-check** over the files: prints only `venueLocationId`, `device.ts:47-51` (S26),
-  the S6 forwarding lines in `device-api.ts` and `device.ts:326` if S6 has not landed,
+  the S6 forwarding lines in `device-api.ts`, `device.ts:326`'s seat scope (S18),
   `till-setup.ts:83-84` until S2-5 lands, and `till-api.ts:624` (unrelated).
 - [ ] **Step 7: commit** "Devices, joins and promotion take the venue, not a location (A1301 S12b)".
 
@@ -3069,7 +3310,7 @@ The restore confirmation's `locationName` → `venueName` rename (`RestoredVenue
 
 | File | What changes |
 | --- | --- |
-| `packages/module/src/personal-data.ts` | `PersonalDataSubject.locationId` (`:14-15`) goes |
+| `packages/module/src/personal-data.ts` | `PersonalDataSubject.locationId` (`:14-15`) goes. Forced, test-only: `packages/module/src/personal-data.test.ts:22` is a literal typed `PersonalDataSubject` (`:17`), so it stops compiling until its `locationId` key goes. The `subject = (personId) => ({ …, locationId: null })` helpers at `packages/adjustments/src/personal-data.test.ts:30`, `packages/identity/src/personal-data.test.ts:311`, `packages/staffing/src/personal-data.test.ts:30` and `packages/workforce/src/personal-data.test.ts:42` (at `623a2d59c4`) are untyped, so they still compile, but they name a field the subject no longer has: drop the key there too. Their other `locationId` lines are module rows and stay |
 | `personal-data-export-api.ts` | `venuePlace(tx, nodeId)` (`:49-59`) becomes a zone read from `readVenue(tx)` through `knownZone`, with no `nodes` join; the `locations`/`nodes` imports (`:4`) follow |
 | `personal-data-time-record.ts` | the time-entry range read drops `eq(timeEntries.locationId, …)` (`:35`) — if A1268 has not already removed it — and the null-location early return (`:26-27`); `exporter.prepare`'s `locationId` (`:40`) stays as long as `RecordExportInput.locationId` exists (moved to S14, header table), filled with `await venueLocationId(tx)`; comment `:16` |
 | `restore-stream.ts` | `readRestoredVenue` (`:209-223`) reads the restored copy's one venue row by no id (design `restore-stream.ts:214`) — through `readVenue` if S1's accessor accepts the opened copy's handle (`store.venue`), otherwise the one `locations` row with no `where`. The `RestoredVenue` field name is S16c's: leave it as it is at the task's head |
@@ -3077,7 +3318,7 @@ The restore confirmation's `locationName` → `venueName` rename (`RestoredVenue
 **Produces:** `PersonalDataSubject` without `locationId`.
 
 - [ ] **Step 1: failing tests.** In `personal-data-export-api.test.ts`, "dates the file in UTC when
-  the venue's stored zone is unknown" (`:290`) also asserts the subject has no `locationId` key
+  the venue's stored zone is unknown" (`:291`) also asserts the subject has no `locationId` key
   (design §1, "Nothing passes a location id"). In `restore-stream.test.ts`, "confirms the restored
   copy's venue whatever venue id the backup settings name": with the settings' `venueId` set to an id
   no row in the copy holds, the confirmation still names the copy's venue. Both FAIL before (the
@@ -3087,14 +3328,16 @@ The restore confirmation's `locationName` → `venueName` rename (`RestoredVenue
 - [ ] **Step 3: implement** the table.
 - [ ] **Step 4: delete:** `personal-data-export-api.test.ts:280` ("dates the file in UTC with no
   location when this node has no row" — the node no longer decides the zone; the unknown-zone case
-  at `:290` keeps the UTC fallback covered); `personal-data-time-record.test.ts:250` ("builds no
+  at `:291` keeps the UTC fallback covered); `personal-data-time-record.test.ts:250` ("builds no
   files when the node has no location") and `:254` ("…whose only entries are at another
   location"). Keep `restore-stream.test.ts:292`, `:417`, `:430`: "another venue" there is another
   bucket's copy, not a location.
 - [ ] **Step 5:** run `pnpm --filter @waitron/server exec vitest run src/personal-data*.test.ts
   src/restore-stream*.test.ts src/restore-request*.test.ts`;
-  `pnpm --filter @waitron/module exec vitest run src/personal-data.test.ts` — PASS; code guards;
-  typecheck `@waitron/module`, `@waitron/server`; `pnpm format:check`.
+  `pnpm --filter @waitron/module exec vitest run src/personal-data.test.ts`, and the same file in
+  `@waitron/adjustments`, `@waitron/identity`, `@waitron/staffing` and `@waitron/workforce` — PASS;
+  code guards; typecheck `@waitron/module`, `@waitron/server`, `@waitron/adjustments`,
+  `@waitron/identity`, `@waitron/staffing`, `@waitron/workforce`; `pnpm format:check`.
 - [ ] **Step 6: done-check** over the four files: prints only `venueLocationId`,
   `personal-data-time-record.ts:40` (S14), and `restore-stream.ts`'s `RestoredVenue.locationName`
   until S16c lands.
@@ -3161,8 +3404,8 @@ Every caller, from `git grep -n -E 'getLocations|LocationSummary|/management-api
 
 ## Names used in S16, S17 and F2–F5
 
-Lines in these sections were read at main `abfe271663` and, in a file A696 changes, at
-`7e824ae233` (`git show origin/feat/a696-startup-zone-validation:<path>`). Every implementer re-runs
+Lines in these sections were read at main `abfe271663` and, in a file A696 changes, at A696's head
+(`7e824ae233`, re-checked at `623a2d59c4`; `git show origin/feat/a696-startup-zone-validation:<path>`). Every implementer re-runs
 the listing commands at their own head: line numbers move.
 
 - **FX**, the fixture grep: `FX='insert\((schema\.)?(locations|nodes|devices|workingOrders)\)|[Ii][Nn][Ss][Ee][Rr][Tt] [Ii][Nn][Tt][Oo] "?locations'`
@@ -3206,7 +3449,7 @@ reset (design §4, "Host files").
   changes one: the request's values are unchanged, only their nesting.
 - **Also must pass:** `pnpm --filter @waitron/server exec vitest run src/first-fiscal-setup.e2e.test.ts`.
   It cannot stay byte-for-byte unedited: its lines `:246-254` and `:368` build the claim from the
-  request's and the preview's `location` (read at `7e824ae233`). Task S16b edits the lines that build
+  request's and the preview's `location` (read at A696's head, `623a2d59c4`). Task S16b edits the lines that build
   the setup request, inside `:246-254` and `:368`, and changes no assertion; the diff of that file
   must show no other changed line (`git diff -U0 main -- apps/server/src/first-fiscal-setup.e2e.test.ts`).
   **S16's PR names this file and these lines.**
@@ -3232,7 +3475,7 @@ reset (design §4, "Host files").
   The country pack's `identity.locationName` (`setup-api.ts:589`, `venue-screen.ts:479`) is read
   unchanged: S19 renames `demo.locationName`.
 
-### The venue-request codemod (written in Task S16a, run in S16a–S16f)
+### The venue-request codemod (written in Task S16a, run in S16a–S16f2)
 
 A Node `.mjs` script kept outside the repo (its text pasted into the PR description as the receipt;
 not committed). It loads `typescript` with `createRequire(<worktree>/package.json)` (the root
@@ -3253,7 +3496,7 @@ has none of the four parent keys, so rule 1 leaves it.
 
 ### Files
 
-Every S16 file in the TSV, with what changes (lines at `7e824ae233`):
+Every S16 file in the TSV, with what changes (lines at A696's head, `623a2d59c4`):
 
 | File | Task | What changes |
 | --- | --- | --- |
@@ -3278,7 +3521,7 @@ Every S16 file in the TSV, with what changes (lines at `7e824ae233`):
 | `apps/server/src/provision.ts` | b | `:45` comment: "location" → "venue" |
 | `packages/fiscal-verifactu/src/setup/first-hour.ts` | b | `:40` `Context.venue` flat; `:382,390,455,470,474` reads |
 | `packages/fiscal-verifactu/src/venue-fields.ts` | b | `:53,88` field `"operationDescription"` |
-| `apps/server/src/recovery-backup-preview.ts` | c | `:3,62-70` reads `readVenue(store.venue)` instead of `locations where id = node.locationId`; `:37,94` `venueName` |
+| `apps/server/src/recovery-backup-preview.ts` | c | `:3,62-70` reads `readVenue(store.venue)` instead of `locations where id = node.locationId`; `:37,94` `venueName`. The refusal stays `restore.identity_unknown` (`:70-71`): a restored copy with no venue row, or with two, makes `readVenue` throw `venue.not_found` or `provisioning.second_venue`, which the setup app has no words for, so this one place catches those two codes and throws `restore.identity_unknown { nodeId }` as today |
 | `apps/server/src/restore.ts` | c | `:860-864` `resolveArtifactNode`: the node must exist in `nodes` (else `restore.identity_unknown`, same meaning); `locationId` filled by `venueLocationId(db)` until S18 drops it from `ProvisionedNode`; `:866-882` `readArtifactNode` stays (S18, with `ProvisionedNode`) |
 | `apps/server/src/restore-command.ts` | c | `:509` message: `venue ${venue.venueName}` |
 | `apps/setup/src/i18n/strings/restore.ts` | c | `restore.preview_location` → `restore.preview_venue` ("Venue" / "Local"); `restore_bucket.venue_details` placeholder `{location}` → `{venue}`; text "location" → "venue" in English |
@@ -3319,6 +3562,11 @@ Not in the TSV but changed by S16, because the request type change does not comp
   `adjustment-venue.ts:329`, `bill-venue.ts:137`, `boot-harness.ts:217`, `clock-venue.ts:39`,
   `party-venue.ts:107`, `signed-in-till.ts:67`, `stream-loop-scenario.ts:290`,
   `stream-pause-scenario.ts:308`, `venue-fixtures.ts:77`.
+  **Order:** once S16a flattens `VenueRequest`, a helper still nesting `location` no longer builds
+  the request S16a defines (its venue fields sit under a key the type no longer has), so a suite
+  that imports it can fail through the helper rather than its own lines. Each S16 task
+  therefore first flattens (with the codemod) any helper in this list that its own suites import
+  and an earlier task has not; S16f1 flattens the rest.
 - Guides: `apps/server/src/guide/en/backup-recovery.md:106` "its source, business, location," →
   "its source, business, venue," (the restore preview's label, Task S16c). Spanish `:117-118`
   already says "el local".
@@ -3436,7 +3684,10 @@ refusal's `locationName`; `venue-screen.demo-region.test.ts`'s `locationName` is
 
 - [ ] **Step 1: failing tests.** `apps/server/src/recovery-backup-preview.test.ts`: the preview's
   expected object has `venueName: <seeded venue name>` and no `locationName`; the existing
-  unknown-node case keeps `restore.identity_unknown` unchanged.
+  unknown-node case keeps `restore.identity_unknown` unchanged. Add "refuses a copy with no venue row
+  as an unknown identity": a backup copy whose `locations` table is empty gives
+  `restore.identity_unknown { nodeId }`, not `venue.not_found` (it passes before the change, where the
+  `where id = node.locationId` read finds no row, and pins that S16c keeps the code).
   `scripts/personal-log-params.test.ts:125` row becomes `["restore.stream_venue_unconfirmed.venueName",
   "the name of the venue"]`. Both fail before: the preview returns `locationName`, and the guard's
   `stalePairs` check (`personal-log-params.test.ts:535`) reports a `NOT_PERSONAL` entry whose key the
@@ -3487,7 +3738,8 @@ taxId, legalName, taxpayerDomicile, series codes, admin), `CLAIM_VENUE_FIELDS`.
 ### Task S16e: `apps/server` tests `src/[a-f]*` take the flat request
 
 **Files:** the 51 `apps/server/src/[a-f]*.test.ts` files the test grep names
-(`grep -E '^apps/server/src/[a-f]' <test grep output>`), minus those already done in S16b/S16c.
+(`grep -E '^apps/server/src/[a-f]' <test grep output>`), minus those already done in S16b/S16c,
+and the listed test helpers these suites import that S16b or S16c has not flattened.
 
 - [ ] **Step 1: the red check.** The test grep over these files prints lines (record the count);
   `pnpm --filter @waitron/server typecheck` lists errors in them.
@@ -3499,11 +3751,23 @@ taxId, legalName, taxpayerDomicile, series codes, admin), `CLAIM_VENUE_FIELDS`.
 - [ ] **Done-check:** the test grep over these files prints nothing.
 - [ ] **Commit:** `git commit -s -m "test: server suites a–f send the flat venue request"`.
 
-### Task S16f: the remaining `apps/server` tests and the test helpers
+### Task S16f1: the remaining test helpers and `apps/server` tests `src/[g-r]*`
 
-**Files:** the other 63 `apps/server` test files the test grep names (`src/[g-z]*`, `scripts/**`),
-and every helper in the "Test helpers" list above outside `packages/provisioning` and `apps/setup`.
-Same steps as S16e, then the whole-branch checks:
+**Files:** every helper in the "Test helpers" list above outside `packages/provisioning` and
+`apps/setup` that an earlier S16 task has not already flattened (header of this section: each task
+first flattens any listed helper its own suites import), and the 34 `apps/server/src/[g-r]*.test.ts`
+files the test grep names at `623a2d59c4` (`grep -E '^apps/server/src/[g-r]' <test grep output>`).
+Split from the first draft's S16f (63 test files plus the test helpers and the whole-package
+checks; review 1a, I5). Same steps as S16e.
+
+- [ ] **Commit:** `git commit -s -m "test: the server test helpers and suites g–r send the flat venue request"`.
+
+### Task S16f2: `apps/server` tests `src/[s-z]*`, `scripts/` and `test/`, and the slice's checks
+
+**Files:** the 25 `apps/server/src/[s-z]*.test.ts` files and the 4 under `apps/server/scripts/` and
+`apps/server/test/` that the test grep names at `623a2d59c4` (`scripts/demo-seed/allocation`,
+`scripts/demo-seed/seed-sales.dated`, `scripts/demo-seed/testing/provision-venue`,
+`scripts/throwaway-venue`, each `.test.ts`). Same steps as S16e, then the whole-branch checks:
 
 - [ ] `pnpm --filter @waitron/server typecheck` clean across the package; every typecheck of a package
   S16 touched (`provisioning`, `server`, `setup`, `fiscal-verifactu`) clean.
@@ -3511,7 +3775,7 @@ Same steps as S16e, then the whole-branch checks:
 - [ ] Fiscal pair; `first-fiscal-setup.e2e.test.ts`; `pnpm format:check`.
 - [ ] **Done-check for the slice:** `git grep -n -E "$P" --` every S16 TSV file prints only the
   exceptions named in Tasks S16a–S16d.
-- [ ] **Commit:** `git commit -s -m "test: remaining server suites and helpers send the flat venue request"`.
+- [ ] **Commit:** `git commit -s -m "test: the remaining server suites send the flat venue request"`.
 
 ### Open PRs touching S16's files (`gh pr list --state open`, full file lists from `gh pr diff <n> --name-only`, 2026-11-01)
 
@@ -3534,7 +3798,7 @@ own setup fields directly (the eleven venue fields beside `country`, `taxId`, `l
 the default menu travels outside `venue`'s keys as the top-level `defaultCatalogueId`. The module
 contract's `locationColumns` and its declarations go. Until the schema slices drop the columns, the
 import fills every column whose foreign key points at `locations` with the importing venue's one row
-(`venueLocationId(tx)`) — the one interim rule that replaces nineteen declarations (see S17a's
+(`venueLocationId(tx)`) — the one interim rule that replaces nineteen declarations (see S17a1's
 evidence below and "Carried to the schema plan"). The
 two CLAUDE.md rules and their topic sections are rewritten.
 
@@ -3548,6 +3812,9 @@ two CLAUDE.md rules and their topic sections are rewritten.
 - **Guards:** code guards, `scripts/id-columns-are-references.test.ts`,
   `scripts/claude-md-pointers.test.ts`, `apps/setup/src/setup-app-first-fiscal.test.ts`,
   `apps/server/src/first-fiscal-setup.e2e.test.ts`.
+- **A773-2 overlap (design §8 risk 9).** `docs/backlog/kitchen.md:296` gives
+  `locations.fire_control`'s removal to A773-2; S17 drops `fireControl` from the bundle. Whichever of
+  S17 and A773-2 lands second drops its own removal step for that field and says so in its PR.
 
 ### Files
 
@@ -3581,7 +3848,12 @@ Tests (25 files exercise the bundle: `git grep -l -E 'buildConfigurationBundle|i
 Not edited: `apps/server/src/testing/fixtures/configuration-v1-before-printing-retirement.json` — a real
 format-1 export kept to prove old files are refused (`configuration-import.test.ts:97-108`).
 
-### Task S17a: format 10 and the import's location fill
+### Task S17a1: format 10, the import's location fill, and the provisioning bundle tests
+
+Split from the first draft's S17a (review 1a, I5): the source change plus the provisioning
+package's six bundle tests here, and the other packages' eighteen bundle tests (one of them 8,253
+lines) in S17a2. Between the two commits the other packages' bundle tests are red, as expected;
+the branch is not pushed between them.
 
 **Interfaces — Consumes:** S1's `readVenue`, `readVenueClock`, `venueLocationId`; S16's flat venue.
 **Produces:** `ConfigurationBundle { version: 10; …; venue: PreparedVenue; defaultCatalogueId: string | null }`,
@@ -3601,16 +3873,18 @@ format-1 export kept to prove old files are refused (`configuration-import.test.
     `select location_id from departments` equals `venueLocationId(tx)`. Fails before at the version check.
   The existing ":5613 exports and imports all seven cell classes into another venue, remapping every id
   and the location" (`apps/server/src/configuration-transfer.test.ts`) must pass unchanged in its
-  assertions: it is the regression guard for the fill.
+  assertions: it is the regression guard for the fill (S17a2 runs it).
 - [ ] **Step 2:** `pnpm --filter @waitron/provisioning exec vitest run src/configuration-transfer.boundaries.test.ts` — FAIL.
-- [ ] **Step 3:** implement the rows marked "a"; update the bundle tests' fixtures to format 10 (the
-  25 files above: `version: 9` → `10`, `venue.location.X` → `venue.X`, `location.catalogueId` →
-  `defaultCatalogueId`, `fireControl` removed). An assertion that checked `fireControl` travels is
-  deleted (design §2.1: `fire_control` is deleted, unused); every other changed assertion names
-  design §4 "Configuration bundle".
-- [ ] **Step 4:** typecheck `@waitron/provisioning`, `@waitron/module`, `@waitron/db`, `@waitron/server`,
-  `@waitron/venue-service`, `@waitron/staffing`, `@waitron/workforce`, `@waitron/workforce-es`; run the
-  25 bundle tests with `pnpm --filter <pkg> exec vitest run <files>` per package — PASS.
+- [ ] **Step 3:** implement the rows marked "a"; update the six provisioning bundle tests' fixtures
+  (`configuration-import`, `configuration-transfer.boundaries`, `configuration-transfer.privacy-contact`,
+  `configuration-transfer.reader-slip-setting`, `configuration-transfer.security`,
+  `first-setup-command-import`) to format 10: `version: 9` → `10`, `venue.location.X` → `venue.X`,
+  `location.catalogueId` → `defaultCatalogueId`, `fireControl` removed. An assertion that checked
+  `fireControl` travels is deleted (design §2.1: `fire_control` is deleted, unused); every other
+  changed assertion names design §4 "Configuration bundle".
+- [ ] **Step 4:** typecheck `@waitron/provisioning`, `@waitron/module`, `@waitron/db`,
+  `@waitron/venue-service`, `@waitron/staffing`, `@waitron/workforce`, `@waitron/workforce-es`
+  (source only; the server's typecheck is S17a2's); run the six provisioning bundle tests — PASS.
 - [ ] **Step 5:** code guards; `pnpm exec vitest run scripts/id-columns-are-references.test.ts` (still
   green: all nineteen `location_id` columns the declarations listed are foreign keys to `locations`,
   read from each set's latest drizzle snapshot with a `jq` over `packages/*/drizzle/meta/*_snapshot.json`,
@@ -3619,6 +3893,27 @@ format-1 export kept to prove old files are refused (`configuration-import.test.
   `packages/db/src/configuration-transfer.ts:75` (`location_catalogues`, S23) and the interim fill's
   `venueLocationId` and `"locations"` lines in `packages/provisioning/src/configuration-transfer.ts`.
 - [ ] **Commit:** `git commit -s -m "configuration export: format 10 carries venue fields; the import fills the venue row itself"`.
+
+### Task S17a2: the other packages' bundle tests take format 10
+
+**Files:** the eighteen bundle tests outside `packages/provisioning` and `scripts/` in the list
+above: `apps/server` 11, `packages/catalogue` 3, `packages/db` 1, `packages/staffing` 1,
+`packages/venue-service` 2. `scripts/id-columns-are-references.test.ts` is S17b's.
+
+- [ ] **Step 1:** the same fixture edits as S17a1 Step 3, with its rule for a `fireControl`
+  assertion. The 8,253-line `apps/server/src/configuration-transfer.test.ts` holds 40 bundle-shape
+  lines; its ":5613 exports and imports all seven cell classes into another venue, remapping every
+  id and the location" must pass with its assertions unchanged.
+- [ ] **Step 2:** typecheck `@waitron/server`, `@waitron/catalogue`, `@waitron/db`,
+  `@waitron/staffing`, `@waitron/venue-service`; run the eighteen tests with
+  `pnpm --filter <pkg> exec vitest run <files>` per package (check free memory before the server's)
+  — PASS.
+- [ ] **Step 3:** code guards; `pnpm format:check`.
+- [ ] **Done-check:** the Tests paragraph's bundle-shape grep
+  (`venue\.location([^A-Za-z]|$)|location: \{|\.location\.|locationColumns|fireControl`) over the
+  eighteen files prints no line that builds or reads a bundle (a `location: {` that is not a bundle,
+  such as a bucket's, stays).
+- [ ] **Commit:** `git commit -s -m "test: bundle tests in every package take format 10"`.
 
 ### Task S17b: the setup app, the guard and the two rules
 
@@ -3716,7 +4011,7 @@ more, it is renamed for what else it seeds (for example `seedVenueWithMenu`) and
 | F3b | `apps/server/src/backup-deletion-alert.test.ts` |
 | F3c | `apps/server/src/boot.backup-recovery-pack.test.ts`, `boot.failed-start.test.ts`, `box-health.payments-off.test.ts`, `card-reader-delete.db.test.ts` |
 | F4c | `apps/server/src/payments-api.test.ts`, `printer-delete.db.test.ts` |
-| F5c | `apps/server/src/staff-notices.test.ts`, `start-backup-room-record.test.ts` |
+| F5c1 | `apps/server/src/staff-notices.test.ts`, `start-backup-room-record.test.ts` |
 | F5d | `apps/server/src/till-api.zone-required.test.ts` |
 | F5e | `apps/server/src/testing-zone-offers.test.ts`, `till-reroute-e2e.test.ts` |
 | none | `apps/server/scripts/allergens-demo.ts`, `daily-close-demo.ts`, `daily-close-z-demo.ts`, `modelo-303-demo.ts`: demo scripts, not tests; they import no test helper, so nothing clashes (S2-4 and S19 own them) |
@@ -3739,7 +4034,12 @@ the schema slices), so F3/F4 do not wait for F5's helper tasks and no two F slic
 - [ ] **Step 4:** typecheck each touched package (`pnpm --filter <pkg> typecheck`); run the same
   files — PASS with the same `Tests N passed` as Step 1 (no test deleted, skipped or added).
 - [ ] **Step 5:** `git diff -U0 <base> -- <task files> | /usr/bin/grep -E '^[-+].*expect\('` prints
-  nothing (no assertion changed); `pnpm format:check`.
+  nothing (no assertion changed), with one exception: an `expect(` line whose only change renames
+  an identifier the hand-edit recipe replaced (`location!.id` → `venueId`, both naming the venue
+  row's id), its value unchanged. Each such line is listed in the commit message, before and after.
+  The F1 recipe "`B` still referenced" produces them: 237 `expect(` lines in `apps` and `packages`
+  tests name a location id (`git grep -n -E 'expect\(.*(LOCATION|locationId|location!?\.id|venue!?\.id)' -- 'apps/*.test.ts' 'packages/*.test.ts'`,
+  the same count at `abfe271663` and `623a2d59c4`). `pnpm format:check`.
 - [ ] **Step 6: done-check.** `git grep -n -E "$FX" -- <task files>` prints only the category-1 lines
   listed in the commit message. The design grep `P` over the task's files may still print categories
   2–5.
@@ -3765,7 +4065,7 @@ an unquoted list is one argument in zsh).
 
 | File | Task | Change |
 | --- | --- | --- |
-| `packages/venue-service/src/testing/zone-menus.ts` | F2a | `:75-79` reads `locations.dayCutover` by `cfg.locationId` → `readVenueClock(tx)`'s day start (the one non-seed change F2 makes: a test helper reading a venue setting, which no code slice lists); `:28` is S6's (`zoneServicePolicies.locationId`) |
+| `packages/venue-service/src/testing/zone-menus.ts` | F2a | `:75-79` reads `locations.dayCutover` by `cfg.locationId` → `readVenueClock(tx)`'s day start (the one non-seed change F2 makes: a test helper reading a venue setting, which no code slice lists; amendment 11); `:28` is S6's (`zoneServicePolicies.locationId`) |
 | `packages/adjustments/test/seed.ts` | F2e | `:10-17` `insert(locations)` + order → `seedVenue` + `seedWorkingOrder` |
 | `packages/payments/test/seed.ts` | F2e | `:55-69` venue, node, device, order → F1 helpers; returned `locationId` kept |
 | `packages/bookings/src/testing/fake-core.ts` | — | `:31,76` `cfg.locationId` (category 4, S18); no change |
@@ -3775,7 +4075,7 @@ an unquoted list is one argument in zsh).
 | `packages/identity/test/fixtures.ts` | F2f | `:18-22` venue + device → `seedVenue` + `seedDevice` |
 | `packages/recipes/test/fixtures.ts` | F2f | `:26-31` venue + node → helpers |
 | `packages/provisioning/test/allocated-venue.ts` | — | `:61` `ProvisionedNode` (S18); no change |
-| `packages/provisioning/test/configuration-bundle.ts` | — | bundle shape (S17a) |
+| `packages/provisioning/test/configuration-bundle.ts` | — | bundle shape (S17a1) |
 | `packages/provisioning/test/first-setup-request.ts`, `start-again-attempt.ts` | — | request shape (S16a) |
 | `packages/reporting/test/fixtures.ts` | F2g | `:56-72,84,93-94` venue, device, node → helpers; `:470,501-505,550-554` module/order rows (S24/S27, or `seedWorkingOrder` where it is an order) |
 | `packages/reporting/test/tender-refund-fixtures.ts` | — | `:76` a refund's `locationId` (S27's table); no change |
@@ -3877,7 +4177,11 @@ one; a raw statement on a `DatabaseSync` stays and is listed (the schema slices 
 | F4a | `git grep -l -E "$FX" -- 'apps/server/src/[g-l]*.test.ts'` | 19 | — (`location-settings-api.orders-open.test.ts` is renamed by S1; take its new name) |
 | F4b | `… -- 'apps/server/src/[m-o]*.test.ts'` | 26 | **#2375**: `management-hours-api.test.ts` |
 | F4c | `… -- 'apps/server/src/p*.test.ts'` | 25 | — |
-| F4d | `… -- 'apps/server/src/r*.test.ts'` | 29 | **#2375**: `restore-command.archive.test.ts` |
+| F4d1 | `… -- 'apps/server/src/re[a-r]*.test.ts'` (`recovery*`, `report*`) | 14 at `623a2d59c4` | — |
+| F4d2 | `… -- 'apps/server/src/re[s-z]*.test.ts'` (`restore*`, `retire*`) | 15 at `623a2d59c4` | **#2375**: `restore-command.archive.test.ts` |
+
+F4d1 and F4d2 split the first draft's F4d (`r*`, 29 files; review 1b, M4). Every `r*` test that `FX` selects starts `re`:
+`git grep -l -E "$FX" -- 'apps/server/src/r[a-df-z]*.test.ts'` prints nothing at `623a2d59c4`.
 
 ---
 
@@ -3886,9 +4190,9 @@ one; a raw statement on a `DatabaseSync` stays and is listed (the schema slices 
 - **Goal / area.** The design gives F5 "78 `apps/server` files plus the rest". At `abfe271663` it is
   **67** test files under `apps/server/src/[s-z]*` that insert (40 `t*`, 27 `s*`/`v*`/`w*`;
   `src/testing/` holds no inserting test), plus 4 `apps/server/scripts/` tests and the helpers. The
-  `z*` tests are F5c's too: at main the only one, `zone-access.finished-party.test.ts`, matches
+  `z*` tests are F5c2's too: at main the only one, `zone-access.finished-party.test.ts`, matches
   nothing; A696 (#2369) adds `zone-*` tests, of which `zone-core-capabilities`,
-  `zone-economic-boundaries` and `zone-webhook-admission` insert (FX at `7e824ae233`).
+  `zone-economic-boundaries` and `zone-webhook-admission` insert (FX at `623a2d59c4`).
   Root `scripts/`: only `scripts/behavioural-triggers.test.ts` seeds these rows;
   `scripts/write-path-tables.test.ts:337` matches FX only inside a string literal the guard's own
   matcher is tested on, not a seed, and stays. `apps/dashboard` and `apps/till`: no test inserts any
@@ -3902,25 +4206,25 @@ brackets.
 
 | File | Task | Change |
 | --- | --- | --- |
-| `apps/server/src/testing/adjustment-venue.ts`, `bill-venue.ts`, `clock-venue.ts`, `party-venue.ts`, `signed-in-till.ts`, `venue-fixtures.ts` | — | provision through `applyVenue` (no insert); request literal (S16f); `cfg.locationId`, `assignCatalogueToLocation` (S18, S5); no F5 change |
+| `apps/server/src/testing/adjustment-venue.ts`, `bill-venue.ts`, `clock-venue.ts`, `party-venue.ts`, `signed-in-till.ts`, `venue-fixtures.ts` | — | provision through `applyVenue` (no insert); request literal (S16); `cfg.locationId`, `assignCatalogueToLocation` (S18, S5); no F5 change |
 | `allocated-contract.ts` | — | `:63-83,97-101` copies a primary's `locations` and `nodes` rows into a standby's database with their ids, which `seedVenue` would not keep (S3/S4's standby path); listed, not changed |
 | `allocated-provision.ts`, `dormant-contract.ts` (`:22,31,70`), `staged-hour-crash.ts`, `staged-hour-restore.ts`, `stream-loop-scenario.ts:466` | F5a/F5b | `ProvisionedNode` lines (S18) stay; `dormant-contract.ts:39` `insert(nodes)` → `seedNode` |
 | `backup-verification-fixture.ts` | F5a | `:187-193` venue and node → helpers; `:50` the fixture node's `locationId` (S18) |
-| `boot-harness.ts` | F5a | `:57-65,335-341` venue and node inserts → helpers with the ids `TILL_ENV`/`KEY_ENV` name (pass them as overrides); `:217` request (S16f) |
+| `boot-harness.ts` | F5a | `:57-65,335-341` venue and node inserts → helpers with the ids `TILL_ENV`/`KEY_ENV` name (pass them as overrides); `:217` request (S16) |
 | `clear-provision-fixture.ts` | — | `:51-54` table list for clearing (S23/S28 rename the tables) |
 | `fiscal-fixtures.ts` | F5a | `:111-118` venue, device, node → helpers; `:52,76-78` (S27) |
 | `floor-sets.ts`, `floor-today-venue.ts`, `kitchen-allergy-fixture.ts`, `live-table.ts`, `service-steps.ts`, `service-zone.ts` | — | module rows and `cfg` (S7, S24, S18) |
 | `full-invoice-fixture.ts` | — | `:69` text "Current mutable location address" (S19) |
 | `session-device.ts` | F5b | `:28-35` stops passing `locationId` to `seedDevice` (F1's helper fills it); `:81-89` `dashboardOrderAt(locationId)` is order values for tests' own inserts (category 2/5, S27); signature kept |
 | `split-extras-venue.ts` | F5b | `:49-57` venue and node → helpers |
-| `stream-pause-scenario.ts` | F5b | `:360` `insert(devices)` → `seedDevice`; its request literal is S16f's and its catalogue lines S5's |
+| `stream-pause-scenario.ts` | F5b | `:360` `insert(devices)` → `seedDevice`; its request literal is S16's and its catalogue lines S5's |
 | `theme-logo.ts`, `zone-offers.ts`, `zone-process-child.ts` | — | module rows, a second location (`theme-logo.ts:70-131`, category 1), a settings read/write (S1) |
 | `fixtures/configuration-v1-before-printing-retirement.json` | — | frozen format-1 export (S17 section) |
 | `apps/server/test/attendance-export-fixture.ts` | F5b | `:15` `insert(locations)` → `seedVenue`; its attendance lines are S13's |
 | the other eight `apps/server/test/*.ts` | — | request/preview shape (S16) or `ProvisionedNode` (S18); none matches FX (`git grep -n -E "$FX" -- 'apps/server/test/*.ts'` prints only `attendance-export-fixture.ts:15`) |
 | `apps/server/scripts/cloud-backup-fixture.ts`, `cloud-recovery-client-fixture.ts` | — | read `locations.name`/`id` from a restored copy (S1's `readVenue`, S18) |
-| `apps/server/scripts/cloud-integration-fixture.ts` | — | request (S16f); `:138-142` reads a node's location (S18) |
-| `apps/server/scripts/testing/venue.ts`, `demo-seed/testing/provision-venue.ts` | — | request (S16f); `locationName` fixture key (S19) |
+| `apps/server/scripts/cloud-integration-fixture.ts` | — | request (S16); `:138-142` reads a node's location (S18) |
+| `apps/server/scripts/testing/venue.ts`, `demo-seed/testing/provision-venue.ts` | — | request (S16); `locationName` fixture key (S19) |
 | `apps/server/scripts/demo-seed/testing/madrid-semantics.ts` | — | canonical keys of the Madrid capture (schema slices) |
 | `apps/dashboard/test/attendance-fixtures.ts`, `apps/dashboard/test/hours-fixtures.ts`, `apps/dashboard/test/manager-hours-fixtures.ts`, `apps/till/test/attendance-fixtures.ts`, `apps/till/test/clock-app.ts`, `apps/till/test/hours-fixtures.ts`, `apps/dashboard/src/testing/department-receipt-app-fixture.ts` | — | API mocks, not database seeds: the attendance and hours fixtures change with S15; `department-receipt-app-fixture.ts:114` mocks `/management-api/location-settings`, renamed by S1 (S1 or S19 updates the mock's path) |
 | `apps/setup/test/*.ts` | — | S16 |
@@ -3934,11 +4238,19 @@ Run every test file that imports a changed helper
 ### Task F5b — helpers `apps/server/src/testing/[p-z]*`, `apps/server/test/*`
 The F5b rows above; same check over the importing tests.
 
-### Task F5c — `apps/server/src/[svwz]*` (27 at main, plus A696's `z*` tests), the four `apps/server/scripts` tests, and the root seed
-`git grep -l -E "$FX" -- 'apps/server/src/[svwz]*.test.ts' 'apps/server/scripts/**/*.test.ts'`
+### Task F5c1 — `apps/server/src/s*` (18 at `623a2d59c4`)
+`git grep -l -E "$FX" -- 'apps/server/src/s*.test.ts'`. F5c1 and F5c2 split the first draft's F5c
+(the `[svwz]*` tests, the four `apps/server/scripts` tests and the `behavioural-triggers` builder;
+review 1b, M4).
+
+### Task F5c2 — `apps/server/src/[vwz]*` (15 at `623a2d59c4`, A696's `z*` tests among them), the four `apps/server/scripts` tests, and the root seed
+`git grep -l -E "$FX" -- 'apps/server/src/[vwz]*.test.ts' ':(glob)apps/server/scripts/**/*.test.ts'`
 (scripts: `demo-seed/seed-adjustments.test.ts`, `dev-setup.test.ts`, `restore-allocation.test.ts`,
-`script-device.test.ts`). `dev-setup.test.ts:538-544` seeds a separate store's `venue` handle: use
-F1's helpers on `store.venue`.
+`script-device.test.ts`). The pathspec needs `:(glob)`: without it git reads `**/` as needing at
+least one directory, so `'apps/server/scripts/**/*.test.ts'` selects only
+`demo-seed/seed-adjustments.test.ts` (1 file at `623a2d59c4`; 4 with `:(glob)`).
+`dev-setup.test.ts:538-544` seeds a separate store's `venue` handle: use F1's helpers on
+`store.venue`.
 `scripts/behavioural-triggers.test.ts` runs raw SQL on a `DatabaseSync` (`:454`), which F1's drizzle
 helpers cannot take. Its orders already go through one builder (`workingOrder`, `:213-223`). F5 adds
 the same for devices: a `device(id, profileId, label, active)` builder beside `workingOrder` that
@@ -3962,12 +4274,102 @@ only: whoever lands second rebases.
 `adjustment-venue.ts`, `bill-venue.ts`, `kitchen-allergy-fixture.ts`, `party-venue.ts`,
 `signed-in-till.ts` and adds `zone-process-child.ts`.
 
-**F5 slice done-check:** `git grep -n -E "$FX" -- 'apps/server/src/[s-z]*.test.ts' 'apps/server/src/testing/**' 'apps/server/test/**' 'apps/server/scripts/**/*.test.ts' 'apps/server/scripts/**/testing/**' 'scripts/*.test.ts'`
+**F5 slice done-check:** `git grep -n -E "$FX" -- 'apps/server/src/[s-z]*.test.ts' 'apps/server/src/testing/**' 'apps/server/test/**' ':(glob)apps/server/scripts/**/*.test.ts' ':(glob)apps/server/scripts/**/testing/**' 'scripts/*.test.ts'`
+(`:(glob)` as in F5c2: `'apps/server/scripts/**/testing/**'` without it misses
+`apps/server/scripts/testing/venue.ts`, checked with `git ls-files`)
 prints only category-1 lines (listed), `allocated-contract.ts`'s standby copy, `behavioural-triggers.test.ts`'s
 `locations` rows (S23), and `write-path-tables.test.ts:337`. (The demo scripts under
 `apps/server/scripts/` that insert venue rows — `allergens-demo.ts`, `daily-close-demo.ts`,
 `daily-close-z-demo.ts`, `modelo-303-demo.ts`, `script-device.ts` — are S2's and S19's, not fixtures.)
 
+
+---
+
+## Cloud follow-up
+
+What Waitron Cloud reads or writes of a Waitron location, which A1301 slice changes it, and what
+Cloud has to change. Read on 2026-11-01 at Cloud `main` `531dacfb`, Cloud branch
+`feat/test-cloud-integration` `28dac3f2` (lane D, not merged), Waitron `main` `0160250f67`, and the
+plan and design at `waitron-docs-a1301-plan` `aa37eb6e8f`. Search:
+`git -C waitron-cloud grep -nE 'locations|location_id|locationId|readLocationClock|LocationId|WAITRON_TILL_LOCATION_ID|localVenueId|management-api/locations|getLocations|location_settings|LocationDraft|venue\.location'`,
+run on `main` and on every local Cloud branch (only `feat/test-cloud-integration` adds a real
+consumer). No Cloud file names `LocationId`, `/management-api/locations`, `getLocations`,
+`location_settings` or `LocationDraft`.
+
+**When a Waitron change reaches Cloud.** Cloud does not follow Waitron's `main`. It reaches Waitron
+in three ways, and each row's last column assumes the right one:
+
+- **Pinned commits.** The cost model replays at `fbadd15785` (`scripts/cloud-cost/conformance-prepare.mjs:13`,
+  2026-10-13) and runs the browser check at `99c265981b` (`:14`, chosen at `:52`). The test-Cloud
+  verifier image and lane D's integration run use `ec91a9e34d` (`deploy/test-cloud/verifier-authorised.test.mjs:15`;
+  `scripts/test-cloud-integration.mjs:15` on the branch). A slice breaks these only when Cloud moves
+  the pin past it.
+- **Whatever checkout the operator names in `WAITRON_CHECKOUT`.** This covers the local proof scripts
+  (`scripts/test-local-backups.mjs:45`, `test-local-remote.mjs:27`, `test-waitron-pairing.mjs:12`,
+  `test-waitron-translation.mjs:38`, `prepare-waitron-stream-fixture.mjs:6`,
+  `backup-transfer-receipt.mjs:22`). These break on the first run against a Waitron `main` that
+  includes the slice.
+- **The wire.** At pairing a Waitron box sends `localVenueId`, which is `tradingContext.locationId`
+  (Waitron `apps/server/src/boot.ts:2759,2768`). Waitron signs it into the pairing bytes
+  (`apps/server/src/cloud-client.ts:269-276`) and uses it as the key under which its backup stream
+  is stored (`packages/stream/src/names.ts:26-28`, `venues/<venueId>/`). Cloud keeps it.
+
+**Two of the pins already predate a Waitron change that is not part of A1301.** `fbadd15785` and
+`ec91a9e34d` both come before Waitron #2198 (`b1b0f10952`, 2026-10-29, "Keep only the node setting
+for box identity"); checked with `git merge-base --is-ancestor`. #2198 removed
+`WAITRON_TILL_LOCATION_ID` and `WAITRON_TILL_NODE_ID` and left `WAITRON_NODE_ID` as the only
+identity setting. The rows marked "#2198" therefore break on any pin move, whether or not A1301 has
+landed.
+
+| Cloud file:line | Uses | Waitron slice that changes it | Cloud change | Lands with/after |
+| --- | --- | --- | --- | --- |
+| **Area: cost model (`scripts/cloud-cost/`). Lane G reported it as D466 / Cloud PR 711.** | | | | |
+| `scripts/cloud-cost/conformance-prepare.mjs:20` | imports `tenants,locations` from Waitron `packages/db/src/schema/tenants.ts` (at the replay pin) | **S23** creates `venue_settings` and moves the venue's settings into it. `locations` stays, but only its id is read (design §6, S23 row). **S28** drops `locations` (design S28; `file-assignment.tsv:433` gives `tenants.ts` to S28) | Remove `locations` from the import list. Import whatever writes the venue at the new pin, either `venue_settings` (S23) or F1's `seedVenue` (`packages/db/src/testing/seed.ts`, F1's "Helper API" above) | Moving `replayRevision` past S23. Required past S28 |
+| `scripts/cloud-cost/conformance-prepare.mjs:25`; `scripts/cloud-cost/fixtures/source-clock-conformance.test.mjs:39,44` | imports `readLocationClock` from `packages/reporting/src/business-day.ts` and calls `readLocationClock(tx, locationId)`. The fixture inserts rows into `location_day_cutover_changes(location_id,…)` | **S1** adds `readVenueClock(tx)` in `packages/db/src/venue.ts` (S1's "API" above). `readLocationClock` stays until **S18** (S1's Files table above; design S18 row). **S23** renames the table to `day_cutover_changes` (design S23 row) | Call `readVenueClock(tx)` from `@waitron/db` with no id. Insert into `day_cutover_changes` with no `location_id` | Possible from S1. Required once the pin passes S18 (the function) and S23 (the table) |
+| `scripts/cloud-cost/waitron-adapter.mjs:56-67,103-110` | builds a venue by inserting directly into `tenants`, `locations` (from `initial.location`: name, invoiceLocales, operationDescription, timeZone, dayCutover) and `nodes` with `locationId` | **S23**: `readVenue` reads `venue_settings`, so a venue made by a bare `locations` insert is incomplete. **S25** drops `nodes.location_id`. **S28** drops `locations` | Create the venue with Waitron's `seedVenue`/`seedNode` (F1) or `provisionVenue`. Drop `locationId` from the `nodes` insert. Flatten `initial.location` into venue fields, matching S16's request shape (S16's "The new request shape" above) | Moving the pin past S23. Required past S25 and S28 |
+| `scripts/cloud-cost/waitron-adapter.mjs:113` | writes `WAITRON_TILL_NODE_ID` and `WAITRON_TILL_LOCATION_ID` into `trading.env` | **Not A1301: #2198** removed both settings. Since then Waitron reads only `WAITRON_NODE_ID` (`apps/server/src/trading-config.ts:31-35`) | Write `WAITRON_NODE_ID` only | Any move of `replayRevision` past `b1b0f10952`, now, ahead of A1301 |
+| `scripts/cloud-cost/local.mjs:171-182` (`readReplayClock`) | `SELECT time_zone, day_cutover FROM locations WHERE id=?` and `location_day_cutover_changes WHERE location_id=?` on a captured Waitron `venue.db` | **S23** moves the time zone and day cut-over into `venue_settings` and `day_cutover_changes` and drops the old side tables | Read the one `venue_settings` row and `day_cutover_changes`, with no id | Moving the pin past S23 (the captured database follows the pin) |
+| `scripts/cloud-cost/private-replay.mjs:33`, `source-bills.mjs:73-75`, `source-days.mjs:24` | `JOIN nodes n … WHERE n.location_id=?`; `SELECT id FROM locations WHERE id=?` | **S25** (`nodes.location_id`), **S28** (`locations`) | Remove the location filter, since a database holds one venue. Stop passing `locationId` through `isolated-replay.mjs:91,109,174`, `run-local.mjs:26`, `local.mjs:148-152,200,210`, `private-replay.mjs:24,74,104-119` and `fixtures/streamed-day-smoke.mjs:32-33,42`. Update the synthetic schemas in `source-bills.test.mjs:23-25`, `source-days.test.mjs:37-39,105` and `source-clock.test.mjs:24-26,76-100`, plus the `locationId` arguments in `fixtures/*-conformance.test.mjs` | Moving the pin past S25. Required past S28 |
+| `scripts/cloud-cost/fixtures/remote-browser-backend.mjs:14-16,28,31` | provisioning request with `location: {name, fiscalTerritory, …}`; `mountReportApi(…, cfg: {nodeId, locationId})`; `mountCatalogueApi(…, venueCfg: {nodeId, locationId})`; `provisioned.locationId`. Runs at `browserRevision` `99c265981b` | **S16** flattens the request (S16's "The new request shape" above). **S5** changes the catalogue API (`catalogue-api.ts`). **S11c** changes `report-api.ts`. **S18** removes `cfg.locationId` and `ProvisionedNode.locationId` (the F tasks' category 4 above) | Send the flat request once the pin passes S16. Drop `locationId` from both `cfg` objects once it passes S18 | Moving `browserRevision` past S16, then past S18 |
+| **Area: backup and storage proofs (`scripts/test-local-backups.mjs`, `scripts/backup-stream-probe.mjs`, `deploy/test-cloud` snapshot fixtures)** | | | | |
+| `scripts/test-local-backups.mjs:174-176` (`databaseHead`) | hashes `SELECT id,name FROM locations` and `SELECT id,location_id,public_key FROM nodes` from a Waitron `venue.db` | **S23** moves the name into `venue_settings`. **S25** drops `nodes.location_id`. **S28** drops `locations` | Hash the venue's settings row and `nodes(id,public_key)` | Must land with S25 and S28 in the reset window (it runs against `WAITRON_CHECKOUT`) |
+| `scripts/test-local-backups.mjs:631`; `scripts/backup-stream-probe.mjs:230,257,261` | `UPDATE locations SET name=?`, a change marker that makes the stream ship a new generation | **S23**: the venue name is read from `venue_settings`. **S28** drops `locations`, so the update fails | Write the marker to the venue's name in `venue_settings`, or to any other row that is streamed | After S23. Required by S28 |
+| `scripts/test-local-backups.mjs:451,609,681,729` | `localVenueId` from Waitron's `cloud-capture-client-fixture.ts` / `cloud-recovery-client-fixture.ts`. The pointer key is `venues/<localVenueId>/current.json` | Waitron's `cloud-recovery-client-fixture.ts:152-160` reads `locations.id` and requires `nodes.locationId` to equal it. F5's table above sends that to S1's `readVenue` and to S18. What the id becomes is **gap 1** below | No change if Waitron keeps sending the same UUID under the same name. Otherwise follow the new name or value | After Waitron decides gap 1, before S28 |
+| `deploy/test-cloud/test-fixtures/snapshot-archive.mjs:17,19`; `deploy/test-cloud/test-fixtures/snapshot-authorised-archive.test.ts:35` | `provisionVenue` request with `venue.location: {…}`; `writeTradingEnv(root, {nodeId, locationId: provisioned.locationId, …})` (verifier pin `ec91a9e34d`) | **S16** flattens the request. **S18** removes `TradingConfig.locationId` (`file-assignment.tsv:361`) and `ProvisionedNode.locationId` | Send the flat request. Drop `locationId` from `writeTradingEnv` | Moving the verifier pin past S16, then past S18 |
+| **Area: pairing, remote access and translation proofs** | | | | |
+| `scripts/test-waitron-pairing.mjs:19,26,49,54,67`; `scripts/test-waitron-translation.mjs:43,72,100,191`; `scripts/test-local-remote.mjs:45,48` | run Waitron's `apps/server/scripts/cloud-integration-fixture.ts` and read `ready.localVenueId`. Pairing checks `status.localVenueId` and puts it into the signed `waitron-cloud-pair-v1` bytes (`test-waitron-pairing.mjs:67`) | In the fixture, the request at `:61` changes in **S16f1** (S16's "Test helpers" list above). The read of `nodes.location_id` at `:136-142` is assigned to **S18** (F5's table above), and the column goes in **S25**. What the value becomes is **gap 1** | None if `ready.json` keeps `localVenueId` holding the same UUID. Otherwise follow the new name | Gap 1's decision, then S18/S25 on `WAITRON_CHECKOUT` |
+| Cloud's own `localVenueId` handling: `apps/portal/src/pairing-types.ts:2,11`, `pairing-controller.ts:45`, `pairing-screen.ts:19` (shown to the owner when they approve), `recovery-types.ts:2,15,34`, `recovery-controller.ts:37`; `packages/backups/src/managed-streams.ts`, `replacement.ts`, `recovery.ts`; `packages/account-http/src/managed-streams.ts`, `recovery.ts` (stored as `local_venue_id`) | treats Waitron's `localVenueId` as an opaque UUID that Waitron supplies (Waitron `boot.ts:2759,2768`) | **S18** removes `TradingContext.locationId` (the F tasks' category 4 above). No slice says what `localVenueId` becomes (**gap 1**) | None if the value stays a stable UUID under the same field name. A new value orphans paired venues and stream pointers, which pre-live resets accept | Gap 1's decision |
+| **Area: test-Cloud integration (lane D, `feat/test-cloud-integration`, not merged; lane D reported it as D79)** | | | | |
+| `deploy/test-cloud/test-fixtures/integration-venue.mjs:32,35`; `integration-control.mjs:48`; `integration-stream.mjs:41,70,76` | import the pinned `cloud-integration-fixture.ts` and use `ready.localVenueId`, including as the stream pointer's key (`readPointer(…, ready.localVenueId)`) | At `ec91a9e34d` the fixture copies `localVenueId` from `env.WAITRON_TILL_LOCATION_ID` (`git show ec91a9e34d:apps/server/scripts/cloud-integration-fixture.ts`, `:126,143,152`). Since **#2198** it reads `nodes.location_id` (main `:136-142`). Then **S18** and **S25**, and **gap 1** | None while pinned. After #2198 the `ready.json` key is unchanged. Past S25, follow gap 1 | Gap 1's decision, before the pin passes S25 |
+| `deploy/test-cloud/test-fixtures/integration-recovery-authority.mjs:18`; `integration-authorised-recovery.test.ts:118,121`; `integration-continuous-recovery.test.ts:126,129` | read `saved.WAITRON_TILL_LOCATION_ID` / `trading.WAITRON_TILL_LOCATION_ID` from the venue's `trading.env` (and `WAITRON_TILL_NODE_ID`) | **Not A1301: #2198** removed both settings. The restored `trading.env` now holds only `WAITRON_NODE_ID` | Take `localVenueId` from `ready.json` or Cloud's status, and the node from `WAITRON_NODE_ID` | Any move of the pin past `b1b0f10952`, now, ahead of A1301 |
+
+**Excluded: Cloud's own uses of the word "location", which do not refer to a Waitron location.**
+- Cloud's `backup_locations` table and S3 storage-location objects `{endpoint,bucket,region}`:
+  `packages/backups/src/catalogue.ts:286,469`, `managed-streams.ts:209`, `verification-admission.ts:33`,
+  `packages/account-http/src/backups.ts:48`, `packages/registration/migrations/011_managed_backups.sql`,
+  `012`, `018`, and their tests.
+- `venue.location` meaning a bucket location: `deploy/test-cloud/test-fixtures/snapshot-client.mjs:29`,
+  `scripts/test-local-backups.mjs:503,686-885`, `storage-client.mjs:43`.
+- `grant(location, scope)` in `test-local-remote.mjs:112,132,142`.
+- Words that only contain the letters: `allocations`/`allocationId`/`allocation_id`
+  (`packages/registration/migrations/038_fiscal_allocation_registry.sql`, `fiscal-registry-schema*`,
+  `retained-fiscal-registry.ts`, `deploy/test-cloud/storage-*.test.mjs`, `scripts/ci-backup-storage-*.test.mjs`).
+- Prose: `packages/account-http/README.md:460`, `packages/registration/src/country-policy.ts:31`,
+  `packages/backups/test/storage.test.ts:86`, and Cloud `docs/` (not searched for consumers).
+
+### Waitron-side gaps, and where this plan takes them
+
+1. **What `localVenueId` becomes** (the table's "gap 1"): folded into "Carried to the schema plan
+   (S20–S28)" above as the OPEN DESIGN POINT "the venue's stable id", merged with the backup
+   bucket key, to settle before S18, with the controller's recommendation (the venue keeps a stable
+   id that a restore carries, today's location id moved onto the venue row, so neither the bucket
+   folder nor Cloud's pairing value changes).
+2. **`WAITRON_TILL_LOCATION_ID`**: nothing for Waitron to do. #2198 (`b1b0f10952`) removed it;
+   `git grep -n WAITRON_TILL_LOCATION_ID 0160250f67` prints only two historical plans
+   (`docs/superpowers/plans/2026-10-27-a1154-node-registration.md:28`,
+   `2026-10-29-a1167-start-deletes-backups.md:114`). Cloud's two older pins (`fbadd15785`,
+   `ec91a9e34d`) predate #2198, so they break on their next move whether or not A1301 has landed.
+3. **`TradingConfig.locationId`**, left over from #2198: "Notes for S18" above.
 
 ---
 
@@ -3984,7 +4386,8 @@ could not be applied exactly as written.
    S2-5, so S1 touches neither the readers nor their callers. S1 keeps renaming the type
    `LocationAddress` → `VenueAddress`: the name is shared with `addressLines` and
    `receiptAddressLines` (S1's), and the rename changes nothing `readLocationAddress` does. The S2
-   part had treated all three readers as S1's; its "allowed leftover" lines were rewritten.
+   part had treated all three readers as S1's; its "allowed leftover" lines were rewritten. Review 1
+   (1a, I4) then moved a fourth, `readReceiptAddress`, to S2-5 by the same rule (amendment 1).
 2. **S5's `departmentReceiptLanguages` `cfg`.** The S5 part said the parameter becomes unused once
    `readReceiptLanguage` loses its id. At A696's head it does not:
    `apps/server/src/department-receipt-languages.ts:27` still passes `cfg` to
@@ -4018,8 +4421,9 @@ could not be applied exactly as written.
 6. **D8 (`z*` tests).** At main the only `apps/server/src/z*` test is
    `zone-access.finished-party.test.ts`, which matches neither the fixture grep nor a location word.
    The `zone-*` tests that seed rows are added by A696 (#2369): `zone-core-capabilities`,
-   `zone-economic-boundaries` and `zone-webhook-admission` insert at `7e824ae233`. F5c's glob is now
-   `[svwz]*`.
+   `zone-economic-boundaries` and `zone-webhook-admission` insert at `7e824ae233` (and at
+   `623a2d59c4`). F5c's glob became `[svwz]*`; review 1 then split it into F5c1 (`s*`) and F5c2
+   (`[vwz]*`).
 7. **D9 (local `seedVenue`).** The 28 files are mapped to the F task whose glob holds them (table
    under "The fixture slices F2–F5"); F1's codemod reports them and adds no import there. Four of the
    28 are demo scripts under `apps/server/scripts/`, not tests; they import no test helper, so nothing
@@ -4042,9 +4446,55 @@ could not be applied exactly as written.
 12. **D7.** The F tasks' "take this task after #2375 lands" and "run after A1268 lands" were
     removed; the overlaps stay listed so the rebase is expected.
 13. **D2.** The S5–S8 part's advice that code slices start after, or wait for, the F tasks owning
-    their tests was removed.
+    their tests was removed. Review 1 (1b, I4) extended D2's header rule to another slice's case in
+    a shared database.
 14. **Coverage check.** Every file `file-assignment.tsv` gives to S1–S12, S16, S17 or an F slice (355
     rows) appears in this plan by full path (269) or by a path suffix or base name inside its slice's
     section (86); seven listed only in brace form were written out in full. Script:
     `python3 ~/waitron-campaign/a1301/scripts/plan-coverage.py <plan> ~/waitron-campaign/a1301/file-assignment.tsv`
     (prints `missing: 0`).
+15. **D11 relaxed by review 1 (1b, M7).** D11 ordered S1 → S5 → S6 → S7. The reads behind it do not
+    hold as a compile dependency (S6 leaves S5's line alone; S7's edit in S6's file touches nothing
+    S6 changes), and the owner's coordination rule makes overlap a rebase, so S5–S8 now depend on S1
+    only. The table and the S5, S6, S7 sections say so.
+
+---
+
+## Appendix: Review 1 folds
+
+`~/waitron-campaign/a1301/review-plan-1a.md` (1a: header, S1–S4, S16, S17, F1) and
+`review-plan-1b.md` (1b: S5–S12d, F2–F5). Each finding's evidence was re-read or re-run at A696's
+head `623a2d59c4` (or main, where the finding cites main) before folding. None was rejected; where
+the fold departs from the reviewer's wording, the line says why.
+
+- **1a-I1** → folded: S1a Step 4 runs the 24 server test files that reach `resolveVenueClock` and deletes `orders-api.test.ts`'s data-node case (`:455`), which exists only for two locations. The other fix (move the change into S1b) was not taken.
+- **1a-I2** → folded: S4-1 Step 1's fiscal case deletes the venue row with foreign keys off; `reserved-identity.test.ts:272` and `0000_baseline.sql:59` re-read.
+- **1a-I3** → folded: S2-1 Step 1 states the zero/one/two-row behaviour, runs the whole package plus the 45 outside importers (count re-run: 41 server, 2 packages, 2 root scripts), and deletes the two `void-issue-clock` second-location cases before Step 2's pin.
+- **1a-I4** → folded: `readReceiptAddress` and its calls at `receipt-print.ts:214` and `receipt-preview-api.ts:381` move to S2-5 (amendment 1); `buildReceiptBytes` re-read at `:173-182`.
+- **1a-I5** → folded: F1b → F1b1/F1b2; S16f → S16f1/S16f2 (counts re-run: 34 and 25+4); S17a → S17a1/S17a2; S3-4 measures its failing list first. Found while splitting S16f: S16e's suites call helpers the first draft flattened only later, so each S16 task now flattens the helpers its own suites import first.
+- **1a-I6** → folded: the header names `623a2d59c4`; `git diff --name-only 7e824ae233 623a2d59c4` showed only `working-order.ts`, `till-api.ts`, the two profile suites and three docs among the cited files; their A696-cited lines were re-cited (`:7038` → `:7056`, `till-api.ts:2486-2508` → `:2496-2514`), and every implementer deletes by test title.
+- **1a-M1** → folded: S4 says `errors-reachable` reads only `packages/*` (`:21`, `:52-59`) and that the server typecheck refuses an undeclared code (`packages/shared/src/errors.ts:68,76,85`; `apps/server/src/errors.ts:25-26`). The same false claim in S11a Step 5 was fixed too.
+- **1a-M2** → folded: S4's reset is now conditional on a test of an old `pending-adoption.json` (S4-2 Step 1, amendment 12).
+- **1a-M3** → folded: S4-2 Step 3 cuts `finish-adoption.ts:109`'s foreign-key parenthesis.
+- **1a-M4** → folded: S4-1 Step 2 reads and recreates triggers on `nodes` (`venue-db.ts:134,207`).
+- **1a-M5** → folded: `venue.not_found`'s registry comment covers a missing taxpayer row and names the CLAUDE.md §3 fault exception.
+- **1a-M6** → folded: S3's `venueTimeZone(tx)` keeps answering "UTC" with no venue row, as S1 does; S3-1's test pins it.
+- **1a-M7** → folded: S16c keeps `restore.identity_unknown` for a copy with no or two venue rows, with a case.
+- **1a-M8** → folded: amendment 4 says one assertion line is re-pointed at the same value.
+- **1a-M9** → folded: S17's header names the A773-2 overlap (`docs/backlog/kitchen.md:296`).
+- **1a-M10** → folded: S2-1 Step 8 is now a plain `git diff --exit-code`, exact because Step 1 took the deletions.
+- **1a-M11** → folded: amendments 9 and 10.
+- **1b-I1** → folded: S2-3 and S10c name `print-api.ts:707-713` and `demo-printer.ts:195-199`; both compile errors re-run with `tsc6` and a control.
+- **1b-I2** → folded by moving: the two refund-path device filters go to S12a (FULL, auth trigger), with their two test deletions and a widened done-check (13 lines at `623a2d59c4`, the two non-admission hits re-read). S11 is also FULL now (1b-I5), but admission stays in one task with `DeviceBinding`.
+- **1b-I3** → folded: F5c2 and the F5 done-check use `:(glob)` (re-run: 1 file without it, 4 with; `scripts/testing/venue.ts` missed without it). The plan's other `/**/` pathspecs all have a directory between, so they match.
+- **1b-I4** → folded by extending D2's header rule (another slice's case in a shared database cleans up its own rows, drawer suites included), with ordering as the fallback when the case's own assertions fail; 11 suites re-counted.
+- **1b-I5** → folded: S9, S10 and S11 are FULL, each with its trigger stated.
+- **1b-M1** → folded: S6a's case keeps a venue with no default menu. The reviewer's chain through `readBusinessDayScheduleRevision` and `business-day-schedule.ts:364` was re-traced; the path is `placeOpenPeriod` → `replaceMenuWeek` → `menu-timetable.ts:477`.
+- **1b-M2** → folded: both codemods skip `apps/dashboard` and `apps/till`.
+- **1b-M3** → folded: F Step 5 allows identifier-only renames inside `expect(`, listed. The count re-run is 237 lines, not the reviewer's 219 (pathspec `'apps/*.test.ts' 'packages/*.test.ts'`).
+- **1b-M4** → folded: F4d → F4d1/F4d2 and F5c → F5c1/F5c2 (counts re-run at `623a2d59c4`); S10a and S11a have hand-over points. The reviewer's insert counts were not copied (not re-run).
+- **1b-M5** → folded: S12 allows a comment-only edit to `profile-zones`' five map rows (`:94-98` at `623a2d59c4`) and corrects the `:497`/`:1669` inserts to module rows that `FX` does not select.
+- **1b-M6** → folded with a correction: only `packages/module/src/personal-data.test.ts`'s literal is typed (`:17`); the four others are untyped helpers that still compile. S12c drops the key in all five and typechecks the four packages.
+- **1b-M7** → folded: S5–S8 depend on S1 only (fold note 15).
+- **1b-M8** → folded: amendment 11.
+- **1b-M9** → folded: 79 files; `:291`; `venue-apply.ts:325` at `623a2d59c4`; S9a's reason; S12b passes `venueLocationId` to `narrowDeviceKitchenScreens` now (`kitchen-screens.ts:892`). The `recipes`/`payments` leftovers: the design grep over their `src` prints nothing at `623a2d59c4`, so no task is needed.

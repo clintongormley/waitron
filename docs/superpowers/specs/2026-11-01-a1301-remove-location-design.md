@@ -16,7 +16,9 @@ Inputs: the inventory and the fiscal check written for this item by two read-onl
   pay period is closed once for the venue, one closure chain per node. Lane B's A1268 builds both,
   and carries no location on entries, sessions, corrections or closures (§7).
 - Question 3 is withdrawn: A1268 now removes the location from clock-ins itself (§7).
-- Question 4 stays open, with a note that A1268 may have to settle part of it (§7).
+- Question 4 was answered later, at ~15:55: (a), the working-time export names the workplace by
+  the venue's name alone, with no reference column and no official workplace code (§7). S14 now
+  waits only for A1268 to land.
 - S13, S14, S15 and S22 shrink to what A1268 leaves, and wait for A1268 to land rather than for owner
   answers. S22 no longer touches a hash or an append-only table (§6, "How A1301 meets A1268").
 - The build plan for the code and fixture slices amends this design in places — files moved between
@@ -587,7 +589,7 @@ Guard groups named below:
 | **S11** | Server: orders, refunds, kitchen, stations, reports, adjustments | `apps/server/src/working-order.ts` (except `:7038`, S2), `order-drafts.ts`, `tender-refund-*.ts`, `bill-refunds.ts:104-119,706`, `kitchen.ts`, `station-*.ts`, `receipt-preview-api.ts`, `report-api.ts:155`; `packages/adjustments/src/*`, `packages/recipes`, `packages/payments` leftovers | S1 | lane | code |
 | **S12** | Server: devices, joins, admission, node reads, personal-data export; `GET /management-api/locations` and the `getLocations` live query deleted | `apps/server/src/device*.ts`, `join-requests.ts`, `promote.ts`, `personal-data-export-api.ts`, `restore-stream.ts:214`, `workforce-api.ts:109`; `packages/module/src/personal-data.ts`; `apps/dashboard/src/api/live-queries.ts`, `api/client.ts` (`LocationSummary`) | S1 | lane | code |
 | **S13** | Workforce code that A1268 leaves: roster versions, shifts and shift templates lose their location filters; convenio read for the venue; business-day reads A1268 keeps on the box's location move to `readVenueClock`; any location filter or `?locationId=` in attendance, hours, end-of-day or the server routes that A1268's merged diff still has. Not here, because A1268 does it: the chain key, entries, sessions, corrections, closures and both hashes (§6, "How A1301 meets A1268") | `packages/workforce/src/*`, `packages/workforce-es/src/*` except `record-export.ts`; `apps/server/src/attendance-*.ts`, `management-attendance-api.ts`, `till-clock-*.ts`, `workforce-api.ts:124,136,405`; the plan lists which of them still match the area grep after A1268 lands | A1268 landed; S1 | lane | code |
-| **S14** | The art. 34.9 export: the opening table's workplace name comes from `readVenue` (it reads `locations` at `record-export.ts:181-185` today); the "Workplace reference" column per the owner's answer to question 4, unless A1268 has settled it. Not here, because A1268 does it: the per-venue export and leaving out the "positions can skip numbers" note | `packages/workforce-es/src/record-export.ts` and its tests and guide text | A1268 landed; S1; owner question 4 | lane | code |
+| **S14** | The art. 34.9 export, per the owner's answer to question 4, (a): the opening table names the venue once (`Workplace \| From \| Before (excluded) \| …`), the name from `readVenue` (it reads `locations` at `record-export.ts:181-185` today); the "Workplace reference" column goes, so the entries and closures tables carry no workplace column; no official workplace code. Its plan reads A1268's merged `record-export.ts` first, so the two do not collide: at #2375's head `8eddd1a4f7` the column is still declared (`:30`) and filled per entry (`:252`) and per closure (`:372`), and #2375's only change to the file adds the skip-numbers note; if A1268's revision removes those fills, S14 drops only what is left. Not here, because A1268 does it: the per-venue export and leaving out the "positions can skip numbers" note | `packages/workforce-es/src/record-export.ts` and its tests and guide text | A1268 landed; S1 | lane | code |
 | **S15** | Dashboard and till attendance and hours, as A1268 leaves them: the planned-versus-actual location picker deleted; the Location column deleted from attendance screens; hours and attendance-day screens and their API clients stop sending a location; the till's other-location refusal, `clock.other_location` and `activeLocationId` deleted if A1268 left any of them. #2375 changes no dashboard or till file | `apps/dashboard/src/screens/attendance-corrections-screen.ts`, `planned-actual-screen.ts`, `widgets/location-picker.ts` (deleted), `my-hours-panel.ts`, `hours-record.ts`, `attendance-export-dialog.ts`, `api/attendance*.ts`, `api/hours.ts`; `apps/till/src/*` (`till-app.ts`, `api/client.ts`, `screens/till-hours-screen.ts`, `widgets/attendance-day-dialog.ts`, `state/*`) | S13 | lane | code; check free memory first for browser tests |
 | **S16** | Setup, restore and provisioning: `LocationDraft` folds into the venue draft; tax territory and fiscal-module choice read the venue field at setup and restore; `first-setup.json`'s `location` key goes (host file reset, §4) | `apps/setup/src/*`; `apps/server/src/setup-api.ts`, `recovery-backup-preview.ts`, `recovery-fiscal-selection.ts`, `first-fiscal-activation.ts`, `first-fiscal-mode.ts:25-28`, `restore.ts:862-863` (`readNodeLocation`, `restore.identity_unknown`), `module-operation-host.ts`, `boot.ts` territory reads; `packages/provisioning/src/*` except S4's and S17's files (`venue-plan.ts`, `venue-apply.ts`, `cli.ts`, `recover-provisioned-venue.ts` beyond S2's call, `first-setup-state.ts:240-279`, `first-setup-resolution-inspection.ts`); `packages/fiscal-verifactu/src/setup/first-hour.ts`, `venue-fields.ts`; `scripts/setup-wizard-fiscal-fields.test.ts` | S1 | **owner** (c: chooses the filing module and starts the chain at setup and restore) | fiscal pair, code, `apps/server/src/first-fiscal-setup.e2e.test.ts` |
 | **S17** | Configuration bundle: `venue.location` → venue fields; `locationColumns` deleted; the two CLAUDE.md rules (§5) | `packages/module/src/module.ts:1592`, `packages/provisioning/src/configuration-transfer.ts`, the five declaring `configuration-transfer.ts` files, `scripts/id-columns-are-references.test.ts`, CLAUDE.md, `docs/developers/conventions-data.md` | S16 | lane | code, `id-columns-are-references`, `claude-md-pointers`, `apps/setup/src/setup-app-first-fiscal.test.ts` |
@@ -625,7 +627,7 @@ from before this cannot be restored or imported".
 **Parallel work.** After S1: S2–S12 and S16 can run in different lanes at the same time, and F1 can
 start; their only shared files are callers in `apps/server` (the plan names each slice's files
 exactly so lanes rebase around one another). F2–F5 follow F1 in parallel. S13 and S14 start when
-A1268 lands (S14 also waits for question 4), S15 after S13, S17 after S16.
+A1268 lands, S15 after S13, S17 after S16.
 S18 waits for S2–S17. S19's plan-only part can start now. S20, S21 and S22 can be built in parallel;
 S23–S28 one after another.
 
@@ -638,7 +640,7 @@ A760 if it follows directly (§4).
 
 **Owner-landed slices:** S2, S3, S4, S16, S23, S25, S26, S27 — eight, the letters in the table saying
 which part of the rule above applies. None changes a fiscal byte, and each runs the fiscal pair
-unedited. S14 lands only after the owner has answered question 4.
+unedited.
 
 ### How A1301 meets A1268
 
@@ -670,7 +672,7 @@ a backward clock step) does not depend on locations.
 | "A session counts at its clock-in's location"; per-location hours reads and end-of-day pass (D4, D7) | A1268's revision: no per-location view, so `recordAtLocation` (its plan's Task 6) is not built | S13 removes what remains |
 | "The box location's business day" (D7) | A1268 keeps the box's location as the source (lane B's `questions.md`, ~14:40) | S13 moves it to `readVenueClock` |
 | The per-location art. 34.9 export and its skip-numbers note | #2375 adds the note (`packages/workforce-es/src/record-export.ts:435-438` on that branch, Task 3c); A1268's revision removes it and makes the export per venue | S14: the venue's name |
-| The export's "Workplace reference" column | not in #2375 | S14, per question 4, unless A1268 settles it |
+| The export's "Workplace reference" column | not in #2375 (at `8eddd1a4f7` it is still declared and filled); A1268's revision may remove the entries' and closures' fills | S14 removes what is left (question 4, answered (a)) |
 | The till's other-location refusal, `clock.other_location`, `activeLocationId` | A1268's revision, if it removes them (its plan's Task 11 and open question 2) | S15 deletes what remains |
 | `location_id` on the five `attendance_*` tables (`attendance.ts`, `attendance-responses.ts`) | A1268's revision, if its per-venue end-of-day pass drops them | S22 drops any left |
 | Device admission by location (`admit`) | out of A1268 | S12 |
@@ -678,8 +680,7 @@ a backward clock step) does not depend on locations.
 
 ## 7. Owner questions
 
-Four questions were asked. Two are answered, one is withdrawn, and one is open. Every other slice
-proceeds without them.
+Four questions were asked. Three are answered and one is withdrawn.
 
 ### Question 1 — does a working-time entry's hash name where it was made? Answered
 
@@ -710,7 +711,7 @@ It asked whether lane B should skip A1268's second PR, whose per-location sessio
 delete. **Withdrawn 2026-11-01:** A1268 was revised to remove the location from clock-ins itself, so
 it no longer builds that code and there is nothing left to skip.
 
-### Question 4 — does the working-time export name the workplace only by the venue's name? (S14 waits)
+### Question 4 — does the working-time export name the workplace only by the venue's name? Answered
 
 The export names the workplace in two columns of its opening table — "Workplace reference /
 Referencia del centro", the location's internal id, and "Workplace / Centro de trabajo", its name — and
@@ -736,11 +737,16 @@ Worked example, the first columns of the export's opening table and of its entri
 **Recommended: (a).** An official workplace code (Spain's Social Security account code for the
 workplace) would be a new field the venue enters, and a separate item if wanted.
 
-**Still open (posted 2026-11-01 ~16:45).** #2375 does not remove the column: at `8eddd1a4f7` the
-export still declares it (`record-export.ts:30`) and fills it from each entry (`:252`) and each
-closure (`:372`). But A1268's revision takes the location off entries and closures, which leaves
-those two fills with no value to read. So A1268 may have to settle the entries and closures tables'
-column itself; if it does, this question shrinks to the opening table.
+**Answered 2026-11-01 (~15:55, relayed by the watcher): (a).** The "Workplace reference" column
+goes. The opening table names the venue once for the whole file
+(`Workplace | From | Before (excluded) | …`); the entries and closures tables carry no workplace
+column; no official workplace code is added now. **S14 builds it**, and waits only for A1268 to
+land. #2375 does not remove the column: at `8eddd1a4f7` (still open, its head unchanged since
+14:15) the export still declares it (`record-export.ts:30`) and fills it from each entry (`:252`)
+and each closure (`:372`), and its only change to the file adds the skip-numbers note. A1268's
+revision takes the location off entries and closures, which leaves those two fills with no value
+to read, so it may remove them itself; S14's plan reads A1268's merged file and removes what is
+left.
 
 ## 8. Risks, and what the plan review should check
 
