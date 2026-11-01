@@ -3714,6 +3714,28 @@ Focused commands: `pnpm --filter @waitron/till exec vitest run src/widgets/box-t
    .github/workflows/host-clock-measure.yml`
    shows that commit.)
 
+### The finish-branch review, folded (2026-11-01)
+
+The whole-branch review (two Codex run-it reviews, a convention reviewer, a simplify reviewer)
+reproduced three behaviour defects; each was fixed test first, and each changes a rule above:
+- **Task 10's order, and decision 6.** AEAT could answer while a person's set waited on the host's
+  status or an anchor's `stepComing`, and the set still went ahead. After the anchors' waits the set
+  now judges the stop again, with the till's check and, for `admin` and `staff`, `witnessed` and
+  `agrees`, re-anchoring every anchor on a refusal, then refuses `stale` again
+  (`apps/server/src/clock-correction.ts`).
+- **Task 14's limit.** A backup run between the host moving the clock and the step's row being
+  written pruned as if no step had happened, and the rule above accepted that for a row waiting in
+  `writePending`. Now nothing is deleted from just before the host is asked until its answer is
+  judged; after that a step holds from its after reading, also while its row waits
+  (`unwrittenStep`, `latestClockStepFor`).
+- **Task 15a's rule, step 3.** An approved missing-entry correction dated after the latest direct
+  entry still decided after a direct entry of the same kind was written after it in its own chain,
+  so a clock-out after an approved later-dated clock-in left the person unable to clock in again.
+  Such a correction no longer decides. This also holds with no step, for a correction dated ahead
+  of the clock, so "while the box's clock only moves forward … this answers what today's rule
+  answers" now needs "and no approved correction is dated ahead of it"
+  (`packages/workforce/src/record-reads.ts`).
+
 ## Review notes
 
 **Per-task review** after each task, at `high` effort, on that task's diff, stating the experiment

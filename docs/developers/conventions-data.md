@@ -4318,7 +4318,9 @@ Inside the turn, each refusal asking nothing further:
 5. for a person: `witnessed` when AEAT has a reading taken during this stop, agreeing or not, so the
    box sets or confirms from AEAT itself; then `agrees` when the device is within a minute, so
    confirming is the way;
-6. each anchor's `stepComing` (a throw refuses `pending_disproofs`), then `stale` again;
+6. each anchor's `stepComing` (a throw refuses `pending_disproofs`); then steps 3 and 5 again,
+   because AEAT can answer or the stop end during the waits (a refusal there re-anchors every
+   anchor); then `stale` again;
 7. the set: read the wall and boot-time clocks, raise the step counter, ask the host, read both
    again. It is verified when the host answered and the wall clock is within 2 000 ms of the target
    plus the boot-time clock's elapsed time;
@@ -4376,7 +4378,10 @@ as before, so a destination holds at most twice `retain`; making room offers hel
 a minute ahead of the clock holds nothing, and a step that cannot be read deletes nothing. With no
 hold, an archive stamped more than a minute ahead still ranks after every other when pruning by
 count. **Limit:** only steps the box made are recorded, so a step by the time service, or by hand on
-the host, holds nothing; nor does a step whose row and alert are still waiting to be written. The
+the host, holds nothing. From just before the box asks the host to set its clock until the host's
+answer is judged, no archive is deleted at all. After that, a step the box made holds as a recorded
+one, including while its row and alert wait to be written (`unwrittenStep`, `latestClockStepFor` in
+`apps/server/src/clock-correction.ts`). The
 stream's generations need no hold: they are aged by the bucket's own clock (the table below).
 
 **The working-time record across a step back** (Tasks 15a and 15b). Every clock action is still
@@ -4385,11 +4390,12 @@ written as before, with the time the clock read; only how a person's state is wo
 one location), the person's latest direct entry by its position (`sequence_no`), since within one
 chain a later position is a later write whatever the clock said; across chains, the latest of those
 by time (`compareEvents`); and an approved missing-entry correction dated after that entry decides
-instead. The clocking routes (`currentState`, `packages/workforce/src/clocking.ts`), the till's
+instead, unless a direct entry of the same kind was written after the correction in the
+correction's own chain. The clocking routes (`currentState`, `packages/workforce/src/clocking.ts`), the till's
 state (`apps/server/src/till-clock-state.ts`) and the attendance reconcile's clock-in
 (`apps/server/src/attendance-discovery.ts`) all read it, so after a step back a person can clock out
-and in again and the till agrees. While the clock only moves forward it answers what the old read
-did. Accepted: across chains times are still compared, so a move between two locations on one node
+and in again and the till agrees. While the clock only moves forward and no correction is dated
+ahead of it, it answers what the old read did. Accepted: across chains times are still compared, so a move between two locations on one node
 inside the step can read wrong until real time passes the earlier entry (item A1268 makes the chain
 one per venue); the hours read, the end-of-day pass and the correction check still order by time.
 Guards: `packages/workforce/src/clocking-step.test.ts`, `apps/server/src/till-clock-step.test.ts`.

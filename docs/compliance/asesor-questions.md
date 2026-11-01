@@ -3906,7 +3906,7 @@ every start without internet, which would carry the same risk to every such star
 > corrige ahora su propio reloj (el del sistema operativo y el reloj interno con batería) a partir
 > de una de tres fuentes: la hora de la AEAT, por sí solo y sin preguntar a nadie; justo después del
 > arranque, si la AEAT no ha respondido o no se le puede preguntar, el reloj de una de sus propias
-> cajas, cuando cualquier miembro del personal con sesión iniciada en esa caja confirma la hora que
+> cajas, cuando cualquier empleado con sesión iniciada en esa caja confirma la hora que
 > muestra; y, en cualquier momento, el teléfono u ordenador de un administrador, cuando este lo
 > confirma. Nadie escribe una hora: la caja o el dispositivo envía su propio reloj. Dos cajas por sí
 > solas ya no confirman la hora justo después del arranque. Cada corrección queda en una tabla cuyas
@@ -3918,7 +3918,7 @@ every start without internet, which would carry the same risk to every such star
 > atendido antes de enviarse su correo, un reinicio entre medias pierde ese correo. Si el sistema no puede comprobar que la corrección se aplicó, avisa igual pero
 > no escribe la fila. Los registros generados antes de la corrección conservan la hora con la que se
 > generaron; el sistema ya lista los que tienen una hora posterior a la real (pregunta Q60). El
-> riesgo: durante una parada detectada al arrancar, cualquier miembro del personal con sesión
+> riesgo: durante una parada detectada al arrancar, cualquier empleado con sesión
 > iniciada en una caja dada de alta en el equipo podría enviar una petición manipulada que fije
 > cualquier hora entre el 28-10-2024 y el año 2100, y su nombre quedaría en la fila y en el aviso.
 > Una versión posterior, aún no desarrollada, prevé esta comprobación en cada arranque sin internet,
