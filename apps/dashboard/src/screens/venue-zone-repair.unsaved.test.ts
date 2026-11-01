@@ -13,7 +13,6 @@ import type { VenueZoneRepair } from "./venue-zone-repair.js";
 
 const view = {
   nodeId: "node",
-  locationId: "location",
   legalName: "Deli Test SL",
   country: "ES",
   province: null,

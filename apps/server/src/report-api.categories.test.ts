@@ -64,7 +64,6 @@ let staffCookie: string;
 let barPrinter: string;
 let narrowPrinter: string;
 let inactivePrinter: string;
-let elsewherePrinter: string;
 const ids = {
   drinks: "",
   softs: "",
@@ -149,14 +148,6 @@ const suite = useVenueDb({
       })
       .returning({ id: locations.id });
     locationId = loc!.id;
-    const [other] = await db
-      .insert(locations)
-      .values({
-        name: "Terrace",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Venta en establecimiento",
-      })
-      .returning({ id: locations.id });
     ({ deviceId } = await seedDevice(db, { locationId }));
     const [node] = await db
       .insert(nodes)
@@ -171,14 +162,13 @@ const suite = useVenueDb({
 
     const printer = async (values: {
       name: string;
-      location?: string;
       active?: boolean;
       paperWidth?: "58mm" | "80mm";
     }): Promise<string> => {
       const [row] = await db
         .insert(printers)
         .values({
-          locationId: values.location ?? locationId,
+          locationId,
           name: values.name,
           transport: "network_tcp",
           host: `10.0.0.${Math.floor(Math.random() * 200) + 2}`,
@@ -192,7 +182,6 @@ const suite = useVenueDb({
     barPrinter = await printer({ name: "Main bar" });
     narrowPrinter = await printer({ name: "Cellar", paperWidth: "58mm" });
     inactivePrinter = await printer({ name: "Old", active: false });
-    elsewherePrinter = await printer({ name: "Terrace", location: other!.id });
 
     await withTransaction(db, async (tx) => {
       const menu = await createCatalogue(tx, { name: "Bar" });
@@ -548,16 +537,53 @@ describe("POST /management-api/reports/categories/print", () => {
     }
   });
 
+  // The second location lives only inside its case, and goes in a `finally`: every other case
+  // reads the one venue. A1301 S11c deletes the case with the check it proves.
+  let elsewhere: { locationId: string; printerId?: string } | undefined;
+  const elsewherePrinter = async (): Promise<string> => {
+    const [other] = await suite.db
+      .insert(locations)
+      .values({
+        name: "Terrace",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Venta en establecimiento",
+      })
+      .returning({ id: locations.id });
+    elsewhere = { locationId: other!.id };
+    const [row] = await suite.db
+      .insert(printers)
+      .values({
+        locationId: other!.id,
+        name: "Terrace",
+        transport: "network_tcp",
+        host: `10.0.0.${Math.floor(Math.random() * 200) + 2}`,
+        port: 9100,
+        paperWidth: "80mm",
+      })
+      .returning({ id: printers.id });
+    elsewhere.printerId = row!.id;
+    return row!.id;
+  };
+
   it.each([
-    ["an inactive printer", () => inactivePrinter],
-    ["another location's printer", () => elsewherePrinter],
-    ["an unknown printer", () => randomUUID()],
+    ["an inactive printer", () => Promise.resolve(inactivePrinter)],
+    ["another location's printer", elsewherePrinter],
+    ["an unknown printer", () => Promise.resolve(randomUUID())],
   ])("404 printer.not_found for %s, enqueuing nothing", async (_case, printerId) => {
-    const id = printerId();
-    const res = await print({ from: DAY1, to: DAY1, mode: "current", printerId: id });
-    expect(res.status).toBe(404);
-    expect(await errorOf(res)).toMatchObject({ code: "printer.not_found", params: { id } });
-    expect(await jobsOn(id)).toEqual([]);
+    try {
+      const id = await printerId();
+      const res = await print({ from: DAY1, to: DAY1, mode: "current", printerId: id });
+      expect(res.status).toBe(404);
+      expect(await errorOf(res)).toMatchObject({ code: "printer.not_found", params: { id } });
+      expect(await jobsOn(id)).toEqual([]);
+    } finally {
+      if (elsewhere !== undefined) {
+        if (elsewhere.printerId !== undefined)
+          await suite.db.delete(printers).where(eq(printers.id, elsewhere.printerId));
+        await suite.db.delete(locations).where(eq(locations.id, elsewhere.locationId));
+        elsewhere = undefined;
+      }
+    }
   });
 
   it("409 sale_classification.invalid enqueues nothing", async () => {

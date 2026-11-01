@@ -3099,9 +3099,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   - A party with no table whose chain of merges never ends (an unknown id, or two parties recorded
     as merged into each other, which the database accepts) is named by the bill's own label;
     whether any till action can make such a loop was not checked.
-  - Left by #906's review: `computeOverdueOrders` is the one report function that reads its own
-    node's location rather than being handed one (adding `locationId` to `OverdueOrdersInput` was
-    suggested, not done); no case pins what a correction slip prints for a counter order delivered
+  - Left by #906's review: no case pins what a correction slip prints for a counter order delivered
     to a table; and a database built on purpose with a delivery table in another location now
     names the order by its own label — no product path creates that state, and whether every
     existing venue database is free of it was not checked.
@@ -3956,10 +3954,10 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 **Left open, for the owner, by C113 (#1014, one receipt language per location):**
 
-- **A change is refused while an open order at the location holds a line**
+- **A change is refused while an open order holds a line**
   (`receipt.language_orders_open`; narrowed by C124, #1020, 2026-10-02, with core
   `0064_line_locale_triggers_text_only`). If a language is changed underneath an open bill by
-  direct SQL, the bill's next split answers an unmapped 500 `server.internal`. [Detail](backlog/printers.md#a-change-is-refused-while-an-open-order-at-the-location-holds-a-line)
+  direct SQL, the bill's next split answers an unmapped 500 `server.internal`. [Detail](backlog/printers.md#a-change-is-refused-while-an-open-order-holds-a-line)
 
 - After a change, a paid counter sale with one dish a station took and one it did not is not
   blocked, and its send-to-prep route (`/prep`) then answers 409 `ticket.already_fired`, as it

@@ -758,11 +758,9 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
         sleep: async (ms) => {
           sleeps.push(ms);
           if (!edited) {
-            const initial = await withTransaction(suite.db, (tx) =>
-              readVenueDetails(tx, venue.cfg),
-            );
+            const initial = await withTransaction(suite.db, (tx) => readVenueDetails(tx));
             await withTransaction(suite.db, (tx) =>
-              writeVenueDetails(tx, venue.cfg, {
+              writeVenueDetails(tx, {
                 expected: initial.details,
                 changes: { timeZone: "UTC" },
               }),

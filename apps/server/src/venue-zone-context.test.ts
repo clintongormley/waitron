@@ -6,7 +6,6 @@ import {
   locations,
   locationBusinessDaySettings,
   locationDayCutoverChanges,
-  nodes,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -82,7 +81,7 @@ describe("raw saved zone context", () => {
       .spyOn(businessDay, "readBusinessDayClockModel")
       .mockRejectedValue(new Error("ordinary clock reached"));
     expect(await read()).toEqual({
-      ...scope,
+      nodeId: scope.nodeId,
       country: "ES",
       legalName: "Test SL",
       province: "Madrid",
@@ -108,11 +107,6 @@ describe("raw saved zone context", () => {
     await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, scope.locationId));
     expect((await read()).savedZone).toEqual({ kind: "valid", timeZone: canonical });
   });
-  it("resolves the location from the writing node when no configured location is supplied", async () => {
-    expect(
-      await withTransaction(suite.db, (tx) => readZoneContext(tx, { nodeId: scope.nodeId })),
-    ).toEqual(await read());
-  });
   it("refuses an unknown writing node", async () => {
     await expect(
       withTransaction(suite.db, (tx) => readZoneContext(tx, { ...scope, nodeId: randomUUID() })),
@@ -121,43 +115,22 @@ describe("raw saved zone context", () => {
       params: { reason: "node" },
     });
   });
-  it("refuses a configured location that differs from the writing node", async () => {
-    await expect(
-      withTransaction(suite.db, (tx) =>
-        readZoneContext(tx, { ...scope, locationId: randomUUID() }),
-      ),
-    ).rejects.toMatchObject({
-      code: "venue.time_zone_target_invalid",
-      params: { reason: "mismatch" },
-    });
-  });
-  it("refuses a node whose saved location no longer exists", async () => {
-    await suite.db.execute(sql`pragma foreign_keys = off`);
-    try {
-      await suite.db
-        .update(nodes)
-        .set({ locationId: randomUUID() })
-        .where(eq(nodes.id, scope.nodeId));
-      await expect(
-        withTransaction(suite.db, (tx) => readZoneContext(tx, { nodeId: scope.nodeId })),
-      ).rejects.toMatchObject({
-        code: "venue.time_zone_target_invalid",
-        params: { reason: "location" },
-      });
-    } finally {
-      await suite.db
-        .update(nodes)
-        .set({ locationId: scope.locationId })
-        .where(eq(nodes.id, scope.nodeId));
-      await suite.db.execute(sql`pragma foreign_keys = on`);
-    }
-  });
   it("refuses a context with no taxpayer identity", async () => {
     await suite.db.execute(sql`delete from tenants`);
-    await expect(read()).rejects.toMatchObject({
-      code: "venue.time_zone_target_invalid",
-      params: { reason: "location" },
-    });
+    const error: unknown = await read().catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ code: "venue.not_found" });
+    expect((error as { params: unknown }).params).toEqual({});
+  });
+  it("refuses with no venue row", async () => {
+    await suite.db.execute(sql`pragma foreign_keys = off`);
+    try {
+      await suite.db.delete(locations);
+      const error: unknown = await read().catch((caught: unknown) => caught);
+      expect(error).toMatchObject({ code: "venue.not_found" });
+      expect((error as { params: unknown }).params).toEqual({});
+    } finally {
+      await suite.db.execute(sql`pragma foreign_keys = on`);
+    }
   });
   it("does not classify a formatter runtime failure as zone eligibility", async () => {
     const failure = new Error("formatter unavailable");

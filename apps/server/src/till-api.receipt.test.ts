@@ -1336,9 +1336,9 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
       departments: suite.db.all(sql`select * from departments order by id`),
     });
     const before = retained();
-    const initial = await withTransaction(suite.db, (tx) => readVenueDetails(tx, cfg));
+    const initial = await withTransaction(suite.db, (tx) => readVenueDetails(tx));
     const saved = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: {
           name: "New venue display",

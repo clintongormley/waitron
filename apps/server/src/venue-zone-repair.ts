@@ -1,6 +1,12 @@
 import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { incidents, locations, locationBusinessDaySettings, type Transaction } from "@waitron/db";
+import {
+  incidents,
+  locations,
+  locationBusinessDaySettings,
+  venueLocationId,
+  type Transaction,
+} from "@waitron/db";
 import { findAdministrativeArea } from "@waitron/country";
 import { getCountryPack, requireCountryTimeZone } from "@waitron/country-packs";
 import type { IssueScope } from "@waitron/fiscal";
@@ -68,10 +74,11 @@ export async function confirmVenueZone(
   const timeZone = requireCountryTimeZone(context.country, request.timeZone);
   await validateRetainedZoneClock(tx, scope, timeZone, at);
   const clockRevision = context.clockRevision + 1;
-  await tx.update(locations).set({ timeZone }).where(eq(locations.id, context.locationId));
+  const venueId = await venueLocationId(tx);
+  await tx.update(locations).set({ timeZone }).where(eq(locations.id, venueId));
   await tx
     .insert(locationBusinessDaySettings)
-    .values({ locationId: context.locationId, revision: clockRevision })
+    .values({ locationId: venueId, revision: clockRevision })
     .onConflictDoUpdate({
       target: locationBusinessDaySettings.locationId,
       set: { revision: clockRevision },
@@ -85,7 +92,6 @@ export async function confirmVenueZone(
     acknowledgedBy: authorizedBy,
     params: {
       nodeId: context.nodeId,
-      locationId: context.locationId,
       timeZone,
       previousRevision: context.clockRevision,
       clockRevision,
@@ -106,12 +112,11 @@ export async function readVenueZoneRepair(
 ) {
   await authorizeManager(tx, { managementSessionId: session, permission: "venue.configure" });
   const context = await readZoneContext(tx, scope);
-  const { nodeId, locationId, legalName, country, province, savedZone, clockRevision } = context;
+  const { nodeId, legalName, country, province, savedZone, clockRevision } = context;
   const pack = getCountryPack(country);
   const area = pack === undefined ? undefined : findAdministrativeArea(pack, province ?? "");
   const view = {
     nodeId,
-    locationId,
     legalName,
     country,
     province,

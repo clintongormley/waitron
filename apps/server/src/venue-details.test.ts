@@ -48,7 +48,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import { ALL_MODULES } from "./modules.js";
-import { mountLocationSettingsApi } from "./location-settings-api.js";
+import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import { readVenueDetails, writeVenueDetails } from "./venue-details.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -59,7 +59,7 @@ beforeEach(async () => {
     sql`update departments set name = 'Dining department', trading_name = 'Customer trading name' where location_id = ${venue.cfg.locationId}`,
   );
 });
-const read = () => withTransaction(suite.db, (tx) => readVenueDetails(tx, venue.cfg));
+const read = () => withTransaction(suite.db, (tx) => readVenueDetails(tx));
 afterEach(() => vi.useRealTimers());
 
 describe("ordinary zone edit revision", () => {
@@ -67,7 +67,7 @@ describe("ordinary zone edit revision", () => {
     const sell = await prepareSale();
     const initial = await read();
     const saved = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: { timeZone: "UTC" },
       }),
@@ -80,7 +80,7 @@ describe("ordinary zone edit revision", () => {
     ]);
     await expect(
       withTransaction(suite.db, (tx) =>
-        writeVenueDetails(tx, venue.cfg, {
+        writeVenueDetails(tx, {
           expected: saved.model.details,
           changes: { timeZone: "Europe/Madrid" },
         }),
@@ -100,7 +100,7 @@ describe("ordinary zone edit revision", () => {
     try {
       await expect(
         withTransaction(suite.db, (tx) =>
-          writeVenueDetails(tx, venue.cfg, {
+          writeVenueDetails(tx, {
             expected: initial.details,
             changes: { timeZone: "UTC" },
           }),
@@ -115,14 +115,14 @@ describe("ordinary zone edit revision", () => {
   it("advances the absent clock revision once for a real zone change and not for a retry", async () => {
     const initial = await read();
     const saved = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: { timeZone: "UTC" },
       }),
     );
     expect(saved.model.businessDayClock.revision).toBe(1);
     const retry = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: { timeZone: "Etc/UTC" },
       }),
@@ -142,7 +142,7 @@ describe("ordinary zone edit revision", () => {
     const initial = await read();
     await expect(
       withTransaction(suite.db, async (tx) => {
-        const saved = await writeVenueDetails(tx, venue.cfg, {
+        const saved = await writeVenueDetails(tx, {
           expected: initial.details,
           changes: { timeZone: "UTC" },
         });
@@ -153,14 +153,14 @@ describe("ordinary zone edit revision", () => {
     expect((await read()).businessDayClock.revision).toBe(7);
     expect((await read()).details.timeZone).toBe("Europe/Madrid");
     const saved = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, { expected: initial.details, changes: { timeZone: "UTC" } }),
+      writeVenueDetails(tx, { expected: initial.details, changes: { timeZone: "UTC" } }),
     );
     expect(saved.model.businessDayClock.revision).toBe(8);
   });
   it("leaves the clock revision absent for an equivalent alias and an unrelated edit", async () => {
     const initial = await read();
     const saved = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: { timeZone: "Europe/Madrid", name: "Updated label" },
       }),
@@ -187,7 +187,7 @@ describe("ordinary zone edit revision", () => {
     );
     try {
       await withTransaction(suite.db, async (tx) => {
-        await writeVenueDetails(tx, venue.cfg, {
+        await writeVenueDetails(tx, {
           expected: initial.details,
           changes: { timeZone: "UTC" },
         });
@@ -272,7 +272,7 @@ describe("venue detail edits", () => {
   it("normalizes an edit and serves an equivalent retry even with a stale expected name", async () => {
     const initial = await read();
     const saved = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: { name: "  New cafe\u0301  " },
       }),
@@ -280,7 +280,7 @@ describe("venue detail edits", () => {
     expect(saved.changed).toBe(true);
     expect(saved.model.details.name).toBe("New café");
     const repeat = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: { name: "New café" },
       }),
@@ -295,7 +295,7 @@ describe("venue detail edits", () => {
     );
     await expect(
       withTransaction(suite.db, (tx) =>
-        writeVenueDetails(tx, venue.cfg, {
+        writeVenueDetails(tx, {
           expected: initial.details,
           changes: { name: "My edit" },
         }),
@@ -303,7 +303,7 @@ describe("venue detail edits", () => {
     ).rejects.toMatchObject({ code: "venue.detail_changed", params: { field: "name" } });
     expect((await read()).details.name).toBe("Another editor");
     const saved = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: { addressLine1: "Calle nueva 2" },
       }),
@@ -317,7 +317,7 @@ describe("venue detail edits", () => {
     );
     const initial = await read();
     const saved = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: { addressLine2: "  " },
       }),
@@ -345,20 +345,20 @@ describe("venue detail edits", () => {
       expect(
         (
           await withTransaction(suite.db, (tx) =>
-            writeVenueDetails(tx, venue.cfg, { expected: initial.details, changes }),
+            writeVenueDetails(tx, { expected: initial.details, changes }),
           )
         ).changed,
       ).toBe(false);
     }
     expect((await read()).details.name).toBe("  Sala principal  ");
   });
-  it.each(["country", "legalName", "taxId", "locationId", "fiscalTerritory"])(
+  it.each(["country", "legalName", "taxId", "fiscalTerritory"])(
     "refuses read-only %s even with a matching value",
     async (field) => {
       const initial = await read();
       await expect(
         withTransaction(suite.db, (tx) =>
-          writeVenueDetails(tx, venue.cfg, {
+          writeVenueDetails(tx, {
             expected: initial.details,
             changes: { [field]: field === "country" ? "ES" : "value" },
           }),
@@ -386,7 +386,7 @@ describe("venue detail edits", () => {
     const initial = await read();
     await expect(
       withTransaction(suite.db, (tx) =>
-        writeVenueDetails(tx, venue.cfg, {
+        writeVenueDetails(tx, {
           expected: initial.details,
           changes: { name: "Valid new name", ...changes } as VenueDetailPatch,
         }),
@@ -418,7 +418,7 @@ describe("venue history locks", () => {
       for (const changes of [{ timeZone: "UTC" }, { dayCutover: "04:00" }]) {
         await expect(
           withTransaction(suite.db, (tx) =>
-            writeVenueDetails(tx, venue.cfg, {
+            writeVenueDetails(tx, {
               expected: initial.details,
               changes: { name: "Should roll back", ...changes },
             }),
@@ -435,7 +435,7 @@ describe("venue history locks", () => {
         expect((await read()).details).toEqual(initial.details);
       }
       const allowed = await withTransaction(suite.db, (tx) =>
-        writeVenueDetails(tx, venue.cfg, {
+        writeVenueDetails(tx, {
           expected: initial.details,
           changes: { name: "Allowed", timeZone: "Europe/Madrid", dayCutover: "05:00:00" },
         }),
@@ -445,7 +445,7 @@ describe("venue history locks", () => {
       expect(
         (
           await withTransaction(suite.db, (tx) =>
-            writeVenueDetails(tx, venue.cfg, {
+            writeVenueDetails(tx, {
               expected: initial.details,
               changes: { name: "Allowed" },
             }),
@@ -481,7 +481,7 @@ describe("venue history locks", () => {
       );
       await expect(
         withTransaction(suite.db, (tx) =>
-          writeVenueDetails(tx, venue.cfg, {
+          writeVenueDetails(tx, {
             expected: initial.details,
             changes: { [field]: field === "timeZone" ? "UTC" : "04:00" },
           }),
@@ -500,7 +500,7 @@ describe("venue history locks", () => {
       chain: suite.db.all(sql`select * from daily_close_chain`),
     };
     const noOp = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: { timeZone: "Europe/Madrid", dayCutover: "05:00:00" },
       }),
@@ -508,7 +508,7 @@ describe("venue history locks", () => {
     expect(noOp.changed).toBe(false);
     expect(noOp.model.details).toEqual(initial.details);
     const saved = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: { name: "Current empty-close display" },
       }),
@@ -540,7 +540,7 @@ describe("venue history locks", () => {
       );
       await expect(
         withTransaction(suite.db, (tx) =>
-          writeVenueDetails(tx, venue.cfg, {
+          writeVenueDetails(tx, {
             expected: initial.details,
             changes: { [field]: value, name: "Atomic refusal" },
           }),
@@ -552,7 +552,7 @@ describe("venue history locks", () => {
       expect((await read()).details).toEqual(initial.details);
     }
     const saved = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: { name: "Current display", province: "28", dayCutover: "05:00:00" },
       }),
@@ -562,7 +562,7 @@ describe("venue history locks", () => {
   it("permits a time-zone override before operational history and retains the initial start", async () => {
     const initial = await read();
     const saved = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: { timeZone: "UTC" },
       }),
@@ -581,7 +581,7 @@ describe("crafted detail bodies and legacy values", () => {
     const initial = await read();
     await expect(
       withTransaction(suite.db, (tx) =>
-        writeVenueDetails(tx, venue.cfg, {
+        writeVenueDetails(tx, {
           expected: initial.details,
           changes: { unexpected: "hidden", country: "ES" },
         } as unknown as VenueDetailWrite),
@@ -600,7 +600,7 @@ describe("crafted detail bodies and legacy values", () => {
     const initial = await read();
     await expect(
       withTransaction(suite.db, (tx) =>
-        writeVenueDetails(tx, venue.cfg, input as unknown as VenueDetailWrite),
+        writeVenueDetails(tx, input as unknown as VenueDetailWrite),
       ),
     ).rejects.toMatchObject({ code: "venue.detail_invalid" });
     expect((await read()).details).toEqual(initial.details);
@@ -611,7 +611,7 @@ describe("crafted detail bodies and legacy values", () => {
     );
     const initial = await read();
     const saved = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: { name: "Corrected", province: null, city: null },
       }),
@@ -619,7 +619,7 @@ describe("crafted detail bodies and legacy values", () => {
     expect(saved.model.details).toEqual({ ...initial.details, name: "Corrected" });
     await expect(
       withTransaction(suite.db, (tx) =>
-        writeVenueDetails(tx, venue.cfg, { expected: saved.model.details, changes: { city: "" } }),
+        writeVenueDetails(tx, { expected: saved.model.details, changes: { city: "" } }),
       ),
     ).rejects.toMatchObject({
       code: "venue.detail_invalid",
@@ -630,7 +630,7 @@ describe("crafted detail bodies and legacy values", () => {
     const initial = await read();
     await expect(
       withTransaction(suite.db, (tx) =>
-        writeVenueDetails(tx, venue.cfg, {
+        writeVenueDetails(tx, {
           expected: initial.details,
           changes: { province: "Barcelona", name: "Not committed" },
         }),
@@ -641,7 +641,7 @@ describe("crafted detail bodies and legacy values", () => {
     });
     expect((await read()).details).toEqual(initial.details);
     const saved = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: { postalCode: "28014" },
       }),
@@ -655,7 +655,7 @@ describe("crafted detail bodies and legacy values", () => {
     );
     const initial = await read();
     const saved = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: {
           timeZone: "legacy-invalid",
@@ -679,14 +679,14 @@ describe("crafted detail bodies and legacy values", () => {
         expect(
           (
             await withTransaction(suite.db, (tx) =>
-              writeVenueDetails(tx, venue.cfg, { expected: initial.details, changes }),
+              writeVenueDetails(tx, { expected: initial.details, changes }),
             )
           ).changed,
         ).toBe(false);
       }
       await expect(
         withTransaction(suite.db, (tx) =>
-          writeVenueDetails(tx, venue.cfg, {
+          writeVenueDetails(tx, {
             expected: initial.details,
             changes: { name: "Actually changed" },
           }),
@@ -695,14 +695,6 @@ describe("crafted detail bodies and legacy values", () => {
     } finally {
       await suite.db.execute(sql`drop trigger detail_probe_no_update`);
     }
-  });
-  it("refuses a missing deployed location", async () => {
-    await expect(
-      withTransaction(suite.db, (tx) => readVenueDetails(tx, { locationId: randomUUID() })),
-    ).rejects.toMatchObject({
-      code: "management.request_invalid",
-      params: { field: "locationId" },
-    });
   });
 });
 describe("existing clock-change cutover mapping", () => {
@@ -726,7 +718,7 @@ describe("unavailable country and own expected values", () => {
       expect(initial.policy[field]).toEqual({ decision: "refuse", reasons: ["geography_context"] });
       await expect(
         withTransaction(suite.db, (tx) =>
-          writeVenueDetails(tx, venue.cfg, {
+          writeVenueDetails(tx, {
             expected: initial.details,
             changes: { [field]: field === "city" ? "New town" : "28014" },
           }),
@@ -737,7 +729,7 @@ describe("unavailable country and own expected values", () => {
       });
     }
     const saved = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: { name: "Corrected display", addressLine1: "Updated street" },
       }),
@@ -751,7 +743,7 @@ describe("unavailable country and own expected values", () => {
     const expected = Object.create(initial.details) as VenueDetailWrite["expected"];
     await expect(
       withTransaction(suite.db, (tx) =>
-        writeVenueDetails(tx, venue.cfg, { expected, changes: { name: "Should not write" } }),
+        writeVenueDetails(tx, { expected, changes: { name: "Should not write" } }),
       ),
     ).rejects.toMatchObject({
       code: "venue.detail_invalid",
@@ -762,7 +754,7 @@ describe("unavailable country and own expected values", () => {
   it("keeps department, trading and taxpayer names when editing the venue display", async () => {
     const initial = await read();
     const saved = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: { name: "Changed venue display" },
       }),
@@ -839,7 +831,7 @@ describe("venue details preserve committed history", () => {
     const location = suite.db.all(sql`select * from locations`);
     await expect(
       withTransaction(suite.db, (tx) =>
-        writeVenueDetails(tx, venue.cfg, {
+        writeVenueDetails(tx, {
           expected: initial.details,
           changes: { name: "Refused together", timeZone: "UTC" },
         }),
@@ -851,7 +843,7 @@ describe("venue details preserve committed history", () => {
     expect(suite.db.all(sql`select * from locations`)).toEqual(location);
     expect(retained()).toEqual(history);
     const saved = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: { name: "New display", addressLine1: "Calle nueva 3", city: "Alcalá de Henares" },
       }),
@@ -879,7 +871,7 @@ describe("venue details preserve committed history", () => {
       const initial = await read();
       expect([initial.hasSales, initial.hasOrderHistory]).toEqual([false, false]);
       const saved = await withTransaction(suite.db, (tx) =>
-        writeVenueDetails(tx, venue.cfg, {
+        writeVenueDetails(tx, {
           expected: initial.details,
           changes: { timeZone: "UTC" },
         }),
@@ -900,7 +892,7 @@ describe("venue details preserve committed history", () => {
     const unsubscribe = subscribeToChanges((event) => events.push(event));
     try {
       const saved = await withTransaction(suite.db, (tx) =>
-        writeVenueDetails(tx, venue.cfg, {
+        writeVenueDetails(tx, {
           expected: initial.details,
           changes: { name: "New display" },
         }),
@@ -916,7 +908,7 @@ describe("venue details preserve committed history", () => {
         { name: " New display ", province: "28", dayCutover: "05:00:00" },
       ]) {
         const repeat = await withTransaction(suite.db, (tx) =>
-          writeVenueDetails(tx, venue.cfg, { expected: initial.details, changes }),
+          writeVenueDetails(tx, { expected: initial.details, changes }),
         );
         expect(repeat.changed).toBe(false);
         expect(events).toEqual([]);
@@ -935,7 +927,7 @@ describe("venue details preserve committed history", () => {
     )();
     const initial = await read();
     const saved = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: { name: "Alias control", timeZone: "America/New_York" },
       }),
@@ -952,7 +944,7 @@ describe("venue details preserve committed history", () => {
     const initial = await read();
     const sale = sell();
     const edit = withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: { name: "Refused together", timeZone: "UTC" },
       }),
@@ -997,7 +989,7 @@ describe("venue details preserve committed history", () => {
     });
     const initial = await read();
     const edit = withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: { timeZone: "UTC" },
       }),
@@ -1070,7 +1062,7 @@ describe("all retained sale rows lock venue clocks", () => {
       ] as const) {
         await expect(
           withTransaction(suite.db, (tx) =>
-            writeVenueDetails(tx, venue.cfg, {
+            writeVenueDetails(tx, {
               expected: initial.details,
               changes: { name: "No partial save", [field]: value },
             }),
@@ -1083,7 +1075,7 @@ describe("all retained sale rows lock venue clocks", () => {
         expect(suite.db.all(sql`select * from sales order by invoice_number`)).toEqual(stored);
       }
       const noOp = await withTransaction(suite.db, (tx) =>
-        writeVenueDetails(tx, venue.cfg, {
+        writeVenueDetails(tx, {
           expected: initial.details,
           changes: { province: "28", dayCutover: "05:00:00" },
         }),
@@ -1174,7 +1166,7 @@ describe("venue detail consumer reads", () => {
     });
     const initial = await read();
     await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: { timeZone: "UTC" },
       }),
@@ -1279,7 +1271,7 @@ describe("venue detail consumer reads", () => {
     const history = retained();
     const initial = await read();
     const saved = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: {
           name: "Corrected display",
@@ -1299,7 +1291,7 @@ describe("venue detail consumer reads", () => {
     expect(retained()).toEqual(history);
     await expect(
       withTransaction(suite.db, (tx) =>
-        writeVenueDetails(tx, venue.cfg, {
+        writeVenueDetails(tx, {
           expected: saved.model.details,
           changes: { timeZone: "UTC", dayCutover: "06:00", name: "Must not save" },
         }),
@@ -1333,7 +1325,7 @@ describe("complete editable field validation", () => {
     for (const value of [[initial.details[field]], 123]) {
       await expect(
         withTransaction(suite.db, (tx) =>
-          writeVenueDetails(tx, venue.cfg, {
+          writeVenueDetails(tx, {
             expected: initial.details,
             changes: { [field]: value } as VenueDetailPatch,
           }),
@@ -1354,7 +1346,7 @@ describe("complete editable field validation", () => {
     const initial = await read();
     await expect(
       withTransaction(suite.db, (tx) =>
-        writeVenueDetails(tx, venue.cfg, {
+        writeVenueDetails(tx, {
           expected: initial.details,
           changes: { addressLine2: "Must not save", [field]: " " },
         }),
@@ -1371,7 +1363,7 @@ describe("complete editable field validation", () => {
       const initial = await read();
       const accepted = "É  Mixed" + "😀".repeat(192);
       const saved = await withTransaction(suite.db, (tx) =>
-        writeVenueDetails(tx, venue.cfg, {
+        writeVenueDetails(tx, {
           expected: initial.details,
           changes: { [field]: `  ${accepted}  ` },
         }),
@@ -1379,7 +1371,7 @@ describe("complete editable field validation", () => {
       expect(saved.model.details[field]).toBe(accepted);
       await expect(
         withTransaction(suite.db, (tx) =>
-          writeVenueDetails(tx, venue.cfg, {
+          writeVenueDetails(tx, {
             expected: saved.model.details,
             changes: { [field]: accepted + "😀" },
           }),
@@ -1407,7 +1399,7 @@ describe("complete editable field validation", () => {
       dayCutover: { decision: "allow_with_warning", reasons: ["clock_effects"] },
     });
     const saved = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: {
           name: "Current display",
@@ -1427,7 +1419,7 @@ describe("complete editable field validation", () => {
       postalCode: "28014",
     });
     const cleared = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: saved.model.details,
         changes: { addressLine2: null },
       }),
@@ -1441,7 +1433,7 @@ describe("complete editable field validation", () => {
       const initial = await read();
       await expect(
         withTransaction(suite.db, (tx) =>
-          writeVenueDetails(tx, venue.cfg, {
+          writeVenueDetails(tx, {
             expected: initial.details,
             changes: { name: "Must not save", [key]: "hidden" },
           }),
@@ -1545,7 +1537,7 @@ describe("workforce facts after venue corrections", () => {
       false,
     ]);
     await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: { timeZone: "UTC", name: "Current location label" },
       }),
@@ -1620,7 +1612,7 @@ describe("open kitchen work during venue corrections", () => {
     expect([initial.hasSales, initial.hasOrderHistory]).toEqual([false, true]);
     await expect(
       withTransaction(suite.db, (tx) =>
-        writeVenueDetails(tx, venue.cfg, {
+        writeVenueDetails(tx, {
           expected: initial.details,
           changes: { name: "Refused together", timeZone: "UTC" },
         }),
@@ -1632,7 +1624,7 @@ describe("open kitchen work during venue corrections", () => {
     expect((await read()).details).toEqual(initial.details);
     expect(retained()).toEqual(before);
     const saved = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: { name: "Current display", addressLine1: "Corrected street" },
       }),
@@ -1649,7 +1641,7 @@ describe("open kitchen work during venue corrections", () => {
 it("accepts a named Etc zone containing a sign and passes it to the reporting clock", async () => {
   const initial = await read();
   const saved = await withTransaction(suite.db, (tx) =>
-    writeVenueDetails(tx, venue.cfg, {
+    writeVenueDetails(tx, {
       expected: initial.details,
       changes: { timeZone: " Etc/GMT+2 " },
     }),
@@ -1678,7 +1670,7 @@ describe("reviewed legacy geography and clock repairs", () => {
       });
       await expect(
         withTransaction(suite.db, (tx) =>
-          writeVenueDetails(tx, venue.cfg, {
+          writeVenueDetails(tx, {
             expected: model.details,
             changes: { postalCode: "28001", name: "Must not save" },
           }),
@@ -1689,7 +1681,7 @@ describe("reviewed legacy geography and clock repairs", () => {
       });
       expect((await read()).details.name).toBe("Sala principal");
       const saved = await withTransaction(suite.db, (tx) =>
-        writeVenueDetails(tx, venue.cfg, {
+        writeVenueDetails(tx, {
           expected: model.details,
           changes: { name: "Allowed display correction" },
         }),
@@ -1705,7 +1697,7 @@ describe("reviewed legacy geography and clock repairs", () => {
     expect(model.details.dayCutover).toBe("06:00garbage");
     await expect(
       withTransaction(suite.db, (tx) =>
-        writeVenueDetails(tx, venue.cfg, {
+        writeVenueDetails(tx, {
           expected: model.details,
           changes: { dayCutover: "06:00" },
         }),
@@ -1748,7 +1740,7 @@ it("refuses a changed cutover beside a placed period and rolls back other detail
   });
   await expect(
     withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: { dayCutover: "13:00", name: "Must roll back" },
       }),
@@ -1758,11 +1750,10 @@ it("refuses a changed cutover beside a placed period and rolls back other detail
     params: { field: "dayCutover", reason: "effective_date_required" },
   });
   const app = new Hono();
-  mountLocationSettingsApi(
+  mountVenueSettingsApi(
     app,
     {
       db: suite.db,
-      cfg: venue.cfg,
       fiscal: venueFiscalSelection(ALL_MODULES, "ES-common").contribution!,
     },
     () => {},

@@ -82,7 +82,6 @@ export type TradingAdmissionView = {
 };
 export interface ZoneRepairView {
   nodeId: string;
-  locationId: string;
   legalName: string;
   country: string;
   province: string | null;

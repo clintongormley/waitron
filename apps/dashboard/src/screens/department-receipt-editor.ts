@@ -435,14 +435,14 @@ export class DepartmentReceiptEditor extends LitElement {
     }
     if (this.requiresDescription) {
       const value = receipt.operationDescription ?? "";
-      if (!value.trim()) problems.operationDescription = t("location_settings.required");
+      if (!value.trim()) problems.operationDescription = t("venue_settings.required");
       else if (
         value.length > 500 ||
         Array.from(value).some(
           (character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127,
         )
       )
-        problems.operationDescription = t("location_settings.invalid");
+        problems.operationDescription = t("venue_settings.invalid");
     }
     return problems;
   }
@@ -543,7 +543,7 @@ export class DepartmentReceiptEditor extends LitElement {
                 : params?.reason === "invalid_logo"
                   ? t("receipts.invalid_logo")
                   : field === "operationDescription"
-                    ? t("location_settings.invalid")
+                    ? t("venue_settings.invalid")
                     : codeMessage(codeOf(error));
       if (
         Array.from(this.shadowRoot!.querySelectorAll("[name]")).some(
@@ -628,7 +628,7 @@ export class DepartmentReceiptEditor extends LitElement {
         this.readError
           ? html`<p class="error" role="alert">${this.readError}</p>
               <wt-button variant="secondary" @click=${() => void this.#load()}
-                >${t("location_settings.retry")}</wt-button
+                >${t("venue_settings.retry")}</wt-button
               >`
           : nothing
       }
@@ -739,7 +739,7 @@ export class DepartmentReceiptEditor extends LitElement {
                     ? html`<wt-input
                         name="operationDescription"
                         required
-                        label=${t("location_settings.description")}
+                        label=${t("venue_settings.description")}
                         hint=${t("receipts.operation_description_hint")}
                         .value=${this.draft.receipt.operationDescription ?? ""}
                         error=${errors.operationDescription ?? ""}

@@ -8,7 +8,6 @@ import { VenueZoneRepair } from "./venue-zone-repair.js";
 
 const status = {
   nodeId: "node",
-  locationId: "location",
   legalName: "Deli Test SL",
   country: "ES",
   province: "08",

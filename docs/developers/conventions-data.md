@@ -4651,13 +4651,13 @@ touched the changed schema. Designed and built in #310.
 
 > **Superseded 2026-09-14.** `authorizeManager` returns `{ authorizedBy, role }` and no tenant, and
 > there is no configured tenant to compare it with — one database, one taxpayer. Built in #378. The
-> two regression cases named below were deleted with the column. What the route still scopes its
-> queries by is the deployed LOCATION — `apps/server/src/location-settings-api.ts` filters on
-> `eq(locations.id, deps.cfg.locationId)` — a separate boundary this change did not touch.
+> two regression cases named below were deleted with the column. The route then still scoped its
+> queries by the deployed location; since A1301 S1 (2026-11-01) it reads the box's one venue
+> (`apps/server/src/venue-settings-api.ts`).
 
 The permission check returns the session's tenant; it does not compare it with the configured tenant.
 A2's two-tenant route probe returned 200 for the other tenant's manager until the caller compared
-them. Regression: `apps/server/src/location-settings-api.test.ts`, "refuses a manager session
+them. Regression: the settings routes' test file, "refuses a manager session
 belonging to another tenant". Printer routes enforce the same check; their regression is
 `apps/server/src/print-api.printer-wiring.test.ts`, "refuses another tenant's manager…".
 

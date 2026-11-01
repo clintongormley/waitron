@@ -16,7 +16,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { setRoutingCell } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
 import { ALL_MODULES } from "./modules.js";
-import { mountLocationSettingsApi } from "./location-settings-api.js";
+import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import {
   provisionBillVenue,
@@ -26,9 +26,9 @@ import {
 } from "./testing/bill-venue.js";
 import "./errors.js";
 
-// A receipt-language change is refused while an open order at the location holds a line: the till
-// can still split such a line, inserting a copy keyed under the old language, or move it to another
-// bill, and the database's line triggers refuse both once the location's language differs. A placed
+// A receipt-language change is refused while an open order holds a line: the till can still split
+// such a line, inserting a copy keyed under the old language, or move it to another bill, and the
+// database's line triggers refuse both once the venue's language differs. A placed
 // or paid order's lines, and an open order with none, take no such write, so they do not block.
 let venue: BillVenue;
 let counter: ZoneOffers;
@@ -55,11 +55,10 @@ beforeAll(async () => {
 
 const settings = new Hono();
 beforeAll(() => {
-  mountLocationSettingsApi(
+  mountVenueSettingsApi(
     settings,
     {
       db: venue.db,
-      cfg: venue.cfg,
       fiscal: venueFiscalSelection(ALL_MODULES, "ES-common").contribution!,
     },
     () => {},
@@ -182,29 +181,6 @@ describe("a receipt-language change while orders are open", () => {
     await seatedWith(venue, "Paella");
     await seatedWith(venue, "Tarta");
     expect(await changeTo("gl-ES")).toEqual(refusedFor(2));
-  });
-
-  it("does not count an open order holding a line at another location", async () => {
-    reset();
-    const elsewhere = randomUUID();
-    const orderId = randomUUID();
-    const stamp = new Date().toISOString();
-    venue.db.run(sql`insert into locations (id, name, invoice_locales, operation_description)
-                     values (${elsewhere}, ${`Elsewhere ${elsewhere}`}, '["en-GB"]', 'Other venue')`);
-    venue.db.run(sql`insert into working_orders (id, source, location_id, order_number, opened_at)
-                     values (${orderId}, 'dashboard', ${elsewhere}, 1, ${stamp})`);
-    venue.db.run(sql`insert into working_order_lines
-                       (id, working_order_id, line_no, name, descriptions, quantity, unit_price_gross,
-                        vat_class, line_total)
-                     values (${randomUUID()}, ${orderId}, 1, 'Item', '{"en-GB":"Item"}', 1000, 121,
-                             'general', 121)`);
-    expect(statusOf(orderId)).toBe("open");
-
-    expect(await changeTo("gl-ES")).toMatchObject({
-      status: 200,
-      json: { receiptLanguage: "gl-ES" },
-    });
-    expect(language()).toEqual(["gl-ES"]);
   });
 
   it("accepts the language already saved while an order is open, writing nothing new", async () => {

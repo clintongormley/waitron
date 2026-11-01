@@ -6,7 +6,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import { ALL_MODULES } from "./modules.js";
-import { mountLocationSettingsApi } from "./location-settings-api.js";
+import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -15,7 +15,7 @@ let venue: Venue;
 function appWith(): Hono {
   const app = new Hono();
   const fiscal = venueFiscalSelection(ALL_MODULES, "ES-common").contribution!;
-  mountLocationSettingsApi(app, { db: suite.db, cfg: venue.cfg, fiscal }, () => {});
+  mountVenueSettingsApi(app, { db: suite.db, fiscal }, () => {});
   return app;
 }
 function read(cookie: string | null = venue.managerCookie) {
@@ -187,12 +187,12 @@ describe("the venue's privacy contact", () => {
     expect(await taxpayer()).toEqual(before);
   });
 
-  it("answers both routes with the location refusal when there is no taxpayer row", async () => {
+  it("answers both routes with the venue refusal when there is no taxpayer row", async () => {
     await suite.db.execute(sql`delete from tenants`);
     for (const response of [await read(), await save(stored)]) {
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(409);
       expect(await response.json()).toEqual({
-        error: { code: "management.request_invalid", params: { field: "locationId" } },
+        error: { code: "venue.not_found", params: {} },
       });
     }
   });

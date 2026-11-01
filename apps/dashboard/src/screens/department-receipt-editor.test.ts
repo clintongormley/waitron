@@ -58,7 +58,7 @@ it("explains an empty required description and disables Save until repaired", as
   await editReceipt(el, "operationDescription", "");
   await clickReceiptSave(el);
   expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
-  expect(receiptField(el, "operationDescription").error).toBe(t("location_settings.required"));
+  expect(receiptField(el, "operationDescription").error).toBe(t("venue_settings.required"));
   expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
   expect(receiptSave(el).disabled).toBe(true);
   const description = receiptField(el, "operationDescription");
@@ -72,7 +72,7 @@ it("explains an empty required description and disables Save until repaired", as
   expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe("");
   expect(receiptSave(el).disabled).toBe(false);
   await editReceipt(el, "operationDescription", " ");
-  expect(description.error).toBe(t("location_settings.required"));
+  expect(description.error).toBe(t("venue_settings.required"));
   expect(receiptSave(el).disabled).toBe(true);
 });
 
@@ -107,7 +107,7 @@ it.each(["a".repeat(501), "Sale\u0001service"])(
     await editReceipt(el, "operationDescription", value);
     await clickReceiptSave(el);
     expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
-    expect(receiptField(el, "operationDescription").error).toBe(t("location_settings.invalid"));
+    expect(receiptField(el, "operationDescription").error).toBe(t("venue_settings.invalid"));
     expect(receiptSave(el).disabled).toBe(true);
   },
 );

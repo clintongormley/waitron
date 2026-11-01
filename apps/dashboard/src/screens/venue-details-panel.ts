@@ -673,7 +673,7 @@ export class VenueDetailsPanel extends LitElement {
               data-test="retry"
               variant="secondary"
               @click=${() => void this.#load()}
-              >${t("location_settings.retry")}</wt-button
+              >${t("venue_settings.retry")}</wt-button
             >`
         : nothing
     }

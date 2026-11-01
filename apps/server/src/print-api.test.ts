@@ -2468,7 +2468,7 @@ describe("mountPrintApi — management: print-test-page", () => {
   it("prints calibration in the committed venue zone without remounting the routes", async () => {
     const app = mountApp({ now: () => NOW });
     const printerId = await createNetworkPrinter(app, "10.0.0.129", 9100, "Clock edit calibration");
-    const initial = await withTransaction(suite.db, (tx) => readVenueDetails(tx, { locationId }));
+    const initial = await withTransaction(suite.db, (tx) => readVenueDetails(tx));
     expect(initial.details.timeZone).toBe("Europe/Madrid");
     const print = async () => {
       const response = await app.request(`/management-api/printers/${printerId}/print-test-page`, {
@@ -2483,55 +2483,39 @@ describe("mountPrintApi — management: print-test-page", () => {
     };
     expect(await print()).toContain("1 Oct 2026, 15:05");
     const saved = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(
-        tx,
-        { locationId },
-        {
-          expected: initial.details,
-          changes: { timeZone: "UTC" },
-        },
-      ),
+      writeVenueDetails(tx, {
+        expected: initial.details,
+        changes: { timeZone: "UTC" },
+      }),
     );
     try {
       expect(await print()).toContain("1 Oct 2026, 13:05");
       await expect(
         withTransaction(suite.db, (tx) =>
-          writeVenueDetails(
-            tx,
-            { locationId },
-            {
-              expected: saved.model.details,
-              changes: { timeZone: "Invalid/Zone" },
-            },
-          ),
+          writeVenueDetails(tx, {
+            expected: saved.model.details,
+            changes: { timeZone: "Invalid/Zone" },
+          }),
         ),
       ).rejects.toMatchObject({
         code: "venue.detail_invalid",
         params: { field: "timeZone", reason: "time_zone" },
       });
       const noOp = await withTransaction(suite.db, (tx) =>
-        writeVenueDetails(
-          tx,
-          { locationId },
-          {
-            expected: saved.model.details,
-            changes: { timeZone: "UTC" },
-          },
-        ),
+        writeVenueDetails(tx, {
+          expected: saved.model.details,
+          changes: { timeZone: "UTC" },
+        }),
       );
       expect(noOp.changed).toBe(false);
       expect(await print()).toContain("1 Oct 2026, 13:05");
     } finally {
-      const latest = await withTransaction(suite.db, (tx) => readVenueDetails(tx, { locationId }));
+      const latest = await withTransaction(suite.db, (tx) => readVenueDetails(tx));
       await withTransaction(suite.db, (tx) =>
-        writeVenueDetails(
-          tx,
-          { locationId },
-          {
-            expected: latest.details,
-            changes: { timeZone: initial.details.timeZone },
-          },
-        ),
+        writeVenueDetails(tx, {
+          expected: latest.details,
+          changes: { timeZone: initial.details.timeZone },
+        }),
       );
     }
   });

@@ -217,7 +217,7 @@ import { runAttendanceEmailLoop } from "./attendance-email-worker.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { createCardProviderPool } from "./card-provider-pool.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
-import { mountLocationSettingsApi } from "./location-settings-api.js";
+import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import { mountThemesApi } from "./themes-api.js";
 import { mountReceiptPreviewApi } from "./receipt-preview-api.js";
 import { drawLogoRasters } from "./receipt-logo.js";
@@ -1771,10 +1771,7 @@ async function bootServer(
   };
   // The venue's default DISPLAY locale. The override is the RAW `tradingContext.localeOverride`, not the
   // defaulted `tradingContext.locale`, which would mask geography.
-  const venueLocale = await readVenueLocale(db, {
-    locationId: tradingContext.locationId,
-    override: tradingContext.localeOverride,
-  });
+  const venueLocale = await readVenueLocale(db, { override: tradingContext.localeOverride });
   const tradingAdmission = new TradingAdmission();
   health.readTradingAdmission = () => tradingAdmission.snapshot();
   const scope = { nodeId: tradingContext.nodeId, locationId: tradingContext.locationId };
@@ -1815,7 +1812,7 @@ async function bootServer(
     > = async (message) => {
       const [delivery, timeZone] = await Promise.all([
         resolveEmailDelivery(db, ring, config.devMode || tradingContext.practiceMode === true),
-        readVenueTimeZone(db, { locationId: tradingContext.locationId }),
+        readVenueTimeZone(db),
       ]);
       if (delivery.mode === "unconfigured") throw new Error("account email is not configured");
       await createAccountEmailSender({ ...delivery.smtp, timeZone })(message);
@@ -1944,9 +1941,7 @@ async function bootServer(
     },
     log,
   );
-  const contentLanguageRules = await readVenueContentLanguageRules(db, {
-    locationId: tradingContext.locationId,
-  });
+  const contentLanguageRules = await readVenueContentLanguageRules(db);
   const cardProvider = await buildCardProvider(
     db,
     config.onboardingIntent,
@@ -2249,7 +2244,7 @@ async function bootServer(
     // Queue all three reads before an answered reset can reach shutdown's drain.
     const [delivery, timeZone, privacy] = await Promise.all([
       resolveAccountEmail(),
-      readVenueTimeZone(db, { locationId: tradingContext.locationId }),
+      readVenueTimeZone(db),
       withTransaction(db, readPrivacyContact),
     ]);
     if (delivery.mode === "unconfigured")
@@ -2266,11 +2261,10 @@ async function bootServer(
     cloud: null,
   };
   mountThemesApi(app, { db }, log);
-  mountLocationSettingsApi(
+  mountVenueSettingsApi(
     app,
     {
       db,
-      cfg: tradingContext,
       fiscal: enabledFiscal,
       readBackupDeadlines: () => ({ ...backupDeadlines }),
     },

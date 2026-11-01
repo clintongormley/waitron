@@ -474,7 +474,7 @@ it("keeps a request failure beside the local correction summary when the draft b
     .poll(() => receiptRoot(el).querySelector("wt-form-actions")!.error)
     .toBe(codeMessage("management.failed"));
   await editReceipt(el, "operationDescription", "");
-  expect(receiptField(el, "operationDescription").error).toBe(t("location_settings.required"));
+  expect(receiptField(el, "operationDescription").error).toBe(t("venue_settings.required"));
   expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe(
     `${t("form.fix_fields")} ${codeMessage("management.failed")}`,
   );
@@ -556,14 +556,14 @@ it("focuses a server-refused description and keeps its refusal until that field 
   await editReceipt(el, "operationDescription", "Rejected service");
   await clickReceiptSave(el);
   const description = receiptField(el, "operationDescription");
-  await expect.poll(() => description.error).toBe(t("location_settings.invalid"));
+  await expect.poll(() => description.error).toBe(t("venue_settings.invalid"));
   await expect
     .poll(() => description.shadowRoot!.activeElement)
     .toBe(description.shadowRoot!.querySelector("input"));
   expect(description.value).toBe("Rejected service");
   expect(receiptSave(el).disabled).toBe(false);
   await editReceipt(el, "email", "other@example.test");
-  expect(description.error).toBe(t("location_settings.invalid"));
+  expect(description.error).toBe(t("venue_settings.invalid"));
   await editReceipt(el, "operationDescription", "Corrected service");
   expect(description.error).toBe("");
   expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe("");

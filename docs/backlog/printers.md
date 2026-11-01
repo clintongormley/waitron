@@ -594,15 +594,15 @@ device rule. Spec: [A268 §4](../superpowers/specs/2026-10-04-add-a-device-desig
 Since A841 slice 7, a theme's logo (`theme_logo` in `listImageUsages`) is a second logo use that
 only the app keeps from deletion; no trigger protects it either.
 
-## A change is refused while an open order at the location holds a line
+## A change is refused while an open order holds a line
 
-- **A change is refused while an open order at the location holds a line**
+- **A change is refused while an open order holds a line**
   (`receipt.language_orders_open`; narrowed by C124, #1020, 2026-10-02, with core
   `0064_line_locale_triggers_text_only`). The order-line language triggers now check a line's
   names only when an update changes them or moves the line, so the till can still split such a
   line, which copies its old-language names into a new line, or move it to another bill, and the
   database refuses both once the language differs. Measured by the till's own routes
-  (`apps/server/src/location-settings-api.orders-open.test.ts`): placed orders, paid bills whose
+  (`apps/server/src/venue-settings-api.orders-open.test.ts`): placed orders, paid bills whose
   party is still seated, a paid order with a dish no station took, and an open bill with no line
   no longer block. After the change, the tests serve a seated party's paid dish, take back a
   serve on one, send a paid sale's unsent dish and collect a placed order. If a language is

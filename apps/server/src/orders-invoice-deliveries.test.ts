@@ -186,22 +186,9 @@ async function extraOffice(name: string, locationId: string = venue.cfg.location
 }
 
 /** Runs `act` with extra A4 printers that are switched off afterwards, for the suites after it. */
-async function withExtraOffices(
-  act: (extra: { upstairs: string; elsewhere: string; off: string }) => Promise<void>,
-) {
-  const [terrace] = await inTx(venue, (tx) =>
-    tx
-      .insert(locations)
-      .values({
-        name: `Terrace ${hostCounter}`,
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Restaurante",
-      })
-      .returning({ id: locations.id }),
-  );
+async function withExtraOffices(act: (extra: { upstairs: string; off: string }) => Promise<void>) {
   const extra = {
     upstairs: await extraOffice("Arriba"),
-    elsewhere: await extraOffice("Terraza", terrace!.id),
     off: await extraOffice("Apagada"),
   };
   await inTx(venue, (tx) =>
@@ -213,6 +200,32 @@ async function withExtraOffices(
     await inTx(venue, (tx) =>
       tx.update(pagePrinters).set({ active: false }).where(eq(pagePrinters.id, extra.upstairs)),
     );
+  }
+}
+
+/** An A4 printer at a second location, deleted with its location afterwards: every other case
+ * reads the one venue. */
+async function withElsewhereOffice(act: (elsewhere: string) => Promise<void>) {
+  const [terrace] = await inTx(venue, (tx) =>
+    tx
+      .insert(locations)
+      .values({
+        name: `Terrace ${hostCounter}`,
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Restaurante",
+      })
+      .returning({ id: locations.id }),
+  );
+  let elsewhere: string | undefined;
+  try {
+    elsewhere = await extraOffice("Terraza", terrace!.id);
+    await act(elsewhere);
+  } finally {
+    await inTx(venue, async (tx) => {
+      if (elsewhere !== undefined)
+        await tx.delete(pagePrinters).where(eq(pagePrinters.id, elsewhere));
+      await tx.delete(locations).where(eq(locations.id, terrace!.id));
+    });
   }
 }
 
@@ -338,12 +351,14 @@ describe("dashboard Print invoice", () => {
 
   it("prints on any active A4 printer at the sale's location, and refuses any other", async () => {
     const { billId, saleId } = await fullInvoice();
-    await withExtraOffices(async ({ upstairs, elsewhere, off }) => {
-      for (const printerId of [elsewhere, off, randomUUID()]) {
-        expect(
-          await printInvoice(venue.adminDashboard, billId, printBody(randomUUID(), printerId)),
-        ).toMatchObject({ status: 409, json: { code: "invoice_delivery.printer_invalid" } });
-      }
+    await withExtraOffices(async ({ upstairs, off }) => {
+      await withElsewhereOffice(async (elsewhere) => {
+        for (const printerId of [elsewhere, off, randomUUID()]) {
+          expect(
+            await printInvoice(venue.adminDashboard, billId, printBody(randomUUID(), printerId)),
+          ).toMatchObject({ status: 409, json: { code: "invoice_delivery.printer_invalid" } });
+        }
+      });
       expect(await deliveriesOf(saleId)).toEqual([]);
       expect(
         (await printInvoice(venue.adminDashboard, billId, printBody(randomUUID(), upstairs)))
@@ -1039,23 +1054,32 @@ describe("dashboard print on a receipt printer", () => {
           { name, transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
         ),
       );
-    const off = (await make("Apagada")).id;
-    const deleted = (await make("Borrada")).id;
-    const elsewhere = (await make("Terraza", terrace!.id)).id;
-    await inTx(venue, async (tx) => {
-      await tx.update(printers).set({ active: false }).where(eq(printers.id, off));
-      await tx
-        .update(printers)
-        .set({ active: false, deletedAt: new Date().toISOString() })
-        .where(eq(printers.id, deleted));
-    });
-    for (const printerId of [off, deleted, elsewhere]) {
-      expect(
-        await printInvoice(venue.adminDashboard, billId, printBody(randomUUID(), printerId)),
-      ).toMatchObject({ status: 409, json: { code: "invoice_delivery.printer_invalid" } });
+    let elsewhere: string | undefined;
+    try {
+      const off = (await make("Apagada")).id;
+      const deleted = (await make("Borrada")).id;
+      elsewhere = (await make("Terraza", terrace!.id)).id;
+      await inTx(venue, async (tx) => {
+        await tx.update(printers).set({ active: false }).where(eq(printers.id, off));
+        await tx
+          .update(printers)
+          .set({ active: false, deletedAt: new Date().toISOString() })
+          .where(eq(printers.id, deleted));
+      });
+      for (const printerId of [off, deleted, elsewhere]) {
+        expect(
+          await printInvoice(venue.adminDashboard, billId, printBody(randomUUID(), printerId)),
+        ).toMatchObject({ status: 409, json: { code: "invoice_delivery.printer_invalid" } });
+      }
+      expect(await deliveriesOf(saleId)).toEqual([]);
+      expect(await jobsOfSale(saleId)).toEqual([]);
+    } finally {
+      // The second location goes: every later case reads the one venue.
+      await inTx(venue, async (tx) => {
+        if (elsewhere !== undefined) await tx.delete(printers).where(eq(printers.id, elsewhere));
+        await tx.delete(locations).where(eq(locations.id, terrace!.id));
+      });
     }
-    expect(await deliveriesOf(saleId)).toEqual([]);
-    expect(await jobsOfSale(saleId)).toEqual([]);
   });
 
   it("still offers email and the PDF with no printer anywhere", async () => {

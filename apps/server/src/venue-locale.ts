@@ -3,9 +3,11 @@ import { eq } from "drizzle-orm";
 import {
   locations,
   readTenant,
+  readVenue,
   withTransaction,
   type Database,
   type Transaction,
+  type Venue,
 } from "@waitron/db";
 import { contentLanguagesOr, readSavedContentLanguages } from "@waitron/catalogue";
 import type { ReceiptLanguageRules } from "@waitron/country";
@@ -29,36 +31,30 @@ async function countryIn(tx: Transaction): Promise<string | null> {
 
 async function geographyIn(
   tx: Transaction,
-  locationId: string,
 ): Promise<{ country: string | null; area: string | null }> {
   const country = await countryIn(tx);
-  const [loc] = await tx
-    .select({ province: locations.province })
-    .from(locations)
-    .where(eq(locations.id, locationId));
-  return { country, area: loc?.province ?? null };
+  return { country, area: (await readVenue(tx)).province };
 }
 
 function readVenueGeography(
   db: Database,
-  locationId: string,
 ): Promise<{ country: string | null; area: string | null }> {
-  return withTransaction(db, (tx) => geographyIn(tx, locationId));
+  return withTransaction(db, geographyIn);
 }
 
 /**
  * The venue's default UI locale, from geography and an optional override, through the shared
  * `override → area → country → English` chain.
  *
- * This is a DISPLAY value, DELIBERATELY separate from the location's receipt language. The
+ * This is a DISPLAY value, DELIBERATELY separate from the venue's receipt language. The
  * `override` is the RAW `WAITRON_TILL_LOCALE` (`cfg.localeOverride`), NOT the defaulted
  * `cfg.locale`, whose `es-ES` default would mask the geography derivation.
  */
 export async function readVenueLocale(
   db: Database,
-  params: { locationId: string; override?: string },
+  params: { override?: string },
 ): Promise<SupportedLocale> {
-  const { country, area } = await readVenueGeography(db, params.locationId);
+  const { country, area } = await readVenueGeography(db);
   return resolveInstalledCountryLocale(SUPPORTED_LOCALE_CODES, {
     override: params.override,
     area,
@@ -68,20 +64,22 @@ export async function readVenueLocale(
 }
 
 /** The content languages the venue's country pack keeps enabled for its area. */
-export async function readVenueContentLanguageRules(
-  db: Database,
-  params: { locationId: string },
-): Promise<ContentLanguageRules> {
-  return resolveInstalledContentLanguageRules(await readVenueGeography(db, params.locationId));
+export async function readVenueContentLanguageRules(db: Database): Promise<ContentLanguageRules> {
+  return resolveInstalledContentLanguageRules(await readVenueGeography(db));
 }
 
 /** The receipt languages the venue's country pack offers, and the one its region fixes, if any,
- * read in the caller's transaction. */
+ * read in the caller's transaction. `venue`, when given, is the venue row the caller already read
+ * in it. */
 export async function readVenueReceiptLanguageRules(
   tx: Transaction,
-  params: { locationId: string },
+  venue?: Pick<Venue, "province">,
 ): Promise<ReceiptLanguageRules> {
-  return resolveInstalledReceiptLanguageRules(await geographyIn(tx, params.locationId));
+  if (venue === undefined) return resolveInstalledReceiptLanguageRules(await geographyIn(tx));
+  return resolveInstalledReceiptLanguageRules({
+    country: await countryIn(tx),
+    area: venue.province,
+  });
 }
 
 /**

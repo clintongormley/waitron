@@ -130,7 +130,7 @@ describe("atomic unusable-zone confirmation", () => {
         acknowledgedBy: actor,
         acknowledgedNote: null,
         params: {
-          ...scope,
+          nodeId: scope.nodeId,
           timeZone: "Europe/Madrid",
           previousRevision: 0,
           clockRevision: 1,
@@ -269,7 +269,7 @@ describe("atomic unusable-zone confirmation", () => {
   it("reads a bounded raw context and an independently computed Madrid preview", async () => {
     const before = snapshot();
     expect(await read("Europe/Madrid")).toEqual({
-      ...scope,
+      nodeId: scope.nodeId,
       legalName: "Test SL",
       country: "ES",
       province: "Madrid",

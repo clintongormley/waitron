@@ -451,9 +451,9 @@ describe("cloud snapshot venue clock edits", () => {
     await worker.tick(signal());
     expect(f.captures()).toBe(1);
     expect(new Date((await state()).nextAt).toISOString()).toBe("2026-09-25T03:32:00.000Z");
-    const initial = await withTransaction(suite.db, (tx) => readVenueDetails(tx, venue.cfg));
+    const initial = await withTransaction(suite.db, (tx) => readVenueDetails(tx));
     await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: { timeZone: "UTC" },
       }),

@@ -19,6 +19,7 @@ const run = createErrorBoundary(
     "management.request_invalid": 400,
     "venue.business_day_changed": 409,
     "venue.time_zone_repair_not_needed": 409,
+    "venue.not_found": 409,
   },
   "management.failed",
 );

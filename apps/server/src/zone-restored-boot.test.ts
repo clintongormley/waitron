@@ -164,12 +164,9 @@ it.each(["archive", "bucket"] as const)(
         tradingAvailable: false,
       });
       const path = "/management-api/venue-details/time-zone-repair";
-      expect(await (await request(path)).json()).toMatchObject({
-        eligible: true,
-        category: "invalid",
-        nodeId: node.nodeId,
-        locationId: node.locationId,
-      });
+      const view = await (await request(path)).json();
+      expect(view).toMatchObject({ eligible: true, category: "invalid", nodeId: node.nodeId });
+      expect(view).not.toHaveProperty("locationId");
       expect(runPendingCardLoop).not.toHaveBeenCalled();
       expect(runAttendanceLoop).not.toHaveBeenCalled();
       await withMockedKill(async (kills) => {

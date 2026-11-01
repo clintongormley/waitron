@@ -1,10 +1,18 @@
 import { eq, sql } from "drizzle-orm";
-import { locations, tenants, locationBusinessDaySettings, type Transaction } from "@waitron/db";
+import {
+  locations,
+  locationBusinessDaySettings,
+  readTenant,
+  readVenue,
+  venueLocationId,
+  type Transaction,
+} from "@waitron/db";
 import { findAdministrativeArea, findAdministrativeAreaByPostalCode } from "@waitron/country";
 import { getCountryPack } from "@waitron/country-packs";
 import { readBusinessDayClockModel } from "./business-day-start.js";
 import { AppError, classifyTimeZone, cutoverForBusinessDay } from "@waitron/shared";
 import type {
+  BusinessDayClockModel,
   VenueDetailField,
   VenueDetailsModel,
   VenueDetailValues,
@@ -26,7 +34,6 @@ export const readOnlyVenueFields: ReadonlySet<string> = new Set([
   "country",
   "legalName",
   "taxId",
-  "locationId",
   "fiscalTerritory",
 ]);
 const nullable = new Set<VenueDetailField>([
@@ -73,27 +80,24 @@ function equivalent(field: VenueDetailField, value: string | null, country: stri
     return normalized.slice(0, 5);
   return normalized;
 }
+/** `clockModel`, when given, is the business-day clock model this transaction already read at `at`
+ * and has not changed since. */
 export async function readVenueDetails(
   tx: Transaction,
-  cfg: { locationId: string },
   at: Date = new Date(),
+  clockModel?: BusinessDayClockModel,
 ): Promise<VenueDetailsModel> {
-  const [location] = await tx.select().from(locations).where(eq(locations.id, cfg.locationId));
-  if (location === undefined)
-    throw new AppError("management.request_invalid", { field: "locationId" });
-  const [issuer] = await tx
-    .select({ country: tenants.country, legalName: tenants.legalName, taxId: tenants.taxId })
-    .from(tenants)
-    .where(eq(tenants.id, 1));
-  if (issuer === undefined)
-    throw new AppError("management.request_invalid", { field: "locationId" });
+  const venue = await readVenue(tx);
+  const tenant = await readTenant(tx);
+  if (tenant === null) throw new AppError("venue.not_found", {});
+  const issuer = { country: tenant.country, legalName: tenant.legalName, taxId: tenant.taxId };
   const pack = getCountryPack(issuer.country);
   const { rows } = await tx.execute<{ sales: number; orders: number; closes: number }>(sql`
     select exists(select 1 from sales limit 1) as sales,
       exists(select 1 from working_orders limit 1) as orders,
       exists(select 1 from daily_closes limit 1) as closes`);
   const history = rows[0]!;
-  const businessDayClock = await readBusinessDayClockModel(tx, cfg, at);
+  const businessDayClock = clockModel ?? (await readBusinessDayClockModel(tx, at));
   const clockReason =
     businessDayClock.clock.cutoverChanges.length > 0
       ? "business_day_history"
@@ -111,16 +115,16 @@ export async function readVenueDetails(
   return {
     businessDayClock,
     details: {
-      name: location.name,
-      addressLine1: location.addressLine1,
-      addressLine2: location.addressLine2,
-      postalCode: location.postalCode,
-      city: location.city,
-      province: location.province,
-      timeZone: location.timeZone,
+      name: venue.name,
+      addressLine1: venue.addressLine1,
+      addressLine2: venue.addressLine2,
+      postalCode: venue.postalCode,
+      city: venue.city,
+      province: venue.province,
+      timeZone: venue.timeZone,
       dayCutover:
         businessDayClock.currentBusinessDay === null
-          ? equivalent("dayCutover", location.dayCutover, issuer.country)!
+          ? equivalent("dayCutover", venue.dayCutover, issuer.country)!
           : cutoverForBusinessDay(businessDayClock.clock, businessDayClock.currentBusinessDay),
     },
     issuer,
@@ -138,8 +142,7 @@ export async function readVenueDetails(
       postalCode:
         pack === undefined ||
         (pack.administrativeAreas.length > 0 &&
-          (location.province === null ||
-            findAdministrativeArea(pack, location.province) === undefined))
+          (venue.province === null || findAdministrativeArea(pack, venue.province) === undefined))
           ? { decision: "refuse", reasons: ["geography_context"] }
           : { decision: "allow_with_warning", reasons: ["current_details_only"] },
       province: { decision: "refuse", reasons: [history.sales ? "sales" : "geography_context"] },
@@ -151,7 +154,6 @@ export async function readVenueDetails(
 }
 export async function writeVenueDetails(
   tx: Transaction,
-  cfg: { locationId: string },
   input: VenueDetailWrite,
   at: Date = new Date(),
 ): Promise<{ changed: boolean; model: VenueDetailsModel }> {
@@ -167,7 +169,7 @@ export async function writeVenueDetails(
     if (typeof value !== "string" && !(value === null && nullable.has(field)))
       invalid(field, "type");
   }
-  const model = await readVenueDetails(tx, cfg, at);
+  const model = await readVenueDetails(tx, at);
   const delta: Partial<VenueDetailValues> = {};
   for (const field of fields) {
     if (!Object.hasOwn(changes, field)) continue;
@@ -249,13 +251,21 @@ export async function writeVenueDetails(
     Object.assign(delta, { [field]: normalized });
   }
   if (Object.keys(delta).length === 0) return { changed: false, model };
-  await tx.update(locations).set(delta).where(eq(locations.id, cfg.locationId));
+  const venueId = await venueLocationId(tx);
+  await tx.update(locations).set(delta).where(eq(locations.id, venueId));
   if (delta.timeZone !== undefined) {
     const revision = model.businessDayClock.revision + 1;
     await tx
       .insert(locationBusinessDaySettings)
-      .values({ locationId: cfg.locationId, revision })
+      .values({ locationId: venueId, revision })
       .onConflictDoUpdate({ target: locationBusinessDaySettings.locationId, set: { revision } });
   }
-  return { changed: true, model: await readVenueDetails(tx, cfg, at) };
+  return {
+    changed: true,
+    model: await readVenueDetails(
+      tx,
+      at,
+      delta.timeZone === undefined ? model.businessDayClock : undefined,
+    ),
+  };
 }

@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  locationDayCutoverChanges,
+  locations,
+  nodes,
+  readVenueClock,
+  readVenueClockAndPlace,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   businessDayOf,
@@ -12,6 +20,7 @@ import {
   currentBusinessDay,
   readLocationClock,
   readLocationClockAndPlace,
+  resolveVenueClock,
   validateBusinessDay,
   validateCutover,
   validateTimeZone,
@@ -200,6 +209,69 @@ describe("readLocationClock", () => {
     const missing = randomUUID();
     await expect(withTransaction(suite.db, (tx) => readLocationClock(tx, missing))).rejects.toThrow(
       `reporting: no location ${missing}`,
+    );
+  });
+
+  it("readVenueClock reads what readLocationClock reads for the one location", async () => {
+    const [location] = await suite.db
+      .insert(locations)
+      .values({
+        name: "Sala",
+        invoiceLocales: ["es"],
+        operationDescription: "Restaurante",
+        timeZone: "Atlantic/Canary",
+        dayCutover: "04:30:00",
+        province: "Las Palmas",
+        city: "Telde",
+      })
+      .returning({ id: locations.id });
+    await suite.db.insert(locationDayCutoverChanges).values([
+      { locationId: location!.id, effectiveBusinessDay: "2026-05-01", dayCutover: "05:00:00" },
+      { locationId: location!.id, effectiveBusinessDay: "2026-01-15", dayCutover: "03:00:00" },
+    ]);
+
+    await withTransaction(suite.db, async (tx) => {
+      expect(await readVenueClockAndPlace(tx)).toEqual(
+        await readLocationClockAndPlace(tx, location!.id),
+      );
+      const clock = await readVenueClock(tx);
+      expect(clock).toEqual(await readLocationClock(tx, location!.id));
+      // So two readers wrong in the same way cannot pass.
+      expect(clock.cutoverChanges.map((change) => change.effectiveBusinessDay)).toEqual([
+        "2026-01-15",
+        "2026-05-01",
+      ]);
+      expect(clock.dayCutover).toBe("04:30");
+    });
+  });
+
+  it("resolveVenueClock reads the venue's clock for a node the database holds", async () => {
+    const [location] = await suite.db
+      .insert(locations)
+      .values({
+        name: "Sala",
+        invoiceLocales: ["es"],
+        operationDescription: "Restaurante",
+        timeZone: "Atlantic/Canary",
+        dayCutover: "04:30:00",
+      })
+      .returning({ id: locations.id });
+    const [node] = await suite.db
+      .insert(nodes)
+      .values({ locationId: location!.id, name: "Box" })
+      .returning({ id: nodes.id });
+
+    expect(await withTransaction(suite.db, (tx) => resolveVenueClock(tx, node!.id))).toEqual({
+      cutoverChanges: [],
+      timeZone: "Atlantic/Canary",
+      dayCutover: "04:30",
+    });
+  });
+
+  it("resolveVenueClock refuses a node the database does not hold", async () => {
+    const missing = randomUUID();
+    await expect(withTransaction(suite.db, (tx) => resolveVenueClock(tx, missing))).rejects.toThrow(
+      `reporting: no node ${missing}`,
     );
   });
 });

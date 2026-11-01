@@ -5257,9 +5257,9 @@ describe("venue detail edits and configuration boundaries", () => {
       .update(locations)
       .set({ dayCutover: "04:30:00" })
       .where(eq(locations.id, source.locationId));
-    const initial = await withTransaction(suite.db, (tx) => readVenueDetails(tx, source));
+    const initial = await withTransaction(suite.db, (tx) => readVenueDetails(tx));
     const saved = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, source, {
+      writeVenueDetails(tx, {
         expected: initial.details,
         changes: {
           name: "Corrected source",
@@ -5294,13 +5294,13 @@ describe("venue detail edits and configuration boundaries", () => {
       timeZone: "Europe/Madrid",
       dayCutover: "07:00",
     });
-    const target = await applyVenue(planVenue(targetRequest, ALL_MODULES), {
+    await applyVenue(planVenue(targetRequest, ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
       beforeCommit: (tx, created) =>
         importConfigurationTables(tx, exported, created, ALL_MODULES, versions),
     });
-    const model = await withTransaction(targetSuite.db, (tx) => readVenueDetails(tx, target));
+    const model = await withTransaction(targetSuite.db, (tx) => readVenueDetails(tx));
     expect(model.details).toEqual({
       name: "Created target",
       addressLine1: "Calle target 2",
@@ -5335,7 +5335,7 @@ describe("venue detail edits and configuration boundaries", () => {
           fiscalBackend: "none",
           fiscalState: "not_applicable",
         });
-      const initial = await withTransaction(suite.db, (tx) => readVenueDetails(tx, target));
+      const initial = await withTransaction(suite.db, (tx) => readVenueDetails(tx));
       const versions = await schemaVersionsByModule(
         { venue: suite.db, node: suite.node },
         ALL_MODULES,
@@ -5361,7 +5361,7 @@ describe("venue detail edits and configuration boundaries", () => {
       const beforeSales = suite.db.all(sql`select * from sales`);
       const beforeSeries = suite.db.all(sql`select * from invoice_series`);
       await withTransaction(suite.db, (tx) => applyPreparedLocation(tx, target, foreignDetails));
-      const after = await withTransaction(suite.db, (tx) => readVenueDetails(tx, target));
+      const after = await withTransaction(suite.db, (tx) => readVenueDetails(tx));
       expect(after.details).toEqual(initial.details);
       expect(after.issuer).toEqual(initial.issuer);
       expect(after.hasSales).toBe(history);
@@ -7683,14 +7683,14 @@ describe("dated business-day configuration transfer", () => {
     expect(exported.tables).not.toHaveProperty("location_business_day_settings");
     const request = venue("B33221177");
     request.location.dayCutover = exported.venue.location.dayCutover;
-    const target = await applyVenue(planVenue(request, ALL_MODULES), {
+    await applyVenue(planVenue(request, ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
       beforeCommit: (tx, created) =>
         importConfigurationTables(tx, exported, created, ALL_MODULES, versions),
     });
     const model = await withTransaction(targetSuite.db, (tx) =>
-      readVenueDetails(tx, target, new Date("2026-11-10T08:00:00Z")),
+      readVenueDetails(tx, new Date("2026-11-10T08:00:00Z")),
     );
     expect(model.businessDayClock).toEqual({
       clock: { timeZone: "Europe/Madrid", dayCutover: "07:00", cutoverChanges: [] },
@@ -7741,7 +7741,7 @@ describe("dated business-day configuration transfer", () => {
       .values({ locationId: target.locationId, revision: 1 });
     const rows = await suite.db.select().from(locationDayCutoverChanges);
     const model = await withTransaction(suite.db, (tx) =>
-      readVenueDetails(tx, target, new Date("2026-11-05T12:00:00Z")),
+      readVenueDetails(tx, new Date("2026-11-05T12:00:00Z")),
     );
     await withTransaction(suite.db, (tx) =>
       applyPreparedLocation(tx, target, {
@@ -7752,7 +7752,7 @@ describe("dated business-day configuration transfer", () => {
     );
     expect(
       await withTransaction(suite.db, (tx) =>
-        readVenueDetails(tx, target, new Date("2026-11-05T12:00:00Z")),
+        readVenueDetails(tx, new Date("2026-11-05T12:00:00Z")),
       ),
     ).toEqual(model);
     expect(await suite.db.select().from(locationDayCutoverChanges)).toEqual(rows);

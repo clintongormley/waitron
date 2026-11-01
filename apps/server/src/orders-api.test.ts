@@ -2,21 +2,11 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { hashPin, deactivatePerson, persons } from "@waitron/identity";
-import {
-  invoiceSeries,
-  locations,
-  nodes,
-  printJobs,
-  sales,
-  tenants,
-  withTransaction,
-  type Database,
-} from "@waitron/db";
-import { createPrinter } from "@waitron/printing";
+import { invoiceSeries, nodes, printJobs, sales, tenants, withTransaction } from "@waitron/db";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { recordSale } from "@waitron/core";
-import { and, eq, sql } from "drizzle-orm";
-import { locationId, nodeId, seriesId as brandSeriesId } from "@waitron/shared";
+import { and, eq } from "drizzle-orm";
+import { nodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seatedWith, send } from "./testing/bill-venue.js";
@@ -362,25 +352,11 @@ describe("Orders routes", () => {
     async (practiceMode) => {
       const billId = await placedIssuedBill(venue, "Paella");
       const ownNode = nodeId(randomUUID());
-      const ownLocation = locationId(randomUUID());
-      const printer = await withTransaction(venue.db, async (tx) => {
-        await tx.insert(locations).values({
-          id: ownLocation,
-          name: "Copy room",
-          invoiceLocales: ["es-ES"],
-          operationDescription: "Hospitality",
-        });
-        await tx.insert(nodes).values({ id: ownNode, locationId: ownLocation, name: "Own box" });
-        return createPrinter(
-          tx,
-          { locationId: ownLocation },
-          {
-            name: "Own receipt printer",
-            transport: "network_tcp",
-            host: "127.0.0.1",
-          },
-        );
-      });
+      const ownLocation = venue.cfg.locationId;
+      await venue.db
+        .insert(nodes)
+        .values({ id: ownNode, locationId: ownLocation, name: "Own box" });
+      const printer = { id: venue.printerId };
       const app = new Hono();
       mountOrdersApi(
         app,
@@ -400,7 +376,7 @@ describe("Orders routes", () => {
         "/management-api/orders/printers",
       );
       expect(choices.status).toBe(200);
-      expect(choices.json).toEqual([{ id: printer.id, name: "Own receipt printer" }]);
+      expect(choices.json).toEqual([{ id: printer.id, name: "Recibos" }]);
       const detail = await send(
         app,
         venue.adminDashboard,
@@ -434,81 +410,4 @@ describe("Orders routes", () => {
       expect(job!.saleId).toBe(sale!.id);
     },
   );
-});
-
-/** Re-stamps every dashboard session as last seen at the (faked) clock. */
-const signedInNow = (db: Database) =>
-  withTransaction(db, (tx) =>
-    tx.execute(sql`update management_sessions set last_seen_at = ${new Date().toISOString()}`),
-  );
-
-describe("Orders data node clock", () => {
-  let scopedVenue: OrderVenue;
-  useVenueDb({
-    migrations: migrationOptionsFor(manifestSets(), null),
-    timeoutMs: 60_000,
-    setup: async (db) => {
-      scopedVenue = await provisionOrderVenue(db);
-    },
-  });
-
-  it("dates reads and staff reprint visibility by the data node, keeping writes at the own location", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-06-10T08:00:00.000Z"));
-    try {
-      const billId = await placedIssuedBill(scopedVenue, "Paella");
-      expect((await collect(scopedVenue, billId, "35.00")).status).toBe(200);
-      vi.setSystemTime(new Date("2026-06-10T12:00:00.000Z"));
-      // Staff signed in at the moved clock, or a session last seen months ahead reads as expired.
-      await signedInNow(scopedVenue.db);
-      const ownNode = nodeId(randomUUID());
-      const ownLocation = locationId(randomUUID());
-      const printer = await withTransaction(scopedVenue.db, async (tx) => {
-        await tx.insert(locations).values({
-          id: ownLocation,
-          name: "Own location",
-          invoiceLocales: ["en-GB"],
-          operationDescription: "Hospitality",
-          timeZone: "Pacific/Kiritimati",
-          dayCutover: "00:00:00",
-        });
-        await tx.insert(nodes).values({ id: ownNode, locationId: ownLocation, name: "Own box" });
-        return createPrinter(
-          tx,
-          { locationId: ownLocation },
-          { name: "Own printer", transport: "network_tcp", host: "127.0.0.1" },
-        );
-      });
-      const app = new Hono();
-      mountOrdersApi(
-        app,
-        {
-          db: scopedVenue.db,
-          backend: scopedVenue.backend,
-          cfg: { nodeId: scopedVenue.cfg.nodeId },
-          tradingContext: { ...scopedVenue.cfg, nodeId: ownNode, locationId: ownLocation },
-          invoiceEmailAvailable: () => Promise.resolve(false),
-        },
-        () => {},
-      );
-      const read = await send(app, scopedVenue.staffDashboard, "GET", "/management-api/orders");
-      expect(read.status).toBe(200);
-      expect(read.json).toMatchObject({ from: "2026-06-10", to: "2026-06-10" });
-      const copy = await send(
-        app,
-        scopedVenue.staffDashboard,
-        "POST",
-        `/management-api/orders/${billId}/reprint`,
-        { printerId: printer.id },
-      );
-      expect(copy.status).toBe(202);
-      const [job] = await scopedVenue.db
-        .select()
-        .from(printJobs)
-        .where(eq(printJobs.id, (copy.json as { jobId: string }).jobId));
-      expect(job).toMatchObject({ locationId: ownLocation, printerId: printer.id });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
 });
