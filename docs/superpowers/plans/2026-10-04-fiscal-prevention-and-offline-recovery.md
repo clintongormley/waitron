@@ -1,5 +1,7 @@
 # Fiscal prevention and offline recovery (W41s) Implementation Plan
 
+> **W41s-7 owner decision, 2026-11-01:** [Task 7's current plan](2026-11-01-w41s-7-conflict-recovery.md) replaces the automatic conflict-switch requirements below. Stop issuance on the clashing active identity, then require an administrator procedure with fresh current recovery-key authentication. Automatic conflict switching is excluded permanently; Task 7 no longer requires outside sole-seller grants, fence acknowledgement, outside switch history or a 24-hour automatic limit. This pointer changes no runtime behaviour or other task's authority.
+
 > **For agentic workers:** use `superpowers:executing-plans` for the queued task. Work inline,
 > following the lane's runbook and the repository's current review rules. Use checkbox steps to
 > record progress. The owner selected queue execution; this session does not implement the work.

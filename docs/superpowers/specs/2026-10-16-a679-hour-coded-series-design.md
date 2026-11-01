@@ -1,5 +1,7 @@
 # A679: hour-coded invoice series
 
+> **W41s-7 owner decision, 2026-11-01:** [Task 7's current plan](../plans/2026-11-01-w41s-7-conflict-recovery.md) replaces the automatic conflict-switch requirements below. Stop issuance on the clashing active identity, then require an administrator procedure with fresh current recovery-key authentication. Automatic conflict switching is excluded permanently; Task 7 no longer requires outside sole-seller grants, fence acknowledgement, outside switch history or a 24-hour automatic limit. This pointer changes no runtime behaviour or other task's authority.
+
 **Approved by the owner, 2026-10-16 at 14:50.** **Dated pointer, 2026-10-21:** the owner replaced the four-symbol hour code with a five-symbol code for the UTC minute on every series, removed the "last hour" question and took the installation code off the recovery sheet and the restore form; see [A947 §6.5 and §6.7](2026-10-21-a947-two-box-failover-design.md). This design is not rewritten, and that change is not built yet.
 
 **Dated pointer, 2026-10-24: 'Preserve the original attempt and artifacts' is superseded by A1042 — Start again deletes the attempt and keeps one small note; see `docs/superpowers/plans/2026-10-24-a1042-start-again-series-note.md`.**

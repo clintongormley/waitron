@@ -6,6 +6,8 @@
 
 # A940 — The software's declaración responsable, inside the app and outside it
 
+> **W41s-7 owner decision, 2026-11-01:** [Task 7's current plan](../plans/2026-11-01-w41s-7-conflict-recovery.md) replaces the automatic conflict-switch requirements below. Stop issuance on the clashing active identity, then require an administrator procedure with fresh current recovery-key authentication. Automatic conflict switching is excluded permanently; Task 7 no longer requires outside sole-seller grants, fence acknowledgement, outside switch history or a 24-hour automatic limit. This pointer changes no runtime behaviour or other task's authority.
+
 > **A950 pointer, 29 October 2026:** the current update design is in the
 > [approved A950 design](2026-10-27-a950-automatic-upgrades-design.md). Its rollback closes after
 > a clean, running restart, before normal work resumes; older first-order references below are

@@ -412,14 +412,15 @@ guard or claiming the two checks are equivalent for every input. No combined-fau
 
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
-Conditional automatic conflict recovery,
-corrective-record resolution, filing investigation, outside evidence and fencing, and the complete
-old-backup/new-hardware operational exercise remain queued.
+Task 7 must stop new issuance after a definite conflict on the active identity and offer an
+administrator a switch using fresh current recovery-key authentication. It must never switch
+automatically. The [current-contract plan](../superpowers/plans/2026-11-01-w41s-7-conflict-recovery.md)
+records the owner's 1 November decision and its permitted activation scope. The issuance stop,
+retained conflict evidence and live administrator procedure remain unimplemented.
 
-**2026-11-01, Task 7 remap:** use the [current-contract plan](../superpowers/plans/2026-11-01-w41s-7-conflict-recovery.md)
-for minute naming and the current drain/allocation interfaces. The remap records the protected-operation
-scope and outside-authority contracts required before live activation. It implements no recovery path;
-the conditional switch, issuance stop and usable administrator fallback remain open.
+Corrective-record resolution, filing investigation, outside evidence and fencing for the other
+tasks, and the complete old-backup/new-hardware operational exercise remain queued. Earlier
+Task 7 automatic-switch requirements below are historical; the 1 November decision supersedes them.
 
 **2026-10-12, a conflict no longer holds its chain (owner).** A record AEAT refuses as a duplicate
 (3000) while holding a different or cancelled record under that key is now `rechazado` with code
@@ -772,6 +773,17 @@ records the missing recipient/address, request recovery, bill/delivery and no-ch
 here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is created.
 
 ## Decisions and deliberate limits
+
+### W41s-7: administrator conflict switching only (owner, 2026-11-01)
+
+After the conflict reply commits, stop issuance on its clashing identity until an administrator
+uses the current recovery key and the existing activation writer to select a fresh minute identity.
+Keep the rejected original and its case. The owner excludes automatic switching permanently and
+removes Task 7's outside sole-seller grant, fence acknowledgement, outside switch history and
+24-hour automatic limit. Those are not prerequisites for this administrator procedure.
+The permitted writer rotates the affected node's identity and series and resets its chain head;
+record contents, hash and number-allocation logic, `registerSif`, `restoreFiscal` and protected
+assertions remain outside the change. See the [implementation plan](../superpowers/plans/2026-11-01-w41s-7-conflict-recovery.md).
 
 - **27 October 2026, A1157:** Keep the normalized text and source files alongside the library's
   watched fingerprints, updated by `--refresh`; keep date stamps in the comparison (owner: “we

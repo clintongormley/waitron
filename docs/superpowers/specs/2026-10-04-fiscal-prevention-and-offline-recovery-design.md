@@ -1,5 +1,7 @@
 # Preventing fiscal conflicts and recovering offline (W41s)
 
+> **W41s-7 owner decision, 2026-11-01:** [Task 7's current plan](../plans/2026-11-01-w41s-7-conflict-recovery.md) replaces the automatic conflict-switch requirements below. Stop issuance on the clashing active identity, then require an administrator procedure with fresh current recovery-key authentication. Automatic conflict switching is excluded permanently; Task 7 no longer requires outside sole-seller grants, fence acknowledgement, outside switch history or a 24-hour automatic limit. This pointer changes no runtime behaviour or other task's authority.
+
 **Dated A679 update, 2026-10-15 at 21:30:** the owner removed custody signing from the new
 paper-register flow. The [current A679 revision](../specs/2026-10-15-a679-two-route-redesign.md#authoritative-revision-owner-decision-2026-10-15-at-2130)
 records unsigned paper integrity, typed positions and the separately owned Cloud admission work.

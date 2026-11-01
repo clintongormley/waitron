@@ -3102,6 +3102,8 @@ being asked about the justification and evidence, not to validate an allocation 
 > emergencia? ¿Hay alguna comunicación adicional a la AEAT por la incidencia, aparte de lo ya
 > preguntado en Q7 sobre el fin de una cadena?
 
+**Owner scope update, 2026-11-01:** [W41s-7 now requires an administrator switch](../superpowers/plans/2026-11-01-w41s-7-conflict-recovery.md) after stopping issuance on the clashing active identity. Automatic conflict switching is excluded permanently. The question and earlier treatment below retain their historical wording; this product decision supplies no legal answer and sends no enquiry.
+
 **Treatment pending answers:** retain the available evidence and the administrator's declaration
 without claiming that they satisfy every legal obligation. The owner approved conditional
 automatic conflict recovery as described above; declared restores are administrator-led.
