@@ -1152,6 +1152,10 @@ and shard counts have not changed in this diagnostic slice.
 
 ## A1252: remaining server job time after the held-setup split
 
+**Coordination, 1 November at 12:45:** the watcher closed A1252 after its split and three
+observations, and assigned the remaining over-270-second work to **A1297**. The measurements
+below remain receipts for that follow-up; they do not mean A1252 is still open.
+
 On 31 October 2026, [PR #2341](https://github.com/clintongormley/waitron/pull/2341)
 landed the held-setup split, preserving all 73 cases, including A1131's three
 fresh-box restore cases. Its final [CI run 41200533986](https://github.com/clintongormley/waitron/actions/runs/41200533986)
@@ -1198,6 +1202,18 @@ two identify the longest job in each older observation. Retain whole-job,
 test-step and per-file times when choosing further packing or suite-setup work,
 with every behavioural assertion preserved. These measurements identify
 contributors; they do not establish the cause of every aggregate delay.
+
+**A696 observation, 1 November:** [PR CI 41305909069](https://github.com/clintongormley/waitron/actions/runs/41305909069)
+passes at `4b85799d4`, after the branch's process matrix is split from one 348-second file
+into five files retaining all 18 cases. The five files take 14.8–99.1 seconds. Their containing
+jobs take 196, 204, 265, 269 and 294 seconds. The 294-second job's largest files are `boot.test.ts`
+(126.7), `first-setup-database-holdings.test.ts` (123.2) and
+`zone-process-matrix.callers.test.ts` (99.1). Nine server jobs exceed 270 seconds; the maximum is
+329, with `first-fiscal-hour.e2e.test.ts` (213.2) and `boot.setup-routes.test.ts` (168.8) its largest
+files. These are measured contributors, not a controlled causal comparison. This PR observation
+is additional evidence, not a replacement for the three main observations above. The remaining
+packing/setup work stays open. Lane E retains the exact twenty job logs, complete durations and
+per-file measurements under `receipts/a696-resume-20261101/`.
 
 A1242's separate publication/fallback qualification is complete. Main run
 [41282000200](https://github.com/clintongormley/waitron/actions/runs/41282000200)

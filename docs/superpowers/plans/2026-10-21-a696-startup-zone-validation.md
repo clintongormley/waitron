@@ -255,7 +255,7 @@ A new failed-start case first observed an un-aborted Cloud worker when snapshot 
 - [x] **Coverage ledger:** Map design §1 to Tasks 4/7–19; §2 to 4/5/8/10–12/18/19; §3 to 3/7–9/18; §4 to 1–3/14; §5 to 4/10–14/17/18; §6 to 10–19; §7 to all focused controls and Tasks 17–19. Enumerate walk-up, held, placed, zero-due, manual/integrated/offline, recovered capture, deferred/later settlement, bill worker/retry/attestation, save/edit/split/adjustment, unpaid departure, cancellation/generic R5, F1/F3/void, emergency, isolated readiness, installed/CLI seeds, live CLIs and fixed demos, with actual case/command receipts. No missing family or dependency is waived by a passing helper.
 - [x] **Verification:** Run focused changed behaviour, Task 13's unedited fiscal checks and `pnpm exec vitest run scripts/alert-codes.test.ts scripts/errors-reachable.test.ts scripts/module-seams.test.ts scripts/workspace-cycles.test.ts scripts/guide-links.test.ts`; inspect counts and failures. Review `git diff <base> --name-only` for protected paths and `git diff --check`. Check developer/package README/operator claims across the complete changed path set. No local whole-workspace suite or duplicated hook; unrun checks stay pending.
 - [x] **Commit/readiness:** Use `git commit -s` for final docs/receipts. Once all required work, including integration dependencies, passes, announce readiness for `finish-branch` and continue under the parent's workflow authorization. One Claude run-it whole-branch review after initial rebase belongs there, in an independent installed complete-candidate checkout. Read completed findings and fix them with focused checks. Retain approval across later rebases; inspect integration and rerun affected checks without another review solely for rebase.
-- [ ] **FULL PR:** Push through normal hook, wait for required current-head CI coverage/merge jobs and inspect actual selected package scope, including the matrix children. Preserve 98/98/98/95 and mutation requirements. Finish green and leave this fiscal PR **waiting for owner landing**; no auto-merge. The parent handles backlog residuals, later authorized land-branch and cleanup. Wider A166 and A444 remain open. Plan publication alone claims no passing runtime, payment, browser, fiscal or restore acceptance.
+- [x] **FULL PR** (qualified at `4b85799d4`, receipt below): Push through normal hook, wait for required current-head CI coverage/merge jobs and inspect actual selected package scope, including the matrix children. Preserve 98/98/98/95 and mutation requirements. Finish green and leave this fiscal PR **waiting for owner landing**; no auto-merge. The parent handles backlog residuals, later authorized land-branch and cleanup. Wider A166 and A444 remain open. Plan publication alone claims no passing runtime, payment, browser, fiscal or restore acceptance.
 
 
 ### Execution update, 1 November: current-main integration and Task 19
@@ -488,3 +488,36 @@ starting the push. The interrupted hook is not a successful gate receipt.
 
 The rebased process matrix passes all18cases/5files in75.67seconds locally, largest70.6seconds.
 This completes the named rebase checks; the next push must still pass its normal hook and exact-head CI.
+
+
+### FULL PR qualification and owner handoff, 1 November
+
+[CI 41305909069](https://github.com/clintongormley/waitron/actions/runs/41305909069) and
+[licence/sign-offs 41305908938](https://github.com/clintongormley/waitron/actions/runs/41305908938)
+pass at `4b85799d45ba42cd3e64ee236f70dc262e063d1a`. All three required checks pass;
+PR #2369 is open, mergeable and has no review conversations. Its main advance after the
+integration base is documentation only. The normal hook passes in 327 seconds: 10,578 root
+cases, coverage and workspace types. CI root coverage is 99.71% statements, 98.96% branches,
+99.86% functions and 99.8% lines. All package coverage merges pass. The server merge reports
+27,904 passed and one skipped; the latter is the unchanged data-volume alias case guarded by
+`it.runIf` in `backup-room.test.ts:447`. Shared mutation scores 94.74% against its floor of 90.
+
+Actual checkout outputs from twenty server jobs, seven coverage merges, root guards and the
+mutation aggregate match that head. All 18 matrix cases execute across five files. Their file
+measurements are 14.8–99.1 seconds; four containing jobs take 196–269 seconds, the callers job
+294 seconds. The remaining server-budget work belongs to A1297. The watcher closed A1252 on
+1 November at 12:45 after its split and observations; A1297 carries the residual target. This run
+has nine server jobs above 270 seconds and a maximum of 329. Measured contributors are in the CI backlog;
+these observations do not establish every delay's cause. No check or deadline was cut.
+
+The sole 766-second review and its two accepted corrections remain recorded above. The protected
+fiscal pair is unchanged against the integration base and passes its 20 cases. Named local,
+browser and installed omission receipts support their tested boundaries. Docker/systemd restart,
+live providers and AEAT acceptance, exhaustive duty/caller coverage, every route-order exception
+and every serialization path remain outside that evidence; the review triage preserves those
+limits. Wider A166 and A444 remain open.
+
+This completes the FULL PR checkpoint at the named source head. This final documentation update
+still passes through the normal hook and current-head CI before handoff. Leave A696 waiting for
+owner review and landing; its item-specific instruction overrides general campaign landing
+authorization. The feature worktree remains available for that review.
