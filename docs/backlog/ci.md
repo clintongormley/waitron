@@ -1175,3 +1175,31 @@ The command was `node <checkout>/scripts/run-with-deadline.mjs 5 -- node -e
 `pathToFileURL(process.argv[1]).href`; those paths differed in the observed symlink invocation.
 Make entrypoint detection account for the physical path and retain both controls. This finding
 was recorded separately from the certificate-test repair; the wrapper is unchanged.
+
+## Real-source bundle tests repeat metadata work
+
+The permission verifier and certificate diagnosis suites run the real bundle CLI. Its release
+stamp reads Git three times, with 20 seconds allowed for each read. Its runtime descriptor
+subprocess then allows 60 seconds. A shared static build could avoid repeating those reads,
+but the certificate suite also builds request-specific wrappers after starting local servers.
+
+Measure selective shared setup that serves focused runs and shards without building unused
+fixtures or retaining stale outputs. Keep the real CLI stamp and permission assertions. A1271's
+trial built three static entries in one CLI invocation and in three invocations; it did not
+implement or qualify Vitest global setup. The comparison and reverse-order control are in the
+A1271 PR. The server suites' larger build limits do not remove repeated metadata work.
+
+Audit these remaining CLI callers and their containing test or hook deadlines:
+
+- `packages/fiscal-verifactu/src/emergency-attempt-crash.test.ts`: a 30-second build limit.
+  The same 16-second-per-Git-read control fails its build-status assertion. Keep its process-crash
+  and retained-attempt checks when correcting the build deadline.
+- `packages/fiscal-verifactu/src/recovery-pdf-node.test.ts`: a 60-second build limit. That delayed
+  control passes; it does not exhaust the metadata subprocess budgets.
+- `packages/provisioning/src/cli-entry.test.ts`: a 120-second build limit leaves no allowance
+  beyond the metadata subprocess budgets for compilation. This mismatch was found by reading;
+  no timeout failure was reproduced.
+- `scripts/backup-verification-runtime.test.mjs`: the real-source CLI case allows 60 seconds
+  for the build and 120 seconds for the test. Its later standalone Git read has a separate
+  10-second limit: the 16-second delay passes the build, then fails that Git read. That failure
+  does not reproduce the build-budget mismatch. Review both waits and the total case deadline.
