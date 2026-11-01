@@ -106,6 +106,10 @@ const destinations = (el: TillTableOrderScreen) => [
 const confirm = (el: TillTableOrderScreen) =>
   panel(el)!.querySelector<HTMLElement & { disabled: boolean }>("[data-move-dishes-confirm]")!;
 const textOf = (node: Element) => node.textContent!.replace(/\s+/g, " ").trim();
+const pressed = (el: TillTableOrderScreen) =>
+  destinations(el)
+    .filter((choice) => choice.getAttribute("aria-pressed") === "true")
+    .map((choice) => choice.dataset.moveDishesTo);
 
 async function openMoveDishes(el: TillTableOrderScreen) {
   await userEvent.click(menu(el));
@@ -271,5 +275,127 @@ describe("A803 move dishes panel", () => {
     expect(ham!.blocked).toEqual({ reason: "floor", kept: "21.00" });
     await tick(el, "c1");
     expect(picker(el).picks).toEqual(new Set(["c1", "c2"]));
+  });
+  it("the Move to choices are a group named by their heading", async () => {
+    const el = await mountScreen();
+    await openMoveDishes(el);
+    const group = panel(el)!.querySelector<HTMLElement>('[role="group"]')!;
+    await expect.element(group).toHaveAccessibleName("Move to");
+    expect([...group.querySelectorAll<HTMLElement>("[data-move-dishes-to]")]).toEqual(
+      destinations(el),
+    );
+  });
+
+  for (const [what, reread] of [
+    [
+      "gains a payment",
+      (bills: PartyBill[]) =>
+        bills.map((bill) =>
+          bill.workingOrderId === "wo-4" ? { ...bill, hasPayments: true } : bill,
+        ),
+    ],
+    [
+      "leaves the party's bills",
+      (bills: PartyBill[]) => bills.filter((bill) => bill.workingOrderId !== "wo-4"),
+    ],
+  ] as const) {
+    it(`a chosen bill that ${what} on a re-read is no longer chosen, and Move sends nothing`, async () => {
+      const el = await mountScreen();
+      const sent = capture(el, "move-dishes");
+      await openMoveDishes(el);
+      await tick(el, "h1");
+      await userEvent.click(destinations(el)[1]!);
+      await el.updateComplete;
+      expect(pressed(el)).toEqual(["wo-4"]);
+      expect(confirm(el).disabled).toBe(false);
+      el.bills = reread(BILLS);
+      await el.updateComplete;
+      expect(destinations(el).map((choice) => choice.dataset.moveDishesTo)).toEqual([
+        "wo-1",
+        "new",
+      ]);
+      expect(pressed(el)).toEqual([]);
+      expect(confirm(el).disabled).toBe(true);
+      expect(confirm(el).getAttribute("variant")).toBe("secondary");
+      // A click on the host reaches the handler even while the inner button is disabled.
+      confirm(el).click();
+      await el.updateComplete;
+      expect(sent).toEqual([]);
+      expect(panel(el)).not.toBeNull();
+    });
+  }
+
+  it("Back closes the panel and sends nothing", async () => {
+    const el = await mountScreen();
+    const sent = capture(el, "move-dishes");
+    await openMoveDishes(el);
+    await tick(el, "h1");
+    await userEvent.click(panel(el)!.querySelector<HTMLElement>("[data-action-back]")!);
+    await el.updateComplete;
+    expect(panel(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
+    expect(sent).toEqual([]);
+  });
+
+  it("Escape closes the panel and sends nothing", async () => {
+    const el = await mountScreen();
+    const sent = capture(el, "move-dishes");
+    await openMoveDishes(el);
+    await expect.poll(() => el.shadowRoot!.activeElement?.tagName).toBe("H2");
+    await tick(el, "h1");
+    await userEvent.keyboard("{Escape}");
+    await el.updateComplete;
+    expect(panel(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
+    expect(sent).toEqual([]);
+  });
+
+  describe("while busy", () => {
+    async function busyPanel() {
+      const el = await mountScreen();
+      const sent = capture(el, "move-dishes");
+      await openMoveDishes(el);
+      await tick(el, "h1");
+      await userEvent.click(destinations(el).at(-1)!);
+      await el.updateComplete;
+      el.busy = true;
+      await el.updateComplete;
+      return { el, sent };
+    }
+
+    it("a tick changes nothing", async () => {
+      const { el } = await busyPanel();
+      await tick(el, "c1");
+      expect(picker(el).picks).toEqual(new Set(["h1"]));
+    });
+
+    it("a destination tap changes nothing", async () => {
+      const { el } = await busyPanel();
+      await userEvent.click(destinations(el)[0]!);
+      await el.updateComplete;
+      expect(pressed(el)).toEqual(["new"]);
+    });
+
+    it("Move sends nothing and the panel stays", async () => {
+      const { el, sent } = await busyPanel();
+      await userEvent.click(confirm(el));
+      await el.updateComplete;
+      expect(sent).toEqual([]);
+      expect(panel(el)).not.toBeNull();
+    });
+  });
+
+  it("choosing Move dishes… again from the ⋮ while it is open starts with nothing picked and no destination", async () => {
+    const el = await mountScreen();
+    await openMoveDishes(el);
+    await tick(el, "h1");
+    await userEvent.click(destinations(el)[0]!);
+    await el.updateComplete;
+    expect(picker(el).picks).toEqual(new Set(["h1"]));
+    expect(pressed(el)).toEqual(["wo-1"]);
+    await openMoveDishes(el);
+    expect(picker(el).picks).toEqual(new Set());
+    expect(pressed(el)).toEqual([]);
+    expect(confirm(el).disabled).toBe(true);
   });
 });

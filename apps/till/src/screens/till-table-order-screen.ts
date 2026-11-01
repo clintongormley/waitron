@@ -5711,17 +5711,26 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
+  /** The chosen destination while it is still offered: a re-read can take a bill out of the party's
+   * bills or give it a payment after it was chosen. */
+  #moveDishesChosen(): string | null | undefined {
+    const to = this.moveDishesTo;
+    if (to === null) return null;
+    return this.#otherBills().some(({ bill }) => bill.workingOrderId === to) ? to : undefined;
+  }
+
   #moveDishesStep(): TemplateResult {
     const rows = this.#moveDishesRows();
     const lineIds = pickedLineIds(rows, this.moveDishesPicks);
-    const canMove = lineIds.length > 0 && this.moveDishesTo !== undefined;
+    const chosen = this.#moveDishesChosen();
+    const canMove = lineIds.length > 0 && chosen !== undefined;
     const shown = this.#shownBills().find((bill) => bill.workingOrderId === this.orderId);
     const destination = (key: string, label: string, to: string | null) =>
       html`<button
         type="button"
         class="option move-dishes-to"
         data-move-dishes-to=${key}
-        aria-pressed=${this.moveDishesTo === to}
+        aria-pressed=${chosen === to}
         @click=${(event: Event) => {
           if (!this.#actionControlCurrent(event)) return;
           this.moveDishesTo = to;
@@ -5750,8 +5759,8 @@ export class TillTableOrderScreen extends LitElement {
           this.#actionScope?.changed();
         }}
       ></till-portion-picker>
-      <h3 data-move-dishes-to-heading>${t("table.move_dishes_to")}</h3>
-      <div class="action-options">
+      <h3 id="move-dishes-to-heading" data-move-dishes-to-heading>${t("table.move_dishes_to")}</h3>
+      <div class="action-options" role="group" aria-labelledby="move-dishes-to-heading">
         ${this.#otherBills().map(({ bill }) =>
           destination(bill.workingOrderId, billLabel(bill), bill.workingOrderId),
         )}
@@ -5774,7 +5783,7 @@ export class TillTableOrderScreen extends LitElement {
   #confirmMoveDishes(event: Event): void {
     if (!this.#actionControlCurrent(event)) return;
     const lineIds = pickedLineIds(this.#moveDishesRows(), this.moveDishesPicks);
-    const toBillId = this.moveDishesTo;
+    const toBillId = this.#moveDishesChosen();
     if (lineIds.length === 0 || toBillId === undefined) return;
     this.#retireActions();
     this.#dispatch("move-dishes", { lineIds, toBillId });
