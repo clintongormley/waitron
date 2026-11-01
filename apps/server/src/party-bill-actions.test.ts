@@ -57,6 +57,7 @@ import { overridePinAttempts } from "./till-api.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { numbersOf } from "./testing/bill-identities.js";
+import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 
 // Split, merge and transfer between a party's bills (table actions plan, Task 5; spec §7, §9, §15).
 // `resetPerTest: false`: the venue is provisioned once in `setup`, and each case seats its own tables.
@@ -623,6 +624,46 @@ describe("a held dish split onto a check", () => {
     expect(flan!.sentAt).toBe(firedAtOf(flan!.id));
     expect(await ticketsPrinting(held.printerId, "FLAN")).toBe(1);
     expect(flanTickets(held.partyId)).toEqual([{ billId: held.checkId, fired: 1 }]);
+  });
+
+  describe("A773 waiter request", () => {
+    it("requests a paid check's held dish when every station waits and changes no financial row", async () => {
+      const held = await heldFlanOnCheck("Mesa held paid then requested");
+      const stationIds = v.db
+        .all<{ id: string }>(sql`select id from kitchen_stations`)
+        .map((station) => station.id);
+      await inTx(v, (tx) => setStationsWaitForPass(tx, true, stationIds));
+      try {
+        await pay(v, held.checkId, "5.00");
+        const financial = async () => ({
+          bill: await billRow(v, held.checkId),
+          lines: await lineRows(held.checkId),
+          sales: v.db.all(sql`select * from sales where working_order_id = ${held.checkId}`),
+          payments: await paymentsOf(held.checkId),
+        });
+        const before = await financial();
+
+        await fireHeld(held.partyId, held.groupId);
+
+        const after = await financial();
+        const [flan] = after.lines;
+        expect(flan!.name).toBe("Flan");
+        expect(flan!.sentAt).not.toBeNull();
+        expect(
+          v.db.all(sql`select requested_at is not null as requested, fired_at as firedAt,
+            pass_controlled as passControlled from ticket_items
+            where working_order_line_id = ${flan!.id}`),
+        ).toEqual([{ requested: 1, firedAt: null, passControlled: 1 }]);
+        expect(after.bill.status).toBe("settled");
+        expect(await ticketsPrinting(held.printerId, "FLAN")).toBe(0);
+        expect({
+          ...after,
+          lines: after.lines.map((line) => ({ ...line, sentAt: null })),
+        }).toEqual(before);
+      } finally {
+        await inTx(v, (tx) => setStationsWaitForPass(tx, false, stationIds));
+      }
+    });
   });
 });
 

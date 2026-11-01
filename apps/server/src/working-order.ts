@@ -2367,34 +2367,30 @@ export async function fireLines(
   await attachKitchenAllergyCopies(tx, inserted, options.keepAllergies);
 
   const firingDishes = dishPlaces.filter((dish) => dish.initiatedAt !== null);
-  const releasedExtras =
+  const heldExtras =
     firingDishes.length === 0
-      ? []
-      : await tx
-          .update(ticketItems)
-          .set({ firedAt })
-          .where(
-            and(
-              eq(ticketItems.workingOrderId, orderId),
-              isNull(ticketItems.firedAt),
-              inArray(
-                ticketItems.workingOrderLineId,
-                tx
-                  .select({ id: workingOrderLines.id })
-                  .from(workingOrderLines)
-                  .where(
-                    inArray(
-                      workingOrderLines.parentLineId,
-                      firingDishes.map((dish) => dish.dishLineId),
-                    ),
-                  ),
+      ? { released: [], requested: [] }
+      : await requestHeldItems(
+          tx,
+          orderId,
+          inArray(
+            ticketItems.workingOrderLineId,
+            tx
+              .select({ id: workingOrderLines.id })
+              .from(workingOrderLines)
+              .where(
+                inArray(
+                  workingOrderLines.parentLineId,
+                  firingDishes.map((dish) => dish.dishLineId),
+                ),
               ),
-            ),
-          )
-          .returning({
-            workingOrderLineId: ticketItems.workingOrderLineId,
-            stationId: ticketItems.stationId,
-          });
+          ),
+          firedAt,
+        );
+  const placeOf = (row: { workingOrderLineId: string; stationId: string }) => ({
+    workingOrderLineId: row.workingOrderLineId,
+    stationId: row.stationId,
+  });
   const extraInserted = await insertSplitExtras(
     tx,
     cfg,
@@ -2411,14 +2407,15 @@ export async function fireLines(
     .filter((row) => row.firedAt !== null && !row.madeHere)
     .map((row) => ({ workingOrderLineId: row.workingOrderLineId, stationId: row.stationId }))
     .concat(
-      releasedExtras,
+      heldExtras.released.map(placeOf),
       extraInserted
         .filter((row) => row.firedAt !== null)
         .map((row) => ({ workingOrderLineId: row.workingOrderLineId, stationId: row.stationId })),
     );
   const requestedItems = inserted
     .filter((row) => row.firedAt === null && row.requestedAt !== null)
-    .map((row) => ({ workingOrderLineId: row.workingOrderLineId, stationId: row.stationId }));
+    .map((row) => ({ workingOrderLineId: row.workingOrderLineId, stationId: row.stationId }))
+    .concat(heldExtras.requested.map(placeOf));
   await freezeKitchenAllergyItems(tx, cfg, orderId, [...firedItems, ...requestedItems]);
   await enqueueKitchenTickets(tx, cfg, orderId, firedItems);
   return unrouted;

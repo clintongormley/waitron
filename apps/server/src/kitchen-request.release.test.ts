@@ -21,7 +21,9 @@ import { splitBill } from "./testing/bill-action-fixture.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { OPERATOR } from "./testing/party-venue.js";
 import { fireGroup, fireHeldLine } from "./order-groups.js";
-import { fireOrderLines, routingOnce } from "./working-order.js";
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { createCourse, setProductCourse } from "./kitchen.js";
+import { fireLines, fireOrderLines, routingOnce, unsentDishLines } from "./working-order.js";
 import "./errors.js";
 
 const suite = useVenueDb({
@@ -320,6 +322,124 @@ describe("A773 waiter request: release", () => {
           passControlled: true,
         }),
       ]);
+      expect(await jobCounts(tx, venue)).toEqual(before);
+    });
+  });
+
+  it("requests a later course's held chips at a waiting Fryer when their no-preparation water is released", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      const later = await createCourse(tx, venue.cfg, { name: "Later", displayOrder: 2 });
+      await setProductCourse(tx, venue.cfg, venue.products.water, later.id);
+      await setStationsWaitForPass(tx, true, [venue.stations.fryer]);
+      await addTabRound(tx, venue.cfg, venue.party.tabId, [
+        { ...dish(venue, "water", true), courseId: later.id, hold: true },
+      ]);
+      expect(await items(tx, venue.party.tabId)).toEqual([
+        expect.objectContaining({
+          productId: venue.products.chips,
+          requestedAt: null,
+          firedAt: null,
+        }),
+      ]);
+      const before = await jobCounts(tx, venue);
+      await fireLines(
+        tx,
+        venue.cfg,
+        venue.party.tabId,
+        (await unsentDishLines(tx, venue.party.tabId)).map((line) => ({
+          ...line,
+          release: true,
+        })),
+      );
+      const [water] = await tx
+        .select({ sentAt: workingOrderLines.sentAt })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.productId, venue.products.water));
+      expect(water!.sentAt).toBe(AT);
+      expect(await items(tx, venue.party.tabId)).toEqual([
+        expect.objectContaining({
+          productId: venue.products.chips,
+          stationId: venue.stations.fryer,
+          requestedAt: AT,
+          firedAt: null,
+          passControlled: true,
+        }),
+      ]);
+      expect(await jobCounts(tx, venue)).toEqual(before);
+    });
+  });
+
+  it("answers a replayed group fire as the first and stamps and prints nothing more", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      await setStationsWaitForPass(tx, true, [venue.stations.grill]);
+      const placed = await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ lines: [dish(venue, "burger")], release: "hold" }],
+      });
+      const before = await jobCounts(tx, venue);
+      const command = {
+        operatorId: OPERATOR,
+        submissionId: randomUUID(),
+        expectedPartyRevision: await partyRevision(tx, venue.party.partyId),
+      };
+      const first = await fireGroup(
+        tx,
+        venue.cfg,
+        venue.party.partyId,
+        placed.groups[0]!.id,
+        command,
+      );
+      const stamped = await items(tx, venue.party.tabId);
+      expect(stamped).toEqual([expect.objectContaining(requestedAtGrill(venue, AT))]);
+      expect(await jobCounts(tx, venue)).toEqual(before);
+      vi.setSystemTime(new Date(Date.parse(AT) + 60_000));
+      const second = await fireGroup(
+        tx,
+        venue.cfg,
+        venue.party.partyId,
+        placed.groups[0]!.id,
+        command,
+      );
+      expect(second).toEqual(first);
+      expect(await items(tx, venue.party.tabId)).toEqual(stamped);
+      expect(await jobCounts(tx, venue)).toEqual(before);
+    });
+  });
+
+  it("answers a replayed fire of one held dish as the first and stamps and prints nothing more", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      await setStationsWaitForPass(tx, true, [venue.stations.grill]);
+      await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ lines: [dish(venue, "burger")], release: "hold" }],
+      });
+      const [burger] = await items(tx, venue.party.tabId);
+      const before = await jobCounts(tx, venue);
+      const command = {
+        operatorId: OPERATOR,
+        submissionId: randomUUID(),
+        expectedPartyRevision: await partyRevision(tx, venue.party.partyId),
+      };
+      const first = await fireHeldLine(tx, venue.cfg, venue.party.partyId, burger!.lineId, command);
+      const stamped = await items(tx, venue.party.tabId);
+      expect(stamped).toEqual([expect.objectContaining(requestedAtGrill(venue, AT))]);
+      expect(await jobCounts(tx, venue)).toEqual(before);
+      vi.setSystemTime(new Date(Date.parse(AT) + 60_000));
+      const second = await fireHeldLine(
+        tx,
+        venue.cfg,
+        venue.party.partyId,
+        burger!.lineId,
+        command,
+      );
+      expect(second).toEqual(first);
+      expect(await items(tx, venue.party.tabId)).toEqual(stamped);
       expect(await jobCounts(tx, venue)).toEqual(before);
     });
   });
