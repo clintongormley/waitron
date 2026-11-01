@@ -95,7 +95,7 @@ const devices: DeviceRow[] = [
         zones: null,
       },
     ],
-    label: "Pantalla Cocina",
+    label: "Grill display",
     active: true,
     lastSeenAt: "2026-08-25T14:30:00.000Z",
     enrolledAt: "2026-08-20T09:00:00.000Z",
@@ -449,7 +449,7 @@ describe("devices-screen", () => {
         const profile = dq(table.shadowRoot!, 'wt-combobox[name="profile-filter"]');
         expect(profile).not.toBeNull();
         await chooseOption(profile!, "dp1");
-        expect(deepText(el, "[data-test=device-label-d1]")).toBe("Pantalla Cocina");
+        expect(deepText(el, "[data-test=device-label-d1]")).toBe("Grill display");
         expect(dq(table.shadowRoot!, "[data-test=device-row-d3]")).toBeNull();
         await chooseOption(profile!, "retired");
         expect(deepText(el, "[data-test=device-label-d4]")).toBe("Retired profile");
@@ -497,7 +497,7 @@ describe("devices-screen", () => {
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
 
-    expect(deepText(el, "[data-test=device-label-d1]")).toBe("Pantalla Cocina");
+    expect(deepText(el, "[data-test=device-label-d1]")).toBe("Grill display");
     // The deviceProfileId resolves to the profile's display name, not the raw id.
     expect(deepText(el, "[data-test=device-profile-d1]")).toBe("Counter till");
     // What a device shows reads out its kitchen screens by name, not by id.
@@ -852,12 +852,12 @@ describe("the device table", () => {
     const row = devicesTable(el).shadowRoot!.querySelector('tr[data-row-key="d1"]')!;
     const activator = row.querySelector<HTMLButtonElement>(".row-activate")!;
     expect(activator.getAttribute("aria-label")).toBe(
-      t("devices.edit_title").replace("{name}", "Pantalla Cocina"),
+      t("devices.edit_title").replace("{name}", "Grill display"),
     );
     activator.click();
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull());
     expect(q(el, "[data-test=edit-device-modal]")!.getAttribute("heading")).toBe(
-      t("devices.edit_title").replace("{name}", "Pantalla Cocina"),
+      t("devices.edit_title").replace("{name}", "Grill display"),
     );
   });
 
@@ -890,7 +890,7 @@ describe("the device table", () => {
     await flush(el);
     const row = devicesTable(el).shadowRoot!.querySelector('tr[data-row-key="d1"]')!;
     const menu = row.querySelector<Menu>("dashboard-row-actions")!;
-    expect(menu.label).toBe(`${t("devices.actions")}: Pantalla Cocina`);
+    expect(menu.label).toBe(`${t("devices.actions")}: Grill display`);
     const items = [...menu.querySelectorAll("wt-button")];
     expect(items.map((b) => b.getAttribute("data-test"))).toEqual([
       "edit-device-d1",
@@ -1207,7 +1207,7 @@ describe("the Edit dialog", () => {
     ...devices[0]!,
     id: "k1",
     kind: "kds_station",
-    label: "Pantalla Cocina",
+    label: "Grill display",
     deviceProfileId: "pk",
     receiptPrinterId: null,
     paymentSlipPrinterId: null,
@@ -1555,7 +1555,7 @@ describe("the Edit dialog", () => {
     await save(el);
     await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
     expect(api.updateDevice).toHaveBeenCalledWith("k1", {
-      name: "Pantalla Cocina",
+      name: "Grill display",
       profileId: "pk",
       kitchenScreens: [{ kind: "pass", stationIds: null, zoneIds: null }],
       receiptPrinterId: null,
@@ -2437,7 +2437,7 @@ describe("the Edit dialog", () => {
         await flush(el);
         await flush(el);
         expect(q(el, "[data-test=edit-device-modal]")!.getAttribute("heading")).toBe(
-          t("devices.edit_title").replace("{name}", "Pantalla Cocina"),
+          t("devices.edit_title").replace("{name}", "Grill display"),
         );
         expect(field(el, "edit-reader").value).toBe("r2");
         // Unchanged, so Save does not write the reader.
@@ -6004,7 +6004,7 @@ describe("Delete", () => {
   });
   // The shape `deviceDeleteRules` (apps/server/src/device-delete.ts) answers for a till with people
   // signed in, a handheld printer it carries and settings of its own.
-  const kitchenImpact = impactOf("d1", "Pantalla Cocina", {
+  const kitchenImpact = impactOf("d1", "Grill display", {
     ends: [
       { key: "sessions", count: 2, targets: [] },
       { key: "held_printers", count: 1, targets: [{ id: "pr1", name: "Mano" }] },
@@ -6122,7 +6122,7 @@ describe("Delete", () => {
     expect(dialogOf(el)!.loading).toBe(false);
     expect(confirmState(el)).toEqual(red);
     expect(dialogOf(el)!.shadowRoot!.querySelector("[data-target]")!.textContent!.trim()).toBe(
-      "Pantalla Cocina",
+      "Grill display",
     );
     expect(orderOf(el)).toEqual(["ends", "removes", "irreversible"]);
     expect(linesOf(el)).toEqual([
