@@ -1240,6 +1240,14 @@ EDITED to pass and is not on this list is a STOP, unless the spec changes what i
     with the claim. Every existing name is unchanged; the owner's standing rule lets a whole-shape
     pin gain the key a new export adds. Task 15c-4.
 
+22. *(Added while building Task 16, 2026-11-01.)* `apps/server/src/guide-content.test.ts:74-84`
+    ("the Box status guide in %s registers its sections", the page's whole section list, English
+    and Spanish): gains `"clock-at-start"` and `"clock-service"` after `"clock-behind"`. Task 16
+    names `{#clock-service}`; the build adds `{#clock-at-start}`, a section of its own for the
+    till's check just after a start, which the clock-behind section had grown too long to hold.
+    Every existing section keeps its id and order; the owner's standing rule lets a whole-shape
+    pin gain the keys a new section adds. Task 16.
+
 **Fixtures only, no assertion changed:**
 6. `apps/server/src/box-status.route.test.ts:120` and
    `apps/server/src/awaiting-fiscal-cert.test.ts:70`:
