@@ -111,6 +111,15 @@ export class ServersScreen extends LitElement {
         margin: 0 0 var(--wt-space-4);
         color: var(--wt-color-text);
       }
+      .fingerprint {
+        max-width: 70ch;
+        margin: 0 0 var(--wt-space-4);
+        color: var(--wt-color-text);
+      }
+      .fingerprint-value {
+        font-family: var(--wt-font-family-mono);
+        overflow-wrap: anywhere;
+      }
       .explanation {
         margin: 0;
         color: var(--wt-color-text);
@@ -128,6 +137,7 @@ export class ServersScreen extends LitElement {
   );
 
   @state() private servers: ServerRow[] = [];
+  @state() private authorityFingerprint: string | null = null;
   @state() private loading = true;
   @state() private loadErrorKey: string | null = null;
   @state() private target: { action: Action; row: ServerRow } | null = null;
@@ -146,6 +156,7 @@ export class ServersScreen extends LitElement {
     try {
       await this.#queries.watch("listServers", [], (listing) => {
         this.servers = listing.nodes;
+        this.authorityFingerprint = listing.authorityFingerprint;
         this.loadErrorKey = null;
       });
     } catch {
@@ -191,7 +202,9 @@ export class ServersScreen extends LitElement {
     this.#focusTarget = null;
     this.target = null;
     try {
-      this.servers = (await this.api.listServers()).nodes;
+      const listing = await this.api.listServers();
+      this.servers = listing.nodes;
+      this.authorityFingerprint = listing.authorityFingerprint;
       this.loadErrorKey = null;
     } catch (error) {
       this.loadErrorKey = codeOf(error);
@@ -323,6 +336,16 @@ export class ServersScreen extends LitElement {
     return html`
       <h1 class="title" tabindex="-1">${t("servers.title")}</h1>
       <p class="intro">${t("servers.intro")}</p>
+      ${
+        this.authorityFingerprint === null
+          ? nothing
+          : html`<p class="fingerprint" data-test="authority-fingerprint">
+              ${t("servers.fingerprint")}:
+              <span class="fingerprint-value" data-test="fingerprint-value"
+                >${this.authorityFingerprint}</span
+              >
+            </p>`
+      }
       ${
         // An empty list comes back whenever no chart is held, primary or not, so it says nothing.
         this.loading || this.loadErrorKey !== null || this.servers.length === 0 || this.#onPrimary()

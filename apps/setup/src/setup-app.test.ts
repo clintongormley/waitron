@@ -48,13 +48,20 @@ function stubApi(overrides: Partial<Record<keyof SetupApi, unknown>> = {}): Setu
     stageConfiguration: vi.fn(),
     runFiscalTest: vi.fn().mockResolvedValue({ status: "accepted" }),
     resetIncompleteAdopt: vi.fn().mockResolvedValue({ resetStaged: true, restarting: true }),
+    primaryCertificate: vi.fn().mockResolvedValue(PRIMARY_CERTIFICATE),
     ...overrides,
   } as unknown as SetupApi;
 }
 
+const PRIMARY_CERTIFICATE = {
+  pem: "-----BEGIN CERTIFICATE-----\nAUTHORITY-X\n-----END CERTIFICATE-----\n",
+  fingerprint256: "3F:A1:9C:0B",
+};
+
 const adoptBody = {
   primaryUrl: "https://waitron.local",
   credential: { personId: "op-1", password: "correct horse" },
+  confirmedCaPem: PRIMARY_CERTIFICATE.pem,
 };
 
 async function mountSetupApp(api: SetupApi = stubApi()): Promise<SetupApp> {
@@ -1770,7 +1777,7 @@ describe("setup-app", () => {
       "Check the authenticator code (if required).",
     ],
   ])(
-    "sends the adopt refusal %s %o back to connect under its field, leaving Connect working",
+    "sends the adopt refusal %s %o back to connect under its field, leaving its button working",
     async (code, params, field, message) => {
       const adopt = vi.fn().mockRejectedValue({ code, params, status: 400 });
       const el = await mountSetupApp(stubApi({ adopt }));
@@ -1780,10 +1787,40 @@ describe("setup-app", () => {
       const input = connect.shadowRoot!.querySelector(`[data-test=${field}]`)!;
       expect(input.getAttribute("error")).toBe(message);
       expect(await bottomOf(connect)).toBe("Correct the highlighted fields to continue.");
-      const button = connect.shadowRoot!.querySelector("[data-test=connect]") as HTMLElement & {
-        disabled: boolean;
-      };
+      const button = connect.shadowRoot!.querySelector(
+        field === "primaryUrl" ? "[data-test=continue]" : "[data-test=connect]",
+      ) as HTMLElement & { disabled: boolean };
       expect(button.disabled).toBe(false);
+    },
+  );
+
+  it.each([
+    [
+      "en-GB",
+      "The primary server's certificate wasn't compared, so nothing was sent. Press Continue to compare it.",
+    ],
+    [
+      "es-ES",
+      "No se ha comparado el certificado del servidor principal, así que no se ha enviado nada. Pulsa Continuar para compararlo.",
+    ],
+  ] as const)(
+    "says an unconfirmed certificate sent nothing and reopens the address step (%s)",
+    async (locale, sentence) => {
+      try {
+        const adopt = vi
+          .fn()
+          .mockRejectedValue({ code: "mirror.primary_unconfirmed", params: {}, status: 409 });
+        const el = await mountSetupApp(stubApi({ adopt }));
+        setLocale(locale);
+        adoptRequest(el, { primaryUrl: adoptBody.primaryUrl, credential: adoptBody.credential });
+        await flush(el);
+        const connect = await screenHost(el, "connect");
+        expect(await bottomOf(connect)).toBe(sentence);
+        expect(connect.shadowRoot!.querySelector("[data-test=continue]")).not.toBeNull();
+        expect(connect.shadowRoot!.querySelector("[data-test=password]")).toBeNull();
+      } finally {
+        setLocale("en-GB");
+      }
     },
   );
 
@@ -1922,12 +1959,20 @@ describe("setup-app", () => {
         .shadowRoot!.querySelector(`[data-test=${field}]`)!
         .shadowRoot!.querySelector("input")!;
 
-    /** Types every field through the real inputs and presses Connect. */
+    /** Types the address, confirms the fingerprint, types the login and presses Connect. */
     async function typeAndConnect(el: SetupApp): Promise<void> {
       goto(el, "connect");
       await el.updateComplete;
       const connect = await screenHost(el, "connect");
-      for (const [field, value] of Object.entries(TYPED)) {
+      const { primaryUrl, ...login } = TYPED;
+      await userEvent.fill(input(connect, "primaryUrl"), primaryUrl);
+      connect.shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
+      await vi.waitFor(() =>
+        expect(connect.shadowRoot!.querySelector("[data-test=matches]")).not.toBeNull(),
+      );
+      connect.shadowRoot!.querySelector<HTMLElement>("[data-test=matches]")!.click();
+      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      for (const [field, value] of Object.entries(login)) {
         await userEvent.fill(input(connect, field), value);
       }
       connect.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!.click();
@@ -1937,6 +1982,7 @@ describe("setup-app", () => {
     const sentBody = {
       primaryUrl: "https://primary.example",
       credential: { personId: "op-7", password: "  kept secret ", totp: "123456" },
+      confirmedCaPem: PRIMARY_CERTIFICATE.pem,
     };
 
     it.each([
@@ -2094,8 +2140,9 @@ describe("setup-app", () => {
       goto(el, "connect");
       await el.updateComplete;
       const connect = await screenHost(el, "connect");
-      for (const field of Object.keys(TYPED)) {
-        expect(input(connect, field).value).toBe("");
+      expect(input(connect, "primaryUrl").value).toBe("");
+      for (const field of ["personId", "password", "totp"]) {
+        expect(connect.shadowRoot!.querySelector(`[data-test=${field}]`)).toBeNull();
       }
     });
   });

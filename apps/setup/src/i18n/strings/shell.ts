@@ -69,6 +69,8 @@ export const shellEn = {
     "The server rejected the details. Check the address and login, then try again.",
   "shell.adopt.vault_not_empty":
     "This server already holds saved keys for other services, and joining would make them unreadable for good. Nothing was changed. Start again on this server, then add it as a mirror.",
+  "shell.adopt.primary_unconfirmed":
+    "The primary server's certificate wasn't compared, so nothing was sent. Press Continue to compare it.",
   "shell.adopt.login_failed":
     "The login failed. Check the admin person ID, password and authenticator code, then try again.",
   "shell.adopt.generic":
@@ -235,6 +237,8 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "El servidor ha rechazado los datos. Revisa la dirección y el inicio de sesión, e inténtalo de nuevo.",
   "shell.adopt.vault_not_empty":
     "Este servidor ya guarda claves de otros servicios y, al unirlo, dejarían de poder leerse para siempre. No se ha cambiado nada. Empieza de nuevo en este servidor y después añádelo como réplica.",
+  "shell.adopt.primary_unconfirmed":
+    "No se ha comparado el certificado del servidor principal, así que no se ha enviado nada. Pulsa Continuar para compararlo.",
   "shell.adopt.login_failed":
     "No se ha podido iniciar sesión. Revisa el ID de persona, la contraseña y el código del autenticador del administrador, e inténtalo de nuevo.",
   "shell.adopt.generic":

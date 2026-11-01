@@ -19,12 +19,15 @@ const warning = (el: SetupApp) =>
 const field = (form: SetupConnectScreen, key: string) =>
   form.shadowRoot!.querySelector<WtInput>(`[data-test=${key}]`)!;
 const screen = (el: SetupApp) => (el as unknown as { screen: Screen }).screen;
+const PEM = "-----BEGIN CERTIFICATE-----\nAUTHORITY-X\n-----END CERTIFICATE-----\n";
 const body: AdoptBody = {
   primaryUrl: "https://primary.example",
   credential: { personId: "operator-1", password: " secret ", totp: "123456" },
+  confirmedCaPem: PEM,
 };
 
-async function mount(request?: AdoptBody) {
+/** `step: "login"` opens the login fields on a clean form, as a confirmed comparison would. */
+async function mount(request?: AdoptBody, step: "address" | "login" = "address") {
   const api = {
     firstSetupStatus: vi.fn().mockResolvedValue({ claimed: false }),
     firstSetupOfferings: vi.fn().mockResolvedValue({ modules: [] }),
@@ -34,6 +37,7 @@ async function mount(request?: AdoptBody) {
     adopt: vi
       .fn()
       .mockResolvedValue({ adopted: true, breakGlassSecret: "test-recovery", restarting: true }),
+    primaryCertificate: vi.fn().mockResolvedValue({ pem: PEM, fingerprint256: "3F:A1" }),
   } as unknown as SetupApi;
   const { el, host } = await mountWidget<SetupApp>("setup-app", { api });
   await vi.waitFor(() => expect(screen(el)).toBe("mode"));
@@ -41,6 +45,10 @@ async function mount(request?: AdoptBody) {
   await el.updateComplete;
   const form = el.shadowRoot!.querySelector<SetupConnectScreen>("setup-connect-screen")!;
   await form.updateComplete;
+  if (step === "login") {
+    Object.assign(form, { step });
+    await form.updateComplete;
+  }
   return { el, form, host, api };
 }
 async function edit(form: SetupConnectScreen, key: string, value: string) {
@@ -65,6 +73,12 @@ function unload() {
 }
 async function fill(form: SetupConnectScreen) {
   await edit(form, "primaryUrl", "  https://primary.example  ");
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
+  await vi.waitFor(() =>
+    expect(form.shadowRoot!.querySelector("[data-test=matches]")).not.toBeNull(),
+  );
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=matches]")!.click();
+  await form.updateComplete;
   await edit(form, "personId", "  operator-1  ");
   await edit(form, "password", " secret ");
   await edit(form, "totp", " 123456 ");
@@ -74,7 +88,7 @@ describe("setup Connect unsaved changes", () => {
   it.each(["primaryUrl", "personId", "password", "totp"])(
     "Back keeps the edited %s until Discard, restoring only the child",
     async (key) => {
-      const { el, form } = await mount();
+      const { el, form } = await mount(undefined, key === "primaryUrl" ? "address" : "login");
       form.dispatchEvent(
         new CustomEvent("setup-patch", {
           detail: { patch: { admin: { email: "root@example.test" } } },
@@ -108,7 +122,7 @@ describe("setup Connect unsaved changes", () => {
   it.each(["primaryUrl", "personId", "totp"])(
     "%s compares its trimmed request value and clears unload after a revert",
     async (key) => {
-      const { el, form } = await mount();
+      const { el, form } = await mount(undefined, key === "primaryUrl" ? "address" : "login");
       await edit(form, key, "edited");
       expect(unload()).toBe(true);
       await edit(form, key, "   ");
@@ -120,7 +134,7 @@ describe("setup Connect unsaved changes", () => {
   );
 
   it("password whitespace remains protected and an exact revert clears it", async () => {
-    const { el, form } = await mount();
+    const { el, form } = await mount(undefined, "login");
     await edit(form, "password", " ");
     expect(unload()).toBe(true);
     await edit(form, "password", "");
@@ -130,7 +144,7 @@ describe("setup Connect unsaved changes", () => {
   });
 
   it("native warning Escape preserves the password and returns focus to Back", async () => {
-    const { el, form } = await mount();
+    const { el, form } = await mount(undefined, "login");
     const input = field(form, "password").shadowRoot!.querySelector<HTMLInputElement>("input")!;
     await userEvent.fill(page.elementLocator(input), " secret ");
     const button = form.shadowRoot!.querySelector<HTMLElement>("[data-test=back]")!;
@@ -190,7 +204,7 @@ describe("setup Connect unsaved changes", () => {
   });
 
   it("invalid submission retains the draft and still asks on Back", async () => {
-    const { el, form, api } = await mount();
+    const { el, form, api } = await mount(undefined, "login");
     await edit(form, "password", " ");
     form.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!.click();
     await form.updateComplete;
@@ -203,7 +217,7 @@ describe("setup Connect unsaved changes", () => {
   });
 
   it("an edit cancels a stale Back answer", async () => {
-    const { el, form } = await mount();
+    const { el, form } = await mount(undefined, "login");
     await edit(form, "password", "first");
     back(form);
     await expect.poll(() => warning(el).open).toBe(true);
@@ -216,7 +230,7 @@ describe("setup Connect unsaved changes", () => {
   });
 
   it("a replacement request cancels an old Back question", async () => {
-    const { el, form } = await mount();
+    const { el, form } = await mount(undefined, "login");
     await edit(form, "password", "first");
     back(form);
     await expect.poll(() => warning(el).open).toBe(true);
@@ -230,7 +244,7 @@ describe("setup Connect unsaved changes", () => {
   });
 
   it("removing only the Connect child releases its unload protection and question", async () => {
-    const { el, form } = await mount();
+    const { el, form } = await mount(undefined, "login");
     await edit(form, "password", "secret");
     expect(unload()).toBe(true);
     back(form);
@@ -243,7 +257,7 @@ describe("setup Connect unsaved changes", () => {
   });
 
   it("reconnecting keeps the original baseline and cannot revive a stale Back", async () => {
-    const { el, form, host } = await mount();
+    const { el, form, host } = await mount(undefined, "login");
     await edit(form, "password", "secret");
     back(form);
     await expect.poll(() => warning(el).open).toBe(true);

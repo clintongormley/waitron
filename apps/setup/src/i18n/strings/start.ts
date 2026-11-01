@@ -50,6 +50,17 @@ export const startEn = {
   "connect.fix_fields": "Correct the highlighted fields to continue.",
   "connect.back": "Back",
   "connect.connect": "Connect",
+  "connect.continue": "Continue",
+  "connect.certificate_failed":
+    "Couldn't read the primary server's certificate. Check the address and that the primary server is on, then try again.",
+  "connect.compare.intro":
+    "On a device already paired with your primary server, open the dashboard's Servers screen. Its public certificate fingerprint must match this one.",
+  "connect.compare.label": "Public certificate fingerprint",
+  "connect.compare.matches": "It matches",
+  "connect.compare.mismatch": "It doesn't match",
+  "connect.stopped":
+    "The fingerprints don't match, so this may not be your primary server. Nothing was sent to it. Check the address and compare again, or go back.",
+  "connect.check_address": "Check the address",
 
   "mode.heading": "Set up this Waitron server",
   "mode.intro":
@@ -176,6 +187,17 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "connect.fix_fields": "Corrige los campos marcados para continuar.",
   "connect.back": "Volver",
   "connect.connect": "Conectar",
+  "connect.continue": "Continuar",
+  "connect.certificate_failed":
+    "No se ha podido leer el certificado del servidor principal. Revisa la dirección y que el servidor principal esté encendido, e inténtalo de nuevo.",
+  "connect.compare.intro":
+    "En un dispositivo ya vinculado a tu servidor principal, abre la pantalla Servidores del panel. Su huella del certificado público debe coincidir con esta.",
+  "connect.compare.label": "Huella del certificado público",
+  "connect.compare.matches": "Coincide",
+  "connect.compare.mismatch": "No coincide",
+  "connect.stopped":
+    "Las huellas no coinciden, así que puede que este no sea tu servidor principal. No se le ha enviado nada. Revisa la dirección y vuelve a comparar, o vuelve atrás.",
+  "connect.check_address": "Revisar la dirección",
 
   "mode.heading": "Configura este servidor Waitron",
   "mode.intro":

@@ -122,6 +122,14 @@ export interface AdoptBody {
   primaryUrl: string;
   /** `totp` is omitted, not `""`, when blank: the server refuses an empty string. */
   credential: { personId: string; password: string; totp?: string };
+  /** The main box's authority certificate the person compared; absent for a plain-http address. */
+  confirmedCaPem?: string;
+}
+
+/** The main box's authority certificate, read before anything secret is sent to it. */
+export interface PrimaryCertificate {
+  pem: string;
+  fingerprint256: string;
 }
 
 export interface AdoptOutcome {
@@ -396,6 +404,13 @@ export class SetupApi {
       body,
       locale === undefined ? {} : { "accept-language": locale },
     );
+  }
+
+  /** `null` for a plain-http address, which only this machine can answer. */
+  primaryCertificate(primaryUrl: string): Promise<PrimaryCertificate | null> {
+    return this.#request<PrimaryCertificate | null>("/setup-api/primary-certificate", "POST", {
+      primaryUrl,
+    });
   }
 
   adopt(body: AdoptBody): Promise<AdoptOutcome> {

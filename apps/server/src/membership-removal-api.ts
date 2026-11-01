@@ -14,6 +14,8 @@ export interface MembershipRemovalApiDeps {
   node: NodeDatabase;
   ring: KeyRing;
   nodeId: string;
+  /** The Servers screen shows it so a joining spare's person can compare it; null without one. */
+  authorityFingerprint: () => Promise<string | null>;
 }
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -52,7 +54,12 @@ export function mountMembershipRemovalApi(
   app.get("/management-api/servers", (c) =>
     run(c, log, async () => {
       await authorize(requireManagementSession(c));
-      return c.json(await listServers(deps.db, deps.nodeId));
+      const listing = await listServers(deps.db, deps.nodeId);
+      return c.json({
+        term: listing.term,
+        authorityFingerprint: await deps.authorityFingerprint(),
+        nodes: listing.nodes,
+      });
     }),
   );
 

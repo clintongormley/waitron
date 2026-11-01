@@ -292,6 +292,7 @@ import { mountGuidePages } from "./guide-pages.js";
 import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
 import { startMenuActivation } from "./menu-activation.js";
 import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
+import { readBoxCaFingerprint } from "./box-tls-repair.js";
 import {
   ensureBoxSecrets,
   mintedBoxLeaf,
@@ -2723,7 +2724,15 @@ async function bootServer(
   // node that is not the chart's serving primary refuses it itself.
   mountMembershipRemovalApi(
     app,
-    { db, node: store.node, ring, nodeId: tradingContext.nodeId },
+    {
+      db,
+      node: store.node,
+      ring,
+      nodeId: tradingContext.nodeId,
+      // `/ca.crt` serves no authority when the operator supplies the certificate files.
+      authorityFingerprint: () =>
+        config.tls === undefined ? readBoxCaFingerprint(config.stateDir) : Promise.resolve(null),
+    },
     log,
   );
 

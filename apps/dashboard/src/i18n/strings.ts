@@ -1761,6 +1761,7 @@ export const en = {
   "diagnostics.action.clear": "Clear",
   "diagnostics.empty": "No log lines yet",
   "servers.title": "Servers",
+  "servers.fingerprint": "This server's public certificate fingerprint",
   "servers.intro":
     "Every machine on this venue's list of servers. A standby that never finished joining can be removed, so tills stop trying to reach it. To use that machine again, it has to join from scratch. A removed machine can be cleared from the list to free its place.",
   "servers.server": "Server",
@@ -5507,6 +5508,7 @@ export const es: Record<StringKey, string> = {
   "diagnostics.action.clear": "Borrar",
   "diagnostics.empty": "Aún no hay líneas de registro",
   "servers.title": "Servidores",
+  "servers.fingerprint": "Huella del certificado público de este servidor",
   "servers.intro":
     "Todas las máquinas de la lista de servidores del local. Un servidor en espera que no terminó de unirse se puede retirar, para que las cajas dejen de intentar conectar con él. Para volver a usar esa máquina, tiene que unirse de nuevo desde el principio. Una máquina retirada se puede quitar de la lista para liberar su sitio.",
   "servers.server": "Servidor",

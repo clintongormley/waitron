@@ -257,6 +257,23 @@ describe("SetupApi", () => {
     });
   });
 
+  it("primaryCertificate POSTs the address and returns the certificate, or null for plain http", async () => {
+    const certificate = { pem: "-----BEGIN CERTIFICATE-----", fingerprint256: "AA:BB" };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(certificate))
+      .mockResolvedValueOnce(jsonResponse(null));
+    const api = new SetupApi("", fetchImpl);
+    expect(await api.primaryCertificate("https://waitron.local")).toEqual(certificate);
+    expect(fetchImpl).toHaveBeenCalledWith("/setup-api/primary-certificate", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ primaryUrl: "https://waitron.local" }),
+    });
+    expect(await api.primaryCertificate("http://127.0.0.1:8080")).toBeNull();
+  });
+
   it("resetIncompleteAdopt POSTs the admin login as JSON and returns the result", async () => {
     const result = { resetStaged: true, restarting: true };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(result, true, 202));
