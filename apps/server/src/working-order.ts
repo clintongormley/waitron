@@ -3637,6 +3637,7 @@ interface ServableLine {
   groupState: "held" | "fired" | "removed" | null;
   ticketItemId: string | null;
   ticketFiredAt: string | null;
+  ticketRequestedAt: string | null;
   ticketMadeHere: boolean | null;
   extraHeld: boolean;
 }
@@ -3665,13 +3666,20 @@ async function servableLines(
       groupState: orderGroups.state,
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
+      ticketRequestedAt: ticketItems.requestedAt,
       ticketMadeHere: ticketItems.madeHere,
       extraHeld: exists(
         tx
           .select({ one: sql`1` })
           .from(extra)
           .innerJoin(extraItem, eq(extraItem.workingOrderLineId, extra.id))
-          .where(and(eq(extra.parentLineId, workingOrderLines.id), isNull(extraItem.firedAt))),
+          .where(
+            and(
+              eq(extra.parentLineId, workingOrderLines.id),
+              isNull(extraItem.firedAt),
+              isNull(extraItem.requestedAt),
+            ),
+          ),
       ).mapWith(Boolean),
     })
     .from(workingOrderLines)
@@ -3726,6 +3734,27 @@ export function isReleased(
       : line.groupState !== null || line.sentAt !== null;
 }
 
+/** Whether the waiter has initiated a dish line, which is what serving needs (D21). The money
+ *  gates read {@link isReleased} instead. */
+export function serviceRequested(
+  line: Pick<
+    ServableLine,
+    | "groupState"
+    | "ticketItemId"
+    | "ticketFiredAt"
+    | "ticketRequestedAt"
+    | "ticketMadeHere"
+    | "sentAt"
+  >,
+): boolean {
+  if (line.ticketMadeHere === true) return true;
+  return line.groupState === "held"
+    ? false
+    : line.ticketItemId !== null
+      ? initiatedAt({ requestedAt: line.ticketRequestedAt, firedAt: line.ticketFiredAt }) !== null
+      : line.groupState !== null || line.sentAt !== null;
+}
+
 /**
  * The named orders holding a dish the kitchen is not making: one never sent and holding no kitchen
  * item ({@link unsentDishLines}), or one that is not released work ({@link isReleased}) — held in
@@ -3768,9 +3797,10 @@ export async function ordersWithUnfiredDish(
   );
 }
 
-/** Serving needs released work ({@link isReleased}), else `group.line_held`. */
+/** Serving needs a dish the waiter has initiated ({@link serviceRequested}) and no held extra,
+ *  else `group.line_held`. */
 function refuseUnreleased(line: ServableLine): void {
-  if (!isReleased(line) || line.extraHeld) {
+  if (!serviceRequested(line) || line.extraHeld) {
     throw new AppError("group.line_held", { tabId: line.workingOrderId, lineNo: line.lineNo });
   }
 }

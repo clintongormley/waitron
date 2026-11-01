@@ -80,6 +80,7 @@ import {
   priceTabRound,
   routingOnce,
   refusePaymentInFlight,
+  serviceRequested,
   splitLinesWithinOrder,
   splitUnitsWithinOrder,
   type TabRoundLine,
@@ -1913,6 +1914,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       ticketItemId: ticketItems.id,
       ticketState: ticketItems.state,
       ticketFiredAt: ticketItems.firedAt,
+      ticketRequestedAt: ticketItems.requestedAt,
       ticketReadyAt: ticketItems.readyAt,
       ticketMadeHere: ticketItems.madeHere,
       stationId: ticketItems.stationId,
@@ -1943,7 +1945,10 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     lines
       .filter(
         (line) =>
-          line.parentLineId !== null && line.ticketItemId !== null && line.ticketFiredAt === null,
+          line.parentLineId !== null &&
+          line.ticketItemId !== null &&
+          line.ticketFiredAt === null &&
+          line.ticketRequestedAt === null,
       )
       .map((line) => line.parentLineId),
   );
@@ -2033,7 +2038,9 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       servedQuantity: thousandthsToDecimal(line.servedQuantity),
       servedAt: line.servedAt,
       released:
-        line.quantity > line.cancelledQuantity && isReleased(line) && !heldExtras.has(line.id),
+        line.quantity > line.cancelledQuantity &&
+        serviceRequested(line) &&
+        !heldExtras.has(line.id),
       kitchen:
         line.ticketState === null
           ? null
