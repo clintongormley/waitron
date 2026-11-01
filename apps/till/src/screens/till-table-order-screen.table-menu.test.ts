@@ -139,8 +139,6 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
         items: [
           "Name this bill",
           "Move dishes…",
-          "Split by item",
-          "Transfer items",
           "Merge bills",
           "Move this bill",
           "Comp the bill",
@@ -222,11 +220,11 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     expect(groups(el).map((group) => group.name)).toEqual(["Whole table"]);
   });
 
-  it("with no party: Split by item, Transfer items and Merge bills under Bill; Join a table and Move guests under Whole table", async () => {
+  it("with no party: Merge bills under Bill; Join a table and Move guests under Whole table", async () => {
     const el = await mountScreen({ party: null, bills: [], orderId: "wo-9" });
 
     expect(groups(el)).toEqual([
-      { name: "Bill", items: ["Split by item", "Transfer items", "Merge bills"] },
+      { name: "Bill", items: ["Merge bills"] },
       { name: "Whole table", items: ["Join a table", "Move guests"] },
     ]);
   });
@@ -316,7 +314,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
         const popup = menu(el).shadowRoot!.querySelector<HTMLElement>("[popover]")!;
         await userEvent.click(trigger);
 
-        expect(groups(el).flatMap((group) => group.items)).toHaveLength(16);
+        expect(groups(el).flatMap((group) => group.items)).toHaveLength(14);
         const box = popup.getBoundingClientRect();
         const anchor = trigger.getBoundingClientRect();
         expect(box.top).toBeGreaterThanOrEqual(anchor.bottom - 0.5);
@@ -376,14 +374,12 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     it.each([
       ["a paid bill", paid],
       ["a presented bill", presented],
-    ])("%s offers no Split by item, Transfer items or Merge bills", async (_, bill) => {
+    ])("%s offers no Move dishes… or Merge bills", async (_, bill) => {
       const el = await mountScreen({ bills: [bill] });
 
-      expect(billItem(el, '[data-action="split"]')).toBeNull();
-      expect(billItem(el, '[data-action="transfer"]')).toBeNull();
+      expect(billItem(el, '[data-action="move-dishes"]')).toBeNull();
       expect(billItem(el, '[data-action="merge"]')).toBeNull();
-      expect(groups(el)[0]!.items).not.toContain("Split by item");
-      expect(groups(el)[0]!.items).not.toContain("Transfer items");
+      expect(groups(el)[0]!.items).not.toContain("Move dishes…");
       expect(groups(el)[0]!.items).not.toContain("Merge bills");
     });
 
@@ -404,17 +400,17 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       ]);
     });
 
-    it("an open bill holding a payment keeps Split by item", async () => {
+    it("an open bill holding a payment keeps Move dishes…", async () => {
       const el = await mountScreen({
         bills: [partyBill("wo-2", 2, "40.00", { total: "54.00", hasPayments: true })],
       });
 
-      expect(billItem(el, '[data-action="split"]')).not.toBeNull();
+      expect(billItem(el, '[data-action="move-dishes"]')).not.toBeNull();
     });
 
-    // mergeBills and transferItems refuse `bill.payments_received` when either bill holds a
-    // payment (requireUntouchedPair); splitBill takes a partly paid bill.
-    it("an open bill holding a payment offers no Transfer items or Merge bills", async () => {
+    // mergeBills refuses `bill.payments_received` when either bill holds a payment
+    // (requireUntouchedPair); moveDishes takes dishes off a partly paid bill.
+    it("an open bill holding a payment offers no Merge bills, and still offers Move dishes…", async () => {
       const el = await mountScreen({
         bills: [
           partyBill("wo-2", 2, "40.00", { total: "54.00", hasPayments: true }),
@@ -422,12 +418,11 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
         ],
       });
 
-      expect(billItem(el, '[data-action="transfer"]')).toBeNull();
       expect(billItem(el, '[data-action="merge"]')).toBeNull();
-      expect(billItem(el, '[data-action="split"]')).not.toBeNull();
+      expect(billItem(el, '[data-action="move-dishes"]')).not.toBeNull();
     });
 
-    it("an open bill holding no payment, beside one that does, still offers Transfer items and Merge bills", async () => {
+    it("an open bill holding no payment, beside one that does, still offers Move dishes… and Merge bills", async () => {
       const el = await mountScreen({
         bills: [
           partyBill("wo-2", 2, "54.00", { total: "54.00" }),
@@ -435,7 +430,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
         ],
       });
 
-      expect(billItem(el, '[data-action="transfer"]')).not.toBeNull();
+      expect(billItem(el, '[data-action="move-dishes"]')).not.toBeNull();
       expect(billItem(el, '[data-action="merge"]')).not.toBeNull();
     });
   });
