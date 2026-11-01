@@ -1143,6 +1143,28 @@ reads `heldItem()` (D6). No exported signature changes.
   recall now clears the request time too (D20).
 - [ ] Ledger `Status: done` for B1 and the exact next step: B2's task plan.
 
+## Left for B2 and B3 by B1's per-task reviews (2026-11-01)
+
+Each point was found by a B1 reviewer and is outside B1's scope; the reports are kept with lane
+C's campaign notes, not in the repository.
+
+- **B2.1:** D3's shift has a second path. When every dish in a course is Requested, `fireLines`'
+  later round stamps the course's no-preparation line (a water) sent at once, as the first
+  round does. B2.1's check covers both paths.
+- **B2.2:** the edited-order read keeps its own `firedCourseIds`, built from
+  `ticket.firedAt != null`, in `working-order.ts` (search the name). Check it under D19 when
+  editing a released or Requested dish. `applyLineEdits`' late read of the next fire's kind has
+  no case that reaches it; none was found, and none was shown impossible.
+- **B2.5:** after Task 5a, a Requested dish moved into a course held until fired would print a
+  HOLD ticket. The move task decides and pins it.
+- **B2 or B3:** the extras of a dish made here, in a held group, become Requested at a waiting
+  station while the group is still held (Task 4's dated paragraph). Decide the mapping where the
+  pass first reads those extras.
+- **B2.6:** `releaseHeld`'s count now includes Requested lines; nothing reads it yet.
+- **B3:** a party whose fired dishes were all cancelled or moved, or whose first submission was
+  all held, gets `added` on its next fire. Before the pass shows "New order" or "Added", ask the
+  owner what counts as a table's first send (with Owner question 1's copy sheet).
+
 ## B2 (outline): a requested dish through every service action
 
 Branch `feat/a773-2b2-requested-lifecycle`. Master Task 8 plus the readers of the audit table's

@@ -87,7 +87,9 @@ Everything not listed here needs more spec work first.
 
 1. **A773-2 — firing and the pass** (_The till, devices and table service_). Implement the
    [reviewed plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md) for the remaining
-   kitchen and pass work, following A773-1's Sent and New order panel.
+   kitchen and pass work, following A773-1's Sent and New order panel. PR B is cut into four
+   ([slice plan](superpowers/plans/2026-11-01-a773-2b-requested-release.md)); B1 has landed,
+   B2–B4 remain, then PRs C–D.
    **A803 — bills and tables** follows A773-1 (owner, 2026-10-18); its pass and station-setting
    slices wait for A773-2.
 2. **A646 — a Modules page where the administrator switches optional modules on and sets them up**
@@ -2532,6 +2534,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A773-2. Firing and the pass.** The [reviewed implementation plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
   leaves PRs B–D: Requested, scoped pass release, station
   settings and coverage warnings, ticket presentation and physical schema/configuration retirement.
+  PR B is cut into B1–B4 by the [slice plan](superpowers/plans/2026-11-01-a773-2b-requested-release.md).
+  B1 has landed: the server stamps a station's part Requested instead of releasing it when that
+  station waits for the pass, on every waiter firing path, and no station can be set to wait until
+  PR C. Next: B2 (a Requested dish through every service action), B3 (the pass board and the pass's
+  Fire), B4 (the screens, the display setting, Columns); the slice plan outlines each and lists
+  what B1's reviews left for them.
   Recheck other lanes' reservations before each slice. A797's revised design, pictures
   and FYI landed on 2026-10-21; A803's pass/station tail follows this build.
   What A797 leaves for the pass (slices 9 and 9b): `apps/till/src/state/kitchen-columns.ts` is the
