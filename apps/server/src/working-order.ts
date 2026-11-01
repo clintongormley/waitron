@@ -1930,6 +1930,27 @@ interface DishKitchenPlace {
   initiated: boolean;
 }
 
+/** What an edit's re-send keeps of each deleted record's phase (D22): a released record stays
+ *  released, and a Requested one keeps its first request time while it comes back Requested. */
+interface KeptPhase {
+  keepReleased?: ReadonlySet<string>;
+  keepRequestedAt?: ReadonlyMap<string, string>;
+}
+
+function keptStamps(
+  keep: KeptPhase,
+  lineId: string,
+  input: Parameters<typeof requestStamps>[0],
+): ReturnType<typeof requestStamps> {
+  const stamps = requestStamps(
+    keep.keepReleased?.has(lineId) === true ? { ...input, waits: false } : input,
+  );
+  const first = keep.keepRequestedAt?.get(lineId);
+  return first !== undefined && stamps.firedAt === null && stamps.requestedAt !== null
+    ? { ...stamps, requestedAt: first }
+    : stamps;
+}
+
 /** Insert records only for extra lines whose own station differs from their dish's destination. */
 export async function insertSplitExtras(
   tx: Transaction,
@@ -1939,6 +1960,7 @@ export async function insertSplitExtras(
   dishes: readonly DishKitchenPlace[],
   routing: RoutingOnce,
   keepAllergies?: ReadonlyMap<string, TicketAllergyCopy>,
+  keepPhase: KeptPhase = {},
 ): Promise<
   {
     workingOrderLineId: string;
@@ -1998,7 +2020,7 @@ export async function insertSplitExtras(
     if (decision?.kind !== "made") return [];
     const dish = byDish.get(extra.parentLineId!)!;
     const here = madeHere.has(decision.stationId);
-    const stamps = requestStamps({
+    const stamps = keptStamps(keepPhase, extra.id, {
       at: routing.at.toISOString(),
       initiated: dish.initiated,
       madeHere: here,
@@ -2109,7 +2131,7 @@ export async function fireLines(
     keepMadeHere?: ReadonlyMap<string, { madeHere: boolean; stationId: string }>;
     keepAllergies?: ReadonlyMap<string, TicketAllergyCopy>;
     routing?: RoutingOnce;
-  } = {},
+  } & KeptPhase = {},
 ): Promise<FireableLine[]> {
   const routing = options.routing ?? routingOnce(tx, cfg, new Date());
   const now = routing.at;
@@ -2319,7 +2341,7 @@ export async function fireLines(
   );
   const values = placed.map(({ initiated, value }) => ({
     ...value,
-    ...requestStamps({
+    ...keptStamps(options, value.workingOrderLineId, {
       at: firedAt,
       initiated,
       madeHere: value.madeHere,
@@ -2395,6 +2417,7 @@ export async function fireLines(
     dishPlaces,
     routing,
     options.keepAllergies,
+    options,
   );
 
   // Only newly fired items not made here print. Outbox inserts on this transaction: no hardware I/O
@@ -6297,6 +6320,8 @@ async function applyLineEdits(
   const fireNow: Parameters<typeof fireLines>[3] = [];
   const keepMadeHere = new Map<string, { madeHere: boolean; stationId: string }>();
   const keepStations = new Map<string, string>();
+  const keepReleased = new Set<string>();
+  const keepRequestedAt = new Map<string, string>();
   const keepSentNumber = new Map<number, string[]>();
   const newPortions: PortionRef[] = [];
   const copiedContexts: { from: string; to: string }[] = [];
@@ -6364,6 +6389,9 @@ async function applyLineEdits(
       for (const line of [parent, ...kept.map(({ child }) => child)]) {
         const sent = line.ticket?.sentOrderNumber ?? null;
         if (sent !== null) keepSentNumber.set(sent, [...(keepSentNumber.get(sent) ?? []), line.id]);
+        if (line.ticket?.firedAt != null) keepReleased.add(line.id);
+        else if (line.ticket?.requestedAt != null)
+          keepRequestedAt.set(line.id, line.ticket.requestedAt);
       }
       if (parent.ticket !== null) {
         keepMadeHere.set(parent.id, {
@@ -6623,6 +6651,8 @@ async function applyLineEdits(
     keepStations,
     keepMadeHere,
     keepAllergies,
+    keepReleased,
+    keepRequestedAt,
     routing,
   });
   for (const [sent, lineIds] of keepSentNumber)
