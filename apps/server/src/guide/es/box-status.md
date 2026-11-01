@@ -426,7 +426,7 @@ gestionar el sistema. El aviso llega solo por la campana, no por correo, y dice 
   reloj en hora por sí solo.** Solo lo dice el equipo de un local en funcionamiento; un portátil o
   un equipo de pruebas no dice nada.
 
-Cada aviso salvo el último te pide que mires la fecha y la hora del equipo en esta página. Mientras el servicio no
+Cada aviso te pide que mires la fecha y la hora del equipo en esta página. Mientras el servicio no
 mantiene el reloj en hora, el equipo sigue pudiendo poner su propio reloj durante una parada, como
 explica [Cuando se paran los cobros por la hora](box-status.md#clock-behind). Mientras la parte
 del equipo que pone su reloj en hora no responde, no puede: entonces el equipo solo puede confirmar

@@ -279,7 +279,8 @@ or authorised refunds, and who opened the cash drawer or authorised it.
 - Purpose: know who made each sale, void, refund and cash-drawer opening.
 - Whose data: staff.
 - What data: who rang up a sale, who authorised a void, who asked for, authorised or recorded the
-  outcome of a refund, who opened the cash drawer or authorised it, and when.
+  outcome of a refund, who opened the cash drawer or authorised it, and when; and who confirmed or
+  set the box's clock from a till, kept in a table whose rows cannot be changed or deleted.
 - Who receives it: _anyone you share it with_.
 - How long: _set with your adviser_. Waitron never changes or deletes a recorded sale.
 - Security: as for every entry.

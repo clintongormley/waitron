@@ -400,7 +400,7 @@ system. The warning comes by the bell only, not by email, and says why:
   answering. If the box can reach the internet, its time service may still keep the clock right by
   itself.** Only a live venue's box says this; a laptop or a test box stays silent.
 
-Each warning but the last asks you to look at the box's date and time on this page. While the service is not
+Each warning asks you to look at the box's date and time on this page. While the service is not
 keeping the clock right, the box can still set its own clock during a stop, as [When payments stop
 because of the clock](box-status.md#clock-behind) explains. While the part of the box that sets
 its clock is not answering, it cannot: the box can then only confirm a clock that is already right.

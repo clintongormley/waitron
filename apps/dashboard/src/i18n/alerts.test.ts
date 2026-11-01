@@ -627,7 +627,7 @@ describe("payments restarted on a clock behind the last sale", () => {
       `Payments restarted on the box's clock (${clockAt}), earlier than the last sale (${lastRecordAt}), once Ana, a staff member, confirmed it on till Bar.`,
     );
     expect(alertMessage("clock.behind_chain_restarted", params, "es")).toBe(
-      `Se reanudaron los cobros con la hora del equipo (${clockAt}), anterior a la última venta (${lastRecordAt}), al confirmarla Ana, miembro del personal, en la caja Bar.`,
+      `Se reanudaron los cobros con la hora del equipo (${clockAt}), anterior a la última venta (${lastRecordAt}), al confirmarla Ana, empleado, en la caja Bar.`,
     );
   });
 
@@ -752,7 +752,7 @@ describe("the box's time service not keeping its clock right", () => {
       "The box's time service has not reached a time server, so its clock may drift. Check that the box can reach the internet and look at its date and time on the Box status page.",
     );
     expect(alertMessage("clock.sync_off", { reason: "unreachable" }, "en")).toBe(
-      "This box cannot see or control its time service: the part of the box that does that is not answering. If the box can reach the internet, its time service may still keep the clock right by itself.",
+      "This box cannot see or control its time service: the part of the box that does that is not answering. If the box can reach the internet, its time service may still keep the clock right by itself. Check its date and time on the Box status page.",
     );
   });
 

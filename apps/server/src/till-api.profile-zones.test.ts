@@ -96,6 +96,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/clock/break-start | none: own attendance at configured device location | till-clock-api.test.ts "rejects a profile without clock-in on break-start" |
  * | POST /api/clock/break-end | none: own attendance at configured device location | till-clock-api.test.ts "rejects a profile without clock-in on break-end" |
  * Clock-route allowed control: till-clock-api.test.ts "allows admitted staff with only clock-in and no service-zone access".
+ * | POST /api/box-clock/challenge, /api/box-clock/confirm | none: the box's own clock, never a zone's | till-box-clock-api.test.ts "serves a staff member whose till's profile has no selling action" |
  * | GET /api/attendance/inbox | none: own current/historical record | till-attendance-api.test.ts "rejects a profile without clock-in on inbox" |
  * | GET /api/attendance/hours | none: own current/historical workplace | till-hours-api.test.ts "refuses a random workplace and admits a recorded historical workplace"; allowed: "clock-only staff read their own completed hours passively without recording activity" |
  * | GET /api/attendance/day | none: own current/historical workplace | till-attendance-api.test.ts "refuses arbitrary workplaces but permits recorded historical workplaces" |

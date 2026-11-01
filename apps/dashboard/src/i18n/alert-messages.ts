@@ -175,7 +175,7 @@ export const ALERT_MESSAGES: Readonly<
       byStaff: {
         mode: "replace",
         en: "Payments restarted on the box's clock ({clockAt:minute}), earlier than the last sale ({lastRecordAt:minute}), once {person}, a staff member, confirmed it on till {device}.",
-        es: "Se reanudaron los cobros con la hora del equipo ({clockAt:minute}), anterior a la última venta ({lastRecordAt:minute}), al confirmarla {person}, miembro del personal, en la caja {device}.",
+        es: "Se reanudaron los cobros con la hora del equipo ({clockAt:minute}), anterior a la última venta ({lastRecordAt:minute}), al confirmarla {person}, empleado, en la caja {device}.",
       },
     },
   },
@@ -523,8 +523,8 @@ export const ALERT_WORDS: Readonly<
         es: "El servicio de hora del equipo no ha contactado con ningún servidor de hora, así que su reloj puede desviarse. Comprueba que el equipo tiene conexión a internet y revisa su fecha y hora en Estado del equipo.",
       },
       unreachable: {
-        en: "This box cannot see or control its time service: the part of the box that does that is not answering. If the box can reach the internet, its time service may still keep the clock right by itself.",
-        es: "Este equipo no puede ver ni controlar su servicio de hora: la parte del equipo que lo hace no responde. Si el equipo tiene conexión a internet, puede que su servicio de hora aún mantenga el reloj en hora por sí solo.",
+        en: "This box cannot see or control its time service: the part of the box that does that is not answering. If the box can reach the internet, its time service may still keep the clock right by itself. Check its date and time on the Box status page.",
+        es: "Este equipo no puede ver ni controlar su servicio de hora: la parte del equipo que lo hace no responde. Si el equipo tiene conexión a internet, puede que su servicio de hora aún mantenga el reloj en hora por sí solo. Comprueba su fecha y hora en Estado del equipo.",
       },
     },
     otherwise: {

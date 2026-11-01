@@ -298,7 +298,9 @@ quién pidió o autorizó las devoluciones, y quién abrió el cajón de efectiv
 - Finalidad: saber quién hizo cada venta, anulación, devolución y apertura del cajón de efectivo.
 - Interesados: el personal.
 - Datos: quién cobró una venta, quién autorizó una anulación, quién pidió, autorizó o registró el
-  resultado de una devolución, quién abrió el cajón de efectivo o lo autorizó, y cuándo.
+  resultado de una devolución, quién abrió el cajón de efectivo o lo autorizó, y cuándo; y quién
+  confirmó o puso la hora del equipo desde una caja, guardado en una tabla cuyas filas no pueden
+  modificarse ni borrarse.
 - Destinatarios: _cualquiera con quien los compartas_.
 - Plazo de conservación: _fijar con tu asesor_. Waitron nunca cambia ni borra una venta registrada.
 - Seguridad: como en todas las entradas.
