@@ -388,7 +388,7 @@ export async function createRun(runDir);
 | `argument-missing` | Either option, or its value, missing. |
 | `case-unknown` | A case not in `RIG_CASES`. |
 | `run-dir-relative` | The run folder is not absolute. |
-| `run-dir-unsafe` | The path does not equal its own `path.resolve`, holds a NUL, or is `/`. |
+| `run-dir-unsafe` | The path does not equal its own `path.resolve`, holds a NUL, is `/`, or is `/dev` or under `/dev/`. |
 | `run-dir-exists` | `EEXIST`, whether the folder is empty or not. |
 | `run-dir-parent-missing` | The parent folder does not exist. |
 
@@ -434,12 +434,12 @@ export async function createRun(runDir);
  */
 /** Durably records the resource, then runs step. step never runs if recording fails. Calls on one RigRun take turns. */
 export async function withRecorded(run, resource, step);
-/** Reads and strictly validates runDir/ledger.json; refuses any resource outside runDir. @returns {Promise<readonly RigResource[]>} */
-export async function loadLedger(runDir);
+/** Checks the run, then reads and strictly validates its ledger.json; refuses any resource outside runDir. @returns {Promise<readonly RigResource[]>} */
+export async function loadLedger(run);
 /** Pure: reverse recording order; image → remove-file, loop → detach-loops, mount → unmount, vm → stop-vm. */
 export function planCleanup(resources);
-/** Runs every step even after failures. @returns {Promise<{status:'clean'|'incomplete', failed: readonly CleanupStep[]}>} */
-export async function runCleanup(plan, adapter);
+/** Loads the run's ledger itself and runs every step even after failures. @returns {Promise<{status:'clean'|'incomplete', failed: readonly CleanupStep[]}>} */
+export async function runCleanup(run, adapter);
 ```
 
 **The ledger file** is `{"version":1,"runDir":"…","resources":[…]}` plus a newline, in canonical bytes.
@@ -455,6 +455,13 @@ Only then does the turn end and `step` run, outside the turn. A step may therefo
 **`loadLedger` refuses with `ledger-invalid`** when the bytes are not canonical, when `runDir` differs from the folder being read, on an unknown kind or key, or when any path is outside `runDir` or under `/dev/`.
 
 **Stopping a VM.** The real `CleanupAdapter` (Linux) must check that a VM's process is the one this run started before stopping it. That belongs to the Linux pull request.
+
+Contract notes from the per-task review (2026-11-01):
+- **Run checks.** `withRecorded`, `loadLedger` and `runCleanup` check the run as text first (`run-invalid`, then Task 2's `run-dir-*` reasons), then `lstat` the run folder: anything but a real folder whose `dev:ino` equals `rootId` is `run-dir-replaced`.
+- **Symlinks on the way.** A resource path reached through an existing symlink is refused when recorded (`resource-through-symlink`); at cleanup that step fails without reaching the adapter. `ledger.json.next` is refused as a resource like `ledger.json`.
+- **Cleanup takes no plan.** `runCleanup(run, adapter)` loads the ledger and re-checks the run folder and each path before every step; `planCleanup` stays pure and refuses unknown or inherited kinds.
+- **Across processes.** The append opens `ledger.json.next` with `wx` before reading the ledger, so the staging file is the lock: a second process gets `EEXIST`, and a staging file left by a crash refuses every later record until removed.
+- **The real adapter's duty (not built in this pull request).** These checks go by path; the Linux adapter must open every path beneath the run folder without following a symlink, with `openat2` and `RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS`.
 
 - [ ] **Step 1: Write the failing tests.**
   - `step sees its resource already in ledger.json on disk` (the test reads the file inside `step`).
