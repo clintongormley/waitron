@@ -117,7 +117,8 @@ Not covered, and why:
   each of these slices removes only what A1268 leaves, so its plan is written against A1268's merged
   diff. The owner answered question 4 (§7) on 2026-11-01 (~15:55): (a), the export names the
   workplace by the venue's name alone, so **S14** now waits only for A1268 to land. Lines this plan
-  hands them are in "Notes for the S13–S15 plans" below.
+  hands them are in "Notes for the S13–S15 plans" below. Their plan, with S12d's task:
+  `docs/superpowers/plans/2026-11-02-a1301-working-time-slices.md`.
 - **S18** (contract and type cleanup) waits for S2–S17, and **S19**'s text sweep runs after S18 (its
   plan-only backlog part may run now).
 - **S20–S28** (the schema slices and the reset window) are a separate plan, written once F1–F5 and
@@ -145,7 +146,7 @@ invoice records point at by foreign key (§6). The lane lands the rest.
 | S10 | 3 (S10a–S10c) | S1 | lane | FULL | `refactor/a1301-s10-printing-layouts` |
 | S11 | 3 (S11a–S11c) | S1 | lane | FULL | `refactor/a1301-s11-orders-kitchen-refunds` |
 | S12 | 3 (S12a–S12c) | S1 | lane | FULL | `refactor/a1301-s12-devices-joins-admission` |
-| S12d | 1 | **S15** (not in this plan) | lane | FULL | `refactor/a1301-s12d-locations-route` |
+| S12d | 1 | **S15-1** (see the working-time plan) | lane | FULL | `refactor/a1301-s12d-locations-route` |
 | S16 | 7 (S16a–S16e, S16f1, S16f2) | S1 | **owner** (c) | FULL | `refactor/a1301-s16-setup-venue-fields` |
 | S17 | 3 (S17a1, S17a2, S17b) | S16 | lane | FULL | `refactor/a1301-s17-bundle-venue-fields` |
 | F2 | 7 (F2a–F2g) | F1 | lane | LIGHT | `refactor/a1301-f2-package-fixtures` |
@@ -396,6 +397,8 @@ function no longer reads the scope. It fails before the change. It is marked
   `WAITRON_ENV` and the two optional settings, never the location. S18 holds the file
   (`file-assignment.tsv:361`); Waitron Cloud's two `writeTradingEnv` callers stop passing it then
   ("Cloud follow-up" below).
+- If S2 lands after S13: the attendance recorder's optional, ignored `locationId?` and
+  `captureBillPaymentAttendance`'s `requested.locationId` (working-time plan, decision 5).
 - **Before S18 removes `TradingContext.locationId`:** the open design point "the venue's stable id"
   under "Carried to the schema plan" must be settled, because that field is today's Cloud pairing
   value and backup folder name.
@@ -454,6 +457,9 @@ function no longer reads the scope. It fails before the change. It is marked
   and Cloud's pairing value do not change.
 - **S17's interim import rule** (a column whose foreign key points at `locations` is set to
   `venueLocationId(tx)`) goes when the columns go; S28's `venueLocationId` grep finds it.
+- **S22** re-keys `attendance_source_state`'s and `attendance_operation_facts`' indexes without
+  `location_id` and replaces `packages/workforce/src/personal-data.ts`'s join of `locations`
+  through `shifts.location_id` (working-time plan, "Carried to other slices").
 - **Second-location cases the code slices did not reach.** F slices leave every case that seeds a
   second location and list it in their commit; the schema slice that drops that table's `location_id`
   deletes any still standing.
@@ -3275,6 +3281,9 @@ admission by location (`admit`) — out of A1268 — S12").
 
 **Produces:** `DeviceBinding` without `locationId`; `currentZoneDevice(tx, session)`.
 
+Whichever of S12a and S13 lands second drops `TillAttendanceApiDeps.cfg.locationId` and
+`TillClockApiDeps.cfg.locationId` (working-time plan, "Carried to other slices").
+
 - [ ] **Step 1: failing test.** In `apps/server/src/device-session.test.ts` (no case there calls
   `toDeviceBinding` today; it is exported at `device-session.ts:145`), add one: select
   `deviceBindingColumns` for a seeded device, pass the row to `toDeviceBinding(id, row)`, and
@@ -3403,50 +3412,7 @@ The restore confirmation's `locationName` → `venueName` rename (`RestoredVenue
 
 ### Task S12d: delete `GET /management-api/locations` and `getLocations`
 
-- **Depends on:** S15 (not in this plan) — **starts only after S15 has removed
-  `planned-actual-screen.ts`'s `getLocations` watch** (`apps/dashboard/src/screens/planned-actual-screen.ts:99`,
-  the route's last user; header, "Files moved from the design's slice").
-- **Lands:** lane. **Branch:** `refactor/a1301-s12d-locations-route`, its own PR.
-- **Review path:** FULL — a cross-package contract (a server route the dashboard calls).
-
-Every caller, from `git grep -n -E 'getLocations|LocationSummary|/management-api/locations([^/]|$)' -- apps packages scripts`:
-
-- server: the route `apps/server/src/workforce-api.ts:108-118` (and the `locations` import `:7` if
-  nothing else in the file uses it — `:124`, `:136`, `:405` are S13's query parameters, not the
-  table); its tests `workforce-api.test.ts:105` and `:208`;
-- dashboard: `apps/dashboard/src/api/client.ts:1044-1048` (`LocationSummary`) and `:4147-4149`
-  (`getLocations`); `apps/dashboard/src/api/live-queries.ts:492`; the one production caller
-  `apps/dashboard/src/screens/planned-actual-screen.ts:99` (S15's); test stubs
-  `dashboard-app.a11y.test.ts:79`, `dashboard-app.disk-stop.test.ts:87`, `dashboard-app.help.test.ts:86`,
-  `dashboard-app.test.ts:152`, `api/client.test.ts:1029-1036`, and the
-  `planned-actual-screen*.test.ts` stubs (S15's, gone with the picker);
-- till: none. Setup: none. `packages/`: none. No server live-resource source names `getLocations`
-  (`git grep -n getLocations -- apps/server packages scripts` prints nothing).
-
-`/management-api/locations/:id/catalogues…` (`catalogue-api.ts:1283-1312`, S5) and the retired
-`/management-api/locations/:id/receipt-print-mode` test paths are other routes.
-
-- [ ] **Step 1: failing test.** In `workforce-api.test.ts`, replace ":105 GET
-  /management-api/locations lists the tenant's locations" with "GET /management-api/locations is
-  gone": expect `404`. FAILS before (`200`).
-- [ ] **Step 2:** `pnpm --filter @waitron/server exec vitest run src/workforce-api.test.ts -t "management-api/locations"` — FAIL.
-- [ ] **Step 3: delete** the route, `LocationSummary`, `getLocations`, the live-query entry and the
-  four `dashboard-app*.test.ts` stubs; delete `client.test.ts:1029` and `workforce-api.test.ts:208`
-  (the 401 for the deleted route). The other `"locations"` table names in `live-queries.ts` are
-  S23's.
-- [ ] **Step 4:** `pnpm --filter @waitron/server exec vitest run src/workforce-api.test.ts`; check
-  free memory (`memory_pressure | grep free`), then `pnpm --filter @waitron/dashboard exec vitest
-  run src/api/client.test.ts src/api/live-queries.test.ts src/dashboard-app.test.ts
-  src/dashboard-app.a11y.test.ts src/dashboard-app.disk-stop.test.ts src/dashboard-app.help.test.ts`
-  — PASS; `pnpm exec vitest run scripts/live-subscriptions.test.ts` and the other code guards;
-  typecheck `@waitron/server`, `@waitron/dashboard`; `pnpm format:check`.
-- [ ] **Step 5: done-check:** the grep in this task's first paragraph prints only the catalogue
-  routes (S5) and `print-api*.test.ts`'s retired-route paths. Over `client.ts` and
-  `live-queries.ts`, the design pattern prints only S5's catalogue lines (`client.ts:499`,
-  `:3114-3137`), S13/S15's roster and shift types and calls (`:988`, `:999`, `:1014`, `:1087`,
-  `:4151-4160`, `:4210-4212`), the comments S12d rewords or leaves (`:616`, `:620`, `:2407` —
-  reword to "the venue's"), and S23's table names in `live-queries.ts`.
-- [ ] **Step 6: commit** "Delete the locations list route and its dashboard query (A1301 S12d)".
+Moved to `docs/superpowers/plans/2026-11-02-a1301-working-time-slices.md`, section "S12d".
 
 ### Open PRs touching S12's files
 

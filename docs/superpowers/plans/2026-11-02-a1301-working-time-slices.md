@@ -31,7 +31,8 @@ nothing at `2c4511d58b`, and the S13 and S14 sections give the per-file checks.
 
 All four slices are lane B's, landed by the lane, FULL review path, one at a time:
 
-1. **S13** — `refactor/a1301-s13-working-time` (Tasks S13a–S13j).
+1. **S13** — `refactor/a1301-s13-working-time` (Tasks S13a, S13b, S13c, S13d1, S13d2, S13e1, S13e2,
+   S13f–S13j).
 2. **S14** — `refactor/a1301-s14-record-export` (Task S14a), after S13.
 3. **S15-1** — `refactor/a1301-s15-1-planned-actual` (Task S15a).
 4. **S15-2** — `refactor/a1301-s15-2-attendance-export` (Task S15b).
@@ -64,9 +65,10 @@ never a reason to wait (whoever lands second rebases).
    the own-workplace half go, and its "refuses missing location or person" half stays word for word
    until S15b deletes the parse and the `requireLocation` lookup it proves (S13i keeps `requireLocation`). S14 then removes `RecordExportInput.locationId` and stops
    the export routes passing it (the routes still parse it until S15b).
-4. **`attendance_source_state` keeps an equality on the venue's id** (S13's decision 3) until S22
-   re-keys its two indexes, which lead with `location_id`; S13f measures it first. Carried to S22
-   below.
+4. **`attendance_source_state` and `attendance_operation_facts` keep an equality on the venue's id**
+   (S13's decision 3) wherever S13f's query-plan measurement shows the read would otherwise scan the
+   table, until S22 re-keys the indexes that lead with `location_id` (`attendance_source_state`'s
+   two, `attendance_operation_facts_day_idx`). Carried to S22 below.
 5. **The question and pending cards are headed by their work day**, not the venue's name (S15's
    choice): with one venue the name says nothing. The look check covers it.
 6. **`AttendanceInbox.locations` becomes `AttendanceInbox.timeZone`**, the venue's zone, which the
@@ -81,13 +83,17 @@ never a reason to wait (whoever lands second rebases).
 - **S12a (lane C).** Once S12a has deleted `admit`'s location refusal
   (`till-attendance-api.ts:101-102`, `till-clock-api.ts:79-80`) and S13 has landed, nothing reads
   `TillAttendanceApiDeps.cfg.locationId` or `TillClockApiDeps.cfg.locationId`: whichever of S12a and
-  S13 lands second drops the two fields. S13d removes the session fact's `locationId` in
+  S13 lands second drops the two fields. S13d2 removes the session fact's `locationId` in
   `till-api.ts` whatever S12a left there.
 - **S18.** If S2 (#2384, owner-landed) lands after S13, its `bill-payments.ts` and `till-sale.ts`
   calls still pass `locationId` to the attendance recorder's ignored optional field, with
   `captureBillPaymentAttendance`'s `requested.locationId` parameter; S18 removes them.
-- **S22.** Re-key `attendance_source_state_scope_uq` and `_watch_idx` without `location_id` and delete
-  S13f's venue equalities. Replace `packages/workforce/src/personal-data.ts`'s join of `locations`
+- **S22.** Re-key `attendance_source_state_scope_uq` and `_watch_idx`, and
+  `attendance_operation_facts_day_idx` (`location_id, business_day, person_id, at`,
+  `packages/workforce/src/schema/attendance.ts:121`), without `location_id`, and delete the venue
+  equalities S13e2 and S13f keep on both tables. Delete `AttendanceResponseReceipt.locationId`
+  (`packages/workforce/src/attendance-contract.ts:43`) with the stored column it mirrors
+  (`attendance_response_commands.location_id`). Replace `packages/workforce/src/personal-data.ts`'s join of `locations`
   through `shifts.location_id` (S13 leaves it, because reading `readVenue` there adds a table scan
   that `personal-data.test.ts`'s "prepare's reads find every row they read through an index" case
   refuses): either list `locations` in that test as a stated exception, or drop the field and reword
@@ -158,22 +164,30 @@ everything in roster, shifts and convenio (outside A1268's scope).
    grow with every captured operation; without the equality, `remember`'s and `due()`'s lookups
    scan the table under the write lock. So the discovery code keeps
    `eq(attendanceSourceState.locationId, venue)` with `venue = await venueLocationId(tx)` read once
-   per call, until S22 re-keys those indexes. Every other `location_id` filter is deleted
-   (`attendance_day_work` grows by one row a business day; `attendance_questions` and
-   `attendance_operation_facts` have person-led indexes). S13f's Step 3 measures this; open
-   point 1 lets the driver overrule it.
+   per call, until S22 re-keys those indexes. `attendance_operation_facts` is read the same way:
+   its `attendance_operation_facts_day_idx` leads with `location_id` (`location_id, business_day,
+   person_id, at`, `schema/attendance.ts:121`), and two reads use it: `readAttendanceFacts`'s
+   stored-facts select, which reads every person's facts by `location_id` and time
+   (`attendance-facts.ts:49-52`), and `reconcileAttendanceDay`'s pending lookup
+   (`attendance-discovery.ts:63-73`). Both keep their `location_id` equality, compared with the
+   venue's id (S13e2 for the stored-facts select, S13f for the pending lookup), unless S13f's
+   Step 3 shows that the plan without it does not scan the table.
+   Every other `location_id` filter is deleted (`attendance_day_work` grows by one row a business
+   day; `attendance_questions` has person-led indexes). S13f's Step 3 measures all four reads.
 4. **A location test that also meant "has an order" keeps the "has an order" half.** Discovery's
    `draft`/`group` sources (`attendance-discovery.ts:140`, `:147`) and the facts reader
    (`attendance-facts.ts:26-34`) answer `null` / no row for an event whose party has **no**
    working order (`having count(distinct o.location_id) = 1` is false for zero rows). The capture
-   helpers `recordDraftEvents` (`order-drafts.ts:1630-1634`) and the group-event helper
-   (`order-groups.ts:2445-2449`) skip an event whose party has zero orders (`orders.length !== 1`).
-   S13 keeps that: "at least one order", never "any".
+   helpers skip such an event too (`orders.length !== 1`): `recordDraftEvents`
+   (`order-drafts.ts:1630-1634`) when the draft's own bill (`orderDrafts.billId`) names no working
+   order, and the group-event helper (`order-groups.ts:2445-2449`) when the party has none. S13
+   keeps that: "at least one order", never "any". A captured row keeps counting as the venue's
+   after its party has lost every order (S13f's `capturedRow` rule).
 5. **The recorder's ignored `locationId?`.** `bill-payments.ts:1166-1182` and `till-sale.ts:128-137`
    (S2's files, owner-landed, open as #2384) pass `locationId` to the attendance recorder. While S2
    has not landed, `AttendanceRecorder`'s input keeps an optional, never-read `locationId?: string`
    for those two callers (rule "Calls into another slice's file"); S18 removes it. If S2 has landed
-   before S13d, S13d edits the two calls itself, argument only, and there is no optional field.
+   before S13d2, S13d2 edits the two calls itself, argument only, and there is no optional field.
 6. **Revision and fingerprint values change once.** `readAttendanceRevision` stops hashing every
    `locations` row and hashes `readVenueClock(tx)` instead (S13h), and discovery's watch
    fingerprints lose their location (S13f). On a box already recording attendance, a client holding
@@ -187,7 +201,7 @@ Pattern and command: the shared done-check's `P`, `git grep -c -E "$P" -- <file>
 
 | File | Count | Task | What changes |
 | --- | --- | --- | --- |
-| `packages/workforce-es/src/convenio.ts` | 5 | S13a | `resolveWorkTimeRuleset(tx)` reads the one `convenio_config` row, no `where` (`:41`, `:64`); refusal detail `{}` (`:68-70`); comment `:36-37` |
+| `packages/workforce-es/src/convenio.ts` | 5 | S13a | `resolveWorkTimeRuleset(tx)` reads the venue's `convenio_config` row: the `where` (`:64`) compares with `await venueLocationId(tx)` until S20–S28 drop the column, so the read keeps its unique-index lookup (`convenio_config_location_uq`, `schema/convenio-config.ts:100`) and refuses a second venue (`:41`, `:64`); refusal detail `{}` (`:68-70`); comment `:36-37` |
 | `packages/workforce-es/src/errors.ts` | 2 | S13a | `"convenio.not_found": Record<string, never>`; comment `:8` |
 | `packages/workforce/src/clocking.ts` | 43 | S13b | roster/shift inputs and rows lose `locationId` (`:94-99`, `:102-110`, `:112-121`, `:130-139`); `getPlannedVsActual` and `plannedShiftsInPeriod` (`:222-266`); `createRosterVersion` (`:296-320`), `copyPublishedToDraft` (`:334-349`), `getRoster` (`:379-396`), `getRosterVersion`/`shiftsForVersion` selects (`:401`, `:417`), `addShift` (`:425-449`), `shiftForWrite` select (`:480`), publish attach (`:531`) and supersede (`:583`, `:595`); row types and mappers (`:697-733`); comments `:133`, `:297-299`, `:427`, `:495-497`, `:574` |
 | `packages/workforce/src/body-ids.ts` | 3 | S13b | `assertLocationExists` (`:14-17`) deleted (its two callers are `clocking.ts:302,439`) |
@@ -195,7 +209,7 @@ Pattern and command: the shared done-check's `P`, `git grep -c -E "$P" -- <file>
 | `packages/workforce/src/schedule-reads.ts` | 4 | S13b | `PersonShiftRow.locationId` (`:20`) and its select (`:60`, `:67`, `:77`) |
 | `packages/workforce/src/personal-data.ts` | 4 | — | **left as is** ("Carried to other slices", S22): the rota file's `location` is a join through `shifts.location_id` (`:67`, `:76`, `:187`) |
 | `packages/workforce/src/absences.ts`, `shift-swaps.ts` | 1 + 1 | S13b | the comments "Not location-scoped…" (`:88`, `:124`) deleted |
-| `packages/staffing/src/rota.ts` | 11 | S13b, S13c | S13b: `getRoster`/`createRosterVersion`/`addShift` calls stop spreading `cfg` (`:251`, `:255`, `:256-261`, `:288`, `:304`, `:360`), `roster.draft_exists` with `{}` (`:363`). S13c: `RotaWeek`'s `locationId` (`:85`). The rest is S9's |
+| `packages/staffing/src/rota.ts` | 11 | S13b, S13c | S13b: `getRoster`/`createRosterVersion`/`addShift` calls stop spreading `cfg` (`:251`, `:255`, `:256-261`, `:288`, `:304`, `:360`), `roster.draft_exists` with `{}` (`:363`). `unattachedWeek`'s `cfg` (`:281`), unused once its `getRoster` call (`:288`) stops spreading it, goes with the arguments at `:302` and `:354`. S13c: `RotaWeek`'s `locationId` (`:85`). The rest is S9's |
 | `packages/staffing/src/staffing-types.ts` | 4 | S13c | `RotaWeek.locationId` (`:113`); the three comments are S9's |
 | `packages/staffing/src/dashboard/client.ts` | 3 | S13c | `watchRotaWarnings(queries, week, apply)` (`:145-159`): no `locationId` parameter, key or query parameter |
 | `packages/staffing/src/dashboard/rota-view.ts` | 1 | S13c | the call at `:416` |
@@ -203,29 +217,30 @@ Pattern and command: the shared done-check's `P`, `git grep -c -E "$P" -- <file>
 | `apps/server/src/workforce-api.ts` | 21 | S13a, S13b, S13c | S13a: the two `resolveWorkTimeRuleset` calls (`:139`, `:304-306`). S13b: the calls into the roster functions (`:127`, `:150`, `:211`, `:234-242`, `:410`), the publish route's previous-version filter (`:315`), the four parse lines become bare validations (`:124`, `:208`, `:225`, `:405`). S13c: the breaches route (`:133-202`) stops parsing `locationId` and filtering unattached shifts by it (`:136`, `:156`). S13j: the three roster validations (`:124`, `:207-208`, `:225`) go. **Not S13:** `:7`, `:108-118` (S12d), `:405` (S15a) |
 | `apps/dashboard/src/api/client.ts` | 8 of 27 | S13j | `RosterVersion.locationId`, `Shift.locationId`, `ShiftInput.locationId`, `MyShift.locationId` (`:1018`, `:1029`, `:1044`, `:1117`) deleted; `getRoster` and `createRosterVersion` (`:4199-4211`) send no `locationId`. The other 19 are S12d's, S5's and S15's |
 | `apps/till/src/api/client.ts` | 1 of 17 | S13j | `MyShift.locationId` (`:2038`) deleted; the rest is S15's or unrelated words |
-| `packages/workforce/src/attendance-types.ts` | 4 | S13e | `AttendanceFact.locationId` (`:8`), `AttendanceDay.locationId` (`:14`), `PlannedAttendanceShift.locationId` (`:34`); comment `:40` |
-| `packages/workforce/src/attendance-state.ts` | 2 | S13e | `assertAttendanceDay` (`:11`); `enqueueAttendanceDay`'s scope (`:30-33`) by business day only; its insert (`:44`) fills `locationId: await venueLocationId(tx)` |
-| `packages/workforce/src/attendance-rota.ts` | 3 | S13e | the two join conditions (`:22`, `:31`) and the day filter (`:37`) |
-| `packages/workforce/src/attendance-questions.ts` | 4 | S13e | `asQuestion` (`:43`); `upsertAttendanceQuestion`'s lookup (`:118`) and insert (`:140`, fills `venueLocationId`); `mergeAttendanceQuestions`' comparison (`:201`) |
-| `packages/workforce/src/end-of-day.ts` | 9 | S13e | every `attendanceQuestions.locationId`/`attendanceDayWork.locationId` filter (`:80`, `:129`, `:192`, `:272`, `:370`, `:383`), the fact and plan filters (`:136`, `:145`), the break fact literal (`:308`) |
-| `packages/workforce/src/attendance-contract.ts` | 12 | S13e (`:73`) | `AttendancePrompt.day` keeps `locationId` on the wire as `(AttendanceDay & { locationId: string }) \| null`. Every other line is a wire field S13 keeps (S15) |
+| `packages/workforce/src/attendance-types.ts` | 4 | S13e1, S13e2 | S13e1 makes these optional and never read; S13e2 deletes them: `AttendanceFact.locationId` (`:8`), `AttendanceDay.locationId` (`:14`), `PlannedAttendanceShift.locationId` (`:34`); comment `:40` |
+| `packages/workforce/src/attendance-state.ts` | 2 | S13e1 | `assertAttendanceDay` (`:11`); `enqueueAttendanceDay`'s scope (`:30-33`) by business day only; its insert (`:44`) fills `locationId: await venueLocationId(tx)` |
+| `packages/workforce/src/attendance-rota.ts` | 3 | S13e1 | the two join conditions (`:22`, `:31`) and the day filter (`:37`) |
+| `packages/workforce/src/attendance-questions.ts` | 4 | S13e1 | `asQuestion` (`:43`); `upsertAttendanceQuestion`'s lookup (`:118`) and insert (`:140`, fills `venueLocationId`); `mergeAttendanceQuestions`' comparison (`:201`) |
+| `packages/workforce/src/end-of-day.ts` | 9 | S13e1 | every `attendanceQuestions.locationId`/`attendanceDayWork.locationId` filter (`:80`, `:129`, `:192`, `:272`, `:370`, `:383`), the fact and plan filters (`:136`, `:145`), the break fact literal (`:308`) |
+| `packages/workforce/src/attendance-contract.ts` | 12 | S13e1 (`:73`) | `AttendancePrompt.day` keeps `locationId` on the wire as `(AttendanceDay & { locationId: string }) \| null` (S15i removes it). `AttendanceResponseReceipt.locationId` (`:43`) is S22's. Every other line is a wire field S13 keeps (S15) |
 | `packages/workforce/src/attendance-question-responses.ts` | 1 | S13h | the command/question location comparison (`:23`) |
 | `packages/workforce/src/attendance-reads.ts` | 32 | S13h | `locationInfo` (`:24-32`) deleted; inbox `locations` is always `[venue]` (`:54-70`); prompts take the venue's id, name and zone (`:76`, `:98-110`, `:119-134`); `readAttendanceDay(tx, { personId, date })` (`:148-179`); `readAttendanceManagerQueue(tx)` (`:180-194`). The response `locationId` fields stay, filled from the venue |
 | `packages/workforce/src/hours-reads.ts` | 7 | S13h | `HoursInput.locationId` (`:23`, `:44-45`), the prompt filter (`:109`); `PersonHours.locationId`/`ManagerHours.locationId` filled from the venue (`:100`, `:163`, `:196`) |
 | `packages/workforce/src/attendance-responses.ts` | 10 | S13h | `readAttendanceRevision` hashes `readVenueClock(tx)` instead of every `locations` row and every cutover row (`:9-11`, `:30-41`); the settings select keeps its table, loses the location ordering |
-| `packages/workforce/src/attendance-response-commands.ts` | 5 | S13h | stored `locationId` is `question ? await venueLocationId(tx) : null` (`:191`, `:270`); `invalid("question_location")` (`:210`) deleted. `:81`, `:88` copy the wire payload's `locationId` (kept, S15) |
-| `apps/server/src/attendance-capture.ts` | 12 | S13d, S13e | S13d: `AttendanceRecorder` input without `locationId` (decision 5); `captureKitchenActivity` reads no order location (`:31-39`); `recordAttendanceFact` (`:57-146`) fills the fact row's `location_id` with `venueLocationId`, reads `readVenueClock`, scopes the day by business day. S13e: its day literals lose `locationId` |
-| `apps/server/src/attendance-integrated.ts` | 3 | S13d | the order-location select (`:33-36`) and the fact (`:42`) go; the watch insert (`:52`) fills `venueLocationId` |
-| `apps/server/src/parties.ts` | 2 | S13d | `attendance?: { recorder: AttendanceRecorder }` (`:725`, `:754`) |
-| `apps/server/src/attendance-facts.ts` | 20 | S13e | `readAttendanceFacts(tx, day)` and `readPlannedAttendanceShifts(tx, day)` read the venue's facts and shifts with no location (decision 4 for `:26-34`); `readVenueClock` (`:3`, `:14`); comment `:15` |
-| `apps/server/src/attendance-discovery.ts` | 51 | S13e (day literals), S13f | every function's scope loses `locationId`; `readVenueClock`; `scanScope`, `remember`'s predicate and `due()` keep the venue equality (decision 3); source fields lose their location column (decision 4); `attendance_day_work` filters deleted; inserts fill `venueLocationId` |
-| `apps/server/src/attendance-source-changes.ts` | 15 | S13f | one venue: the per-location map (`:46-57`) becomes one set of days; `readVenueClock`; day-work filter deleted; watch insert fills `venueLocationId` (`:84`); the conflict target (`:93-98`) names the real unique index and stays (S22) |
+| `packages/workforce/src/attendance-response-commands.ts` | 5 | S13h | stored `locationId` is `question ? await venueLocationId(tx) : null` (`:191`, `:270`); `invalid("question_location")` (`:210`) deleted (no test names it: `git grep -n question_location -- apps packages` prints only that line). `:81`, `:88` copy the wire payload's `locationId` (kept, S15) |
+| `apps/server/src/attendance-capture.ts` | 12 | S13d1, S13d2, S13e2 | S13d1: `AttendanceRecorder` input with an optional, never-read `locationId` (decision 5); `recordAttendanceFact` (`:57-146`) fills the fact row's `location_id` with `venueLocationId`, reads `readVenueClock`, scopes the day by business day. S13d2: `captureKitchenActivity` reads no order location (`:31-39`). S13e2: its day literals lose `locationId` |
+| `apps/server/src/attendance-integrated.ts` | 3 | S13d2 | the order-location select (`:33-36`) and the fact (`:42`) go; the watch insert (`:52`) fills `venueLocationId` |
+| `apps/server/src/parties.ts` | 2 | S13d2 | `attendance?: { recorder: AttendanceRecorder }` (`:725`, `:754`) |
+| `apps/server/src/attendance-facts.ts` | 20 | S13e2 | `readAttendanceFacts(tx, day)` and `readPlannedAttendanceShifts(tx, day)` read the venue's facts and shifts with no location (decision 4 for `:26-34`), except the stored-facts select's `location_id` equality (`:51`), filled with `await venueLocationId(tx)` until S13f's Step 3 decides it (decision 3); `readVenueClock` (`:3`, `:14`); comment `:15` |
+| `apps/server/src/attendance-discovery.ts` | 51 | S13e2 (day literals), S13f | every function's scope loses `locationId`; `readVenueClock`; `scanScope`, `remember`'s predicate, `due()` and `reconcileAttendanceDay`'s pending lookup (`:63-73`) keep the venue equality unless S13f's Step 3 shows no scan without it (decision 3); source fields lose their location column (decision 4); `attendance_day_work` filters deleted; inserts fill `venueLocationId` |
+| `apps/server/src/attendance-source-changes.ts` | 15 | S13f | one venue: the per-location map (`:46-57`) becomes one set of days, and the watch is still written only when a watch or a current row exists (today the loop from `:57` writes one only for a location found in either); `readVenueClock`; day-work filter deleted; watch insert fills `venueLocationId` (`:84`); the conflict target (`:93-98`) names the real unique index and stays (S22) |
 | `apps/server/src/attendance-loop.ts` | 3 | S13f | `AttendancePassDeps.locationId` (`:11`), its scope (`:28`) and filter (`:48`) |
-| `apps/server/src/attendance-email-worker.ts` | 6 | S13g | deps lose `locationId` and `locationName` (`:22`, `:28`); the question filter (`:72`) goes; the day literal (`:95-100`, S13e) and reconcile scope (`:104`); the message's place name is `(await readVenue(tx)).name` (`:131`) |
+| `apps/server/src/attendance-email-worker.ts` (`:102-106`) | — | S13f | the `reconcileAttendanceDay` call's literal scope `{ nodeId, locationId: deps.locationId, personId, day }` loses `locationId`, or it does not compile once S13f narrows the scope; the rest of the file is S13g's |
+| `apps/server/src/attendance-email-worker.ts` | 6 | S13g | deps lose `locationId` and `locationName` (`:22`, `:28`); the question filter (`:72`) goes; the day literal (`:95-100`, S13e2); the reconcile scope (`:104`) is S13f's; the message's place name is `(await readVenue(tx)).name` (`:131`) |
 | `apps/server/src/attendance-email.ts`, `i18n/attendance-email.ts` | 3 + 4 | S13g | parameter `locationName` → `venueName`; both sentences' words unchanged |
 | `apps/server/src/till-clock-state.ts` | 5 | S13g | `readTillClockState(tx, { personId }, at)`; `readVenueClock`; `TillClockState.locationId` stays (the till reads it) and is filled with `venueLocationId` |
 | `apps/server/src/till-clock-api.ts` | 7 | S13g | the state reads (`:103`, `:129`, `:170`), `writeClock`'s clock (`:152`); `TillClockApiDeps.cfg.locationId` (`:30`) and `admit`'s refusal (`:79-80`) are S12a's (see S13g Step 6) |
-| `apps/server/src/management-attendance-api.ts` | 33 | S13h (queue call), S13i | S13i: inbox push (`:81-87`), own-workplace checks (`:100-104`, `:119-123`, `:151-156`), the location existence check (`:176-182`), `readLocationClock(scope.locationId)` (`:106`, `:184`), lookups' `locations` (`:197-207`) from the venue, `cfg.locationId` (`:36`) |
+| `apps/server/src/management-attendance-api.ts` | 33 | S13h (queue call; `:220`'s `const scope =` becomes a bare validating `parseAttendanceLocationQuery(…)` call, as `noUnusedLocals` refuses an unused `scope`), S13i | S13i: inbox push (`:81-87`), own-workplace checks (`:100-104`, `:119-123`, `:151-156`), the location existence check (`:176-182`), `readLocationClock(scope.locationId)` (`:106`, `:184`), lookups' `locations` (`:197-207`) from the venue, `cfg.locationId` (`:36`) |
 | `apps/server/src/till-attendance-api.ts` | 20 | S13i | the same in the till's routes (`:145-151`, `:171-177`, `:190-194`, `:253-257`); `TillAttendanceApiDeps.cfg.locationId` (`:48`) and `admit`'s refusal (`:101-102`) are S12a's |
 | `apps/server/src/attendance-own-scope.ts` | 5 | S13i | deleted |
 | `apps/server/src/attendance-export-api.ts` | 22 | S13i | the three own checks (`:65-70`, `:90-95`, `:127-132`) deleted; `ExportDeps.cfg` (`:25`) deleted; the exporter's `locationId` (`:106`) is `await venueLocationId(tx)` until S14 removes `RecordExportInput.locationId`. `requireLocation` (`:38-44`, called at `:63`, `:89`) **stays** until S15b: the trimmed export case's kept half proves it (driver's ruling 3) |
@@ -267,12 +282,15 @@ Pattern and command: the shared done-check's `P`, `git grep -c -E "$P" -- <file>
 - Browser tests (staffing's `src/dashboard/**`): `memory_pressure | grep free` first.
 - **A database with a second venue row** (plan rule): once a function reads through
   `venueLocationId`/`readVenue`/`readVenueClock`, a suite that seeds a second `locations` row
-  fails with `provisioning.second_venue`. Each task first lists its suites with
+  fails with `provisioning.second_venue`, and one that seeds none fails with `venue.not_found`
+  (both thrown by `venueRow`, `packages/db/src/venue.ts:49-50`; S13h reads the venue on every inbox
+  and revision read, so its suites meet both). Each task first lists its suites with
   `git grep -c -E 'insert\((schema\.)?locations\)|seedLocation\(|seedVenue\(|insertLocation\(' -- <its test files>`
   and reads every file printing 2 or more (or 1 plus a `locations` insert inside a case). A case
   that only proves a cross-location refusal is deleted (named below); any other seeds one venue
   (`seedVenue` from `@waitron/db/testing/seed.js`, or the setup's first row) without changing an
-  assertion.
+  assertion. `packages/staffing/src/routes.test.ts:290`, `:672` and `:793` seed a second venue in
+  cases about staff roles, seasons and special days (S9's), not S13's roster reads: leave them.
 - **Assertions about the one venue's id.** A test asserting `locationId: <the venue's id>` on a
   stored `attendance_*` row keeps passing unchanged (the column is filled with the same id). A test
   asserting `locationId` on an object whose type loses the field (`AttendanceFact`,
@@ -296,15 +314,20 @@ tests `packages/workforce-es/src/convenio.test.ts`, `work-summary.test.ts`, `ind
   `resolveWorkTimeRuleset(suite.db)`, expect the seeded `workingDaysPerWeek`. FAILS before:
   `params` is `undefined`, so `params.locationId` throws `TypeError`.
 - [ ] **Step 2:** `pnpm --filter @waitron/workforce-es exec vitest run src/convenio.test.ts` — FAIL.
-- [ ] **Step 3: implement.** Delete the `where` (`:64`); the refusal's params become `{}`; the
+- [ ] **Step 3: implement.** The `where` (`:64`) compares with `await venueLocationId(tx)` instead
+  of `params.locationId`, not deleted: a `limit 1` with no `where` would pick one of several rows
+  without a word, while this keeps the unique-index lookup and refuses a second venue
+  (`venueLocationId` takes `Transaction`, and `seedNode` at `packages/db/src/testing/seed.ts:58-61`
+  already passes it a `Database | Transaction`); S20–S28 delete the condition with the column. The
+  refusal's params become `{}`; the
   error type `Record<string, never>` with its comment reworded to "No `convenio_config` row: the
   venue has not configured its working-time rules"; the two server calls pass no second argument.
   Dashboard text: `en: "Configure the venue's working-time rules first"`, `es: "Configura primero
   las reglas de jornada del local"` (no client reads the params; `git grep -n convenio.not_found --
   apps packages ':!*.test.ts'`).
 - [ ] **Step 4: tests.** `convenio.test.ts` shares one database across cases and gives each case
-  its own location (its comment `:20-22`): once the read has no `where`, a second row answers the
-  wrong case. Make every case seed the one venue and delete its own `convenio_config` row at its
+  its own location (its comment `:20-22`): once the read takes the venue's id, a case that adds a
+  location fails with `provisioning.second_venue`. Make every case use the one venue and delete its own `convenio_config` row at its
   end (in a `finally`), or switch the suite to `resetPerTest: true` if its setup reseeds; no
   assertion changes except "throws convenio.not_found when no convenio_config row exists for the
   location" (renamed "…for the venue"), whose params expectation becomes `{}` (this decision).
@@ -333,7 +356,10 @@ unused), `apps/server/src/workforce-api.ts` (the S13b lines in the table). Tests
 `schedule-reads.test.ts`, `shift-swaps.test.ts`, `personal-data.test.ts`, `pay-period-closure.test.ts:156`,
 `record-reads.test.ts:164`; `packages/staffing/src/rota.test.ts`; `apps/server/src/schedule-api.test.ts`,
 `me-api.test.ts` (shift rows), `apps/server/src/workforce-api.test.ts` (roster, shift, publish and
-planned-vs-actual describes; the warnings describe is S13c's).
+planned-vs-actual describes; the warnings describe is S13c's), `venue-details.test.ts:1465-1471`
+(`createRosterVersion` and `addShift` with `locationId: venue.cfg.locationId`) and
+`attendance-obligations.test.ts` (`createRosterVersion` `:65`, `:99`; `addShift` `:70`): the
+compiler refuses their literal `locationId` once the inputs lose it.
 
 **Produces:** `CreateRosterVersionInput = { period }`; `RosterVersionRow`, `ShiftRow`,
 `PersonShiftRow` without `locationId`; `AddShiftInput` without `locationId`;
@@ -356,8 +382,10 @@ planned-vs-actual describes; the warnings describe is S13c's).
   planned-vs-actual one (`:405`) carries "Validated and ignored: the dashboard still sends it
   (A1301 S15)"; the publish route's
   previous-version query (`:313-320`) loses `eq(rosterVersions.locationId, …)`. Staffing: the
-  backend calls stop spreading `cfg`; if `changeRotaWeek`'s `cfg` is then unused (TS6133), drop it
-  and the argument at its caller in `packages/staffing/src/routes.ts`.
+  backend calls stop spreading `cfg`. `unattachedWeek`'s `cfg` parameter (`rota.ts:281`) is then
+  unused, which `noUnusedParameters` refuses: drop it and the arguments at `:302` and `:354`. If
+  `changeRotaWeek`'s `cfg` is then unused (TS6133), drop it and the argument at its caller in
+  `packages/staffing/src/routes.ts`.
 - [ ] **Step 4: tests.** Codemod the call arguments (`scheduling.test.ts` names `locationId` on
   114 lines: `git grep -c -E 'locationId' -- packages/workforce/src/scheduling.test.ts`). The suite
   shares one database (`:28-29`) and seeds extra locations per case (`:151`, `:852`, `:874`,
@@ -379,14 +407,16 @@ planned-vs-actual describes; the warnings describe is S13c's).
   "400s a non-UUID locationId…" (`:722`) and "400s a request with no locationId…" (`:734`): that
   parse is unchanged (decision 1), S15a removes them. Expected
   shift and version rows in every file lose `locationId` (design §1). `personal-data.test.ts`
-  seeds a second location (`:156`, `:457`): hold one venue (the rota file still reads
-  "Harbour Terrace" through the kept join, "Carried to other slices", S22).
+  seeds a second location (`:156`, `:457`) through direct fixture inserts (`insertRosterVersion`,
+  `insertDraftShift`), which S13b does not change, and nothing it runs reads the venue: run it
+  unedited and leave the seeds to F2.
 - [ ] **Step 5:** `pnpm --filter @waitron/workforce exec vitest run src/scheduling.test.ts
   src/scheduling.concurrency.test.ts src/schedule-reads.test.ts src/shift-swaps.test.ts
   src/personal-data.test.ts src/pay-period-closure.test.ts src/record-reads.test.ts`;
   `pnpm --filter @waitron/staffing exec vitest run src/rota.test.ts src/routes.test.ts`;
   `pnpm --filter @waitron/server exec vitest run src/workforce-api.test.ts
-  src/workforce-api.gate-sweep.test.ts src/schedule-api.test.ts src/me-api.test.ts`. The warnings
+  src/workforce-api.gate-sweep.test.ts src/schedule-api.test.ts src/me-api.test.ts
+  src/venue-details.test.ts src/attendance-obligations.test.ts`. The warnings
   describe in `workforce-api.test.ts` ("roster warnings while planning") may still fail on its
   per-case locations: it is S13c's, which runs before the PR. Code guards; the hash steps;
   typecheck `@waitron/workforce`, `@waitron/staffing`, `@waitron/server`; `pnpm format:check`.
@@ -445,23 +475,18 @@ ignored, since the route reads only `period`); `watchRotaWarnings(queries, week,
   `staffing-types.ts`: only S9's lines (S9's section lists them) if S9 has not landed.
 - [ ] **Step 7: commit** "The rota warnings read the venue's week (A1301 S13c)".
 
-### Task S13d: attendance facts are captured for the venue
+### Task S13d1: the attendance recorder stores the venue whatever it is passed
 
-**Files:** `apps/server/src/attendance-capture.ts`, `attendance-integrated.ts`, `parties.ts`;
-crossings `till-api.ts:1447`, `working-order.ts` (`captureOrderEdit` `:330-362` and its nine
-callers, `captureOrderAmendment` `:7180-7200`), `adjustments-apply.ts:1488`, `order-drafts.ts`
-(`discardPartyDrafts` `:907`, `:944`; `captureDraft` `:1286-1304`; `recordDraftEvents`
-`:1622-1645`), `order-groups.ts:2436-2458`, `bill-refunds.ts` (`captureRefundAttendance` `:112-135`
-and its three callers `:731`, `:771`, `:790`), `finish-party-service.ts:176,233`,
-`unpaid-departure.ts:187`; S2's `bill-payments.ts:1150-1182` and `till-sale.ts:120-140` **only if
-#2384 has landed** (decision 5). Find every site with
-`git grep -n -E 'AttendanceRecorder; locationId|recorder.*locationId|captureOrderEdit\(|captureDraft\(|captureRefundAttendance\(' -- 'apps/server/src/*.ts'`
-and let `pnpm --filter @waitron/server typecheck` (with `noUnusedParameters`) report the rest.
+S13d is split in two (decision 5's optional field makes the halves compile on their own): S13d1
+changes the recorder and no caller; S13d2 changes the callers.
 
-**Produces:** `AttendanceRecorder = (tx, fact: Omit<AttendanceFact, "locationId"> & { outcome; locationId?: string })`
-(the optional only while S2 is unlanded); `captureOrderEdit`, `captureDraft`,
-`captureRefundAttendance` without a location parameter; `finishTable`/`closeParty`/
-`discardPartyDrafts` take `attendance?: { recorder: AttendanceRecorder }`.
+**Files:** `apps/server/src/attendance-capture.ts` (`AttendanceRecorder`'s input and
+`recordAttendanceFact`, `:57-146`, only). Tests: `attendance-capture.test.ts` and the eight test
+files named in Step 4.
+
+**Produces:** `AttendanceRecorder = (tx, fact: Omit<AttendanceFact, "locationId"> & { outcome; locationId?: string })`,
+the optional field never read. No caller changes: every call that passes `locationId` still
+compiles.
 
 - [ ] **Step 1: failing test.** In `attendance-capture.test.ts`, add "records an operation for the
   venue when given no location": `recordAttendanceFact(tx, { source: "order", key, personId, kind:
@@ -473,21 +498,20 @@ and let `pnpm --filter @waitron/server typecheck` (with `noUnusedParameters`) re
   the insert fills `locationId: await venueLocationId(tx)`; `readVenueClock(tx)` replaces both
   `readLocationClock` calls; the existing-row branch and the saved-day lookup scope
   `attendance_day_work` by business day only; the day literals pass `locationId: await
-  venueLocationId(tx)` until S13e removes the field. Callers drop the property and the order /
-  device selects that only fed it. **Keep "has an order"** (decision 4): `recordDraftEvents` and
-  the group-event helper select one working order of the party (`select({ id }) … limit(1)`) and
-  skip the event when there is none, instead of `selectDistinct(locationId)` and `length !== 1`.
-  `attendance-integrated.ts`'s watch insert fills `venueLocationId`.
+  venueLocationId(tx)` until S13e2 removes the field.
 - [ ] **Step 4: delete or trim** (each seeds or moves to a second location to prove the stored
-  location survives a move): **delete** `attendance-adjustments.test.ts` "keeps the removed event's
-  original location after its bill moves"; `attendance-amendments.test.ts` "marking an order placed
-  captures its stored location with the writer's original clock reading" — but first check
-  whether another case asserts the original clock reading; if none does, keep the case with the
-  second location and the `{ ...v.cfg, locationId: … }` override removed; `attendance-arriving-groups.test.ts`
-  "keeps the snapshot when the destination party later changes location";
-  `attendance-draft-events.test.ts` "captures creation by its event identity and retains the
-  original location after a later move" (keep its first half if the event-identity capture is
-  asserted nowhere else: `grep -n 'event identity\|eventKey' apps/server/src/attendance-draft-events.test.ts`);
+  location survives a move). They go here, not with the callers in S13d2: once the recorder stores
+  the venue's id whatever it is passed, a case that seeds a second `locations` row is refused
+  `provisioning.second_venue` (`packages/db/src/venue.ts:50`). **Delete**
+  `attendance-adjustments.test.ts` "keeps the removed event's original location after its bill
+  moves"; `attendance-amendments.test.ts` "marking an order placed captures its stored location
+  with the writer's original clock reading" — but first check whether another case asserts the
+  original clock reading; if none does, keep the case with the second location and the
+  `{ ...v.cfg, locationId: … }` override removed; `attendance-arriving-groups.test.ts` "keeps the
+  snapshot when the destination party later changes location"; `attendance-draft-events.test.ts`
+  "captures creation by its event identity and retains the original location after a later move"
+  (keep its first half if the event-identity capture is asserted nowhere else:
+  `grep -n 'event identity\|eventKey' apps/server/src/attendance-draft-events.test.ts`);
   `attendance-group-commands.test.ts` "a captured group keeps its original location when its
   party's bills move"; `attendance-kitchen-service.test.ts` "a kitchen transition uses its stored
   order location"; `attendance-order-command-routes.test.ts` "%s uses the stored order location
@@ -496,9 +520,56 @@ and let `pnpm --filter @waitron/server typecheck` (with `noUnusedParameters`) re
   case's table to `"invoice-choice"`; skip whichever is gone). **Trim:** `attendance-capture.test.ts`
   "replay cannot replace the original actor, location or human request instant": drop the
   `locationId: elsewhere` replay field and its location expectation, keep actor and instant,
-  rename "…the original actor or human request instant". `attendance-drafts.test.ts:99,135` pass
-  `{ recorder }` only. Cases that assert the stored row's `locationId` equal to the venue's id stay
-  as they are.
+  rename "…the original actor or human request instant". Cases that assert the stored row's
+  `locationId` equal to the venue's id stay as they are. A listed case that still passes here may
+  instead go in S13d2; say which in the commit.
+- [ ] **Step 5:** `pnpm --filter @waitron/server exec vitest run src/attendance-capture.test.ts
+  src/attendance-adjustments.test.ts src/attendance-amendments.test.ts
+  src/attendance-arriving-groups.test.ts src/attendance-draft-events.test.ts
+  src/attendance-group-commands.test.ts src/attendance-kitchen-service.test.ts
+  src/attendance-order-command-routes.test.ts src/attendance-orders.test.ts`; code guards; the hash
+  steps; `pnpm --filter @waitron/server typecheck` (no caller edited, so it passes as it stands);
+  `pnpm format:check`.
+- [ ] **Step 6: done-check** over `attendance-capture.ts`: only `venueLocationId`, the transitional
+  day literals (S13e2), the optional `locationId?` line, and `captureKitchenActivity`'s order
+  location (`:31-39`, S13d2).
+- [ ] **Step 7: commit** "The attendance recorder stores the venue's id (A1301 S13d1)".
+
+### Task S13d2: the capture callers pass no location
+
+**Files:** `apps/server/src/attendance-capture.ts` (`captureKitchenActivity`, `:31-39`),
+`attendance-integrated.ts`, `parties.ts`; crossings `till-api.ts:1447`, `working-order.ts`
+(`captureOrderEdit` `:330-362` and its nine callers, `captureOrderAmendment` `:7180-7200`),
+`adjustments-apply.ts:1488`, `order-drafts.ts` (`discardPartyDrafts` `:907`, `:944`; `captureDraft`
+`:1286-1304`; `recordDraftEvents` `:1622-1645`), `order-groups.ts:2436-2458`, `bill-refunds.ts`
+(`captureRefundAttendance` `:112-135` and its three callers `:731`, `:771`, `:790`),
+`finish-party-service.ts:176,233`, `unpaid-departure.ts:187`; S2's `bill-payments.ts:1150-1182` and
+`till-sale.ts:120-140` **only if #2384 has landed** (decision 5). Find every site with
+`git grep -n -E 'AttendanceRecorder; locationId|recorder.*locationId|captureOrderEdit\(|captureDraft\(|captureRefundAttendance\(' -- 'apps/server/src/*.ts'`
+and let `pnpm --filter @waitron/server typecheck` (with `noUnusedParameters`) report the rest.
+Tests: the call sites the typecheck reports, among them `attendance-drafts.test.ts:99,135`.
+
+**Produces:** `captureOrderEdit`, `captureDraft`, `captureRefundAttendance` without a location
+parameter; `finishTable`/`closeParty`/`discardPartyDrafts` take
+`attendance?: { recorder: AttendanceRecorder }`. If #2384 has landed, `AttendanceRecorder` loses
+the optional `locationId?` too (decision 5).
+
+- [ ] **Step 1: the failing check is the compiler.** Remove the location parameter from
+  `captureOrderEdit`, `captureDraft` and `captureRefundAttendance`, and narrow `parties.ts`'s
+  `attendance` option (`:725`, `:754`) to `{ recorder: AttendanceRecorder }`. No behaviour changes
+  in this task: S13d1 already stores the venue's id, and the capture suites in Step 5 hold the
+  behaviour.
+- [ ] **Step 2:** `pnpm --filter @waitron/server typecheck` — FAIL, listing the callers.
+- [ ] **Step 3: implement.** Callers drop the property and the order / device selects that only
+  fed it; `captureKitchenActivity` reads no order location. **Keep "has an order"** (decision 4):
+  `recordDraftEvents` keeps its join on the draft's own bill (`orderDrafts.billId`,
+  `order-drafts.ts:1630-1634`) and changes only its select, to one working order's `id … limit 1`;
+  the group-event helper selects one working order of the party (`select({ id }) … limit(1)`); each
+  skips the event when there is none, instead of `selectDistinct(locationId)` and `length !== 1`.
+  `attendance-integrated.ts`: the order-location select (`:33-36`) and the fact's `locationId`
+  (`:42`) go, and its watch insert (`:52`) fills `venueLocationId`.
+- [ ] **Step 4: test call sites.** `attendance-drafts.test.ts:99,135` pass `{ recorder }` only;
+  every other call the typecheck reports drops its location argument, no assertion changed.
 - [ ] **Step 5:** `pnpm --filter @waitron/server exec vitest run` on `src/attendance-*.test.ts`
   (the capture files: `ls apps/server/src/attendance-*.test.ts`; check free memory first, the set
   is large), `src/till-api.test.ts`, `src/working-order*.test.ts`, `src/order-drafts*.test.ts`,
@@ -507,81 +578,135 @@ and let `pnpm --filter @waitron/server typecheck` (with `noUnusedParameters`) re
   `pnpm --filter @waitron/server typecheck`; `pnpm format:check`. If S2 has not landed, also run
   `src/bill-payments*.test.ts` and `src/till-sale*.test.ts` unedited.
 - [ ] **Step 6: done-check** over `attendance-capture.ts`, `attendance-integrated.ts`,
-  `parties.ts`: only `venueLocationId`, the transitional day literals (S13e) and, while S2 is
+  `parties.ts`: only `venueLocationId`, the transitional day literals (S13e2) and, while S2 is
   unlanded, the optional `locationId?` line. `git grep -n -E 'recorder.*locationId|AttendanceRecorder; locationId' -- 'apps/server/src/*.ts' ':!*.test.ts'`
   prints nothing.
-- [ ] **Step 7: commit** "Attendance facts are captured for the venue (A1301 S13d)".
+- [ ] **Step 7: commit** "Attendance capture callers pass no location (A1301 S13d2)".
 
-### Task S13e: an attendance day has no location
+### Task S13e1: an attendance day has no location — the workforce half
+
+S13e is split in two. The workforce half stops reading the field while keeping it as an optional,
+never-read property, so `apps/server` still compiles without an edit; the server half stops passing
+it and deletes the optional fields (the same bridge as decision 5).
 
 **Files:** `packages/workforce/src/attendance-types.ts`, `attendance-state.ts`, `attendance-rota.ts`,
-`attendance-questions.ts`, `end-of-day.ts`, `attendance-contract.ts:73`;
-`apps/server/src/attendance-facts.ts`; the day literals in `attendance-discovery.ts` (`:36-40`,
-`:238-242`, `:570-575`), `attendance-capture.ts` (S13d's), `attendance-source-changes.ts:74-78`,
-`attendance-email-worker.ts:95-100`; the recorder type in `attendance-capture.ts`; crossing fixture
+`attendance-questions.ts`, `end-of-day.ts`, `attendance-contract.ts:73`; crossing fixture
 `packages/workforce/test/attendance-fixture.ts:39-66`. Tests: `packages/workforce/src/attendance-state.test.ts`,
 `attendance-rota.test.ts`, `attendance-questions.test.ts`, `end-of-day*.test.ts`,
-`attendance-mail.test.ts`; `apps/server/src/attendance-facts.test.ts`,
-`attendance-draft-merge-routes.test.ts`, `attendance-rota.test.ts`.
+`attendance-mail.test.ts`.
 
-**Produces:** `AttendanceDay = { businessDay, startAt, endAt }`; `AttendanceFact` and
-`PlannedAttendanceShift` without `locationId`; `readAttendanceFacts(tx, day)` and
-`readPlannedAttendanceShifts(tx, day)` for the venue.
+**Produces:** `AttendanceDay = { businessDay, startAt, endAt, locationId?: string }`, and
+`AttendanceFact` and `PlannedAttendanceShift` with the same optional `locationId?`, which no
+workforce code reads (S13e2 deletes all three).
 
 - [ ] **Step 1: failing test.** In `attendance-state.test.ts`, add "saves the venue's day from a day
   with no location": `enqueueAttendanceDay(tx, { businessDay, startAt, endAt })`; one
   `attendance_day_work` row with the venue's `locationId`. FAILS before: `assertAttendanceDay`
   throws `attendance.invalid` (`!day.locationId`, `:11`).
 - [ ] **Step 2:** `pnpm --filter @waitron/workforce exec vitest run src/attendance-state.test.ts` — FAIL.
-- [ ] **Step 3: implement** the table rows for S13e. Inserts into `attendance_day_work` and
+- [ ] **Step 3: implement** the table rows for S13e1. Inserts into `attendance_day_work` and
   `attendance_questions` fill `venueLocationId`; every `attendanceQuestions.locationId` and
-  `attendanceDayWork.locationId` filter in these files is deleted (decision 3); `mergeAttendanceQuestions`
-  stops comparing locations (the composite key `attendance.ts:184-185` still holds, both rows carry
-  the venue's id). `attendance-facts.ts`: the `retained` CTE and the stored-facts select carry no
-  location column; the `draft`/`group` branches keep one row per event whose party has at least
-  one order (decision 4: the inner join already requires one; delete only the `having` clause);
-  the stored-facts select loses its `location_id` condition; `readPlannedAttendanceShifts` loses
-  the two location conditions; `readVenueClock(tx)`. The contract's prompt day is
-  `(AttendanceDay & { locationId: string }) | null`: `attendance-reads.ts:101-106` still fills it
-  from the question row until S13h. The recorder input becomes `AttendanceFact & { outcome;
-  locationId?: string }` (or without the optional, decision 5).
+  `attendanceDayWork.locationId` filter in these files is deleted (decision 3), and so are
+  `end-of-day.ts`'s fact and plan filters (`:136`, `:145`); `mergeAttendanceQuestions` stops
+  comparing locations (the composite key `attendance.ts:184-185` still holds, both rows carry the
+  venue's id). The contract's prompt day is `(AttendanceDay & { locationId: string }) | null`:
+  `attendance-reads.ts:101-106` still fills it from the question row until S13h, and S15i removes it.
 - [ ] **Step 4: delete or trim.** **Delete:** `attendance-state.test.ts` "keeps the same business
-  date at two locations separate"; `apps/server/src/attendance-facts.test.ts` "a captured session
-  keeps its original location after a device moves" and "does not assign a location to a retained
-  party event with conflicting bill locations". **Trim:** `attendance-questions.test.ts` "same
-  source key at two locations or two people makes separate obligations" → keep the two-people half
-  (expect 2 rows, 1 own), rename "same source key for two people makes separate obligations";
+  date at two locations separate". **Trim:** `attendance-questions.test.ts` "same source key at two
+  locations or two people makes separate obligations" → keep the two-people half (expect 2 rows,
+  1 own), rename "same source key for two people makes separate obligations";
   `attendance-rota.test.ts` (workforce) "leaves other days, locations, actual clock starts and
   unscheduled activity alone" → drop the `elsewhere` day, rename without "locations";
   `end-of-day.test.ts` "excludes another person, another location and both sides of the
-  business-day window" → drop the `elsewhere` fact, rename without "another location";
-  `attendance-facts.test.ts` "includes the lower day boundary, excludes the upper boundary and
-  another location" → drop the `elsewhere` fact; "returns only current published same-location
-  shifts by start-day, retaining split and spillover ends" → drop the `elsewhere` version and shift,
-  rename without "same-location"; `attendance-draft-merge-routes.test.ts` "%s keeps every bill and
-  records nothing; Merge bills afterwards snapshots the admitted mover at the trusted instant" →
-  delete the tail that inserts `Elsewhere` and moves the open orders (`:235-262`), and the
-  `locationId` key in its `readAttendanceFacts` expectation. Fixtures and calls lose `locationId`
-  from day, fact and plan literals (design §1).
+  business-day window" → drop the `elsewhere` fact, rename without "another location". The
+  workforce fixture and the workforce tests' day, fact and plan literals lose `locationId`
+  (design §1).
 - [ ] **Step 5:** `pnpm --filter @waitron/workforce exec vitest run src/attendance-state.test.ts
   src/attendance-rota.test.ts src/attendance-questions.test.ts src/end-of-day.test.ts
   src/end-of-day.concurrency.test.ts src/end-of-day.obligations.test.ts src/attendance-mail.test.ts
-  src/attendance-reads.test.ts src/hours-reads.test.ts`; `pnpm --filter @waitron/server exec vitest
-  run src/attendance-facts.test.ts src/attendance-draft-merge-routes.test.ts src/attendance-rota.test.ts
-  src/attendance-discovery.test.ts src/attendance-loop.test.ts src/attendance-email-worker.test.ts`;
-  code guards; the hash steps; typecheck `@waitron/workforce`, `@waitron/server`; `pnpm format:check`.
-- [ ] **Step 6: done-check** over the five workforce files and `attendance-facts.ts`: only
-  `venueLocationId`. `attendance-contract.ts:73`'s `locationId` is S15's.
-- [ ] **Step 7: commit** "An attendance day has no location (A1301 S13e)".
+  src/attendance-reads.test.ts src/hours-reads.test.ts`; code guards; the hash steps; typecheck
+  `@waitron/workforce` and `@waitron/server` (the server passes for the optional fields' sake;
+  its suites run in S13e2, which also deletes the server cases this half turns red);
+  `pnpm format:check`.
+- [ ] **Step 6: done-check** over the five workforce files: only `venueLocationId` and the three
+  optional `locationId?` fields (S13e2). `attendance-contract.ts:73`'s `locationId` is S15i's.
+- [ ] **Step 7: commit** "An attendance day has no location in the working-time package (A1301 S13e1)".
+
+### Task S13e2: an attendance day has no location — the server half
+
+**Files:** `apps/server/src/attendance-facts.ts`; the day literals in `attendance-discovery.ts`
+(`:36-40`, `:238-242`, `:570-575`), `attendance-capture.ts` (S13d1's),
+`attendance-source-changes.ts:74-78`, `attendance-email-worker.ts:95-100`; the recorder type in
+`attendance-capture.ts`; `packages/workforce/src/attendance-types.ts` (the three optional fields
+S13e1 left). Tests: `apps/server/src/attendance-facts.test.ts`,
+`attendance-draft-merge-routes.test.ts`, `attendance-rota.test.ts`; the five suites that call
+`readAttendanceFacts` with a day literal (`attendance-bill-payments.test.ts:121`,
+`attendance-derived-groups.test.ts:133`, `attendance-edit-group-events.test.ts:190`,
+`attendance-integrated-payments.test.ts:111`, `attendance-whole-payments.test.ts:198`);
+`attendance-export-api.test.ts`'s day literal in "rechecks a %s question-only historical workplace
+after formatting" (`:583-588`; S13i deletes the case, but it must compile until then);
+`attendance-obligations.test.ts`'s `day()` helper (`:31-36`; not a fresh literal, so the compiler
+does not force it, design §1).
+
+**Produces:** `AttendanceDay = { businessDay, startAt, endAt }`; `AttendanceFact` and
+`PlannedAttendanceShift` without `locationId`; `readAttendanceFacts(tx, day)` and
+`readPlannedAttendanceShifts(tx, day)` for the venue.
+
+- [ ] **Step 1: failing test.** In `apps/server/src/attendance-facts.test.ts`, add "reads the
+  venue's facts for a day with no location": seed one order operation on the venue, then
+  `readAttendanceFacts(tx, { businessDay, startAt, endAt })` answers it. FAILS before:
+  `readLocationClock(tx, undefined)` (`attendance-facts.ts:14`) throws "reporting: no location
+  undefined" (`packages/reporting/src/business-day.ts:195`).
+- [ ] **Step 2:** `pnpm --filter @waitron/server exec vitest run src/attendance-facts.test.ts` — FAIL.
+- [ ] **Step 3: implement** the table rows for S13e2. `attendance-facts.ts`: the `retained` CTE and
+  the stored-facts select carry no location column; the `draft`/`group` branches keep one row per
+  event whose party has at least one order (decision 4: the inner join already requires one;
+  delete only the `having` clause); the stored-facts select keeps `location_id = ${venue}`, with
+  `venue = await venueLocationId(tx)` read once, until S13f's Step 3 decides it (decision 3);
+  `readPlannedAttendanceShifts` loses the two location conditions; `readVenueClock(tx)`. The day
+  literals lose `locationId`; the three optional fields in `attendance-types.ts` go. The recorder
+  input becomes `AttendanceFact & { outcome; locationId?: string }` (or without the optional,
+  decision 5).
+- [ ] **Step 4: delete or trim.** **Delete:** `attendance-facts.test.ts` "a captured session keeps
+  its original location after a device moves" and "does not assign a location to a retained party
+  event with conflicting bill locations". **Trim:** `attendance-facts.test.ts` "includes the lower
+  day boundary, excludes the upper boundary and another location" → drop the `elsewhere` fact;
+  "returns only current published same-location shifts by start-day, retaining split and
+  spillover ends" → drop the `elsewhere` version and shift, rename without "same-location";
+  `attendance-draft-merge-routes.test.ts` "%s keeps every bill and records nothing; Merge bills
+  afterwards snapshots the admitted mover at the trusted instant" → delete the tail that inserts
+  `Elsewhere` and moves the open orders (`:235-262`), and the `locationId` key in its
+  `readAttendanceFacts` expectation. Calls lose `locationId` from day, fact and plan literals
+  (design §1).
+- [ ] **Step 5:** `pnpm --filter @waitron/server exec vitest run src/attendance-facts.test.ts
+  src/attendance-draft-merge-routes.test.ts src/attendance-rota.test.ts
+  src/attendance-discovery.test.ts src/attendance-loop.test.ts src/attendance-email-worker.test.ts
+  src/attendance-bill-payments.test.ts src/attendance-derived-groups.test.ts
+  src/attendance-edit-group-events.test.ts src/attendance-integrated-payments.test.ts
+  src/attendance-whole-payments.test.ts src/attendance-obligations.test.ts
+  src/attendance-export-api.test.ts`. One case is expected red until S13i deletes it: the export
+  suite's "rechecks a %s question-only historical workplace after formatting", which inserts a
+  second `locations` row (`:574-577`), so `upsertAttendanceQuestion`'s venue read refuses it from
+  S13e1 on. Code guards; the hash steps; typecheck `@waitron/workforce`, `@waitron/server`;
+  `pnpm format:check`.
+- [ ] **Step 6: done-check** over `attendance-types.ts` and `attendance-facts.ts`: only
+  `venueLocationId` and the stored-facts select's venue equality (S13f, decision 3).
+- [ ] **Step 7: commit** "An attendance day has no location in the server (A1301 S13e2)".
 
 ### Task S13f: discovery, source changes and the attendance loop run for the venue
 
 **Files:** `apps/server/src/attendance-discovery.ts`, `attendance-source-changes.ts`,
-`attendance-loop.ts`; crossing `boot.ts:2056-2070` (the `beginAttendanceDiscovery` call and
-`runAttendanceLoop`'s deps). Tests: `apps/server/src/attendance-discovery.test.ts`,
-`attendance-loop.test.ts`, `attendance-integrated-discovery.test.ts`, `attendance-rota.test.ts`,
+`attendance-loop.ts`, `attendance-facts.ts` (the stored-facts select's venue equality, only if
+Step 3 deletes it), `attendance-email-worker.ts:102-106` (the `reconcileAttendanceDay` call's
+literal scope `{ nodeId: deps.nodeId, locationId: deps.locationId, personId, day }` loses
+`locationId`; the compiler refuses it once the scope narrows); crossing `boot.ts:2056-2070` (the
+`beginAttendanceDiscovery` call and `runAttendanceLoop`'s deps). Tests:
+`apps/server/src/attendance-discovery.test.ts`, `attendance-loop.test.ts`,
+`attendance-integrated-discovery.test.ts`, `attendance-rota.test.ts`,
 `attendance-cutover-settings.test.ts`, `attendance-restore.test.ts`, `boot.attendance.test.ts`,
-and the `markAttendanceSourceChanged` callers' tests (`workforce-api.test.ts`).
+`attendance-email-worker.test.ts`, `attendance-obligations.test.ts` (`nextAttendanceDay` `:38`,
+`:157`; `discoverAttendanceDays` `:41`; `beginAttendanceDiscovery` `:95`), and the
+`markAttendanceSourceChanged` callers' tests (`workforce-api.test.ts`).
 
 **Produces:** `beginAttendanceDiscovery(tx, { generation })`, `discoverAttendanceDays(tx, { now,
 batchSize })`, `nextAttendanceDay(tx, { now })`, `reconcileAttendanceDay(tx, { nodeId, personId,
@@ -595,12 +720,24 @@ day }, at)`; `runAttendancePass`/`runAttendanceLoop` deps without `locationId`.
   until `more` is false, then `nextAttendanceDay(tx, { now })` equals that day. FAILS before:
   `readLocationClock(tx, undefined)` throws "reporting: no location undefined".
 - [ ] **Step 2:** `pnpm --filter @waitron/server exec vitest run src/attendance-discovery.test.ts` — FAIL.
-- [ ] **Step 3: measure decision 3 first.** In a scratch test (not committed), run `explain query
-  plan` on `remember`'s predicate select (`:277-283`) and `due()`'s select (`:467-478`) with and
-  without the `location_id` condition. The failing case for "the equality is needed" prints
-  `SCAN attendance_source_state`; the control, with the condition, prints `SEARCH … USING INDEX
-  attendance_source_state_scope_uq` / `_watch_idx`. Record both plans in the commit message. If
-  the plan without the condition does not scan, delete the condition too and say so.
+- [ ] **Step 3: measure decision 3 first.** In a scratch test (not committed), on a migrated
+  venue database with rows in both tables, run `explain query plan` with and without the
+  `location_id` condition on four reads: `remember`'s predicate select (`:277-283`) and `due()`'s
+  select (`:467-478`) on `attendance_source_state`, and, on `attendance_operation_facts`,
+  `readAttendanceFacts`'s stored-facts select (`attendance-facts.ts:49-52`) and
+  `reconcileAttendanceDay`'s pending lookup (`attendance-discovery.ts:63-73`). The failing case
+  for "the equality is needed" prints `SCAN attendance_source_state` /
+  `SCAN attendance_operation_facts`; the control, with the condition, prints `SEARCH … USING
+  INDEX` naming `attendance_source_state_scope_uq` / `_watch_idx` /
+  `attendance_operation_facts_day_idx`. **The rule:** keep `eq(…locationId, venue)` on every read
+  whose plan without it shows a full table scan; delete it where the plan without it still
+  searches an index, and say so. Record all eight plans in the commit message. A probe at plan
+  time (`node:sqlite`, SQLite 3.54.0, an empty table carrying only `attendance_operation_facts`'s
+  four indexes, no `ANALYZE`) printed `SEARCH attendance_operation_facts USING INDEX
+  attendance_operation_facts_pending_idx (outcome=?)` for both `attendance_operation_facts` reads
+  without the condition, and the same for the stored-facts select with it: so expect to delete
+  those two (even with the condition, the planner did not choose
+  `attendance_operation_facts_day_idx` for the stored-facts select).
 - [ ] **Step 4: implement.** Every scope loses `locationId`; `readVenueClock(tx)` replaces the five
   `readLocationClock` calls; `attendance_day_work` filters are deleted and its inserts fill
   `venueLocationId`; `attendance_source_state` lookups keep `eq(attendanceSourceState.locationId,
@@ -610,10 +747,16 @@ day }, at)`; `runAttendancePass`/`runAttendanceLoop` deps without `locationId`.
   working_orders o where o.party_id = d.party_id) as attributed`; the other sources answer 1);
   `remember`'s day gating (`:262-267`) tests that instead of `row.locationId === scan.locationId`,
   and the fingerprint drops `row.locationId` (decision 6); `capturedRow` stops copying
-  `fact.locationId`; the clock page (`:350`) and the versions' planned shifts (`:386`) lose their
+  `fact.locationId` onto the row (`attendance-discovery.ts:310-336`) and marks it as the venue's
+  instead (`attributed = 1`), so a captured draft or group event still has its days marked after
+  its party has lost every order, as the copied location ensures today; the clock page (`:350`) and the versions' planned shifts (`:386`) lose their
   location; the whole-payment watch lookup in `reconcileAttendanceDay` (`:83-93`) keeps the venue
-  equality. `attendance-source-changes.ts`: one set of days for the venue, `readVenueClock`, insert
-  fills `venueLocationId`. `attendance-loop.ts`: deps and filter. `boot.ts`: drop the two
+  equality; the pending lookup (`:63-73`) and the stored-facts select follow Step 3's rule.
+  `attendance-source-changes.ts`: one set of days for the venue, `readVenueClock`, insert fills
+  `venueLocationId`, and the watch is still written only when a watch or a current row exists
+  (`watches.length > 0 || current.length > 0`; today the loop over `byLocation`, `:57`, writes
+  nothing when both are empty). `attendance-email-worker.ts:102-106`: the scope loses
+  `locationId`. `attendance-loop.ts`: deps and filter. `boot.ts`: drop the two
   `locationId: tradingContext.locationId` arguments.
 - [ ] **Step 5: delete or trim.** **Delete:** `attendance-discovery.test.ts` "uses captured location
   instead of a session's moved device and ignores another location". **Trim:** "qualifies a
@@ -621,11 +764,17 @@ day }, at)`; `runAttendancePass`/`runAttendanceLoop` deps without `locationId`.
   (`:756`): the order is created at the venue, not at `otherLocation`; keep the instant and outcome
   assertions; rename "…at its saved instant when…". The suite's second location (`:86-104`,
   `otherLocation`) goes once nothing uses it. Calls lose `locationId` from their scopes.
+  **Add** to `attendance-discovery.test.ts` "a captured event still marks its day after its party
+  loses every order": capture a draft or group event, move or delete every working order of its
+  party, discover; the event's day is marked to be evaluated again. It passes before the change
+  too (today `capturedRow` copies the stored location); it fails if `capturedRow` stops marking
+  the row as the venue's.
 - [ ] **Step 6:** `pnpm --filter @waitron/server exec vitest run` on the test files listed in
   **Files** plus `src/till-clock-api.test.ts src/till-attendance-api.test.ts`; code guards; the
   hash steps; `pnpm --filter @waitron/server typecheck`; `pnpm format:check`.
-- [ ] **Step 7: done-check** over the three files: only `venueLocationId`, the
-  `attendanceSourceState.locationId` equalities and conflict targets (S22, decision 3), and
+- [ ] **Step 7: done-check** over the three files and `attendance-facts.ts`: only
+  `venueLocationId`, the `attendanceSourceState.locationId` equalities and conflict targets, the
+  `attendance_operation_facts` equalities Step 3 kept (S22, decision 3), and
   `reconcileAttendanceBeforeClock`'s scope (S13g).
 - [ ] **Step 8: commit** "Attendance discovery and the end-of-day loop run for the venue (A1301 S13f)".
 
@@ -673,8 +822,10 @@ field `venueName`.
 
 **Files:** `packages/workforce/src/attendance-reads.ts`, `hours-reads.ts`, `attendance-responses.ts`,
 `attendance-response-commands.ts`, `attendance-question-responses.ts`; crossings
-`apps/server/src/management-attendance-api.ts:221` (`readAttendanceManagerQueue(tx)`) and any call
-the typecheck reports. Tests: `packages/workforce/src/attendance-reads.test.ts`,
+`apps/server/src/management-attendance-api.ts:220-221` (`readAttendanceManagerQueue(tx)`; the
+`const scope =` at `:220` becomes a bare `parseAttendanceLocationQuery(new URL(c.req.url).searchParams);`
+that still validates, since `noUnusedLocals` refuses an unused `scope`) and any call the
+typecheck reports. Tests: `packages/workforce/src/attendance-reads.test.ts`,
 `hours-reads.test.ts`, `attendance-responses.test.ts`, `attendance-response-commands.test.ts`,
 `attendance-response-migration.test.ts` (read only; schema cases are S22's), `correction-groups.test.ts`,
 `personal-data.test.ts`.
@@ -693,7 +844,8 @@ venue's (decision 1).
 - [ ] **Step 3: implement** the table rows for S13h. The venue is read once per call (`readVenue`
   and `venueLocationId`); the manager hours read reads it once, not once per person. The
   revision hashes `{ personId, entries, questions, commands, clock: await readVenueClock(tx),
-  settings }` (decision 6).
+  settings }` (decision 6). `hours-reads.ts`: `HoursInput.locationId` (`:23`) and `windowFor`'s
+  empty-location check (`:43-45`) go, and so does the prompt filter (`:109`).
 - [ ] **Step 4: delete or trim.** **Delete:** `attendance-reads.test.ts` "retains historical
   locations and their current named zones, excluding locations belonging only to others" and
   "refuses an absent selected location without returning another location's record". **Keep:**
@@ -703,7 +855,11 @@ venue's (decision 1).
   manager's proposal and keeps the question's on an answer" stays as it is (the stored value is
   the venue's id). Inbox expectations that listed only the venue when the person had entries now
   list it always: a case asserting `locations: []` for a person with no entries (`attendance-reads.test.ts:139`) changes to the
-  venue's row (this decision: the inbox always offers the venue).
+  venue's row (this decision: the inbox always offers the venue). **Trim** `hours-reads.test.ts`
+  "refuses empty scopes and unknown window kinds instead of reading the venue" (`:475`): delete its
+  empty-location assertion, `read(undefined, f.personId, now, clock, "")` (`:477-479`), which no
+  longer rejects once the check goes; keep the empty-person and unknown-kind assertions. The
+  suite's `read()` helper (`:20-36`) drops its `locationId` parameter and property.
 - [ ] **Step 5:** run the **Files** tests and `pnpm --filter @waitron/server exec vitest run
   src/management-attendance-api.test.ts src/management-hours-api.test.ts src/till-attendance-api.test.ts
   src/till-hours-api.test.ts src/attendance-till-api.test.ts` (S13i's set; a refusal those still
@@ -721,8 +877,19 @@ venue's (decision 1).
 `boot.ts:2447` (`cfg: { nodeId: tradingContext.nodeId }`). Tests: `management-hours-api.test.ts`,
 `management-attendance-api.test.ts`, `till-attendance-api.test.ts`, `till-hours-api.test.ts`,
 `attendance-export-api.test.ts`, `attendance-till-api.test.ts`, `me-api.personal-data-export.test.ts`.
-`apps/server/src/till-api.profile-zones.test.ts` and `till-api.profile-actions.test.ts` run
-unedited by S13.
+The `cfg` literals the compiler refuses once `ExportDeps.cfg` goes and
+`ManagementAttendanceApiDeps.cfg` becomes `{ nodeId }` (only the `cfg` key changes):
+`personal-data-export-api.workforce.test.ts:716-720` and `personal-data-time-record.test.ts:120-124`
+(both `{ db: suite.db, cfg: { locationId }, exporter }`, S12c's files) drop `cfg`;
+`attendance-export-api.test.ts:429-433` (`cfg: { nodeId: fixture.nodeId, locationId:
+fixture.locationId }`) becomes `cfg: { nodeId: fixture.nodeId }`.
+`apps/server/src/till-api.profile-zones.test.ts` gets a comment-only edit, as the parent plan
+allows S12a: its map rows for `GET /api/attendance/hours` (`:102`) and `GET /api/attendance/day`
+(`:103`) say "none: own current/historical workplace" and name own-workplace cases; they become
+"none: own record" and name surviving cases ("clock-only staff read their own completed hours
+passively without recording activity", `till-hours-api.test.ts:60`, for hours; "serves own history
+to clock-only staff without service zones and keeps reads passive", `till-attendance-api.test.ts:139`,
+for day). `till-api.profile-actions.test.ts` runs unedited.
 
 **Every caller of the own-workplace check** (`git grep -n assertOwnAttendanceLocation -- apps packages`
 at `2c4511d58b`, ran: nine calls in eight routes, plus the three imports and the definition):
@@ -789,8 +956,11 @@ without `cfg`; no `assertOwnAttendanceLocation`.
   the venue's row; S15 trims their wire half). The S12a variants (`"location"` rows of the
   `it.each` tables at `till-attendance-api.test.ts:230` and `till-hours-api.test.ts:94`) are
   S12a's.
-- [ ] **Step 5:** run the **Files** tests and `src/till-api.profile-zones.test.ts
-  src/till-api.profile-actions.test.ts` (no edit: `git diff --stat` shows neither); the text
+- [ ] **Step 5:** run the **Files** tests, `src/personal-data-export-api.workforce.test.ts
+  src/personal-data-time-record.test.ts`, and `src/till-api.profile-zones.test.ts
+  src/till-api.profile-actions.test.ts` (`git diff --stat` shows no change to
+  `profile-actions`, and `git diff -U0` of `profile-zones` shows only the two comment rows, no
+  assertion; the commit and PR name that edit); the text
   guards (`apps/server/src/guide-content.test.ts`, `scripts/guide-links.test.ts`,
   `scripts/claude-md-pointers.test.ts`); code guards; the hash steps;
   `pnpm --filter @waitron/server typecheck`; `pnpm format:check`.
@@ -896,9 +1066,10 @@ any point after S13b works.
 - [ ] **Step 7: done-check for the whole slice.**
   `FILES=($(git grep -l -E "$P" -- 'packages/workforce/src/*.ts' 'packages/workforce-es/src/*.ts' apps/server/src/attendance-*.ts apps/server/src/management-attendance-api.ts apps/server/src/till-attendance-api.ts apps/server/src/till-clock-*.ts apps/server/src/workforce-api.ts apps/server/src/hours-request.ts apps/server/src/i18n/attendance-email.ts apps/server/src/parties.ts 'packages/staffing/src/rota.ts' 'packages/staffing/src/staffing-types.ts' 'packages/staffing/src/dashboard/*.ts' ':!*.test.ts'))`,
   then the shared done-check over `"${FILES[@]}"`. It may print only: `venueLocationId`; the
-  `attendanceSourceState.locationId` equalities and conflict targets (S22, decision 3);
-  `attendance-source-changes.ts`'s conflict target (S22); `personal-data.ts:1,67,76,187` (open
-  point 4); `attendance-responses.ts`'s `locationBusinessDaySettings` (S23);
+  `attendanceSourceState.locationId` equalities and conflict targets, and the
+  `attendance_operation_facts` equalities S13f's Step 3 kept (S22, decision 3);
+  `attendance-source-changes.ts`'s conflict target (S22); `personal-data.ts:1,67,76,187` (S22,
+  "Carried to other slices"); `attendance-responses.ts`'s `locationBusinessDaySettings` (S23);
   `configuration-transfer.ts` ×2 (S17); `dashboard/live-queries.ts` (S23); `record-export.ts`
   (S14); `workforce-api.ts:7,108-118` (S12d); `attendance-export-api.ts`'s `requireLocation` and
   its `locations` import (S15b); every line in "Left for S15" below; S12a's `admit` lines and the
@@ -938,13 +1109,13 @@ which refuses an id naming no `locations` row; S15b deletes it with the parse (d
 | `AttendanceInbox.locations` (`packages/workforce/src/attendance-contract.ts:85`) | `attendance-reads.ts` (always `[venue]`) | dashboard `widgets/my-hours-panel.ts:244`; till `till-app.ts:4828`, `screens/till-hours-screen.ts:107`, `widgets/attendance-day-dialog.ts:70` |
 | `AttendanceLookups.locations` (`:103`) | `management-attendance-api.ts` lookups | `screens/attendance-corrections-screen.ts:248-249` |
 | `AttendancePrompt.locationId`, `.locationName` (`:70-71`) | `attendance-reads.ts` | dashboard `my-hours-panel.ts:397`, `:402`, `:556`, `widgets/hours-record.ts:153`; till `till-app.ts:4893`, `screens/till-attendance-questions.ts:96`, `till-hours-screen.ts:177` |
-| `AttendancePrompt.day.locationId` (`:73`) | `attendance-reads.ts` | no client reads it; the client fixtures `apps/dashboard/test/attendance-fixtures.ts:37`, `apps/till/test/attendance-fixtures.ts:37`, `apps/till/src/api/client.attendance.test.ts:57` type it |
+| `AttendancePrompt.day.locationId` (`:73`; S15i removes it) | `attendance-reads.ts` | no client reads it; the client fixtures `apps/dashboard/test/attendance-fixtures.ts:37`, `apps/till/test/attendance-fixtures.ts:37`, `apps/till/src/api/client.attendance.test.ts:57` type it |
 | `AttendanceDayView.locationId` (`:89`) | `attendance-reads.ts` | dashboard `my-hours-panel.ts:350`, `:402`, `:446`, `attendance-corrections-screen.ts:480`, `:576`; till `state/attendance.ts:144`, `widgets/attendance-day-dialog.ts:89`, `:172`, `till-app.ts:4910`, `:4930` |
 | `AttendanceManagerQueue.locationId` (`:97`) | `attendance-reads.ts` | typed by `apps/dashboard/src/api/attendance.ts:29`; no read found |
 | `PersonHours.locationId` (`:134`) | `hours-reads.ts` | dashboard `my-hours-panel.ts:271`, `attendance-corrections-screen.ts:307`, `hours-record.ts:100`; till `state/hours.ts:93`, `till-hours-screen.ts:112`, `:289` |
 | `ManagerHours.locationId` (`:152`) | `hours-reads.ts` | `attendance-corrections-screen.ts:306` |
 | `AttendanceExportSelection.locationId` (`:161`), `AttendanceCommandPayload` `locationId` (`:16`, `:23`) | request types (above) | the senders above |
-| `AttendanceResponseReceipt.locationId` (`:43`) | the stored command row (`attendance_response_commands.location_id`, S22) | served by `GET …/attendance/commands/:commandId`; no client read found |
+| `AttendanceResponseReceipt.locationId` (`:43`; S22 removes it with the column, not S15) | the stored command row (`attendance_response_commands.location_id`, S22) | served by `GET …/attendance/commands/:commandId`; no client read found |
 | `TillClockState.locationId` (`apps/server/src/till-clock-state.ts:11`) | `venueLocationId` | till `till-app.ts:4673`, `:4830`; type `apps/till/src/api/client.ts:145` |
 
 **Server lines S15 changes with the clients:** the three parser files (whole); `workforce-api.ts`'s
@@ -955,7 +1126,7 @@ response fillers listed above; the contract fields above.
 
 `gh pr list --state open` at 2026-11-01 lists one: **#2384** (S2, owner-landed, head `a8d285eab5`).
 Of S13's files it changes `bill-payments.ts` and `till-sale.ts` (decision 5), `working-order.ts`
-(hunks at `:4465`, `:4510`, `:7139`, not the recorder lines S13d edits),
+(hunks at `:4465`, `:4510`, `:7139`, not the recorder lines S13d2 edits),
 `attendance-orders.test.ts` (deletes "an edit keeps the order's recorded location when configuration
 points elsewhere") and `attendance-order-command-routes.test.ts` (narrows "%s uses the stored order
 location rather than the caller's config" to `"invoice-choice"`). Whoever lands second rebases.
@@ -1007,6 +1178,7 @@ venue row, so the key is `venueName`.
 | `apps/server/src/personal-data-time-record.ts` | crossing, S12c's file | the `prepare` call's `locationId` line (`:38` at head; `locationId: await venueLocationId(tx)` once S12c has landed) deleted, with its import if unused. **If S12c has not landed**, lines `:26-27` (`const { locationId } = subject; if (locationId === null) …`) stay: they read `PersonalDataSubject.locationId`, which is S12c's |
 | `apps/server/test/attendance-export-fixture.ts` | test fixture | `prepareTimeRecordExport(tx, { locationId, period, audience, locale })` (`:94`) drops `locationId` |
 | `packages/workforce-es/src/record-export.test.ts` | test | the `input()` helper drops `locationId` (`:68-69`); the metadata case below |
+| `docs/backlog.md` | docs | A1301's entry says S14 has landed (Step 7) |
 
 Readers of `RecordExportInput`, from
 `git grep -n -E 'RecordExportInput|\.prepare\(tx, \{|prepareTimeRecordExport|formatTimeRecordExport' -- apps packages scripts`:
@@ -1067,7 +1239,9 @@ working time. No guide edit.
   Also `git grep -n "locationId" -- apps/server/test/attendance-export-fixture.ts` prints only the
   fixture's own seed and return lines (`:15`-ish insert, the returned `locationId` other suites read),
   which are F5's.
-- [ ] **Step 7: commit** `git commit -s` "The working-time export takes its workplace name from the
+- [ ] **Step 7: backlog.** Update A1301's entry in `docs/backlog.md` (`:6447` at `2c4511d58b`):
+  "S14 landed (#…)"; S15-1 can start.
+- [ ] **Step 8: commit** `git commit -s` "The working-time export takes its workplace name from the
   venue (A1301 S14)". The PR body names the CSV header change.
 
 ### Open PRs touching S14's files
@@ -1130,7 +1304,7 @@ the dashboard or till sends or reads it.
 | 10 | `GET /management-api/me/attendance/hours` (`management-attendance-api.ts:93-111`) | `parseHoursQuery` `hours-request.ts:14-16`, exact keys, refuses without (S13i deleted the own-scope check, `:100-104`); `readLocationClock(tx, scope.locationId)` `:106` | `PersonHours.locationId` (`hours-reads.ts:163`); its `pending.prompts` filtered by location (`hours-reads.ts:109`) | `api/hours.ts:18-30,54-58`; `my-hours-panel.ts:264-271`; `hours-record.ts:100` | S15j |
 | 11 | `GET /management-api/attendance/hours` (`:169-189`) | same parser; the location-exists check `:176-182`; `readLocationClock` `:184` | `ManagerHours.locationId` (`hours-reads.ts:196`) and each person's `hours.locationId` | `api/hours.ts:33-38,60-64`; `attendance-corrections-screen.ts:287-307,327` | S15j |
 | 12 | `GET /api/attendance/hours` (`till-attendance-api.ts:138-156`) | same parser (S13i deleted the own-scope check, `:145-149`); `readLocationClock` `:151` | `PersonHours.locationId` | `apps/till/src/api/client.ts:2729-2740`; `state/hours.ts:35,54-93`; `till-hours-screen.ts:112,289`; `till-app.ts:4673-4712` | S15j |
-| 13 | `GET /api/clock/state`, `POST /api/clock/{in,out,break-start,break-end}` (`till-clock-api.ts:87-139`) | none | `TillClockState.locationId` (`till-clock-state.ts:11,58`; scope from `deps.cfg.locationId` at `till-clock-api.ts:103,129,170`) | till type `client.ts:145`; read at `till-app.ts:4673,4830` | S15j (server); S15f (till stops reading) |
+| 13 | `GET /api/clock/state`, `POST /api/clock/{in,out,break-start,break-end}` (`till-clock-api.ts:87-139`) | none | `TillClockState.locationId` (`till-clock-state.ts:11,58`; scope from `deps.cfg.locationId` at `till-clock-api.ts:103,129,170` until S13g narrows it) | till type `client.ts:145`; read at `till-app.ts:4673,4830` | S15j (server); S15f (till stops reading) |
 | 14 | `GET /management-api/me/attendance/day` (`management-attendance-api.ts:112-128`) | `parseAttendanceDayQuery(…, "worker")` `attendance-request.ts:150-165`, exact keys, refuses without (S13i deleted the own-scope check, `:119-123`) | `AttendanceDayView.locationId` (`attendance-reads.ts:170`, `...scope`); zone from `locationInfo` `:158` | `api/own-attendance.ts:15-20,41-46`; `my-hours-panel.ts:344-350` | S15k |
 | 15 | `GET /management-api/attendance/day` (`:226-237`) | same parser, manager keys, refuses without | same | `api/attendance.ts:32-33,68-71`; `attendance-corrections-screen.ts:474-490` | S15k |
 | 16 | `GET /api/attendance/day` (`till-attendance-api.ts:183-199`) | worker parser (S13i deleted the own-scope check, `:190-194`) | same | `client.ts:2742-2748`; `state/attendance.ts:140-144`; `till-app.ts:4910` | S15k |
@@ -1167,7 +1341,7 @@ S13j moved them end to end (driver's ruling 1).
 | `apps/till/src/screens/till-attendance-questions.ts` | 1 | S15g |
 | `apps/till/src/i18n/strings.ts` | 3 | S15g |
 | `apps/till/src/layout.ts`, `screens/till-ticket-view.ts`, `widgets/receipt-language.ts` | 1, 1, 3 (comments: "the location's address / receipt languages") | S15g (comment-only) |
-| `apps/dashboard/src/i18n/strings.ts` (`attendance.location`, `planned.location`, `planned.no_location`, `attendance.time_skipped`) | 6 of 15 | S15a, S15e |
+| `apps/dashboard/src/i18n/strings.ts` (`attendance.location`, `planned.location`, `planned.no_location`, `attendance.time_skipped`) | 7 of 15 (`:108`, `:126`, `:2373`, `:2384`, `:3861`, `:6167`, `:6178`; the Spanish `attendance.time_skipped`, `:3879`, says "ubicación", which the pattern does not match, and S15e rewords it too) | S15a, S15e |
 | `apps/server/src/workforce-api.ts` (`:401-416` only) | 3 of 21 | S15a |
 | `packages/workforce/src/clocking.ts` (`getPlannedVsActual`, `:223-260`, only if S13 left its `locationId` parameter) | — | S15a |
 | `apps/server/src/attendance-export-request.ts` | 5 | S15b |
@@ -1176,11 +1350,11 @@ S13j moved them end to end (driver's ruling 1).
 | `apps/server/src/hours-request.ts` | 4 | S15j |
 | `apps/server/src/management-attendance-api.ts` | 33 | S15i, S15j, S15k |
 | `apps/server/src/till-attendance-api.ts` | 20 (`:101-102` is S12a's `admit`) | S15i, S15j, S15k |
-| `apps/server/src/till-clock-state.ts`, `till-clock-api.ts` | 5, 7 | S15j (`:11,35,58`; `:103,129,170`), rest S13/S12a |
-| `packages/workforce/src/attendance-contract.ts` | 12 | S15b (`:161`), S15h (`:16,23`), S15i (`:70-71,85,103`), S15j (`:134,152`), S15k (`:89,97`) |
+| `apps/server/src/till-clock-state.ts`, `till-clock-api.ts` | 5, 7 | S15j (`till-clock-state.ts:11,58`); S13g did `till-clock-state.ts:35,38` and `till-clock-api.ts:103,129,152,170`; `till-clock-api.ts:30,79-80` are S12a's |
+| `packages/workforce/src/attendance-contract.ts` | 12 | S15b (`:161`), S15h (`:16,23`), S15i (`:70-71,73,85,103`), S15j (`:134,152`), S15k (`:89,97`); `:43` (`AttendanceResponseReceipt.locationId`) is S22's |
 | `packages/workforce/src/attendance-reads.ts` | 32 | S15i (inbox `:53-145`), S15k (`:24-31,150-194`) |
-| `packages/workforce/src/hours-reads.ts` | 7 | S15i (`:109`), S15j (`:23,44-45,100,163,196`) |
-| `packages/workforce/src/attendance-response-commands.ts` | 5 (`:81,88,210` S15h; `:191,270` S13) | S15h |
+| `packages/workforce/src/hours-reads.ts` | 7 | S15j (`:100,163,196`); S13h did `:23`, `:44-45`, `:109` |
+| `packages/workforce/src/attendance-response-commands.ts` | 5 (`:81,88` S15h; `:191,210,270` S13) | S15h |
 | `packages/workforce/src/dashboard/live-queries.ts` (`lookups` dependencies) | 4 | S15i (`:13` only; `record` keeps its tables, S23) |
 | Test fixture helpers `apps/dashboard/test/{attendance,hours,manager-hours}-fixtures.ts`, `apps/till/test/{attendance-fixtures,clock-app,hours-fixtures}.ts` | 5, 3, 11, 5, 6, 3 | the task that drops the field they mock |
 
@@ -1221,8 +1395,11 @@ Deleted whole (each exists only to prove a refusal or isolation between two plac
 - `apps/dashboard/src/screens/attendance-corrections-screen.hours.test.ts`: "drops a held old location
   summary before displaying the new workplace" (`:90`).
 - `apps/dashboard/src/widgets/my-hours-panel.export.test.ts`: "reads availability for the newly
-  selected historical workplace" (`:145`), and the `"location-removed"` variant of the `it.each` at
-  `:119`.
+  selected historical workplace" (`:145`; S15b's, as it reads the dialog's `locationId`
+  property, `:152`), and the `"location-removed"` variant of the `it.each` at `:119` (S15e's).
+- `apps/dashboard/src/widgets/attendance-export-dialog.test.ts`: the `"locationId"` variant of
+  "suppresses an old download after %s changes" (`:166`; it sets `el.locationId = "other-place"`,
+  `:188`), S15b's.
 - `apps/dashboard/src/widgets/my-hours-panel.test.ts`: "retires a failed day's load message when its
   location is left" (`:453`).
 - `apps/dashboard/src/api/attendance.test.ts`: the `"locations"` variant of "a %s event refreshes
@@ -1266,7 +1443,8 @@ without revealing hours" (`:94`) are S12a's (the `admit` refusal), not S15's.
 (deleted), `api/client.test.ts` (the `getPlannedVsActual` case), `api/live-queries.test.ts:114` (args
 `["location", "2026-09-01", "2026-09-11"]` → `["2026-09-01", "2026-09-11"]`),
 `apps/server/src/workforce-api.test.ts` (planned-vs-actual block `:711-770`),
-`workforce-api.gate-sweep.test.ts:292,326`, `packages/workforce/src/pay-period-closure.test.ts:156`.
+`workforce-api.gate-sweep.test.ts:292,326` (`packages/workforce/src/pay-period-closure.test.ts:156`
+is S13b's, which changes `getPlannedVsActual`'s input).
 
 | Where | What changes |
 | --- | --- |
@@ -1291,7 +1469,8 @@ without revealing hours" (`:94`) are S12a's (the `admit` refusal), not S15's.
 - [ ] **Step 5:** run `pnpm --filter @waitron/server exec vitest run src/workforce-api.test.ts src/workforce-api.gate-sweep.test.ts`;
   `pnpm --filter @waitron/workforce exec vitest run src/pay-period-closure.test.ts src/planned-vs-actual.test.ts`;
   after the memory check,
-  `pnpm --filter @waitron/dashboard exec vitest run src/screens/planned-actual-screen.test.ts src/screens/planned-actual-screen.a11y.test.ts src/api/client.test.ts src/api/live-queries.test.ts src/i18n/strings.test.ts`
+  `pnpm --filter @waitron/dashboard exec vitest run src/screens/planned-actual-screen.test.ts src/screens/planned-actual-screen.a11y.test.ts src/api/client.test.ts src/api/live-queries.test.ts`
+  (the dashboard has no `src/i18n/strings.test.ts`)
   — each prints `Tests` with no failures; code guards; typecheck `@waitron/server`,
   `@waitron/workforce`, `@waitron/dashboard`; `pnpm format:check`. Open the screen in the dev stack
   (`wa-wt demo <worktree-name>`) and look at it in both themes and at phone width: the week field
@@ -1300,7 +1479,9 @@ without revealing hours" (`:94`) are S12a's (the `admit` refusal), not S15's.
   nothing; `git grep -n -E "location-picker|resolveLocationSelection|dashboard-location-picker|planned\.(no_)?location" -- apps packages`
   prints nothing. `getLocations` and `LocationSummary` remain in `client.ts` and `live-queries.ts`
   for S12d.
-- [ ] **Step 7: commit** "Planned versus actual reads the venue's week with no location picker (A1301 S15a)".
+- [ ] **Step 7: backlog.** Update A1301's entry in `docs/backlog.md`: "S15-1 landed (#…)"; S15-2
+  and S12d can start.
+- [ ] **Step 8: commit** "Planned versus actual reads the venue's week with no location picker (A1301 S15a)".
 
 ### Task S15b: the working-time export takes no location (PR S15-2)
 
@@ -1313,7 +1494,11 @@ server `attendance-export-request.ts`, `attendance-export-api.ts`. Tests:
 `widgets/my-hours-panel.export.test.ts`, `screens/attendance-corrections-screen.export.test.ts`;
 `apps/server/src/attendance-export-request.test.ts`, `attendance-export-api.test.ts`,
 `boot.attendance-export.test.ts:120-123`, `personal-data-export-api.workforce.test.ts:715-733`,
-`personal-data-time-record.test.ts:118-135` (S12c's files: the query and the `cfg` literal only).
+`personal-data-time-record.test.ts:118-135` (S12c's files: the query only; S13i dropped their `cfg`).
+Two dashboard cases that read the dialog's `locationId` property, which this task deletes:
+`attendance-export-dialog.test.ts`'s `"locationId"` variant of "suppresses an old download after %s
+changes" (`:166`, `:188`) and `my-hours-panel.export.test.ts` "reads availability for the newly
+selected historical workplace" (`:145`).
 
 | Where | What changes |
 | --- | --- |
@@ -1333,7 +1518,10 @@ server `attendance-export-request.ts`, `attendance-export-api.ts`. Tests:
 - [ ] **Step 3: implement** the table.
 - [ ] **Step 4: trim** "refuses missing location or person after authority" as listed under
   "Cross-location cases"; in `attendance-export-request.test.ts` drop the `"locationId"` variant of
-  the `it.each` at `:81`.
+  the `it.each` at `:81`. **Delete** `attendance-export-dialog.test.ts`'s `"locationId"` variant of
+  "suppresses an old download after %s changes" (the `it.each` row `:166` and its branch `:188`) and
+  `my-hours-panel.export.test.ts` "reads availability for the newly selected historical workplace"
+  (`:145`): both set or read the property this task deletes.
 - [ ] **Step 5:** run `pnpm --filter @waitron/server exec vitest run src/attendance-export-request.test.ts src/attendance-export-api.test.ts src/boot.attendance-export.test.ts src/personal-data-export-api.workforce.test.ts src/personal-data-time-record.test.ts`;
   after the memory check,
   `pnpm --filter @waitron/dashboard exec vitest run src/api/attendance-export.test.ts src/widgets/attendance-export-dialog.test.ts src/widgets/attendance-export-dialog.a11y.test.ts src/widgets/attendance-export-dialog.unsaved.test.ts src/widgets/my-hours-panel.export.test.ts src/screens/attendance-corrections-screen.export.test.ts`
@@ -1341,7 +1529,9 @@ server `attendance-export-request.ts`, `attendance-export-api.ts`. Tests:
   `pnpm format:check`.
 - [ ] **Step 6: done-check** over `attendance-export-request.ts`, `attendance-export-api.ts`,
   `api/attendance-export.ts`, `attendance-export-dialog.ts`: prints nothing.
-- [ ] **Step 7: commit** "The working-time export takes no location (A1301 S15b)".
+- [ ] **Step 7: backlog.** Update A1301's entry in `docs/backlog.md`: "S15-2 landed (#…)"; S15-3
+  can start.
+- [ ] **Step 8: commit** "The working-time export takes no location (A1301 S15b)".
 
 ### Task S15c: the dashboard's attendance and hours API clients send no location (PR S15-3)
 
@@ -1404,7 +1594,8 @@ fixture's own constant instead); tests `api/attendance.test.ts`, `api/hours.test
 screen nor this panel uses it; `attendance.time_skipped` EN `:126` "…on this date in this location." →
 "…on this date at this venue.", ES `:3879` "…en esta fecha y ubicación." → "…en esta fecha en este
 local."); `apps/dashboard/test/hours-fixtures.ts`, `attendance-fixtures.ts` (mocks only, see below);
-tests `my-hours-panel*.test.ts`, `hours-record.test.ts`, `i18n/strings.test.ts`.
+tests `my-hours-panel*.test.ts`, `hours-record.test.ts` (the dashboard has no
+`i18n/strings.test.ts`).
 
 | Where | What changes |
 | --- | --- |
@@ -1426,7 +1617,7 @@ contract still declares them; S15h–S15k remove them.
 - [ ] **Step 3: implement** the table.
 - [ ] **Step 4: delete and trim** the my-hours cases listed under "Cross-location cases".
 - [ ] **Step 5:** (memory check) run `my-hours-panel.test.ts`, `.export.test.ts`, `.a11y.test.ts`,
-  `.unsaved.test.ts`, `hours-record.test.ts`, `src/i18n/strings.test.ts`, and the
+  `.unsaved.test.ts`, `hours-record.test.ts`, and the
   `screens/my-schedule-screen*.test.ts` files that mount the panel — PASS; code guards; dashboard
   typecheck; `pnpm format:check`. Look at My hours with a pending question in both themes and at
   phone width.
@@ -1505,8 +1696,7 @@ venue's": `client.ts:167,1322,1401,3177`, `till-app.ts:3238,3240,3246,9207`, `la
 
 **Files:** `packages/workforce/src/attendance-contract.ts` (`locationId` out of the `request` and
 `propose` payloads, `:16`, `:23`), `attendance-response-commands.ts` (`normalize`'s copies `:81`,
-`:88`; the `question_location` refusal `:210`, which no test covers:
-`git grep -n question_location -- apps packages` prints only that line), `apps/server/src/attendance-request.ts`
+`:88`; S13h already deleted the `question_location` refusal, `:210`), `apps/server/src/attendance-request.ts`
 (`:94-113`: the key list and `common` lose `locationId`; the two command routes read no
 `command.locationId` once S13i deleted their own-scope calls); the clients' payload lines
 `attendance-corrections-screen.ts:576`, `my-hours-panel.ts:446`, `till-app.ts` (`attendanceEditor`'s
@@ -1548,26 +1738,32 @@ compared as JSON (`attendance-response-commands.ts:173-179`). Pre-production, no
 day dialog needs for today's date; `AttendanceLookups.locations` `:103` deleted),
 `attendance-reads.ts` (`readAttendanceInbox` `:53-145`: no `locations` list; `timeZone` from
 `readVenue(tx)`; each prompt takes `timeZone` from it; the `ownLocations`/`byLocation` maps go; the
-prompt's `day` object is S13's `AttendanceDay` and is left as S13 leaves it), `hours-reads.ts:109`
-(the pending prompts are no longer filtered by place), `dashboard/live-queries.ts:13`
+prompt's `day` loses the `locationId` S13 kept on it: `attendance-contract.ts:73` becomes
+`day: AttendanceDay | null` and `attendance-reads.ts:101-106` stops filling `day.locationId`),
+`dashboard/live-queries.ts:13`
 (`lookups: ["persons"]`); server `management-attendance-api.ts` (inbox push `:81-87`, lookups
 `:197-200,207`, imports), `till-attendance-api.ts` (inbox push `:171-177`); `till-app.ts`
 (`#openAttendanceDay`'s zone → `inbox.timeZone`); fixtures `apps/dashboard/test/attendance-fixtures.ts:32-51,121`,
-`apps/till/test/attendance-fixtures.ts:32-51,121`, `apps/till/test/clock-app.ts:177`. Tests:
+`apps/till/test/attendance-fixtures.ts:32-51,121` (both include the prompt day's `locationId`,
+`:37`), `apps/till/test/clock-app.ts:177`, and the prompt day's `locationId` in
+`apps/till/src/api/client.attendance.test.ts:57`. Tests:
 `packages/workforce/src/attendance-reads.test.ts`, `hours-reads.test.ts`;
 `apps/server/src/management-attendance-api.test.ts` ("provides minimal lookups, own viewer
 eligibility, an empty queue and a day from the same subject revision", `:123`: drop the `locations`
 expectation), `management-hours-api.test.ts`, `till-attendance-api.test.ts`, `boot.hours.test.ts:144`;
-`apps/dashboard/src/api/attendance.test.ts`.
+`apps/dashboard/src/api/attendance.test.ts` (the lookups dependency expectation `:205`,
+`[{ type: "persons" }, { type: "locations" }]` → `[{ type: "persons" }]`, and the `"locations"`
+variant at `:318`; the `"locations"` entries at `:201` and `:291` list the queue and day reads'
+tables, which keep theirs, S23).
 
 - [ ] **Step 1: failing test.** In `packages/workforce/src/attendance-reads.test.ts`, add "gives the
   inbox the venue's zone and no place list": `readAttendanceInbox` for a person with no entries
   `toEqual`s an object with `timeZone` equal to the venue row's zone and no `locations` key, and each
-  prompt has no `locationId` or `locationName` key. FAILS before.
+  prompt has no `locationId` or `locationName` key, nor its `day`. FAILS before.
 - [ ] **Step 2:** `pnpm --filter @waitron/workforce exec vitest run src/attendance-reads.test.ts` — FAIL.
 - [ ] **Step 3: implement**; follow the four typechecks to every literal.
-- [ ] **Step 4: delete** the lookups `"locations"` variant in `api/attendance.test.ts:318` (S13h
-  already deleted `attendance-reads.test.ts:267`); trim `till-attendance-api.test.ts:163` and
+- [ ] **Step 4: delete** the lookups `"locations"` variant in `api/attendance.test.ts:318` and
+  narrow the lookups expectation at `:205` (S13h already deleted `attendance-reads.test.ts:267`); trim `till-attendance-api.test.ts:163` and
   `management-hours-api.test.ts:123` as listed above. Any suite that now fails with
   `provisioning.second_venue` (the inbox reads `readVenue` for every person) gets the plan's
   "second venue row" rule.
@@ -1586,15 +1782,12 @@ expectation), `management-hours-api.test.ts`, `till-attendance-api.test.ts`, `bo
 
 **Files:** `hours-request.ts` (`parseHoursQuery` returns `{ selection }`; keys `["kind"]` or
 `["kind", "date"]`), `attendance-contract.ts` (`PersonHours.locationId` `:134`,
-`ManagerHours.locationId` `:152`), `hours-reads.ts` (`HoursInput.locationId` `:23`, its check
-`:44-45`, `:100`, `:163`, `:196`), `management-attendance-api.ts` (own hours `:99-107`: the parsed
+`ManagerHours.locationId` `:152`), `hours-reads.ts` (`:100`, `:163`, `:196`; S13h already removed
+`HoursInput.locationId` and its check), `management-attendance-api.ts` (own hours `:99-107`: the parsed
 `locationId` goes, `readVenueClock(tx)` if S13 has not already moved `:106`; manager hours `:175-185`: the
 location-exists check gone, `readVenueClock(tx)`), `till-attendance-api.ts` (`:141-152` likewise),
-`till-clock-state.ts` (`TillClockState.locationId` `:11`, `scope: { personId }` `:35`, `:58`;
-`readVenueClock(tx)` if S13 has not moved `:38`), `till-clock-api.ts` (the three
-`{ personId, locationId: deps.cfg.locationId }` literals `:103`, `:129`, `:170` → `{ personId }`;
-`reconcileAttendanceBeforeClock` in `attendance-discovery.ts:30` still passes its wider scope, which
-TypeScript accepts as it is not a fresh literal); fixtures `apps/dashboard/test/hours-fixtures.ts`,
+`till-clock-state.ts` (`TillClockState.locationId` `:11` and its fill `:58`; S13g already narrowed
+the scope and the clock, and `till-clock-api.ts`'s three state reads); fixtures `apps/dashboard/test/hours-fixtures.ts`,
 `manager-hours-fixtures.ts`, `apps/till/test/hours-fixtures.ts`, `clock-app.ts:169-170`. Tests:
 `hours-request.test.ts`, `management-hours-api.test.ts`, `till-hours-api.test.ts`,
 `boot.hours.test.ts`, `till-clock-state.test.ts`, `till-clock-api.test.ts`,
@@ -1607,14 +1800,12 @@ TypeScript accepts as it is not a fresh literal); fixtures `apps/dashboard/test/
 - [ ] **Step 3: implement**; follow the typechecks.
 - [ ] **Step 4: delete** `management-hours-api.test.ts` "answers the venue's hours, queue and day
   whatever workplace id the query names" (S13i's rewrite of `:587`, listed under "Cross-location
-  cases"); `hours-reads.test.ts`
-  "refuses empty scopes and unknown window kinds instead of reading the venue" (`:475`) keeps its
-  window-kind half.
+  cases").
 - [ ] **Step 5:** run the server and workforce files above; (memory check) the dashboard and till tests
   importing the hours fixtures — PASS; code guards; typecheck four packages; `pnpm format:check`.
 - [ ] **Step 6: done-check** over `hours-request.ts`, `hours-reads.ts`, `till-clock-state.ts`,
-  `till-clock-api.ts`, and the hours routes: prints only `till-clock-api.ts`'s S13/S12a lines
-  (`deps.cfg` type, `admit`) and S13's `attendance-discovery.ts` scope.
+  `till-clock-api.ts`, and the hours routes: prints only `till-clock-api.ts`'s S12a lines (the
+  `deps.cfg` field and `admit`) while S12a is unlanded.
 - [ ] **Step 7: commit** "Hours and the till's clock state name no location (A1301 S15j)".
 
 ### Task S15k: the day and queue reads carry no location (PR S15-3)
@@ -1625,17 +1816,15 @@ TypeScript accepts as it is not a fresh literal); fixtures `apps/dashboard/test/
 `:97`), `attendance-reads.ts` (`locationInfo` `:24-32` deleted; `readAttendanceDay` takes
 `{ personId, date }` and its zone from `readVenue(tx)`; `readAttendanceManagerQueue(tx)` returns
 `{ items }`; the `locations` import), `management-attendance-api.ts` (own day `:118-124`, queue
-`:220-221` with `noQuery(c)`, manager day `:232-233`; `cfg.locationId` out of the deps type if
-nothing reads it; `locations`/`readLocationClock` imports), `till-attendance-api.ts` (`:186-195`);
+`:220-221` with `noQuery(c)`, manager day `:232-233`; `locations`/`readLocationClock` imports;
+S13i already narrowed the deps' `cfg` to `{ nodeId }`), `till-attendance-api.ts` (`:186-195`);
 fixtures
 `apps/dashboard/test/attendance-fixtures.ts`, `apps/till/test/attendance-fixtures.ts`,
 `apps/till/test/clock-app.ts:179-181`. Comment-only, no assertion edited:
 `apps/server/src/till-api.profile-actions.test.ts:74` names the generated title "rejects a profile
 without clock-in on day?date=2026-01-05" (the `routes` entry at `till-attendance-api.test.ts:130`
-loses `&locationId=LOCATION`); `till-api.profile-zones.test.ts:101-103` read "none: own record" and
-name surviving cases ("clock-only staff read their own completed hours passively without recording
-activity" for hours, "serves own history to clock-only staff without service zones and keeps reads
-passive" for day). Tests: `attendance-request.test.ts` ("parses exact worker and manager day scopes
+loses `&locationId=LOCATION`). (S13i already rewrote `till-api.profile-zones.test.ts:102-103`.)
+Tests: `attendance-request.test.ts` ("parses exact worker and manager day scopes
 with normalized identifiers", `:249`), `management-attendance-api.test.ts` (the `paths` table),
 `management-hours-api.test.ts`, `till-attendance-api.test.ts` (`routes`, `pathOf`),
 `boot.hours.test.ts:135`, `packages/workforce/src/attendance-reads.test.ts`.
@@ -1647,20 +1836,21 @@ with normalized identifiers", `:249`), `management-attendance-api.test.ts` (the 
 - [ ] **Step 3: implement.**
 - [ ] **Step 4: delete** `attendance-request.test.ts` "requires an exact location-only scope for a
   manager queue" (`:287`) (S13i and S13h already deleted `till-attendance-api.test.ts:315` and
-  `attendance-reads.test.ts:362`); make the two comment-only edits in the admission suites.
+  `attendance-reads.test.ts:362`); make the comment-only edit in `till-api.profile-actions.test.ts`.
 - [ ] **Step 5:** run `pnpm --filter @waitron/server exec vitest run src/till-api.profile-actions.test.ts src/till-api.profile-zones.test.ts`
-  FIRST and confirm `git diff -U0` of each shows only the comment rows named above (S12a's five rows
-  in `profile-zones` are separate), no assertion changed; then the server and workforce files above;
+  FIRST and confirm `git diff -U0` of `profile-actions` shows only the comment row named above and
+  `git diff --stat` shows no change to `profile-zones`, no assertion changed; then the server and workforce files above;
   (memory check) the dashboard and till tests importing the attendance fixtures — PASS; code guards;
   typecheck four packages; `pnpm format:check`.
 - [ ] **Step 6: S15's done-check.** Over every S15 non-test file:
   `git grep -n -E "$P" -- apps/dashboard/src/api/attendance.ts apps/dashboard/src/api/hours.ts apps/dashboard/src/api/own-attendance.ts apps/dashboard/src/api/attendance-export.ts apps/dashboard/src/screens/attendance-corrections-screen.ts apps/dashboard/src/screens/planned-actual-screen.ts apps/dashboard/src/widgets/my-hours-panel.ts apps/dashboard/src/widgets/hours-record.ts apps/dashboard/src/widgets/attendance-export-dialog.ts apps/till/src/state/hours.ts apps/till/src/state/attendance.ts apps/till/src/screens/till-hours-screen.ts apps/till/src/screens/till-attendance-questions.ts apps/till/src/widgets/attendance-day-dialog.ts apps/server/src/hours-request.ts apps/server/src/attendance-export-request.ts packages/workforce/src/attendance-contract.ts packages/workforce/src/hours-reads.ts`
-  prints nothing. In `apps/till/src/api/client.ts` and `till-app.ts` it prints only the unrelated
-  words. In `attendance-request.ts`,
+  prints nothing, except `attendance-contract.ts:43` (`AttendanceResponseReceipt.locationId`, S22's,
+  "Carried to other slices"). In `apps/till/src/api/client.ts` and `till-app.ts` it prints only the
+  unrelated words. In `attendance-request.ts`,
   `management-attendance-api.ts`, `till-attendance-api.ts`, `attendance-export-api.ts`,
   `till-clock-api.ts`, `till-clock-state.ts`, `attendance-reads.ts`, `attendance-response-commands.ts`
-  it prints only S13's and S12a's lines (deps `cfg` types read by `admit` and
-  `reconcileAttendanceBeforeClock`, the command row's `location_id`).
+  it prints only S13's and S12a's lines (the deps `cfg` fields `admit` reads while S12a is
+  unlanded, the command row's `location_id`).
   `apps/dashboard/src/api/client.ts` and `live-queries.ts`: S12d's and S5's lines, and S23's table
   names.
 - [ ] **Step 7: commit** "Attendance day and queue reads name no location (A1301 S15k)".
@@ -1671,7 +1861,8 @@ with normalized identifiers", `:249`), `management-attendance-api.test.ts` (the 
   apps (S15e, S15g) deleted; `attendance.time_skipped` reworded in both apps (S15e, S15g).
 - Guides: none describes a working-time location picker or column (the guide grep under S14 prints no
   working-time line). No guide edit.
-- Backlog: S15-3's PR updates A1301's entry in `docs/backlog.md` (`:6447-6461`) to say S15 has landed;
+- Backlog: each S15 PR updates A1301's entry in `docs/backlog.md` (`:6447-6461`): S15-1 and S15-2
+  name their PR, and S15-3's says S15 has landed;
   no other entry names these pickers
   (`git grep -n -i -E "location.picker|planned.vs.actual.*location|activeLocationId" -- docs/backlog.md 'docs/backlog/*.md' 'docs/developers/*.md'`
   prints nothing).
@@ -1703,7 +1894,9 @@ Every reference at head, from
   import at `:7`, which nothing else in the file uses (its only other matches are the roster and
   planned-vs-actual `locationId` query lines, `:124-416`, which are not the table); tests
   `workforce-api.test.ts` "GET /management-api/locations lists the tenant's locations" (`:105`) and
-  "401s an unauthenticated request" (`:207-210`, the one request it makes is to this route);
+  "401s an unauthenticated request" (`:207-210`, the one request it makes is to this route; the
+  file's only other 401 check is the warnings describe's "refuses staff and unauthenticated reads",
+  `:976`, `:991`);
 - dashboard: `api/client.ts` `LocationSummary` (`:1074-1078`) and `getLocations` (`:4195-4197`);
   `api/live-queries.ts:492`; test stubs `dashboard-app.a11y.test.ts:79`,
   `dashboard-app.disk-stop.test.ts:87`, `dashboard-app.help.test.ts:86`, `dashboard-app.test.ts:152`,
@@ -1727,8 +1920,9 @@ match, so the grep prints nothing at all once S12d is done (the old text said it
   /management-api/locations lists the tenant's locations" (`:105`) with "GET /management-api/locations
   is gone": expect `404`. FAILS before (`200`).
 - [ ] **Step 2:** `pnpm --filter @waitron/server exec vitest run src/workforce-api.test.ts -t "management-api/locations"` — FAIL.
-- [ ] **Step 3: delete** the route, its comment (`:108`) and the `locations` import; delete
-  "401s an unauthenticated request" (`:207-210`); rename the describe block "mountWorkforceApi —
+- [ ] **Step 3: delete** the route, its comment (`:108`) and the `locations` import; point "401s an
+  unauthenticated request" (`:207-210`) at a surviving route instead of deleting it: `GET
+  /management-api/roster?period=2026-03-02` with `{ cookie: null }`, still expecting `401`; rename the describe block "mountWorkforceApi —
   locations + roster read/create" (`:104`) to "mountWorkforceApi — roster read/create". Delete
   `LocationSummary`, `getLocations`, the live-query entry, the four `dashboard-app*.test.ts` stubs and
   the `client.test.ts` case. Reword three comments in `client.ts` to name the venue: `:646` "the
@@ -1747,7 +1941,8 @@ match, so the grep prints nothing at all once S12d is done (the old text said it
   (`client.ts:529`, `:3144-3167`) until S5 lands, and S23's table names in `live-queries.ts` (S13j
   removed the roster and shift lines). `workforce-api.ts` prints nothing: S13 removed the roster
   lines and S15a the planned-vs-actual ones.
-- [ ] **Step 6: commit** "Delete the locations list route and its dashboard query (A1301 S12d)".
+- [ ] **Step 6: backlog.** Update A1301's entry in `docs/backlog.md`: "S12d landed (#…)".
+- [ ] **Step 7: commit** "Delete the locations list route and its dashboard query (A1301 S12d)".
 
 ### Open PRs touching S12d's files
 
