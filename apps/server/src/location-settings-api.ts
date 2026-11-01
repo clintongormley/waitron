@@ -78,7 +78,7 @@ async function writeReceiptLanguage(
   locationId: string,
   language: string,
 ): Promise<void> {
-  const rules = await readVenueReceiptLanguageRules(tx, { locationId });
+  const rules = await readVenueReceiptLanguageRules(tx);
   if (!rules.choices.includes(language)) {
     throw new AppError("management.request_invalid", { field: "receiptLanguage" });
   }
@@ -102,7 +102,7 @@ async function writeReceiptLanguage(
 }
 
 async function readVenueDefaults(tx: Transaction, locationId: string): Promise<VenueDefaults> {
-  const rules = await readVenueReceiptLanguageRules(tx, { locationId });
+  const rules = await readVenueReceiptLanguageRules(tx);
   const [receiptLanguage] = await storedLanguages(tx, locationId);
   const { defaultProductVatClass } = await readCatalogueSettings(tx);
   return {
@@ -292,9 +292,7 @@ export function mountLocationSettingsApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const answer = await gated(sessionId, async (tx) => {
-        const rules = await readVenueReceiptLanguageRules(tx, {
-          locationId: deps.cfg.locationId,
-        });
+        const rules = await readVenueReceiptLanguageRules(tx);
         const [language] = await storedLanguages(tx, deps.cfg.locationId);
         return { language, choices: rules.choices, fixed: rules.fixed ?? null };
       });

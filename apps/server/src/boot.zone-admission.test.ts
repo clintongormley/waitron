@@ -360,7 +360,6 @@ describe("startup zone admission", () => {
       expect(await context.json()).toMatchObject({
         eligible: true,
         nodeId: NODE,
-        locationId: LOCATION,
       });
       expect(readVenueDetails).not.toHaveBeenCalled();
       noDuties();
@@ -506,7 +505,6 @@ describe("startup zone admission", () => {
       eligible: true,
       category: "invalid",
       nodeId: NODE,
-      locationId: LOCATION,
     });
     noDuties();
     expect(readVenueDetails).not.toHaveBeenCalled();

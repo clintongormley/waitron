@@ -58,7 +58,6 @@ declare module "@waitron/shared" {
     "venue.time_zone_repair_not_needed": Record<string, never>;
     "venue.time_zone_repaired": {
       nodeId: string;
-      locationId: string;
       timeZone: string;
       previousRevision: number;
       clockRevision: number;

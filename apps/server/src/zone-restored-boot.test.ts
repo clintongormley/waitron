@@ -168,7 +168,6 @@ it.each(["archive", "bucket"] as const)(
         eligible: true,
         category: "invalid",
         nodeId: node.nodeId,
-        locationId: node.locationId,
       });
       expect(runPendingCardLoop).not.toHaveBeenCalled();
       expect(runAttendanceLoop).not.toHaveBeenCalled();

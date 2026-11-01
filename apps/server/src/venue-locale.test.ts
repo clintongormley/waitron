@@ -43,22 +43,35 @@ const suite = useVenueDb({
   },
 });
 
+/** Runs `act` with the one venue moved to Madrid, and back to Barcelona afterwards. */
+async function inMadrid(act: () => Promise<void>) {
+  await suite.db.update(locations).set({ province: "Madrid" }).where(eq(locations.id, locationId));
+  try {
+    await act();
+  } finally {
+    await suite.db
+      .update(locations)
+      .set({ province: "Barcelona" })
+      .where(eq(locations.id, locationId));
+  }
+}
+
 describe("readVenueLocale", () => {
   it("derives the country default when no override and no regional catalogue", async () => {
     // Barcelona → ca-ES unavailable in this build → country ES → es-ES.
-    const got = await readVenueLocale(suite.db, { locationId, override: undefined });
+    const got = await readVenueLocale(suite.db, { override: undefined });
     expect(got).toBe("es-ES");
   });
 
   it("honours a supported override", async () => {
-    const got = await readVenueLocale(suite.db, { locationId, override: "en-GB" });
+    const got = await readVenueLocale(suite.db, { override: "en-GB" });
     expect(got).toBe("en-GB");
   });
 
   it("ignores an unsupported override, falls to country", async () => {
     // 'ca-ES' has no catalogue (not in SUPPORTED_LOCALES), so the override is dropped and the country
     // default 'ES' → es-ES wins — the same result as no override at all.
-    const got = await readVenueLocale(suite.db, { locationId, override: "ca-ES" });
+    const got = await readVenueLocale(suite.db, { override: "ca-ES" });
     expect(got).toBe("es-ES");
   });
 
@@ -68,10 +81,7 @@ describe("readVenueLocale", () => {
     // Restored afterwards so the suite stays order-independent.
     await suite.db.execute(sql`delete from tenants`);
     try {
-      const got = await readVenueLocale(suite.db, {
-        locationId: randomUUID(),
-        override: undefined,
-      });
+      const got = await readVenueLocale(suite.db, { override: undefined });
       expect(got).toBe("en-GB");
     } finally {
       await seedTenant(suite.db);
@@ -79,37 +89,46 @@ describe("readVenueLocale", () => {
   });
 });
 
+it.each([
+  ["readVenueLocale", () => readVenueLocale(suite.db, {})],
+  ["readVenueContentLanguageRules", () => readVenueContentLanguageRules(suite.db)],
+  ["readVenueReceiptLanguageRules", () => withTransaction(suite.db, readVenueReceiptLanguageRules)],
+])("%s refuses when no venue is set up", async (_name, read) => {
+  const [venue] = await suite.db.select().from(locations);
+  await suite.db.delete(locations);
+  try {
+    await expect(read()).rejects.toMatchObject({ code: "venue.not_found" });
+  } finally {
+    await suite.db.insert(locations).values(venue!);
+  }
+});
+
 describe("readVenueContentLanguageRules", () => {
   const SPAIN_OFFICIAL = ["es", "ca", "ca-ES-valencia", "gl", "eu"];
 
   it("requires Catalan and Spanish for the Barcelona venue", async () => {
-    expect(await readVenueContentLanguageRules(suite.db, { locationId })).toStrictEqual({
+    expect(await readVenueContentLanguageRules(suite.db)).toStrictEqual({
       required: ["ca", "es"],
       official: SPAIN_OFFICIAL,
     });
   });
 
   it("requires Spanish for a Madrid venue", async () => {
-    const [madrid] = await suite.db
-      .insert(locations)
-      .values({
-        name: "Madrid",
-        province: "Madrid",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Retail",
-      })
-      .returning({ id: locations.id });
-    expect(await readVenueContentLanguageRules(suite.db, { locationId: madrid!.id })).toStrictEqual(
-      { required: ["es"], official: SPAIN_OFFICIAL },
-    );
+    await inMadrid(async () => {
+      expect(await readVenueContentLanguageRules(suite.db)).toStrictEqual({
+        required: ["es"],
+        official: SPAIN_OFFICIAL,
+      });
+    });
   });
 
   it("requires nothing when there is no taxpayer row to read a country from", async () => {
     await suite.db.execute(sql`delete from tenants`);
     try {
-      expect(
-        await readVenueContentLanguageRules(suite.db, { locationId: randomUUID() }),
-      ).toStrictEqual({ required: [], official: [] });
+      expect(await readVenueContentLanguageRules(suite.db)).toStrictEqual({
+        required: [],
+        official: [],
+      });
     } finally {
       await seedTenant(suite.db);
     }
@@ -123,7 +142,7 @@ describe("readVenueReceiptLanguageRules", () => {
     const catalonia = getCountryPack("ES")!.administrativeAreas.find(({ code }) => code === "08")!;
     expect(catalonia.fixedReceiptLocale?.locale).toBe("ca-ES");
     expect(
-      await withTransaction(suite.db, (tx) => readVenueReceiptLanguageRules(tx, { locationId })),
+      await withTransaction(suite.db, (tx) => readVenueReceiptLanguageRules(tx)),
     ).toStrictEqual({
       choices: SPAIN_RECEIPT,
       defaultLocale: "ca-ES",
@@ -132,29 +151,19 @@ describe("readVenueReceiptLanguageRules", () => {
   });
 
   it("fixes nothing for a Madrid venue, offering Spanish first", async () => {
-    const [madrid] = await suite.db
-      .insert(locations)
-      .values({
-        name: "Madrid receipts",
-        province: "Madrid",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Retail",
-      })
-      .returning({ id: locations.id });
-    expect(
-      await withTransaction(suite.db, (tx) =>
-        readVenueReceiptLanguageRules(tx, { locationId: madrid!.id }),
-      ),
-    ).toStrictEqual({ choices: SPAIN_RECEIPT, defaultLocale: "es-ES" });
+    await inMadrid(async () => {
+      expect(await withTransaction(suite.db, readVenueReceiptLanguageRules)).toStrictEqual({
+        choices: SPAIN_RECEIPT,
+        defaultLocale: "es-ES",
+      });
+    });
   });
 
   it("offers nothing when there is no taxpayer row to read a country from", async () => {
     await suite.db.execute(sql`delete from tenants`);
     try {
       expect(
-        await withTransaction(suite.db, (tx) =>
-          readVenueReceiptLanguageRules(tx, { locationId: randomUUID() }),
-        ),
+        await withTransaction(suite.db, (tx) => readVenueReceiptLanguageRules(tx)),
       ).toStrictEqual({ choices: [], defaultLocale: "es-ES" });
     } finally {
       await seedTenant(suite.db);
@@ -218,9 +227,7 @@ it.each([
   await suite.db.update(tenants).set({ country: "GB" }).where(eq(tenants.id, 1));
   try {
     const settings = loadTillAppSettings({ WAITRON_TILL_LOCALE: raw });
-    expect(await readVenueLocale(suite.db, { locationId, override: settings.localeOverride })).toBe(
-      expected,
-    );
+    expect(await readVenueLocale(suite.db, { override: settings.localeOverride })).toBe(expected);
   } finally {
     await suite.db.update(tenants).set({ country: "ES" }).where(eq(tenants.id, 1));
   }

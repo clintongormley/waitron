@@ -23,7 +23,6 @@ for (const locale of ["en-GB", "es-ES"] as const)
         let saved = false;
         const status = {
           nodeId: "node",
-          locationId: "location",
           legalName: "Deli Test SL",
           country: "ES",
           province: "08",

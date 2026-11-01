@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { locations, type Transaction } from "@waitron/db";
 import type { ReceiptConfig } from "@waitron/layouts";
 
-export interface LocationAddress {
+export interface VenueAddress {
   addressLine1: string | null;
   addressLine2: string | null;
   postalCode: string | null;
@@ -14,7 +14,7 @@ export interface LocationAddress {
  * The address as a receipt prints it, in at most two lines: the street lines joined, then the postal
  * code and city with the province unless it names the city. Blank parts are left out.
  */
-export function addressLines(address: LocationAddress): string[] {
+export function addressLines(address: VenueAddress): string[] {
   const part = (value: string | null) => value?.trim() ?? "";
   const city = part(address.city);
   const province = part(address.province);
@@ -29,10 +29,10 @@ export function addressLines(address: LocationAddress): string[] {
     .filter(Boolean);
 }
 
-/** The address lines a receipt prints: none when its `printAddress` is `false` or there is no location. */
+/** The address lines a receipt prints: none when its `printAddress` is `false` or there is no address. */
 export function receiptAddressLines(
   receipt: Pick<ReceiptConfig, "printAddress">,
-  address: LocationAddress | undefined,
+  address: VenueAddress | undefined,
 ): string[] {
   return receipt.printAddress === false || address === undefined ? [] : addressLines(address);
 }
@@ -51,10 +51,7 @@ export async function readLocationAddress(tx: Transaction, locationId: string): 
   return row === undefined ? [] : addressLines(row);
 }
 
-async function readAddress(
-  tx: Transaction,
-  locationId: string,
-): Promise<LocationAddress | undefined> {
+async function readAddress(tx: Transaction, locationId: string): Promise<VenueAddress | undefined> {
   const [row] = await tx
     .select({
       addressLine1: locations.addressLine1,

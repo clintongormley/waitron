@@ -1,53 +1,48 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { CORE_MIGRATIONS, locations } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { readVenueTimeZone } from "./venue-time-zone.js";
 
-let locationId: string;
+const venue = {
+  id: randomUUID(),
+  name: "Island venue",
+  invoiceLocales: ["es-ES"],
+  operationDescription: "Retail",
+  timeZone: "Atlantic/Canary",
+};
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
-    // Through the table definition: `locations.id` is a `$defaultFn` generator a raw insert never reaches.
-    const [location] = await db
-      .insert(locations)
-      .values({
-        name: "Island venue",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Retail",
-        timeZone: "Atlantic/Canary",
-      })
-      .returning({ id: locations.id });
-    locationId = location!.id;
+    await db.insert(locations).values(venue);
   },
 });
 
-it("reads the location's stored time zone instead of inferring it from language", async () => {
-  expect(await readVenueTimeZone(suite.db, { locationId })).toBe("Atlantic/Canary");
+it("reads the venue's stored time zone instead of inferring it from language", async () => {
+  expect(await readVenueTimeZone(suite.db)).toBe("Atlantic/Canary");
 });
 
-it("uses UTC when the location is missing", async () => {
-  await expect(readVenueTimeZone(suite.db, { locationId: randomUUID() })).resolves.toBe("UTC");
+it("uses UTC when no venue is set up", async () => {
+  await suite.db.execute(sql`delete from locations`);
+  try {
+    await expect(readVenueTimeZone(suite.db)).resolves.toBe("UTC");
+  } finally {
+    await suite.db.insert(locations).values(venue);
+  }
 });
 
 it.each(["", "Not/AZone"])("uses UTC for an invalid stored zone %j", async (timeZone) => {
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Invalid zone venue",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Retail",
-      timeZone,
-    })
-    .returning({ id: locations.id });
-  const invalidLocationId = location!.id;
+  await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, venue.id));
   try {
-    expect(await readVenueTimeZone(suite.db, { locationId: invalidLocationId })).toBe("UTC");
+    expect(await readVenueTimeZone(suite.db)).toBe("UTC");
   } finally {
-    await suite.db.execute(sql`delete from locations where id = ${invalidLocationId}`);
+    await suite.db
+      .update(locations)
+      .set({ timeZone: venue.timeZone })
+      .where(eq(locations.id, venue.id));
   }
 });

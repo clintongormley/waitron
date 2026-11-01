@@ -1,10 +1,9 @@
-import { asc, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
-  locations,
   nodes,
   tenants,
   locationBusinessDaySettings,
-  locationDayCutoverChanges,
+  readVenueClockAndPlace,
   type Transaction,
 } from "@waitron/db";
 import {
@@ -21,7 +20,6 @@ import type { IssueScope } from "@waitron/fiscal";
 
 export interface ZoneContext {
   nodeId: string;
-  locationId: string;
   legalName: string;
   country: string;
   province: string | null;
@@ -30,47 +28,24 @@ export interface ZoneContext {
   clockRevision: number;
 }
 
-const storedCutover = (value: string): string =>
-  /^([01]\d|2[0-3]):[0-5]\d:00$/.test(value) ? value.slice(0, 5) : value;
-
+/** `scope.locationId` is not read: the box holds one venue. */
 export async function readZoneContext(tx: Transaction, scope: IssueScope): Promise<ZoneContext> {
-  const [node] = await tx
-    .select({ locationId: nodes.locationId })
-    .from(nodes)
-    .where(eq(nodes.id, scope.nodeId));
+  const [node] = await tx.select({ id: nodes.id }).from(nodes).where(eq(nodes.id, scope.nodeId));
   if (node === undefined) throw new AppError("venue.time_zone_target_invalid", { reason: "node" });
-  if (scope.locationId !== undefined && scope.locationId !== node.locationId)
-    throw new AppError("venue.time_zone_target_invalid", { reason: "mismatch" });
-  const [location] = await tx.select().from(locations).where(eq(locations.id, node.locationId));
   const [tenant] = await tx
     .select({ legalName: tenants.legalName, country: tenants.country })
     .from(tenants)
     .where(eq(tenants.id, 1));
-  if (location === undefined || tenant === undefined)
-    throw new AppError("venue.time_zone_target_invalid", { reason: "location" });
-  const changes = await tx
-    .select()
-    .from(locationDayCutoverChanges)
-    .where(eq(locationDayCutoverChanges.locationId, node.locationId))
-    .orderBy(asc(locationDayCutoverChanges.effectiveBusinessDay));
-  const [settings] = await tx
-    .select()
-    .from(locationBusinessDaySettings)
-    .where(eq(locationBusinessDaySettings.locationId, node.locationId));
+  if (tenant === undefined) throw new AppError("venue.not_found", {});
+  const { clock, place } = await readVenueClockAndPlace(tx);
+  // Keyed by the venue's row id, so the table holds at most one row.
+  const [settings] = await tx.select().from(locationBusinessDaySettings).limit(1);
   return {
     nodeId: scope.nodeId,
-    locationId: node.locationId,
     ...tenant,
-    province: location.province,
-    savedZone: classifySavedTimeZone(location.timeZone),
-    clock: {
-      timeZone: location.timeZone,
-      dayCutover: storedCutover(location.dayCutover),
-      cutoverChanges: changes.map((change) => ({
-        effectiveBusinessDay: change.effectiveBusinessDay,
-        dayCutover: storedCutover(change.dayCutover),
-      })),
-    },
+    province: place.province,
+    savedZone: classifySavedTimeZone(clock.timeZone),
+    clock,
     clockRevision: settings?.revision ?? 0,
   };
 }

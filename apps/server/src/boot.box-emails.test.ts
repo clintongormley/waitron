@@ -154,7 +154,7 @@ describe("the running server's managers' email check", () => {
         .select({ name: locations.name })
         .from(locations)
         .where(eq(locations.id, venue.cfg.locationId));
-      const venueLocale = await readVenueLocale(suite.db, { locationId: venue.cfg.locationId });
+      const venueLocale = await readVenueLocale(suite.db, {});
       // The admin has no language of their own, so the email takes the venue's.
       expect(admin!.locale).toBeNull();
       expect(venueLocale).toBe("es-ES");

@@ -126,13 +126,15 @@ describe("time-zone repair management boundary", () => {
       await suite.db.update(persons).set({ role }).where(eq(persons.id, actor));
       const read = await request("GET");
       expect(read.status).toBe(200);
-      expect(await read.json()).toMatchObject({
-        ...scope,
+      const view = await read.json();
+      expect(view).toMatchObject({
+        nodeId: scope.nodeId,
         category: "invalid",
         eligible: true,
         admission: { state: "invalid" },
         clockRevision: 0,
       });
+      expect(view).not.toHaveProperty("locationId");
       expect(restart).not.toHaveBeenCalled();
       const response = await request();
       expect(response.status).toBe(200);
