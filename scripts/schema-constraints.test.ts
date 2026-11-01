@@ -325,7 +325,6 @@ const EXPECTED_FOREIGN_KEYS = [
   ["time_entries", ["captured_by_device_id"], "devices"],
   ["time_entries", ["correction_actor_id"], "persons"],
   ["time_entries", ["corrects_entry_id"], "time_entries"],
-  ["time_entries", ["location_id"], "locations"],
   ["time_entries", ["node_id"], "nodes"],
   ["time_entries", ["person_id"], "persons"],
   ["time_entries", ["recorded_by_person_id"], "persons"],

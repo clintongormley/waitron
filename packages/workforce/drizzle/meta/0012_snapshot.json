@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "aa90295c-41c0-4f88-a5c4-b5def10387d6",
+  "id": "27278566-ab9c-4149-ad6e-6ba042323074",
   "prevId": "31a42494-8918-415f-8655-46db45b1d601",
   "tables": {
     "absences": {
@@ -2244,6 +2244,14 @@
           ],
           "isUnique": true
         },
+        "time_entries_person_entry_uq": {
+          "name": "time_entries_person_entry_uq",
+          "columns": [
+            "id",
+            "person_id"
+          ],
+          "isUnique": true
+        },
         "time_entries_person_event_idx": {
           "name": "time_entries_person_event_idx",
           "columns": [
@@ -2257,15 +2265,7 @@
           "columns": [
             "person_id",
             "node_id",
-            "sequence_no"
-          ],
-          "isUnique": false
-        },
-        "time_entries_location_chain_idx": {
-          "name": "time_entries_location_chain_idx",
-          "columns": [
             "location_id",
-            "node_id",
             "sequence_no"
           ],
           "isUnique": false
@@ -2281,6 +2281,7 @@
           "name": "time_entries_chain_position_uq",
           "columns": [
             "node_id",
+            "location_id",
             "sequence_no"
           ],
           "isUnique": true
@@ -2493,7 +2494,14 @@
         "node_id": {
           "name": "node_id",
           "type": "text",
-          "primaryKey": true,
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
@@ -2549,6 +2557,19 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+        "workforce_chains_location_id_locations_id_fk": {
+          "name": "workforce_chains_location_id_locations_id_fk",
+          "tableFrom": "workforce_chains",
+          "tableTo": "locations",
+          "columnsFrom": [
+            "location_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "workforce_chains_last_entry_id_time_entries_id_fk": {
           "name": "workforce_chains_last_entry_id_time_entries_id_fk",
           "tableFrom": "workforce_chains",
@@ -2563,7 +2584,15 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "workforce_chains_node_id_location_id_pk": {
+          "columns": [
+            "node_id",
+            "location_id"
+          ],
+          "name": "workforce_chains_node_id_location_id_pk"
+        }
+      },
       "uniqueConstraints": {},
       "checkConstraints": {
         "workforce_chains_pointer_ck": {

@@ -9,7 +9,6 @@ import {
   flag,
   id,
   label,
-  locations,
   newId,
   nodes,
   originChecks,
@@ -49,7 +48,6 @@ export const timeEntries = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     personId: id("person_id").notNull(),
-    locationId: id("location_id").notNull(),
     /** Stamped by the append, never by the device. It keys the chain: one chain per node. */
     nodeId: id("node_id").notNull(),
     entryKind: workforceEntryKind("entry_kind").notNull(),
@@ -89,17 +87,12 @@ export const timeEntries = table(
     isFirstEntry: flag("is_first_entry").notNull(),
   },
   (t) => [
-    // restrict everywhere: a clock event must never lose the person, location, device or node it
-    // attributes work to.
+    // restrict everywhere: a clock event must never lose the person, device or node it attributes
+    // work to.
     foreignKey({
       columns: [t.personId],
       foreignColumns: [persons.id],
       name: "time_entries_person_fk",
-    }).onDelete("restrict"),
-    foreignKey({
-      columns: [t.locationId],
-      foreignColumns: [locations.id],
-      name: "time_entries_location_fk",
     }).onDelete("restrict"),
     foreignKey({
       columns: [t.capturedByDeviceId],
@@ -132,8 +125,8 @@ export const timeEntries = table(
       name: "time_entries_response_fk",
     }).onDelete("restrict"),
     foreignKey({
-      columns: [t.respondsToEntryId, t.personId, t.locationId],
-      foreignColumns: [t.id, t.personId, t.locationId],
+      columns: [t.respondsToEntryId, t.personId],
+      foreignColumns: [t.id, t.personId],
       name: "time_entries_response_subject_fk",
     }).onDelete("restrict"),
     foreignKey({
@@ -141,7 +134,7 @@ export const timeEntries = table(
       foreignColumns: [payPeriodClosures.id],
       name: "time_entries_closure_fk",
     }).onDelete("restrict"),
-    uniqueIndex("time_entries_subject_identity_uq").on(t.id, t.personId, t.locationId),
+    uniqueIndex("time_entries_person_entry_uq").on(t.id, t.personId),
     check(
       "time_entries_author_kind_ck",
       sql`${t.authorKind} is null or ${t.authorKind} in ('worker','manager','automatic')`,
@@ -163,8 +156,6 @@ export const timeEntries = table(
     index("time_entries_person_event_idx").on(t.personId, t.eventAt),
     // A person's latest entry on each node, which decides their clock state (`readLatestLiveEntry`).
     index("time_entries_person_chain_idx").on(t.personId, t.nodeId, t.sequenceNo),
-    // Attendance discovery reads each node's entries at one location by position, on every pass.
-    index("time_entries_location_chain_idx").on(t.locationId, t.nodeId, t.sequenceNo),
     index("time_entries_corrects_entry_idx").on(t.correctsEntryId),
     // ±14h, the wall-offset domain `sales` uses.
     check("time_entries_event_offset_ck", sql`${t.eventOffsetMinutes} between -840 and 840`),

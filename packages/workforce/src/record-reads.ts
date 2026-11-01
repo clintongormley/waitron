@@ -17,17 +17,13 @@ import { compareEvents, liveClockEntries } from "./effective-entries.js";
 export interface TimeRecordQuery {
   period: Period;
   personId?: string;
-  locationId?: string;
 }
 export async function readTimeRecord(
   tx: Database | Transaction,
   query: TimeRecordQuery,
 ): Promise<TimeRecord> {
   if (
-    (!query.personId && !query.locationId) ||
-    [query.personId, query.locationId].some(
-      (v) => v !== undefined && (typeof v !== "string" || !v),
-    ) ||
+    (query.personId !== undefined && (typeof query.personId !== "string" || !query.personId)) ||
     query.period === null ||
     typeof query.period !== "object" ||
     !isRecordDate(query.period.start) ||
@@ -35,11 +31,8 @@ export async function readTimeRecord(
     query.period.start >= query.period.end
   )
     throw new AppError("attendance.invalid", { reason: "record_scope_or_period" });
-  const entries = await readRecordedEntries(tx, {
-    locationId: query.locationId,
-    personId: query.personId,
-  });
-  const closures = await readClosures(tx, { locationId: query.locationId, period: query.period });
+  const entries = await readRecordedEntries(tx, { personId: query.personId });
+  const closures = await readClosures(tx, { period: query.period });
   const personId = query.personId;
   return recordInPeriod(
     projectTimeRecord(
@@ -67,7 +60,7 @@ function snapshotOf(snapshot: PayPeriodSnapshot, personId: string): PayPeriodSna
 
 export async function readRecordedEntries(
   tx: Database | Transaction,
-  scope: { personId?: string; locationId?: string; entryId?: string },
+  scope: { personId?: string; entryId?: string },
 ): Promise<TimeEntryRecord[]> {
   const rows = await tx
     .select()
@@ -76,7 +69,6 @@ export async function readRecordedEntries(
       and(
         scope.entryId === undefined ? undefined : eq(timeEntries.id, scope.entryId),
         scope.personId === undefined ? undefined : eq(timeEntries.personId, scope.personId),
-        scope.locationId === undefined ? undefined : eq(timeEntries.locationId, scope.locationId),
       ),
     );
   return rows.map(recordFromRow);
@@ -146,7 +138,6 @@ function recordFromRow(row: typeof timeEntries.$inferSelect): TimeEntryRecord {
   return {
     entryId: row.id,
     personId: row.personId,
-    locationId: row.locationId,
     nodeId: row.nodeId,
     entryKind: row.entryKind,
     eventAt: row.eventAt,

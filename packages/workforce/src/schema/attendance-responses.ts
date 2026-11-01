@@ -27,9 +27,7 @@ export const attendanceResponseCommands = table(
     personId: id("person_id")
       .notNull()
       .references(() => persons.id, { onDelete: "restrict" }),
-    locationId: id("location_id")
-      .notNull()
-      .references(() => locations.id, { onDelete: "restrict" }),
+    locationId: id("location_id").references(() => locations.id, { onDelete: "restrict" }),
     questionId: id("question_id"),
     action: responseAction("action").notNull(),
     input: json<AttendanceCommandPayload>("input").notNull(),

@@ -136,9 +136,6 @@ function entry(row: BackupRow): VerifiableEntry {
 function chainScope(row: BackupRow): string {
   return JSON.stringify([text(row, "node_id")]);
 }
-function closureScope(row: BackupRow): string {
-  return JSON.stringify([text(row, "node_id"), text(row, "location_id")]);
-}
 async function checkTime(query: BackupQuery): Promise<{ chain: boolean; head: boolean }> {
   const groups = new Map<string, { entries: VerifiableEntry[]; last: BackupRow }>();
   let chain = true;
@@ -205,12 +202,11 @@ async function checkClosures(query: BackupQuery): Promise<boolean> {
   let valid = true;
   for await (const row of query.rows("select * from pay_period_closures")) {
     try {
-      const key = closureScope(row);
+      const key = chainScope(row);
       const group = groups.get(key) ?? [];
       group.push({
         id: text(row, "id"),
         nodeId: text(row, "node_id"),
-        locationId: text(row, "location_id"),
         period: { start: text(row, "period_start"), end: text(row, "period_end") },
         clock: json(row, "clock") as PayPeriodClosure["clock"],
         snapshot: json(row, "snapshot") as PayPeriodClosure["snapshot"],

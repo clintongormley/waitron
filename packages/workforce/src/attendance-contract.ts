@@ -40,7 +40,7 @@ export interface AttendanceResponseReceipt {
   requestedByPersonId: string;
   authorizedByPersonId: string;
   personId: string;
-  locationId: string;
+  locationId: string | null;
   questionId: string | null;
   action: AttendanceCommandPayload["action"];
   input: AttendanceCommandPayload;

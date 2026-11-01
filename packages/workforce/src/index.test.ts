@@ -107,14 +107,13 @@ describe("employments constraint declarations (forces the lazy extraConfig callb
 });
 
 describe("time_entries constraint declarations (forces the lazy extraConfig callback)", () => {
-  it("declares time_entries' seven foreign keys and the offset/second checks", () => {
+  it("declares time_entries' six foreign keys and the offset/second checks", () => {
     const config = getTableConfig(api.timeEntries);
 
     const fkNames = config.foreignKeys.map((fk) => fk.getName());
     expect(fkNames).toEqual(
       expect.arrayContaining([
         "time_entries_person_fk",
-        "time_entries_location_fk",
         "time_entries_captured_by_device_fk",
         "time_entries_recorded_by_person_fk",
         "time_entries_node_fk",

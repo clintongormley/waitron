@@ -158,6 +158,20 @@ for (const { tag } of journal.entries)
     join(previousFolder, `${tag}.sql`),
   );
 afterAll(() => rmSync(previousFolder, { recursive: true, force: true }));
+// Main's set before A1268, which refuses a venue holding working time (working-time-per-venue-migration.test.ts).
+const mainFolder = mkdtempSync(join(tmpdir(), "a10-4-main-response-"));
+mkdirSync(join(mainFolder, "meta"));
+const mainJournal = JSON.parse(
+  readFileSync(join(WORKFORCE_MIGRATIONS.migrationsFolder, "meta/_journal.json"), "utf8"),
+) as { entries: { tag: string }[] };
+mainJournal.entries = mainJournal.entries.slice(0, 12);
+writeFileSync(join(mainFolder, "meta/_journal.json"), JSON.stringify(mainJournal));
+for (const { tag } of mainJournal.entries)
+  copyFileSync(
+    join(WORKFORCE_MIGRATIONS.migrationsFolder, `${tag}.sql`),
+    join(mainFolder, `${tag}.sql`),
+  );
+afterAll(() => rmSync(mainFolder, { recursive: true, force: true }));
 
 describe("populated A10-3 response-table upgrade", () => {
   const old = useVenueDb({
@@ -250,15 +264,7 @@ describe("populated A10-3 response-table upgrade", () => {
       entries: JSON.stringify(
         db.execute(sql`select * from time_entries order by sequence_no`).rows,
       ),
-      // A later migration keys the head by node alone and drops its location.
-      heads: JSON.stringify(
-        db
-          .execute<Record<string, unknown>>(sql`select * from workforce_chains`)
-          .rows.map((head) => {
-            delete head.location_id;
-            return head;
-          }),
-      ),
+      heads: JSON.stringify(db.execute(sql`select * from workforce_chains`).rows),
       questions: JSON.stringify(db.execute(sql`select * from attendance_questions`).rows),
       mail: JSON.stringify(db.execute(sql`select * from attendance_mail`).rows),
       tables: db
@@ -267,7 +273,7 @@ describe("populated A10-3 response-table upgrade", () => {
         )
         .rows.map((r) => r.name),
     };
-    await runMigrations(db, WORKFORCE_MIGRATIONS);
+    await runMigrations(db, { ...WORKFORCE_MIGRATIONS, migrationsFolder: mainFolder });
     expect(
       JSON.stringify(db.execute(sql`select * from time_entries order by sequence_no`).rows),
     ).toBe(before.entries);

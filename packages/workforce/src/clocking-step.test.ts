@@ -161,16 +161,12 @@ describe("clocking across a backward step of the box's clock", () => {
     await run((tx) => backend.clockIn(tx, at(p, "09:00", a)));
     await run((tx) => backend.clockOut(tx, at(p, "12:00", a)));
     await run((tx) => backend.clockIn(tx, at(p, "13:00", b)));
-    const { rows } = await suite.db.execute<{ location_id: string; sequence_no: number }>(
-      sql`select location_id, sequence_no from time_entries where person_id = ${p} order by event_at`,
+    const { rows } = await suite.db.execute<{ sequence_no: number }>(
+      sql`select sequence_no from time_entries where person_id = ${p} order by event_at`,
     );
     // The suite shares one node across its cases, so positions are read relative to the first.
     const first = Number(rows[0]!.sequence_no);
-    expect(rows.map((r) => [r.location_id, Number(r.sequence_no) - first + 1])).toEqual([
-      [a, 1],
-      [a, 2],
-      [b, 3],
-    ]);
+    expect(rows.map((r) => Number(r.sequence_no) - first + 1)).toEqual([1, 2, 3]);
     const entry = await run((tx) => readLatestLiveEntry(tx, p));
     expect({ kind: entry?.entryKind, locationId: entry?.locationId }).toEqual({
       kind: "in",

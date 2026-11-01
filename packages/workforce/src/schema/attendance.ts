@@ -166,18 +166,18 @@ export const attendanceQuestions = table(
       t.id,
     ),
     foreignKey({
-      columns: [t.openEntryId, t.personId, t.locationId],
-      foreignColumns: [timeEntries.id, timeEntries.personId, timeEntries.locationId],
+      columns: [t.openEntryId, t.personId],
+      foreignColumns: [timeEntries.id, timeEntries.personId],
       name: "attendance_questions_open_fk",
     }).onDelete("restrict"),
     foreignKey({
-      columns: [t.automaticEntryId, t.personId, t.locationId],
-      foreignColumns: [timeEntries.id, timeEntries.personId, timeEntries.locationId],
+      columns: [t.automaticEntryId, t.personId],
+      foreignColumns: [timeEntries.id, timeEntries.personId],
       name: "attendance_questions_automatic_fk",
     }).onDelete("restrict"),
     foreignKey({
-      columns: [t.resolvedByEntryId, t.personId, t.locationId],
-      foreignColumns: [timeEntries.id, timeEntries.personId, timeEntries.locationId],
+      columns: [t.resolvedByEntryId, t.personId],
+      foreignColumns: [timeEntries.id, timeEntries.personId],
       name: "attendance_questions_resolution_fk",
     }).onDelete("restrict"),
     foreignKey({

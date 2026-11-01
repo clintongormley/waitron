@@ -188,10 +188,10 @@ describe("appendToChain", () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
-          id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          id, person_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, captured_by_source, recorded_at, entry_hash, sequence_no,
           is_first_entry
-        ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'in',
+        ) values (${newId()}, ${personId}, ${nodeId}, 'in',
           '2026-01-05T09:00:00.123Z', 0,
           ${personId}, 'dashboard', '2026-01-05T09:00:00.000Z', ${"0".repeat(64)}, 1, true)`),
     );
@@ -205,10 +205,10 @@ describe("appendToChain", () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
-          id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          id, person_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, captured_by_source, recorded_at, entry_hash, sequence_no,
           is_first_entry
-        ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'in',
+        ) values (${newId()}, ${personId}, ${nodeId}, 'in',
           '2026-01-05T09:00:00.000Z', 0,
           ${personId}, 'dashboard', '2026-01-05T09:00:00.123Z', ${"0".repeat(64)}, 1, true)`),
     );
@@ -263,10 +263,10 @@ describe("appendToChain", () => {
     // `transaction`.
     await suite.db.execute(sql`
       insert into time_entries (
-        id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+        id, person_id, node_id, entry_kind, event_at, event_offset_minutes,
         recorded_by_person_id, captured_by_source, recorded_at, entry_hash, sequence_no,
         is_first_entry
-      ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'in',
+      ) values (${newId()}, ${personId}, ${nodeId}, 'in',
         '2026-01-05T08:00:00.000Z', 0,
         ${personId}, 'dashboard', '2026-01-05T08:00:00.000Z', ${"1".repeat(64)}, 1, true)`);
 

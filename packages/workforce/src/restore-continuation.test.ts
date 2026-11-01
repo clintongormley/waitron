@@ -76,9 +76,9 @@ async function readHead() {
 function rawForkInsertAt(position: number) {
   return suite.db.run(sql`
     insert into time_entries (
-      id, captured_by_source, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+      id, captured_by_source, person_id, node_id, entry_kind, event_at, event_offset_minutes,
       recorded_by_person_id, recorded_at, entry_hash, prev_entry_hash, sequence_no, is_first_entry
-    ) values (${globalThis.crypto.randomUUID()}, 'dashboard', ${personId}, ${locationId}, ${nodeId}, 'in',
+    ) values (${globalThis.crypto.randomUUID()}, 'dashboard', ${personId}, ${nodeId}, 'in',
       '2026-01-05T20:00:00.000Z', 0,
       ${personId}, '2026-01-05T20:00:00.000Z', ${"B".repeat(64)}, ${"A".repeat(64)}, ${position}, 0)`);
 }

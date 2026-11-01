@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { newId, type Database, type Transaction } from "@waitron/db";
 import {
   AppError,
@@ -40,7 +40,6 @@ export async function appendClosureMarker(
     { nodeId },
     {
       personId: target.personId,
-      locationId: target.locationId,
       entryKind: "confirmation",
       eventAt: target.eventAt,
       eventOffsetMinutes: target.offsetMinutes,
@@ -68,17 +67,15 @@ function validatePeriod(period: Period): void {
 }
 export async function readPayPeriodClosures(
   tx: Database | Transaction,
-  input: { locationId: string; period: Period },
+  input: { period: Period },
 ): Promise<PayPeriodClosure[]> {
   validatePeriod(input.period);
-  if (typeof input.locationId !== "string" || !input.locationId) invalidPeriod("location");
-  return readClosures(tx, { locationId: input.locationId, period: input.period });
+  return readClosures(tx, { period: input.period });
 }
 export async function closePayPeriod(
   tx: Transaction,
   input: {
     nodeId: string;
-    locationId: string;
     period: Period;
     clock: BusinessDayClock;
     now: string;
@@ -87,7 +84,7 @@ export async function closePayPeriod(
   },
 ): Promise<PayPeriodClosure> {
   validatePeriod(input.period);
-  const existing = await readClosures(tx, { locationId: input.locationId, period: input.period });
+  const existing = await readClosures(tx, { period: input.period });
   const replay = existing.find(
     (row) => row.period.start === input.period.start && row.period.end === input.period.end,
   );
@@ -110,7 +107,7 @@ export async function closePayPeriod(
   const scheduledCloseAt = businessDayBoundaryAt(input.clock, input.period.end);
   if (closedAt < scheduledCloseAt)
     throw new AppError("pay_period.not_due", { closeAt: scheduledCloseAt });
-  const entries = await readRecordedEntries(tx, { locationId: input.locationId });
+  const entries = await readRecordedEntries(tx, {});
   const closureId = newId();
   const unmarked = automaticEntryIdsWithoutMarker(entries);
   const candidates = entries.filter((e) => unmarked.has(e.entryId));
@@ -128,9 +125,7 @@ export async function closePayPeriod(
   }));
   const counted = recordInPeriod(projectTimeRecord([...entries, ...virtual]), input.period);
   const eligible = candidates.filter((e) =>
-    counted.sessions.some(
-      (s) => s.personId === e.personId && s.locationId === e.locationId && s.endedAt === e.eventAt,
-    ),
+    counted.sessions.some((s) => s.personId === e.personId && s.endedAt === e.eventAt),
   );
   const eligibleIds = new Set(eligible.map((e) => e.entryId));
   const markers = virtual.filter((e) => eligibleIds.has(e.extension.respondsToEntryId));
@@ -179,18 +174,12 @@ export async function closePayPeriod(
   const [previous] = await tx
     .select()
     .from(payPeriodClosures)
-    .where(
-      and(
-        eq(payPeriodClosures.nodeId, input.nodeId),
-        eq(payPeriodClosures.locationId, input.locationId),
-      ),
-    )
+    .where(eq(payPeriodClosures.nodeId, input.nodeId))
     .orderBy(desc(payPeriodClosures.sequenceNo))
     .limit(1);
   const value: Omit<PayPeriodClosure, "closureHash"> = {
     id: closureId,
     nodeId: input.nodeId,
-    locationId: input.locationId,
     period: input.period,
     clock: structuredClone(input.clock),
     scheduledCloseAt,

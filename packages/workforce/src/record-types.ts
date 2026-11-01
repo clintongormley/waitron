@@ -32,7 +32,6 @@ export interface PayPeriodSnapshot {
 export interface PayPeriodClosure {
   id: string;
   nodeId: string;
-  locationId: string;
   period: Period;
   clock: BusinessDayClock;
   scheduledCloseAt: string;
@@ -51,7 +50,6 @@ export interface ClosedPeriodImpact {
 }
 export interface PayPeriodClosureView {
   closureId: string;
-  locationId: string;
   period: Period;
   closedAt: string;
   closureHash: string;

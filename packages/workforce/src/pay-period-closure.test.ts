@@ -212,6 +212,18 @@ it("serialises simultaneous closes into one closure and one marker", async () =>
     (await suite.db.select().from(api.timeEntries)).filter((e) => e.entryKind === "confirmation"),
   ).toHaveLength(1);
 });
+it("closes a period once for the venue", async () => {
+  const first = await close();
+  const secondNode = await seedNode(suite.db, brandedLocationId(locationId));
+  const again = await close({ nodeId: secondNode });
+  expect(again.id).toBe(first.id);
+  expect(await api.readPayPeriodClosures(suite.db, { period })).toHaveLength(1);
+  const february = await close({
+    period: { start: "2026-11-01", end: "2026-12-01" },
+    now: "2026-12-01T05:00:00Z",
+  });
+  expect(february.sequenceNo).toBe(2);
+});
 it("rolls back closure, markers and time-chain head when a second marker is refused", async () => {
   await automatic();
   await automatic(other);
@@ -410,11 +422,6 @@ it("freezes accepted missing clock-in and clock-out entries with their requests"
   expect(frozen.snapshot.sessions.map((s) => s.workedMinutes)).toEqual([480]);
   expect(frozen.snapshot.entries).toHaveLength(4);
   expect(frozen.snapshot.markedAutomaticEntryIds).toEqual([]);
-});
-it.each([null, "", []])("refuses a malformed closure read location %j", async (bad) => {
-  await expect(
-    api.readPayPeriodClosures(suite.db, { locationId: bad as string, period }),
-  ).rejects.toMatchObject({ code: "pay_period.invalid" });
 });
 it("reads overlapping closures and verifies successive months on the same chain", async () => {
   const first = await close();

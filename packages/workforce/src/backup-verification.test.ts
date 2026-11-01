@@ -144,9 +144,9 @@ beforeEach(async () => {
     closePayPeriod(tx, {
       nodeId: retired,
       locationId: otherPlace,
-      period: { start: "2026-01-01", end: "2026-02-01" },
+      period: { start: "2026-04-01", end: "2026-05-01" },
       clock: { timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] },
-      now: "2026-02-01T00:00:01.000Z",
+      now: "2026-05-01T00:00:01.000Z",
       ruleset: makeRuleset(),
       origin: jobOrigin("dashboard"),
     }),
@@ -259,20 +259,19 @@ describe("complete captured workforce backup evidence", () => {
       invalid(await run(), "history");
     },
   );
-  it("checks retired-node closure history at another location", async () => {
+  it("checks retired-node closure history", async () => {
     await both(
       `update pay_period_closures set closure_hash='${"C".repeat(64)}' where node_id='${retired}'`,
     );
     invalid(await run(), "history");
   });
-  it("verifies closures at two locations of one node as two chains", async () => {
+  it("verifies a node's closures as one chain", async () => {
     await original.db.transaction((tx) =>
       closePayPeriod(tx, {
         nodeId: node,
-        locationId: otherPlace,
-        period: { start: "2026-02-01", end: "2026-03-01" },
+        period: { start: "2026-05-01", end: "2026-06-01" },
         clock: { timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] },
-        now: "2026-03-01T00:00:01.000Z",
+        now: "2026-06-01T00:00:01.000Z",
         ruleset: makeRuleset(),
         origin: jobOrigin("dashboard"),
       }),
@@ -280,11 +279,9 @@ describe("complete captured workforce backup evidence", () => {
     const [closure] = await original.db
       .select()
       .from(payPeriodClosures)
-      .where(sql`node_id = ${node} and location_id = ${otherPlace}`);
+      .where(sql`node_id = ${node} and period_start = '2026-05-01'`);
+    expect(closure!.sequenceNo).toBe(4);
     await restored.db.insert(payPeriodClosures).values(closure!);
-    expect(await original.db.select().from(timeEntries)).toEqual(
-      await restored.db.select().from(timeEntries),
-    );
     expect(await run()).toEqual(passed);
   });
   it("accepts legacy entries with no record extension", async () => {
@@ -377,13 +374,13 @@ describe("complete captured workforce backup evidence", () => {
   });
   it.each([node, retired])("detects old middle damage on node %s", async (n) => {
     await both(
-      `update time_entries set event_offset_minutes=120 where node_id='${n}' and location_id='${place}' and sequence_no=2`,
+      `update time_entries set event_offset_minutes=120 where node_id='${n}' and sequence_no=2`,
     );
     invalid(await run(), "chain");
   });
   it("detects damage on another location", async () => {
     await both(
-      `update time_entries set entry_hash='${"A".repeat(64)}' where id=(select id from time_entries where node_id='${node}' and location_id='${otherPlace}' order by sequence_no limit 1)`,
+      `update time_entries set entry_hash='${"A".repeat(64)}' where node_id='${node}' and sequence_no=5`,
     );
     invalid(await run(), "chain");
   });
