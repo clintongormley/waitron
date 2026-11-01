@@ -5,6 +5,7 @@ import { AppError } from "@waitron/shared";
 export const ACCOUNT_ACTION_RATE_WINDOW_MS = 60_000;
 export const ACCOUNT_ACTION_RATE_MAX = 30;
 export const ACCOUNT_ACTION_GLOBAL_RATE_MAX = 300;
+const PASSWORD_RESET_COOLDOWN_MS = 60_000;
 
 export interface AccountActionRateLimiter {
   check(subject: string): void;
@@ -18,11 +19,14 @@ export function createPasswordResetCooldown(
   return (email) => {
     const current = now();
     for (const [key, deadline] of deadlines) {
-      if (deadline <= current) deadlines.delete(key);
+      // A deadline further ahead than the wait was set before a backward clock step.
+      if (deadline <= current || deadline - current > PASSWORD_RESET_COOLDOWN_MS) {
+        deadlines.delete(key);
+      }
     }
     const key = createHash("sha256").update(email.trim().toLowerCase()).digest("hex");
     if (deadlines.has(key)) return false;
-    deadlines.set(key, current + 60_000);
+    deadlines.set(key, current + PASSWORD_RESET_COOLDOWN_MS);
     return true;
   };
 }
@@ -37,7 +41,8 @@ export function createAccountActionRateLimiter(
   return {
     check(subject: string): void {
       const current = now();
-      if (current - windowStart >= ACCOUNT_ACTION_RATE_WINDOW_MS) {
+      // A start ahead of the clock was set before a backward clock step.
+      if (current - windowStart >= ACCOUNT_ACTION_RATE_WINDOW_MS || current < windowStart) {
         windowStart = current;
         globalCount = 0;
         counts.clear();

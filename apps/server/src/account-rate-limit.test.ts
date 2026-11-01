@@ -53,3 +53,43 @@ describe("password reset cooldown", () => {
     expect(accept("other@example.com")).toBe(false);
   });
 });
+
+describe("account action limits across a backward clock step", () => {
+  const FAR = 400 * 24 * 60 * 60 * 1000;
+
+  it("opens a fresh window when the limiter's window started ahead of the clock", () => {
+    let now = FAR;
+    const limiter = createAccountActionRateLimiter(() => now);
+    for (let i = 0; i < ACCOUNT_ACTION_RATE_MAX; i += 1) limiter.check("account-a");
+    for (let i = ACCOUNT_ACTION_RATE_MAX; i < ACCOUNT_ACTION_GLOBAL_RATE_MAX; i += 1)
+      limiter.check(`account-${i}`);
+    now = FAR - 1;
+    expect(() => limiter.check("account-a")).not.toThrow();
+    expect(() => limiter.check("one-more-account")).not.toThrow();
+  });
+
+  it("keeps a full window when the clock reads its start", () => {
+    const limiter = createAccountActionRateLimiter(() => FAR);
+    for (let i = 0; i < ACCOUNT_ACTION_RATE_MAX; i += 1) limiter.check("account-a");
+    expect(() => limiter.check("account-a")).toThrowError(
+      expect.objectContaining({ code: "account_action.rate_limited" }),
+    );
+  });
+
+  it("lets a reset through whose wait ends more than the minute ahead of the clock", () => {
+    let now = FAR;
+    const accept = createPasswordResetCooldown(() => now);
+    expect(accept("person@example.com")).toBe(true);
+    now = FAR - 1;
+    expect(accept("person@example.com")).toBe(true);
+  });
+
+  it("keeps a reset's wait that ends a minute or less ahead of the clock", () => {
+    let now = FAR;
+    const accept = createPasswordResetCooldown(() => now);
+    expect(accept("person@example.com")).toBe(true);
+    expect(accept("person@example.com")).toBe(false); // its wait ends exactly a minute ahead
+    now = FAR + 1;
+    expect(accept("person@example.com")).toBe(false);
+  });
+});

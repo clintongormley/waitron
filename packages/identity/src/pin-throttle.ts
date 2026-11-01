@@ -54,6 +54,19 @@ function entryKey(slot: string, personId: string): string {
   return `${slot}:${personId}`;
 }
 
+/**
+ * Whether an entry last touched at `lastAt` is forgotten at `t`: idle, or touched further ahead of
+ * the clock than the longest wait, so stamped before a backward clock step, which would otherwise
+ * hold its wait for the step's length.
+ */
+export function pinThrottleIdle(lastAt: number, t: number): boolean {
+  return t - lastAt >= PIN_THROTTLE_IDLE_MS || lastAt - t > PIN_THROTTLE_MAX_WAIT_SECONDS * 1000;
+}
+
+function isIdle(entry: Entry, t: number): boolean {
+  return pinThrottleIdle(entry.lastAt, t);
+}
+
 function waitSecondsFor(fails: number): number {
   return Math.min(PIN_THROTTLE_MAX_WAIT_SECONDS, 2 ** (fails - PIN_THROTTLE_FREE_ATTEMPTS));
 }
@@ -69,7 +82,9 @@ export function pinThrottleRetryAfterSeconds(unlockAt: number, t: number): numbe
 
 export function createPinThrottle(opts: PinThrottleOptions = {}): PinThrottle {
   const { now = Date.now } = opts;
-  // Kept in order of `lastAt`, oldest first: every touch moves its entry to the end.
+  // Kept in order of `lastAt`, oldest first: every touch moves its entry to the end. Only a
+  // backward clock step breaks that order, so the sweeps pass over an entry stamped ahead of the
+  // clock rather than stopping at it.
   const entries = new Map<string, Entry>();
   const heldBySlot = new Map<string, number>();
 
@@ -89,7 +104,7 @@ export function createPinThrottle(opts: PinThrottleOptions = {}): PinThrottle {
   function liveEntry(key: string, t: number): Entry | undefined {
     const entry = entries.get(key);
     if (entry === undefined) return undefined;
-    if (t - entry.lastAt >= PIN_THROTTLE_IDLE_MS) {
+    if (isIdle(entry, t)) {
       drop(key, entry);
       return undefined;
     }
@@ -100,8 +115,8 @@ export function createPinThrottle(opts: PinThrottleOptions = {}): PinThrottle {
   // its share until the process restarts.
   function hasRoom(slot: string, t: number): boolean {
     for (const [key, entry] of entries) {
-      if (t - entry.lastAt < PIN_THROTTLE_IDLE_MS) break;
-      drop(key, entry);
+      if (isIdle(entry, t)) drop(key, entry);
+      else if (entry.lastAt <= t) break;
     }
     return (heldBySlot.get(slot) ?? 0) < PIN_THROTTLE_MAX_KEYS_PER_SLOT;
   }
@@ -131,12 +146,13 @@ export function createPinThrottle(opts: PinThrottleOptions = {}): PinThrottle {
     wouldRefuse(slot: string, personId: string): boolean {
       const t = now();
       const entry = entries.get(entryKey(slot, personId));
-      if (entry !== undefined && t - entry.lastAt < PIN_THROTTLE_IDLE_MS) return t < entry.unlockAt;
+      if (entry !== undefined && !isIdle(entry, t)) return t < entry.unlockAt;
       // A new pair: refused only while its slot is full once `check` has swept the idle entries.
       let idleInSlot = 0;
       for (const kept of entries.values()) {
-        if (t - kept.lastAt < PIN_THROTTLE_IDLE_MS) break;
-        if (kept.slot === slot) idleInSlot += 1;
+        if (isIdle(kept, t)) {
+          if (kept.slot === slot) idleInSlot += 1;
+        } else if (kept.lastAt <= t) break;
       }
       return (heldBySlot.get(slot) ?? 0) - idleInSlot >= PIN_THROTTLE_MAX_KEYS_PER_SLOT;
     },

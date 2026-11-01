@@ -1,6 +1,6 @@
 import "./errors.js";
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, gt, lt } from "drizzle-orm";
+import { and, eq, gt, lt, lte, or } from "drizzle-orm";
 import { isUniqueViolation } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
@@ -13,6 +13,11 @@ import type { TotpKeyRing } from "./mfa.js";
 import type { SecretCheck } from "./secret-check.js";
 
 const STATE_TTL_MS = 10 * 60 * 1000;
+
+/** A later expiry was stamped before a backward clock step, and counts as passed. */
+function latestLiveExpiry(now: Date): string {
+  return new Date(now.getTime() + STATE_TTL_MS).toISOString();
+}
 const AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
 
 function digest(value: string): string {
@@ -46,7 +51,14 @@ async function begin(
   const nonce = randomBytes(32).toString("base64url");
   const verifier = randomBytes(48).toString("base64url");
   const now = input.now ?? new Date();
-  await tx.delete(googleOidcStates).where(lt(googleOidcStates.expiresAt, now.toISOString()));
+  await tx
+    .delete(googleOidcStates)
+    .where(
+      or(
+        lt(googleOidcStates.expiresAt, now.toISOString()),
+        gt(googleOidcStates.expiresAt, latestLiveExpiry(now)),
+      ),
+    );
   await tx.insert(googleOidcStates).values({
     personId,
     mode,
@@ -96,6 +108,7 @@ export async function claimGoogleState(
       and(
         eq(googleOidcStates.stateHash, digest(input.state)),
         gt(googleOidcStates.expiresAt, (input.now ?? new Date()).toISOString()),
+        lte(googleOidcStates.expiresAt, latestLiveExpiry(input.now ?? new Date())),
       ),
     )
     .returning({

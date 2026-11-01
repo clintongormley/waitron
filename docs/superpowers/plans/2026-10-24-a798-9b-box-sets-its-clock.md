@@ -3212,6 +3212,31 @@ any writer leaves past the limits used here, and no gate reset on a clock that n
   with the committed one and it holds.
 - **M5:** `workIsDue`'s comment names `retryDue`.
 
+### Task 15c-2's notes (2026-11-01)
+
+- **The rule as written, with no allowance for a small step.** A link, Google state or enrolment
+  whose expiry lies even one millisecond further ahead than its lifetime is refused, so a step back
+  of a few seconds refuses a link issued in the minutes before it; the person asks for a new one.
+  The two limiters reopen their window on any backward step. Both err towards refusing a
+  credential or relaxing a flood guard for one window, never towards keeping either for the
+  step's length.
+- **The email-change code's own expiry has no ceiling.** It is written in the same insert as the
+  link, 10 minutes after issue against the link's 30, so whenever it lies more than its 10 minutes
+  ahead the link lies more than its 30 ahead, and the link's ceiling already refuses the code
+  (control 2 in `t15c2/mutate.py` removes that ceiling and fails the code case).
+- **The sweeps follow the rule too** (not named above). The next issue of an account action deletes
+  a link of that purpose stamped beyond its lifetime, as it deletes an expired one; the next Google
+  ceremony sweeps such a state.
+- **"Lapsed" means forgotten.** A PIN or password-throttle entry last touched further ahead than the
+  longest wait (60 seconds) starts its streak over, the same relaxation a restart already gives
+  (`pin-throttle.ts`'s header). The rule is shared as `pinThrottleIdle`; the password throttle's
+  forgotten-address counters follow it too. A backward step breaks the order the sweeps rely on, so
+  they pass over an entry stamped ahead rather than stopping at it, and the password throttle's
+  `begin` and `wouldRefuse` judge their own entry instead of trusting the sweep to have removed it.
+  A sweep can still stop at a live entry with an idle one behind it, until the entries stamped
+  before the step have gone idle or been used again — by reasoning, not a run, at most the idle
+  time plus the longest wait (16 minutes). That only delays freeing room.
+
 ### Task 15's departures and notes (2026-10-31)
 
 - **Stream generations: no hold; the prune reads the bucket's clock** (Task 15's review, I2). The

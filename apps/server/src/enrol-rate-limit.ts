@@ -43,7 +43,8 @@ export function createEnrolRateLimiter(opts: EnrolRateLimiterOptions = {}): Enro
   return {
     check(): void {
       const t = now();
-      if (t - windowStart >= ENROL_RATE_WINDOW_MS) {
+      // A start ahead of the clock was set before a backward clock step.
+      if (t - windowStart >= ENROL_RATE_WINDOW_MS || t < windowStart) {
         windowStart = t;
         count = 0;
       }

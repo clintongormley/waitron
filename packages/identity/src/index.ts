@@ -116,6 +116,7 @@ export {
   PIN_THROTTLE_IDLE_MS,
   PIN_THROTTLE_MAX_KEYS_PER_SLOT,
   PIN_THROTTLE_MAX_WAIT_SECONDS,
+  pinThrottleIdle,
   createPinThrottle,
   pinThrottleRetryAfterSeconds,
   pinThrottleUnlockAt,

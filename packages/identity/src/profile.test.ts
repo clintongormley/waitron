@@ -810,3 +810,41 @@ describe("a fresh sign-in by the signed-in person", () => {
     ).toBe(f.personId);
   });
 });
+
+describe("an authenticator enrolment begun before a backward clock step", () => {
+  const TEN_MINUTES_MS = 10 * 60 * 1000;
+  const keyRing = { current: { version: 1, key: Buffer.alloc(32, 5) } };
+
+  async function finishWithExpiry(aheadOfClockMs: number): Promise<string> {
+    const f = await fixture();
+    const pending = await withTransaction(suite.db, (tx) =>
+      beginOwnTotpEnrollment(tx, { ...f, currentPassword: "correct horse", keyRing }),
+    );
+    const expiresAt = new Date(Date.now() + aheadOfClockMs).toISOString();
+    await suite.db.execute(
+      sql`update totp_enrollments set expires_at = ${expiresAt} where id = ${pending.enrollmentId}`,
+    );
+    try {
+      await withTransaction(suite.db, (tx) =>
+        finishOwnTotpEnrollment(tx, {
+          ...f,
+          enrollmentId: pending.enrollmentId,
+          code: generateSync({ secret: pending.secret }),
+          keyRing,
+        }),
+      );
+      return "accepted";
+    } catch (error) {
+      return (error as { code?: string }).code ?? String(error);
+    }
+  }
+
+  it("refuses an enrolment whose expiry lies more than its ten minutes ahead of the clock", async () => {
+    expect(await finishWithExpiry(400 * 24 * 60 * 60 * 1000)).toBe("totp.invalid");
+    expect(await finishWithExpiry(TEN_MINUTES_MS + 60_000)).toBe("totp.invalid");
+  });
+
+  it("finishes an enrolment whose expiry lies just inside its ten minutes", async () => {
+    expect(await finishWithExpiry(TEN_MINUTES_MS - 60_000)).toBe("accepted");
+  });
+});

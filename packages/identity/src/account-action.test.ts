@@ -992,3 +992,110 @@ describe("confirming an email change by code when the account moved on", () => {
     }
   });
 });
+
+describe("an account action issued before a backward clock step", () => {
+  const NOW = new Date("2026-10-01T12:00:00.000Z");
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const later = (ms: number) => new Date(NOW.getTime() + ms);
+
+  async function issueReset(email: string, issuedAt: Date) {
+    const personId = await seedManager(suite.db, { email });
+    const issued = await run((tx) =>
+      issueAccountAction(tx, { personId, purpose: "password_reset", now: issuedAt }),
+    );
+    return { personId, issued };
+  }
+
+  async function outcome(fn: () => Promise<unknown>): Promise<string> {
+    try {
+      await fn();
+      return "accepted";
+    } catch (error) {
+      return isAppError(error) ? error.code : `not an AppError: ${String(error)}`;
+    }
+  }
+  const complete = (token: string, purpose: "password_reset" | "invitation", now: Date) =>
+    outcome(() =>
+      run((tx) =>
+        completeAccountAction(tx, {
+          token,
+          purpose,
+          password: "a new secure password",
+          ...(purpose === "invitation" ? { pin: "4321" } : {}),
+          now,
+        }),
+      ),
+    );
+  const inspect = (token: string, purpose: "password_reset" | "invitation", now: Date) =>
+    outcome(() => run((tx) => inspectAccountAction(tx, { token, purpose, now })));
+
+  it("refuses a password-reset link whose expiry lies more than its lifetime ahead of the clock", async () => {
+    const { issued } = await issueReset("step-reset@x.com", later(400 * DAY_MS));
+    expect(await inspect(issued.token, "password_reset", NOW)).toBe("account_action.invalid");
+    expect(await complete(issued.token, "password_reset", NOW)).toBe("account_action.invalid");
+  });
+
+  it("refuses a link issued one millisecond ahead of the clock, and accepts one issued at it", async () => {
+    const ahead = await issueReset("step-reset-1ms@x.com", later(1));
+    expect(await inspect(ahead.issued.token, "password_reset", NOW)).toBe("account_action.invalid");
+    expect(await complete(ahead.issued.token, "password_reset", NOW)).toBe(
+      "account_action.invalid",
+    );
+    const atClock = await issueReset("step-reset-at@x.com", NOW);
+    expect(await inspect(atClock.issued.token, "password_reset", NOW)).toBe("accepted");
+    expect(await complete(atClock.issued.token, "password_reset", NOW)).toBe("accepted");
+  });
+
+  it("measures an invitation against the invitation's own day, not a reset's half hour", async () => {
+    const personId = await seedManager(suite.db, { email: "step-invite@x.com" });
+    await makePending(personId);
+    const issued = await run((tx) =>
+      issueAccountAction(tx, { personId, purpose: "invitation", now: NOW }),
+    );
+    const anHourEarlier = later(-60 * 60 * 1000);
+    expect(await inspect(issued.token, "invitation", anHourEarlier)).toBe("account_action.invalid");
+    expect(await inspect(issued.token, "invitation", NOW)).toBe("accepted");
+    expect(await complete(issued.token, "invitation", NOW)).toBe("accepted");
+  });
+
+  it("refuses an email-change code whose link lies more than its lifetime ahead of the clock", async () => {
+    const codeKey = Buffer.alloc(32, 11);
+    const personId = await seedManager(suite.db, { email: "step-code@x.com" });
+    await suite.db.execute(
+      sql`update persons set pending_email = 'step-changed@x.com' where id = ${personId}`,
+    );
+    const issue = (now: Date) =>
+      run((tx) =>
+        issueAccountAction(tx, {
+          personId,
+          purpose: "email_change",
+          codeKey,
+          targetEmail: "step-changed@x.com",
+          now,
+        }),
+      );
+    const ahead = await issue(later(1));
+    await expect(
+      run((tx) => confirmEmailChangeByCode(tx, { personId, code: ahead.code!, codeKey, now: NOW })),
+    ).resolves.toBeNull();
+    const atClock = await issue(NOW);
+    await expect(
+      run((tx) =>
+        confirmEmailChangeByCode(tx, { personId, code: atClock.code!, codeKey, now: NOW }),
+      ),
+    ).resolves.toBe("step-changed@x.com");
+  });
+
+  it("deletes a link stamped beyond its lifetime when the next one is issued, as it deletes an expired one", async () => {
+    const { personId, issued } = await issueReset("step-history@x.com", later(400 * DAY_MS));
+    const next = await run((tx) =>
+      issueAccountAction(tx, { personId, purpose: "password_reset", now: NOW }),
+    );
+    const rows = await suite.db.execute<{ id: string }>(
+      sql`select id from management_account_actions
+          where person_id = ${personId} and purpose = 'password_reset'`,
+    );
+    expect(rows.rows.map((row) => row.id)).toEqual([next.id]);
+    expect(rows.rows.map((row) => row.id)).not.toContain(issued.id);
+  });
+});

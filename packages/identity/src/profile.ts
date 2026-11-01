@@ -1,7 +1,7 @@
 import "./errors.js";
 import { nowIso } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { and, eq, gt, isNull, ne } from "drizzle-orm";
+import { and, eq, gt, isNull, lte, ne } from "drizzle-orm";
 import { AppError, assertSupportedLocale, isValidTelephone } from "@waitron/shared";
 import { persons } from "./schema/persons.js";
 import { foldForUniqueness } from "./fold.js";
@@ -156,6 +156,8 @@ export async function verifyOwnCredentials(
   return person;
 }
 
+const TOTP_ENROLLMENT_TTL_MS = 10 * 60 * 1000;
+
 export async function beginOwnTotpEnrollment(
   tx: Transaction,
   input: Owner & Credentials,
@@ -163,7 +165,7 @@ export async function beginOwnTotpEnrollment(
   const person = await ownPerson(tx, input);
   await verifyCurrent(tx, person, input);
   const secret = generateTotpSecret();
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  const expiresAt = new Date(Date.now() + TOTP_ENROLLMENT_TTL_MS).toISOString();
   await tx.delete(totpEnrollments).where(eq(totpEnrollments.personId, person.id));
   const [row] = await tx
     .insert(totpEnrollments)
@@ -194,6 +196,8 @@ export async function finishOwnTotpEnrollment(
         eq(totpEnrollments.id, input.enrollmentId),
         eq(totpEnrollments.personId, person.id),
         gt(totpEnrollments.expiresAt, new Date().toISOString()),
+        // A later expiry was stamped before a backward clock step, and counts as passed.
+        lte(totpEnrollments.expiresAt, new Date(Date.now() + TOTP_ENROLLMENT_TTL_MS).toISOString()),
       ),
     );
   const secret =

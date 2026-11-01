@@ -49,3 +49,20 @@ describe("the enrol fixed-window rate limiter", () => {
     expect(caught(() => limiter.check())).toBeUndefined();
   });
 });
+
+describe("the enrol rate limiter across a backward clock step", () => {
+  it("opens a fresh window when its window started ahead of the clock", () => {
+    let now = 400 * 24 * 60 * 60 * 1000;
+    const limiter = createEnrolRateLimiter({ now: () => now });
+    for (let i = 0; i < ENROL_RATE_MAX; i++) limiter.check();
+    now -= 1;
+    expect(caught(() => limiter.check())).toBeUndefined();
+  });
+
+  it("keeps a full window when the clock reads its start", () => {
+    const now = 400 * 24 * 60 * 60 * 1000;
+    const limiter = createEnrolRateLimiter({ now: () => now });
+    for (let i = 0; i < ENROL_RATE_MAX; i++) limiter.check();
+    expect(isAppError(caught(() => limiter.check()))).toBe(true);
+  });
+});
