@@ -1234,6 +1234,12 @@ EDITED to pass and is not on this list is a STOP, unless the spec changes what i
     unchanged; the owner's standing rule lets a whole-shape pin gain the key a new export adds.
     Task 15a.
 
+21. *(Added while building Task 15c-4, 2026-11-01.)* `packages/workforce/src/index.test.ts:20`
+    ("exports exactly the intended names", the package's whole export list): gains
+    `"attendanceMailDue"`, the due condition the attendance email worker's eligible read now shares
+    with the claim. Every existing name is unchanged; the owner's standing rule lets a whole-shape
+    pin gain the key a new export adds. Task 15c-4.
+
 **Fixtures only, no assertion changed:**
 6. `apps/server/src/box-status.route.test.ts:120` and
    `apps/server/src/awaiting-fiscal-cert.test.ts:70`:

@@ -18,6 +18,7 @@ describe("the public surface", () => {
         "attendanceOperationFacts",
         "attendanceQuestions",
         "attendanceMail",
+        "attendanceMailDue",
         "claimAttendanceMail",
         "expireAttendanceMailClaims",
         "reportAttendanceMail",
