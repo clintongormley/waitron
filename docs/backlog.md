@@ -2016,7 +2016,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   landed; it leaves open A1235–A1238. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
   main bill, has landed (#2360); it leaves open A1256, A1258, A1261, A1263–A1267 and A1269. Slice
   4a, one dish picker behind the ⋮'s **Move dishes…** in place of Split by item and Transfer items,
-  has landed. Remaining slices: 4b, waiting dishes that leave with their own copy of the course; 4c,
+  has landed (#2372); it leaves open A1286–A1294 and A1298–A1300. Remaining slices: 4b, waiting dishes that leave with their own copy of the course; 4c,
   Split a table through the same picker, with A590; pre-bills after asesor S2 (A446). One payment pays one bill. Station modes, pass naming and grouped cross-bill
   firing wait for pending A773-2, independently of S2. New Spanish wording requires approval
   during implementation. Each new seating starts at Bill 1
