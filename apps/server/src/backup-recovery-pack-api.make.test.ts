@@ -742,20 +742,31 @@ describe("a made pack", () => {
       },
     }).make(true);
     await inside;
+    let asked!: () => void;
+    const lockRequested = new Promise<void>((resolve) => (asked = resolve));
+    const nodeLock = suite.node.withWriteLock;
+    const nodeSpy = vi.spyOn(suite.node, "withWriteLock").mockImplementation((body) => {
+      asked();
+      return nodeLock(body);
+    });
+    onTestFinished(() => nodeSpy.mockRestore());
     const replacement = mintBreakGlassKey({ venue: suite.db, node: suite.node }, node.nodeId).then(
       (replaced) => {
         order.push("key replaced");
         return replaced;
       },
     );
-    // Room for a replacement nothing holds back to finish before the pack does.
+    // Once the replacement asks for node.db's lock, room for it to finish if nothing holds it back.
+    await lockRequested;
     await Promise.race([replacement, new Promise((resolve) => setTimeout(resolve, 100))]);
+    order.push("released");
     release();
     const answer = await response;
     expect(answer.status).toBe(200);
     const replaced = await replacement;
     expect(order.at(-1)).toBe("key replaced");
     expect(order.slice(0, -1)).toContain("venue write committed");
+    expect(order.slice(order.indexOf("released"), -1)).toContain("venue write committed");
     const file = await readRecoveryPackPdf(new Uint8Array(await answer.arrayBuffer()));
     const carried = (file.serverKey as { nodeKey: { name: string } }).nodeKey;
     const [record] = await packs();

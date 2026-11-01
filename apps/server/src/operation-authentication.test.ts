@@ -315,11 +315,20 @@ describe("a recovery key's authority", () => {
       },
     );
     await inside;
+    let asked!: () => void;
+    const lockRequested = new Promise<void>((resolve) => (asked = resolve));
+    const nodeLock = suite.node.withWriteLock;
+    const nodeSpy = vi.spyOn(suite.node, "withWriteLock").mockImplementation((body) => {
+      asked();
+      return nodeLock(body);
+    });
+    onTestFinished(() => nodeSpy.mockRestore());
     const replacement = mintBreakGlassSecret(handles(), NODE).then((replaced) => {
       order.push("key replaced");
       return replaced;
     });
-    // Room for a replacement nothing holds back to finish before the write does.
+    // Once the replacement asks for node.db's lock, room for it to finish if nothing holds it back.
+    await lockRequested;
     await Promise.race([replacement, new Promise((resolve) => setTimeout(resolve, 100))]);
     release();
     expect(await result).toBe("committed");
