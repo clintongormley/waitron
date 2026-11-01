@@ -11,7 +11,7 @@ import {
 import { mintBreakGlassSecret } from "./break-glass.js";
 import * as operations from "./operation-authentication.js";
 import {
-  nodeWriterBesideRequest,
+  venueAndNodeWritersBesideRequest,
   whileChangingNodeOnLockRequest,
   whileChangingOnLockRequest,
 } from "./testing/watched-scrypt.js";
@@ -133,7 +133,7 @@ describe("scoped recovery-key authority", () => {
   it("derives outside the write lock and rolls back a refused operation", async () => {
     const original = await readRecoveryKeyVerifier(suite.node, NODE);
     let held: unknown;
-    const observed = await nodeWriterBesideRequest(suite.node, () =>
+    const observed = await venueAndNodeWritersBesideRequest(suite.db, suite.node, () =>
       operations.withRecoveryKeyOperation(
         { db: suite.db, node: suite.node, nodeId: NODE },
         binding,

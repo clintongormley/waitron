@@ -31,7 +31,8 @@ const pins = {
 // `order`, outside them in `outside`.
 const passwords = {
   watching: false,
-  inRequestTransaction: false,
+  /** How many of the request's transactions are open, on either file. */
+  inRequestTransaction: 0,
   order: [] as string[],
   outside: 0,
 };
@@ -43,7 +44,7 @@ export function watchedCrypto(actual: Crypto): Crypto {
   const scrypt = (secret: string, salt: Buffer, keyLength: number, done: Done) => {
     if (secret === failing) throw new Error("scrypt failed (test fault)");
     if (passwords.watching) {
-      if (passwords.inRequestTransaction) passwords.order.push("key derived in a transaction");
+      if (passwords.inRequestTransaction > 0) passwords.order.push("key derived in a transaction");
       else passwords.outside += 1;
     }
     const watched = secret === pins.pin;
@@ -163,56 +164,72 @@ export async function writerBesideRequest<T>(
   request: () => Promise<T>,
 ): Promise<{ result: T; order: string[]; outside: number }> {
   const { withTransaction } = await import("@waitron/db");
-  return writerBeside(db, (body) => withTransaction(db, body), request);
+  return writersBeside([{ db, transaction: (body) => withTransaction(db, body) }], request);
 }
 
-/** `writerBesideRequest` on `node.db`'s write lock. */
-export async function nodeWriterBesideRequest<T>(
+/** `writerBesideRequest` on both files' write locks: a writer commits beside each. */
+export async function venueAndNodeWritersBesideRequest<T>(
+  db: Database,
   node: NodeDatabase,
   request: () => Promise<T>,
 ): Promise<{ result: T; order: string[]; outside: number }> {
-  const { withNodeTransaction } = await import("@waitron/db");
-  return writerBeside(node, (body) => withNodeTransaction(node, body), request);
+  const { withNodeTransaction, withTransaction } = await import("@waitron/db");
+  return writersBeside(
+    [
+      { db, transaction: (body) => withTransaction(db, body) },
+      { db: node, transaction: (body) => withNodeTransaction(node, body) },
+    ],
+    request,
+  );
 }
 
-async function writerBeside<D extends Database, X extends Transaction, T>(
-  db: D,
-  transaction: (body: (tx: X) => unknown) => Promise<unknown>,
+interface WatchedLock {
+  db: Database;
+  transaction: (body: (tx: Transaction) => unknown) => Promise<unknown>;
+}
+
+async function writersBeside<T>(
+  locks: readonly WatchedLock[],
   request: () => Promise<T>,
 ): Promise<{ result: T; order: string[]; outside: number }> {
   let writerAsking = false;
-  const original = db.withWriteLock;
-  const spy = vi.spyOn(db as Database, "withWriteLock").mockImplementation((body) =>
-    writerAsking
-      ? original(body)
-      : original(async () => {
-          passwords.inRequestTransaction = true;
-          try {
-            return await body();
-          } finally {
-            passwords.inRequestTransaction = false;
-            passwords.order.push("request's transaction");
-          }
-        }),
-  );
+  const spies = locks.map(({ db }) => {
+    const original = db.withWriteLock;
+    return vi.spyOn(db, "withWriteLock").mockImplementation((body) =>
+      writerAsking
+        ? original(body)
+        : original(async () => {
+            passwords.inRequestTransaction += 1;
+            try {
+              return await body();
+            } finally {
+              passwords.inRequestTransaction -= 1;
+              passwords.order.push("request's transaction");
+            }
+          }),
+    );
+  });
   try {
     return await watchingDerivations(async () => {
-      const writer = new Promise<void>((resolve, reject) => {
-        setImmediate(() => {
-          writerAsking = true;
-          const committed = transaction((tx) => tx.execute(sql`select 1`));
-          writerAsking = false;
-          committed.then(() => {
-            passwords.order.push("writer");
-            resolve();
-          }, reject);
-        });
-      });
-      const [result] = await Promise.all([request(), writer]);
+      const writers = locks.map(
+        ({ transaction }) =>
+          new Promise<void>((resolve, reject) => {
+            setImmediate(() => {
+              writerAsking = true;
+              const committed = transaction((tx) => tx.execute(sql`select 1`));
+              writerAsking = false;
+              committed.then(() => {
+                passwords.order.push("writer");
+                resolve();
+              }, reject);
+            });
+          }),
+      );
+      const [result] = await Promise.all([request(), ...writers]);
       return result;
     });
   } finally {
-    spy.mockRestore();
+    for (const spy of spies) spy.mockRestore();
   }
 }
 
