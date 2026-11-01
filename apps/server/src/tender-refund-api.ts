@@ -138,6 +138,7 @@ export function mountTenderRefundApi(
   );
   const commandDeps = {
     db: deps.db,
+    cfg: deps.cfg,
     backend: deps.backend,
     admission: deps.admission,
     cfg: deps.cfg,

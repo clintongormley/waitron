@@ -1,4 +1,5 @@
 import { IssuanceRefusal, withIssuanceTransaction } from "@waitron/core";
+import { issuanceStopsRefund } from "./bill-refunds.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { requireEconomicWrite } from "./trading-admission.js";
 import { billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
@@ -252,10 +253,13 @@ async function settlePendingBillRefunds(
   const reading = deps.clock.now();
   // A completed refund's time places it in a cash-up window, so none is settled by a clock that
   // reads behind the last sale.
-  const stopped = await withTransaction(deps.db, (tx) =>
-    deps.backend.clockBehindLatestRecord(tx, reading),
+  const stopped = await withTransaction(
+    deps.db,
+    async (tx) =>
+      (await deps.backend.clockBehindLatestRecord(tx, reading)) !== null ||
+      (await issuanceStopsRefund(tx, deps)),
   );
-  if (stopped !== null) return;
+  if (stopped) return;
   const pending = await withTransaction(deps.db, (tx) =>
     tx
       .select({ refund: billPaymentRefunds, workingOrderId: billPayments.workingOrderId })

@@ -48,6 +48,7 @@ import type {
 } from "@waitron/verifactu";
 import { appendToChain } from "./chain.js";
 import { currentSif } from "./registro-sif.js";
+import { assertNoActiveConflict } from "./conflict-evidence.js";
 import type { SifRegistration } from "./registro-sif.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import type { Entorno, RegistroRow } from "./registro-row.js";
@@ -181,6 +182,10 @@ export class VerifactuBackend implements FiscalBackend {
     refuseBeforeFirstIssueDate(reading);
   }
 
+  refuseNewIssuance(tx: Transaction, nodeId: NodeId): Promise<void> {
+    return assertNoActiveConflict(tx, nodeId);
+  }
+
   clockBehindLatestRecord(
     tx: Transaction,
     reading: { instant: Date; offsetMinutes: number },
@@ -280,6 +285,7 @@ export class VerifactuBackend implements FiscalBackend {
    * took for the sale row, so the sale and its fiscal record carry one instant.
    */
   async recordSale(tx: Transaction, sale: SaleForFiscalRecord): Promise<FiscalRecordRef> {
+    await this.refuseNewIssuance(tx, sale.nodeId);
     const sif = await currentSif(tx, sale.nodeId);
     const tenant = await this.taxpayer(tx);
 
@@ -415,6 +421,7 @@ export class VerifactuBackend implements FiscalBackend {
     // The anulación extends the ORIGINAL's chain, keyed by its node, and inherits its origin.
     const origin = readSaleOrigin(original.source, original.device_id);
     const nodeId = original.node_id as NodeId;
+    await this.refuseNewIssuance(tx, nodeId);
     const sif = await currentSif(tx, nodeId);
     const tenant = await this.taxpayer(tx);
     const now = this.clock.now();
@@ -478,6 +485,7 @@ export class VerifactuBackend implements FiscalBackend {
     sale: SaleForFiscalRecord,
     correction: { correctsSaleId: SaleId },
   ): Promise<FiscalRecordRef> {
+    await this.refuseNewIssuance(tx, sale.nodeId);
     const { rows } = await tx.execute<OriginalAltaForCorrection>(sql`
       select id_emisor_factura, num_serie_factura, fecha_expedicion_factura, tipo_factura
       from registros_facturacion
@@ -580,6 +588,7 @@ export class VerifactuBackend implements FiscalBackend {
     sale: SaleForFiscalRecord,
     substitution: { substitutedSaleIds: SaleId[] },
   ): Promise<FiscalRecordRef> {
+    await this.refuseNewIssuance(tx, sale.nodeId);
     // Checked here as well as by the caller: a wrong filing is unrepairable.
     if (substitution.substitutedSaleIds.length === 0) {
       throw new Error(

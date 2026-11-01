@@ -3330,6 +3330,7 @@ async function bootServer(
     isSingletonPrimary && !fencedOrMirror
       ? runTenderRefundRecoveryLoop({
           db,
+          cfg: tradingContext,
           backend: nodeBackend,
           admission: tradingAdmission,
           cfg: tradingContext,

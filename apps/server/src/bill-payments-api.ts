@@ -304,6 +304,7 @@ export function mountBillPaymentsApi(
         await refundBillPayment(
           {
             ...fiscal,
+            cfg: saleCfg,
             refundProviderFor: refundProvidersOf({
               simulator: deps.cardProvider,
               pool: deps.pool,

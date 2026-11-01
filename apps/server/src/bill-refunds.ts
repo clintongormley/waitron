@@ -4,6 +4,7 @@ import { and, eq, isNotNull, ne } from "drizzle-orm";
 import { billPaymentRefunds, billPayments, withTransaction, workingOrders } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { TrustedReading } from "@waitron/fiscal";
+import { IssuanceRefusedError } from "@waitron/fiscal";
 import {
   authorize,
   roleHasPermission,
@@ -77,6 +78,16 @@ export type BillRefundDeps = Pick<TillSaleDeps, "db" | "backend" | "clock" | "ad
   refundProviderFor?: RefundProviderFor;
   attendance?: AttendanceRecorder;
 };
+
+export async function issuanceStopsRefund(tx: Transaction, deps: BillRefundDeps): Promise<boolean> {
+  try {
+    await deps.backend.refuseNewIssuance(tx, deps.cfg.nodeId);
+    return false;
+  } catch (error) {
+    if (error instanceof IssuanceRefusedError) return true;
+    throw error;
+  }
+}
 
 /** The practice simulator by its name, else the pooled provider of that name; a name neither
  * serves (a hand-keyed card's `manual`) is undefined. */
@@ -352,6 +363,7 @@ async function sendCardRefund(
     const target = (await readCardRefund(tx, refundId))!;
     const reading = deps.clock.now();
     if (await clockStopsRefund(tx, deps, null, reading)) return { ...target, stopped: true };
+    if (await issuanceStopsRefund(tx, deps)) return { ...target, stopped: true };
     const [row] = await tx
       .update(billPaymentRefunds)
       .set({
@@ -657,6 +669,7 @@ export async function refundBillPayment(
           }
           if (earlier.refund.state === "pending") {
             await deps.backend.refuseWhileClockBehind(tx, deps.clock.now());
+            await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
             return { kind: "resume" as const, refundId: earlier.refund.id };
           }
           return {
@@ -669,6 +682,7 @@ export async function refundBillPayment(
         }
         const reading = deps.clock.now();
         await deps.backend.refuseWhileClockBehind(tx, reading);
+        await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
 
         await requireOpenBill(tx, workingOrderId);
         await refusePaymentInFlight(tx, [workingOrderId]);

@@ -40,6 +40,7 @@ import {
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { recordSale, settleSale } from "@waitron/core";
+import { IssuanceRefusedError } from "@waitron/fiscal";
 import type { SettleSaleTender } from "@waitron/core";
 import { VENUE_SERVICE } from "./modules.js";
 import {
@@ -1094,6 +1095,7 @@ async function beginBillPayment(
   if (!Number.isFinite(reading.instant.getTime()))
     throw new AppError("venue.time_zone_conversion_failed", { reason: "invalid_instant" });
   await deps.backend.refuseWhileClockBehind(tx, reading);
+  await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
 
   await requireOpenBill(tx, workingOrderId);
   await requireOrderBillEditor(tx, workingOrderId, {
@@ -1258,11 +1260,7 @@ export function billPaymentIsLive(db: Database, billPaymentId: string): boolean 
   return liveBillPaymentsOf(db).has(billPaymentId);
 }
 
-/**
- * Runs work that follows a card charged on a connected reader. When `deps` opts in, a full disk or
- * a clock behind the latest fiscal record becomes `sale.charged_not_recorded`, so the till can say
- * the card was charged; any other error, and every error when it does not, passes through unchanged.
- */
+/** A post-capture refusal must not describe a completed charge as declined. */
 export async function afterCardCharged<T>(
   deps: { sayCardChargedNotRecorded?: boolean; log?: Logger },
   workingOrderId: string,
@@ -1279,6 +1277,7 @@ export async function afterCardCharged<T>(
 }
 
 function notRecordedReason(error: unknown): NotRecordedReason | null {
+  if (error instanceof IssuanceRefusedError) return "issuance_refused";
   if (diskFullIn(error)) return "disk_full";
   if (error instanceof AppError && error.code === "clock.behind_chain") return "clock_behind_chain";
   return null;
@@ -1300,7 +1299,7 @@ export function collectFailure(
   return chargedNotRecorded(deps.log, workingOrderId, "disk_full");
 }
 
-type NotRecordedReason = "disk_full" | "clock_behind_chain";
+type NotRecordedReason = "disk_full" | "clock_behind_chain" | "issuance_refused";
 
 /** Carries no cause: the error boundary answers `storage.disk_full` for any full disk in the chain. */
 function chargedNotRecorded(
@@ -1322,10 +1321,7 @@ export type ReaderBillPaymentDeps = BillPaymentDeps & {
   /** The chosen reader's `card_readers.id`, passed to `collect`; absent for the simulator. */
   readerId?: string;
   /**
-   * Set by the till's routes: a full disk or a clock behind the latest fiscal record after
-   * `collect` returned a charge, or a full disk on the SumUp or Stripe terminal adapter's own save
-   * of one inside it, answers `sale.charged_not_recorded`, so staff are told not to charge again.
-   * Unset, the refusal passes through: `storage.disk_full` or `clock.behind_chain`.
+   * Report a known charge separately when storage, the clock or held issuance prevents its invoice.
    */
   sayCardChargedNotRecorded?: boolean;
 };

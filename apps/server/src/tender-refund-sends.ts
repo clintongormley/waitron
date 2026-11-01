@@ -17,7 +17,12 @@ import {
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { AppError, centsToDecimal } from "@waitron/shared";
 import { raiseTenderRefundConflict } from "./bill-refund-alerts.js";
-import { clockStopsRefund, refundOutcome, type RefundEvidence } from "./bill-refunds.js";
+import {
+  clockStopsRefund,
+  issuanceStopsRefund,
+  refundOutcome,
+  type RefundEvidence,
+} from "./bill-refunds.js";
 import { attestationColumns, type Attestation } from "./bill-payments.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { toTenderRefundView, type TenderRefundDeps } from "./tender-refunds.js";
@@ -322,6 +327,7 @@ async function send(
     if (expired()) return null;
     const reading = deps.clock.now();
     if (await clockStopsRefund(tx, deps, null, reading)) return null;
+    if (await issuanceStopsRefund(tx, deps)) return null;
     const [row] = await tx
       .update(tenderRefunds)
       .set({

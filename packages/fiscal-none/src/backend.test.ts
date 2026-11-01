@@ -86,7 +86,9 @@ describe("NoneBackend records nothing", () => {
 
   it("recordSale writes nothing and returns a recorded ref carrying the sale's own instants", async () => {
     const sale = sampleSale();
-    const ref = await make().recordSale(tx, sale);
+    const backend = make();
+    await backend.refuseNewIssuance(tx, NODE);
+    const ref = await backend.recordSale(tx, sale);
     expect(ref).toEqual({
       backend: "none",
       recordId: SALE,

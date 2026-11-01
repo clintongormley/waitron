@@ -175,6 +175,7 @@ async function post(venue: Venue, path: string, body: object): Promise<Response>
     backend: {
       clockBehindLatestRecord: async () => null,
       refuseWhileClockBehind: async () => {},
+      refuseNewIssuance: async () => {},
     } as Partial<FiscalBackend> as FiscalBackend,
     clock: systemClock(),
     cfg: venue.cfg,

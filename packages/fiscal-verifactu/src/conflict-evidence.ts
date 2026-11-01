@@ -1,5 +1,7 @@
 import { and, asc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
+import { IssuanceRefusedError } from "@waitron/fiscal";
+import "./errors.js";
 import {
   fiscalConflictEvidence,
   type ConflictCause,
@@ -28,6 +30,14 @@ export interface ActiveConflict extends ConflictRef {
   evidence: ConflictEvidence | null;
   cause: ConflictCause;
   evidenceId: string | null;
+}
+
+export async function assertNoActiveConflict(tx: Transaction, nodeId: string): Promise<void> {
+  if ((await readActiveConflicts(tx, nodeId)).length !== 0) {
+    throw new IssuanceRefusedError("sif.allocation_invalid", {
+      reason: "conflict_requires_administrator",
+    });
+  }
 }
 
 export async function readActiveConflicts(

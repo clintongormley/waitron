@@ -46,6 +46,10 @@ export class FakeFiscalBackend implements FiscalBackend {
   readonly simplifiedInvoiceLimit: Decimal | null;
   readonly recipientNameMaxLength: number | null;
 
+  refuseNewIssuance(): Promise<void> {
+    return Promise.resolve();
+  }
+
   private readonly injectedIssues = new Map<string, IntegrityIssue[]>();
 
   constructor(

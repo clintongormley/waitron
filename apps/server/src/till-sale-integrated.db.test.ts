@@ -18,6 +18,7 @@ import {
 } from "@waitron/catalogue";
 import type { AvailableProduct } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
+import { openFilingCase, recordCaseEvent } from "@waitron/fiscal-verifactu/src/filing-cases.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 // Its records carry NO `verificationUrl`, which exercises the ticket's empty-QR default.
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
@@ -608,6 +609,157 @@ beforeAll(() => {
     deploymentEnvironment: deploymentEnvironment(process.env),
     resolveClient: () =>
       Promise.reject(new Error("till-sale-integrated.db.test: resolveClient must never be called")),
+  });
+});
+
+describe("active fiscal conflict stops new money", () => {
+  async function seedConflict(
+    cfg: DeviceRequestConfig,
+    cause: "fiscal.huella_divergente" | "fiscal.duplicado_anulado",
+  ) {
+    const [record] = suite.db.all<{ id: string }>(sql`
+      select id from registros_facturacion where node_id = ${cfg.nodeId} order by secuencia limit 1
+    `);
+    await withTransaction(suite.db, async (tx) => {
+      const opened = await openFilingCase(tx, {
+        registroId: record!.id,
+        cause,
+        evidence: { codigo: 3000, mensaje: "Invoice identity conflict", csv: null },
+        now: clock.now().instant,
+      });
+      await recordCaseEvent(tx, {
+        caseId: opened.id,
+        actionKey: randomUUID(),
+        kind: "resolved",
+        personId: OPERATOR,
+        action: "Recorded an administrator note",
+        now: clock.now().instant,
+      });
+    });
+  }
+
+  async function originalSale(cfg: DeviceRequestConfig, cafe: OfferedProduct) {
+    return payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
+      id: randomUUID(),
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      tender: { method: "cash", amount: "1.50" },
+    });
+  }
+
+  for (const cause of ["fiscal.huella_divergente", "fiscal.duplicado_anulado"] as const) {
+    it.each(["cash", "card"] as const)(
+      `refuses %s before money for one historical resolved ${cause}`,
+      async (method) => {
+        const { cfg, cafe } = await setupVenue();
+        await originalSale(cfg, cafe);
+        await seedConflict(cfg, cause);
+        const series = await suite.db.select().from(invoiceSeries);
+        const records = await suite.db.execute(sql`select * from registros_facturacion`);
+        const jobs = await suite.db.select().from(printJobs);
+        const provider = new FakePaymentProvider(suite.db);
+        const id = randomUUID();
+        const lines = [{ menuItemId: cafe.menuItemId, quantity: "1" }];
+        const pay =
+          method === "cash"
+            ? payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
+                id,
+                lines,
+                zoneId: cafe.zoneId,
+                tender: { method: "cash", amount: "1.50" },
+              })
+            : payWorkingOrderIntegrated({ db: suite.db, backend, clock, provider }, cfg, {
+                id,
+                lines,
+                zoneId: cafe.zoneId,
+              });
+        await expect(pay).rejects.toMatchObject({
+          code: "sif.allocation_invalid",
+          params: { reason: "conflict_requires_administrator" },
+        });
+        expect(provider.collectCalls).toEqual([]);
+        expect(provider.refundCalls).toEqual([]);
+        expect(await paymentCount(id)).toBe(0);
+        expect(await saleCount(id)).toBe(0);
+        expect(await suite.db.select().from(invoiceSeries)).toEqual(series);
+        expect(await suite.db.execute(sql`select * from registros_facturacion`)).toEqual(records);
+        expect(await suite.db.select().from(printJobs)).toEqual(jobs);
+      },
+    );
+  }
+
+  it("capture_finishes_after_conflict: keeps the charge unfiled and never charges the retry", async () => {
+    const { cfg, cafe } = await setupVenue();
+    await originalSale(cfg, cafe);
+    const provider = new FakePaymentProvider(suite.db);
+    const collect = provider.collect.bind(provider);
+    provider.collect = async (params) => {
+      const captured = await collect(params);
+      await seedConflict(cfg, "fiscal.huella_divergente");
+      return captured;
+    };
+    const id = randomUUID();
+    const deps = { db: suite.db, backend, clock, provider, sayCardChargedNotRecorded: true };
+    const request = {
+      id,
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+    };
+    await expect(payWorkingOrderIntegrated(deps, cfg, request)).rejects.toMatchObject({
+      code: "sale.charged_not_recorded",
+      params: { reason: "issuance_refused" },
+    });
+    expect(
+      suite.db.all(sql`select state, amount, sale_id from payments where working_order_id = ${id}`),
+    ).toEqual([{ state: "captured", amount: 150, sale_id: null }]);
+    expect(await saleCount(id)).toBe(0);
+    await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toMatchObject({
+      code: "sale.charged_not_recorded",
+    });
+    expect(provider.collectCalls).toHaveLength(1);
+    expect(await paymentCount(id)).toBe(1);
+    expect(await saleCount(id)).toBe(0);
+    expect(provider.refundCalls).toEqual([]);
+  });
+
+  it("replays an issued sale while the same identity is stopped", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const id = randomUUID();
+    const req = {
+      id,
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      tender: { method: "cash" as const, amount: "1.50" },
+    };
+    const ticket = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, req);
+    await seedConflict(cfg, "fiscal.duplicado_anulado");
+    await expect(payWorkingOrder({ db: suite.db, backend, clock }, cfg, req)).resolves.toEqual(
+      ticket,
+    );
+    expect(await saleCount(id)).toBe(1);
+    expect(await registroCount(id)).toBe(1);
+  });
+
+  it("refuses an invoice-first issue while preserving the open order and counters", async () => {
+    const { cfg, cafe } = await setupVenue("ticket_then_pay");
+    await originalSale(cfg, cafe);
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, cfg, {
+      id,
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+    });
+    await seedConflict(cfg, "fiscal.huella_divergente");
+    const before = await suite.db.select().from(invoiceSeries);
+    await expect(
+      issueOrderInvoice({ db: suite.db, backend, clock }, cfg, id, OPERATOR),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "conflict_requires_administrator" },
+    });
+    expect(await saleCount(id)).toBe(0);
+    expect(await orderState(id)).toEqual({ status: "open", settledAtSet: false });
+    expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
   });
 });
 
