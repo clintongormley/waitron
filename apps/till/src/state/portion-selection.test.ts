@@ -6,7 +6,6 @@ import { paidQuantities } from "./bill-payment.js";
 import { tabLinePortionKey } from "./portion-groups.js";
 import {
   pickRows,
-  pickedAmount,
   pickedCount,
   pickedLineIds,
   setCount,
@@ -137,7 +136,6 @@ describe("A803 selection:", () => {
     const after = rowsOf(lines, paid, picks).find((row) => row.members[0]!.name === "Caña")!;
     expect(after.blocked).toEqual({ reason: "floor", kept: "40.00" });
     expect(sorted(setCount(after, 3, picks))).toEqual(["c1", "c2"]);
-    expect(pickedAmount(rowsOf(lines, paid, picks), picks)).toBe("10.00");
   });
 
   it("the kept money is what was received plus what is reserved", () => {
@@ -178,7 +176,6 @@ describe("A803 selection:", () => {
     expect(row!.each).toBe("15.00");
     const picks = toggleRow(row!, new Set());
     expect(pickedLineIds([row!], picks)).toEqual(["u"]);
-    expect(pickedAmount([row!], picks)).toBe("15.00");
   });
 
   it("a paid Croqueta's row is blocked paid; its unpaid twins form their own row", () => {
@@ -335,7 +332,6 @@ describe("A803 selection:", () => {
     expect(sorted(picks)).toEqual(["a1", "a2", "b4", "b5"]);
     expect(sorted(tidied)).toEqual(["a2", "a3", "b5"]);
     const rows = rowsOf(lines, paid, tidied);
-    expect(pickedAmount(rows, tidied)).toBe("15.00");
     expect(rows.find((row) => ids(row).includes("b5"))!.blocked).toEqual({
       reason: "floor",
       kept: "15.00",
@@ -432,7 +428,7 @@ describe("A803 selection:", () => {
     expect(alone!.blocked).toEqual({ reason: "floor", kept: "5.00" });
   });
 
-  it("pickedLineIds and pickedAmount leave out a pick on a row now paid", () => {
+  it("pickedLineIds leaves out a pick on a row now paid", () => {
     const croquetas = [1, 2, 3].map((n) => dish(`k${n}`, n, "Croqueta", "3.00"));
     const picks = new Set(["k1", "k2"]);
     const rows = rowsOf(
@@ -443,7 +439,6 @@ describe("A803 selection:", () => {
 
     expect(rows[0]!.blocked).toEqual({ reason: "paid" });
     expect(pickedLineIds(rows, picks)).toEqual(["k2"]);
-    expect(pickedAmount(rows, picks)).toBe("3.00");
   });
 
   it("pickedLineIds is in line order", () => {
@@ -454,25 +449,5 @@ describe("A803 selection:", () => {
 
     expect(rows.map(ids)).toEqual([["p"], ["c1", "c4"]]);
     expect(pickedLineIds(rows, picks)).toEqual(["c1", "p", "c4"]);
-  });
-
-  it("pickedAmount sums dish and extras exactly", () => {
-    const pennies = [1, 2, 3].map((n) => dish(`n${n}`, n, "Nube", "0.05"));
-    const pennyRows = rowsOf(pennies);
-    const burger = dish("b", 1, "Burger", "10.00");
-    const extra = line("x", 2, {
-      parentLineNo: 1,
-      name: "Bacon",
-      productId: "bacon",
-      unitPriceGross: "1.10",
-      portion: false,
-    });
-    const burgerRows = rowsOf([burger, extra]);
-
-    expect(pickedAmount(pennyRows, toggleRow(pennyRows[0]!, new Set()))).toBe("0.15");
-    expect(pickedAmount(burgerRows, toggleRow(burgerRows[0]!, new Set()))).toBe(
-      toScale(addDecimal(tabLineGross(burger), tabLineGross(extra)), MONEY_SCALE),
-    );
-    expect(pickedAmount(burgerRows, new Set())).toBe("0.00");
   });
 });

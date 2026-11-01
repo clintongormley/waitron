@@ -1,15 +1,13 @@
 import {
-  MONEY_SCALE,
   type Decimal,
-  addDecimal,
   compareDecimal,
   decimal,
+  multiplyDecimal,
   subtractDecimal,
   sumDecimals,
-  toScale,
 } from "@waitron/shared";
 import type { BillBalance, TabLine } from "../api/client.js";
-import { tabLineGross } from "./adjust-target.js";
+import { billGross } from "./adjust-target.js";
 import { moneyPlus, paidQuantities } from "./bill-payment.js";
 import { portionGroups } from "./portion-groups.js";
 
@@ -35,10 +33,7 @@ export type Picks = ReadonlySet<string>;
 
 const ZERO = decimal("0");
 
-function memberAmount(dish: TabLine, extras: ReadonlyMap<number, TabLine[]>): Decimal {
-  const own = [dish, ...(extras.get(dish.lineNo) ?? [])];
-  return toScale(sumDecimals(own.map(tabLineGross)), MONEY_SCALE);
-}
+const times = (each: Decimal, count: number) => multiplyDecimal(each, decimal(String(count)));
 
 /**
  * The bill's dishes as Move dishes… offers them. A dish recalled into a draft is left out; a dish
@@ -66,7 +61,7 @@ export function pickRows(
   const paid = balance === null ? null : paidQuantities(balance);
   const groups = portionGroups(dishes, keyOf, (row) => row.lineNo).map((members) => ({
     members,
-    each: memberAmount(members[0]!, extras),
+    each: billGross([members[0]!, ...(extras.get(members[0]!.lineNo) ?? [])]),
     paid:
       paid !== null &&
       members.some((member) => compareDecimal(decimal(paid.get(member.lineNo) ?? "0"), ZERO) > 0),
@@ -76,12 +71,7 @@ export function pickRows(
   const pickedTotal = sumDecimals(
     groups
       .filter((group) => !group.paid)
-      .map((group) =>
-        toScale(
-          sumDecimals(Array.from({ length: pickedOf(group.members) }, () => group.each)),
-          MONEY_SCALE,
-        ),
-      ),
+      .map((group) => times(group.each, pickedOf(group.members))),
   );
   const kept = balance === null ? null : moneyPlus(balance.received, balance.reserved);
   return groups.map(({ members, each, paid: isPaid }): PickRow => {
@@ -89,8 +79,10 @@ export function pickRows(
     let limit = members.length;
     if (isPaid) limit = 0;
     else if (balance !== null && kept !== null) {
-      const own = sumDecimals(Array.from({ length: picked }, () => each));
-      let left = subtractDecimal(decimal(balance.total), subtractDecimal(pickedTotal, own));
+      let left = subtractDecimal(
+        decimal(balance.total),
+        subtractDecimal(pickedTotal, times(each, picked)),
+      );
       limit = 0;
       while (limit < members.length) {
         left = subtractDecimal(left, each);
@@ -177,15 +169,4 @@ export function pickedLineIds(rows: readonly PickRow[], picks: Picks): string[] 
     .flatMap((row) => row.members.filter((member) => picks.has(member.id)))
     .sort((a, b) => a.lineNo - b.lineNo)
     .map((member) => member.id);
-}
-
-/** What the picked dishes take off the bill, their extras included, at the money scale, leaving out
- * a pick on a paid row. */
-export function pickedAmount(rows: readonly PickRow[], picks: Picks): string {
-  let total = ZERO;
-  for (const row of rows) {
-    if (row.blocked?.reason === "paid") continue;
-    for (let n = pickedCount(row, picks); n > 0; n--) total = addDecimal(total, decimal(row.each));
-  }
-  return toScale(total, MONEY_SCALE);
 }
