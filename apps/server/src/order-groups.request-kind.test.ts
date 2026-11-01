@@ -238,7 +238,7 @@ describe("A773 request kind of arriving dishes", () => {
       .where(eq(workingOrderLines.id, lines[1]!.id));
     await suite.db
       .update(ticketItems)
-      .set({ firedAt: null, madeHere: false })
+      .set({ firedAt: null, requestedAt: null, madeHere: false })
       .where(eq(ticketItems.workingOrderLineId, lines[1]!.id));
     await withTransaction(suite.db, async (tx) => {
       const course = await createCourse(tx, v.cfg, { name: "Held arrival", displayOrder: 1 });

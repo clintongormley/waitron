@@ -4630,7 +4630,8 @@ export function assertDistinctTransferLines(tabId: string, transfers: { lineNo: 
  * split of a dish with extras is refused `tab.transfer_modifier_line` unless `splitExtras` is set:
  * then each extra is split with it, the part going with the split dish being its count a dish times
  * the part split, and refused the same when an extra is not a whole count a dish. With
- * `refuseHeld`, a line whose own or split-off extra's ticket item is unfired is refused
+ * `refuseHeld`, a line whose own or split-off extra's ticket item is held (neither fired nor
+ * requested) is refused
  * `tab.split_held_line` unless its group is held: firing a group fires its lines on whichever bills
  * they are on. Returns each
  * ticket item a split made, mapped to the one it was copied from, and each row a split made, keyed
@@ -4689,6 +4690,7 @@ async function carveLines(
       listUnitPriceGross: workingOrderLines.listUnitPriceGross,
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
+      ticketRequestedAt: ticketItems.requestedAt,
       groupState: orderGroups.state,
       orderNumber: workingOrders.orderNumber,
     })
@@ -4741,7 +4743,8 @@ async function carveLines(
       opts.refuseHeld &&
       line.groupState !== "held" &&
       [line, ...childLineNos.map((lineNo) => byLineNo.get(lineNo)!)].some(
-        (row) => row.ticketItemId !== null && row.ticketFiredAt === null,
+        (row) =>
+          row.ticketItemId !== null && row.ticketFiredAt === null && row.ticketRequestedAt === null,
       )
     ) {
       throw new AppError("tab.split_held_line", { tabId: fromTabId, lineNo: t.lineNo });

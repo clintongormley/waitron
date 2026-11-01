@@ -2467,7 +2467,8 @@ export async function recordGroupEvent(
   });
 }
 
-// Relocation preserves fired history; only a live held course keeps arriving unfired food held.
+// Relocation preserves fired and requested history; only a live held course keeps arriving food
+// the waiter has not asked for held.
 export async function groupArrivingDishes(
   tx: Transaction,
   cfg: OriginConfig,
@@ -2486,6 +2487,7 @@ export async function groupArrivingDishes(
       sentAt: workingOrderLines.sentAt,
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
+      ticketRequestedAt: ticketItems.requestedAt,
       ticketMadeHere: ticketItems.madeHere,
     })
     .from(workingOrderLines)
@@ -2513,7 +2515,7 @@ export async function groupArrivingDishes(
   const immediate: typeof dishes = [];
   const heldByCourse = new Map<string | null, typeof dishes>();
   for (const line of dishes) {
-    if (isReleased({ ...line, groupState: null })) released.push(line);
+    if (serviceRequested({ ...line, groupState: null })) released.push(line);
     else if (line.courseActive !== true || line.heldUntilFired !== true) immediate.push(line);
     else {
       const course = heldByCourse.get(line.courseId);
