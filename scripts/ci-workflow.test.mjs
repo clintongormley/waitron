@@ -918,6 +918,32 @@ describe("the `ci` aggregate's verdict", () => {
     return needs;
   };
 
+  it(
+    "refuses a skipped shared mutation score when shared was selected",
+    () => {
+      const { status, output } = runVerdict(
+        scoped({ code: "true", shared: "true" }, "mutation-shared-aggregate"),
+      );
+      expect(status).toBe(JQ_REFUSED);
+      expect(output).toContain(
+        "@waitron/shared was selected but its mutation score job mutation-shared-aggregate was skipped",
+      );
+    },
+    ONE_RUN_TEST_TIMEOUT_MS,
+  );
+
+  it.each([
+    { code: "true", shared: "false" },
+    { code: "false", shared: "true" },
+    { code: "true", shared: "true", reuse: "true", reuse_run: "42", reuse_sha: "b".repeat(40) },
+  ])(
+    "accepts a skipped shared mutation score with scope %j",
+    (outputs) => {
+      expect(runVerdict(scoped(outputs, "mutation-shared-aggregate")).status).toBe(0);
+    },
+    ONE_RUN_TEST_TIMEOUT_MS,
+  );
+
   it("accepts skipped selected coverage only with a concrete verified reuse receipt", () => {
     const [{ id, gate }] = ciMergeJobs;
     const needs = scoped(
@@ -1746,6 +1772,12 @@ describe("the test shards", () => {
     const aggregate = job("mutation-shared-aggregate").body.join("\n");
     expect(job("mutation-shared-aggregate").body).toContain("    timeout-minutes: 5");
     expect(aggregate).toContain("needs: [changes, mutation-shared]");
+    const condition = (body) =>
+      body
+        .split("\n")
+        .find((line) => line.startsWith("    if: "))
+        .slice(8);
+    expect(condition(aggregate)).toBe(`always() && ${condition(shard)}`);
     expect(aggregate).toContain("pattern: mutation-report-shared-shard-*");
     expect(aggregate).not.toContain("merge-multiple: true");
     expect(aggregate).toContain(

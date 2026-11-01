@@ -427,8 +427,10 @@ span crosses a `HEAVY_FILES` range boundary is mutated by no shard — 2 in db a
 2026-10-12 splits, as counted by that day's Codex review by instrumenting each split file whole and
 by range. And `scripts/mutation-break-thresholds.test.mjs`, which pins which
 package holds which bar, is weaker than its name: it reads `mutation.yml` as TEXT for the sharded
-packages' bars and their shards' upload paths, so a step that reached the same command or path
-through a variable would be invisible to it, and it never runs Stryker to see a report written.
+db, ui and ui-core bars and their shards' upload paths, so a step that reached the same command
+or path through a variable would be invisible to it. Shared's combined CI floor is checked from
+`ci.yml` by `scripts/ci-workflow.test.mjs`; the mutation-floor guard checks its local floor and
+imports its shard configuration. Neither guard runs Stryker to see a report written.
 
 `packages/shared`'s score is taken without `src/conventions.test.ts`: its `vitest.config.ts`
 excludes that file whenever `STRYKER_MUTATOR_WORKER` is set, which Stryker 10 sets on the worker
@@ -472,7 +474,11 @@ full report cannot contribute results outside a shard's selected files. The ordi
 Each CI shard writes one JSON report and has no separate score floor. The five-minute
 `mutation-shared-aggregate` job requires four report directories and enforces 90% on their combined
 score. Both jobs report to `ci`; the aggregate uses the same shared-package and reuse conditions
-as the shards, and still runs after a failed shard to refuse incomplete reports. Downloads and
+as the shards, and still runs after a failed shard to refuse incomplete reports. The final `ci`
+verdict refuses a skipped mutation aggregate when shared was selected, except when verified reuse
+supplies the earlier result. Its executable jq cases cover that refusal and the unselected,
+documentation and verified-reuse paths. The workflow guard also requires the aggregate's condition
+to be `always() && ` followed by the shards' condition. Downloads and
 uploads use the existing bounded two-attempt patterns. The download action keeps each artifact
 in its own directory because the aggregate counts those directories. No new Actions cache is added.
 
@@ -1797,6 +1803,10 @@ of 5, and never under 5. A run that failed its own checks ran to its end and cou
 mutation run `37267389722` did); a cancelled run does not. The window: ci.yml's latest 264 runs, 2026-10-07 08:24
 to 2026-10-08T09:03:33Z, read 2026-10-08; the other workflows' latest 30 runs; `mutation-db` only
 since the SQLite switch (#489, 2026-09-23), because its earlier shards ran a different engine.
+
+The following measurements describe the October window above. Since 1 November 2026,
+[shared has four mutation shards and a five-minute score job](#shared-mutation-work-is-split-across-four-whole-file-shards);
+the `mutation-shared` row below records the earlier unsharded job.
 
 | file               | job                               | longest measured (min)         | limit |
 | ------------------ | --------------------------------- | ------------------------------ | ----- |
@@ -3739,9 +3749,11 @@ change to the helper selects those packages' jobs and, through CI's dependents w
 package that depends on one of them; the consumer guard recognises `test:merge` jobs
 as well as test shards.
 
-Only `mutation.yml`'s three report downloads still use `actions/download-artifact`. That is a scope
-decision: those artifacts are directories of several files, and the helper reads only artifacts
-holding one file.
+The mutation report downloads still use `actions/download-artifact`: the three in `mutation.yml`
+and, since 1 November 2026, shared's score job in `ci.yml`. The coverage helper accepts coverage
+blob names and writes their reports to one flat directory; the mutation score job instead counts
+separate report directories. Its bounded action retries remain. Replacing them is a separate
+[backlog item](../backlog.md).
 
 The artifact-download cases in `scripts/ci-workflow.test.mjs` are weaker than their name: they
 read workflow text, never execute a workflow. They check the action and helper forms, matching

@@ -3761,8 +3761,8 @@ jobs:
       # change could not affect; a job skipped because something it needs failed is caught by that
       # failure. The step has no `if:`, so it always runs and prints what each needed job reported.
       #
-      # One exception to "skipped passes": a coverage merge job skipped while `changes` selected its
-      # package fails, because then that package's coverage bar was never checked. The table at the
+      # One exception to "skipped passes": a score job skipped while `changes` selected its
+      # package fails, because then that package's floor was never checked. The table at the
       # top of the script names each merge job's gate and package. When a job also failed, that
       # failure's message is the one printed.
       #
@@ -3783,6 +3783,7 @@ jobs:
               "test-till-merge": { gate: "till", package: "@waitron/till" },
               "test-dashboard-merge": { gate: "dashboard", package: "@waitron/dashboard" },
               "test-venue-service-merge": { gate: "venue_service", package: "@waitron/venue-service" },
+              "mutation-shared-aggregate": { gate: "shared", package: "@waitron/shared", kind: "mutation score" },
             } as $merges
             | $ENV.NEEDS | fromjson
             | if type != "object" or length == 0 then error("no needed job results to read") else . end
@@ -3800,7 +3801,7 @@ jobs:
               (map(select(.value.result == "skipped" and $merges[.key] != null
                           and $scope.reuse != "true"
                           and $scope.code == "true" and $scope[$merges[.key].gate] == "true")
-                   | "\($merges[.key].package) was selected but its coverage merge job \(.key) was skipped")
+                   | "\($merges[.key].package) was selected but its \($merges[.key].kind // "coverage merge") job \(.key) was skipped")
                | if length > 0 then error(join("; ")) else empty end)
           '
 

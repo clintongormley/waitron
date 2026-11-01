@@ -7,6 +7,7 @@
 // Weaker than its name in one way worth stating: it reads the workflow as TEXT for the sharded
 // packages' bars and their shards' upload paths, so a step that reached the same command or path
 // through a variable would be invisible to it. It never runs Stryker to see a report written.
+// Shared keeps its local floor here; ci-workflow.test.mjs checks its combined CI floor in ci.yml.
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
