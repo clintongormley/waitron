@@ -23,6 +23,7 @@ There is no database server in the app's path, no connection string and no datab
 | `backups`     | `/var/lib/waitron/backups`     | local encrypted backup archives, when they are switched on                                                                                                                                  |
 | `mailpit`     | `/data`                        | the local dev/prepare mail inbox (account and invoice email captured when no SMTP credential exists; a demo's invoice email always)                                                         |
 | `print_agent` | `/var/lib/waitron-print-agent` | the print agent's join token, saved config, and the pinned box CA (`server-ca.crt`)                                                                                                         |
+| `box_socket`  | `/run/waitron-box`             | nothing: an empty stand-in until `waitron.sh install` names the host's socket folder in `.env`                                                                                              |
 
 A box installed before the box ran its own database server was retired also carries a `waitron_db`
 volume holding that old database. Nothing reads it and nothing on the box removes it, including

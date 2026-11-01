@@ -3744,6 +3744,16 @@ table with an expression index keeps the index out of the schema in every genera
 the table and adds it back in a later generation. A wrong index fails the migrate loudly,
 so nothing silent is at stake, only a round trip.
 
+## A drizzle table rebuild is rehearsed on `node:sqlite`, never the `sqlite3` CLI
+
+drizzle-kit's rebuild writes the new table's CHECKs naming `"__new_<table>"` and then renames the
+table. The app's engine rewrites those names; macOS's `sqlite3` command line does not, and refuses
+the rename. Run 2026-11-01 on this Mac, on a two-column reproduction of that shape: `sqlite3` 3.51.0
+printed `error in table t after rename: no such column: __new_t.a` and exited 1, while Node
+v26.11.1's `node:sqlite` (SQLite 3.54.0) ran the same statements and stored the CHECK as
+`"t".a > 0 OR "t".a = -1`. So a rehearsal on the command line fails a migration the app runs; run
+it on `node:sqlite`.
+
 ## `applyMigrations` refuses to report success on a short set
 
 It compares the journal rows a set recorded against the entries the image ships and throws
@@ -4432,16 +4442,6 @@ triggers go with it and `applyMigrations` puts them back after the set (`install
 `append_only.triggers_restored`. Guard: `packages/fiscal-verifactu/src/clock-confirmations-upgrade.test.ts`,
 an upgrade from the shipped table. Pre-live, nothing else carries old rows forward (CLAUDE.md §3).
 Task 15a's read adds one index, `packages/workforce/drizzle/0011_person_chain_index.sql`.
-
-#### A drizzle table rebuild is rehearsed on `node:sqlite`, never the `sqlite3` CLI
-
-drizzle-kit's rebuild writes the new table's CHECKs naming `"__new_<table>"` and then renames the
-table. The app's engine rewrites those names; macOS's `sqlite3` command line does not, and refuses
-the rename. Run 2026-11-01 on this Mac, on a two-column reproduction of that shape: `sqlite3` 3.51.0
-printed `error in table t after rename: no such column: __new_t.a` and exited 1, while Node
-v26.11.1's `node:sqlite` (SQLite 3.54.0) ran the same statements and stored the CHECK as
-`"t".a > 0 OR "t".a = -1`. So a rehearsal on the command line fails a migration the app runs; run
-it on `node:sqlite`.
 
 **Measured** (Tasks 1 and 4, on GitHub `ubuntu-24.04` runners with systemd 255 and chrony as the
 time service; every printed line is in the plan's "Measured for 9b" table):

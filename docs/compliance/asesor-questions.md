@@ -3762,7 +3762,8 @@ The stop was built by A798-B slice 8 (#2012); the confirmation by slice 9 (#2025
 2026-10-24 and parked for the owner. One step back per confirmation; later records are held to the
 minute. Until slice 9b (not built) the box cannot set its own clock, so a confirmation only lifts
 the stop. Sales that a clock running ahead stamped later than the real time are listed for the owner
-(Q60).
+(Q60). _2026-11-01: slice 9b (#2331) sets the clock and adds a staff member's confirmation from a
+till; see [Q61](#q61-a-system-that-corrects-its-own-clock-from-a-tills-clock-when-it-has-no-internet-added-2026-11-01)._
 
 This records a question; no enquiry has been sent.
 
@@ -3888,7 +3889,10 @@ the time it shows; and, at any time, an administrator's own phone or computer, w
 it. Nobody types a time: the till or the device sends its own clock. Two tills on their own no
 longer confirm the time just after a start. Each correction is kept in a table whose rows cannot be
 changed or deleted — who confirmed, which till, the box's time before and after, and the size of
-the step — and the managers are alerted on the dashboard and by email. A correction the box cannot
+the step — and the managers are alerted on the dashboard and by email. A verified correction whose row
+cannot be written at once (a full disk) is kept in memory and written later; a restart before then
+loses it, leaving only a line in the box's system journal. If a later correction marks the alert
+handled before its email is sent, a restart in between loses that email. A correction the box cannot
 confirm took effect is alerted the same way but writes no row. Records written before the
 correction keep the time they were given; the box already lists those dated later than the real
 time (Q60). The risk: during a stop found at start-up, any staff member signed in on a till joined
@@ -3908,7 +3912,10 @@ every start without internet, which would carry the same risk to every such star
 > solas ya no confirman la hora justo después del arranque. Cada corrección queda en una tabla cuyas
 > filas no pueden modificarse ni borrarse (quién confirmó, desde qué caja, la hora del equipo antes
 > y después, y el tamaño del salto), y se avisa a los responsables en el panel de gestión y por
-> correo electrónico. Si el sistema no puede comprobar que la corrección se aplicó, avisa igual pero
+> correo electrónico. Si la fila de una corrección comprobada no puede escribirse en ese momento (un
+> disco lleno), se guarda en memoria y se escribe después; un reinicio antes de eso la pierde, y solo
+> queda una línea en el registro del sistema del equipo. Si una corrección posterior da el aviso por
+> atendido antes de enviarse su correo, un reinicio entre medias pierde ese correo. Si el sistema no puede comprobar que la corrección se aplicó, avisa igual pero
 > no escribe la fila. Los registros generados antes de la corrección conservan la hora con la que se
 > generaron; el sistema ya lista los que tienen una hora posterior a la real (pregunta Q60). El
 > riesgo: durante una parada detectada al arrancar, cualquier miembro del personal con sesión

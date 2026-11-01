@@ -807,14 +807,14 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   their dating transaction after provider waits. Still store money already moved.
   **Clock confirmation lifts the stop for one step back, with no gap limit; once a record is written
   under it, readings stay within a minute of the latest record written since.** Sources: AEAT, two
-  agreeing devices at different addresses (not while the stop found at start-up lasts) or an
-  administrator's own device, or, during a stop found at start-up once AEAT has not answered or
-  cannot be asked, a till's time confirmed by a staff member signed in on it (owner, 2026-10-31);
-  never a box device outside development. Guards: clock-behind-stop, payments clock-behind, fiscal
+  agreeing devices at different addresses (not while the stop found at start-up lasts), an
+  administrator's own device, or a till's time confirmed on it by an administrator at any time or,
+  during a stop found at start-up once AEAT has not answered or cannot be asked, by a staff member
+  signed in on it (owner, 2026-10-31); never a box device outside development. Guards: clock-behind-stop, payments clock-behind, fiscal
   chain/restart/confirmation, clock-confirm route and `apps/server/src/clock-watch.start-up.test.ts`
   suites, weaker than the rule: only named routes/readings/requests; new money routes unguarded.
-  **The box sets its clock only through the host service, from AEAT, a staff member's till at
-  start-up or an administrator's device — never from devices alone and never while it keeps time
+  **The box sets its clock only through the host service, from AEAT, a till's time (a staff
+  member's during start-up, an administrator's at any time) or an administrator's own device — never from devices alone and never while it keeps time
   over the internet — and every step it verifies, or sees move the clock by over a second, is
   alerted and emailed.** Guards: `apps/server/src/clock-correction.test.ts`, `apps/server/src/clock-set.route.test.ts`,
   `apps/server/src/till-box-clock-api.test.ts`, `scripts/waitron-box-sh.test.mjs`, weaker than the

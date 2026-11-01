@@ -409,9 +409,9 @@ today); generalise archive entry routing off declared source ids when a second n
   trust cases remain unmeasured. [B3 §7.5](../superpowers/specs/2026-10-21-b3-usb-installer-design.md)
   requires separate hostname/CA-subtree negatives and a same-device correct-name positive.
 - **The box image carries the WireGuard link.**
-- **The box image keeps its clock synchronised, with no terminal** (A798). The server's
-  `timedatectl` probe reports "unavailable" where the command is absent
-  (`apps/server/src/time-health.ts:34-43`). Since A798's revision 5 (owner, 2026-10-19) a box whose clock
+- **The box image keeps its clock synchronised, with no terminal** (A798). The server reads
+  the time service through the box's host service (`apps/server/src/box-host-client.ts`) and
+  reports "unavailable" when that service does not answer. Since A798's revision 5 (owner, 2026-10-19) a box whose clock
   reads earlier than its last recorded sale stops taking payment until the clock is set, so the
   image should also keep time through a power cut (hardware with a battery-backed clock), and set
   it as soon as it is online. Since A798-B slice 10, `waitron.sh install` runs `timedatectl
@@ -1553,8 +1553,8 @@ clock check waits. Read, not run. Left open by A798-B slice 9b, Task 15.
 
 AEAT agreeing with the box restarts payments even if two
   devices disagree (the bell still shows their `clock.disagrees`); AEAT disagreeing blocks the
-  devices and an administrator for the rest of the stop, even after a step of the clock that leaves
-  the stop on, since in slice 9 the box cannot set its clock. The disagreement is kept in memory,
+  devices and an administrator for the rest of the stop. Since slice 9b the box sets its clock from
+  AEAT's disagreeing time itself, and an administrator's set is refused `witnessed`. The disagreement is kept in memory,
   so restarting the server forgets it. Slice 8's own ways out remain: the clock put right, or real
   time passing the record. The owner may prefer it to lapse at a step (owner FYI 6). Left open by A798-B slice 9 (#2025).
 

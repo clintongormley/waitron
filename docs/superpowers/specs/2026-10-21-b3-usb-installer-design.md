@@ -137,7 +137,7 @@ wizard.
 | First setup | Unauthenticated; Demo and Prepare go to whoever is first, Live to the first claim | `apps/server/src/setup-api.ts:613`, `:806`; `packages/provisioning/src/first-setup-state.ts:507-515` |
 | Releases | None. No `v*` tag, no GitHub Release; CI would publish `:<version>` on one | `.github/workflows/ci.yml:2770-2772` |
 | Box screen | Nothing; the kiosk is a recorded lean, unbuilt | `docs/backlog/box.md:6-33` |
-| Box settings (Wi-Fi, clock) | No screen; the server only reads the clock's state by running `timedatectl` | `apps/server/src/time-health.ts:34-42` |
+| Box settings (Wi-Fi, clock) | No screen; the server only reads the clock's state by running `timedatectl` | `apps/server/src/time-health.ts:34-42`; historical 2026-10-21 inventory, see §10's dated A798 update |
 | Host-side helper | Only the print agent, which reaches the host's message bus through a mounted socket | `deploy/compose.yml:145-153` |
 | Maintenance login | Nothing; a 2026-09-11 discussion record proposes one | `docs/superpowers/specs/2026-09-11-box-maintenance-and-remote-support.md:5` |
 
