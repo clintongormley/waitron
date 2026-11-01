@@ -453,3 +453,13 @@ and Canary evening generation literals. A wrong family count must still fail its
 Exact control exits, restored result and disposable checkout cleanup are in the campaign ledger.
 The sole766-second review remains applicable to this assertion-preserving test subdivision;
 normal hook and fresh exact-head CI remain required before owner handoff.
+
+
+**Hosted matrix calibration, 1 November:** run41303406913 at12b6bf6fa executes all18parent
+cases across the five files. Their actual file times are27.8/88.1/89.0/97.3/107.0seconds;
+the containing jobs take276–302seconds. Local timings understate those hosted costs.
+`node scripts/test-durations.mjs` over the20completed server logs supplies the replacement
+values for only those five entries; every other entry remains unchanged. This lets the duration
+sequencer use the observed costs when assigning and ordering files. It is not proof of the next
+run's job durations. Assertion bodies, case counts, deadlines and production code remain unchanged;
+normal hook and exact-head CI still qualify the scheduling-data update before owner handoff.
