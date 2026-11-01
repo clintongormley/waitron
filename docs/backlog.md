@@ -6378,6 +6378,9 @@ _Formerly parts of B9 and Track C._ Open work:
   Read each intervening release, check version pins and bundled notices, and compare built output
   with main for any bundler or compiler bump before landing.
 
+- **A1304 — qualify Hono 4.13.16's security fixes against Waitron's middleware.**
+  Main's 4.13.13 and A1302's 4.13.14 both fall in the published router advisory range.
+  [Detail](backlog/dependencies.md#a1304-hono-router-security-qualification).
 - **A Vitest 5 retry still needs mutation qualification after the Stryker 10.1.1 update.**
   [Detail](backlog/dependencies.md#a-vitest-5-retry-has-to-re-measure-mutation--nothing-about-stryker-10-settles-it)
 

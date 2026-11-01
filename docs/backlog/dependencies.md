@@ -244,3 +244,25 @@ the actual build. Which other installed packages are affected remains unverified
   of the output. A file snapshot would fail with a readable diff; whether this repo wants
   snapshot files at all is an owner decision. Left behind by the till QR library upgrade
   (qrcode-generator 1 -> 2, 2026-09-20).
+
+
+## A1304: Hono router security qualification
+
+A1302's review found a newer security release outside its assigned 4.13.13 to 4.13.14 range.
+At main `0160250f67ce6968deff3c6ce2169ed65558d0ba`, `git show origin/main:pnpm-lock.yaml`
+names Hono 4.13.13; A1302's candidate names 4.13.14. Both fall in the publisher's affected range.
+This establishes an affected dependency version, not a demonstrated authentication bypass in Waitron.
+
+**Next action:** read the intervening 4.13.15 and 4.13.16 releases, update the dependency, and
+exercise Waitron's wildcard middleware with distinguishing refusing and accepting requests.
+Trace the gates in `apps/server/src/boot.ts`, `setup-api.ts`, `setup-spa.ts` and `till-api.ts`.
+The default router and wildcard registrations are present; whether a protected Waitron action
+can be reached without its gate remains unverified. Hono's own `mount()` is a separate path
+from Waitron's module contribution method of the same name. Review the other four advisories
+in the release against their actual consumers, rather than assuming all five affect Waitron.
+
+| Source | Source words | What they establish |
+| --- | --- | --- |
+| [Publisher's router advisory](https://github.com/honojs/hono/security/advisories/GHSA-h7mg-cq63-vhpq), read 1 November 2026 | “>= 4.1.4, <= 4.13.15”; “4.13.16” | Affected and patched dependency ranges. |
+| [Same advisory](https://github.com/honojs/hono/security/advisories/GHSA-h7mg-cq63-vhpq) | “without any wildcard middleware” | The encoded-line-terminator case reaches the not-found handler without those middleware checks. |
+| [4.13.16 release](https://github.com/honojs/hono/releases/tag/v4.13.16), read 1 November 2026 | “This release includes fixes” | The release lists router, mount, form validator, CSS helper and CSRF fixes. Actual Waitron exposure needs the consumer checks above. |
