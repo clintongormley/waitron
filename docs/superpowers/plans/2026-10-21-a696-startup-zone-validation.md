@@ -372,3 +372,14 @@ about every consumer or duty. The report's broader unverified claims remain expl
 in the retained triage. Review, timing/usage, red/green/control logs and exact candidate hash live
 in Lane E `receipts/a696-resume-20261101/`. Normal push-hook and current-head CI qualification
 remain pending; the FULL PR box remains open for their external evidence and owner handoff.
+
+
+**First push-hook correction, 1 November:** format/lint passed, then the repository suite failed
+one case while10,090 passed. The unchanged node-identity guard caught an unused retired fixture
+setting and a fiscal test local still named for a till. The supported loader reads only node
+identity and resolves its location from rows (`b1b0f1095`, PR #2198). Remove the unused settings
+from boot and wrong-node restore fixtures; rename the fiscal fixture's13identifier uses, retaining
+every matcher and property key. Focused guard40/server30/fiscal30 pass. A text search also caught
+a retired setting after an escaped newline that the guard missed; its decoded-string gap is
+recorded in the CI backlog, with the actual two-way probe. No guard was relaxed. The blocked
+hook is retained as failure evidence; the next normal push must complete its gate again.

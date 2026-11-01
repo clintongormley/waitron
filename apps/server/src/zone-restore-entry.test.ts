@@ -146,9 +146,7 @@ it("an artifact naming an unknown recovery node still refuses before placement",
     entry.name === "secrets/trading.env"
       ? {
           ...entry,
-          bytes: Buffer.from(
-            `WAITRON_NODE_ID=00000000-0000-4000-8000-000000000099\nWAITRON_LOCATION_ID=${node.locationId}\n`,
-          ),
+          bytes: Buffer.from(`WAITRON_NODE_ID=00000000-0000-4000-8000-000000000099\n`),
         }
       : entry,
   );

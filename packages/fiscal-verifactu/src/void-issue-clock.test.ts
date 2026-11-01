@@ -27,7 +27,7 @@ import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const AT = "2026-10-14T23:30:00.000Z";
-let till: SeededNodeWithSif;
+let seededNode: SeededNodeWithSif;
 const scratch: string[] = [];
 afterEach(async () => {
   vi.useRealTimers();
@@ -40,11 +40,11 @@ const source: TrustedClock = {
 const backend = (clock = source) =>
   fiscal.FISCAL_SLOT.makeBackend({ db: suite.db, clock, environment: "preproduction" });
 beforeEach(async () => {
-  till = await seedTenantWithSif(suite.db);
+  seededNode = await seedTenantWithSif(suite.db);
   await suite.db
     .update(locations)
     .set({ timeZone: "Europe/Madrid" })
-    .where(eq(locations.id, till.locationId));
+    .where(eq(locations.id, seededNode.locationId));
 });
 async function prepare(tx: Transaction, id: SaleId, clock = source) {
   return fiscal.prepareFiscalVoidClock(tx, id, clock);
@@ -54,7 +54,7 @@ const original = () =>
     recordSale(
       tx,
       backend(),
-      saleInput({ ...till, clock: source, settlement: { kind: "deferred" } }),
+      saleInput({ ...seededNode, clock: source, settlement: { kind: "deferred" } }),
     ),
   );
 const annul = (id: SaleId) =>
@@ -120,7 +120,10 @@ describe("the void caller's original writing location", () => {
     "refuses unusable original zone %j without appending or allocating",
     async (timeZone) => {
       const old = await original();
-      await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, till.locationId));
+      await suite.db
+        .update(locations)
+        .set({ timeZone })
+        .where(eq(locations.id, seededNode.locationId));
       const before = snapshot();
       await expect(annul(old.saleId)).rejects.toMatchObject({
         code: "venue.time_zone_invalid",
@@ -164,10 +167,10 @@ describe("the void caller's original writing location", () => {
         })
         .returning();
       await backend().recordSale(tx, {
-        origin: saleInput(till).origin,
+        origin: saleInput(seededNode).origin,
         saleId: saleId(row!.id),
-        nodeId: till.nodeId,
-        seriesId: till.seriesId,
+        nodeId: seededNode.nodeId,
+        seriesId: seededNode.seriesId,
         seriesCode: "A",
         invoiceNumber: 1,
         issuedAt: new Date(AT),
@@ -196,7 +199,7 @@ describe("the void caller's original writing location", () => {
       await suite.db
         .update(nodes)
         .set({ locationId: randomUUID() })
-        .where(eq(nodes.id, till.nodeId));
+        .where(eq(nodes.id, seededNode.nodeId));
       const before = snapshot();
       await expect(annul(old.saleId)).rejects.toMatchObject({
         code: "venue.time_zone_target_invalid",
@@ -212,9 +215,9 @@ describe("the void caller's original writing location", () => {
 it("an active emergency identity uses the caller's issue instant rather than allocation time", async () => {
   const [freshNode] = await suite.db
     .insert(nodes)
-    .values({ locationId: till.locationId, name: "Emergency node" })
+    .values({ locationId: seededNode.locationId, name: "Emergency node" })
     .returning();
-  const node = { nodeId: nodeId(freshNode!.id), locationId: locationId(till.locationId) };
+  const node = { nodeId: nodeId(freshNode!.id), locationId: locationId(seededNode.locationId) };
   await suite.db.insert(invoiceSeries).values({ nodeId: node.nodeId, code: "A" });
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   const binding = {
@@ -245,7 +248,7 @@ it("an active emergency identity uses the caller's issue instant rather than all
   const directory = await mkdtemp(join(tmpdir(), "zone-emergency-"));
   scratch.push(directory);
   const confirmationPath = join(directory, "confirmation.json");
-  const current = await withTransaction(suite.db, (tx) => fiscal.currentSif(tx, till.nodeId));
+  const current = await withTransaction(suite.db, (tx) => fiscal.currentSif(tx, seededNode.nodeId));
   await writeFile(
     confirmationPath,
     JSON.stringify({
@@ -289,7 +292,7 @@ it("an active emergency identity uses the caller's issue instant rather than all
       tx,
       backend(clock),
       saleInput({
-        ...till,
+        ...seededNode,
         nodeId: node.nodeId,
         seriesId: seriesId(activation.series[0]!.id),
         clock,

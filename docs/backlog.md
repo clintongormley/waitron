@@ -6010,6 +6010,11 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   Qualify its entrypoint check with symlink and physical-path controls, then make both run the
   child. [Observed reproduction](backlog/ci.md#deadline-command-through-a-directory-symlink).
 
+- **The node-identity text guard misses a retired setting after an escaped newline.**
+  Inspect decoded string/template values as well as raw text, retaining legitimate negative and
+  historical controls. The A696 fixtures themselves are corrected; the scanner gap remains.
+  [Reproduction](backlog/ci.md#retired-settings-after-a-source-escape).
+
 - **A1213. Does a re-run till shard's report reach `test-till-merge`?** Seen once, not proven, in
   A1125's CI (#2238, 2026-10-29), while the merge still used the download action. Since A1216 the
   merge runs `scripts/download-coverage-blobs.mjs`, which keeps the highest-id copy of each report

@@ -201,7 +201,6 @@ beforeEach(async () => {
     WAITRON_STATE_DIR: scratch,
     WAITRON_VENUE_DIR: dirname(file),
     WAITRON_NODE_ID: NODE,
-    WAITRON_LOCATION_ID: LOCATION,
     WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
     WAITRON_DASHBOARD_APP_DIR: join(scratch, "dashboard"),
     WAITRON_MANAGEMENT_ORIGIN: ORIGIN,

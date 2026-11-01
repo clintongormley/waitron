@@ -5594,6 +5594,16 @@ the retired command's separator. Text extensions are case-sensitive. The fiscal 
 ordinary and private identifiers; quoted property keys remain string literals and are not
 identifier checks. These limits also apply to source comments and prose that use different words.
 
+On 1 November, A696's pre-push guard found an obsolete location setting and a fiscal test fixture
+still named for a till. Removing the unused setting and renaming the fixture preserves its
+assertions; focused guard40, server30 and fiscal30 cases pass. A further text search found another
+obsolete setting immediately after an escaped newline inside a template literal. The text regex
+misses it because it reads the source escape rather than the decoded newline: a direct
+`inspectSource` probe reports one failure for the plain spelling and none after the escape.
+That guard gap remains in the CI backlog. The fixture itself now uses only the supported node
+identity. The full first hook failed one of10,091 cases; its earlier format/lint passes do not
+qualify the blocked push. Logs: Lane E `receipts/a696-resume-20261101/`.
+
 
 ## Root receipts moved on 2026-10-31
 
