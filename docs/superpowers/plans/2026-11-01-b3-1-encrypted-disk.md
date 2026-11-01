@@ -610,6 +610,7 @@ That array is the only copy this pull request zeros. Strings parsed from the fil
 **Sequence**, inside the store's turn: an in-process promise chain shared with `withKey`. A lock across processes is slice 3's host-service design.
 1. Run Task 4's checks 1–7 on `hostRoot`.
 2. If `disk-recovery` is absent, create it with mode `0700` (never `hostRoot`), then check it.
+   Then flush `hostRoot`, on every store and not only after creating the folder: an earlier store may have created it and failed before this flush, and a retry cannot tell. A failure here is `io-failed`.
 3. If `<uuid>.json` exists at all, valid or corrupt, refuse `record-exists`.
 4. Unlink a leftover `<uuid>.json.next`. Only that fixed name is ever unlinked.
 5. Write `.next` with `wx`, mode `0600`.

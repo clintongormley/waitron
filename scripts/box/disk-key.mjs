@@ -262,12 +262,16 @@ export function createDiskRecoveryStore(deps) {
       stats = await io.lstat(folder, { bigint: true });
     }
     checkFolder(stats);
+    // Flushed on every store, not only after the mkdir: an earlier store may have made the folder
+    // and then failed to flush hostRoot, and a retry cannot tell.
+    await io.syncDirectory(hostRoot);
 
     // Write once per disk: a corrupt record is refused too, because nothing may remove a key.
     const record = join(folder, `${diskUuid}.json`);
     if ((await lstatIfPresent(record)) !== null) throw refusal("record-exists");
 
     const next = `${record}.next`;
+    // Clears a leftover file or symlink; a folder here (only root can make one) fails every store.
     try {
       await io.unlink(next);
     } catch (error) {
@@ -294,8 +298,10 @@ export function createDiskRecoveryStore(deps) {
       const diskUuid = input?.diskUuid;
       const key = input?.key;
       if (!isUuid(diskUuid) || !isKey(key)) throw refusal("input-invalid");
+      // Encoded now, in the same tick as the check: the caller may change its array before the turn.
+      const keyHex = encodeKey(key);
       try {
-        await inTurn(() => writeRecord(diskUuid, encodeKey(key)));
+        await inTurn(() => writeRecord(diskUuid, keyHex));
       } catch (error) {
         throw isRefusal(error) ? error : refusal("io-failed");
       }
