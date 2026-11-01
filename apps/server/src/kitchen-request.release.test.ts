@@ -428,13 +428,15 @@ describe("A773 waiter request: release", () => {
       await addTabRound(tx, venue.cfg, venue.party.tabId, [
         { ...dish(venue, "water", true), courseId: later.id, hold: true },
       ]);
-      expect(await items(tx, venue.party.tabId)).toEqual([
+      const held = await items(tx, venue.party.tabId);
+      expect(held).toEqual([
         expect.objectContaining({
           productId: venue.products.chips,
           requestedAt: null,
           firedAt: null,
         }),
       ]);
+      expect(await allergyCopies(tx, held[0]!.id)).toEqual([]);
       const before = await jobCounts(tx, venue);
       await fireLines(
         tx,
@@ -459,7 +461,76 @@ describe("A773 waiter request: release", () => {
           passControlled: true,
         }),
       ]);
+      expect(await allergyCopies(tx, held[0]!.id)).toHaveLength(1);
       expect(await jobCounts(tx, venue)).toEqual(before);
+    });
+  });
+
+  it("starts a held extra's queue age at the fire when its dish is fired later and no station waits", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      const later = await createCourse(tx, venue.cfg, { name: "Later", displayOrder: 2 });
+      await setProductCourse(tx, venue.cfg, venue.products.water, later.id);
+      await addTabRound(tx, venue.cfg, venue.party.tabId, [
+        { ...dish(venue, "water", true), courseId: later.id, hold: true },
+      ]);
+      expect(await items(tx, venue.party.tabId)).toEqual([
+        expect.objectContaining({ productId: venue.products.chips, firedAt: null, queuedAt: AT }),
+      ]);
+      const FIRED = "2026-03-14T12:25:00.000Z";
+      vi.setSystemTime(new Date(FIRED));
+      await fireLines(
+        tx,
+        venue.cfg,
+        venue.party.tabId,
+        (await unsentDishLines(tx, venue.party.tabId)).map((line) => ({
+          ...line,
+          release: true,
+        })),
+      );
+      expect(await items(tx, venue.party.tabId)).toEqual([
+        expect.objectContaining({
+          productId: venue.products.chips,
+          stationId: venue.stations.fryer,
+          requestedAt: FIRED,
+          firedAt: FIRED,
+          queuedAt: FIRED,
+        }),
+      ]);
+    });
+  });
+
+  it("releases only the held extras of the dishes being fired", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      const later = await createCourse(tx, venue.cfg, { name: "Later", displayOrder: 2 });
+      await setProductCourse(tx, venue.cfg, venue.products.water, later.id);
+      await addTabRound(tx, venue.cfg, venue.party.tabId, [
+        { ...dish(venue, "water", true), courseId: later.id, hold: true },
+        { ...dish(venue, "water", true), courseId: later.id, hold: true },
+      ]);
+      const [firing, staying] = await unsentDishLines(tx, venue.party.tabId);
+      const chipsOf = async (dishLineId: string) => {
+        const [line] = await tx
+          .select({ id: workingOrderLines.id })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.parentLineId, dishLineId));
+        return (await items(tx, venue.party.tabId)).find((row) => row.lineId === line!.id);
+      };
+      vi.setSystemTime(new Date(LATER));
+      await fireLines(tx, venue.cfg, venue.party.tabId, [
+        { ...firing!, release: true },
+        { ...staying!, hold: true },
+      ]);
+      expect(await chipsOf(firing!.id)).toMatchObject({ firedAt: LATER });
+      expect(await chipsOf(staying!.id)).toMatchObject({
+        productId: venue.products.chips,
+        requestedAt: null,
+        firedAt: null,
+        queuedAt: AT,
+      });
     });
   });
 
