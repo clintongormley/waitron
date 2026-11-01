@@ -583,16 +583,16 @@ export const en = {
   "receipt_language.warning":
     "By default, receipts print in {receipt}, which is not one of your content languages. Product names on them print in {default}, the default language.",
   "nav.content_languages": "Content languages",
-  "location_settings.description": "Invoice operation description",
-  "location_settings.help":
+  "venue_settings.description": "Invoice operation description",
+  "venue_settings.help":
     "This text is copied onto future fiscal records for this location. Existing records keep their original description.",
-  "location_settings.help_label": "Help with the operation description",
-  "location_settings.required": "Enter the invoice operation description.",
-  "location_settings.invalid":
+  "venue_settings.help_label": "Help with the operation description",
+  "venue_settings.required": "Enter the invoice operation description.",
+  "venue_settings.invalid":
     "The description was rejected. Use at most 500 characters and remove hidden control characters.",
-  "location_settings.load_error": "The location settings could not be loaded.",
-  "location_settings.save_error": "The description could not be saved. Try again.",
-  "location_settings.retry": "Retry",
+  "venue_settings.load_error": "The venue settings could not be loaded.",
+  "venue_settings.save_error": "The description could not be saved. Try again.",
+  "venue_settings.retry": "Retry",
 
   "content_languages.title": "Content languages",
   "content_languages.loading": "Loading content languages…",
@@ -4344,16 +4344,16 @@ export const es: Record<StringKey, string> = {
   "receipt_language.warning":
     "Por defecto, los recibos se imprimen en {receipt}, que no es uno de tus idiomas del contenido. Los nombres de los productos salen en {default}, el idioma predeterminado.",
   "nav.content_languages": "Idiomas del contenido",
-  "location_settings.description": "Descripción de la operación",
-  "location_settings.help":
+  "venue_settings.description": "Descripción de la operación",
+  "venue_settings.help":
     "Este texto se copia en los futuros registros fiscales de este local. Los registros existentes conservan su descripción original.",
-  "location_settings.help_label": "Ayuda sobre la descripción de la operación",
-  "location_settings.required": "Introduce la descripción de la operación.",
-  "location_settings.invalid":
+  "venue_settings.help_label": "Ayuda sobre la descripción de la operación",
+  "venue_settings.required": "Introduce la descripción de la operación.",
+  "venue_settings.invalid":
     "La descripción no es válida. Usa como máximo 500 caracteres y elimina los caracteres de control ocultos.",
-  "location_settings.load_error": "No se ha podido cargar la configuración del local.",
-  "location_settings.save_error": "No se ha podido guardar la descripción. Inténtalo de nuevo.",
-  "location_settings.retry": "Reintentar",
+  "venue_settings.load_error": "No se ha podido cargar la configuración del local.",
+  "venue_settings.save_error": "No se ha podido guardar la descripción. Inténtalo de nuevo.",
+  "venue_settings.retry": "Reintentar",
 
   "content_languages.title": "Idiomas del contenido",
   "content_languages.loading": "Cargando los idiomas del contenido…",

@@ -105,3 +105,10 @@ it("words every part of the Box status page in both languages, with the same pla
     expect(placeholders(es[key]), key).toEqual(placeholders(en[key]));
   }
 });
+
+it("names the venue's settings, not a location's", () => {
+  expect(t("venue_settings.load_error", "en")).toBe("The venue settings could not be loaded.");
+  expect(t("venue_settings.load_error", "es-ES")).toBe(
+    "No se ha podido cargar la configuración del local.",
+  );
+});

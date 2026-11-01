@@ -384,7 +384,7 @@ export class VenueDefaultsPanel extends LitElement {
       this.readError
         ? html`<p class="error" role="alert" data-test="read-error">${this.readError}</p>
             <wt-button data-test="retry" variant="secondary" @click=${() => void this.#load()}
-              >${t("location_settings.retry")}</wt-button
+              >${t("venue_settings.retry")}</wt-button
             >`
         : nothing
     }
