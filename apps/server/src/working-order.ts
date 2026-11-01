@@ -1925,9 +1925,9 @@ interface DishKitchenPlace {
   dishLineId: string;
   stationId: string | null;
   courseId: string | null;
-  /** For a stored dish, initiatedAt(its ticket); the waiter's time when this write initiates it;
-   *  null while held. */
-  initiatedAt: string | null;
+  /** Whether the dish's extras leave hold: the dish is initiated, or it is made here, even in a
+   *  held group. */
+  initiated: boolean;
 }
 
 /** Insert records only for extra lines whose own station differs from their dish's destination. */
@@ -1943,7 +1943,6 @@ export async function insertSplitExtras(
   {
     workingOrderLineId: string;
     stationId: string;
-    requestedAt: string | null;
     firedAt: string | null;
     quantity: number;
   }[]
@@ -1999,10 +1998,9 @@ export async function insertSplitExtras(
     if (decision?.kind !== "made") return [];
     const dish = byDish.get(extra.parentLineId!)!;
     const here = madeHere.has(decision.stationId);
-    const at = routing.at.toISOString();
     const stamps = requestStamps({
-      at: here ? at : (dish.initiatedAt ?? at),
-      initiated: dish.initiatedAt !== null,
+      at: routing.at.toISOString(),
+      initiated: dish.initiated,
       madeHere: here,
       waits: waiting.has(decision.stationId),
     });
@@ -2051,7 +2049,6 @@ export async function insertSplitExtras(
       .map((row) => ({
         workingOrderLineId: row.workingOrderLineId,
         stationId: row.stationId,
-        requestedAt: row.requestedAt,
         firedAt: row.firedAt,
         quantity: row.quantity!,
       }));
@@ -2280,7 +2277,7 @@ export async function fireLines(
           dishLineId: line.id,
           stationId: null,
           courseId,
-          initiatedAt: courseFired ? firedAt : null,
+          initiated: courseFired,
         });
         return null;
       }
@@ -2298,7 +2295,7 @@ export async function fireLines(
         dishLineId: line.id,
         stationId,
         courseId,
-        initiatedAt: fired ? firedAt : null,
+        initiated: fired,
       });
       return {
         initiated: courseFired,
@@ -2366,7 +2363,7 @@ export async function fireLines(
   }
   await attachKitchenAllergyCopies(tx, inserted, options.keepAllergies);
 
-  const firingDishes = dishPlaces.filter((dish) => dish.initiatedAt !== null);
+  const firingDishes = dishPlaces.filter((dish) => dish.initiated);
   const heldExtras =
     firingDishes.length === 0
       ? { released: [], requested: [] }
@@ -2655,7 +2652,7 @@ async function finishRelease(
       dishLineId: line.id,
       stationId: null,
       courseId: line.courseId,
-      initiatedAt: at,
+      initiated: true,
     })),
     routing,
   );
@@ -6551,15 +6548,13 @@ async function applyLineEdits(
       dishLineId: parent.id,
       stationId: parent.ticket?.stationId ?? null,
       courseId: parent.ticket?.courseId ?? parent.courseId,
-      initiatedAt:
+      initiated:
         parent.ticket !== null
-          ? initiatedAt(parent.ticket)
-          : parent.groupState === "held" ||
-              parent.children.some(
-                (child) => child.ticket !== null && initiatedAt(child.ticket) === null,
-              )
-            ? null
-            : routing.at.toISOString(),
+          ? initiatedAt(parent.ticket) !== null
+          : parent.groupState !== "held" &&
+            !parent.children.some(
+              (child) => child.ticket !== null && initiatedAt(child.ticket) === null,
+            ),
     })),
     routing,
   );

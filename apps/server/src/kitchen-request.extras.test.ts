@@ -5,6 +5,7 @@ import {
   deviceMadeHereStations,
   deviceProfiles,
   devices,
+  orderGroups,
   printJobs,
   ticketItems,
   withTransaction,
@@ -110,6 +111,24 @@ async function jobsAt(tx: Transaction, printerId: string) {
       .from(printJobs)
       .where(eq(printJobs.printerId, printerId))
   ).map((job) => decodeTicket(job.payload));
+}
+
+async function madeHereDevice(tx: Transaction, venue: Venue, stationId: string) {
+  const [profile] = await tx
+    .insert(deviceProfiles)
+    .values({ name: "Bar till", formFactor: "till", capabilities: [] })
+    .returning({ id: deviceProfiles.id });
+  const [here] = await tx
+    .insert(devices)
+    .values({
+      locationId: venue.cfg.locationId,
+      deviceProfileId: profile!.id,
+      label: "Here",
+      tokenHash: `here-${randomUUID()}`,
+    })
+    .returning({ id: devices.id });
+  await tx.insert(deviceMadeHereStations).values({ deviceId: here!.id, stationId });
+  return here!.id;
 }
 
 function burgerWithChips(venue: Venue) {
@@ -224,25 +243,10 @@ describe("A773 waiter request: extras", () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       await setStationsWaitForPass(tx, true, [venue.stations.fryer]);
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({ name: "Bar till", formFactor: "till", capabilities: [] })
-        .returning({ id: deviceProfiles.id });
-      const [here] = await tx
-        .insert(devices)
-        .values({
-          locationId: venue.cfg.locationId,
-          deviceProfileId: profile!.id,
-          label: "Here",
-          tokenHash: `here-${randomUUID()}`,
-        })
-        .returning({ id: devices.id });
-      await tx
-        .insert(deviceMadeHereStations)
-        .values({ deviceId: here!.id, stationId: venue.stations.fryer });
+      const here = await madeHereDevice(tx, venue, venue.stations.fryer);
       const placed = await placeGroups(
         tx,
-        { ...venue.cfg, sendingDeviceId: here!.id },
+        { ...venue.cfg, sendingDeviceId: here },
         venue.party.partyId,
         {
           operatorId: OPERATOR,
@@ -263,6 +267,42 @@ describe("A773 waiter request: extras", () => {
     });
   });
 
+  it("requests the chips of a burger made here in a held group at a waiting Fryer", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      await setStationsWaitForPass(tx, true, [venue.stations.fryer]);
+      const here = await madeHereDevice(tx, venue, venue.stations.grill);
+      const placed = await placeGroups(
+        tx,
+        { ...venue.cfg, sendingDeviceId: here },
+        venue.party.partyId,
+        {
+          operatorId: OPERATOR,
+          groups: [{ lines: [line(venue, "burger", "1", 1)], release: "hold" }],
+        },
+      );
+      const [group] = await tx
+        .select({ state: orderGroups.state })
+        .from(orderGroups)
+        .where(eq(orderGroups.partyId, venue.party.partyId));
+      expect(group!.state).toBe("held");
+      const rows = await items(tx, placed.tabId);
+      expect(rows.find((row) => row.productId === venue.products.burger)).toMatchObject({
+        state: "ready",
+        requestedAt: AT,
+        firedAt: AT,
+      });
+      expect(rows.find((row) => row.productId === venue.products.chips)).toMatchObject({
+        stationId: venue.stations.fryer,
+        requestedAt: AT,
+        firedAt: null,
+        passControlled: true,
+      });
+      expect(await jobsAt(tx, venue.printers.fryer)).toEqual([]);
+    });
+  });
+
   it("releases chips an edit adds to a requested burger by the Fryer's own setting", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
     const venue = await setupSplitExtrasVenue();
@@ -278,7 +318,11 @@ describe("A773 waiter request: extras", () => {
       const chips = (await items(tx, venue.party.tabId)).find(
         (row) => row.productId === venue.products.chips,
       );
-      expect(chips).toMatchObject({ firedAt: expect.any(String), passControlled: false });
+      expect(chips).toMatchObject({
+        requestedAt: EDIT_AT,
+        firedAt: EDIT_AT,
+        passControlled: false,
+      });
       const fryer = (await jobsAt(tx, venue.printers.fryer)).join("\n");
       expect(fryer).toContain("CHIPS");
       expect(fryer).not.toContain("HOLD CHANGED");

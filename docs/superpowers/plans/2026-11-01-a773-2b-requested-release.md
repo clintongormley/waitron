@@ -343,7 +343,7 @@ groups and the pass") to say B1 landed and B2–B4 remain, with this plan linked
   it.
 
 - **D19 "Initiated by the waiter" is the request time or the fire time.** At the four sites B1
-  changes — `DishKitchenPlace.initiatedAt` (Task 4), the editable order's "a child is still held"
+  changes — `DishKitchenPlace.initiated` (Task 4), the editable order's "a child is still held"
   test (`working-order.ts:6494-6497`, Task 4), `anyFired` (Task 3b) and `releasedCourses` (Task 6),
   the last two over `initiatedItem()` / `heldItem()` — B1 reads `initiatedAt(ticket)`
   (`requestedAt ?? firedAt`, D1), never `requestedAt` alone, so a row written before the column
@@ -856,6 +856,14 @@ null when its group is held or a child's ticket is still held (`initiatedAt(chil
 null`, replacing `child.ticket.firedAt === null` at `:6494-6497`, D19), else `routing.at`. Callers
 print `firedAt !== null` as today; HOLD CHANGED is unchanged (D14). `fireLines`' extras **release**
 (`:2322-2350`) is Task 5b's.
+
+**Changed at the build's Task 4 review (2026-11-01, I1, m1, m2).** An extra takes the time of the
+write that adds it, never its dish's earlier time: an edit adding chips to a burger requested at
+12:00 stamps them with the edit's 12:05 (case 5 pins the value). So `DishKitchenPlace` carries
+`initiated: boolean` instead of `initiatedAt`, and every extra is stamped `routing.at`. The extras
+of a made-here dish in a held group still leave hold at once, as before the branch (5e8d5ec094),
+so at a waiting station they are Requested while the group is held; a case pins it, and B2 or B3
+decides whether that stays. `insertSplitExtras` returns no `requestedAt`: no caller reads it.
 
 Which edits reach this code (round 3, P2, run): a parent with any record whose `fired_at` is set
 makes `kitchenHas` answer true (`:5798`), so the action is `"change"` (`:5961`) and
