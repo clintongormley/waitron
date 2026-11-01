@@ -1360,17 +1360,17 @@ describe("mountCatalogueApi — catalogues", () => {
   );
 });
 
-describe("mountCatalogueApi — location menus", () => {
-  // The location's default + member rows are the ONLY state shared across these tests (one venue
+describe("mountCatalogueApi — the venue's menus", () => {
+  // The venue's default + member rows are the ONLY state shared across these tests (one venue
   // file for the whole file); every catalogue a test creates gets a fresh id. Reset both so the tests
-  // are order-independent. `locationId` is set by the shared setup, which runs before this beforeEach.
+  // are order-independent.
   beforeEach(async () => {
     await suite.db.execute(sql`delete from location_catalogues`);
     await suite.db.execute(sql`update locations set catalogue_id = null`);
   });
 
-  const cataloguesPath = () => `/management-api/locations/${locationId}/catalogues`;
-  const defaultPath = () => `/management-api/locations/${locationId}/default-catalogue`;
+  const cataloguesPath = () => "/management-api/venue/catalogues";
+  const defaultPath = () => "/management-api/venue/default-catalogue";
 
   it("GET lists every tenant catalogue with sellable + default flags (200)", async () => {
     const app = mountApp();
@@ -1388,7 +1388,7 @@ describe("mountCatalogueApi — location menus", () => {
     expect(byId.get(shelf)).toMatchObject({ sellable: false, isDefault: false });
   });
 
-  it("POST adds a catalogue to the location's accessible set (204)", async () => {
+  it("POST adds a catalogue to the venue's menu list (204)", async () => {
     const app = mountApp();
     const day = await createCatalogueVia(app, "Daily");
     const res = await send(app, "POST", cataloguesPath(), { body: { catalogueId: day } });
@@ -1400,7 +1400,7 @@ describe("mountCatalogueApi — location menus", () => {
     expect(rows.find((r) => r.id === day)).toMatchObject({ sellable: true });
   });
 
-  it("DELETE removes a catalogue from the location's accessible set (204)", async () => {
+  it("DELETE removes a catalogue from the venue's menu list (204)", async () => {
     const app = mountApp();
     const day = await createCatalogueVia(app, "Daily");
     await send(app, "POST", cataloguesPath(), { body: { catalogueId: day } });

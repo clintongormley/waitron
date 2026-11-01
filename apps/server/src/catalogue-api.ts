@@ -130,7 +130,7 @@ export interface CatalogueApiDeps {
   /** The content languages the venue must keep; none when absent. */
   contentLanguageRules?: ContentLanguageRules;
   db: Database;
-  /** Required by the routes that read the venue's location; `requireVenueCfg` throws without it. */
+  /** Required by the routes that read the venue's settings; `requireVenueCfg` throws without it. */
   venueCfg?: TradingContext;
   venueLocale?: string;
 }
@@ -321,7 +321,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "shared.decimal_overflow": 400,
   "catalogue.not_found": 404,
   "menu.name_taken": 409,
-  "location.not_found": 404,
   "category.not_found": 404,
   "category.invalid": 400,
   "category.parent_cycle": 409,
@@ -447,7 +446,7 @@ function parseMenuVariants(value: unknown): MenuVariant[] {
   });
 }
 
-/** A SHAPE screen only; the location-menu writes check that the id names a catalogue. */
+/** A SHAPE screen only; the venue menu-list writes check that the id names a catalogue. */
 async function requireCatalogueIdBody(c: Context): Promise<string> {
   const body = await readJsonBody<{ catalogueId?: unknown }>(c);
   if (typeof body.catalogueId !== "string") {
@@ -1276,10 +1275,10 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
-  // A location's menu list: its default `locations.catalogue_id` plus `location_catalogues` members.
+  // The venue's menu list: its default plus member rows.
   // PUT sets the default; the old default is demoted to a member, never dropped. DELETE needs no
   // catalogue guard: removing a non-member row is a no-op.
-  app.get("/management-api/locations/:locationId/catalogues", (c) =>
+  app.get("/management-api/venue/catalogues", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const rows = await gated(c, sessionId, (tx) => listCataloguesForVenue(tx));
@@ -1287,7 +1286,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
-  app.post("/management-api/locations/:locationId/catalogues", (c) =>
+  app.post("/management-api/venue/catalogues", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const catalogueId = await requireCatalogueIdBody(c);
@@ -1296,7 +1295,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
-  app.delete("/management-api/locations/:locationId/catalogues/:catalogueId", (c) =>
+  app.delete("/management-api/venue/catalogues/:catalogueId", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const catalogueId = requireUuidParam(c.req.param("catalogueId"), "CatalogueId");
@@ -1305,7 +1304,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
-  app.put("/management-api/locations/:locationId/default-catalogue", (c) =>
+  app.put("/management-api/venue/default-catalogue", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const catalogueId = await requireCatalogueIdBody(c);
@@ -1620,10 +1619,10 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
 /** A misconfiguration guard, not a request fault: `boot.ts` always supplies `venueCfg`. */
 function requireVenueCfg(deps: CatalogueApiDeps): TradingContext {
   /* v8 ignore start -- boot always threads a venueCfg; only a harness that omits it AND calls a route
-     that reads the venue's location reaches this, which no suite does — surfaced as a 500 by `run`. */
+     that reads the venue's settings reaches this, which no suite does — surfaced as a 500 by `run`. */
   if (deps.venueCfg === undefined) {
     throw new Error(
-      "mountCatalogueApi: venueCfg is required by routes that read the venue's location",
+      "mountCatalogueApi: venueCfg is required by routes that read the venue's settings",
     );
   }
   /* v8 ignore stop */

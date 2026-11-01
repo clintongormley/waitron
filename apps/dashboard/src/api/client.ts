@@ -526,7 +526,7 @@ export interface CatalogueSummary {
   version: number;
 }
 
-export interface LocationCatalogueSummary extends CatalogueSummary {
+export interface VenueCatalogueSummary extends CatalogueSummary {
   sellable: boolean;
   isDefault: boolean;
 }
@@ -3141,32 +3141,22 @@ export class DashboardApi {
     );
   }
 
-  // ── Location menus (which catalogues a location sells) ─────────────────────────────────────────
+  // ── The venue's menus (which catalogues the venue sells) ──────────────────────────────────────
 
-  listLocationCatalogues(locationId: string): Promise<LocationCatalogueSummary[]> {
-    return this.#request<LocationCatalogueSummary[]>(
-      `/management-api/locations/${locationId}/catalogues`,
-      "GET",
-    );
+  listVenueCatalogues(): Promise<VenueCatalogueSummary[]> {
+    return this.#request<VenueCatalogueSummary[]>("/management-api/venue/catalogues", "GET");
   }
 
-  addLocationCatalogue(locationId: string, catalogueId: string): Promise<void> {
-    return this.#request<void>(`/management-api/locations/${locationId}/catalogues`, "POST", {
-      catalogueId,
-    });
+  addVenueCatalogue(catalogueId: string): Promise<void> {
+    return this.#request<void>("/management-api/venue/catalogues", "POST", { catalogueId });
   }
 
-  removeLocationCatalogue(locationId: string, catalogueId: string): Promise<void> {
-    return this.#request<void>(
-      `/management-api/locations/${locationId}/catalogues/${catalogueId}`,
-      "DELETE",
-    );
+  removeVenueCatalogue(catalogueId: string): Promise<void> {
+    return this.#request<void>(`/management-api/venue/catalogues/${catalogueId}`, "DELETE");
   }
 
-  setLocationDefaultCatalogue(locationId: string, catalogueId: string): Promise<void> {
-    return this.#request<void>(`/management-api/locations/${locationId}/default-catalogue`, "PUT", {
-      catalogueId,
-    });
+  setVenueDefaultCatalogue(catalogueId: string): Promise<void> {
+    return this.#request<void>("/management-api/venue/default-catalogue", "PUT", { catalogueId });
   }
 
   listCategories(): Promise<CategorySummary[]> {

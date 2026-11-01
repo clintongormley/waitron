@@ -612,26 +612,26 @@ describe("DashboardApi", () => {
     });
   });
 
-  it("listLocationCatalogues GETs a location's menu membership with credentials", async () => {
+  it("listVenueCatalogues GETs the venue's menu membership with credentials", async () => {
     const rows = [
       { id: "c1", name: "Casa", active: true, version: 1, sellable: true, isDefault: true },
       { id: "c2", name: "Día", active: true, version: 1, sellable: false, isDefault: false },
     ];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.listLocationCatalogues("loc1")).toEqual(rows);
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/locations/loc1/catalogues", {
+    expect(await api.listVenueCatalogues()).toEqual(rows);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/venue/catalogues", {
       method: "GET",
       credentials: "include",
       signal: expect.any(AbortSignal),
     });
   });
 
-  it("addLocationCatalogue POSTs a catalogueId to the location's accessible set", async () => {
+  it("addVenueCatalogue POSTs a catalogueId to the venue's menu list", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    await api.addLocationCatalogue("loc1", "c2");
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/locations/loc1/catalogues", {
+    await api.addVenueCatalogue("c2");
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/venue/catalogues", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
@@ -639,21 +639,21 @@ describe("DashboardApi", () => {
     });
   });
 
-  it("removeLocationCatalogue DELETEs a catalogue from the location's accessible set", async () => {
+  it("removeVenueCatalogue DELETEs a catalogue from the venue's menu list", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    await api.removeLocationCatalogue("loc1", "c2");
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/locations/loc1/catalogues/c2", {
+    await api.removeVenueCatalogue("c2");
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/venue/catalogues/c2", {
       method: "DELETE",
       credentials: "include",
     });
   });
 
-  it("setLocationDefaultCatalogue PUTs the default catalogueId for the location", async () => {
+  it("setVenueDefaultCatalogue PUTs the venue's default catalogueId", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    await api.setLocationDefaultCatalogue("loc1", "c2");
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/locations/loc1/default-catalogue", {
+    await api.setVenueDefaultCatalogue("c2");
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/venue/default-catalogue", {
       method: "PUT",
       credentials: "include",
       headers: { "content-type": "application/json" },

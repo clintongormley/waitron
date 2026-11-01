@@ -341,26 +341,17 @@ describe("Catalogue API — option groups, gates, by-id FKs", () => {
       }),
     );
     await expect403(
-      await send(app, "POST", `/management-api/locations/${ZERO_UUID}/catalogues`, staffCookie, {
+      await send(app, "POST", "/management-api/venue/catalogues", staffCookie, {
         catalogueId: ZERO_UUID,
       }),
     );
     await expect403(
-      await send(
-        app,
-        "DELETE",
-        `/management-api/locations/${ZERO_UUID}/catalogues/${ZERO_UUID}`,
-        staffCookie,
-      ),
+      await send(app, "DELETE", `/management-api/venue/catalogues/${ZERO_UUID}`, staffCookie),
     );
     await expect403(
-      await send(
-        app,
-        "PUT",
-        `/management-api/locations/${ZERO_UUID}/default-catalogue`,
-        staffCookie,
-        { catalogueId: ZERO_UUID },
-      ),
+      await send(app, "PUT", "/management-api/venue/default-catalogue", staffCookie, {
+        catalogueId: ZERO_UUID,
+      }),
     );
   });
 
