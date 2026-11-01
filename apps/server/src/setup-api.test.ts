@@ -2385,6 +2385,23 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     expect(requestRestart).not.toHaveBeenCalled(); // a failed fetch never restarts
   });
 
+  it("maps a mirror.vault_not_empty from adopt to HTTP 409", async () => {
+    const app = new Hono();
+    const adopt = vi.fn(async () => {
+      throw new AppError("mirror.vault_not_empty", {});
+    });
+    const { deps, requestRestart } = makeAdoptDeps({ adopt });
+    mountSetup(app, deps, noopLog);
+
+    const res = await postAdopt(app, adoptBody());
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: { code: "mirror.vault_not_empty", params: {} },
+    });
+    await tick();
+    expect(requestRestart).not.toHaveBeenCalled();
+  });
+
   it("answers the primary's refused login from adopt as 401 password.invalid, naming no field", async () => {
     const app = new Hono();
     const adopt = vi.fn(async () => {

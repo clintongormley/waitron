@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -35,6 +35,7 @@ import {
 } from "./adopt.js";
 import { ALL_MODULES } from "./modules.js";
 import type { MirrorBundle, ReservedIdentity } from "./mirror-bundle.js";
+import type { StandbyIdentity } from "./reserved-identity.js";
 import type { PendingAdoption } from "./finish-adoption.js";
 import { verifyBreakGlass } from "./break-glass.js";
 import { keyRingEnv, writeCredentialsRing } from "./box-secrets.js";
@@ -50,6 +51,12 @@ vi.mock("./modules.js", async (importOriginal) => {
   };
 });
 
+// One identity for every adopt, so a fixture can endorse the identity the box sends.
+vi.mock("./reserved-identity.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./reserved-identity.js")>();
+  return { ...actual, generateStandbyIdentity: () => STANDBY };
+});
+
 // Cases depend on `useVenueDb`'s default `resetPerTest`: each starts from an unstamped `deployment`
 // and an empty `tenants`.
 
@@ -60,6 +67,10 @@ const DESIGNATED = {
 } as const;
 
 const PRIMARY_KEYS = generateNodeKeyPair();
+const STANDBY: StandbyIdentity = {
+  nodeId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  ...generateNodeKeyPair(),
+};
 
 const RESERVED: ReservedIdentity = {
   modules: {
@@ -67,8 +78,8 @@ const RESERVED: ReservedIdentity = {
   },
   series: [{ code: "SA-7", purpose: "standard" }],
   endorsement: endorseKey(
-    "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-    "STANDBY_PUB",
+    STANDBY.nodeId,
+    STANDBY.publicKey,
     DESIGNATED.nodeId,
     PRIMARY_KEYS.privateKey,
   ),
@@ -678,5 +689,129 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(JSON.stringify(error)).not.toContain(BUNDLE_RING.key);
     expect(beforeFirstWrite).not.toHaveBeenCalled();
     await writtenNothing();
+  });
+
+  it.each([
+    [
+      "another node id",
+      endorseKey(
+        "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        STANDBY.publicKey,
+        DESIGNATED.nodeId,
+        PRIMARY_KEYS.privateKey,
+      ),
+    ],
+    [
+      "another public key",
+      endorseKey(
+        STANDBY.nodeId,
+        generateNodeKeyPair().publicKey,
+        DESIGNATED.nodeId,
+        PRIMARY_KEYS.privateKey,
+      ),
+    ],
+  ] as const)(
+    "refuses a main box's endorsement of %s than this box sent, writing nothing",
+    async (_case, endorsement) => {
+      const error = await adoptFromPrimary(
+        deps({
+          fetchBundle: async () => makeBundle({ reservedIdentity: { ...RESERVED, endorsement } }),
+        }),
+        REQ,
+        NO_HOOKS,
+      ).catch((e: unknown) => e);
+      expect(isAppError(error) && error.code).toBe("mirror.bundle_fetch_failed");
+      expect(isAppError(error) && error.params).toEqual({});
+      await writtenNothing();
+    },
+  );
+
+  it.each([
+    ["a key that is not 32 bytes", { key: "abc", version: 1 }, "credentials.key_invalid"],
+    [
+      "a previous key on the same version",
+      { ...BUNDLE_RING, previous: { key: Buffer.alloc(32, 0x6c).toString("base64"), version: 1 } },
+      "credentials.key_ring_version_collision",
+    ],
+  ] as const)(
+    "refuses a main box's ring with %s, writing nothing",
+    async (_case, credentialsRing, code) => {
+      const error = await adoptFromPrimary(
+        deps({ fetchBundle: async () => makeBundle({ credentialsRing }) }),
+        REQ,
+        NO_HOOKS,
+      ).catch((e: unknown) => e);
+      expect(isAppError(error) && error.code).toBe(code);
+      await writtenNothing();
+    },
+  );
+
+  it("writes nothing to node.db when the main box's authority files cannot be written", async () => {
+    // A file where the `tls` folder goes refuses the authority's write.
+    await writeFile(join(stateDir, "tls"), "not a folder");
+    await expect(adoptFromPrimary(deps(), REQ, NO_HOOKS)).rejects.toMatchObject({
+      code: "EEXIST",
+    });
+    for (const table of [
+      "node_mode",
+      "node_mirror_link",
+      "node_signing_key",
+      "node_recovery_key",
+      "node_primary_key",
+    ]) {
+      expect((await suite.node.execute(sql.raw(`select node_id from ${table}`))).rows).toEqual([]);
+    }
+  });
+
+  it("keeps the box's own secrets.env, byte for byte, when the deployment cannot be stamped", async () => {
+    const own = "WAITRON_CREDENTIALS_KEY=b3du\nWAITRON_CREDENTIALS_KEY_VERSION=1\n";
+    await writeFile(join(stateDir, "secrets.env"), own, { mode: 0o600 });
+    await suite.db.execute(
+      sql.raw(`create trigger refuse_stamp before insert on deployment
+        begin select raise(abort, 'refused by test'); end`),
+    );
+    try {
+      await expect(adoptFromPrimary(deps(), REQ, NO_HOOKS)).rejects.toThrow("refused by test");
+      expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toBe(own);
+    } finally {
+      await suite.db.execute(sql`drop trigger if exists refuse_stamp`);
+    }
+  });
+
+  it("leaves no role, signing key, recovery key or link behind when the main box's key cannot be pinned", async () => {
+    await suite.node.execute(
+      sql.raw(`create trigger refuse_pin before insert on node_primary_key
+        begin select raise(abort, 'refused by test'); end`),
+    );
+    try {
+      await expect(adoptFromPrimary(deps(), REQ, NO_HOOKS)).rejects.toThrow("refused by test");
+      for (const table of [
+        "node_mode",
+        "node_signing_key",
+        "node_recovery_key",
+        "node_mirror_link",
+      ]) {
+        expect((await suite.node.execute(sql.raw(`select node_id from ${table}`))).rows).toEqual(
+          [],
+        );
+      }
+    } finally {
+      await suite.node.execute(sql`drop trigger if exists refuse_pin`);
+    }
+  });
+
+  it("replaces secrets.env whole: a variable the old file held is gone, and the file is 0600", async () => {
+    await writeFile(
+      join(stateDir, "secrets.env"),
+      "WAITRON_CREDENTIALS_KEY=b3du\nWAITRON_CREDENTIALS_KEY_VERSION=1\nREVIEW_EXTRA=1\n",
+      { mode: 0o644 },
+    );
+    await adoptFromPrimary(deps(), REQ, NO_HOOKS);
+    const secretsFile = join(stateDir, "secrets.env");
+    expect(parseEnvFile(await readFile(secretsFile, "utf8"))).toEqual({
+      WAITRON_CREDENTIALS_KEY: BUNDLE_RING.key,
+      WAITRON_CREDENTIALS_KEY_VERSION: "1",
+    });
+    expect((await stat(secretsFile)).mode & 0o777).toBe(0o600);
   });
 });

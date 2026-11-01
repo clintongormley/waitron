@@ -23,7 +23,7 @@ import {
   isPermittedLeafIpv4,
   reissueServerLeaf,
 } from "./self-signed-cert.js";
-import { stageFile, stagedPath, writeFileAtomic } from "./fs-atomic.js";
+import { stageFile, stagedPath, writeFileAtomic, writeFileDurable } from "./fs-atomic.js";
 import { formatEnvFile } from "./env-file.js";
 import type { TlsFiles } from "./tls.js";
 
@@ -69,7 +69,8 @@ export interface EncodedKeyRing {
  * Replaces `secrets.env` whole with `ring`, so the next boot opens what the main box sealed.
  */
 export async function writeCredentialsRing(stateDir: string, ring: EncodedKeyRing): Promise<void> {
-  await writeFileAtomic(join(stateDir, "secrets.env"), formatEnvFile(keyRingEnv(ring)), 0o600);
+  // Durable: node.db's commit is, and a key it holds sealed under this ring opens only with it.
+  await writeFileDurable(join(stateDir, "secrets.env"), formatEnvFile(keyRingEnv(ring)), 0o600);
 }
 
 /** The ring's variables, as `loadKeyRing` reads them; the previous pair only when it has one. */

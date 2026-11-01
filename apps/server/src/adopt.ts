@@ -154,11 +154,14 @@ export async function adoptFromPrimary(
   if ((await listCredentials(deps.ownerDb)).length > 0) {
     throw new AppError("mirror.vault_not_empty", {});
   }
-  // This proves only that the bundle agrees with itself, not who sent it: checking the main box's
-  // certificate fingerprint before the password is sent is the next step (the design's trust
-  // section, docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md).
+  // This proves only that the bundle agrees with itself and with the identity this box sent, not
+  // who sent it: that rests on the authority the person confirmed, which `fetchMirrorBundle` trusts
+  // before it sends the password (trust and fencing,
+  // docs/superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md §6).
   const { endorsement } = bundle.reservedIdentity;
   if (
+    endorsement.nodeId !== standby.nodeId ||
+    endorsement.publicKey !== standby.publicKey ||
     endorsement.endorsedBy !== designated.nodeId ||
     !verifyEndorsement(endorsement, bundle.primaryPublicKey)
   ) {

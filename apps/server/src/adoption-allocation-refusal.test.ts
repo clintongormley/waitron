@@ -80,7 +80,23 @@ function deps(value = bundle()) {
     }),
     advertisedOrigin: "https://spare.test",
     environment: "preproduction" as const,
-    fetchBundle: async () => value,
+    // The main box endorses the identity this box sends.
+    fetchBundle: async (
+      _url: string,
+      _credential: unknown,
+      standby: { nodeId: string; publicKey: string },
+    ) => ({
+      ...value,
+      reservedIdentity: {
+        ...value.reservedIdentity,
+        endorsement: endorseKey(
+          standby.nodeId,
+          standby.publicKey,
+          PRIMARY,
+          PRIMARY_KEYS.privateKey,
+        ),
+      },
+    }),
     persistTrading: async () => {},
     persistModuleConfig: async () => {},
     persistCredentialsRing: (ring: MirrorBundle["credentialsRing"]) =>
