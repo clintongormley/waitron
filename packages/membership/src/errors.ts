@@ -12,8 +12,9 @@ declare module "@waitron/shared" {
     /**
      * The chart this box holds is too broken to read (`malformed`), or vouched for by no key it
      * stores itself (its own, or the main box's it pinned). The first comes only from a fault; the
-     * second also from a Cloud peer, or (with three or more boxes) a main box that changed twice
-     * since this box joined, which the backlog records. Screens show the generic text.
+     * second also from a Cloud peer, or, in a venue of three or more boxes after two promotions, a
+     * main box that no key this box trusts vouched for, which the backlog records. Screens show the
+     * generic text.
      */
     "membership.held_untrusted": { reason: VerifyFailure };
   }

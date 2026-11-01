@@ -23,8 +23,10 @@ import {
   endorseKey,
   generateNodeKeyPair,
   MAX_NODES,
+  signDocumentBody,
   verifyBytes,
   verifyMembershipDocument,
+  type MembershipDocumentBody,
   type MembershipNode,
   type NodeKeyPair,
   type SignedMembershipDocument,
@@ -1123,6 +1125,70 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     );
     expect(await allocationSnapshot()).toEqual(counterBefore);
   });
+
+  /** Holds a chart the main box signed with its own key over `body`, whatever its shape. */
+  async function holdMainSignedBody(designated: AdoptResult, body: object): Promise<void> {
+    await writeNodeMembership(db, {
+      body,
+      signerNodeId: designated.nodeId,
+      signature: signDocumentBody(body as MembershipDocumentBody, primaryKeyPair.privateKey),
+      endorsements: [],
+    } as unknown as SignedMembershipDocument);
+  }
+
+  it.each([
+    ["with no nodes list", (term: number) => ({ term })],
+    ["whose nodes entry is a number", (term: number) => ({ term, nodes: [42] })],
+  ])(
+    "refuses 409 membership.held_untrusted malformed for a chart the main box signed %s, reserving nothing and changing no chart",
+    async (_label, bodyAt) => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated, "https://relay.example:9000/");
+      const seedTerm = ((await readNodeMembership(db))?.body.term ?? -1) + 1;
+      await holdMainSignedBody(designated, bodyAt(seedTerm));
+      const chartBefore = await readNodeMembership(db);
+      const counterBefore = await allocationSnapshot();
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error: { code: "membership.held_untrusted", params: { reason: "malformed" } },
+      });
+      expect(await allocationSnapshot()).toEqual(counterBefore);
+      expect(await readNodeMembership(db)).toEqual(chartBefore);
+    },
+  );
+
+  it.each([
+    ["with no nodes list", (term: number) => ({ term })],
+    ["whose nodes entry is a number", (term: number) => ({ term, nodes: [42] })],
+  ])(
+    "refuses 409 membership.held_untrusted malformed when a chart the main box signed %s lands between a chart round's read and its write",
+    async (_label, bodyAt) => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated, "https://relay.example:9000/");
+      const seedTerm = await holdChartWithStandby(designated, crypto.randomUUID());
+      pause.beforeChartMint = () => holdMainSignedBody(designated, bodyAt(seedTerm + 1));
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+      });
+
+      expect(pause.beforeChartMint).toBeUndefined();
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error: { code: "membership.held_untrusted", params: { reason: "malformed" } },
+      });
+      expect((await readNodeMembership(db))?.body).toEqual(bodyAt(seedTerm + 1));
+    },
+  );
 
   it("adds a spare after another spare retired itself", async () => {
     const { designated, adminPersonId } = await setupVenue();

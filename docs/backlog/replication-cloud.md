@@ -575,17 +575,27 @@ so once one exists those paths would refuse it `membership.held_untrusted`, and 
 the generic text. Not run with a Cloud peer: none signs charts today. Decide with the Cloud standby
 work which keys a box trusts.
 
-## A1276: with three or more boxes, a main box that changed twice since a box joined is not trusted
+## A1276: after two promotions, a box can refuse the main box's chart
 
 Left open by A947 slice 3a. A box trusts only its own key and the ONE main-box key it pinned when it
 joined (`pinPrimaryKeyTx` has one production caller, `apps/server/src/adopt.ts`), and a chart carries
-only its signer's own endorsement. The sequence: main box M; spares S1 and S2 join under M. M fails
-and S1 is promoted. Spare D joins under S1, so D trusts D and S1. S1 fails and S2 is promoted. D now
-holds S2's chart, which carries S2's endorsement by M, a key D never pinned. D then refuses to be
-promoted or to retire (`membership.held_untrusted`, reason `endorsement_invalid` at the helper
-level, measured in the slice's Task 15 review), and the screen shows the generic text with no next
-step, which CLAUDE.md §3 allows only for a state only a bug produces. Not run end to end: that
-replication delivers S2's chart to D is not proven. Go-live is two boxes, where this cannot arise.
+only its signer's own endorsement. So in a venue of three or more boxes, after two promotions, a box
+can hold a chart from a main box that no key it trusts vouched for. It then refuses to be promoted
+or to retire (`membership.held_untrusted`, reason `endorsement_invalid`), and the screen shows the
+generic text with no next step, which CLAUDE.md §3 allows only for a state only a bug produces. Two
+sequences:
+
+- (a) Main box M; spares S1 and S2 join under M. M fails and S1 is promoted. Spare D joins under S1,
+  so D trusts D and S1. S1 fails and S2 is promoted. S2's chart carries M's endorsement of S2, and D
+  never trusted M, so D refuses it. The main box changed only once since D joined. Control: the
+  same chart with S1 vouching for S2 is trusted.
+- (b) The original main box M, which trusts only itself, holds the chart of S2 after S1 and then S2
+  are promoted, with S1 vouching for S2. M refuses it. Control: S1's chart with M vouching for S1
+  is trusted.
+
+Measured at the helper the trust check calls (`verifyDocumentSigner` in `@waitron/membership`, with
+trust sets built by hand), on the slice's branch; not run end to end. That replication delivers
+S2's chart to D, or to a returned M, is not proven. Go-live is two boxes, where this cannot arise.
 Fix idea: at join, also pin the main box's own trusted keys.
 
 ## A1277: a malformed chart signed by a trusted key is copied into the next chart
@@ -603,9 +613,11 @@ Predates A947 slice 3a. On main (01945cbce, in a throwaway worktree), the case "
 membership.revoked_duplicate when the held chart's revoked list names a machine twice" in
 `apps/server/src/mirror-bundle-api.test.ts`, with a snapshot of the reservations added before and
 after, failed only on the snapshot: the route answered 409 `membership.revoked_duplicate` after
-making one signed outside reservation (`allocationId contract-P000042`). The slice's trust check
-runs before the reservation but passes this chart, which the main box signed. Wanted: check the
-chart's shape before reserving.
+making one signed outside reservation (`allocationId contract-P000042`). On the slice's branch the
+trust check and the readability check (`assertHeldDocumentReadable`) both run before the
+reservation, and both pass this chart: the main box signed it, and the readability check does not
+look for repeated ids. The same snapshot added on the branch still fails with that reservation.
+Wanted: refuse repeated ids before reserving.
 
 ## A1279: a local secondary promotes only over a chart it signed itself
 

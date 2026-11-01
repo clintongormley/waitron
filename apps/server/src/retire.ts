@@ -59,9 +59,9 @@ export async function retireSelf(deps: RetireDeps): Promise<RetireResult> {
     throw new AppError("node.retire_no_carrier", {});
   }
 
-  // A held chart no stored key vouches for comes from a fault in Waitron, a Cloud peer, or (with
-  // three or more boxes) a main box that changed twice since this box joined. The backlog records
-  // the last two.
+  // A held chart no stored key vouches for comes from a fault in Waitron, a Cloud peer, or, in a
+  // venue of three or more boxes after two promotions, a main box that no key this box trusts
+  // vouched for. The backlog records the last two.
   await assertHeldDocumentTrusted({ node: deps.node, ring: deps.ring, nodeId: deps.nodeId }, held);
 
   const document = await mintNextMembershipDocument(

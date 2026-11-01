@@ -85,7 +85,14 @@ async function close(store: VenueDatabase): Promise<void> {
 }
 
 let a: { id: string; publicKey: string; secret: string; dir: string };
-let b: { id: string; secret: string; dir: string; ring: KeyRing; nodeBytes: Buffer };
+let b: {
+  id: string;
+  joinedPublicKey: string;
+  secret: string;
+  dir: string;
+  ring: KeyRing;
+  nodeBytes: Buffer;
+};
 let copiedTerm: number;
 
 function chartBody(term: number, nodes: MembershipDocumentBody["nodes"]): MembershipDocumentBody {
@@ -124,6 +131,7 @@ beforeAll(async () => {
   const bStore = await openStore(bDir);
   let persisted: EncodedKeyRing | undefined;
   let bId: string | undefined;
+  let bJoinedPublicKey: string | undefined;
   const joined = await adoptFromPrimary(
     {
       ownerDb: bStore.venue,
@@ -140,8 +148,9 @@ beforeAll(async () => {
       persistCredentialsRing: async (ring) => {
         persisted = ring;
       },
-      fetchBundle: async (_url, _credential, standby) =>
-        assembleMirrorBundle({
+      fetchBundle: async (_url, _credential, standby) => {
+        bJoinedPublicKey = standby.publicKey;
+        return assembleMirrorBundle({
           appDb: aStore.venue,
           node: aStore.node,
           ring: RING_A,
@@ -151,7 +160,8 @@ beforeAll(async () => {
           accountKey: "test-account-key",
           designated: { nodeId: aId, locationId: loc!.id },
           standby,
-        }),
+        });
+      },
     },
     { primaryUrl: "https://primary.test", credential: { personId: "p", password: "x" } },
     { beforeFirstWrite: async () => {} },
@@ -175,6 +185,7 @@ beforeAll(async () => {
   a = { id: aId, publicKey: nodeSigningPublicKey(aKey), secret: aSecret, dir: aDir };
   b = {
     id: bId!,
+    joinedPublicKey: bJoinedPublicKey!,
     secret: joined.breakGlassSecret,
     dir: bDir,
     ring: loadKeyRing(keyRingEnv(persisted!)),
@@ -225,6 +236,7 @@ describe("a spare whose venue.db is replaced by the main box's", () => {
     const bKey = await readNodeSigningKey(box.node, b.ring, b.id);
     expect(bKey).not.toBeNull();
     expect(nodeSigningPublicKey(bKey!)).not.toBe(a.publicKey);
+    expect(nodeSigningPublicKey(bKey!)).toBe(b.joinedPublicKey);
     expect(await readNodeSigningKey(box.node, b.ring, a.id)).toBeNull();
 
     const verifier = (await readRecoveryKeyVerifier(box.node, b.id))!;

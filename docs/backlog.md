@@ -5755,9 +5755,10 @@ outstanding on code that exists.
 - **A1275: a Cloud peer's chart is refused on the checked paths** (promotion, retiring, adding a
   spare). [Detail](backlog/replication-cloud.md#a1275-a-cloud-peers-chart-is-refused-on-the-checked-paths)
 
-- **A1276: with three or more boxes, a main box that changed twice since a box joined is not
-  trusted**, and the refusal names no next step. Not run end to end.
-  [Detail](backlog/replication-cloud.md#a1276-with-three-or-more-boxes-a-main-box-that-changed-twice-since-a-box-joined-is-not-trusted)
+- **A1276: after two promotions, a box can refuse the main box's chart**, in a venue of three or
+  more boxes, when no key it trusts vouched for that main box; the refusal names no next step.
+  Measured at the helper, not end to end.
+  [Detail](backlog/replication-cloud.md#a1276-after-two-promotions-a-box-can-refuse-the-main-boxs-chart)
 
 - **A1277: a malformed chart signed by a trusted key is copied into the next chart.**
   [Detail](backlog/replication-cloud.md#a1277-a-malformed-chart-signed-by-a-trusted-key-is-copied-into-the-next-chart)

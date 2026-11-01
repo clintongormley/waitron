@@ -579,8 +579,6 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       expect(new X509Certificate(Buffer.from(leafInRow!.bytes)).serialNumber).toBe(
         leafB.serialNumber,
       );
-      // B's node.db is the dead box's, carried in the sealed state: had the rebuild kept another
-      // node.db, A's signing key would read as null here.
       const ringB = loadKeyRing(
         parseEnvFile(await readFile(join(dirsB.state, "secrets.env"), "utf8")),
       );

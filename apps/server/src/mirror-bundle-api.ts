@@ -28,6 +28,7 @@ import {
   mintNextMembershipDocument,
 } from "./membership-mint.js";
 import {
+  assertHeldDocumentReadable,
   assertHeldDocumentTrusted,
   HELD_DOCUMENT_REFUSALS,
   type StoredTrustDeps,
@@ -115,7 +116,9 @@ export function mountMirrorBundleApi(
         if (deps.relayUrl === undefined) throw new AppError("mirror.no_relay", {});
         // Before assembly, so a refused chart spends no reservation. Each mint round below checks
         // the chart it re-reads again.
-        await assertHeldDocumentTrusted(trustDeps(deps), await readNodeMembership(deps.appDb));
+        const held = await readNodeMembership(deps.appDb);
+        assertHeldDocumentReadable(held);
+        await assertHeldDocumentTrusted(trustDeps(deps), held);
 
         const bundle = await assembleMirrorBundle({
           appDb: deps.appDb,
@@ -189,11 +192,12 @@ async function appendStandbyToChart(
 ): Promise<void> {
   for (let round = 1; round <= MAX_CHART_WRITE_ROUNDS; round += 1) {
     const held = await readNodeMembership(deps.appDb);
+    assertHeldDocumentReadable(held);
     refuseRemovedStandby(held, standbyNodeId);
     refuseFullChart(held, standbyNodeId);
-    // A held chart no stored key vouches for comes from a fault in Waitron, a Cloud peer, or (with
-    // three or more boxes) a main box that changed twice since this box joined. The backlog records
-    // the last two.
+    // A held chart no stored key vouches for comes from a fault in Waitron, a Cloud peer, or, in a
+    // venue of three or more boxes after two promotions, a main box that no key this box trusts
+    // vouched for. The backlog records the last two.
     await assertHeldDocumentTrusted(trustDeps(deps), held);
     const document = await mintNextMembershipDocument(
       { db: deps.appDb, node: deps.node, ring: deps.ring },
