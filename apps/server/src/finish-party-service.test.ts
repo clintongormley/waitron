@@ -22,6 +22,9 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readBillEditState } from "./bill-editing.js";
 import { advanceTicketItem, markServed } from "./working-order.js";
 import { readCancellationContext } from "./line-cancel-context.js";
+import { fireGroup } from "./order-groups.js";
+import { printedLines } from "./testing/decode-ticket.js";
+import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { combineParties } from "./testing/table-action-fixture.js";
 import {
   watchDerivationsAndLock,
@@ -40,6 +43,7 @@ import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import {
   billWith,
   inTx,
+  placeGrouped,
   provisionAdjustmentVenue,
   rowsOf,
   type AdjustmentVenue,
@@ -508,6 +512,192 @@ describe("finishing paid food service", () => {
     expect(await post(p, { ...(await confirm(p)), [field as string]: value })).toMatchObject({
       status: 400,
       body: { error: { code: "management.request_invalid", params: { field } } },
+    });
+    expect(await snapshot(p)).toEqual(before);
+  });
+});
+
+describe("A773 requested lifecycle", () => {
+  /** Kitchen names, which the station's slips print, of the four dishes in line order. */
+  const KITCHEN = ["GREENS", "BURG", "RIBEYE", "LOAF"];
+
+  /**
+   * A paid party with a held Salad, then a Burger fired at a station that waits for the pass when
+   * `waiting` (Requested; otherwise released and queued), a released queued Steak and a released
+   * Bread advanced to ready, each in its own group.
+   */
+  async function everyPhase(waiting: boolean) {
+    const order = await billWith(venue, [{ name: "Salad" }], { release: "hold", shape: "grouped" });
+    const seated = { partyId: order.partyId, tabId: order.billId };
+    const place = (name: string) =>
+      inTx(venue, (tx) =>
+        placeGrouped(
+          tx,
+          venue.cfg,
+          seated,
+          [{ menuItemId: venue.item(name), quantity: "1" }],
+          "fire",
+          venue.staffId,
+        ),
+      );
+    if (waiting) await inTx(venue, (tx) => setStationsWaitForPass(tx, true, [venue.stationId]));
+    try {
+      await place("Burger");
+    } finally {
+      if (waiting) await inTx(venue, (tx) => setStationsWaitForPass(tx, false, [venue.stationId]));
+    }
+    await place("Steak");
+    await place("Bread");
+    const lines = await rowsOf(venue, order.billId);
+    const [bread] = await venue.db
+      .select()
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderLineId, lines[3]!.id));
+    await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, bread!.id, "preparing"));
+    await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, bread!.id, "ready"));
+    await payWorkingOrder(
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
+      venue.cfg,
+      { id: order.billId, tender: { method: "cash", amount: "49.50" }, lines: [] },
+    );
+    const [party] = await venue.db.select().from(parties).where(eq(parties.id, order.partyId));
+    const p: Fixture = {
+      ...order,
+      lines,
+      body: {
+        expectedPartyRevision: party!.revision,
+        expectedEdits: [await inTx(venue, (tx) => readBillEditState(tx, order.billId))],
+        submissionId: randomUUID(),
+      },
+    };
+    const confirmed = await confirm(p);
+    return {
+      p,
+      body: {
+        ...confirmed,
+        approver: { personId: venue.managerId, pin: PINS.manager },
+        cancellations: confirmed.cancellations.map((item) => ({
+          ...item,
+          refundHandoff: true,
+          // Only released dishes the kitchen has not started need the answer.
+          ...(item.expectedContext.components.some((c) => c.firedAt !== null) &&
+          item.expectedContext.stage === "not_started"
+            ? { preparationStarted: false }
+            : {}),
+        })),
+      },
+    };
+  }
+
+  /** Finish `body`, answering the jobs it printed as the kitchen names each one carries. */
+  async function finishPrinting(p: Fixture, body: unknown) {
+    const before = new Set((await snapshot(p)).jobs.map((job) => job.id));
+    const answer = await post(p, body);
+    const printed = (await snapshot(p)).jobs
+      .filter((job) => !before.has(job.id))
+      // A slip's table, party number and time differ between two parties.
+      .map((job) =>
+        printedLines(job.payload).map((line) =>
+          line.replace(/^M-[0-9a-f]{8}$|^\d+$|^\d\d:\d\d$/, "<varies>"),
+        ),
+      );
+    const byDish = KITCHEN.map((name) =>
+      printed.filter((lines) => lines.some((line) => line.includes(name))),
+    );
+    return { answer, printed, byDish };
+  }
+
+  it("finishes held, Requested, waiting and ready dishes in one Finish", async () => {
+    const twin = await everyPhase(false);
+    const { p, body } = await everyPhase(true);
+    const burger = body.cancellations[1]!.expectedContext;
+    expect(burger.components).toMatchObject([
+      { lineId: p.lines[1]!.id, firedAt: null, requestedAt: expect.any(String) },
+    ]);
+    expect(body.cancellations[1]).not.toHaveProperty("preparationStarted");
+    for (const item of body.cancellations)
+      for (const component of item.expectedContext.components) {
+        expect(component).toHaveProperty("requestedAt");
+        expect(component.stationId).toBe(venue.stationId);
+      }
+
+    const control = await finishPrinting(twin.p, twin.body);
+    const result = await finishPrinting(p, body);
+    expect(control.answer.status, JSON.stringify(control.answer.body)).toBe(200);
+    expect(result.answer.status, JSON.stringify(result.answer.body)).toBe(200);
+    expect(result.answer.body.state).toBe("closed");
+
+    const positions = (links: { lineId: string }[], lines: Fixture["lines"]) =>
+      links.map((link) => lines.findIndex((line) => line.id === link.lineId));
+    expect(positions(result.answer.body.refundLinks, p.lines)).toEqual(
+      positions(control.answer.body.refundLinks, twin.p.lines),
+    );
+    expect(result.answer.body.refundLinks).toHaveLength(4);
+
+    const after = await snapshot(p);
+    expect(after.party[0]?.state).toBe("closed");
+    expect(after.tickets).toEqual([]);
+    for (const line of p.lines)
+      expect(after.cancellations.find((row) => row.lineId === line.id)).toMatchObject({
+        quantity: 1000,
+      });
+    const cancels = after.adjustments.filter(
+      (row) => row.workingOrderId === p.billId && row.action === "cancel",
+    );
+    expect(cancels).toHaveLength(4);
+    for (const row of cancels) expect(row).toMatchObject({ reduction: 0, refundHandoff: true });
+
+    expect(result.byDish[1]).toEqual([]);
+    expect(control.byDish[1]).toHaveLength(1);
+    for (const index of [0, 2, 3])
+      expect(result.byDish[index], KITCHEN[index]).toEqual(control.byDish[index]);
+    expect(result.printed).toHaveLength(3);
+  });
+
+  it("refuses a Finish confirmed while a dish was held once its group became Requested", async () => {
+    const p = await fixture();
+    const body = await confirm(p);
+    await inTx(venue, (tx) => setStationsWaitForPass(tx, true, [venue.stationId]));
+    try {
+      await inTx(venue, (tx) =>
+        fireGroup(tx, venue.cfg, p.partyId, p.lines[0]!.groupId!, {
+          submissionId: randomUUID(),
+          expectedPartyRevision: p.body.expectedPartyRevision,
+          operatorId: venue.staffId,
+        }),
+      );
+    } finally {
+      await inTx(venue, (tx) => setStationsWaitForPass(tx, false, [venue.stationId]));
+    }
+    const [burger] = await venue.db
+      .select()
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderLineId, p.lines[0]!.id));
+    expect(burger).toMatchObject({ requestedAt: expect.any(String), firedAt: null });
+    // Everything but the dish contexts is read again, so only a context can refuse.
+    const [party] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
+    const [bill] = await venue.db
+      .select()
+      .from(workingOrders)
+      .where(eq(workingOrders.id, p.billId));
+    const stale = {
+      ...body,
+      expectedPartyRevision: party!.revision,
+      expectedEdits: [await inTx(venue, (tx) => readBillEditState(tx, p.billId))],
+      cancellations: body.cancellations.map((item) => ({
+        ...item,
+        expectedBillRevision: bill!.revision,
+      })),
+    };
+    const before = await snapshot(p);
+    expect(await post(p, stale)).toMatchObject({
+      status: 409,
+      body: { error: { code: "party.unserved_dishes" } },
     });
     expect(await snapshot(p)).toEqual(before);
   });
