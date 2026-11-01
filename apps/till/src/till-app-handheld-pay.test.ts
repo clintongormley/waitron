@@ -3519,6 +3519,8 @@ describe("the paid screen on a handheld", () => {
           lineId: "line-1",
           state: "queued",
           firedAt: null,
+          requestedAt: null,
+          stationId: "station-1",
           quantity: "1.000",
           kitchenQuantity: "1.000",
           servedQuantity: "0.000",

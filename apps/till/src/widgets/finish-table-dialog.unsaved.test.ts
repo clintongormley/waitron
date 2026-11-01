@@ -28,6 +28,8 @@ class FinishLeaveApp extends LitElement {
             lineId: "flan",
             state: "queued",
             firedAt: "2026-10-19T12:00:00Z",
+            requestedAt: null,
+            stationId: "station-1",
             quantity: "1.000",
             kitchenQuantity: "1.000",
             servedQuantity: "0.000",

@@ -12679,6 +12679,8 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
             lineId,
             state: "queued",
             firedAt: null,
+            requestedAt: null,
+            stationId: "station-1",
             quantity: "2.000",
             kitchenQuantity: "2.000",
             servedQuantity: "1.000",
@@ -13089,6 +13091,21 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
       if (kind === "bill") value.billRevision++;
       if (kind === "party") value.revision++;
       if (kind === "kitchen") value.context.stage = "started";
+      const { el } = await mountFinish({ getCancellation: vi.fn().mockResolvedValue(value) });
+      await openFinish(el);
+      expect(finishDialog(el)).toBeNull();
+      expect(api.finishTable).toHaveBeenCalledOnce();
+      expect(banner(el)?.textContent).toContain(codeMessage("tab.cancel_context_changed"));
+    },
+  );
+
+  it.each(["requestedAt", "stationId"])(
+    "refuses an opening observation whose kitchen %s changed during its reads",
+    async (field) => {
+      const value = consent();
+      const component = value.context.components[0]!;
+      if (field === "requestedAt") component.requestedAt = "2026-09-27T10:00:00.000Z";
+      else component.stationId = "station-2";
       const { el } = await mountFinish({ getCancellation: vi.fn().mockResolvedValue(value) });
       await openFinish(el);
       expect(finishDialog(el)).toBeNull();

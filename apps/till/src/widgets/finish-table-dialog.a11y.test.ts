@@ -47,6 +47,8 @@ for (const locale of ["en-GB", "es-ES"]) {
                 lineId: `line-${index}`,
                 state: stage === "started" ? "preparing" : "queued",
                 firedAt: stage === "held" ? null : "2026-10-19T12:00:00Z",
+                requestedAt: null,
+                stationId: "station-1",
                 quantity: "2.000",
                 kitchenQuantity: "2.000",
                 servedQuantity: "0.000",

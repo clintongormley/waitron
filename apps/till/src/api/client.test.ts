@@ -3793,6 +3793,8 @@ describe("TillApi: a seated party", () => {
                 lineId: "line-1",
                 state: "queued" as const,
                 firedAt: "2026-10-19T12:00:00.000Z",
+                requestedAt: null,
+                stationId: "station-1",
                 quantity: "3",
                 kitchenQuantity: "3",
                 servedQuantity: "1",

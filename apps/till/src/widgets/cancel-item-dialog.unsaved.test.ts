@@ -24,6 +24,8 @@ class CancelLeaveApp extends LitElement {
           lineId: "dish",
           state: "queued",
           firedAt: null,
+          requestedAt: null,
+          stationId: "station-1",
           quantity: "3.000",
           kitchenQuantity: "3.000",
           servedQuantity: "0.000",

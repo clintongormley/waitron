@@ -11,6 +11,8 @@ const context = {
       lineId: "dish-3",
       state: "preparing" as const,
       firedAt: "2026-10-17T10:00:00.000Z",
+      requestedAt: null,
+      stationId: "station-1",
       quantity: "2.000",
       kitchenQuantity: "2.000",
       servedQuantity: "0.000",

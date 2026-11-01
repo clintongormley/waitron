@@ -37,6 +37,8 @@ function dish(lineId: string, stage: "held" | "fired" | "started" = "held"): Uns
           lineId,
           state: stage === "started" ? "preparing" : "queued",
           firedAt: stage === "held" ? null : "2026-10-19T12:00:00Z",
+          requestedAt: null,
+          stationId: "station-1",
           quantity: "3.000",
           kitchenQuantity: "3.000",
           servedQuantity: "0.000",
