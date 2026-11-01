@@ -41,7 +41,7 @@ export type ActivationValidation =
 
 export async function validateAllocationForActivation(
   tx: Transaction,
-  node: ProvisionedNode,
+  node: Pick<ProvisionedNode, "nodeId">,
   allocation: unknown,
   approval: unknown,
   context: AllocationContext,
@@ -53,17 +53,17 @@ type SeriesBases = readonly { readonly code: string; readonly purpose: string }[
 
 async function validateForActivation(
   tx: Transaction,
-  node: ProvisionedNode,
+  node: Pick<ProvisionedNode, "nodeId">,
   allocation: unknown,
   approval: unknown,
   context: AllocationContext,
   dormantBases?: SeriesBases,
 ): Promise<ActivationValidation> {
   const [storedNode] = await tx
-    .select({ locationId: nodes.locationId })
+    .select({ id: nodes.id })
     .from(nodes)
     .where(eq(nodes.id, node.nodeId));
-  if (storedNode?.locationId !== node.locationId || context.targetNodeId !== node.nodeId)
+  if (storedNode === undefined || context.targetNodeId !== node.nodeId)
     return { ok: false, reason: "node_mismatch" };
   const tenant = await readTenant(tx);
   if (tenant === null) return { ok: false, reason: "taxpayer_mismatch" };
@@ -128,7 +128,7 @@ async function validateForActivation(
 
 export async function activateAllocation(
   tx: Transaction,
-  node: ProvisionedNode,
+  node: Pick<ProvisionedNode, "nodeId">,
   allocation: unknown,
   approval: unknown,
   context: AllocationContext,
@@ -138,7 +138,7 @@ export async function activateAllocation(
 
 export async function activateAuthenticatedAllocation(
   tx: Transaction,
-  node: ProvisionedNode,
+  node: Pick<ProvisionedNode, "nodeId">,
   allocation: unknown,
   approval: unknown,
   context: AllocationContext,
@@ -184,7 +184,7 @@ function authenticatedContext(context: AllocationContext, authority: unknown, ac
 
 export async function activateAuthenticatedHourStandbyAllocation(
   tx: Transaction,
-  node: ProvisionedNode,
+  node: Pick<ProvisionedNode, "nodeId">,
   allocation: unknown,
   approval: unknown,
   context: AllocationContext,
@@ -223,7 +223,7 @@ export async function activateAuthenticatedHourStandbyAllocation(
 
 export async function activateAuthenticatedDormantAllocation(
   tx: Transaction,
-  node: ProvisionedNode,
+  node: Pick<ProvisionedNode, "nodeId">,
   reservationEventId: string,
   allocation: unknown,
   approval: unknown,
@@ -244,7 +244,7 @@ export async function activateAuthenticatedDormantAllocation(
 
 export async function activateDormantAllocation(
   tx: Transaction,
-  node: ProvisionedNode,
+  node: Pick<ProvisionedNode, "nodeId">,
   reservationEventId: string,
   allocation: unknown,
   approval: unknown,
@@ -255,7 +255,7 @@ export async function activateDormantAllocation(
 
 async function activateDormant(
   tx: Transaction,
-  node: ProvisionedNode,
+  node: Pick<ProvisionedNode, "nodeId">,
   reservationEventId: string,
   allocation: unknown,
   approval: unknown,
@@ -346,7 +346,7 @@ async function activateDormant(
 
 async function activate(
   tx: Transaction,
-  node: ProvisionedNode,
+  node: Pick<ProvisionedNode, "nodeId">,
   allocation: unknown,
   approval: unknown,
   context: AllocationContext,
@@ -369,9 +369,12 @@ async function activate(
       );
     const tenant = await readTenant(tx);
     const [stamp] = await tx.select().from(deployment).where(eq(deployment.id, 1));
-    const [storedNode] = await tx.select().from(nodes).where(eq(nodes.id, node.nodeId));
+    const [storedNode] = await tx
+      .select({ id: nodes.id })
+      .from(nodes)
+      .where(eq(nodes.id, node.nodeId));
     if (
-      storedNode?.locationId !== node.locationId ||
+      storedNode === undefined ||
       prior.nodeId !== node.nodeId ||
       context.targetNodeId !== node.nodeId
     )

@@ -433,7 +433,7 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
     expect(retained.receipt).toEqual(f.receipt);
     const report = await readCloudAllocationReport(
       suite.db,
-      { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) },
+      { nodeId: TENANT_A.nodeId },
       {
         receiptPath: join(
           f.root,

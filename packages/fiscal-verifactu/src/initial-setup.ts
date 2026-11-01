@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { eq } from "drizzle-orm";
 import { nodes } from "@waitron/db";
-import { AppError, locationId, nodeId } from "@waitron/shared";
+import { AppError, nodeId } from "@waitron/shared";
 import type { InitialSetupContext, InitialSetupContribution } from "@waitron/module";
 import {
   validateAllocationEnvelope,
@@ -622,7 +622,7 @@ function createInitialSetup(
       if (node === undefined) refuse("node_mismatch");
       const active = await readModuleAllocationSeries(
         tx,
-        { nodeId: nodeId(node.id), locationId: locationId(node.locationId) },
+        { nodeId: nodeId(node.id) },
         context.bases,
       );
       if (!isDeepStrictEqual(active, retained.result.series)) refuse("activation_superseded");

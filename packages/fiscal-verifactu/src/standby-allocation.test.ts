@@ -179,12 +179,6 @@ describe("a dormant standby allocation checked against stored venue facts", () =
     expect(await check(input, expected)).toEqual({ ok: false, reason: "scope_mismatch" });
   });
 
-  it("refuses a source node outside the requested location", async () => {
-    expect(
-      await check(undefined, context, { ...primary, locationId: locationId(TENANT_B.locationId) }),
-    ).toEqual({ ok: false, reason: "node_mismatch" });
-  });
-
   it("refuses a missing source node", async () => {
     expect(
       await check(undefined, context, { ...primary, nodeId: "missing" as typeof primary.nodeId }),
@@ -282,4 +276,14 @@ describe("a dormant standby allocation checked against stored venue facts", () =
       reason: "reservation_not_current",
     });
   });
+});
+
+// A1301: deleted with cfg in S18
+it("validates a standby allocation without source location scope", async () => {
+  expect(
+    await check(undefined, context, {
+      ...primary,
+      locationId: locationId("f0000000-0000-4000-8000-000000000099"),
+    }),
+  ).toEqual(await check());
 });

@@ -279,18 +279,6 @@ it("binds reserve to the primary actually read by the host", async () => {
   ).rejects.toMatchObject(refusal("node_mismatch"));
 });
 
-it("refuses establishment in another location even with a valid signed proof", async () => {
-  await suite.db
-    .update(nodes)
-    .set({ locationId: TENANT_B.locationId })
-    .where(eq(nodes.id, standby.nodeId));
-  await expect(
-    attempt("establish", (tx, operation, held) =>
-      lifecycle().establish(tx, standby, { version: 1, evidence: held.evidence }, operation),
-    ),
-  ).rejects.toMatchObject(refusal("node_mismatch"));
-});
-
 it("rolls back dormant evidence when a later host write fails, retaining the outside mark", async () => {
   const before = await rows();
   const refusalError = new Error("host write refused");
@@ -610,16 +598,6 @@ it("refuses to reserve for a spare that already has an active SIF", async () => 
   expect(await rows()).toEqual(before);
 });
 
-it("refuses to reserve for a stored spare in another location", async () => {
-  await suite.db
-    .update(nodes)
-    .set({ locationId: TENANT_B.locationId })
-    .where(eq(nodes.id, standby.nodeId));
-  await expect(
-    attempt("reserve", (tx, operation) => lifecycle().reserve(tx, primary, standby, operation)),
-  ).rejects.toMatchObject(refusal("node_mismatch"));
-});
-
 it("refuses to reserve for a spare that already has an open series", async () => {
   await suite.db
     .insert(invoiceSeries)
@@ -629,4 +607,24 @@ it("refuses to reserve for a spare that already has an open series", async () =>
     attempt("reserve", (tx, operation) => lifecycle().reserve(tx, primary, standby, operation)),
   ).rejects.toMatchObject(refusal("standby_already_active"));
   expect(await rows()).toEqual(before);
+});
+
+// A1301: deleted with cfg in S18
+it("reserves a standby allocation without location scope", async () => {
+  const unscoped = { ...standby, locationId: locationId("f0000000-0000-4000-8000-000000000099") };
+  const reserved = await attempt(
+    "reserve",
+    (tx, operation) => lifecycle().reserve(tx, primary, unscoped, operation),
+    () => {},
+    unscoped,
+  );
+  expect(reserved).toEqual({ state: { version: 1, evidence: request().evidence } });
+});
+
+it("reserves before the standby node has been created", async () => {
+  await suite.db.delete(nodes).where(eq(nodes.id, standby.nodeId));
+  const reserved = await attempt("reserve", (tx, operation) =>
+    lifecycle().reserve(tx, primary, standby, operation),
+  );
+  expect(reserved).toEqual({ state: { version: 1, evidence: request().evidence } });
 });

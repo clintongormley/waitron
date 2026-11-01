@@ -18,7 +18,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { TENANT_A, TENANT_B, seedTenants, seedSoldRegistro } from "../test/fixtures.js";
+import { TENANT_A, seedTenants, seedSoldRegistro } from "../test/fixtures.js";
 import * as fiscal from "./index.js";
 import { registroSif } from "./schema/sif.js";
 import { activateAllocation } from "./allocation.js";
@@ -416,15 +416,6 @@ describe("allocation activation checks inside the venue transaction", () => {
     });
   });
 
-  it("checks the actual stored node location", async () => {
-    expect(
-      await validate(allocation, approval, context, {
-        ...node,
-        locationId: locationId(TENANT_B.locationId),
-      }),
-    ).toEqual({ ok: false, reason: "node_mismatch" });
-  });
-
   it("refuses a node absent from the database", async () => {
     await suite.db.delete(invoiceSeries);
     await suite.db.delete(nodes).where(eq(nodes.id, node.nodeId));
@@ -800,18 +791,6 @@ describe("replay scope and history", () => {
       params: { reason: "outside_confirmation_missing" },
     });
     expect(await activationSnapshot()).toEqual(before);
-  });
-
-  it("checks the stored node location again on replay", async () => {
-    await activate();
-    await suite.db
-      .update(nodes)
-      .set({ locationId: TENANT_B.locationId })
-      .where(eq(nodes.id, node.nodeId));
-    await expect(activate({ ...context, priorActivation: "committed" })).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: { reason: "node_mismatch" },
-    });
   });
 
   it("refuses a different trusted target on replay", async () => {
@@ -1192,4 +1171,53 @@ describe("independent attempts from the same old backup", () => {
       (await suite.db.execute(sql`select count(*) as n from fiscal_allocations`)).rows,
     ).toEqual([{ n: 0 }]);
   });
+});
+
+it("refuses replay when the stored node is absent", async () => {
+  await activate();
+  await suite.db.execute(sql`pragma foreign_keys = off`);
+  try {
+    await suite.db.delete(nodes).where(eq(nodes.id, node.nodeId));
+    await expect(activate({ ...context, priorActivation: "committed" })).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "node_mismatch" },
+    });
+  } finally {
+    await suite.db.execute(sql`pragma foreign_keys = on`);
+  }
+});
+
+// A1301: deleted with cfg in S18
+it("validates and replays an allocation without location scope", async () => {
+  const unscoped = { ...node, locationId: locationId("f0000000-0000-4000-8000-000000000099") };
+  expect(await validate(allocation, approval, context, unscoped)).toEqual({
+    ok: true,
+    allocation,
+    approval,
+  });
+  const committed = await withTransaction(suite.db, (tx) =>
+    activateAllocation(tx, unscoped, allocation, approval, context),
+  );
+  expect(
+    await withTransaction(suite.db, (tx) =>
+      activateAllocation(tx, unscoped, allocation, approval, {
+        ...context,
+        priorActivation: "committed",
+      }),
+    ),
+  ).toEqual(committed);
+});
+
+// A1301: deleted with cfg in S18
+it("replays a committed allocation without location scope", async () => {
+  const committed = await activate();
+  const unscoped = { ...node, locationId: locationId("f0000000-0000-4000-8000-000000000099") };
+  expect(
+    await withTransaction(suite.db, (tx) =>
+      activateAllocation(tx, unscoped, allocation, approval, {
+        ...context,
+        priorActivation: "committed",
+      }),
+    ),
+  ).toEqual(committed);
 });

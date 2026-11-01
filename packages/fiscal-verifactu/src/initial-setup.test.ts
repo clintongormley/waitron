@@ -145,7 +145,7 @@ async function commit(f: ReturnType<typeof fixture>) {
   return withTransaction(suite.db, (tx) =>
     activateAllocation(
       tx,
-      { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) },
+      { nodeId: TENANT_A.nodeId },
       f.input.allocation,
       f.input.approval,
       activationContext,

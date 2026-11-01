@@ -35,17 +35,17 @@ export type StandbyAllocationValidation =
 
 export async function validateStandbyAllocation(
   tx: Transaction,
-  primary: ProvisionedNode,
+  primary: Pick<ProvisionedNode, "nodeId">,
   targetNodeId: string,
   evidence: unknown,
   trust: unknown,
   context: PaperReservationContext | DeclaredStandbyContext,
 ): Promise<StandbyAllocationValidation> {
   const [source] = await tx
-    .select({ locationId: nodes.locationId })
+    .select({ id: nodes.id })
     .from(nodes)
     .where(eq(nodes.id, primary.nodeId));
-  if (source?.locationId !== primary.locationId) return { ok: false, reason: "node_mismatch" };
+  if (source === undefined) return { ok: false, reason: "node_mismatch" };
   const tenant = await readTenant(tx);
   if (tenant === null) return { ok: false, reason: "taxpayer_missing" };
   const [stamp] = await tx
@@ -108,8 +108,8 @@ export async function validateStandbyAllocation(
 
 export async function establishDormantAllocation(
   tx: Transaction,
-  primary: ProvisionedNode,
-  standby: ProvisionedNode,
+  primary: Pick<ProvisionedNode, "nodeId">,
+  standby: Pick<ProvisionedNode, "nodeId">,
   evidence: unknown,
   trust: unknown,
   context: PaperReservationContext | DeclaredStandbyContext,
@@ -124,15 +124,10 @@ export async function establishDormantAllocation(
     return refuse("malformed");
   }
   const [target] = await tx
-    .select({ locationId: nodes.locationId })
+    .select({ id: nodes.id })
     .from(nodes)
     .where(eq(nodes.id, standby.nodeId));
-  if (
-    standby.nodeId === primary.nodeId ||
-    standby.locationId !== primary.locationId ||
-    target?.locationId !== standby.locationId
-  )
-    return refuse("node_mismatch");
+  if (standby.nodeId === primary.nodeId || target === undefined) return refuse("node_mismatch");
   const [activeSif] = await tx
     .select({ id: registroSif.id })
     .from(registroSif)
