@@ -18,6 +18,8 @@ export interface StoredTrustDeps {
   readonly node: NodeDatabase;
   readonly ring: KeyRing;
   readonly nodeId: string;
+  /** This node's private key, when the operation has already unsealed it. */
+  readonly privateKey?: string;
 }
 
 /** A route that signs over the held chart maps this refusal to 409. */
@@ -31,7 +33,9 @@ export const HELD_DOCUMENT_REFUSALS: Record<string, ContentfulStatusCode> = {
  * a copied venue.db brings with it.
  */
 export async function readStoredTrustSet(deps: StoredTrustDeps): Promise<TrustSet> {
-  const own = nodeSigningPublicKey(await readNodeIdentityKey(deps.node, deps.ring, deps.nodeId));
+  const own = nodeSigningPublicKey(
+    deps.privateKey ?? (await readNodeIdentityKey(deps.node, deps.ring, deps.nodeId)),
+  );
   const pinned = await readPinnedPrimaryKey(deps.node, deps.nodeId);
   return pinned === null
     ? { [deps.nodeId]: own }

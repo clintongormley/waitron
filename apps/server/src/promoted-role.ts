@@ -2,11 +2,17 @@ import {
   readNodeMembership,
   withNodeTransaction,
   type Database,
+  type DeploymentMode,
   type NodeDatabase,
+  type SingletonRole,
 } from "@waitron/db";
 import { readNodeMode, setPrimaryRoleTx } from "@waitron/node-db";
 import { nodeSigningPublicKey, readNodeSigningKey, type KeyRing } from "@waitron/credentials";
-import { standingOf, verifyMembershipDocument } from "@waitron/membership";
+import {
+  standingOf,
+  verifyMembershipDocument,
+  type SignedMembershipDocument,
+} from "@waitron/membership";
 import type { Logger } from "./logger.js";
 
 export interface FinishPromotedRoleDeps {
@@ -15,6 +21,12 @@ export interface FinishPromotedRoleDeps {
   readonly ring: KeyRing;
   readonly nodeId: string;
   readonly log: Logger;
+}
+
+/** This node's two role axes and the held chart, when the caller has just read them. */
+export interface PromotedRoleReads {
+  readonly axes: { readonly mode: DeploymentMode; readonly singletonRole: SingletonRole };
+  readonly held: SignedMembershipDocument | null;
 }
 
 /**
@@ -26,11 +38,12 @@ export interface FinishPromotedRoleDeps {
  */
 export async function finishPromotedRole(
   deps: FinishPromotedRoleDeps,
+  reads?: PromotedRoleReads,
 ): Promise<"finished" | "nothing"> {
-  const axes = await readNodeMode(deps.node, deps.nodeId);
+  const axes = reads?.axes ?? (await readNodeMode(deps.node, deps.nodeId));
   if (axes.mode === "primary" && axes.singletonRole === "primary") return "nothing";
 
-  const held = await readNodeMembership(deps.venue);
+  const held = reads === undefined ? await readNodeMembership(deps.venue) : reads.held;
   if (held === null) return "nothing";
   if (held.signerNodeId !== deps.nodeId) return "nothing";
   if (standingOf(held, deps.nodeId) !== "serving-primary") return "nothing";

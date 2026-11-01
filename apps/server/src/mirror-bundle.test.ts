@@ -316,6 +316,14 @@ describe("assembleMirrorBundle (primary side)", () => {
     }
   });
 
+  it("endorses the standby with the primary key the caller supplies", async () => {
+    const standby = { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB };
+    const supplied = generateNodeKeyPair();
+    const { bundle } = await allocatedBundle(standby, { primaryPrivateKey: supplied.privateKey });
+    expect(bundle.primaryPublicKey).toBe(supplied.publicKey);
+    expect(verifyEndorsement(bundle.reservedIdentity.endorsement, supplied.publicKey)).toBe(true);
+  });
+
   it("throws mirror.not_provisioned when the database carries no deployment stamp", async () => {
     await expect(
       assembleMirrorBundle({

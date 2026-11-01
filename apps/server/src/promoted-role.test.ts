@@ -116,6 +116,41 @@ describe("finishPromotedRole", () => {
     ]);
   });
 
+  it("decides on the axes and chart the caller read, reading neither again", async () => {
+    const { nodeId, privateKey } = await mirrorBox();
+    const ownChart = chart(nodeId, "serving-primary");
+    const held = {
+      ...ownChart,
+      signature: signDocumentBody(ownChart.body, privateKey),
+      endorsements: [],
+    };
+    const log = () => {};
+    const deps = { venue: suite.db, node: suite.node, ring: RING, nodeId, log };
+
+    // node.db says mirror and venue.db holds no chart: only the passed reads can decide either way.
+    expect(
+      await finishPromotedRole(deps, {
+        axes: { mode: "primary", singletonRole: "primary" },
+        held,
+      }),
+    ).toBe("nothing");
+    expect(await readNodeMode(suite.node, nodeId)).toEqual({
+      mode: "mirror",
+      singletonRole: "secondary",
+    });
+
+    expect(
+      await finishPromotedRole(deps, {
+        axes: { mode: "mirror", singletonRole: "secondary" },
+        held,
+      }),
+    ).toBe("finished");
+    expect(await readNodeMode(suite.node, nodeId)).toEqual({
+      mode: "primary",
+      singletonRole: "primary",
+    });
+  });
+
   it("finishes a local secondary's singleton role the same way", async () => {
     const { nodeId, privateKey } = await mirrorBox();
     await setNodeMode({ venue: suite.db, node: suite.node }, nodeId, "primary");

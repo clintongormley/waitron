@@ -6,6 +6,7 @@ import {
 import { readNodeEndorsement, type Database, type NodeDatabase } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { assertHeldDocumentTrusted } from "./membership-trust.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 
 export const MAX_CHART_WRITE_ROUNDS = 8;
@@ -21,6 +22,20 @@ export const CHART_MINT_REFUSALS: Record<string, ContentfulStatusCode> = {
   "membership.revoked_node_listed": 409,
 };
 
+export interface MintDeps {
+  readonly db: Database;
+  readonly node: NodeDatabase;
+  readonly ring: KeyRing;
+  /** The signer's private key, when the operation has already unsealed it. */
+  readonly signerPrivateKey?: string;
+}
+
+/**
+ * `"stored-keys"` refuses `membership.held_untrusted` when no key this node stores vouches for the
+ * held chart (`assertHeldDocumentTrusted`). `"none"` signs over it unchecked.
+ */
+export type HeldChartCheck = "stored-keys" | "none";
+
 /**
  * Read THIS node's signing key and build and sign the next membership document. The signer's stored
  * endorsement, if any, is always carried, so a peer that trusts only the endorser's key can accept
@@ -28,16 +43,27 @@ export const CHART_MINT_REFUSALS: Record<string, ContentfulStatusCode> = {
  * caller's job.
  */
 export async function mintNextMembershipDocument(
-  deps: { db: Database; node: NodeDatabase; ring: KeyRing },
+  deps: MintDeps,
   args: {
     heldDocument: SignedMembershipDocument | null;
     nodes: readonly MembershipNode[];
     signerNodeId: string;
+    verifyHeld: HeldChartCheck;
     minTerm?: number;
     revoked?: readonly string[];
   },
 ): Promise<SignedMembershipDocument> {
-  const signerPrivateKey = await readNodeIdentityKey(deps.node, deps.ring, args.signerNodeId);
+  const signerPrivateKey =
+    deps.signerPrivateKey ?? (await readNodeIdentityKey(deps.node, deps.ring, args.signerNodeId));
+  if (args.verifyHeld === "stored-keys") {
+    // A held chart no stored key vouches for comes from a fault in Waitron, a Cloud peer, or, in a
+    // venue of three or more boxes after two promotions, a main box that no key this box trusts
+    // vouched for. The backlog records the last two.
+    await assertHeldDocumentTrusted(
+      { node: deps.node, ring: deps.ring, nodeId: args.signerNodeId, privateKey: signerPrivateKey },
+      args.heldDocument,
+    );
+  }
   const endorsement = await readNodeEndorsement(deps.db, args.signerNodeId);
   return buildNextMembershipDocument({
     heldDocument: args.heldDocument,

@@ -17,6 +17,7 @@ export async function seedTermZeroMembership(
     heldDocument: null,
     nodes: [{ nodeId, contactUrl, standing: "serving-primary" }],
     signerNodeId: nodeId,
+    verifyHeld: "none",
   });
   await writeNodeMembership(deps.db, document);
 }

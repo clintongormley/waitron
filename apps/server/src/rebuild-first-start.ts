@@ -133,6 +133,8 @@ export async function completeRebuild(deps: RebuildDeps): Promise<boolean> {
       heldDocument: held,
       nodes,
       signerNodeId: deps.nodeId,
+      // `assertRestoredMembershipValid` above checked it against the keys venue.db names.
+      verifyHeld: "none",
       ...(pointerTerm === null ? {} : { minTerm: pointerTerm + 1 }),
     },
   );

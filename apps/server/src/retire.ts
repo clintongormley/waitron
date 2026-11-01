@@ -15,7 +15,7 @@ import {
 } from "@waitron/membership";
 import type { KeyRing } from "@waitron/credentials";
 import { mintNextMembershipDocument } from "./membership-mint.js";
-import { assertHeldDocumentReadable, assertHeldDocumentTrusted } from "./membership-trust.js";
+import { assertHeldDocumentReadable } from "./membership-trust.js";
 import type { Logger } from "./logger.js";
 
 export interface RetireDeps {
@@ -59,17 +59,13 @@ export async function retireSelf(deps: RetireDeps): Promise<RetireResult> {
     throw new AppError("node.retire_no_carrier", {});
   }
 
-  // A held chart no stored key vouches for comes from a fault in Waitron, a Cloud peer, or, in a
-  // venue of three or more boxes after two promotions, a main box that no key this box trusts
-  // vouched for. The backlog records the last two.
-  await assertHeldDocumentTrusted({ node: deps.node, ring: deps.ring, nodeId: deps.nodeId }, held);
-
   const document = await mintNextMembershipDocument(
     { db: deps.appDb, node: deps.node, ring: deps.ring },
     {
       heldDocument: held,
       nodes: evictNode(held!.body.nodes, deps.nodeId),
       signerNodeId: deps.nodeId,
+      verifyHeld: "stored-keys",
     },
   );
 

@@ -292,6 +292,7 @@ describe("completeRebuild", () => {
           heldDocument: null,
           nodes: [...held!.body.nodes, other],
           signerNodeId: NODE,
+          verifyHeld: "none",
         },
       ),
     );
@@ -315,7 +316,7 @@ describe("completeRebuild", () => {
       suite.db,
       await mintNextMembershipDocument(
         { db: suite.db, node: suite.node, ring: RING },
-        { heldDocument: null, nodes: [other], signerNodeId: NODE },
+        { heldDocument: null, nodes: [other], signerNodeId: NODE, verifyHeld: "none" },
       ),
     );
     await completeRebuild(deps(stateDir));
@@ -339,6 +340,7 @@ describe("completeRebuild", () => {
           heldDocument: held,
           nodes: held!.body.nodes,
           signerNodeId: NODE,
+          verifyHeld: "none",
         },
       );
       await writeNodeMembership(suite.db, promoted);

@@ -33,6 +33,7 @@ import {
   HELD_DOCUMENT_REFUSALS,
   type StoredTrustDeps,
 } from "./membership-trust.js";
+import { readNodeIdentityKey } from "./node-identity.js";
 import { withAuthenticatedOperation } from "./operation-authentication.js";
 import { parseStandbyOperationInput } from "./recovery-module-operation.js";
 import type { ModuleOperations } from "@waitron/module";
@@ -118,7 +119,10 @@ export function mountMirrorBundleApi(
         // reservation. Each mint round below checks the chart it re-reads again.
         const held = await readNodeMembership(deps.appDb);
         assertHeldDocumentReadable(held);
-        await assertHeldDocumentTrusted(trustDeps(deps), held);
+        // Unsealed once for the whole request: the check below, the bundle's endorsement and every
+        // chart round sign or verify with it.
+        const signingKey = await readNodeIdentityKey(deps.node, deps.ring, deps.designated.nodeId);
+        await assertHeldDocumentTrusted(trustDeps(deps, signingKey), held);
 
         const bundle = await assembleMirrorBundle({
           appDb: deps.appDb,
@@ -131,11 +135,12 @@ export function mountMirrorBundleApi(
           standby,
           accountKey: deps.accountKey,
           moduleOperations,
+          primaryPrivateKey: signingKey,
         });
         // Before the response, so no bundle is handed out for a node the chart omits: a till reroutes by
         // the chart's `contactUrl`. Deliberately a separate transaction: assembly's reservation has already
         // committed.
-        await appendStandbyToChart(deps, standby.nodeId, standbyContactUrl);
+        await appendStandbyToChart(deps, signingKey, standby.nodeId, standbyContactUrl);
 
         return c.json(bundle);
       };
@@ -180,13 +185,14 @@ export function mountMirrorBundleApi(
 }
 
 /** The designated main box's own stored keys, which it trusts the held chart against. */
-function trustDeps(deps: MirrorBundleApiDeps): StoredTrustDeps {
-  return { node: deps.node, ring: deps.ring, nodeId: deps.designated.nodeId };
+function trustDeps(deps: MirrorBundleApiDeps, privateKey: string): StoredTrustDeps {
+  return { node: deps.node, ring: deps.ring, nodeId: deps.designated.nodeId, privateKey };
 }
 
 // A refused write means this mint was built on a stale chart: re-read and mint again, never force.
 async function appendStandbyToChart(
   deps: MirrorBundleApiDeps,
+  signingKey: string,
   standbyNodeId: string,
   standbyContactUrl: string,
 ): Promise<void> {
@@ -195,16 +201,13 @@ async function appendStandbyToChart(
     assertHeldDocumentReadable(held);
     refuseRemovedStandby(held, standbyNodeId);
     refuseFullChart(held, standbyNodeId);
-    // A held chart no stored key vouches for comes from a fault in Waitron, a Cloud peer, or, in a
-    // venue of three or more boxes after two promotions, a main box that no key this box trusts
-    // vouched for. The backlog records the last two.
-    await assertHeldDocumentTrusted(trustDeps(deps), held);
     const document = await mintNextMembershipDocument(
-      { db: deps.appDb, node: deps.node, ring: deps.ring },
+      { db: deps.appDb, node: deps.node, ring: deps.ring, signerPrivateKey: signingKey },
       {
         heldDocument: held,
         nodes: withMember(held?.body.nodes ?? [], standbyNodeId, standbyContactUrl),
         signerNodeId: deps.designated.nodeId,
+        verifyHeld: "stored-keys",
       },
     );
     if (await persistNodeMembershipIfNewer(deps.appDb, document)) return;

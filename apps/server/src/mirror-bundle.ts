@@ -86,8 +86,8 @@ function encodeKeyRing(ring: KeyRing): EncodedKeyRing {
   return encoded;
 }
 
-// `ring` unseals the primary's identity private key, which signs the standby's endorsement, and
-// travels whole as `credentialsRing`.
+// `ring` travels whole as `credentialsRing`, and unseals the primary's identity private key, which
+// signs the standby's endorsement, when `primaryPrivateKey` does not carry it.
 export interface AssembleDeps {
   appDb: Database;
   node: NodeDatabase;
@@ -100,6 +100,8 @@ export interface AssembleDeps {
   accountKey: string;
   wireguardPublicKey?: string;
   moduleOperations?: ModuleOperations;
+  /** The designated node's private key, when the caller has already unsealed it. */
+  primaryPrivateKey?: string;
 }
 
 export function refuseRemovedStandby(
@@ -199,7 +201,7 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
         return { modules: states, series };
       }),
     ),
-    readNodeIdentityKey(deps.node, deps.ring, deps.designated.nodeId),
+    deps.primaryPrivateKey ?? readNodeIdentityKey(deps.node, deps.ring, deps.designated.nodeId),
     readFile(caCertPath(deps.stateDir), "utf8"),
     readFile(caKeyPath(deps.stateDir), "utf8"),
   ]);

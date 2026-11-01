@@ -89,6 +89,14 @@ describe("the held document's check against the keys this box stores", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("takes this box's key from the private key the caller supplies, unsealing nothing", async () => {
+    const supplied = generateNodeKeyPair();
+    const unsealedNode = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    expect(
+      await readStoredTrustSet({ ...deps(unsealedNode), privateKey: supplied.privateKey }),
+    ).toEqual({ [unsealedNode]: supplied.publicKey });
+  });
+
   it("trusts a document signed by a spare the main box endorsed", async () => {
     const { nodeId } = await box();
     await pinMainBoxKey(suite.node, nodeId, { nodeId: MAIN_ID, publicKey: MAIN.publicKey });

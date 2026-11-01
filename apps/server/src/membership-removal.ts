@@ -218,6 +218,8 @@ async function writeChartInRounds<T>(
         heldDocument: held,
         nodes: next.nodes,
         signerNodeId: deps.nodeId,
+        // Unchecked: removal and clearing are the stated exception on `readNodeMembership`.
+        verifyHeld: "none",
         revoked: next.revoked,
       },
     );

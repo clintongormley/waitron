@@ -35,8 +35,8 @@ import {
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { refreshDeploymentHolders, type DeploymentHolders } from "./deployment-holders.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
-import { assertHeldDocumentReadable, assertHeldDocumentTrusted } from "./membership-trust.js";
-import { finishPromotedRole } from "./promoted-role.js";
+import { assertHeldDocumentReadable } from "./membership-trust.js";
+import { finishPromotedRole, type PromotedRoleReads } from "./promoted-role.js";
 import type { Logger } from "./logger.js";
 
 /**
@@ -109,6 +109,18 @@ function roleRepairDeps(deps: PromoteDeps) {
 }
 
 /**
+ * Called straight after a holders refresh, with nothing awaited between, so the holders stand for a
+ * re-read of the mode.
+ */
+function repairReads(deps: PromoteDeps, held: SignedMembershipDocument | null): PromotedRoleReads {
+  const axes = {
+    mode: deps.holders.mode.current,
+    singletonRole: deps.holders.singletonRole.current,
+  };
+  return { axes, held };
+}
+
+/**
  * Local secondary to primary: the node already sells, so this claims the singleton duties only.
  * Idempotent: an already-primary node is a no-op. The checks and the mint run before the venue
  * transaction that writes the new membership document; the role in node.db follows it. A failed
@@ -122,9 +134,12 @@ export async function promoteLocalSecondaryToPrimary(
 ): Promise<PromotionResult> {
   assertFenced(attestation);
 
+  // One read for the repair check and the mint: the save below is not term-guarded, and the mint's
+  // own reads already stood between a chart read and it, so a second read guarded nothing.
+  const held = await readNodeMembership(deps.db);
   // Fresh state, so a re-run after a half-completed promote sees what landed.
   await refreshDeploymentHolders(deps.node, deps.nodeId, deps.holders);
-  if ((await finishPromotedRole(roleRepairDeps(deps))) === "finished") {
+  if ((await finishPromotedRole(roleRepairDeps(deps), repairReads(deps, held))) === "finished") {
     await refreshDeploymentHolders(deps.node, deps.nodeId, deps.holders);
     deps.log("info", "promotion.completed", { target: "local_secondary" });
     return { alreadyPrimary: false };
@@ -138,18 +153,14 @@ export async function promoteLocalSecondaryToPrimary(
     return { alreadyPrimary: true };
   }
 
-  const held = await readNodeMembership(deps.db);
   assertNotFenced(held, deps.nodeId);
-  // A held chart no stored key vouches for comes from a fault in Waitron, a Cloud peer, or, in a
-  // venue of three or more boxes after two promotions, a main box that no key this box trusts
-  // vouched for. The backlog records the last two.
-  await assertHeldDocumentTrusted(deps, held);
   const document = await mintNextMembershipDocument(
     { db: deps.db, node: deps.node, ring: deps.ring },
     {
       heldDocument: held,
       nodes: nextStandings(held?.body.nodes ?? [], deps.nodeId),
       signerNodeId: deps.nodeId,
+      verifyHeld: "stored-keys",
     },
   );
 
@@ -221,8 +232,11 @@ export async function promoteMirrorToPrimary(
   assertFenced(attestation);
   const supplied = snapshotModuleOperations(deps.moduleOperations);
 
+  // One read for the repair check and the mint: a chart written in between fails the term-guarded
+  // commit below.
+  const held = await readNodeMembership(deps.db);
   await refreshDeploymentHolders(deps.node, deps.nodeId, deps.holders);
-  if ((await finishPromotedRole(roleRepairDeps(deps))) === "finished") {
+  if ((await finishPromotedRole(roleRepairDeps(deps), repairReads(deps, held))) === "finished") {
     await refreshDeploymentHolders(deps.node, deps.nodeId, deps.holders);
     deps.log("info", "promotion.completed", { target: "mirror" });
     return { alreadyPrimary: false, seriesId: await readStandardSeriesId(deps.db, deps.nodeId) };
@@ -241,18 +255,14 @@ export async function promoteMirrorToPrimary(
   if (stored === undefined) throw new AppError("node.not_found", { id: deps.nodeId });
   const node = { nodeId: brandNodeId(deps.nodeId), locationId: brandLocationId(stored.locationId) };
 
-  const held = await readNodeMembership(deps.db);
   assertNotFenced(held, deps.nodeId);
-  // A held chart no stored key vouches for comes from a fault in Waitron, a Cloud peer, or, in a
-  // venue of three or more boxes after two promotions, a main box that no key this box trusts
-  // vouched for. The backlog records the last two.
-  await assertHeldDocumentTrusted(deps, held);
   const document = await mintNextMembershipDocument(
     { db: deps.db, node: deps.node, ring: deps.ring },
     {
       heldDocument: held,
       nodes: nextStandings(held?.body.nodes ?? [], deps.nodeId),
       signerNodeId: deps.nodeId,
+      verifyHeld: "stored-keys",
     },
   );
 

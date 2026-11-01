@@ -97,7 +97,7 @@ async function holdChart(p: Primary, nodes: readonly MembershipNode[]): Promise<
   const held = await readNodeMembership(p.db);
   const document = await mintNextMembershipDocument(
     { db: p.db, node: suite.node, ring: RING },
-    { heldDocument: held, nodes, signerNodeId: p.nodeId },
+    { heldDocument: held, nodes, signerNodeId: p.nodeId, verifyHeld: "none" },
   );
   await writeNodeMembership(p.db, document);
 }
@@ -163,7 +163,7 @@ async function holdChartRevoking(
   const held = await readNodeMembership(p.db);
   const document = await mintNextMembershipDocument(
     { db: p.db, node: suite.node, ring: RING },
-    { heldDocument: held, nodes, signerNodeId: p.nodeId, revoked },
+    { heldDocument: held, nodes, signerNodeId: p.nodeId, revoked, verifyHeld: "none" },
   );
   await writeNodeMembership(p.db, document);
 }
