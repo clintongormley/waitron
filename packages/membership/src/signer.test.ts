@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { generateNodeKeyPair } from "./crypto.js";
 import { sampleBody, signDoc } from "./document-fixtures.js";
 import { endorseKey } from "./endorsement.js";
-import { signDocumentBody, verifyDocumentSigner } from "./verify.js";
+import { MAX_NODES, MAX_REVOKED, signDocumentBody, verifyDocumentSigner } from "./verify.js";
 
 const a = generateNodeKeyPair();
 const b = generateNodeKeyPair();
@@ -122,6 +122,49 @@ describe("verifyDocumentSigner", () => {
     ];
     it.each(cases)("%s", (_, doc) => {
       expect(verifyDocumentSigner(doc, trust)).toEqual({ trusted: false, reason: "malformed" });
+    });
+  });
+
+  describe("refuses as malformed a body larger or deeper than any chart, whoever signed it", () => {
+    const node = (i: number) => ({ nodeId: `n${i}`, contactUrl: "", standing: "sell-only" });
+    let deep: unknown = [];
+    for (let i = 0; i < 20_000; i += 1) deep = [deep];
+    const cases: [string, Record<string, unknown>][] = [
+      ["nodes nested 20,000 lists deep", { term: 1, nodes: deep }],
+      ["a node holding a list", { term: 1, nodes: [{ ...node(0), extra: [] }] }],
+      [
+        "more nodes than a chart may list",
+        { term: 1, nodes: Array.from({ length: MAX_NODES + 1 }, (_, i) => node(i)) },
+      ],
+      [
+        "more cleared ids than a chart may list",
+        { term: 1, nodes: [], revoked: Array.from({ length: MAX_REVOKED + 1 }, String) },
+      ],
+      [
+        "a field beyond the declared ones holding more values than a chart can",
+        { term: 1, nodes: [], note: Array.from({ length: 300 }, String) },
+      ],
+    ];
+    it.each(cases)("%s", (_, body) => {
+      // Too deep for the signer as well, so that body carries another chart's signature.
+      const signature =
+        body.nodes === deep
+          ? signDocumentBody(sampleBody(1), a.privateKey)
+          : signDocumentBody(body as never, a.privateKey);
+      const doc = { body, signerNodeId: "A", signature, endorsements: [] };
+      expect(verifyDocumentSigner(doc, trust)).toEqual({ trusted: false, reason: "malformed" });
+    });
+
+    it("still trusts the largest chart a trusted key can sign", () => {
+      const body = {
+        term: 1,
+        nodes: Array.from({ length: MAX_NODES }, (_, i) => node(i)),
+        revoked: Array.from({ length: MAX_REVOKED }, String),
+      };
+      expect(verifyDocumentSigner(signDoc(body as never, "A", a.privateKey), trust)).toEqual({
+        trusted: true,
+        signerNodeId: "A",
+      });
     });
   });
 
