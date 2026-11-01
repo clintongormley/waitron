@@ -817,7 +817,7 @@ the setup area and venue details under its history limits, separate from the clo
 large release assets and the A940/A947/A798 coordination.
 
 **Built so far (2026-11-01).** [PR 1](../superpowers/plans/2026-11-01-b3-1-encrypted-disk.md)
-(#PR1) adds three host libraries under `scripts/box/`, none called yet:
+(#2370) adds three host libraries under `scripts/box/`, none called yet:
 
 - `disk-state.mjs`: `classifyDisk`, the installer's decision about which disk it may erase, from a
   whole-machine observation. TPM and Secure Boot come back in a separate `hardware` field.
