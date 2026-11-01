@@ -321,6 +321,24 @@ it.each([
   expect(f.hook).not.toHaveBeenCalled();
 });
 
+it("places a joined spare's venue authority beside the box's own", async () => {
+  const f = await fixture();
+  f.entries.push(
+    { name: "secrets/tls/venue-ca.crt", bytes: Buffer.from("venue-ca-cert") },
+    { name: "secrets/tls/venue-ca.key", bytes: Buffer.from("venue-ca-key") },
+  );
+  await seal(f);
+  const validated = await validateBackupArtifactFile(f);
+  try {
+    await placeBackupData(validated, f);
+    expect(await readFile(join(f.stateDir, "tls/ca.key"), "utf8")).toBe("private-tls/ca.key");
+    expect(await readFile(join(f.stateDir, "tls/venue-ca.crt"), "utf8")).toBe("venue-ca-cert");
+    expect(await readFile(join(f.stateDir, "tls/venue-ca.key"), "utf8")).toBe("venue-ca-key");
+  } finally {
+    await validated.discard();
+  }
+});
+
 it("accepts absent optional backup state and a module with no private entry obligations", async () => {
   const f = await fixture();
   f.entries = f.entries.filter((entry) => entry.name !== "secrets/backup.env");
