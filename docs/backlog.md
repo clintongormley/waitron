@@ -2192,6 +2192,18 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   to be on the same bill. Believed impossible, since every move takes extras with their dish; by
   reading, not tested. Decide whether the key should say so.
 
+- **A1298. Move dishes… says only "Could not update the table, try again" when a picked dish has
+  left the bill or the bill was merged away (left open by A803 slice 4a).** The server answers
+  `tab.line_not_found` or `tab.not_open`; neither is in the till's `TABLE_REFUSALS`
+  (`apps/till/src/till-app.ts`), so `#onMoveDishes` falls back to `table.error`. The station move
+  already words the first (`move_station.refused.tab.line_not_found`). By reading, not run; the
+  retired Transfer items handler went the same way. Needs English and Spanish words.
+
+- **A1299. Moving, splitting or transferring a very large bill binds one value per line further
+  along (left open by A803 slice 4a).** Slice 4a passes Move dishes…' line ids as one bound value,
+  but `moveOrderLines` and `stampSentOrderNumber` in `apps/server/src/working-order.ts` still bind
+  one per line, so a bill past the store's bound-value limit would fail there. By reading, not run.
+
 - **A1193. Choosing which portions of a grouped row an action takes, and Fire now on a grouped
   row (left open by A803 slice 1, D14 and D31).** Actions on a row take a count, never chosen
   portions, and Fire now fires only the row's first portion. Since slice 4a, Move dishes… picks a
