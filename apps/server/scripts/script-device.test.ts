@@ -32,10 +32,25 @@ describe("scriptSessionDevice", () => {
         retiredAt: new Date().toISOString(),
       })
       .returning({ id: deviceProfiles.id });
-    const run = () =>
-      withTransaction(suite.db, (tx) => scriptSessionDevice(tx, location!.id, "Script till"));
+    const run = () => withTransaction(suite.db, (tx) => scriptSessionDevice(tx, "Script till"));
 
-    const first = await profileOf(await run());
+    const deviceId = await run();
+    const [device] = await suite.db
+      .select({
+        venueId: devices.locationId,
+        label: devices.label,
+        active: devices.active,
+        tokenHash: devices.tokenHash,
+      })
+      .from(devices)
+      .where(eq(devices.id, deviceId));
+    expect(device).toEqual({
+      venueId: location!.id,
+      label: "Script till",
+      active: false,
+      tokenHash: "unusable",
+    });
+    const first = await profileOf(deviceId);
     expect(first.id).not.toBe(retired!.id);
     expect(first.retiredAt).toBeNull();
     // With a retired and a live profile both named so, the next run finds the live one.

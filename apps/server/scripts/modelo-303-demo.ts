@@ -244,7 +244,6 @@ interface SeededNode {
   rectificativeSeriesId: SeriesId;
 }
 interface Venue {
-  locationId: string;
   nodes: SeededNode[];
   authorizerId: string;
 }
@@ -303,7 +302,7 @@ export async function seedVenue(db: Database, timeZone: string = "Europe/Madrid"
     .returning({ id: persons.id });
   const authorizerId = person!.id;
 
-  return { locationId, nodes: seeded, authorizerId };
+  return { nodes: seeded, authorizerId };
 }
 
 /** Summed from the constants above, never read back from the database the roll-ups query. */
@@ -509,7 +508,7 @@ async function main(): Promise<void> {
     // The rectificativa's `sale.rectify` gate needs a supervisor session.
     const authorizerSession = await withTransaction(db, async (tx) => {
       return loginWithPin(tx, {
-        deviceId: await scriptSessionDevice(tx, venue.locationId, "Modelo 303 demo"),
+        deviceId: await scriptSessionDevice(tx, "Modelo 303 demo"),
         personId: venue.authorizerId,
         pin: "1234",
       });
