@@ -11,8 +11,11 @@ import {
  * No foreign key joins a `local` table to a `ledger`/`state` one, in either direction.
  *
  * A `local` row belongs to one node and means nothing to another, so no venue row may depend on
- * one; and `node.db` is reserved, empty, for a later slice that may move `local` tables into it,
- * which a key across the classes would block.
+ * one, and a key across the classes would block moving a `local` table into `node.db`.
+ *
+ * It sides tables by CLASS, not by the file a set is applied to: node.db's tables are `local`, so a
+ * key from one of them into one of venue.db's `local` tables passes here. SQLite refuses the write
+ * instead, because the target table is not in node.db.
  *
  * It reads drizzle's head snapshot per migration set (`headSnapshot` in
  * `packages/sync-enrolment/src/testing/migration-sets.ts`), which holds the graph as

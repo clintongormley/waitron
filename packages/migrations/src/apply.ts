@@ -57,7 +57,10 @@ export async function applyMigrations(
   }
 }
 
-/** node.db never gets append-only triggers, so a node set that names tables for them is refused. */
+/**
+ * node.db never gets append-only triggers, so a node set that names tables for them is refused.
+ * Only a fault in Waitron produces it: the node set in `migrations.manifest.json` names none.
+ */
 function assertNoNodeAppendOnly(set: VenueMigrationOptions): void {
   const tables = set.appendOnlyTables ?? [];
   if (set.database === "node" && tables.length > 0) {

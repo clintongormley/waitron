@@ -48,6 +48,11 @@ or every enabled-module combination. The disabled-module protection issue remain
 
 ## Writes confined to named files
 
+_2026-11-01: A947 slice 3a removed `node_roles` and `mirror_config` and the file named for
+`mirror_config` below; the guard's current table set is `scripts/write-path-tables.json`, and
+[conventions-data.md](conventions-data.md#the-tables-scriptswrite-path-tablesjson-lists-are-read-only-to-the-application-and-one-guard-is-the-whole-of-the-enforcement)
+says what it holds now. The table below records 2026-10-19._
+
 The guard checks source text against the allowed files. It does not make the database refuse a
 write and does not follow a request through its call chain. The exact table-set check retains
 `node_roles` alongside these four historical names; it no longer imports the retired record.
@@ -55,7 +60,7 @@ write and does not follow a request through its call chain. The exact table-set 
 | Table           | Allowed writers                                                                                                                                                                                                                                            |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `deployment`    | [packages/db/src/deployment.ts](../../packages/db/src/deployment.ts)                                                                                                                                                                                       |
-| `mirror_config` | [packages/db/src/mirror-config.ts](../../packages/db/src/mirror-config.ts)                                                                                                                                                                                 |
+| `mirror_config` | `packages/db/src/mirror-config.ts` (deleted)                                                                                                                                                                                                               |
 | `nodes`         | [packages/db/src/node-identity.ts](../../packages/db/src/node-identity.ts), [packages/db/src/reserved-identity.ts](../../packages/db/src/reserved-identity.ts), [packages/provisioning/src/venue-apply.ts](../../packages/provisioning/src/venue-apply.ts) |
 | `tenants`       | [packages/provisioning/src/taxpayer-name.ts](../../packages/provisioning/src/taxpayer-name.ts), [packages/provisioning/src/venue-apply.ts](../../packages/provisioning/src/venue-apply.ts)                                                                 |
 

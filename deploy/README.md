@@ -14,6 +14,9 @@ folder itself holds `recovery.lock`, which serialises changes to `recovery.json`
 lock files is held a `-journal` appears beside it, and a crash can leave that behind. None of the
 lock files holds data; do not delete them, because a process that finds one missing takes a new
 lock beside the one still held.
+`venue.db` is the venue's data; `node.db` is what this box remembers about itself (its role, its
+signing key, its recovery-key check, and on a spare the main box's address and key). Only `venue.db`
+streams to a bucket; a backup file carries both.
 There is no database server in the app's path, no connection string and no database password.
 
 | volume        | mounted at                     | holds                                                                                                                                                                                       |
@@ -424,7 +427,10 @@ Both forms wipe every volume in the table above. Plain `reset` keeps four things
   summary the page confirmed.
 - `first-setup-start-again-choices/`, one small record for each Keep or Move choice someone made
   at Start again.
-- `first-setup-set-aside/`, the files a Move set aside rather than deleted.
+- `first-setup-set-aside/`, the files a Move set aside rather than deleted. Each Move's folder also
+  holds `secrets.env`, a copy of the box's key ring file as it was at the Move, because the moved
+  databases' sealed rows open only with it. Anyone who copies this folder off the box copies that
+  key ring too.
 
 `reset --all` removes the whole `state` volume, those four included, so the box mints a brand-new
 certificate authority on its next boot and every device has to go through the trust step again. That includes any device with a dashboard or till tab left open across the reset:

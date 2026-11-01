@@ -1,3 +1,5 @@
+> **A947 slice 3a, 1 November 2026:** `node.db` is no longer empty: a box's role, recovery-key check, signing key, main-box link and pinned main-box key now live there, and `node_roles` and `mirror_config` are gone, so this plan's statements about where those live, and that `node.db` has no tables, describe the tree before it ([slice 3a plan](2026-10-31-a947-3a-node-db.md)).
+
 # A1131b/c slice 2: one wipe, no password — Implementation Plan
 
 **Revision 7 (2026-10-30).** Folds the round-3 check of revision 6

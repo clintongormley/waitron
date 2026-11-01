@@ -416,7 +416,10 @@ Where each failure arrives differs, which is the part a session gets wrong:
 | `db` | the sharded `mutation-db` matrix plus `mutation-db-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand, on the merged score of the ten shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing |
 | `node-db` | the unsharded `mutation-node-db` job in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand; a LOCAL `pnpm --filter @waitron/node-db mutation` fails below 90 too, because the bar is in its own config |
 
-Four hedges worth carrying. `packages/fiscal`'s `mutate` list names only some of its source files, so its floor
+Five hedges worth carrying. `packages/node-db`'s score is taken over the mutants its config's
+`ignoreStatic` keeps: a local `pnpm --filter @waitron/node-db exec stryker run --force` on
+2026-11-01 instrumented 153 mutants, and its report marked 50 of them `Ignored` as static and 103
+`Killed`, a score of 100.00. `packages/fiscal`'s `mutate` list names only some of its source files, so its floor
 is not a package-wide one. Neither is `packages/db`'s, for a smaller reason: one file is out of its
 `mutate` set — `src/english-only.ts`, whose only suite lives in the root vitest project and which
 nothing under `packages/db` imports, so every one of its mutants survives by construction. The

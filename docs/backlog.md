@@ -592,8 +592,13 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   [Detail](backlog/setup.md#a1142-a-cut-off-start-again-beside-found-files-the-move-cannot-handle-gets-only-the-explanation).
 
 - **A1143: files a Move set aside have no way back in the app.** Recover from backup takes only a
-  backup file, a bucket copy or a Waitron Cloud copy. Left open by A1098.
+  backup file, a bucket copy or a Waitron Cloud copy. Left open by A1098. A way back must use the
+  key ring the Move stored beside the folder.
   [Detail](backlog/setup.md#a1143-files-a-move-set-aside-have-no-way-back-in-the-app)
+
+- **A1284: where the environment sets the vault key, a Move copies a ring that is not the one in
+  use.** Left open by A947 slice 3a.
+  [Detail](backlog/setup.md#a1284-where-the-environment-sets-the-vault-key-a-move-copies-a-ring-that-is-not-the-one-in-use)
 
 - **A1144: after Keep, the box stays on its page even if the files are later removed by hand.**
   Left open by A1098.
@@ -5735,9 +5740,46 @@ outstanding on code that exists.
   [Design](superpowers/specs/2026-10-26-a1111-mirror-personal-sign-in-design.md)
 
 - **A947. Go-live on two local boxes.** The owner approved the revised design; slice 4a landed as
-  [#1990](https://github.com/clintongormley/waitron/pull/1990) on 2026-10-24. Slices 3a onwards
-  are still open. Slice 3a's [plan](superpowers/plans/2026-10-31-a947-3a-node-db.md) is written
-  and waits on the owner's two questions in it. [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
+  [#1990](https://github.com/clintongormley/waitron/pull/1990) on 2026-10-24. Slice 3a
+  ([plan](superpowers/plans/2026-10-31-a947-3a-node-db.md)) moves what a box remembers about itself
+  into its own `node.db`; the owner answered yes to both its questions on 2026-10-31. Slices 3b
+  onwards are still open. [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
+
+- **A1273: the shared key ring has no rotation path to the spare.** A spare gets the main box's
+  ring only when it joins. For slices 3b and 3c.
+  [Detail](backlog/replication-cloud.md#a1273-the-shared-key-ring-has-no-rotation-path-to-the-spare)
+
+- **A1274: a lost node.db beside an intact venue.db reads as a sole primary.**
+  [Detail](backlog/replication-cloud.md#a1274-a-lost-nodedb-beside-an-intact-venuedb-reads-as-a-sole-primary)
+
+- **A1275: a Cloud peer's chart is refused on the checked paths** (promotion, retiring, adding a
+  spare). [Detail](backlog/replication-cloud.md#a1275-a-cloud-peers-chart-is-refused-on-the-checked-paths)
+
+- **A1276: with three or more boxes, a main box that changed twice since a box joined is not
+  trusted**, and the refusal names no next step. Not run end to end.
+  [Detail](backlog/replication-cloud.md#a1276-with-three-or-more-boxes-a-main-box-that-changed-twice-since-a-box-joined-is-not-trusted)
+
+- **A1277: a malformed chart signed by a trusted key is copied into the next chart.**
+  [Detail](backlog/replication-cloud.md#a1277-a-malformed-chart-signed-by-a-trusted-key-is-copied-into-the-next-chart)
+
+- **A1278: the spare-adding route spends a reservation on a held chart it then refuses.** Predates
+  A947 slice 3a.
+  [Detail](backlog/replication-cloud.md#a1278-the-spare-adding-route-spends-a-reservation-on-a-held-chart-it-then-refuses)
+
+- **A1279: a local secondary promotes only over a chart it signed itself.** No production caller.
+  [Detail](backlog/replication-cloud.md#a1279-a-local-secondary-promotes-only-over-a-chart-it-signed-itself)
+
+- **A1280: a retried join leaves the abandoned node id's node.db rows.**
+  [Detail](backlog/replication-cloud.md#a1280-a-retried-join-leaves-the-abandoned-node-ids-nodedb-rows)
+
+- **A1281: the venue command reads a missing or unmigrated node.db as version 0.**
+  [Detail](backlog/replication-cloud.md#a1281-the-venue-command-reads-a-missing-or-unmigrated-nodedb-as-version-0)
+
+- **A1282: the Servers screen's main-box fingerprint is stale after a connection repair** until the
+  page reloads. [Detail](backlog/replication-cloud.md#a1282-the-servers-screens-main-box-fingerprint-is-stale-after-a-connection-repair)
+
+- **A1283: no guide page covers the Servers screen or adding a spare.**
+  [Detail](backlog/replication-cloud.md#a1283-no-guide-page-covers-the-servers-screen-or-adding-a-spare)
 
 The membership, promotion and rejoin arc remains in the tree. What remains, largest first:
 
@@ -5817,7 +5859,8 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   [Detail](backlog/replication-cloud.md#loose-ends-left-by-sqlite-slice-2-task-9a)
 
 - **If a later slice moves `local` tables into `node.db`**, that slice decides again how the drain
-  crosses the two files: SQLite refuses a trigger body that writes another attached database.
+  crosses the two files: SQLite refuses a trigger body that writes another attached database. A947
+  slice 3a moved five tables with no change-log triggers; the question stays for `change_log`.
   [Detail](backlog/replication-cloud.md#if-a-later-slice-moves-local-tables-into-nodedb)
 
 - **A promoting standby may list itself with an empty `contactUrl`, so no till is told to dial it.**

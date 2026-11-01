@@ -148,7 +148,8 @@ for this docs task; no provider work is authorised.
   standby and added it to its membership list (the tests assert only on the mirror's own
   database); `adoptFromPrimary` (`adopt.ts`) spreads one adoption across several transactions with
   file writes between and no commented decision (CLAUDE.md §3), so a failure partway could leave a
-  stamped mirror with no break-glass verifier; the restore guard's repeated-destination check
+  stamped `venue.db` with none of the box's `node.db` rows (since A947 slice 3a its mode, signing
+  key, link, recovery-key check and pinned key share one `node.db` transaction); the restore guard's repeated-destination check
   compares resolved path text, so two names reaching one file through a symlink may pass;
   `mirror-session.ts`'s keepalive keeps an `isNull(lastSeenAt)` arm on a `not null` column (dead,
   kept on purpose); `MirrorBundle.wireguardPublicKey` is set by no production caller and read by
@@ -196,7 +197,10 @@ design question: how the dormant certificate is protected when the seal must hap
 initial copy ([design](../superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md),
 [plan](../superpowers/plans/2026-09-07-fiscal-cert-distribution.md)). Beside it, **the vault-ring
 question**: `tenant_credentials` is `local` and a blob sealed under one node's ring cannot be opened
-under another's, so `fiscal.aeat` and `payments.stripe` do not travel to a standby at all.
+under another's. Since A947 slice 3a a spare receives the main box's ring when it joins
+(`credentialsRing` in `apps/server/src/mirror-bundle.ts`, written by `apps/server/src/adopt.ts`), so
+rows a copy of `venue.db` brings open there; nothing yet delivers that copy, nor a ring the main box
+changes after the join (A1273).
 
 ## Adding a mirror while the internet is down
 
@@ -253,15 +257,18 @@ Cloud's production store still needs its own run.
 - A fencing document the peer serves later at that same term reads as not
   newer, so the box is never fenced (reproduced with a temporary two-boot case in
   `apps/server/src/boot.reconcile.test.ts`). I believe it cannot happen today — the only writer of
-  `mirror_config`, which the peer check needs, is `apps/server/src/adopt.ts`, for a standby that
-  never finishes adoption — from reading, not a run. Recorded, not redesigned.
+  `node_mirror_link` (in `node.db`), which the peer check needs, is `apps/server/src/adopt.ts`, for a
+  standby that never finishes adoption — from reading, not a run. Recorded, not redesigned.
 
 ## The restored membership row's check (`assertRestoredMembershipValid`, #678) trusts the keys the restored copy holds
 
 - A copy whose `nodes.public_key` for this node was rewritten, with its
   document re-signed by the matching key, passes, and the next term is signed over the added node
   (the case "passes a document re-signed with a key the copy's own node row was changed to name"
-  pins that).
+  pins that). Since A947 slice 3a the three paths that sign over the held chart check it against
+  keys `node.db` holds instead, and refuse a chart signed by a key only `venue.db` names (the case
+  "refuses a document signed by a key only venue.db names" in
+  `apps/server/src/membership-trust.test.ts`); this restore start's check is unchanged.
 
 ## Only the start that finishes a restore checks the row's signature
 
@@ -269,9 +276,9 @@ Cloud's production store still needs its own run.
   checks only that it can be read and is shaped as a document (A53); a start still finishing an
   adoption checks neither. Promotion, `retireSelf` and the standby chart append
   (`apps/server/src/promote.ts`, `apps/server/src/retire.ts`, `apps/server/src/mirror-bundle-api.ts`)
-  sign over the held row without checking it. The owner's
-  decision (2026-09-26) is under the failover residuals ("a standby checks a promotion against the
-  primary's key"); a restored mirror's own start is not covered by it.
+  check the held row against the keys `node.db` holds since A947 slice 3a
+  (`assertHeldDocumentTrusted`, `apps/server/src/membership-trust.ts`; limits A1275, A1276). A
+  restored mirror's own start is not covered.
 
 ## On a start with NO restore marker, text that is not JSON or a machine list that is not a list fails with the generic text
 
@@ -291,7 +298,7 @@ every later venue (the owner's answer to the A947 design's question 4). Slices 3
 canonicalisation, verification, trust), node enrolment and its rate limiting
 (`apps/server/src/node-enrol-api.ts`, `enrol-rate-limit.ts`), node retirement, and the
 `ledger` / `state` / `local` classification — which no longer chooses a database file: every table
-is in `venue.db` (#548). Read the residuals below as requirements for what failover is
+was put in `venue.db` (#548), and since A947 slice 3a only a box's own five tables are in `node.db`. Read the residuals below as requirements for what failover is
 rebuilt INTO, not as descriptions of code that exists today. A standby holds its full dormant
 identity from JOIN and promotion never mints a chain.
 
@@ -410,6 +417,10 @@ so a document its primary genuinely signed fails the check there (measured, see 
 entry). The owner chose to leave those paths unchecked now and, as part of the failover work: a
 standby stores the primary's key when it joins, and promotion, `retireSelf` and the standby chart
 append check the held document against it. Not built; until then those paths stay unchecked.
+_2026-11-01: built in A947 slice 3a._ Joining pins the main box's key in `node.db`
+(`pinPrimaryKeyTx`, `apps/server/src/adopt.ts`), and the three paths check the held document
+against this box's own key and that pinned key (`assertHeldDocumentTrusted`,
+`apps/server/src/membership-trust.ts`). Its limits are A1275 and A1276.
 
 - **Translate all keeps the suggestion routes’ existing primary checks** (owner, 2026-10-15,
   lane B question 3, answer (a)). Do not add a separate primary check to discarding a suggestion;
@@ -508,11 +519,11 @@ mirror's copy was found (not exhaustive). [Design §7.2](../superpowers/specs/20
 
 The owner approved the second revision on 2026-10-22 at about 02:40; the amendment adds his
 03:12 direction. Slice 4a landed as [#1990](https://github.com/clintongormley/waitron/pull/1990) on
-2026-10-24. Slices 3a onwards are still open. Slice 3a's
-[plan](../superpowers/plans/2026-10-31-a947-3a-node-db.md) is written; the build waits for the
-owner's answers to its two questions: whether the box's role may be saved a moment after the
-switch's fiscal save, and whether a spare checks the main box's certificate fingerprint before it
-receives the venue's keys.
+2026-10-24. Slice 3a ([plan](../superpowers/plans/2026-10-31-a947-3a-node-db.md)) moves what a box
+remembers about itself into its own `node.db`; the owner answered yes to both its questions on
+2026-10-31: the box's role is saved a moment after the switch's fiscal save, and a spare checks
+the main box's certificate fingerprint before it receives the venue's keys. Slices 3b onwards are
+still open; A1273 to A1284 are the loose ends slice 3a left.
 
 The owner, 2026-10-21: "For go live I want one box with failover to another
 local box." The [design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md) re-cuts
@@ -532,6 +543,110 @@ switch (§6.6); the returning box hands over and becomes the spare by itself aft
 the membership chart, so a till's router sees one server (§2).
 
 [Mock-ups](mockups/a947-two-box-failover/README.md).
+
+## A1273: the shared key ring has no rotation path to the spare
+
+Left open by A947 slice 3a, for slices 3b and 3c. A spare receives the main box's key ring once,
+when it joins (`credentialsRing` in `apps/server/src/mirror-bundle.ts`; `apps/server/src/adopt.ts`
+writes it over the spare's `secrets.env`). `waitron-credentials rotate` re-seals the main box's
+vault rows and its own signing key under the ring's current version (`rotateCredentials`,
+`packages/credentials/src/store.ts`), and nothing sends that ring to a spare that has already
+joined. From reading, not run: a spare holding a copy of `venue.db` taken after a rotation could
+not open the rows sealed under the new version. Wanted: a way for the ring to reach the spare, or a
+rule that a rotation re-joins it.
+
+## A1274: a lost node.db beside an intact venue.db reads as a sole primary
+
+Left open by A947 slice 3a. A box with no row in `node_mode` reads as a sole primary
+(`readNodeMode`, `packages/node-db/src/mode.ts`). So a spare whose `node.db` is deleted, while its
+copy of `venue.db` stays, reopens with a new `node.db` holding no row for it and reads its mode and
+singleton role as primary. Guard: the case "reads as a sole primary once its node.db is lost" in
+`apps/server/src/node-db-copy.test.ts`, which asserts the reader and the holder refresh; it starts no
+server, so what boot then does is not run. A start-up refusal for a missing `node.db` was not taken
+in slice 3a because it needs a new recovery-page code with English and Spanish title and action.
+
+## A1275: a Cloud peer's chart is refused on the checked paths
+
+Left open by A947 slice 3a. Promotion (both functions), retiring and the spare-adding route check
+the held chart against the keys this box stores itself: its own, and the main box's key pinned when
+it joined, plus a spare one of those endorsed (`readStoredTrustSet` and `assertHeldDocumentTrusted`,
+`apps/server/src/membership-trust.ts`). A chart a Cloud peer signs is vouched for by none of them,
+so once one exists those paths would refuse it `membership.held_untrusted`, and the screens show
+the generic text. Not run with a Cloud peer: none signs charts today. Decide with the Cloud standby
+work which keys a box trusts.
+
+## A1276: with three or more boxes, a main box that changed twice since a box joined is not trusted
+
+Left open by A947 slice 3a. A box trusts only its own key and the ONE main-box key it pinned when it
+joined (`pinPrimaryKeyTx` has one production caller, `apps/server/src/adopt.ts`), and a chart carries
+only its signer's own endorsement. The sequence: main box M; spares S1 and S2 join under M. M fails
+and S1 is promoted. Spare D joins under S1, so D trusts D and S1. S1 fails and S2 is promoted. D now
+holds S2's chart, which carries S2's endorsement by M, a key D never pinned. D then refuses to be
+promoted or to retire (`membership.held_untrusted`, reason `endorsement_invalid` at the helper
+level, measured in the slice's Task 15 review), and the screen shows the generic text with no next
+step, which CLAUDE.md §3 allows only for a state only a bug produces. Not run end to end: that
+replication delivers S2's chart to D is not proven. Go-live is two boxes, where this cannot arise.
+Fix idea: at join, also pin the main box's own trusted keys.
+
+## A1277: a malformed chart signed by a trusted key is copied into the next chart
+
+Left open by A947 slice 3a. The readability check (`assertHeldDocumentReadable`,
+`apps/server/src/membership-trust.ts`) checks only the fields a chart declares, so a held chart
+signed by a key this box trusts whose `nodes` entry carries an extra key passes it and the trust
+check, and retiring and the spare-adding route copy that extra key into the chart they sign.
+Measured on the slice's branch at those two paths; promotion was not measured, and on main it was
+not run. Waitron never writes such a chart.
+
+## A1278: the spare-adding route spends a reservation on a held chart it then refuses
+
+Predates A947 slice 3a. On main (01945cbce, in a throwaway worktree), the case "refuses 409
+membership.revoked_duplicate when the held chart's revoked list names a machine twice" in
+`apps/server/src/mirror-bundle-api.test.ts`, with a snapshot of the reservations added before and
+after, failed only on the snapshot: the route answered 409 `membership.revoked_duplicate` after
+making one signed outside reservation (`allocationId contract-P000042`). The slice's trust check
+runs before the reservation but passes this chart, which the main box signed. Wanted: check the
+chart's shape before reserving.
+
+## A1279: a local secondary promotes only over a chart it signed itself
+
+Left open by A947 slice 3a. `promoteLocalSecondaryToPrimary` (`apps/server/src/promote.ts`) runs the
+trust check with no pinned main-box key, because only joining pins one, so it trusts its own key
+alone. It has no production caller: the promote endpoint never calls it
+(`apps/server/src/boot.ts`, "it NEVER calls `promoteLocalSecondaryToPrimary`"), and the in-process
+handle a started server carries (`makeStartedServer`, `apps/server/src/boot.ts`) is used only by
+tests. Decide its trust set if it gains a caller.
+
+## A1280: a retried join leaves the abandoned node id's node.db rows
+
+Left open by A947 slice 3a. A join retried after a failure under a new node id leaves the first
+attempt's `node_signing_key`, `node_mode` and `node_mirror_link` rows for an id nothing else names
+(a probe case added to `apps/server/src/adopt.test.ts` in the slice's Task 10 review, then
+removed). Nothing reads a row by any id but its own, and a rotation re-seals the key, but it is a
+private key for an identity the main box endorsed. Wanted: remove them when a new attempt starts.
+
+## A1281: the venue command reads a missing or unmigrated node.db as version 0
+
+Left open by A947 slice 3a. `waitron-provision venue` refuses an unmigrated `venue.db`
+(`provisioning.database_unmigrated`, `packages/provisioning/src/cli.ts`), but does not check
+`node.db`: the node set's version reads as 0 when its table is missing (`appliedSchemaVersion`,
+`packages/migrations/src/schema-version.ts`). A real box's folder is migrated, both files, before the
+command runs (`applyMigrations`), so this needs a folder put together by hand. Wanted: the same
+refusal for `node.db`.
+
+## A1282: the Servers screen's main-box fingerprint is stale after a connection repair
+
+Left open by A947 slice 3a. The dashboard's Settings → Servers screen shows the serving box's
+certificate authority fingerprint (`readBoxCaFingerprint`, `apps/server/src/box-tls-repair.ts`), refreshed only when `node_membership` or `nodes` change (`listServers` in
+`apps/dashboard/src/api/live-queries.ts`). A connection repair that makes a new authority would show
+the old fingerprint until the page reloads. From reading, not run.
+
+## A1283: no guide page covers the Servers screen or adding a spare
+
+Left open by A947 slice 3a. CLAUDE.md §3 asks a screen change to update its guide. Slice 3a changed
+the Servers screen (the fingerprint line) and the joining steps (a spare compares the main box's
+fingerprint before it sends a password), and no page in `apps/server/src/guide/en/` or
+`apps/server/src/guide/es/` covers either. Wanted: a section in English and Spanish, with shared
+`{#id}` headings, on adding a spare and the fingerprint comparison.
 
 ## Loose ends left by the Cloud connection integration
 
@@ -604,9 +719,11 @@ credential sealing and scheduler takeover remain unverified.
 
 ## If a later slice moves local tables into node.db
 
-Slice 2's design reserved it for slice
-5. That slice decides again how the drain crosses the two files: SQLite refuses a trigger body
-that writes another attached database, so either `change_log` is reclassified to the file its
+A947 slice 3a moved five tables into `node.db` with no change-log triggers: `node.db` has no
+`change_log`, and `withTransaction`, which drains it, refuses the node handle
+(`packages/db/src/tenancy.ts`). A later slice that moves a table whose changes must be delivered,
+or `change_log` itself, decides again how the drain crosses the two files: SQLite refuses a trigger
+body that writes another attached database, so either `change_log` is reclassified to the file its
 writers live on, or the triggers stop writing it directly and something above them does (P3).
 
 ## A promoting standby may list itself with an empty contactUrl
