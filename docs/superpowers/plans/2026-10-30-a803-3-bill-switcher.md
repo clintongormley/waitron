@@ -3605,6 +3605,17 @@ Answered on top of `42c717233`. RED is `till-app.ts` at `42c717233`; controls we
 
 **Controls:** the fix removed → the RED above; the refusal said whenever the draft changed (the `#leftBillDrafts` check removed) → the bill-left case, `expected 'Could not update the table, try again' to be ''`; `#carryCandidate` answering false when it moved the lines, over `-t "LOOK"` → `Tests 6 failed | 21 passed`: the record's four, the bill-left case, and the new m1 case with `expected 'That bill belongs to other guests' to be ''`.
 
+### Finish-branch review answers (2026-11-01)
+
+A dated record; the task text above is left as written. Reviews: two Codex run-it reviews, the convention reviewer, and two re-reads of the fixes (files in lane C's `a803-3-finish/`). Commits `7467e1d55` to `be761a16e`.
+
+- **Paid bills of a party merged in count as the table's bills.** `partyBillIds` and `ensureShownBill` (Task 4a) are replaced by `shownBillIds` and `ensureFamilyBill` in `table-actions.ts`, which read the party's whole family through `partyFamily`, as the bills read does. So the answer's `billIds` lists those paid bills, and Split a table gives the staying party no empty bill while such a paid bill is still shown (D1's "no bill that is not abandoned"); the staying table then opens on that paid bill and the waiter uses + New bill. An abandoned bill still does not count (two cases).
+- **The new-bill route has its closed-zone case** in `till-api.zone-closed.test.ts`.
+- **The switcher sets `opens-below`** (the Task 10 record's "The other users of `wt-row-actions` do not set it" no longer holds), so a long list scrolls and + New bill can be reached.
+- **Choosing another bill or + New bill with a half-done step asks Keep editing / Discard changes**, through the same `#leavingActions` as the ⋮.
+- **Split a table with the bills read failing afterwards** shows a bill the till knew that stayed, or, when the staying party's only bill left, the new bill at the next successful read for that party on that visit; that read ends the wait even when it lists no bill.
+- **Not changed:** A1267 (dishes on a bill gone with no bill left) stays a follow-up; the duplicate `it.each(["merge", "separate"])` rows named at Task 4a stay as recorded there; `till-table-order-screen.parties.test.ts`'s `[data-bill-main]` case (from `c9ad7a634`, before the branch) is left as it was: it checks for a marker nothing draws, so it cannot fail.
+
 ## Task 16: backlog, questions, PR text, hand-off (≈25 calls)
 
 - [x] Task 9 review M4 (keyboard of the shared `wt-row-actions`: no arrow keys in a `role="menu"`,
