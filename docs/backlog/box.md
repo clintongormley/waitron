@@ -832,7 +832,7 @@ dracut files; the rig entry point (`bench/box-installer/run.mjs`) and disk fixtu
 observation, mount and cleanup adapters (until then the disk-key store's fixed entry points
 refuse); the root-owned
 check run as root; real power cuts; seal experiments (a)–(i) and every slice-1 measurement.
-PR 2, the preboot logic (unlock gate, locked-mode redirect, Wi-Fi record reader), can be built here.
+PR 2, the preboot logic (unlock gate, locked-mode redirect, Wi-Fi record reader), needs no Linux machine and can be built now.
 
 **For the owner: a box that already holds Waitron, with its TPM or Secure Boot switched off.**
 Should the stick start the installed box anyway, or stop and show the firmware message? Starting it

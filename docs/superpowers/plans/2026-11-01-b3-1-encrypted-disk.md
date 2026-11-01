@@ -149,8 +149,8 @@ The six-slice plan was written on 2026-10-26. This re-map checks it against main
    | production reset refusal | `:659-662` | `:701-712` |
 
    `deploy/compose.yml:12` (`restart: unless-stopped`) still holds. The D-Bus socket mount is at `:150-151`, inside the spec's `:149-153`. The recipe pull request must re-read these.
-7. **Slice 8's recovery-document files are gone.** A1187 part 1 (`58de3963a`, #2274) removed `apps/server/src/recovery-document-api.ts` and the dashboard recovery-document panel. The recovery pack replaced them (`backup-recovery-pack-*.ts`, `recovery-pack-card.ts`). A1187 part 3, the disk-key page, waits for B3 (`docs/backlog.md:4920`). Slice 8 must re-map; this pull request is unaffected.
-8. **The docs still say "no build":** `docs/backlog.md:5151`, the spec's status line, `docs/backlog/box.md:751-752`, and "Nothing built." at `docs/backlog/box.md:816` (the B3 section runs from `:745` to `:817`). Task 7 adds dated pointers.
+7. **Slice 8's recovery-document files are gone.** A1187 part 1 (`58de3963a`, #2274) removed `apps/server/src/recovery-document-api.ts` and the dashboard recovery-document panel. The recovery pack replaced them (`backup-recovery-pack-*.ts`, `recovery-pack-card.ts`). A1187 part 3, the disk-key page, waits for B3 (`docs/backlog.md`). Slice 8 must re-map; this pull request is unaffected.
+8. **The docs said "no build"** (backlog B3 entry, the spec's status line, box.md's B3 section); Task 7 rewrites the backlog and box.md lines and adds dated pointers to the spec and the six-slice plan.
 9. **Still true, checked by reading:**
    - No `deploy/box/`, no `bench/box-installer/`, and no `.github/workflows/box-image.yml`.
    - `apps/server/src/self-signed-cert.ts:27-33` still names the permitted subtrees and commit `75f17f9e3`.
@@ -168,7 +168,7 @@ The six-slice plan was written on 2026-10-26. This re-map checks it against main
 **Test conventions.**
 - Tests import `describe`, `expect` and `it` from `vitest`.
 - Real-file tests use `fs.realpath(await fs.mkdtemp(join(tmpdir(), "...")))` (macOS `/var` is a symlink to `/private/var`) and remove their folders in `afterEach`.
-- Rejected inputs assert both `code` and `reason` (CLAUDE.md §4).
+- Rejected inputs assert both `code` and `reason`.
 
 **Letter case.** No test may depend on file-name letter case. The reviewer ran this: on macOS's default case-insensitive filesystem, `ABCDEF.json` opened as `abcdef.json` with `O_NOFOLLOW`. CI's Linux runner is case-sensitive (my belief, not run). So a case-dependent test could pass on one and fail on the other. UUID case is refused as `input-invalid` **before any file call**, and no test creates two files whose names differ only in case.
 
@@ -702,7 +702,7 @@ That array is the only copy this pull request zeros. Strings parsed from the fil
 ### Task 7: backlog and dated pointers
 
 **Files:**
-- Modify: `docs/backlog.md`, the B3 entry at line 5151.
+- Modify: `docs/backlog.md`, the B3 entry.
 - Modify: `docs/backlog/box.md`, `## B3. The bootable USB installer`, lines 745–817. "authorised; no build" is at 751–752 and "Nothing built." is at 816.
 - Modify: `docs/superpowers/specs/2026-10-21-b3-usb-installer-design.md`, one dated pointer line at the top.
 - Modify: `docs/superpowers/plans/2026-10-26-b3-usb-installer.md`, one dated pointer line at the top.
@@ -716,8 +716,7 @@ That array is the only copy this pull request zeros. Strings parsed from the fil
     - the real observation, mount and cleanup adapters;
     - the root-owned check run as root;
     - real power cuts;
-    - seal experiments (a)–(i) and every slice-1 measurement;
-    - PR 2's preboot logic.
+    - seal experiments (a)–(i) and every slice-1 measurement.
 
     All of these need a Linux machine with KVM, OVMF and swtpm, or the hardware. Keep the Android hold sentence exactly as it is.
 - [ ] **Step 2: `docs/backlog/box.md`.** Make the same change at 751–752 and 816, and link this plan.
