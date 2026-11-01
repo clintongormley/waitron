@@ -1,6 +1,7 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
+  breakAfterColons,
   focusFirstInvalid,
   submitOnEnter,
   baseStyles,
@@ -34,6 +35,19 @@ const REQUIRED_FIELDS: Record<"address" | "login", readonly ConnectField[]> = {
 
 /** Only plain http needs no comparison, and the server allows it to this machine alone. */
 const isPlainHttp = (url: string): boolean => /^http:/i.test(url.trim());
+
+/**
+ * A main box's address is its origin, so a typed path, query or fragment is dropped. Anything that
+ * is not an http or https URL is left as typed, for the server to refuse.
+ */
+function originOf(typed: string): string {
+  try {
+    const url = new URL(typed);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.origin : typed;
+  } catch {
+    return typed;
+  }
+}
 
 interface FieldText {
   label: StringKey;
@@ -94,7 +108,6 @@ export class SetupConnectScreen extends LitElement {
         margin: 0 0 var(--wt-space-4);
         font-family: var(--wt-font-family-mono);
         color: var(--wt-color-text);
-        overflow-wrap: anywhere;
       }
     `,
   ];
@@ -232,6 +245,9 @@ export class SetupConnectScreen extends LitElement {
     if (key === "primaryUrl") {
       this.addressRefused = false;
       this.readFailed = false;
+      // A read still under way is for the address as it was; its answer is dropped.
+      this.#readGeneration++;
+      this.reading = false;
     }
   }
 
@@ -252,10 +268,12 @@ export class SetupConnectScreen extends LitElement {
     this.addressRefused = false;
     this.readFailed = false;
     if (this.#blocked()) return;
+    const address = originOf(this.values.primaryUrl.trim());
+    this.values = { ...this.values, primaryUrl: address };
     const generation = ++this.#readGeneration;
     this.reading = true;
     try {
-      const certificate = await this.api.primaryCertificate(this.values.primaryUrl.trim());
+      const certificate = await this.api.primaryCertificate(address);
       if (generation !== this.#readGeneration || !this.isConnected) return;
       this.certificate = certificate ?? undefined;
       this.confirmedCaPem = undefined;
@@ -288,6 +306,12 @@ export class SetupConnectScreen extends LitElement {
   #mismatch(): void {
     this.certificate = undefined;
     this.#show("stopped");
+  }
+
+  /** Back to the editable address, keeping the login; Continue then reads and compares again. */
+  #checkAddress(): void {
+    this.fieldRefusalDismissed = true;
+    this.#show("address");
   }
 
   #connect(): void {
@@ -365,17 +389,23 @@ export class SetupConnectScreen extends LitElement {
         return html`<wt-button
           variant="primary"
           data-test="check-address"
-          @click=${() => this.#show("address")}
+          @click=${() => this.#checkAddress()}
           >${t("connect.check_address")}</wt-button
         >`;
       case "login":
         return html`<wt-button
-          variant="primary"
-          data-test="connect"
-          ?disabled=${blocked}
-          @click=${() => this.#connect()}
-          >${t("connect.connect")}</wt-button
-        >`;
+            variant="secondary"
+            slot="secondary"
+            data-test="check-address"
+            @click=${() => this.#checkAddress()}
+            >${t("connect.check_address")}</wt-button
+          ><wt-button
+            variant="primary"
+            data-test="connect"
+            ?disabled=${blocked}
+            @click=${() => this.#connect()}
+            >${t("connect.connect")}</wt-button
+          >`;
     }
   }
 
@@ -384,13 +414,14 @@ export class SetupConnectScreen extends LitElement {
   ): TemplateResult | typeof nothing {
     switch (this.step) {
       case "address":
+      case "stopped":
         return nothing;
-      case "compare":
+      case "compare": {
+        const fingerprint = breakAfterColons(this.certificate?.fingerprint256 ?? "");
         return html`<p data-test="compare">${t("connect.compare.intro")}</p>
           <p class="fingerprint-label">${t("connect.compare.label")}</p>
-          <p class="fingerprint" data-test="fingerprint">${this.certificate?.fingerprint256}</p>`;
-      case "stopped":
-        return html`<p role="alert" data-test="stopped">${t("connect.stopped")}</p>`;
+          <p class="fingerprint" data-test="fingerprint">${fingerprint}</p>`;
+      }
       case "login":
         return html`${field("personId")} ${field("password", "password")} ${field("totp")}`;
     }
@@ -404,6 +435,7 @@ export class SetupConnectScreen extends LitElement {
     const bottom = [
       ...(this.errorMessage === undefined || this.refusalDismissed ? [] : [this.errorMessage]),
       ...(this.readFailed ? [t("connect.certificate_failed")] : []),
+      ...(this.step === "stopped" ? [t("connect.stopped")] : []),
       ...(errors.size > 0 || refused !== undefined ? [t("connect.fix_fields")] : []),
     ].join(" ");
     return html`

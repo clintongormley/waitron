@@ -146,6 +146,20 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     expect(path).toBe("/management-api/mirror-bundle");
   });
 
+  it("sends a typed path or query nowhere over plain http either", async () => {
+    let seen: string | undefined;
+    const app = new Hono();
+    app.all("*", (c: Context) => {
+      seen = `${c.req.method} ${new URL(c.req.url).pathname}${new URL(c.req.url).search}`;
+      return c.json(SAMPLE_BUNDLE);
+    });
+    const base = await startServer(app);
+
+    await fetchMirrorBundle(`${base}/admin/reboot?now=1#`, CREDENTIAL, STANDBY);
+
+    expect(seen).toBe("POST /management-api/mirror-bundle");
+  });
+
   it("re-runs the SSRF guard at the fetch boundary: a private/metadata URL throws before any fetch", async () => {
     for (const bad of [
       "http://169.254.169.254/latest",
@@ -535,6 +549,24 @@ describe("the spare checks the main box's certificate before it sends a password
     );
     expect(isAppError(error) && hasCode(error, "password.invalid")).toBe(true);
     expect(isAppError(error) && error.params).toEqual({});
+  });
+
+  it("sends a typed path, query or fragment to neither the certificate read nor the bundle request", async () => {
+    const server = await startBoxServer(x, (seen) =>
+      seen.method === "GET"
+        ? { status: 200, body: x.caPem, contentType: "application/x-pem-file" }
+        : { status: 200, body: JSON.stringify({ ...SAMPLE_BUNDLE, boxCaPem: x.caPem }) },
+    );
+    boxServers.push(server);
+    const typed = `${server.url}/admin/reboot?now=1#`;
+
+    await fetchPrimaryCertificate(typed);
+    await fetchMirrorBundle(typed, CREDENTIAL, STANDBY, x.caPem);
+
+    expect(server.requests.map(({ method, path }) => `${method} ${path}`)).toEqual([
+      "GET /ca.crt",
+      "POST /management-api/mirror-bundle",
+    ]);
   });
 });
 

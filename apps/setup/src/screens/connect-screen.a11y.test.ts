@@ -62,7 +62,7 @@ describe.each(["light", "dark"] as const)("setup-connect-screen a11y (%s theme)"
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations with a routed-back server error shown above Connect", async () => {
+  it("has no violations with a routed-back server error shown above Continue", async () => {
     const { el, host } = await mount({ errorMessage: "Couldn't reach the primary server." }, theme);
     expect(await bottomOf(el)).toBe("Couldn't reach the primary server.");
     await expectNoA11yViolations(host);
@@ -87,7 +87,36 @@ describe.each(["light", "dark"] as const)("setup-connect-screen a11y (%s theme)"
     await toCompare(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=mismatch]")!.click();
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-test=stopped]")).not.toBeNull();
+    expect(await bottomOf(el)).toContain("The fingerprints don't match");
+    await expectNoA11yViolations(host);
+  });
+
+  it.each([
+    [
+      "the certificate read's failure",
+      { code: "mirror.bundle_fetch_failed", params: {}, status: 502 },
+      "Couldn't read the primary server's certificate.",
+    ],
+    [
+      "the address marked invalid by the certificate read",
+      { code: "mirror.primary_url_invalid", params: {}, status: 400 },
+      "Correct the highlighted fields to continue.",
+    ],
+  ])("has no violations with %s shown", async (_label, refusal, sentence) => {
+    const { el, host } = await mount(
+      { api: { primaryCertificate: vi.fn().mockRejectedValue(refusal) } },
+      theme,
+    );
+    el.shadowRoot!.querySelector("[data-test=primaryUrl]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "https://waitron.local" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
+    await vi.waitFor(async () => expect(await bottomOf(el)).toContain(sentence));
     await expectNoA11yViolations(host);
   });
 

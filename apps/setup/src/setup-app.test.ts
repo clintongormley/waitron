@@ -2039,6 +2039,105 @@ describe("setup-app", () => {
       expect(input(connect, "password").value).toBe(TYPED.password);
     });
 
+    const OTHER_CERTIFICATE = {
+      pem: "-----BEGIN CERTIFICATE-----\nAUTHORITY-B\n-----END CERTIFICATE-----\n",
+      fingerprint256: "B0:B1:B2:B3",
+    };
+
+    const button = (connect: HTMLElement, name: string) =>
+      connect.shadowRoot!.querySelector<HTMLElement>(`[data-test=${name}]`);
+
+    it("pairs an address edited while its certificate is read only with its own certificate", async () => {
+      const answers: Array<(value: unknown) => void> = [];
+      const primaryCertificate = vi.fn(() => new Promise((resolve) => answers.push(resolve)));
+      const adopt = vi.fn().mockResolvedValue({ adopted: true, restarting: true });
+      const el = await mountSetupApp(stubApi({ adopt, primaryCertificate }));
+      goto(el, "connect");
+      await el.updateComplete;
+      const connect = await screenHost(el, "connect");
+      await userEvent.fill(input(connect, "primaryUrl"), "https://a.example");
+      button(connect, "continue")!.click();
+      await userEvent.fill(input(connect, "primaryUrl"), "https://b.example");
+      answers[0]!(PRIMARY_CERTIFICATE);
+      await flush(el);
+      expect(button(connect, "matches")).toBeNull();
+      expect(input(connect, "primaryUrl").value).toBe("https://b.example");
+
+      button(connect, "continue")!.click();
+      expect(primaryCertificate).toHaveBeenLastCalledWith("https://b.example");
+      answers[1]!(OTHER_CERTIFICATE);
+      await vi.waitFor(() => expect(button(connect, "matches")).not.toBeNull());
+      expect(
+        connect.shadowRoot!.querySelector("[data-test=fingerprint]")!.textContent!.trim(),
+      ).toBe(OTHER_CERTIFICATE.fingerprint256);
+      button(connect, "matches")!.click();
+      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      await userEvent.fill(input(connect, "personId"), "op-1");
+      await userEvent.fill(input(connect, "password"), "pw");
+      button(connect, "connect")!.click();
+      await flush(el);
+      expect(adopt).toHaveBeenCalledExactlyOnceWith({
+        primaryUrl: "https://b.example",
+        credential: { personId: "op-1", password: "pw" },
+        confirmedCaPem: OTHER_CERTIFICATE.pem,
+      });
+    });
+
+    it("after a join refused at the main box's certificate, lets the person correct the address and compare again", async () => {
+      const adopt = vi
+        .fn()
+        .mockRejectedValueOnce({ code: "mirror.bundle_fetch_failed", params: {}, status: 502 })
+        .mockResolvedValue({ adopted: true, restarting: true });
+      const primaryCertificate = vi
+        .fn()
+        .mockResolvedValueOnce(PRIMARY_CERTIFICATE)
+        .mockResolvedValueOnce(OTHER_CERTIFICATE);
+      const el = await mountSetupApp(stubApi({ adopt, primaryCertificate }));
+      await typeAndConnect(el);
+      const connect = await screenHost(el, "connect");
+      expect(await bottomOf(connect)).toContain("Check that the address is");
+      expect(button(connect, "check-address")!.textContent!.trim()).toBe("Check the address");
+
+      button(connect, "check-address")!.click();
+      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      expect(input(connect, "primaryUrl").readOnly).toBe(false);
+      await userEvent.fill(input(connect, "primaryUrl"), "https://main.example");
+      button(connect, "continue")!.click();
+      await vi.waitFor(() => expect(button(connect, "matches")).not.toBeNull());
+      expect(primaryCertificate).toHaveBeenLastCalledWith("https://main.example");
+      button(connect, "matches")!.click();
+      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      expect(input(connect, "personId").value).toBe(TYPED.personId);
+      await userEvent.fill(input(connect, "totp"), "654321");
+      button(connect, "connect")!.click();
+      await flush(el);
+      expect(adopt).toHaveBeenLastCalledWith({
+        primaryUrl: "https://main.example",
+        credential: { ...sentBody.credential, totp: "654321" },
+        confirmedCaPem: OTHER_CERTIFICATE.pem,
+      });
+    });
+
+    it("after a join refused for its address, reopens the address step marked and editable, and reads the corrected one", async () => {
+      const adopt = vi
+        .fn()
+        .mockRejectedValue({ code: "mirror.primary_url_invalid", params: {}, status: 400 });
+      const primaryCertificate = vi.fn().mockResolvedValue(PRIMARY_CERTIFICATE);
+      const el = await mountSetupApp(stubApi({ adopt, primaryCertificate }));
+      await typeAndConnect(el);
+      const connect = await screenHost(el, "connect");
+      expect(
+        connect.shadowRoot!.querySelector("[data-test=primaryUrl]")!.getAttribute("error"),
+      ).toBe("Check the primary server address.");
+      expect(input(connect, "primaryUrl").readOnly).toBe(false);
+      expect(button(connect, "connect")).toBeNull();
+
+      await userEvent.fill(input(connect, "primaryUrl"), "https://main.example");
+      button(connect, "continue")!.click();
+      await vi.waitFor(() => expect(primaryCertificate).toHaveBeenCalledTimes(2));
+      expect(primaryCertificate).toHaveBeenLastCalledWith("https://main.example");
+    });
+
     // Owner rule (C95): a refused login must not say whether the person exists, so it marks no
     // field; a message under the code or the password would say the details before it were right.
     it("says only that the login failed, above Connect, when the primary refuses the login", async () => {

@@ -54,7 +54,7 @@ export const startEn = {
   "connect.certificate_failed":
     "Couldn't read the primary server's certificate. Check the address and that the primary server is on, then try again.",
   "connect.compare.intro":
-    "On a device already paired with your primary server, open the dashboard's Servers screen. Its public certificate fingerprint must match this one.",
+    "On a device already signed in to your primary server's dashboard, open Settings, then Servers. The public certificate fingerprint shown there must match this one.",
   "connect.compare.label": "Public certificate fingerprint",
   "connect.compare.matches": "It matches",
   "connect.compare.mismatch": "It doesn't match",
@@ -191,7 +191,7 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "connect.certificate_failed":
     "No se ha podido leer el certificado del servidor principal. Revisa la dirección y que el servidor principal esté encendido, e inténtalo de nuevo.",
   "connect.compare.intro":
-    "En un dispositivo ya vinculado a tu servidor principal, abre la pantalla Servidores del panel. Su huella del certificado público debe coincidir con esta.",
+    "En un dispositivo que ya tenga la sesión iniciada en el panel de tu servidor principal, abre Ajustes y luego Servidores. La huella del certificado público que aparece allí debe coincidir con esta.",
   "connect.compare.label": "Huella del certificado público",
   "connect.compare.matches": "Coincide",
   "connect.compare.mismatch": "No coincide",

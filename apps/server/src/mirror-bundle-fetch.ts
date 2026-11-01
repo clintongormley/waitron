@@ -174,7 +174,8 @@ export async function fetchPrimaryCertificate(
 ): Promise<{ pem: string; fingerprint256: string } | null> {
   const base = assertSafePrimaryUrl(primaryUrl);
   if (base.protocol === "http:") return null;
-  const url = new URL(`${base.href.replace(/\/+$/, "")}/ca.crt`);
+  // A main box's address is its origin: a typed path, query or fragment is not sent to it.
+  const url = new URL("/ca.crt", base.origin);
 
   let answer: { status: number; text: string };
   try {
@@ -236,7 +237,7 @@ export async function fetchMirrorBundle(
   // Re-checked here so no caller can make this fetch an unvalidated URL; the request is built from
   // the parsed `URL`, not the raw string.
   const base = assertSafePrimaryUrl(primaryUrl);
-  const url = `${base.href.replace(/\/+$/, "")}/management-api/mirror-bundle`;
+  const url = new URL("/management-api/mirror-bundle", base.origin).href;
   // Plain http is allowed only to a loopback host, which only this machine can answer, so it needs
   // no confirmation. Every https request, `localhost` included, is sent only to the one authority
   // certificate the person confirmed, and is refused before any connection when there is none.

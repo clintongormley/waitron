@@ -118,6 +118,7 @@ export type {
 } from "./floor-map-fills.js";
 export { UndoHistory } from "./history.js";
 export { submitOnEnter } from "./submit-on-enter.js";
+export { breakAfterColons } from "./fingerprint.js";
 export {
   ContentLanguageController,
   currentContentLanguages,

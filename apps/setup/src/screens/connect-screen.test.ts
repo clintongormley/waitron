@@ -1,5 +1,6 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { expectBreaksOnlyAfterColons } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./connect-screen.js";
@@ -54,6 +55,12 @@ const CERT: PrimaryCertificate = {
   pem: "-----BEGIN CERTIFICATE-----\nAUTHORITY-X\n-----END CERTIFICATE-----\n",
   fingerprint256:
     "3F:A1:9C:0B:7E:22:D4:51:88:6A:E0:13:BC:47:F9:2D:65:0E:A8:31:DC:74:5B:96:C2:0F:E7:38:41:AD:9B:16",
+};
+
+const CERT_B: PrimaryCertificate = {
+  pem: "-----BEGIN CERTIFICATE-----\nAUTHORITY-B\n-----END CERTIFICATE-----\n",
+  fingerprint256:
+    "B0:B1:B2:B3:B4:B5:B6:B7:B8:B9:BA:BB:BC:BD:BE:BF:C0:C1:C2:C3:C4:C5:C6:C7:C8:C9:CA:CB:CC:CD:CE:CF",
 };
 
 /** A request the shell hands back: one the person already compared. */
@@ -441,7 +448,9 @@ describe("setup-connect-screen: comparing the primary server's fingerprint", () 
     await vi.waitFor(() => expect(q(el, "[data-test=fingerprint]")).not.toBeNull());
     expect(api.primaryCertificate).toHaveBeenCalledExactlyOnceWith("https://waitron.local");
     expect(text(q(el, "[data-test=fingerprint]")!)).toBe(CERT.fingerprint256);
-    expect(text(q(el, "[data-test=compare]")!)).toContain("Servers screen");
+    expect(text(q(el, "[data-test=compare]")!)).toBe(
+      "On a device already signed in to your primary server's dashboard, open Settings, then Servers. The public certificate fingerprint shown there must match this one.",
+    );
     expect(q(el, "[data-test=password]")).toBeNull();
     expect(q(el, "[data-test=connect]")).toBeNull();
     expect(events).toEqual([]);
@@ -475,9 +484,10 @@ describe("setup-connect-screen: comparing the primary server's fingerprint", () 
     await vi.waitFor(() => expect(q(el, "[data-test=mismatch]")).not.toBeNull());
     await pressed(el, "mismatch");
 
-    expect(text(q(el, "[data-test=stopped]")!)).toBe(
+    expect(await bottomOf(el)).toBe(
       "The fingerprints don't match, so this may not be your primary server. Nothing was sent to it. Check the address and compare again, or go back.",
     );
+    expect(await alerts(el)).toHaveLength(1);
     expect(q(el, "[data-test=password]")).toBeNull();
     expect(q(el, "[data-test=fingerprint]")).toBeNull();
     expect(events).toEqual([]);
@@ -560,6 +570,174 @@ describe("setup-connect-screen: comparing the primary server's fingerprint", () 
     expect(await bottomOf(el)).toBe(FIX_FIELDS);
   });
 
+  it("drops a certificate read still under way when the address is edited, and compares only the address on screen", async () => {
+    const answers: Array<(value: PrimaryCertificate) => void> = [];
+    const api = {
+      primaryCertificate: vi.fn(
+        () => new Promise<PrimaryCertificate>((resolve) => answers.push(resolve)),
+      ),
+    };
+    const { el, host } = await mount({ api });
+    const events = collect(host);
+    await type(el, "primaryUrl", "https://a.example");
+    await pressed(el, "continue");
+    await type(el, "primaryUrl", "https://b.example");
+    answers[0]!(CERT);
+    await new Promise((resolve) => setTimeout(resolve));
+    await el.updateComplete;
+    expect(q(el, "[data-test=fingerprint]")).toBeNull();
+    expect(q(el, "[data-test=continue]")!.hasAttribute("loading")).toBe(false);
+
+    await pressed(el, "continue");
+    expect(api.primaryCertificate).toHaveBeenLastCalledWith("https://b.example");
+    answers[1]!(CERT_B);
+    await vi.waitFor(() =>
+      expect(text(q(el, "[data-test=fingerprint]")!)).toBe(CERT_B.fingerprint256),
+    );
+    await pressed(el, "matches");
+    await type(el, "personId", "op-1");
+    await type(el, "password", "correct horse");
+    await pressed(el, "connect");
+    expect((events[0]!.detail as { body: AdoptBody }).body).toEqual({
+      primaryUrl: "https://b.example",
+      credential: { personId: "op-1", password: "correct horse" },
+      confirmedCaPem: CERT_B.pem,
+    });
+  });
+
+  it("says nothing about a dropped certificate read that fails after the address is edited", async () => {
+    let refuse!: (reason: unknown) => void;
+    const api = {
+      primaryCertificate: vi.fn(
+        () =>
+          new Promise<PrimaryCertificate>((_resolve, reject) => {
+            refuse = reject;
+          }),
+      ),
+    };
+    const { el } = await mount({ api });
+    await type(el, "primaryUrl", "https://a.example");
+    await pressed(el, "continue");
+    await type(el, "primaryUrl", "https://b.example");
+    refuse({ code: "mirror.primary_url_invalid", params: {}, status: 400 });
+    await new Promise((resolve) => setTimeout(resolve));
+    await el.updateComplete;
+    expect(q(el, "[data-test=primaryUrl]")!.hasAttribute("invalid")).toBe(false);
+    expect(await bottomOf(el)).toBe("");
+  });
+
+  it("drops a certificate confirmed earlier once the address is read again", async () => {
+    const { el, host } = await mount({
+      api: stubApi(null),
+      request: REQUEST,
+      invalidField: "primaryUrl",
+    });
+    const events = collect(host);
+    await type(el, "primaryUrl", "http://127.0.0.1:8080");
+    await pressed(el, "continue");
+    await vi.waitFor(() => expect(q(el, "[data-test=connect]")).not.toBeNull());
+    await pressed(el, "connect");
+    expect((events[0]!.detail as { body: AdoptBody }).body).toEqual({
+      primaryUrl: "http://127.0.0.1:8080",
+      credential: REQUEST.credential,
+    });
+  });
+
+  it("presses Continue when Enter is pressed in the address field", async () => {
+    const api = stubApi();
+    const { el, host } = await mount({ api });
+    const events = collect(host);
+    await type(el, "primaryUrl", "https://waitron.local");
+    q(el, "[data-test=primaryUrl]")!.shadowRoot!.querySelector("input")!.focus();
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(q(el, "[data-test=fingerprint]")).not.toBeNull());
+    expect(api.primaryCertificate).toHaveBeenCalledExactlyOnceWith("https://waitron.local");
+    expect(events).toEqual([]);
+  });
+
+  it("lets the person correct the address from the login step, keeping the login", async () => {
+    const api = { primaryCertificate: vi.fn().mockResolvedValue(CERT_B) };
+    const { el, host } = await mount({
+      api,
+      request: REQUEST,
+      errorMessage: "Couldn't join the primary server.",
+    });
+    const events = collect(host);
+    expect(q(el, "[data-test=connect]")).not.toBeNull();
+    expect(text(q(el, "[data-test=check-address]")!)).toBe("Check the address");
+
+    await pressed(el, "check-address");
+    const url = q(el, "[data-test=primaryUrl]") as HTMLElement & { value: string };
+    expect(url.hasAttribute("readonly")).toBe(false);
+    expect(url.value).toBe(REQUEST.primaryUrl);
+    expect(q(el, "[data-test=personId]")).toBeNull();
+    await type(el, "primaryUrl", "https://main.example");
+    await pressed(el, "continue");
+    await vi.waitFor(() => expect(q(el, "[data-test=matches]")).not.toBeNull());
+    expect(api.primaryCertificate).toHaveBeenCalledExactlyOnceWith("https://main.example");
+    await pressed(el, "matches");
+    await pressed(el, "connect");
+    expect((events[0]!.detail as { body: AdoptBody }).body).toEqual({
+      primaryUrl: "https://main.example",
+      credential: REQUEST.credential,
+      confirmedCaPem: CERT_B.pem,
+    });
+  });
+
+  it("asks for no hidden field to be corrected once the person goes back to the address", async () => {
+    const { el } = await mount({ request: REQUEST, invalidField: "password" });
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
+    await pressed(el, "check-address");
+    expect(await bottomOf(el)).toBe("");
+  });
+
+  it("reads and sends only the origin of a typed address, and shows that origin", async () => {
+    const api = stubApi();
+    const { el, host } = await mount({ api });
+    const events = collect(host);
+    await type(el, "primaryUrl", " https://Main.Example:443/admin/reboot?now=1#top ");
+    await pressed(el, "continue");
+    await vi.waitFor(() => expect(q(el, "[data-test=matches]")).not.toBeNull());
+    expect(api.primaryCertificate).toHaveBeenCalledExactlyOnceWith("https://main.example");
+    expect((q(el, "[data-test=primaryUrl]") as HTMLElement & { value: string }).value).toBe(
+      "https://main.example",
+    );
+    await pressed(el, "matches");
+    await type(el, "personId", "op-1");
+    await type(el, "password", "correct horse");
+    await pressed(el, "connect");
+    expect((events[0]!.detail as { body: AdoptBody }).body.primaryUrl).toBe("https://main.example");
+  });
+
+  it.each(["ftp://waitron.local/x", "waitron.local"])(
+    "sends an address that is not an http or https URL (%s) as typed, for the server to refuse",
+    async (typed) => {
+      const api = stubApi();
+      const { el } = await mount({ api });
+      await type(el, "primaryUrl", typed);
+      await pressed(el, "continue");
+      expect(api.primaryCertificate).toHaveBeenCalledExactlyOnceWith(typed);
+    },
+  );
+
+  it.each([1280, 390])(
+    "breaks the fingerprint only after a colon, keeping its text (%ipx)",
+    async (width) => {
+      await page.viewport(width, 900);
+      try {
+        const { el } = await mount({ api: stubApi() });
+        await type(el, "primaryUrl", "https://waitron.local");
+        await pressed(el, "continue");
+        await vi.waitFor(() => expect(q(el, "[data-test=fingerprint]")).not.toBeNull());
+        const fingerprint = q(el, "[data-test=fingerprint]")!;
+        expect(fingerprint.textContent!.trim()).toBe(CERT.fingerprint256);
+        expectBreaksOnlyAfterColons(fingerprint, width === 390);
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    },
+  );
+
   it("opens the address step for a handed-back https request that carries no confirmed certificate", async () => {
     const { el } = await mount({
       request: { primaryUrl: "https://primary.example", credential: REQUEST.credential },
@@ -587,12 +765,12 @@ describe("setup-connect-screen: comparing the primary server's fingerprint", () 
     await pressed(el, "continue");
     await vi.waitFor(() => expect(q(el, "[data-test=fingerprint]")).not.toBeNull());
     expect(text(q(el, "[data-test=compare]")!)).toBe(
-      "En un dispositivo ya vinculado a tu servidor principal, abre la pantalla Servidores del panel. Su huella del certificado público debe coincidir con esta.",
+      "En un dispositivo que ya tenga la sesión iniciada en el panel de tu servidor principal, abre Ajustes y luego Servidores. La huella del certificado público que aparece allí debe coincidir con esta.",
     );
     expect(text(q(el, "[data-test=matches]")!)).toBe("Coincide");
     expect(text(q(el, "[data-test=mismatch]")!)).toBe("No coincide");
     await pressed(el, "mismatch");
-    expect(text(q(el, "[data-test=stopped]")!)).toBe(
+    expect(await bottomOf(el)).toBe(
       "Las huellas no coinciden, así que puede que este no sea tu servidor principal. No se le ha enviado nada. Revisa la dirección y vuelve a comparar, o vuelve atrás.",
     );
     expect(text(q(el, "[data-test=check-address]")!)).toBe("Revisar la dirección");

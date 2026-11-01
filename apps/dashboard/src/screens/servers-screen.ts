@@ -2,7 +2,7 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
-import { baseStyles, type DataTableColumn } from "@waitron/ui";
+import { baseStyles, breakAfterColons, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-dialog.js";
@@ -118,7 +118,6 @@ export class ServersScreen extends LitElement {
       }
       .fingerprint-value {
         font-family: var(--wt-font-family-mono);
-        overflow-wrap: anywhere;
       }
       .explanation {
         margin: 0;
@@ -342,7 +341,7 @@ export class ServersScreen extends LitElement {
           : html`<p class="fingerprint" data-test="authority-fingerprint">
               ${t("servers.fingerprint")}:
               <span class="fingerprint-value" data-test="fingerprint-value"
-                >${this.authorityFingerprint}</span
+                >${breakAfterColons(this.authorityFingerprint)}</span
               >
             </p>`
       }
