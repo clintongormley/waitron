@@ -16,6 +16,8 @@ import { join } from "node:path";
  * @property {typeof fs.rename} rename
  * @property {typeof fs.unlink} unlink
  * @property {typeof fs.readdir} readdir
+ * @property {(path:string) => Promise<void>} syncFile
+ * @property {(path:string) => Promise<void>} syncDirectory
  *
  * @typedef {object} DiskRecoveryDeps
  * @property {string} hostRoot  absolute, realpath-equal
@@ -24,6 +26,7 @@ import { join } from "node:path";
  * @property {DiskRecoveryIo} [io]  test-only override of the file operations
  *
  * @typedef {object} DiskRecoveryStore
+ * @property {(input:{diskUuid:string, key:Uint8Array}) => Promise<void>} store
  * @property {(input:{diskUuid:string}, consume:(key:Uint8Array)=>Promise<void>) => Promise<void>} withKey
  */
 
@@ -35,6 +38,16 @@ const KEY_HEX = /^[0-9a-f]{64}$/;
 const MAX_RECORD_BYTES = 1024;
 const FOLDER = "disk-recovery";
 
+/** @param {string} path @param {number} flags */
+async function syncPath(path, flags) {
+  const handle = await fs.open(path, flags);
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
 /** @type {DiskRecoveryIo} */
 const defaultIo = {
   lstat: fs.lstat,
@@ -44,6 +57,9 @@ const defaultIo = {
   rename: fs.rename,
   unlink: fs.unlink,
   readdir: fs.readdir,
+  syncFile: (path) => syncPath(path, constants.O_RDONLY | constants.O_NOFOLLOW),
+  syncDirectory: (path) =>
+    syncPath(path, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW),
 };
 
 /** @param {string} reason */
@@ -108,6 +124,16 @@ function parseRecord(text, diskUuid) {
   return value.key;
 }
 
+/** @param {unknown} key */
+function isKey(key) {
+  return key instanceof Uint8Array && key.length === 32 && key.some((byte) => byte !== 0);
+}
+
+/** @param {Uint8Array} key */
+function encodeKey(key) {
+  return Array.from(key, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 /** @param {string} hex */
 function decodeKey(hex) {
   const key = new Uint8Array(32);
@@ -169,19 +195,29 @@ export function createDiskRecoveryStore(deps) {
     if (!ownedSafely(root)) throw refusal("permissions-unsafe");
   }
 
+  /** @param {{isSymbolicLink():boolean, isDirectory():boolean, uid:bigint, mode:bigint}} stats */
+  function checkFolder(stats) {
+    if (stats.isSymbolicLink() || !stats.isDirectory()) throw refusal("path-unsafe");
+    if (!ownedSafely(stats)) throw refusal("permissions-unsafe");
+  }
+
+  /** @param {string} path @returns {Promise<import("node:fs").BigIntStats | null>} */
+  async function lstatIfPresent(path) {
+    try {
+      return await io.lstat(path, { bigint: true });
+    } catch (error) {
+      if (errnoCode(error) === "ENOENT") return null;
+      throw error;
+    }
+  }
+
   /** @param {string} diskUuid @returns {Promise<string>} the key's hex */
   async function readRecord(diskUuid) {
     await checkMount(diskUuid);
     const folder = join(hostRoot, FOLDER);
-    let stats;
-    try {
-      stats = await io.lstat(folder, { bigint: true });
-    } catch (error) {
-      if (errnoCode(error) === "ENOENT") throw refusal("record-missing");
-      throw error;
-    }
-    if (stats.isSymbolicLink() || !stats.isDirectory()) throw refusal("path-unsafe");
-    if (!ownedSafely(stats)) throw refusal("permissions-unsafe");
+    const stats = await lstatIfPresent(folder);
+    if (stats === null) throw refusal("record-missing");
+    checkFolder(stats);
 
     // Only root can write in root-only parents, so only root could swap a folder between these
     // checks and the open below, and root is already trusted (spec §7.5).
@@ -207,7 +243,55 @@ export function createDiskRecoveryStore(deps) {
     }
   }
 
+  /** @param {string} diskUuid @param {string} keyHex */
+  async function writeRecord(diskUuid, keyHex) {
+    await checkMount(diskUuid);
+    const folder = join(hostRoot, FOLDER);
+    let stats = await lstatIfPresent(folder);
+    if (stats === null) {
+      await io.mkdir(folder, { mode: 0o700 });
+      stats = await io.lstat(folder, { bigint: true });
+    }
+    checkFolder(stats);
+
+    // Write once per disk: a corrupt record is refused too, because nothing may remove a key.
+    const record = join(folder, `${diskUuid}.json`);
+    if ((await lstatIfPresent(record)) !== null) throw refusal("record-exists");
+
+    const next = `${record}.next`;
+    try {
+      await io.unlink(next);
+    } catch (error) {
+      if (errnoCode(error) !== "ENOENT") throw error;
+    }
+    const text = JSON.stringify({ version: 1, diskUuid, key: keyHex }) + "\n";
+    await io.writeFile(next, text, { flag: "wx", mode: 0o600 });
+    await io.syncFile(next);
+    await io.rename(next, record);
+
+    // The record is in place from here on, so a failure can no longer mean "nothing written".
+    let published;
+    try {
+      await io.syncDirectory(folder);
+      published = await readRecord(diskUuid);
+    } catch {
+      throw refusal("publication-unverified");
+    }
+    if (published !== keyHex) throw refusal("publication-unverified");
+  }
+
   return {
+    async store(input) {
+      const diskUuid = input?.diskUuid;
+      const key = input?.key;
+      if (!isUuid(diskUuid) || !isKey(key)) throw refusal("input-invalid");
+      try {
+        await inTurn(() => writeRecord(diskUuid, encodeKey(key)));
+      } catch (error) {
+        throw isRefusal(error) ? error : refusal("io-failed");
+      }
+    },
+
     async withKey(input, consume) {
       const diskUuid = input?.diskUuid;
       if (!isUuid(diskUuid)) throw refusal("input-invalid");
@@ -236,8 +320,15 @@ const fixedStore = createDiskRecoveryStore({
 });
 
 /**
- * Fixed production entry point. No inspectHostState adapter exists until the Linux rig, so it
- * refuses "mount-unverified" before any file call.
+ * Fixed production entry points. No inspectHostState adapter exists until the Linux rig, so both
+ * refuse "mount-unverified" before any file call.
+ * @param {{diskUuid:string, key:Uint8Array}} input
+ */
+export async function storeDiskRecovery(input) {
+  return fixedStore.store(input);
+}
+
+/**
  * @param {{diskUuid:string}} input
  * @param {(key:Uint8Array)=>Promise<void>} consume
  */

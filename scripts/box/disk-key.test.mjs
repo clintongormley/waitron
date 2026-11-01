@@ -3,7 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HOST_ROOT, createDiskRecoveryStore, withDiskRecovery } from "./disk-key.mjs";
+import { constants } from "node:fs";
+import {
+  HOST_ROOT,
+  createDiskRecoveryStore,
+  storeDiskRecovery,
+  withDiskRecovery,
+} from "./disk-key.mjs";
 
 const DISK_A = "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d";
 const DISK_B = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
@@ -23,14 +29,32 @@ const rootIdOf = async (path) => {
   return { dev: stats.dev, ino: stats.ino, rootId: `${stats.dev}:${stats.ino}` };
 };
 
-const IO_NAMES = ["lstat", "open", "mkdir", "writeFile", "rename", "unlink", "readdir"];
+const syncPath = async (path, flags) => {
+  const handle = await fs.open(path, flags);
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+};
+const REAL_IO = {
+  lstat: fs.lstat,
+  open: fs.open,
+  mkdir: fs.mkdir,
+  writeFile: fs.writeFile,
+  rename: fs.rename,
+  unlink: fs.unlink,
+  readdir: fs.readdir,
+  syncFile: (path) => syncPath(path, constants.O_RDONLY),
+  syncDirectory: (path) => syncPath(path, constants.O_RDONLY | constants.O_DIRECTORY),
+};
 
 /** A real io that counts every call; `overrides` replace single operations. */
 function countingIo(overrides = {}) {
   const calls = [];
   const io = {};
-  for (const name of IO_NAMES) {
-    const run = overrides[name] ?? fs[name];
+  for (const name of Object.keys(REAL_IO)) {
+    const run = overrides[name] ?? REAL_IO[name];
     io[name] = (...args) => {
       calls.push(name);
       return run(...args);
@@ -49,15 +73,17 @@ const foreignOwner = (stats) =>
     },
   });
 
-async function fixture({ record = true } = {}) {
+async function fixture({ record = true, folder: withFolder = true } = {}) {
   const parent = await fs.realpath(await fs.mkdtemp(join(tmpdir(), "b3-disk-key-")));
   parents.push(parent);
   const hostRoot = join(parent, "host");
   await fs.mkdir(hostRoot, { mode: 0o700 });
   await fs.chmod(hostRoot, 0o700);
   const folder = join(hostRoot, "disk-recovery");
-  await fs.mkdir(folder, { mode: 0o700 });
-  await fs.chmod(folder, 0o700);
+  if (withFolder) {
+    await fs.mkdir(folder, { mode: 0o700 });
+    await fs.chmod(folder, 0o700);
+  }
   const writeRecord = async (name, text, dir = folder) => {
     const path = join(dir, name);
     await fs.writeFile(path, text, { mode: 0o600 });
@@ -210,6 +236,12 @@ describe("withKey: the mount check (Review Focus 4)", () => {
     });
     await expect(store.withKey({ diskUuid: DISK_A }, vi.fn())).rejects.toEqual(
       refused("root-changed"),
+    );
+  });
+
+  it("the fixed storeDiskRecovery → mount-unverified", async () => {
+    await expect(storeDiskRecovery({ diskUuid: DISK_A, key: KEY })).rejects.toEqual(
+      refused("mount-unverified"),
     );
   });
 
@@ -503,5 +535,271 @@ describe("withKey: other file errors", () => {
       .withKey({ diskUuid: DISK_A }, vi.fn())
       .catch((e) => e);
     expect(error.message).toBe("disk_recovery.refused");
+  });
+});
+
+/** Every path under `root`, relative to it; empty when `root` is an empty folder. */
+const listing = async (root) => (await fs.readdir(root, { recursive: true })).sort();
+const exists = (path) =>
+  fs.lstat(path).then(
+    () => true,
+    () => false,
+  );
+const OTHER_KEY = Uint8Array.from({ length: 32 }, (_, i) => (i * 11 + 5) % 256);
+
+// The injected failures below stop a store at one stage, as a power cut would. They are not one: no
+// page cache is lost, so they show what each stage leaves behind, not what a disk keeps.
+describe("store: writing once per disk", () => {
+  it("store then withKey round-trips the bytes", async () => {
+    const f = await fixture({ record: false, folder: false });
+    const store = f.make({ io: undefined });
+    await store.store({ diskUuid: DISK_A, key: KEY });
+    const record = join(f.folder, `${DISK_A}.json`);
+    expect(await fs.readFile(record, "utf8")).toBe(recordText(DISK_A));
+    expect((await fs.lstat(record)).mode & 0o777).toBe(0o600);
+    expect((await fs.lstat(f.folder)).mode & 0o777).toBe(0o700);
+    expect(await listing(f.hostRoot)).toEqual([
+      "disk-recovery",
+      join("disk-recovery", `${DISK_A}.json`),
+    ]);
+    const { copy } = await readKey(store);
+    expect(copy).toEqual(KEY);
+  });
+
+  it("the default io flushes the staged file and the folder through their handles", async () => {
+    const f = await fixture({ record: false, folder: false });
+    const probe = await fs.open(f.hostRoot, constants.O_RDONLY);
+    const handleProto = Object.getPrototypeOf(probe);
+    await probe.close();
+    const sync = vi.spyOn(handleProto, "sync");
+    try {
+      await f.make({ io: undefined }).store({ diskUuid: DISK_A, key: KEY });
+      expect(sync).toHaveBeenCalledTimes(2);
+    } finally {
+      sync.mockRestore();
+    }
+  });
+
+  it("store into an existing disk-recovery folder", async () => {
+    const f = await fixture({ record: false });
+    await f.make().store({ diskUuid: DISK_A, key: KEY });
+    expect((await readKey(f.make())).copy).toEqual(KEY);
+  });
+
+  it("store over an existing valid record → record-exists, with the file bytes unchanged", async () => {
+    const f = await fixture();
+    const before = await fs.readFile(join(f.folder, `${DISK_A}.json`));
+    await expect(f.make().store({ diskUuid: DISK_A, key: OTHER_KEY })).rejects.toEqual(
+      refused("record-exists"),
+    );
+    expect(await fs.readFile(join(f.folder, `${DISK_A}.json`))).toEqual(before);
+    expect(await exists(join(f.folder, `${DISK_A}.json.next`))).toBe(false);
+  });
+
+  it("store over a corrupt record → record-exists, with the file unchanged", async () => {
+    const f = await fixture({ record: false });
+    await f.writeRecord(`${DISK_A}.json`, "{not json\n");
+    await expect(f.make().store({ diskUuid: DISK_A, key: KEY })).rejects.toEqual(
+      refused("record-exists"),
+    );
+    expect(await fs.readFile(join(f.folder, `${DISK_A}.json`), "utf8")).toBe("{not json\n");
+  });
+
+  it("two concurrent stores for one disk → exactly one fulfilled, the other record-exists", async () => {
+    const f = await fixture({ record: false, folder: false });
+    const store = f.make();
+    const results = await Promise.allSettled([
+      store.store({ diskUuid: DISK_A, key: KEY }),
+      store.store({ diskUuid: DISK_A, key: OTHER_KEY }),
+    ]);
+    expect(results.map((r) => r.status).sort()).toEqual(["fulfilled", "rejected"]);
+    expect(results.find((r) => r.status === "rejected").reason).toEqual(refused("record-exists"));
+    expect((await readKey(store)).copy).toEqual(KEY);
+  });
+
+  it("withKey started straight after store, on the same instance → receives the new key", async () => {
+    const f = await fixture({ record: false, folder: false });
+    const store = f.make();
+    const stored = store.store({ diskUuid: DISK_A, key: KEY });
+    const read = readKey(store);
+    await stored;
+    expect((await read).copy).toEqual(KEY);
+  });
+
+  it("a non-refusal failure while checking the folder → io-failed", async () => {
+    const f = await fixture({ record: false });
+    const { io } = countingIo({
+      lstat: async (target, options) => {
+        if (target === join(f.folder, `${DISK_A}.json`))
+          throw Object.assign(new Error("fake EIO"), { code: "EIO" });
+        return fs.lstat(target, options);
+      },
+    });
+    await expect(f.make({ io }).store({ diskUuid: DISK_A, key: KEY })).rejects.toEqual(
+      refused("io-failed"),
+    );
+  });
+
+  it("an unlink failure other than a missing file → io-failed", async () => {
+    const f = await fixture({ record: false });
+    const { io } = countingIo({
+      unlink: async () => {
+        throw Object.assign(new Error("fake EIO"), { code: "EIO" });
+      },
+    });
+    await expect(f.make({ io }).store({ diskUuid: DISK_A, key: KEY })).rejects.toEqual(
+      refused("io-failed"),
+    );
+  });
+
+  it("a disk-recovery folder that is a symlink → path-unsafe, nothing written", async () => {
+    const f = await fixture({ record: false });
+    const elsewhere = join(f.parent, "elsewhere");
+    await fs.rename(f.folder, elsewhere);
+    await fs.symlink(elsewhere, f.folder);
+    await expect(f.make().store({ diskUuid: DISK_A, key: KEY })).rejects.toEqual(
+      refused("path-unsafe"),
+    );
+    expect(await listing(elsewhere)).toEqual([]);
+  });
+});
+
+describe("store: interrupted writes", () => {
+  const halfRecord = recordText(DISK_A).slice(0, recordText(DISK_A).length >> 1);
+
+  it.each(["writeFile", "syncFile", "rename"])(
+    "%s fails → io-failed, then withKey gives record-missing, then a fresh store succeeds and removes the leftover .next",
+    async (stage) => {
+      const f = await fixture({ record: false });
+      const next = join(f.folder, `${DISK_A}.json.next`);
+      const { io } = countingIo({
+        [stage]: async (path, data, options) => {
+          if (stage === "writeFile") await fs.writeFile(path, halfRecord, options);
+          throw Object.assign(new Error(`fake ${stage} failure`), { code: "EIO" });
+        },
+      });
+      await expect(f.make({ io }).store({ diskUuid: DISK_A, key: KEY })).rejects.toEqual(
+        refused("io-failed"),
+      );
+      expect(await exists(next)).toBe(true);
+      await expect(f.make().withKey({ diskUuid: DISK_A }, vi.fn())).rejects.toEqual(
+        refused("record-missing"),
+      );
+      await f.make().store({ diskUuid: DISK_A, key: KEY });
+      expect(await exists(next)).toBe(false);
+      expect((await readKey(f.make())).copy).toEqual(KEY);
+    },
+  );
+
+  it("syncDirectory fails after the rename → publication-unverified; withKey gives the whole new key; a second store gives record-exists", async () => {
+    const f = await fixture({ record: false });
+    const { io } = countingIo({
+      syncDirectory: async () => {
+        throw Object.assign(new Error("fake folder flush failure"), { code: "EIO" });
+      },
+    });
+    await expect(f.make({ io }).store({ diskUuid: DISK_A, key: KEY })).rejects.toEqual(
+      refused("publication-unverified"),
+    );
+    expect((await readKey(f.make())).copy).toEqual(KEY);
+    await expect(f.make().store({ diskUuid: DISK_A, key: KEY })).rejects.toEqual(
+      refused("record-exists"),
+    );
+  });
+
+  it("the read-back returns different bytes → publication-unverified", async () => {
+    const f = await fixture({ record: false });
+    let renamed = false;
+    const { io } = countingIo({
+      rename: async (...args) => {
+        await fs.rename(...args);
+        renamed = true;
+      },
+      open: async (...args) => {
+        const handle = await fs.open(...args);
+        if (!renamed) return handle;
+        return new Proxy(handle, {
+          get(target, key) {
+            if (key === "readFile") return async () => recordText(DISK_A, hex(OTHER_KEY));
+            const value = Reflect.get(target, key);
+            return typeof value === "function" ? value.bind(target) : value;
+          },
+        });
+      },
+    });
+    await expect(f.make({ io }).store({ diskUuid: DISK_A, key: KEY })).rejects.toEqual(
+      refused("publication-unverified"),
+    );
+  });
+
+  it("a truncated leftover .next (half the bytes) is ignored by withKey and removed by the next store", async () => {
+    const f = await fixture({ record: false });
+    const next = await f.writeRecord(`${DISK_A}.json.next`, halfRecord);
+    await expect(f.make().withKey({ diskUuid: DISK_A }, vi.fn())).rejects.toEqual(
+      refused("record-missing"),
+    );
+    await f.make().store({ diskUuid: DISK_A, key: KEY });
+    expect(await exists(next)).toBe(false);
+    expect((await readKey(f.make())).copy).toEqual(KEY);
+  });
+});
+
+describe("store: the mount check (Review Focus 4)", () => {
+  it("hostRoot removed (stand-in still answers) → mount-unverified, nothing created", async () => {
+    const f = await fixture({ record: false, folder: false });
+    await fs.rm(f.hostRoot, { recursive: true });
+    await expect(f.make().store({ diskUuid: DISK_A, key: KEY })).rejects.toEqual(
+      refused("mount-unverified"),
+    );
+    expect(await listing(f.parent)).toEqual([]);
+  });
+
+  it("stand-in throws → mount-unverified, zero io calls, and hostRoot stays empty", async () => {
+    const f = await fixture({ record: false, folder: false });
+    const store = f.make({
+      inspectHostState: async () => {
+        throw new Error("no mount");
+      },
+    });
+    await expect(store.store({ diskUuid: DISK_A, key: KEY })).rejects.toEqual(
+      refused("mount-unverified"),
+    );
+    expect(f.counting.calls).toEqual([]);
+    expect(await listing(f.hostRoot)).toEqual([]);
+  });
+
+  it("stand-in rootId names another folder → root-changed, and no disk-recovery folder is created", async () => {
+    const f = await fixture({ record: false, folder: false });
+    const { rootId } = await rootIdOf(f.parent);
+    const store = f.make({ inspectHostState: async () => ({ ...f.answer, rootId }) });
+    await expect(store.store({ diskUuid: DISK_A, key: KEY })).rejects.toEqual(
+      refused("root-changed"),
+    );
+    expect(await exists(f.folder)).toBe(false);
+    expect(await listing(f.hostRoot)).toEqual([]);
+  });
+
+  it("the seam reports disk B → disk-mismatch, zero io calls", async () => {
+    const f = await fixture({ record: false, folder: false });
+    const store = f.make({ inspectHostState: async () => ({ ...f.answer, diskUuid: DISK_B }) });
+    await expect(store.store({ diskUuid: DISK_A, key: KEY })).rejects.toEqual(
+      refused("disk-mismatch"),
+    );
+    expect(f.counting.calls).toEqual([]);
+  });
+});
+
+describe("store: bad input", () => {
+  it.each([
+    ["an all-zero key", { diskUuid: DISK_A, key: new Uint8Array(32) }],
+    ["a 31-byte key", { diskUuid: DISK_A, key: KEY.slice(0, 31) }],
+    ["a key that is a plain array", { diskUuid: DISK_A, key: Array.from(KEY) }],
+    ["an upper-case UUID", { diskUuid: DISK_A.toUpperCase(), key: KEY }],
+    ["a missing input", undefined],
+  ])("%s → input-invalid with zero io calls", async (_, input) => {
+    const f = await fixture({ record: false, folder: false });
+    await expect(f.make().store(input)).rejects.toEqual(refused("input-invalid"));
+    expect(f.counting.calls).toEqual([]);
+    expect(f.inspectHostState).not.toHaveBeenCalled();
   });
 });
