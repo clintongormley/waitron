@@ -1,5 +1,5 @@
 import { nodeDumpEntry } from "./testing/node-copy.js";
-import { createHash } from "node:crypto";
+import { createHash, generateKeyPairSync } from "node:crypto";
 import { appendFile, cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import * as fs from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -13,6 +13,8 @@ import { migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets } from "@waitron/module";
 import * as store from "@waitron/store";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { withNodeTransaction } from "@waitron/db";
+import { loadKeyRing, sealNodeSigningKeyTx } from "@waitron/credentials";
 import { certificate } from "@waitron/server-kit/certificate.js";
 import { buildManifest } from "./backup-manifest.js";
 import { packArchive, type ArchiveEntry } from "./backup-archive.js";
@@ -200,10 +202,7 @@ describe("complete backup verification", () => {
           name: "core",
           semanticsVersion: 1,
           status: "passed",
-          checks: [
-            { code: "data", status: "passed" },
-            { code: "secret", status: "passed" },
-          ],
+          checks: [{ code: "data", status: "passed" }],
         },
         {
           name: "credentials",
@@ -236,6 +235,35 @@ describe("complete backup verification", () => {
     });
     expect(readBackupVerificationResult(JSON.stringify(result), f.request)).toEqual(result);
     expect(await readFile(f.deps.artifactPath)).toEqual(bytes);
+  });
+  it("passes a box whose signing key is sealed in its node copy and pairs with its public key", async () => {
+    const keys = generateKeyPairSync("ed25519");
+    const publicKey = keys.publicKey.export({ format: "der", type: "spki" }).toString("base64");
+    const privateKey = keys.privateKey.export({ format: "der", type: "pkcs8" }).toString("base64");
+    suite.db.run(sql`update nodes set public_key = ${publicKey} where id = ${sourceNodeId}`);
+    await withNodeTransaction(suite.node, (tx) =>
+      sealNodeSigningKeyTx(
+        tx,
+        loadKeyRing({ WAITRON_CREDENTIALS_KEY: vault }),
+        sourceNodeId,
+        privateKey,
+      ),
+    );
+    try {
+      const f = await fixture();
+      await seal(f);
+      const result = await verify(f);
+      expect(result.modules.map((m) => [m.name, m.status])).toEqual([
+        ["core", "passed"],
+        ["credentials", "passed"],
+        ["fiscal-none", "passed"],
+        ["node", "passed"],
+      ]);
+      expect(result.status).toBe("passed");
+    } finally {
+      suite.db.run(sql`update nodes set public_key = null where id = ${sourceNodeId}`);
+      suite.node.run(sql`delete from node_signing_key`);
+    }
   });
   it.each(["sha256", "bytes"] as const)(
     "rejects an independently measured %s mismatch before parsing",
@@ -527,10 +555,7 @@ describe("complete backup verification", () => {
       name: "core",
       semanticsVersion: 1,
       status: "invalid",
-      checks: [
-        { code: "data", status: "invalid" },
-        { code: "secret", status: "passed" },
-      ],
+      checks: [{ code: "data", status: "invalid" }],
     });
   });
   it("a real encrypted vault row with an unavailable key prevents a completed module verdict", async () => {

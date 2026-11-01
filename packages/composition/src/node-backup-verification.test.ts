@@ -255,6 +255,17 @@ describe("node.db's backup verification", () => {
     },
   );
 
+  it("does not swallow a failed read of the node copy's key row as a missing key", async () => {
+    seedVenue(null);
+    const copy = new DatabaseSync(":memory:");
+    try {
+      copy.exec("create table node_signing_key (node_id text primary key, iv blob)");
+      await expect(run(copy.serialize())).rejects.toThrow("no such column");
+    } finally {
+      copy.close();
+    }
+  });
+
   it("passes a key-less source whose node copy has none of node.db's tables", async () => {
     seedVenue(null);
     const copy = new DatabaseSync(":memory:");
