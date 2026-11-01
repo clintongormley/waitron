@@ -279,7 +279,7 @@ export interface SplitGuestCounts {
  * `tableId` leaves the party and its today's merge ({@link leaveMergesRestoring}), and a new,
  * unnamed party starts on it, taking `billId`, or a new empty bill when none is chosen. The chosen
  * bill must be an open or presented bill of the party, holding no dish held for the kitchen. A
- * staying party left with no bill that is not abandoned is given a new empty one.
+ * staying party whose family is left with no bill that is not abandoned is given a new empty one.
  */
 export async function splitTable(
   tx: Transaction,
@@ -353,8 +353,7 @@ export async function splitTable(
             },
       );
       await printHoldTickets(tx, cfg, held);
-      // The staying party is given an empty bill when it is left with none (D1).
-      await shownBillIds(tx, cfg, partyId);
+      await ensureFamilyBill(tx, cfg, partyId);
     }
     await leaveMergesRestoring(tx, [tableId]);
     return { partyId: newParty, billId: taken };
@@ -381,10 +380,33 @@ async function refuseUnsplittableBill(
 }
 
 /**
- * The party's bills that are not abandoned, in number order (unnumbered last, then by id): its
- * family's, as the party's bills read lists them, so a paid bill kept on a party combined into it
- * counts. A party with none is first given one new empty bill (A803 D1); its revision is the
- * caller's to move.
+ * Bills that are not abandoned on any party of the family: as the party's bills read lists them,
+ * so a paid bill kept on a party combined into it counts.
+ */
+function notAbandonedInFamily(family: string[]) {
+  return and(inArray(workingOrders.partyId, family), ne(workingOrders.status, "abandoned"));
+}
+
+/**
+ * A party whose family has no bill that is not abandoned is given one new empty bill (A803 D1);
+ * its revision is the caller's to move.
+ */
+async function ensureFamilyBill(
+  tx: Transaction,
+  cfg: OriginConfig,
+  partyId: string,
+): Promise<void> {
+  const [any] = await tx
+    .select({ id: workingOrders.id })
+    .from(workingOrders)
+    .where(notAbandonedInFamily(await partyFamily(tx, partyId)))
+    .limit(1);
+  if (any === undefined) await insertPartyBill(tx, cfg, partyId);
+}
+
+/**
+ * The family's bills that are not abandoned, in number order (unnumbered last, then by id). A
+ * party whose family has none is first given one new empty bill, as {@link ensureFamilyBill} does.
  */
 async function shownBillIds(
   tx: Transaction,
@@ -394,12 +416,7 @@ async function shownBillIds(
   const rows = await tx
     .select({ id: workingOrders.id })
     .from(workingOrders)
-    .where(
-      and(
-        inArray(workingOrders.partyId, await partyFamily(tx, partyId)),
-        ne(workingOrders.status, "abandoned"),
-      ),
-    );
+    .where(notAbandonedInFamily(await partyFamily(tx, partyId)));
   if (rows.length === 0) return [await insertPartyBill(tx, cfg, partyId)];
   const numbers = await VENUE_SERVICE.readBillIdentities(
     tx,
