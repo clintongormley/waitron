@@ -6141,7 +6141,11 @@ async function applyLineEdits(
       ? undefined
       : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() };
   if (order.partyId !== null) {
-    const fireKind = await nextFireKind(tx, order.partyId);
+    const fireKind = pricedAs.some(
+      (as) => as.kind === "line" && as.joins === undefined && as.kitchen === "fire",
+    )
+      ? await nextFireKind(tx, order.partyId)
+      : undefined;
     for (const as of pricedAs) {
       if (
         as.kind !== "line" ||
@@ -6157,7 +6161,7 @@ async function applyLineEdits(
         order.partyId,
         as.kitchen,
         actorId,
-        as.kitchen === "fire" ? fireKind : "next_course",
+        as.kitchen === "fire" ? fireKind! : "next_course",
       );
       await recordGroupEvent(
         tx,

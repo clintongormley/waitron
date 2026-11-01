@@ -350,7 +350,14 @@ export async function placeGroups(
   const requestOfRow = expanded?.requestOfRow ?? [];
   const groupIds: string[] = [];
   const insertedAfter = new Map<string, string>();
-  const fireKind = await nextFireKind(tx, partyId);
+  const fireKind = groups.some(
+    (group) =>
+      group.release === "fire" &&
+      group.joinGroupId === undefined &&
+      group.afterGroupId === undefined,
+  )
+    ? await nextFireKind(tx, partyId)
+    : undefined;
   for (const group of groups) {
     let groupId: string;
     if (group.joinGroupId !== undefined) groupId = group.joinGroupId;
@@ -368,7 +375,7 @@ export async function placeGroups(
         partyId,
         group.release,
         operatorId,
-        group.release === "fire" ? fireKind : "next_course",
+        group.release === "fire" ? fireKind! : "next_course",
       );
     groupIds.push(groupId);
   }
@@ -2507,21 +2514,24 @@ export async function groupArrivingDishes(
     }
   }
   const routing = immediate.length === 0 ? undefined : routingOnce(tx, cfg, new Date());
-  const fireKind = await nextFireKind(tx, partyId);
-  const fired = await groupArrived(
-    tx,
-    partyId,
-    billId,
-    [
-      ...released.map((line) => ({ id: line.id, firedAt: line.ticketFiredAt ?? line.sentAt })),
-      ...immediate.map((line) => ({ id: line.id, firedAt: routing!.at.toISOString() })),
-    ],
-    "fire",
-    fireKind,
-    operatorId,
-    firers,
-    attendance,
-  );
+  const firing = [
+    ...released.map((line) => ({ id: line.id, firedAt: line.ticketFiredAt ?? line.sentAt })),
+    ...immediate.map((line) => ({ id: line.id, firedAt: routing!.at.toISOString() })),
+  ];
+  const fired =
+    firing.length === 0
+      ? null
+      : await groupArrived(
+          tx,
+          partyId,
+          billId,
+          firing,
+          "fire",
+          await nextFireKind(tx, partyId),
+          operatorId,
+          firers,
+          attendance,
+        );
   if (immediate.length > 0)
     await fireOrderLines(
       tx,
