@@ -15,7 +15,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
-import { splitBill } from "./testing/bill-action-fixture.js";
+import { mergeBills, splitBill } from "./testing/bill-action-fixture.js";
 import { readDrafts } from "./order-drafts.js";
 
 import { placeGroups } from "./testing/group-submit-fixture.js";
@@ -821,6 +821,45 @@ describe("A803 a paid bill kept on a party combined away is one of the table's b
     expect(await partyRow(v, luis.partyId)).toMatchObject({
       revision: splitting.expectedPartyRevision + 1,
     });
+  });
+
+  it("Split a table taking the staying party's last bill gives it a new empty bill when its only other bill was merged away", async () => {
+    const [m4, m5] = await tables("Family merged", 4, 5);
+    const ana = await seat(v, m4);
+    await joinFree(ana.partyId, m5);
+    await order(v, ana.tabId, "Burger", "Vino");
+    const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
+    const merging = await cmd(ana.partyId);
+    await act((tx) => mergeBills(tx, v.cfg, b2, ana.tabId, merging));
+    expect(await billRow(v, ana.tabId)).toMatchObject({ status: "abandoned" });
+
+    const splitting = await cmd(ana.partyId);
+    const result = await act((tx) => splitTable(tx, v.cfg, ana.partyId, m5, b2, splitting));
+
+    expect(result).toEqual({ partyId: result.partyId, billId: b2 });
+    expect(await activeTablesOf(v, ana.partyId)).toEqual([m4]);
+    const shown = await shownBills(ana.partyId);
+    expect(shown).toEqual([{ id: expect.any(String), status: "open" }]);
+    expect([ana.tabId, b2]).not.toContain(shown[0]!.id);
+    expect(await linesOf(v, shown[0]!.id)).toEqual([]);
+    expect(await partyRow(v, ana.partyId)).toMatchObject({
+      revision: splitting.expectedPartyRevision + 1,
+    });
+  });
+
+  it("Move guests answers one new empty bill for a party whose only bill is abandoned", async () => {
+    const [m4, m9] = await tables("Family abandoned", 4, 9);
+    const ana = await seat(v, m4);
+    v.db.run(sql`update working_orders set status = 'abandoned' where id = ${ana.tabId}`);
+
+    const moving = await opts(ana.partyId);
+    const result = await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m9, moving));
+
+    const shown = await shownBills(ana.partyId);
+    expect(shown).toEqual([{ id: expect.any(String), status: "open" }]);
+    expect(shown[0]!.id).not.toBe(ana.tabId);
+    expect(await linesOf(v, shown[0]!.id)).toEqual([]);
+    expect(result).toEqual({ partyId: ana.partyId, billIds: [shown[0]!.id] });
   });
 });
 
