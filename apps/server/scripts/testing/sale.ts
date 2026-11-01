@@ -1,6 +1,6 @@
 import { recordSale, withIssuanceTransaction } from "@waitron/core";
 import type { Database } from "@waitron/db";
-import type { TrustedClock } from "@waitron/fiscal";
+import { prepareIssueClock, type TrustedClock } from "@waitron/fiscal";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { addDecimal, decimal, jobOrigin, nodeId, percentOf, seriesId } from "@waitron/shared";
 
@@ -35,15 +35,16 @@ export function recordFixtureSale(db: Database, args: FixtureSale) {
   const vatRate = decimal(args.vatRate);
   const tipAmount = decimal(args.tipAmount ?? "0.00");
   const total = addDecimal(baseAmount, percentOf(baseAmount, vatRate));
-  const backend = new VerifactuBackend({
-    clock,
-    db,
-    environment: "preproduction",
-    deploymentEnvironment: "preproduction",
-    resolveClient: () => Promise.reject(new Error("fixture sales must not contact AEAT")),
-  });
-  return withIssuanceTransaction(db, (tx) =>
-    recordSale(tx, backend, {
+  return withIssuanceTransaction(db, async (tx) => {
+    const issueClock = await prepareIssueClock(tx, { nodeId: args.nodeId }, clock);
+    const backend = new VerifactuBackend({
+      clock: issueClock,
+      db,
+      environment: "preproduction",
+      deploymentEnvironment: "preproduction",
+      resolveClient: () => Promise.reject(new Error("fixture sales must not contact AEAT")),
+    });
+    return recordSale(tx, backend, {
       origin: jobOrigin("operator_script"),
       nodeId: nodeId(args.nodeId),
       seriesId: seriesId(args.seriesId),
@@ -72,7 +73,7 @@ export function recordFixtureSale(db: Database, args: FixtureSale) {
           },
         ],
       },
-      clock,
-    }),
-  );
+      clock: issueClock,
+    });
+  });
 }

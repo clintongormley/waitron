@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { incidents, openVenueDatabase, sales } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { recordFixtureSale } from "./testing/sale.js";
 import { provisionTestVenue } from "./testing/venue.js";
 import { createDemoVenueProvisioner } from "./demo-seed/testing/provision-venue.js";
@@ -33,6 +34,7 @@ afterEach(async () => {
     directories.splice(0).map((path) => rm(path, { recursive: true, force: true })),
   );
   vi.unstubAllEnvs();
+  vi.useRealTimers();
 });
 
 async function box() {
@@ -124,4 +126,35 @@ it("demo seeding stops at a refused issuance without keeping that sale", async (
       source: row.source,
     })),
   ).toEqual([{ code: "fiscal.fingerprint_mismatch", saleId: null, source: "demo_seed" }]);
+});
+
+it("the sale fixture keeps the venue issue date when the host is on the previous day", async () => {
+  const provisionSale = createDemoVenueProvisioner(() => suite.db, {
+    nifBase: 70000000,
+    nifFormat: "calculated",
+    invoiceLocale: "es-ES",
+  });
+  const venue = await provisionSale();
+  fault.failAt = Number.POSITIVE_INFINITY;
+  vi.stubEnv("TZ", "UTC");
+  vi.setSystemTime(new Date("2026-11-01T23:30:00.000Z"));
+
+  await recordFixtureSale(suite.db, {
+    nodeId: venue.nodeId,
+    seriesId: venue.seriesIds[0]!,
+    description: "Test meal",
+    baseAmount: "10.00",
+    vatRate: "10.00",
+  });
+
+  expect(
+    await suite.db
+      .select({ issuedAt: sales.issuedAt, offsetMinutes: sales.issuedOffsetMinutes })
+      .from(sales),
+  ).toEqual([{ issuedAt: "2026-11-01T23:30:00.000Z", offsetMinutes: 60 }]);
+  expect(
+    await suite.db
+      .select({ date: registrosFacturacion.fechaExpedicionFactura })
+      .from(registrosFacturacion),
+  ).toEqual([{ date: "2026-11-02" }]);
 });
