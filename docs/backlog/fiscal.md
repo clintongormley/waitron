@@ -445,6 +445,17 @@ original receipt under both ordinary and reversed unordered-query traversal. Bef
 filter, the reversed traversal returned the second correction's figures. This check covers
 receipt replay, not the remaining current-version filing and remedy decisions.
 
+**1 November 2026, Task 8 marker and append checks.** `Subsanacion`, `RechazoPrevio`
+and `SinRegistroPrevio` have nullable stored columns. The payload round-trip cases compare the
+built and rebuilt records and their XML markers, including explicit `N` and omitted fields.
+The append cases exercise successive correction links after an unrelated sale, retain older
+rows and recompute the new fingerprints. A competing replacement receives
+`fiscal.record_already_corrected`; a missing target, different invoice, sale or node, an
+anulación target or an absent correction flag receives `fiscal.remedy_invalid`.
+The generated marker migration adds columns without rebuilding the table. These checks do
+not implement administrator remedy actions, select the current version for filing, resolve held
+cases or prove acceptance by AEAT. Those remain Task 8 work before publication.
+
  Earlier
 Task 7 automatic-switch requirements below are historical; the 1 November decision supersedes them.
 

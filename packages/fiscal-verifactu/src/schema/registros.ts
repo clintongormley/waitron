@@ -67,6 +67,9 @@ export const registrosFacturacion = table(
     nombreRazonEmisor: label("nombre_razon_emisor").notNull(),
     // Null on an anulación — RegistroAnulacion carries no TipoFactura at all.
     tipoFactura: label("tipo_factura"),
+    subsanacion: label("subsanacion"),
+    rechazoPrevio: label("rechazo_previo"),
+    sinRegistroPrevio: label("sin_registro_previo"),
     // AEAT's rectificativa and substitution blocks, copied from the RegistroAlta when present. Not
     // huella inputs, so `json` is safe; a hashed field would need `text`.
     tipoRectificativa: label("tipo_rectificativa"),

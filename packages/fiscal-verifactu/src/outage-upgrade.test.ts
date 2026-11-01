@@ -55,7 +55,13 @@ it("adds clean outage defaults to populated predecessor sidecars without changin
   await suite.db.execute(sql`insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
     values (1, '2026-07-21T00:01:00.000Z', 60)`);
   const before = (await suite.db.execute(sql`select * from registros_facturacion`)).rows.map(
-    (row) => ({ ...row, corrects_registro_id: null }),
+    (row) => ({
+      ...row,
+      corrects_registro_id: null,
+      subsanacion: null,
+      rechazo_previo: null,
+      sin_registro_previo: null,
+    }),
   );
   await runMigrations(suite.db, FISCAL_MIGRATIONS);
   expect((await suite.db.execute(sql`select * from fiscal_conflict_evidence`)).rows).toEqual([]);

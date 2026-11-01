@@ -83,6 +83,9 @@ it("adds an empty replacement link while preserving every populated row and fisc
     registros_facturacion: before.registros_facturacion!.map((row) => ({
       ...row,
       corrects_registro_id: null,
+      subsanacion: null,
+      rechazo_previo: null,
+      sin_registro_previo: null,
     })),
   };
   expect(await snapshot()).toEqual(expected);

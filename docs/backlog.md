@@ -390,6 +390,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   payloads and prove two successive corrections of one invoice against AEAT preproduction;
   its storage upgrade now has a populated-predecessor row-preservation check. Receipt replay
   explicitly selects the original issued record after later corrections.
+  Stored remedy markers now survive row conversion and XML assembly; the chain writer accepts
+  successive same-invoice correction links and refuses a competing replacement with a domain code.
+  Administrator actions, current-version filing decisions and the live second-correction probe
+  remain unfinished.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment
@@ -6186,6 +6190,8 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **A1230 residual: dashboard shard 1's blocked operation is unknown.**
   Retain the next failing log's selected-file case/hook events and Playwright API log;
   use them to locate the pending operation before changing test or product behavior.
+  A1305 owns the later shard-4 deadline with `device-profiles-screen.clock.test.ts` unfinished;
+  its cause is also unconfirmed and its complete log is retained.
   [Detail](backlog/ci.md#a1230-dashboard-shard-1s-blocked-operation-is-unknown).
 
 - **A1305 residual: the dashboard page blocked during a click, and what blocked it is unknown.**

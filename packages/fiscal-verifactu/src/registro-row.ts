@@ -131,6 +131,7 @@ export function toRegistroRow(
     offsetMinutos: ctx.offsetMinutes,
     tipoHuella: record.TipoHuella,
     huella: record.Huella,
+    rechazoPrevio: record.RechazoPrevio ?? null,
     entorno: ctx.entorno,
   };
 
@@ -143,6 +144,8 @@ export function toRegistroRow(
       fechaExpedicionFactura: toIsoDate(record.IDFactura.FechaExpedicionFactura),
       nombreRazonEmisor: record.NombreRazonEmisor,
       tipoFactura: record.TipoFactura,
+      subsanacion: record.Subsanacion ?? null,
+      sinRegistroPrevio: null,
       // The four AEAT rectificativa and substitution fields, stored as-built so the drainer
       // re-serialises them (fromRegistroRow reads them back). None is hashed, so storing them here
       // does not affect this record's huella.
@@ -169,6 +172,8 @@ export function toRegistroRow(
     fechaExpedicionFactura: toIsoDate(record.IDFactura.FechaExpedicionFacturaAnulada),
     nombreRazonEmisor: anulacionEmisorName(ctx),
     tipoFactura: null,
+    subsanacion: null,
+    sinRegistroPrevio: record.SinRegistroPrevio ?? null,
     // A RegistroAnulacion carries none of the four rectificativa and substitution fields — they
     // belong to a registro de alta (R1–R5 for the three rectificativa fields, F3 for
     // FacturasSustituidas), never to an anulación.
@@ -235,6 +240,9 @@ export type RegistroRow = {
   fecha_expedicion_factura: string;
   nombre_razon_emisor: string;
   tipo_factura: string | null;
+  subsanacion: RegistroAlta["Subsanacion"] | null;
+  rechazo_previo: RegistroAlta["RechazoPrevio"] | null;
+  sin_registro_previo: RegistroAnulacion["SinRegistroPrevio"] | null;
   // The four AEAT rectificativa and substitution fields, stored so the drainer can re-serialise
   // them — without which AEAT rejects the filing missing its mandatory TipoRectificativa (error
   // 1114). None is a huella input (`@waitron/verifactu` hashes 8 named fields, none of these), so
@@ -346,6 +354,12 @@ export function fromRegistroRow(row: RegistroRow): RegistroAlta | RegistroAnulac
   if (row.tipo_registro === "anulacion") {
     return {
       ...common,
+      ...(row.sin_registro_previo !== null && {
+        SinRegistroPrevio: row.sin_registro_previo,
+      }),
+      ...(row.rechazo_previo !== null && {
+        RechazoPrevio: row.rechazo_previo as RegistroAnulacion["RechazoPrevio"],
+      }),
       IDFactura: {
         IDEmisorFacturaAnulada: row.id_emisor_factura,
         NumSerieFacturaAnulada: row.num_serie_factura,
@@ -362,6 +376,8 @@ export function fromRegistroRow(row: RegistroRow): RegistroAlta | RegistroAnulac
       FechaExpedicionFactura: toAeatDate(row.fecha_expedicion_factura),
     },
     NombreRazonEmisor: row.nombre_razon_emisor,
+    ...(row.subsanacion !== null && { Subsanacion: row.subsanacion }),
+    ...(row.rechazo_previo !== null && { RechazoPrevio: row.rechazo_previo }),
     TipoFactura: row.tipo_factura as RegistroAlta["TipoFactura"],
     // The four AEAT rectificativa and substitution fields, spread back on ONLY when stored
     // non-null — matching buildAltaRecord's own conditional-spread shape (in `@waitron/verifactu`),
