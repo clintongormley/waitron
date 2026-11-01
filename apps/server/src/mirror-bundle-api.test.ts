@@ -26,6 +26,7 @@ import {
   verifyBytes,
   verifyMembershipDocument,
   type MembershipNode,
+  type NodeKeyPair,
 } from "@waitron/membership";
 import { planVenue, type AdoptResult } from "@waitron/provisioning";
 import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
@@ -41,7 +42,7 @@ import {
 } from "./testing/allocated-contract.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
-import { establishNodeIdentity } from "./node-identity.js";
+import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
@@ -124,6 +125,8 @@ function nextNif(): string {
 
 let stateDir: string;
 let db: Database;
+// The main box's own key pair, set by `setupVenue`, so each chart it holds is one it signed.
+let primaryKeyPair: NodeKeyPair;
 
 async function setupVenue(): Promise<{
   designated: AdoptResult;
@@ -168,6 +171,10 @@ async function setupVenue(): Promise<{
   };
   await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, designated.nodeId);
   const primaryPublicKey = (await readMembershipTrustSet(db))[designated.nodeId]!;
+  primaryKeyPair = {
+    publicKey: primaryPublicKey,
+    privateKey: await readNodeIdentityKey(suite.node, RING, designated.nodeId),
+  };
   const adminPersonId = await withTransaction(db, async (tx) => {
     const r = await tx.execute<{ id: string }>(sql`select id from persons where role = 'admin'`);
     return r.rows[0]!.id;
@@ -251,7 +258,11 @@ async function holdChartWithStandby(
   ];
   await writeNodeMembership(
     db,
-    signedMembershipDoc(term, { signerNodeId: designated.nodeId, nodes: members }),
+    signedMembershipDoc(term, {
+      signerNodeId: designated.nodeId,
+      keyPair: primaryKeyPair,
+      nodes: members,
+    }),
   );
   return term;
 }
@@ -385,6 +396,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       db,
       signedMembershipDoc(seedTerm, {
         signerNodeId: designated.nodeId,
+        keyPair: primaryKeyPair,
         nodes: [
           {
             nodeId: designated.nodeId,
@@ -508,6 +520,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       db,
       signedMembershipDoc(seedTerm, {
         signerNodeId: designated.nodeId,
+        keyPair: primaryKeyPair,
         nodes: [
           {
             nodeId: designated.nodeId,
@@ -559,6 +572,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       db,
       signedMembershipDoc(seedTerm, {
         signerNodeId: designated.nodeId,
+        keyPair: primaryKeyPair,
         nodes: [
           {
             nodeId: designated.nodeId,
@@ -862,6 +876,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       db,
       signedMembershipDoc(seedTerm, {
         signerNodeId: designated.nodeId,
+        keyPair: primaryKeyPair,
         nodes: [
           {
             nodeId: designated.nodeId,
@@ -906,6 +921,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       db,
       signedMembershipDoc(seedTerm, {
         signerNodeId: designated.nodeId,
+        keyPair: primaryKeyPair,
         nodes: [
           {
             nodeId: designated.nodeId,
@@ -940,6 +956,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       db,
       signedMembershipDoc(seedTerm, {
         signerNodeId: designated.nodeId,
+        keyPair: primaryKeyPair,
         nodes: [
           {
             nodeId: designated.nodeId,
@@ -980,6 +997,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         db,
         signedMembershipDoc(term, {
           signerNodeId: designated.nodeId,
+          keyPair: primaryKeyPair,
           nodes: [
             {
               nodeId: designated.nodeId,

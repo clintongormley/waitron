@@ -19,12 +19,15 @@ import { CREDENTIALS_MIGRATIONS, loadKeyRing, type KeyRing } from "@waitron/cred
 import {
   endorseKey,
   generateNodeKeyPair,
+  signDocumentBody,
   verifyMembershipDocument,
   type MembershipNode,
   type NodeStanding,
   type SignedMembershipDocument,
 } from "@waitron/membership";
-import { establishNodeIdentity } from "./node-identity.js";
+import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
+import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { persistEvictionOrThrow, retireSelf, type RetireDeps } from "./retire.js";
 
 const RING: KeyRing = loadKeyRing({
@@ -35,6 +38,11 @@ const RING: KeyRing = loadKeyRing({
 const noopLog: RetireDeps["log"] = () => {};
 
 const CARRIER_ID = "carrier-1";
+const CARRIER_KEY = generateNodeKeyPair();
+const N1_KEY = generateNodeKeyPair();
+
+// Each fenced node's own signing key, so a chart it signed itself is signed with the key it holds.
+const ownKeys = new Map<string, string>();
 
 // Two cases depend on `useVenueDb`'s default per-test reset: each expects no chart held, and would
 // otherwise read the chart an earlier case wrote.
@@ -67,13 +75,15 @@ async function fencedNode(): Promise<{
     .returning({ id: locations.id });
   const nodeId = await seedNode(db, brandLocationId(loc!.id));
   await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, nodeId);
+  ownKeys.set(nodeId, await readNodeIdentityKey(suite.node, RING, nodeId));
+  await pinMainBoxKey(suite.node, nodeId, { nodeId: CARRIER_ID, publicKey: CARRIER_KEY.publicKey });
   return {
     nodeId,
     deps: (log) => ({ appDb: db, node: suite.node, ring: RING, nodeId, log }),
   };
 }
 
-// retire reads only the term and node standings; it never verifies the held signature.
+// Signed by the carrier, whose key every fenced node pins, or with no carrier by the node itself.
 function heldDoc(
   nodeId: string,
   selfStanding: NodeStanding,
@@ -87,10 +97,12 @@ function heldDoc(
   if (carrier) {
     nodes.push({ nodeId: carrierId, contactUrl: "https://carrier", standing: "serving-primary" });
   }
+  const signerNodeId = carrier ? carrierId : nodeId;
+  const privateKey = carrier ? CARRIER_KEY.privateKey : ownKeys.get(nodeId)!;
   return {
     body: { term, nodes },
-    signerNodeId: carrier ? carrierId : nodeId,
-    signature: "held-placeholder-sig",
+    signerNodeId,
+    signature: signDocumentBody({ term, nodes }, privateKey),
     endorsements: [],
   };
 }
@@ -181,12 +193,11 @@ describe("retireSelf", () => {
 });
 
 function docAtTerm(term: number, nodeId: string): SignedMembershipDocument {
-  return {
-    body: { term, nodes: [{ nodeId, contactUrl: "", standing: "evicted" }] },
+  return signedMembershipDoc(term, {
     signerNodeId: nodeId,
-    signature: "placeholder-sig",
-    endorsements: [],
-  };
+    keyPair: N1_KEY,
+    nodes: [{ nodeId, contactUrl: "", standing: "evicted" }],
+  });
 }
 
 describe("persistEvictionOrThrow", () => {

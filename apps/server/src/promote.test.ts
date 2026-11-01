@@ -25,9 +25,12 @@ import {
   endorseKey,
   generateNodeKeyPair,
   MAX_NODES,
+  signDocumentBody,
   verifyMembershipDocument,
   type Endorsement,
+  type MembershipDocumentBody,
   type MembershipNode,
+  type NodeKeyPair,
   type SignedMembershipDocument,
 } from "@waitron/membership";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
@@ -37,6 +40,7 @@ import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
 import { sealAdoptedStandbyKey } from "./testing/adopted-standby-key.js";
+import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { singletonPass } from "./singleton-pass.js";
 import { DRAIN_DUTY } from "./pass.js";
 import {
@@ -93,25 +97,54 @@ function nodeFailingNextWrite(
   });
 }
 
-// Promote reads only the held term and node list, never the signature, so a placeholder serves.
+// A real key pair per signer id, so a held chart verifies against the key its box pins.
+const signerKeys = new Map<string, NodeKeyPair>();
+function signerKey(nodeId: string): NodeKeyPair {
+  let key = signerKeys.get(nodeId);
+  if (key === undefined) {
+    key = generateNodeKeyPair();
+    signerKeys.set(nodeId, key);
+  }
+  return key;
+}
+
+function signedBy(signerNodeId: string, body: MembershipDocumentBody): SignedMembershipDocument {
+  return {
+    body,
+    signerNodeId,
+    signature: signDocumentBody(body, signerKey(signerNodeId).privateKey),
+    endorsements: [],
+  };
+}
+
+/** Holds `doc`, pinning its signer's key as adopt pins the main box's, unless self-signed. */
+async function holdChart(
+  db: Database,
+  node: NodeDatabase,
+  boxId: string,
+  doc: SignedMembershipDocument,
+): Promise<void> {
+  await writeNodeMembership(db, doc);
+  if (doc.signerNodeId === boxId) return;
+  await pinMainBoxKey(node, boxId, {
+    nodeId: doc.signerNodeId,
+    publicKey: signerKey(doc.signerNodeId).publicKey,
+  });
+}
+
 function heldTermThreeDoc(
   nodeId: string,
   oldNodeId: string,
   extra: MembershipNode[] = [],
 ): SignedMembershipDocument {
-  return {
-    body: {
-      term: 3,
-      nodes: [
-        { nodeId: oldNodeId, contactUrl: "https://old", standing: "serving-primary" },
-        { nodeId, contactUrl: "", standing: "serving-secondary" },
-        ...extra,
-      ],
-    },
-    signerNodeId: oldNodeId,
-    signature: "held-placeholder-sig",
-    endorsements: [],
-  };
+  return signedBy(oldNodeId, {
+    term: 3,
+    nodes: [
+      { nodeId: oldNodeId, contactUrl: "https://old", standing: "serving-primary" },
+      { nodeId, contactUrl: "", standing: "serving-secondary" },
+      ...extra,
+    ],
+  });
 }
 
 // A fenced node has the same `(primary, secondary)` axis pair as a healthy local secondary, so only
@@ -121,18 +154,13 @@ function heldFencedDoc(
   standing: "sell-only" | "evicted",
   carrierNodeId = "carrier-node",
 ): SignedMembershipDocument {
-  return {
-    body: {
-      term: 3,
-      nodes: [
-        { nodeId: carrierNodeId, contactUrl: "https://carrier", standing: "serving-primary" },
-        { nodeId, contactUrl: "", standing },
-      ],
-    },
-    signerNodeId: carrierNodeId,
-    signature: "held-placeholder-sig",
-    endorsements: [],
-  };
+  return signedBy(carrierNodeId, {
+    term: 3,
+    nodes: [
+      { nodeId: carrierNodeId, contactUrl: "https://carrier", standing: "serving-primary" },
+      { nodeId, contactUrl: "", standing },
+    ],
+  });
 }
 
 describe("promoteLocalSecondaryToPrimary", () => {
@@ -213,8 +241,10 @@ describe("promoteLocalSecondaryToPrimary", () => {
     const { db, deps, nodeId } = await localSecondary();
     const oldNodeId = "old-node-1";
     const bystanderId = "bystander-1";
-    await writeNodeMembership(
+    await holdChart(
       db,
+      suite.node,
+      nodeId,
       heldTermThreeDoc(nodeId, oldNodeId, [
         { nodeId: bystanderId, contactUrl: "https://bystander", standing: "sell-only" },
       ]),
@@ -257,7 +287,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
     const ownKey = (await readMembershipTrustSet(db))[nodeId]!;
     const endorsement = endorseKey(nodeId, ownKey, oldNodeId, endorser.privateKey);
     await db.update(nodes).set({ endorsement }).where(eq(nodes.id, nodeId));
-    await writeNodeMembership(db, heldTermThreeDoc(nodeId, oldNodeId));
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, oldNodeId));
 
     await promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true });
 
@@ -288,7 +318,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
   it("is idempotent: a second promote does not bump the term again", async () => {
     const { db, deps, nodeId } = await localSecondary();
     const oldNodeId = "old-node-1";
-    await writeNodeMembership(db, heldTermThreeDoc(nodeId, oldNodeId));
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, oldNodeId));
 
     const first = await promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true });
     expect(first.alreadyPrimary).toBe(false);
@@ -303,7 +333,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
 
   it("refuses a fenced (sell-only) node with promotion.node_fenced and writes nothing", async () => {
     const { db, deps, nodeId } = await localSecondary();
-    await writeNodeMembership(db, heldFencedDoc(nodeId, "sell-only"));
+    await holdChart(db, suite.node, nodeId, heldFencedDoc(nodeId, "sell-only"));
     const error = await captureError(() =>
       promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
     );
@@ -315,7 +345,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
 
   it("refuses a fenced (evicted) node with promotion.node_fenced and writes nothing", async () => {
     const { db, deps, nodeId } = await localSecondary();
-    await writeNodeMembership(db, heldFencedDoc(nodeId, "evicted"));
+    await holdChart(db, suite.node, nodeId, heldFencedDoc(nodeId, "evicted"));
     const error = await captureError(() =>
       promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
     );
@@ -327,7 +357,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
 
   it("on a local secondary, a role write that fails after the venue save is logged and rejects", async () => {
     const { db, deps, nodeId } = await localSecondary();
-    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-node-1"));
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-node-1"));
     const { log, entries } = recordingLog();
 
     const error = await captureError(() =>
@@ -355,7 +385,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
 
   it("a second call after a lost role write finishes the role and mints no second term", async () => {
     const { db, deps, nodeId } = await localSecondary();
-    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-node-1"));
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-node-1"));
     const { log, entries } = recordingLog();
 
     const first = await captureError(() =>
@@ -382,7 +412,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
 
   it("refuses an unstamped venue.db with deployment.not_stamped, saving nothing in either file", async () => {
     const { db, deps, nodeId } = await localSecondary();
-    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-node-1"));
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-node-1"));
     await db.delete(deployment);
 
     const error = await captureError(() =>
@@ -416,12 +446,10 @@ describe("promoteLocalSecondaryToPrimary", () => {
 });
 
 function docAtTerm(term: number, nodeId: string): SignedMembershipDocument {
-  return {
-    body: { term, nodes: [{ nodeId, contactUrl: "", standing: "serving-primary" }] },
-    signerNodeId: nodeId,
-    signature: "placeholder-sig",
-    endorsements: [],
-  };
+  return signedBy(nodeId, {
+    term,
+    nodes: [{ nodeId, contactUrl: "", standing: "serving-primary" }],
+  });
 }
 
 describe("promoteMirrorToPrimary", () => {
@@ -456,6 +484,10 @@ describe("promoteMirrorToPrimary", () => {
     const nif = t.rows[0]!.tax_id;
 
     const standby = generateStandbyIdentity();
+    signerKeys.set(standby.nodeId, {
+      publicKey: standby.publicKey,
+      privateKey: standby.privateKey,
+    });
     await sealAdoptedStandbyKey(suite.node, RING, standby);
     await setNodeMode({ venue: db, node: suite.node }, standby.nodeId, "mirror");
     const endorsement: Endorsement = {
@@ -515,7 +547,7 @@ describe("promoteMirrorToPrimary", () => {
 
   it("persists trading identity without handing the callback a cached series", async () => {
     const { db, deps, nodeId } = await mirror();
-    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary"));
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary"));
     const persist = vi.fn(async () => {});
     await promoteMirrorToPrimary(deps(noopLog, persist), { oldNodeNeutralised: true });
     expect(persist).toHaveBeenCalledTimes(1);
@@ -524,7 +556,7 @@ describe("promoteMirrorToPrimary", () => {
 
   it("flips mode+singleton to primary, mints an endorsed term-bumped doc, and returns the validated standard seriesId", async () => {
     const { db, deps, nodeId, standardSeriesId, endorsement } = await mirror();
-    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary", []));
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary", []));
 
     const result = await promoteMirrorToPrimary(deps(noopLog), { oldNodeNeutralised: true });
 
@@ -544,7 +576,7 @@ describe("promoteMirrorToPrimary", () => {
 
   it("refuses promotion before changing roles when the mirror has no full invoice series", async () => {
     const { db, deps, nodeId } = await mirror();
-    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary"));
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary"));
     await db.execute(
       sql`update invoice_series set retired_at = current_timestamp where node_id = ${nodeId} and purpose = 'full'`,
     );
@@ -568,7 +600,7 @@ describe("promoteMirrorToPrimary", () => {
   it("persists trading identity BEFORE the point-of-no-return (a persist failure aborts the flip)", async () => {
     // A persist that throws must leave the node a mirror; had the flip run first, it would be primary.
     const { db, deps, nodeId } = await mirror();
-    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary"));
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary"));
     const persisted: string[] = [];
     const err = await captureError(() =>
       promoteMirrorToPrimary(
@@ -604,7 +636,7 @@ describe("promoteMirrorToPrimary", () => {
 
   it("is idempotent — a second promote on an already-primary node is a no-op", async () => {
     const { db, deps, nodeId } = await mirror();
-    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary"));
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary"));
 
     const first = await promoteMirrorToPrimary(deps(noopLog), { oldNodeNeutralised: true });
     const second = await promoteMirrorToPrimary(deps(noopLog), { oldNodeNeutralised: true });
@@ -616,7 +648,7 @@ describe("promoteMirrorToPrimary", () => {
 
   it("refuses a fenced node with promotion.node_fenced, leaving it a mirror and persisting nothing", async () => {
     const { db, deps, nodeId } = await mirror();
-    await writeNodeMembership(db, heldFencedDoc(nodeId, "sell-only"));
+    await holdChart(db, suite.node, nodeId, heldFencedDoc(nodeId, "sell-only"));
     const persisted: string[] = [];
     const err = await captureError(() =>
       promoteMirrorToPrimary(
@@ -639,18 +671,18 @@ describe("promoteMirrorToPrimary", () => {
   // the clearing; the primary's join refusal (`mirror.standby_removed`) is what refuses it.
   it("refuses a machine its own held chart has cleared (revoked) with promotion.node_fenced, leaving it a mirror", async () => {
     const { db, deps, nodeId } = await mirror();
-    await writeNodeMembership(db, {
-      body: {
+    await holdChart(
+      db,
+      suite.node,
+      nodeId,
+      signedBy("carrier-node", {
         term: 3,
         nodes: [
           { nodeId: "carrier-node", contactUrl: "https://carrier", standing: "serving-primary" },
         ],
         revoked: [nodeId],
-      },
-      signerNodeId: "carrier-node",
-      signature: "held-placeholder-sig",
-      endorsements: [],
-    });
+      }),
+    );
     const persisted: string[] = [];
     const err = await captureError(() =>
       promoteMirrorToPrimary(
@@ -669,19 +701,19 @@ describe("promoteMirrorToPrimary", () => {
 
   it("refuses with membership.chart_too_large, leaving it a mirror, when its held chart lists MAX_NODES machines but not itself", async () => {
     const { db, deps, nodeId } = await mirror();
-    await writeNodeMembership(db, {
-      body: {
+    await holdChart(
+      db,
+      suite.node,
+      nodeId,
+      signedBy("other-0", {
         term: 3,
         nodes: Array.from({ length: MAX_NODES }, (_, i) => ({
           nodeId: `other-${i}`,
           contactUrl: `https://other-${i}`,
           standing: i === 0 ? ("serving-primary" as const) : ("serving-secondary" as const),
         })),
-      },
-      signerNodeId: "other-0",
-      signature: "held-placeholder-sig",
-      endorsements: [],
-    });
+      }),
+    );
     const persisted: string[] = [];
     const err = await captureError(() =>
       promoteMirrorToPrimary(
@@ -714,7 +746,7 @@ describe("promoteMirrorToPrimary", () => {
 
   it("a refused membership write leaves node.db's role untouched", async () => {
     const { db, deps, nodeId } = await mirror();
-    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary"));
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary"));
 
     // A newer term lands between the mint and the venue save, as a gossip adoption would.
     const err = await captureError(() =>
@@ -740,7 +772,7 @@ describe("promoteMirrorToPrimary", () => {
 
   it("a role write that fails after the venue save is logged and still asks for a restart", async () => {
     const { db, deps, nodeId, standardSeriesId } = await mirror();
-    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary"));
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary"));
     const { log, entries } = recordingLog();
 
     const result = await promoteMirrorToPrimary(
@@ -766,7 +798,7 @@ describe("promoteMirrorToPrimary", () => {
 
   it("a second call after a lost role write finishes the role and mints no second term", async () => {
     const { db, deps, nodeId, standardSeriesId } = await mirror();
-    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary"));
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary"));
     const { log, entries } = recordingLog();
 
     const first = await promoteMirrorToPrimary(
@@ -791,7 +823,7 @@ describe("promoteMirrorToPrimary", () => {
 
   it("still asks for a restart when node.db can be neither written nor read after the venue save", async () => {
     const { db, deps, nodeId, standardSeriesId } = await mirror();
-    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary"));
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary"));
     const promoteDeps = {
       ...deps(noopLog),
       node: nodeFailingNextWrite(suite.node, { readsFailAfter: true }),
@@ -807,7 +839,7 @@ describe("promoteMirrorToPrimary", () => {
 
   it("refuses an unstamped venue.db with deployment.not_stamped before activating or persisting anything", async () => {
     const { db, deps, nodeId } = await mirror();
-    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary"));
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary"));
     await db.delete(deployment);
     const persist = vi.fn(async () => {});
     const activate = vi.fn(async () => {});

@@ -23,12 +23,7 @@ import {
 } from "@waitron/db";
 import { readNodeMode, setNodeMode, setSingletonRole, writeMirrorLink } from "@waitron/node-db";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
-import {
-  generateNodeKeyPair,
-  signDocumentBody,
-  type Endorsement,
-  type SignedMembershipDocument,
-} from "@waitron/membership";
+import { generateNodeKeyPair, signDocumentBody, type Endorsement } from "@waitron/membership";
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
@@ -46,6 +41,8 @@ import { invoiceSeries } from "@waitron/db";
 import { parseEnvFile } from "./env-file.js";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 import { freePort } from "./testing/free-ports.js";
+import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -382,19 +379,21 @@ async function seedMirrorIdentity(
   });
 
   // A held term-3 chart: the outgoing primary serving, this node secondary — the promote bumps it to 4.
-  const held: SignedMembershipDocument = {
-    body: {
-      term: 3,
-      nodes: [
-        { nodeId: MIRROR_ORIGIN_NODE_ID, contactUrl: "https://old", standing: "serving-primary" },
-        { nodeId: standby.nodeId, contactUrl: "", standing: "serving-secondary" },
-      ],
-    },
+  // Signed by the outgoing primary's key, which this box pins as adopt would.
+  const origin = generateNodeKeyPair();
+  const held = signedMembershipDoc(3, {
     signerNodeId: MIRROR_ORIGIN_NODE_ID,
-    signature: "held-placeholder-sig",
-    endorsements: [],
-  };
+    keyPair: origin,
+    nodes: [
+      { nodeId: MIRROR_ORIGIN_NODE_ID, contactUrl: "https://old", standing: "serving-primary" },
+      { nodeId: standby.nodeId, contactUrl: "", standing: "serving-secondary" },
+    ],
+  });
   await writeNodeMembership(db, held);
+  await pinMainBoxKey(node, standby.nodeId, {
+    nodeId: MIRROR_ORIGIN_NODE_ID,
+    publicKey: origin.publicKey,
+  });
 
   await writeMirrorLink(node, standby.nodeId, {
     relayUrl: "https://127.0.0.1:1/",

@@ -7,9 +7,13 @@ import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
-import type { MembershipNode, SignedMembershipDocument } from "@waitron/membership";
+import {
+  signDocumentBody,
+  type MembershipNode,
+  type SignedMembershipDocument,
+} from "@waitron/membership";
 import { ALL_MODULES } from "./modules.js";
-import { establishNodeIdentity } from "./node-identity.js";
+import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountManagementApi } from "./management-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
@@ -126,13 +130,15 @@ async function login(app: Hono, email: string): Promise<string> {
   return res.headers.get("set-cookie")!.split(";")[0];
 }
 
-/** Written through the plain-upsert setter (the read is unverified), so the placeholder signature is
- * fine. */
+// This box's own signing key, read once its identity is established.
+let ownKey: string;
+
+/** Signed by this box with its own key, which it trusts. */
 function membershipDoc(term: number, nodes: readonly MembershipNode[]): SignedMembershipDocument {
   return {
     body: { term, nodes },
     signerNodeId: nodes[0]!.nodeId,
-    signature: "self-placeholder-sig",
+    signature: signDocumentBody({ term, nodes }, ownKey),
     endorsements: [],
   };
 }
@@ -146,6 +152,7 @@ describe("POST /api/box/retire", () => {
     // Establish the node identity so the mint on the happy path has a key to sign with; harmless to
     // the refusal paths, which return before any mint.
     await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, nodeId);
+    ownKey = await readNodeIdentityKey(suite.node, RING, nodeId);
     managerCookie = await login(buildApp(nodeId), MANAGER_EMAIL);
   });
 
@@ -178,18 +185,23 @@ describe("POST /api/box/retire", () => {
   });
 
   it("409 when the held chart's revoked list names a machine twice, so the eviction cannot be minted", async () => {
+    const body = {
+      term: 5,
+      nodes: [
+        { nodeId, contactUrl: "", standing: "sell-only" as const },
+        {
+          nodeId: CARRIER_NODE_ID,
+          contactUrl: "https://carrier",
+          standing: "serving-primary" as const,
+        },
+      ],
+      revoked: ["gone", "gone"],
+    };
     await writeNodeMembership(suite.db, {
       signerNodeId: nodeId,
-      signature: "self-placeholder-sig",
+      signature: signDocumentBody(body, ownKey),
       endorsements: [],
-      body: {
-        term: 5,
-        nodes: [
-          { nodeId, contactUrl: "", standing: "sell-only" },
-          { nodeId: CARRIER_NODE_ID, contactUrl: "https://carrier", standing: "serving-primary" },
-        ],
-        revoked: ["gone", "gone"],
-      },
+      body,
     });
     const app = buildApp(nodeId);
     const res = await app.request("/api/box/retire", {

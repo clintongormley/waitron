@@ -30,7 +30,7 @@ import {
   createCategory,
   createProduct,
 } from "@waitron/catalogue";
-import type { Endorsement, SignedMembershipDocument } from "@waitron/membership";
+import { generateNodeKeyPair, type Endorsement } from "@waitron/membership";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer, type StartedServer } from "./boot.js";
@@ -50,6 +50,8 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { freePort } from "./testing/free-ports.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
+import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 
 // The promote endpoint end to end over HTTP, each boot on its own venue directory: an admin-login
 // promote restarts the mirror as a primary that sells and chains on its own reserved SIF without
@@ -171,19 +173,21 @@ async function seedMirror(
     recoveryKey: false,
   });
 
-  const held: SignedMembershipDocument = {
-    body: {
-      term: 3,
-      nodes: [
-        { nodeId: MIRROR_ORIGIN_NODE_ID, contactUrl: "https://old", standing: "serving-primary" },
-        { nodeId: standby.nodeId, contactUrl: "", standing: "serving-secondary" },
-      ],
-    },
+  // Signed by the outgoing primary's key, which this box pins as adopt would.
+  const origin = generateNodeKeyPair();
+  const held = signedMembershipDoc(3, {
     signerNodeId: MIRROR_ORIGIN_NODE_ID,
-    signature: "held-placeholder-sig",
-    endorsements: [],
-  };
+    keyPair: origin,
+    nodes: [
+      { nodeId: MIRROR_ORIGIN_NODE_ID, contactUrl: "https://old", standing: "serving-primary" },
+      { nodeId: standby.nodeId, contactUrl: "", standing: "serving-secondary" },
+    ],
+  });
   await writeNodeMembership(admin, held);
+  await pinMainBoxKey(node, standby.nodeId, {
+    nodeId: MIRROR_ORIGIN_NODE_ID,
+    publicKey: origin.publicKey,
+  });
 
   await writeMirrorLink(node, standby.nodeId, {
     relayUrl: "https://127.0.0.1:1/",
