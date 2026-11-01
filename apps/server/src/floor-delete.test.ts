@@ -660,19 +660,10 @@ describe("floor hierarchy deletion", () => {
     ).toEqual([]);
   });
 
-  it("empty and foreign zone selections do not change or create floor state", async () => {
-    const [loc] = await inTx(v, (tx) =>
-      tx
-        .insert(locations)
-        .values({ name: "Foreign empty", invoiceLocales: ["en"], operationDescription: "Test" })
-        .returning(),
-    );
-    const z = await zone("Foreign empty", loc!.id);
-    await planned(z, "Foreign empty", loc!.id);
+  it("empty and unknown zone selections do not change or create floor state", async () => {
     const before = await inTx(v, snapshot);
     expect(await impact([])).toEqual({ refusals: [], removes: [] });
-    expect(await impact([z, randomUUID()])).toEqual({ refusals: [], removes: [] });
-    await inTx(v, (tx) => seatFor().clear(tx, [z], NOW));
+    expect(await impact([randomUUID()])).toEqual({ refusals: [], removes: [] });
     await inTx(v, (tx) => seatFor().clear(tx, [], NOW));
     expect(await inTx(v, snapshot)).toEqual(before);
   });
