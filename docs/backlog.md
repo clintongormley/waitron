@@ -6465,9 +6465,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Design](superpowers/specs/2026-11-01-a1301-remove-location-design.md),
   [plan](superpowers/plans/2026-11-01-a1301-remove-location.md)
 
-- **A1301 S5 left "location" in files other slices own.** Two parameters in
-  `packages/catalogue/src/operations.ts` are named `_locationId` and never read; they go when S2's
-  callers stop passing them. Wording to change: `apps/server/src/testing/zone-offers.ts` and a
+- **A1301 S5 left "location" in files other slices own.** Wording to change:
+  `apps/server/src/testing/zone-offers.ts` and a
   `till-api.test.ts` comment (F5), `apps/server/scripts/demo-seed/seed-catalogue.ts` (S19), and the
   English and Spanish guide `content-and-images.md`, whose receipt-language paragraph still speaks
   of "the location's default".
