@@ -6354,6 +6354,13 @@ _Formerly parts of B9 and Track C._ Open work:
 
 _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._ Detail: [backlog/architecture.md](backlog/architecture.md).
 
+- **A1301. Remove the "location" concept: the venue holds everything a location held** (owner,
+  2026-11-01, high priority; nothing new is built on locations meanwhile). The design is written and
+  reviewed: its settings move to a new one-row `venue_settings` table, and the work is cut into
+  slices S1–S28 and fixture slices F1–F5, eight of them landed by the owner. Four owner questions
+  are open, about the working-time record and lane B's A1268 PR 2. Lane A builds it next.
+  [Design](superpowers/specs/2026-11-01-a1301-remove-location-design.md)
+
 - **The `authorized_by` comment on `drawer_opens` says only a manual open sets it**
   [Detail](backlog/architecture.md#the-authorized_by-comment-on-drawer_opens-says-only-a-manual-open-sets-it)
 
