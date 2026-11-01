@@ -34,7 +34,7 @@ export const CONFLICT_RECOVERY_STRINGS = {
       "This attempt cannot be continued. Start a new attempt with a fresh clock comparison, or choose Stop. Invoices stay stopped until an identity switch is confirmed.",
     "conflict_recovery.again": "Start a new attempt",
     "conflict_recovery.limited":
-      "Too many recovery requests are running or have arrived recently. Wait a minute and try again, or choose Stop.",
+      "Too many recovery requests are running or have arrived recently. Wait a minute, enter the current key again and try again, or choose Stop.",
     "conflict_recovery.wait":
       "Waiting for an available minute: {seconds} seconds. The box checks every five seconds. Compare clocks again when the wait ends; switching always needs your choice.",
     "conflict_recovery.leave_title": "Leave recovery?",
@@ -81,7 +81,7 @@ export const CONFLICT_RECOVERY_STRINGS = {
       "No se puede continuar este intento. Inicia otro con una nueva comparación de relojes, o elige Detener. La facturación sigue detenida hasta que se confirme el cambio de identidad.",
     "conflict_recovery.again": "Iniciar otro intento",
     "conflict_recovery.limited":
-      "Hay demasiadas solicitudes de recuperación en curso o recientes. Espera un minuto e inténtalo de nuevo, o elige Detener.",
+      "Hay demasiadas solicitudes de recuperación en curso o recientes. Espera un minuto, vuelve a introducir la clave actual e inténtalo de nuevo, o elige Detener.",
     "conflict_recovery.wait":
       "Esperando un minuto disponible: {seconds} segundos. La caja comprueba cada cinco segundos. Vuelve a comparar los relojes cuando termine la espera; el cambio siempre requiere tu elección.",
     "conflict_recovery.leave_title": "¿Salir de la recuperación?",

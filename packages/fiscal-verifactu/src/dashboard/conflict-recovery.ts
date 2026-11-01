@@ -218,6 +218,7 @@ export class ConflictRecovery extends LitElement {
       this.cancelWait();
       const code = codeOf(error);
       const reason = (error as { params?: { reason?: unknown } } | null)?.params?.reason;
+      if (code === "recovery.rate_limited") this.key = "";
       if (code === "promotion.break_glass_invalid") {
         this.offline = false;
         this.noParallel = false;

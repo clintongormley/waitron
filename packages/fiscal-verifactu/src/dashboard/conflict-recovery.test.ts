@@ -409,6 +409,10 @@ it("keeps a rate-limit refusal actionable without starting an automatic retry lo
   );
   expect(calls).toHaveLength(1);
   expect(
+    screen.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!.value,
+  ).toBe("");
+  await key(screen, "current-key");
+  expect(
     (
       screen.shadowRoot!.querySelector("[data-action=inspect]") as HTMLElement & {
         disabled: boolean;
@@ -627,4 +631,112 @@ it("reconciles an uncertain preparation before offering a new attempt", async ()
   expect(calls.at(-1)!.eventId).toBe(eventId);
   expect(calls.at(-1)!.command).toEqual({ kind: "status" });
   expect(calls.filter((call) => call.command.kind === "activate")).toEqual([]);
+});
+
+it("updates the countdown locally and keeps repeated waits five seconds apart", async () => {
+  vi.useFakeTimers({
+    toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "performance"],
+  });
+  let previews = 0;
+  const { screen, calls } = await mount(async (body) => {
+    if (body.command.kind === "status")
+      return { kind: "status", active: [active], event: { kind: "none" } };
+    if (body.command.kind === "prepare" && body.command.proposal.action === "select")
+      return {
+        kind: "prepared",
+        value: { status: "waiting", targetMs: Date.now() + 7000, remainingMs: 7000 },
+      };
+    if (body.command.kind === "prepare" && body.command.proposal.action === "preview") {
+      previews++;
+      return previews === 1
+        ? {
+            kind: "prepared",
+            value: { status: "waiting", targetMs: Date.now() + 2000, remainingMs: 2000 },
+          }
+        : { kind: "prepared", value: { status: "preview", identity: "0CNQR" } };
+    }
+    return prepared(body);
+  });
+  await inspect(screen);
+  await compare(screen);
+  await vi.advanceTimersByTimeAsync(0);
+  const count = calls.length;
+  await vi.advanceTimersByTimeAsync(2000);
+  await screen.updateComplete;
+  expect(screen.shadowRoot!.querySelector("[data-wait]")?.textContent).toContain("5 seconds");
+  expect(calls).toHaveLength(count);
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(previews).toBe(1);
+  await vi.advanceTimersByTimeAsync(1000);
+  await screen.updateComplete;
+  expect(screen.shadowRoot!.querySelector("[data-wait]")?.textContent).toContain("1 seconds");
+  await vi.advanceTimersByTimeAsync(4000);
+  await screen.updateComplete;
+  expect(previews).toBe(2);
+  expect(screen.shadowRoot!.querySelector("[data-wait]")).toBeNull();
+  expect(screen.shadowRoot!.querySelector("[data-action=switch]")).toBeNull();
+  const finished = calls.length;
+  await vi.advanceTimersByTimeAsync(20000);
+  expect(calls).toHaveLength(finished);
+  expect(calls.filter((call) => call.command.kind === "activate")).toEqual([]);
+});
+
+it.each(["status", "clock-challenge", "compare-clocks", "select", "preview-selection"])(
+  "refuses a schema-valid reply for the wrong %s command without activating",
+  async (stage) => {
+    const { screen, calls } = await mount(async (body) => {
+      if (body.command.kind === "status")
+        return stage === "status"
+          ? {
+              kind: "prepared",
+              value: { id: "unexpected-challenge", boxInstantMs: Date.now(), expiresInMs: 5000 },
+            }
+          : { kind: "status", active: [active], event: { kind: "none" } };
+      if (body.command.kind === "prepare" && body.command.proposal.action === stage)
+        return { kind: "status", active: [active], event: { kind: "none" } };
+      if (
+        stage === "preview-selection" &&
+        body.command.kind === "prepare" &&
+        body.command.proposal.action === "select"
+      )
+        return { kind: "prepared", value: { status: "preview", identity: "0CNQR" } };
+      return prepared(body);
+    });
+    if (stage === "status") {
+      await key(screen, "current-key");
+      await click(screen, "inspect");
+    } else {
+      await inspect(screen);
+      await compare(screen);
+    }
+    await vi.waitFor(() =>
+      expect(screen.shadowRoot!.querySelector("wt-form-actions")?.error).toContain(
+        "The request could not be completed",
+      ),
+    );
+    expect(screen.shadowRoot!.querySelector("[data-action=switch]")).toBeNull();
+    expect(screen.shadowRoot!.querySelector("[data-complete]")).toBeNull();
+    expect(calls.filter((call) => call.command.kind === "activate")).toEqual([]);
+    expect(screen.shadowRoot!.querySelector("[data-action=stop]")).not.toBeNull();
+  },
+);
+
+it("refuses a committed result for another event without clearing the current key", async () => {
+  const { screen, calls } = await mount(async () => ({
+    kind: "status",
+    active: [],
+    event: { kind: "committed", result: { ...committed, activationEventId: "another-event" } },
+  }));
+  await key(screen, "current-key");
+  await click(screen, "inspect");
+  await vi.waitFor(() =>
+    expect(screen.shadowRoot!.querySelector("wt-form-actions")?.error).toContain(
+      "The request could not be completed",
+    ),
+  );
+  expect(screen.shadowRoot!.querySelector("[data-complete]")).toBeNull();
+  expect(
+    screen.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!.value,
+  ).toBe("current-key");
+  expect(calls).toHaveLength(1);
 });

@@ -26,7 +26,8 @@ per fixed one-minute window, with at most two requests running. The recovery key
 that limit. Invalid TLS, origin or site checks are refused before this budget is used. Other devices can keep recovery unavailable by sending accepted HTTPS requests or holding their
 bodies open. Close other recovery pages and stop those requests, or isolate untrusted devices on the
 venue network, before retrying. **Stop** ends this page's work; it does not clear the box's shared
-request budget. This limit bounds admitted work, not availability under hostile network traffic.
+request budget. After a rate refusal, enter the current key again before retrying. This limit
+bounds admitted work, not availability under hostile network traffic.
 
 The switch uses the live database. It keeps your orders, payments and issued records, retires the
 old identity and series from further issuance, and starts the new series at one. It leaves the

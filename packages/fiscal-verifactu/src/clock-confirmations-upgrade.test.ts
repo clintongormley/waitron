@@ -33,7 +33,15 @@ const suite = useVenueDb({
     for (const set of TEST_MIGRATIONS) {
       await applyMigrationSet(
         db,
-        set === FISCAL_SET ? { ...set, migrationsFolder: directory } : set,
+        set === FISCAL_SET
+          ? {
+              ...set,
+              migrationsFolder: directory,
+              appendOnlyTables: set.appendOnlyTables?.filter(
+                (table) => table !== "fiscal_conflict_evidence",
+              ),
+            }
+          : set,
       );
     }
   },
@@ -101,6 +109,7 @@ it("keeps every confirmation and both append-only triggers across the staff migr
   expect(indexesBefore).toHaveLength(4);
 
   await applyMigrationSet(suite.db, FISCAL_SET);
+  expect((await suite.db.execute(sql`select * from fiscal_conflict_evidence`)).rows).toEqual([]);
 
   expect(await confirmationRows()).toEqual(before);
   expect(await confirmationIndexes()).toEqual(indexesBefore);

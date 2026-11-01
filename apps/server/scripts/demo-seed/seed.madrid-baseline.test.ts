@@ -25,6 +25,7 @@ const ADDED_TABLES = [
   "adjustment_lines",
   "bill_identities",
   "bill_number_allocations",
+  "fiscal_conflict_evidence",
   "order_portion_events",
   "order_portions",
   "recovery_packs",
