@@ -2394,15 +2394,6 @@ export interface TabLine {
   portion?: boolean;
 }
 
-/**
- * One entry in a line transfer. Omit `quantity` (or pass the whole line quantity) for a whole-line move;
- * a smaller decimal string splits the line, the destination inheriting the same locked per-unit price.
- */
-export interface TabTransfer {
-  lineNo: number;
-  quantity?: string;
-}
-
 export interface MadeHereItem {
   lineId: string;
   name: string;
@@ -4743,20 +4734,6 @@ export class TillApi {
   }
 
   /**
-   * Put the chosen items of a bill on a new bill of the same party → `POST /api/bills/:billId/split`,
-   * answering the new bill's id. Rejects, among others, `bill.paid`, `bill.presented`,
-   * `bill.line_paid`, `tab.split_held_line`, `tab.transfer_modifier_line`, `party.not_open` and
-   * `party.out_of_date`.
-   */
-  splitBill(
-    billId: string,
-    transfers: readonly TabTransfer[],
-    revisions: BillRevisions & { expectedEdit: BillEditExpected },
-  ): Promise<{ billId: string }> {
-    return this.#request(`/api/bills/${billId}/split`, "POST", { transfers, ...revisions });
-  }
-
-  /**
    * Move every item of `fromBillId` onto `intoBillId`, two untouched bills of one party →
    * `POST /api/bills/:intoBillId/merge`. Rejects, among others, `bill.presented`, `bill.paid`,
    * `bill.other_party`, `bill.payments_received`, `tab.not_open` and `party.out_of_date`.
@@ -4787,24 +4764,6 @@ export class TillApi {
     return this.#request(`/api/bills/${fromBillId}/move-dishes`, "POST", {
       lineIds,
       toBillId,
-      ...revisions,
-    });
-  }
-
-  /**
-   * Move the chosen items from one untouched bill of a party to another →
-   * `POST /api/bills/:fromBillId/transfer` (see {@link TabTransfer}). Rejects as
-   * {@link mergeBills} does, and `bill.line_paid` and `sale.empty_basket`.
-   */
-  async transferItems(
-    fromBillId: string,
-    toBillId: string,
-    transfers: readonly TabTransfer[],
-    revisions: BillRevisions & { expectedEdits: BillEditExpected[] },
-  ): Promise<void> {
-    await this.#request<void>(`/api/bills/${fromBillId}/transfer`, "POST", {
-      toBillId,
-      transfers,
       ...revisions,
     });
   }

@@ -3294,41 +3294,6 @@ describe("TillApi", () => {
     },
   );
 
-  it("transferItems POSTs { toBillId, transfers } to the /transfer route of the bill the items leave", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
-
-    await expect(
-      new TillApi("", fetchStub).transferItems(
-        "wo-src",
-        "wo-dst",
-        [{ lineNo: 1 }, { lineNo: 2, quantity: "1.000" }],
-        {
-          expectedEdits: [
-            { billId: "wo-dst", editorVersion: 0, draftId: null, draftRevision: null },
-            { billId: "wo-src", editorVersion: 0, draftId: null, draftRevision: null },
-          ],
-        },
-      ),
-    ).resolves.toBeUndefined();
-
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/bills/wo-src/transfer",
-      expect.objectContaining({
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          toBillId: "wo-dst",
-          transfers: [{ lineNo: 1 }, { lineNo: 2, quantity: "1.000" }],
-          expectedEdits: [
-            { billId: "wo-dst", editorVersion: 0, draftId: null, draftRevision: null },
-            { billId: "wo-src", editorVersion: 0, draftId: null, draftRevision: null },
-          ],
-        }),
-      }),
-    );
-  });
-
   it("A803 bill names: setBillName PUTs the name, the party, its revision and the bill's editor expectation to the bill's /name route", async () => {
     const fetchStub = vi
       .fn()
@@ -3354,28 +3319,6 @@ describe("TillApi", () => {
       }),
     );
     expect(result).toEqual({ revision: 4, billNumber: 2, billName: "Clint" });
-  });
-
-  it("splitBill POSTs the chosen lines to the bill's /split route and answers the new bill's id", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ billId: "wo-new" }));
-
-    const result = await new TillApi("", fetchStub).splitBill("wo-7", [{ lineNo: 1 }], {
-      expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
-    });
-
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/bills/wo-7/split",
-      expect.objectContaining({
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          transfers: [{ lineNo: 1 }],
-          expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
-        }),
-      }),
-    );
-    expect(result).toEqual({ billId: "wo-new" });
   });
 
   it("mergeBills surfaces a refusal as { code }", async () => {
@@ -4646,45 +4589,6 @@ describe("TillApi: a seated party", () => {
           { billId: "wo-from", editorVersion: 0, draftId: null, draftRevision: null },
           { billId: "wo-into", editorVersion: 0, draftId: null, draftRevision: null },
         ],
-      },
-    ],
-    [
-      "transferItems",
-      (api: TillApi) =>
-        api.transferItems("wo-src", "wo-dst", [{ lineNo: 1 }], {
-          expectedPartyRevision: 3,
-          partyId: "v1",
-          expectedEdits: [
-            { billId: "wo-dst", editorVersion: 0, draftId: null, draftRevision: null },
-            { billId: "wo-src", editorVersion: 0, draftId: null, draftRevision: null },
-          ],
-        }),
-      "/api/bills/wo-src/transfer",
-      {
-        toBillId: "wo-dst",
-        transfers: [{ lineNo: 1 }],
-        expectedPartyRevision: 3,
-        partyId: "v1",
-        expectedEdits: [
-          { billId: "wo-dst", editorVersion: 0, draftId: null, draftRevision: null },
-          { billId: "wo-src", editorVersion: 0, draftId: null, draftRevision: null },
-        ],
-      },
-    ],
-    [
-      "splitBill",
-      (api: TillApi) =>
-        api.splitBill("wo-7", [{ lineNo: 1 }], {
-          expectedPartyRevision: 3,
-          partyId: "v1",
-          expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
-        }),
-      "/api/bills/wo-7/split",
-      {
-        transfers: [{ lineNo: 1 }],
-        expectedPartyRevision: 3,
-        partyId: "v1",
-        expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
       },
     ],
     [

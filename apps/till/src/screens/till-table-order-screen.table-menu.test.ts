@@ -369,8 +369,8 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     const billItem = (el: TillTableOrderScreen, selector: string) =>
       menu(el).querySelector<HTMLElement>(`[data-table-menu-bill] ${selector}`);
 
-    // splitBill refuses `bill.paid` and `bill.presented`; mergeBills and transferItems refuse the
-    // bill on screen the same way (apps/server/src/bill-actions.ts, refuseClosedBill).
+    // moveDishes and mergeBills refuse a `bill.paid` or `bill.presented` bill on screen
+    // (apps/server/src/bill-actions.ts, refuseClosedBill).
     it.each([
       ["a paid bill", paid],
       ["a presented bill", presented],

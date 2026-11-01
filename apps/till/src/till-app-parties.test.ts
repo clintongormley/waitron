@@ -322,8 +322,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     setPartyGuests: vi.fn().mockResolvedValue({ revision: 4, guestCount: 4 }),
     setBillName: vi.fn().mockResolvedValue({ revision: 4, billNumber: 1, billName: "Clint" }),
     mergeBills: vi.fn().mockResolvedValue(undefined),
-    transferItems: vi.fn().mockResolvedValue(undefined),
-    splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
+    moveDishes: vi.fn().mockResolvedValue({ billId: "wo-check" }),
     recordSale: vi.fn().mockResolvedValue(saleResult),
     collectOrder: vi.fn().mockResolvedValue(saleResult),
     moveBill: vi.fn().mockResolvedValue({ partyId: null, billId: "wo-check" }),
@@ -1608,7 +1607,7 @@ describe("till-app: the party on a handheld", () => {
   }
 
   it.each([
-    ["split-lines", { transfers: [{ lineNo: 1 }] }, "splitBill", { billId: "wo-check" }],
+    ["move-dishes", { lineIds: ["line-1"], toBillId: null }, "moveDishes", { billId: "wo-check" }],
     ["join-tables", { tableId: "t9" }, "joinTables", { partyId: "v1", billIds: ["wo-4"] }],
   ] as const)(
     "refuses %s sent from an order read before a glance at the floor saw another device's change",
@@ -1814,10 +1813,10 @@ describe("till-app: the party on a handheld", () => {
       expect(banner(el)).toBeNull();
     });
 
-    it("Split items onto a new bill: back on the order tab, the new bill is on screen", async () => {
+    it("Move dishes to a new bill: back on the order tab, the new bill is on screen", async () => {
       const { call, answer } = held();
-      const { el } = await mountApp({ ...onPhone(), splitBill: call });
-      emit(await openOnPhone(el), "split-lines", { transfers: [{ lineNo: 1 }] });
+      const { el } = await mountApp({ ...onPhone(), moveDishes: call });
+      emit(await openOnPhone(el), "move-dishes", { lineIds: ["line-1"], toBillId: null });
       await flush(el);
       await selectTab(el, "floor");
 
@@ -1853,7 +1852,7 @@ describe("till-app: the party on a handheld", () => {
           return { partyId: "v-split", billId: "wo-check" };
         }),
       });
-      emit(await openOnPhone(el), "split-lines", { transfers: [{ lineNo: 1 }] });
+      emit(await openOnPhone(el), "move-dishes", { lineIds: ["line-1"], toBillId: null });
       await flush(el);
       expect(orderCard(el)!.orderId).toBe("wo-check");
       emit(orderCard(el)!, "split-table", { tableId: "t5", billId: "wo-check" });
@@ -2519,7 +2518,7 @@ describe("till-app: table actions on the party", () => {
       }),
     });
     const order = await openMesa(el);
-    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
+    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: null });
     await flush(el);
     expect(tableOrder(el)!.orderId).toBe("wo-check");
 
@@ -2554,7 +2553,7 @@ describe("till-app: table actions on the party", () => {
 
   it.each([
     ["merge-bills", { fromBillId: "wo-check" }, "mergeBills"],
-    ["transfer-lines", { toBillId: "wo-check", transfers: [{ lineNo: 1 }] }, "transferItems"],
+    ["move-dishes", { lineIds: ["line-1"], toBillId: "wo-check" }, "moveDishes"],
   ] as const)(
     "says the two bills are served differently when %s is refused for their service modes",
     async (type, detail, method) => {
@@ -3339,10 +3338,10 @@ describe("till-app: a table action's answer once the waiter has opened another p
       answer: { partyId: "v1", billIds: ["wo-4"] },
     },
     {
-      action: "Split items onto a new bill",
-      method: "splitBill",
-      event: "split-lines",
-      detail: { transfers: [{ lineNo: 1 }] },
+      action: "Move dishes to a new bill",
+      method: "moveDishes",
+      event: "move-dishes",
+      detail: { lineIds: ["line-1"], toBillId: null },
       answer: { billId: "wo-check" },
     },
     {
@@ -3756,7 +3755,7 @@ describe("till-app: a table action's answer once the waiter has opened another p
       }),
     });
     const order = await openMesa(el);
-    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
+    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: null });
     await flush(el);
     expect(tableOrder(el)!.orderId).toBe("wo-check");
     emit(tableOrder(el)!, "split-table", { tableId: "t5", billId: "wo-check" });
@@ -5328,8 +5327,8 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
     };
   }
 
-  it("a bills read sent before this till's own Split this bill answered leaves the split's new bill on screen, with nothing said", async () => {
-    const split = () => vi.mocked(api.splitBill).mock.calls.length > 0;
+  it("a bills read sent before this till's own Move dishes to a new bill answered leaves the new bill on screen, with nothing said", async () => {
+    const split = () => vi.mocked(api.moveDishes).mock.calls.length > 0;
     const read = heldBills(() => (split() ? [tabBill, checkBill] : [tabBill]));
     const floor = vi.fn(async () => {
       if (split() && read.held()) {
@@ -5346,7 +5345,7 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
     await flush(el);
     expect(read.held()).toBe(true);
 
-    emit(tableOrder(el)!, "split-lines", { transfers: [{ lineNo: 1 }] });
+    emit(tableOrder(el)!, "move-dishes", { lineIds: ["line-1"], toBillId: null });
     await flush(el);
     await flush(el);
     await new Promise((resolve) => setTimeout(resolve, 80));
@@ -5836,13 +5835,13 @@ describe("till-app: every table move sends the party revision it last read", () 
       ],
     ],
     [
-      "transfer-lines",
-      { toBillId: "wo-check", transfers: [{ lineNo: 1 }] },
-      "transferItems",
+      "move-dishes",
+      { lineIds: ["line-1"], toBillId: "wo-check" },
+      "moveDishes",
       [
         "wo-4",
+        ["line-1"],
         "wo-check",
-        [{ lineNo: 1 }],
         {
           expectedPartyRevision: 3,
           partyId: "v1",
@@ -5854,20 +5853,21 @@ describe("till-app: every table move sends the party revision it last read", () 
       ],
     ],
     [
-      "split-lines",
-      { transfers: [{ lineNo: 1 }] },
-      "splitBill",
+      "move-dishes",
+      { lineIds: ["line-1"], toBillId: null },
+      "moveDishes",
       [
         "wo-4",
-        [{ lineNo: 1 }],
+        ["line-1"],
+        null,
         {
           expectedPartyRevision: 3,
           partyId: "v1",
-          expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          expectedEdits: [{ billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null }],
         },
       ],
     ],
-  ] as const)("%s sends the party revision it last read", async (type, detail, method, args) => {
+  ] as const)("%s %j sends the party revision it last read", async (type, detail, method, args) => {
     const { el } = await mountApp();
     const order = await openMesa(el);
 
@@ -5879,18 +5879,18 @@ describe("till-app: every table move sends the party revision it last read", () 
     ).toHaveBeenCalledWith(...args);
   });
 
-  it("sends no transfer that carries no items", async () => {
+  it("sends no move of dishes that carries no dishes", async () => {
     const { el } = await mountApp();
     const order = await openMesa(el);
 
-    emit(order, "transfer-lines", { toBillId: "wo-check", transfers: [] });
+    emit(order, "move-dishes", { lineIds: [], toBillId: "wo-check" });
     await flush(el);
 
-    expect(api.transferItems).not.toHaveBeenCalled();
+    expect(api.moveDishes).not.toHaveBeenCalled();
     expect(banner(el)).toBeNull();
   });
 
-  it("asks before splitting a bill over €3,000 and cancel sends no split", async () => {
+  it("asks before moving dishes off a bill over €3,000 to a new bill and cancel sends no move", async () => {
     const { el } = await mountApp({
       getPartyBills: vi
         .fn()
@@ -5898,21 +5898,21 @@ describe("till-app: every table move sends the party revision it last read", () 
     });
     const order = await openMesa(el);
 
-    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
+    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: null });
     await flush(el);
 
     const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-confirm-different-people]");
     expect(dialog?.textContent).toContain(differentPeopleText("3000.00"));
-    expect(api.splitBill).not.toHaveBeenCalled();
+    expect(api.moveDishes).not.toHaveBeenCalled();
 
     dialog!.querySelector<HTMLElement>("[data-cancel]")!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-confirm-different-people]")).toBeNull();
-    expect(api.splitBill).not.toHaveBeenCalled();
+    expect(api.moveDishes).not.toHaveBeenCalled();
     expect(tableOrder(el)!.orderId).toBe("wo-4");
   });
 
-  it("splits a large bill after staff confirm different people", async () => {
+  it("moves dishes off a large bill to a new bill after staff confirm different people", async () => {
     const { el } = await mountApp({
       getPartyBills: vi
         .fn()
@@ -5920,24 +5920,24 @@ describe("till-app: every table move sends the party revision it last read", () 
     });
     const order = await openMesa(el);
 
-    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
+    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: null });
     await flush(el);
-    expect(api.splitBill).not.toHaveBeenCalled();
+    expect(api.moveDishes).not.toHaveBeenCalled();
 
     el.shadowRoot!.querySelector<HTMLElement>(
       "[data-confirm-different-people] [data-confirm]",
     )!.click();
     await flush(el);
 
-    expect(api.splitBill).toHaveBeenCalledWith("wo-4", [{ lineNo: 1 }], {
+    expect(api.moveDishes).toHaveBeenCalledWith("wo-4", ["line-1"], null, {
       expectedPartyRevision: 3,
       partyId: "v1",
-      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+      expectedEdits: [{ billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null }],
     });
     expect(el.shadowRoot!.querySelector("[data-confirm-different-people]")).toBeNull();
   });
 
-  it("splits a bill at €3,000 without asking for different people", async () => {
+  it("moves dishes off a bill at €3,000 to a new bill without asking for different people", async () => {
     const { el } = await mountApp({
       getPartyBills: vi
         .fn()
@@ -5945,18 +5945,18 @@ describe("till-app: every table move sends the party revision it last read", () 
     });
     const order = await openMesa(el);
 
-    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
+    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: null });
     await flush(el);
 
     expect(el.shadowRoot!.querySelector("[data-confirm-different-people]")).toBeNull();
-    expect(api.splitBill).toHaveBeenCalledWith("wo-4", [{ lineNo: 1 }], {
+    expect(api.moveDishes).toHaveBeenCalledWith("wo-4", ["line-1"], null, {
       expectedPartyRevision: 3,
       partyId: "v1",
-      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+      expectedEdits: [{ billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null }],
     });
   });
 
-  it("asks before splitting a bill over the server's limit, naming it", async () => {
+  it("asks before moving dishes off a bill over the server's limit to a new bill, naming it", async () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, simplifiedInvoiceLimit: "3.00" }),
       getPartyBills: vi
@@ -5965,15 +5965,15 @@ describe("till-app: every table move sends the party revision it last read", () 
     });
     const order = await openMesa(el);
 
-    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
+    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: null });
     await flush(el);
 
     const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-confirm-different-people]");
     expect(dialog?.textContent).toContain(formatMoney("3.00", currentLocale()));
-    expect(api.splitBill).not.toHaveBeenCalled();
+    expect(api.moveDishes).not.toHaveBeenCalled();
   });
 
-  it("splits a bill of any size without asking for a server that sends no limit", async () => {
+  it("moves dishes off a bill of any size to a new bill without asking for a server that sends no limit", async () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, simplifiedInvoiceLimit: null }),
       getPartyBills: vi
@@ -5982,31 +5982,31 @@ describe("till-app: every table move sends the party revision it last read", () 
     });
     const order = await openMesa(el);
 
-    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
+    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: null });
     await flush(el);
 
     expect(el.shadowRoot!.querySelector("[data-confirm-different-people]")).toBeNull();
-    expect(api.splitBill).toHaveBeenCalledWith("wo-4", [{ lineNo: 1 }], {
+    expect(api.moveDishes).toHaveBeenCalledWith("wo-4", ["line-1"], null, {
       expectedPartyRevision: 3,
       partyId: "v1",
-      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+      expectedEdits: [{ billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null }],
     });
   });
 
-  it("does not split when the bill total could not be read", async () => {
+  it("does not move dishes to a new bill when the bill total could not be read", async () => {
     const { el } = await mountApp({
       getPartyBills: vi.fn().mockRejectedValue(new Error("offline")),
     });
     const order = await openMesa(el);
 
-    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
+    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: null });
     await flush(el);
 
-    expect(api.splitBill).not.toHaveBeenCalled();
+    expect(api.moveDishes).not.toHaveBeenCalled();
     expect(banner(el)?.textContent).toContain(t("table.reread_failed"));
   });
 
-  it("sends a large-bill line transfer only after staff confirm different people", async () => {
+  it("sends a large bill's dishes to another bill only after staff confirm different people", async () => {
     const { el } = await mountApp({
       getPartyBills: vi
         .fn()
@@ -6014,16 +6014,16 @@ describe("till-app: every table move sends the party revision it last read", () 
     });
     const order = await openMesa(el);
 
-    emit(order, "transfer-lines", { toBillId: "wo-check", transfers: [{ lineNo: 1 }] });
+    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "wo-check" });
     await flush(el);
 
     const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-confirm-different-people]");
     expect(dialog).not.toBeNull();
-    expect(api.transferItems).not.toHaveBeenCalled();
+    expect(api.moveDishes).not.toHaveBeenCalled();
 
     dialog!.querySelector<HTMLElement>("[data-confirm]")!.click();
     await flush(el);
-    expect(api.transferItems).toHaveBeenCalledWith("wo-4", "wo-check", [{ lineNo: 1 }], {
+    expect(api.moveDishes).toHaveBeenCalledWith("wo-4", ["line-1"], "wo-check", {
       expectedPartyRevision: 3,
       partyId: "v1",
       expectedEdits: [
@@ -6043,7 +6043,7 @@ describe("till-app: every table move sends the party revision it last read", () 
       ),
     });
     const order = await openMesa(el);
-    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
+    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: null });
     await flush(el);
     expect(tableOrder(el)!.orderId).toBe("wo-check");
 
@@ -6061,7 +6061,8 @@ describe("till-app: every table move sends the party revision it last read", () 
     ].map((row) => row.dataset.switchBill);
     expect(listed).toContain(checkBill.workingOrderId);
     expect(api.mergeBills).not.toHaveBeenCalled();
-    expect(api.transferItems).not.toHaveBeenCalled();
+    // Only the move that made the bill: nothing is moved back.
+    expect(api.moveDishes).toHaveBeenCalledOnce();
   });
 
   it("moves a party whose tab has been paid, from the paid tab", async () => {
@@ -6525,7 +6526,7 @@ describe("till-app: another device changed the table first", () => {
     const split = seated({}, { revision: 5, billCount: 2, outstanding: "44.00" });
     const reads = floorThat([table4], [split]);
     const { el } = await mountApp({
-      splitBill: vi
+      moveDishes: vi
         .fn()
         .mockRejectedValue({ code: "party.out_of_date", partyId: "v1", revision: 5 }),
       getTablesState: reads.getTablesState,
@@ -6533,7 +6534,7 @@ describe("till-app: another device changed the table first", () => {
     const order = await openMesa(el);
     reads.other.acted = true;
 
-    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
+    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: null });
     await flush(el);
 
     expect(banner(el)!.textContent).toContain(
@@ -6587,7 +6588,7 @@ describe("till-app: another device changed the table first", () => {
       ],
     );
     const { el } = await mountApp({
-      transferItems: vi
+      moveDishes: vi
         .fn()
         .mockRejectedValue({ code: "party.out_of_date", partyId: "v7", revision: 10 }),
       getTablesState: reads.getTablesState,
@@ -6595,7 +6596,7 @@ describe("till-app: another device changed the table first", () => {
     const order = await openMesa(el);
     reads.other.acted = true;
 
-    emit(order, "transfer-lines", { toBillId: "wo-check", transfers: [{ lineNo: 1 }] });
+    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "wo-check" });
     await flush(el);
 
     expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "7"));
@@ -6604,7 +6605,7 @@ describe("till-app: another device changed the table first", () => {
   it.each([
     ["table.needs_clearing", "move-guests", { toTableId: "t9" }, "moveGuests"],
     ["table.needs_clearing", "join-tables", { tableId: "t9" }, "joinTables"],
-    ["party.not_open", "split-lines", { transfers: [{ lineNo: 1 }] }, "splitBill"],
+    ["party.not_open", "move-dishes", { lineIds: ["line-1"], toBillId: null }, "moveDishes"],
   ] as const)("shows %s in its own words after %s", async (code, type, detail, method) => {
     const { el } = await mountApp({ [method]: vi.fn().mockRejectedValue({ code }) });
     const order = await openMesa(el);
@@ -7047,7 +7048,7 @@ describe("till-app: the order's groups", () => {
       submitDraft: answering({ tabId: "wo-4", revision: 4, groups: [] }),
     });
     const order = await openMesa(el);
-    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
+    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: null });
     await flush(el);
     expect(tableOrder(el)!.orderId).toBe("wo-check");
     const onCheck = tableOrder(el)!;
@@ -11612,13 +11613,27 @@ describe("till-app: bill composition editing observations", () => {
     { billId: "wo-check", editorVersion: 3, draftId: null, draftRevision: null },
   ];
   const commands = [
-    { event: "merge-bills", detail: { fromBillId: "wo-check" }, method: "mergeBills" },
     {
-      event: "transfer-lines",
-      detail: { toBillId: "wo-check", transfers: [{ lineNo: 1 }] },
-      method: "transferItems",
+      name: "mergeBills",
+      event: "merge-bills",
+      detail: { fromBillId: "wo-check" },
+      method: "mergeBills",
+      newBill: false,
     },
-    { event: "split-lines", detail: { transfers: [{ lineNo: 1 }] }, method: "splitBill" },
+    {
+      name: "moveDishes to Bill 2",
+      event: "move-dishes",
+      detail: { lineIds: ["line-1"], toBillId: "wo-check" },
+      method: "moveDishes",
+      newBill: false,
+    },
+    {
+      name: "moveDishes to a new bill",
+      event: "move-dishes",
+      detail: { lineIds: ["line-1"], toBillId: null },
+      method: "moveDishes",
+      newBill: true,
+    },
   ] as const;
 
   function observations(missing?: string) {
@@ -11631,7 +11646,7 @@ describe("till-app: bill composition editing observations", () => {
     }));
   }
 
-  it.each(commands)("$method sends only the affected bill observations", async (command) => {
+  it.each(commands)("$name sends only the affected bill observations", async (command) => {
     const { el } = await mountApp({ listDrafts: observations() });
     const order = await openMesa(el);
     emit(order, command.event, command.detail);
@@ -11640,14 +11655,14 @@ describe("till-app: bill composition editing observations", () => {
     expect(call.at(-1)).toEqual({
       expectedPartyRevision: 3,
       partyId: "v1",
-      ...(command.method === "splitBill" ? { expectedEdit: edits[0] } : { expectedEdits: edits }),
+      expectedEdits: command.newBill ? [edits[0]] : edits,
     });
     expect(drafts.saveDraft).not.toHaveBeenCalled();
     expect(drafts.takeOverDraft).not.toHaveBeenCalled();
   });
 
   for (const outcome of ["success", "refusal"] as const) {
-    it.each(commands)("$method refreshes editing metadata after " + outcome, async (command) => {
+    it.each(commands)("$name refreshes editing metadata after " + outcome, async (command) => {
       const listDrafts = observations();
       const sending = vi.fn(async () => {
         if (outcome === "refusal") throw { code: "bill.presented" };
@@ -11665,8 +11680,8 @@ describe("till-app: bill composition editing observations", () => {
     });
   }
 
-  it.each(commands)("$method refuses a missing affected observation", async (command) => {
-    const missing = command.method === "splitBill" ? "wo-4" : "wo-check";
+  it.each(commands)("$name refuses a missing affected observation", async (command) => {
+    const missing = command.newBill ? "wo-4" : "wo-check";
     const { el } = await mountApp({ listDrafts: observations(missing) });
     const order = await openMesa(el);
     emit(order, command.event, command.detail);
@@ -11676,7 +11691,7 @@ describe("till-app: bill composition editing observations", () => {
   });
 
   it.each(commands.filter((command) => command.method !== "mergeBills"))(
-    "$method keeps the shown observation while the different-people confirmation is open",
+    "$name keeps the shown observation while the different-people confirmation is open",
     async (command) => {
       let newer = false;
       const read = observations();
@@ -11710,7 +11725,7 @@ describe("till-app: bill composition editing observations", () => {
   );
 
   for (const outcome of ["success", "refusal"] as const) {
-    it.each(commands)("$method ignores a replaced API's late " + outcome, async (command) => {
+    it.each(commands)("$name ignores a replaced API's late " + outcome, async (command) => {
       let resolve!: (value: { billId: string }) => void;
       let reject!: (reason: unknown) => void;
       const pending = new Promise<{ billId: string }>((yes, no) => {

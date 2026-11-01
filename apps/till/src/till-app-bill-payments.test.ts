@@ -3822,30 +3822,30 @@ describe("till-app: a change refused on a bill that holds money", () => {
     expectReadAgain({ bills: reads.bills, balance: reads.balance });
   });
 
-  it("says why a transfer to or from a bill holding money was refused, and reads the bills again", async () => {
-    const transferItems = vi
+  it("says why a move of dishes to another bill holding money was refused, and reads the bills again", async () => {
+    const moveDishes = vi
       .fn()
       .mockRejectedValue({ code: "bill.payments_received", status: 409, workingOrderId: "wo-4" });
-    const { el, order, reads } = await openHolding({ transferItems });
+    const { el, order, reads } = await openHolding({ moveDishes });
     const before = listed(order);
 
-    emit(order, "transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] });
+    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "wo-9" });
     await flush(el);
 
-    expect(transferItems).toHaveBeenCalledOnce();
+    expect(moveDishes).toHaveBeenCalledOnce();
     expect(text(banner(el))).toBe(codeMessage("bill.payments_received"));
     expect(listed(tableOrder(el))).toEqual(before);
     expectReadAgain({ bills: reads.bills, balance: reads.balance });
   });
 
   it.each(["bill.refund_in_progress", "working_order.not_open"])(
-    "says a split refused %s in that code's own words, and reads the bill again",
+    "says a move to a new bill refused %s in that code's own words, and reads the bill again",
     async (code) => {
       const { el, order, reads } = await openHolding({
-        splitBill: vi.fn().mockRejectedValue({ code, status: 409 }),
+        moveDishes: vi.fn().mockRejectedValue({ code, status: 409 }),
       });
 
-      emit(order, "split-lines", { transfers: [{ lineNo: 4 }] });
+      emit(order, "move-dishes", { lineIds: ["line-4"], toBillId: null });
       await flush(el);
 
       expect(text(banner(el))).toBe(codeMessage(code));
@@ -3854,16 +3854,16 @@ describe("till-app: a change refused on a bill that holds money", () => {
     },
   );
 
-  it("A803 refund wording names the excess of a split that would leave the bill owing less than it received, and offers to refund it first", async () => {
-    const splitBill = vi.fn().mockRejectedValue({
+  it("A803 refund wording names the excess of a move to a new bill that would leave the bill owing less than it received, and offers to refund it first", async () => {
+    const moveDishes = vi.fn().mockRejectedValue({
       code: "bill.received_exceeds_total",
       status: 409,
       workingOrderId: "wo-4",
       excess: "20.00",
     });
-    const { el, order, reads } = await openHolding({ splitBill });
+    const { el, order, reads } = await openHolding({ moveDishes });
 
-    emit(order, "split-lines", { transfers: [{ lineNo: 1 }, { lineNo: 2 }] });
+    emit(order, "move-dishes", { lineIds: ["line-1", "line-2"], toBillId: null });
     await flush(el);
 
     expect(text(banner(el))).toContain(
@@ -3916,11 +3916,11 @@ describe("till-app: a change refused on a bill that holds money", () => {
     const getBillBalance = vi.fn().mockResolvedValue(heldMoney);
     const { el, order } = await openHolding({
       getBillBalance,
-      splitBill: vi
+      moveDishes: vi
         .fn()
         .mockRejectedValue({ code: "bill.received_exceeds_total", status: 409, excess: "20.00" }),
     });
-    emit(order, "split-lines", { transfers: [{ lineNo: 1 }, { lineNo: 2 }] });
+    emit(order, "move-dishes", { lineIds: ["line-1", "line-2"], toBillId: null });
     await flush(el);
     getBillBalance.mockRejectedValue(new TypeError("Failed to fetch"));
 
@@ -3939,13 +3939,13 @@ describe("till-app: a change refused on a bill that holds money", () => {
     });
     const { el, order } = await openHolding({
       getBillBalance: vi.fn().mockResolvedValue(two),
-      splitBill: vi.fn().mockRejectedValue({
+      moveDishes: vi.fn().mockRejectedValue({
         code: "bill.received_exceeds_total",
         status: 409,
         excess: "20.00",
       }),
     });
-    emit(order, "split-lines", { transfers: [{ lineNo: 1 }, { lineNo: 2 }] });
+    emit(order, "move-dishes", { lineIds: ["line-1", "line-2"], toBillId: null });
     await flush(el);
 
     banner(el)!.querySelector<HTMLElement>("[data-refund-excess]")!.click();
@@ -3972,7 +3972,7 @@ describe.each(["light", "dark"] as const)(
             .mockResolvedValue(
               balanceOf({ received: "50.00", outstanding: "70.00", payments: [paymentOf()] }),
             ),
-          splitBill: vi.fn().mockRejectedValue({
+          moveDishes: vi.fn().mockRejectedValue({
             code: "bill.received_exceeds_total",
             status: 409,
             excess: "20.00",
@@ -3981,7 +3981,7 @@ describe.each(["light", "dark"] as const)(
         theme,
       );
       const order = await openTable(el);
-      emit(order, "split-lines", { transfers: [{ lineNo: 1 }, { lineNo: 2 }] });
+      emit(order, "move-dishes", { lineIds: ["line-1", "line-2"], toBillId: null });
       await flush(el);
       expect(el.shadowRoot!.querySelector("[data-refund-excess]")).not.toBeNull();
 
@@ -4893,7 +4893,7 @@ describe("till-app: the owner's split after a contribution", () => {
             payments: [contribution],
           }),
     );
-    const splitBill = vi.fn(async () => {
+    const moveDishes = vi.fn(async () => {
       split = true;
       return { billId: "wo-check" };
     });
@@ -4914,14 +4914,14 @@ describe("till-app: the owner's split after a contribution", () => {
       getPartyBills,
       getTabLines,
       getBillBalance,
-      splitBill,
+      moveDishes,
       previewBillPayment: vi.fn().mockResolvedValue(cash("30.00", "0.00")),
       takeBillPayment,
       getTablesState: vi.fn().mockResolvedValue([mesa({ billCount: 2, outstanding: "70.00" })]),
     });
     const order = await openTable(el);
 
-    emit(order, "split-lines", { transfers: [{ lineNo: 4 }, { lineNo: 5 }] });
+    emit(order, "move-dishes", { lineIds: ["line-4", "line-5"], toBillId: null });
     await flush(el);
     expect(tableOrder(el).orderId).toBe("wo-check");
     await openDialog(el, "items");

@@ -356,7 +356,6 @@ import type {
   StaffMember,
   SubmittedDraft,
   TabLine,
-  TabTransfer,
   TableState,
   TableParty,
   TicketState,
@@ -15955,72 +15954,6 @@ export class TillApp extends LitElement {
     await pending.proceed();
   }
 
-  async #onTransferLines(event: Event, confirmed?: BillComposition): Promise<void> {
-    const { toBillId, transfers } = (
-      event as CustomEvent<{ toBillId: string; transfers: TabTransfer[] }>
-    ).detail;
-    if (this.activeTabId === undefined || transfers.length === 0) return;
-    const asked = confirmed ?? this.#billComposition([this.activeTabId, toBillId]);
-    if (asked === null || !this.#billCompositionUnchanged(asked)) return;
-    if (
-      confirmed === undefined &&
-      (await this.#askDifferentPeople(() =>
-        this.#ownBillsChange(() => this.#onTransferLines(event, asked)),
-      ))
-    )
-      return;
-    if (!this.#billCompositionUnchanged(asked)) return;
-    this.errorKey = undefined;
-    try {
-      await asked.api.transferItems(asked.billId, toBillId, transfers, {
-        ...asked.revisions,
-        expectedEdits: asked.expectedEdits,
-      });
-    } catch (error) {
-      if (!this.#billCompositionCurrent(asked)) return;
-      await this.#onBillPairRefusal(error);
-      if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
-      return;
-    }
-    if (!this.#billCompositionCurrent(asked)) return;
-    await this.#reloadOrder();
-    if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
-  }
-
-  async #onSplitLines(event: Event, confirmed?: BillComposition): Promise<void> {
-    const { transfers } = (event as CustomEvent<{ transfers: TabTransfer[] }>).detail;
-    if (this.activeTabId === undefined) return;
-    const asked = confirmed ?? this.#billComposition([this.activeTabId]);
-    if (asked === null || !this.#billCompositionUnchanged(asked)) return;
-    if (
-      confirmed === undefined &&
-      (await this.#askDifferentPeople(() =>
-        this.#ownBillsChange(() => this.#onSplitLines(event, asked)),
-      ))
-    )
-      return;
-    if (!this.#billCompositionUnchanged(asked)) return;
-    this.errorKey = undefined;
-    try {
-      const split = await asked.api.splitBill(asked.billId, transfers, {
-        ...asked.revisions,
-        expectedEdit: asked.expectedEdits[0]!,
-      });
-      if (!this.#billCompositionCurrent(asked)) return;
-      this.#chooseBill(split.billId);
-    } catch (error) {
-      if (!this.#billCompositionCurrent(asked)) return;
-      const code = (error as { code?: string }).code;
-      if (code === "tab.transfer_modifier_line") this.errorKey = "table.split_modifier_error";
-      else if (code === "tab.split_held_line") this.errorKey = "table.split_held_error";
-      else if (isBillMoneyRefusal(error)) await this.#onBillMoneyRefusal(error);
-      else await this.#onTableRefusal(error);
-      if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
-      return;
-    }
-    await this.#reloadOrder();
-  }
-
   async #onMoveDishes(event: Event, confirmed?: BillComposition): Promise<void> {
     const { lineIds, toBillId } = (
       event as CustomEvent<{ lineIds: string[]; toBillId: string | null }>
@@ -19660,8 +19593,6 @@ export class TillApp extends LitElement {
         @name-bill=${(event: Event) => void this.#onNameBill(event)}
         @guests-party=${(event: Event) => void this.#onGuestsParty(event)}
         @merge-bills=${(event: Event) => void this.#ownBillsChange(() => this.#onMergeBills(event))}
-        @transfer-lines=${(event: Event) => void this.#ownBillsChange(() => this.#onTransferLines(event))}
-        @split-lines=${(event: Event) => void this.#ownBillsChange(() => this.#onSplitLines(event))}
         @move-dishes=${(event: Event) => void this.#ownBillsChange(() => this.#onMoveDishes(event))}
         @finish-table=${() => void this.#onFinishTable()}
         @record-unpaid-departure=${() => this.#onRecordUnpaidDeparture()}
