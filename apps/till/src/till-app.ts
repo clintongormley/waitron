@@ -667,6 +667,13 @@ function isBillMoneyRefusal(error: unknown): boolean {
   return typeof code === "string" && BILL_MONEY_REFUSALS.has(code);
 }
 
+const DESTINATION_REFUSALS: ReadonlySet<string> = new Set([
+  "order.payment_in_flight",
+  "bill.refund_in_progress",
+  "bill.presented",
+  "bill.paid",
+]);
+
 /** A table refusal as said: a move that would leave the bill owing less than it has received names
  * by how much, with the offer to give that back first. */
 function billWriteError(error: unknown, lineChange = false): CounterError {
@@ -1473,9 +1480,7 @@ function errorText(
     }
     const bill = error.bill;
     if (bill !== undefined)
-      return t("table.refused_on_bill")
-        .replace("{bill}", () => bill)
-        .replace("{message}", () => codeMessage(error.code));
+      return fill(t("table.refused_on_bill"), { bill, message: codeMessage(error.code) });
     return codeMessage(error.code);
   }
   if ("billNameTakenOver" in error)
@@ -16012,15 +16017,15 @@ export class TillApp extends LitElement {
     if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
   }
 
-  /** The label of the destination bill when a move is refused for a card payment or refund under
-   * way on it: the code's own words speak of "this order" or "this bill", and the bill on screen
-   * is the one the dishes leave. */
+  /** The label of the destination bill when a move is refused for its state: the code's own words
+   * speak of "this order" or "this bill", and the bill on screen is the one the dishes leave. */
   #refusedDestination(error: unknown, toBillId: string | null): string | undefined {
     const refused = error as { code?: unknown; workingOrderId?: unknown } | undefined;
     if (
       toBillId === null ||
       refused?.workingOrderId !== toBillId ||
-      (refused.code !== "order.payment_in_flight" && refused.code !== "bill.refund_in_progress")
+      typeof refused.code !== "string" ||
+      !DESTINATION_REFUSALS.has(refused.code)
     )
       return undefined;
     const bill = this.partyBills.find((each) => each.workingOrderId === toBillId);

@@ -335,9 +335,11 @@ cuando la caja vuelve a leer la cuenta, y ese plato deja de estar entre los que 
 **Mover** antes, la caja rechaza el cambio con el motivo, por ejemplo **Este artículo ya está
 pagado, así que no se puede cambiar, mover ni cobrar otra vez. Devuelve antes su pago**, y no se
 mueve nada. Si el cambio dejara la cuenta por debajo de lo que ya se ha pagado, la caja dice cuánto
-y ofrece un botón **Devolver** por ese importe. Si otra persona tiene
-platos sin enviar en alguna de las dos cuentas, toma antes su pedido. Abre otra vez **Mover
-platos…** para elegir de nuevo.
+y ofrece un botón **Devolver** por ese importe. Si se rechaza el cambio porque la cuenta que
+elegiste tiene un cobro o una devolución con tarjeta en curso, o porque entretanto se ha presentado
+o pagado, la caja nombra esa cuenta antes del motivo, por ejemplo **Cuenta 2: Esta cuenta ya está
+pagada**. Si otra persona tiene platos sin enviar en alguna de las dos cuentas, toma antes su
+pedido. Abre otra vez **Mover platos…** para elegir de nuevo.
 
 ## Poner nombre a una cuenta {#bill-names}
 

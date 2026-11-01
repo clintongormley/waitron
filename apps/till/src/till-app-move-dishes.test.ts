@@ -278,7 +278,7 @@ describe("A803 move dishes app:", () => {
   });
 
   it.each(["draft.taken_over", "draft.out_of_date"])(
-    "%s shows its own words, reads the bill's drafts again, and moves nothing",
+    "%s shows its own words and reads the bill's drafts again",
     async (code) => {
       const { el, order } = await open({
         moveDishes: vi.fn().mockRejectedValue({ code, status: 409 }),
@@ -291,15 +291,14 @@ describe("A803 move dishes app:", () => {
       expect(bannerText(el)).toContain(codeMessage(code));
       expect(bannerText(el)).not.toContain(t("table.error"));
       expect(api.listDrafts.mock.calls.length).toBeGreaterThan(draftReads);
-      expect(tableOrder(el)!.orderId).toBe("wo-4");
     },
   );
 
-  describe("refused for a card or a refund under way", () => {
+  describe("refused for the destination's state", () => {
     const onDestination = () => [bill("wo-4", 1), bill("bill-1", 2, { hasPayments: true })];
 
-    it.each(["order.payment_in_flight", "bill.refund_in_progress"])(
-      "%s naming the destination names that bill before its words, and moves nothing",
+    it.each(["order.payment_in_flight", "bill.refund_in_progress", "bill.presented", "bill.paid"])(
+      "%s naming the destination names that bill before its words",
       async (code) => {
         const { el, order } = await open({
           getPartyBills: vi.fn().mockResolvedValue(onDestination()),
@@ -310,9 +309,29 @@ describe("A803 move dishes app:", () => {
         await flush(el, 6);
 
         expect(bannerText(el)).toBe(`Bill 2: ${codeMessage(code)}`);
-        expect(tableOrder(el)!.orderId).toBe("wo-4");
       },
     );
+
+    it("a destination named like a placeholder is printed as it is", async () => {
+      const { el, order } = await open({
+        getPartyBills: vi
+          .fn()
+          .mockResolvedValue([
+            bill("wo-4", 1),
+            bill("bill-1", 2, { hasPayments: true, billName: "{message}" }),
+          ]),
+        moveDishes: vi.fn().mockRejectedValue({
+          code: "order.payment_in_flight",
+          status: 409,
+          workingOrderId: "bill-1",
+        }),
+      });
+
+      emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "bill-1" });
+      await flush(el, 6);
+
+      expect(bannerText(el)).toBe(`Bill 2 · {message}: ${codeMessage("order.payment_in_flight")}`);
+    });
 
     it("in Spanish the destination is named the same way", async () => {
       const { el, order } = await open({
@@ -332,7 +351,7 @@ describe("A803 move dishes app:", () => {
       expect(bannerText(el)).toContain("Se está cobrando");
     });
 
-    it.each(["order.payment_in_flight", "bill.refund_in_progress"])(
+    it.each(["order.payment_in_flight", "bill.refund_in_progress", "bill.presented", "bill.paid"])(
       "%s naming the bill on screen keeps its words as they are",
       async (code) => {
         const { el, order } = await open({

@@ -319,9 +319,11 @@ till next reads the bill, and that dish drops out of what you picked. If you tap
 then, the move is refused with the reason, such as **This item has already been paid for, so it
 cannot be changed, moved or charged again. Refund its payment first**, and nothing moves. If the
 move would leave the bill owing less than has been paid, the till says how much and offers a
-**Refund** button for that amount. If someone else has
-unsent dishes on either bill, take over their order first. Open **Move dishes…** again to choose
-afresh.
+**Refund** button for that amount. If the move is refused because a card payment or refund is
+still going through on the bill you chose, or because that bill was presented or paid in the
+meantime, the till names that bill before the reason, such as **Bill 2: This bill is paid**. If
+someone else has unsent dishes on either bill, take over their order first. Open **Move dishes…**
+again to choose afresh.
 
 ## Name a bill {#bill-names}
 
