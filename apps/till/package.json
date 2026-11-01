@@ -30,7 +30,7 @@
     "qrcode-generator": "^2.0.4"
   },
   "devDependencies": {
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "@vitest/browser-playwright": "^4.1.12",
     "@vitest/coverage-v8": "^4.1.12",
     "axe-core": "^4.14.0",
