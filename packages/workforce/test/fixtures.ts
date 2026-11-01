@@ -249,7 +249,7 @@ export async function insertTimeEntry(
   await tx.transaction((inner) =>
     appendToChain(
       inner,
-      { nodeId: params.nodeId, locationId: params.locationId },
+      { nodeId: params.nodeId },
       {
         personId: params.personId,
         locationId: params.locationId,

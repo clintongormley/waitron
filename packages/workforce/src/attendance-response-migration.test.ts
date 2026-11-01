@@ -250,7 +250,12 @@ describe("populated A10-3 response-table upgrade", () => {
       entries: JSON.stringify(
         db.execute(sql`select * from time_entries order by sequence_no`).rows,
       ),
-      heads: JSON.stringify(db.execute(sql`select * from workforce_chains`).rows),
+      // A later migration keys the head by node alone and drops its location.
+      heads: JSON.stringify(
+        db
+          .execute<Record<string, unknown>>(sql`select * from workforce_chains`)
+          .rows.map(({ location_id: _, ...head }) => head),
+      ),
       questions: JSON.stringify(db.execute(sql`select * from attendance_questions`).rows),
       mail: JSON.stringify(db.execute(sql`select * from attendance_mail`).rows),
       tables: db
@@ -278,7 +283,7 @@ describe("populated A10-3 response-table upgrade", () => {
     ]);
     expect(before.tables.filter((name) => !tables.includes(name))).toEqual([]);
     expect(db.execute(sql`select * from attendance_response_commands`).rows).toEqual([]);
-    expect(verifyChain(await readChain(db, { nodeId: node, locationId: place }))).toEqual({
+    expect(verifyChain(await readChain(db, { nodeId: node }))).toEqual({
       ok: true,
     });
     await expect(

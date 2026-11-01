@@ -615,7 +615,7 @@ export class WorkforceBackend {
   ): Promise<void> {
     await appendToChain(
       tx,
-      { nodeId: input.nodeId, locationId: input.locationId },
+      { nodeId: input.nodeId },
       {
         personId: input.personId,
         locationId: input.locationId,

@@ -1,6 +1,6 @@
 // Side-effect: registers this package's codes on the shared AppError registry.
 import "./errors.js";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import type { Origin } from "@waitron/shared";
 import { isUniqueViolation, type Database, type Transaction } from "@waitron/db";
@@ -17,11 +17,9 @@ import type { CorrectionStatus, WorkforceEntryKind } from "./projection.js";
  */
 const MAX_APPEND_ATTEMPTS = 3;
 
-/** One chain per (node, location). An object rather than positional strings, so a caller cannot
- * transpose the two. */
+/** One chain per node. */
 export interface ChainKey {
   nodeId: string;
-  locationId: string;
 }
 
 /** The chain fields and `recorded_at` are computed by `appendToChain`, never supplied. */
@@ -64,9 +62,7 @@ async function selectHead(tx: Transaction, key: ChainKey): Promise<ChainHead | u
       lastRecordedAt: workforceChains.lastRecordedAt,
     })
     .from(workforceChains)
-    .where(
-      and(eq(workforceChains.nodeId, key.nodeId), eq(workforceChains.locationId, key.locationId)),
-    );
+    .where(eq(workforceChains.nodeId, key.nodeId));
   return row;
 }
 
@@ -77,8 +73,8 @@ export async function readChainHead(tx: Transaction, key: ChainKey): Promise<Cha
 
   await tx
     .insert(workforceChains)
-    .values({ nodeId: key.nodeId, locationId: key.locationId })
-    .onConflictDoNothing({ target: [workforceChains.nodeId, workforceChains.locationId] });
+    .values({ nodeId: key.nodeId })
+    .onConflictDoNothing({ target: workforceChains.nodeId });
 
   const created = await selectHead(tx, key);
   /* v8 ignore start */
@@ -185,9 +181,7 @@ async function attemptAppend(
       lastEntryHash: entryHash,
       lastRecordedAt: recordedAt,
     })
-    .where(
-      and(eq(workforceChains.nodeId, key.nodeId), eq(workforceChains.locationId, key.locationId)),
-    );
+    .where(eq(workforceChains.nodeId, key.nodeId));
 
   return { id: inserted.id, sequenceNo, entryHash };
 }
@@ -276,7 +270,7 @@ export async function readChain(
       isFirstEntry: timeEntries.isFirstEntry,
     })
     .from(timeEntries)
-    .where(and(eq(timeEntries.nodeId, key.nodeId), eq(timeEntries.locationId, key.locationId)))
+    .where(eq(timeEntries.nodeId, key.nodeId))
     .orderBy(timeEntries.sequenceNo);
   return rows.map(
     ({

@@ -141,21 +141,17 @@ describe("time_entries constraint declarations (forces the lazy extraConfig call
 });
 
 describe("workforce_chains constraint declarations (forces the lazy extraConfig callback)", () => {
-  it("declares the chain head's composite key, foreign keys and pointer check", () => {
+  it("declares the chain head's key, foreign keys and pointer check", () => {
     const config = getTableConfig(api.workforceChains);
 
-    expect(config.primaryKeys.map((pk) => pk.getName())).toContain(
-      "workforce_chains_node_id_location_id_pk",
-    );
+    expect(config.primaryKeys).toEqual([]);
+    expect(config.columns.filter((c) => c.primary).map((c) => c.name)).toEqual(["node_id"]);
 
     const fkNames = config.foreignKeys.map((fk) => fk.getName());
-    expect(fkNames).toEqual(
-      expect.arrayContaining([
-        "workforce_chains_node_id_nodes_id_fk",
-        "workforce_chains_location_id_locations_id_fk",
-        "workforce_chains_last_entry_id_time_entries_id_fk",
-      ]),
-    );
+    expect(fkNames.sort()).toEqual([
+      "workforce_chains_last_entry_id_time_entries_id_fk",
+      "workforce_chains_node_id_nodes_id_fk",
+    ]);
 
     expect(config.checks.map((c) => c.name)).toContain("workforce_chains_pointer_ck");
   });

@@ -63,11 +63,11 @@ describe("missing-entry counterpart eligibility", () => {
         origin,
       }),
     );
-    const before = await run((tx) => readChain(tx, { nodeId, locationId }));
+    const before = await run((tx) => readChain(tx, { nodeId }));
     await expect(
       run((tx) => backend.requestCorrection(tx, missing("out", "2026-01-06T17:00:00Z"))),
     ).rejects.toMatchObject({ code: "correction.invalid" });
-    expect(await run((tx) => readChain(tx, { nodeId, locationId }))).toEqual(before);
+    expect(await run((tx) => readChain(tx, { nodeId }))).toEqual(before);
   });
   it("a still-pending counterpart permits the complementary missing end", async () => {
     await completedDay();

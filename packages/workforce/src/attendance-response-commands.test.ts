@@ -217,10 +217,7 @@ function pair(): AttendanceCommandPayload {
 async function snapshot() {
   return {
     entries: await suite.db.select().from(timeEntries).orderBy(timeEntries.id),
-    heads: await suite.db
-      .select()
-      .from(workforceChains)
-      .orderBy(workforceChains.nodeId, workforceChains.locationId),
+    heads: await suite.db.select().from(workforceChains).orderBy(workforceChains.nodeId),
     receipts: await suite.db
       .select()
       .from(attendanceResponseCommands)
@@ -233,7 +230,7 @@ async function refused(action: () => unknown, code: string) {
   expect(await snapshot()).toEqual(before);
 }
 async function intact() {
-  expect(verifyChain(await readChain(suite.db, { nodeId, locationId }))).toEqual({ ok: true });
+  expect(verifyChain(await readChain(suite.db, { nodeId }))).toEqual({ ok: true });
 }
 async function automaticQuestion() {
   await clock("2026-01-05T09:00:00Z");
@@ -791,7 +788,7 @@ it("replay survives closing and reopening a persisted venue copy", async () => {
       expect(reopened.venue.execute(sql`select * from time_entries order by id`).rows).toEqual(
         before,
       );
-      expect(verifyChain(await readChain(reopened.venue, { nodeId, locationId }))).toEqual({
+      expect(verifyChain(await readChain(reopened.venue, { nodeId }))).toEqual({
         ok: true,
       });
     } finally {
@@ -827,10 +824,10 @@ it("a till decision on another node keeps the selected manager and device origin
       e.capturedByDeviceId,
     ]),
   ).toEqual(requested.entryIds.map((id) => [decisionNode, id, manager, "device", deviceId]));
-  expect(verifyChain(await readChain(suite.db, { nodeId: earlierNode, locationId }))).toEqual({
+  expect(verifyChain(await readChain(suite.db, { nodeId: earlierNode }))).toEqual({
     ok: true,
   });
-  expect(verifyChain(await readChain(suite.db, { nodeId: decisionNode, locationId }))).toEqual({
+  expect(verifyChain(await readChain(suite.db, { nodeId: decisionNode }))).toEqual({
     ok: true,
   });
 });

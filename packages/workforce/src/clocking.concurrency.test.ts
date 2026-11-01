@@ -59,7 +59,7 @@ async function attemptClockIn(at: string): Promise<string> {
 }
 
 async function countInEntries(): Promise<number> {
-  const chain = await readChain(suite.db, { nodeId, locationId });
+  const chain = await readChain(suite.db, { nodeId });
   return chain.filter((e) => e.personId === personId && e.entryKind === "in").length;
 }
 

@@ -37,7 +37,7 @@ export async function appendClosureMarker(
 ): Promise<void> {
   await appendToChain(
     tx,
-    { nodeId, locationId: target.locationId },
+    { nodeId },
     {
       personId: target.personId,
       locationId: target.locationId,

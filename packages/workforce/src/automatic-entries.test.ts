@@ -168,7 +168,7 @@ describe("automatic closes and worker confirmation", () => {
       () => run((tx) => backend.clockIn(tx, event("2026-01-06T10:00:00Z"))),
       "attendance.already_open",
     );
-    expect(verifyChain(await readChain(suite.db, { nodeId, locationId }))).toEqual({ ok: true });
+    expect(verifyChain(await readChain(suite.db, { nodeId }))).toEqual({ ok: true });
   });
   it("counts a trailing break at the supplied automatic end before the worker answers", async () => {
     await run((tx) => backend.breakStart(tx, event("2026-01-05T16:00:00Z")));
@@ -331,7 +331,7 @@ describe("automatic closes and worker confirmation", () => {
       reason: { code: "attendance.not_pending" },
     });
     expect(await minutes()).toBe(480);
-    expect(verifyChain(await readChain(suite.db, { nodeId, locationId }))).toEqual({ ok: true });
+    expect(verifyChain(await readChain(suite.db, { nodeId }))).toEqual({ ok: true });
   });
   it("records the actual ordinary recorder's role at append and retains it after role changes", async () => {
     await run((tx) =>
@@ -341,6 +341,6 @@ describe("automatic closes and worker confirmation", () => {
     const rows = await suite.db.select().from(timeEntries).orderBy(timeEntries.sequenceNo);
     expect(rows[0]).toMatchObject({ authorKind: "worker", recordedByPersonId: personId });
     expect(rows[1]).toMatchObject({ authorKind: "manager", recordedByPersonId: manager });
-    expect(verifyChain(await readChain(suite.db, { nodeId, locationId }))).toEqual({ ok: true });
+    expect(verifyChain(await readChain(suite.db, { nodeId }))).toEqual({ ok: true });
   });
 });

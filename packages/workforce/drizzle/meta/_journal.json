@@ -85,6 +85,13 @@
       "when": 1793486353019,
       "tag": "0011_person_chain_index",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1793539269847,
+      "tag": "0012_workforce_chain_per_node",
+      "breakpoints": true
     }
   ]
 }

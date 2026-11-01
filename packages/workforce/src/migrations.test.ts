@@ -543,12 +543,12 @@ describe("the workforce set carries no tenant column", () => {
     expect(found).toEqual([]);
   });
 
-  it("keys the working-time chain head by (node_id, location_id) alone", async () => {
+  it("keys the working-time chain head by node_id alone", async () => {
     const key = (await columnsOf("workforce_chains"))
       .filter((column) => column.pk > 0)
       .sort((left, right) => left.pk - right.pk)
       .map((column) => column.name);
-    expect(key).toEqual(["node_id", "location_id"]);
+    expect(key).toEqual(["node_id"]);
   });
 
   /**
@@ -576,8 +576,9 @@ describe("the workforce set carries no tenant column", () => {
         };
       }
     }
-    expect(indexes["time_entries_chain_position_uq"]!.columns).toBe(
-      "node_id, location_id, sequence_no",
+    expect(indexes["time_entries_chain_position_uq"]!.columns).toBe("node_id, sequence_no");
+    expect(indexes["time_entries_person_chain_idx"]!.columns).toBe(
+      "person_id, node_id, sequence_no",
     );
     expect(indexes["roster_versions_published_period_uq"]!.columns).toBe(
       "location_id, period_start, period_end",

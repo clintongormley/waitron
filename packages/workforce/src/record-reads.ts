@@ -83,16 +83,12 @@ export async function readRecordedEntries(
 }
 
 /**
- * The entry that decides a person's clock state. A chain is one node and one location, and within
- * it a later position is a later write whatever the box's clock said, so each chain's latest direct
- * entry is taken by `sequence_no`; event times are compared only across chains, and against an
- * approved missing-entry correction, whose time the person requesting it chose. A correction written
- * earlier in its chain than a direct entry of the kind asked for no longer decides, whatever its
- * time, as that entry is the later write. While the clock only moves forward and no correction is
- * dated ahead of it, this is the latest entry by `compareEvents`. After a backward step it is the
- * last one written within each chain; across chains a later-dated entry written before the step
- * still wins (plan 2026-10-24-a798-9b, Task 15a, "Accepted residual"). Retimes are left out, as the
- * hours projection applies those.
+ * The entry that decides a person's clock state. Within a node a later position is a later write,
+ * whatever the box's clock said, so each node's latest direct entry is taken by `sequence_no`. Event
+ * times are compared only across nodes, and against an approved missing-entry correction, whose time
+ * the person requesting it chose; such a correction written before a later direct entry of the kind
+ * asked for on its node no longer decides. Retimes are left out, as the hours projection applies
+ * those.
  */
 export async function readLatestLiveEntry(
   tx: Transaction,
@@ -105,9 +101,9 @@ export async function readLatestLiveEntry(
       : sql`${column} = ${options.kind}`;
   const missingKind = (column: SQL) =>
     options.kind === undefined ? sql`${column} is not null` : sql`${column} = ${options.kind}`;
-  const followedByDirect = (node: SQLWrapper, location: SQLWrapper, sequence: SQLWrapper) =>
+  const followedByDirect = (node: SQLWrapper, sequence: SQLWrapper) =>
     sql`exists (select 1 from time_entries later where later.person_id = ${personId}
-      and later.node_id = ${node} and later.location_id = ${location} and later.sequence_no > ${sequence}
+      and later.node_id = ${node} and later.sequence_no > ${sequence}
       and ${directKind(sql`later.entry_kind`)})`;
   const heads = await tx
     .select({ entry: timeEntries })
@@ -117,7 +113,7 @@ export async function readLatestLiveEntry(
       eq(
         timeEntries.id,
         sql`(select head.id from time_entries head where head.person_id = ${personId}
-          and head.node_id = ${workforceChains.nodeId} and head.location_id = ${workforceChains.locationId}
+          and head.node_id = ${workforceChains.nodeId}
           and ${directKind(sql`head.entry_kind`)} order by head.sequence_no desc limit 1)`,
       ),
     );
@@ -135,10 +131,10 @@ export async function readLatestLiveEntry(
       and(
         eq(timeEntries.personId, personId),
         sql`${timeEntries.entryKind} = 'correction' and ${timeEntries.correctionStatus} = 'approved' and ${timeEntries.correctsEntryId} is null and ${missingKind(sql`${timeEntries.missingEntryKind}`)}`,
-        sql`not ${followedByDirect(timeEntries.nodeId, timeEntries.locationId, timeEntries.sequenceNo)}`,
+        sql`not ${followedByDirect(timeEntries.nodeId, timeEntries.sequenceNo)}`,
         sql`${timeEntries.eventAt} = (select max(recent.event_at) from time_entries recent where recent.person_id = ${personId} ${since}
       and recent.entry_kind = 'correction' and recent.correction_status = 'approved' and recent.corrects_entry_id is null and ${missingKind(sql`recent.missing_entry_kind`)}
-      and not ${followedByDirect(sql`recent.node_id`, sql`recent.location_id`, sql`recent.sequence_no`)})`,
+      and not ${followedByDirect(sql`recent.node_id`, sql`recent.sequence_no`)})`,
       ),
     );
   return liveClockEntries([...(direct ? [direct] : []), ...corrections.map(recordFromRow)])

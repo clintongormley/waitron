@@ -154,7 +154,7 @@ describe("clocking across a backward step of the box's clock", () => {
     expect(await latest(await worker("never clocked"))).toBeUndefined();
   });
 
-  it("reads the latest chain's entry when the person moved location (control)", async () => {
+  it("reads the latest entry when the person moved location (control)", async () => {
     const p = await worker("moved");
     const a = await seedLocation(suite.db);
     const b = await seedLocation(suite.db);
@@ -164,10 +164,12 @@ describe("clocking across a backward step of the box's clock", () => {
     const { rows } = await suite.db.execute<{ location_id: string; sequence_no: number }>(
       sql`select location_id, sequence_no from time_entries where person_id = ${p} order by event_at`,
     );
-    expect(rows.map((r) => [r.location_id, Number(r.sequence_no)])).toEqual([
+    // The suite shares one node across its cases, so positions are read relative to the first.
+    const first = Number(rows[0]!.sequence_no);
+    expect(rows.map((r) => [r.location_id, Number(r.sequence_no) - first + 1])).toEqual([
       [a, 1],
       [a, 2],
-      [b, 1],
+      [b, 3],
     ]);
     const entry = await run((tx) => readLatestLiveEntry(tx, p));
     expect({ kind: entry?.entryKind, locationId: entry?.locationId }).toEqual({
@@ -201,7 +203,7 @@ describe("clocking across a backward step of the box's clock", () => {
     expect(await latest(p)).toEqual({ kind: "out", at: "14:00" });
   });
 
-  it("keeps a chain per node as well as per location", async () => {
+  it("keeps a chain per node", async () => {
     const p = await worker("two nodes");
     const second = await seedNode(suite.db, brandLocationId(locationId));
     await run((tx) => backend.clockIn(tx, at(p, "09:00")));
@@ -276,10 +278,8 @@ describe("clocking across a backward step of the box's clock", () => {
     expect(await latest(p, "in")).toEqual({ kind: "in", at: "13:00" });
   });
 
-  // The plan's accepted residual (Task 15a, the lead's ruling (e)): times are still compared
-  // across chains, so a move of location within a backward step reads the other chain's later
-  // entry until real time passes it, and the clock actions follow that reading.
-  it("still reads another location's later-dated entry after a step, as the plan accepts", async () => {
+  // One chain per node: the clock-in written after the step is the latest write.
+  it("reads the clock-in at another location written after a step", async () => {
     const p = await worker("residual");
     const a = await seedLocation(suite.db);
     const b = await seedLocation(suite.db);
@@ -287,12 +287,13 @@ describe("clocking across a backward step of the box's clock", () => {
     await run((tx) => backend.clockOut(tx, at(p, "21:10", a)));
     // The clock is stepped back an hour.
     await run((tx) => backend.clockIn(tx, at(p, "20:15", b)));
-    expect(await latest(p)).toEqual({ kind: "out", at: "21:10" });
-    expect(await rejection(() => run((tx) => backend.clockOut(tx, at(p, "20:40", b))))).toBe(
-      "attendance.no_open_entry",
+    expect(await latest(p)).toEqual({ kind: "in", at: "20:15" });
+    expect(await rejection(() => run((tx) => backend.clockIn(tx, at(p, "20:30", b))))).toBe(
+      "attendance.already_open",
     );
-    await run((tx) => backend.clockIn(tx, at(p, "20:45", b)));
+    await run((tx) => backend.clockOut(tx, at(p, "20:40", b)));
     expect(await rowCount(p)).toBe(4);
+    expect(await latest(p)).toEqual({ kind: "out", at: "20:40" });
   });
 
   // This read runs on every clock action while the venue's write lock is held, and a person's
@@ -312,7 +313,7 @@ describe("clocking across a backward step of the box's clock", () => {
       });
       expect(plans.filter((line) => /TEMP B-TREE|\(person_id=\?\)$/.test(line))).toEqual([]);
       expect(plans).toContain(
-        "SEARCH head USING INDEX time_entries_person_chain_idx (person_id=? AND node_id=? AND location_id=?)",
+        "SEARCH head USING INDEX time_entries_person_chain_idx (person_id=? AND node_id=?)",
       );
       expect(
         plans.filter((line) => line.startsWith("SCAN") && !/^SCAN workforce_chains\b/.test(line)),

@@ -124,7 +124,6 @@ const CLASSIFIED: Record<string, Classification> = {
     in: [],
     out: [
       "node_id",
-      "location_id",
       "sequence_no",
       "last_entry_id",
       "last_entry_hash",

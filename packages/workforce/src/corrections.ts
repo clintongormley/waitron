@@ -337,8 +337,7 @@ export async function requestCorrection(
 ): Promise<string> {
   const { change, entry } = await prepareRequest(tx, input, explicitProposal);
   validateChange(await readRecordedEntries(tx, { personId: change.personId }), change, false);
-  return (await appendToChain(tx, { nodeId: input.nodeId, locationId: change.locationId }, entry))
-    .id;
+  return (await appendToChain(tx, { nodeId: input.nodeId }, entry)).id;
 }
 async function prepareDecision(
   tx: Transaction,
@@ -406,8 +405,7 @@ export async function decideCorrection(
   const { request, entry } = await prepareDecision(tx, input, action);
   if (entry.correctionStatus === "approved")
     validateChange(await readRecordedEntries(tx, { personId: request.personId }), request, true);
-  return (await appendToChain(tx, { nodeId: input.nodeId, locationId: request.locationId }, entry))
-    .id;
+  return (await appendToChain(tx, { nodeId: input.nodeId }, entry)).id;
 }
 export function approveCorrection(
   tx: Transaction,
@@ -461,16 +459,8 @@ export async function requestCorrectionGroup(
   )
     correctionInvalid("invalid_group");
   const ids: string[] = [];
-  for (const [index, { change, entry }] of prepared.entries())
-    ids.push(
-      (
-        await appendToChain(
-          tx,
-          { nodeId: inputs[index]!.nodeId, locationId: change.locationId },
-          entry,
-        )
-      ).id,
-    );
+  for (const [index, { entry }] of prepared.entries())
+    ids.push((await appendToChain(tx, { nodeId: inputs[index]!.nodeId }, entry)).id);
   return ids;
 }
 
@@ -500,9 +490,7 @@ export async function decideCorrectionGroup(
   )
     correctionInvalid("invalid_group");
   const ids: string[] = [];
-  for (const { request, entry } of prepared)
-    ids.push(
-      (await appendToChain(tx, { nodeId: input.nodeId, locationId: request.locationId }, entry)).id,
-    );
+  for (const { entry } of prepared)
+    ids.push((await appendToChain(tx, { nodeId: input.nodeId }, entry)).id);
   return ids;
 }

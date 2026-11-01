@@ -45,8 +45,8 @@ beforeEach(async () => {
   nodeId = await seedNode(suite.db, brandLocationId(locationId));
 });
 
-function key(location = locationId, node = nodeId): ChainKey {
-  return { nodeId: node, locationId: location };
+function key(node = nodeId): ChainKey {
+  return { nodeId: node };
 }
 
 function inputAt(at: string, location = locationId): TimeEntryAppend {
@@ -103,7 +103,7 @@ describe("appendToChain", () => {
       last_recorded_at: string | null;
     }>(sql`
       select sequence_no, last_entry_id, last_entry_hash, last_recorded_at from workforce_chains
-      where node_id = ${nodeId} and location_id = ${locationId}`);
+      where node_id = ${nodeId}`);
     expect(rows[0]).toMatchObject({
       sequence_no: 1,
       last_entry_id: id,
@@ -112,28 +112,32 @@ describe("appendToChain", () => {
     expect(rows[0]!.last_recorded_at).not.toBeNull();
   });
 
-  it("keeps a separate, independent chain per (node, location)", async () => {
+  it("keeps one chain per node across locations", async () => {
     const otherLocation = await seedLocation(suite.db);
     const otherNode = await seedNode(suite.db, brandLocationId(otherLocation));
-    await suite.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")));
     await suite.db.transaction((tx) =>
-      appendToChain(
-        tx,
-        key(otherLocation, otherNode),
-        inputAt("2026-01-05T09:00:00Z", otherLocation),
-      ),
+      appendToChain(tx, { nodeId }, inputAt("2026-01-05T09:00:00Z")),
     );
-    expect((await readChain(suite.db, key())).map((e) => e.sequenceNo)).toEqual([1]);
-    const other = await readChain(suite.db, key(otherLocation, otherNode));
-    expect(other.map((e) => e.sequenceNo)).toEqual([1]);
-    expect(other[0]?.isFirstEntry).toBe(true);
+    await suite.db.transaction((tx) =>
+      appendToChain(tx, { nodeId }, inputAt("2026-01-05T10:00:00Z", otherLocation)),
+    );
+    const chain = await readChain(suite.db, { nodeId });
+    expect(chain.map((e) => [e.locationId, e.sequenceNo])).toEqual([
+      [locationId, 1],
+      [otherLocation, 2],
+    ]);
+    expect(verifyChain(chain)).toEqual({ ok: true });
+    const other = await suite.db.transaction((tx) =>
+      appendToChain(tx, { nodeId: otherNode }, inputAt("2026-01-05T09:00:00Z", otherLocation)),
+    );
+    expect(other.sequenceNo).toBe(1);
   });
 
-  it("keeps one chain per (node, location); two nodes at one location do not collide", async () => {
+  it("keeps one chain per node; two nodes at one location do not collide", async () => {
     // Two nodes write one location across a promotion, taking the same sequence_no values.
     const nodeB = await seedNode(suite.db, brandLocationId(locationId));
-    const k1 = key(locationId, nodeId);
-    const k2 = key(locationId, nodeB);
+    const k1 = key(nodeId);
+    const k2 = key(nodeB);
     await suite.db.transaction((tx) => appendToChain(tx, k1, clockEvent()));
     await suite.db.transaction((tx) => appendToChain(tx, k1, clockEvent()));
     await suite.db.transaction((tx) => appendToChain(tx, k2, clockEvent()));
@@ -244,7 +248,7 @@ describe("appendToChain", () => {
     expect(
       refusalOn(error, UNIQUE_VIOLATION, {
         table: "time_entries",
-        columns: ["node_id", "location_id", "sequence_no"],
+        columns: ["node_id", "sequence_no"],
       }),
     ).toBe(true);
     // The control: the same row at the next free position is accepted, so the refusal above is the
@@ -273,7 +277,7 @@ describe("appendToChain", () => {
       .catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe("attendance.append_contention");
-    expect((error as AppError).params).toEqual({ nodeId, locationId, attempts: 3 });
+    expect((error as AppError).params).toEqual({ nodeId, attempts: 3 });
   });
 
   it("surfaces exhausted retries as a structured AppError, never a bare string", async () => {
@@ -282,7 +286,7 @@ describe("appendToChain", () => {
       transaction: () =>
         Promise.reject(
           refusalError({
-            unique: { table: "time_entries", columns: ["node_id", "location_id", "sequence_no"] },
+            unique: { table: "time_entries", columns: ["node_id", "sequence_no"] },
           }),
         ),
     } as never;
@@ -291,7 +295,7 @@ describe("appendToChain", () => {
     );
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe("attendance.append_contention");
-    expect((error as AppError).params).toEqual({ nodeId, locationId, attempts: 3 });
+    expect((error as AppError).params).toEqual({ nodeId, attempts: 3 });
   });
 
   it("does not retry an error that is not a chain collision", async () => {
@@ -351,7 +355,7 @@ describe("appendToChain", () => {
     expect(
       refusalOn(firstRefusal, UNIQUE_VIOLATION, {
         table: "time_entries",
-        columns: ["node_id", "location_id", "sequence_no"],
+        columns: ["node_id", "sequence_no"],
       }),
     ).toBe(true);
     const rows = await suite.db
@@ -378,7 +382,7 @@ describe("appendToChain", () => {
       last_entry_hash: string;
     }>(sql`
       select sequence_no, last_entry_id, last_entry_hash from workforce_chains
-      where node_id = ${nodeId} and location_id = ${locationId}`);
+      where node_id = ${nodeId}`);
     expect(head).toEqual([
       { sequence_no: 1, last_entry_id: result.id, last_entry_hash: result.entryHash },
     ]);
@@ -481,7 +485,7 @@ describe("appendToChain commits the correction and capture content to the hash",
 });
 
 describe("readChainHead", () => {
-  it("creates the chain head row from scratch when a (node, location) has none yet", async () => {
+  it("creates the chain head row from scratch when a node has none yet", async () => {
     const head = await suite.db.transaction((tx) => readChainHead(tx, key()));
     expect(head).toEqual({
       sequenceNo: 0,
@@ -491,7 +495,7 @@ describe("readChainHead", () => {
     });
     const { rows } = await suite.db.execute<{ count: number }>(sql`
       select count(*) as count from workforce_chains
-      where node_id = ${nodeId} and location_id = ${locationId}`);
+      where node_id = ${nodeId}`);
     expect(rows[0]?.count).toBe(1);
   });
 
@@ -504,7 +508,7 @@ describe("readChainHead", () => {
     expect(head.lastRecordedAt).not.toBeNull();
     const { rows } = await suite.db.execute<{ count: number }>(sql`
       select count(*) as count from workforce_chains
-      where node_id = ${nodeId} and location_id = ${locationId}`);
+      where node_id = ${nodeId}`);
     expect(rows[0]?.count).toBe(1);
   });
 });

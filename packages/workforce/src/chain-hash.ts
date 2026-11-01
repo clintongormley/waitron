@@ -4,7 +4,7 @@ import type { Source } from "@waitron/shared";
 
 /** The content of one time entry that the chain hash commits to, plus the predecessor's hash. */
 export interface EntryHashInput {
-  /** The entry's 1-based position within its (node, location) chain. */
+  /** The entry's 1-based position within its node's chain. */
   sequenceNo: number;
   personId: string;
   locationId: string;

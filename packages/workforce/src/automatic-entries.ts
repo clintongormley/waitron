@@ -65,7 +65,7 @@ export async function recordAutomaticClose(
     throw new AppError("attendance.invalid", { reason: "no_later_activity" });
   const { id } = await appendToChain(
     tx,
-    { nodeId: input.nodeId, locationId: input.locationId },
+    { nodeId: input.nodeId },
     {
       personId: input.personId,
       locationId: input.locationId,
@@ -130,7 +130,7 @@ export async function confirmAutomaticEntry(
     throw new AppError("attendance.not_pending", { entryId: input.entryId });
   const { id } = await appendToChain(
     tx,
-    { nodeId: input.nodeId, locationId: target.locationId },
+    { nodeId: input.nodeId },
     {
       personId: target.personId,
       locationId: target.locationId,

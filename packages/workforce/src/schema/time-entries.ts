@@ -50,8 +50,7 @@ export const timeEntries = table(
     id: id("id").primaryKey().$defaultFn(newId),
     personId: id("person_id").notNull(),
     locationId: id("location_id").notNull(),
-    /** Stamped by the append, never by the device. With `location_id` it keys the chain, so each node
-     * that writes a location keeps its own chain. */
+    /** Stamped by the append, never by the device. It keys the chain: one chain per node. */
     nodeId: id("node_id").notNull(),
     entryKind: workforceEntryKind("entry_kind").notNull(),
     eventAt: tsString("event_at").notNull(),
@@ -83,7 +82,7 @@ export const timeEntries = table(
     entryHash: label("entry_hash").notNull(),
     /** Null on the genesis entry (hashed as empty). */
     prevEntryHash: label("prev_entry_hash"),
-    /** The 1-based position within this (node, location) chain. */
+    /** The 1-based position within this node's chain. */
     sequenceNo: count("sequence_no").notNull(),
     /** Exactly the first entry of a chain — not the current head, which is
      * `workforce_chains.last_entry_id`. */
@@ -162,8 +161,8 @@ export const timeEntries = table(
       or (${t.authorKind} in ('worker','manager') and ${t.recordedByPersonId} is not null), 0)`,
     ),
     index("time_entries_person_event_idx").on(t.personId, t.eventAt),
-    // A person's latest entry in each chain, which decides their clock state (`readLatestLiveEntry`).
-    index("time_entries_person_chain_idx").on(t.personId, t.nodeId, t.locationId, t.sequenceNo),
+    // A person's latest entry on each node, which decides their clock state (`readLatestLiveEntry`).
+    index("time_entries_person_chain_idx").on(t.personId, t.nodeId, t.sequenceNo),
     index("time_entries_corrects_entry_idx").on(t.correctsEntryId),
     // ±14h, the wall-offset domain `sales` uses.
     check("time_entries_event_offset_ck", sql`${t.eventOffsetMinutes} between -840 and 840`),
@@ -197,7 +196,7 @@ export const timeEntries = table(
               and ${t.correctionDirection} is not null and ${t.authorKind} is not null)))`,
     ),
     // The backstop against a forked chain: refuses a taken position whatever wrote the row.
-    uniqueIndex("time_entries_chain_position_uq").on(t.nodeId, t.locationId, t.sequenceNo),
+    uniqueIndex("time_entries_chain_position_uq").on(t.nodeId, t.sequenceNo),
     // Mirrors `registros_huella_ck`, and shares its gap: a NUL byte after 64 hex digits passes,
     // because `length()` and `glob` stop at the first NUL.
     check(

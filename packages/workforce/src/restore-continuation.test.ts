@@ -7,7 +7,7 @@
  * fiscal chain. A forked copy of position M+1 is refused by `time_entries_chain_position_uq`.
  * SQLite names a unique index's columns, not the index, so the refusal is asserted by those columns.
  */
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, captureError, constraintTarget, isUniqueViolation } from "@waitron/db";
@@ -36,9 +36,9 @@ beforeEach(async () => {
   nodeId = await seedNode(suite.db, brandLocationId(locationId));
 });
 
-/** The chain key for this suite's default (node, location). */
+/** The chain key for this suite's node. */
 function key(): ChainKey {
-  return { nodeId, locationId };
+  return { nodeId };
 }
 
 /** A base `in` clock event's append input at a given instant. */
@@ -54,7 +54,7 @@ function inputAt(at: string): TimeEntryAppend {
   };
 }
 
-/** Reads the (node, location) chain head — what a backup carries verbatim into the restore. */
+/** Reads the node's chain head — what a backup carries verbatim into the restore. */
 async function readHead() {
   const [row] = await suite.db
     .select({
@@ -63,12 +63,12 @@ async function readHead() {
       lastEntryHash: workforceChains.lastEntryHash,
     })
     .from(workforceChains)
-    .where(and(eq(workforceChains.nodeId, nodeId), eq(workforceChains.locationId, locationId)));
+    .where(eq(workforceChains.nodeId, nodeId));
   return row!;
 }
 
 /**
- * A raw insert claiming `position` on this (node, location) chain — the survivor's copy arriving.
+ * A raw insert claiming `position` on this node's chain — the survivor's copy arriving.
  * Every other column is valid, so the ONLY constraint it can trip is the chain-position uq: `id` is
  * stated because its default is a Drizzle `$defaultFn` a raw insert does not run, and the
  * timestamps carry `.000` because the whole-second checks on both columns demand it.
@@ -131,7 +131,7 @@ describe("cold restore continues the working-time chain (no hook)", () => {
     // `time_entries_chain_position_uq`'s columns, so a refusal on any other key fails here.
     expect(constraintTarget(error)).toEqual({
       table: "time_entries",
-      columns: ["node_id", "location_id", "sequence_no"],
+      columns: ["node_id", "sequence_no"],
     });
     expect(await readChain(suite.db, k)).toHaveLength(4);
   });

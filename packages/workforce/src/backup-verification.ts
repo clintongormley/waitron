@@ -135,7 +135,7 @@ function entry(row: BackupRow): VerifiableEntry {
   };
 }
 function chainScope(row: BackupRow): string {
-  return JSON.stringify([text(row, "node_id"), text(row, "location_id")]);
+  return JSON.stringify([text(row, "node_id")]);
 }
 function closureScope(row: BackupRow): string {
   return JSON.stringify([text(row, "node_id"), text(row, "location_id")]);
@@ -146,7 +146,7 @@ async function checkTime(query: BackupQuery): Promise<{ chain: boolean; head: bo
   let head = true;
   if (await has(query, "time_entries")) {
     for await (const row of query.rows(
-      "select * from time_entries order by node_id, location_id, sequence_no",
+      "select * from time_entries order by node_id, sequence_no",
     )) {
       try {
         const key = chainScope(row);

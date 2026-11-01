@@ -158,7 +158,7 @@ async function minutes() {
   ).workedMinutes;
 }
 async function intact() {
-  expect(verifyChain(await readChain(suite.db, { nodeId, locationId }))).toEqual({ ok: true });
+  expect(verifyChain(await readChain(suite.db, { nodeId }))).toEqual({ ok: true });
 }
 async function unchangedRefusal(action: () => Promise<unknown>, code: string) {
   const before = await suite.db.select().from(timeEntries);
@@ -221,7 +221,7 @@ describe("two-party correction decisions", () => {
         author: { kind: "manager", personId },
         entry: { extension: { selfApproved: true }, recordedByPersonId: personId },
       });
-      const chain = await readChain(suite.db, { nodeId, locationId });
+      const chain = await readChain(suite.db, { nodeId });
       expect(verifyChain(chain)).toEqual({ ok: true });
       expect(
         verifyChain(

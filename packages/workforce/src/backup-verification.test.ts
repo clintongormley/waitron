@@ -52,7 +52,7 @@ beforeEach(async () => {
     original.db.transaction((tx) =>
       appendToChain(
         tx,
-        { nodeId, locationId },
+        { nodeId },
         {
           personId: person,
           locationId,
@@ -235,9 +235,9 @@ function invalid(result: Awaited<ReturnType<typeof run>>, code: (typeof codes)[n
 }
 
 describe("complete captured workforce backup evidence", () => {
-  it("walks every node-location time chain and stored head including retired nodes", async () => {
+  it("walks every node's time chain and stored head including retired nodes", async () => {
     expect(await run()).toEqual(passed);
-    expect(original.db.all(sql`select * from workforce_chains`)).toHaveLength(3);
+    expect(original.db.all(sql`select * from workforce_chains`)).toHaveLength(2);
   });
   it.each(["before", "after"])(
     "validates %s evidence independently of row comparison",
@@ -291,7 +291,7 @@ describe("complete captured workforce backup evidence", () => {
     const added = await original.db.transaction((tx) =>
       appendToChain(
         tx,
-        { nodeId: retired, locationId: place },
+        { nodeId: retired },
         {
           personId: person,
           locationId: place,
@@ -312,7 +312,7 @@ describe("complete captured workforce backup evidence", () => {
     await restored.db
       .update(workforceChains)
       .set(head)
-      .where(sql`node_id=${retired} and location_id=${place}`);
+      .where(sql`node_id=${retired}`);
     expect(await run()).toEqual(passed);
   });
   it.each([
@@ -330,13 +330,10 @@ describe("complete captured workforce backup evidence", () => {
     await both(`update time_entries set ${change} where node_id='${retired}' and sequence_no=1`);
     invalid(await run(), "chain");
   });
-  it.each(["node_id=x'01'", "location_id=x'01'"])(
-    "rejects malformed stored head scope %s",
-    async (change) => {
-      await both(`update workforce_chains set ${change} where node_id='${retired}'`);
-      invalid(await run(), "head");
-    },
-  );
+  it.each(["node_id=x'01'"])("rejects malformed stored head scope %s", async (change) => {
+    await both(`update workforce_chains set ${change} where node_id='${retired}'`);
+    invalid(await run(), "head");
+  });
   it.each(["last_entry_id='orphan'", "last_entry_hash='orphan'", "last_recorded_at='orphan'"])(
     "rejects an empty head with %s",
     async (change) => {
@@ -355,11 +352,7 @@ describe("complete captured workforce backup evidence", () => {
     },
   );
   it.each([
-    [
-      "time decoder",
-      "select * from time_entries order by node_id, location_id, sequence_no",
-      "person_id",
-    ],
+    ["time decoder", "select * from time_entries order by node_id, sequence_no", "person_id"],
     ["head decoder", "select * from workforce_chains", "node_id"],
     ["closure decoder", "select * from pay_period_closures", "snapshot"],
   ])(
@@ -508,9 +501,7 @@ describe("complete captured workforce backup evidence", () => {
         db,
         "delete from workforce_chains; delete from time_entries; delete from pay_period_closures",
       );
-      await db
-        .insert(workforceChains)
-        .values({ nodeId: node, locationId: place, updatedAt: new Date(at) });
+      await db.insert(workforceChains).values({ nodeId: node, updatedAt: new Date(at) });
     }
     expect(await run()).toEqual(passed);
   });
