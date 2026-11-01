@@ -1,6 +1,5 @@
 /**
- * Concurrent callers of `appendToChain` leave ONE contiguous, re-verifying chain per (node,
- * location).
+ * Concurrent callers of `appendToChain` leave ONE contiguous, re-verifying chain per node.
  *
  * Weaker than its name: nothing here checks that the writers actually overlap, and it does not show
  * that the venue file's write queue is what keeps positions distinct. `racePair`

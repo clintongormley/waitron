@@ -17,7 +17,6 @@ import type { CorrectionStatus, WorkforceEntryKind } from "./projection.js";
  */
 const MAX_APPEND_ATTEMPTS = 3;
 
-/** One chain per node. */
 export interface ChainKey {
   nodeId: string;
 }

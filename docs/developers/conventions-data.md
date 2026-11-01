@@ -4434,9 +4434,9 @@ stream's generations need no hold: they are aged by the bucket's own clock (the 
 
 **The working-time record across a step back** (Tasks 15a and 15b). Every clock action is still
 written as before, with the time the clock read; only how a person's state is worked out changed.
-`readLatestLiveEntry` (`packages/workforce/src/record-reads.ts`) takes, in each chain (one per node
-since A1268 PR 1), the person's latest direct entry by its position (`sequence_no`), since within one
-chain a later position is a later write whatever the clock said; across nodes, the latest of those
+`readLatestLiveEntry` (`packages/workforce/src/record-reads.ts`) takes, in each chain (one per
+node), the person's latest direct entry by its position (`sequence_no`), since within one chain a
+later position is a later write whatever the clock said; across nodes, the latest of those
 by time (`compareEvents`); and an approved missing-entry correction dated after that entry decides
 instead, unless a clock action was written after the correction in the correction's own
 chain (for the clock-in read, a clock-in). The clocking routes (`currentState`, `packages/workforce/src/clocking.ts`), the till's

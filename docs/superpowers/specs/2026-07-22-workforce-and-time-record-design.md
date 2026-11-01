@@ -310,7 +310,7 @@ in an interface, field name, or doc comment.
   `TimeEntry`, `WorkSession` (the projected workday: start/end, pauses, worked minutes, overtime),
   `Shift`, `Roster`, `Absence`, `Correction`.
 - **The generic engine:** the append-only immutable chained time-entry stream + role-revocation +
-  per-location chain (§5 — now keyed per (node, location); see the 2026-09-07 rekey pointer there); the work-session projection; the scheduling engine; and a **rule-validation
+  per-location chain (§5 — now keyed per (node, location); see the 2026-09-07 rekey pointer there) _(2026-11-01: one chain per node — see §5)_; the work-session projection; the scheduling engine; and a **rule-validation
   engine** that consumes an injected ruleset.
 - **`WorkTimeRuleset` interface** — max weekly minutes, min inter-shift rest, break thresholds,
   weekly rest, overtime cap, night window + premium. The *engine* is generic; the *numbers and rules*
