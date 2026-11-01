@@ -1075,9 +1075,10 @@ The preceding and following healthy shards do not diagnose the hang.
 
 A1027 adds a diagnostic process deadline with unfinished-file and process reports
 to every browser package's test command. The original wait remains unlocated.
-On recurrence, retain the failed step log and use its file list and process state
-to identify the blocked operation. Keep the venue-service startup investigation
-and A419's dashboard stall separate; no shared cause is established.
+On recurrence, retain the failed step log and use its file list, any
+`[file-progress] stack:` lines and the process state to identify the blocked
+operation. Keep the venue-service startup investigation and A419's dashboard stall
+separate; no shared cause is established.
 
 ## A1089 merge read-back: server coverage upload timed out
 
@@ -1131,9 +1132,9 @@ and enables Playwright API logging. On recurrence, preserve the whole failing lo
 read each selected file's last collected/case/hook event and any unfinished
 Playwright API call, then reproduce that wait. A completed collection event
 separates a loaded module from an assigned file; a case-start event precedes its
-beforeEach hooks. These events do not name a pending application promise. Since
-A1305, a file that runs 60 seconds also gets `[file-progress] stack:` lines from
-its browser page (see A1305 below). Product behavior, test assertions, test deadlines
+beforeEach hooks. These events do not name a pending application promise. A
+file that runs 60 seconds also gets `[file-progress] stack:` lines (see A1305
+below). Product behavior, test assertions, test deadlines
 and shard counts have not changed in this diagnostic slice.
 
 ## A1305: the dashboard page blocked during a click, and what blocked it is unknown
@@ -1145,8 +1146,12 @@ reached its 360-second deadline on 1 November 2026 with only
 log `performing click action` and never `click action done`: of the 83 clicks
 started between 18:58:17 and 18:58:32, 82 succeeded and that one failed, at
 18:58:32.166, when Playwright's timeout (the test's remaining 15 seconds) ran out on
-the Node side. That browser page made no further call before the deadline, and the
-file's two later cases never started.
+the Node side. The log's click lines name no browser page, so it does not show which
+pages the 82 ran on. Its `navigated to` lines do name a browser session: the clock
+file's session loaded that file at 18:58:16.788 and nothing after it, while the other
+two sessions went on loading test files until 18:58:56. No later API call in the log
+names an element the clock file clicks, and its two later cases, which each begin by clicking
+`edit-clock-profile`, never reached that click.
 
 A blocked main thread explains that shape and a waiting test does not. On macOS,
 a test whose click handler loops forever never finished and its file never ended,
@@ -1158,12 +1163,11 @@ with coverage). Reading the click's path
 (`wt-switch`, the screen's capability toggle, the draft scope, `wt-dialog`) found
 no loop.
 
-The shared reporter now pauses a page whose file has run 60 seconds and prints its
-JavaScript stack, or says the page was waiting, or that it did not answer at all
-(`docs/developers/ci-and-gates.md`, "Trace selected cases and browser calls…"). On
-the next stall, read those lines first; they name the code, or rule JavaScript out.
-The earlier dashboard stall (A1230, above) left too little evidence to say whether
-it was the same.
+On the next stall, read the `[file-progress] stack:` lines first
+([how they are taken](../developers/ci-and-gates.md#a-browser-file-that-runs-60-seconds-gets-a-stack-sample)).
+They show where the page's JavaScript was when paused, or that nothing paused and
+whether the page answered, or that no page showed the file. The earlier dashboard
+stall (A1230, above) left too little evidence to say whether it was the same.
 
 ## A1252: remaining server job time after the held-setup split
 

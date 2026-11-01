@@ -1,5 +1,7 @@
 // A Vitest reporter that prints which test FILE is running, so a CI job that hangs shows the file
-// it hung in. Vitest's default reporter, off a terminal, names a file only once it finishes.
+// it hung in. Vitest's default reporter, off a terminal, names a file only once it finishes. In a
+// browser project it also attaches Chrome's debugger to each test page, and pauses a page whose
+// file has run 60 seconds to print its JavaScript stack.
 
 const PREFIX = "[file-progress]";
 const STACK = `${PREFIX} stack:`;
@@ -56,6 +58,7 @@ export default class FileProgressReporter {
     this.running = new Map();
     this.modules = new Map();
     this.sampled = new Set();
+    this.unshown = new Set();
     this.pages = new Map();
     this.timer = undefined;
     this.stackTimer = undefined;
@@ -172,8 +175,7 @@ export default class FileProgressReporter {
     cdp.on("Debugger.scriptParsed", ({ scriptId, url }) => {
       if (url) debuggee.scripts.set(scriptId, url);
     });
-    // Always resume: a pause sent to an idle page stays armed and stops the page the next time
-    // any script runs, so an unanswered pause would freeze a healthy page.
+    // Resume every pause: one sent to an idle page stops that page's next script.
     cdp.on("Debugger.paused", ({ callFrames }) => {
       const waiters = debuggee.waiters.splice(0);
       for (const waiter of waiters) waiter(callFrames);
@@ -198,24 +200,31 @@ export default class FileProgressReporter {
     for (const [key, startedAt] of this.running) {
       const elapsed = at - startedAt;
       if (elapsed < this.stackAfterMs || this.sampled.has(key)) continue;
-      this.sampled.add(key);
       const head = `${key} has run ${seconds(elapsed)};`;
-      this.sampleFile(this.modules.get(key), head).catch((error) =>
-        this.stack(`${head} sampling failed: ${error?.message ?? error}`),
-      );
+      this.sampleFile(key, head).catch((error) => {
+        this.sampled.add(key);
+        this.stack(`${head} sampling failed: ${error?.message ?? error}`);
+      });
     }
   }
 
-  async sampleFile({ moduleId, project }, head) {
-    if (!project.browser?.provider?.pages) return;
+  async sampleFile(key, head) {
+    const { moduleId, project } = this.modules.get(key);
+    if (!project.browser?.provider?.pages) {
+      this.sampled.add(key);
+      return;
+    }
     const needle = encodeURIComponent(moduleId);
     const showing = [...this.pages.values()].filter(
       ({ cdp, page }) => cdp && page.frames().some((frame) => frame.url().includes(needle)),
     );
     if (showing.length === 0) {
-      this.stack(`${head} no browser page showed it, so no stack was taken`);
+      if (this.unshown.has(key)) return;
+      this.unshown.add(key);
+      this.stack(`${head} no browser page showed it yet, so no stack was taken`);
       return;
     }
+    this.sampled.add(key);
     await Promise.all(showing.map((debuggee) => this.samplePage(debuggee, head)));
   }
 
@@ -225,7 +234,10 @@ export default class FileProgressReporter {
       waiter = resolve;
       debuggee.waiters.push(resolve);
     });
-    send(debuggee.cdp, "Debugger.pause").catch(() => {});
+    let refused;
+    send(debuggee.cdp, "Debugger.pause").catch((error) => {
+      refused = error?.message ?? error;
+    });
     const callFrames = await this.within(PAUSE_WAIT_MS, paused);
     if (callFrames !== TIMED_OUT) {
       this.stack(`${head} its page was running JavaScript:`);
@@ -242,10 +254,14 @@ export default class FileProgressReporter {
       ANSWER_WAIT_MS,
       send(debuggee.cdp, "Runtime.evaluate", { expression: "0" }),
     );
-    this.stack(
+    const reply =
       answer === TIMED_OUT
-        ? `${head} no JavaScript paused and the page did not answer in ${ANSWER_WAIT_MS / 1000}s (the renderer is stuck outside JavaScript)`
-        : `${head} no JavaScript was running and the page answers (it is waiting, not blocked)`,
+        ? `the page did not answer in ${ANSWER_WAIT_MS / 1000}s`
+        : "the page answers";
+    this.stack(
+      refused === undefined
+        ? `${head} no JavaScript paused within ${PAUSE_WAIT_MS / 1000}s and ${reply}`
+        : `${head} the pause request was refused (${refused}); ${reply}`,
     );
   }
 

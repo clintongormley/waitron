@@ -545,7 +545,7 @@ describe("stack samples from a browser page that a file has kept busy", () => {
     expect(lines[30]).toBe("[file-progress] stack:   at f29 second http://x/a  b.js:30:1");
   });
 
-  it("says the page is waiting when nothing pauses within 3 seconds but the page answers", async () => {
+  it("says nothing paused within 3 seconds and the page answers", async () => {
     const { page, tick, fire, timeouts, stackLines } = await runningHangFile();
     tick(61_000);
     await settle();
@@ -555,7 +555,7 @@ describe("stack samples from a browser page that a file has kept busy", () => {
     await settle();
     expect(page.cdp.sent).toEqual(["Debugger.enable", "Debugger.pause", "Runtime.evaluate"]);
     expect(stackLines()).toEqual([
-      "[file-progress] stack: src/hang.test.ts [browser] has run 61.0s; no JavaScript was running and the page answers (it is waiting, not blocked)",
+      "[file-progress] stack: src/hang.test.ts [browser] has run 61.0s; no JavaScript paused within 3s and the page answers",
     ]);
     expect(timeouts.map((timer) => [timer.ms, timer.cleared])).toEqual([
       [3000, true],
@@ -563,7 +563,7 @@ describe("stack samples from a browser page that a file has kept busy", () => {
     ]);
   });
 
-  it("says the renderer is stuck when nothing pauses and the page does not answer in 2 seconds", async () => {
+  it("says nothing paused and the page did not answer when it does not answer in 2 seconds", async () => {
     const { page, tick, fire, timeouts, stackLines } = await runningHangFile();
     page.cdp.evaluateAnswers = false;
     tick(60_000);
@@ -574,12 +574,12 @@ describe("stack samples from a browser page that a file has kept busy", () => {
     fire(2000);
     await settle();
     expect(stackLines()).toEqual([
-      "[file-progress] stack: src/hang.test.ts [browser] has run 60.0s; no JavaScript paused and the page did not answer in 2s (the renderer is stuck outside JavaScript)",
+      "[file-progress] stack: src/hang.test.ts [browser] has run 60.0s; no JavaScript paused within 3s and the page did not answer in 2s",
     ]);
     expect(timeouts.every((timer) => timer.unrefed)).toBe(true);
   });
 
-  it("asks the page whether it answers when the pause request itself is refused", async () => {
+  it("says the pause request was refused, and whether the page answers", async () => {
     const { page, tick, fire, stackLines } = await runningHangFile();
     page.cdp.pauseFails = true;
     tick(60_000);
@@ -587,7 +587,22 @@ describe("stack samples from a browser page that a file has kept busy", () => {
     fire(3000);
     await settle();
     expect(stackLines()).toEqual([
-      "[file-progress] stack: src/hang.test.ts [browser] has run 60.0s; no JavaScript was running and the page answers (it is waiting, not blocked)",
+      "[file-progress] stack: src/hang.test.ts [browser] has run 60.0s; the pause request was refused (pause refused); the page answers",
+    ]);
+  });
+
+  it("says the pause request was refused and the page did not answer in 2 seconds", async () => {
+    const { page, tick, fire, stackLines } = await runningHangFile();
+    page.cdp.pauseFails = true;
+    page.cdp.evaluateAnswers = false;
+    tick(60_000);
+    await settle();
+    fire(3000);
+    await settle();
+    fire(2000);
+    await settle();
+    expect(stackLines()).toEqual([
+      "[file-progress] stack: src/hang.test.ts [browser] has run 60.0s; the pause request was refused (pause refused); the page did not answer in 2s",
     ]);
   });
 
@@ -647,17 +662,50 @@ describe("stack samples from a browser page that a file has kept busy", () => {
     ]);
   });
 
-  it("says so when no attached page shows a browser file", async () => {
-    const project = browserProject([fakePage([frameFor("src/other.test.ts")])]);
+  it("says once when no attached page shows a browser file, however many checks find none", async () => {
+    const page = fakePage([frameFor("src/other.test.ts")]);
+    const project = browserProject([page]);
+    const { reporter, tick, stackLines } = stackHarness();
+    reporter.onInit({ projects: [project] });
+    reporter.onTestModuleQueued(browserModule(hangPath, project));
+    await settle();
+    for (const ms of [60_000, 5000, 5000, 5000]) {
+      tick(ms);
+      await settle();
+    }
+    expect(stackLines()).toEqual([
+      "[file-progress] stack: src/hang.test.ts [browser] has run 60.0s; no browser page showed it yet, so no stack was taken",
+    ]);
+    expect(page.cdp.sent).toEqual(["Debugger.enable"]);
+  });
+
+  it("samples a file at a later check once a page shows it, after an earlier check found none", async () => {
+    const page = fakePage([frameFor("src/other.test.ts")]);
+    const project = browserProject([page]);
     const { reporter, tick, stackLines } = stackHarness();
     reporter.onInit({ projects: [project] });
     reporter.onTestModuleQueued(browserModule(hangPath, project));
     await settle();
     tick(60_000);
     await settle();
+    page.frameUrls = [frameFor(hangPath)];
+    page.cdp.pauseWith = [
+      {
+        functionName: "spin",
+        url: "http://x/a.js",
+        location: { scriptId: "1", lineNumber: 0, columnNumber: 0 },
+      },
+    ];
+    tick(5000);
+    await settle();
+    tick(5000);
+    await settle();
     expect(stackLines()).toEqual([
-      "[file-progress] stack: src/hang.test.ts [browser] has run 60.0s; no browser page showed it, so no stack was taken",
+      "[file-progress] stack: src/hang.test.ts [browser] has run 60.0s; no browser page showed it yet, so no stack was taken",
+      "[file-progress] stack: src/hang.test.ts [browser] has run 65.0s; its page was running JavaScript:",
+      "[file-progress] stack:   at spin http://x/a.js:1:1",
     ]);
+    expect(page.cdp.sent.filter((method) => method === "Debugger.pause")).toHaveLength(1);
   });
 
   it("writes nothing for a file whose project has no browser", async () => {
@@ -694,17 +742,19 @@ describe("stack samples from a browser page that a file has kept busy", () => {
       "[file-progress] stack: could not attach to a browser page: target closed now",
       "[file-progress] stack: could not attach to a browser page: gone",
       "[file-progress] stack: could not attach to a browser page: enable refused",
-      "[file-progress] stack: src/hang.test.ts [browser] has run 60.0s; no browser page showed it, so no stack was taken",
-      "[file-progress] stack: src/again.test.ts [browser] has run 60.0s; no browser page showed it, so no stack was taken",
+      "[file-progress] stack: src/hang.test.ts [browser] has run 60.0s; no browser page showed it yet, so no stack was taken",
+      "[file-progress] stack: src/again.test.ts [browser] has run 60.0s; no browser page showed it yet, so no stack was taken",
     ]);
   });
 
-  it("writes a failure while sampling instead of rejecting", async () => {
+  it("writes a failure while sampling once instead of rejecting", async () => {
     const { page, tick, stackLines } = await runningHangFile();
     page.frames = () => {
       throw "page closed";
     };
     tick(60_000);
+    await settle();
+    tick(5000);
     await settle();
     expect(stackLines()).toEqual([
       "[file-progress] stack: src/hang.test.ts [browser] has run 60.0s; sampling failed: page closed",
@@ -746,6 +796,8 @@ describe("stack samples from a browser page that a file has kept busy", () => {
     } finally {
       vi.useRealTimers();
     }
-    expect(lines.at(-1)).toContain("the renderer is stuck outside JavaScript");
+    expect(lines.at(-1)).toContain(
+      "no JavaScript paused within 3s and the page did not answer in 2s",
+    );
   });
 });
