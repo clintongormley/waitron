@@ -181,18 +181,21 @@ export type InvoiceDeliveryOutcome =
 /** How long a claim stays current without a renewal or a report. */
 export const INVOICE_DELIVERY_LEASE_MS = 60_000;
 
+const shifted = (now: Date, ms: number) => new Date(now.getTime() + ms).toISOString();
+
 /** The waits before each automatic retry of a refused email. */
 const RETRY_DELAYS_MS = [5_000, 30_000, 120_000, 600_000];
 const LONGEST_RETRY_WAIT_MS = Math.max(...RETRY_DELAYS_MS);
 
-const shifted = (now: Date, ms: number) => new Date(now.getTime() + ms).toISOString();
+/** The latest a queued delivery's next attempt can lie ahead of `now` without a backward step. */
+export const latestNextAttempt = (now: Date) => shifted(now, LONGEST_RETRY_WAIT_MS);
 
 /** A queued delivery is due at its next attempt, or at once when that lies further ahead than the
  * longest retry wait: it was set before the clock stepped back. */
 export function deliveryDue(now: Date): SQL {
   return or(
     lte(invoiceDeliveries.nextAttemptAt, now.toISOString()),
-    gt(invoiceDeliveries.nextAttemptAt, shifted(now, LONGEST_RETRY_WAIT_MS)),
+    gt(invoiceDeliveries.nextAttemptAt, latestNextAttempt(now)),
   )!;
 }
 

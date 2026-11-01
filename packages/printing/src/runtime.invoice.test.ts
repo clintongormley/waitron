@@ -156,6 +156,23 @@ describe("generic print runtime's invoice boundary", () => {
       ).toMatchObject({ status: "queued", claimedBy: null });
     },
   );
+  it("gives the adapter a receipt queued further ahead than the bound it names, as after a backward step", async () => {
+    for (const [aheadAt, claimed] of [
+      [now, false],
+      ["2026-11-30T23:59:59.999Z", true],
+    ] as const) {
+      const ctx = await setup();
+      const jobs = await withTransaction(suite.db, (tx) =>
+        claimPrintJobs(tx, ctx.agentId, {
+          locationId: ctx.locationId,
+          visibleKeys: [],
+          invoiceReceiptsAt: "2026-11-30T23:00:00.000Z",
+          invoiceReceiptsAheadAt: aheadAt,
+        }),
+      );
+      expect(jobs.map((job) => job.id).includes(ctx.managed)).toBe(claimed);
+    }
+  });
   it("does not consume a future invoice claim before its due time", async () => {
     const ctx = await setup();
     const jobs = await withTransaction(suite.db, (tx) =>

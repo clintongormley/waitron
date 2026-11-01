@@ -74,6 +74,8 @@ export async function claimPrintJobs(
     printerId?: string;
     /** Includes due invoice receipts; the caller must attach their token in this transaction. */
     invoiceReceiptsAt?: string;
+    /** A receipt queued later than this was queued before the clock stepped back, and is due too. */
+    invoiceReceiptsAheadAt?: string;
   },
 ): Promise<ClaimedJob[]> {
   const { claimedAt, due } = dueNow();
@@ -88,7 +90,12 @@ export async function claimPrintJobs(
         ? sql`false`
         : sql`exists (
       select 1 from invoice_deliveries d where d.print_job_id = ${jobId}
-        and d.status = 'queued' and d.next_attempt_at <= ${ctx.invoiceReceiptsAt})`
+        and d.status = 'queued'
+        and (d.next_attempt_at <= ${ctx.invoiceReceiptsAt}${
+          ctx.invoiceReceiptsAheadAt === undefined
+            ? sql``
+            : sql` or d.next_attempt_at > ${ctx.invoiceReceiptsAheadAt}`
+        }))`
     }
   )`;
   return claimRows<ClaimedJob>(tx, {

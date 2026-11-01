@@ -572,7 +572,7 @@ it("retains a persisted deadline across dated replacements, cancellation and res
 describe("a backward clock step", () => {
   const DAY = 86400000;
 
-  it("takes the next snapshot at once when its deadline lies further ahead than 25 hours", async () => {
+  it("takes the next snapshot at once when its deadline lies further ahead than 49 hours", async () => {
     const f = await fixture();
     const scheduled: (number | null)[] = [];
     const w = createCloudSnapshotWorker({ ...f.deps, onScheduled: (at) => scheduled.push(at) });
@@ -597,7 +597,66 @@ describe("a backward clock step", () => {
     expect(scheduled.at(-1)).toBe(next);
   });
 
-  it("takes the next snapshot once its deadline lies a millisecond further ahead than 25 hours, and not at 25", async () => {
+  /** Ticks a minute apart from `startAt`, with a later day start saved for a coming business day. */
+  async function capturesWithLaterStart(
+    startAt: string,
+    clock: { dayCutover: string; effectiveBusinessDay: string; laterCutover: string },
+    ticks: number,
+  ) {
+    const f = await fixture();
+    f.advance(Date.parse(startAt) - Date.parse("2026-09-24T12:00:00Z"));
+    f.deps.readClock = async () => ({
+      timeZone: "Europe/Madrid",
+      dayCutover: clock.dayCutover,
+      cutoverChanges: [
+        { effectiveBusinessDay: clock.effectiveBusinessDay, dayCutover: clock.laterCutover },
+      ],
+    });
+    const scheduled: (number | null)[] = [];
+    const w = createCloudSnapshotWorker({ ...f.deps, onScheduled: (at) => scheduled.push(at) });
+    for (let i = 0; i < ticks; i++) {
+      await w.tick(signal());
+      f.advance(60_000);
+    }
+    return { captures: f.captures(), next: scheduled.filter((at) => at !== null).at(-1)! };
+  }
+
+  it("takes one snapshot, with no step, while a later day start waits for tomorrow", async () => {
+    const tomorrow = { dayCutover: "04:00", effectiveBusinessDay: "2026-09-25" };
+    // 04:45 in Madrid, after that day's fire; tomorrow starts at 06:00.
+    expect(
+      (
+        await capturesWithLaterStart(
+          "2026-09-24T02:45:00Z",
+          { ...tomorrow, laterCutover: "06:00" },
+          10,
+        )
+      ).captures,
+    ).toBe(1);
+    // Noon; tomorrow starts at 23:00.
+    expect(
+      (
+        await capturesWithLaterStart(
+          "2026-09-24T10:00:00Z",
+          { ...tomorrow, laterCutover: "23:00" },
+          10,
+        )
+      ).captures,
+    ).toBe(1);
+  });
+
+  it("takes one snapshot, with no step, when the longest business day puts its deadline 48.7 hours ahead", async () => {
+    // The day start moves from 00:00 to 23:59 across the night the clocks go back.
+    const { captures, next } = await capturesWithLaterStart(
+      "2026-10-23T22:45:00Z",
+      { dayCutover: "00:00", effectiveBusinessDay: "2026-10-25", laterCutover: "23:59" },
+      5,
+    );
+    expect(captures).toBe(1);
+    expect(next - Date.parse("2026-10-23T22:45:00Z")).toBeGreaterThan(48 * 3600000);
+  });
+
+  it("takes the next snapshot once its deadline lies a millisecond further ahead than 49 hours, and not at 49", async () => {
     for (const [past, captures] of [
       [0, 1],
       [1, 2],
@@ -607,13 +666,13 @@ describe("a backward clock step", () => {
       const w = createCloudSnapshotWorker({ ...f.deps, onScheduled: (at) => scheduled.push(at) });
       await w.tick(signal());
       const left = scheduled.at(-1)! - Date.parse("2026-09-24T12:00:00Z");
-      f.advance(left - 25 * 3600000 - past);
+      f.advance(left - 49 * 3600000 - past);
       await w.tick(signal());
       expect(f.captures()).toBe(captures);
     }
   });
 
-  it("keeps the deadline after a step that leaves it less than 25 hours ahead", async () => {
+  it("keeps the deadline after a step that leaves it less than 49 hours ahead", async () => {
     const f = await fixture();
     const w = createCloudSnapshotWorker(f.deps);
     await w.tick(signal());

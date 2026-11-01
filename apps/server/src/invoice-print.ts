@@ -14,6 +14,7 @@ import type { InvoicePrintClaim } from "@waitron/print-agent";
 import {
   claimInvoiceDelivery,
   expireInvoiceDeliveryClaims,
+  latestNextAttempt,
   reportInvoiceDelivery,
   reserveInvoiceDelivery,
 } from "./invoice-delivery.js";
@@ -62,7 +63,11 @@ export async function claimInvoicePrintJobs(
   now = new Date(),
 ): Promise<InvoicePrintJob[]> {
   await expireInvoiceDeliveryClaims(tx, now);
-  const jobs = await claimPrintJobs(tx, agentId, { ...ctx, invoiceReceiptsAt: now.toISOString() });
+  const jobs = await claimPrintJobs(tx, agentId, {
+    ...ctx,
+    invoiceReceiptsAt: now.toISOString(),
+    invoiceReceiptsAheadAt: latestNextAttempt(now),
+  });
   if (jobs.length === 0) return [];
   const deliveries = await tx
     .select()

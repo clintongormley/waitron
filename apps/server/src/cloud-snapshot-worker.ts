@@ -126,9 +126,10 @@ function monthAt(at: Date, clock: ScheduleClock) {
     parts.find((p) => p.type === "year")!.value + "-" + parts.find((p) => p.type === "month")!.value
   );
 }
-/** A daily deadline lies at most one civil day ahead: under 25 hours, across the night the clocks go
- * back. One further ahead was set before the clock stepped back, and is due. */
-const LONGEST_GAP_MS = 25 * 3600000;
+/** A daily deadline lies at most one business day ahead: under 49 hours, when a day start moved up
+ * to 23:59 later meets the night the clocks go back. One further ahead was set before the clock
+ * stepped back, and is due. */
+const LONGEST_GAP_MS = 49 * 3600000;
 const isDue = (nextAt: number, t: number) => nextAt <= t || nextAt - t > LONGEST_GAP_MS;
 /** An unpublished capture is abandoned a day after it was made, or once it was made more than a day
  * ahead of now, as before a backward step. */

@@ -127,6 +127,7 @@ describe("createPairingMode", () => {
     expect(mode.hasHold(holdId)).toBe(false);
     expect(mode.openSince()).toBeNull();
     expect(mode.orphanedClaims()).toEqual(["r1"]);
+    expect(mode.renew(holdId)).toBeNull();
   });
 
   it("stays open after a step back that leaves its hold no further ahead than its length", () => {

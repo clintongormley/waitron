@@ -3173,7 +3173,9 @@ commit, per-task review and push)*:
   snapshots, content suggestion jobs, invoice deliveries.
 - **15c-4, schedulers and leases** — the payments reconcile scheduler, the print-job lease, the
   backup schedule (and its two comments), the attendance email worker's retry time and claim lapse
-  (found while building 15c-3), then the `nowIso()` / `Date.now` grep.
+  (found while building 15c-3), the office printer's "unclaimed" alert (`alert-sources.ts`) and a
+  test page's lease (`page-test-pages.ts`, `settle`) (both from 15c-3's review), then the
+  `nowIso()` / `Date.now` grep.
 
 ### Task 15c-1's departure (2026-11-01)
 
@@ -3270,12 +3272,14 @@ moved and no sign-in limit of the same shape left out, and reran the lead's 22 c
 
 ### Task 15c-3's notes (2026-11-01)
 
-- **The cloud snapshot's limit is 25 hours, not one day.** A daily deadline is the next civil
-  day's fire, and across the night the clocks go back that lies up to 25 hours ahead: with a
-  one-day limit, a deadline just set on 24 October 2026 read as due at once and a second snapshot
-  would be taken (`cloud-snapshot-worker.test.ts`, "keeps a deadline 24.5 hours ahead across the
-  night the clocks go back"; the one-day control fails it, `~/waitron-campaign-b/a798-9b/t15c3/mutate.out`
-  control 9). A capture still waiting to be published keeps the one day it already had.
+- **The cloud snapshot's limit is 49 hours, not one day.** A daily deadline is the next business
+  day's fire. Across the night the clocks go back it lies up to 25 hours ahead, and with a later
+  day start saved for tomorrow up to about 48 hours: a start moved from 00:00 to 23:59 across
+  25 October 2026 put it 48.73 hours ahead. With a shorter limit a deadline just set read as due,
+  and a snapshot was taken on every one-minute tick (the per-task review's run: 10 in 10 minutes
+  with 25 hours). Tests: "keeps a deadline 24.5 hours ahead across the night the clocks go back",
+  "while a later day start waits for tomorrow", "the longest business day puts its deadline 48.7
+  hours ahead". A capture still waiting to be published keeps the one day it already had.
 - **A waiting capture whose publication keeps being refused** was the stuck case: before this task
   one made before a backward step was retried and refused for the step's length, and no new
   capture was made. It is now abandoned once made more than a day ahead, as an old one is.
@@ -3283,17 +3287,37 @@ moved and no sign-in limit of the same shape left out, and reran the lead's 22 c
   last renewal plus 3 minutes, so a step back longer than the time since then puts it more than
   3 minutes ahead, and it lapses: `renew` then answers `null` for it, as for any lapsed hold
   (`pairing-mode.test.ts`; the route's answer was not run).
-- **The card-refund window is two-sided.** A first send stamped further ahead than the
-  provider's window is treated as outside it: nothing is resent under the old key, and the refund
-  waits for a manager, as one sent too long ago does.
+- **The card-refund resend departs from the rule's letter** (the per-task review, M4). A first
+  send stamped ahead of now at all is not resent: after a backward step its real age is unknown,
+  and could already be past the provider's key window. This is the rule the tender-refund path
+  already used (`tender-refund-sends.ts`, `age >= 0`). The refund waits for a manager, as one sent
+  too long ago does.
 - **Invoice deliveries share two conditions** (`deliveryDue`, `claimLapsed` in
   `invoice-delivery.ts`): the claim, the claim expiry, both of the email worker's reads and the
-  page printer's pick use them, so no reader is left on the one-sided test. The longest retry wait
-  is the last of the four retry delays (10 minutes); the retry schedule now reads the same list.
+  page printer's pick use them, and the receipt printer's pick in `packages/printing/src/runtime.ts`
+  takes the same upper bound (`latestNextAttempt`). The office printer's "unclaimed" alert still
+  reads the time one-sided: Task 15c-4. The longest retry wait is the last of the four retry
+  delays (10 minutes); the retry schedule now reads the same list.
 - **Found while reading, left for 15c-4:** the attendance email worker has the same shape —
   `attendanceMail.nextAttemptAt` compared one-sided (`apps/server/src/attendance-email-worker.ts`,
   the eligible read) and a 60-second claim lapse (`packages/workforce/src/attendance-mail.ts`,
   `expireAttendanceMailClaims`). Read, not run.
+
+### Task 15c-3's per-task review, folded (2026-11-01)
+
+Review C0/I2/M5 (`~/waitron-campaign-b/a798-9b/t15c3/review.md`). The reviewer reran the lead's
+controls against the parent's code, ran 63 `apps/server` suites (3171 tests), and found no change
+on a clock that never moved for five of the six jobs.
+- **I1:** the snapshot's 25-hour limit took a snapshot every minute, with no step, while a later
+  day start waited for tomorrow. The limit is now 49 hours, with the reviewer's three runs as tests.
+- **I2:** the receipt printer's pick still read `next_attempt_at` one-sided, so a receipt copy
+  queued before a step was not printed. It now takes the same upper bound; cases in the printing
+  package and in `invoice-delivery.test.ts`.
+- **M4:** the card-refund resend follows the tender path's `age >= 0` (the note above).
+- **M5:** the pairing case now also asserts `renew` answers `null`.
+- **M3:** accepted and recorded in the join-requests audit row.
+- **M1, M2:** moved to Task 15c-4 (the office printer's "unclaimed" alert in `alert-sources.ts`;
+  a test page's lease in `page-test-pages.ts`, which keeps its printer out of the A4 pick).
 
 ### Task 15's departures and notes (2026-10-31)
 

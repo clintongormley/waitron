@@ -877,6 +877,34 @@ describe("receipt delivery reservation", () => {
     });
   });
 
+  it("hands the receipt agent a queued copy whose next attempt lies 400 days ahead, as after a backward step", async () => {
+    const sale = await issue();
+    const job = await receiptJob(sale.saleId);
+    const delivery = await withTransaction(suite.db, (tx) =>
+      reserveInvoiceDelivery(tx, sale.saleId, request(job.jobId)),
+    );
+    const [location] = await suite.db.select().from(locations);
+    const [agent] = await suite.db
+      .insert(printAgents)
+      .values({ locationId: location!.id, name: "Receipt agent", tokenHash: "scrypt$fixture" })
+      .returning();
+    const pick = (nextAttemptAt: Date) =>
+      withTransaction(suite.db, async (tx) => {
+        await tx.execute(
+          sql`update invoice_deliveries set next_attempt_at = ${nextAttemptAt.toISOString()} where id = ${delivery.id}`,
+        );
+        return claimInvoicePrintJobs(
+          tx,
+          agent!.id,
+          { locationId: location!.id, visibleKeys: [] },
+          start,
+        );
+      });
+    expect(await pick(new Date(start.getTime() + 600_000))).toEqual([]);
+    const [claimed] = await pick(new Date(start.getTime() + 400 * 86_400_000));
+    expect(claimed!.invoiceClaim).toMatchObject({ deliveryId: delivery.id, generation: 1 });
+  });
+
   it("correlates the existing queued original without another job or handover snapshot", async () => {
     const sale = await issue();
     const job = await receiptJob(sale.saleId);

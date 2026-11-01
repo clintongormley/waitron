@@ -1133,7 +1133,7 @@ describe("design §8 test 21: never sent, sent but not found, and the key window
       app: venue.appAt(clockPlus(aheadMs)),
     });
     const row = await onlyRefundOf(card.id);
-    expect(Date.parse(row.sentAt!)).toBeGreaterThan(Date.now() + aheadMs - HOUR);
+    expect(Date.parse(row.sentAt!)).toBeGreaterThan(Date.now() + aheadMs / 2);
     return { paymentId: card.id, refundId: row.id, asked };
   }
 
@@ -1147,14 +1147,14 @@ describe("design §8 test 21: never sent, sent but not found, and the key window
     expect(await onlyRefundOf(paymentId)).toMatchObject({ state: "pending", sendCount: 1 });
   });
 
-  it("resends on a retry when the first send is stamped 23 hours ahead", async () => {
-    const { paymentId, refundId, asked } = await refundSentAhead(23 * HOUR);
+  it("sends nothing on a retry when the first send is stamped a minute ahead", async () => {
+    const { paymentId, refundId, asked } = await refundSentAhead(60_000);
 
     const retried = await asked.again(venue.app);
 
-    expect(retried.answer.json).toMatchObject({ refund: { state: "completed" } });
-    expect(callsFor(refundId)).toHaveLength(2);
-    expect(await onlyRefundOf(paymentId)).toMatchObject({ state: "completed", sendCount: 2 });
+    expect(retried.answer.json).toMatchObject({ refund: { state: "pending" } });
+    expect(callsFor(refundId)).toHaveLength(1);
+    expect(await onlyRefundOf(paymentId)).toMatchObject({ state: "pending", sendCount: 1 });
   });
 
   it("resends on the manager's resolve inside the window", async () => {
