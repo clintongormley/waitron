@@ -1100,11 +1100,7 @@ export class TillShell extends LitElement {
 
   #operatorActions(theme: boolean): TemplateResult {
     const state = this.clockState;
-    const foreign =
-      state !== null &&
-      state.activeLocationId !== null &&
-      state.activeLocationId !== state.locationId;
-    const disabled = this.clockBusy || state === null || foreign;
+    const disabled = this.clockBusy || state === null;
     const action = (kind: TillClockAction, label: string) =>
       html`<wt-button
         data-clock-action=${kind}
@@ -1118,7 +1114,6 @@ export class TillShell extends LitElement {
       this.clockAvailable
         ? html`
             ${this.clockError ? html`<span class="clock-message" role="status">${this.clockError}</span>` : nothing}
-            ${foreign ? html`<span class="clock-message">${t("clock.other_location")}</span>` : nothing}
             ${
               state === null
                 ? html`<wt-button

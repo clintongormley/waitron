@@ -244,7 +244,6 @@ it.each([390, 1280])(
           locationId: "v",
           businessDay: "2026-10-19",
           state: "working",
-          activeLocationId: "v",
           lastEntryId: "entry",
           firstClockIn: false,
         },

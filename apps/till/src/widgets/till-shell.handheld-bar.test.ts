@@ -250,7 +250,6 @@ describe("a handheld's More on a short phone", () => {
               locationId: "venue",
               businessDay: "2026-10-29",
               state: "working",
-              activeLocationId: "venue",
               lastEntryId: "entry",
               firstClockIn: false,
             },

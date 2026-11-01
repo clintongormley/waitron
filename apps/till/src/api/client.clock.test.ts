@@ -13,7 +13,6 @@ const state = {
   locationId: "venue",
   businessDay: "2026-10-14",
   state: "working",
-  activeLocationId: "venue",
   lastEntryId: "entry",
   firstClockIn: false,
 };

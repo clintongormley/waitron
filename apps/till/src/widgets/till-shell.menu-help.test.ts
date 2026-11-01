@@ -38,7 +38,6 @@ const clockState = {
   locationId: "venue",
   businessDay: "2026-10-14",
   state: "working" as const,
-  activeLocationId: "venue",
   lastEntryId: "entry",
   firstClockIn: false,
 };

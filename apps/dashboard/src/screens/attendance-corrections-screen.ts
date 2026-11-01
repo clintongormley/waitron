@@ -496,7 +496,6 @@ export class AttendanceCorrectionsScreen extends LitElement {
   #details(item: CorrectionItem): void {
     if (this.#blocked || this.editorOpen || !this.isConnected) return;
     this.personId = item.personId;
-    this.locationId = item.locationId;
     this.selectedItemId = item.id;
     this.view = null;
     const change = item.changes[0]!;

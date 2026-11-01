@@ -24,7 +24,6 @@ export function managerHours(): ManagerHours {
     attendanceItem({
       id: "request",
       personId: "worker",
-      locationId: "shop",
       direction: "worker_request",
       status: "waiting-manager",
       reason: "Old pending hours",

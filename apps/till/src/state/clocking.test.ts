@@ -13,7 +13,6 @@ function clock(
     locationId: "venue",
     businessDay: "2026-10-14",
     state,
-    activeLocationId: state === "out" ? null : "venue",
     lastEntryId,
     firstClockIn: lastEntryId === null,
   };

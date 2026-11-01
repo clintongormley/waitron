@@ -229,7 +229,7 @@ it("refuses malformed dates, impossible dates and unsupported windows without re
   expect(seen).toEqual([{ locationId: "venue", selection: { kind: "week", date: "2026-01-12" } }]);
 });
 it("a proposal can be accepted only when ready, while disagreement and missing-time edits keep their prompt identities", async () => {
-  const item = attendanceItem({ personId: "p1", locationId: "venue", readyToApply: false });
+  const item = attendanceItem({ personId: "p1", readyToApply: false });
   const proposal = attendancePrompt({
     id: "proposal-prompt",
     personId: "p1",

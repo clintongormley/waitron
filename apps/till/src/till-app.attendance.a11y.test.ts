@@ -23,7 +23,7 @@ describe.each(["light", "dark"] as const)("real attendance flow accessibility in
     try {
       const f = await clockApp({ theme });
       f.api.login.mockResolvedValueOnce({ personId: "p1", permissions: [], locale: language });
-      const proposal = attendanceItem({ personId: "p1", locationId: "venue" });
+      const proposal = attendanceItem({ personId: "p1" });
       f.api.getAttendanceInbox.mockResolvedValue({
         ...attendanceInbox(
           [

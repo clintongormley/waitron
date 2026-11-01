@@ -71,7 +71,6 @@ describe("attendance client", () => {
           id: "proposal",
           requestEntryIds: ["proposal"],
           personId: "ana",
-          locationId: "venue",
           direction: "manager_proposal",
           status: "waiting-worker",
           readyToApply: true,

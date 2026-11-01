@@ -238,8 +238,6 @@ export const en = {
   "clock.write_error": "Your time could not be recorded. Try again.",
   "clock.uncertain": "The answer was lost. Check your clock before trying again.",
   "clock.retry": "Retry read",
-  "clock.other_location":
-    "Your open shift belongs to another location. Use that location to change it.",
   "clock.recorded_out": "Clocked out",
   "clock.logout_failed": "Your finish was recorded. This device is locked.",
 
@@ -2115,7 +2113,6 @@ export const es: Record<StringKey, string> = {
   "clock.write_error": "No se ha podido registrar la hora. Reinténtalo.",
   "clock.uncertain": "Se ha perdido la respuesta. Consulta tu fichaje antes de reintentarlo.",
   "clock.retry": "Volver a consultar",
-  "clock.other_location": "Tu turno abierto pertenece a otro local. Cámbialo desde ese local.",
   "clock.recorded_out": "Salida registrada",
   "clock.logout_failed": "Tu salida está registrada. Este dispositivo está bloqueado.",
 
