@@ -80,6 +80,8 @@ const multiple = result({ kind: "multiple", diskId: null });
 const none = result({ kind: "none", diskId: null });
 
 const classifyOne = (d) => classifyDisk(machine([d]));
+/** An array of `length` slots holding only `entries`; the other slots are holes, not undefined. */
+const sparse = (length, entries) => Object.assign(new Array(length), entries);
 const invalid = expect.objectContaining({
   code: "disk.observation_invalid",
   reason: "observation-invalid",
@@ -133,6 +135,22 @@ describe("classifyDisk: recognised disks", () => {
 
   it("classifies a disk with no table but a whole-disk filesystem as unknown", () => {
     expect(classifyOne(blankDisk({ whole: plain("other") }))).toEqual(unknown);
+  });
+
+  it.each([
+    ["vfat", plain("vfat")],
+    ["ntfs", plain("ntfs")],
+    ["other", plain("other")],
+    ["bitlocker", plain("bitlocker")],
+    ["unreadable", plain("unreadable")],
+    ["a foreign luks2 header", luks(valid(""), valid(""))],
+  ])("classifies a Windows disk whose whole device reads as %s as unknown", (_name, whole) => {
+    expect(classifyOne(windowsDisk({ whole }))).toEqual(unknown);
+  });
+
+  it("classifies an MBR disk with ntfs whose whole device reads as other as unknown", () => {
+    const d = disk({ table: "mbr", partitions: [partition(plain("ntfs"), null)] });
+    expect(classifyOne({ ...d, whole: plain("other") })).toEqual(unknown);
   });
 });
 
@@ -250,6 +268,10 @@ describe("classifyDisk: foreign and unreadable disks", () => {
     expect(classifyOne(blankDisk({ whole: plain("unreadable") }))).toEqual(unknown);
   });
 
+  it("classifies a complete Waitron disk whose whole device is unreadable as unknown", () => {
+    expect(classifyOne(completeWaitronDisk({ whole: plain("unreadable") }))).toEqual(unknown);
+  });
+
   it("classifies ntfs plus one unreadable partition as unknown", () => {
     const d = disk({
       partitions: [
@@ -347,7 +369,7 @@ describe("classifyDisk: hardware", () => {
 });
 
 describe("classifyDisk: the name tag never decides anything", () => {
-  const longAccented = "Restaurant Àngels i Còpia de l'Església Vella del Carrer Major";
+  const longAccented = "Café Àngels and the Old Crème Brûlée Kitchen on Main Street";
   const tags = [
     ["no tag", null],
     ["an accented name", Buffer.from("Bar Àngels")],
@@ -410,6 +432,12 @@ describe("classifyDisk: malformed observations", () => {
     ["an unknown secureBoot value", () => machine([blankDisk()], { secureBoot: "on" })],
     ["disks that are not an array", () => machine("disks")],
     ["a disk that is not an object", () => machine([null])],
+    ["disks with a hole after a Windows disk", () => machine(sparse(2, { 0: windowsDisk() }))],
+    ["disks with a hole before a Windows disk", () => machine(sparse(2, { 1: windowsDisk() }))],
+    [
+      "partitions with a hole",
+      () => machine([disk({ partitions: sparse(2, { 0: windowsDisk().partitions[2] }) })]),
+    ],
     ["an extra disk key", () => machine([{ ...blankDisk(), extra: 1 }])],
     ["an unknown attachment", () => machine([blankDisk({ attachment: "usb" })])],
     ["an unknown table", () => machine([blankDisk({ table: "apm" })])],
@@ -438,6 +466,18 @@ describe("classifyDisk: malformed observations", () => {
       () => machine([blankDisk({ whole: { content: "luks2", luks: { 0: valid(), 1: valid() } } })]),
     ],
     ["a header that is not an object", () => machine([blankDisk({ whole: luks(null, valid()) })])],
+    [
+      "whole-device luks with a hole for the secondary header",
+      () => machine([blankDisk({ whole: { content: "luks2", luks: sparse(2, { 0: valid() }) } })]),
+    ],
+    [
+      "whole-device luks with a hole for the primary header",
+      () => machine([blankDisk({ whole: { content: "luks2", luks: sparse(2, { 1: valid() }) } })]),
+    ],
+    [
+      "Waitron partition luks with a hole for the secondary header",
+      () => machine([waitronWith({ content: "luks2", luks: sparse(2, { 0: valid() }) })]),
+    ],
     [
       "an extra header key",
       () => machine([blankDisk({ whole: luks({ ...valid(), extra: 1 }, valid()) })]),

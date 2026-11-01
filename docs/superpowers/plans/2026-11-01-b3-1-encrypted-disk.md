@@ -115,6 +115,11 @@ All three can be tested here, but together they would roughly double this review
 - Image size.
 - The hand-installed versus stick-installed file comparison.
 
+**Open points from Task 1's review, for the owner or a later slice.**
+
+- A lone disk whose attachment is `unknown` counts as internal (rule 1), so it can be the disk the installer erases. That is right for a second disk (it gives `multiple`), but for a lone disk it is for the owner or slice 2 to confirm.
+- A Waitron disk whose two partition tables were both wiped reads as blank, and so as erasable. The observation has no field for "an encryption header found where Waitron's partition would start"; the Linux adapter has to decide how to look for one and report it.
+
 ## Re-map against main on 2026-11-01
 
 The six-slice plan was written on 2026-10-26. This re-map checks it against main at `612535109`.
@@ -233,7 +238,8 @@ export function classifyDisk(input);
 - a non-canonical GUID or UUID;
 - a `luks` field that does not match `content`;
 - partitions present when `table` is none or unreadable;
-- a non-`Uint8Array` `nameTag`.
+- a non-`Uint8Array` `nameTag`;
+- a hole in the `disks`, `partitions` or `luks` array (a sparse array), which `forEach` would skip.
 
 Slice 2 treats a throw as "write nothing".
 
@@ -257,7 +263,7 @@ Slice 2 treats a throw as "write nothing".
      - No other partition, and no `whole` signature, carries any marker.
    - c) No marker, but some `luks2` content anywhere (foreign encryption): `unknown`.
    - d) `table: "none"` and `whole.content: "none"`: `recognised-other`, `blank`.
-   - e) `table` is gpt or mbr with at least one partition, every partition is `ntfs`, `bitlocker`, `vfat`, or `none` with `typeGuid === MICROSOFT_RESERVED_TYPE`, and at least one is `ntfs` or `bitlocker`: `recognised-other`. It is `bitlocker` if any partition is BitLocker, otherwise `windows`.
+   - e) `whole.content` is `none`, `table` is gpt or mbr with at least one partition, every partition is `ntfs`, `bitlocker`, `vfat`, or `none` with `typeGuid === MICROSOFT_RESERVED_TYPE`, and at least one is `ntfs` or `bitlocker`: `recognised-other`. It is `bitlocker` if any partition is BitLocker, otherwise `windows`.
    - f) Anything else is `unknown`. That includes a partition table with **no** partitions, which narrows §5.2's "empty" in the safe direction: only a disk with no table at all counts as blank. Widening what is erased without asking is a later explicit decision.
 
 `nameTag` is type-checked and read by no rule.
@@ -278,6 +284,7 @@ Slice 2 treats a throw as "write nothing".
   - `MBR disk with ntfs → "windows"`.
   - `windowsDisk plus one "other" partition → unknown`.
   - `"none" partition whose type is not Microsoft reserved → unknown`.
+  - `windowsDisk whose whole device reads as vfat | ntfs | other | bitlocker | unreadable | foreign luks2 → unknown`, and `MBR disk with ntfs whose whole device reads as other → unknown`.
   - `gpt table with zero partitions → unknown`.
 
   **Waitron disks**
@@ -304,6 +311,7 @@ Slice 2 treats a throw as "write nothing".
   - `whole-disk foreign LUKS2 → unknown`.
   - `unreadable table → unknown`.
   - `ntfs plus one unreadable partition → unknown`.
+  - `completeWaitronDisk whose whole device is unreadable → unknown`.
 
   **Review Focus 2: which disks count**
   - `two internal Windows disks → {kind:"multiple", diskId:null}`.
@@ -346,6 +354,10 @@ Slice 2 treats a throw as "write nothing".
   - Add `if (disk.nameTag && disk.nameTag.length > 48) return unknown` → the Review Focus 3 table fails.
   - Ignore `attachment` → the legitimate-case control fails, which shows the rule does not wrongly refuse.
   - Remove the duplicate-id check → "two disks with the same diskId" fails.
+  - Drop rule e's `whole.content === "none"` → the five Windows and MBR whole-device cases that rules a and c do not already refuse fail.
+  - Drop rule a's whole-device check → "completeWaitronDisk whose whole device is unreadable" fails.
+  - Iterate disks or luks headers with `forEach` → the sparse-array cases fail (a hole would otherwise pass validation).
+  - Deleting rule c, or rule a's `table === "unreadable"` check, changes no result: rules d and e already refuse those disks. A comparison over 1,000,000 random single-disk observations found no difference, while a control mutant (rule e without its whole-device check) differed 13,614 times. Rule c stays so that a wider rule e cannot let foreign encryption through.
 - [ ] **Step 6: Commit.** Run prettier and eslint, then `git add scripts/box/disk-state.mjs scripts/box/disk-state.test.mjs && git commit -s -m "feat(box): classify the disks an installer finds"`. The commit body names the deletion controls. It also says that the order of the hardware check against guard 3 is slice 2's, and that the observation adapter and real-disk fixtures wait for the Linux rig.
 
 ### Task 2: rig arguments and a fresh run folder

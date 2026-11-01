@@ -83,7 +83,7 @@ function checkSignature(value) {
   if (!CONTENT_KINDS.includes(value.content)) throw invalid();
   if (value.content === "luks2") {
     if (!Array.isArray(value.luks) || value.luks.length !== 2) throw invalid();
-    value.luks.forEach(checkHeader);
+    for (const header of value.luks) checkHeader(header);
   } else if (value.luks !== null) {
     throw invalid();
   }
@@ -128,7 +128,8 @@ function checkMachine(input) {
     !Array.isArray(input.disks)
   )
     throw invalid();
-  input.disks.forEach(checkDisk);
+  // for…of, not forEach: a hole in a sparse array visits as undefined and is refused.
+  for (const disk of input.disks) checkDisk(disk);
   const ids = new Set(input.disks.map((disk) => disk.diskId));
   if (ids.size !== input.disks.length) throw invalid();
 }
@@ -183,6 +184,8 @@ function classifyOne(disk) {
     const layoutVersion = completeLayout(disk);
     return layoutVersion === null ? unknown : { kind: "waitron", layoutVersion, recognised: null };
   }
+  // The blank and Windows rules below also refuse these; this stays so a wider Windows rule
+  // cannot let foreign encryption through.
   if (signatures.some((s) => s.content === "luks2")) return unknown;
   if (disk.table === "none" && disk.whole.content === "none")
     return { kind: "recognised-other", layoutVersion: null, recognised: "blank" };
@@ -192,6 +195,7 @@ function classifyOne(disk) {
       (p.content === "none" && p.typeGuid === MICROSOFT_RESERVED_TYPE),
   );
   if (
+    disk.whole.content === "none" &&
     disk.partitions.length > 0 &&
     windowsShaped &&
     disk.partitions.some((p) => p.content === "ntfs" || p.content === "bitlocker")
