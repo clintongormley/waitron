@@ -1,8 +1,8 @@
 import type { Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { businessDayAt, businessDayBounds } from "@waitron/shared";
-import { timeEntries } from "@waitron/workforce";
-import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
+import { readLatestLiveEntry, timeEntries } from "@waitron/workforce";
+import { and, eq, gte, lt, sql } from "drizzle-orm";
 
 export type TillClockStatus = "out" | "working" | "on_break";
 
@@ -39,22 +39,7 @@ export async function readTillClockState(
   const clock = await readLocationClock(tx, scope.locationId);
   const businessDay = businessDayAt(clock, at);
   const bounds = businessDayBounds(clock, businessDay);
-  const [latest] = await tx
-    .select({
-      id: timeEntries.id,
-      locationId: timeEntries.locationId,
-      kind: liveKind,
-    })
-    .from(timeEntries)
-    .where(and(eq(timeEntries.personId, scope.personId), liveEntry))
-    .orderBy(
-      desc(timeEntries.eventAt),
-      desc(timeEntries.recordedAt),
-      desc(timeEntries.nodeId),
-      desc(timeEntries.sequenceNo),
-      desc(timeEntries.id),
-    )
-    .limit(1);
+  const latest = await readLatestLiveEntry(tx, scope.personId);
   const [clockedIn] = await tx
     .select({ id: timeEntries.id })
     .from(timeEntries)
@@ -69,14 +54,14 @@ export async function readTillClockState(
       ),
     )
     .limit(1);
-  const state = latest === undefined ? "out" : stateAfter[latest.kind];
+  const state = latest === undefined ? "out" : stateAfter[latest.entryKind as LiveKind];
   return {
     personId: scope.personId,
     locationId: scope.locationId,
     businessDay,
     state,
     activeLocationId: state === "out" ? null : latest!.locationId,
-    lastEntryId: latest?.id ?? null,
+    lastEntryId: latest?.entryId ?? null,
     firstClockIn: clockedIn === undefined,
   };
 }

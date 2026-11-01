@@ -6,7 +6,7 @@ import { businessDayBoundaryAt, type BusinessDayClock } from "@waitron/shared";
 export type ScheduleClock = BusinessDayClock;
 
 export const AUTO_MARGIN_MINUTES = 30;
-/** The longest single sleep, so a clock jump is noticed within the hour. */
+/** The longest single sleep, so a step of the clock is noticed within the hour (`runBackupSweep`). */
 export const MAX_SLEEP_MS = 60 * 60 * 1000;
 const AUTO_JITTER_MINUTES = 10;
 
@@ -54,6 +54,24 @@ function instantOfLocal(
 function jitterMinutes(seed: string): number {
   const h = createHash("sha256").update(seed).digest();
   return h[0] % (AUTO_JITTER_MINUTES + 1);
+}
+
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+
+/**
+ * How far ahead of now `nextFireMs` can put a fire: one interval, or the longest gap between allowed
+ * days plus 25 hours — the hour the clocks go back, and a later day start saved for tomorrow
+ * (backup-schedule.test.ts, "longestFireAheadMs"). A fire further ahead was worked out before the
+ * clock stepped back.
+ */
+export function longestFireAheadMs(schedule: BackupSchedule): number {
+  if (schedule.kind === "interval") return schedule.ms;
+  const days = schedule.days === "daily" ? [0, 1, 2, 3, 4, 5, 6] : [...schedule.days].sort();
+  let gapDays = 1;
+  for (let i = 0; i < days.length; i++)
+    gapDays = Math.max(gapDays, (days[(i + 1) % days.length]! - days[i]! + 7) % 7 || 7);
+  return gapDays * DAY_MS + 25 * HOUR_MS;
 }
 
 /** `"auto"` fires at the day cutover plus `AUTO_MARGIN_MINUTES` plus a jitter stable per seed. */

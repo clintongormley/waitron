@@ -304,6 +304,29 @@ describe("invoiceDeliveryAlertSource", () => {
     ]);
   });
 
+  it("raises the unclaimed alert at once, dated now, for an A4 queued further ahead than the longest retry wait", async () => {
+    const v = await venue();
+    const sale = await invoice(v);
+    await attempt(v, sale.saleId, "a4", "queued");
+
+    // Ten minutes is the longest retry wait; a due time further ahead was stamped before a step back.
+    expect(await alerts(new Date(START.getTime() - 600_000))).toEqual([]);
+    for (const now of [
+      new Date(START.getTime() - 600_001),
+      new Date(START.getTime() - 400 * 86_400_000),
+    ])
+      expect(await alerts(now)).toEqual([
+        {
+          key: `invoice_delivery.undelivered:${sale.saleId}`,
+          code: "invoice_delivery.office_printer_unclaimed",
+          params: { invoice: sale.number, printer: "Back office" },
+          severity: "error",
+          since: now.toISOString(),
+          screen: "orders",
+        },
+      ]);
+  });
+
   it("raises nothing while an attempt is being sent, or for a queued receipt or email", async () => {
     const v = await venue();
     await attempt(v, (await invoice(v)).saleId, "a4", "sending");

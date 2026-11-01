@@ -237,4 +237,87 @@ describe("till-notice-strip", () => {
       await page.viewport(width, height);
     }
   });
+
+  describe("while the box offers Check the time", () => {
+    const BEHIND = notice("clock.behind_chain", "error");
+    const checkButton = (inside: ParentNode) =>
+      inside.querySelector<HTMLElement>("wt-button[data-check-time]");
+
+    it.each([
+      ["clock.behind_chain", BEHIND],
+      ["clock.unusable", CLOCK],
+    ])("draws %s's hint as a Check the time button, its words unchanged", async (code, shown) => {
+      const { el } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
+        notices: [shown],
+        checkTimeOffered: true,
+      });
+      const line = root(el).querySelector<HTMLElement>("[data-notice-tone]")!;
+      expect(flat(line.querySelector(".main"))).toBe(en[`staff_notice.${code}` as keyof typeof en]);
+      expect(flat(checkButton(line))).toBe(en["staff_notice.check_time"]);
+      expect(flat(line)).not.toContain(en["staff_notice.tell_manager"]);
+    });
+
+    it("sends one till-check-time out of its shadow root on a press", async () => {
+      const { el, host } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
+        notices: [BEHIND],
+        checkTimeOffered: true,
+      });
+      let heard = 0;
+      host.addEventListener("till-check-time", () => heard++);
+      await userEvent.click(checkButton(root(el))!);
+      expect(heard).toBe(1);
+    });
+
+    it("draws the button in the opened list when the clock notice is the second of two", async () => {
+      const { el } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
+        notices: [DISK, BEHIND],
+        checkTimeOffered: true,
+      });
+      expect(checkButton(root(el))).toBeNull();
+      await userEvent.click(button(el)!);
+      await settle(el);
+      const items = [...list(el)!.querySelectorAll("li")];
+      expect(checkButton(items[0]!)).toBeNull();
+      expect(flat(items[0]!)).toContain(en["staff_notice.tell_manager"]);
+      expect(flat(checkButton(items[1]!))).toBe(en["staff_notice.check_time"]);
+    });
+
+    it("keeps the button out of the toggle when the clock notice is the first of two", async () => {
+      const { el } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
+        notices: [BEHIND, DISK],
+        checkTimeOffered: true,
+      });
+      const toggle = button(el)!;
+      expect(checkButton(toggle)).toBeNull();
+      expect(
+        toggle.closest("[data-notice-strip]")!.querySelector("wt-button[data-check-time]"),
+      ).not.toBeNull();
+      expect(flat(toggle.querySelector("[data-notice-more] [aria-hidden='true']"))).toBe("+1");
+      await userEvent.click(toggle);
+      await settle(el);
+      expect(toggle.getAttribute("aria-expanded")).toBe("true");
+      expect(list(el)!.querySelectorAll("li")).toHaveLength(2);
+    });
+
+    it("draws no button without the offer, and Tell a manager as today", async () => {
+      const { el } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
+        notices: [BEHIND],
+      });
+      expect(checkButton(root(el))).toBeNull();
+      expect(flat(root(el).querySelector("[data-notice-tone]"))).toBe(
+        `${en["staff_notice.clock.behind_chain"]} · ${en["staff_notice.tell_manager"]}`,
+      );
+    });
+
+    it("draws no button on a disk-full notice", async () => {
+      const { el } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
+        notices: [DISK],
+        checkTimeOffered: true,
+      });
+      expect(checkButton(root(el))).toBeNull();
+      expect(flat(root(el).querySelector("[data-notice-tone]"))).toContain(
+        en["staff_notice.tell_manager"],
+      );
+    });
+  });
 });

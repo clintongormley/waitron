@@ -22,21 +22,21 @@ export const BOX_EMAIL_WORDS = {
   "clock.unusable": {
     en: {
       subject: "{venue}: sales can't be recorded because the box's clock is wrong",
-      text: "The box at {venue} has its clock set before 28 October 2024, so no sale can be recorded for the tax agency until the clock is right. Connect the box to the internet; if its clock does not correct itself, ask whoever installed the box to set it.",
+      text: "The box at {venue} has its clock set before 28 October 2024, so no sale can be recorded for the tax agency until the clock is right. With the internet the box puts it right by itself. Otherwise an administrator can usually set it from their own phone or computer on the Box status page (in the dashboard, Settings → Box status); if the box started with its clock wrong, any staff member can do it from a till with “Check the time”.",
     },
     es: {
       subject: "{venue}: no se pueden registrar ventas porque la hora del equipo es incorrecta",
-      text: "El equipo de {venue} tiene la hora puesta antes del 28 de octubre de 2024, así que no se puede registrar ninguna venta en Hacienda hasta que la hora sea correcta. Conecta el equipo a internet; si la hora no se corrige sola, pide a quien instaló el equipo que la ponga.",
+      text: "El equipo de {venue} tiene la hora puesta antes del 28 de octubre de 2024, así que no se puede registrar ninguna venta en Hacienda hasta que la hora sea correcta. Con internet, el equipo la corrige solo. Si no, un administrador normalmente puede ponerla en hora desde su propio móvil u ordenador en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo); si el equipo arrancó con la hora mal, cualquier empleado puede hacerlo desde una caja con «Comprobar la hora».",
     },
   },
   "clock.behind_chain": {
     en: {
       subject: "Payments stopped at {venue}: the box's clock reads earlier than its last sale",
-      text: "The box's clock ({clockAt}) reads earlier than its last recorded sale ({lastRecordAt}). Since then no device can take payment. Orders can still be taken and sent to the kitchen. What to do: • If the box's clock is wrong (usual after a power cut): connect the box to the internet so it corrects itself, or call whoever installed it. • If you think the box's clock is right: look at the Box status page (in the dashboard, Settings → Box status), where an administrator can confirm the clock with their own phone; with the internet or two tills switched on, the box does it by itself.",
+      text: "The box's clock ({clockAt}) reads earlier than its last recorded sale ({lastRecordAt}). Since then no device can take payment. Orders can still be taken and sent to the kitchen. What to do: • If the box's clock is wrong (usual after a power cut): with the internet the box puts it right by itself; otherwise an administrator can usually set it from their own phone or computer on the Box status page (in the dashboard, Settings → Box status), and if the box started with payments stopped and the tax agency does not answer (or the box does not send it records), any staff member can do it from a till with “Check the time”. • If you think the box's clock is right: an administrator can confirm it on the same page; with the internet the box does it by itself, and so do two tills that agree with it — except when the box started with payments stopped: then two tills are not enough, and, in the same case, a staff member confirms it from a till with “Check the time”.",
     },
     es: {
       subject: "No se puede cobrar en {venue}: la hora del equipo es anterior a la última venta",
-      text: "La hora del equipo ({clockAt}) es anterior a la última venta registrada ({lastRecordAt}). Desde entonces ningún dispositivo puede cobrar. Se pueden seguir tomando pedidos y enviándolos a cocina. Qué hacer: • Si la hora del equipo está mal (lo normal tras un corte de luz): conecta el equipo a internet para que la corrija, o llama a quien lo instaló. • Si crees que la hora del equipo es correcta: mira Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo), donde un administrador puede confirmar la hora con su propio móvil; con internet o dos cajas encendidas, el equipo lo hace solo.",
+      text: "La hora del equipo ({clockAt}) es anterior a la última venta registrada ({lastRecordAt}). Desde entonces ningún dispositivo puede cobrar. Se pueden seguir tomando pedidos y enviándolos a cocina. Qué hacer: • Si la hora del equipo está mal (lo normal tras un corte de luz): con internet, el equipo la corrige solo; si no, un administrador normalmente puede ponerla en hora desde su propio móvil u ordenador en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo), y si el equipo arrancó con los cobros parados y Hacienda no responde (o el equipo no le envía registros), cualquier empleado puede hacerlo desde una caja con «Comprobar la hora». • Si crees que la hora del equipo es correcta: un administrador puede confirmarla en esa misma página; con internet, el equipo lo hace solo, y también dos cajas que coincidan con él, salvo si el equipo arrancó con los cobros parados: entonces no bastan dos cajas y, en ese mismo caso, un empleado la confirma desde una caja con «Comprobar la hora».",
     },
   },
 } as const satisfies Record<string, Record<"en" | "es", { subject: string; text: string }>>;
@@ -47,13 +47,17 @@ export const CLOCK_CONFIRMED_BY_WORDS = {
     authority: "the tax agency's time",
     devices: "two tills or handhelds",
     admin: "an administrator",
+    staff: "a staff member on a till",
     otherwise: "a check recorded on the box",
+    staffNamed: "a staff member ({person}) on a till",
   },
   es: {
     authority: "la hora de Hacienda",
     devices: "dos cajas o terminales",
     admin: "un administrador",
+    staff: "un empleado en una caja",
     otherwise: "una comprobación anotada en el equipo",
+    staffNamed: "un miembro del personal ({person}) en una caja",
   },
 } as const satisfies Record<"en" | "es", Record<string, string>>;
 
@@ -61,12 +65,60 @@ export const CLOCK_RESTARTED_EMAIL_WORDS = {
   en: {
     subject: "Payments restarted at {venue}",
     text: "The box's clock was confirmed by {confirmedBy} and payments started again. Sales recorded with a later time than the real one are listed on the Box status page (in the dashboard, Settings → Box status).",
+    byStaff:
+      "The box's clock was confirmed by {person}, a staff member, on {till}, and payments started again. Sales recorded with a later time than the real one are listed on the Box status page (in the dashboard, Settings → Box status).",
+    namedTill: "till {device}",
+    unnamedTill: "a till",
   },
   es: {
     subject: "Se reanudaron los cobros en {venue}",
     text: "La hora del equipo se confirmó con {confirmedBy} y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
+    byStaff:
+      "La hora del equipo la confirmó {person}, miembro del personal, en {till}, y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
+    namedTill: "la caja {device}",
+    unnamedTill: "una caja",
   },
-} as const satisfies Record<"en" | "es", { subject: string; text: string }>;
+} as const satisfies Record<
+  "en" | "es",
+  { subject: string; text: string; byStaff: string; namedTill: string; unnamedTill: string }
+>;
+
+/** By what set the clock, `unverified` (with its own subject) instead of any when the box could
+ * not confirm the step took; `{step}` is `forward`, `back` or `moved` with the step's length. */
+export const CLOCK_CORRECTED_EMAIL_WORDS = {
+  en: {
+    subject: "{venue}: the box's clock was set",
+    authority:
+      "The box set its clock from the tax agency's time: {step}, from {before} to {after}.",
+    admin: "The box's clock was set from {person}'s device: {step}, from {before} to {after}.",
+    staff:
+      "The box's clock was set from the time on {till}, confirmed by {person}, a staff member: {step}, from {before} to {after}.",
+    unverifiedSubject: "{venue}: the box could not confirm it set its clock",
+    unverified:
+      "The box tried to set its clock but could not confirm the change took. Its clock read {before} before and {after} after ({step}). Check the box's clock on the Box status page (in the dashboard, Settings → Box status).",
+    forward: "moved forward {duration}",
+    back: "moved back {duration}",
+    moved: "moved {duration}",
+    namedTill: "till {device}",
+    unnamedTill: "a till",
+  },
+  es: {
+    subject: "{venue}: se puso la hora del equipo",
+    authority: "El equipo puso su reloj con la hora de Hacienda: {step}, de {before} a {after}.",
+    admin:
+      "El reloj del equipo se puso con la hora del dispositivo de {person}: {step}, de {before} a {after}.",
+    staff:
+      "El reloj del equipo se puso con la hora de {till}, confirmada por {person}, miembro del personal: {step}, de {before} a {after}.",
+    unverifiedSubject: "{venue}: el equipo no pudo confirmar que puso su reloj",
+    unverified:
+      "El equipo intentó poner su reloj, pero no ha podido confirmar que el cambio se aplicara. Su reloj marcaba {before} antes y {after} después ({step}). Comprueba la hora del equipo en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
+    forward: "adelantado {duration}",
+    back: "atrasado {duration}",
+    moved: "cambiado {duration}",
+    namedTill: "la caja {device}",
+    unnamedTill: "una caja",
+  },
+} as const satisfies Record<"en" | "es", Record<string, string>>;
 
 /** `text` for several sales, `one` for one, `partial` appended to either; `unconfirmed` instead of
  * all three when the box cannot tell which sales. */

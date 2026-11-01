@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import type { KeyRing } from "@waitron/credentials";
 import { incidents, locations, type Database } from "@waitron/db";
 import { codeOf } from "@waitron/server-kit";
-import { formatBytes } from "@waitron/shared";
+import { formatBytes, formatDuration } from "@waitron/shared";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
 import type { DiskFullState } from "./disk-full-state.js";
 import { resolveEmailDeliveryIn, type EmailDelivery } from "./email-delivery.js";
@@ -12,6 +12,7 @@ import {
   BACKUP_REFUSED_EMAIL_WORDS,
   BOX_EMAIL_WORDS,
   CLOCK_CONFIRMED_BY_WORDS,
+  CLOCK_CORRECTED_EMAIL_WORDS,
   CLOCK_MISDATED_EMAIL_WORDS,
   CLOCK_RESTARTED_EMAIL_WORDS,
 } from "./i18n/box-emails.js";
@@ -34,11 +35,13 @@ export function isBoxEmailCode(code: string): code is BoxEmailCode {
   return Object.hasOwn(BOX_EMAIL_WORDS, code);
 }
 
-/** The alerts the duty emails while they stay open, read from the incidents table. */
+/** The alerts the duty emails while they stay open, read from the incidents table; a
+ * `clock.corrected` one is emailed even once handled, see `startBoxEmailDuty`'s `remember`. */
 export const INCIDENT_EMAIL_CODES = [
   "clock.behind_chain_restarted",
   "clock.records_misdated",
   "backup.archives_deleted",
+  "clock.corrected",
 ] as const;
 
 export type IncidentEmailCode = (typeof INCIDENT_EMAIL_CODES)[number];
@@ -61,6 +64,8 @@ const TIME_PLACEHOLDERS = {
   lastRecordAt: "lastRecordOffsetMinutes",
   from: "fromOffsetMinutes",
   to: "toOffsetMinutes",
+  before: "beforeOffsetMinutes",
+  after: "afterOffsetMinutes",
 } as const;
 
 function wordsFor(
@@ -102,10 +107,50 @@ function wordsFor(
         ? by[source as keyof typeof by]
         : by.otherwise;
     const words = CLOCK_RESTARTED_EMAIL_WORDS[language];
+    const person = params?.["person"];
+    if (params?.["byStaff"] === true && typeof person === "string") {
+      const device = params["device"];
+      const till =
+        typeof device === "string"
+          ? words.namedTill.replaceAll("{device}", () => device)
+          : words.unnamedTill;
+      return {
+        subject: words.subject,
+        text: words.byStaff.replaceAll("{person}", () => person).replaceAll("{till}", () => till),
+      };
+    }
     return {
       subject: words.subject,
       text: words.text.replaceAll("{confirmedBy}", () => confirmedBy),
     };
+  }
+  if (code === "clock.corrected") {
+    const words = CLOCK_CORRECTED_EMAIL_WORDS[language];
+    const direction = params?.["direction"];
+    const step = (
+      direction === "forward" ? words.forward : direction === "back" ? words.back : words.moved
+    ).replaceAll("{duration}", () =>
+      formatDuration(params?.["stepMs"], language === "es" ? "es-ES" : "en-GB"),
+    );
+    const name = params?.["person"];
+    const person = typeof name === "string" ? name : "—";
+    const source = params?.["source"];
+    let subject: string = words.subject;
+    let template: string = words.authority;
+    if (params?.["unverified"] === true) {
+      subject = words.unverifiedSubject;
+      template = words.unverified;
+    } else if (source === "staff") {
+      const device = params?.["device"];
+      const till =
+        typeof device === "string"
+          ? words.namedTill.replaceAll("{device}", () => device)
+          : words.unnamedTill;
+      template = words.staff.replaceAll("{till}", () => till).replaceAll("{person}", () => person);
+    } else if (source === "admin") {
+      template = words.admin.replaceAll("{person}", () => person);
+    }
+    return { subject, text: template.replaceAll("{step}", () => step) };
   }
   if (code === "clock.records_misdated") {
     const words = CLOCK_MISDATED_EMAIL_WORDS[language];
@@ -194,6 +239,9 @@ interface Episode {
   readonly owner?: string;
   /** Set for an open alert's episode, which lasts while the alert stays open. */
   readonly incident?: true;
+  /** Set for a `clock.corrected` alert's episode, which also lasts once the alert is handled, until
+   * `deliver` finds nothing left worth trying. */
+  readonly untilSent?: true;
   /** The params of the notice that began the episode, kept for its whole length. */
   readonly params?: Readonly<Record<string, unknown>>;
   readonly sentTo: Set<string>;
@@ -207,7 +255,10 @@ function recipientKey(recipient: ManagerEmailRecipient): string {
 
 /** Checks every `intervalMs`, the first one `intervalMs` after start, each next one armed after the
  * last finished. `stop` resolves once a database read in flight has finished; nothing is read or
- * sent after it. */
+ * sent after it. `remember` begins an alert's episode with no read, for an alert that may be
+ * handled before the next check reads it: the box's own clock step, whose next step marks it
+ * handled. A restart loses the email of an alert already handled and not yet sent; the alert stays
+ * in the bell. */
 export function startBoxEmailDuty(deps: {
   disk: Pick<DiskFullState, "since">;
   space: Pick<FreeSpaceState, "current">;
@@ -222,7 +273,7 @@ export function startBoxEmailDuty(deps: {
   intervalMs: number;
   log: Logger;
   timer?: (ms: number, fn: () => void) => Timer;
-}): { stop: () => Promise<void> } {
+}): { stop: () => Promise<void>; remember: (incident: EmailedIncident) => void } {
   const timer = deps.timer ?? unrefTimer;
   const episodes = new Map<string, Episode>();
   /** The refusal episode's `runStopped.since`; a different one is a new refusal. */
@@ -254,6 +305,7 @@ export function startBoxEmailDuty(deps: {
         code,
         ...(owner === undefined ? {} : { owner }),
         ...(incident === undefined ? {} : { incident }),
+        ...(incident && code === "clock.corrected" ? { untilSent: true as const } : {}),
         ...(params === undefined ? {} : { params }),
         sentTo: new Set(),
         said: new Set(),
@@ -270,20 +322,29 @@ export function startBoxEmailDuty(deps: {
     deps.log("warn", event, { code: episode.code });
   }
 
+  /** True once nothing is left worth trying for a handled alert: every manager has it or had their
+   * address refused outright, there is none, or email is not set up. */
   async function deliver(
     episode: Episode,
     ctx: BoxEmailContext,
     toldAlready?: ReadonlySet<string>,
-  ): Promise<void> {
-    if (ctx.recipients.length === 0) return sayOnce(episode, "box_email.no_recipients");
+  ): Promise<boolean> {
+    if (ctx.recipients.length === 0) {
+      sayOnce(episode, "box_email.no_recipients");
+      return true;
+    }
     const pending = ctx.recipients.filter((r) => {
       const key = recipientKey(r);
       return !episode.sentTo.has(key) && !toldAlready?.has(key);
     });
-    if (pending.length === 0) return;
-    if (ctx.delivery.mode === "unconfigured") return sayOnce(episode, "box_email.not_configured");
+    if (pending.length === 0) return true;
+    if (ctx.delivery.mode === "unconfigured") {
+      sayOnce(episode, "box_email.not_configured");
+      return true;
+    }
+    let finished = true;
     for (const recipient of pending) {
-      if (stopped) return;
+      if (stopped) return false;
       let outcome: TextEmailOutcome;
       try {
         outcome = await deps.send({
@@ -300,18 +361,20 @@ export function startBoxEmailDuty(deps: {
         deps.log("info", "box_email.sent", { code: episode.code });
         continue;
       }
+      if (outcome !== "rejected") finished = false;
       const logged = episode.logged.get(key) ?? new Set<TextEmailOutcome>();
       episode.logged.set(key, logged);
       if (logged.has(outcome)) continue;
       logged.add(outcome);
       deps.log("warn", "box_email.send_failed", { code: episode.code, outcome });
     }
+    return finished;
   }
 
   async function check(): Promise<void> {
     try {
       if (stopped || !deps.isPrimary()) return;
-      const due: { episode: Episode; toldAlready?: ReadonlySet<string> }[] = [];
+      const due: { episode: Episode; key?: string; toldAlready?: ReadonlySet<string> }[] = [];
       const full = deps.disk.since() !== null;
       const low = deps.space.current().lowSince !== null;
       if (!full && !low) {
@@ -359,6 +422,7 @@ export function startBoxEmailDuty(deps: {
         if (episode.incident) {
           // A handled alert is never open again, so its episode ends for good.
           if (incidentSeen.has(key)) due.push({ episode });
+          else if (episode.untilSent) due.push({ episode, key });
           else episodes.delete(key);
           continue;
         }
@@ -374,9 +438,10 @@ export function startBoxEmailDuty(deps: {
       // Read at every check while an episode lasts, so a manager added during it is found.
       const ctx = await read(deps.context);
       if (stopped) return;
-      for (const { episode, toldAlready } of due) {
+      for (const { episode, key, toldAlready } of due) {
         if (stopped) return;
-        await deliver(episode, ctx, toldAlready);
+        const done = await deliver(episode, ctx, toldAlready);
+        if (done && key !== undefined) episodes.delete(key);
       }
     } catch (error) {
       deps.log("warn", "box_email.check_failed", { errorCode: codeOf(error) });
@@ -392,6 +457,9 @@ export function startBoxEmailDuty(deps: {
       stopped = true;
       armed.cancel();
       await reading?.catch(() => undefined);
+    },
+    remember: (incident) => {
+      begin(`incident:${incident.id}`, incident.code, undefined, incident.params, true);
     },
   };
 }

@@ -62,6 +62,9 @@ export interface DeriveConfig {
   horizonDays: number;
   maxPeriodsPerTick: number;
   staleAfterMs: number;
+  /** The furthest after its writing that this duty's `nextAttemptAt` is ever set (`longestWait`
+   * in `run.ts`). A row further ahead than this was written before the clock stepped back. */
+  longestWaitMs: number;
 }
 
 /** One unit of due work, tagged by how it was found — which decides which claim statement runs. */
@@ -117,14 +120,17 @@ export function derive(snapshot: LedgerSnapshot, now: Date, config: DeriveConfig
     if (r.state === "running") {
       // startedAt is never null on a `running` row, but a null here would mean "stranded with no
       // clock", which must not silently become reclaimable.
-      if (r.startedAt !== null && Date.parse(r.startedAt) < nowMs - config.staleAfterMs) {
+      if (
+        r.startedAt !== null &&
+        claimLapsed(Date.parse(r.startedAt), nowMs, config.staleAfterMs)
+      ) {
         stale.push({ kind: "stale", row: r });
       }
       continue;
     }
     if (TERMINAL.includes(r.state) || r.nextAttemptAt === null) continue;
     const due = Date.parse(r.nextAttemptAt);
-    if (due <= nowMs) claimable.push({ kind: "claimable", row: r });
+    if (retryDue(due, nowMs, config.longestWaitMs)) claimable.push({ kind: "claimable", row: r });
     else earliestFuture = Math.min(earliestFuture, due);
   }
 
@@ -147,6 +153,17 @@ export function derive(snapshot: LedgerSnapshot, now: Date, config: DeriveConfig
     beyondHorizon,
     nextDueAt: new Date(Math.min(earliestFuture, nextBoundary)),
   };
+}
+
+/** A claim older than its lease, or stamped further ahead than it (the clock stepped back). */
+export function claimLapsed(startedAtMs: number, nowMs: number, staleAfterMs: number): boolean {
+  return startedAtMs < nowMs - staleAfterMs || startedAtMs > nowMs + staleAfterMs;
+}
+
+/** A retry time reached, or further ahead than any wait the runner writes (the clock stepped
+ * back). */
+export function retryDue(dueMs: number, nowMs: number, longestWaitMs: number): boolean {
+  return dueMs <= nowMs || dueMs > nowMs + longestWaitMs;
 }
 
 function periodStart(work: DueWork): Date {

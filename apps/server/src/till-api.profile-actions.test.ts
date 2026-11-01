@@ -67,6 +67,7 @@ import {
  * | POST /api/clock/break-start                             | clock-in | clock-in; till-clock-api.test.ts "rejects a profile without clock-in on break-start" |
  * | POST /api/clock/break-end                               | clock-in | clock-in; till-clock-api.test.ts "rejects a profile without clock-in on break-end" |
  * Clock-route allowed control: till-clock-api.test.ts "allows admitted staff with only clock-in and no service-zone access".
+ * | POST /api/box-clock/challenge, /api/box-clock/confirm | admitted session; no profile action | till-box-clock-api.test.ts: "refuses both routes without a session", "refuses a staff member the till's profile no longer admits, on both routes", "refuses a confirm when admission is withdrawn between the challenge and its transaction"; allowed: "serves a staff member whose till's profile has no selling action" |
  * | GET /api/attendance/inbox | clock-in | till-attendance-api.test.ts "rejects a profile without clock-in on inbox" |
  * | GET /api/attendance/hours | clock-in | till-hours-api.test.ts "refuses changed profile admission without revealing hours"; allowed: "clock-only staff read their own completed hours passively without recording activity" |
  * | GET /api/attendance/day | clock-in | till-attendance-api.test.ts "rejects a profile without clock-in on day?date=2026-01-05&locationId=LOCATION" |

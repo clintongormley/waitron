@@ -12,6 +12,7 @@ export function reconcilerAsDuty(reconciler: PaymentReconciler): PeriodDuty {
     name: `payments.reconcile.${reconciler.provider}`,
     cadence: "daily",
     retryParkedAfterMs: DAY_MS,
+    longestResweepMs: DAY_MS,
     async run(period: RunPeriod, now: Date): Promise<DutyOutcome> {
       const result = await reconciler.reconcile(period, now);
       return {

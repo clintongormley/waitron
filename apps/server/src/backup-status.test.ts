@@ -58,6 +58,58 @@ describe("readDestinationStatus", () => {
     expect(s).toMatchObject({ configured: true, destinations: [{ id: "a", stale: true }] });
   });
 
+  describe("an archive stamped ahead of the clock (a step back)", () => {
+    const archives = (id: string, mtimes: number[]): StorageBackend =>
+      listing(id, async () =>
+        [...mtimes]
+          .sort((a, b) => b - a)
+          .map((mtimeMs) => ({ key: backupArchiveKey(new Date(mtimeMs)), size: 1, mtimeMs })),
+      );
+    const DAY = 86_400_000;
+
+    it("is stale when its only archive is stamped further ahead than staleAfterMs", async () => {
+      const ahead = NOW.getTime() + 400 * DAY;
+      const s = await readAll([archives("a", [ahead])], 60_000, NOW);
+      expect(s.destinations).toEqual([
+        {
+          id: "a",
+          lastBackupAt: new Date(ahead).toISOString(),
+          ageSeconds: -400 * 86_400,
+          stale: true,
+          readErrorCode: null,
+        },
+      ]);
+    });
+
+    it("is judged by its newest archive that is not that far ahead", async () => {
+      const s = await readAll(
+        [archives("a", [NOW.getTime() + 400 * DAY, NOW.getTime() - 3 * DAY])],
+        DAY,
+        NOW,
+      );
+      expect(s.destinations).toEqual([
+        {
+          id: "a",
+          lastBackupAt: new Date(NOW.getTime() - 3 * DAY).toISOString(),
+          ageSeconds: 3 * 86_400,
+          stale: true,
+          readErrorCode: null,
+        },
+      ]);
+      const fresh = await readAll(
+        [archives("a", [NOW.getTime() + 400 * DAY, NOW.getTime() - 1000])],
+        DAY,
+        NOW,
+      );
+      expect(fresh.destinations).toMatchObject([{ ageSeconds: 1, stale: false }]);
+    });
+
+    it("is fresh when its archive is exactly staleAfterMs ahead", async () => {
+      const s = await readAll([archives("a", [NOW.getTime() + 60_000])], 60_000, NOW);
+      expect(s.destinations).toMatchObject([{ ageSeconds: -60, stale: false }]);
+    });
+  });
+
   it("a destination with no backups yet is stale with null age", async () => {
     const s = await readAll([backend("a", null)], 60_000, NOW);
     expect(s).toMatchObject({

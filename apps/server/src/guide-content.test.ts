@@ -78,6 +78,8 @@ describe("the user guides", () => {
       "free-space",
       "out-of-space",
       "clock-behind",
+      "clock-at-start",
+      "clock-service",
       "sales-dated-wrongly",
       "clock-witnesses",
       "emails",

@@ -296,7 +296,7 @@ describe("drain — flow control (envio_flujo)", () => {
     const proximoEnvioEn = new Date("2026-07-21T00:05:00Z"); // still in the future relative to `now` below
     await suite.db.execute(sql`
       insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
-      values (1, ${proximoEnvioEn.toISOString()}, 60)
+      values (1, ${proximoEnvioEn.toISOString()}, 300)
     `);
 
     const now = new Date("2026-07-21T00:01:00Z"); // before proximoEnvioEn — the gate is still closed

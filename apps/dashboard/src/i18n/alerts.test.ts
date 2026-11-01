@@ -268,6 +268,7 @@ it("names only registered word lists in its word-list slots, variants and words 
               m[1] !== "date" &&
               m[1] !== "bytes" &&
               m[1] !== "minute" &&
+              m[1] !== "duration" &&
               !Object.hasOwn(ALERT_WORDS, m[1]!),
           )
           .map((m) => `${code}: ${m[0]}`),
@@ -439,6 +440,26 @@ it("never says the payments check may not look at a payment again", () => {
   }
 });
 
+describe("the box's clock set before the earliest date", () => {
+  it.each([
+    ["en", "en-GB", /install|support|manager/i, "an administrator can usually set it"],
+    [
+      "es",
+      "es-ES",
+      /instal|soporte|encargad|gerente/i,
+      "un administrador normalmente puede ponerla",
+    ],
+  ] as const)(
+    "points %s readers at the Box status page, not the installer or anyone else",
+    (lang, locale, elsewhere, administrator) => {
+      const text = ALERT_MESSAGES["clock.unusable"]![lang];
+      expect(text).toContain(t("nav.box_status", locale));
+      expect(text).not.toMatch(elsewhere);
+      expect(text).toContain(administrator);
+    },
+  );
+});
+
 describe("the box's clock reading behind its last sale", () => {
   const params = { clockAt: "2025-03-14T09:12:00.000Z", lastRecordAt: "2026-10-22T19:43:00.000Z" };
 
@@ -467,6 +488,100 @@ describe("the box's clock reading behind its last sale", () => {
 
   it("shows a dash for a time it cannot read", () => {
     expect(alertMessage("clock.behind_chain", { clockAt: null }, "en")).toContain("(—)");
+  });
+});
+
+describe("the box's clock was stepped", () => {
+  const before = "2026-10-19T07:10:00.000Z";
+  const after = "2026-10-21T10:10:00.000Z";
+  const base = {
+    confirmationId: "c1",
+    source: "authority",
+    person: null,
+    deviceId: null,
+    device: null,
+    before,
+    beforeOffsetMinutes: 60,
+    after,
+    afterOffsetMinutes: 60,
+    stepMs: (2 * 24 + 3) * 3_600_000,
+    direction: "forward",
+    verified: true,
+    unverified: false,
+    byAdmin: false,
+    byStaff: false,
+  };
+  const from = formatIsoMinute(before);
+  const to = formatIsoMinute(after);
+
+  function both(params: Record<string, unknown>) {
+    const english = alertMessage("clock.corrected", params, "en");
+    const spanish = alertMessage("clock.corrected", params, "es");
+    for (const text of [english, spanish]) {
+      expect(text).not.toContain("—");
+      expect(text).not.toMatch(/[{}]/);
+    }
+    return { english, spanish };
+  }
+
+  it("says the tax agency's time set it, which way, how far, and from when to when", () => {
+    const { english, spanish } = both(base);
+    expect(english).toBe(
+      `The box set its clock from the tax agency's time: moved forward 2 days and 3 hours, from ${from} to ${to}.`,
+    );
+    expect(spanish).toBe(
+      `El equipo puso su reloj con la hora de Hacienda: adelantado 2 días y 3 horas, de ${from} a ${to}.`,
+    );
+  });
+
+  it("names the till and the staff member who confirmed it", () => {
+    const params = {
+      ...base,
+      source: "staff",
+      person: "Ana",
+      deviceId: "till-1",
+      device: "Barra 1",
+      byStaff: true,
+      stepMs: -5 * 60_000,
+      direction: "back",
+    };
+    const { english, spanish } = both(params);
+    expect(english).toBe(
+      `The box's clock was set from till Barra 1, confirmed by Ana: moved back 5 minutes, from ${from} to ${to}.`,
+    );
+    expect(spanish).toBe(
+      `El reloj del equipo se puso con la hora de la caja Barra 1, confirmada por Ana: atrasado 5 minutos, de ${from} a ${to}.`,
+    );
+  });
+
+  it("names the administrator whose device set it", () => {
+    const { english, spanish } = both({ ...base, source: "admin", person: "Luis", byAdmin: true });
+    expect(english).toBe(
+      `The box's clock was set from Luis's device: moved forward 2 days and 3 hours, from ${from} to ${to}.`,
+    );
+    expect(spanish).toBe(
+      `El reloj del equipo se puso con la hora del dispositivo de Luis: adelantado 2 días y 3 horas, de ${from} a ${to}.`,
+    );
+  });
+
+  it("says a change it could not confirm was tried, and only what the clock read, whoever asked", () => {
+    for (const who of [{}, { source: "staff", person: "Ana", device: "Barra 1", byStaff: true }]) {
+      const params = { ...base, ...who, confirmationId: null, verified: false, unverified: true };
+      const { english, spanish } = both(params);
+      expect(english).toBe(
+        `The box tried to set its clock but could not confirm the change took. Its clock read ${from} before and ${to} after (moved forward 2 days and 3 hours). Check the box's clock on the Box status page.`,
+      );
+      expect(spanish).toBe(
+        `El equipo intentó poner su reloj, pero no ha podido confirmar que el cambio se aplicara. Su reloj marcaba ${from} antes y ${to} después (adelantado 2 días y 3 horas). Comprueba la hora del equipo en Estado del equipo.`,
+      );
+    }
+  });
+
+  it("words a direction it does not know neutrally", () => {
+    expect(ALERT_WORDS["clock_step_direction"]!.otherwise).toEqual({ en: "moved", es: "cambiado" });
+    expect(both({ ...base, direction: "sideways" }).english).toContain(
+      ": moved 2 days and 3 hours,",
+    );
   });
 });
 
@@ -506,11 +621,22 @@ describe("payments restarted on a clock behind the last sale", () => {
     }
   });
 
+  it("names the staff member and the till when a staff member confirmed, in each language", () => {
+    const params = { ...base, confirmedBy: "staff", person: "Ana", byStaff: true, device: "Bar" };
+    expect(alertMessage("clock.behind_chain_restarted", params, "en")).toBe(
+      `Payments restarted on the box's clock (${clockAt}), earlier than the last sale (${lastRecordAt}), once Ana, a staff member, confirmed it on till Bar.`,
+    );
+    expect(alertMessage("clock.behind_chain_restarted", params, "es")).toBe(
+      `Se reanudaron los cobros con la hora del equipo (${clockAt}), anterior a la última venta (${lastRecordAt}), al confirmarla Ana, miembro del personal, en la caja Bar.`,
+    );
+  });
+
   it("words each way the clock can be confirmed", () => {
     expect(ALERT_WORDS["clock_confirmed_by"]!.words).toEqual({
       authority: { en: "the tax agency's time", es: expect.any(String) },
       devices: { en: "two tills or handhelds", es: expect.any(String) },
       admin: { en: "an administrator", es: expect.any(String) },
+      staff: { en: "a staff member", es: expect.any(String) },
     });
     expect(ALERT_WORDS["clock_confirmed_by"]!.otherwise).toEqual({
       en: "a check recorded on the box",
@@ -608,6 +734,50 @@ describe("a restarted clock that later proved wrong", () => {
     );
     expect(alertMessage("clock.behind_chain_disproved", params, "es")).toBe(
       `Las ventas registradas entre ${from} y ${to} se fecharon con un reloj que resultó estar mal. Quedan como se registraron; consúltalo con tu asesor.`,
+    );
+  });
+});
+
+describe("the box's time service not keeping its clock right", () => {
+  const REASONS = ["off", "stopped", "unsynchronised", "unreachable"] as const;
+
+  it("says what is wrong for each reason, in English", () => {
+    expect(alertMessage("clock.sync_off", { reason: "off" }, "en")).toBe(
+      "The box's time service is switched off, so nothing keeps its clock right. Check its date and time on the Box status page.",
+    );
+    expect(alertMessage("clock.sync_off", { reason: "stopped" }, "en")).toBe(
+      "The box's time service is on but not running, so nothing keeps its clock right. Check its date and time on the Box status page.",
+    );
+    expect(alertMessage("clock.sync_off", { reason: "unsynchronised" }, "en")).toBe(
+      "The box's time service has not reached a time server, so its clock may drift. Check that the box can reach the internet and look at its date and time on the Box status page.",
+    );
+    expect(alertMessage("clock.sync_off", { reason: "unreachable" }, "en")).toBe(
+      "This box cannot see or control its time service: the part of the box that does that is not answering. If the box can reach the internet, its time service may still keep the clock right by itself. Check its date and time on the Box status page.",
+    );
+  });
+
+  it("words each reason differently in Spanish, with every slot filled", () => {
+    const spanish = REASONS.map((reason) => alertMessage("clock.sync_off", { reason }, "es"));
+    expect(new Set(spanish).size).toBe(REASONS.length);
+    for (const text of spanish) {
+      expect(text).not.toContain("{");
+      expect(text).not.toBe(alertMessage("clock.sync_off", { reason: "other" }, "es"));
+    }
+    for (const text of spanish.slice(0, 3)) expect(text).toContain(t("nav.box_status", "es-ES"));
+  });
+
+  it("never tells anyone to install anything when the clock service does not answer", () => {
+    for (const language of ["en", "es"] as const) {
+      const text = alertMessage("clock.sync_off", { reason: "unreachable" }, language);
+      expect(text.toLowerCase()).not.toContain("instal");
+    }
+  });
+
+  it("never shows a reason it has no words for as the raw code", () => {
+    const text = alertMessage("clock.sync_off", { reason: "not_a_reason" }, "en");
+    expect(text).not.toContain("not_a_reason");
+    expect(text).toBe(
+      "The box's clock is not being kept right. Check its date and time on the Box status page.",
     );
   });
 });

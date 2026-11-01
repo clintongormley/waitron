@@ -149,7 +149,7 @@ it("does not decode another person's incomplete attribution during an own-record
   expect((await query(other)).sessions.map((s) => s.workedMinutes)).toEqual([480, 480, 480, 480]);
 });
 
-it("keeps simultaneous live events and ignores the later acknowledgment when deciding clock state", async () => {
+it("orders simultaneous live events by chain position and ignores the later acknowledgment when deciding clock state", async () => {
   const worker = await seedPerson(suite.db, "Simultaneous");
   await withTransaction(suite.db, (tx) =>
     backend.clockIn(tx, event(worker, "2026-01-05T09:00:00Z")),
@@ -171,7 +171,7 @@ it("keeps simultaneous live events and ignores the later acknowledgment when dec
       withTransaction(suite.db, (tx) => backend.clockIn(tx, event(worker, "2026-01-05T11:00:00Z"))),
     ).rejects.toMatchObject({ code: "attendance.already_open" });
   });
-  expect(result.rows).toBe(2);
+  expect(result.rows).toBe(1);
   expect(verifyChain(await readChain(suite.db, { nodeId, locationId }))).toEqual({ ok: true });
 });
 

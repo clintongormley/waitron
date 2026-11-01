@@ -41,6 +41,7 @@ import {
  */
 
 export const CHALLENGE_TTL_MS = 5 * 60 * 1000;
+const CHALLENGE_AHEAD_MS = 60 * 1000;
 
 type ChallengePurpose = (typeof challengePurpose.enumValues)[number];
 
@@ -106,7 +107,9 @@ async function consumeChallenge(
       createdAt: webauthnChallenges.createdAt,
     });
   if (challenge === undefined) throw new AppError("passkey.verification_failed", {});
-  if (Date.now() - Date.parse(challenge.createdAt) > CHALLENGE_TTL_MS) {
+  const age = Date.now() - Date.parse(challenge.createdAt);
+  // A challenge stamped ahead of the clock was issued before a backward clock step.
+  if (age > CHALLENGE_TTL_MS || age < -CHALLENGE_AHEAD_MS) {
     throw new AppError("passkey.challenge_expired", {});
   }
   return challenge.challenge;

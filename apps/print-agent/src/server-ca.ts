@@ -81,8 +81,10 @@ export async function createServerTrustingFetch(opts: ServerTrustOptions): Promi
    * first-boot fetch does not disable printing for an hour. */
   const refresh = async (): Promise<boolean> => {
     const interval = caPem === undefined ? INITIAL_RETRY_INTERVAL_MS : REFRESH_INTERVAL_MS;
-    if (now() - lastFetchAt < interval) return false;
-    lastFetchAt = now();
+    const at = now();
+    // A last fetch further ahead than the interval predates a backward step, so it counts as due.
+    if (at - lastFetchAt < interval && lastFetchAt - at <= interval) return false;
+    lastFetchAt = at;
     let pem: string;
     try {
       const res = await caFetch(caUrl, { signal: AbortSignal.timeout(caFetchTimeoutMs) });

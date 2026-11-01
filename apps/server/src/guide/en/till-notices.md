@@ -27,7 +27,9 @@ space to start, the notice stays, also after a restart, until about 24 MB is fre
 
 **Sales can't be recorded: the box's clock is wrong · Tell a manager** is red. The box's clock is
 set too far in the past to record a sale for the tax agency. Until it is fixed, the box also
-refuses payments and refunds. A manager needs to fix the clock.
+refuses payments and refunds. An administrator can set the clock from their own phone or computer,
+on the [Box status page](box-status.md#clock-behind). Just after the box starts, the hint can read
+**Check the time** instead, as described below.
 
 **Payments stopped: the box's clock reads earlier than its last sale · Tell a manager** is red. The
 box's clock reads more than a minute earlier than the last sale it recorded. Until it reads no more
@@ -55,10 +57,35 @@ card was taken:
 - **From the bill's payment options (Whole bill, Pay items, Contribute or Split equally):** the
   payment stays waiting, and the box records it by itself once payments are back.
 
-A manager fixes this from the [Box status page](box-status.md#clock-behind). If the box's clock is
-right and it was the last sale that carried a wrong time, payments restart by themselves once the
-tax agency or two tills or handhelds confirm the clock, or an administrator confirms it there with
-their own phone or computer, never from the box's own screen.
+With the internet the box usually puts its clock right by itself. Otherwise an
+administrator sets or confirms the clock on the [Box status page](box-status.md#clock-behind) with
+their own phone or computer, never from the box's own screen. Just after the box starts, any staff
+member can do it from a till with **Check the time**, as described below. If the box's clock is
+right and it was the last sale that carried a wrong time, two tills or handhelds that agree with
+the box also restart payments, unless the stop has lasted since the box started. They never set
+the clock.
+
+**Check the time** at the end of a red clock line, instead of **Tell a manager**, means the box
+started with its clock in doubt and could not reach the tax agency's time. It ends either
+of the two red clock lines above. A refused payment then says to use **Check the time** at the top
+of the screen. Tap **Check the time** to open its dialog; when another notice shows first, open the
+list and tap it there. Anyone signed in on the till can use it.
+
+The dialog shows the box's time and this till's time. Nobody types a time: the till's own time is
+what is sent, so if the till's time is wrong too, correct it in the till's own settings first, then
+check again.
+
+- When the two times are more than a minute apart, it asks **Use this device's time?** Press **Use
+  this time** to set the box's clock to the till's time; payments start again. Press **Not
+  now** to leave it.
+- When they agree, it asks you to confirm that the box's time is right. Press **The time is right**
+  if it is; payments start again on the box's clock. Press **Not now** to leave it.
+
+Either way, every manager is told who confirmed the time and from which till. If the box refuses,
+the dialog says why above its buttons and, where trying again can help, offers **Check again**.
+If the box's [start-up](box-status.md#clock-at-start) ends while the dialog is open, a staff member can no longer set the clock from a till:
+the dialog says so and offers **Administrator sign-in**, so that an administrator can sign in there
+with their PIN and set the clock from the same till.
 
 **The box is nearly out of space · Tell a manager** is amber. Work is still saved, but space is
 running out. A manager should free space before it runs out, on the

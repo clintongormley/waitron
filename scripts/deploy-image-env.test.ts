@@ -849,6 +849,36 @@ it("starts no database server on the box, and needs no secret before the box boo
   expect(ENV_EXAMPLE).not.toContain("POSTGRES_PASSWORD");
 });
 
+describe("the app's mount of the box's clock socket", () => {
+  const app = COMPOSE.slice(COMPOSE.indexOf("\n  app:\n"), COMPOSE.indexOf("\n  mailpit:\n"));
+
+  it("binds the folder .env names, or an empty named volume when .env names none", () => {
+    expect(app).toMatch(/^ {6}- \$\{WAITRON_BOX_SOCKET_DIR:-box_socket\}:\/run\/waitron-box$/m);
+    expect(COMPOSE.slice(COMPOSE.indexOf("\nvolumes:\n"))).toMatch(/^ {2}box_socket:$/m);
+    expect(ENV_EXAMPLE).toMatch(/^# WAITRON_BOX_SOCKET_DIR=\/run\/waitron-box$/m);
+  });
+
+  it("installs the handler where the units run it, and names the folder the socket listens in", () => {
+    const unit = (name: string) => read(`deploy/box/${name}`);
+    const lib = /BOX_LIB_DIR="\$\{WAITRON_SH_BOX_LIB_DIR:-([^}]+)\}"/.exec(WAITRON_SH)?.[1];
+    const units = /BOX_UNIT_DIR="\$\{WAITRON_SH_BOX_UNIT_DIR:-([^}]+)\}"/.exec(WAITRON_SH)?.[1];
+    const named = /env_set WAITRON_BOX_SOCKET_DIR (\S+)/.exec(WAITRON_SH)?.[1];
+    expect(units).toBe("/etc/systemd/system");
+    expect(unit("waitron-box@.service")).toContain(`ExecStart=${lib}/waitron-box.sh %i`);
+    expect(unit("waitron-box@.service")).toContain(
+      `ExecStopPost=${lib}/waitron-box.sh --restore %i`,
+    );
+    expect(unit("waitron-box.socket")).toContain(`ListenStream=${named}/box.sock`);
+    expect(named).toBe("/run/waitron-box");
+  });
+
+  it("gives no container the power to set the clock itself", () => {
+    expect(COMPOSE).not.toMatch(/^\s*cap_add:/m);
+    expect(COMPOSE).not.toContain("SYS_TIME");
+    expect(COMPOSE).not.toContain("/dev/rtc");
+  });
+});
+
 it("stores image-library bytes in the database without a separate image volume", () => {
   expect(IMAGE_ENV).not.toHaveProperty("WAITRON_MEDIA_DIR");
   expect(DOCKERFILE).not.toContain("/var/lib/waitron/media");

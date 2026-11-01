@@ -940,10 +940,12 @@ describe("adjustment report routes", () => {
       vi.useRealTimers();
     });
 
-    /** Only `Date`: the database and the request still run on real timers. */
+    /** Only `Date`: the database and the request still run on real timers. The fixture's people
+     * signed in at the moved clock, or a session last seen weeks ahead of it reads as expired. */
     function nowIs(instant: string): void {
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(new Date(instant));
+      db.run(sql`update management_sessions set last_seen_at = ${instant}`);
     }
 
     it.each<[string, string, string, number]>([

@@ -14,7 +14,7 @@ import type {
   TranslationCell,
   TranslationItemPage,
 } from "@waitron/catalogue/src/content-translation-types.js";
-import { AppError } from "@waitron/shared";
+import { AppError, jobOrigin } from "@waitron/shared";
 import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { type BackupSupervisorDeps } from "./backup-supervisor.js";
@@ -38,6 +38,8 @@ const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
 const clocks = vi.hoisted(() => ({
   archive: undefined as BackupSupervisorDeps | undefined,
+  supervisor: undefined as
+    { current(): { retention?: { count: number; days: number } } } | undefined,
   order: [] as string[],
 }));
 vi.mock("./backup-supervisor.js", async (original) => {
@@ -48,6 +50,7 @@ vi.mock("./backup-supervisor.js", async (original) => {
       constructor(deps: BackupSupervisorDeps) {
         super(deps);
         clocks.archive = deps;
+        clocks.supervisor = this;
       }
       override async reload() {
         clocks.order.push("reload");
@@ -148,12 +151,23 @@ describe("boot's authority clock wiring", () => {
   it("raises the drift alert from a sample the fiscal drain observes, and runs the Translate all loop until close", async () => {
     beforeServerStarts();
     const venue = await setupVenue(suite.db);
+    // A step the box made to its clock, already handled, so it raises no alert or email here.
+    await suite.db.insert(incidents).values({
+      source: jobOrigin("dashboard").source,
+      code: "clock.corrected",
+      params: { after: "2026-10-12T08:00:00.000Z", stepMs: -90_000 },
+      severity: "warning",
+      detectedAt: "2026-10-12T08:00:00.000Z",
+      acknowledgedAt: "2026-10-12T09:00:00.000Z",
+    });
     const [port] = await freePorts(1);
     let scratch: string | undefined;
     let server: StartedServer | undefined;
     try {
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(new Date("2026-10-14T00:00:00Z"));
+      // The manager signed in at the moved clock, or a session last seen weeks ahead reads as expired.
+      suite.db.run(sql`update management_sessions set last_seen_at = ${new Date().toISOString()}`);
       scratch = await mkdtemp(join(tmpdir(), "waitron-boot-clock-wiring-"));
       const migrationsRoot = join(scratch, "migrations");
       for (const [index, set] of manifestSets().entries()) {
@@ -254,6 +268,10 @@ describe("boot's authority clock wiring", () => {
       expect(clocks.archive!.readInstallationStart).toBe(hooks.readInstallationStart);
       expect(clocks.archive!.recordArchivesDeleted).toBe(hooks.recordArchivesDeleted);
       expect(clocks.archive!.statfs).toBeUndefined();
+      await expect(clocks.archive!.latestClockStep!()).resolves.toEqual({
+        confirmedAt: "2026-10-12T08:00:00.000Z",
+        stepMs: -90_000,
+      });
       // Before the first backup run, which could raise the same alert for its own deletions.
       expect(recordStartDeletions).toHaveBeenCalledOnce();
       expect(vi.mocked(recordStartDeletions).mock.calls[0]![0]).toMatchObject({
@@ -284,6 +302,16 @@ describe("boot's authority clock wiring", () => {
       expect(stepDeps.installationStartedAt).toBe(hooks.readInstallationStart);
       expect(stepDeps.onArchivesDeleted).toBe(hooks.recordArchivesDeleted);
       expect(stepDeps.statfs).toBe(watchDeps.statfs);
+      // The same step read as every run, so making room holds what the run's pruning keeps; the
+      // age cap is the running duty's, none here.
+      expect(stepDeps.latestClockStep).toBe(clocks.archive!.latestClockStep);
+      expect(stepDeps.retainDays!()).toBeUndefined();
+      const running = clocks.supervisor!.current();
+      const current = vi
+        .spyOn(clocks.supervisor!, "current")
+        .mockReturnValue({ ...running, retention: { count: 3, days: 12 } });
+      expect(stepDeps.retainDays!()).toBe(12);
+      current.mockRestore();
       // The step's folders are the running duty's, read from the supervisor's live status: this
       // primary has no backups set up, so there are none.
       expect(stepDeps.backends()).toEqual([]);

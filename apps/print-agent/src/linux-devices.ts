@@ -79,8 +79,11 @@ export function createLinuxDevices(
   let availability: BluetoothAvailability | undefined;
   let listedAt = -Infinity;
   let listing: Promise<BluetoothDevice[]> | undefined;
-  let recentPaired: { startedAt: number; devices: BluetoothDevice[] } | undefined;
-  let forgottenAt = -Infinity;
+  let recentPaired:
+    { startedAt: number; forgetsBefore: number; devices: BluetoothDevice[] } | undefined;
+  // Counted rather than timed, so a forget made after a backward step still follows every listing
+  // started before it.
+  let forgets = 0;
 
   const record = (next: BluetoothAvailability): void => {
     const changed = availability === undefined || !sameAvailability(availability, next);
@@ -92,11 +95,12 @@ export function createLinuxDevices(
 
   const listPaired = async (): Promise<BluetoothDevice[]> => {
     const startedAt = now();
+    const forgetsBefore = forgets;
     listedAt = startedAt;
     try {
       const paired = await bluetooth.paired();
       record({ available: true });
-      recentPaired = { startedAt, devices: paired };
+      recentPaired = { startedAt, forgetsBefore, devices: paired };
       return paired;
     } catch (error) {
       recentPaired = undefined;
@@ -111,7 +115,11 @@ export function createLinuxDevices(
     });
     return listing;
   };
-  const recheckDue = (): boolean => now() - listedAt >= BLUETOOTH_RECHECK_MS;
+  // Also due when the last listing started further ahead than the interval: the clock stepped back.
+  const recheckDue = (): boolean => {
+    const at = now();
+    return at - listedAt >= BLUETOOTH_RECHECK_MS || listedAt - at > BLUETOOTH_RECHECK_MS;
+  };
 
   const usb = (): Promise<UsbPrinter[]> => readUsbPrinters(sysfsRoot, devRoot);
 
@@ -129,10 +137,13 @@ export function createLinuxDevices(
   // runs a listing of its own rather than joining one already running.
   const pairedFor = async (mac: string | null): Promise<LocalDevice[]> => {
     const recent = recentPaired;
+    const age = recent === undefined ? -1 : now() - recent.startedAt;
+    // A listing started ahead of the clock predates a backward step and is of unknown age.
     const reusable =
       recent !== undefined &&
-      recent.startedAt > forgottenAt &&
-      now() - recent.startedAt < PAIRED_REUSE_MS &&
+      recent.forgetsBefore === forgets &&
+      age >= 0 &&
+      age < PAIRED_REUSE_MS &&
       recent.devices.some((d) => d.mac === mac);
     return toLocal(reusable ? recent.devices : await listPaired());
   };
@@ -208,7 +219,7 @@ export function createLinuxDevices(
       try {
         return await bluetooth.forget(mac);
       } finally {
-        forgottenAt = now();
+        forgets += 1;
       }
     },
 

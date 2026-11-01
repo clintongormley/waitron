@@ -1,7 +1,7 @@
 import "./errors.js";
 import { createHmac, randomBytes } from "node:crypto";
 import {
-  PIN_THROTTLE_IDLE_MS,
+  pinThrottleIdle,
   pinThrottleRetryAfterSeconds,
   pinThrottleUnlockAt,
 } from "@waitron/identity";
@@ -58,7 +58,9 @@ export function createPasswordThrottle(
   now: () => number = Date.now,
   secret: Uint8Array = randomBytes(32),
 ): PasswordThrottle & PasswordThrottleProbe & { tracked(): number } {
-  // Finished attempts, oldest `lastAt` first: a finish re-inserts its entry at the end.
+  // Finished attempts, oldest `lastAt` first: a finish re-inserts its entry at the end. Only a
+  // backward clock step breaks that order, so the sweep passes over an entry stamped ahead of the
+  // clock rather than stopping at it, and each read checks its own entry.
   const entries = new Map<string, Entry>();
   // Never forgotten or folded, so trimming `entries` never has to walk past one.
   const inFlight = new Map<string, Entry>();
@@ -70,7 +72,7 @@ export function createPasswordThrottle(
   let buckets: Buckets | undefined;
 
   function bucketLive(table: Buckets, bucket: number, t: number): boolean {
-    return t - table.lastAt[bucket]! < PIN_THROTTLE_IDLE_MS;
+    return !pinThrottleIdle(table.lastAt[bucket]!, t);
   }
 
   function fold(entry: Entry, t: number): void {
@@ -98,8 +100,8 @@ export function createPasswordThrottle(
 
   function sweepIdle(t: number): void {
     for (const [key, entry] of entries) {
-      if (t - entry.lastAt < PIN_THROTTLE_IDLE_MS) break;
-      entries.delete(key);
+      if (pinThrottleIdle(entry.lastAt, t)) entries.delete(key);
+      else if (entry.lastAt <= t) break;
     }
   }
 
@@ -110,6 +112,10 @@ export function createPasswordThrottle(
       fold(entry, t);
       entries.delete(key);
     }
+  }
+
+  function liveEntry(entry: Entry | undefined, t: number): Entry | undefined {
+    return entry !== undefined && !pinThrottleIdle(entry.lastAt, t) ? entry : undefined;
   }
 
   function fresh(bucket: number, fingerprint: number, t: number): Entry {
@@ -132,15 +138,14 @@ export function createPasswordThrottle(
       if (inFlight.has(key)) return true;
       const kept = entries.get(key);
       // An idle entry is one `begin` would sweep away before looking.
-      const live = kept !== undefined && t - kept.lastAt < PIN_THROTTLE_IDLE_MS ? kept : undefined;
-      return t < (live ?? fresh(bucket, fingerprint, t)).unlockAt;
+      return t < (liveEntry(kept, t) ?? fresh(bucket, fingerprint, t)).unlockAt;
     },
     begin(email) {
       sweepIdle(now());
       const { key, bucket, fingerprint } = placeOf(secret, email);
       const t = now();
       if (inFlight.has(key)) throw new AppError("password.throttled", { retryAfterSeconds: 1 });
-      const entry = entries.get(key) ?? fresh(bucket, fingerprint, t);
+      const entry = liveEntry(entries.get(key), t) ?? fresh(bucket, fingerprint, t);
       if (t < entry.unlockAt) {
         throw new AppError("password.throttled", {
           retryAfterSeconds: pinThrottleRetryAfterSeconds(entry.unlockAt, t),

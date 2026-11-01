@@ -358,6 +358,59 @@ describe("printer Bluetooth commands", () => {
     expect(commands.agentsHeld()).toBe(0);
   });
 
+  // Queued at 1_000; a clock read earlier than that leaves the command's end further ahead than
+  // its 120 seconds and a result's further ahead than its 60.
+  it.each([
+    ["400 days back", 400 * 86_400_000, false],
+    ["its limit back exactly", 0, true],
+    ["a millisecond past its limit", 1, false],
+  ])("drops a pending command ending further ahead than its limit (%s)", (_case, back, kept) => {
+    const { clock, commands } = store();
+    for (let i = 1; i <= BLUETOOTH_COMMAND_LIMIT; i++)
+      commands.enqueue("agent-1", "pair", address(i), "0000");
+    clock.now -= back;
+    expect(commands.current("agent-1")).toHaveLength(kept ? BLUETOOTH_COMMAND_LIMIT : 0);
+    if (!kept)
+      expect(
+        commands.enqueue("agent-1", "forget", address(BLUETOOTH_COMMAND_LIMIT + 1)),
+      ).toMatchObject({ state: "pending", expiresInMs: 120_000 });
+  });
+
+  it.each([
+    ["400 days back", 400 * 86_400_000, false],
+    ["its limit back exactly", 0, true],
+    ["a millisecond past its limit", 1, false],
+  ])("drops a result ending further ahead than its limit (%s)", (_case, back, kept) => {
+    const { clock, commands } = store();
+    commands.enqueue("agent-1", "forget", A);
+    commands.accept("agent-1", [{ id: "c1", ok: true }]);
+    clock.now -= back;
+    expect(commands.latest("agent-1", A)).toEqual(
+      kept ? expect.objectContaining({ state: "succeeded" }) : undefined,
+    );
+  });
+
+  it.each([
+    ["400 days back", 400 * 86_400_000, 0],
+    ["the sweep's minute ahead exactly", 0, 1],
+    ["a millisecond past the sweep's minute", 1, 0],
+  ])(
+    "sweeps an idle agent when the next sweep lies further ahead than its minute (%s)",
+    (_case, back, held) => {
+      const { clock, commands } = store();
+      commands.enqueue("agent-idle", "forget", A);
+      clock.now += 120_000;
+      commands.current("agent-busy");
+      commands.enqueue("agent-idle", "forget", A);
+      // The sweep above ran at 121_000, so the next is due a minute ahead, at 181_000, and the idle
+      // command queued then ends at 241_000. Stepping back `back` leaves both that far past their
+      // limits; only a sweep reaches the idle agent.
+      clock.now -= back;
+      commands.current("agent-busy");
+      expect(commands.agentsHeld()).toBe(held);
+    },
+  );
+
   it("uses the real clock and random ids by default", () => {
     const commands = createPrinterBluetoothCommands();
     const first = commands.enqueue("agent-1", "forget", A);

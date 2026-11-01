@@ -641,6 +641,17 @@ describe("payments stopped while the box's clock reads behind its last sale", ()
   });
 });
 
+describe("the stop's advice on the Clock row", () => {
+  it.each([
+    ["en", /install/i],
+    ["es", /instal/i],
+  ] as const)("names the administrator's check, not the installer (%s)", (locale, installer) => {
+    setLocale(locale);
+    expect(t("box_status.clock.behind_chain_fix")).toContain(t("box_status.clock.admin.open"));
+    expect(t("box_status.clock.behind_chain_fix")).not.toMatch(installer);
+  });
+});
+
 describe("the Clock row while payments are stopped for the clock", () => {
   const CLOCK_BEHIND = notice("clock.behind_chain", "error", {
     clockAt: "2025-03-14T09:12:00.000Z",
@@ -685,13 +696,16 @@ describe("the Clock row while payments are stopped for the clock", () => {
       },
       contrary: { authority: null, devices: [] },
       confirmation: null,
+      startUp: false,
       ...overrides,
     };
   }
 
   const NO_WITNESS = { authority: null, devices: [] };
 
-  function confirmedStop(source: "authority" | "devices" | "admin" | "elapsed"): ClockStop {
+  function confirmedStop(
+    source: "authority" | "devices" | "admin" | "staff" | "elapsed",
+  ): ClockStop {
     return clockStop({
       proof: "confirmed",
       confirmation: { id: "c-1", source, personName: "Ana", confirmedAt: CONFIRMED },
@@ -771,6 +785,49 @@ describe("the Clock row while payments are stopped for the clock", () => {
       devicesProof(),
       t("box_status.clock.stop.ready"),
     ]);
+  });
+
+  it("never says proof is found for devices alone during start-up, and names who can confirm", () => {
+    const devices = clockStop().agreeing.devices;
+    const startUpLine =
+      "Waiting for proof that the clock is right: the tax agency's time (when the box sends it records), “Check the time” on a till if the tax agency does not answer, or an administrator's device. The box started with payments stopped, so two tills or handhelds are not enough.";
+    const devicesOnly = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({ agreeing: { authority: null, devices }, startUp: true }),
+    });
+    expect(devicesOnly.details).toEqual([
+      compared(),
+      t("box_status.clock.behind_chain_fix"),
+      devicesProof(),
+      startUpLine,
+    ]);
+    const none = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({ proof: "none", agreeing: NO_WITNESS, startUp: true }),
+    });
+    expect(none.details.at(-1)).toBe(startUpLine);
+    // The tax agency's agreement still ends the stop by itself during start-up.
+    const withAuthority = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({ startUp: true }),
+    });
+    expect(withAuthority.details.at(-1)).toBe(t("box_status.clock.stop.ready"));
+    const contrary = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({ proof: "contrary", agreeing: NO_WITNESS, startUp: true }),
+    });
+    expect(contrary.details.at(-1)).toBe(t("box_status.clock.stop.contrary"));
+  });
+
+  it("words the start-up wait in Spanish too", () => {
+    setLocale("es");
+    const clock = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({ proof: "none", agreeing: NO_WITNESS, startUp: true }),
+    });
+    expect(clock.details.at(-1)).toBe(
+      "Esperando una prueba de que la hora es correcta: la de Hacienda (si el equipo le envía registros), «Comprobar la hora» en una caja si Hacienda no responde, o el dispositivo de un administrador. El equipo arrancó con los cobros parados, así que no bastan dos cajas o terminales.",
+    );
   });
 
   it("says the box waits for proof while there is none", () => {
@@ -932,6 +989,12 @@ describe("the Clock row while payments are stopped for the clock", () => {
       devicesProof(),
       `Payments restarted at ${formatIsoMinute(CONFIRMED)}, confirmed by two tills or handhelds.`,
     ]);
+  });
+
+  it("names a staff member's confirmation as a staff member", () => {
+    expect(clockRow({ clockStop: confirmedStop("staff") }).details.at(-1)).toBe(
+      `Payments restarted at ${formatIsoMinute(CONFIRMED)}, confirmed by a staff member.`,
+    );
   });
 
   it("names what confirmed the clock with the bell's words for each source", () => {

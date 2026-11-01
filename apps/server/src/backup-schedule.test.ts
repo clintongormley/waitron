@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { AUTO_MARGIN_MINUTES, MAX_SLEEP_MS, nextFireMs } from "./backup-schedule.js";
+import {
+  AUTO_MARGIN_MINUTES,
+  MAX_SLEEP_MS,
+  longestFireAheadMs,
+  nextFireMs,
+} from "./backup-schedule.js";
+import type { BackupSchedule } from "./backup-config.js";
 
 const MADRID = { timeZone: "Europe/Madrid", dayCutover: "05:00", cutoverChanges: [] };
 
@@ -239,5 +245,86 @@ describe("automatic backups use each candidate business-day boundary", () => {
     expect(nextFireMs({ kind: "interval", ms: 1234 }, clock, now, "node-A")).toBe(
       now.getTime() + 1234,
     );
+  });
+});
+
+describe("longestFireAheadMs", () => {
+  const HOUR = 3600000;
+  const DAY = 24 * HOUR;
+
+  it("is one interval for an interval schedule", () => {
+    expect(longestFireAheadMs({ kind: "interval", ms: 1234 })).toBe(1234);
+  });
+
+  it.each([
+    ["daily", "daily", 49],
+    ["Mondays", [1], 7 * 24 + 25],
+    ["Mondays and Wednesdays", [3, 1], 5 * 24 + 25],
+    ["no day", [], 49],
+  ] as const)("allows the longest gap plus 25 hours on %s", (_, days, hours) => {
+    const at = { hour: 3, minute: 0 };
+    expect(
+      longestFireAheadMs({ kind: "wall-clock", days: days === "daily" ? days : [...days], at }),
+    ).toBe(hours * HOUR);
+    expect(
+      longestFireAheadMs({
+        kind: "wall-clock",
+        days: days === "daily" ? days : [...days],
+        at: "auto",
+      }),
+    ).toBe(hours * HOUR);
+  });
+
+  // A later day start saved for tomorrow, across the night the clocks go back.
+  const LATER_START = {
+    timeZone: "Europe/Madrid",
+    dayCutover: "00:00",
+    cutoverChanges: [{ effectiveBusinessDay: "2026-10-25", dayCutover: "23:59" }],
+  };
+
+  it("needs more than the gap: a later day start puts a Sunday automatic fire over 8 days ahead", () => {
+    const schedule: BackupSchedule = { kind: "wall-clock", days: [0], at: "auto" };
+    const now = new Date("2026-10-17T22:45:00Z");
+    const ahead = nextFireMs(schedule, LATER_START, now, "node-A") - now.getTime();
+    expect(ahead).toBeGreaterThan(8 * DAY);
+    expect(ahead).toBeLessThanOrEqual(longestFireAheadMs(schedule));
+  });
+
+  it("is never exceeded by nextFireMs across both changes of the clocks", () => {
+    const schedules: BackupSchedule[] = [];
+    for (const days of ["daily", [1], [6], [0], [1, 4], []] as const)
+      for (const at of [
+        { hour: 3, minute: 0 },
+        { hour: 23, minute: 59 },
+        { hour: 0, minute: 0 },
+        "auto",
+      ] as const)
+        schedules.push({ kind: "wall-clock", days: days === "daily" ? days : [...days], at });
+    const clocks = [
+      { timeZone: "Europe/Madrid", dayCutover: "05:00", cutoverChanges: [] },
+      LATER_START,
+      {
+        timeZone: "Europe/Madrid",
+        dayCutover: "23:59",
+        cutoverChanges: [{ effectiveBusinessDay: "2026-03-29", dayCutover: "00:00" }],
+      },
+      { timeZone: "Pacific/Kiritimati", dayCutover: "00:00", cutoverChanges: [] },
+    ];
+    // A fire is furthest ahead just after the one before it, so walk from fire to fire, and also
+    // every 331 minutes.
+    let worst = 0;
+    for (const [from, to] of [
+      ["2026-03-15T00:00:00Z", "2026-04-08T00:00:00Z"],
+      ["2026-10-11T00:00:00Z", "2026-11-04T00:00:00Z"],
+    ] as const)
+      for (const schedule of schedules)
+        for (const clock of clocks) {
+          const aheadAt = (at: number) => nextFireMs(schedule, clock, new Date(at), "node-A") - at;
+          for (let at = Date.parse(from); at < Date.parse(to); at += aheadAt(at) + 1)
+            worst = Math.max(worst, aheadAt(at) - longestFireAheadMs(schedule));
+          for (let at = Date.parse(from); at < Date.parse(to); at += 331 * 60000)
+            worst = Math.max(worst, aheadAt(at) - longestFireAheadMs(schedule));
+        }
+    expect(worst).toBeLessThanOrEqual(0);
   });
 });

@@ -13,6 +13,9 @@ import type {
   ClockCheckOpenRequest,
   ClockConfirmation,
   ClockConfirmRequest,
+  ClockStep,
+  ClockStepRecorded,
+  ClockStepRequest,
   ClockProvedWrong,
   ClockStopState,
   ClockWitness,
@@ -57,6 +60,7 @@ import {
 } from "./clock-behind.js";
 import { closeClockCheckByItself, openClockCheck, waitingClockCheck } from "./clock-checks.js";
 import { clockStopState, confirmClockStop, noteClockProvedWrong } from "./clock-confirmation.js";
+import { confirmClockStep, latestClockStep } from "./clock-step.js";
 import { misdatedDetail, misdatedRecords } from "./clock-misdated.js";
 import { readAuthorityTime } from "./authority-time.js";
 import { NOMBRE_RAZON_MAX } from "./venue-fields.js";
@@ -204,6 +208,14 @@ export class VerifactuBackend implements FiscalBackend {
     input: ClockConfirmRequest,
   ): Promise<{ confirmation: ClockConfirmation | null }> {
     return confirmClockStop(tx, input);
+  }
+
+  confirmClockStep(tx: Transaction, input: ClockStepRequest): Promise<ClockStepRecorded> {
+    return confirmClockStep(tx, input);
+  }
+
+  latestClockStep(tx: Transaction): Promise<ClockStep | null> {
+    return latestClockStep(tx);
   }
 
   openClockCheck(tx: Transaction, input: ClockCheckOpenRequest): Promise<{ id: string } | null> {

@@ -127,3 +127,45 @@ describe("Google OpenID Connect state", () => {
     ).toBe("google.invalid");
   });
 });
+
+describe("Google OpenID Connect state stored before a backward clock step", () => {
+  const NOW = new Date("2026-10-01T12:00:00.000Z");
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const later = (ms: number) => new Date(NOW.getTime() + ms);
+
+  it("refuses a state whose expiry lies more than its ten minutes ahead of the clock", async () => {
+    const far = await run((tx) => beginGoogleLogin(tx, { ...config, now: later(400 * DAY_MS) }));
+    expect(
+      await codeOf(() => run((tx) => claimGoogleState(tx, { state: far.state, now: NOW }))),
+    ).toBe("google.invalid");
+    const justAhead = await run((tx) => beginGoogleLogin(tx, { ...config, now: later(1) }));
+    expect(
+      await codeOf(() => run((tx) => claimGoogleState(tx, { state: justAhead.state, now: NOW }))),
+    ).toBe("google.invalid");
+  });
+
+  it("accepts a state begun at the clock", async () => {
+    const begun = await run((tx) => beginGoogleLogin(tx, { ...config, now: NOW }));
+    const claimed = await run((tx) => claimGoogleState(tx, { state: begun.state, now: NOW }));
+    expect(claimed.mode).toBe("login");
+  });
+
+  it("keeps a state whose expiry is exactly its ten minutes ahead when the next ceremony begins", async () => {
+    const first = await run((tx) => beginGoogleLogin(tx, { ...config, now: NOW }));
+    await run((tx) => beginGoogleLogin(tx, { ...config, now: NOW }));
+    const claimed = await run((tx) => claimGoogleState(tx, { state: first.state, now: NOW }));
+    expect(claimed.mode).toBe("login");
+  });
+
+  it("sweeps a state stamped beyond its ten minutes when the next ceremony begins, as it sweeps an expired one", async () => {
+    await run((tx) => beginGoogleLogin(tx, { ...config, now: later(400 * DAY_MS) }));
+    const ceiling = later(10 * 60 * 1000).toISOString();
+    const ahead = () =>
+      suite.db.execute<{ n: number }>(
+        sql`select count(*) as n from google_oidc_states where expires_at > ${ceiling}`,
+      );
+    expect((await ahead()).rows[0]!.n).toBeGreaterThan(0);
+    await run((tx) => beginGoogleLogin(tx, { ...config, now: NOW }));
+    expect((await ahead()).rows[0]!.n).toBe(0);
+  });
+});

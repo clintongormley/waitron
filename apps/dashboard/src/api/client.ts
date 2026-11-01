@@ -1887,10 +1887,12 @@ export interface ClockStopView {
   contrary: { authority: ClockWitnessView | null; devices: ClockStopDeviceView[] };
   confirmation: {
     id: string;
-    source: "authority" | "devices" | "admin" | "elapsed";
+    source: "authority" | "devices" | "admin" | "staff" | "elapsed";
     personName: string | null;
     confirmedAt: string;
   } | null;
+  /** While true, devices alone do not end the stop. */
+  startUp: boolean;
 }
 
 export type ClockStopDeviceView = ClockWitnessView & { label: string | null };
@@ -1905,6 +1907,13 @@ export interface ClockChallengeView {
 export interface ClockConfirmView {
   confirmationId: string;
   source: "admin";
+  confirmedAt: string;
+}
+
+/** LOCAL copy of `POST /api/box/clock-set`'s answer (`apps/server/src/box-health-api.ts`). */
+export interface ClockSetView {
+  confirmationId: string | null;
+  stepMs: number;
   confirmedAt: string;
 }
 
@@ -4594,6 +4603,11 @@ export class DashboardApi {
   /** `deviceAt` is this device's clock in milliseconds since the epoch. */
   clockConfirm(input: { challengeId: string; deviceAt: number }): Promise<ClockConfirmView> {
     return this.#request<ClockConfirmView>("/api/box/clock-confirm", "POST", input);
+  }
+
+  /** Asks the box to set its clock to this device's; `deviceAt` as for `clockConfirm`. */
+  clockSet(input: { challengeId: string; deviceAt: number }): Promise<ClockSetView> {
+    return this.#request<ClockSetView>("/api/box/clock-set", "POST", input);
   }
 
   freeBoxSpace(): Promise<FreedSpaceView> {

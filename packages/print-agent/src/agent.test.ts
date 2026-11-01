@@ -810,6 +810,30 @@ describe("createAgent — setup controls", () => {
     expect(c.join).toHaveBeenCalledWith(A, "kitchen-pi");
   });
 
+  // Asked at 1_000, so due at 301_000; a clock read earlier than 1_000 leaves it further ahead than
+  // its five minutes.
+  it.each([
+    ["400 days back", 1_000 - 400 * 86_400_000, null],
+    ["five minutes ahead exactly", 1_000, "a1.s"],
+    ["a millisecond past five minutes", 999, null],
+  ])(
+    "resets at once when the reset lies further ahead than its five minutes (%s)",
+    async (_case, steppedTo, token) => {
+      let now = 1_000;
+      const host = fakeHost({ config: CONFIG, token: "a1.s", now: () => now });
+      const c = client({
+        pullJobs: vi.fn(async () => failR({ kind: "unreachable", detail: "offline" })),
+      });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      await agent.beginNetworkReset();
+      expect((await agent.setupSnapshot()).resetAt).toBe(301_000);
+      now = steppedTo;
+      await agent.runOnce();
+      expect(await host.token()).toBe(token);
+    },
+  );
+
   it.each([
     [null, null, false],
     [CONFIG, null, false],
@@ -1048,6 +1072,69 @@ describe("createAgent — inventory, discovery and resolve", () => {
       await agent.runOnce();
       expect(probeNetwork).toHaveBeenCalledTimes(1);
       expect(inventoryOf(c, 2).scanned).toEqual([]);
+    },
+  );
+
+  // Received at 1_000 ending at 181_000; a clock read earlier than 1_000 leaves that end further
+  // ahead than it was when it arrived. The pulls after the first fail, so nothing replaces it.
+  it.each([
+    ["400 days back", 1_000 - 400 * 86_400_000, 0],
+    ["as far ahead as it arrived", 1_000, 1],
+    ["a millisecond further ahead than it arrived", 999, 0],
+  ])(
+    "stops scanning when the discovery window's end lies further ahead than it arrived (%s)",
+    async (_case, steppedTo, scans) => {
+      const scan = vi.fn(async () => []);
+      const host = fakeHost({ config: CONFIG, token: "a1.s", scan });
+      let now = 1_000;
+      host.now = () => now;
+      const c = client({
+        pullJobs: vi
+          .fn()
+          .mockResolvedValueOnce(
+            okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: 181_000 }),
+          )
+          .mockResolvedValue(failR({ kind: "unreachable", detail: "offline" })),
+      });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      now = steppedTo;
+      await agent.runOnce();
+      expect(scan).toHaveBeenCalledTimes(scans);
+    },
+  );
+
+  // Received at 1_000 for 29 s, so it ends at 30_000; a clock read earlier than 1_000 leaves that
+  // end further ahead than the check's own length.
+  it.each([
+    ["400 days back", 1_000 - 400 * 86_400_000, 0],
+    ["its length ahead exactly", 1_000, 1],
+    ["a millisecond past its length", 999, 0],
+  ])(
+    "drops an address check whose end lies further ahead than its length (%s)",
+    async (_case, steppedTo, probes) => {
+      const target = { host: "192.168.20.247", port: 9100, expiresInMs: 29000 };
+      const probeNetwork = vi.fn().mockResolvedValue([]);
+      const host = fakeHost({ config: CONFIG, token: "a1.s", probeNetwork });
+      let now = 1000;
+      host.now = () => now;
+      const c = client({
+        pullJobs: vi.fn().mockResolvedValue(
+          okR({
+            nodeId: "n1",
+            servers: [],
+            jobs: [],
+            discoveryUntil: null,
+            networkProbes: [target],
+          }),
+        ),
+      });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      vi.mocked(c.pullJobs).mockResolvedValue(failR({ kind: "unreachable", detail: "offline" }));
+      now = steppedTo;
+      await agent.runOnce();
+      expect(probeNetwork).toHaveBeenCalledTimes(probes);
     },
   );
 
@@ -1914,6 +2001,52 @@ describe("createAgent — start/stop and logging", () => {
       await loop;
     }
   });
+
+  // The next pass is due at 1_050, worked out at 1_000; a clock read earlier than 1_000 leaves it
+  // further ahead than one interval. The server's window follows its clock, so the first poll after
+  // a step back only brings a fresh window and the pass runs on the next.
+  it.each([
+    ["400 days back", 1_000 - 400 * 86_400_000, 2],
+    ["one interval ahead exactly", 1_000, 1],
+    ["a millisecond past one interval", 999, 2],
+  ])(
+    "starts the next scan within two polls when its time lies further ahead than one interval (%s)",
+    async (_case, steppedTo, scans) => {
+      let clock = 1_000;
+      const sleeps: ReturnType<typeof deferred<void>>[] = [];
+      const scan = vi.fn(async () => []);
+      const host = fakeHost({
+        config: CONFIG,
+        token: "a1.s",
+        scan,
+        now: () => clock,
+        sleep: () => {
+          const pause = deferred();
+          sleeps.push(pause);
+          return pause.promise;
+        },
+      });
+      const pulls = vi.fn(async () =>
+        okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: clock + 10_000 }),
+      );
+      const agent = createAgent({ host, client: client({ pullJobs: pulls }), intervalMs: 50 });
+      await agent.runOnce();
+      const loop = agent.start();
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(scan).toHaveBeenCalledTimes(1);
+        clock = steppedTo;
+        sleeps[0]!.resolve(undefined);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        sleeps[1]!.resolve(undefined);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(scan).toHaveBeenCalledTimes(scans);
+      } finally {
+        agent.stop();
+        await loop;
+      }
+    },
+  );
 
   it("logs on a phase change, not on every tick", async () => {
     const host = fakeHost({ config: CONFIG, token: "a1.s" });
@@ -3235,6 +3368,40 @@ describe("createAgent — A4 page jobs", () => {
     expect(host.logs).toContain(`warn page job report abandoned {"delivery":"${PAGE_JOB.id}"}`);
     expect(c.claimPageJob).toHaveBeenCalledTimes(claimsBefore + 1);
   });
+
+  // Last known alive at 50_000; a clock read further back than two leases before that leaves the
+  // claim's start more than its limit ahead.
+  it.each([
+    ["400 days back", 50_000 - 400 * 86_400_000, 1],
+    ["two leases back exactly", 50_000 - PAGE_REPORT_GIVE_UP_MS, 2],
+    ["a millisecond past two leases back", 50_000 - PAGE_REPORT_GIVE_UP_MS - 1, 1],
+  ])(
+    "gives up a report whose claim was last known alive further ahead than two leases (%s)",
+    async (_case, steppedTo, reports) => {
+      let clock = 1_000;
+      const printing = deferred<PagePrintOutcome>();
+      const { host, renewals } = pageHost(() => printing.promise, { now: () => clock });
+      const reportPageJob = vi.fn(async () => failR({ kind: "unreachable", detail: "status 503" }));
+      const c = client({
+        claimPageJob: vi.fn().mockResolvedValueOnce(okR(PAGE_JOB)).mockResolvedValue(okR(null)),
+        reportPageJob,
+      });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      await settle();
+      clock = 50_000;
+      renewals[0]!.resolve();
+      await settle();
+      printing.resolve(SENT);
+      await settle();
+      expect(reportPageJob).toHaveBeenCalledTimes(1);
+
+      clock = steppedTo;
+      await agent.runOnce();
+      await settle();
+      expect(reportPageJob).toHaveBeenCalledTimes(reports);
+    },
+  );
 
   it("logs a runner that throws and claims again on the next pull", async () => {
     const { host } = pageHost(vi.fn(async () => SENT));

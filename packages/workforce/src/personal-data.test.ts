@@ -1,5 +1,5 @@
 import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
-import type { Database, Transaction } from "@waitron/db";
+import type { Database } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import { WorkforceBackend } from "./clocking.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { WORKFORCE_PERSONAL_DATA } from "./personal-data.js";
+import { planningEveryStatement } from "../test/query-plans.js";
 import { attendanceResponseCommands } from "./schema/attendance-responses.js";
 import {
   attendanceMail,
@@ -1072,52 +1073,6 @@ describe("WORKFORCE_PERSONAL_DATA", () => {
     );
   });
 });
-
-interface CompiledStatement {
-  sql: string;
-  params: unknown[];
-}
-
-interface DrizzleSession {
-  prepareQuery(query: CompiledStatement, ...rest: unknown[]): { all(): unknown };
-}
-
-/**
- * `tx` with every statement drizzle compiles on it recorded, each with its query plan read through
- * the same session.
- */
-function planningEveryStatement(tx: Transaction) {
-  const statements: { sql: string; plan: () => string[] }[] = [];
-  const recording = new Proxy(tx, {
-    get: (target, key, receiver) => {
-      const value: unknown = Reflect.get(target, key, receiver);
-      if (key !== "session") return value;
-      const session = value as DrizzleSession;
-      return new Proxy(session, {
-        get: (inner, innerKey, innerReceiver) =>
-          innerKey === "prepareQuery"
-            ? (query: CompiledStatement, ...rest: unknown[]) => {
-                statements.push({
-                  sql: query.sql,
-                  plan: () =>
-                    (
-                      inner
-                        .prepareQuery(
-                          { sql: `explain query plan ${query.sql}`, params: query.params },
-                          undefined,
-                          "all",
-                        )
-                        .all() as { detail: string }[]
-                    ).map((row) => row.detail),
-                });
-                return inner.prepareQuery(query, ...rest);
-              }
-            : Reflect.get(inner, innerKey, innerReceiver),
-      });
-    },
-  });
-  return { recording, statements };
-}
 
 // These reads run while the venue's write lock is held, and the person-keyed tables they read grow
 // with trading.

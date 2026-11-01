@@ -429,3 +429,88 @@ describe("password login backoff under a flood of made-up addresses", () => {
     });
   });
 });
+
+describe("password login backoff across a backward clock step", () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const LONGEST_WAIT_MS = 60_000;
+  const SECRET = new Uint8Array(32);
+  const refused = (throttle: ReturnType<typeof createPasswordThrottle>, email: string): boolean => {
+    try {
+      throttle.begin(email)("error");
+      return false;
+    } catch (error) {
+      if (isAppError(error) && error.code === "password.throttled") return true;
+      throw error;
+    }
+  };
+
+  it("forgets a wait whose last wrong password lies more than the longest wait ahead of the clock", () => {
+    let now = 400 * DAY_MS;
+    const throttle = createPasswordThrottle(() => now);
+    for (let i = 0; i < 4; i++) throttle.begin("owner@example.com")("invalid");
+    now = 0;
+    expect(throttle.wouldRefuse("owner@example.com")).toBe(false);
+    expect(refused(throttle, "owner@example.com")).toBe(false);
+    for (let i = 0; i < 3; i++) throttle.begin("owner@example.com")("invalid"); // three free again
+    expect(refused(throttle, "owner@example.com")).toBe(false);
+  });
+
+  it("forgets a wait one millisecond past the longest wait ahead, and keeps one at it", () => {
+    let now = LONGEST_WAIT_MS + 1;
+    const lapsed = createPasswordThrottle(() => now);
+    for (let i = 0; i < 4; i++) lapsed.begin("owner@example.com")("invalid");
+    now = 0;
+    expect(lapsed.wouldRefuse("owner@example.com")).toBe(false);
+    expect(refused(lapsed, "owner@example.com")).toBe(false);
+
+    now = LONGEST_WAIT_MS;
+    const kept = createPasswordThrottle(() => now);
+    for (let i = 0; i < 4; i++) kept.begin("owner@example.com")("invalid");
+    now = 0;
+    expect(kept.wouldRefuse("owner@example.com")).toBe(true);
+    expect(() => kept.begin("owner@example.com")).toThrowError(
+      expect.objectContaining({ params: { retryAfterSeconds: 62 } }),
+    );
+  });
+
+  it("starts an address forgotten into its counter fresh when the counter lies far ahead of the clock", () => {
+    let now = 400 * DAY_MS;
+    const throttle = createPasswordThrottle(() => now, SECRET);
+    for (let i = 0; i < 4; i++) throttle.begin("real@example.com")("invalid");
+    const real = passwordThrottleBucket(SECRET, "real@example.com");
+    let made = 0;
+    for (let i = 0; made < 1000; i++) {
+      const email = `made-up-${i}@example.com`;
+      if (passwordThrottleBucket(SECRET, email) === real) continue;
+      throttle.begin(email)("invalid");
+      made += 1;
+    }
+    now = 0;
+    expect(throttle.wouldRefuse("real@example.com")).toBe(false);
+    expect(refused(throttle, "real@example.com")).toBe(false);
+  });
+
+  it("refuses no address stamped past the longest wait ahead, even where the sweep stops short of it", () => {
+    let now = 0;
+    const throttle = createPasswordThrottle(() => now);
+    throttle.begin("recent@example.com")("invalid"); // the oldest entry, and not idle: the sweep stops here
+    now = 100_000;
+    for (let i = 0; i < 4; i++) throttle.begin("further@example.com")("invalid");
+    now = 1_000; // a step back: "further" is 99 seconds ahead, lapsed
+    expect(throttle.wouldRefuse("further@example.com")).toBe(false);
+    expect(refused(throttle, "further@example.com")).toBe(false);
+  });
+
+  it("sweeps past an address stamped a little ahead of the clock rather than stopping at it", () => {
+    let now = 30_000;
+    const throttle = createPasswordThrottle(() => now);
+    throttle.begin("ahead@example.com")("invalid"); // the oldest entry
+    now = 100_000;
+    for (let i = 0; i < 5; i++) throttle.begin(`further-${i}@example.com`)("invalid");
+    expect(throttle.tracked()).toBe(6);
+    now = 0; // "ahead" is 30 seconds ahead, not lapsed; each further-i 100 seconds, lapsed
+    const finish = throttle.begin("new@example.com");
+    expect(throttle.tracked()).toBe(2); // "ahead", and "new" in flight
+    finish("success");
+  });
+});

@@ -526,7 +526,7 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
     const [first, second] = held;
     // Stands in for a record before the held ones whose answer has not been read yet.
     await suite.db.execute(sql`
-      update envios set estado = 'pendiente', proximo_intento_en = ${at(2 * HOUR).toISOString()}
+      update envios set estado = 'pendiente', proximo_intento_en = ${at(HOUR).toISOString()}
       where registro_id = ${first!}
     `);
 

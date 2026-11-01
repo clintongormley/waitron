@@ -4,7 +4,13 @@ import { count, enumCheck, enumType, id, json, newId, nodes, table, ts } from "@
 import { clockChecks } from "./clock-checks.js";
 import { registrosFacturacion } from "./registros.js";
 
-export const clockConfirmationSource = enumType(["authority", "devices", "admin", "elapsed"]);
+export const clockConfirmationSource = enumType([
+  "authority",
+  "devices",
+  "admin",
+  "staff",
+  "elapsed",
+]);
 export const clockConfirmationReason = enumType([
   "start",
   "change",
@@ -37,8 +43,9 @@ export const clockConfirmations = table(
     confirmedAt: ts("confirmed_at").notNull(),
     stepMs: count("step_ms").notNull(),
     source: clockConfirmationSource("source").notNull(),
-    // No foreign key: `persons` is in @waitron/identity's migration set, which this set does not
-    // require. Nothing checks that it names a person.
+    // The administrator or staff member who confirmed. No foreign key: `persons` is in
+    // @waitron/identity's migration set, which this set does not require. Nothing checks that it
+    // names a person.
     personId: id("person_id"),
     reason: clockConfirmationReason("reason").notNull(),
     proof: json<unknown>("proof").notNull(),
@@ -54,7 +61,7 @@ export const clockConfirmations = table(
     check("clock_confirmations_reason_ck", enumCheck(t.reason)),
     check(
       "clock_confirmations_person_ck",
-      sql`(${t.source} = 'admin') = (${t.personId} is not null) and (${t.personId} is null or length(${t.personId}) > 0)`,
+      sql`(${t.source} in ('admin', 'staff')) = (${t.personId} is not null) and (${t.personId} is null or length(${t.personId}) > 0)`,
     ),
     check(
       "clock_confirmations_record_ck",

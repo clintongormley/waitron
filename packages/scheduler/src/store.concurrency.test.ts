@@ -57,8 +57,12 @@ describe("two runners starting together on one failed row", () => {
     );
     const later = new Date(NOW.getTime() + 60_000);
     const [first, second] = await Promise.all([
-      withTransaction(suite.db, (tx) => claimRow(tx, { id: claimed!.id, now: later })),
-      withTransaction(suite.db, (tx) => claimRow(tx, { id: claimed!.id, now: later })),
+      withTransaction(suite.db, (tx) =>
+        claimRow(tx, { id: claimed!.id, now: later, longestWaitMs: 24 * 60 * 60 * 1000 }),
+      ),
+      withTransaction(suite.db, (tx) =>
+        claimRow(tx, { id: claimed!.id, now: later, longestWaitMs: 24 * 60 * 60 * 1000 }),
+      ),
     ]);
     expect([first, second].filter((r) => r !== null)).toHaveLength(1);
 

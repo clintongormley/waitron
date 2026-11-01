@@ -118,7 +118,7 @@ function mixedEnvios(sent: Sent[]): Sent[] {
 async function closeGateUntil(at: Date): Promise<void> {
   await suite.db.execute(sql`
     insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
-    values (1, ${at.toISOString()}, 60)
+    values (1, ${at.toISOString()}, 300)
   `);
 }
 

@@ -293,3 +293,22 @@ describe("the till's comp words follow the Comp window's (design D10)", () => {
     );
   });
 });
+
+/**
+ * The box's clock emails (`apps/server/src/i18n/box-emails.ts`) quote this button by the same
+ * literal, and their test pins it there: renaming the button means renaming it in both.
+ */
+describe("the “Check the time” button", () => {
+  it("keeps the label the box's clock emails quote", () => {
+    expect(en["staff_notice.check_time"]).toBe("Check the time");
+    expect(es["staff_notice.check_time"]).toBe("Comprobar la hora");
+  });
+
+  it.each(["sale.clock_unusable_check", "sale.clock_behind_chain_check"] as const)(
+    "%s names the button by its label",
+    (key) => {
+      expect(en[key]).toContain(`“${en["staff_notice.check_time"]}”`);
+      expect(es[key]).toContain(`«${es["staff_notice.check_time"]}»`);
+    },
+  );
+});

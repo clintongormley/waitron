@@ -74,6 +74,24 @@ describe("a PaymentReconciler adapts to a PeriodDuty", () => {
     expect(outcome.resweepAfter).toEqual(new Date("2026-07-26T04:00:00Z"));
   });
 
+  // The scheduler runs at once a re-sweep due further ahead than the duty declares, reading it as
+  // written before the clock stepped back.
+  it("declares a longest re-sweep no shorter than the re-sweep it asks for", async () => {
+    const mismatch = {
+      paymentRef: "pi_1",
+      references: ["pi_1"],
+      localState: "captured" as const,
+      localAmount: "10.00",
+      settledAmount: "9.50",
+      workingOrderId: "wo_1",
+    };
+    const result = { ...emptyResult(PERIOD), orphan: [mismatch], drift: [mismatch] };
+    const duty = reconcilerAsDuty(reconcilerReturning(result));
+
+    const outcome = await duty.run(PERIOD, NOW);
+    expect(duty.longestResweepMs).toBe(outcome.resweepAfter!.getTime() - NOW.getTime());
+  });
+
   it("does not ask for a re-sweep for an orphan with no drift", async () => {
     const orphan = {
       paymentRef: "pi_2",

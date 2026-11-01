@@ -31,7 +31,8 @@ export interface EnrolRateLimiter {
   /**
    * Record one enrol attempt. Throws `device.join_rate_limited` (→ HTTP 429) when this window has
    * already seen {@link ENROL_RATE_MAX} allowed attempts; otherwise returns, having counted this one.
-   * The first call after {@link ENROL_RATE_WINDOW_MS} elapses opens a fresh window and resets the count.
+   * The first call after {@link ENROL_RATE_WINDOW_MS} elapses, or after a backward clock step, opens a
+   * fresh window and resets the count.
    */
   check(): void;
 }
@@ -43,7 +44,8 @@ export function createEnrolRateLimiter(opts: EnrolRateLimiterOptions = {}): Enro
   return {
     check(): void {
       const t = now();
-      if (t - windowStart >= ENROL_RATE_WINDOW_MS) {
+      // A start ahead of the clock was set before a backward clock step.
+      if (t - windowStart >= ENROL_RATE_WINDOW_MS || t < windowStart) {
         windowStart = t;
         count = 0;
       }

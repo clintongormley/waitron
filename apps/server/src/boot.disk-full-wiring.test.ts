@@ -251,7 +251,11 @@ describe("boot's full-disk stop wiring", () => {
         server = await startServer({ ...env, ...extra }, { ...env, ...extra });
         const state = seen.created[0]!.state as DiskFullState;
         const notices = (seen.deviceDeps[0] as DeviceApiDeps).notices!;
-        expect(notices.sources.map(({ owner }) => owner)).toEqual(["box", "fiscal-verifactu"]);
+        expect(notices.sources.map(({ owner }) => owner)).toEqual([
+          "box",
+          "box-clock",
+          "fiscal-verifactu",
+        ]);
         expect(notices.filing()).toEqual({ enabled: filing });
         const reading = notices.clock.now();
         const box = notices.sources[0]!.source;

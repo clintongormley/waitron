@@ -1123,6 +1123,40 @@ describe("design §8 test 21: never sent, sent but not found, and the key window
     expect((await pay(billId, "cash", "1.00")).answer.json.code).toBe("bill.refund_in_progress");
   });
 
+  /** {@link pendingRefund}, its first send made on a clock `aheadMs` ahead, as before a backward step. */
+  async function refundSentAhead(aheadMs: number) {
+    const billId = await bill("Pulpo", "Croquetas", "Croquetas");
+    const card = await pay(billId, "card", "20.00");
+    venue.card.scriptNextRefund({ made: false, answer: LOST });
+    const asked = await refund(billId, card.id, {
+      applied: "5.00",
+      app: venue.appAt(clockPlus(aheadMs)),
+    });
+    const row = await onlyRefundOf(card.id);
+    expect(Date.parse(row.sentAt!)).toBeGreaterThan(Date.now() + aheadMs / 2);
+    return { paymentId: card.id, refundId: row.id, asked };
+  }
+
+  it("sends nothing on a retry when the first send is stamped 25 hours ahead, as after a backward step", async () => {
+    const { paymentId, refundId, asked } = await refundSentAhead(25 * HOUR);
+
+    const retried = await asked.again(venue.app);
+
+    expect(retried.answer.json).toMatchObject({ refund: { state: "pending" } });
+    expect(callsFor(refundId)).toHaveLength(1);
+    expect(await onlyRefundOf(paymentId)).toMatchObject({ state: "pending", sendCount: 1 });
+  });
+
+  it("sends nothing on a retry when the first send is stamped a minute ahead", async () => {
+    const { paymentId, refundId, asked } = await refundSentAhead(60_000);
+
+    const retried = await asked.again(venue.app);
+
+    expect(retried.answer.json).toMatchObject({ refund: { state: "pending" } });
+    expect(callsFor(refundId)).toHaveLength(1);
+    expect(await onlyRefundOf(paymentId)).toMatchObject({ state: "pending", sendCount: 1 });
+  });
+
   it("resends on the manager's resolve inside the window", async () => {
     const { paymentId, refundId } = await pendingRefund();
 

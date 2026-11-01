@@ -2555,6 +2555,13 @@ export interface DepartmentTransferDetail {
   }[];
 }
 
+/** A "Check the time" that went through: `stepMs` 0 confirmed the box's time, any other set it. */
+export interface BoxClockConfirmed {
+  confirmationId: string | null;
+  stepMs: number;
+  confirmedAt: string;
+}
+
 export class TillApi {
   #madeHereListener?: (items: MadeHereItem[]) => void;
 
@@ -2787,6 +2794,28 @@ export class TillApi {
       override === undefined ? command : { ...command, override },
       options.signal,
     );
+  }
+
+  /** A challenge for "Check the time": the box's time, valid for a few seconds. `override` says an
+   * administrator signing in here asks; its PIN is checked by the confirm. */
+  boxClockChallenge(override?: {
+    personId: string;
+    pin: string;
+  }): Promise<{ challengeId: string; boxAt: string }> {
+    return this.#request(
+      "/api/box-clock/challenge",
+      "POST",
+      override === undefined ? {} : { override },
+    );
+  }
+
+  /** Confirms the box's time, or sets it to `deviceAt`, this till's own time in milliseconds. */
+  boxClockConfirm(body: {
+    challengeId: string;
+    deviceAt: number;
+    override?: { personId: string; pin: string };
+  }): Promise<BoxClockConfirmed> {
+    return this.#request("/api/box-clock/confirm", "POST", body);
   }
 
   clockIn(expectedEntryId: string | null, options: ReadOptions = {}): Promise<TillClockState> {

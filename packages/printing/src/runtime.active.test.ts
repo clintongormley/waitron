@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   locations,
@@ -11,7 +11,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { claimPrintJobs } from "./runtime.js";
+import { claimPrintJobs, PRINT_JOB_LEASE_MS } from "./runtime.js";
 import { createPrinter } from "./printers.js";
 import { enqueuePrintJob } from "./outbox.js";
 import type { PrintConfig } from "./printers.js";
@@ -118,5 +118,77 @@ describe("claimPrintJobs respects printers.active", () => {
     );
     expect(reclaimed).toEqual([]);
     expect(await jobStatus(jobId)).toBe("printing");
+  });
+});
+
+// After the clock steps back, a claim stamped before the step lies ahead of the new clock by the
+// step's length. One further ahead than the lease was stamped before such a step, and has lapsed.
+describe("a print job's claim stamped ahead of the clock", () => {
+  async function claimedJobStampedAt(
+    claimedAt: Date,
+  ): Promise<{ cfg: PrintConfig; agentId: string; jobId: string }> {
+    const cfg = await setup();
+    const agentId = await seedAgent(cfg);
+    const jobId = await withTransaction(suite.db, async (tx: Transaction) => {
+      const p = await createPrinter(tx, cfg, {
+        name: "Kitchen",
+        transport: "network_tcp",
+        host: "10.0.0.9",
+      });
+      const { jobId } = await enqueuePrintJob(tx, cfg, p.id, new Uint8Array([0x41]));
+      return jobId;
+    });
+    const claimed = await withTransaction(suite.db, (tx: Transaction) =>
+      claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+    );
+    expect(claimed).toHaveLength(1);
+    await suite.db
+      .update(printJobs)
+      .set({ claimedAt: claimedAt.toISOString() })
+      .where(eq(printJobs.id, jobId));
+    return { cfg, agentId, jobId };
+  }
+
+  it("claims again a job whose claim lies 400 days ahead", async () => {
+    const { cfg, agentId, jobId } = await claimedJobStampedAt(
+      new Date(Date.now() + 400 * 24 * 60 * 60 * 1000),
+    );
+    const reclaimed = await withTransaction(suite.db, (tx: Transaction) =>
+      claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+    );
+    expect(reclaimed.map((j) => j.id)).toEqual([jobId]);
+  });
+
+  describe("under a fixed clock", () => {
+    const NOW = new Date("2026-11-01T12:00:00.000Z");
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    for (const [aheadMs, claimedAgain] of [
+      [PRINT_JOB_LEASE_MS, false],
+      [PRINT_JOB_LEASE_MS + 1, true],
+    ] as const) {
+      it(`${claimedAgain ? "claims again" : "leaves"} a job whose claim lies ${aheadMs} ms ahead`, async () => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(NOW);
+        const { cfg, agentId, jobId } = await claimedJobStampedAt(
+          new Date(NOW.getTime() + aheadMs),
+        );
+        const reclaimed = await withTransaction(suite.db, (tx: Transaction) =>
+          claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+        );
+        expect(reclaimed.map((j) => j.id)).toEqual(claimedAgain ? [jobId] : []);
+      });
+    }
+  });
+
+  // The claim reads the clock after this stamp, so the stamp is at most the lease ahead of it.
+  it("leaves a job whose claim lies at most the lease ahead", async () => {
+    const { cfg, agentId } = await claimedJobStampedAt(new Date(Date.now() + PRINT_JOB_LEASE_MS));
+    const reclaimed = await withTransaction(suite.db, (tx: Transaction) =>
+      claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+    );
+    expect(reclaimed).toEqual([]);
   });
 });

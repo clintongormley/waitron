@@ -112,6 +112,13 @@ oldest backups on that disk, within the same limits, whenever the disk falls und
 it has room to start and, once it is running, tells you on the bell and by
 [email](box-status.md#emails), as it does for the others.
 
+A backup's date comes from the box's clock when it was made. So for a while after the box [sets
+its own clock](box-status.md#clock-behind), when the box deletes old backups it keeps the newest of
+the backups made before the change, as many as it keeps of the others, besides those it keeps as
+usual; and when it makes room, it deletes the backups made before the change last. This lasts as many days as backups are kept, and covers only changes the box made itself,
+not one its time service made. The start on a full disk does not do this yet: it still deletes by
+the dates in the backups' names.
+
 This page cannot remove other files or move your data to a larger disk.
 
 When the bell says **Backup not made**, open **Box status** and check **Disk space**. Use **Free**
@@ -154,16 +161,26 @@ notices guide](till-notices.md#notices) lists what staff can and cannot do meanw
 The tills show **Payments stopped: the box's clock reads earlier than its last sale**. The alerts
 bell says so too, with both times in it: the time on the box's clock and the time of the latest
 sale. On this page, **Sales** and **Clock** turn red with the tills' words, and the **Clock** row
-adds what to do: **Connect the box to the internet so it can correct its clock, or call whoever
-installed it.** Where the box can tell, the row also says whether it is **Kept in time over the
-internet**.
+adds what to do: **With the internet the box corrects its clock by itself; otherwise an
+administrator can use “Check with this device's time”.** Where the box can tell, the row also says
+whether it is **Kept in time over the internet** or **Not kept in time over the internet**, as
+[its time service](box-status.md#clock-service) explains.
+
+While the box is running, a stop like this is also an alert in the bell and an
+[email](box-status.md#emails) to everyone who can manage the system, administrators included. The
+bell sends you to this page. The email says that an administrator can set the clock from their own
+phone or computer on this page, and when any staff member can do it from a till instead
+(during [start-up](box-status.md#clock-at-start)).
 
 There are three ways out:
 
 - **Set the clock right.** On a box that keeps its clock in time over the internet, connecting it to
-  the internet lets it correct the clock by itself. Otherwise, call whoever installed the box: the
-  box has no page for setting its clock. This ends the stop unless the latest sale itself carries a
-  wrong, later time.
+  the internet lets it correct the clock by itself. Otherwise a box that sends records to the tax
+  agency sets its clock from the tax agency's time by itself when it can reach it, an administrator can set it from their
+  own phone or computer, and during start-up, if the box cannot get the tax agency's time, a staff
+  member can set it from a till, as the
+  paragraphs below explain. This ends the stop unless the latest sale itself carries a wrong, later
+  time.
 - **Confirm the box's clock**, when the box's clock is right and it was the latest sale that was
   recorded with a wrong, later time, for example while the clock was running fast. The box usually
   does this by itself, as the paragraphs after this list explain.
@@ -179,7 +196,9 @@ two need nobody to press anything:
   **Clock** row shows it as **Tax agency: matches (checked 2026-10-23 21:40)**.
 - **Two tills or handhelds** at different network addresses, whose clocks are within a minute of the
   box's and of each other's. The row shows them as **Devices: 2 read 2026-10-23 21:40**. The [next
-  section](box-status.md#clock-witnesses) explains which devices count.
+  section](box-status.md#clock-witnesses) explains which devices count. Just after the box starts,
+  two devices are not enough on their own: a person confirms the time instead, as [Just after a
+  start](box-status.md#clock-at-start) explains.
 - **An administrator's own phone or computer**, as the paragraphs below explain.
 
 Only a time taken while the box's clock already read more than a minute behind the last sale
@@ -189,7 +208,12 @@ either. There is no limit on how far behind the last sale the box's clock may be
 While the box waits, the **Clock** row says **Waiting for proof that the clock is right: the tax
 agency's time (when the box sends it records), or two tills or handhelds.** Once the proof is in, it
 says **Proof found: payments restart within a few seconds.**, and the box takes payments again
-within about 15 seconds.
+within about 15 seconds. [Just after a start](box-status.md#clock-at-start), two devices alone do
+not restart payments, so until the tax agency's time agrees, and unless other clocks say the box's
+clock is wrong, the row says **Waiting for proof that the clock is right: the tax agency's time
+(when the box sends it records), “Check the time” on a till if the tax agency does not answer, or
+an administrator's device. The box started with payments stopped, so two tills or handhelds are not
+enough.**
 
 Sometimes the other clocks say the opposite: two or more tills or handhelds agree with each other
 that the box's clock is more than a minute off, or the tax agency's time disagrees with it during
@@ -197,23 +221,54 @@ the stop. The row then lists each clock that disagrees, for example **Tax agency
 (checked 2026-10-23 21:12)** or **Bar till: does not match (read 2026-10-23 21:13)**, and says
 **Other clocks say the box's clock is wrong.** A clock that has answered both ways is listed once,
 by its latest answer. Nothing can confirm
-the clock, not even an administrator. The tax agency's answer counts first: when it agrees with the
+the clock, not even an administrator; it can only be set. The tax agency's answer counts first: when it agrees with the
 box, disagreeing devices do not hold payments back. The box keeps the tax agency's disagreement
 only in its memory, so it forgets it if the box itself restarts during the stop; while the tax
 agency still disagrees, it comes back with the next answer.
 
+When the tax agency's time disagrees with the box's during the stop, the box sets its own clock
+from the tax agency's time, with nobody asked. Setting the clock this way, or in any of the ways
+below, also confirms it: payments restart on the new time, even when that time is still earlier
+than a latest sale that was dated by a clock running fast, and the box lists the sales dated
+wrongly as for any confirmation. The box sets its clock only while it is **Not kept in time over
+the internet**: a box whose time service keeps it in time leaves its clock to that service. If a
+try fails, it tries again later. Devices that disagree never set the clock: they are listed on the
+row and set nothing, and an administrator can still set the clock from their own device.
+
 When no proof arrives, for example because the box has no internet and fewer than two tills are in
-use, an administrator can confirm the clock from this page on their own phone or computer. During a
-stop, the **Clock** row shows administrators a **Check with this device's time** button. It opens a
-dialog that shows both times: **The box's clock says … This device says …**
+use, an administrator can confirm or set the clock from this page on their own phone or computer.
+During a stop, the **Clock** row shows administrators a **Check with this device's time** button.
+Anyone else who can open this page sees **Only an administrator can check the box's clock with
+this device's time. Signing in as one signs you out here first.** and a **Sign in as an
+administrator** button. The button opens a dialog that shows both times: **The box's clock says …
+This device says …**
 
 - When the two are within a minute of each other, counting half the time the box took to answer,
   the dialog asks **They agree. Confirm that the box's clock is right?** Press **Confirm**, and
   payments restart.
+- When they are further apart and the box can set its clock, the dialog asks **The box's clock
+  says … Your device says … Use your device's time?** Press **Use this time**, and the box sets its
+  clock to your device's time and payments restart. The dialog says **The box's clock is
+  set.** The box can set its clock only while it is not kept in time over the internet, and only
+  while the tax agency has not answered during the stop: once it has, the box sets or confirms its
+  clock from the tax agency's time itself.
 - Otherwise it says **The box could not show that its clock is within a minute of your device's.
   Check that your device's time is right; if it is, connect the box to the internet so it can
   correct its clock.** and offers only **Close**. Because of the time the answer takes, two times a
   little under a minute apart can still get this message.
+
+Setting the clock can sign you out of the dashboard. When the clock moves by more than half an
+hour, either way, every dashboard session that was in use just before ends, so the dialog adds
+**Sign in again to go on.** A smaller step forward shortens the time any dashboard session can sit
+unused before it ends by the size of the step; a smaller step back ends no session. Tills and
+handhelds stay signed in.
+
+If the box refuses to set its clock, the dialog says why above its buttons. For example, when the
+part of the box that sets its clock is not answering, it says **This box cannot set its own clock:
+the part of the box that does that is not answering. If the box can reach the internet, its time
+service may still put the clock right by itself. Once the box's clock is within a minute of your
+device's, you can confirm it here.** When the box's clock changed while you were checking, or the
+box had not finished recording what it found about its clock, close the dialog and check again.
 
 When you press **Confirm**, the box reads its own time again and judges the two once more. If it
 cannot show that they agree, the dialog shows the new times with the same message and only
@@ -286,8 +341,70 @@ back, but the alert stays in the bell until a manager presses **Mark handled** o
 
 If the clock reads a date before 28 October 2024, the tills show **Sales can't be recorded: the
 box's clock is wrong** instead, and the bell says so too, with the date the box's clock reads.
-Nothing can confirm the clock then, and the page does not offer **Check with this device's time**.
-The way out is to set the clock right.
+Nothing can confirm the clock then, and the box cannot ask the tax agency for its time, because
+with a date that early it cannot check the tax agency's certificate. The way out is to set the
+clock right: on a box kept in time over the internet, by connecting it to the internet; otherwise
+an administrator sets it with **Check with this device's time**, or, during
+[start-up](box-status.md#clock-at-start), a staff member from a till.
+
+Each time the box sets its clock, whoever or whatever set it, the bell has an alert saying so, with
+the time before and after and how far the clock moved, for example **The box's clock was set from
+Ana's device: moved forward 2 days and 3 hours, from 2026-10-21 18:40 to 2026-10-23 21:40.**, and the box
+[emails](box-status.md#emails) the people who manage the system. When the box set its clock but
+could not confirm the change took, the alert says so and asks you to check the box's clock on this
+page. If the box cannot write the change down at once (a full disk, for example) and restarts before
+it can, that change has no alert and no email.
+
+## Just after a start {#clock-at-start}
+
+When the box starts with one of these clock problems and cannot reach the tax agency's time, a
+staff member can set or confirm the clock from a till, so that the venue does not wait for an
+administrator. A restart of the box counts as a start, whether after a power cut, an update or by
+hand.
+
+The time from the start until the clock no longer stops payments is called start-up here. Within about
+half a minute of the start, once the box has asked the tax agency and had no answer, every till
+and handheld where someone is signed in ends its red clock line with **Check the time** instead of
+**Tell a manager**. On a box whose clock reads before 28 October 2024, or one that does not send
+records to the tax agency, it does so at the till's next check, within about 15 seconds. Any staff member signed in on the
+till can press it; it needs no permission. The [till notices guide](till-notices.md#notices) says
+what the till's dialog shows and what each button does.
+
+The till sends its own time. When it is more than a minute from the box's, the box sets its clock
+to it; when it is within a minute, the box keeps its clock, and payments restart on it. Either way
+the bell and the email name the staff member and the till. When the till's time is used, other
+devices' readings do not stop it. When the till agrees with the box, two devices that disagree
+with the box stop the confirmation, and the dialog says why. Two tills or handhelds that agree
+with the box do not restart payments on their own during start-up; a person confirms instead.
+
+Start-up ends as soon as the box finds that the clock no longer stops payments. From then on, a
+staff member can no longer set the clock from a till. If payments stop for the clock again while
+the box is running, the tills offer nothing: an administrator sets the clock from this page on
+their own phone or computer. If the tax agency answers while **Check the time** is offered, the
+offer ends and the box uses the tax agency's time itself.
+
+## The box's time service {#clock-service}
+
+The box has a time service that keeps its clock right over the internet. Where the box can read
+that service, the **Clock** row says **Kept in time over the internet** when the service is
+running and has reached a time server, and **Not kept in time over the internet** otherwise. When
+the box cannot read it, for example on a laptop, the row says neither.
+
+When the service is not keeping the clock right, the bell warns the people who can manage the
+system. The warning comes by the bell only, not by email, and says why:
+
+- **The box's time service is switched off, so nothing keeps its clock right.**
+- **The box's time service is on but not running, so nothing keeps its clock right.**
+- **The box's time service has not reached a time server, so its clock may drift.** Check that the
+  box can reach the internet.
+- **This box cannot see or control its time service: the part of the box that does that is not
+  answering. If the box can reach the internet, its time service may still keep the clock right by
+  itself.** Only a live venue's box says this; a laptop or a test box stays silent.
+
+Each warning asks you to look at the box's date and time on this page. While the service is not
+keeping the clock right, the box can still set its own clock during a stop, as [When payments stop
+because of the clock](box-status.md#clock-behind) explains. While the part of the box that sets
+its clock is not answering, it cannot: the box can then only confirm a clock that is already right.
 
 ## Sales dated wrongly {#sales-dated-wrongly}
 
@@ -361,7 +478,8 @@ agree that the time is 2026-10-23 21:40, but the box's clock reads 2026-10-23 21
 date and time on the Box status page.** Staff on the tills see nothing for this.
 
 The same readings are the device proof that confirms the box's clock during a stop, as [When
-payments stop because of the clock](box-status.md#clock-behind) explains.
+payments stop because of the clock](box-status.md#clock-behind) explains, except [just after a
+start](box-status.md#clock-at-start). Devices never set the box's clock by themselves.
 
 ## Emails about the box {#emails}
 
@@ -372,6 +490,7 @@ The box emails everyone who can manage the system and has an email address when:
 - its clock is set before 28 October 2024, so no sale can be recorded;
 - its clock reads earlier than its last sale, so payments have stopped;
 - its clock was confirmed during such a stop, so payments restarted;
+- it set its own clock, or tried to and could not confirm the change took;
 - it found sales dated wrongly after such a stop, or found that it cannot tell which ones were;
 - it deleted old backups to make room;
 - a backup was not made for lack of room.
@@ -386,6 +505,12 @@ backups, the box keeps trying while their alert is open in the bell. A full disk
 freed is still nearly out of space, so anyone the full-disk email did not reach is sent the
 nearly-out-of-space email instead. A restart while the problem lasts can send the same email again.
 While no mail server is set up, nothing is sent.
+
+Each time the box sets its clock it sends its own email, even when it sets the clock again within a
+minute, which marks the first change's alert handled. Once a change's alert is handled, the box
+stops trying to send its email to a manager whose address the mail server refused outright, and a
+restart before the email is sent loses it. The alert itself stays on the **Alerts** page, under
+**Handled**.
 
 A box whose clock reads before 28 October 2024 usually cannot send its email: with a date that
 early it cannot check the mail server's certificate.

@@ -52,6 +52,7 @@ import {
   expireInvoiceDeliveryClaims,
   reportInvoiceDelivery,
   reportInvoiceEmailDelivery,
+  INVOICE_DELIVERY_LEASE_MS,
 } from "./invoice-delivery.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -517,6 +518,40 @@ describe("invoice delivery claims", () => {
     },
   );
 
+  describe("times stamped ahead of the clock, as after a backward step", () => {
+    const ahead = (ms: number) => new Date(start.getTime() + ms);
+    const scheduleAt = (id: string, at: Date) =>
+      suite.db.execute(
+        sql`update invoice_deliveries set next_attempt_at = ${at.toISOString()} where id = ${id}`,
+      );
+
+    it("claims a queued entry whose next attempt lies further ahead than the longest retry wait", async () => {
+      const { delivery } = await queued();
+      await scheduleAt(delivery.id, ahead(600_000));
+      expect(await claim(delivery.id)).toBeUndefined();
+      await scheduleAt(delivery.id, ahead(600_001));
+      expect(await claim(delivery.id)).toBeDefined();
+    });
+
+    it("expires a claim taken further ahead than its lease", async () => {
+      const { delivery } = await queued();
+      expect(await claim(delivery.id)).toBeDefined();
+      await suite.db.execute(
+        sql`update invoice_deliveries set claimed_at = ${ahead(INVOICE_DELIVERY_LEASE_MS).toISOString()} where id = ${delivery.id}`,
+      );
+      expect(await withTransaction(suite.db, (tx) => expireInvoiceDeliveryClaims(tx, start))).toBe(
+        0,
+      );
+      await suite.db.execute(
+        sql`update invoice_deliveries set claimed_at = ${ahead(INVOICE_DELIVERY_LEASE_MS + 1).toISOString()} where id = ${delivery.id}`,
+      );
+      expect(await withTransaction(suite.db, (tx) => expireInvoiceDeliveryClaims(tx, start))).toBe(
+        1,
+      );
+      expect(await rows()).toMatchObject([{ status: "unknown", failure_code: "timeout" }]);
+    });
+  });
+
   it.each(["deliveryId", "generation", "token", "holder"] as const)(
     "ignores a report with the wrong %s",
     async (field) => {
@@ -840,6 +875,34 @@ describe("receipt delivery reservation", () => {
       receiptCopy: false,
       receiptHandover: null,
     });
+  });
+
+  it("hands the receipt agent a queued copy whose next attempt lies 400 days ahead, as after a backward step", async () => {
+    const sale = await issue();
+    const job = await receiptJob(sale.saleId);
+    const delivery = await withTransaction(suite.db, (tx) =>
+      reserveInvoiceDelivery(tx, sale.saleId, request(job.jobId)),
+    );
+    const [location] = await suite.db.select().from(locations);
+    const [agent] = await suite.db
+      .insert(printAgents)
+      .values({ locationId: location!.id, name: "Receipt agent", tokenHash: "scrypt$fixture" })
+      .returning();
+    const pick = (nextAttemptAt: Date) =>
+      withTransaction(suite.db, async (tx) => {
+        await tx.execute(
+          sql`update invoice_deliveries set next_attempt_at = ${nextAttemptAt.toISOString()} where id = ${delivery.id}`,
+        );
+        return claimInvoicePrintJobs(
+          tx,
+          agent!.id,
+          { locationId: location!.id, visibleKeys: [] },
+          start,
+        );
+      });
+    expect(await pick(new Date(start.getTime() + 600_000))).toEqual([]);
+    const [claimed] = await pick(new Date(start.getTime() + 400 * 86_400_000));
+    expect(claimed!.invoiceClaim).toMatchObject({ deliveryId: delivery.id, generation: 1 });
   });
 
   it("correlates the existing queued original without another job or handover snapshot", async () => {
@@ -2518,6 +2581,44 @@ describe("invoice email worker pass", () => {
       { status: "unknown", reported_outcome: "sent" },
       { id: nextId, status: "queued", attempts: 0, reported_at: null },
     ]);
+  });
+  it("sends, as after a backward step, a queued email whose next attempt lies 400 days ahead on the worker's next pass", async () => {
+    const { delivery } = await queued();
+    await suite.db.execute(
+      sql`update invoice_deliveries set next_attempt_at = ${new Date(start.getTime() + 400 * 86_400_000).toISOString()} where id = ${delivery.id}`,
+    );
+    const sent: string[] = [];
+    expect(
+      await runInvoiceEmailPass({
+        db: suite.db,
+        holder: "server-one",
+        now: () => start,
+        readDocument: documentFor,
+        send: async () => {
+          sent.push(delivery.id);
+          return { status: "sent" };
+        },
+      }),
+    ).toEqual({ processed: true, deliveryId: delivery.id });
+    expect(sent).toEqual([delivery.id]);
+  });
+
+  it("expires on the worker's next pass, as after a backward step, a claim taken 400 days ahead", async () => {
+    const { delivery } = await queued();
+    await claim(delivery.id);
+    await suite.db.execute(
+      sql`update invoice_deliveries set claimed_at = ${new Date(start.getTime() + 400 * 86_400_000).toISOString()} where id = ${delivery.id}`,
+    );
+    await runInvoiceEmailPass({
+      db: suite.db,
+      holder: "server-two",
+      now: () => start,
+      readDocument: documentFor,
+      send: async (): Promise<InvoiceDeliveryOutcome> => {
+        throw new Error("Uncertain replay");
+      },
+    });
+    expect(await rows()).toMatchObject([{ status: "unknown", failure_code: "timeout" }]);
   });
 });
 

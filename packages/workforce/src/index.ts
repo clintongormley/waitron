@@ -11,6 +11,7 @@ export {
 } from "./schema/attendance.js";
 export { enqueueAttendanceDay } from "./attendance-state.js";
 export {
+  attendanceMailDue,
   claimAttendanceMail,
   expireAttendanceMailClaims,
   reportAttendanceMail,
@@ -83,6 +84,7 @@ export { computeEntryHash, verifyChain } from "./chain-hash.js";
 export type { ChainVerification, EntryHashInput, VerifiableEntry } from "./chain-hash.js";
 export { WorkforceBackend } from "./clocking.js";
 export { projectTimeRecord } from "./record-projection.js";
+export { readLatestLiveEntry } from "./record-reads.js";
 export type { TimeRecordQuery } from "./record-reads.js";
 export type {
   ClockEventInput,

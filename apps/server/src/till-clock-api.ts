@@ -91,11 +91,18 @@ export function mountTillClockApi(app: Hono, deps: TillClockApiDeps, log: Logger
       const state = await withTransaction(deps.db, async (tx) => {
         await admit(tx, deps, session);
         const at = deps.now();
-        await reconcileAttendanceBeforeClock(tx, { ...deps.cfg, personId: session.personId }, at);
-        return readTillClockState(
+        const read = await reconcileAttendanceBeforeClock(
           tx,
-          { personId: session.personId, locationId: deps.cfg.locationId },
+          { ...deps.cfg, personId: session.personId },
           at,
+        );
+        return (
+          read ??
+          readTillClockState(
+            tx,
+            { personId: session.personId, locationId: deps.cfg.locationId },
+            at,
+          )
         );
       });
       return c.json(state);
@@ -111,12 +118,17 @@ export function mountTillClockApi(app: Hono, deps: TillClockApiDeps, log: Logger
         const result = await withTransaction(deps.db, async (tx) => {
           await admit(tx, deps, session);
           const at = deps.now();
-          await reconcileAttendanceBeforeClock(tx, { ...deps.cfg, personId: session.personId }, at);
-          const before = await readTillClockState(
-            tx,
-            { personId: session.personId, locationId: deps.cfg.locationId },
-            at,
-          );
+          const before =
+            (await reconcileAttendanceBeforeClock(
+              tx,
+              { ...deps.cfg, personId: session.personId },
+              at,
+            )) ??
+            (await readTillClockState(
+              tx,
+              { personId: session.personId, locationId: deps.cfg.locationId },
+              at,
+            ));
           if (before.lastEntryId !== expectedEntryId)
             // Commit reconciliation even when its new end makes the submitted action stale.
             return { error: new AppError("attendance.state_changed", {}) };

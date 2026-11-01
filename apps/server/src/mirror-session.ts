@@ -1,5 +1,5 @@
 import type { MiddlewareHandler } from "hono";
-import { and, eq, isNotNull, isNull, lt, or } from "drizzle-orm";
+import { and, eq, gt, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { nowIso, withTransaction, type Database, type DeploymentMode } from "@waitron/db";
 import {
   foldForUniqueness,
@@ -117,6 +117,7 @@ export function mirrorSession(
     // session ended with a fresh `last_seen_at` dead. One clock read, so stamp and cutoff agree.
     const seenAt = nowIso();
     const staleBefore = new Date(Date.parse(seenAt) - KEEPALIVE_INTERVAL_MS).toISOString();
+    const aheadAfter = new Date(Date.parse(seenAt) + KEEPALIVE_INTERVAL_MS).toISOString();
     await withTransaction(db, (tx) =>
       tx
         .update(managementSessions)
@@ -128,6 +129,9 @@ export function mirrorSession(
               // Never matches: `last_seen_at` is NOT NULL.
               isNull(managementSessions.lastSeenAt),
               lt(managementSessions.lastSeenAt, staleBefore),
+              // Left ahead by a backward clock step: the idle rule refuses a stamp far ahead. A
+              // concurrent request's stamp is only moments ahead.
+              gt(managementSessions.lastSeenAt, aheadAfter),
               isNotNull(managementSessions.endedAt),
             ),
           ),

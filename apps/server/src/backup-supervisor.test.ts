@@ -1190,6 +1190,32 @@ describe("BackupSupervisor hands each run the room hooks", () => {
     );
   }, 60_000);
 
+  it("hands each run the box's latest clock step, so the archives it holds are kept", async () => {
+    const dest = await makeDestDir();
+    const behindKey = backupArchiveKey(new Date(Date.now() - 400 * 24 * HOUR));
+    await writeFile(join(dest, behindKey), "behind");
+    const refs: Refs = {
+      config: localFsConfig([dest], STRONG_KEY_1),
+      role: "primary",
+      venueDir: await makeVenueDir(),
+      logs: [],
+      managed: false,
+    };
+    const latestClockStep = vi.fn(async () => ({
+      confirmedAt: new Date(Date.now() - HOUR).toISOString(),
+      stepMs: 400 * 24 * HOUR,
+    }));
+    const sup = supervisorFor(refs, await makeStateDir(), { latestClockStep });
+    try {
+      await sup.reload();
+      await waitForArchiveUnderCurrentKey(sup);
+    } finally {
+      await sup.stop();
+    }
+    expect(latestClockStep).toHaveBeenCalled();
+    expect(await listArchives(dest)).toContain(behindKey);
+  }, 60_000);
+
   it("deletes nothing without the two hooks, and the run is refused", async () => {
     const { dest, oldKey, newestKey } = await folderWithOldAndNewest();
     const refs: Refs = {

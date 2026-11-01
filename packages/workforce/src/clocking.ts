@@ -23,10 +23,9 @@ export type {
 import { recordAutomaticClose, confirmAutomaticEntry } from "./automatic-entries.js";
 import type { AutomaticCloseInput, AutomaticConfirmationInput } from "./automatic-entries.js";
 export type { AutomaticCloseInput, AutomaticConfirmationInput } from "./automatic-entries.js";
-import { liveClockEntries, compareEvents } from "./effective-entries.js";
 import { readTimeRecord, type TimeRecordQuery } from "./record-reads.js";
 import type { TimeRecord } from "./record-types.js";
-import { readRecordedEntries, readLatestLiveEntries } from "./record-reads.js";
+import { readRecordedEntries, readLatestLiveEntry } from "./record-reads.js";
 import {
   dailyContractedTargetMinutes,
   projectWorkSessions,
@@ -605,9 +604,7 @@ export class WorkforceBackend {
   }
 
   private async currentState(tx: Transaction, personId: string): Promise<ShiftState> {
-    const last = liveClockEntries(await readLatestLiveEntries(tx, personId))
-      .sort(compareEvents)
-      .at(-1);
+    const last = await readLatestLiveEntry(tx, personId);
     return last === undefined ? "out" : STATE_AFTER[last.entryKind as LiveEntryKind];
   }
 

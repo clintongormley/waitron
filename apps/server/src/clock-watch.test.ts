@@ -108,6 +108,7 @@ function harness(
   const store = {
     noteAuthority: vi.fn(),
     witnesses: vi.fn((): ClockWitness[] => []),
+    forSetting: vi.fn(() => []),
     takeNewAuthority: vi.fn((): ClockWitness[] => queued.shift() ?? []),
     endStop: vi.fn(),
     clear: vi.fn(),
@@ -856,6 +857,7 @@ describe("startClockWatch", () => {
       store: {
         noteAuthority: vi.fn(),
         witnesses: vi.fn(() => []),
+        forSetting: vi.fn(() => []),
         takeNewAuthority: vi.fn(() => []),
         endStop: vi.fn(),
         clear: vi.fn(),

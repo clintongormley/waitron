@@ -1,4 +1,4 @@
-import { formatBytes, formatMoney } from "@waitron/shared";
+import { formatBytes, formatDuration, formatMoney } from "@waitron/shared";
 import { formatIsoMinute } from "./date-format.js";
 import { currentLocale, pickLocale } from "./i18n.js";
 import { GENERIC_ALERT } from "./strings.js";
@@ -10,7 +10,9 @@ export { formatBytes };
  * that calendar day, the way the alert's language writes it; `{name:bytes}` writes a number of
  * bytes as gigabytes or megabytes, the way the alert's language writes them; `{name:minute}` writes
  * an instant in `toISOString`'s shape as `YYYY-MM-DD HH:MM` in the browser's zone, in either
- * language; `{name:list}` writes the words a registered word list gives the param's value.
+ * language; `{name:duration}` writes a number of milliseconds, either sign, as its two largest
+ * non-zero whole units from days to seconds (tenths of a second below one), in the alert's language;
+ * `{name:list}` writes the words a registered word list gives the param's value.
  * A variant is chosen by its param being `true`: a `replace` variant's words stand instead of the
  * message, and otherwise each `append` variant's words follow it. `one` words stand instead of the
  * message's own when the param they name is the number 1; variants apply over them as usual. */
@@ -115,6 +117,7 @@ export function alertWords(
       if (kind === "date") return formatDay(value, l);
       if (kind === "bytes") return formatBytes(value, l);
       if (kind === "minute") return formatMinute(value);
+      if (kind === "duration") return formatDuration(value, l);
       if (kind === undefined) return formatParam(value);
       if (!Object.hasOwn(wordLists, kind)) return formatParam(null);
       const list = wordLists[kind]!;

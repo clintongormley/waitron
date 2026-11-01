@@ -1,6 +1,7 @@
 import { chmod, mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { Database } from "@waitron/db";
+import type { ClockStep } from "@waitron/fiscal";
 import { recordBackupOutcome, type BackupOutcomeHolder } from "./alert-sources.js";
 import type { WaitronModule } from "@waitron/module";
 import { assembleArchiveEntries, collectStateParts } from "./archive-entries.js";
@@ -9,7 +10,12 @@ import { ArchiveReadBudget } from "./archive-read-budget.js";
 import { packArchiveStream, type ArchiveInputEntry } from "./backup-archive-file.js";
 import { buildManifest, type BackupManifest } from "./backup-manifest.js";
 import type { BackupSchedule } from "./backup-config.js";
-import { MAX_SLEEP_MS, nextFireMs, type ScheduleClock } from "./backup-schedule.js";
+import {
+  MAX_SLEEP_MS,
+  longestFireAheadMs,
+  nextFireMs,
+  type ScheduleClock,
+} from "./backup-schedule.js";
 import type { DeploymentEnvironment } from "./config.js";
 import { errnoOf } from "./errno.js";
 import { freeBytes, type Statfs } from "./free-bytes.js";
@@ -26,6 +32,7 @@ import {
 import { withDestinationCall } from "./backup-destination-call.js";
 import {
   foldersOnDisk,
+  heldByStep,
   installationStartOrNull,
   makeRoom,
   reportArchivesDeleted,
@@ -68,6 +75,9 @@ export interface BackupSweepDeps {
   schedule: BackupSchedule;
   /** How many of the newest artifacts each destination keeps. */
   retain: number;
+  /** The latest step the box made to its own clock, read once a run; absent, nothing is held
+   * (see {@link clockStepHold}). */
+  latestClockStep?: () => Promise<LatestClockStep>;
   /** An artifact older than this many days is deleted even within the count cap. */
   retainDays: number;
   /** Node-stable, so a fleet spreads its `auto` backups across a window rather than firing together. */
@@ -105,7 +115,8 @@ export interface BackupSweepDeps {
    * The venue database's current size. Before the copy, a tick needs twice this in `stagingDir` (the
    * staged copy and its ciphertext) plus this once more for each local destination counted as on
    * the same disk (each folder copy's working file). When free space there is short, it first
-   * deletes old backups, oldest first and only those `installationStartedAt` allows, and refuses
+   * deletes old backups, oldest first (those a clock step holds last) and only those
+   * `installationStartedAt` allows, and refuses
    * only when that cannot bring free space to the need plus `spaceFloorBytes`. After the copy it
    * refuses when free space is under the copy's own size. After encrypting, when at least one
    * local destination is counted as on that disk (one whose disk could not be read is counted), a
@@ -183,6 +194,7 @@ export async function runOnce(
   const reportDeleted = (deleted: readonly DeletableArchive[]) =>
     reportArchivesDeleted(deps.onArchivesDeleted, deleted, now(), deps.log);
   try {
+    const held = await readClockStepHold(deps.latestClockStep, nowMs, deps.retainDays, deps.log);
     // Collected before the copy, so a broken state folder fails the tick without copying the
     // whole database.
     const [manifest, parts] = await Promise.all([
@@ -226,6 +238,7 @@ export async function runOnce(
           reason: "backup_room",
           outOfReach: "floor",
           installationStartedAt,
+          clockStepHold: async () => held,
           signal: deps.signal,
           log: deps.log,
           onDeleted: reportDeleted,
@@ -268,7 +281,7 @@ export async function runOnce(
             deps.onUploaded?.(backend.id);
             if (deps.outcomes)
               recordBackupOutcome(deps.outcomes, backend.id, true, stamp.toISOString());
-            await pruneBackend(backend, deps.retain, deps.retainDays, nowMs, call, key);
+            await pruneBackend(backend, deps.retain, deps.retainDays, nowMs, call, key, held);
           });
           deps.log("info", "backup.destination_completed", { destination: backend.id, key });
         } catch (err) {
@@ -320,10 +333,63 @@ export async function runOnce(
  * number. */
 const DELETE_BATCH = 1000;
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** How far ahead of the clock an archive's stamp may be and still be ranked by it. */
+const AHEAD_TOLERANCE_MS = 60_000;
+
+/** The stamps a recent step makes untrustworthy: those before the step's `confirmedAt`, written by
+ * the clock it corrected, and those more than a minute ahead of now. Held while the step is less
+ * than `retainDays` old by the clock now; a step dated more than a minute ahead of now holds
+ * nothing, or a clock put back after it would hold every archive until it caught up. Only steps the
+ * box made are recorded, so a step by the time service, or by hand on the host, holds nothing. */
+export function clockStepHold(
+  step: ClockStep | null,
+  nowMs: number,
+  retainDays: number,
+): ClockStepHold | undefined {
+  if (step === null) return undefined;
+  const fromMs = Date.parse(step.confirmedAt);
+  if (fromMs > nowMs + AHEAD_TOLERANCE_MS || nowMs - fromMs >= retainDays * DAY_MS)
+    return undefined;
+  return { fromMs, toMs: nowMs + AHEAD_TOLERANCE_MS };
+}
+
+/** A step the box made to its own clock, `"setting"` while the box is setting it and where it
+ * lands is not yet known, or null. */
+export type LatestClockStep = ClockStep | "setting" | null;
+
+/** The hold now: everything while the box is setting its clock, or when the step cannot be read
+ * (logged `backup.clock_step_unreadable`), as an installation start that cannot be read deletes
+ * nothing. */
+export async function readClockStepHold(
+  read: (() => Promise<LatestClockStep>) | undefined,
+  nowMs: number,
+  retainDays: number,
+  log: Logger,
+): Promise<ClockStepHold | "everything" | undefined> {
+  try {
+    const step = (await read?.()) ?? null;
+    return step === "setting" ? "everything" : clockStepHold(step, nowMs, retainDays);
+  } catch (err) {
+    log("warn", "backup.clock_step_unreadable", { errorCode: codeOf(err), errno: errnoOf(err) });
+    return "everything";
+  }
+}
+
+export interface ClockStepHold {
+  fromMs: number;
+  toMs: number;
+}
+
 /** Deletes an archive past EITHER cap: beyond the `retain` newest, or older than `retainDays`, both
  * by the stamp in its key, never the file's mtime. Only a name {@link parseBackupArchiveKey} reads
  * is an archive; any other name is left where it is and does not take a kept slot. `justStored`,
- * the archive this run put, ranks first among archives sharing its stamp and is never deleted. */
+ * the archive this run put, ranks first among archives sharing its stamp and is never deleted. An
+ * archive stamped more than a minute ahead of `nowMs` ranks after every other. One stamped outside
+ * `held` (see {@link clockStepHold}) takes no kept slot; the `retain` newest of those by stamp are
+ * kept and the rest deleted, so a destination holds at most twice `retain`. `"everything"` deletes
+ * nothing. */
 export async function pruneBackend(
   backend: StorageBackend,
   retain: number,
@@ -331,30 +397,44 @@ export async function pruneBackend(
   nowMs: number,
   call: StorageCall,
   justStored?: string,
+  held?: ClockStepHold | "everything",
 ): Promise<void> {
+  if (held === "everything") return;
+  const heldArchives: Array<{ key: string; ms: number }> = [];
   const archives = (await backend.list(BACKUP_KEY_PREFIX, call)).flatMap(({ key }) => {
     const parsed = parseBackupArchiveKey(key);
-    return parsed === null ? [] : [{ key, ms: parsed.timestamp.getTime() }];
+    if (parsed === null) return [];
+    const ms = parsed.timestamp.getTime();
+    if (heldByStep(held, ms)) {
+      heldArchives.push({ key, ms });
+      return [];
+    }
+    return [{ key, ms, ahead: ms > nowMs + AHEAD_TOLERANCE_MS ? 1 : 0 }];
   });
+  const byKeyDesc = (a: { key: string }, b: { key: string }) =>
+    a.key < b.key ? 1 : a.key > b.key ? -1 : 0;
   const rank = (key: string) => (key === justStored ? 1 : 0);
   archives.sort(
-    (a, b) =>
-      b.ms - a.ms || rank(b.key) - rank(a.key) || (a.key < b.key ? 1 : a.key > b.key ? -1 : 0),
+    (a, b) => a.ahead - b.ahead || b.ms - a.ms || rank(b.key) - rank(a.key) || byKeyDesc(a, b),
   );
-  const maxAgeMs = retainDays * 24 * 60 * 60 * 1000;
-  const toDelete = archives
-    .filter(
+  heldArchives.sort((a, b) => b.ms - a.ms || byKeyDesc(a, b));
+  const maxAgeMs = retainDays * DAY_MS;
+  const toDelete = [
+    ...archives.filter(
       (archive, i) => archive.key !== justStored && (i >= retain || nowMs - archive.ms > maxAgeMs),
-    )
-    .map((archive) => archive.key);
+    ),
+    ...heldArchives.slice(retain),
+  ].map((archive) => archive.key);
   for (let i = 0; i < toDelete.length; i += DELETE_BATCH)
     await backend.deleteMany(toDelete.slice(i, i + DELETE_BATCH), call);
 }
 
 /**
  * Takes a copy at once, then sleeps toward each next fire in chunks of at most `MAX_SLEEP_MS`, so a
- * clock jump is noticed within the hour. A failed tick is logged with its code, never its message,
- * which could carry a path; an abort mid-tick is a cancellation, not a failure.
+ * step of the clock is noticed within the hour: a step forward past the fire fires then, and a step
+ * back that leaves the fire further ahead than the schedule puts one works the fire out again. A
+ * failed tick is logged with its code, never its message, which could carry a path; an abort
+ * mid-tick is a cancellation, not a failure.
  */
 export async function runBackupSweep(deps: BackupSweepDeps): Promise<void> {
   const now = deps.now ?? (() => new Date());
@@ -365,12 +445,14 @@ export async function runBackupSweep(deps: BackupSweepDeps): Promise<void> {
     while (!deps.signal.aborted) {
       // Inside the try: a `readClock` rejection must not end the backup loop.
       let fireAt: number;
+      let computedAt: number;
       try {
         const clock =
           deps.schedule.kind === "wall-clock"
             ? await deps.readClock()
             : { timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] };
-        fireAt = nextFireMs(deps.schedule, clock, now(), deps.jitterSeed);
+        computedAt = now().getTime();
+        fireAt = nextFireMs(deps.schedule, clock, new Date(computedAt), deps.jitterSeed);
       } catch (err) {
         if (deps.signal.aborted) break;
         deps.log("warn", "backup.schedule_failed", { errorCode: codeOf(err) });
@@ -380,12 +462,23 @@ export async function runBackupSweep(deps: BackupSweepDeps): Promise<void> {
       deps.onScheduled?.(fireAt);
       // `fireAt` is fixed for the cycle, so a time zone or cutover change lands at the next fire.
       // Never recompute it mid-wait: an interval schedule's next fire is `now + ms`, so each wake
-      // would push it out again.
+      // would push it out again. The one exception is a `fireAt` the clock stepped back from: the
+      // clock reads earlier than when the fire was worked out, and the fire lies further ahead
+      // than the schedule puts one. Without the first, a fire past the bound with no step (a
+      // two-hour change of the clocks) would be worked out again at every turn, never sleeping.
+      const longestAhead = longestFireAheadMs(deps.schedule);
+      let steppedBack = false;
       while (!deps.signal.aborted && now().getTime() < fireAt) {
+        const nowMs = now().getTime();
+        if (nowMs < computedAt && fireAt - nowMs > longestAhead) {
+          steppedBack = true;
+          break;
+        }
         const chunk = Math.min(MAX_SLEEP_MS, fireAt - now().getTime());
         await deps.sleep(chunk, deps.signal);
       }
       if (deps.signal.aborted) break;
+      if (steppedBack) continue;
       deps.onScheduled?.(null);
       await tick(deps);
     }

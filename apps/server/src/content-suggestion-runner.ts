@@ -166,9 +166,10 @@ export function createContentSuggestionRunner(deps: ContentSuggestionRunnerDeps)
     if (!deps.isPrimary()) return "idle";
     const job = await withTransaction(deps.db, (tx) => readActiveSuggestionJob(tx));
     if (!job) return "idle";
-    // A refusal that keeps coming back would otherwise hold the run open, refusing every new one.
-    if (now().getTime() - Date.parse(job.createdAt) >= JOB_LIFETIME_MS)
-      return close(job, "expired", null);
+    // A refusal that keeps coming back would otherwise hold the run open, refusing every new one. A
+    // job made more than its lifetime ahead of now was made before the clock stepped back.
+    const age = now().getTime() - Date.parse(job.createdAt);
+    if (age >= JOB_LIFETIME_MS || age < -JOB_LIFETIME_MS) return close(job, "expired", null);
     if ((await deps.connection.translationService()) !== "on")
       return close(job, "failed", "not_connected");
     if (job.state === "submitting")

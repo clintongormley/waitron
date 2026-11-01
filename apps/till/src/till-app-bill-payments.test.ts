@@ -2230,6 +2230,42 @@ describe("till-app: a bill payment's refusals and retries", () => {
     );
   });
 
+  it("points a cash contribution's clock refusal at Check the time while the box offers it", async () => {
+    setLocale("en-GB");
+    const takeBillPayment = vi.fn().mockRejectedValue({
+      code: "clock.behind_chain",
+      clockAt: "2025-03-14T08:12:00.000Z",
+      offsetMinutes: 60,
+      lastRecordAt: "2026-10-18T21:40:00.000Z",
+      lastRecordOffsetMinutes: 120,
+      status: 409,
+    });
+    const marker = {
+      owner: "box-clock",
+      key: "clock.check_time",
+      code: "clock.check_time",
+      severity: "error",
+      params: {},
+    };
+    const getDeviceEquipment = vi
+      .fn()
+      .mockResolvedValue({ ...equipmentWith(null), notices: [marker] });
+    const { el } = await mountApp({ takeBillPayment, getDeviceEquipment });
+    await openTable(el);
+    await vi.waitFor(() => expect(getDeviceEquipment).toHaveBeenCalled());
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(
+      t("sale.clock_behind_chain_check")
+        .replace("{clockAt}", "14/03/2025\u00a009:12")
+        .replace("{lastRecordAt}", "18/10/2026\u00a023:40"),
+    );
+  });
+
   it("says the operator may not take payments when the server refuses them the payment permission", async () => {
     const takeBillPayment = vi.fn().mockRejectedValue({
       code: "authorization.not_permitted",

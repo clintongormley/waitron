@@ -379,6 +379,24 @@ describe("page-printer management routes", () => {
     expect((await registered(app, target(agent.agentId, "10.61.4.2"))).outcome).toBe("created");
   });
 
+  it("refuses an entry past the shorter bound when the window lies further ahead than its length", async () => {
+    const app = mountApp();
+    const agent = await joinAgent(app, "Office agent");
+    const start = await send(app, "POST", "/management-api/printer-discovery/start", {
+      cookie: managerCookie,
+    });
+    expect(start.status).toBe(200);
+    // Ten minutes back: the window then ends further ahead than its three minutes, while the
+    // dashboard session stays inside its 30-minute idle limit.
+    const reportedAt = Date.now() - 10 * 60_000;
+    vi.spyOn(Date, "now").mockReturnValue(reportedAt);
+    await scan(app, agent.token, [officeEntry("10.61.4.3")]);
+    vi.spyOn(Date, "now").mockReturnValue(reportedAt + 30_000);
+    const stale = await register(app, target(agent.agentId, "10.61.4.3"));
+    expect(stale.status).toBe(404);
+    expect(await stale.json()).toEqual({ error: { code: "page_printer.not_found", params: {} } });
+  });
+
   it("refuses an entry whose printer cannot print an invoice as page_printer.not_printable", async () => {
     const app = mountApp();
     const agent = await joinAgent(app, "Office agent");

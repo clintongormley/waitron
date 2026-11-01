@@ -77,7 +77,8 @@ export async function resolveManagementSession(
       ),
     );
   if (row === undefined) throw new AppError("management_session.required", {});
-  if (Date.now() - Date.parse(row.lastSeenAt) > IDLE_TIMEOUT_MS) {
+  // Mirrored: a backward clock step past the idle timeout ends the session as a forward one does.
+  if (Math.abs(Date.now() - Date.parse(row.lastSeenAt)) > IDLE_TIMEOUT_MS) {
     throw new AppError("management_session.expired", {});
   }
   if (row.status === "suspended") {

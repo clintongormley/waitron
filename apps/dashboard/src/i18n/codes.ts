@@ -1342,6 +1342,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The check took too long. Try again.",
     es: "La comprobación ha tardado demasiado. Vuelve a intentarlo.",
   },
+  "clock.set_refused": {
+    en: "The box's clock was not set. See the Clock row.",
+    es: "No se ha puesto en hora el equipo. Mira la fila Reloj.",
+  },
+  "clock.set_failed": {
+    en: "The box could not set its clock. See the Clock row.",
+    es: "El equipo no ha podido poner su reloj en hora. Mira la fila Reloj.",
+  },
   "theme.name_taken": {
     en: "A theme with this name already exists.",
     es: "Ya existe un tema con este nombre.",

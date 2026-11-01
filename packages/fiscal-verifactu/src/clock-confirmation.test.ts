@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { recordSale } from "@waitron/core";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import type { ClockWitness, TrustedClock } from "@waitron/fiscal";
+import type { ClockAdminConfirm, ClockWitness, TrustedClock } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import type { NodeId, SeriesId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -572,7 +572,7 @@ function adminReading(boxMs: number, differenceMs: number, uncertaintyMs: number
   };
 }
 
-type AdminInput = ReturnType<typeof adminReading>;
+type AdminInput = ClockAdminConfirm;
 
 function confirmAsAdmin(ms: number, witnesses: readonly ClockWitness[], admin: AdminInput) {
   return withTransaction(suite.db, (tx) =>
@@ -952,5 +952,132 @@ describe("an administrator's device while a check waits", () => {
   it("the automatic path does not close a waiting check", async () => {
     await waitingCheck();
     await confirmsNothing(T, [authority(T - 10 * S, 5 * S, 500), ...twoDevices(T)]);
+  });
+});
+
+function incidentParams(code: string): Record<string, unknown>[] {
+  return suite.db
+    .all<{
+      params: string;
+    }>(sql`select params from incidents where code = ${code} order by rowid`)
+    .map((row) => JSON.parse(row.params) as Record<string, unknown>);
+}
+
+const DEVICE = { deviceId: "device-bar", deviceLabel: "Bar", address: "10.0.0.9" };
+
+/** A staff member's reading on the till `DEVICE`, `differenceMs` from the box at `boxMs`. */
+function staffReading(boxMs: number, differenceMs: number): AdminInput {
+  return {
+    ...adminReading(boxMs, differenceMs, S),
+    personName: "Ana Staff",
+    role: "staff",
+    device: DEVICE,
+  };
+}
+
+describe("a staff member on a till", () => {
+  it("agreeing during a stop, confirms with source staff and names the person and the till", async () => {
+    await sale(T);
+    const checkId = await openCheck(R);
+    const staff = staffReading(R - 2 * S, 10 * S);
+    const answer = await confirmAsAdmin(R, [], staff);
+    const written = await rows();
+    expect(written).toHaveLength(1);
+    expect(written[0]).toMatchObject({
+      source: "staff",
+      personId: PERSON,
+      checkId,
+      registroId: latestId(),
+    });
+    expect(written[0]!.proof).toEqual({
+      authority: null,
+      devices: [],
+      staff: {
+        deviceId: DEVICE.deviceId,
+        address: DEVICE.address,
+        boxAt: staff.reading.boxAt,
+        witnessAt: staff.reading.witnessAt,
+        uncertaintyMs: S,
+      },
+      heads: headsNow(),
+      closing: {
+        bootMs: BOOT.ms,
+        bootId: null,
+        correctedStart: iso(R),
+        partial: true,
+        unconfirmed: false,
+      },
+    });
+    expect(answer.confirmation).toMatchObject({ source: "staff", personId: PERSON });
+    expect(incidentParams("clock.behind_chain_restarted")).toEqual([
+      {
+        confirmationId: written[0]!.id,
+        confirmedBy: "staff",
+        person: "Ana Staff",
+        clockAt: iso(R),
+        lastRecordAt: iso(T),
+        byStaff: true,
+        device: "Bar",
+      },
+    ]);
+    expect((await stateAt(R, []))!.confirmation).toEqual({
+      id: written[0]!.id,
+      source: "staff",
+      personId: PERSON,
+      confirmedAt: iso(R),
+    });
+  });
+
+  it("control: the same reading without role or till confirms as an administrator, as slice 9 did", async () => {
+    await sale(T);
+    await openCheck(R);
+    const admin = adminReading(R - 2 * S, 10 * S, S);
+    await confirmAsAdmin(R, [], admin);
+    const written = await rows();
+    expect(written[0]).toMatchObject({ source: "admin" });
+    expect(Object.keys(written[0]!.proof as object).sort()).toEqual([
+      "admin",
+      "authority",
+      "closing",
+      "devices",
+      "heads",
+    ]);
+    expect(incidentParams("clock.behind_chain_restarted")).toEqual([
+      {
+        confirmationId: written[0]!.id,
+        confirmedBy: "admin",
+        person: "Alex Admin",
+        clockAt: iso(R),
+        lastRecordAt: iso(T),
+      },
+    ]);
+  });
+
+  it("without a till, is refused before any write: a caller's bug", async () => {
+    await sale(T);
+    await openCheck(R);
+    const noDevice = { ...staffReading(R - 2 * S, 10 * S), device: undefined };
+    await expect(confirmAsAdmin(R, [], noDevice)).rejects.toThrow(/staff/);
+    expect(count("clock_confirmations")).toBe(0);
+    expect(incidentParams("clock.behind_chain_restarted")).toEqual([]);
+  });
+
+  it("whose till differs from the box during a stop, is refused as differs, writing nothing", async () => {
+    await sale(T);
+    await openCheck(R);
+    await adminRefused(R, [], staffReading(R, 2 * M), "clock.confirm_refused", {
+      reason: "differs",
+    });
+  });
+
+  it("never closes a check that waits: refused as not stopped, writing nothing", async () => {
+    await sale(T);
+    await openCheck(R);
+    await adminRefused(T, [], staffReading(T, 0), "clock.confirm_refused", {
+      reason: "not_stopped",
+    });
+    expect(await confirmAsAdmin(T, [], adminReading(T, 0, 0))).toMatchObject({
+      confirmation: { source: "admin" },
+    });
   });
 });

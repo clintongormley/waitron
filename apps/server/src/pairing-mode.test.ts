@@ -116,4 +116,27 @@ describe("createPairingMode", () => {
     clock.advance(PAIRING_HOLD_MS);
     expect(mode.openUntil()).toBeNull();
   });
+
+  it("shuts when the clock steps back, leaving its hold further ahead than its length", () => {
+    const clock = atClock();
+    const mode = createPairingMode({ now: clock.now, newId: ids() });
+    const { holdId } = mode.open();
+    mode.claim("r1", { holdId, sessionKey: "k", personName: "Ana" });
+    clock.advance(-400 * 24 * 60 * 60 * 1000);
+    expect(mode.isOpen()).toBe(false);
+    expect(mode.hasHold(holdId)).toBe(false);
+    expect(mode.openSince()).toBeNull();
+    expect(mode.orphanedClaims()).toEqual(["r1"]);
+    expect(mode.renew(holdId)).toBeNull();
+  });
+
+  it("stays open after a step back that leaves its hold no further ahead than its length", () => {
+    const clock = atClock();
+    const mode = createPairingMode({ now: clock.now, newId: ids() });
+    const { holdId } = mode.open();
+    clock.advance(30_000);
+    clock.advance(-30_000);
+    expect(mode.isOpen()).toBe(true);
+    expect(mode.hasHold(holdId)).toBe(true);
+  });
 });

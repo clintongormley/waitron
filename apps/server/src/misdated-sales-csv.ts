@@ -15,7 +15,7 @@ type Language = "en" | "es";
 export interface MisdatedSalesInput {
   venue: string;
   language: Language;
-  /** The administrator's display name, for a closing an administrator confirmed. */
+  /** The display name of the administrator or staff member who confirmed the closing. */
   confirmedByName: string | null;
   episode: { from: string; fromOffsetMinutes: number; to: string; toOffsetMinutes: number };
   detail: Extract<MisdatedDetail, { known: true }>;
@@ -27,6 +27,7 @@ const SOURCE_WORD = {
   authority: "authority",
   devices: "devices",
   admin: "admin",
+  staff: "staff",
   elapsed: "otherwise",
 } as const satisfies Record<ClockConfirmationSource, keyof (typeof CLOCK_CONFIRMED_BY_WORDS)["en"]>;
 
@@ -54,10 +55,15 @@ function header(input: MisdatedSalesInput, boundMs: number, offsetMinutes: numbe
   const { closing, records } = input.detail;
   const words = MISDATED_SALES_WORDS[input.language];
   const by = CLOCK_CONFIRMED_BY_WORDS[input.language];
+  const name = input.confirmedByName;
   const confirmedBy =
-    closing.source === "admin" && input.confirmedByName !== null
-      ? `${by.admin} (${input.confirmedByName})`
-      : by[SOURCE_WORD[closing.source]];
+    name === null
+      ? by[SOURCE_WORD[closing.source]]
+      : closing.source === "admin"
+        ? `${by.admin} (${name})`
+        : closing.source === "staff"
+          ? by.staffNamed.replaceAll("{person}", () => name)
+          : by[SOURCE_WORD[closing.source]];
   // "Made before" stays true at minute precision only when a bound with seconds is rounded up.
   const roundedBound = Math.ceil(boundMs / MINUTE_MS) * MINUTE_MS;
   const sentence = fill(records.length === 1 ? words.header.one : words.header.text, {

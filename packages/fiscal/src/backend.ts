@@ -181,7 +181,7 @@ export interface ClockBehindLatestRecord {
  * it, or a confirmation already covers the reading. */
 export type ClockStopProof = "none" | "contrary" | "ready" | "confirmed";
 
-export type ClockConfirmationSource = "authority" | "devices" | "admin" | "elapsed";
+export type ClockConfirmationSource = "authority" | "devices" | "admin" | "staff" | "elapsed";
 
 /** A clock reading more than a minute earlier than the latest record, what the witnesses say about
  * it, and the confirmation that covers it if one does. */
@@ -227,10 +227,46 @@ export interface ClockAdminReading {
   uncertaintyMs: number;
 }
 
+/** The person who confirmed the box's clock: an administrator, or a staff member (`role:
+ * "staff"`) on a till; `device` names the till when the reading came from one. */
 export interface ClockAdminConfirm {
   personId: string;
   personName: string;
   reading: ClockAdminReading;
+  role?: "staff";
+  device?: { deviceId: string; deviceLabel: string | null; address: string | null };
+}
+
+/** A step of the box's clock from `before` to `after`, read on the boot-time clock either side.
+ * `stepMs` is the measured step; `verified` false when the box could not confirm the step took.
+ * `admin` names the person for the `admin` and `staff` sources, with `role: "staff"` for `staff`. */
+export interface ClockStepRequest {
+  before: Pick<TrustedReading, "instant" | "offsetMinutes">;
+  after: Pick<TrustedReading, "instant" | "offsetMinutes">;
+  bootBefore: BootReading;
+  bootAfter: BootReading;
+  targetAt: string;
+  stepMs: number;
+  verified: boolean;
+  reason: "behind_chain" | "unusable";
+  source: "authority" | "admin" | "staff";
+  witnesses: readonly ClockWitness[];
+  admin?: ClockAdminConfirm;
+  nodeId: string;
+}
+
+/** What a step recorded: its confirmation row, null when unverified, and its `clock.corrected`
+ * alert, null when an unverified step moved the clock by a second or less. */
+export interface ClockStepRecorded {
+  confirmation: ClockConfirmation | null;
+  corrected: { id: string; params: Readonly<Record<string, unknown>> } | null;
+}
+
+/** A step the box made to its own clock: when it was confirmed, by the clock after it, and by how
+ * much it moved the clock (negative for back). */
+export interface ClockStep {
+  confirmedAt: string;
+  stepMs: number;
 }
 
 export interface ClockConfirmation {
@@ -372,6 +408,17 @@ export interface FiscalBackend {
     tx: Transaction,
     input: ClockConfirmRequest,
   ): Promise<{ confirmation: ClockConfirmation | null }>;
+
+  /** Records a step of the box's clock: one confirmation row when the step was verified (closing
+   * the stop's check and, when the clock still reads behind the latest record, lifting the stop
+   * from the after reading), and `clock.corrected` for a verified step or an unverified one of
+   * more than a second, answering both. Absent when the regime never stops a clock. */
+  confirmClockStep?(tx: Transaction, input: ClockStepRequest): Promise<ClockStepRecorded>;
+
+  /** The latest step `confirmClockStep` recorded that moved the clock, verified or not, by the
+   * order they were written, never by their dates; null when none has. Only steps the box made are
+   * recorded: one by the time service, or by a person on the host, is never answered here. */
+  latestClockStep?(tx: Transaction): Promise<ClockStep | null>;
 
   /** Records when a stop began: opens a check while the stop holds and none is open, and answers
    * the open one; null, and nothing written, while there is no stop. */

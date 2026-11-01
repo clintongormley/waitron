@@ -10544,6 +10544,35 @@ describe("till-app", () => {
       expect(text).not.toContain(t("sale.charged_disk_full"));
     });
 
+    it("a wrong clock points at Check the time while the box offers it", async () => {
+      const marker = {
+        owner: "box-clock",
+        key: "clock.check_time",
+        code: "clock.check_time",
+        severity: "error",
+        params: {},
+      };
+      const getDeviceEquipment = vi.fn().mockResolvedValue({ roles: [], notices: [marker] });
+      const { el } = await mountApp({
+        getDeviceEquipment,
+        pay: vi.fn().mockRejectedValue({
+          code: "clock.unusable",
+          clockAt: "2001-01-01T11:00:00.000Z",
+          offsetMinutes: 60,
+          status: 409,
+        }),
+      });
+      const c = await toCounter(el);
+      await vi.waitFor(() => expect(getDeviceEquipment).toHaveBeenCalled());
+      c.store.addProduct(cafe, "1");
+      await el.updateComplete;
+      emit(c, "collect-card", {});
+      await flush(el);
+      expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!).toContain(
+        t("sale.clock_unusable_check").replace("{date}", "01/01/2001"),
+      );
+    });
+
     it("a wrong clock shows the date the box's clock reads", async () => {
       expect(currentLocale()).toBe("es-ES");
       const text = await payReader({

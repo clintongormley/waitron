@@ -3,6 +3,7 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { parseBackupArchiveKey } from "./backup-keys.js";
+import type { ClockStepHold } from "./backup-sweep.js";
 import type { DeviceOf } from "./disk-usage.js";
 import { errnoOf } from "./errno.js";
 import { freeBytes, type Statfs } from "./free-bytes.js";
@@ -26,23 +27,37 @@ export interface DeletableArchive {
 
 /**
  * The archives the box may delete to make room, oldest first (ties by key): regular files named as
- * archives, taken strictly after the current installation began, never the newest in their folder.
- * An unknown installation start offers nothing.
+ * archives, taken strictly after the current installation began, never the newest of those in their
+ * folder. An unknown installation start offers nothing. An archive `held` by a clock step (see
+ * {@link heldByStep}) is offered only after every other, and "the newest" is then the newest one not
+ * held, or the newest held one when every one is held. `"everything"` offers nothing.
  */
 export async function listDeletableArchives(
   folders: readonly BackupFolder[],
   installationStartedAt: Date | null,
   readdir: (dir: string) => Promise<string[]> = (dir) => fs.readdir(dir),
+  held?: ClockStepHold | "everything",
 ): Promise<DeletableArchive[]> {
-  if (installationStartedAt === null) return [];
+  if (installationStartedAt === null || held === "everything") return [];
+  const order = (a: DeletableArchive, b: DeletableArchive) =>
+    Number(heldByStep(held, a.takenAt.getTime())) - Number(heldByStep(held, b.takenAt.getTime())) ||
+    byAgeThenKey(a, b);
   const out: DeletableArchive[] = [];
   for (const { destination, dir } of folders) {
-    const archives = await archivesIn(destination, dir, readdir);
-    archives.sort(byAgeThenKey);
-    archives.pop();
-    out.push(...archives.filter((a) => a.takenAt.getTime() > installationStartedAt.getTime()));
+    const archives = (await archivesIn(destination, dir, readdir)).filter(
+      (a) => a.takenAt.getTime() > installationStartedAt.getTime(),
+    );
+    const free = archives.filter((a) => !heldByStep(held, a.takenAt.getTime()));
+    const newest = (free.length > 0 ? free : archives).sort(byAgeThenKey).at(-1);
+    out.push(...archives.filter((a) => a !== newest));
   }
-  return out.sort(byAgeThenKey);
+  return out.sort(order);
+}
+
+/** Whether a clock step's hold covers an archive stamped at `ms`: before the step, or more than a
+ * minute ahead of the clock when the hold was read (see `clockStepHold`). */
+export function heldByStep(held: ClockStepHold | undefined, ms: number): boolean {
+  return held !== undefined && (ms < held.fromMs || ms > held.toMs);
 }
 
 function byAgeThenKey(a: DeletableArchive, b: DeletableArchive): number {
@@ -188,6 +203,8 @@ export interface MakeRoomOptions {
   folders: readonly BackupFolder[];
   /** Asked only when free space is under the aim, so a step with room never waits for it. */
   installationStartedAt: () => Promise<Date | null>;
+  /** The clock step's hold, asked as `installationStartedAt` is; absent, nothing is held. */
+  clockStepHold?: () => Promise<ClockStepHold | "everything" | undefined>;
   signal: AbortSignal;
   log: Logger;
   /** Logged with each deletion. */
@@ -203,7 +220,8 @@ export interface MakeRoomOptions {
 }
 
 /**
- * Makes `neededBytes` plus `aimBytes` free at `dir` by deleting the oldest deletable archives, or
+ * Makes `neededBytes` plus `aimBytes` free at `dir` by deleting archives in
+ * {@link listDeletableArchives}'s order (oldest first, held ones last), or
  * plus `floorBytes` when the aim cannot be reached and `outOfReach` is `"floor"` (an aim below the
  * floor counts as the floor).
  * Refuses with `backup.staging_space_low` (`afterDeleting: false`), deleting nothing, when free
@@ -229,7 +247,12 @@ export async function makeRoom(opts: MakeRoomOptions): Promise<void> {
   const aim = opts.neededBytes + Math.max(opts.aimBytes, opts.floorBytes);
   let free = await freeBytes(opts.dir, opts.statfs);
   if (free === null || free >= aim) return;
-  const archives = await listDeletableArchives(opts.folders, await opts.installationStartedAt());
+  const archives = await listDeletableArchives(
+    opts.folders,
+    await opts.installationStartedAt(),
+    undefined,
+    await opts.clockStepHold?.(),
+  );
   const offered = archives.reduce((sum, a) => sum + a.bytes, 0);
   if (free + offered < floor)
     throw new AppError("backup.staging_space_low", {

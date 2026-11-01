@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, incidents } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { formatDuration } from "@waitron/shared";
 import {
   boxEmailMessage,
   isBoxEmailCode,
@@ -11,6 +12,7 @@ import {
 import {
   BOX_EMAIL_WORDS,
   CLOCK_CONFIRMED_BY_WORDS,
+  CLOCK_CORRECTED_EMAIL_WORDS,
   CLOCK_MISDATED_EMAIL_WORDS,
   CLOCK_RESTARTED_EMAIL_WORDS,
 } from "./i18n/box-emails.js";
@@ -65,6 +67,48 @@ describe("boxEmailMessage", () => {
   });
 });
 
+describe("the clock stop emails", () => {
+  it.each(["clock.unusable", "clock.behind_chain"] as const)(
+    "%s sends nobody to whoever installed the box, and names the pages and button that fix it",
+    (code) => {
+      const { en, es } = BOX_EMAIL_WORDS[code];
+      expect(en.text).not.toMatch(/install|support|manager/i);
+      expect(es.text).not.toMatch(/instal|soporte|encargad|gerente/i);
+      expect(en.text).toContain("an administrator can usually set it");
+      expect(es.text).toContain("un administrador normalmente puede ponerla en hora");
+      expect(en.text).toContain("Settings → Box status");
+      expect(es.text).toContain("Ajustes → Estado del equipo");
+      expect(en.text).toContain("“Check the time”");
+      expect(es.text).toContain("«Comprobar la hora»");
+    },
+  );
+});
+
+describe("the clock stop emails' till offer", () => {
+  it.each(["clock.unusable", "clock.behind_chain"] as const)(
+    "%s offers a till for a stop the box started with, never for one just after a start",
+    (code) => {
+      const { en, es } = BOX_EMAIL_WORDS[code];
+      expect(en.text).not.toMatch(/just started|just after a start/);
+      expect(es.text).not.toMatch(/acaba de arrancar|justo después de arrancar/);
+      expect(en.text).toMatch(/if the box started with (its clock wrong|payments stopped)/);
+      expect(es.text).toMatch(/si el equipo arrancó con (la hora mal|los cobros parados)/);
+    },
+  );
+
+  it("offers a till for a behind-the-last-sale stop only when the tax agency cannot answer", () => {
+    const { en, es } = BOX_EMAIL_WORDS["clock.behind_chain"];
+    expect(en.text).toContain(
+      "the tax agency does not answer (or the box does not send it records), any staff member",
+    );
+    expect(en.text).toContain("and, in the same case, a staff member confirms it");
+    expect(es.text).toContain(
+      "Hacienda no responde (o el equipo no le envía registros), cualquier empleado",
+    );
+    expect(es.text).toContain("y, en ese mismo caso, un empleado la confirma");
+  });
+});
+
 describe("boxEmailMessage for a clock stop", () => {
   const PARAMS = {
     clockAt: "2025-03-14T08:12:00.000Z",
@@ -77,7 +121,7 @@ describe("boxEmailMessage for a clock stop", () => {
     expect(boxEmailMessage("clock.behind_chain", "en", "Corner Bistro", PARAMS)).toEqual({
       subject:
         "Payments stopped at Corner Bistro: the box's clock reads earlier than its last sale",
-      text: "The box's clock (14/03/2025 09:12) reads earlier than its last recorded sale (18/10/2026 23:40). Since then no device can take payment. Orders can still be taken and sent to the kitchen. What to do: • If the box's clock is wrong (usual after a power cut): connect the box to the internet so it corrects itself, or call whoever installed it. • If you think the box's clock is right: look at the Box status page (in the dashboard, Settings → Box status), where an administrator can confirm the clock with their own phone; with the internet or two tills switched on, the box does it by itself.",
+      text: "The box's clock (14/03/2025 09:12) reads earlier than its last recorded sale (18/10/2026 23:40). Since then no device can take payment. Orders can still be taken and sent to the kitchen. What to do: • If the box's clock is wrong (usual after a power cut): with the internet the box puts it right by itself; otherwise an administrator can usually set it from their own phone or computer on the Box status page (in the dashboard, Settings → Box status), and if the box started with payments stopped and the tax agency does not answer (or the box does not send it records), any staff member can do it from a till with “Check the time”. • If you think the box's clock is right: an administrator can confirm it on the same page; with the internet the box does it by itself, and so do two tills that agree with it — except when the box started with payments stopped: then two tills are not enough, and, in the same case, a staff member confirms it from a till with “Check the time”.",
     });
   });
 
@@ -129,6 +173,42 @@ describe("boxEmailMessage for payments restarted", () => {
       subject: ES.subject.replaceAll("{venue}", "Corner Bistro"),
       text: ES.text.replaceAll("{confirmedBy}", CLOCK_CONFIRMED_BY_WORDS.es[confirmedBy]),
     });
+  });
+
+  it("names the staff member and the till when a staff member confirmed, in both languages", () => {
+    const params = {
+      ...RESTARTED,
+      confirmedBy: "staff",
+      person: "Ana",
+      byStaff: true,
+      device: "Bar",
+    };
+    expect(
+      boxEmailMessage("clock.behind_chain_restarted", "en", "Corner Bistro", params).text,
+    ).toBe(
+      "The box's clock was confirmed by Ana, a staff member, on till Bar, and payments started again. Sales recorded with a later time than the real one are listed on the Box status page (in the dashboard, Settings → Box status).",
+    );
+    expect(
+      boxEmailMessage("clock.behind_chain_restarted", "es", "Corner Bistro", params).text,
+    ).toBe(
+      "La hora del equipo la confirmó Ana, miembro del personal, en la caja Bar, y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
+    );
+  });
+
+  it("names a till without a label as a till", () => {
+    const params = {
+      ...RESTARTED,
+      confirmedBy: "staff",
+      person: "Ana",
+      byStaff: true,
+      device: null,
+    };
+    expect(
+      boxEmailMessage("clock.behind_chain_restarted", "en", "Corner Bistro", params).text,
+    ).toContain("confirmed by Ana, a staff member, on a till, and payments");
+    expect(
+      boxEmailMessage("clock.behind_chain_restarted", "es", "Corner Bistro", params).text,
+    ).toContain("la confirmó Ana, miembro del personal, en una caja, y se volvió");
   });
 
   it("words a source it does not know as a check recorded on the box", () => {
@@ -229,6 +309,150 @@ describe("boxEmailMessage for wrongly dated sales", () => {
   });
 });
 
+describe("boxEmailMessage for the box setting its clock", () => {
+  const DAY = 86_400_000;
+  const STEP = {
+    confirmationId: "c-step",
+    source: "authority",
+    person: null,
+    deviceId: null,
+    device: null,
+    before: "2025-03-14T08:12:00.000Z",
+    beforeOffsetMinutes: 60,
+    after: "2026-10-18T21:40:00.000Z",
+    afterOffsetMinutes: 120,
+    stepMs: 2 * DAY + 3 * 3_600_000,
+    direction: "forward",
+    verified: true,
+    unverified: false,
+    byAdmin: false,
+    byStaff: false,
+  };
+  const ES = CLOCK_CORRECTED_EMAIL_WORDS.es;
+  const message = (language: "en" | "es", params: Record<string, unknown>) =>
+    boxEmailMessage("clock.corrected", language, "Corner Bistro", params);
+
+  it("says the tax agency's time set it, which way, how far, and both times in their own offsets", () => {
+    expect(message("en", STEP)).toEqual({
+      subject: "Corner Bistro: the box's clock was set",
+      text: "The box set its clock from the tax agency's time: moved forward 2 days and 3 hours, from 14/03/2025 09:12 to 18/10/2026 23:40.",
+    });
+    expect(message("es", STEP)).toEqual({
+      subject: ES.subject.replaceAll("{venue}", "Corner Bistro"),
+      text: ES.authority
+        .replaceAll(
+          "{step}",
+          ES.forward.replaceAll("{duration}", formatDuration(STEP.stepMs, "es-ES")),
+        )
+        .replaceAll("{before}", "14/03/2025 09:12")
+        .replaceAll("{after}", "18/10/2026 23:40"),
+    });
+  });
+
+  it("names the administrator whose device set it, in both languages", () => {
+    const params = { ...STEP, source: "admin", person: "Ben", byAdmin: true };
+    expect(message("en", params).text).toBe(
+      "The box's clock was set from Ben's device: moved forward 2 days and 3 hours, from 14/03/2025 09:12 to 18/10/2026 23:40.",
+    );
+    expect(message("es", params).text).toBe(
+      ES.admin
+        .replaceAll("{person}", "Ben")
+        .replaceAll(
+          "{step}",
+          ES.forward.replaceAll("{duration}", formatDuration(STEP.stepMs, "es-ES")),
+        )
+        .replaceAll("{before}", "14/03/2025 09:12")
+        .replaceAll("{after}", "18/10/2026 23:40"),
+    );
+  });
+
+  it("names the staff member who confirmed it and the till that proposed it, in both languages", () => {
+    const params = {
+      ...STEP,
+      source: "staff",
+      person: "Ana",
+      deviceId: "d-bar",
+      device: "Bar",
+      byStaff: true,
+      direction: "back",
+      stepMs: -DAY,
+    };
+    expect(message("en", params).text).toBe(
+      "The box's clock was set from the time on till Bar, confirmed by Ana, a staff member: moved back 1 day, from 14/03/2025 09:12 to 18/10/2026 23:40.",
+    );
+    expect(message("es", params).text).toBe(
+      ES.staff
+        .replaceAll("{till}", ES.namedTill.replaceAll("{device}", "Bar"))
+        .replaceAll("{person}", "Ana")
+        .replaceAll("{step}", ES.back.replaceAll("{duration}", formatDuration(-DAY, "es-ES")))
+        .replaceAll("{before}", "14/03/2025 09:12")
+        .replaceAll("{after}", "18/10/2026 23:40"),
+    );
+    expect(message("es", params).text).toContain("la caja Bar");
+  });
+
+  it("names a till without a label as a till", () => {
+    const params = { ...STEP, source: "staff", person: "Ana", byStaff: true };
+    expect(message("en", params).text).toContain("from the time on a till, confirmed by Ana,");
+    expect(message("es", params).text).toContain(
+      ES.staff.split("{till}")[0]!.concat(ES.unnamedTill),
+    );
+  });
+
+  it("says a step it could not confirm was only tried, and what the clock read before and after", () => {
+    const params = {
+      ...STEP,
+      confirmationId: null,
+      verified: false,
+      unverified: true,
+      source: "admin",
+      person: "Ben",
+      byAdmin: true,
+    };
+    expect(message("en", params)).toEqual({
+      subject: "Corner Bistro: the box could not confirm it set its clock",
+      text: "The box tried to set its clock but could not confirm the change took. Its clock read 14/03/2025 09:12 before and 18/10/2026 23:40 after (moved forward 2 days and 3 hours). Check the box's clock on the Box status page (in the dashboard, Settings → Box status).",
+    });
+    expect(message("es", params)).toEqual({
+      subject: ES.unverifiedSubject.replaceAll("{venue}", "Corner Bistro"),
+      text: ES.unverified
+        .replaceAll(
+          "{step}",
+          ES.forward.replaceAll("{duration}", formatDuration(STEP.stepMs, "es-ES")),
+        )
+        .replaceAll("{before}", "14/03/2025 09:12")
+        .replaceAll("{after}", "18/10/2026 23:40"),
+    });
+  });
+
+  it("words a person's step as theirs even without their name, never as the tax agency's", () => {
+    for (const source of ["admin", "staff"]) {
+      const text = message("en", { ...STEP, source, person: null }).text;
+      expect(text).not.toContain("tax agency");
+      expect(text).toContain("—");
+    }
+  });
+
+  it("words a step of exactly one day and one of 400 days", () => {
+    expect(message("en", { ...STEP, stepMs: DAY }).text).toContain("moved forward 1 day, from");
+    expect(message("en", { ...STEP, stepMs: 400 * DAY }).text).toContain(
+      "moved forward 400 days, from",
+    );
+    expect(message("es", { ...STEP, stepMs: 400 * DAY }).text).toContain(
+      ES.forward.replaceAll("{duration}", formatDuration(400 * DAY, "es-ES")),
+    );
+  });
+
+  it("words a direction it does not know as moved", () => {
+    expect(message("en", { ...STEP, direction: "sideways" }).text).toContain(
+      "time: moved 2 days and 3 hours, from",
+    );
+    expect(message("es", { ...STEP, direction: "sideways" }).text).toContain(
+      ES.moved.replaceAll("{duration}", formatDuration(STEP.stepMs, "es-ES")),
+    );
+  });
+});
+
 describe("every clock email", () => {
   const STOP = {
     clockAt: "2025-03-14T08:12:00.000Z",
@@ -258,6 +482,27 @@ describe("every clock email", () => {
     ["clock.records_misdated", { ...MISDATED, partial: true }],
     ["clock.records_misdated", { ...MISDATED, count: 1, partial: true }],
     ["clock.records_misdated", { ...MISDATED, count: 0, unconfirmed: true }],
+    ...[
+      { source: "authority", person: null, device: null },
+      { source: "admin", person: "Ben", device: null, byAdmin: true },
+      { source: "staff", person: "Ana", device: "Bar", byStaff: true },
+      { source: "staff", person: "Ana", device: null, byStaff: true },
+      { source: "authority", person: null, device: null, unverified: true },
+    ].map(
+      (who) =>
+        [
+          "clock.corrected",
+          {
+            before: "2025-03-14T08:12:00.000Z",
+            beforeOffsetMinutes: 60,
+            after: "2026-10-18T21:40:00.000Z",
+            afterOffsetMinutes: 120,
+            stepMs: 86_400_000,
+            direction: "forward",
+            ...who,
+          },
+        ] as const,
+    ),
   ] as const;
   const EVERY = EMAILS.flatMap(([code, params]) =>
     LANGUAGES.map((language) => [code, language, params] as const),
@@ -296,6 +541,31 @@ describe("readOpenEmailedIncidents", () => {
       { code: "clock.records_misdated", params: { at: "2026-10-22T09:31:00.000Z" } },
     ]);
     expect(open.every(({ id }) => typeof id === "string" && id !== "")).toBe(true);
+  });
+});
+
+describe("readOpenEmailedIncidents for the box setting its clock", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+
+  it("reads an open clock.corrected alert and no handled one", async () => {
+    const row = (detectedAt: string, acknowledgedAt: string | null) => ({
+      source: "dashboard" as const,
+      code: "clock.corrected",
+      params: { at: detectedAt },
+      severity: "warning" as const,
+      detectedAt,
+      acknowledgedAt,
+    });
+    await suite.db
+      .insert(incidents)
+      .values([
+        row("2026-10-22T09:30:00.000Z", "2026-10-22T09:31:00.000Z"),
+        row("2026-10-22T09:31:00.000Z", null),
+      ]);
+    const open = await readOpenEmailedIncidents(suite.db);
+    expect(open.map(({ code, params }) => ({ code, params }))).toEqual([
+      { code: "clock.corrected", params: { at: "2026-10-22T09:31:00.000Z" } },
+    ]);
   });
 });
 

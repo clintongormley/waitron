@@ -1,8 +1,9 @@
-import { and, asc, eq, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { withTransaction, type Database } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import {
   attendanceMail,
+  attendanceMailDue,
   attendanceQuestions,
   claimAttendanceMail,
   expireAttendanceMailClaims,
@@ -77,7 +78,7 @@ export async function runAttendanceEmailPass(
       isNotNull(persons.email),
       sql`length(trim(${persons.email})) > 0`,
       inArray(attendanceMail.status, ["pending", "rejected"]),
-      lte(attendanceMail.nextAttemptAt, now.toISOString()),
+      attendanceMailDue(now),
     );
     const candidates = () =>
       tx

@@ -1374,6 +1374,21 @@ describe("a returning disabled device", () => {
     expect(await suite.db.select().from(joinRequests)).toEqual(before);
   });
 
+  it("is not a returning device's request once it lies further ahead than its fifteen minutes", async () => {
+    const venue = await setupVenue(suite.db);
+    const deviceId = await returningKnock(venue);
+    const stampAhead = (aheadMs: number) =>
+      suite.db
+        .update(joinRequests)
+        .set({ createdAt: new Date(Date.now() + aheadMs).toISOString() })
+        .where(eq(joinRequests.id, deviceId));
+    await stampAhead(JOIN_TTL_MS - 5_000);
+    expect(await asApp((tx) => hasReturningRequest(tx, venue.cfg, deviceId))).toBe(true);
+    await stampAhead(JOIN_TTL_MS + 60_000);
+    expect(await asApp((tx) => hasReturningRequest(tx, venue.cfg, deviceId))).toBe(false);
+    expect(await asApp((tx) => endReturningRequest(tx, venue.cfg, deviceId))).toBe(false);
+  });
+
   it("neither counts nor ends a print agent's request that carries the device's id", async () => {
     const venue = await setupVenue(suite.db);
     const cfg = venue.cfg;
@@ -1789,5 +1804,32 @@ describe("deleted zone joins", () => {
         VENUE_SERVICE.assertPassScreenZone(tx, venue.cfg, pending.joinId, null),
       ),
     ).rejects.toMatchObject({ code: "kitchen_screen.zone_not_allowed", params: { zoneId: null } });
+  });
+});
+
+describe("a request stamped ahead of the clock, as after a backward step", () => {
+  const stampAhead = (joinId: string, aheadMs: number) =>
+    suite.db
+      .update(joinRequests)
+      .set({ createdAt: new Date(Date.now() + aheadMs).toISOString() })
+      .where(eq(joinRequests.id, joinId));
+
+  it("lapses once it lies further ahead than its fifteen minutes", async () => {
+    const cfg = (await setupVenue(suite.db)).cfg;
+    const made = await asApp((tx) =>
+      createJoinRequest(tx, cfg, { kind: "print_agent", label: "a" }),
+    );
+    await stampAhead(made.joinId, JOIN_TTL_MS + 60_000);
+    expect(await readAgentJoinStatus(suite.db, cfg, made.joinId, made.token)).toBe("not_approved");
+    expect(await suite.db.select().from(joinRequests)).toEqual([]);
+  });
+
+  it("stays pending while it lies less than its fifteen minutes ahead", async () => {
+    const cfg = (await setupVenue(suite.db)).cfg;
+    const made = await asApp((tx) =>
+      createJoinRequest(tx, cfg, { kind: "print_agent", label: "a" }),
+    );
+    await stampAhead(made.joinId, JOIN_TTL_MS - 5_000);
+    expect(await readAgentJoinStatus(suite.db, cfg, made.joinId, made.token)).toBe("pending");
   });
 });

@@ -129,9 +129,16 @@ beforeEach(() => {
 // One database is shared across the suite and the mocked credential ids repeat, while
 // `credential_id` is unique — so clear the passkey rows between tests.
 afterEach(async () => {
+  vi.useRealTimers();
   await run((tx) => tx.delete(webauthnCredentials));
   await run((tx) => tx.delete(webauthnChallenges));
 });
+
+/** Freezes `Date` for the rest of the test, so a boundary is exact whatever the calls between take. */
+function freezeDate(): void {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-31T12:00:00.000Z"));
+}
 
 describe("passkey registration", () => {
   it("issues options, stores a challenge, then persists the credential and consumes the challenge", async () => {
@@ -407,6 +414,41 @@ describe("passkey registration", () => {
     expect(mockVerify).not.toHaveBeenCalled();
   });
 
+  it("throws passkey.challenge_expired for a challenge stamped more than a minute ahead of the clock", async () => {
+    freezeDate();
+    const { token } = await openManagementSession(suite.db, "admin");
+    const begun = await begin(token);
+    await run((tx) =>
+      tx
+        .update(webauthnChallenges)
+        .set({ createdAt: new Date(Date.now() + 60_001).toISOString() })
+        .where(eq(webauthnChallenges.id, begun.challengeHandle)),
+    );
+
+    expect(await codeOf(() => finish(token, begun.challengeHandle))).toBe(
+      "passkey.challenge_expired",
+    );
+    expect(mockVerify).not.toHaveBeenCalled();
+  });
+
+  it("verifies a challenge stamped exactly a minute ahead of the clock", async () => {
+    freezeDate();
+    const { token } = await openManagementSession(suite.db, "admin");
+    mockVerify.mockResolvedValue({ verified: false });
+    const begun = await begin(token);
+    await run((tx) =>
+      tx
+        .update(webauthnChallenges)
+        .set({ createdAt: new Date(Date.now() + 60_000).toISOString() })
+        .where(eq(webauthnChallenges.id, begun.challengeHandle)),
+    );
+
+    expect(await codeOf(() => finish(token, begun.challengeHandle))).toBe(
+      "passkey.verification_failed",
+    );
+    expect(mockVerify).toHaveBeenCalledTimes(1);
+  });
+
   it("maps a THROW from the library to passkey.verification_failed (not an opaque 500)", async () => {
     const { token } = await openManagementSession(suite.db, "admin");
     mockVerify.mockRejectedValue(new Error("Unexpected authenticator response"));
@@ -672,6 +714,24 @@ describe("passkey authentication", () => {
       tx.select().from(webauthnChallenges).where(eq(webauthnChallenges.id, begun.challengeHandle)),
     );
     expect(chal).toHaveLength(1);
+  });
+
+  it("throws passkey.challenge_expired for a sign-in challenge stamped more than a minute ahead of the clock", async () => {
+    freezeDate();
+    const personId = await seedPerson(suite.db, "admin");
+    await seedCredential(personId, "cred-abc", 0);
+    const begun = await beginAuth();
+    await run((tx) =>
+      tx
+        .update(webauthnChallenges)
+        .set({ createdAt: new Date(Date.now() + 60_001).toISOString() })
+        .where(eq(webauthnChallenges.id, begun.challengeHandle)),
+    );
+
+    expect(await codeOf(() => authenticate(begun.challengeHandle, "cred-abc"))).toBe(
+      "passkey.challenge_expired",
+    );
+    expect(mockVerifyAuth).not.toHaveBeenCalled();
   });
 
   it("refuses a person suspended AFTER enrolling a passkey, minting no session", async () => {

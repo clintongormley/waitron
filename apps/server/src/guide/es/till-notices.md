@@ -32,8 +32,10 @@ unos 24 MB.
 
 **No se pueden registrar ventas: la hora del equipo es incorrecta · Avisa al encargado** es rojo.
 La hora del equipo está tan atrasada que no se puede registrar una venta para Hacienda. Hasta que
-se corrija, el equipo también rechaza los cobros y las devoluciones. El encargado tiene que
-corregir la hora.
+se corrija, el equipo también rechaza los cobros y las devoluciones. Un administrador puede poner
+la hora desde su propio móvil u ordenador, en la [página Estado del
+equipo](box-status.md#clock-behind). Justo después de que el equipo arranque, la indicación puede
+decir **Comprobar la hora** en su lugar, como se explica más abajo.
 
 **No se puede cobrar: la hora del equipo es anterior a la última venta · Avisa al encargado** es
 rojo. El reloj del equipo marca más de un minuto antes que la última venta que registró. Hasta que
@@ -63,11 +65,38 @@ Lo que hay que hacer después depende de cómo se cobró la tarjeta:
   Dividir a partes iguales):** el pago queda pendiente, y el equipo lo registra por sí solo cuando
   se puede volver a cobrar.
 
-El encargado lo resuelve en la [página Estado del equipo](box-status.md#clock-behind). Si la hora
-del equipo es correcta y fue la última venta la que llevaba una hora equivocada, los cobros se
-reanudan solos en cuanto Hacienda o dos cajas o terminales confirman la hora, o cuando un
-administrador la confirma allí con su propio móvil u ordenador, nunca desde la pantalla del propio
-equipo.
+Con internet, el equipo normalmente corrige su reloj por sí solo. Si no, un
+administrador pone o confirma la hora en la [página Estado del equipo](box-status.md#clock-behind)
+con su propio móvil u ordenador, nunca desde la pantalla del propio equipo. Justo después de que el
+equipo arranque, cualquier empleado puede hacerlo desde una caja con **Comprobar la hora**, como se
+explica más abajo. Si la hora del equipo es correcta y fue la última venta la que llevaba una hora
+equivocada, dos cajas o terminales que coinciden con el equipo también reanudan los cobros, salvo
+que la parada dure desde que arrancó el equipo. Nunca ponen la hora.
+
+**Comprobar la hora** al final de una línea roja de la hora, en lugar de **Avisa al encargado**,
+significa que el equipo arrancó con su hora en duda y no ha podido obtener la hora de
+Hacienda. Termina cualquiera de las dos líneas rojas de la hora de arriba. Un cobro rechazado dice
+entonces que uses **Comprobar la hora** arriba de la pantalla. Pulsa **Comprobar la hora** para
+abrir su diálogo; si se muestra primero otro aviso, abre la lista y púlsalo ahí. Puede usarlo
+cualquiera con la sesión iniciada en la caja.
+
+El diálogo muestra la hora del equipo y la de esta caja. Nadie escribe una hora: lo que se envía es
+la hora de la propia caja, así que si la hora de la caja también está mal, corrígela primero en los
+ajustes de la caja y vuelve a comprobarlo.
+
+- Cuando las dos horas están a más de un minuto, pregunta **¿Usar la hora de este dispositivo?**
+  Pulsa **Usar esta hora** para poner el reloj del equipo a la hora de la caja; se
+  puede volver a cobrar. Pulsa **Ahora no** para dejarlo.
+- Cuando coinciden, te pide que confirmes que la hora del equipo es correcta. Pulsa **La hora es
+  correcta** si lo es; se puede volver a cobrar con el reloj del equipo. Pulsa **Ahora no** para
+  dejarlo.
+
+En los dos casos, se avisa a todos los encargados de quién confirmó la hora y desde qué caja. Si el
+equipo se niega, el diálogo dice por qué encima de sus botones y, cuando volver a intentarlo puede
+servir, ofrece **Comprobar otra vez**. Si el [arranque](box-status.md#clock-at-start) del equipo termina con el
+diálogo abierto, un empleado ya no puede poner el reloj en hora desde una caja: el diálogo lo dice y
+ofrece **Acceso de administrador**, para que un administrador inicie sesión ahí con su PIN y ponga
+la hora desde la misma caja.
 
 **Queda poco espacio en el equipo · Avisa al encargado** es ámbar. El trabajo se sigue guardando,
 pero se está acabando el espacio. El encargado debería liberar espacio antes de que se acabe, en

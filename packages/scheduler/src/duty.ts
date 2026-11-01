@@ -35,5 +35,9 @@ export interface PeriodDuty {
   /** When set, a run that parks queues the next generation of the same period, due this long
    * after the park. Unset, a parked period is never tried again. */
   readonly retryParkedAfterMs?: number;
+  /** The furthest after a run that its `resweepAfter` lies. A re-sweep due later than this, and
+   * later than `retryParkedAfterMs`, reads as written before the clock stepped back and runs at
+   * once (`longestWait` in `run.ts`), so `runOne` enqueues a later one at that limit. */
+  readonly longestResweepMs?: number;
   run(period: RunPeriod, now: Date): Promise<DutyOutcome>;
 }

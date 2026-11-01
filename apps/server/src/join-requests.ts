@@ -1,6 +1,6 @@
 import "./errors.js";
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
-import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, gt, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import {
   type Database,
   type Transaction,
@@ -36,12 +36,24 @@ export const JOIN_TTL_MS = 15 * 60 * 1000;
  * must avoid. */
 export const PENDING_CAP = 10;
 
-const lapseCutoff = () => new Date(Date.now() - JOIN_TTL_MS).toISOString();
+/** A request made more than {@link JOIN_TTL_MS} before now has lapsed, and so has one stamped more
+ * than that AHEAD of now: after the clock steps back it would otherwise stay approvable for the
+ * step's length. */
+const lapsedAt = () => {
+  const now = Date.now();
+  return {
+    from: new Date(now - JOIN_TTL_MS).toISOString(),
+    to: new Date(now + JOIN_TTL_MS).toISOString(),
+  };
+};
 
 /** Delete every lapsed request this node holds, so a lapsed row never occupies the cap, never
  * blocks a number, and never appears in the pending list. */
 async function sweepLapsed(tx: Transaction, cfg: TradingContext): Promise<void> {
-  await tx.delete(joinRequests).where(and(ownedBy(cfg), lt(joinRequests.createdAt, lapseCutoff())));
+  const { from, to } = lapsedAt();
+  await tx
+    .delete(joinRequests)
+    .where(and(ownedBy(cfg), or(lt(joinRequests.createdAt, from), gt(joinRequests.createdAt, to))));
 }
 
 export type DeviceRequestWindow = Pick<PairingMode, "openSince" | "orphanedClaims">;
@@ -647,13 +659,16 @@ export async function denyJoinRequest(
   return row.kind;
 }
 
-const returningOf = (cfg: TradingContext, deviceId: string) =>
-  and(
+const returningOf = (cfg: TradingContext, deviceId: string) => {
+  const { from, to } = lapsedAt();
+  return and(
     ownedBy(cfg),
     eq(joinRequests.id, deviceId),
     eq(joinRequests.kind, "device"),
-    gte(joinRequests.createdAt, lapseCutoff()),
+    gte(joinRequests.createdAt, from),
+    lte(joinRequests.createdAt, to),
   );
+};
 
 /** Whether this node holds a pending request from the device to come back. */
 export async function hasReturningRequest(

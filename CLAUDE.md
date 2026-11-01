@@ -563,6 +563,10 @@ called weaker than its name, the topic file lists what it does not see.
 - **A drizzle-kit 0.31.11 table rebuild writes an expression index back as quoted column names,
   which this engine refuses.** Take the index out of the schema for every generation that rebuilds
   its table and add it back in a generation of its own, with a note at the index.
+- **Rehearse a drizzle table rebuild on `node:sqlite`, never the `sqlite3` command line**: macOS's
+  `sqlite3` 3.51.0 refuses the rename the app's SQLite 3.54.0 runs (`no such column: __new_…`), so
+  the rehearsal fails a sound migration. Nothing guards it.
+  [Receipt](docs/developers/conventions-data.md#a-drizzle-table-rebuild-is-rehearsed-on-nodesqlite-never-the-sqlite3-cli).
 - **A foreign key whose target has no unique index is refused at the first WRITE, not at migrate
   time** (`foreign key mismatch`). So a green migrate is no evidence a new key is sound — write
   through it.
@@ -802,10 +806,20 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   reader/refund/drawer work; pause both refund recovery loops. Recheck card-refund send/outcome in
   their dating transaction after provider waits. Still store money already moved.
   **Clock confirmation lifts the stop for one step back, with no gap limit; once a record is written
-  under it, readings stay within a minute of the latest record written since.** Sources: AEAT, two agreeing devices at different
-  addresses or an administrator's own device, never a box device outside development.
-  Guards: clock-behind-stop, payments clock-behind, fiscal chain/restart/confirmation and clock-confirm
-  route suites, weaker than the rule: only named routes/readings/requests; new money routes unguarded.
+  under it, readings stay within a minute of the latest record written since.** Sources: AEAT, two
+  agreeing devices at different addresses (not while the stop found at start-up lasts), an
+  administrator's own device, or a till's time confirmed on it by an administrator at any time or,
+  during a stop found at start-up once AEAT has not answered or cannot be asked, by a staff member
+  signed in on it (owner, 2026-10-31); never a box device outside development. Guards: clock-behind-stop, payments clock-behind, fiscal
+  chain/restart/confirmation, clock-confirm route and `apps/server/src/clock-watch.start-up.test.ts`
+  suites, weaker than the rule: only named routes/readings/requests; new money routes unguarded.
+  **The box sets its clock only through the host service, from AEAT, a till's time (a staff
+  member's during start-up, an administrator's at any time) or an administrator's own device — never from devices alone and never while it keeps time
+  over the internet — and every step it verifies, or sees move the clock by over a second, is
+  alerted and emailed.** Guards: `apps/server/src/clock-correction.test.ts`, `apps/server/src/clock-set.route.test.ts`,
+  `apps/server/src/till-box-clock-api.test.ts`, `scripts/waitron-box-sh.test.mjs`, weaker than the
+  rule: the handler's suite runs stubs, not systemd; the route suites cover the named routes only.
+  [Detail](docs/developers/conventions-data.md#the-box-sets-its-own-clock).
 - **Never put our own metadata into a hash.** `entorno` must not enter `computeHuella`;
   differing only in it must leave hashes identical.
 - **Restore and promotion start a new chain under a new installation name.** Setup/restore/promotion use five symbols for the box's UTC minute,

@@ -65,15 +65,22 @@ export function clockReadingOf(refusal: {
 }
 
 /** `clockAt`'s date in the reading's own offset, the one the record would carry, never the till's
- * own time zone. */
-export function clockUnusableText(clockAt: string, offsetMinutes: number): string {
+ * own time zone; with `checkTime`, pointing at the till's "Check the time". */
+export function clockUnusableText(
+  clockAt: string,
+  offsetMinutes: number,
+  checkTime = false,
+): string {
   const date = new Intl.DateTimeFormat(locale, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
     timeZone: "UTC",
   }).format(new Date(Date.parse(clockAt) + offsetMinutes * 60_000));
-  return t("sale.clock_unusable").replace("{date}", () => date);
+  return t(checkTime ? "sale.clock_unusable_check" : "sale.clock_unusable").replace(
+    "{date}",
+    () => date,
+  );
 }
 
 export interface ClockBehind {
@@ -123,11 +130,12 @@ function readingText(at: string, offsetMinutes: number): string {
   return `${date}\u00a0${time}`;
 }
 
-/** Each reading in its own offset, the one its record carries or would carry. */
-export function clockBehindText(behind: ClockBehind): string {
+/** Each reading in its own offset, the one its record carries or would carry; with `checkTime`,
+ * pointing at the till's "Check the time". */
+export function clockBehindText(behind: ClockBehind, checkTime = false): string {
   const clockAt = readingText(behind.clockAt, behind.offsetMinutes);
   const lastRecordAt = readingText(behind.lastRecordAt, behind.lastRecordOffsetMinutes);
-  return t("sale.clock_behind_chain")
+  return t(checkTime ? "sale.clock_behind_chain_check" : "sale.clock_behind_chain")
     .replace("{clockAt}", () => clockAt)
     .replace("{lastRecordAt}", () => lastRecordAt);
 }
@@ -159,6 +167,21 @@ export function carriedText(
 /** The hour and minute of `at`, as the active locale writes a time of day. */
 export function clockTime(at: Date | number): string {
   return new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }).format(at);
+}
+
+/** The date and time of day of `at` in the till's own time zone, joined with a no-break space. */
+export function clockDateTime(at: Date | number): string {
+  const date = new Intl.DateTimeFormat(locale, {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(at);
+  const time = new Intl.DateTimeFormat(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(at);
+  return `${date}\u00a0${time}`;
 }
 
 /** Strips the region subtag ("es-ES" → "es"); a missing language degrades to the English text. */

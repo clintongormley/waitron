@@ -59,15 +59,17 @@ export function createPageTestPages(now: () => Date) {
   };
   const settle = (): number => {
     const at = now().getTime();
+    // A time further ahead than its limit was stamped before the clock stepped back.
+    const past = (since: number, limit: number) => at - since >= limit || since - at > limit;
     for (const [printerId, page] of pages) {
-      if (page.status === "waiting" && at - page.requestedAt >= TEST_PAGE_CLAIM_WINDOW_MS) {
+      if (page.status === "waiting" && past(page.requestedAt, TEST_PAGE_CLAIM_WINDOW_MS)) {
         finish(page, "failed", "not_claimed", at);
       } else if (
         page.status === "printing" &&
-        at - page.claim!.touchedAt >= INVOICE_DELIVERY_LEASE_MS
+        past(page.claim!.touchedAt, INVOICE_DELIVERY_LEASE_MS)
       ) {
         finish(page, "unknown", "timeout", at);
-      } else if (page.finishedAt !== undefined && at - page.finishedAt >= TEST_PAGE_OUTCOME_MS) {
+      } else if (page.finishedAt !== undefined && past(page.finishedAt, TEST_PAGE_OUTCOME_MS)) {
         pages.delete(printerId);
       }
     }

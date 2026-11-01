@@ -96,6 +96,7 @@ const PROOF_READY = health({
     lastRecordOffsetMinutes: 120,
     recordId: "rec-42",
     gapMs: 4_800_000,
+    startUp: false,
     proof: "ready",
     agreeing: {
       authority: {
@@ -430,6 +431,53 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
         await expectNoA11yViolations(host);
       },
     );
+
+    it.each([
+      ["the question", null, "clock-set-confirm"],
+      [
+        "a refusal",
+        { code: "clock.set_refused", params: { reason: "synchronised" } },
+        "clock-set-confirm",
+      ],
+      ["the clock set", { confirmationId: "c-2", stepMs: 86_400_000 }, "clock-set-done"],
+    ] as const)("renders the set dialog accessibly with %s", async (_name, answer, drawn) => {
+      const spy = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-22T19:30:05.000Z"));
+      onTestFinished(() => spy.mockRestore());
+      const clockSet =
+        answer === null || !("code" in answer)
+          ? vi.fn().mockResolvedValue({ ...answer, confirmedAt: "2026-10-22T19:30:05.000Z" })
+          : vi.fn().mockRejectedValue(answer);
+      const settable = health({
+        clockStop: {
+          ...PROOF_READY.clockStop!,
+          proof: "none",
+          agreeing: { authority: null, devices: [] },
+          contrary: { authority: null, devices: [] },
+        },
+        clock: {
+          ...STOPPED.clock,
+          sync: { synced: false, source: "timedatectl", warn: true },
+        },
+      });
+      const api = Object.assign(stubApi(settable), { clockChallenge: challenged(), clockSet });
+      const { el, host } = await mountWidget<BoxStatusScreen>(
+        "dashboard-box-status-screen",
+        { api, canOpen: () => true, canConfirmClock: true },
+        theme,
+      );
+      await flush(el);
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=clock-check]")!);
+      await flush(el);
+      if (answer !== null) {
+        await userEvent.click(
+          el.shadowRoot!.querySelector<HTMLElement>("[data-test=clock-set-confirm]")!,
+        );
+        await flush(el);
+        expect(clockSet).toHaveBeenCalledOnce();
+      }
+      expect(el.shadowRoot!.querySelector(`[data-test=${drawn}]`)).not.toBeNull();
+      await expectNoA11yViolations(host);
+    });
   });
 
   it("renders accessibly with a stop whose proof is found", async () => {

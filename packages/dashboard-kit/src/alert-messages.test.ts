@@ -102,6 +102,53 @@ describe("a bytes placeholder", () => {
   });
 });
 
+registerAlertMessages({
+  "test.step": { en: "Moved {stepMs:duration}.", es: "ES {stepMs:duration}." },
+});
+
+describe("a duration placeholder", () => {
+  const S = 1_000;
+  const M = 60 * S;
+  const H = 60 * M;
+  const D = 24 * H;
+
+  it("writes the two largest units a number of milliseconds holds, whichever way it points", () => {
+    expect(alertMessage("test.step", { stepMs: 2 * D + 3 * H + 4 * M }, "en")).toBe(
+      "Moved 2 days and 3 hours.",
+    );
+    expect(alertMessage("test.step", { stepMs: -(2 * D + 3 * H) }, "en")).toBe(
+      "Moved 2 days and 3 hours.",
+    );
+    expect(alertMessage("test.step", { stepMs: D + 5 * M }, "en")).toBe(
+      "Moved 1 day and 5 minutes.",
+    );
+    expect(alertMessage("test.step", { stepMs: H }, "en")).toBe("Moved 1 hour.");
+    expect(alertMessage("test.step", { stepMs: 2 * M + 30 * S + 400 }, "en")).toBe(
+      "Moved 2 minutes and 30 seconds.",
+    );
+    expect(alertMessage("test.step", { stepMs: 1_400 }, "en")).toBe("Moved 1 second.");
+  });
+
+  it("writes less than a second as tenths of a second", () => {
+    expect(alertMessage("test.step", { stepMs: 400 }, "en")).toBe("Moved 0.4 seconds.");
+    expect(alertMessage("test.step", { stepMs: 0 }, "en")).toBe("Moved 0 seconds.");
+  });
+
+  it("writes the units in the alert's language", () => {
+    const english = alertMessage("test.step", { stepMs: 2 * D + 3 * H }, "en");
+    const spanish = alertMessage("test.step", { stepMs: 2 * D + 3 * H }, "es");
+    expect(spanish).toMatch(/^ES 2 \S+ \S+ 3 \S+\.$/);
+    expect(spanish.slice(3)).not.toBe(english.slice(6));
+    expect(spanish).not.toMatch(/day|hour|and/);
+  });
+
+  it("writes a dash for anything that is not a number of milliseconds", () => {
+    for (const stepMs of ["1000", null, undefined, NaN, Infinity, {}]) {
+      expect(alertMessage("test.step", { stepMs }, "en")).toBe("Moved —.");
+    }
+  });
+});
+
 describe("formatBytes", () => {
   it("writes a byte count as an alert's bytes placeholder does, for a screen to use", () => {
     expect(formatBytes(1_800_000_000, "es")).toBe("1,8 GB");

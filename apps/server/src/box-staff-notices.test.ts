@@ -1,13 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import type { StaffNoticeReadContext } from "@waitron/module";
 import {
+  BOX_CLOCK_NOTICE_OWNER,
   BOX_NOTICE_OWNER,
   boxStaffNoticeSource,
+  clockCheckNoticeSource,
+  deviceNoticeSources,
   devicePrinterNoticeSources,
   printerStaffNoticeSource,
 } from "./box-staff-notices.js";
 import type { FreeSpaceReading } from "./free-space-watch.js";
 import type { PrinterInTrouble } from "./print-job-trouble.js";
+import { ALL_MODULES } from "./modules.js";
+import { readStaffNotices } from "./staff-notices.js";
 
 const AT = new Date("2026-10-22T10:00:00.000Z");
 const CTX = {
@@ -61,6 +66,77 @@ describe("boxStaffNoticeSource", () => {
 
   it("answers nothing before the first reading", async () => {
     expect(await read(null, { freeBytes: null, readAt: null, lowSince: null })).toEqual([]);
+  });
+});
+
+describe("the till's clock check", () => {
+  const CHECK_TIME = {
+    key: "clock.check_time",
+    code: "clock.check_time",
+    severity: "error",
+    params: {},
+  };
+
+  /** Runs each source's savepoint straight through. */
+  const SAVEPOINTS = {
+    transaction: (fn: () => Promise<unknown>) => fn(),
+  } as unknown as StaffNoticeReadContext["tx"];
+
+  it("has an owner of its own, which no module is named", () => {
+    expect(BOX_CLOCK_NOTICE_OWNER).toBe("box-clock");
+    expect(ALL_MODULES.map((module) => module.name)).not.toContain(BOX_CLOCK_NOTICE_OWNER);
+  });
+
+  it("answers the check-the-time marker while the check answers true, asking at the read's reading", async () => {
+    const clockCheck = vi.fn(async () => true);
+    expect(await clockCheckNoticeSource(clockCheck).read(CTX)).toEqual([CHECK_TIME]);
+    expect(clockCheck).toHaveBeenCalledExactlyOnceWith(CTX.tx, CTX.reading);
+  });
+
+  it("answers no marker while the check answers false", async () => {
+    expect(await clockCheckNoticeSource(async () => false).read(CTX)).toEqual([]);
+  });
+
+  it("is a device source only when a check is given, after the box's own", () => {
+    const box = { disk: { since: () => null }, space: { current: () => OFF } };
+    expect(deviceNoticeSources(box, []).map((entry) => entry.owner)).toEqual([BOX_NOTICE_OWNER]);
+    expect(
+      deviceNoticeSources({ ...box, clockCheck: async () => true }, []).map((entry) => entry.owner),
+    ).toEqual([BOX_NOTICE_OWNER, BOX_CLOCK_NOTICE_OWNER]);
+  });
+
+  it("keeps the storage notices when the check's read fails", async () => {
+    const sources = deviceNoticeSources(
+      {
+        disk: { since: () => AT },
+        space: { current: () => OFF },
+        clockCheck: async () => {
+          throw new Error("database is locked");
+        },
+      },
+      [],
+    );
+    const read = await readStaffNotices(SAVEPOINTS, sources, {
+      reading: CTX.reading,
+      log: () => {},
+    });
+    expect(read.notices).toEqual([{ ...DISK_FULL, owner: BOX_NOTICE_OWNER }]);
+    expect(read.unavailable).toEqual([BOX_CLOCK_NOTICE_OWNER]);
+  });
+
+  it("is read beside the storage notices", async () => {
+    const sources = deviceNoticeSources(
+      { disk: { since: () => null }, space: { current: () => ON }, clockCheck: async () => true },
+      [],
+    );
+    const read = await readStaffNotices(SAVEPOINTS, sources, {
+      reading: CTX.reading,
+      log: () => {},
+    });
+    expect(read.notices).toEqual([
+      { ...CHECK_TIME, owner: BOX_CLOCK_NOTICE_OWNER },
+      { ...SPACE_LOW, owner: BOX_NOTICE_OWNER },
+    ]);
   });
 });
 

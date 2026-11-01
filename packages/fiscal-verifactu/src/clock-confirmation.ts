@@ -137,16 +137,17 @@ function adminAgrees(reading: ClockAdminReading): boolean {
   return differenceMs + reading.uncertaintyMs <= CLOCK_WITNESS_MARGIN_MS;
 }
 
-/** The administrator's confirmation of a check that waits: refused `not_stopped` with none,
- * `contrary_proof` when AEAT, or a group of devices from two addresses, taken after the stop ended
- * disagrees, and `differs` when the administrator's device does not agree with the box. */
+/** The administrator's confirmation of a check that waits: refused `not_stopped` with none, or
+ * for a staff member, who never closes one; `contrary_proof` when AEAT, or a group of devices
+ * from two addresses, taken after the stop ended disagrees; and `differs` when the
+ * administrator's device does not agree with the box. */
 async function closeWaitingAsAdmin(
   tx: Transaction,
   input: ClockConfirmRequest,
   admin: ClockAdminConfirm,
 ): Promise<{ confirmation: ClockConfirmation }> {
   const waiting = await waitingCheck(tx, input.reading);
-  if (waiting === null) refuse("not_stopped");
+  if (waiting === null || admin.role === "staff") refuse("not_stopped");
   const { agreeing, contrary } = judgeAfterStopEnded(input.witnesses, waiting.latest);
   if (contrary.authority !== null || contrary.devices.length > 0) refuse("contrary_proof");
   if (!adminAgrees(admin.reading)) refuse("differs");
@@ -173,12 +174,15 @@ async function closeWaitingAsAdmin(
  * addresses, taken during the stop disagrees, and `differs` when that device does not agree with
  * the box. A refusal throws `clock.confirm_refused`, and a reading before 28-10-2024
  * `clock.unusable`, writing nothing. With `admin` and no stop, it closes a check that waits
- * instead. */
+ * instead; a staff member (`role: "staff"`) never does, and is refused `not_stopped`. */
 export async function confirmClockStop(
   tx: Transaction,
   input: ClockConfirmRequest,
 ): Promise<{ confirmation: ClockConfirmation | null }> {
   const { admin } = input;
+  // A staff member's reading counts only as a device that is not the box, so it needs the till.
+  if (admin?.role === "staff" && admin.device === undefined)
+    throw new Error("confirmClockStop: a staff member's confirmation was given no till");
   if (admin !== undefined) refuseBeforeFirstIssueDate(input.reading);
   const judged = await judge(tx, input.reading, input.witnesses);
   if (admin === undefined) {
@@ -206,7 +210,11 @@ export async function confirmClockStop(
     openedNow,
   });
   const source =
-    admin !== undefined ? "admin" : agreeing.authority === null ? "devices" : "authority";
+    admin !== undefined
+      ? (admin.role ?? "admin")
+      : agreeing.authority === null
+        ? "devices"
+        : "authority";
   const personId = admin?.personId ?? null;
   const seq = await nextConfirmationSeq(tx);
   const [row] = await tx
@@ -224,6 +232,10 @@ export async function confirmClockStop(
         ...storedWitnesses({
           ...agreeing,
           admin: admin === undefined ? null : admin.reading,
+          ...(admin?.role === undefined ? {} : { role: admin.role }),
+          ...(admin?.device === undefined
+            ? {}
+            : { device: { deviceId: admin.device.deviceId, address: admin.device.address } }),
         }),
         heads: await chainHeads(tx),
         closing,
@@ -242,6 +254,8 @@ export async function confirmClockStop(
       person: admin?.personName ?? null,
       clockAt: input.reading.instant.toISOString(),
       lastRecordAt: latest.at.toISOString(),
+      ...(source === "staff" ? { byStaff: true as const } : {}),
+      ...(admin?.device === undefined ? {} : { device: admin.device.deviceLabel }),
     },
   });
   await recordMisdated(tx, {

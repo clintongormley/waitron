@@ -53,13 +53,16 @@ function dueNow(): { claimedAt: string; due: SQL } {
   // and cutoff read the clock of the one process that holds the venue file.
   const claimedAt = nowIso();
   const leaseCutoff = new Date(Date.parse(claimedAt) - PRINT_JOB_LEASE_MS).toISOString();
+  // A claim further ahead than the lease was stamped before the clock stepped back.
+  const leaseAhead = new Date(Date.parse(claimedAt) + PRINT_JOB_LEASE_MS).toISOString();
   return {
     claimedAt,
     due: sql`(
         j.status = 'queued'
         or (j.kind = 'document' and j.status = 'failed' and j.attempts < ${MAX_DELIVERY_ATTEMPTS})
         or (j.status = 'printing'
-            and (j.claimed_at is null or j.claimed_at < ${leaseCutoff}))
+            and (j.claimed_at is null or j.claimed_at < ${leaseCutoff}
+                 or j.claimed_at > ${leaseAhead}))
       )`,
   };
 }
@@ -74,6 +77,8 @@ export async function claimPrintJobs(
     printerId?: string;
     /** Includes due invoice receipts; the caller must attach their token in this transaction. */
     invoiceReceiptsAt?: string;
+    /** A receipt queued later than this was queued before the clock stepped back, and is due too. */
+    invoiceReceiptsAheadAt?: string;
   },
 ): Promise<ClaimedJob[]> {
   const { claimedAt, due } = dueNow();
@@ -88,7 +93,12 @@ export async function claimPrintJobs(
         ? sql`false`
         : sql`exists (
       select 1 from invoice_deliveries d where d.print_job_id = ${jobId}
-        and d.status = 'queued' and d.next_attempt_at <= ${ctx.invoiceReceiptsAt})`
+        and d.status = 'queued'
+        and (d.next_attempt_at <= ${ctx.invoiceReceiptsAt}${
+          ctx.invoiceReceiptsAheadAt === undefined
+            ? sql``
+            : sql` or d.next_attempt_at > ${ctx.invoiceReceiptsAheadAt}`
+        }))`
     }
   )`;
   return claimRows<ClaimedJob>(tx, {

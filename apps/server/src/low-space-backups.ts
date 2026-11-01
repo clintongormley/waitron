@@ -8,6 +8,7 @@ import {
   type DeletableArchive,
 } from "./backup-room.js";
 import type { StagingTurn } from "./backup-staging-turn.js";
+import { readClockStepHold, type LatestClockStep } from "./backup-sweep.js";
 import type { BackupRuntimeStatus } from "./backup-supervisor.js";
 import type { DeviceOf } from "./disk-usage.js";
 import { errnoOf } from "./errno.js";
@@ -24,6 +25,10 @@ export interface LowSpaceBackupDeps {
    * where no run would replace what is deleted. */
   backends: () => readonly Pick<StorageBackend, "id" | "localDir">[];
   installationStartedAt?: () => Promise<Date | null>;
+  /** The latest step the box made to its own clock; absent, nothing is held (see `clockStepHold`). */
+  latestClockStep?: () => Promise<LatestClockStep>;
+  /** The running backups' age cap, which bounds how long a step holds; unknown, nothing is deleted. */
+  retainDays?: () => number | undefined;
   onArchivesDeleted?: (deleted: readonly DeletableArchive[], at: Date) => Promise<void>;
   now: () => Date;
   log: Logger;
@@ -38,9 +43,10 @@ export interface LowSpaceBackupDeps {
  * they cannot reach it. Deletes nothing while a backup run holds or waits for the staging turn; the
  * next reading tries again. Once it holds the turn it reads free space and the backup settings again
  * and lists the folders; once the installation start is read it checks that each listed folder's
- * destination is still among `backends()` with the same `localDir`, and deletes nothing if not. A
- * venue folder whose disk cannot be read is logged `backup.venue_disk_unreadable` and deletes
- * nothing.
+ * destination is still among `backends()` with the same `localDir`, and deletes nothing if not.
+ * Archives a recent step to the clock holds are offered last (see `listDeletableArchives`). A venue
+ * folder whose disk cannot be read is logged `backup.venue_disk_unreadable` and deletes nothing, as
+ * do a step that cannot be read (logged `backup.clock_step_unreadable`) and unknown `retainDays`.
  */
 export function lowSpaceBackupDeletion(
   deps: LowSpaceBackupDeps,
@@ -88,6 +94,17 @@ export function lowSpaceBackupDeletion(
         statfs: deps.statfs,
         folders,
         installationStartedAt,
+        clockStepHold: async () => {
+          if (deps.latestClockStep === undefined) return undefined;
+          const retainDays = deps.retainDays?.();
+          if (retainDays === undefined) return "everything";
+          return readClockStepHold(
+            deps.latestClockStep,
+            deps.now().getTime(),
+            retainDays,
+            deps.log,
+          );
+        },
         signal,
         log: deps.log,
         reason: "space_low",

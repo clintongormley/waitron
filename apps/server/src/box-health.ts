@@ -10,6 +10,7 @@ import type {
 import { persons } from "@waitron/identity";
 import { cardReaders, DEMO_READER_ID } from "@waitron/payments";
 import type { StreamView } from "@waitron/stream";
+import type { ClockStartUp } from "./clock-start-up.js";
 import type { DiskFullState } from "./disk-full-state.js";
 import type { DiskUsage } from "./disk-usage.js";
 import type { LeftoverSurvey } from "./free-space-now.js";
@@ -43,6 +44,9 @@ export interface ClockStopView extends Omit<
     personName: string | null;
     confirmedAt: string;
   } | null;
+  /** The start-up window at the read: while open, devices alone do not end the stop (plan
+   * decision 18, `clock-watch.ts`). */
+  startUp: boolean;
 }
 
 /** A `clock.records_misdated` alert's incident id and its own params. */
@@ -160,6 +164,8 @@ export function clockStopReader(deps: {
   backend: Pick<FiscalBackend, "clockStopState">;
   witnesses: () => readonly ClockWitness[];
   clock: Pick<TrustedClock, "now">;
+  /** Absent, the window reads closed. */
+  startUp?: Pick<ClockStartUp, "open">;
 }): (db: Database) => Promise<ClockStopView | null> {
   return async (db) => {
     const state = await readClockStopState(db, deps);
@@ -186,6 +192,7 @@ export function clockStopReader(deps: {
       agreeing: { authority: state.agreeing.authority, devices: labelled(state.agreeing.devices) },
       contrary: { authority: state.contrary.authority, devices: labelled(state.contrary.devices) },
       confirmation,
+      startUp: deps.startUp?.open() === true,
     };
   };
 }

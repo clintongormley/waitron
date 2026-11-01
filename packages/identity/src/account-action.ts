@@ -31,6 +31,11 @@ export const ACCOUNT_ACTION_TTL_MS = {
 export const ACCOUNT_ACTION_CODE_TTL_MS = 10 * 60 * 1000;
 export const ACCOUNT_ACTION_CODE_ATTEMPTS = 5;
 
+/** A later expiry was stamped before a backward clock step, and counts as passed. */
+function latestLiveExpiry(nowIso: string, purpose: AccountActionPurpose): string {
+  return new Date(Date.parse(nowIso) + ACCOUNT_ACTION_TTL_MS[purpose]).toISOString();
+}
+
 function hashToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
 }
@@ -159,6 +164,7 @@ async function deleteDeadActions(
         or(
           isNotNull(managementAccountActions.usedAt),
           lte(managementAccountActions.expiresAt, nowIso),
+          gt(managementAccountActions.expiresAt, latestLiveExpiry(nowIso, purpose)),
         ),
       ),
     );
@@ -189,6 +195,7 @@ export async function confirmEmailChangeByCode(
         eq(managementAccountActions.purpose, "email_change"),
         isNull(managementAccountActions.usedAt),
         gt(managementAccountActions.expiresAt, nowIso),
+        lte(managementAccountActions.expiresAt, latestLiveExpiry(nowIso, "email_change")),
         gt(managementAccountActions.codeExpiresAt, nowIso),
         lt(managementAccountActions.codeAttempts, ACCOUNT_ACTION_CODE_ATTEMPTS),
       ),
@@ -277,6 +284,7 @@ export async function inspectAccountAction(
         eq(managementAccountActions.purpose, input.purpose),
         isNull(managementAccountActions.usedAt),
         gt(managementAccountActions.expiresAt, nowIso),
+        lte(managementAccountActions.expiresAt, latestLiveExpiry(nowIso, input.purpose)),
       ),
     )
     .limit(1);
@@ -429,6 +437,7 @@ export async function completeAccountAction(
         eq(managementAccountActions.purpose, input.purpose),
         isNull(managementAccountActions.usedAt),
         gt(managementAccountActions.expiresAt, nowIso),
+        lte(managementAccountActions.expiresAt, latestLiveExpiry(nowIso, input.purpose)),
       ),
     )
     .returning({ personId: managementAccountActions.personId });

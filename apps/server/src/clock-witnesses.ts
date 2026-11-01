@@ -27,6 +27,9 @@ export interface ClockWitnessStore {
    * clock since), agreeing or not, and every AEAT disagreement noted since the last `endStop()`,
    * whatever its age and through steps. */
   witnesses(): ClockWitness[];
+  /** Each AEAT reading `witnesses()` would hand out that is still fresh, with the box's clocks
+   * when it was noted: what a set measures its offset from. Never a device's. */
+  forSetting(): SettableReading[];
   /** AEAT witnesses noted since the last call. */
   takeNewAuthority(): ClockWitness[];
   /** The stop has ended: forget the kept AEAT disagreements. */
@@ -36,10 +39,12 @@ export interface ClockWitnessStore {
   clear(): void;
 }
 
-interface Kept {
+export interface SettableReading {
   readonly witness: ClockWitness;
   readonly at: BoxClockReading;
 }
+
+type Kept = SettableReading;
 
 function writable(ms: number): boolean {
   return Number.isFinite(ms) && Math.abs(ms) <= LATEST_DATE_MS;
@@ -52,7 +57,7 @@ export function createClockWitnessStore(
   const monotonic = deps.monotonic ?? (() => performance.now());
   const devices = new Map<string, Kept>();
   let authorities: Kept[] = [];
-  let disagreements: ClockWitness[] = [];
+  let disagreements: Kept[] = [];
   let untaken: ClockWitness[] = [];
 
   function fresh(kept: Kept, now: BoxClockReading): boolean {
@@ -92,7 +97,8 @@ export function createClockWitnessStore(
         uncertaintyMs,
       };
       untaken.push(witness);
-      if (judgeClockWitnesses([witness]).authorityDisagrees.length > 0) disagreements.push(witness);
+      if (judgeClockWitnesses([witness]).authorityDisagrees.length > 0)
+        disagreements.push({ witness, at });
       else authorities.push({ witness, at });
     },
     witnesses() {
@@ -102,8 +108,13 @@ export function createClockWitnessStore(
       return [
         ...[...devices.values()].map((kept) => kept.witness),
         ...authorities.map((kept) => kept.witness),
-        ...disagreements,
+        ...disagreements.map((kept) => kept.witness),
       ];
+    },
+    forSetting() {
+      const now = { wallMs: wall(), monoMs: monotonic() };
+      authorities = authorities.filter((kept) => fresh(kept, now));
+      return [...authorities, ...disagreements.filter((kept) => fresh(kept, now))];
     },
     takeNewAuthority() {
       const taken = untaken;

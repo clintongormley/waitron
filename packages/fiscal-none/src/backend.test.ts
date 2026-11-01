@@ -74,6 +74,8 @@ describe("NoneBackend records nothing", () => {
     expect(backend.clockStopState).toBeUndefined();
     expect("restartAfterClockStop" in backend).toBe(false);
     expect(backend.confirmClockStop).toBeUndefined();
+    expect(backend.confirmClockStep).toBeUndefined();
+    expect(backend.latestClockStep).toBeUndefined();
     expect(backend.openClockCheck).toBeUndefined();
     expect(backend.closeClockCheckByItself).toBeUndefined();
     expect(backend.waitingClockCheck).toBeUndefined();

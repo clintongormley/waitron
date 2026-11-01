@@ -1032,6 +1032,30 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
     expect((await pull(app, token)).discoveryUntil).toBe(discoveryUntil);
   });
 
+  // Opened at T for three minutes; a clock read earlier than T leaves its end further ahead than
+  // its length.
+  it.each([
+    ["400 days back", 400 * 86_400_000, false],
+    ["its length ahead exactly", 0, true],
+    ["a millisecond past its length", 1, false],
+  ])(
+    "shuts a discovery window whose end lies further ahead than its length (%s)",
+    async (_case, stepBack, open) => {
+      const app = mountApp();
+      const { token } = await joinAndAccept(app);
+      const start = await send(app, "POST", "/management-api/printer-discovery/start", {
+        cookie: managerCookie,
+      });
+      const { discoveryUntil } = (await start.json()) as { discoveryUntil: number };
+      const now = vi.spyOn(Date, "now").mockReturnValue(discoveryUntil - 3 * 60_000 - stepBack);
+      try {
+        expect((await pull(app, token)).discoveryUntil).toBe(open ? discoveryUntil : null);
+      } finally {
+        now.mockRestore();
+      }
+    },
+  );
+
   /** A session of its own, so ageing it cannot expire the shared manager cookie. */
   async function ownManagerSession(
     minutesIdle: number,
@@ -3094,6 +3118,25 @@ describe("agent inventory screening and the discovered-printer list", () => {
     expect(res.status).toBe(200);
     return (await res.json()) as Record<string, unknown>[];
   }
+
+  it("lists a report by the shorter bound while the window lies further ahead than its length", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app, "Stepped agent");
+    const start = await send(app, "POST", "/management-api/printer-discovery/start", {
+      cookie: managerCookie,
+    });
+    expect(start.status).toBe(200);
+    const serial = `SN-${randomUUID()}`;
+    // Ten minutes back: the window then ends further ahead than its three minutes, while the
+    // dashboard session stays inside its 30-minute idle limit.
+    const reportedAt = Date.now() - 10 * 60_000;
+    vi.spyOn(Date, "now").mockReturnValue(reportedAt);
+    await pull(app, token, { visible: [{ transport: "usb", localKey: serial }], scanned: [] });
+    vi.spyOn(Date, "now").mockReturnValue(reportedAt + 15_000);
+    expect((await discoveredRows(app)).map((r) => r.localKey)).toContain(serial);
+    vi.spyOn(Date, "now").mockReturnValue(reportedAt + 30_000);
+    expect((await discoveredRows(app)).map((r) => r.localKey)).not.toContain(serial);
+  });
 
   it("drops malformed inventory entries and keeps the well-formed ones", async () => {
     const app = mountApp();

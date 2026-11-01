@@ -1,9 +1,23 @@
-import { and, eq, inArray, lte } from "drizzle-orm";
+import { and, eq, gt, inArray, lte, or, type SQL } from "drizzle-orm";
 import { newId, type Transaction } from "@waitron/db";
 import { attendanceMail } from "./schema/attendance.js";
 
 type MailClaim = { id: string; token: string };
 type MailOutcome = "sent" | "rejected" | "unknown";
+
+const RETRY_MS = 15 * 60_000;
+const CLAIM_MS = 60_000;
+
+const at = (ms: number) => new Date(ms).toISOString();
+
+/** Due at its retry time, or once that lies further ahead than the retry's wait: a time stamped
+ * before the clock stepped back. */
+export function attendanceMailDue(now: Date): SQL {
+  return or(
+    lte(attendanceMail.nextAttemptAt, now.toISOString()),
+    gt(attendanceMail.nextAttemptAt, at(now.getTime() + RETRY_MS)),
+  )!;
+}
 
 export async function cancelUnclaimedAttendanceMail(
   tx: Transaction,
@@ -38,7 +52,7 @@ export async function claimAttendanceMail(
       and(
         eq(attendanceMail.id, input.id),
         inArray(attendanceMail.status, ["pending", "rejected"]),
-        lte(attendanceMail.nextAttemptAt, input.now.toISOString()),
+        attendanceMailDue(input.now),
       ),
     )
     .returning({ id: attendanceMail.id });
@@ -52,7 +66,10 @@ export async function expireAttendanceMailClaims(tx: Transaction, now: Date): Pr
     .where(
       and(
         eq(attendanceMail.status, "sending"),
-        lte(attendanceMail.claimedAt, new Date(now.getTime() - 60_000).toISOString()),
+        or(
+          lte(attendanceMail.claimedAt, at(now.getTime() - CLAIM_MS)),
+          gt(attendanceMail.claimedAt, at(now.getTime() + CLAIM_MS)),
+        ),
       ),
     )
     .returning({ id: attendanceMail.id });
@@ -70,9 +87,7 @@ export async function reportAttendanceMail(
     .set({
       status: outcome,
       outcome,
-      ...(outcome === "rejected"
-        ? { nextAttemptAt: new Date(now.getTime() + 15 * 60_000).toISOString() }
-        : {}),
+      ...(outcome === "rejected" ? { nextAttemptAt: at(now.getTime() + RETRY_MS) } : {}),
     })
     .where(
       and(

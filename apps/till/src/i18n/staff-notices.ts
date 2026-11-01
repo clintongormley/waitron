@@ -12,20 +12,35 @@ const FIXED = {
   "clock.unusable": "staff_notice.clock.unusable",
   "clock.behind_chain": "staff_notice.clock.behind_chain",
   "storage.space_low": "staff_notice.storage.space_low",
+  "clock.check_time": "staff_notice.clock.check_time",
 } as const;
 
 function unknownText(): { main: string; hint: string } {
   return { main: t(UNKNOWN.main), hint: t(UNKNOWN.hint) };
 }
 
+/** The clock stops a person at a till can lift with "Check the time" while the box offers it. */
+const CHECKABLE: ReadonlySet<string> = new Set(["clock.unusable", "clock.behind_chain"]);
+
+/** Whether `notice` is a clock stop whose hint is "Check the time" while `checkTime` is set. */
+export function checksTime(notice: Pick<StaffNotice, "code">, checkTime: boolean): boolean {
+  return checkTime && CHECKABLE.has(notice.code);
+}
+
 /** A notice's words in the till's current language: its main words and the hint after " · ". A
  * code the till has no words for, or params it cannot word, is worded as unknown. */
-export function staffNoticeText(notice: Pick<StaffNotice, "code" | "params">): {
+export function staffNoticeText(
+  notice: Pick<StaffNotice, "code" | "params">,
+  checkTime = false,
+): {
   main: string;
   hint: string;
 } {
   if (Object.hasOwn(FIXED, notice.code)) {
-    return { main: t(FIXED[notice.code as keyof typeof FIXED]), hint: t(TELL_MANAGER) };
+    return {
+      main: t(FIXED[notice.code as keyof typeof FIXED]),
+      hint: t(checksTime(notice, checkTime) ? "staff_notice.check_time" : TELL_MANAGER),
+    };
   }
   if (notice.code === "printer.jobs_waiting") {
     const { printer, since } = notice.params;

@@ -1,3 +1,4 @@
+import { boxHostClient, type BoxHostClient, type ClockServiceStatus } from "./box-host-client.js";
 import { clearStagedRecoveries, createSetupRecoveryPreparation } from "./recovery-preparation.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
 import type { WaitronModule } from "@waitron/module";
@@ -180,6 +181,7 @@ import {
 import { mountNodeApi } from "./node-api.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import { deviceNoticeSources, devicePrinterNoticeSources } from "./box-staff-notices.js";
+import { clockStartUp, tillClockCheck } from "./clock-start-up.js";
 import {
   BOX_EMAIL_CHECK_MS,
   readBoxEmailContext,
@@ -305,6 +307,8 @@ import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxHealthApi } from "./box-health-api.js";
 import { clockCheckWaitingReader, clockStopReader, collectBoxHealth } from "./box-health.js";
 import { CLOCK_WATCH_MS, startClockWatch } from "./clock-watch.js";
+import { clockCorrection, latestClockStepFor } from "./clock-correction.js";
+import { clockSyncAlertSource } from "./clock-sync-alert.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
 import { readDiskUsage, type DiskUsage } from "./disk-usage.js";
 import { createSpaceFreer, surveyLeftovers, type LeftoverDeps } from "./free-space-now.js";
@@ -842,6 +846,8 @@ export interface StartServerSeams {
   freeSpaceWatch?: { intervalMs?: number; statfs?: Statfs };
   testClock?: ModuleOperationHost["testClock"];
   requestFromBox?: (c: Context) => boolean;
+  /** The box's clock service; unset, the server talks to the host's socket. */
+  boxHost?: BoxHostClient;
 }
 
 /**
@@ -1626,7 +1632,6 @@ async function bootServer(
   const awaitingFiscalCert = { current: false };
   const clockWitnesses = createClockWitnessStore();
   const boxBoot = bootReader();
-  const authorityClock = createAuthorityClockStatus({ onSample: clockWitnesses.noteAuthority });
   const isMirror = holders.mode.current === "mirror";
   // The boot-captured read-only posture; the gate's own per-request predicate re-reads `mode` live,
   // so a promotion lifts it without a restart.
@@ -1662,6 +1667,15 @@ async function bootServer(
   // A BOOT decision, deliberately not live: an in-process promotion does not start the duties gated
   // on this without a restart.
   const isSingletonPrimary = holders.singletonRole.current === "primary";
+  // Before the tills' notice sources, which read it. Closed on a node that is not primary at its
+  // start: the watch looks only on the primary, so it would not close it there (plan decision 14).
+  const clockStart = clockStartUp({ primaryAtStart: isSingletonPrimary });
+  const authorityClock = createAuthorityClockStatus({
+    onSample: (sample) => {
+      clockWitnesses.noteAuthority(sample);
+      clockStart.authorityAsked(true);
+    },
+  });
   // Asked on each call, unlike `isSingletonPrimary`: the role can change while the box runs.
   const filesRecords = () =>
     fiscalDrainEnabled(config) && holders.singletonRole.current === "primary";
@@ -1814,6 +1828,21 @@ async function bootServer(
     incidents: recordIncidentOnce,
   });
   const tillClock = systemClock();
+  const boxHost = seams.boxHost ?? boxHostClient();
+  // Before the tills' routes, which set the clock through it.
+  const correction = clockCorrection({
+    host: boxHost,
+    backend: nodeBackend,
+    store: clockWitnesses,
+    clock: tillClock,
+    boot: boxBoot,
+    read: (fn) => db.withWriteLock(() => fn(db)),
+    transaction: (fn) => withTransaction(db, fn),
+    // Called only once a set has run, after the email duty below has started.
+    onCorrected: (incident) => boxEmails.remember(incident),
+    nodeId: tradingContext.nodeId,
+    log,
+  });
   const tableRemovals = enabledTableRemovals(
     ALL_MODULES.filter((module) => (appliedModuleVersions[module.name] ?? 0) > 0),
   );
@@ -1845,6 +1874,16 @@ async function bootServer(
       workforceEnabled,
       attendanceResponsesEnabled: isSingletonPrimary,
       attendance: attendanceRecorder,
+      boxClock: {
+        correction,
+        startUp: clockStart,
+        witnesses: () => clockWitnesses.witnesses(),
+        clearWitnesses: () => clockWitnesses.clear(),
+        readBoot: boxBoot.readBoot,
+        steady: () => performance.now(),
+        requestFromBox: seams.requestFromBox,
+        filesRecords,
+      },
     },
     log,
   );
@@ -2004,7 +2043,19 @@ async function bootServer(
         tenantDomain: config.tenantDomain,
         disk: diskFull,
         notices: {
-          sources: deviceNoticeSources({ disk: diskFull, space: freeSpace }, setsToMigrate),
+          sources: deviceNoticeSources(
+            {
+              disk: diskFull,
+              space: freeSpace,
+              clockCheck: tillClockCheck({
+                startUp: clockStart,
+                backend: nodeBackend,
+                witnesses: () => clockWitnesses.witnesses(),
+                filesRecords,
+              }),
+            },
+            setsToMigrate,
+          ),
           deviceSources: devicePrinterNoticeSources({ now, locationId: tradingContext.locationId }),
           clock: tillClock,
           filing: () => ({ enabled: filesRecords() }),
@@ -2293,6 +2344,12 @@ async function bootServer(
     record: backupRoom.recordArchivesDeleted,
     log,
   });
+  // A write-lock turn, not a transaction: a run, or the free-space watch, on a nearly full disk must
+  // still read it.
+  const latestClockStep = latestClockStepFor(correction, async () => {
+    const read = nodeBackend.latestClockStep?.bind(nodeBackend);
+    return read === undefined ? null : db.withWriteLock(() => read(db));
+  });
   const backupSupervisor = new BackupSupervisor({
     buildConfig: async () =>
       loadBackupSettings({
@@ -2320,6 +2377,7 @@ async function bootServer(
     stagingTurn,
     readInstallationStart: backupRoom.readInstallationStart,
     recordArchivesDeleted: backupRoom.recordArchivesDeleted,
+    latestClockStep,
     nodeId: tradingContext.nodeId,
     log,
   });
@@ -2393,6 +2451,8 @@ async function bootServer(
       staging: stagingTurn,
       backends: () => runningLocalBackends(backupSupervisor.current()),
       installationStartedAt: backupRoom.readInstallationStart,
+      latestClockStep,
+      retainDays: () => backupSupervisor.current().retention?.days,
       onArchivesDeleted: backupRoom.recordArchivesDeleted,
       now,
       log,
@@ -2434,6 +2494,24 @@ async function bootServer(
     log,
   });
   undoOnFailure.push(() => boxEmails.stop());
+  // One read of the host's clock service a minute, shared by every reader of it.
+  const clockServiceCache = createTtlCache<ClockServiceStatus>({ ttlMs: 60_000, now });
+  const readClockService = () => clockServiceCache.get("status", () => boxHost.clockStatus());
+  const timeHealthCache = createTtlCache<TimeHealth>({ ttlMs: 60_000, now });
+  const readTimeHealth = () =>
+    timeHealthCache.get("sync", () =>
+      checkTimeHealth({
+        status: readClockService,
+      }),
+    );
+  // A reading of the time service taken before a set is not served after it.
+  correction.addAnchor({
+    stepComing: async () => {},
+    reanchor: async () => {
+      clockServiceCache.clear();
+      timeHealthCache.clear();
+    },
+  });
   const clockWatch = startClockWatch({
     backend: nodeBackend,
     store: clockWitnesses,
@@ -2442,13 +2520,20 @@ async function bootServer(
     nodeId: tradingContext.nodeId,
     read: (fn) => db.withWriteLock(() => fn(db)),
     transaction: (fn) => withTransaction(db, fn),
+    correction,
+    startUp: clockStart,
     filesRecords,
     isPrimary: () => holders.singletonRole.current === "primary",
     intervalMs: CLOCK_WATCH_MS,
     log,
   });
   undoOnFailure.push(() => clockWatch.stop());
+  correction.addAnchor(clockWatch);
   const serverAlertSources: AlertSource[] = [
+    clockSyncAlertSource({
+      status: readClockService,
+      production: config.environment === "production",
+    }),
     backupSource,
     storageAlertSource({ space: freeSpace, disk: diskFull }),
     sealedStateAlertSource(sealedStateStatus),
@@ -2510,6 +2595,7 @@ async function bootServer(
       // box enforces and tracks a live promotion.
       readMode: () => holders.mode.current,
       readSingletonRole: () => holders.singletonRole.current,
+      readTime: readTimeHealth,
       readAwaitingFiscalCertificate: () => awaitingFiscalCert.current,
     },
     log,
@@ -2525,7 +2611,6 @@ async function bootServer(
     log,
     backupDirs: localBackupDirs,
   };
-  const timeHealthCache = createTtlCache<TimeHealth>({ ttlMs: 60_000, now });
   const diskUsageCache = createTtlCache<DiskUsage>({ ttlMs: 60_000, now });
   // Its own, so the page's notice failures are logged once per spell apart from the equipment read's.
   const pageNoticeLog = createStaffNoticeLog(log);
@@ -2535,6 +2620,13 @@ async function bootServer(
   );
   const paymentsEnabled = setsToMigrate.some((module) => module.name === "payments");
   const fiscalOutbox = enabledFiscal.outbox;
+  const readClockStop = clockStopReader({
+    backend: nodeBackend,
+    witnesses: () => clockWitnesses.witnesses(),
+    clock: tillClock,
+    startUp: clockStart,
+  });
+  const readClockCheckWaiting = clockCheckWaitingReader({ backend: nodeBackend, clock: tillClock });
   mountBoxHealthApi(
     app,
     {
@@ -2562,7 +2654,7 @@ async function bootServer(
                 },
               }),
           authorityClock: authorityClock.read,
-          timeHealth: () => timeHealthCache.get("sync", () => checkTimeHealth()),
+          timeHealth: readTimeHealth,
           disk: diskFull,
           space: freeSpace,
           usage: () =>
@@ -2577,12 +2669,8 @@ async function bootServer(
           leftovers: () => surveyLeftovers(leftoverDeps),
           paymentsEnabled,
           canFree: () => !isReadOnly(),
-          clockStop: clockStopReader({
-            backend: nodeBackend,
-            witnesses: () => clockWitnesses.witnesses(),
-            clock: tillClock,
-          }),
-          clockCheckWaiting: clockCheckWaitingReader({ backend: nodeBackend, clock: tillClock }),
+          clockStop: readClockStop,
+          clockCheckWaiting: readClockCheckWaiting,
         }),
       freeSpace: createSpaceFreer({
         ...leftoverDeps,
@@ -2603,6 +2691,7 @@ async function bootServer(
         readBoot: boxBoot.readBoot,
         requestFromBox: seams.requestFromBox,
         devMode: config.devMode,
+        correction,
       },
     },
     log,

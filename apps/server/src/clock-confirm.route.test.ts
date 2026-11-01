@@ -1168,6 +1168,33 @@ it("shows a restart whose person has no row with no name", async () => {
   });
 });
 
+it("says whether the start-up window is open at the read, and closed with no window", async () => {
+  const state = {
+    clockAt: "2026-10-22T09:00:00.000Z",
+    offsetMinutes: 60,
+    lastRecordAt: "2026-10-22T09:10:00.000Z",
+    lastRecordOffsetMinutes: 60,
+    recordId: "record-1",
+    gapMs: 10 * MINUTE,
+    proof: "ready" as const,
+    agreeing: { authority: null, devices: [] },
+    contrary: { authority: null, devices: [] },
+    confirmation: null,
+  };
+  let open = true;
+  const deps = {
+    backend: { clockStopState: async () => state },
+    witnesses: () => [],
+    clock: systemClock(),
+  };
+  const read = clockStopReader({ ...deps, startUp: { open: () => open } });
+
+  expect((await read(venue.db))?.startUp).toBe(true);
+  open = false;
+  expect((await read(venue.db))?.startUp).toBe(false);
+  expect((await clockStopReader(deps)(venue.db))?.startUp).toBe(false);
+});
+
 async function healthOf(stop: Stop): Promise<BoxHealth> {
   const answer = await send(stop.app, marta.cookie, "GET", "/api/box/health");
   expect(answer.status).toBe(200);

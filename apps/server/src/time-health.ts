@@ -1,47 +1,21 @@
 import type { Transaction } from "@waitron/db";
 import type { AlertSource } from "@waitron/module";
 import "./errors.js";
-import { execFile } from "node:child_process";
+import type { ClockServiceStatus } from "./box-host-client.js";
 import type { AuthorityTimeSample } from "./clock-witnesses.js";
 
-/** Whether the system clock is NTP-synchronised. `source: "unavailable"` (never `warn: true`) on a host
- * without systemd's `timedatectl` — dev machines and macOS — so the probe never cries wolf where it
- * cannot know. Where systemd's `timedatectl` is present (the appliance), it reports the real sync
- * state. */
+/** Whether the system clock is NTP-synchronised, as the box's clock service reads it from the
+ * host's `timedatectl`. `source: "unavailable"` (never `warn: true`) where that service does not
+ * answer — dev machines, Docker Desktop, a host without systemd — so the probe never cries wolf
+ * where it cannot know. */
 export type TimeHealth = { synced: boolean; source: "timedatectl" | "unavailable"; warn: boolean };
 
-export type CommandRunner = (cmd: string, args: string[]) => Promise<{ stdout: string }>;
-
-// The real OS shell-out is environment-coupled and unreachable from a unit test.
-/* v8 ignore start */
-const defaultRun: CommandRunner = (cmd, args) =>
-  new Promise((resolve, reject) => {
-    execFile(cmd, args, { timeout: 2000 }, (error, stdout) => {
-      // A non-zero EXIT (e.g. an unsynced state some builds signal by rc) still resolves with its
-      // stdout, mapping to a real sync check below. Two failure shapes must instead reject so the
-      // caller's catch maps them to "unavailable" (honest "can't determine", never a false warn):
-      // a SPAWN failure (ENOENT — binary absent), where `error.code` is a string; and the `{ timeout }`
-      // KILL of a hung probe, where `error.code` is `null` but `error.killed` is true (empty stdout
-      // would otherwise read as "not synced" and cry wolf).
-      const err = error as (NodeJS.ErrnoException & { killed?: boolean }) | null;
-      if (err && (typeof err.code === "string" || err.killed)) {
-        reject(err);
-        return;
-      }
-      resolve({ stdout });
-    });
-  });
-/* v8 ignore stop */
-
-export async function checkTimeHealth(deps: { run?: CommandRunner } = {}): Promise<TimeHealth> {
-  const run = deps.run ?? defaultRun;
-  try {
-    const { stdout } = await run("timedatectl", ["show", "-p", "NTPSynchronized", "--value"]);
-    const synced = stdout.trim() === "yes";
-    return { synced, source: "timedatectl", warn: !synced };
-  } catch {
-    return { synced: false, source: "unavailable", warn: false };
-  }
+export async function checkTimeHealth(deps: {
+  status: () => Promise<ClockServiceStatus>;
+}): Promise<TimeHealth> {
+  const status = await deps.status();
+  if (!status.available) return { synced: false, source: "unavailable", warn: false };
+  return { synced: status.synchronised, source: "timedatectl", warn: !status.synchronised };
 }
 
 export type AuthorityClockStatus =

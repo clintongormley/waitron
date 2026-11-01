@@ -106,8 +106,9 @@ export function createAgent(opts: AgentOptions): Agent {
   let operation = Promise.resolve();
   let wakePromise: Promise<void>;
   let wakeResolve: () => void;
-  // 0 means no discovery window.
+  // 0 means no discovery window. Its length is how far ahead its end lay when it arrived.
   let discoveryUntil = 0;
+  let discoveryLength = 0;
   let networkProbes: { target: NetworkProbe; expiresAt: number }[] = [];
   let probeServer: string | undefined;
   let status: AgentStatus = { phase: "unconfigured", serverUrl: null, current: null };
@@ -132,6 +133,13 @@ export function createAgent(opts: AgentOptions): Agent {
   let claiming = false;
   let claimAgain = false;
   let unsentPageReports: PageReport[] = [];
+
+  /** A deadline further ahead of the clock than its own length was set before the clock stepped
+   * back, so it counts as passed rather than lasting the step's length longer. */
+  function passed(deadline: number, length: number): boolean {
+    const now = host.now();
+    return now >= deadline || deadline - now > length;
+  }
 
   function replaceWakeSignal(): void {
     wakePromise = new Promise((resolve) => {
@@ -443,7 +451,8 @@ export function createAgent(opts: AgentOptions): Agent {
 
   async function resendPageReports(url: string, token: string): Promise<void> {
     for (const report of unsentPageReports) {
-      if (host.now() - report.aliveAt > PAGE_REPORT_GIVE_UP_MS) {
+      // Either side: a claim last alive further ahead than the limit predates a backward step.
+      if (Math.abs(host.now() - report.aliveAt) > PAGE_REPORT_GIVE_UP_MS) {
         host.log.warn("page job report abandoned", { delivery: report.job.id });
         unsentPageReports = unsentPageReports.filter((kept) => kept !== report);
       } else {
@@ -520,7 +529,7 @@ export function createAgent(opts: AgentOptions): Agent {
       report({ phase: "unconfigured", serverUrl: null, current: null });
       return false;
     }
-    if (resetAt !== undefined && outOfTouch && host.now() >= resetAt) {
+    if (resetAt !== undefined && outOfTouch && passed(resetAt, RESET_WINDOW_MS)) {
       await host.saveToken(null);
       config = { ...config, servers: undefined };
       await host.saveConfig(config);
@@ -647,12 +656,18 @@ export function createAgent(opts: AgentOptions): Agent {
     // carrying it succeeds, and only if no newer pass or reset has replaced it meanwhile.
     const sentScan = scanFound;
     let scanned = [...sentScan];
-    if (host.now() < discoveryUntil && !scanning && (!running || host.now() >= nextScanAt)) {
+    if (
+      !passed(discoveryUntil, discoveryLength) &&
+      !scanning &&
+      (!running || passed(nextScanAt, intervalMs))
+    ) {
       void discover();
     }
     const targets =
       current === probeServer
-        ? networkProbes.filter((probe) => host.now() < probe.expiresAt).map((probe) => probe.target)
+        ? networkProbes
+            .filter((probe) => !passed(probe.expiresAt, probe.target.expiresInMs))
+            .map((probe) => probe.target)
         : [];
     if (targets.length) {
       try {
@@ -738,9 +753,10 @@ export function createAgent(opts: AgentOptions): Agent {
       config = { ...config, servers };
       await host.saveConfig(config);
     }
-    discoveryUntil = pulled.value.discoveryUntil ?? 0;
     // A remote server's epoch deadline cannot be compared with this host's clock.
     const receivedAt = host.now();
+    discoveryUntil = pulled.value.discoveryUntil ?? 0;
+    discoveryLength = discoveryUntil - receivedAt;
     networkProbes = (pulled.value.networkProbes ?? []).map((target) => ({
       target,
       expiresAt: receivedAt + target.expiresInMs,

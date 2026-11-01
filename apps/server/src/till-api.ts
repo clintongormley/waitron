@@ -70,6 +70,7 @@ import { mountTillClockApi } from "./till-clock-api.js";
 import { mountTillAttendanceApi } from "./till-attendance-api.js";
 import type { TradingContext } from "./trading-context.js";
 import { inPinTurn, overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
+import { mountTillBoxClockApi, type TillBoxClockDeps } from "./till-box-clock-api.js";
 import { moveDishesToStation, type StationMoveRequest } from "./station-move.js";
 import { madeHereAnswer, sendingCfg } from "./made-here.js";
 import { requestCfg } from "./request-config.js";
@@ -304,6 +305,8 @@ export interface TillApiDeps {
   onboardingIntent?: OnboardingIntent;
   /** Injected by tests; production gets one `createPinThrottle()` per mount. */
   pinThrottle?: PinThrottle;
+  /** "Check the time": mounts the till's clock check when the seat can confirm a stop. */
+  boxClock?: TillBoxClockDeps;
   invoiceEmailAvailable?: () => Promise<boolean>;
   workforceEnabled?: boolean;
   attendanceResponsesEnabled?: boolean;
@@ -1265,6 +1268,20 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   const catchUpFloor = (tx: Transaction) =>
     ensureToday(tx, deps.cfg, deps.tableRemovals ?? [], deps.clock.now().instant);
   app.use("/api/*", madeHereAnswer(deps.db, deps.cfg.locale));
+  if (deps.boxClock !== undefined)
+    mountTillBoxClockApi(
+      app,
+      {
+        db: deps.db,
+        backend: deps.backend,
+        clock: deps.clock,
+        nodeId: deps.cfg.nodeId,
+        devMode: deps.devMode === true,
+        attemptsFor: (deviceId) => overridePinAttempts(pinThrottle, deviceId),
+        boxClock: deps.boxClock,
+      },
+      log,
+    );
   if (deps.workforceEnabled === true)
     mountTillClockApi(
       app,
