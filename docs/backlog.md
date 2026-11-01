@@ -6445,12 +6445,19 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   every design question (lane B's A1268 does the working-time hashes; the working-time export names
   the venue only). The build plan covers S1–S12, S16, S17 and F1–F5; the watcher hands out its
   slices. S1 landed (#2379): `@waitron/db`'s `readVenue`, `readVenueClock`,
-  `readVenueClockAndPlace` and the interim `venueLocationId` are on main, so S2–S12, S16 and F1 can
-  start. S13–S15 can start now that A1268 has landed (#2375), S18 waits for S2–S17, and the schema
+  `readVenueClockAndPlace` and the interim `venueLocationId` are on main, so S2–S12 and S16 can
+  start. F1 landed (#2383): `@waitron/db/testing/seed.js` has `seedVenue` and `seedWorkingOrder`,
+  `packages/db`'s tests seed through them, and `scripts/a1301-seed-codemod.mjs` rewrites the common
+  shapes and reports the rest, so F2–F5 can start. S13–S15 can start now that A1268 has landed (#2375), S18 waits for S2–S17, and the schema
   slices S20–S28 get a plan of their own, which first settles what the venue id sent to Cloud and
   naming the backup folder becomes.
   [Design](superpowers/specs/2026-11-01-a1301-remove-location-design.md),
   [plan](superpowers/plans/2026-11-01-a1301-remove-location.md)
+
+- **`seedVenue` checks for a venue, then inserts it, in two steps.** Two calls running at once on
+  one database can both write a venue (found by finish-branch's second Codex review on #2383, not
+  fixed: tests seed one step at a time). A single insert-if-no-venue statement in
+  `packages/db/src/testing/seed.ts` closes it, if a test ever seeds in parallel.
 
 - **Four dashboard text keys have no reader.** `venue_settings.help`, `venue_settings.help_label`,
   `venue_settings.save_error` and `venue_settings.load_error` (`apps/dashboard/src/i18n/strings.ts`,
