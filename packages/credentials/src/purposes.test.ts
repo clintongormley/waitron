@@ -5,6 +5,9 @@ import { capturedSync as captured } from "./testing/captured.js";
 
 describe("PURPOSES", () => {
   it("declares the host credential purposes", () => {
+    // Every purpose here is venue-wide: its row travels with venue.db to any box holding a copy.
+    // Decide whether a new secret is venue-wide or belongs to one box before it joins this list;
+    // a per-box secret lives in that box's node.db instead.
     expect(Object.keys(PURPOSES).sort()).toEqual([
       "backup.archive",
       "backup.stream",

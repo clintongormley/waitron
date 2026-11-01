@@ -22,6 +22,14 @@ export {
 } from "./store.js";
 export type { CredentialMeta, CredentialRef, CredentialRowMeta, RotationResult } from "./store.js";
 
+export {
+  nodeSigningPublicKey,
+  openNodeSigningKeyRow,
+  readNodeSigningKey,
+  sealNodeSigningKeyTx,
+} from "./node-signing-key.js";
+export type { SealedSigningKeyRow } from "./node-signing-key.js";
+
 export { CREDENTIALS_CLASSIFICATION } from "./classification.js";
 
 // Keeps errors.ts's augmentation reachable from the public barrel; guard:

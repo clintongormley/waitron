@@ -17,8 +17,8 @@ const VENUE_DIR_VARIABLE = "WAITRON_VENUE_DIR";
  * for the directory it serves. There is no `WAITRON_STATE_DIR` fallback: that default lives in
  * `apps/server`, and a package cannot import an app.
  *
- * `store.venue`, not `store.node`: `packages/migrations/src/apply.ts` creates every table in the
- * venue file, and both handles share one type, so only `bin.test.ts`'s round trip tells them apart.
+ * The vault is in the venue file; the node file holds only the box's signing key, which `rotate`
+ * re-seals.
  */
 export async function runBin(argv: string[], env: NodeJS.ProcessEnv, io: CliIo): Promise<number> {
   const venueDir = env[VENUE_DIR_VARIABLE];
@@ -36,6 +36,7 @@ export async function runBin(argv: string[], env: NodeJS.ProcessEnv, io: CliIo):
     store = await openVenueDatabase(venueDir, { exclusive: false });
     return await runCli(argv, {
       db: store.venue,
+      node: store.node,
       ring,
       io,
       readFile: (path) => readFile(path, "utf8"),

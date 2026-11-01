@@ -1,5 +1,5 @@
 import { parseArgs } from "node:util";
-import { withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import { AppError, isAppError } from "@waitron/shared";
 import type { KeyRing } from "./keyring.js";
 import { PURPOSES, isPurpose } from "./purposes.js";
@@ -21,6 +21,8 @@ export interface CliIo {
 
 export interface CliDeps {
   db: Database;
+  /** The box's own file; `rotate` re-seals its signing key there. */
+  node?: NodeDatabase;
   ring: KeyRing;
   io: CliIo;
   readFile(path: string): Promise<string>;
@@ -178,7 +180,7 @@ async function remove(argv: string[], deps: CliDeps): Promise<number> {
 async function rotate(deps: CliDeps): Promise<number> {
   let result: RotationResult;
   try {
-    result = await rotateCredentials(deps.db, deps.ring);
+    result = await rotateCredentials(deps.db, deps.ring, deps.node);
   } catch (error) {
     return reportFailure(error, deps);
   }

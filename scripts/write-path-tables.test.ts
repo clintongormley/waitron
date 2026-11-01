@@ -195,6 +195,7 @@ describe("no source writes a table the application role may only read", () => {
       "node_mode",
       "node_recovery_key",
       "node_roles",
+      "node_signing_key",
       "nodes",
       "tenants",
     ]);

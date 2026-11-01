@@ -28,7 +28,9 @@ export const PURPOSES = {
   /** DEPRECATED: nothing seals or reads it any more. Kept because a purpose name is never deleted
    * or renamed. */
   "sync.mirror_token": ["token"],
-  /** The node's own Ed25519 membership identity PRIVATE key. */
+  /** DEPRECATED: nothing seals it in the venue's vault any more; a box's signing key lives in its
+   * own `node.db` (`./node-signing-key.ts`). Kept because a purpose name is never deleted or
+   * renamed. */
   "membership.node_key": ["privateKey"],
   /**
    * The owner's S3-compatible bucket the venue's database streams to. `venueId` names the venue's
