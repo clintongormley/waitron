@@ -37,9 +37,9 @@ describe("a group's permanent number", () => {
   it("counts fired and removed batches and keeps its number when held groups reorder", async () => {
     const partyId = await party();
     const [fire, mains, dessert] = await inTx(async (tx) => [
-      await startGroup(tx, partyId, "fire", OPERATOR),
-      await startGroup(tx, partyId, "hold", OPERATOR),
-      await startGroup(tx, partyId, "hold", OPERATOR),
+      await startGroup(tx, partyId, "fire", OPERATOR, "new_order"),
+      await startGroup(tx, partyId, "hold", OPERATOR, "next_course"),
+      await startGroup(tx, partyId, "hold", OPERATOR, "next_course"),
     ]);
     await inTx((tx) =>
       reorderHeldGroups(tx, partyId, [dessert!, mains!], {
@@ -56,7 +56,7 @@ describe("a group's permanent number", () => {
     await inTx((tx) =>
       tx.update(orderGroups).set({ state: "removed" }).where(eq(orderGroups.id, dessert!)),
     );
-    const next = await inTx((tx) => startGroup(tx, partyId, "hold", OPERATOR));
+    const next = await inTx((tx) => startGroup(tx, partyId, "hold", OPERATOR, "next_course"));
     expect((await groups(partyId)).find((row) => row.id === next)).toMatchObject({
       position: 4,
       displayNumber: 4,
@@ -68,9 +68,9 @@ describe("a group's permanent number", () => {
     const from = await party();
     const into = await party();
     const [source1, source2, target1] = await inTx(async (tx) => [
-      await startGroup(tx, from, "hold", OPERATOR),
-      await startGroup(tx, from, "hold", OPERATOR),
-      await startGroup(tx, into, "hold", OPERATOR),
+      await startGroup(tx, from, "hold", OPERATOR, "next_course"),
+      await startGroup(tx, from, "hold", OPERATOR, "next_course"),
+      await startGroup(tx, into, "hold", OPERATOR, "next_course"),
     ]);
     await inTx((tx) => moveGroupsToParty(tx, from, into));
     expect(await groups(into)).toMatchObject([
@@ -78,7 +78,7 @@ describe("a group's permanent number", () => {
       { id: source1, position: 2, displayNumber: 1, numberPartyId: from },
       { id: source2, position: 3, displayNumber: 2, numberPartyId: from },
     ]);
-    const next = await inTx((tx) => startGroup(tx, into, "fire", OPERATOR));
+    const next = await inTx((tx) => startGroup(tx, into, "fire", OPERATOR, "new_order"));
     expect((await groups(into)).find((row) => row.id === next)).toMatchObject({
       position: 4,
       displayNumber: 3,
@@ -90,11 +90,11 @@ describe("a group's permanent number", () => {
     const from = await party();
     const into = await party();
     await inTx(async (tx) => {
-      await startGroup(tx, from, "hold", OPERATOR);
-      await startGroup(tx, from, "fire", OPERATOR);
+      await startGroup(tx, from, "hold", OPERATOR, "next_course");
+      await startGroup(tx, from, "fire", OPERATOR, "new_order");
       await moveGroupsToParty(tx, from, into);
     });
-    const next = await inTx((tx) => startGroup(tx, from, "hold", OPERATOR));
+    const next = await inTx((tx) => startGroup(tx, from, "hold", OPERATOR, "next_course"));
     expect(await groups(from)).toMatchObject([
       { id: next, position: 1, displayNumber: 3, numberPartyId: from },
     ]);
@@ -104,11 +104,11 @@ describe("a group's permanent number", () => {
     const partyId = await party();
     await expect(
       inTx(async (tx) => {
-        await startGroup(tx, partyId, "hold", OPERATOR);
+        await startGroup(tx, partyId, "hold", OPERATOR, "next_course");
         throw new Error("send refused");
       }),
     ).rejects.toThrow("send refused");
-    const next = await inTx((tx) => startGroup(tx, partyId, "hold", OPERATOR));
+    const next = await inTx((tx) => startGroup(tx, partyId, "hold", OPERATOR, "next_course"));
     expect(await groups(partyId)).toMatchObject([
       { id: next, position: 1, displayNumber: 1, numberPartyId: partyId },
     ]);
@@ -119,8 +119,8 @@ describe("group numbers returned to the till", () => {
   it("returns permanent identities in firing order through both group reads", async () => {
     const partyId = await party();
     const [first, second] = await inTx(async (tx) => [
-      await startGroup(tx, partyId, "hold", OPERATOR),
-      await startGroup(tx, partyId, "hold", OPERATOR),
+      await startGroup(tx, partyId, "hold", OPERATOR, "next_course"),
+      await startGroup(tx, partyId, "hold", OPERATOR, "next_course"),
     ]);
     await inTx((tx) =>
       reorderHeldGroups(tx, partyId, [second!, first!], {
@@ -144,9 +144,9 @@ describe("group numbers returned to the till", () => {
   it("counts removed and moved-away origins when no visible group remains", async () => {
     const from = await party();
     const into = await party();
-    const removed = await inTx((tx) => startGroup(tx, from, "hold", OPERATOR));
+    const removed = await inTx((tx) => startGroup(tx, from, "hold", OPERATOR, "next_course"));
     await inTx(async (tx) => {
-      await startGroup(tx, from, "fire", OPERATOR);
+      await startGroup(tx, from, "fire", OPERATOR, "new_order");
       await tx.update(orderGroups).set({ state: "removed" }).where(eq(orderGroups.id, removed));
       await moveGroupsToParty(tx, from, into);
     });
@@ -188,9 +188,9 @@ describe("pre-live groups without a number identity", () => {
       const refusal = { code: "management.request_invalid", params: { field: "groupId" } };
       await expect(inTx((tx) => listOrderGroups(tx, partyId))).rejects.toMatchObject(refusal);
       await expect(inTx((tx) => readCurrentOrders(tx, partyId))).rejects.toMatchObject(refusal);
-      await expect(inTx((tx) => startGroup(tx, partyId, "hold", OPERATOR))).rejects.toMatchObject(
-        refusal,
-      );
+      await expect(
+        inTx((tx) => startGroup(tx, partyId, "hold", OPERATOR, "next_course")),
+      ).rejects.toMatchObject(refusal);
       expect((await groups(partyId)).map((row) => row.id)).toEqual([legacy!.id]);
     },
   );

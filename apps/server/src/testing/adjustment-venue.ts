@@ -610,7 +610,13 @@ export async function placeGrouped(
     lines.map((line) => ({ ...line, hold: !fire, release: fire })),
     "checked",
   );
-  const groupId = await startGroup(tx, seated.partyId, release, operatorId);
+  const groupId = await startGroup(
+    tx,
+    seated.partyId,
+    release,
+    operatorId,
+    release === "fire" ? "new_order" : "next_course",
+  );
   const inserted = await insertTabRound(
     tx,
     cfg,

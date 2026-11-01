@@ -1874,7 +1874,7 @@ describe("A803 portions: approval differences no single line can show", () => {
         const round = await priceTabRound(tx, venue.cfg, bill.billId, roundOf(lines), "checked");
         await insertTabRound(tx, venue.cfg, round, round.rows);
       }
-      const groupId = await startGroup(tx, bill.partyId, "hold", venue.staffId);
+      const groupId = await startGroup(tx, bill.partyId, "hold", venue.staffId, "next_course");
       await tx
         .update(workingOrderLines)
         .set({ groupId })
@@ -2551,7 +2551,13 @@ describe("A803 portions: what a comp or discount took follows each line it is sp
         "checked",
       );
       await insertTabRound(tx, venue.cfg, round, round.rows);
-      const groupId = await startGroup(tx, seatedBill.partyId, "hold", venue.staffId);
+      const groupId = await startGroup(
+        tx,
+        seatedBill.partyId,
+        "hold",
+        venue.staffId,
+        "next_course",
+      );
       await tx
         .update(workingOrderLines)
         .set({ groupId })
@@ -2820,7 +2826,7 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
         const round = await priceTabRound(tx, venue.cfg, bill.billId, roundOf(lines), "checked");
         await insertTabRound(tx, venue.cfg, round, round.rows);
       }
-      const groupId = await startGroup(tx, bill.partyId, "hold", venue.staffId);
+      const groupId = await startGroup(tx, bill.partyId, "hold", venue.staffId, "next_course");
       const stored = await tx
         .update(workingOrderLines)
         .set({ groupId })
@@ -3350,7 +3356,7 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
           ),
         )
         .orderBy(workingOrderLines.lineNo);
-      const groupId = await startGroup(tx, seat.partyId, "hold", venue.staffId);
+      const groupId = await startGroup(tx, seat.partyId, "hold", venue.staffId, "next_course");
       await tx
         .update(workingOrderLines)
         .set({ groupId })

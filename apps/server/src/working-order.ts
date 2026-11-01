@@ -269,6 +269,7 @@ import {
   removeEmptiedHeldGroups,
   requireGroup,
   requireOperator,
+  nextFireKind,
   startGroup,
   type Firer,
   type HeldChange,
@@ -6119,6 +6120,7 @@ async function applyLineEdits(
       ? undefined
       : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() };
   if (order.partyId !== null) {
+    const fireKind = await nextFireKind(tx, order.partyId);
     for (const as of pricedAs) {
       if (
         as.kind !== "line" ||
@@ -6129,7 +6131,13 @@ async function applyLineEdits(
         continue;
       }
       const actorId = requireOperator(operatorId);
-      const groupId = await startGroup(tx, order.partyId, as.kitchen, actorId);
+      const groupId = await startGroup(
+        tx,
+        order.partyId,
+        as.kitchen,
+        actorId,
+        as.kitchen === "fire" ? fireKind : "next_course",
+      );
       await recordGroupEvent(
         tx,
         {
