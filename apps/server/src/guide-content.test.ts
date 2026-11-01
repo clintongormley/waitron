@@ -202,6 +202,7 @@ it.each(GUIDE_LANGUAGES)("serves the till notices guide in %s with its sections"
   expect(renderGuide(markdown!, GUIDE_PAGES).sections.map(({ id }) => id)).toEqual([
     "notice-line",
     "notices",
+    "invoice-conflict",
   ]);
 });
 

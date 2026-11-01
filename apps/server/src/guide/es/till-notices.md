@@ -118,3 +118,12 @@ comanda; puede que haya que reimprimir la comanda desde la mesa o reenviarla des
 
 **El equipo necesita atención · Avisa al encargado** es un aviso para el que este terminal no tiene
 texto, quizá de una versión más reciente del equipo. Avisa al encargado para que revise el equipo.
+
+## Cuando se detiene la facturación por un conflicto de identidad {#invoice-conflict}
+
+Elige **Abrir recuperación** junto al rechazo para abrir la recuperación de este equipo en otra
+pestaña. Conserva la ventana de pago. Si indica que la tarjeta ya se ha cobrado, no vuelvas a
+cobrar. Usa la clave de recuperación actual de este equipo y sigue
+[Recuperar una identidad de facturación](box-status.md#invoice-conflict).
+Puedes cerrar la ventana de pago sin iniciar una recuperación. El cambio de identidad no anula
+el rechazo original; su incidencia de envío sigue abierta.

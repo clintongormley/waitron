@@ -1272,7 +1272,16 @@ export async function afterCardCharged<T>(
   } catch (error) {
     const reason = notRecordedReason(error);
     if (reason === null) throw error;
-    throw chargedNotRecorded(deps.log, workingOrderId, reason);
+    const recoveryUrl =
+      error instanceof IssuanceRefusedError
+        ? (error.params as Record<string, unknown>).recoveryUrl
+        : undefined;
+    throw chargedNotRecorded(
+      deps.log,
+      workingOrderId,
+      reason,
+      typeof recoveryUrl === "string" ? recoveryUrl : undefined,
+    );
   }
 }
 
@@ -1306,9 +1315,14 @@ function chargedNotRecorded(
   log: Logger | undefined,
   workingOrderId: string,
   reason: NotRecordedReason,
+  recoveryUrl?: string,
 ): AppError {
   log?.("error", "sale.charged_not_recorded", { workingOrderId });
-  return new AppError("sale.charged_not_recorded", { workingOrderId, reason });
+  return new AppError("sale.charged_not_recorded", {
+    workingOrderId,
+    reason,
+    ...(recoveryUrl === undefined ? {} : { recoveryUrl }),
+  });
 }
 
 /** {@link takeReaderBillPayment}'s deps: the fiscal ones, and the reader's provider. */

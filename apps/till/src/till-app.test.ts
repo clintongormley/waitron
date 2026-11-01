@@ -7526,6 +7526,34 @@ describe("till-app", () => {
   });
 
   it.each(["en-GB", "es-ES"])(
+    "offers module recovery after invoice-first parking is refused (%s)",
+    async (locale) => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, locale }),
+        parkOrder: vi
+          .fn()
+          .mockRejectedValue({
+            code: "sif.allocation_invalid",
+            reason: "conflict_requires_administrator",
+            recoveryUrl: "/manage/recovery/fiscal-conflict",
+            status: 409,
+          }),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "park-order", { label: "Table 4" });
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("a[data-recovery]")?.getAttribute("href")).toBe(
+        "/manage/recovery/fiscal-conflict",
+      );
+      expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
+        t("recovery.issuance_stopped"),
+      );
+    },
+  );
+
+  it.each(["en-GB", "es-ES"])(
     "park-order refused for a clock behind the last sale says it can't be recorded (%s)",
     async (locale) => {
       const { el } = await mountApp({
@@ -10466,6 +10494,57 @@ describe("till-app", () => {
       await flush(el);
       return el.shadowRoot!.querySelector('[role="alert"]')!.textContent!;
     }
+
+    it.each([false, true])(
+      "offers module recovery on a counter reader refusal with charged=%s",
+      async (charged) => {
+        const { el } = await mountApp({
+          pay: vi
+            .fn()
+            .mockRejectedValue({
+              code: charged ? "sale.charged_not_recorded" : "sif.allocation_invalid",
+              reason: charged ? "issuance_refused" : "conflict_requires_administrator",
+              recoveryUrl: "/manage/recovery/fiscal-conflict",
+              status: 409,
+            }),
+        });
+        const c = await toCounter(el);
+        c.store.addProduct(cafe, "1");
+        await el.updateComplete;
+        emit(c, "collect-card", {});
+        await flush(el);
+        expect(el.shadowRoot!.querySelector("a[data-recovery]")?.getAttribute("href")).toBe(
+          "/manage/recovery/fiscal-conflict",
+        );
+        if (charged)
+          expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
+            t("recovery.charged"),
+          );
+      },
+    );
+
+    it("keeps separate-terminal refund advice beside module recovery", async () => {
+      const { el } = await mountApp({
+        recordSale: vi
+          .fn()
+          .mockRejectedValue({
+            code: "sif.allocation_invalid",
+            recoveryUrl: "/manage/recovery/fiscal-conflict",
+            status: 409,
+          }),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "confirm-payment", { method: "card", amount: "5", externalRef: "OP-4417" });
+      await flush(el);
+      expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
+        t("recovery.manual_card"),
+      );
+      expect(el.shadowRoot!.querySelector("a[data-recovery]")?.getAttribute("href")).toBe(
+        "/manage/recovery/fiscal-conflict",
+      );
+    });
 
     it("a cash sale refused for a full disk says not to take payment", async () => {
       const text = await payCash(diskFull);

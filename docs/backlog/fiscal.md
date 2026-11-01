@@ -419,8 +419,10 @@ uses the existing minute admission and activation writer, and validates exact co
 An interrupted uncommitted attempt cannot recreate its consumed process admission. The module's key-only
 HTTPS route now prepares, switches and reconciles an exact event, with admission before parsing or key
 verification. Status reports a retained uncommitted selection as requiring a new attempt. The public
-browser entry, translated operator presentation and complete procedure qualification remain open;
-this is not yet an available recovery procedure.
+key-only browser entry and translated refusal links now expose the procedure, with English/Spanish
+guidance in Box status, till notices and backup recovery. Local qualification includes real HTTPS
+boot and cold built-dashboard loading, and captured-payment completion once after an actual switch.
+Whole-branch reviews and current-head CI remain before delivery.
 
 Corrective-record resolution, filing investigation, outside evidence and fencing for the other
 tasks, and the complete old-backup/new-hardware operational exercise remain queued. Earlier

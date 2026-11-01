@@ -63,6 +63,7 @@ declare module "@waitron/shared" {
     "sif.reservation_invalid": { reason: string };
     "sif.allocation_invalid": {
       reason: string;
+      recoveryUrl?: string;
       allowedFromMs?: number;
       remainingMs?: number;
       recheckInMs?: number;

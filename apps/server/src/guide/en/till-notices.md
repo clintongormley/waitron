@@ -105,3 +105,11 @@ ticket; the ticket itself may still need reprinting from the table or resending 
 
 **The box needs attention · Tell a manager** is a notice this till has no words for, perhaps from
 a newer version of the box. Tell a manager so they can check the box.
+
+## When invoices stop after an identity conflict {#invoice-conflict}
+
+Choose **Open recovery** beside the refusal to open this box's recovery page in a separate tab.
+Keep the payment window available. If it says the card was charged, do not charge again. Use this
+box's current recovery key and follow [Recover an invoice identity](box-status.md#invoice-conflict).
+You can close the payment window without starting a recovery. A completed switch does not undo
+the original rejection; its filing case stays open.

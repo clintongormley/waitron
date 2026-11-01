@@ -1,3 +1,8 @@
+import {
+  recoveryLink,
+  recoveryRefusalOf,
+  recoveryRefusalText,
+} from "./widgets/recovery-refusal.js";
 import type {
   AllergyCommand,
   AllergyMoveRead,
@@ -742,6 +747,8 @@ function isPartyOutOfDate(error: unknown): boolean {
 }
 
 function tableWriteError(error: unknown): CounterError {
+  const recovery = recoveryRefusalOf(error);
+  if (recovery !== undefined) return recovery;
   const period = periodRefusal(error);
   if (period !== undefined) return period;
   const refused = error as { code?: string; tableId?: unknown } | undefined;
@@ -987,6 +994,8 @@ function periodRefusal(error: unknown): CounterError | undefined {
 }
 
 function counterError(error: unknown, fallback: StringKey): CounterError {
+  const recovery = recoveryRefusalOf(error);
+  if (recovery !== undefined) return recovery;
   const unsent = billUnsentOf(error);
   if (unsent !== undefined) return { unsentBill: unsent };
   const period = periodRefusal(error);
@@ -999,6 +1008,8 @@ function counterError(error: unknown, fallback: StringKey): CounterError {
 }
 
 function discardError(error: unknown): CounterError {
+  const recovery = recoveryRefusalOf(error);
+  if (recovery !== undefined) return recovery;
   if (isPaymentsReceived(error)) return "held.discard_holds_money";
   const code = (error as { code?: string } | undefined)?.code;
   return code === "fiscal.fingerprint_mismatch" ||
@@ -1398,7 +1409,14 @@ type CounterError =
   | StringKey
   /** `tableId`: the table a refusal names, for wording that names it; `bill`: the label of the
    * bill it names when that is not the bill on screen. */
-  | { code: string; menuId?: string; tableId?: string; bill?: string }
+  | {
+      code: string;
+      menuId?: string;
+      tableId?: string;
+      bill?: string;
+      recoveryUrl?: string;
+      manualCard?: true;
+    }
   | { billPayments: string }
   | { replacedGroups: string }
   /** `lineChange`: refused for a change to a line, not a move of items. */
@@ -1468,6 +1486,8 @@ function errorText(
   if ("replacedGroups" in error)
     return t("table.draft_replaced_groups").replace("{groups}", () => error.replacedGroups);
   if ("code" in error) {
+    const recovery = recoveryRefusalText(error);
+    if (recovery !== null) return html`${recovery} ${recoveryLink(error, true)}`;
     if (error.code === "menu_period.not_running") {
       const menu = menus.find((menu) => menu.id === error.menuId);
       if (menu !== undefined)
@@ -1673,10 +1693,13 @@ function saleRefusalOf(
       | "sale.charged_disk_full"
       | "sale.charged_clock_behind"
     >
-  | { code: string }
+  | { code: string; recoveryUrl?: string; manualCard?: true }
   | { clockUnusable: { clockAt: string; offsetMinutes: number } }
   | { clockBehind: ClockBehind }
   | undefined {
+  const recovery = recoveryRefusalOf(error);
+  if (recovery !== undefined)
+    return { ...recovery, ...(tender.manualCard ? { manualCard: true as const } : {}) };
   const refusal = error as
     | {
         code?: string;

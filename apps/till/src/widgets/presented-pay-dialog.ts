@@ -1,3 +1,4 @@
+import { recoveryLink } from "./recovery-refusal.js";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { compareDecimal, decimal, formatMoney, subtractDecimal } from "@waitron/shared";
@@ -418,7 +419,8 @@ export class TillPresentedPayDialog extends LitElement {
       ${this.#methodFields(errors)}
       ${this.asksGuests ? this.#guests(errors.get("guests")) : nothing}
       ${this.#methods().length === 0 ? payNotice(this.notice) : nothing}`;
-    const actions = html`<wt-form-actions slot="footer" .error=${this.#bottomMessage(errors)}>
+    const actions = html`<wt-form-actions slot="footer" .error=${this.#bottomMessage(errors)}
+      >${recoveryLink(this.shownRefusal)}
       <wt-button
         slot="cancel"
         variant="secondary"
@@ -499,7 +501,7 @@ export class TillPresentedPayDialog extends LitElement {
     const actions = html`<wt-form-actions
       slot="footer"
       .error=${this.shownRefusal === null ? "" : refusalText(this.shownRefusal, this.checkTimeOffered)}
-    >
+      >${recoveryLink(this.shownRefusal)}
       <wt-button
         slot="cancel"
         variant="secondary"

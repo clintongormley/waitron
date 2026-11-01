@@ -224,6 +224,7 @@ export function isLatestSend(
 export interface DialogRefusal {
   code: string;
   field?: string;
+  recoveryUrl?: string;
 }
 
 /** The longest reason a refund or an unpaid departure is sent with. */
@@ -248,6 +249,7 @@ export function refusalOf(error: unknown, changes = true): PayRefusal {
     lastRecordAt?: unknown;
     lastRecordOffsetMinutes?: unknown;
     reason?: unknown;
+    recoveryUrl?: unknown;
   };
   const unsent = billUnsentOf(error);
   return {
@@ -264,6 +266,7 @@ export function refusalOf(error: unknown, changes = true): PayRefusal {
       ? { lastRecordOffsetMinutes: refused.lastRecordOffsetMinutes }
       : {}),
     ...(typeof refused.reason === "string" ? { reason: refused.reason } : {}),
+    ...(typeof refused.recoveryUrl === "string" ? { recoveryUrl: refused.recoveryUrl } : {}),
   };
 }
 

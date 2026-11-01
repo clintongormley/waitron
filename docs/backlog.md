@@ -382,8 +382,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   The key-authenticated live operation and its HTTPS route now support preparation, switching and exact committed replay;
   a retained uncommitted selection reports that a new attempt is required. The public key-only browser flow now
   has explicit switching, paced minute checks, exact-attempt reconciliation, Stop and draft protection, with English
-  and Spanish Box status guidance. Recovery links in issuance refusals, live HTTPS cold-boot qualification,
-  captured-payment finalisation after the actual switch and the operational runbook remain open. Corrective-record resolution, filing investigation, outside
+  and Spanish guidance. Issuance refusals now carry the module's recovery destination, including after
+  capture; the live HTTPS entry and captured-payment finalisation after the actual switch have local
+  integration checks. The operational runbook describes this procedure. Whole-branch review and CI
+  qualification remain before delivery. Corrective-record resolution, filing investigation, outside
   evidence and fencing for the other tasks, and the complete old-backup/new-hardware exercise remain queued.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 

@@ -313,6 +313,7 @@ declare module "@waitron/shared" {
     "sale.charged_not_recorded": {
       workingOrderId: string;
       reason: "disk_full" | "clock_behind_chain" | "issuance_refused";
+      recoveryUrl?: string;
     };
     /**
      * A tender method this till does not support. `method` echoes the request so a translator can

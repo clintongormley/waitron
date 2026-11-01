@@ -94,6 +94,9 @@ describe("conflict issuance preflights over real routes", () => {
       code: "sale.charged_not_recorded",
       params: { reason: "issuance_refused" },
     });
+    expect(charged.json).toMatchObject({
+      params: { recoveryUrl: "/manage/recovery/fiscal-conflict" },
+    });
     expect(
       suite.db.all(
         sql`select state, amount, sale_id from payments where working_order_id = ${billId}`,
@@ -113,6 +116,9 @@ describe("conflict issuance preflights over real routes", () => {
     const sends = venue.card.collectCalls.length;
     const answer = await pay(billId, part(method));
     expect(answer.json).toMatchObject(refusal);
+    expect(answer.json).toMatchObject({
+      params: { recoveryUrl: "/manage/recovery/fiscal-conflict" },
+    });
     expect(venue.card.collectCalls).toHaveLength(sends);
     expect(
       suite.db.all(sql`select id from bill_payments where working_order_id = ${billId}`),

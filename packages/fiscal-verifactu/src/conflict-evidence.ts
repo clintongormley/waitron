@@ -36,6 +36,7 @@ export async function assertNoActiveConflict(tx: Transaction, nodeId: string): P
   if ((await readActiveConflicts(tx, nodeId)).length !== 0) {
     throw new IssuanceRefusedError("sif.allocation_invalid", {
       reason: "conflict_requires_administrator",
+      recoveryUrl: "/manage/recovery/fiscal-conflict",
     });
   }
 }

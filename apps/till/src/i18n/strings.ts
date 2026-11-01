@@ -2,6 +2,12 @@
 // keys, and `es` is typed `Record<StringKey, string>`, so a key added without its Spanish sibling
 // fails typecheck.
 export const en = {
+  "recovery.open": "Open recovery",
+  "recovery.issuance_stopped":
+    "New invoices are stopped. Open recovery with this box's current recovery key.",
+  "recovery.charged": "Card charged. Do not charge again.",
+  "recovery.manual_card":
+    "If you already charged a card on a separate terminal, refund it there before trying this sale again.",
   "trust.title": "This device hasn't trusted the till yet",
   "trust.explanation":
     "The till is served over HTTPS with the venue box's own certificate, which this device does not recognise yet. Install the box's certificate, then reopen the till.",
@@ -1866,6 +1872,12 @@ export type StringKey = keyof typeof en;
 
 // Typed `Record<StringKey, string>`, not Partial, so an untranslated key fails typecheck.
 export const es: Record<StringKey, string> = {
+  "recovery.open": "Abrir recuperación",
+  "recovery.issuance_stopped":
+    "La emisión de facturas está detenida. Abre la recuperación con la clave de recuperación actual de este equipo.",
+  "recovery.charged": "La tarjeta ya se ha cobrado. No vuelvas a cobrar.",
+  "recovery.manual_card":
+    "Si ya has cobrado con tarjeta en un datáfono independiente, devuelve el importe allí antes de intentar registrar esta venta otra vez.",
   "trust.title": "Este dispositivo todavía no confía en la caja",
   "trust.explanation":
     "La caja se sirve por HTTPS con el certificado del servidor del local, que este dispositivo todavía no reconoce. Instala el certificado del servidor y vuelve a abrir la caja.",
