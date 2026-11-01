@@ -19,7 +19,8 @@ export default defineConfig({
         ...coverageConfigDefaults.exclude,
         "drizzle.config.ts",
         "drizzle/**",
-        // Re-export barrels, on which v8 reports phantom uncovered branches.
+        // Re-export barrels, on which v8 reports phantom uncovered branches. Their surface is
+        // asserted by index.test.ts and schema-ownership.test.ts.
         "src/index.ts",
         "src/schema/index.ts",
       ],
