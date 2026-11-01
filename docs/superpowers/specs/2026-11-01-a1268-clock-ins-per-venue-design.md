@@ -97,7 +97,7 @@ is no per-location view of working time: nothing filters or groups entries, sess
 items by location. A correction or confirmation is tied to the entry it answers by the entry and
 the person only. This takes in what revision 1 kept as D5. Where the attendance tables still need
 a place for a correction item, no location is passed in (watcher, 2026-11-01 ~17:05): a manager's
-proposal shown to the worker takes the venue's name and time zone from A1301 S1's `readVenue`, and
+proposal shown to the worker, and the inbox of a worker with clock entries, take the venue's name and time zone from A1301 S1's `readVenue`, and
 an attendance command's `location_id` stops being required, holding a value only when the command
 answers a question (plan, open question 1).
 
