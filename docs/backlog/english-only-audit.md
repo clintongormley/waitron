@@ -199,7 +199,7 @@ Test helpers under `testing/` and `test/` folders hold Spanish fixture venues: w
 (`apps/server/src/testing/bill-venue.ts:66–75`, `party-venue.ts:57–65`, `adjustment-venue.ts`,
 `split-extras-venue.ts`), «Venta en establecimiento» and «Caja 1» in boot and stream helpers, a
 Spanish A4 invoice for line-wrapping checks (`full-invoice-fixture.ts`), the station default
-«Cocina» (`packages/db/src/testing/seed.ts:44–50`), a frozen configuration export in five languages
+«Cocina» (`packages/db/src/testing/seed.ts:66–73`), a frozen configuration export in five languages
 (`apps/server/src/testing/fixtures/configuration-v1-before-printing-retirement.json`), a signed Cloud
 test vector whose bytes cannot change (`apps/server/test/cloud-translation-vector.json`), and the
 demo seed's 4,173-line golden snapshot (`demo-seed/testing/spanish-practice-sales.golden.json`, mostly
