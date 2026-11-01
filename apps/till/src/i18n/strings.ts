@@ -1378,6 +1378,8 @@ export const en = {
   "table.pick_count": "{count} of {total}",
   "table.move_dishes_floor": "{amount} is already paid on this bill: move fewer dishes",
   "table.move_dishes_none": "No dishes to move",
+  // A refusal that names another bill than the one on screen: that bill's label, then its words.
+  "table.refused_on_bill": "{bill}: {message}",
   "table.action_move_dishes": "Move dishes…",
   "table.move_dishes_heading": "Move dishes from {bill}",
   "table.move_dishes_to": "Move to",
@@ -3203,6 +3205,7 @@ export const es: Record<StringKey, string> = {
   "table.pick_count": "{count} de {total}",
   "table.move_dishes_floor": "Ya se han pagado {amount} en esta cuenta: mueve menos platos",
   "table.move_dishes_none": "No hay platos para mover",
+  "table.refused_on_bill": "{bill}: {message}",
   "table.action_move_dishes": "Mover platos…",
   "table.move_dishes_heading": "Mover platos de {bill}",
   "table.move_dishes_to": "Mover a",

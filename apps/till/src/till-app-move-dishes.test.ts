@@ -295,6 +295,58 @@ describe("A803 move dishes app:", () => {
     },
   );
 
+  describe("refused for a card or a refund under way", () => {
+    const onDestination = () => [bill("wo-4", 1), bill("bill-1", 2, { hasPayments: true })];
+
+    it.each(["order.payment_in_flight", "bill.refund_in_progress"])(
+      "%s naming the destination names that bill before its words, and moves nothing",
+      async (code) => {
+        const { el, order } = await open({
+          getPartyBills: vi.fn().mockResolvedValue(onDestination()),
+          moveDishes: vi.fn().mockRejectedValue({ code, status: 409, workingOrderId: "bill-1" }),
+        });
+
+        emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "bill-1" });
+        await flush(el, 6);
+
+        expect(bannerText(el)).toBe(`Bill 2: ${codeMessage(code)}`);
+        expect(tableOrder(el)!.orderId).toBe("wo-4");
+      },
+    );
+
+    it("in Spanish the destination is named the same way", async () => {
+      const { el, order } = await open({
+        getPartyBills: vi.fn().mockResolvedValue(onDestination()),
+        moveDishes: vi.fn().mockRejectedValue({
+          code: "order.payment_in_flight",
+          status: 409,
+          workingOrderId: "bill-1",
+        }),
+      });
+      setLocale("es");
+
+      emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "bill-1" });
+      await flush(el, 6);
+
+      expect(bannerText(el)).toBe(`Cuenta 2: ${codeMessage("order.payment_in_flight")}`);
+      expect(bannerText(el)).toContain("Se está cobrando");
+    });
+
+    it.each(["order.payment_in_flight", "bill.refund_in_progress"])(
+      "%s naming the bill on screen keeps its words as they are",
+      async (code) => {
+        const { el, order } = await open({
+          moveDishes: vi.fn().mockRejectedValue({ code, status: 409, workingOrderId: "wo-4" }),
+        });
+
+        emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "bill-1" });
+        await flush(el, 6);
+
+        expect(bannerText(el)).toBe(codeMessage(code));
+      },
+    );
+  });
+
   it.each(["draft.taken_over", "draft.out_of_date"])(
     "Merge bills refused %s shows the words Move dishes shows for it",
     async (code) => {

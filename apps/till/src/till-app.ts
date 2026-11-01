@@ -1389,8 +1389,9 @@ interface WaitingOrderMove {
  * screen, with a second message when something else failed since. */
 type CounterError =
   | StringKey
-  /** `tableId`: the table a refusal names, for wording that names it. */
-  | { code: string; menuId?: string; tableId?: string }
+  /** `tableId`: the table a refusal names, for wording that names it; `bill`: the label of the
+   * bill it names when that is not the bill on screen. */
+  | { code: string; menuId?: string; tableId?: string; bill?: string }
   | { billPayments: string }
   | { replacedGroups: string }
   /** `lineChange`: refused for a change to a line, not a move of items. */
@@ -1470,6 +1471,11 @@ function errorText(
       if (table !== undefined)
         return tableSentence(table, "floor.needs_moving_first", "floor.needs_moving_first_named");
     }
+    const bill = error.bill;
+    if (bill !== undefined)
+      return t("table.refused_on_bill")
+        .replace("{bill}", () => bill)
+        .replace("{message}", () => codeMessage(error.code));
     return codeMessage(error.code);
   }
   if ("billNameTakenOver" in error)
@@ -15985,12 +15991,40 @@ export class TillApp extends LitElement {
       if (!this.#billCompositionCurrent(asked)) return;
       const code = (error as { code?: string } | undefined)?.code;
       if (code === "tab.split_held_line") this.errorKey = "table.split_held_error";
-      else await this.#onBillPairRefusal(error);
+      else {
+        const destination = this.#refusedDestination(error, toBillId);
+        await this.#onBillPairRefusal(error);
+        // Set by the await above; the compiler still holds the undefined assigned before the call.
+        const said = this.errorKey as CounterError | undefined;
+        if (
+          destination !== undefined &&
+          this.#billCompositionCurrent(asked) &&
+          typeof said === "object" &&
+          "code" in said &&
+          said.code === code
+        )
+          this.errorKey = { ...said, bill: destination };
+      }
       if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
       return;
     }
     await this.#reloadOrder();
     if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
+  }
+
+  /** The label of the destination bill when a move is refused for a card payment or refund under
+   * way on it: the code's own words speak of "this order" or "this bill", and the bill on screen
+   * is the one the dishes leave. */
+  #refusedDestination(error: unknown, toBillId: string | null): string | undefined {
+    const refused = error as { code?: unknown; workingOrderId?: unknown } | undefined;
+    if (
+      toBillId === null ||
+      refused?.workingOrderId !== toBillId ||
+      (refused.code !== "order.payment_in_flight" && refused.code !== "bill.refund_in_progress")
+    )
+      return undefined;
+    const bill = this.partyBills.find((each) => each.workingOrderId === toBillId);
+    return bill === undefined ? undefined : billLabel(bill);
   }
 
   #finishCurrent(composition: BillComposition): boolean {
