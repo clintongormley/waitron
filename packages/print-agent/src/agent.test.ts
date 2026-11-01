@@ -1075,6 +1075,35 @@ describe("createAgent — inventory, discovery and resolve", () => {
     },
   );
 
+  // Received at 1_000 ending at 181_000; a clock read earlier than 1_000 leaves that end further
+  // ahead than it was when it arrived. The pulls after the first fail, so nothing replaces it.
+  it.each([
+    ["400 days back", 1_000 - 400 * 86_400_000, 0],
+    ["as far ahead as it arrived", 1_000, 1],
+    ["a millisecond further ahead than it arrived", 999, 0],
+  ])(
+    "stops scanning when the discovery window's end lies further ahead than it arrived (%s)",
+    async (_case, steppedTo, scans) => {
+      const scan = vi.fn(async () => []);
+      const host = fakeHost({ config: CONFIG, token: "a1.s", scan });
+      let now = 1_000;
+      host.now = () => now;
+      const c = client({
+        pullJobs: vi
+          .fn()
+          .mockResolvedValueOnce(
+            okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: 181_000 }),
+          )
+          .mockResolvedValue(failR({ kind: "unreachable", detail: "offline" })),
+      });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      now = steppedTo;
+      await agent.runOnce();
+      expect(scan).toHaveBeenCalledTimes(scans);
+    },
+  );
+
   // Received at 1_000 for 29 s, so it ends at 30_000; a clock read earlier than 1_000 leaves that
   // end further ahead than the check's own length.
   it.each([
@@ -1974,13 +2003,14 @@ describe("createAgent — start/stop and logging", () => {
   });
 
   // The next pass is due at 1_050, worked out at 1_000; a clock read earlier than 1_000 leaves it
-  // further ahead than one interval.
+  // further ahead than one interval. The server's window follows its clock, so the first poll after
+  // a step back only brings a fresh window and the pass runs on the next.
   it.each([
     ["400 days back", 1_000 - 400 * 86_400_000, 2],
     ["one interval ahead exactly", 1_000, 1],
     ["a millisecond past one interval", 999, 2],
   ])(
-    "starts the next scan at once when its time lies further ahead than one interval (%s)",
+    "starts the next scan within two polls when its time lies further ahead than one interval (%s)",
     async (_case, steppedTo, scans) => {
       let clock = 1_000;
       const sleeps: ReturnType<typeof deferred<void>>[] = [];
@@ -1997,7 +2027,7 @@ describe("createAgent — start/stop and logging", () => {
         },
       });
       const pulls = vi.fn(async () =>
-        okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: 10_000 }),
+        okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: clock + 10_000 }),
       );
       const agent = createAgent({ host, client: client({ pullJobs: pulls }), intervalMs: 50 });
       await agent.runOnce();
@@ -2007,6 +2037,8 @@ describe("createAgent — start/stop and logging", () => {
         expect(scan).toHaveBeenCalledTimes(1);
         clock = steppedTo;
         sleeps[0]!.resolve(undefined);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        sleeps[1]!.resolve(undefined);
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(scan).toHaveBeenCalledTimes(scans);
       } finally {

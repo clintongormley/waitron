@@ -79,8 +79,11 @@ export function createLinuxDevices(
   let availability: BluetoothAvailability | undefined;
   let listedAt = -Infinity;
   let listing: Promise<BluetoothDevice[]> | undefined;
-  let recentPaired: { startedAt: number; devices: BluetoothDevice[] } | undefined;
-  let forgottenAt = -Infinity;
+  let recentPaired:
+    { startedAt: number; forgetsBefore: number; devices: BluetoothDevice[] } | undefined;
+  // Counted rather than timed, so a forget made after a backward step still follows every listing
+  // started before it.
+  let forgets = 0;
 
   const record = (next: BluetoothAvailability): void => {
     const changed = availability === undefined || !sameAvailability(availability, next);
@@ -92,11 +95,12 @@ export function createLinuxDevices(
 
   const listPaired = async (): Promise<BluetoothDevice[]> => {
     const startedAt = now();
+    const forgetsBefore = forgets;
     listedAt = startedAt;
     try {
       const paired = await bluetooth.paired();
       record({ available: true });
-      recentPaired = { startedAt, devices: paired };
+      recentPaired = { startedAt, forgetsBefore, devices: paired };
       return paired;
     } catch (error) {
       recentPaired = undefined;
@@ -134,11 +138,10 @@ export function createLinuxDevices(
   const pairedFor = async (mac: string | null): Promise<LocalDevice[]> => {
     const recent = recentPaired;
     const age = recent === undefined ? -1 : now() - recent.startedAt;
-    // A listing started ahead of the clock predates a backward step, so a forget made since can
-    // carry an earlier time than the listing's start.
+    // A listing started ahead of the clock predates a backward step and is of unknown age.
     const reusable =
       recent !== undefined &&
-      recent.startedAt > forgottenAt &&
+      recent.forgetsBefore === forgets &&
       age >= 0 &&
       age < PAIRED_REUSE_MS &&
       recent.devices.some((d) => d.mac === mac);
@@ -216,7 +219,7 @@ export function createLinuxDevices(
       try {
         return await bluetooth.forget(mac);
       } finally {
-        forgottenAt = now();
+        forgets += 1;
       }
     },
 

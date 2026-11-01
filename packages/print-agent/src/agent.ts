@@ -106,8 +106,9 @@ export function createAgent(opts: AgentOptions): Agent {
   let operation = Promise.resolve();
   let wakePromise: Promise<void>;
   let wakeResolve: () => void;
-  // 0 means no discovery window.
+  // 0 means no discovery window. Its length is how far ahead its end lay when it arrived.
   let discoveryUntil = 0;
+  let discoveryLength = 0;
   let networkProbes: { target: NetworkProbe; expiresAt: number }[] = [];
   let probeServer: string | undefined;
   let status: AgentStatus = { phase: "unconfigured", serverUrl: null, current: null };
@@ -655,7 +656,11 @@ export function createAgent(opts: AgentOptions): Agent {
     // carrying it succeeds, and only if no newer pass or reset has replaced it meanwhile.
     const sentScan = scanFound;
     let scanned = [...sentScan];
-    if (host.now() < discoveryUntil && !scanning && (!running || passed(nextScanAt, intervalMs))) {
+    if (
+      !passed(discoveryUntil, discoveryLength) &&
+      !scanning &&
+      (!running || passed(nextScanAt, intervalMs))
+    ) {
       void discover();
     }
     const targets =
@@ -748,9 +753,10 @@ export function createAgent(opts: AgentOptions): Agent {
       config = { ...config, servers };
       await host.saveConfig(config);
     }
-    discoveryUntil = pulled.value.discoveryUntil ?? 0;
     // A remote server's epoch deadline cannot be compared with this host's clock.
     const receivedAt = host.now();
+    discoveryUntil = pulled.value.discoveryUntil ?? 0;
+    discoveryLength = discoveryUntil - receivedAt;
     networkProbes = (pulled.value.networkProbes ?? []).map((target) => ({
       target,
       expiresAt: receivedAt + target.expiresInMs,

@@ -3119,6 +3119,25 @@ describe("agent inventory screening and the discovered-printer list", () => {
     return (await res.json()) as Record<string, unknown>[];
   }
 
+  it("lists a report by the shorter bound while the window lies further ahead than its length", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app, "Stepped agent");
+    const start = await send(app, "POST", "/management-api/printer-discovery/start", {
+      cookie: managerCookie,
+    });
+    expect(start.status).toBe(200);
+    const serial = `SN-${randomUUID()}`;
+    // Ten minutes back: the window then ends further ahead than its three minutes, while the
+    // dashboard session stays inside its 30-minute idle limit.
+    const reportedAt = Date.now() - 10 * 60_000;
+    vi.spyOn(Date, "now").mockReturnValue(reportedAt);
+    await pull(app, token, { visible: [{ transport: "usb", localKey: serial }], scanned: [] });
+    vi.spyOn(Date, "now").mockReturnValue(reportedAt + 15_000);
+    expect((await discoveredRows(app)).map((r) => r.localKey)).toContain(serial);
+    vi.spyOn(Date, "now").mockReturnValue(reportedAt + 30_000);
+    expect((await discoveredRows(app)).map((r) => r.localKey)).not.toContain(serial);
+  });
+
   it("drops malformed inventory entries and keeps the well-formed ones", async () => {
     const app = mountApp();
     const { agentId, token } = await joinAndAccept(app, "Screening agent");

@@ -78,18 +78,22 @@ export function createPrinterBluetoothCommands(
   const agents = new Map<string, AgentCommands>();
   let nextSweepAt = 0;
 
+  /** An end further ahead than its own limit was set before a backward step of the clock. */
+  const ended = (expiresAt: number, ttl: number, instant: number): boolean =>
+    expiresAt <= instant || expiresAt - instant > ttl;
+
   function pruneAgent(agentId: string, agent: AgentCommands, instant: number): void {
     for (const [address, entry] of agent.pending)
-      if (entry.expiresAt <= instant) agent.pending.delete(address);
+      if (ended(entry.expiresAt, COMMAND_TTL_MS, instant)) agent.pending.delete(address);
     for (const [address, entry] of agent.results)
-      if (entry.expiresAt <= instant) agent.results.delete(address);
+      if (ended(entry.expiresAt, RESULT_TTL_MS, instant)) agent.results.delete(address);
     if (agent.pending.size === 0 && agent.results.size === 0) agents.delete(agentId);
   }
 
   /** Prunes the named agent, or every agent when a sweep is due, and returns the instant used. */
   function prune(agentId: string): { instant: number; agent: AgentCommands | undefined } {
     const instant = now();
-    if (instant >= nextSweepAt) {
+    if (ended(nextSweepAt, SWEEP_INTERVAL_MS, instant)) {
       for (const [id, agent] of agents) pruneAgent(id, agent, instant);
       nextSweepAt = instant + SWEEP_INTERVAL_MS;
     } else {

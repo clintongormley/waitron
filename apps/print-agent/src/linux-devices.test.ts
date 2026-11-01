@@ -666,6 +666,17 @@ describe("createLinuxDevices — resolve() against a recent paired listing", () 
     },
   );
 
+  it("lists again after a forget made behind the poll's listing, once the clock has caught up", async () => {
+    const { devices, paired, poll, advance } = setup([[{ mac: PRINTER }], []]);
+    advance(5_000);
+    await poll();
+    advance(-3_000);
+    await devices.forgetBluetooth(PRINTER);
+    advance(3_001);
+    await expect(devices.resolve(job(PRINTER))).rejects.toThrow(`device ${PRINTER} not attached`);
+    expect(paired).toHaveBeenCalledTimes(2);
+  });
+
   it("lists again after a forget made once the clock stepped back behind the poll's listing", async () => {
     const { devices, paired, poll, advance } = setup([[{ mac: PRINTER }], []]);
     advance(5_000);

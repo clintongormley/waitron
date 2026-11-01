@@ -3392,13 +3392,28 @@ deletion control. The first three were read, not run, when added.
   (`print-api.ts`, three minutes, not the pairing window): one ending further ahead than its length
   is shut, so agents stop scanning; and the discovered list's reports (`isListed`, `isFresh`) count
   as fresh only within their limit on either side, since a stale report authorises Pair and Forget.
-- **A paired listing started ahead of the clock at all is not reused** (stricter than the rule): a
-  forget made after a small step back carries an earlier time than a listing started before it, so
-  the "started after the last forget" check would reuse a listing that still holds the forgotten
-  printer. Refusing costs one listing.
+- **A paired listing started ahead of the clock at all is not reused** (stricter than the rule): its
+  age is unknown, and refusing costs one listing.
 - **Not changed:** `ipp-probe.ts` already drops an answer checked ahead of the clock; `dev.ts`'s
   listen deadline is development-only; the setup page's reset countdown reads the snapshot, and the
   reset now runs on the next tick.
+
+### Task 15c-5's per-task review, folded (2026-11-01)
+
+- **A forget is ordered by a count, not a time** (I1). The first build refused a listing started
+  ahead of the clock, which held only until the clock caught up with the listing's start: a forget
+  stamped after a step back still let the older listing be reused then. Each listing now records
+  how many forgets had finished when it started, and is reused only if none has finished since.
+- **The server's Bluetooth command store** (I2, `printer-bluetooth-commands.ts`): a pending command,
+  a result and the next sweep further ahead than their own limits have ended. Its audit row is new.
+- **The agent's stored discovery window** (M3, predates the branch): a pull that fails does not
+  replace it, so after a step back the agent kept scanning. Its length at arrival is kept beside it,
+  and an end further ahead than that is passed. After a step back the first poll therefore only
+  brings the server's fresh window, and a pass runs on the next; the next-scan case now runs two
+  polls with a server window that follows the clock.
+- **Tests for the window's two other readers** (M4): the discovered list and an office printer's
+  registration each use the shorter bound while the window lies further ahead than its length, with
+  a ten-minute step so the dashboard session stays inside its idle limit.
 
 ### Task 15's departures and notes (2026-10-31)
 
