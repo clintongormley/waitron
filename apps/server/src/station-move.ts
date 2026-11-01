@@ -20,6 +20,7 @@ import { enqueueKitchenTickets, enqueueStationMoved, firedQuantity } from "./kit
 import type { TicketState, CorrectionItem, FiredItem } from "./kitchen-print.js";
 import { notifyKitchenAllergyDestination } from "./kitchen-allergy.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { heldItem } from "./kitchen-phase.js";
 import { heldPaperStations, printedHeldGroups, recordHeldPaper } from "./order-groups.js";
 import { readLineCancellations } from "./line-service-state.js";
 import { runServiceCommand } from "./parties.js";
@@ -58,7 +59,7 @@ export async function rerouteHeldAtRelease(
       and(
         eq(ticketItems.workingOrderId, orderId),
         scope,
-        isNull(ticketItems.firedAt),
+        heldItem(),
         eq(ticketItems.state, "queued"),
         eq(ticketItems.madeHere, false),
       ),

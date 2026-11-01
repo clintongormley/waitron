@@ -2805,16 +2805,12 @@ export async function sendLines(
     null,
   );
   const rerouted = await rerouteHeldAtRelease(tx, cfg, tabId, ticketScope, routing);
-  const firedItems = await tx
-    .update(ticketItems)
-    .set({ firedAt: firedNow, queuedAt: firedNow })
-    .where(and(eq(ticketItems.workingOrderId, tabId), isNull(ticketItems.firedAt), ticketScope))
-    .returning({
-      workingOrderLineId: ticketItems.workingOrderLineId,
-      stationId: ticketItems.stationId,
-      courseId: ticketItems.courseId,
-      quantity: ticketItems.quantity,
-    });
+  const { released: firedItems, requested } = await requestHeldItems(
+    tx,
+    tabId,
+    ticketScope,
+    firedNow,
+  );
   // Sending everything held releases every held no-route line outside a held group. Sending named
   // lines releases the named ones, and a course's no-route lines once nothing routed in that course is still held.
   const noRoute = await heldNoRouteLines(
@@ -2827,7 +2823,7 @@ export async function sendLines(
           courseIds: await releasedCourses(
             tx,
             tabId,
-            firedItems.map((item) => item.courseId),
+            [...firedItems, ...requested].map((item) => item.courseId),
           ),
           lineIds: namedLineIds,
         },
@@ -2839,7 +2835,7 @@ export async function sendLines(
     cfg,
     tabId,
     firedItems,
-    [],
+    requested,
     noRoute,
     firedNow,
     true,
@@ -2847,7 +2843,7 @@ export async function sendLines(
     routing,
     rerouted,
   );
-  if (firedItems.length > 0 || noRoute.lines.length > 0)
+  if (firedItems.length > 0 || requested.length > 0 || noRoute.lines.length > 0)
     await captureOrderService(tx, attendance, tabId, "send");
 }
 
@@ -2862,7 +2858,7 @@ async function releasedCourses(
   const stillHeld = await tx
     .selectDistinct({ courseId: ticketItems.courseId })
     .from(ticketItems)
-    .where(and(eq(ticketItems.workingOrderId, orderId), isNull(ticketItems.firedAt)));
+    .where(and(eq(ticketItems.workingOrderId, orderId), heldItem()));
   const held = new Set(stillHeld.map((row) => row.courseId));
   return candidates.filter((courseId) => !held.has(courseId));
 }

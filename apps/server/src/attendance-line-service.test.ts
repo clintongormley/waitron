@@ -21,6 +21,7 @@ import { createCourse, createStation } from "./kitchen.js";
 import { mountTillApi } from "./till-api.js";
 import { parkOrder } from "./working-order.js";
 import { provisionBillVenue, seatedWith, send, type BillVenue } from "./testing/bill-venue.js";
+import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -205,5 +206,42 @@ describe("direct line service attendance", () => {
     );
     expect((await state()).facts).toEqual(before.facts);
     expect((await state()).days).toEqual(before.days);
+  });
+});
+
+describe("A773 waiter request", () => {
+  it("a send of only requested work still records the send's activity", async () => {
+    const order = await prepare("send");
+    await withTransaction(suite.db, (tx) => setStationsWaitForPass(tx, true, [stationId]));
+    expect(await command(api(recordAttendanceFact), "send", order)).toMatchObject({ status: 200 });
+    const after = await state();
+    expect(
+      after.facts.map((r) => [
+        r.source,
+        r.key,
+        r.personId,
+        r.kind,
+        r.at,
+        r.offsetMinutes,
+        r.outcome,
+      ]),
+    ).toEqual([
+      [
+        "order",
+        `${order.id}:${order.revision + 1}:send`,
+        v.operatorId,
+        "order",
+        "2026-01-05T16:40:00.000Z",
+        60,
+        "qualifying",
+      ],
+    ]);
+    expect(after.days.map((r) => [r.businessDay, r.dirtyRevision])).toEqual([["2026-01-05", 1]]);
+    expect(after.tickets.find((r) => r.workingOrderLineId === order.lineId)).toMatchObject({
+      stationId,
+      requestedAt: expect.any(String),
+      firedAt: null,
+      passControlled: true,
+    });
   });
 });
