@@ -365,3 +365,451 @@ describe("selected-file progress details", () => {
     }
   });
 });
+
+describe("stack samples from a browser page that a file has kept busy", () => {
+  const settle = () => new Promise((resolve) => globalThis.setImmediate(resolve));
+
+  function fakeCdp() {
+    const listeners = new Map();
+    const cdp = {
+      sent: [],
+      pauseWith: undefined,
+      evaluateAnswers: true,
+      enableFails: false,
+      pauseFails: false,
+      on(event, listener) {
+        if (!listeners.has(event)) listeners.set(event, []);
+        listeners.get(event).push(listener);
+      },
+      listeners: (event) => listeners.get(event)?.length ?? 0,
+      emit(event, payload) {
+        for (const listener of listeners.get(event) ?? []) listener(payload);
+      },
+      send(method, params) {
+        cdp.sent.push(method);
+        if (method === "Debugger.enable" && cdp.enableFails) {
+          return Promise.reject(new Error("enable refused"));
+        }
+        if (method === "Debugger.pause" && cdp.pauseFails) {
+          return Promise.reject(new Error("pause refused"));
+        }
+        if (method === "Debugger.pause" && cdp.pauseWith) {
+          const callFrames = cdp.pauseWith;
+          globalThis.queueMicrotask(() => cdp.emit("Debugger.paused", { callFrames }));
+        }
+        if (method === "Debugger.resume") return Promise.reject(new Error("not paused"));
+        if (method === "Runtime.evaluate") {
+          expect(params).toEqual({ expression: "0" });
+          if (!cdp.evaluateAnswers) return new Promise(() => {});
+        }
+        return Promise.resolve({});
+      },
+    };
+    return cdp;
+  }
+
+  function fakePage(frameUrls = []) {
+    const cdp = fakeCdp();
+    const page = {
+      cdp,
+      sessions: 0,
+      frameUrls,
+      frames: () => page.frameUrls.map((url) => ({ url: () => url })),
+      context: () => ({
+        newCDPSession: async (target) => {
+          expect(target).toBe(page);
+          page.sessions += 1;
+          return cdp;
+        },
+      }),
+    };
+    return page;
+  }
+
+  const absolute = (path) => `/repo/apps/dashboard/${path}`;
+  const frameFor = (path) =>
+    `http://localhost:63315/__vitest_test__/__test__/?sessionId=s&iframeId=${encodeURIComponent(absolute(path))}`;
+
+  function browserProject(pages, name = "browser") {
+    return {
+      name,
+      browser: { provider: { pages: new Map(pages.map((page, i) => [`s${i}`, page])) } },
+    };
+  }
+
+  function browserModule(path, project) {
+    return { relativeModuleId: path, moduleId: absolute(path), project, state: () => "passed" };
+  }
+
+  function stackHarness(options = {}) {
+    const timeouts = [];
+    const h = harness({
+      ...options,
+      setTimeout: (fn, ms) => {
+        const timer = {
+          fn,
+          ms,
+          cleared: false,
+          unrefed: false,
+          unref() {
+            this.unrefed = true;
+            return this;
+          },
+        };
+        timeouts.push(timer);
+        return timer;
+      },
+      clearTimeout: (timer) => {
+        timer.cleared = true;
+      },
+    });
+    const fire = (ms) => {
+      for (const timer of timeouts) {
+        if (timer.ms === ms && !timer.cleared && !timer.fired) {
+          timer.fired = true;
+          timer.fn();
+        }
+      }
+    };
+    const stackLines = () => h.lines.filter((line) => line.startsWith("[file-progress] stack:"));
+    return { ...h, timeouts, fire, stackLines };
+  }
+
+  const hangPath = "src/hang.test.ts";
+
+  async function runningHangFile(options) {
+    const page = fakePage([frameFor(hangPath)]);
+    const project = browserProject([page]);
+    const h = stackHarness(options);
+    h.reporter.onInit({ projects: [{ name: "node" }, project] });
+    h.reporter.onTestModuleQueued(browserModule(hangPath, project));
+    await settle();
+    return { ...h, page, project };
+  }
+
+  it("attaches to each browser page once and enables its debugger", async () => {
+    const { reporter, page, project } = await runningHangFile();
+    reporter.onTestModuleStart(browserModule(hangPath, project));
+    reporter.onTestModuleQueued(browserModule("src/other.test.ts", project));
+    const later = fakePage();
+    project.browser.provider.pages.set("s9", later);
+    reporter.onTestModuleQueued(browserModule("src/third.test.ts", project));
+    await settle();
+    expect(page.sessions).toBe(1);
+    expect(page.cdp.sent).toEqual(["Debugger.enable"]);
+    expect(page.cdp.listeners("Debugger.paused")).toBe(1);
+    expect(page.cdp.listeners("Debugger.scriptParsed")).toBe(1);
+    expect(later.sessions).toBe(1);
+    expect(later.cdp.sent).toEqual(["Debugger.enable"]);
+  });
+
+  it("prints the paused page's call frames, naming scripts from their parse events", async () => {
+    const { page, tick, stackLines } = await runningHangFile();
+    page.cdp.emit("Debugger.scriptParsed", { scriptId: "7", url: "http://localhost/src/hang.ts" });
+    page.cdp.emit("Debugger.scriptParsed", { scriptId: "8", url: "" });
+    page.cdp.pauseWith = [
+      {
+        functionName: "spinForever",
+        url: "",
+        location: { scriptId: "7", lineNumber: 9, columnNumber: 4 },
+      },
+      {
+        functionName: "",
+        url: "http://localhost/fallback.js",
+        location: { scriptId: "8", lineNumber: 0, columnNumber: 0 },
+      },
+    ];
+    tick(60_000);
+    await settle();
+    expect(stackLines()).toEqual([
+      "[file-progress] stack: src/hang.test.ts [browser] has run 60.0s; its page was running JavaScript:",
+      "[file-progress] stack:   at spinForever http://localhost/src/hang.ts:10:5",
+      "[file-progress] stack:   at (anonymous) http://localhost/fallback.js:1:1",
+    ]);
+    expect(page.cdp.sent).toEqual(["Debugger.enable", "Debugger.pause", "Debugger.resume"]);
+  });
+
+  it("prints at most thirty frames, each on one line", async () => {
+    const { page, tick, stackLines } = await runningHangFile();
+    page.cdp.pauseWith = Array.from({ length: 40 }, (_, i) => ({
+      functionName: `f${i}\nsecond`,
+      url: "http://x/a\r\nb.js",
+      location: { scriptId: "1", lineNumber: i, columnNumber: 0 },
+    }));
+    tick(60_000);
+    await settle();
+    const lines = stackLines();
+    expect(lines).toHaveLength(31);
+    expect(lines.every((line) => !/[\r\n]/.test(line))).toBe(true);
+    expect(lines[1]).toBe("[file-progress] stack:   at f0 second http://x/a  b.js:1:1");
+    expect(lines[30]).toBe("[file-progress] stack:   at f29 second http://x/a  b.js:30:1");
+  });
+
+  it("says nothing paused within 3 seconds and the page answers", async () => {
+    const { page, tick, fire, timeouts, stackLines } = await runningHangFile();
+    tick(61_000);
+    await settle();
+    expect(stackLines()).toEqual([]);
+    expect(timeouts.map((timer) => [timer.ms, timer.unrefed])).toEqual([[3000, true]]);
+    fire(3000);
+    await settle();
+    expect(page.cdp.sent).toEqual(["Debugger.enable", "Debugger.pause", "Runtime.evaluate"]);
+    expect(stackLines()).toEqual([
+      "[file-progress] stack: src/hang.test.ts [browser] has run 61.0s; no JavaScript paused within 3s and the page answers",
+    ]);
+    expect(timeouts.map((timer) => [timer.ms, timer.cleared])).toEqual([
+      [3000, true],
+      [2000, true],
+    ]);
+  });
+
+  it("says nothing paused and the page did not answer when it does not answer in 2 seconds", async () => {
+    const { page, tick, fire, timeouts, stackLines } = await runningHangFile();
+    page.cdp.evaluateAnswers = false;
+    tick(60_000);
+    await settle();
+    fire(3000);
+    await settle();
+    expect(stackLines()).toEqual([]);
+    fire(2000);
+    await settle();
+    expect(stackLines()).toEqual([
+      "[file-progress] stack: src/hang.test.ts [browser] has run 60.0s; no JavaScript paused within 3s and the page did not answer in 2s",
+    ]);
+    expect(timeouts.every((timer) => timer.unrefed)).toBe(true);
+  });
+
+  it("says the pause request was refused, and whether the page answers", async () => {
+    const { page, tick, fire, stackLines } = await runningHangFile();
+    page.cdp.pauseFails = true;
+    tick(60_000);
+    await settle();
+    fire(3000);
+    await settle();
+    expect(stackLines()).toEqual([
+      "[file-progress] stack: src/hang.test.ts [browser] has run 60.0s; the pause request was refused (pause refused); the page answers",
+    ]);
+  });
+
+  it("says the pause request was refused and the page did not answer in 2 seconds", async () => {
+    const { page, tick, fire, stackLines } = await runningHangFile();
+    page.cdp.pauseFails = true;
+    page.cdp.evaluateAnswers = false;
+    tick(60_000);
+    await settle();
+    fire(3000);
+    await settle();
+    fire(2000);
+    await settle();
+    expect(stackLines()).toEqual([
+      "[file-progress] stack: src/hang.test.ts [browser] has run 60.0s; the pause request was refused (pause refused); the page did not answer in 2s",
+    ]);
+  });
+
+  it("resumes a pause that arrives after the wait gave up, and one nobody asked for", async () => {
+    const { page, tick, fire, stackLines } = await runningHangFile();
+    page.cdp.emit("Debugger.paused", { callFrames: [] });
+    await settle();
+    expect(page.cdp.sent).toEqual(["Debugger.enable", "Debugger.resume"]);
+    tick(60_000);
+    await settle();
+    fire(3000);
+    await settle();
+    const before = stackLines();
+    page.cdp.emit("Debugger.paused", {
+      callFrames: [
+        { functionName: "late", location: { scriptId: "1", lineNumber: 0, columnNumber: 0 } },
+      ],
+    });
+    await settle();
+    expect(page.cdp.sent.at(-1)).toBe("Debugger.resume");
+    expect(page.cdp.sent.filter((method) => method === "Debugger.resume")).toHaveLength(2);
+    expect(stackLines()).toEqual(before);
+  });
+
+  it("does not sample a file below the threshold, and samples each file at most once", async () => {
+    const { page, tick, timers } = await runningHangFile({ stackAfterMs: 10_000 });
+    expect(timers.map((timer) => [timer.ms, timer.unrefed])).toEqual([
+      [60_000, true],
+      [5000, true],
+    ]);
+    page.cdp.pauseWith = [];
+    tick(9_999);
+    await settle();
+    expect(page.cdp.sent).toEqual(["Debugger.enable"]);
+    tick(1);
+    await settle();
+    tick(5000);
+    await settle();
+    expect(page.cdp.sent.filter((method) => method === "Debugger.pause")).toHaveLength(1);
+  });
+
+  it("samples only the pages showing the file", async () => {
+    const shown = fakePage([frameFor("src/other.test.ts"), frameFor(hangPath)]);
+    const elsewhere = fakePage([frameFor("src/other.test.ts")]);
+    const project = browserProject([elsewhere, shown]);
+    const { reporter, tick, stackLines } = stackHarness();
+    reporter.onInit({ projects: [project] });
+    reporter.onTestModuleQueued(browserModule(hangPath, project));
+    await settle();
+    shown.cdp.pauseWith = [];
+    tick(60_000);
+    await settle();
+    expect(elsewhere.cdp.sent).toEqual(["Debugger.enable"]);
+    expect(shown.cdp.sent).toContain("Debugger.pause");
+    expect(stackLines()).toEqual([
+      "[file-progress] stack: src/hang.test.ts [browser] has run 60.0s; its page was running JavaScript:",
+    ]);
+  });
+
+  it("says once when no attached page shows a browser file, however many checks find none", async () => {
+    const page = fakePage([frameFor("src/other.test.ts")]);
+    const project = browserProject([page]);
+    const { reporter, tick, stackLines } = stackHarness();
+    reporter.onInit({ projects: [project] });
+    reporter.onTestModuleQueued(browserModule(hangPath, project));
+    await settle();
+    for (const ms of [60_000, 5000, 5000, 5000]) {
+      tick(ms);
+      await settle();
+    }
+    expect(stackLines()).toEqual([
+      "[file-progress] stack: src/hang.test.ts [browser] has run 60.0s; no browser page showed it yet, so no stack was taken",
+    ]);
+    expect(page.cdp.sent).toEqual(["Debugger.enable"]);
+  });
+
+  it("samples a file at a later check once a page shows it, after an earlier check found none", async () => {
+    const page = fakePage([frameFor("src/other.test.ts")]);
+    const project = browserProject([page]);
+    const { reporter, tick, stackLines } = stackHarness();
+    reporter.onInit({ projects: [project] });
+    reporter.onTestModuleQueued(browserModule(hangPath, project));
+    await settle();
+    tick(60_000);
+    await settle();
+    page.frameUrls = [frameFor(hangPath)];
+    page.cdp.pauseWith = [
+      {
+        functionName: "spin",
+        url: "http://x/a.js",
+        location: { scriptId: "1", lineNumber: 0, columnNumber: 0 },
+      },
+    ];
+    tick(5000);
+    await settle();
+    tick(5000);
+    await settle();
+    expect(stackLines()).toEqual([
+      "[file-progress] stack: src/hang.test.ts [browser] has run 60.0s; no browser page showed it yet, so no stack was taken",
+      "[file-progress] stack: src/hang.test.ts [browser] has run 65.0s; its page was running JavaScript:",
+      "[file-progress] stack:   at spin http://x/a.js:1:1",
+    ]);
+    expect(page.cdp.sent.filter((method) => method === "Debugger.pause")).toHaveLength(1);
+  });
+
+  it("does not start a second sample while the first is still waiting", async () => {
+    const { page, tick, fire } = await runningHangFile();
+    page.cdp.evaluateAnswers = false;
+    tick(60_000);
+    await settle();
+    fire(3000);
+    await settle();
+    tick(5000);
+    await settle();
+    expect(page.cdp.sent.filter((method) => method === "Debugger.pause")).toHaveLength(1);
+  });
+
+  it("writes nothing for a file whose project has no browser", async () => {
+    const { reporter, lines, tick } = stackHarness();
+    reporter.onInit({ projects: [{ name: "node" }, { name: "other", browser: {} }] });
+    reporter.onTestModuleQueued(fakeModule("src/node.test.ts", { project: "node" }));
+    await settle();
+    tick(120_000);
+    await settle();
+    expect(lines).toEqual([
+      "[file-progress] start src/node.test.ts [node]",
+      "[file-progress] still running: src/node.test.ts [node] 120.0s",
+    ]);
+  });
+
+  it("writes an attach failure once instead of throwing, and samples no failed page", async () => {
+    const broken = fakePage([frameFor(hangPath)]);
+    broken.context = () => ({
+      newCDPSession: () => Promise.reject(new Error("target closed\nnow")),
+    });
+    const refusing = fakePage([frameFor(hangPath)]);
+    refusing.cdp.enableFails = true;
+    const gone = fakePage([frameFor(hangPath)]);
+    gone.context = () => ({ newCDPSession: () => Promise.reject("gone") });
+    const project = browserProject([broken, refusing, gone]);
+    const { reporter, tick, stackLines } = stackHarness();
+    reporter.onInit({ projects: [project] });
+    reporter.onTestModuleQueued(browserModule(hangPath, project));
+    reporter.onTestModuleQueued(browserModule("src/again.test.ts", project));
+    await settle();
+    tick(60_000);
+    await settle();
+    expect(stackLines()).toEqual([
+      "[file-progress] stack: could not attach to a browser page: target closed now",
+      "[file-progress] stack: could not attach to a browser page: gone",
+      "[file-progress] stack: could not attach to a browser page: enable refused",
+      "[file-progress] stack: src/hang.test.ts [browser] has run 60.0s; no browser page showed it yet, so no stack was taken",
+      "[file-progress] stack: src/again.test.ts [browser] has run 60.0s; no browser page showed it yet, so no stack was taken",
+    ]);
+  });
+
+  it("writes a failure while sampling once instead of rejecting", async () => {
+    const { page, tick, stackLines } = await runningHangFile();
+    page.frames = () => {
+      throw "page closed";
+    };
+    tick(60_000);
+    await settle();
+    tick(5000);
+    await settle();
+    expect(stackLines()).toEqual([
+      "[file-progress] stack: src/hang.test.ts [browser] has run 60.0s; sampling failed: page closed",
+    ]);
+  });
+
+  it("checks every 5 seconds by default, never holds the process open, and stops at run end", async () => {
+    const { reporter, timers } = await runningHangFile();
+    expect(timers[1].ms).toBe(5000);
+    expect(timers[1].unrefed).toBe(true);
+    reporter.onTestRunEnd();
+    expect(timers.map((timer) => timer.cleared)).toEqual([true, true]);
+  });
+
+  it("uses the global timeouts by default for its bounded waits", async () => {
+    const page = fakePage([frameFor(hangPath)]);
+    page.cdp.evaluateAnswers = false;
+    const project = browserProject([page]);
+    const lines = [];
+    let clock = 0;
+    const intervals = [];
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const reporter = new FileProgressReporter({
+        now: () => clock,
+        write: (line) => lines.push(line),
+        setInterval: (fn) => {
+          intervals.push(fn);
+          return { unref() {} };
+        },
+        clearInterval: () => {},
+      });
+      reporter.onInit({ projects: [project] });
+      reporter.onTestModuleQueued(browserModule(hangPath, project));
+      await vi.advanceTimersByTimeAsync(0);
+      clock = 60_000;
+      intervals[1]();
+      await vi.advanceTimersByTimeAsync(5000);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(lines.at(-1)).toContain(
+      "no JavaScript paused within 3s and the page did not answer in 2s",
+    );
+  });
+});

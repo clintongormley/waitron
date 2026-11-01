@@ -755,6 +755,8 @@ the default one; `test:shard` already names `default` and `blob`. Guard: the fil
 `scripts/ci-workflow.test.mjs`, weaker than its name — it reads `ci.yml` as text, and finds a test
 command only in a `Run the … shard` step or the stream step.
 
+In a browser project the same reporter also attaches Chrome's debugger to each test page it finds when a file starts, and leaves it attached; see "A browser file that runs 60 seconds gets a stack sample" below.
+
 A file whose `end` line comes more than 90 seconds after its `start` line also gets a GitHub
 warning annotation (`::warning title=Slow test file::`), because one file that long holds up its
 shard (see "Every CI test job should finish in about 4 minutes" below). In browser mode that time can
@@ -773,9 +775,9 @@ file-progress line. An unset or empty selector emits no detail lines. Existing f
 start/end lines still feed the outer deadline's unfinished-file report.
 
 The dashboard shard selects A1230's three unfinished files and sets `DEBUG=pw:api`
-for Playwright's API log. This records reported phases and browser API calls; it
-does not sample a blocked renderer's JavaScript stack. Read the last event for
-each file alongside the last browser call before assigning a cause. A hook that
+for Playwright's API log. This records reported phases and browser API calls.
+Read the last event for each file alongside the last browser call before
+assigning a cause. A hook that
 throws can emit `hook-start` without `hook-end`. Check later events before treating
 that unmatched start as a stall: in the native Vitest fixture used for the
 31 October 2026 retrospective review, the throwing `beforeEach` was followed by
@@ -795,6 +797,79 @@ fixture blocked in beforeEach; its log named that hook and case before the
 five-second outer deadline returned 124. Disposable-copy controls removing
 collection output, hook-start output and selector enforcement failed two, five
 and five reporter checks respectively; the restored reporter passed all 27.
+
+### A browser file that runs 60 seconds gets a stack sample
+
+This runs whether or not `WAITRON_TEST_TRACE_FILES` is set. In a browser project,
+`scripts/vitest-file-progress.mjs` attaches Chrome's debugger (a Playwright CDP
+session) to each test page as files start, and leaves it attached for the rest of
+the run. Every 5 seconds it looks for files that have run 60 seconds without ending.
+For each, it pauses every page with a frame whose address contains the file's path
+and prints `[file-progress] stack:` lines. A file no page shows yet gets one line
+saying so and is looked for again at each later check; once a page shows it, it is
+sampled, and never again. Each sampled page gives one of these:
+
+- `its page was running JavaScript:` followed by up to 30
+  `at <function> <url>:<line>:<column>` lines: where the page's JavaScript was when
+  it paused. That is not necessarily the code holding the test up (see the timer
+  experiment below). The positions are in the code the browser was served, after
+  Vite's transform, so they can differ from the source file's lines.
+- `no JavaScript paused within 3s and the page answers`: no pause arrived within 3
+  seconds, and the page answered a one-line evaluation (`Runtime.evaluate` of `0`)
+  within 2 seconds.
+- `no JavaScript paused within 3s and the page did not answer in 2s`: neither came
+  back.
+- `the pause request was refused (<message>); the page answers`, or the same ending
+  `the page did not answer in 2s`: the debugger refused the pause, so the line says
+  nothing about what JavaScript was doing.
+
+A file in a project with no browser gets no `stack:` line. A failure to attach, or
+an error while sampling, is printed as a `stack:` line rather than thrown.
+
+Every pause is resumed, including one that arrives after the sample stopped
+waiting. The protocol describes `Debugger.pause` as "Stops on the next JavaScript
+statement." (`js_protocol.json` in the ChromeDevTools devtools-protocol repository,
+and playwright-core 1.64.1's `types/protocol.d.ts`). On 1 November 2026, a Node
+script drove headless Chromium through Playwright against a page with no scripts
+of its own: it sent `Debugger.pause`, waited 3 seconds, then ran `page.evaluate` returning 42. With
+nothing resuming pauses, no pause event came during the 3 seconds, one came when the
+evaluation ran, and the evaluation had not answered 5 seconds later. With a listener
+resuming every pause, the same steps returned 42. With no pause sent, they returned
+42 and no pause event came.
+
+Experiments, 1 November 2026, in headless Chromium:
+
+- A Node script called the reporter's `samplePage` through Playwright on a page
+  with no scripts of its own. A function spinning for 6.5 seconds printed a stack
+  naming `spinForever`. A page that had set a 30 ms interval and created a promise that
+  never settles printed a stack in the interval's callback (`incidentalTimer`). A
+  page spinning with `Debugger.setSkipAllPauses` on printed
+  `no JavaScript paused within 3s and the page did not answer in 2s`, although
+  JavaScript was running.
+- In `apps/dashboard`, with `stackAfterMs` and `stackCheckMs` lowered in a scratch
+  copy of the reporter: a click handler spinning forever printed a stack naming
+  `spinForever`; a test awaiting a promise that never settles printed that version's `no JavaScript was running and the page answers` line, which it printed both when no pause arrived within 3 seconds and when the pause request was refused, and that file's next case still
+  passed; and `device-profiles-screen.clock.test.ts`, paused mid-run, still passed.
+  Those runs used the reporter before the refused-pause line existed.
+- A scratch reporter subclass constructed with `{ stackAfterMs: 1500, stackCheckMs: 20 }`,
+  run as `pnpm --dir apps/dashboard exec vitest run
+  src/screens/device-profiles-screen.clock.test.ts --reporter=default
+  --reporter=<subclass path>`, printed one sample at 1.5 seconds
+  (`its page was running JavaScript:` and one frame, `raf`); the file's 3 tests
+  passed.
+
+Cost: whole-shard cost was not measured. A local script ran that same Vitest command
+(default thresholds, so no page was paused) six times, interleaved, three with the
+debugger attached and three with a subclass skipping the attach. The means of the whole command's wall-clock time, start-up included, were
+10.08 seconds attached and 9.34 seconds not, and every run passed. That is a small, noisy local sample of one short file,
+not a shard measurement.
+
+Run `pnpm exec vitest run scripts/vitest-file-progress.test.mjs` for the stack
+checks too. With a fake page and a fake debugger connection, they check one attach
+per page, the printed frames, each no-pause and refused-pause line, the 3- and
+2-second bounds, that every pause is resumed, that a file no page shows yet is
+sampled at a later check and named once, and that a project with no browser prints
+nothing. No real browser runs in them.
 
 
 ### A browser shard reports before its job limit
