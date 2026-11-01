@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { recoveryRefusalOf } from "./recovery-refusal.js";
 import { refusalOf } from "../state/bill-payment.js";
 import type { TillPresentedPayDialog } from "./presented-pay-dialog.js";
@@ -41,17 +41,12 @@ for (const locale of ["en", "es"] as const) {
       expect(link!.getAttribute("href")).toBe("/manage/recovery/fiscal-conflict");
       expect(link!.target).toBe("_blank");
       expect(link!.rel).toBe("noopener");
-      expect(link!.textContent).toBe(locale === "en" ? "Open recovery" : "Abrir recuperación");
+      expect(link!.textContent).toBe(t("recovery.open"));
       const actions = el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
         "wt-form-actions",
       )!;
-      expect(actions.error).toContain(
-        locale === "en" ? "current recovery key" : "clave de recuperación actual",
-      );
-      if (charged)
-        expect(actions.error).toContain(
-          locale === "en" ? "Do not charge again" : "No vuelvas a cobrar",
-        );
+      expect(actions.error).toContain(t("recovery.issuance_stopped"));
+      if (charged) expect(actions.error).toContain(t("recovery.charged"));
     },
   );
 }
@@ -152,7 +147,7 @@ it.each(dialogCases)("keeps recovery available for $tag", async ({ tag, props })
   );
   expect(
     el.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error,
-  ).toContain("current recovery key");
+  ).toContain(t("recovery.issuance_stopped"));
 });
 
 it.each([
