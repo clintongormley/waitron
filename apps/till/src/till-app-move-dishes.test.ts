@@ -12,6 +12,7 @@ import {
   drillFormFactor,
   emit,
   flush,
+  lock,
   mountApp,
   openTable,
   party,
@@ -100,6 +101,24 @@ async function open(overrides: Record<string, unknown> = {}) {
 
 const sourceEdit = { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null };
 
+/** A Move whose answer waits until the test settles or refuses it. */
+function heldMove() {
+  let settle!: (value: { billId: string }) => void;
+  let refuse!: (error: unknown) => void;
+  const call = vi.fn(
+    () =>
+      new Promise<{ billId: string }>((resolve, reject) => {
+        settle = resolve;
+        refuse = reject;
+      }),
+  );
+  return {
+    call,
+    settle: (value: { billId: string }) => settle(value),
+    refuse: (error: unknown) => refuse(error),
+  };
+}
+
 describe("A803 move dishes app:", () => {
   it("Move to a new bill sends the picked ids with the two revisions and the source's editor, then shows the new bill", async () => {
     const getPartyBills = vi
@@ -153,38 +172,45 @@ describe("A803 move dishes app:", () => {
     expect(bannerText(el)).toBe("");
   });
 
-  it("over the simplified-invoice limit the question comes first, and No sends nothing", async () => {
-    const { el, order } = await open({
-      getTill: vi
-        .fn()
-        .mockResolvedValue({ ...till(drillFormFactor), simplifiedInvoiceLimit: "3000.00" }),
-      getPartyBills: vi
-        .fn()
-        .mockResolvedValue([
-          bill("wo-4", 1, { total: "3500.00", outstanding: "3500.00" }),
-          bill("bill-1", 2),
-        ]),
-    });
+  it.each([
+    { to: "a new bill", toBillId: null },
+    { to: "Bill 2", toBillId: "bill-1" },
+  ])(
+    "over the simplified-invoice limit, a move to $to asks the question first: No sends nothing and Yes sends once",
+    async ({ toBillId }) => {
+      const { el, order } = await open({
+        getTill: vi
+          .fn()
+          .mockResolvedValue({ ...till(drillFormFactor), simplifiedInvoiceLimit: "3000.00" }),
+        getPartyBills: vi
+          .fn()
+          .mockResolvedValue([
+            bill("wo-4", 1, { total: "3500.00", outstanding: "3500.00" }),
+            bill("bill-1", 2),
+          ]),
+      });
 
-    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: null });
-    await flush(el);
+      emit(order, "move-dishes", { lineIds: ["line-1"], toBillId });
+      await flush(el);
 
-    const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-confirm-different-people]");
-    expect(dialog?.textContent).toContain(differentPeopleText("3000.00"));
-    expect(api.moveDishes).not.toHaveBeenCalled();
-    dialog!.querySelector<HTMLElement>("[data-cancel]")!.click();
-    await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-confirm-different-people]")).toBeNull();
-    expect(api.moveDishes).not.toHaveBeenCalled();
+      const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-confirm-different-people]");
+      expect(dialog?.textContent).toContain(differentPeopleText("3000.00"));
+      expect(api.moveDishes).not.toHaveBeenCalled();
+      dialog!.querySelector<HTMLElement>("[data-cancel]")!.click();
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-confirm-different-people]")).toBeNull();
+      expect(api.moveDishes).not.toHaveBeenCalled();
 
-    emit(tableOrder(el)!, "move-dishes", { lineIds: ["line-1"], toBillId: null });
-    await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>(
-      "[data-confirm-different-people] [data-confirm]",
-    )!.click();
-    await flush(el);
-    expect(api.moveDishes).toHaveBeenCalledTimes(1);
-  });
+      emit(tableOrder(el)!, "move-dishes", { lineIds: ["line-1"], toBillId });
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement>(
+        "[data-confirm-different-people] [data-confirm]",
+      )!.click();
+      await flush(el);
+      expect(api.moveDishes).toHaveBeenCalledTimes(1);
+      expect(api.moveDishes).toHaveBeenCalledWith("wo-4", ["line-1"], toBillId, expect.any(Object));
+    },
+  );
 
   it("bill.received_exceeds_total shows the approved sentence with Refund {amount}", async () => {
     const { el, order } = await open({
@@ -377,5 +403,128 @@ describe("A803 move dishes app:", () => {
     expect(moveDishes).toHaveBeenCalledTimes(2);
     expect(moveDishes.mock.calls[0]![3]).toMatchObject({ expectedPartyRevision: 3 });
     expect(moveDishes.mock.calls[1]![3]).toMatchObject({ expectedPartyRevision: 4 });
+  });
+
+  it("a successful move after a refused one takes the refusal's words away", async () => {
+    const moveDishes = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "tab.not_open" })
+      .mockResolvedValue({ billId: "bill-1" });
+    const { el, order } = await open({ moveDishes });
+
+    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "bill-1" });
+    await flush(el, 6);
+    expect(bannerText(el)).toContain(t("table.error"));
+    emit(tableOrder(el)!, "move-dishes", { lineIds: ["line-1"], toBillId: "bill-1" });
+    await flush(el, 6);
+
+    expect(moveDishes).toHaveBeenCalledTimes(2);
+    expect(bannerText(el)).toBe("");
+  });
+
+  it("a successful move to Bill 2 reads the bill's drafts once more", async () => {
+    const { el, order } = await open();
+    const draftReads = api.listDrafts.mock.calls.length;
+
+    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "bill-1" });
+    await flush(el, 8);
+
+    expect(api.moveDishes).toHaveBeenCalledOnce();
+    expect(api.listDrafts.mock.calls.length).toBe(draftReads + 1);
+  });
+
+  it("a refusal answering after the waiter switched bills says nothing on the bill now shown and reads nothing more", async () => {
+    const move = heldMove();
+    const { el, order } = await open({
+      getPartyBills: vi.fn().mockResolvedValue(partPaid()),
+      moveDishes: move.call,
+    });
+    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "bill-1" });
+    await flush(el);
+    emit(tableOrder(el)!, "switch-bill", { workingOrderId: "bill-1" });
+    await flush(el, 6);
+    expect(tableOrder(el)!.orderId).toBe("bill-1");
+    const bills = api.getPartyBills.mock.calls.length;
+    const drafts = api.listDrafts.mock.calls.length;
+
+    move.refuse({ code: "bill.line_paid", status: 409 });
+    await flush(el, 6);
+
+    expect(move.call).toHaveBeenCalledOnce();
+    expect(tableOrder(el)!.orderId).toBe("bill-1");
+    expect(bannerText(el)).toBe("");
+    expect(api.getPartyBills.mock.calls.length).toBe(bills);
+    expect(api.listDrafts.mock.calls.length).toBe(drafts);
+  });
+
+  it("a party.out_of_date refusal answering after Ana signed out and Sam signed in shows Sam nothing and reads no floor", async () => {
+    const move = heldMove();
+    const { el, order } = await open({ moveDishes: move.call });
+    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: null });
+    await flush(el);
+    emit(tableOrder(el)!, "logout");
+    await flush(el);
+    emit(lock(el), "logged-in", { personId: "p2", displayName: "Sam", permissions: [] });
+    await flush(el, 6);
+    const floorReads = api.getTablesState.mock.calls.length;
+
+    move.refuse({ code: "party.out_of_date", partyId: "v1", revision: 4 });
+    await flush(el, 6);
+
+    expect(move.call).toHaveBeenCalledOnce();
+    expect(bannerText(el)).toBe("");
+    expect(api.getTablesState.mock.calls.length).toBe(floorReads);
+  });
+
+  describe("while this till's own Move is out", () => {
+    afterEach(() => vi.useRealTimers());
+
+    it.each([
+      { sent: "straight away", limit: undefined },
+      { sent: "after Yes to the question", limit: "3000.00" },
+    ])(
+      "the 15-second re-read that comes due reads no bills, when the Move was sent $sent",
+      async ({ limit }) => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+        const move = heldMove();
+        const { el, order } = await open({
+          moveDishes: move.call,
+          ...(limit === undefined
+            ? {}
+            : {
+                getTill: vi
+                  .fn()
+                  .mockResolvedValue({ ...till(drillFormFactor), simplifiedInvoiceLimit: limit }),
+                getPartyBills: vi
+                  .fn()
+                  .mockResolvedValue([
+                    bill("wo-4", 1, { total: "3500.00", outstanding: "3500.00" }),
+                    bill("bill-1", 2),
+                  ]),
+              }),
+        });
+        emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "bill-1" });
+        await flush(el);
+        if (limit !== undefined) {
+          el.shadowRoot!.querySelector<HTMLElement>(
+            "[data-confirm-different-people] [data-confirm]",
+          )!.click();
+          await flush(el);
+        }
+        expect(move.call).toHaveBeenCalledOnce();
+        const bills = api.getPartyBills.mock.calls.length;
+        const drafts = api.listDrafts.mock.calls.length;
+
+        await vi.advanceTimersByTimeAsync(15_000);
+        await flush(el);
+
+        expect(api.listDrafts.mock.calls.length).toBeGreaterThan(drafts);
+        expect(api.getPartyBills.mock.calls.length).toBe(bills);
+        move.settle({ billId: "bill-1" });
+        await flush(el, 6);
+        expect(api.getPartyBills.mock.calls.length).toBeGreaterThan(bills);
+        expect(bannerText(el)).toBe("");
+      },
+    );
   });
 });
