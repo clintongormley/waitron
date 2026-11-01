@@ -1185,8 +1185,8 @@ describe("the dishes of an open bill moved between service modes", () => {
 });
 
 describe("A773 waiter request", () => {
-  it("requests a counter order's dish when it is seated at a free table and every station waits", async () => {
-    const orderId = await counterOrder(v, "Tarta");
+  /** Every station waits for the pass and one printer serves every active station. */
+  async function everyStationWaiting(run: (printerId: string) => Promise<void>) {
     const stations = v.db.all<{ id: string; active: number }>(
       sql`select id, active from kitchen_stations`,
     );
@@ -1212,6 +1212,31 @@ describe("A773 waiter request", () => {
       return id;
     });
     try {
+      await run(printerId);
+    } finally {
+      await inTx(v, async (tx) => {
+        await setStationsWaitForPass(tx, false, stationIds);
+        for (const stationId of active)
+          await detachPrinterFromStation(tx, v.cfg, { stationId, printerId });
+      });
+    }
+  }
+
+  const requestStamps = (orderId: string) =>
+    inTx(v, (tx) =>
+      tx
+        .select({
+          requestedAt: ticketItems.requestedAt,
+          firedAt: ticketItems.firedAt,
+          passControlled: ticketItems.passControlled,
+        })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, orderId)),
+    );
+
+  it("requests a counter order's dish when it is seated at a free table and every station waits", async () => {
+    const orderId = await counterOrder(v, "Tarta");
+    await everyStationWaiting(async (printerId) => {
       await move(
         orderId,
         { tableId: await v.table("Arrival table A773") },
@@ -1223,27 +1248,30 @@ describe("A773 waiter request", () => {
         },
       );
 
-      const tickets = await inTx(v, (tx) =>
-        tx
-          .select({
-            requestedAt: ticketItems.requestedAt,
-            firedAt: ticketItems.firedAt,
-            passControlled: ticketItems.passControlled,
-          })
-          .from(ticketItems)
-          .where(eq(ticketItems.workingOrderId, orderId)),
-      );
-      expect(tickets).toEqual([
+      expect(await requestStamps(orderId)).toEqual([
         { requestedAt: expect.any(String), firedAt: null, passControlled: true },
       ]);
       expect(printedBy(printerId)).toEqual([]);
-    } finally {
-      await inTx(v, async (tx) => {
-        await setStationsWaitForPass(tx, false, stationIds);
-        for (const stationId of active)
-          await detachPrinterFromStation(tx, v.cfg, { stationId, printerId });
-      });
-    }
+    });
+  });
+
+  it("requests a counter order's dish when it joins a seated party and every station waits", async () => {
+    const mesa = await v.table("Occupied table A773");
+    const ana = await seat(v, mesa);
+    await order(v, ana.tabId, "Burger");
+    const anaTickets = await ticketsOf(ana.tabId);
+    expect(anaTickets).toEqual([expect.objectContaining({ firedAt: expect.any(String) })]);
+    const orderId = await counterOrder(v, "Tarta");
+    await everyStationWaiting(async (printerId) => {
+      const result = await move(orderId, { tableId: mesa });
+
+      expect(result).toEqual({ partyId: ana.partyId, billId: orderId });
+      expect(await requestStamps(orderId)).toEqual([
+        { requestedAt: expect.any(String), firedAt: null, passControlled: true },
+      ]);
+      expect(await ticketsOf(ana.tabId)).toEqual(anaTickets);
+      expect(printedBy(printerId)).toEqual([]);
+    });
   });
 });
 

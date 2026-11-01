@@ -42,8 +42,7 @@ export interface StampedItem {
   quantity: number | null;
 }
 
-/** Stamp the held items in `scope`: those at a waiting station Requested, the rest released.
- *  Requested items are outside `heldItem()`, so no later release touches them. */
+/** Stamp the held items in `scope`: those at a waiting station Requested, the rest released. */
 export async function requestHeldItems(
   tx: Transaction,
   orderId: string,

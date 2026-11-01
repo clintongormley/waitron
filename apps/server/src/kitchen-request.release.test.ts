@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   orderGroups,
@@ -8,11 +8,12 @@ import {
   ticketItems,
   withTransaction,
   workingOrderLines,
+  workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setRoutingCell, setStationToday } from "@waitron/venue-service";
+import { setRoutingCell, setStationToday, ticketItemAllergies } from "@waitron/venue-service";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { setStationPrinting } from "./testing/station-printing.js";
@@ -40,6 +41,7 @@ afterEach(() => {
 });
 
 const AT = "2026-03-14T12:00:00.000Z";
+const LATER = "2026-03-14T12:05:00.000Z";
 
 type Venue = Awaited<ReturnType<typeof setupSplitExtrasVenue>>;
 
@@ -75,6 +77,21 @@ async function jobCounts(tx: Transaction, venue: Venue) {
   for (const [name, id] of Object.entries(venue.printers))
     counts[name] = (await jobsAt(tx, id)).length;
   return counts;
+}
+
+async function orderRevision(tx: Transaction, orderId: string): Promise<number> {
+  const [row] = await tx
+    .select({ revision: workingOrders.revision })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
+  return row!.revision;
+}
+
+async function allergyCopies(tx: Transaction, ticketItemId: string) {
+  return tx
+    .select()
+    .from(ticketItemAllergies)
+    .where(eq(ticketItemAllergies.ticketItemId, ticketItemId));
 }
 
 async function partyRevision(tx: Transaction, partyId: string): Promise<number> {
@@ -212,17 +229,71 @@ describe("A773 waiter request: release", () => {
         groups: [{ lines: [dish(venue, "burger")], release: "hold" }],
       });
       const [burger] = await items(tx, venue.party.tabId);
+      expect(await allergyCopies(tx, burger!.id)).toEqual([]);
+      const revision = await orderRevision(tx, venue.party.tabId);
       const before = await jobCounts(tx, venue);
+      vi.setSystemTime(new Date(LATER));
       await fireHeldLine(tx, venue.cfg, venue.party.partyId, burger!.lineId, {
         operatorId: OPERATOR,
         submissionId: randomUUID(),
         expectedPartyRevision: await partyRevision(tx, venue.party.partyId),
       });
       expect(await items(tx, venue.party.tabId)).toEqual([
-        expect.objectContaining(requestedAtGrill(venue, AT)),
+        expect.objectContaining({ ...requestedAtGrill(venue, LATER), queuedAt: burger!.queuedAt }),
       ]);
+      expect(burger!.queuedAt).not.toBe(LATER);
+      const [line] = await tx
+        .select({ sentAt: workingOrderLines.sentAt })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.id, burger!.lineId));
+      expect(line!.sentAt).toBe(LATER);
+      expect(await allergyCopies(tx, burger!.id)).toHaveLength(1);
+      expect(await orderRevision(tx, venue.party.tabId)).toBeGreaterThan(revision);
       expect(await jobCounts(tx, venue)).toEqual(before);
     });
+  });
+
+  it("refuses a held group whose sold-out burger would be requested at a waiting Grill, writing nothing", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    const placed = await withTransaction(db, async (tx) => {
+      await setStationsWaitForPass(tx, true, [venue.stations.grill]);
+      return placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ lines: [dish(venue, "burger")], release: "hold" }],
+      });
+    });
+    await db.run(sql`update products set available = 0 where id = ${venue.products.burger}`);
+    const snapshot = () =>
+      withTransaction(db, async (tx) => {
+        const rows = await items(tx, venue.party.tabId);
+        const allergies = [];
+        for (const row of rows) allergies.push(await allergyCopies(tx, row.id));
+        return {
+          rows,
+          allergies,
+          lines: await tx
+            .select()
+            .from(workingOrderLines)
+            .where(eq(workingOrderLines.workingOrderId, venue.party.tabId)),
+          group: await tx
+            .select()
+            .from(orderGroups)
+            .where(eq(orderGroups.id, placed.groups[0]!.id)),
+          order: await orderRevision(tx, venue.party.tabId),
+          party: await partyRevision(tx, venue.party.partyId),
+          jobs: await jobCounts(tx, venue),
+        };
+      });
+    const before = await snapshot();
+    vi.setSystemTime(new Date(LATER));
+    await expect(
+      withTransaction(db, (tx) => fire(tx, venue, placed.groups[0]!.id)),
+    ).rejects.toMatchObject({
+      code: "product.unavailable",
+      params: { productId: venue.products.burger },
+    });
+    expect(await snapshot()).toEqual(before);
   });
 
   it("prints Bar's FIRE ticket for a group whose HOLD ticket printed, and nothing at a waiting Grill", async () => {
@@ -290,6 +361,27 @@ describe("A773 waiter request: release", () => {
       await later();
       expect(await row()).toEqual([requested]);
       expect(await jobCounts(tx, venue)).toEqual(before);
+    });
+  });
+
+  it("does not ask the allergy question again when a later release names only a requested burger", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      await setStationsWaitForPass(tx, true, [venue.stations.grill]);
+      await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ lines: [dish(venue, "burger")], release: "fire" }],
+      });
+      const [requested] = await tx
+        .select()
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, venue.party.tabId));
+      expect(requested).toMatchObject({ firedAt: null, passControlled: true });
+      await tx.run(sql`delete from party_allergy where party_id = ${venue.party.partyId}`);
+      await fireOrderLines(tx, venue.cfg, venue.party.tabId, [requested!.workingOrderLineId]);
+      expect(await tx.select().from(ticketItems).where(eq(ticketItems.id, requested!.id))).toEqual([
+        requested,
+      ]);
     });
   });
 
