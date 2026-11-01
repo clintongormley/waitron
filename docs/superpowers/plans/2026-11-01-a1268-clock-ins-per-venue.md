@@ -24,6 +24,9 @@ on `feat/a1268-2-sessions-per-venue`, a fresh worktree off `main` after PR 1 lan
 (`python3 ~/workspace/tools/worktree.py new waitron feat/a1268-2-sessions-per-venue --headless`).
 Each PR leaves `main` working on its own.
 
+**Review:** a fresh-context plan review (no Critical; seven Important, five Minor) was folded in
+on 2026-11-01. Each finding was checked against the code first; all held.
+
 **Out of scope:** PR 3 — the design's part 2 (§4, "pair by write order, show the time as written"),
 which gets its own plan after PR 2 lands. Also out (design §6): a cross-node write order, device
 admission, and the pay-period closure chain.
@@ -58,7 +61,7 @@ admission, and the pay-period closure chain.
   browser tests.
 - **Shell is zsh:** quote globs, use `/usr/bin/grep` where an exit status decides anything.
 
-### Guard suites for a schema change (Task 3)
+### Guard suites for a schema change (Tasks 3a and 3b)
 
 From the worktree root, every one, each exit status checked:
 
@@ -76,28 +79,28 @@ pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.
 1. **A box whose node already wrote clock entries at two locations** (a dashboard correction naming
    another location, `corrections.ts`). Expected: the migration is refused with
    `UNIQUE constraint failed: __new_workforce_chains.node_id`, nothing is changed, and the venue is
-   reset. Task 3's rehearsal test.
+   reset. Task 3a's rehearsal test.
 2. **A correction or confirmation written at another location on the same box after PR 1.**
    Expected: it takes the node's next position in its one chain, keeps its own `location_id`, and
-   the chain verifies whole. Task 3's chain case.
+   the chain verifies whole. Task 3a's chain case.
 3. **A session clocked in at A and out at B** (after PR 2, from the till). Expected: counted once,
    at A, in the hours screen, the period record, the art. 34.9 export, the closure snapshot and the
-   end-of-day pass — never at B, never twice, never as an unmatched clock-out. Tasks 6–9.
+   end-of-day pass — never at B, never twice, never as an unmatched clock-out. And a missing-clock-out question already open for that shift is resolved when it is clocked out at another location. Tasks 5–10b.
 4. **An open shift clocked in at A with a break started at B.** Expected: the hours screen at A shows
-   it open with the break; B's view shows none of its entries. Tasks 6 and 8.
+   it open with the break; B's view shows none of its entries. Tasks 5 and 7.
 5. **Two nodes writing one venue database (a promotion).** Expected: still one chain per node, each
-   numbered from 1, merged by time as today. Task 3 keeps the two-node control.
+   numbered from 1, merged by time as today. Task 3a keeps the two-node control.
 
 ---
 
 ## What a survey and a throwaway run found (2026-11-01, on `56aa74f85`)
 
-- **The migration `drizzle-kit` writes.** With the schema edited as Task 3 says, `pnpm db:generate`
+- **The migration `drizzle-kit` writes.** With the schema edited as Task 3a says, `pnpm db:generate`
   wrote ONE file that rebuilds `workforce_chains` (create `__new_workforce_chains` with
   `node_id text PRIMARY KEY`, copy the six remaining columns, `DROP TABLE`, rename) and then only
   drops and recreates `time_entries_person_chain_idx` and `time_entries_chain_position_uq`.
   `time_entries` is NOT rebuilt, so its append-only triggers are untouched. The experiment was
-  reverted; the file is regenerated in Task 3.
+  reverted; the file is regenerated in Task 3a.
 - **Foreign keys stay on through that rebuild.** The `PRAGMA foreign_keys=OFF` it emits is a no-op
   inside the migration's transaction (CLAUDE.md §3). Nothing references `workforce_chains`
   (`/usr/bin/grep -rn "workforceChains\|workforce_chains"` over `packages/*/src/schema` printed only
@@ -116,15 +119,15 @@ pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.
   non-append-only table and no append-only trigger change.
 - **Guard suites against that migration** (8 files: 507 passed, 1 failed). The one failure was
   `scripts/schema-constraints.test.ts` "carries every foreign key the product declares", missing
-  `workforce_chains(location_id)->locations` — the row Task 3 deletes.
+  `workforce_chains(location_id)->locations` — the row Task 3b deletes.
   `scripts/migration-upgrade.test.ts` passed. It is weaker than it looks here: its synthetic
   rows differ in every unique-index column (its header comment, lines 39-49), so it cannot show the
-  two-location refusal. Task 3's rehearsal test does.
+  two-location refusal. Task 3a's rehearsal test does.
 - **The demo seed writes no clock rows:** `madrid-before-move.manifest.json` counts
   `time_entries: 0` and `workforce_chains: 0` in every phase. But
   `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts` compares each table's captured
   columns and foreign keys. Against the experiment it failed on `workforce_chains`: `location_id` is
-  gone and the `node_id` foreign key's `id` goes from 2 to 1. Task 3 adds the adjustment, the way
+  gone and the `node_id` foreign key's `id` goes from 2 to 1. Task 3b adds the adjustment, the way
   `parties.main_bill_id` was handled (lines 134-136 of that test).
 - **`projectWorkSessions` already pairs per person** (`projection.ts`, `groupByPerson`). Today's
   per-location pairing comes from callers that filter entries by location before pairing
@@ -136,6 +139,16 @@ pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.
   person only. Only the pending-counterpart lookup (`corrections.ts:232`) matches the location.
   This was read, not run; the existing cases `correction-lifecycle.test.ts:38` and `:64`
   ("…overlapping the person's completed work at another location") agree.
+- **The art. 34.9 export DOES carry chain fields** (the design's §2 says it does not):
+  `packages/workforce-es/src/record-export.ts:66-67` labels "Node reference / Referencia del nodo"
+  and "Chain position / Posición en la cadena", filled per entry at :272-273. After PR 1 a
+  location's export shows positions that skip numbers when the node also recorded entries at
+  another location. The export has a notes block (:426-441), so Task 3c adds one line in English and
+  Spanish, and a `record-export.test.ts` case pins it.
+- **Discovery's clock scan survives the re-key** (read, not run): it pages a node's entries at one
+  location by `sequence_no > cursor and sequence_no <= endpoint`, with the endpoint
+  `max(sequence_no) … where location_id = ? group by node_id` (`attendance-discovery.ts:192`,
+  `:350`). Positions stay increasing per node, so skipped numbers are harmless.
 - **Guides:** nothing to change. `/usr/bin/grep -rniE "another location|other location|otro local|per location|each location|cada local"`
   over `apps/server/src/guide`, filtered to clock, shift, turno, fichar and hours words, printed
   nothing.
@@ -158,7 +171,14 @@ pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.
    it (Task 6, `recordAtLocation`): an entry belongs to the location of the session it falls in,
    including a person's trailing open shift. An entry that falls in no session belongs to the
    location it was made at. So an entry is in exactly one location's view. Open question 1.
-5. **Closure snapshots follow D4** (Task 7). The closure chain is untouched (D6), but what a closure
+5. **The export explains its chain positions** (Task 3c). The design's claim that the export
+   carries no chain field is wrong (survey above); the coordinator is correcting the design.
+6. **Discovery re-checks the clock-in location's day** (Task 10b). This is not in D7, but without it
+   a shift begun at B and clocked out at A's till leaves B's "missing clock-out" question open and
+   its reminder due: `remember` marks a day only when `row.locationId === scan.locationId`
+   (`attendance-discovery.ts:262-266`), and the question resolves only when B's day is processed
+   again.
+7. **Closure snapshots follow D4** (Task 7). The closure chain is untouched (D6), but what a closure
    freezes is the location view, so a session clocked in at A and out at B is frozen in A's closure.
 
 ## Open questions (each has a default the build uses)
@@ -184,36 +204,40 @@ decision.
 
 | PR / Task | Test file | Test | Old check | New check | Why |
 |---|---|---|---|---|---|
-| 1 / T3 | `packages/workforce/src/chain.test.ts` | "keeps a separate, independent chain per (node, location)" (:114) | other location on another node: own chain from 1 | renamed "keeps one chain per node across locations": second location on the SAME node continues at 2; the other node's chain still starts at 1 | D1 |
-| 1 / T3 | same | "keeps one chain per (node, location); two nodes at one location do not collide" (:127) | positions per node | unchanged checks; renamed "…per node…" | fixture (name) |
-| 1 / T3 | same | "advances the chain head…" (:94), readChainHead cases (:477, :491), retry case (:376) | head row selected `where node_id and location_id` | `where node_id` | fixture (query) |
-| 1 / T3 | same | "rejects a second entry claiming an occupied chain position" (:242), retry case (:349) | refusal columns `node_id, location_id, sequence_no` | `node_id, sequence_no` | D1 |
-| 1 / T3 | same | exhaustion cases (:271, :289) | params `{ nodeId, locationId, attempts: 3 }` | `{ nodeId, attempts: 3 }` | D1 (the key is the node) |
-| 1 / T3 | `src/chain.concurrency.test.ts` | "never collides between two nodes on the SAME location" (:95) | key helper takes a location | key `{ nodeId }` | fixture |
-| 1 / T3 | `src/restore-continuation.test.ts` | "refuses a survivor's forked row loudly…" (:118) | columns `node_id, location_id, sequence_no` | `node_id, sequence_no` | D1 |
-| 1 / T3 | same | `readHead` (:65) | `where nodeId and locationId` | `where nodeId` | fixture |
-| 1 / T3 | `src/clocking-step.test.ts` | "reads the latest chain's entry when the person moved location (control)" (:157) | positions `[a,1],[a,2],[b,1]` | `[a,1],[a,2],[b,3]`; renamed "…reads the latest entry when the person moved location (control)" | D1 |
-| 1 / T3 | same | "keeps a chain per node as well as per location" (:204) | latest is the second node's `in` | same check; renamed "keeps a chain per node" | fixture (name) |
-| 1 / T3 | same | "still reads another location's later-dated entry after a step, as the plan accepts" (:282) | reads `out` 21:10; clock-out at B refused `attendance.no_open_entry`; second clock-in at B written (4 rows) | renamed "reads the clock-in at another location written after a step": reads `in` 20:15; clock-out at B 20:40 accepted; a clock-in at B 20:45 refused `attendance.already_open`; 4 rows | D1, D3 |
-| 1 / T3 | same | "finds the deciding entry through indexes…" (:300) | plan contains `…time_entries_person_chain_idx (person_id=? AND node_id=? AND location_id=?)` | `…(person_id=? AND node_id=?)` | D1 |
-| 1 / T3 | `src/migrations.test.ts` | "keys the working-time chain head by (node_id, location_id) alone" (:546) | key `["node_id","location_id"]` | renamed "…by node_id alone": `["node_id"]` | D1 |
-| 1 / T3 | same | "rebuilds the multi-column keys on their remaining columns" (:558) | `time_entries_chain_position_uq` = `node_id, location_id, sequence_no` | `node_id, sequence_no`; add `time_entries_person_chain_idx` = `person_id, node_id, sequence_no` | D1 |
-| 1 / T3 | `src/index.test.ts` | "declares the chain head's composite key, foreign keys and pointer check" (:143-160) | pk `workforce_chains_node_id_location_id_pk`; location foreign key | no composite key (`primaryKeys` empty; `node_id` is the column primary key); foreign keys on node and last entry only; renamed "declares the chain head's key…" | D1 |
-| 1 / T3 | `src/personal-data.coverage.test.ts` | "classifies every column of workforce_chains exactly once" | `out` lists `location_id` | without `location_id` | D1 |
-| 1 / T3 | `src/backup-verification.test.ts` | "walks every node-location time chain and stored head including retired nodes" (:237) | 3 heads | 2 heads (node, retired); renamed "walks every node's time chain…" | D1 |
-| 1 / T3 | same | "rejects malformed stored head scope %s" (:351) | cases `node_id=x'01'`, `location_id=x'01'` | `node_id=x'01'` only (the column is gone) | D1 |
-| 1 / T3 | same | "detects damage on another location" (:367) | damages `location_id=otherPlace and sequence_no=1` | damages the lowest-positioned `otherPlace` row on `node` (`sequence_no=6` by the seed's order, read not run) | fixture (that row's position moved) |
-| 1 / T3 | same | "accepts legacy entries with no record extension" (:290), "accepts an explicit empty stored head…" (:488) | head written `where/values … location_id` | without `location_id` | fixture |
-| 1 / T3 | `src/attendance-response-migration.test.ts` | "adds only the empty receipt table and retains legal rows, heads, questions and attempted mail byte for byte" (:172) | rows written by today's `WorkforceBackend` on the 0008-era schema; heads byte for byte | rows written by raw inserts with `computeEntryHash` (as `record-migration.test.ts` does); heads equal to the before rows minus `location_id` | D1/D2 (this test runs through the new migration, which drops the column) |
-| 1 / T3 | `src/attendance-response-commands.test.ts` (:223), `src/correction-groups.test.ts` (:159) | heads ordered by `nodeId, locationId` | ordered by `nodeId` | fixture |
-| 1 / T3 | `scripts/schema-constraints.test.ts` | FK list (:343) | row `["workforce_chains", ["location_id"], "locations"]` | row deleted | D1 |
-| 1 / T3 | `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts` | "preserves every Madrid seed row (en/es)" | captured `workforce_chains` shape | adjustment: drop the `location_id` column and its foreign key, renumber the remaining foreign keys' `id` | D1 (as `parties.main_bill_id`) |
-| 1 / T3 | `apps/server/src/management-hours-api.test.ts` (:107), `till-attendance-api.test.ts` (:118), `attendance-export-api.test.ts` (:89) | heads `order by node_id, location_id` | `order by node_id` | fixture |
-| 1 / T1, T3 | every `appendToChain`/`readChain`/`readChainHead` call in tests (list in Tasks 1 and 3) | entry gains `locationId` (T1); key loses it (T3) | — | fixture |
+| 1 / T3a | `packages/workforce/src/chain.test.ts` | "keeps a separate, independent chain per (node, location)" (:114) | other location on another node: own chain from 1 | renamed "keeps one chain per node across locations": second location on the SAME node continues at 2; the other node's chain still starts at 1 | D1 |
+| 1 / T3a | same | "keeps one chain per (node, location); two nodes at one location do not collide" (:127) | positions per node | unchanged checks; renamed "…per node…" | fixture (name) |
+| 1 / T3a | same | "advances the chain head…" (:94), readChainHead cases (:477, :491), retry case (:376) | head row selected `where node_id and location_id` | `where node_id` | fixture (query) |
+| 1 / T3a | same | "rejects a second entry claiming an occupied chain position" (:242), retry case (:349) | refusal columns `node_id, location_id, sequence_no` | `node_id, sequence_no` | D1 |
+| 1 / T3a | same | exhaustion cases (:271, :289) | params `{ nodeId, locationId, attempts: 3 }` | `{ nodeId, attempts: 3 }` | D1 (the key is the node) |
+| 1 / T3a | `src/chain.concurrency.test.ts` | "never collides between two nodes on the SAME location" (:95) | key helper takes a location | key `{ nodeId }` | fixture |
+| 1 / T3a | `src/restore-continuation.test.ts` | "refuses a survivor's forked row loudly…" (:118) | columns `node_id, location_id, sequence_no` | `node_id, sequence_no` | D1 |
+| 1 / T3a | same | `readHead` (:65) | `where nodeId and locationId` | `where nodeId` | fixture |
+| 1 / T3a | `src/clocking-step.test.ts` | "reads the latest chain's entry when the person moved location (control)" (:157) | positions `[a,1],[a,2],[b,1]` | `[a,1],[a,2],[b,3]`; renamed "…reads the latest entry when the person moved location (control)" | D1 |
+| 1 / T3a | same | "keeps a chain per node as well as per location" (:204) | latest is the second node's `in` | same check; renamed "keeps a chain per node" | fixture (name) |
+| 1 / T3a | same | "still reads another location's later-dated entry after a step, as the plan accepts" (:282) | reads `out` 21:10; clock-out at B refused `attendance.no_open_entry`; second clock-in at B written (4 rows) | renamed "reads the clock-in at another location written after a step": reads `in` 20:15; a clock-in at B 20:30 refused `attendance.already_open`; then a clock-out at B 20:40 accepted; 4 rows; reads `out` 20:40 | D1, D3 |
+| 1 / T3a | same | "finds the deciding entry through indexes…" (:300) | plan contains `…time_entries_person_chain_idx (person_id=? AND node_id=? AND location_id=?)` | `…(person_id=? AND node_id=?)` | D1 |
+| 1 / T3a | `src/migrations.test.ts` | "keys the working-time chain head by (node_id, location_id) alone" (:546) | key `["node_id","location_id"]` | renamed "…by node_id alone": `["node_id"]` | D1 |
+| 1 / T3a | same | "rebuilds the multi-column keys on their remaining columns" (:558) | `time_entries_chain_position_uq` = `node_id, location_id, sequence_no` | `node_id, sequence_no`; add `time_entries_person_chain_idx` = `person_id, node_id, sequence_no` | D1 |
+| 1 / T3a | `src/index.test.ts` | "declares the chain head's composite key, foreign keys and pointer check" (:143-160) | pk `workforce_chains_node_id_location_id_pk`; location foreign key | no composite key (`primaryKeys` empty; `node_id` is the column primary key); foreign keys on node and last entry only; renamed "declares the chain head's key…" | D1 |
+| 1 / T3a | `src/personal-data.coverage.test.ts` | "classifies every column of workforce_chains exactly once" | `out` lists `location_id` | without `location_id` | D1 |
+| 1 / T3a | `src/backup-verification.test.ts` | "does not classify an unexpected %s failure as corrupt data" ("time decoder" row, :340-343) | fault matched on the statement `select * from time_entries order by node_id, location_id, sequence_no` | matched on `select * from time_entries order by node_id, sequence_no` (the statement Task 3a's Step 7 writes) | fixture (the statement it intercepts changed) |
+| 1 / T3a | `src/backup-verification.test.ts` | "walks every node-location time chain and stored head including retired nodes" (:237) | 3 heads | 2 heads (node, retired); renamed "walks every node's time chain…" | D1 |
+| 1 / T3a | same | "rejects malformed stored head scope %s" (:351) | cases `node_id=x'01'`, `location_id=x'01'` | `node_id=x'01'` only (the column is gone) | D1 |
+| 1 / T3a | same | "detects damage on another location" (:367) | damages `location_id=otherPlace and sequence_no=1` | damages the lowest-positioned `otherPlace` row on `node` (`sequence_no=6` by the seed's order, read not run) | fixture, made in Task 2b (it then passes on both schemas) |
+| 1 / T3a | same | "accepts legacy entries with no record extension" (:290), "accepts an explicit empty stored head…" (:488) | head written `where/values … location_id` | without `location_id` | fixture |
+| 1 / T3a | `src/attendance-response-migration.test.ts` | "adds only the empty receipt table and retains legal rows, heads, questions and attempted mail byte for byte" (:172) | rows written by today's `WorkforceBackend` on the 0008-era schema; heads byte for byte | Task 2b: rows written by raw inserts with `computeEntryHash` (as `record-migration.test.ts` does), comparisons unchanged. Task 3a: heads equal to the before rows minus `location_id` | 2b fixture; 3a D1/D2 (this test runs through the new migration, which drops the column) |
+| 1 / T3a | `src/attendance-response-commands.test.ts` (:223), `src/correction-groups.test.ts` (:159) | heads ordered by `nodeId, locationId` | ordered by `nodeId` | fixture |
+| 1 / T3b | `scripts/schema-constraints.test.ts` | FK list (:343) | row `["workforce_chains", ["location_id"], "locations"]` | row deleted | D1 |
+| 1 / T3b | `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts` | "preserves every Madrid seed row (en/es)" | captured `workforce_chains` shape | adjustment: drop the `location_id` column and its foreign key, renumber the remaining foreign keys' `id` | D1 (as `parties.main_bill_id`) |
+| 1 / T3b | `apps/server/src/management-hours-api.test.ts` (:107), `till-attendance-api.test.ts` (:118), `attendance-export-api.test.ts` (:89) | heads `order by node_id, location_id` | `order by node_id` | fixture |
+| 1 / T1, T3a, T3b | every `appendToChain`/`readChain`/`readChainHead` call in tests (list in Tasks 1 and 3) | entry gains `locationId` (T1); key loses it (T3) | — | fixture |
+| 1 / T3c | `packages/workforce-es/src/record-export.test.ts` | new "explains that a chain position counts its node's entries at every location" | — | new | D1 |
+| 2 / T6 | `packages/workforce/src/record-closures.test.ts` | "does not invent an amendment for unchanged or unrelated records" (:153) | `elsewhere` reuses `start`, `end`, `change`'s ids at "other-venue"; asserts no impacts and no `closedPeriodIds` there | `elsewhere` entries get their own ids and times outside the session; same assertions | fixture (with the location check at `record-projection.ts:105` gone, the reused ids collide in `byId`, and the case fails `expected false to be true`, per the plan review's run) |
+| 2 / T10 | `apps/server/src/till-clock-api.test.ts` | same case as below, its first state read (:109-113) | after a clock-in at another location the same day, `firstClockIn: true` | `firstClockIn: false` | D7 |
 | 1 / T2 | `src/backup-verification.test.ts` | new "verifies closures at two locations of one node as two chains" | — | new control | D6 |
 | 2 / T6 | `src/record-reads.test.ts` | new cases (Task 6) | — | — | D4 |
-| 2 / T10 | `apps/server/src/till-clock-api.test.ts` | "refuses break and out writes on a shift at another location, while a matching-location shift succeeds" (:92) | out/break-start/break-end answer 403 `attendance.not_permitted`, 1 row | renamed "lets break and out writes close a shift begun at another location": break-start 200, break-end 200, out 200; the out is written at the box's location on the box's node; state `out` | D3 |
-| 2 / T11 | `apps/till/src/widgets/till-shell.test.ts` | "unknown or another-location clock state offers Retry or an explanation and disables clock writes (%s)" (:122) | `"another-venue"`: buttons disabled, text `clock.other_location` | split: `null` case unchanged; new "keeps clock actions enabled when the open shift began at another location": buttons enabled, no "another location" text | D3 |
+| 2 / T10 | `apps/server/src/till-clock-api.test.ts` | "refuses break and out writes on a shift at another location, while a matching-location shift succeeds" (:92) | out/break-start/break-end answer 403 `attendance.not_permitted`, 1 row | renamed "lets break and out writes close a shift begun at another location": `instant` moves on a minute before each write (as `:303-321` does), and each request sends the latest `lastEntryId`; break-start 200, break-end 200, out 200; the out is written at the box's location on the box's node; state `out` | D3 |
+| 2 / T11 | `apps/till/src/widgets/till-shell.test.ts` | "unknown or another-location clock state offers Retry or an explanation and disables clock writes (%s)" (:122) | `"another-venue"`: buttons disabled, text `clock.other_location` | split: `null` case unchanged; new "keeps clock actions enabled when the open shift began at another location": no `clockError`; buttons enabled; no `.clock-message` rendered | D3 |
 
 ---
 
@@ -227,8 +251,8 @@ rebuild and no append-only trigger change.
 
 ### Task 1: The append input carries the entry's location
 
-A refactor with no behaviour change. It moves the location onto the entry before Task 3 removes it
-from the key, which keeps Task 3's sweep small. There is no new test: what proves it is typecheck
+A refactor with no behaviour change. It moves the location onto the entry before Task 3a removes it
+from the key, which keeps the cut's sweep small. There is no new test: what proves it is typecheck
 plus the unchanged suites.
 
 **Files:**
@@ -246,7 +270,7 @@ plus the unchanged suites.
 **Interfaces:**
 - Produces: `TimeEntryAppend.locationId: string` (required). In this task `attemptAppend` hashes and
   stores `entry.locationId`, and `key.locationId` still addresses the head row. Callers pass the same
-  location in both until Task 3.
+  location in both until Task 3a.
 
 - [ ] **Step 1: Add `locationId: string` to `TimeEntryAppend`.** In `attemptAppend`, use
   `entry.locationId` for `computeEntryHash` and the `time_entries` insert (`chain.ts:127`, `:148`);
@@ -265,7 +289,7 @@ plus the unchanged suites.
 
 The time chain and the closure chain are grouped by the same `scope()` today
 (`backup-verification.ts:137-139`, used at :149, :165, :206). This task splits it. The behaviour is
-unchanged here; Task 3 changes only the time grouping.
+unchanged here; Task 3a changes only the time grouping.
 
 **Files:**
 - Modify: `packages/workforce/src/backup-verification.ts`
@@ -273,7 +297,7 @@ unchanged here; Task 3 changes only the time grouping.
 
 **Interfaces:**
 - Produces: `chainScope(row: BackupRow): string` (time entries and stored heads; still
-  `[node_id, location_id]` until Task 3) and `closureScope(row: BackupRow): string`
+  `[node_id, location_id]` until Task 3a) and `closureScope(row: BackupRow): string`
   (`[node_id, location_id]`, kept by D6).
 
 - [ ] **Step 1: Write the control test** "verifies closures at two locations of one node as two
@@ -292,12 +316,36 @@ unchanged here; Task 3 changes only the time grouping.
   — every case passes.
 - [ ] **Step 5: Commit** — "Name backup verification's time and closure groupings separately".
 
-### Task 3: The cut — one chain per node
+### Task 2b: Two test fixtures that pass on both schemas
 
-The one task that cannot be split without leaving a red tree: once the column goes, `chain.ts`,
-`readLatestLiveEntry`'s subqueries and the backup check all name it. The edits are small; most of
-the task is the test sweep, which typecheck finds. If it passes about 150 tool calls unfinished,
-stop at a green or cleanly red point, commit, and hand over (global rule).
+This task moves two fixture changes out of the cut. Both pass before and after it.
+
+**Files:**
+- Test: `packages/workforce/src/attendance-response-migration.test.ts` (:172-…)
+- Test: `packages/workforce/src/backup-verification.test.ts` ("detects damage on another location", :367)
+
+- [ ] **Step 1: Seed `attendance-response-migration.test.ts`'s rows by raw insert.** Replace the
+  `backend.clockIn`/`clockOut` calls on the 0008-era database with raw `insert`s of the same two
+  entries and their head, hashed with `computeEntryHash` the way `record-migration.test.ts:61-102`
+  does. Keep every comparison as it is, `heads` byte for byte included. Today's writer cannot run on
+  an old schema once Task 3a changes `chain.ts`.
+- [ ] **Step 2: Rewrite the "detects damage on another location" fixture** to damage
+  `(select id from time_entries where node_id='${node}' and location_id='${otherPlace}' order by sequence_no limit 1)`
+  instead of `location_id='${otherPlace}' and sequence_no=1`.
+- [ ] **Step 3: Run** `pnpm --filter @waitron/workforce exec vitest run src/attendance-response-migration.test.ts src/backup-verification.test.ts`
+  — every case passes.
+- [ ] **Step 4: Deletion control:** in Step 2's case, damage nothing → the case fails (it expects
+  `chain` invalid). Revert.
+- [ ] **Step 5: Commit** — "Seed two workforce tests in ways that do not depend on the chain key".
+
+### Task 3a: The cut, in the workforce package
+
+Once the column goes, `chain.ts`, `readLatestLiveEntry`'s subqueries and the backup check all name
+it, so they change together. This task ends with the workforce package green and its typecheck
+clean. `@waitron/server`'s typecheck, the madrid baseline test and `scripts/schema-constraints.test.ts`
+stay red until Task 3b, which is dispatched straight after; the per-task review covers 3a and 3b
+together. If 3a passes about 150 tool calls unfinished, stop at a green or cleanly red point,
+commit, and hand over (global rule).
 
 **Files:**
 - Create: `packages/workforce/src/chain-per-node-migration.test.ts`
@@ -309,9 +357,8 @@ stop at a green or cleanly red point, commit, and hand over (global rule).
   `attemptAppend`, `readChain`; comment at :20-21), `errors.ts:27-31`,
   `record-reads.ts:85-147`, `backup-verification.ts` (`chainScope`, the `order by` at :146),
   `chain-hash.ts:7` (comment)
-- Modify (tests): the rows in "Test checks this plan changes" marked 1 / T3, plus every
-  key literal typecheck reports, in both packages
-- Modify: `scripts/schema-constraints.test.ts:343`, `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts`
+- Modify (tests): the rows in "Test checks this plan changes" marked 1 / T3a, plus every key
+  literal `pnpm --filter @waitron/workforce typecheck` reports
 
 **Interfaces:**
 - Consumes: `TimeEntryAppend.locationId` (Task 1), `chainScope` (Task 2).
@@ -368,41 +415,87 @@ stop at a green or cleanly red point, commit, and hand over (global rule).
   event times are compared across nodes and against an approved missing-entry correction; retimes
   are left out. Cut the "Accepted residual" sentence.
 - [ ] **Step 7: Backup verification.** `chainScope` returns `JSON.stringify([text(row, "node_id")])`;
-  `checkTime` selects `… order by node_id, sequence_no`.
-- [ ] **Step 8: Sweep.** Run `pnpm --filter @waitron/workforce typecheck` and
-  `pnpm --filter @waitron/server typecheck`. Fix each reported key literal (`{ nodeId, locationId }`
-  handed to `appendToChain`/`readChain`/`readChainHead` becomes `{ nodeId }`; a helper like
+  `checkTime` selects `select * from time_entries order by node_id, sequence_no`, and the "time
+  decoder" row of "does not classify an unexpected %s failure as corrupt data" names that same
+  statement.
+- [ ] **Step 8: Sweep the workforce package.** Run `pnpm --filter @waitron/workforce typecheck` and
+  fix each reported key literal (`{ nodeId, locationId }` handed to
+  `appendToChain`/`readChain`/`readChainHead` becomes `{ nodeId }`; a helper like
   `key(location, node)` keeps only the node). Find raw SQL on the head table with
-  `/usr/bin/grep -rn "workforce_chains" packages/workforce/src apps/server/src | /usr/bin/grep location`
-  and `/usr/bin/grep -rn "workforceChains.locationId" packages apps`, and fix each hit. Expected
-  afterwards: both typechecks exit 0, and both greps print nothing outside
-  `chain-per-node-migration.test.ts`.
-- [ ] **Step 9: Make the table's assertion changes** marked 1 / T3. That includes the
-  `attendance-response-migration.test.ts` rewrite: seed by raw insert, and compare heads with
-  `location_id` left out of the before rows. Also the `seed.madrid-baseline.test.ts` adjustment,
-  inside the `for (const phase …)` loop beside the `parties` one: filter `location_id` out of
-  `workforce_chains.columns`, filter `from === "location_id"` out of its `foreignKeys`, and
-  renumber the remaining keys' `id` in their existing order from 0. Then delete the
-  `schema-constraints.test.ts:343` row. For the clocking-step residual flip, the new body is:
-  in at A 21:00, out at A 21:10, in at B 20:15 → `latest` is `{ kind: "in", at: "20:15" }`;
-  out at B 20:40 → accepted; in at B 20:45 → `attendance.already_open`; `rowCount` 4. Replace its
-  comment with "One chain per node: the clock-in written after the step is the latest write.".
+  `/usr/bin/grep -rn "workforce_chains" packages/workforce/src | /usr/bin/grep location` and
+  `/usr/bin/grep -rn "workforceChains.locationId" packages`, and fix each hit. Expected afterwards:
+  typecheck exits 0, and both greps print nothing outside `chain-per-node-migration.test.ts`.
+- [ ] **Step 9: Make the table's assertion changes** marked 1 / T3a. In
+  `attendance-response-migration.test.ts`, which Task 2b already seeds by raw insert, compare heads
+  with `location_id` left out of the before rows. For the clocking-step residual flip, the new body
+  is: in at A 21:00, out at A 21:10, then the clock is stepped back and in at B 20:15 → `latest` is
+  `{ kind: "in", at: "20:15" }`. A clock-in at B 20:30 is refused `attendance.already_open`, and
+  then a clock-out at B 20:40 is accepted. `rowCount` is 4 and `latest` is `{ kind: "out", at: "20:40" }`.
+  Replace its comment with "One chain per node: the clock-in written after the step is the latest
+  write.".
 - [ ] **Step 10: Run the focused files, then the package.**
   `pnpm --filter @waitron/workforce exec vitest run src/chain-per-node-migration.test.ts src/chain.test.ts src/chain.concurrency.test.ts src/clocking-step.test.ts src/backup-verification.test.ts src/migrations.test.ts src/index.test.ts src/restore-continuation.test.ts src/attendance-response-migration.test.ts src/personal-data.coverage.test.ts`
-  (expected: all pass), then `pnpm --filter @waitron/workforce exec vitest run` (whole package).
-- [ ] **Step 11: Run the server files the cut reaches.**
-  `pnpm --filter @waitron/server exec vitest run scripts/demo-seed/seed.madrid-baseline.test.ts src/management-hours-api.test.ts src/till-attendance-api.test.ts src/attendance-export-api.test.ts src/till-clock-api.test.ts src/till-clock-state.test.ts src/till-clock-step.test.ts src/till-clock-attendance.test.ts src/restore-command.archive.test.ts src/attendance-loop.test.ts src/attendance-restore.test.ts src/boot.attendance.test.ts src/backup-verification.authority.test.ts src/venue-details.test.ts`.
-  Expected: all pass.
-- [ ] **Step 12: Run the guard suites** in "Guard suites for a schema change" — every one passes,
-  and the two fiscal ones are unedited (`git diff --stat -- packages/fiscal-verifactu` prints
-  nothing).
-- [ ] **Step 13: Deletion controls.** Each is reverted afterwards:
+  (expected: all pass), then `pnpm --filter @waitron/workforce exec vitest run` (whole package) and
+  `pnpm --filter @waitron/workforce-es exec vitest run src/record-export.test.ts`.
+- [ ] **Step 11: Deletion controls.** Each is reverted afterwards:
   - Put `location_id` back into the head subquery of `readLatestLiveEntry`. The clocking-step
     residual case must fail, and so must "finds the deciding entry through indexes…".
   - Make `chainScope` `[node_id, location_id]` again. The backup case "walks every node's time
     chain…" must fail on `head`, because a head row has no `location_id`.
-- [ ] **Step 14: Commit** — "One working-time chain per node: the chain head is keyed by the node
+- [ ] **Step 12: Commit** — "One working-time chain per node: the chain head is keyed by the node
   alone and each entry keeps its own location".
+
+### Task 3b: The cut, in the server and the root guards
+
+**Files:**
+- Modify (tests): every key literal `pnpm --filter @waitron/server typecheck` reports; the rows
+  marked 1 / T3b
+- Modify: `scripts/schema-constraints.test.ts:343`, `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts`
+
+- [ ] **Step 1: Sweep the server.** Run `pnpm --filter @waitron/server typecheck` and fix each
+  reported key literal as in Task 3a. Then run
+  `/usr/bin/grep -rn "workforce_chains" apps/server/src | /usr/bin/grep location` and fix each hit
+  (expected from reading: `management-hours-api.test.ts:107`, `till-attendance-api.test.ts:118`,
+  `attendance-export-api.test.ts:89`). Expected afterwards: typecheck exits 0 and the grep prints
+  nothing.
+- [ ] **Step 2: Adjust the madrid baseline,** inside the `for (const phase …)` loop beside the
+  `parties` adjustment. Filter `location_id` out of `workforce_chains.columns`, filter
+  `from === "location_id"` out of its `foreignKeys`, and renumber the remaining keys' `id` in their
+  existing order from 0. Then delete the `schema-constraints.test.ts:343` row.
+- [ ] **Step 3: Run the server files the cut reaches.**
+  `pnpm --filter @waitron/server exec vitest run scripts/demo-seed/seed.madrid-baseline.test.ts src/management-hours-api.test.ts src/till-attendance-api.test.ts src/attendance-export-api.test.ts src/till-clock-api.test.ts src/till-clock-state.test.ts src/till-clock-step.test.ts src/till-clock-attendance.test.ts src/restore-command.archive.test.ts src/attendance-loop.test.ts src/attendance-restore.test.ts src/boot.attendance.test.ts src/boot.till-clock.test.ts src/backup-verification.authority.test.ts src/venue-details.test.ts src/service-delete.integration.test.ts`.
+  Expected: all pass.
+- [ ] **Step 4: Run the guard suites** in "Guard suites for a schema change" — every one passes,
+  and the two fiscal ones are unedited (`git diff --stat -- packages/fiscal-verifactu` prints
+  nothing).
+- [ ] **Step 5: Commit** — "Update the server's tests and the schema guard for one chain per node".
+
+### Task 3c: The export says what a chain position counts
+
+The export's history has "Chain position / Posición en la cadena" per entry
+(`packages/workforce-es/src/record-export.ts:67`, `:273`). After Task 3a, one location's record can
+skip numbers. The export's notes block (:426-441) gains one line. `packages/workforce-es` may carry
+official Spanish text (CLAUDE.md §3), and the Spanish follows the till's word for the box ("el
+servidor del local", `apps/till/src/i18n/strings.ts`, `trust.*`).
+
+**Files:**
+- Modify: `packages/workforce-es/src/record-export.ts` (notes, after the "Automatic finishes…" line)
+- Test: `packages/workforce-es/src/record-export.test.ts`
+
+- [ ] **Step 1: Write the failing test** "explains that a chain position counts its node's entries
+  at every location". `formatTimeRecordExport` for locale `en` → `notes` contains exactly
+  "Chain position counts every entry its node recorded, at every location, so one location's record
+  can skip numbers.". For `es` → `notes` contains exactly "La posición en la cadena cuenta todos los
+  asientos que registró su nodo, en todos los locales, así que el registro de un local puede saltarse
+  números.". Run `pnpm --filter @waitron/workforce-es exec vitest run src/record-export.test.ts`.
+  Expected: FAIL.
+- [ ] **Step 2: Add the note** to both audiences, as the third entry, before the
+  representatives-only one.
+- [ ] **Step 3: Run** that file plus
+  `pnpm --filter @waitron/server exec vitest run src/attendance-export-csv.test.ts src/attendance-export-pdf.test.ts src/attendance-export-api.test.ts`.
+  Expected: all pass. The CSV case reads only the first two notes (`attendance-export-csv.test.ts:71-77`).
+- [ ] **Step 4: Commit** — "The working-time export says why a location's chain positions can skip
+  numbers".
 
 ### Task 4: PR 1's docs
 
@@ -424,6 +517,15 @@ stop at a green or cleanly red point, commit, and hand over (global rule).
 - [ ] **Step 1: Make the edits.**
 - [ ] **Step 2: Run** `pnpm exec vitest run scripts/claude-md-pointers.test.ts` — passes.
 - [ ] **Step 3: Commit** — "docs: record that the working-time chain is now one per node".
+
+### Before PR 1 is merged: name every venue that needs a reset
+
+- [ ] Read each venue this machine holds, read-only through `node:sqlite`
+  (`new DatabaseSync(path, { readOnly: true })`, never the `sqlite3` CLI), with
+  `select node_id from workforce_chains group by node_id having count(*) > 1`. Read the first dev
+  stack's venue (the seeded host folder of the first port slot) and the Santet real-data venue
+  (worktree `waitron-local-santet-data`). Any row printed means that venue's migration will be
+  refused, and the PR's first line names it.
 
 Then `/finish-branch` with this plan's path. Risk triggers: a migration, and a cross-package
 contract (`ChainKey`), so this is the full path and two Codex reviews.
@@ -448,40 +550,53 @@ confirmations go with their root entry (`recordRoot`).
 - Modify: `packages/workforce/src/projection.ts` (add `sessionWindows`)
 - Modify: `packages/workforce/src/record-period.ts` (add `recordAtLocation`; `recordInPeriod` keys
   sessions by person, :23-31)
+- Modify: `packages/workforce/src/index.ts` (export `sessionWindows`, `SessionWindow`; Task 10b
+  uses them from `apps/server`)
 - Test: `packages/workforce/src/projection.test.ts`, `packages/workforce/src/record-projection.test.ts`
 
 **Interfaces:**
 - Produces:
-  - `interface SessionWindow { personId: string; locationId: string; startedAt: string; endedAt: string | null }`
+  - `interface SessionWindow { personId: string; locationId: string; startedAt: string; endedAt: string | null; entryIds: string[] }`
   - `sessionWindows(entries: readonly TimeEntryRecord[]): SessionWindow[]` — the same pairing as
     `projectWorkSessions` (effective clock entries, per person, by `compareEvents`), plus one
     window with `endedAt: null` for a person's trailing open shift. `locationId` is the clock-in's.
+    `entryIds` holds the root (`recordRoot`) of every effective entry the pairing used: its
+    clock-in, each break start and end it took, and its clock-out.
   - `recordAtLocation(record: TimeRecord, locationId: string): TimeRecord` — the shared rule above.
-    Membership is decided per root over `effectiveClockEntries` of `record.entries`. A root inside a
-    window with `start ≤ eventAt ≤ end` (no end for an open one) belongs to that window's location;
-    otherwise to its own `locationId`. It keeps `sessions` with `s.locationId === locationId`, plus
-    `closures` and `closedPeriodImpacts` of that location.
+    A row goes with its root. A root in some window's `entryIds` belongs to that window's location.
+    A root in none goes by a half-open time test, `startedAt ≤ eventAt < endedAt` (no end for an
+    open window), against the same person's windows; this covers a pending request, a stray
+    clock-out or a stray break. Otherwise it belongs to its own `locationId`. The function keeps
+    `sessions` with `s.locationId === locationId`, plus that location's `closures` and
+    `closedPeriodImpacts`.
 
-- [ ] **Step 1: Write the failing tests.** Build the entries with the existing record-projection
-  helpers.
+- [ ] **Step 1: Write the tests.** Build the entries with the existing record-projection helpers.
   - `sessionWindows`: in A 09:00, out B 17:00, in B 18:00 →
-    `[{ A, 09:00, 17:00 }, { B, 18:00, null }]`.
+    `[{ A, 09:00, 17:00, entryIds: [in, out] }, { B, 18:00, null, entryIds: [in] }]`.
   - `recordAtLocation(projectTimeRecord(entries), A)` for in A 09:00, break_start B 12:00,
-    break_end B 12:30, out B 17:00: one session, `workedMinutes` 450, and entries
-    `in, break_start, break_end, out`. For B: no sessions and no entries.
-  - `recordInPeriod` over that A view keeps all four entries. Today's (person, location) key keeps
-    only the `in`, which is what this case fails on.
+    break_end B 12:30, out B 17:00 → one session, `workedMinutes` 450, and entries
+    `in, break_start, break_end, out`. For B → no sessions and no entries.
+  - "assigns an entry at a session's end second by its pairing, not its time": in A 09:00, out A
+    17:00, in B 17:00, out B 20:00 → A's view has two entries, both at A, and B's view has B's two.
+  - "places a pending missing-entry request inside a session by its time": in A 09:00, out A 17:00,
+    plus a requested (not approved) missing `break_start` at B 12:00 → in A's view, not B's.
+  - `recordInPeriod` over the four-entry A view keeps all four entries. Today's (person, location)
+    key keeps only the `in`.
   - Control (passes before and after): in A 09:00, out A 12:00, in B 13:00, out B 17:00 → A's view
     has the 180-minute session and two entries, B's the 240-minute one and two.
   Run `pnpm --filter @waitron/workforce exec vitest run src/projection.test.ts src/record-projection.test.ts`.
-  Expected: FAIL (`sessionWindows`/`recordAtLocation` are not exported).
-- [ ] **Step 2: Implement** `sessionWindows`, `recordAtLocation`, and the per-person key in
-  `recordInPeriod` (`JSON.stringify([session.personId])`, and the same for the entry lookup at :31).
+  Expected: FAIL (`sessionWindows`/`recordAtLocation` are not exported yet; the behaviour is pinned
+  by Step 4's controls).
+- [ ] **Step 2: Implement** `sessionWindows`, `recordAtLocation`, the exports, and the per-person key
+  in `recordInPeriod` (`JSON.stringify([session.personId])`, and the same for the entry lookup at :31).
 - [ ] **Step 3: Run** the two files, then `pnpm --filter @waitron/workforce exec vitest run src/record-reads.test.ts src/record-closures.test.ts src/pay-period-closure.test.ts`
   — every one passes. On callers that still pre-filter by location, the per-person key changes
   nothing.
-- [ ] **Step 4: Deletion control:** key `recordInPeriod` by (person, location) again → the
-  four-entry case fails. Revert.
+- [ ] **Step 4: Deletion controls.** Each is reverted afterwards:
+  - key `recordInPeriod` by (person, location) again → the four-entry `recordInPeriod` case fails;
+  - assign every root by an inclusive time test (`startedAt ≤ eventAt ≤ endedAt`), ignoring
+    `entryIds` → "assigns an entry at a session's end second by its pairing…" fails;
+  - drop the time test for roots outside every pairing → the pending-request case fails.
 - [ ] **Step 5: Commit** — "Add a location's view of a working-time record, with sessions paired
   per person".
 
@@ -512,19 +627,24 @@ confirmations go with their root entry (`recordRoot`).
     closure's `snapshot.sessions` holds the 480-minute session and its `snapshot.entries` both rows;
     both rows carry `closedPeriodIds` with the closure.
   Expected: FAIL. Today the location read holds only the `in` and no session.
-- [ ] **Step 2: Implement** `presentAt` and the new `readTimeRecord`. In `record-projection.ts`,
+- [ ] **Step 2: Fix the `record-closures.test.ts:153` fixture** ("does not invent an amendment for
+  unchanged or unrelated records"). Give the `elsewhere` entries their own ids, with times outside
+  the `start`–`end` session (for example the next day), and keep its assertions. It reuses `start`,
+  `end` and `change`'s ids, which collide in `byId` once Step 3 drops the location check.
+- [ ] **Step 3: Implement** `presentAt` and the new `readTimeRecord`. In `record-projection.ts`,
   build each closure's `current` as
   `recordInPeriod(recordAtLocation({ ...record, closures: [], closedPeriodImpacts: [] }, closure.locationId), closure.period)`.
   At :105, drop `row.entry.locationId === closure.locationId &&`: membership is `roots`, which
   now comes from the location view.
-- [ ] **Step 3: Run** `pnpm --filter @waitron/workforce exec vitest run src/record-reads.test.ts src/record-closures.test.ts src/record-projection.test.ts src/record-read-budget.test.ts src/pay-period-closure.test.ts`.
+- [ ] **Step 4: Run** `pnpm --filter @waitron/workforce exec vitest run src/record-reads.test.ts src/record-closures.test.ts src/record-projection.test.ts src/record-read-budget.test.ts src/pay-period-closure.test.ts src/attendance-reads.test.ts`
+  and `pnpm --filter @waitron/workforce-es exec vitest run src/record-export.test.ts`.
   Expected: all pass. `record-read-budget.test.ts`'s row counts are unchanged, because its people
   work at one location. If one changes, STOP: the budget is a decided limit, not a fixture.
-- [ ] **Step 4: Run the apps that read the record:**
+- [ ] **Step 5: Run the apps that read the record:**
   `pnpm --filter @waitron/server exec vitest run src/attendance-export-api.test.ts src/personal-data-time-record.test.ts src/management-hours-api.test.ts`.
   Expected: all pass. "builds no files for a person whose only entries are at another location"
   still holds: no session at this location, and no entry of theirs falls in one.
-- [ ] **Step 5: Commit** — "Count a work session at its clock-in's location in the period record
+- [ ] **Step 6: Commit** — "Count a work session at its clock-in's location in the period record
   and its closures".
 
 ### Task 7: Closing a pay period, the hours screen and planned-versus-actual
@@ -538,11 +658,15 @@ confirmations go with their root entry (`recordRoot`).
 
 **Interfaces:**
 - Consumes: `presentAt`, `recordAtLocation` (Tasks 5–6).
+- Keeps: the automatic-entry eligibility at `pay-period-close.ts:131`
+  (`s.locationId === e.locationId && s.endedAt === e.eventAt`). Under D4 an automatic clock-out is
+  written at its clock-in's location, which is also its session's location, so the rule still
+  holds. Task 8 pins it.
 
 - [ ] **Step 1: Write the failing tests.**
   - `pay-period-closure.test.ts`, "closes a session clocked out at another location in its clock-in
-    location's period": in A 09:00 and out B 17:00 (an automatic out at B, for the marker path).
-    `closePayPeriod` at A → the snapshot has the 480-minute session. At B → no sessions.
+    location's period": in A 09:00 and a plain clock-out at B 17:00. `closePayPeriod` at A → the
+    snapshot has the 480-minute session and both entries. At B → no sessions and no entries.
   - `hours-reads.test.ts`, "shows a shift begun here and continued elsewhere as one":
     in A 09:00, break_start B 12:00 → `readPersonHours({ locationId: A, … })` has one open shift
     whose `breakStart` is the B entry, and at B there is no open shift. Then break_end B 12:30 and
@@ -555,7 +679,7 @@ confirmations go with their root entry (`recordRoot`).
   `recordAtLocation(projectTimeRecord(entries), locationId)`. `entriesForLocation` reads
   `{ presentAt: locationId }`, and `getPlannedVsActual` filters sessions to
   `s.locationId === query.locationId` as well as the period.
-- [ ] **Step 3: Run** `pnpm --filter @waitron/workforce exec vitest run src/pay-period-closure.test.ts src/pay-period-configuration.test.ts src/hours-reads.test.ts src/planned-vs-actual.test.ts src/scheduling.test.ts`.
+- [ ] **Step 3: Run** `pnpm --filter @waitron/workforce exec vitest run src/pay-period-closure.test.ts src/pay-period-configuration.test.ts src/hours-reads.test.ts src/planned-vs-actual.test.ts src/scheduling.test.ts src/record-read-budget.test.ts`.
   Expected: all pass. That includes `scheduling.test.ts:948` ("another location's published shifts
   and entries do not leak in") and `hours-reads.test.ts:419` ("never leaks another person or
   location…"), unedited.
@@ -566,7 +690,7 @@ confirmations go with their root entry (`recordRoot`).
 **Files:**
 - Modify: `packages/workforce/src/end-of-day.ts:250-348`
 - Modify: `packages/workforce/src/automatic-entries.ts:42-87` (`recordAutomaticClose`)
-- Test: `end-of-day.test.ts`, `automatic-entries.test.ts`
+- Test: `end-of-day.test.ts`, `automatic-entries.test.ts`, `pay-period-closure.test.ts`
 
 - [ ] **Step 1: Write the failing tests.**
   - `automatic-entries.test.ts`, "closes a shift begun here whose latest entry was made elsewhere":
@@ -575,6 +699,9 @@ confirmations go with their root entry (`recordRoot`).
     minutes. Today it is refused `attendance.not_pending`, because `live.at(-1)` is at B.
   - Control: `recordAutomaticClose` with `locationId: B` for that `in` → `attendance.not_pending`
     (the clock-in is not at B; this is kept).
+  - `pay-period-closure.test.ts`, "marks an automatic clock-out after a break elsewhere in its
+    clock-in location's closure": the case above, then `closePayPeriod` at A for January →
+    `snapshot.markedAutomaticEntryIds` equals `[<the automatic out>]`. At B → `[]`.
   - `end-of-day.test.ts`, "closes the day's open shift whose break was taken at another location":
     the same entries plus an order fact at A at 16:40. Processing A's day appends an automatic out
     at 16:40 at A, and processing B's day appends nothing.
@@ -585,7 +712,7 @@ confirmations go with their root entry (`recordRoot`).
   `end-of-day.ts`, `effective` loses its location filter, `breaks` loses
   `e.locationId === day.locationId`, and `canClose` loses `liveLatest.locationId === day.locationId`.
   `intervals` keeps `i.start.locationId === day.locationId` (D4).
-- [ ] **Step 3: Run** `pnpm --filter @waitron/workforce exec vitest run src/end-of-day.test.ts src/end-of-day.targeted.test.ts src/end-of-day.obligations.test.ts src/end-of-day.concurrency.test.ts src/automatic-entries.test.ts`.
+- [ ] **Step 3: Run** `pnpm --filter @waitron/workforce exec vitest run src/end-of-day.test.ts src/end-of-day.targeted.test.ts src/end-of-day.obligations.test.ts src/end-of-day.concurrency.test.ts src/automatic-entries.test.ts src/pay-period-closure.test.ts`.
   Expected: all pass. "excludes another person, another location and both sides of the business-day
   window" (`end-of-day.test.ts:85`) is unedited: its other-location FACT still belongs to the
   other location.
@@ -625,7 +752,11 @@ Then run `pnpm --filter @waitron/workforce exec vitest run` (whole package) once
 - Test: `apps/server/src/till-clock-api.test.ts`, `till-clock-state.test.ts`, `attendance-discovery.test.ts`
 
 - [ ] **Step 1: Write the failing tests.**
-  - Flip `till-clock-api.test.ts:92` as the table says.
+  - Flip `till-clock-api.test.ts:92` as the table's two rows for it say. The open shift is on
+    another node and the till writes at `instant`. Equal event times fall back to recording time,
+    then to node id (`effective-entries.ts:3-13`), and the node id is random here. So move
+    `instant` on by a minute before each of break-start, break-end and out (as `:303-321` does), and
+    send each request the latest state's `lastEntryId`.
   - `till-clock-state.test.ts`, "counts today's clock-in at another location as the first": clock in
     at `other` today, out at `other`, then `read()` at the box location → `firstClockIn: false`.
     Today it is `true`.
@@ -640,12 +771,47 @@ Then run `pnpm --filter @waitron/workforce exec vitest run` (whole package) once
   `state.state === "out"`. Use `start.locationId` for `readLocationClock`, for `day.locationId`, for
   the saved-work lookup, and as the `locationId` handed to `reconcileAttendanceDay`. `admit` (:71-84)
   is unchanged.
-- [ ] **Step 3: Run** those three plus `src/till-clock-step.test.ts src/till-clock-attendance.test.ts src/till-attendance-api.test.ts`.
+- [ ] **Step 3: Run** those three plus `src/till-clock-step.test.ts src/till-clock-attendance.test.ts src/till-attendance-api.test.ts src/boot.till-clock.test.ts`.
   Expected: all pass. `till-clock-step.test.ts:99`'s control is unedited: it still reads `working`
   at the other location.
 - [ ] **Step 4: Deletion control:** restore the `writeClock` refusal → the flipped
   `till-clock-api` case fails. Revert.
 - [ ] **Step 5: Commit** — "Let the till clock out or break a shift begun at another location".
+
+### Task 10b: Discovery re-checks the day of a shift begun at another location
+
+Discovery scans one location's clock entries
+(`attendance-discovery.ts:350`, `… and location_id = ${scan.locationId} …`), and `remember` marks a
+day only for that location (`:262-266`, `row.locationId === scan.locationId`). Suppose a shift begins
+at B yesterday and is clocked out at A's till. A's scan sees the clock-out, B's day is never
+processed again, and B's "missing clock-out" question stays open: it resolves only when B's day is
+reprocessed (`end-of-day.ts`, which sets `resolvedByEntryId` and cancels the reminder).
+
+**Files:**
+- Modify: `apps/server/src/attendance-discovery.ts` (`remember`)
+- Test: `apps/server/src/attendance-discovery.test.ts`
+
+**Interfaces:**
+- Consumes: `sessionWindows`, `readRecordedEntries` (`@waitron/workforce`).
+
+- [ ] **Step 1: Write the failing test** "marks the clock-in location's day when a shift begun there
+  is clocked out here". Clock in at `otherLocation` yesterday 18:00. Process `otherLocation`'s
+  yesterday so that its missing-times question exists, with a pending reminder. Clock out at
+  `locationId` today 01:00. Run discovery for `locationId` (the file's `begin`/`drain` helpers).
+  Then `attendance_day_work` for (`otherLocation`, yesterday) has a higher `dirtyRevision` than
+  before. After that day is processed again, the question's `resolvedByEntryId` is the clock-out's
+  id and its mail is `cancelled`. Expected: FAIL (the revision is unchanged).
+- [ ] **Step 2: Implement.** In `remember`, when `scan.source === "clock"` and `row.personId` is
+  set, read the person's entries and find the `sessionWindows` window whose `entryIds` holds the
+  row's root (`row.key`, or the root of `row.relatedId`). If that window's `locationId` is not
+  `scan.locationId`, `dirtyDay` it as well, for the business day of `window.startedAt` by that
+  location's clock (`readLocationClock`). Do this on the same path that dirties the scan's own days,
+  the one taken when the fingerprint changes.
+- [ ] **Step 3: Run** `pnpm --filter @waitron/server exec vitest run src/attendance-discovery.test.ts src/attendance-loop.test.ts src/boot.attendance.test.ts src/attendance-email-worker.test.ts`.
+  Expected: all pass.
+- [ ] **Step 4: Deletion control:** skip the extra `dirtyDay` → the new case fails. Revert.
+- [ ] **Step 5: Commit** — "Recheck the day of a shift begun at another location when it is clocked
+  out here".
 
 ### Task 11: The till drops "Your open shift belongs to another location"
 
@@ -655,10 +821,11 @@ Then run `pnpm --filter @waitron/workforce exec vitest run` (whole package) once
 - Modify: `apps/till/src/i18n/strings.ts:231-232` (EN) and `:2100` (ES): delete `clock.other_location`
 - Test: `apps/till/src/widgets/till-shell.test.ts:122-153`
 
-- [ ] **Step 1: Split and flip the test** as the table says. The new case's state is
-  `{ state: "working", activeLocationId: "another-venue", locationId: "venue", … }`. Expect
-  `[data-clock-action]` not to be `disabled`, and `el.shadowRoot!.textContent` not to contain
-  "another location". Check headroom (`memory_pressure | grep free`), then run
+- [ ] **Step 1: Split and flip the test** as the table says. The new case sets no `clockError`, and
+  its state is `{ state: "working", activeLocationId: "another-venue", locationId: "venue", … }`.
+  Expect `[data-clock-action]` not to be `disabled`, and
+  `el.shadowRoot!.querySelector(".clock-message")` to be `null`. Check headroom
+  (`memory_pressure | grep free`), then run
   `pnpm --filter @waitron/till exec vitest run src/widgets/till-shell.test.ts`. Expected: the new
   case FAILS.
 - [ ] **Step 2: Implement.** Delete the key from both catalogues, since `es` is
@@ -676,10 +843,12 @@ Then run `pnpm --filter @waitron/workforce exec vitest run` (whole package) once
 - Modify: the workforce spec. After PR 1's pointer, add "> **2026-11-01 — clock state and sessions
   per venue (A1268 PR 2).** A person has one clock state across the venue, and a work session pairs
   their entries wherever each was made; a per-location view counts it at its clock-in's location."
-- Modify: `docs/backlog.md` — delete the A1268 entry (:5232). In the same area add
-  "**A1268 part 2: pair a person's entries by write order after a backward clock step.**
-  [Detail](backlog/box.md#a1268-part-2-pair-a-persons-entries-by-write-order-after-a-backward-clock-step)",
-  and the `activeLocationId` line held back from Task 4.
+- Modify: `docs/backlog.md` — delete the A1268 entry (:5232). In the same area add two entries:
+  - "**A1268 part 2: pair a person's entries by write order after a backward clock step.**
+    [Detail](backlog/box.md#a1268-part-2-pair-a-persons-entries-by-write-order-after-a-backward-clock-step)"
+  - "**The till's clock state still reports `activeLocationId`, which nothing reads after A1268
+    PR 2.** Remove it with the till's fixtures, or keep it as information (A1268 plan, open
+    question 2)."
 - Modify: `docs/backlog/box.md` — replace the A1268 section with
   "## A1268 part 2: pair a person's entries by write order after a backward clock step." Carry its
   second half (the hours read, `intervalsFor` and `validateSequence` still order by
@@ -700,10 +869,10 @@ say so in the note.
 
 ## Self-review notes
 
-- **Spec coverage.** D1 → Task 3. D2 → Task 3's rehearsal test and the PR's first line. D3's read →
-  Task 3; D3's till → Tasks 10–11. D4 → Tasks 5–9. D5 → kept, with Global Constraints and Task 9
-  Step 2 naming what stays. D6 → Task 2 and Task 3's `chainScope`. D7 → Task 10. Docs → Tasks 4
+- **Spec coverage.** D1 → Tasks 3a–3b. D2 → Task 3a's rehearsal test and the PR's first line; the export note → Task 3c. D3's read →
+  Task 3a; D3's till → Tasks 10–11. D4 → Tasks 5–9. D5 → kept, with Global Constraints and Task 9
+  Step 2 naming what stays. D6 → Task 2 and Task 3a's `chainScope`. D7 → Tasks 10 and 10b. Docs → Tasks 4
   and 12. Guides: none, with the grep receipt.
 - **Names used across tasks:** `TimeEntryAppend.locationId` (T1), `chainScope`/`closureScope` (T2),
-  `ChainKey { nodeId }` (T3), `SessionWindow`/`sessionWindows`/`recordAtLocation` (T5), `presentAt`
+  `ChainKey { nodeId }` (T3a), `SessionWindow` (with `entryIds`)/`sessionWindows`/`recordAtLocation` (T5, also used by T10b), `presentAt`
   (T6).
