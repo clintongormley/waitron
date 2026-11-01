@@ -6378,7 +6378,7 @@ _Formerly parts of B9 and Track C._ Open work:
   Read each intervening release, check version pins and bundled notices, and compare built output
   with main for any bundler or compiler bump before landing.
 
-- **A Vitest 5 retry has to re-measure mutation — nothing about Stryker 10 settles it.**
+- **A Vitest 5 retry still needs mutation qualification after the Stryker 10.1.1 update.**
   [Detail](backlog/dependencies.md#a-vitest-5-retry-has-to-re-measure-mutation--nothing-about-stryker-10-settles-it)
 
 - **Bundled npm notices stop at a module-type-only package manifest.**

@@ -42,6 +42,10 @@ retry removes the Vitest-major ignore in `.github/dependabot.yml` (A779, added w
 PR #1179 was closed), and must also check whether #766's stored Dependabot ignore of
 `@vitest/browser-playwright` 5.x holds that package back, and clear it if so
 (`docs/developers/workflow-guide.md` → Dependabot pull requests).
+Stryker 10.1.0's [release notes](https://github.com/stryker-mutator/stryker-js/releases/tag/v10.1.0)
+list “support vitest v5”; 10.1.1 republishes that release. A1302's qualification uses the installed
+Vitest 4.1.12. It does not test Vitest 5, so this entry remains open.
+
 See the owner's ignore-qualification decision below.
 
 ## Whether a declared floor follows the installed version is undecided — one decision for every manifest
