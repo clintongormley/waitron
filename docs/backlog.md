@@ -2166,6 +2166,17 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   the approved `draft.taken_over` text the plan chose (D9); after Take over the move works. Decide
   the words, and whether the refusal offers Take over in place. Pictures `s7-*`, `s8-*` (`~/waitron-campaign-c/a803-4-shots/`, not in the repository).
 
+- **A1300. "Pay the whole" sends the amount the pay dialog read, so a bill that grew meanwhile is
+  left owing (found by A803 slice 4a's review of moving dishes onto a part-paid bill).** The pay
+  dialog's whole choice sends a contribution of the `balance.outstanding` it read when it opened
+  (`apps/till/src/widgets/bill-pay-dialog.ts`, `#choice()`). The reviewer's probe: Bill 2 holds
+  €5 and reads €27.00 outstanding, a €3 Caña moves onto it, and a contribution of €27 is accepted
+  with `outstandingAfter: "3.00"`; a share of one at the old amount is refused
+  `bill.allocation_changed`. Not checked whether adding a dish from another till does the same,
+  nor how the dialog shows the answer. Decide whether a whole payment carries what it read and is
+  refused when the bill has grown. Probe:
+  `~/waitron-campaign-c/a803-4-reviews/q2-experiments/move-dishes.q2-probe.test.ts`.
+
 - **A1290. The table screen's action panel can put Back and its action half below the window, and
   "+ New bill" touches Back (seen in A803 slice 4a's LOOK).** At 1280×900 Move dishes… opens at the
   lower left, the order heading, bill switcher and ⋮ scroll out of view and the space to the right

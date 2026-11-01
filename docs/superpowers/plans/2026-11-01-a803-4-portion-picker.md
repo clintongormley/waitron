@@ -51,6 +51,15 @@ them). So every commit of 4a is a working till against a working server.
 
 ## Owner answers
 
+**Added 2026-11-01, after the build (the text below this paragraph is as planned):** all four
+questions were answered in lane C's `questions.md`. Question 2: yes, the old checks go. Question 1:
+the words as proposed, and the grey reason gains what to do — "{amount} is already paid on this
+bill: move fewer dishes" / «Ya se han pagado {amount} en esta cuenta: mueve menos platos». Question
+3: dishes MAY move onto a bill that already has a payment; it owes more afterwards and Merge bills
+still refuses such a bill. That replaces D4's "holding no payment", D14's destination list and the
+"other bills with no payment" checks of Tasks 7a and 11; D5 still holds, because a move only adds
+dishes and no price is negative. Question 4: the default (one tap takes the whole row).
+
 None yet for slice 4. The defaults under "Owner questions" are what the build uses. **Question 2
 (deleted till checks) is written to `~/waitron-campaign-c/questions.md` at Task 0**, before any file
 it names is edited; the build goes ahead on its default meanwhile, as the owner's 2026-10-05 rule
