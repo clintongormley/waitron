@@ -416,6 +416,11 @@ Conditional automatic conflict recovery,
 corrective-record resolution, filing investigation, outside evidence and fencing, and the complete
 old-backup/new-hardware operational exercise remain queued.
 
+**2026-11-01, Task 7 remap:** use the [current-contract plan](../superpowers/plans/2026-11-01-w41s-7-conflict-recovery.md)
+for minute naming and the current drain/allocation interfaces. The remap records the protected-operation
+scope and outside-authority contracts required before live activation. It implements no recovery path;
+the conditional switch, issuance stop and usable administrator fallback remain open.
+
 **2026-10-12, a conflict no longer holds its chain (owner).** A record AEAT refuses as a duplicate
 (3000) while holding a different or cancelled record under that key is now `rechazado` with code
 3000, with its incident and filing case, and the chain's later records are still sent

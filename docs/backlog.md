@@ -381,6 +381,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **W41s. Fiscal prevention and offline recovery** — conditional automatic conflict recovery, corrective-record resolution,
   filing investigation, outside evidence and fencing, and the complete old-backup/new-hardware operational exercise remain queued.
+  Task 7's [current-contract remap](superpowers/plans/2026-11-01-w41s-7-conflict-recovery.md)
+  separates retained conflict evidence from the protected activation and outside-authority gates; runtime recovery remains open.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment

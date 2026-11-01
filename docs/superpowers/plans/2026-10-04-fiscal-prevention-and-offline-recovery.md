@@ -537,6 +537,10 @@ that a full-disk rollback did not occur.
 
 ## Task 7: conditional automatic conflict recovery
 
+**2026-11-01 execution remap:** follow the [current-contract plan](2026-11-01-w41s-7-conflict-recovery.md)
+for this task's current interfaces, minute naming and implementation gates. The original task below
+remains the acceptance outline; this pointer claims no implementation or runtime qualification.
+
 **Create:** `packages/fiscal-verifactu/src/chain-restart.ts`, `chain-restart.test.ts`.
 **Modify:** `drain.ts`, `filing-cases.ts`, `apps/server/src/fiscal-recovery.ts` and its tests.
 
