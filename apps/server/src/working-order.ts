@@ -4699,8 +4699,8 @@ async function carveLines(
       partials.push({ line, quantity: t.quantity, children });
     }
   }
-  // A weighed portion is one dish and leaves its bill whole (spec §3.1); A1196 keeps the in-bill
-  // splits.
+  // A measured (weighed) portion is one dish and leaves its bill whole (spec §3.1); A1196 keeps
+  // the in-bill splits.
   if (fromTabId !== toTabId && partials.length > 0) {
     const portionOf = await readGrowingPortions(
       tx,

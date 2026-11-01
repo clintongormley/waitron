@@ -848,16 +848,13 @@ describe("A803 A1195: a weighed portion leaves its bill whole", () => {
     return { ...p, weighed: weighed!, lineNo };
   }
 
-  /** Every row a move could touch, in insertion order. */
+  /** Every row of every table, in insertion order. */
   function moveTables() {
+    const tables = venue.db.all<{ name: string }>(
+      sql`select name from sqlite_master where type = 'table' and name not like 'sqlite_%' and name not like '_litestream%' order by name`,
+    );
     return Object.fromEntries(
-      [
-        "working_order_lines",
-        "working_line_portions",
-        "order_portion_events",
-        "ticket_items",
-        "working_orders",
-      ].map((name) => [
+      tables.map(({ name }) => [
         name,
         venue.db.all(sql`select * from ${sql.identifier(name)} order by rowid`),
       ]),
@@ -900,6 +897,54 @@ describe("A803 A1195: a weighed portion leaves its bill whole", () => {
       params: { tabId: p.billId, lineNo: p.lineNo, quantity: "0.100" },
     });
     expect(moveTables()).toEqual(before);
+  });
+
+  it("A803 A1195: of two weighed portions cut in one transfer, the refusal names the lower line", async () => {
+    const p = await withHam();
+    const [second] = await inTx(venue, (tx) =>
+      addPortionRound(tx, venue.cfg, p.billId, ham("0.400"), { fire: true }),
+    );
+    const secondNo = (await linesOf(p.billId)).find((line) => line.id === second!.lineId)!.lineNo;
+    expect(secondNo).toBeGreaterThan(p.lineNo);
+    const ask = { ...(await command(p)), expectedEdits: await bothEdits(p) };
+    await expect(
+      inTx(venue, (tx) =>
+        transferItems(
+          tx,
+          venue.cfg,
+          p.billId,
+          p.otherId,
+          [
+            { lineNo: secondNo, quantity: "0.200" },
+            { lineNo: p.lineNo, quantity: "0.100" },
+          ],
+          ask,
+        ),
+      ),
+    ).rejects.toMatchObject({
+      code: "tab.transfer_quantity_invalid",
+      params: { tabId: p.billId, lineNo: p.lineNo, quantity: "0.100" },
+    });
+  });
+
+  it("A803 A1195: a bound dish that is not measured, held as a line of two, still splits part of itself onto another bill", async () => {
+    const p = await fixture();
+    const [first] = p.portions;
+    const firstNo = (await linesOf(p.billId)).find((line) => line.id === first!.lineId)!.lineNo;
+    // No product path stores a bound unit dish as a line of two; by hand, as
+    // simplified-limit.test.ts does, to show the refusal reads the portion's measure.
+    await inTx(venue, async (tx) => {
+      await tx.delete(workingOrderLines).where(eq(workingOrderLines.parentLineId, first!.lineId));
+      await tx
+        .update(workingOrderLines)
+        .set({ quantity: 2000 })
+        .where(eq(workingOrderLines.id, first!.lineId));
+    });
+    const ask = { ...(await command(p)), expectedEdit: await edit(p.billId) };
+    const split = await inTx(venue, (tx) =>
+      splitBill(tx, venue.cfg, p.billId, [{ lineNo: firstNo, quantity: "1" }], ask),
+    );
+    expect((await linesOf(split.billId)).map((line) => line.lineNo)).toHaveLength(1);
   });
 
   it("A803 A1195: the whole 0.350 kg still moves, keeping its portion and writing one moved event", async () => {
