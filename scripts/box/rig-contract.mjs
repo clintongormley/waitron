@@ -1,22 +1,29 @@
 import * as fs from "node:fs/promises";
 import { constants } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
 
 /**
- * @typedef {{ runDir: string, rootId: string }} RigRun
+ * @typedef {{ runDir: string, rootId: string, runId: string }} RigRun
+ *   rootId is the run folder's device and inode; runId is drawn at random by createRun and kept in
+ *   the ledger, because a file system may give a new folder a removed folder's inode.
  * @typedef {{kind:'image', path:string}
  *   | {kind:'loop', image:string}
  *   | {kind:'mount', target:string}
  *   | {kind:'vm', pidFile:string}} RigResource
  * @typedef {{action:'stop-vm', pidFile:string}|{action:'unmount', target:string}
  *   |{action:'detach-loops', image:string}|{action:'remove-file', path:string}} CleanupStep
+ * @typedef {CleanupStep & { reason: string }} FailedStep
  * @typedef {{ stopVm(pidFile:string):Promise<void>, unmount(target:string):Promise<void>,
  *   detachLoops(image:string):Promise<void>, removeFile(path:string):Promise<void> }} CleanupAdapter
- *   The checks here go by path, so a folder swapped after them is not seen. A real adapter (Linux;
- *   none is built in this pull request) must therefore open every path beneath the run folder
- *   without following a symlink: openat2 from a handle on the run folder with
- *   RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS. It must also check that a VM's process is the one this
- *   run started before stopping it.
+ *   The checks here go by path, so a folder swapped after them is not seen. That holds for this
+ *   library's own ledger write too: a run folder swapped for a symlink after the checks sends the
+ *   staging file into the symlink's target and, when the target holds a copy of this run's ledger,
+ *   the rename as well; only the final no-follow flush of the run folder then refuses, after the
+ *   write. A real adapter (Linux; none is built in this pull request) must therefore open every
+ *   path beneath the run folder without following a symlink: openat2 from a handle on the run
+ *   folder with RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS. It must also check that a VM's process is
+ *   the one this run started before stopping it.
  */
 
 /** Case names the argument parser recognises. None is runnable yet: each needs the Linux recipe and rig adapter. */
@@ -75,9 +82,9 @@ export function parseRigArgs(argv) {
   return { caseName, runDir };
 }
 
-/** @param {string} runDir @param {readonly RigResource[]} resources */
-function ledgerBytes(runDir, resources) {
-  return JSON.stringify({ version: 1, runDir, resources }) + "\n";
+/** @param {string} runDir @param {string} runId @param {readonly RigResource[]} resources */
+function ledgerBytes(runDir, runId, resources) {
+  return JSON.stringify({ version: 1, runDir, runId, resources }) + "\n";
 }
 
 /** @param {string} path */
@@ -100,12 +107,13 @@ export async function createRun(runDir) {
     if (error.code === "ENOENT") throw rigError("run-dir-parent-missing");
     throw error;
   }
+  const runId = randomBytes(16).toString("hex");
   const ledger = join(runDir, "ledger.json");
-  await fs.writeFile(ledger, ledgerBytes(runDir, []), { flag: "wx", mode: 0o600 });
+  await fs.writeFile(ledger, ledgerBytes(runDir, runId, []), { flag: "wx", mode: 0o600 });
   await syncPath(ledger);
   await syncPath(runDir);
   const stat = await fs.lstat(runDir, { bigint: true });
-  return { runDir, rootId: `${stat.dev}:${stat.ino}` };
+  return { runDir, rootId: `${stat.dev}:${stat.ino}`, runId };
 }
 
 /** Loop devices are named by their recorded backing image, never by device id. A cleanup step names its path with its resource's field. */
@@ -169,22 +177,32 @@ function insideRun(runDir, path) {
 /** @param {unknown} run @returns {asserts run is RigRun} */
 function checkRun(run) {
   if (
-    !exactRecord(run, ["runDir", "rootId"]) ||
+    !exactRecord(run, ["runDir", "rootId", "runId"]) ||
     typeof (/** @type {RigRun} */ (run).runDir) !== "string" ||
-    typeof (/** @type {RigRun} */ (run).rootId) !== "string"
+    typeof (/** @type {RigRun} */ (run).rootId) !== "string" ||
+    typeof (/** @type {RigRun} */ (run).runId) !== "string"
   )
     throw rigError("run-invalid");
   checkRunDir(/** @type {RigRun} */ (run).runDir);
 }
 
-/** The run folder must still be the real folder createRun made, not a symlink or a replacement. @param {RigRun} run */
+/** The run folder must still have the device and inode createRun saw; readLedger checks the run id. @param {RigRun} run */
 async function checkRoot(run) {
-  const stat = await fs.lstat(run.runDir, { bigint: true });
-  if (!stat.isDirectory() || `${stat.dev}:${stat.ino}` !== run.rootId)
-    throw rigError("run-dir-replaced");
+  let stat;
+  try {
+    stat = await fs.lstat(run.runDir, { bigint: true });
+  } catch (error) {
+    if (error.code === "ENOENT") throw rigError("run-dir-replaced");
+    throw error;
+  }
+  if (`${stat.dev}:${stat.ino}` !== run.rootId) throw rigError("run-dir-replaced");
 }
 
-/** Refuses a path reached through a symlink. Parts not made yet are fine: nothing beneath them exists. @param {string} runDir @param {string} path */
+/**
+ * Refuses a path reached through a symlink, or through a file (resource-through-symlink for both).
+ * Parts not made yet are fine: nothing beneath them exists.
+ * @param {string} runDir @param {string} path
+ */
 async function checkBeneath(runDir, path) {
   let current = runDir;
   for (const part of path.slice(runDir.length + 1).split("/")) {
@@ -194,18 +212,23 @@ async function checkBeneath(runDir, path) {
       stat = await fs.lstat(current);
     } catch (error) {
       if (error.code === "ENOENT") return;
+      if (error.code === "ENOTDIR") throw rigError("resource-through-symlink");
       throw error;
     }
     if (stat.isSymbolicLink()) throw rigError("resource-through-symlink");
   }
 }
 
-/** @param {string} runDir */
-async function readLedger(runDir) {
-  const handle = await fs.open(
-    join(runDir, "ledger.json"),
-    constants.O_RDONLY | constants.O_NOFOLLOW,
-  );
+/** A ledger naming another run's id is refused as run-dir-replaced. @param {RigRun} run */
+async function readLedger(run) {
+  const { runDir } = run;
+  let handle;
+  try {
+    handle = await fs.open(join(runDir, "ledger.json"), constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch (error) {
+    if (error.code === "ELOOP" || error.code === "ENOENT") throw rigError("ledger-invalid");
+    throw error;
+  }
   let text;
   try {
     text = await handle.readFile("utf8");
@@ -220,13 +243,15 @@ async function readLedger(runDir) {
   }
   // Another version, another run's folder, missing or extra keys, key order and spacing are all
   // refused by the canonical-bytes comparison below.
-  if (!Array.isArray(value?.resources)) throw rigError("ledger-invalid");
+  if (typeof value?.runId !== "string") throw rigError("ledger-invalid");
+  if (value.runId !== run.runId) throw rigError("run-dir-replaced");
+  if (!Array.isArray(value.resources)) throw rigError("ledger-invalid");
   const resources = value.resources.map((/** @type {unknown} */ item) => {
     const shape = resourceShape(item);
     if (shape === null || !insideRun(runDir, shape.path)) throw rigError("ledger-invalid");
     return shape.resource;
   });
-  if (ledgerBytes(runDir, resources) !== text) throw rigError("ledger-invalid");
+  if (ledgerBytes(runDir, run.runId, resources) !== text) throw rigError("ledger-invalid");
   return resources;
 }
 
@@ -234,23 +259,30 @@ async function readLedger(runDir) {
 export async function loadLedger(run) {
   checkRun(run);
   await checkRoot(run);
-  return readLedger(run.runDir);
+  return readLedger(run);
 }
 
 /**
  * Creating ledger.json.next with wx before reading the ledger makes the staging file a lock
  * across processes: a second writer cannot read the ledger until the first has renamed its copy
- * into place. A staging file left by a crash refuses every later record until someone removes it.
+ * into place. ledger-busy means the staging file is there: another process is recording, or a
+ * crash left it behind. A left-behind one refuses every later record until a person removes it.
  * @param {RigRun} run @param {RigResource} resource @param {string} path
  */
 async function appendToLedger(run, resource, path) {
   await checkRoot(run);
   await checkBeneath(run.runDir, path);
   const next = join(run.runDir, "ledger.json.next");
-  const handle = await fs.open(next, "wx", 0o600);
+  let handle;
   try {
-    const resources = await readLedger(run.runDir);
-    await handle.writeFile(ledgerBytes(run.runDir, [...resources, resource]));
+    handle = await fs.open(next, "wx", 0o600);
+  } catch (error) {
+    if (error.code === "EEXIST") throw rigError("ledger-busy");
+    throw error;
+  }
+  try {
+    const resources = await readLedger(run);
+    await handle.writeFile(ledgerBytes(run.runDir, run.runId, [...resources, resource]));
     await handle.sync();
   } catch (error) {
     await handle.close();
@@ -259,15 +291,20 @@ async function appendToLedger(run, resource, path) {
   }
   await handle.close();
   await fs.rename(next, join(run.runDir, "ledger.json"));
-  await syncPath(run.runDir);
+  try {
+    await syncPath(run.runDir);
+  } catch (error) {
+    if (error.code === "ELOOP") throw rigError("run-dir-replaced");
+    throw error;
+  }
 }
 
-/** @type {WeakMap<RigRun, Promise<void>>} */
-const turns = new WeakMap();
+/** Keyed by run folder, so copies of one run record take turns too. @type {Map<string, Promise<void>>} */
+const turns = new Map();
 
 /**
  * Durably records the resource, then runs step. step never runs if recording fails. Calls on one
- * RigRun take turns in this process; the staging file keeps other processes out.
+ * run folder take turns in this process; the staging file keeps other processes out.
  * step runs after the turn ends, so it may record its own sub-resources.
  * @template T @param {RigRun} run @param {RigResource} resource @param {() => T | Promise<T>} step @returns {Promise<T>}
  */
@@ -276,11 +313,11 @@ export async function withRecorded(run, resource, step) {
   const shape = resourceShape(resource);
   if (shape === null) throw rigError("resource-invalid");
   if (!insideRun(run.runDir, shape.path)) throw rigError("resource-outside-run");
-  const turn = (turns.get(run) ?? Promise.resolve()).then(() =>
+  const turn = (turns.get(run.runDir) ?? Promise.resolve()).then(() =>
     appendToLedger(run, shape.resource, shape.path),
   );
   turns.set(
-    run,
+    run.runDir,
     turn.catch(() => {}),
   );
   await turn;
@@ -307,23 +344,34 @@ export function planCleanup(resources) {
 
 /**
  * Cleans up exactly what the run's ledger records, in reverse order. Before each step it checks
- * again that the run folder is the one createRun made and that the step's path is reached through
- * no symlink; a step that fails a check is counted as failed and never reaches the adapter.
- * Runs every step even after failures.
- * @param {RigRun} run @param {CleanupAdapter} adapter @returns {Promise<{status:'clean'|'incomplete', failed: readonly CleanupStep[]}>}
+ * again that the run folder has createRun's device and inode, that its ledger still names this
+ * run's id and reads back, and that the step's path is reached through no symlink; a step that
+ * fails a check is counted as failed and never reaches the adapter. Runs every step even after
+ * failures. Each failed entry's reason is the refusal's reason, or adapter-failed for any other
+ * error. A staging file left beside the ledger afterwards, or one whose presence cannot be checked,
+ * is reported as a failed remove-file with reason ledger-busy and never removed: a person decides
+ * whether it is a crash's leftover.
+ * @param {RigRun} run @param {CleanupAdapter} adapter @returns {Promise<{status:'clean'|'incomplete', failed: readonly FailedStep[]}>}
  */
 export async function runCleanup(run, adapter) {
   const resources = await loadLedger(run);
-  /** @type {CleanupStep[]} */
+  /** @type {FailedStep[]} */
   const failed = [];
   for (const { step, path, call } of cleanupSteps(resources)) {
     try {
-      await checkRoot(run);
+      await loadLedger(run);
       await checkBeneath(run.runDir, path);
       await call(adapter, path);
-    } catch {
-      failed.push(step);
+    } catch (error) {
+      const reason = error?.code === "rig.refused" ? error.reason : "adapter-failed";
+      failed.push({ ...step, reason });
     }
   }
+  const next = join(run.runDir, "ledger.json.next");
+  const leftover = await fs.lstat(next).then(
+    () => true,
+    (error) => error.code !== "ENOENT",
+  );
+  if (leftover) failed.push({ action: "remove-file", path: next, reason: "ledger-busy" });
   return { status: failed.length === 0 ? "clean" : "incomplete", failed };
 }

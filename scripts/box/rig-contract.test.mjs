@@ -18,10 +18,15 @@ import {
 const { events, hooks } = vi.hoisted(() => ({ events: [], hooks: {} }));
 vi.mock("node:fs/promises", async (importOriginal) => {
   const real = await importOriginal();
+  const failIfAsked = (name, path) => {
+    const failure = hooks.fail?.(name, path);
+    if (failure) throw failure;
+  };
   const recorded =
     (name) =>
     async (path, ...rest) => {
       events.push([name, path, ...(name === "rename" ? [rest[0]] : [])]);
+      failIfAsked(name, path);
       return real[name](path, ...rest);
     };
   return {
@@ -41,10 +46,13 @@ vi.mock("node:fs/promises", async (importOriginal) => {
     },
     async open(path, flags, mode) {
       events.push(["open", path, flags]);
+      await hooks.beforeOpen?.(path, flags);
+      failIfAsked("open", path);
       const handle = await real.open(path, flags, mode);
       const sync = handle.sync.bind(handle);
       handle.sync = async () => {
         events.push(["sync", path]);
+        failIfAsked("sync", path);
         return sync();
       };
       return handle;
@@ -55,6 +63,8 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 const roots = [];
 afterEach(async () => {
   delete hooks.afterMkdir;
+  delete hooks.beforeOpen;
+  delete hooks.fail;
   for (const root of roots.splice(0)) {
     await fs.chmod(root, 0o700).catch(() => {});
     await fs.rm(root, { recursive: true, force: true });
@@ -149,13 +159,25 @@ describe("createRun", () => {
     const runDir = join(await scratch(), "run");
     const run = await createRun(runDir);
     const stat = await fs.lstat(runDir, { bigint: true });
-    expect(run).toEqual({ runDir, rootId: `${stat.dev}:${stat.ino}` });
+    expect(run).toEqual({
+      runDir,
+      rootId: `${stat.dev}:${stat.ino}`,
+      runId: expect.stringMatching(/^[0-9a-f]{32}$/),
+    });
     expect(Number(stat.mode) & 0o777).toBe(0o700);
     expect(await fs.readFile(join(runDir, "ledger.json"), "utf8")).toBe(
-      JSON.stringify({ version: 1, runDir, resources: [] }) + "\n",
+      JSON.stringify({ version: 1, runDir, runId: run.runId, resources: [] }) + "\n",
     );
     expect((await fs.lstat(join(runDir, "ledger.json"))).mode & 0o777).toBe(0o600);
     expect(await fs.readdir(runDir)).toEqual(["ledger.json"]);
+  });
+
+  it("two runs made at one path one after the other get different run ids", async () => {
+    const runDir = join(await scratch(), "run");
+    const first = await createRun(runDir);
+    await fs.rm(runDir, { recursive: true });
+    const second = await createRun(runDir);
+    expect(second.runId).not.toBe(first.runId);
   });
 
   it("existing empty folder → run-dir-exists, with its mode unchanged", async () => {
@@ -228,7 +250,8 @@ describe("createRun", () => {
   });
 });
 
-const ledgerText = (runDir, resources) => JSON.stringify({ version: 1, runDir, resources }) + "\n";
+const ledgerText = (runDir, runId, resources) =>
+  JSON.stringify({ version: 1, runDir, runId, resources }) + "\n";
 const readLedgerText = (runDir) => fs.readFile(join(runDir, "ledger.json"), "utf8");
 const freshRun = async () => createRun(join(await scratch(), "run"));
 const fakeAdapter = (failing = new Set()) => {
@@ -253,7 +276,7 @@ describe("withRecorded", () => {
     const run = await freshRun();
     const image = { kind: "image", path: join(run.runDir, "disk.img") };
     const result = await withRecorded(run, image, async () => {
-      expect(await readLedgerText(run.runDir)).toBe(ledgerText(run.runDir, [image]));
+      expect(await readLedgerText(run.runDir)).toBe(ledgerText(run.runDir, run.runId, [image]));
       return "made";
     });
     expect(result).toBe("made");
@@ -270,7 +293,7 @@ describe("withRecorded", () => {
       { kind: "vm", pidFile: join(run.runDir, "vm", "qemu.pid") },
     ];
     for (const resource of resources) await withRecorded(run, resource, () => undefined);
-    expect(await readLedgerText(run.runDir)).toBe(ledgerText(run.runDir, resources));
+    expect(await readLedgerText(run.runDir)).toBe(ledgerText(run.runDir, run.runId, resources));
     expect(await loadLedger(run)).toEqual(resources);
   });
 
@@ -293,7 +316,7 @@ describe("withRecorded", () => {
     expect(await loadLedger(run)).toEqual([image, loop]);
   });
 
-  it("the ledger write fails (ledger.json.next pre-created as a folder) → step never called, ledger unchanged", async () => {
+  it("the lock already taken (ledger.json.next present) → ledger-busy, step never called, ledger unchanged", async () => {
     const run = await freshRun();
     const before = await readLedgerText(run.runDir);
     await fs.mkdir(join(run.runDir, "ledger.json.next"));
@@ -303,13 +326,63 @@ describe("withRecorded", () => {
       withRecorded(run, image, () => {
         called = true;
       }),
-    ).rejects.toMatchObject({ code: "EEXIST" });
+    ).rejects.toThrow(refused("ledger-busy"));
     expect(called).toBe(false);
     expect(await readLedgerText(run.runDir)).toBe(before);
 
     await fs.rmdir(join(run.runDir, "ledger.json.next"));
     await withRecorded(run, image, () => undefined);
     expect(await loadLedger(run)).toEqual([image]);
+  });
+
+  it("the staging file's flush fails → that error, step never called, ledger unchanged, no staging file left", async () => {
+    const run = await freshRun();
+    const before = await readLedgerText(run.runDir);
+    const failure = Object.assign(new Error("EIO: sync"), { code: "EIO" });
+    hooks.fail = (name, path) =>
+      name === "sync" && path === join(run.runDir, "ledger.json.next") ? failure : undefined;
+    let called = false;
+    await expect(
+      withRecorded(run, { kind: "image", path: join(run.runDir, "disk.img") }, () => {
+        called = true;
+      }),
+    ).rejects.toBe(failure);
+    expect(called).toBe(false);
+    expect(await readLedgerText(run.runDir)).toBe(before);
+    expect(await fs.readdir(run.runDir)).toEqual(["ledger.json"]);
+  });
+
+  it.each([
+    ["the run folder's status", "lstat", (dir) => dir],
+    ["a resource path's status", "lstat", (dir) => join(dir, "disk.img")],
+    ["taking the staging file", "open", (dir) => join(dir, "ledger.json.next")],
+    ["opening the ledger", "open", (dir) => join(dir, "ledger.json")],
+    ["the final folder flush", "open", (dir) => dir],
+  ])(
+    "an unexpected error from %s → that same error, step never called",
+    async (_name, call, at) => {
+      const run = await freshRun();
+      const failure = Object.assign(new Error("EACCES: test"), { code: "EACCES" });
+      hooks.fail = (name, path) => (name === call && path === at(run.runDir) ? failure : undefined);
+      let called = false;
+      await expect(
+        withRecorded(run, { kind: "image", path: join(run.runDir, "disk.img") }, () => {
+          called = true;
+        }),
+      ).rejects.toBe(failure);
+      expect(called).toBe(false);
+    },
+  );
+
+  it("two concurrent calls through copies of one run record → the ledger holds both resources", async () => {
+    const run = await freshRun();
+    const first = { kind: "image", path: join(run.runDir, "a.img") };
+    const second = { kind: "image", path: join(run.runDir, "b.img") };
+    await Promise.all([
+      withRecorded(run, first, () => undefined),
+      withRecorded({ ...run }, second, () => undefined),
+    ]);
+    expect(await loadLedger(run)).toEqual([first, second]);
   });
 
   it.each([
@@ -361,7 +434,7 @@ describe("withRecorded", () => {
     const before = await fs.open(ledger, "r");
     try {
       await withRecorded(run, { kind: "image", path: join(run.runDir, "disk.img") }, () => {});
-      expect(await before.readFile("utf8")).toBe(ledgerText(run.runDir, []));
+      expect(await before.readFile("utf8")).toBe(ledgerText(run.runDir, run.runId, []));
       expect((await fs.lstat(ledger)).ino).not.toBe((await before.stat()).ino);
     } finally {
       await before.close();
@@ -385,7 +458,7 @@ describe("withRecorded", () => {
     const run = await freshRun();
     const elsewhere = join(await scratch(), "elsewhere");
     await fs.mkdir(elsewhere);
-    const planted = ledgerText(run.runDir, []);
+    const planted = ledgerText(run.runDir, run.runId, []);
     await fs.writeFile(join(elsewhere, "ledger.json"), planted);
     await fs.rm(run.runDir, { recursive: true });
     await fs.symlink(elsewhere, run.runDir);
@@ -409,6 +482,52 @@ describe("withRecorded", () => {
     ).rejects.toThrow(refused("run-dir-replaced"));
   });
 
+  it("an older run's record over a newer run at the same path, with the folder id matching → run-dir-replaced, ledger unchanged", async () => {
+    const runDir = join(await scratch(), "run");
+    const stale = await createRun(runDir);
+    await fs.rm(runDir, { recursive: true });
+    const current = await createRun(runDir);
+    const before = await readLedgerText(runDir);
+    let called = false;
+    await expect(
+      withRecorded(
+        { ...stale, rootId: current.rootId },
+        { kind: "image", path: join(runDir, "a") },
+        () => {
+          called = true;
+        },
+      ),
+    ).rejects.toThrow(refused("run-dir-replaced"));
+    expect(called).toBe(false);
+    expect(await readLedgerText(runDir)).toBe(before);
+    expect(await fs.readdir(runDir)).toEqual(["ledger.json"]);
+  });
+
+  it("the run folder swapped for a symlink just before the lock is taken → run-dir-replaced at the final folder flush, step never called", async () => {
+    const run = await freshRun();
+    const elsewhere = join(await scratch(), "elsewhere");
+    await fs.mkdir(elsewhere);
+    await fs.copyFile(join(run.runDir, "ledger.json"), join(elsewhere, "ledger.json"));
+    const image = { kind: "image", path: join(run.runDir, "disk.img") };
+    hooks.beforeOpen = async (path) => {
+      if (path !== join(run.runDir, "ledger.json.next")) return;
+      delete hooks.beforeOpen;
+      await fs.rename(run.runDir, `${run.runDir}-moved`);
+      await fs.symlink(elsewhere, run.runDir);
+    };
+    let called = false;
+    await expect(
+      withRecorded(run, image, () => {
+        called = true;
+      }),
+    ).rejects.toThrow(refused("run-dir-replaced"));
+    expect(called).toBe(false);
+    // The staging file and its rename went by path into the symlink's target.
+    expect(await fs.readFile(join(elsewhere, "ledger.json"), "utf8")).toBe(
+      ledgerText(run.runDir, run.runId, [image]),
+    );
+  });
+
   it("a run whose rootId is empty → run-dir-replaced", async () => {
     const run = await freshRun();
     await expect(
@@ -420,7 +539,7 @@ describe("withRecorded", () => {
     ).rejects.toThrow(refused("run-dir-replaced"));
   });
 
-  it("a run folder that was removed → the file system's own error, step never called", async () => {
+  it("a run folder that was removed → run-dir-replaced, step never called", async () => {
     const run = await freshRun();
     await fs.rm(run.runDir, { recursive: true });
     let called = false;
@@ -428,7 +547,7 @@ describe("withRecorded", () => {
       withRecorded(run, { kind: "image", path: join(run.runDir, "a") }, () => {
         called = true;
       }),
-    ).rejects.toMatchObject({ code: "ENOENT" });
+    ).rejects.toThrow(refused("run-dir-replaced"));
     expect(called).toBe(false);
   });
 
@@ -453,7 +572,7 @@ describe("withRecorded", () => {
     expect(await readLedgerText(run.runDir)).toBe(before);
   });
 
-  it("a parent that is a file → the file system's own error, step never called", async () => {
+  it("a parent that is a file → resource-through-symlink, step never called", async () => {
     const run = await freshRun();
     await fs.writeFile(join(run.runDir, "file"), "");
     let called = false;
@@ -461,7 +580,7 @@ describe("withRecorded", () => {
       withRecorded(run, { kind: "image", path: join(run.runDir, "file", "x") }, () => {
         called = true;
       }),
-    ).rejects.toMatchObject({ code: "ENOTDIR" });
+    ).rejects.toThrow(refused("resource-through-symlink"));
     expect(called).toBe(false);
   });
 
@@ -485,6 +604,7 @@ describe("withRecorded", () => {
     const recorded = new Set((await loadLedger(run)).map((resource) => resource.path));
     expect(ran.filter((path) => !recorded.has(path))).toEqual([]);
     expect(recorded.size).toBe(ran.length);
+    expect(results.reduce((sum, result) => sum + result.busy, 0)).toBeGreaterThan(0);
   }, 60_000);
 
   it.each([
@@ -512,16 +632,26 @@ describe.each([
   ["runCleanup", (run) => runCleanup(run, fakeAdapter().adapter)],
 ])("%s checks the run before any file call", (_name, call) => {
   it.each([
-    ["an empty run folder", { runDir: "", rootId: "1:2" }, "run-dir-relative"],
-    ["a relative run folder", { runDir: "tmp/r", rootId: "1:2" }, "run-dir-relative"],
-    ["the root folder", { runDir: "/", rootId: "1:2" }, "run-dir-unsafe"],
-    ["/dev", { runDir: "/dev", rootId: "1:2" }, "run-dir-unsafe"],
-    ["a folder under /dev/", { runDir: "/dev/shm/run", rootId: "1:2" }, "run-dir-unsafe"],
-    ["a folder not in normal form", { runDir: "/tmp/x/../r", rootId: "1:2" }, "run-dir-unsafe"],
+    ["an empty run folder", { runDir: "", rootId: "1:2", runId: "a" }, "run-dir-relative"],
+    ["a relative run folder", { runDir: "tmp/r", rootId: "1:2", runId: "a" }, "run-dir-relative"],
+    ["the root folder", { runDir: "/", rootId: "1:2", runId: "a" }, "run-dir-unsafe"],
+    ["/dev", { runDir: "/dev", rootId: "1:2", runId: "a" }, "run-dir-unsafe"],
+    [
+      "a folder under /dev/",
+      { runDir: "/dev/shm/run", rootId: "1:2", runId: "a" },
+      "run-dir-unsafe",
+    ],
+    [
+      "a folder not in normal form",
+      { runDir: "/tmp/x/../r", rootId: "1:2", runId: "a" },
+      "run-dir-unsafe",
+    ],
     ["no run", undefined, "run-invalid"],
-    ["a run folder that is not text", { runDir: 7, rootId: "1:2" }, "run-invalid"],
-    ["a rootId that is not text", { runDir: "/tmp/r", rootId: 7 }, "run-invalid"],
-    ["an extra key", { runDir: "/tmp/r", rootId: "1:2", extra: 1 }, "run-invalid"],
+    ["a run folder that is not text", { runDir: 7, rootId: "1:2", runId: "a" }, "run-invalid"],
+    ["a rootId that is not text", { runDir: "/tmp/r", rootId: 7, runId: "a" }, "run-invalid"],
+    ["a runId that is not text", { runDir: "/tmp/r", rootId: "1:2", runId: 7 }, "run-invalid"],
+    ["no runId", { runDir: "/tmp/r", rootId: "1:2" }, "run-invalid"],
+    ["an extra key", { runDir: "/tmp/r", rootId: "1:2", runId: "a", extra: 1 }, "run-invalid"],
   ])("%s → refused", async (_case, run, reason) => {
     events.length = 0;
     await expect(call(run)).rejects.toThrow(refused(reason));
@@ -530,13 +660,25 @@ describe.each([
 });
 
 describe("loadLedger", () => {
-  it("a ledger.json that is a symlink to a well-formed ledger → refused without reading it", async () => {
+  it("a ledger.json that is a symlink to a well-formed ledger → ledger-invalid without reading it", async () => {
     const run = await freshRun();
     const elsewhere = join(await scratch(), "ledger.json");
-    await fs.writeFile(elsewhere, ledgerText(run.runDir, []));
+    await fs.writeFile(elsewhere, ledgerText(run.runDir, run.runId, []));
     await fs.rm(join(run.runDir, "ledger.json"));
     await fs.symlink(elsewhere, join(run.runDir, "ledger.json"));
-    await expect(loadLedger(run)).rejects.toMatchObject({ code: "ELOOP" });
+    await expect(loadLedger(run)).rejects.toThrow(refused("ledger-invalid"));
+  });
+
+  it("a missing ledger.json → ledger-invalid", async () => {
+    const run = await freshRun();
+    await fs.rm(join(run.runDir, "ledger.json"));
+    await expect(loadLedger(run)).rejects.toThrow(refused("ledger-invalid"));
+  });
+
+  it("a run folder that was removed → run-dir-replaced", async () => {
+    const run = await freshRun();
+    await fs.rm(run.runDir, { recursive: true });
+    await expect(loadLedger(run)).rejects.toThrow(refused("run-dir-replaced"));
   });
 
   it("a run folder replaced by a symlink to a folder holding a planted ledger → run-dir-replaced", async () => {
@@ -545,69 +687,99 @@ describe("loadLedger", () => {
     await fs.mkdir(elsewhere);
     await fs.writeFile(
       join(elsewhere, "ledger.json"),
-      ledgerText(run.runDir, [{ kind: "image", path: join(run.runDir, "a") }]),
+      ledgerText(run.runDir, run.runId, [{ kind: "image", path: join(run.runDir, "a") }]),
     );
     await fs.rm(run.runDir, { recursive: true });
     await fs.symlink(elsewhere, run.runDir);
     await expect(loadLedger(run)).rejects.toThrow(refused("run-dir-replaced"));
   });
 
+  it("an older run's record over a newer run at the same path, with the folder id matching → run-dir-replaced", async () => {
+    const runDir = join(await scratch(), "run");
+    const stale = await createRun(runDir);
+    await fs.rm(runDir, { recursive: true });
+    const current = await createRun(runDir);
+    await expect(loadLedger({ ...stale, rootId: current.rootId })).rejects.toThrow(
+      refused("run-dir-replaced"),
+    );
+  });
+
   it.each([
     [
       "a ledger edited to name /etc/passwd",
-      (dir) => ledgerText(dir, [{ kind: "image", path: "/etc/passwd" }]),
+      (dir, id) => ledgerText(dir, id, [{ kind: "image", path: "/etc/passwd" }]),
     ],
-    ["a relative path", (dir) => ledgerText(dir, [{ kind: "image", path: "disk.img" }])],
-    ["a path that is not text", (dir) => ledgerText(dir, [{ kind: "image", path: 7 }])],
-    ["an unknown kind", (dir) => ledgerText(dir, [{ kind: "disk", path: `${dir}/a` }])],
-    ["an inherited kind name", (dir) => ledgerText(dir, [{ kind: "toString", path: `${dir}/a` }])],
+    ["a relative path", (dir, id) => ledgerText(dir, id, [{ kind: "image", path: "disk.img" }])],
+    ["a path that is not text", (dir, id) => ledgerText(dir, id, [{ kind: "image", path: 7 }])],
+    ["an unknown kind", (dir, id) => ledgerText(dir, id, [{ kind: "disk", path: `${dir}/a` }])],
+    [
+      "an inherited kind name",
+      (dir, id) => ledgerText(dir, id, [{ kind: "toString", path: `${dir}/a` }]),
+    ],
     [
       "the ledger's staging file",
-      (dir) => ledgerText(dir, [{ kind: "image", path: `${dir}/ledger.json.next` }]),
+      (dir, id) => ledgerText(dir, id, [{ kind: "image", path: `${dir}/ledger.json.next` }]),
     ],
     [
       "an extra resource key",
-      (dir) => ledgerText(dir, [{ kind: "image", path: `${dir}/a`, note: "x" }]),
+      (dir, id) => ledgerText(dir, id, [{ kind: "image", path: `${dir}/a`, note: "x" }]),
     ],
-    ["another run's folder", (dir) => ledgerText(`${dir}-other`, [])],
-    ["runDir missing", () => JSON.stringify({ version: 1, resources: [] }) + "\n"],
+    ["another run's folder", (dir, id) => ledgerText(`${dir}-other`, id, [])],
+    [
+      "runDir missing",
+      (_dir, id) => JSON.stringify({ version: 1, runId: id, resources: [] }) + "\n",
+    ],
+    ["runId missing", (dir) => JSON.stringify({ version: 1, runDir: dir, resources: [] }) + "\n"],
+    ["a runId that is not text", (dir) => ledgerText(dir, 7, [])],
     [
       "version 1 as text",
-      (dir) => JSON.stringify({ version: "1", runDir: dir, resources: [] }) + "\n",
+      (dir, id) => JSON.stringify({ version: "1", runDir: dir, runId: id, resources: [] }) + "\n",
     ],
-    ["version 2", (dir) => JSON.stringify({ version: 2, runDir: dir, resources: [] }) + "\n"],
+    [
+      "version 2",
+      (dir, id) => JSON.stringify({ version: 2, runDir: dir, runId: id, resources: [] }) + "\n",
+    ],
     [
       "an extra top-level key",
-      (dir) => JSON.stringify({ version: 1, runDir: dir, resources: [], extra: 1 }) + "\n",
+      (dir, id) =>
+        JSON.stringify({ version: 1, runDir: dir, runId: id, resources: [], extra: 1 }) + "\n",
     ],
     [
       "resources that are not a list",
-      (dir) => JSON.stringify({ version: 1, runDir: dir, resources: {} }) + "\n",
+      (dir, id) => JSON.stringify({ version: 1, runDir: dir, runId: id, resources: {} }) + "\n",
     ],
     ["null", () => "null\n"],
     ["bytes that are not JSON", () => "{\n"],
-    ["no trailing newline", (dir) => ledgerText(dir, []).trimEnd()],
+    ["no trailing newline", (dir, id) => ledgerText(dir, id, []).trimEnd()],
     [
       "pretty-printed bytes",
-      (dir) => JSON.stringify({ version: 1, runDir: dir, resources: [] }, null, 2) + "\n",
+      (dir, id) =>
+        JSON.stringify({ version: 1, runDir: dir, runId: id, resources: [] }, null, 2) + "\n",
     ],
     [
       "keys in another order",
-      (dir) => JSON.stringify({ runDir: dir, version: 1, resources: [] }) + "\n",
+      (dir, id) => JSON.stringify({ runId: id, runDir: dir, version: 1, resources: [] }) + "\n",
     ],
     [
       "resource keys in another order",
-      (dir) =>
+      (dir, id) =>
         JSON.stringify({
           version: 1,
           runDir: dir,
+          runId: id,
           resources: [{ path: `${dir}/a`, kind: "image" }],
         }) + "\n",
     ],
   ])("refuses %s → ledger-invalid", async (_name, bytes) => {
     const run = await freshRun();
-    await fs.writeFile(join(run.runDir, "ledger.json"), bytes(run.runDir));
+    await fs.writeFile(join(run.runDir, "ledger.json"), bytes(run.runDir, run.runId));
     await expect(loadLedger(run)).rejects.toThrow(refused("ledger-invalid"));
+  });
+
+  it("a ledger naming another run's id → run-dir-replaced", async () => {
+    const run = await freshRun();
+    await fs.writeFile(join(run.runDir, "ledger.json"), ledgerText(run.runDir, "0".repeat(32), []));
+    await expect(loadLedger(run)).rejects.toThrow(refused("run-dir-replaced"));
   });
 });
 
@@ -682,8 +854,53 @@ describe("runCleanup", () => {
     expect(calls.map(([name]) => name)).toEqual(["stopVm", "unmount", "detachLoops", "removeFile"]);
     expect(result).toEqual({
       status: "incomplete",
-      failed: [{ action: "unmount", target: join(run.runDir, "mnt") }],
+      failed: [{ action: "unmount", target: join(run.runDir, "mnt"), reason: "adapter-failed" }],
     });
+  });
+
+  it("a staging file left beside the ledger → incomplete, named with ledger-busy and kept, every step still run", async () => {
+    const run = await freshRun();
+    await recordAll(run);
+    const next = join(run.runDir, "ledger.json.next");
+    await fs.writeFile(next, "partial");
+    const { calls, adapter } = fakeAdapter();
+    const result = await runCleanup(run, adapter);
+    expect(calls).toHaveLength(4);
+    expect(result).toEqual({
+      status: "incomplete",
+      failed: [{ action: "remove-file", path: next, reason: "ledger-busy" }],
+    });
+    expect(await fs.readFile(next, "utf8")).toBe("partial");
+  });
+
+  it("a staging file whose presence cannot be checked → reported like a left one", async () => {
+    const run = await freshRun();
+    const next = join(run.runDir, "ledger.json.next");
+    const failure = Object.assign(new Error("EACCES: test"), { code: "EACCES" });
+    hooks.fail = (name, path) => (name === "lstat" && path === next ? failure : undefined);
+    expect(await runCleanup(run, fakeAdapter().adapter)).toEqual({
+      status: "incomplete",
+      failed: [{ action: "remove-file", path: next, reason: "ledger-busy" }],
+    });
+  });
+
+  it("the ledger replaced by another run's during cleanup → every later step fails unrun with run-dir-replaced", async () => {
+    const run = await freshRun();
+    await recordAll(run);
+    const { calls, adapter } = fakeAdapter();
+    adapter.stopVm = async (path) => {
+      calls.push(["stopVm", path]);
+      const text = await readLedgerText(run.runDir);
+      await fs.writeFile(join(run.runDir, "ledger.json"), text.replace(run.runId, "0".repeat(32)));
+    };
+    const result = await runCleanup(run, adapter);
+    expect(calls).toEqual([["stopVm", join(run.runDir, "qemu.pid")]]);
+    expect(result.status).toBe("incomplete");
+    expect(result.failed.map((step) => [step.action, step.reason])).toEqual([
+      ["unmount", "run-dir-replaced"],
+      ["detach-loops", "run-dir-replaced"],
+      ["remove-file", "run-dir-replaced"],
+    ]);
   });
 
   it("an empty ledger → clean, no adapter calls", async () => {
@@ -697,7 +914,7 @@ describe("runCleanup", () => {
     const run = await freshRun();
     await fs.writeFile(
       join(run.runDir, "ledger.json"),
-      ledgerText(run.runDir, [
+      ledgerText(run.runDir, run.runId, [
         { kind: "image", path: "/etc/passwd" },
         { kind: "mount", target: "/" },
       ]),
@@ -713,7 +930,7 @@ describe("runCleanup", () => {
     await fs.mkdir(elsewhere);
     await fs.writeFile(
       join(elsewhere, "ledger.json"),
-      ledgerText(run.runDir, [{ kind: "image", path: join(run.runDir, "a") }]),
+      ledgerText(run.runDir, run.runId, [{ kind: "image", path: join(run.runDir, "a") }]),
     );
     await fs.rm(run.runDir, { recursive: true });
     await fs.symlink(elsewhere, run.runDir);
@@ -739,7 +956,7 @@ describe("runCleanup", () => {
     );
     expect(result).toEqual({
       status: "incomplete",
-      failed: [{ action: "stop-vm", pidFile: vm.pidFile }],
+      failed: [{ action: "stop-vm", pidFile: vm.pidFile, reason: "resource-through-symlink" }],
     });
   });
 
@@ -750,7 +967,7 @@ describe("runCleanup", () => {
     const { calls, adapter } = fakeAdapter();
     expect(await runCleanup(run, adapter)).toEqual({
       status: "incomplete",
-      failed: [{ action: "unmount", target: mount.target }],
+      failed: [{ action: "unmount", target: mount.target, reason: "resource-through-symlink" }],
     });
     expect(calls).toEqual([]);
   });
@@ -769,18 +986,18 @@ describe("runCleanup", () => {
     const result = await runCleanup(run, adapter);
     expect(calls).toEqual([["stopVm", join(run.runDir, "qemu.pid")]]);
     expect(result.status).toBe("incomplete");
-    expect(result.failed.map((step) => step.action)).toEqual([
-      "unmount",
-      "detach-loops",
-      "remove-file",
+    expect(result.failed.map((step) => [step.action, step.reason])).toEqual([
+      ["unmount", "run-dir-replaced"],
+      ["detach-loops", "run-dir-replaced"],
+      ["remove-file", "run-dir-replaced"],
     ]);
   });
 });
 
 const CHILD = `
-const [moduleUrl, runDir, rootId, tag, count] = process.argv.slice(1);
+const [moduleUrl, runDir, rootId, runId, tag, count] = process.argv.slice(1);
 const { withRecorded } = await import(moduleUrl);
-const run = { runDir, rootId };
+const run = { runDir, rootId, runId };
 const ran = [];
 let busy = 0;
 process.stdout.write("ready\\n");
@@ -792,7 +1009,7 @@ for (let index = 0; index < Number(count); index += 1) {
       await withRecorded(run, { kind: "image", path }, () => { ran.push(path); });
       break;
     } catch (error) {
-      if (error.code !== "EEXIST") throw error;
+      if (error.reason !== "ledger-busy") throw error;
       busy += 1;
       await new Promise((resolve) => setTimeout(resolve, 1));
     }
@@ -805,7 +1022,17 @@ function recordingChild(run, tag, count) {
   const moduleUrl = new URL("./rig-contract.mjs", import.meta.url).href;
   const child = spawn(
     process.execPath,
-    ["--input-type=module", "-e", CHILD, moduleUrl, run.runDir, run.rootId, `p${tag}`, `${count}`],
+    [
+      "--input-type=module",
+      "-e",
+      CHILD,
+      moduleUrl,
+      run.runDir,
+      run.rootId,
+      run.runId,
+      `p${tag}`,
+      `${count}`,
+    ],
     { stdio: ["pipe", "pipe", "inherit"], timeout: 45_000 },
   );
   let output = "";
