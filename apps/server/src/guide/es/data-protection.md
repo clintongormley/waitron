@@ -405,7 +405,10 @@ configuración para poner en marcha otro local.
   guarda una copia programada en un destino, borra de ese destino las copias que pasen de las 7 más
   recientes y las de más de 30 días, salvo que cambies esos ajustes. Antes de una copia, cuando
   al disco del equipo le quedan menos de unos 2 GB libres, o al arrancar con el disco lleno, también puede borrar sus copias más antiguas de las carpetas
-  de ese disco, nunca la más reciente de cada una. Desactivar la copia del bucket o las copias
+  de ese disco, nunca la más reciente de cada una. Durante un tiempo después de que el equipo ponga
+  su propio reloj en hora, conserva las copias fechadas con el reloj equivocado o las borra las
+  últimas; el arranque con el disco lleno aún no lo hace (lo explica [Estado del
+  equipo](box-status.md#free-space)). Desactivar la copia del bucket o las copias
   programadas deja lo que ya está guardado, así que bórralo en tu proveedor, o de la carpeta, cuando
   ya no lo necesites. Todo lo demás: _fijar con tu asesor_.
 - Seguridad: Waitron no cifra la copia del bucket, pero las contraseñas y claves que guarda para tus
@@ -487,7 +490,8 @@ Esto es lo que el panel puede mostrarte.
 
 Waitron no registra quién abrió o leyó un registro en una pantalla, ni la dirección de red desde la
 que llegó un inicio de sesión. La única dirección que toma de la conexión de una petición y guarda
-es la de un dispositivo cuyo reloj ayudó a confirmar el reloj del equipo. Un agente de impresión
+es la de un dispositivo cuyo reloj ayudó a confirmar o poner en hora el reloj del equipo. Un agente
+de impresión
 también comunica al equipo su propia dirección de red, que muestra **Impresoras**.
 
 ## Pérdidas habituales {#breach-losses}

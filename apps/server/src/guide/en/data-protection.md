@@ -373,7 +373,10 @@ own, can also make scheduled backups, and can export your setup to start another
 - How long: the bucket copy keeps a week of history. Each time Waitron stores a scheduled backup in
   a place, it deletes from that place any backup beyond the newest 7 and any older than 30 days,
   unless you change those settings. Before a backup, whenever the box's disk falls under about 2 GB free, or as the box starts with
-  its disk full, the box can also delete its oldest backups in folders on that disk, never the newest in each. Turning off
+  its disk full, the box can also delete its oldest backups in folders on that disk, never the newest in each. For a
+  while after the box sets its own clock, it keeps the backups dated by the wrong clock or deletes
+  them last; the start on a full disk does not do this yet
+  ([Box status](box-status.md#free-space) explains). Turning off
   the bucket copy or the scheduled backups leaves what is already stored, so delete it at your
   provider, or from the folder, when you no longer need it. Anything else: _set with your adviser_.
 - Security: Waitron does not encrypt the bucket copy, but the passwords and keys it keeps for your
@@ -449,7 +452,7 @@ what the dashboard can show you.
 
 Waitron does not record who opened or read a record on a screen, or the network address a sign-in
 came from. The one address it takes from a request's connection and keeps is that of a device whose
-clock helped confirm the box's clock. A print agent also tells the box its own network address,
+clock helped confirm or set the box's clock. A print agent also tells the box its own network address,
 which **Printers** shows.
 
 ## Common losses {#breach-losses}
