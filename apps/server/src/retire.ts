@@ -15,6 +15,7 @@ import {
 } from "@waitron/membership";
 import type { KeyRing } from "@waitron/credentials";
 import { mintNextMembershipDocument } from "./membership-mint.js";
+import { assertHeldDocumentTrusted } from "./membership-trust.js";
 import type { Logger } from "./logger.js";
 
 export interface RetireDeps {
@@ -56,6 +57,10 @@ export async function retireSelf(deps: RetireDeps): Promise<RetireResult> {
   if (servingPrimaryNodeId(held!) === undefined) {
     throw new AppError("node.retire_no_carrier", {});
   }
+
+  // Only a fault in Waitron produces a held chart no stored key vouches for today; a Cloud peer's
+  // charts would be refused here too, a limit the backlog records.
+  await assertHeldDocumentTrusted({ node: deps.node, ring: deps.ring, nodeId: deps.nodeId }, held);
 
   const document = await mintNextMembershipDocument(
     { db: deps.appDb, node: deps.node, ring: deps.ring },

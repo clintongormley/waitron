@@ -21,6 +21,7 @@ import {
   generateNodeKeyPair,
   signDocumentBody,
   verifyMembershipDocument,
+  type MembershipDocumentBody,
   type MembershipNode,
   type NodeStanding,
   type SignedMembershipDocument,
@@ -190,7 +191,48 @@ describe("retireSelf", () => {
     expect(held?.body.term).toBe(3); // no write
     expect(held!.body.nodes.find((n) => n.nodeId === nodeId)?.standing).toBe("sell-only");
   });
+
+  it("refuses to sign over a held document no stored key vouches for, writing nothing", async () => {
+    const { deps, nodeId } = await fencedNode();
+    await writeNodeMembership(db, strangerSigned(fencedBody(nodeId)));
+
+    const err = await captureError(() => retireSelf(deps(noopLog)));
+    expect(isAppError(err) && err.code).toBe("membership.held_untrusted");
+    expect(isAppError(err) && err.params).toEqual({ reason: "untrusted_signer" });
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+  });
+
+  it("still refuses a malformed held document signed by a key no stored key vouches for", async () => {
+    const { deps, nodeId } = await fencedNode();
+    const body = { ...fencedBody(nodeId), revoked: ["gone", "gone"] };
+    await writeNodeMembership(db, strangerSigned(body));
+
+    const err = await captureError(() => retireSelf(deps(noopLog)));
+    expect(isAppError(err) && err.code).toBe("membership.revoked_duplicate");
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+  });
 });
+
+const STRANGER_KEY = generateNodeKeyPair();
+
+function fencedBody(nodeId: string): MembershipDocumentBody {
+  return {
+    term: 3,
+    nodes: [
+      { nodeId, contactUrl: "", standing: "sell-only" },
+      { nodeId: CARRIER_ID, contactUrl: "https://carrier", standing: "serving-primary" },
+    ],
+  };
+}
+
+function strangerSigned(body: MembershipDocumentBody): SignedMembershipDocument {
+  return {
+    body,
+    signerNodeId: "stranger",
+    signature: signDocumentBody(body, STRANGER_KEY.privateKey),
+    endorsements: [],
+  };
+}
 
 function docAtTerm(term: number, nodeId: string): SignedMembershipDocument {
   return signedMembershipDoc(term, {

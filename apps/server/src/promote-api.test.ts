@@ -203,6 +203,16 @@ describe("POST /management-api/promote (two-path auth over the promote closure)"
     }
   });
 
+  it("run's membership.held_untrusted maps to 409", async () => {
+    const run = vi.fn(async (): Promise<PromoteRunResult> => {
+      throw new AppError("membership.held_untrusted", { reason: "untrusted_signer" });
+    });
+    const { app } = appWith(run);
+    const res = await post(app, { oldNodeNeutralised: true, breakGlass: GOOD_SECRET });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe("membership.held_untrusted");
+  });
+
   it("run's promotion.node_fenced maps to 409", async () => {
     const run = vi.fn(async (): Promise<PromoteRunResult> => {
       throw new AppError("promotion.node_fenced", { standing: "sell-only" });

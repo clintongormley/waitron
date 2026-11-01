@@ -982,6 +982,107 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect(await readNodeMembership(db)).toEqual(chartBefore);
   });
 
+  it("refuses to sign over a held document no stored key vouches for, writing nothing", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+    const seedTerm = ((await readNodeMembership(db))?.body.term ?? -1) + 1;
+    await writeNodeMembership(
+      db,
+      signedMembershipDoc(seedTerm, {
+        signerNodeId: "stranger",
+        nodes: [
+          {
+            nodeId: designated.nodeId,
+            contactUrl: "https://box.deli.test",
+            standing: "serving-primary",
+          },
+        ],
+      }),
+    );
+    const chartBefore = await readNodeMembership(db);
+
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      ...validStandby(),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: { code: "membership.held_untrusted", params: { reason: "untrusted_signer" } },
+    });
+    expect(await readNodeMembership(db)).toEqual(chartBefore);
+  });
+
+  it("still refuses a malformed held document signed by a key no stored key vouches for", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+    const seedTerm = ((await readNodeMembership(db))?.body.term ?? -1) + 1;
+    await writeNodeMembership(
+      db,
+      signedMembershipDoc(seedTerm, {
+        signerNodeId: "stranger",
+        nodes: [
+          {
+            nodeId: designated.nodeId,
+            contactUrl: "https://box.deli.test",
+            standing: "serving-primary",
+          },
+        ],
+        revoked: ["gone", "gone"],
+      }),
+    );
+    const chartBefore = await readNodeMembership(db);
+
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      ...validStandby(),
+    });
+
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
+      "membership.revoked_duplicate",
+    );
+    expect(await readNodeMembership(db)).toEqual(chartBefore);
+  });
+
+  it("adds a spare after another spare retired itself", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+    const retired = generateNodeKeyPair();
+    const retiredId = crypto.randomUUID();
+    const endorsement = endorseKey(
+      retiredId,
+      retired.publicKey,
+      designated.nodeId,
+      primaryKeyPair.privateKey,
+    );
+    const seedTerm = ((await readNodeMembership(db))?.body.term ?? -1) + 1;
+    const retirement = signedMembershipDoc(seedTerm, {
+      signerNodeId: retiredId,
+      keyPair: retired,
+      nodes: [
+        {
+          nodeId: designated.nodeId,
+          contactUrl: "https://box.deli.test",
+          standing: "serving-primary",
+        },
+        { nodeId: retiredId, contactUrl: "https://cloud.deli.test", standing: "evicted" },
+      ],
+    });
+    await writeNodeMembership(db, { ...retirement, endorsements: [endorsement] });
+    const standby = validStandby();
+
+    const res = await post(app, { personId: adminPersonId, password: ADMIN_PASSWORD, ...standby });
+
+    expect(res.status).toBe(200);
+    const held = (await readNodeMembership(db))!;
+    expect(held.body.term).toBe(seedTerm + 1);
+    expect(held.signerNodeId).toBe(designated.nodeId);
+    expect(held.body.nodes.map((n) => n.nodeId)).toContain(standby.standbyNodeId);
+  });
+
   describe("a held chart already listing MAX_NODES machines", () => {
     /** This primary and MAX_NODES - 1 others, the first of them `evicted`; returns their ids. */
     async function holdFullChart(

@@ -35,6 +35,7 @@ import {
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { refreshDeploymentHolders, type DeploymentHolders } from "./deployment-holders.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
+import { assertHeldDocumentTrusted } from "./membership-trust.js";
 import { finishPromotedRole } from "./promoted-role.js";
 import type { Logger } from "./logger.js";
 
@@ -141,6 +142,9 @@ export async function promoteLocalSecondaryToPrimary(
 
   const held = await readNodeMembership(deps.db);
   assertNotFenced(held, deps.nodeId);
+  // Only a fault in Waitron produces a held chart no stored key vouches for today; a Cloud peer's
+  // charts would be refused here too, a limit the backlog records.
+  await assertHeldDocumentTrusted(deps, held);
   const document = await mintNextMembershipDocument(
     { db: deps.db, node: deps.node, ring: deps.ring },
     {
@@ -240,6 +244,9 @@ export async function promoteMirrorToPrimary(
 
   const held = await readNodeMembership(deps.db);
   assertNotFenced(held, deps.nodeId);
+  // Only a fault in Waitron produces a held chart no stored key vouches for today; a Cloud peer's
+  // charts would be refused here too, a limit the backlog records.
+  await assertHeldDocumentTrusted(deps, held);
   const document = await mintNextMembershipDocument(
     { db: deps.db, node: deps.node, ring: deps.ring },
     {

@@ -27,6 +27,7 @@ import {
   MAX_CHART_WRITE_ROUNDS,
   mintNextMembershipDocument,
 } from "./membership-mint.js";
+import { assertHeldDocumentTrusted, HELD_DOCUMENT_REFUSALS } from "./membership-trust.js";
 import { withAuthenticatedOperation } from "./operation-authentication.js";
 import { parseStandbyOperationInput } from "./recovery-module-operation.js";
 import type { ModuleOperations } from "@waitron/module";
@@ -58,6 +59,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.standby_removed": 409,
   "mirror.membership_full": 409,
   ...CHART_MINT_REFUSALS,
+  ...HELD_DOCUMENT_REFUSALS,
   "membership.write_contended": 503,
 };
 
@@ -177,6 +179,12 @@ async function appendStandbyToChart(
     const held = await readNodeMembership(deps.appDb);
     refuseRemovedStandby(held, standbyNodeId);
     refuseFullChart(held, standbyNodeId);
+    // Only a fault in Waitron produces a held chart no stored key vouches for today; a Cloud peer's
+    // charts would be refused here too, a limit the backlog records.
+    await assertHeldDocumentTrusted(
+      { node: deps.node, ring: deps.ring, nodeId: deps.designated.nodeId },
+      held,
+    );
     const document = await mintNextMembershipDocument(
       { db: deps.appDb, node: deps.node, ring: deps.ring },
       {

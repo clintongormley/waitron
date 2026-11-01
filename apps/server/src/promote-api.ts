@@ -22,6 +22,7 @@ import type { Logger } from "./logger.js";
 import { TLSSocket } from "node:tls";
 import type { createNodeOperationPreparation } from "./node-operation-preparation.js";
 import { requestFromBox } from "./request-from-box.js";
+import { HELD_DOCUMENT_REFUSALS } from "./membership-trust.js";
 
 /**
  * `restarting` is true only for a real mirror-to-primary promote, which reboots the node; the
@@ -58,6 +59,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "promotion.node_fenced": 409,
   "promotion.membership_superseded": 409,
   ...CHART_MINT_REFUSALS,
+  ...HELD_DOCUMENT_REFUSALS,
 };
 
 function requireNodeOperationHttps(c: Context): void {

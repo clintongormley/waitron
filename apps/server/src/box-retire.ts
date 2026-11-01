@@ -8,6 +8,7 @@ import { CHART_MINT_REFUSALS } from "./membership-mint.js";
 import { requireManagementSession } from "@waitron/server-kit";
 import { createErrorBoundary } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
+import { HELD_DOCUMENT_REFUSALS } from "./membership-trust.js";
 // No `./errors.js` side-effect import: this file throws no code of its own.
 
 export type BoxRetireDeps = {
@@ -33,6 +34,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "node.retire_no_carrier": 409,
   "node.retire_superseded": 409,
   ...CHART_MINT_REFUSALS,
+  ...HELD_DOCUMENT_REFUSALS,
 };
 
 /**

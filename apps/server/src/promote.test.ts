@@ -443,6 +443,41 @@ describe("promoteLocalSecondaryToPrimary", () => {
     expect(isAppError(error) && error.code).toBe("promotion.not_a_local_secondary");
     expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("secondary");
   });
+
+  it("refuses to sign over a held document no stored key vouches for, writing nothing", async () => {
+    const { db, deps, nodeId } = await localSecondary();
+    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "unpinned-old-node"));
+    const error = await captureError(() =>
+      promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
+    );
+    expect(isAppError(error) && error.code).toBe("membership.held_untrusted");
+    expect(isAppError(error) && error.params).toEqual({ reason: "untrusted_signer" });
+    expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("secondary");
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+  });
+
+  it("still refuses a fenced node with promotion.node_fenced when no stored key vouches for its chart", async () => {
+    const { db, deps, nodeId } = await localSecondary();
+    await writeNodeMembership(db, heldFencedDoc(nodeId, "sell-only", "unpinned-carrier"));
+    const error = await captureError(() =>
+      promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
+    );
+    expect(isAppError(error) && error.code).toBe("promotion.node_fenced");
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+  });
+
+  it("still refuses a malformed held document signed by a key no stored key vouches for", async () => {
+    const { db, deps, nodeId } = await localSecondary();
+    const doc = heldTermThreeDoc(nodeId, "unpinned-old-node");
+    const body = { ...doc.body, revoked: ["gone", "gone"] };
+    await writeNodeMembership(db, signedBy("unpinned-old-node", body));
+    const error = await captureError(() =>
+      promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
+    );
+    expect(isAppError(error) && error.code).toBe("membership.revoked_duplicate");
+    expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("secondary");
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+  });
 });
 
 function docAtTerm(term: number, nodeId: string): SignedMembershipDocument {
@@ -880,6 +915,38 @@ describe("promoteMirrorToPrimary", () => {
     });
     expect(held?.signerNodeId).toBe(nodeId);
     expect(held?.endorsements).toEqual([]);
+  });
+
+  it("refuses to sign over a held document no stored key vouches for, writing nothing", async () => {
+    const { db, deps, nodeId } = await mirror();
+    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "unpinned-old-primary"));
+    const persist = vi.fn(async () => {});
+    const err = await captureError(() =>
+      promoteMirrorToPrimary(deps(noopLog, persist), { oldNodeNeutralised: true }),
+    );
+    expect(isAppError(err) && err.code).toBe("membership.held_untrusted");
+    expect(isAppError(err) && err.params).toEqual({ reason: "untrusted_signer" });
+    expect(persist).not.toHaveBeenCalled();
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+    expect(await readNodeMode(suite.node, nodeId)).toEqual({
+      mode: "mirror",
+      singletonRole: "secondary",
+    });
+  });
+
+  it("still refuses a malformed held document signed by a key no stored key vouches for", async () => {
+    const { db, deps, nodeId } = await mirror();
+    const doc = heldTermThreeDoc(nodeId, "unpinned-old-primary");
+    const body = { ...doc.body, revoked: ["gone", "gone"] };
+    await writeNodeMembership(db, signedBy("unpinned-old-primary", body));
+    const persist = vi.fn(async () => {});
+    const err = await captureError(() =>
+      promoteMirrorToPrimary(deps(noopLog, persist), { oldNodeNeutralised: true }),
+    );
+    expect(isAppError(err) && err.code).toBe("membership.revoked_duplicate");
+    expect(persist).not.toHaveBeenCalled();
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+    expect((await readNodeMode(suite.node, nodeId)).mode).toBe("mirror");
   });
 
   it("reports a held term of -1 when the refused membership write leaves no chart held at all", async () => {

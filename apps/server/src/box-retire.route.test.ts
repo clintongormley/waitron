@@ -8,6 +8,7 @@ import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/te
 import { planVenue } from "@waitron/provisioning";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import {
+  generateNodeKeyPair,
   signDocumentBody,
   type MembershipNode,
   type SignedMembershipDocument,
@@ -210,6 +211,34 @@ describe("POST /api/box/retire", () => {
     });
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: { code: "membership.revoked_duplicate" } });
+    expect((await readNodeMembership(suite.db))?.body.term).toBe(5);
+  });
+
+  it("409 membership.held_untrusted when no stored key vouches for the held chart", async () => {
+    const body = {
+      term: 5,
+      nodes: [
+        { nodeId, contactUrl: "", standing: "sell-only" as const },
+        {
+          nodeId: CARRIER_NODE_ID,
+          contactUrl: "https://carrier",
+          standing: "serving-primary" as const,
+        },
+      ],
+    };
+    await writeNodeMembership(suite.db, {
+      signerNodeId: CARRIER_NODE_ID,
+      signature: signDocumentBody(body, generateNodeKeyPair().privateKey),
+      endorsements: [],
+      body,
+    });
+    const app = buildApp(nodeId);
+    const res = await app.request("/api/box/retire", {
+      method: "POST",
+      headers: { cookie: managerCookie },
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "membership.held_untrusted" } });
     expect((await readNodeMembership(suite.db))?.body.term).toBe(5);
   });
 
