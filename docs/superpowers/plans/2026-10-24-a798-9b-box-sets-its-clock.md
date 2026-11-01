@@ -3343,7 +3343,14 @@ on a clock that never moved for five of the six jobs.
   (`backup-schedule.test.ts`, "a later day start puts a Sunday automatic fire over 8 days ahead").
   The bound is checked by walking `nextFireMs` from fire to fire, where a fire is furthest ahead,
   across both changes of the clocks, for six day sets, four times of day and four clocks. A fire
-  further ahead than the bound is worked out again at the next wake (within the hour), never shifted.
+  further ahead than the bound is worked out again at the next wake (within the hour), never shifted,
+  and only when the clock reads earlier than when the fire was worked out: the review found a zone
+  whose clocks change by two hours (Antarctica/Troll) puts an automatic fire 54 minutes past the
+  bound with no step, and the bound alone then worked it out again without ever sleeping.
+- **The backup "overdue" alert** (review I1, predates the branch) passes over a local folder's archive
+  stamped further ahead than the overdue limit and judges the newest one that is not.
+- **A duty's re-sweep** later than its longest wait is enqueued at that limit (review M5), so a duty
+  that declares less than it asks for is not run at every tick.
 - **The office printer's "unclaimed" alert** reports a queued A4 copy stamped further ahead than the
   longest retry wait at once, dated now: the pick now hands such a copy out, so it is due, and when
   it became due is unknown. Treating it as due now and then waiting two minutes would never raise it,
@@ -3352,7 +3359,11 @@ on a clock that never moved for five of the six jobs.
   the worker's eligible read, as invoice deliveries do; its 15-minute wait is the only retry wait.
   A claim taken more than 60 seconds ahead ends `unknown`, never resent, as an abandoned claim does.
 - **The grep** (`nowIso()` and `Date.now` not followed by `(`, non-test source under `apps/` and
-  `packages/`) found no `nowIso()` used in a comparison: every hit stamps a write. Of the `Date.now`
+  `packages/`) found `nowIso()` in a comparison only in a sighting the "Device last seen" row accepts
+  (`till-session.ts`, `device-session.ts`, `packages/printing/src/agent.ts`) and one ordering guard
+  (`floor-today-parts.ts`, `latest.joinedAt > now`, safe); every other hit stamps a write. It cannot
+  see a clock wrapped as `() => Date.now()`, which is how the print agent's loop gets `host.now`
+  (Task 15c-5). Of the `Date.now`
   defaults, the PIN, account-action, device-join and pairing limiters were done in 15c-2 and 15c-3.
   New: printer address probes (`printer-probes.ts`, fixed here) and the print agent's Bluetooth
   recheck and paired-device reuse (`apps/print-agent/src/linux-devices.ts`) and server certificate
@@ -3365,8 +3376,13 @@ on a clock that never moved for five of the six jobs.
 The rule of Task 15c, test first, for three in-memory limits in `apps/print-agent/src`: the Bluetooth
 recheck (`linux-devices.ts`, `recheckDue`, `BLUETOOTH_RECHECK_MS`), paired-device reuse
 (`PAIRED_REUSE_MS`, a reuse decided from a start time further ahead than its limit is not a reuse)
-and the server certificate refetch (`server-ca.ts`, `lastFetchAt` against its interval). Each gets
-its failing case, a control just inside the limit and a deletion control. Read, not run, when added.
+and the server certificate refetch (`server-ca.ts`, `lastFetchAt` against its interval). Three more
+in the agent's own loop, `packages/print-agent/src/agent.ts`, on `host.now` (`() => Date.now()` in
+`apps/print-agent/src/host.ts`), found by Task 15c-4's review: the next discovery scan (`nextScanAt`;
+after a 400-day step back no scan ran, so a printer being added is never found until a restart), a
+network reset asked for (`resetAt`), and giving up an unsent page report (`aliveAt` against
+`PAGE_REPORT_GIVE_UP_MS`). Each gets its failing case, a control just inside the limit and a
+deletion control. The first three were read, not run, when added.
 
 ### Task 15's departures and notes (2026-10-31)
 
