@@ -84,7 +84,7 @@ import { DEMO_PRINTER_KEY } from "./demo-printer.js";
 import { setPrinterPortable } from "@waitron/layouts";
 import { readPrinterHolders } from "./device-equipment.js";
 import { deletePrinter, readPrinterDeleteImpact } from "./printer-delete.js";
-import { DISCOVERED_TTL_MS, isListed as listedAt } from "./discovery-listing.js";
+import { DISCOVERED_TTL_MS, isListed as listedAt, withinTtl } from "./discovery-listing.js";
 import { mountPagePrintersApi, type PagePrinterQueue } from "./page-printers-api.js";
 import type { PagePrinterDiscovery } from "./page-printers.js";
 import { mountPagePrintApi, type RenderInvoicePage } from "./page-print-api.js";
@@ -478,10 +478,14 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   let discoveryUntil = 0; // epoch ms; 0 = closed
   const DISCOVERY_WINDOW_MS = 3 * 60_000;
   const isFresh = (at: number | undefined, now: number): boolean =>
-    at !== undefined && now - at <= DISCOVERED_TTL_MS;
+    withinTtl(at, now, DISCOVERED_TTL_MS);
+  /** 0 when closed; a window ending further ahead than its length was opened before a backward
+   * step of the clock, so it is closed. */
+  const openDiscoveryUntil = (now: number): number =>
+    discoveryUntil - now > DISCOVERY_WINDOW_MS ? 0 : discoveryUntil;
   /** The discovered list's own freshness, which also bounds the Pair and Forget it offers. */
   const isListed = (at: number | undefined, now: number): boolean =>
-    listedAt(at, now, discoveryUntil);
+    listedAt(at, now, openDiscoveryUntil(now));
   const keyOf = (agentId: string, transport: string, locator: string): string =>
     `${agentId}:${transport}:${locator}`;
   const queueKeyOf = (device: DiscoveredDeviceWire): string | undefined => {
@@ -718,6 +722,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const held = await deps.readMembership();
       const networkProbes = printerProbes.current();
       const commands = bluetoothCommands.current(agentId);
+      const repliedAt = Date.now();
+      const until = openDiscoveryUntil(repliedAt);
       return c.json({
         nodeId: deps.cfg.nodeId,
         servers: routableServers(held),
@@ -731,7 +737,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           payload: Buffer.from(job.payload).toString("base64"),
           ...(job.invoiceClaim === undefined ? {} : { invoiceClaim: job.invoiceClaim }),
         })),
-        discoveryUntil: discoveryUntil > Date.now() ? discoveryUntil : null,
+        discoveryUntil: until > repliedAt ? until : null,
         ...(networkProbes.length ? { networkProbes } : {}),
         ...(commands.length ? { bluetoothCommands: commands } : {}),
       });
@@ -1037,7 +1043,10 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       db: deps.db,
       locationId: deps.cfg.locationId,
       findDiscovery: findPagePrinterDiscovery,
-      discoveryWindow: () => ({ now: Date.now(), discoveryUntil }),
+      discoveryWindow: () => {
+        const now = Date.now();
+        return { now, discoveryUntil: openDiscoveryUntil(now) };
+      },
       testPages,
       ...(deps.now === undefined ? {} : { now: deps.now }),
     },

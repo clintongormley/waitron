@@ -212,6 +212,32 @@ describe("createServerTrustingFetch", () => {
     expect(responder.calls.length).toBe(2);
   });
 
+  // Fetched at 0; a clock read earlier than an hour before that leaves the last fetch further
+  // ahead than the interval.
+  it.each([
+    ["400 days back", -400 * 86_400_000, 2],
+    ["an hour back exactly", -60 * 60 * 1000, 1],
+    ["a millisecond past an hour back", -60 * 60 * 1000 - 1, 2],
+  ])(
+    "refetches when the last fetch lies further ahead than the hour (%s)",
+    async (_case, steppedTo, fetches) => {
+      const material = mintCa("localhost");
+      const { server, origin } = await startHttps(material);
+      servers.push(server);
+      let clock = 0;
+      const responder = caResponder(mintCa("localhost").caPem);
+      const trusting = await createServerTrustingFetch({
+        serverUrl: origin,
+        stateDir,
+        caEndpointFetch: responder.fetch,
+        now: () => clock,
+      });
+      clock = steppedTo;
+      await expect(trusting(`${origin}/x`)).rejects.toThrow();
+      expect(responder.calls.length).toBe(fetches);
+    },
+  );
+
   it("is a pass-through for an http server URL (no CA to fetch)", async () => {
     const base = (async () => new Response("plain", { status: 200 })) as typeof fetch;
     const responder = caResponder("unused");

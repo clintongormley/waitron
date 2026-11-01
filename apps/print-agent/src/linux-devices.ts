@@ -111,7 +111,11 @@ export function createLinuxDevices(
     });
     return listing;
   };
-  const recheckDue = (): boolean => now() - listedAt >= BLUETOOTH_RECHECK_MS;
+  // Also due when the last listing started further ahead than the interval: the clock stepped back.
+  const recheckDue = (): boolean => {
+    const at = now();
+    return at - listedAt >= BLUETOOTH_RECHECK_MS || listedAt - at > BLUETOOTH_RECHECK_MS;
+  };
 
   const usb = (): Promise<UsbPrinter[]> => readUsbPrinters(sysfsRoot, devRoot);
 
@@ -129,10 +133,14 @@ export function createLinuxDevices(
   // runs a listing of its own rather than joining one already running.
   const pairedFor = async (mac: string | null): Promise<LocalDevice[]> => {
     const recent = recentPaired;
+    const age = recent === undefined ? -1 : now() - recent.startedAt;
+    // A listing started ahead of the clock predates a backward step, so a forget made since can
+    // carry an earlier time than the listing's start.
     const reusable =
       recent !== undefined &&
       recent.startedAt > forgottenAt &&
-      now() - recent.startedAt < PAIRED_REUSE_MS &&
+      age >= 0 &&
+      age < PAIRED_REUSE_MS &&
       recent.devices.some((d) => d.mac === mac);
     return toLocal(reusable ? recent.devices : await listPaired());
   };

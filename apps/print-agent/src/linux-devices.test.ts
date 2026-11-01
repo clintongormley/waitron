@@ -4,7 +4,12 @@ import { delimiter, join } from "node:path";
 import type { BluetoothHost } from "./bluetooth.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DiscoveredDevice, WireJob } from "@waitron/print-agent";
-import { PAIRED_REUSE_MS, buildPdlQuery, createLinuxDevices } from "./linux-devices.js";
+import {
+  BLUETOOTH_RECHECK_MS,
+  PAIRED_REUSE_MS,
+  buildPdlQuery,
+  createLinuxDevices,
+} from "./linux-devices.js";
 
 // A one-printer usblp sysfs tree (the real box's identity), so USB discovery is real in these
 // composition tests while Bluetooth/network are injected fakes.
@@ -347,6 +352,31 @@ describe("createLinuxDevices — pairedBluetooth()", () => {
     expect(paired).toHaveBeenCalledTimes(1);
   });
 
+  // Listed at 0; a clock read earlier than one recheck interval before that leaves the listing's
+  // start further ahead than the interval.
+  it.each([
+    ["400 days back", -400 * 86_400_000, 2],
+    ["the interval back exactly", -BLUETOOTH_RECHECK_MS, 1],
+    ["a millisecond past the interval back", -BLUETOOTH_RECHECK_MS - 1, 2],
+  ])(
+    "rechecks an unavailable side whose last listing started further ahead than the interval (%s)",
+    async (_case, steppedTo, listings) => {
+      let clock = 0;
+      const paired = vi.fn(async () => {
+        throw new Error("No default controller available");
+      });
+      const devices = createLinuxDevices({
+        sysfsRoot: root,
+        now: () => clock,
+        bluetooth: fakeBluetooth({ paired }),
+      });
+      await devices.checkBluetooth();
+      clock = steppedTo;
+      await devices.checkBluetooth();
+      expect(paired).toHaveBeenCalledTimes(listings);
+    },
+  );
+
   it("joins a listing already running rather than starting a second", async () => {
     let release!: (v: { mac: string }[]) => void;
     const paired = vi.fn(
@@ -616,6 +646,31 @@ describe("createLinuxDevices — resolve() against a recent paired listing", () 
   it("lists again after this agent forgets a printer, so the forgotten one is not attached", async () => {
     const { devices, paired, poll, advance } = setup([[{ mac: PRINTER }], []]);
     await poll();
+    await devices.forgetBluetooth(PRINTER);
+    advance(1);
+    await expect(devices.resolve(job(PRINTER))).rejects.toThrow(`device ${PRINTER} not attached`);
+    expect(paired).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ["400 days back", -400 * 86_400_000],
+    ["a millisecond back", -1],
+  ])(
+    "lists again when the poll's listing started ahead of the clock (%s)",
+    async (_case, steppedTo) => {
+      const { devices, paired, poll, advance } = setup([[{ mac: PRINTER }], []]);
+      await poll();
+      advance(steppedTo);
+      await expect(devices.resolve(job(PRINTER))).rejects.toThrow(`device ${PRINTER} not attached`);
+      expect(paired).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("lists again after a forget made once the clock stepped back behind the poll's listing", async () => {
+    const { devices, paired, poll, advance } = setup([[{ mac: PRINTER }], []]);
+    advance(5_000);
+    await poll();
+    advance(-3_000);
     await devices.forgetBluetooth(PRINTER);
     advance(1);
     await expect(devices.resolve(job(PRINTER))).rejects.toThrow(`device ${PRINTER} not attached`);

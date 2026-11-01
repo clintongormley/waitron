@@ -3384,6 +3384,22 @@ network reset asked for (`resetAt`), and giving up an unsent page report (`alive
 `PAGE_REPORT_GIVE_UP_MS`). Each gets its failing case, a control just inside the limit and a
 deletion control. The first three were read, not run, when added.
 
+### Task 15c-5's notes (2026-11-01)
+
+- **Two more in the agent's loop, and two on the server.** The loop's address checks (`networkProbes`,
+  received with their own length and kept while out of touch) end once their end lies further ahead
+  than that length. Tracing the loop's discovery window to its source found the server's own window
+  (`print-api.ts`, three minutes, not the pairing window): one ending further ahead than its length
+  is shut, so agents stop scanning; and the discovered list's reports (`isListed`, `isFresh`) count
+  as fresh only within their limit on either side, since a stale report authorises Pair and Forget.
+- **A paired listing started ahead of the clock at all is not reused** (stricter than the rule): a
+  forget made after a small step back carries an earlier time than a listing started before it, so
+  the "started after the last forget" check would reuse a listing that still holds the forgotten
+  printer. Refusing costs one listing.
+- **Not changed:** `ipp-probe.ts` already drops an answer checked ahead of the clock; `dev.ts`'s
+  listen deadline is development-only; the setup page's reset countdown reads the snapshot, and the
+  reset now runs on the next tick.
+
 ### Task 15's departures and notes (2026-10-31)
 
 - **Stream generations: no hold; the prune reads the bucket's clock** (Task 15's review, I2). The

@@ -1032,6 +1032,30 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
     expect((await pull(app, token)).discoveryUntil).toBe(discoveryUntil);
   });
 
+  // Opened at T for three minutes; a clock read earlier than T leaves its end further ahead than
+  // its length.
+  it.each([
+    ["400 days back", 400 * 86_400_000, false],
+    ["its length ahead exactly", 0, true],
+    ["a millisecond past its length", 1, false],
+  ])(
+    "shuts a discovery window whose end lies further ahead than its length (%s)",
+    async (_case, stepBack, open) => {
+      const app = mountApp();
+      const { token } = await joinAndAccept(app);
+      const start = await send(app, "POST", "/management-api/printer-discovery/start", {
+        cookie: managerCookie,
+      });
+      const { discoveryUntil } = (await start.json()) as { discoveryUntil: number };
+      const now = vi.spyOn(Date, "now").mockReturnValue(discoveryUntil - 3 * 60_000 - stepBack);
+      try {
+        expect((await pull(app, token)).discoveryUntil).toBe(open ? discoveryUntil : null);
+      } finally {
+        now.mockRestore();
+      }
+    },
+  );
+
   /** A session of its own, so ageing it cannot expire the shared manager cookie. */
   async function ownManagerSession(
     minutesIdle: number,
