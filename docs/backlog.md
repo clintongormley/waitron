@@ -189,6 +189,7 @@ under `docs/backlog/`.
   sign-in, Stop and explicit copy at the action. It does not repair network/configuration
   problems or a persistent external refusal. Design the applicable repair choices without
   treating an HTTP status, another check or a completed query as proof of the cause.
+  Keep the installed certificate until a replacement passes its checks.
   [Remaining workflow](backlog/self-service-refusals.md#certificate).
 
 - **A1089: reconciliation alerts need a production caller and an evidence/decision route.** The
@@ -5758,6 +5759,10 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 - **A1251: reject conditional error tolerance in artifact-download guards.**
   The scanner accepts a retry with `continue-on-error: ${{ true }}` while rejecting literal
   `true`. Add refusal cases and retain legitimate absent/false controls. [Detail](backlog/ci.md#a1251-reject-conditional-error-tolerance-in-artifact-download-guards).
+
+- **The deadline command can exit successfully without running its child through a directory symlink.**
+  Qualify its entrypoint check with symlink and physical-path controls, then make both run the
+  child. [Observed reproduction](backlog/ci.md#deadline-command-through-a-directory-symlink).
 
 - **A1242: qualify publishing after reused CI and the differing-tree fallback on real main pushes.**
   Retain real main run ids proving publication after reuse and the full suite after an unequal-tree

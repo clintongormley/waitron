@@ -1144,3 +1144,17 @@ Retain whole-job, test-step and per-file times when a job exceeds the target.
 Use those measurements to choose further packing or suite-setup work while
 preserving every behavioural assertion. The measurements above do not establish
 a cause for every over-budget group.
+
+
+## Deadline command through a directory symlink
+
+On 1 November 2026, A1251's local control invoked `scripts/run-with-deadline.mjs` through a
+symlinked temporary checkout. It returned status 0 with no child output. The same command
+through the physical path returned status 0 and printed `CHILD_RAN`. An explicit directory
+symlink reproduced the same pair; the initial blank test logs were discarded as invalid evidence.
+
+The command was `node <checkout>/scripts/run-with-deadline.mjs 5 -- node -e
+'console.log("CHILD_RAN")'`. Its CLI check compares `import.meta.url` with
+`pathToFileURL(process.argv[1]).href`; those paths differed in the observed symlink invocation.
+Make entrypoint detection account for the physical path and retain both controls. This finding
+was recorded separately from the certificate-test repair; the wrapper is unchanged.
