@@ -254,7 +254,10 @@ describe("populated A10-3 response-table upgrade", () => {
       heads: JSON.stringify(
         db
           .execute<Record<string, unknown>>(sql`select * from workforce_chains`)
-          .rows.map(({ location_id: _, ...head }) => head),
+          .rows.map((head) => {
+            delete head.location_id;
+            return head;
+          }),
       ),
       questions: JSON.stringify(db.execute(sql`select * from attendance_questions`).rows),
       mail: JSON.stringify(db.execute(sql`select * from attendance_mail`).rows),

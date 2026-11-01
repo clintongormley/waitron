@@ -130,9 +130,8 @@ describe("migrating a node whose entries are all at one location", () => {
     const node = await seedNode(suite.db, brandLocationId(place));
     await seedChain(suite.db, { personId, locationId: place, nodeId: node }, ["in", "out"]);
     const entriesBefore = rows(suite.db, "time_entries");
-    const [{ location_id: _, ...headBefore }] = rows(suite.db, "workforce_chains") as [
-      Record<string, unknown>,
-    ];
+    const [headBefore] = rows(suite.db, "workforce_chains") as [Record<string, unknown>];
+    delete headBefore.location_id;
     const triggersBefore = schemaFacts(suite.db).timeEntryTriggers;
     expect(triggersBefore).not.toEqual([]);
 
