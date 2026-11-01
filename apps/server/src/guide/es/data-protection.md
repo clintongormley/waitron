@@ -406,7 +406,7 @@ configuración para poner en marcha otro local.
   recientes y las de más de 30 días, salvo que cambies esos ajustes. Antes de una copia, cuando
   al disco del equipo le quedan menos de unos 2 GB libres, o al arrancar con el disco lleno, también puede borrar sus copias más antiguas de las carpetas
   de ese disco, nunca la más reciente de cada una. Durante un tiempo después de que el equipo ponga
-  su propio reloj en hora, conserva las copias fechadas con el reloj equivocado o las borra las
+  su propio reloj en hora, conserva algunas de las copias fechadas con el reloj equivocado o las borra las
   últimas; el arranque con el disco lleno aún no lo hace (lo explica [Estado del
   equipo](box-status.md#free-space)). Desactivar la copia del bucket o las copias
   programadas deja lo que ya está guardado, así que bórralo en tu proveedor, o de la carpeta, cuando

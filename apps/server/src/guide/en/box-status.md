@@ -113,9 +113,9 @@ it has room to start and, once it is running, tells you on the bell and by
 [email](box-status.md#emails), as it does for the others.
 
 A backup's date comes from the box's clock when it was made. So for a while after the box [sets
-its own clock](box-status.md#clock-behind), the box keeps every backup made before the change when
-it deletes old backups, and deletes those backups last when it makes room, after the ones made
-since. This lasts as many days as backups are kept, and covers only changes the box made itself,
+its own clock](box-status.md#clock-behind), when the box deletes old backups it keeps the newest of
+the backups made before the change, as many as it keeps of the others, besides those it keeps as
+usual; and when it makes room, it deletes the backups made before the change last. This lasts as many days as backups are kept, and covers only changes the box made itself,
 not one its time service made. The start on a full disk does not do this yet: it still deletes by
 the dates in the backups' names.
 
@@ -167,15 +167,16 @@ whether it is **Kept in time over the internet** or **Not kept in time over the 
 [its time service](box-status.md#clock-service) explains.
 
 While the box is running, a stop like this is also an alert in the bell and an
-[email](box-status.md#emails) to everyone who can manage the system, administrators included. Both
-say that an administrator can set the clock from their own phone or computer on this page, and, if
-the box has just started, that any staff member can do it from a till.
+[email](box-status.md#emails) to everyone who can manage the system, administrators included. The
+bell sends you to this page. The email says that an administrator can set the clock from their own
+phone or computer on this page, and, if the box has just started, that any staff member can do it
+from a till.
 
 There are three ways out:
 
 - **Set the clock right.** On a box that keeps its clock in time over the internet, connecting it to
-  the internet lets it correct the clock by itself. Otherwise the box sets its clock from the tax
-  agency's time by itself when it can reach the tax agency, an administrator can set it from their
+  the internet lets it correct the clock by itself. Otherwise a box that sends records to the tax
+  agency sets its clock from the tax agency's time by itself when it can reach it, an administrator can set it from their
   own phone or computer, and just after a start a staff member can set it from a till, as the
   paragraphs below explain. This ends the stop unless the latest sale itself carries a wrong, later
   time.
@@ -206,7 +207,8 @@ either. There is no limit on how far behind the last sale the box's clock may be
 While the box waits, the **Clock** row says **Waiting for proof that the clock is right: the tax
 agency's time (when the box sends it records), or two tills or handhelds.** Once the proof is in, it
 says **Proof found: payments restart within a few seconds.**, and the box takes payments again
-within about 15 seconds.
+within about 15 seconds. [Just after a start](box-status.md#clock-at-start), two devices alone do
+not restart payments, even though the row says this; a person confirms the time instead.
 
 Sometimes the other clocks say the opposite: two or more tills or handhelds agree with each other
 that the box's clock is more than a minute off, or the tax agency's time disagrees with it during
@@ -214,7 +216,7 @@ the stop. The row then lists each clock that disagrees, for example **Tax agency
 (checked 2026-10-23 21:12)** or **Bar till: does not match (read 2026-10-23 21:13)**, and says
 **Other clocks say the box's clock is wrong.** A clock that has answered both ways is listed once,
 by its latest answer. Nothing can confirm
-the clock, not even an administrator. The tax agency's answer counts first: when it agrees with the
+the clock, not even an administrator; it can only be set. The tax agency's answer counts first: when it agrees with the
 box, disagreeing devices do not hold payments back. The box keeps the tax agency's disagreement
 only in its memory, so it forgets it if the box itself restarts during the stop; while the tax
 agency still disagrees, it comes back with the next answer.
@@ -354,25 +356,26 @@ staff member can set or confirm the clock from a till, so that the venue does no
 administrator. A restart of the box counts as a start, whether after a power cut, an update or by
 hand.
 
-About 15 to 20 seconds after the start, once the box has asked the tax agency and had no answer,
-every till and handheld where someone is signed in ends its red clock line with **Check the time**
-instead of **Tell a manager**. On a box whose clock reads before 28 October 2024, or one that does
-not send records to the tax agency, it does so straight away. Any staff member signed in on the
+The time from the start until the clock no longer stops payments is called start-up here. Within about
+half a minute of the start, once the box has asked the tax agency and had no answer, every till
+and handheld where someone is signed in ends its red clock line with **Check the time** instead of
+**Tell a manager**. On a box whose clock reads before 28 October 2024, or one that does not send
+records to the tax agency, it does so at the till's next check, within about 15 seconds. Any staff member signed in on the
 till can press it; it needs no permission. The [till notices guide](till-notices.md#notices) says
 what the till's dialog shows and what each button does.
 
 The till sends its own time. When it is more than a minute from the box's, the box sets its clock
 to it; when it is within a minute, the box keeps its clock, and payments restart on it. Either way
-the bell and the email name the staff member and the till, and the **Clock** row says what
-confirmed the clock. Other devices that disagree with the till do not stop this: their readings are
-kept with the record. Two tills or handhelds that agree with the box do not restart payments on
-their own while start-up lasts; a person confirms instead.
+the bell and the email name the staff member and the till. When the till's time is used, other
+devices' readings do not stop it. When the till agrees with the box, two devices that disagree
+with the box stop the confirmation, and the dialog says why. Two tills or handhelds that agree
+with the box do not restart payments on their own during start-up; a person confirms instead.
 
-Start-up ends as soon as the box finds its clock is no longer stopped. From then on, a staff member
-can no longer set the clock from a till. If the clock stops payments again while the box is
-running, the till offers nothing, and an administrator sets the clock from this page, or from a
-till by signing in there as an administrator from the till's dialog. If the tax agency answers
-while the till is offered, the offer ends and the box uses the tax agency's time itself.
+Start-up ends as soon as the box finds that the clock no longer stops payments. From then on, a
+staff member can no longer set the clock from a till. If payments stop for the clock again while
+the box is running, the tills offer nothing: an administrator sets the clock from this page on
+their own phone or computer. If the tax agency answers while **Check the time** is offered, the
+offer ends and the box uses the tax agency's time itself.
 
 ## The box's time service {#clock-service}
 
@@ -392,7 +395,7 @@ system. The warning comes by the bell only, not by email, and says why:
   answering. If the box can reach the internet, its time service may still keep the clock right by
   itself.** Only a live venue's box says this; a laptop or a test box stays silent.
 
-Each warning asks you to look at the box's date and time on this page. While the service is not
+Each warning but the last asks you to look at the box's date and time on this page. While the service is not
 keeping the clock right, the box can still set its own clock during a stop, as [When payments stop
 because of the clock](box-status.md#clock-behind) explains. While the part of the box that sets
 its clock is not answering, it cannot: the box can then only confirm a clock that is already right.

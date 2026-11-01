@@ -65,7 +65,7 @@ Lo que hay que hacer después depende de cómo se cobró la tarjeta:
   Dividir a partes iguales):** el pago queda pendiente, y el equipo lo registra por sí solo cuando
   se puede volver a cobrar.
 
-Con internet, el equipo corrige su reloj por sí solo con la hora de Hacienda. Si no, un
+Con internet, el equipo normalmente corrige su reloj por sí solo. Si no, un
 administrador pone o confirma la hora en la [página Estado del equipo](box-status.md#clock-behind)
 con su propio móvil u ordenador, nunca desde la pantalla del propio equipo. Justo después de que el
 equipo arranque, cualquier empleado puede hacerlo desde una caja con **Comprobar la hora**, como se
@@ -93,8 +93,8 @@ ajustes de la caja y vuelve a comprobarlo.
 
 En los dos casos, se avisa a todos los encargados de quién confirmó la hora y desde qué caja. Si el
 equipo se niega, el diálogo dice por qué encima de sus botones y, cuando volver a intentarlo puede
-servir, ofrece **Comprobar otra vez**. Cuando el equipo lleva en marcha desde la última vez que su
-reloj estaba bien, un empleado ya no puede ponerlo en hora desde una caja: el diálogo lo dice y
+servir, ofrece **Comprobar otra vez**. Si el [arranque](box-status.md#clock-at-start) del equipo termina con el
+diálogo abierto, un empleado ya no puede poner el reloj en hora desde una caja: el diálogo lo dice y
 ofrece **Acceso de administrador**, para que un administrador inicie sesión ahí con su PIN y ponga
 la hora desde la misma caja.
 

@@ -57,7 +57,7 @@ card was taken:
 - **From the bill's payment options (Whole bill, Pay items, Contribute or Split equally):** the
   payment stays waiting, and the box records it by itself once payments are back.
 
-With the internet the box puts its clock right by itself, from the tax agency's time. Otherwise an
+With the internet the box usually puts its clock right by itself. Otherwise an
 administrator sets or confirms the clock on the [Box status page](box-status.md#clock-behind) with
 their own phone or computer, never from the box's own screen. Just after the box starts, any staff
 member can do it from a till with **Check the time**, as described below. If the box's clock is
@@ -83,9 +83,9 @@ check again.
 
 Either way, every manager is told who confirmed the time and from which till. If the box refuses,
 the dialog says why above its buttons and, where trying again can help, offers **Check again**.
-Once the box has been running since its clock was last right, a staff member can no longer set it
-from a till: the dialog says so and offers **Administrator sign-in**, so that an administrator can
-sign in there with their PIN and set the clock from the same till.
+If the box's [start-up](box-status.md#clock-at-start) ends while the dialog is open, a staff member can no longer set the clock from a till:
+the dialog says so and offers **Administrator sign-in**, so that an administrator can sign in there
+with their PIN and set the clock from the same till.
 
 **The box is nearly out of space · Tell a manager** is amber. Work is still saved, but space is
 running out. A manager should free space before it runs out, on the

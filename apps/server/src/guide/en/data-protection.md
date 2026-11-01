@@ -374,8 +374,8 @@ own, can also make scheduled backups, and can export your setup to start another
   a place, it deletes from that place any backup beyond the newest 7 and any older than 30 days,
   unless you change those settings. Before a backup, whenever the box's disk falls under about 2 GB free, or as the box starts with
   its disk full, the box can also delete its oldest backups in folders on that disk, never the newest in each. For a
-  while after the box sets its own clock, it keeps the backups dated by the wrong clock or deletes
-  them last; the start on a full disk does not do this yet
+  while after the box sets its own clock, it keeps some of the backups dated by the wrong clock or
+  deletes them last; the start on a full disk does not do this yet
   ([Box status](box-status.md#free-space) explains). Turning off
   the bucket copy or the scheduled backups leaves what is already stored, so delete it at your
   provider, or from the folder, when you no longer need it. Anything else: _set with your adviser_.

@@ -3490,6 +3490,39 @@ Task 13b's row words and to its review fold's administrator sign-in.
 **Focused commands.** `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts`;
 `pnpm exec vitest run scripts/guide-links.test.ts`.
 
+### Task 16's per-task review, folded (2026-11-01; C0/I5/M7)
+
+Folded into the guides, both languages: the till's **Administrator sign-in** is reached only when
+start-up ends while the dialog is open (the dialog opens only from the start-up hint,
+`clock-start-up.ts:66-67`), so a running stop is the administrator's on Box status (I1); a till
+that AGREES is refused `contrary_proof` by two disagreeing devices, and a till's set keeps no
+other readings (`till-box-clock-api.ts:323`, `clock-correction.ts:262`) (I2); the old-backup
+deletion keeps only the newest `retain` of the held backups (`backup-sweep.ts:420`), not all
+(I3); only the email names the administrator and the till, the bell sends to Box status (I4);
+"Proof found" during start-up (I5, guide half); the `unreachable` warning names no page (M1);
+timing "within about half a minute" and "at the till's next check, within about 15 seconds"
+(`equipment-poll.ts:4`) (M2); only a box that files asks the tax agency (M3); "it can only be
+set" when other clocks disagree (M4); the Clock row's "what confirmed" sentence cut (M5); a
+Spanish slip (M6); "start-up" defined once (M7).
+
+**Code defect the review found (I5), not a guide matter → Task 16a.**
+
+### Task 16a: The Clock row does not promise a devices-only restart during start-up
+
+**Goal.** During the start-up window two agreeing devices make `proof === "ready"`, which the
+watch does not act on (`clock-watch.ts:395-396`, decision 18), but the Clock row still says **Proof
+found: payments restart within a few seconds.** (`box-status-rows.ts:381-382`), and the waiting
+line names "two tills or handhelds" as a proof. The box-health read does not carry the window.
+Carry it (`clockStop.startUp: boolean`, or a `proof` the read narrows to `"none"` with the
+devices still listed), and word the row: while the window is open and only devices agree, the
+waiting line names the tax agency's time or a person confirming on a till; never "Proof found".
+English and Spanish; the guide's I5 sentence then says what the row says.
+
+**Failing tests first.** `box-status-rows.test.ts`: two agreeing devices with the window open →
+no "Proof found", the start-up waiting line; window closed → today's words (control, unchanged).
+The read: `box-status.route` or the health builder passes the window. **Deletion control:** drop
+the window from the row's choice → the open-window case says "Proof found".
+
 ### Task 17: LOOK, without the dev stack
 
 The dev stack (`wa-wt demo`) needs Docker, which is not answering on this Mac, so the LOOK uses the

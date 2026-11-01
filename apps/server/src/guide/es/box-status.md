@@ -119,9 +119,10 @@ arrancar y, una vez en marcha, te avisa en la campana y por [correo](box-status.
 que en los demás casos.
 
 La fecha de una copia de seguridad sale del reloj del equipo cuando se hizo. Por eso, durante un
-tiempo después de que el equipo [ponga su propio reloj en hora](box-status.md#clock-behind), el
-equipo conserva todas las copias hechas antes del cambio cuando borra copias antiguas, y las borra
-las últimas cuando hace sitio, después de las hechas desde entonces. Esto dura tantos días como se
+tiempo después de que el equipo [ponga su propio reloj en hora](box-status.md#clock-behind), cuando
+el equipo borra copias antiguas conserva las más recientes de las copias hechas antes del cambio,
+tantas como conserva de las demás, además de las que conserva como siempre; y cuando hace sitio,
+borra las últimas las copias hechas antes del cambio. Esto dura tantos días como se
 conservan las copias, y solo cubre los cambios que hizo el propio equipo, no uno que hiciera su
 servicio de hora. El arranque con el disco lleno aún no lo hace: sigue borrando por las fechas que
 llevan las copias en su nombre.
@@ -177,15 +178,15 @@ internet**, como explica [su servicio de hora](box-status.md#clock-service).
 
 Mientras el equipo está en marcha, una parada así es también un aviso en la campana y un
 [correo](box-status.md#emails) a todas las personas que pueden gestionar el sistema, también a los
-administradores. Los dos dicen que un administrador puede poner la hora desde su propio móvil u
-ordenador en esta página y, si el equipo acaba de arrancar, que cualquier empleado puede hacerlo
-desde una caja.
+administradores. La campana te envía a esta página. El correo dice que un administrador puede
+poner la hora desde su propio móvil u ordenador en esta página y, si el equipo acaba de arrancar,
+que cualquier empleado puede hacerlo desde una caja.
 
 Hay tres salidas:
 
 - **Poner la hora bien.** En un equipo que se pone en hora por internet, conectarlo a internet le
-  permite corregir la hora por sí solo. Si no, el equipo pone su reloj con la hora de Hacienda por
-  sí solo cuando puede conectar con Hacienda, un administrador puede ponerlo desde su propio móvil u
+  permite corregir la hora por sí solo. Si no, un equipo que envía registros a Hacienda pone su
+  reloj con la hora de Hacienda por sí solo cuando puede conectar con ella, un administrador puede ponerlo desde su propio móvil u
   ordenador, y justo después de un arranque un empleado puede ponerlo desde una caja, como explican
   los párrafos siguientes. Esto termina la parada salvo que la última venta lleve una hora
   equivocada, posterior a la real.
@@ -218,7 +219,8 @@ venta.
 Mientras el equipo espera, la fila **Reloj** dice **Esperando una prueba de que la hora es correcta:
 la de Hacienda (si el equipo le envía registros), o la de dos cajas o terminales.** Cuando llega la
 prueba, dice **Hay prueba: los cobros se reanudan en unos segundos.**, y el equipo vuelve a cobrar
-en unos 15 segundos.
+en unos 15 segundos. [Justo después de un arranque](box-status.md#clock-at-start), dos
+dispositivos solos no reanudan los cobros, aunque la fila lo diga; la hora la confirma una persona.
 
 A veces los otros relojes dicen lo contrario: dos o más cajas o terminales coinciden entre sí en que
 el reloj del equipo va desviado más de un minuto, o la hora de Hacienda no coincide con él durante
@@ -226,7 +228,7 @@ la parada. Entonces la fila muestra cada reloj que no coincide, por ejemplo **Ha
 (comprobado 2026-10-23 21:12)** o **Barra: no coincide (marcó 2026-10-23 21:13)**, y dice **Otros
 relojes dicen que la hora del equipo está mal.** Un reloj que ha respondido de las dos formas
 aparece una sola vez, con su última respuesta. Nada puede confirmar la hora, ni siquiera un
-administrador. La respuesta de Hacienda cuenta primero: cuando
+administrador; solo se puede poner en hora. La respuesta de Hacienda cuenta primero: cuando
 coincide con el equipo, los dispositivos que no coinciden no paran los cobros. El equipo solo guarda
 el desacuerdo de Hacienda en su memoria, así que lo olvida si el propio equipo se reinicia durante
 la parada; mientras Hacienda siga sin coincidir, vuelve con la siguiente respuesta.
@@ -375,27 +377,28 @@ un empleado puede poner o confirmar la hora desde una caja, para que el local no
 a un administrador. Un reinicio del equipo cuenta como arranque, sea tras un corte de luz, una
 actualización o a mano.
 
-Unos 15 a 20 segundos después del arranque, cuando el equipo ha preguntado a Hacienda y no ha
-tenido respuesta, cada caja y terminal con alguien con la sesión iniciada termina su línea roja de
+Aquí se llama arranque al tiempo que va desde que el equipo arranca hasta que el reloj deja de
+parar los cobros. En el medio minuto siguiente al arranque, más o menos, cuando el equipo ha
+preguntado a Hacienda y no ha tenido respuesta, cada caja y terminal con alguien con la sesión iniciada termina su línea roja de
 la hora con **Comprobar la hora** en lugar de **Avisa al encargado**. En un equipo cuyo reloj marca
-una fecha anterior al 28 de octubre de 2024, o en uno que no envía registros a Hacienda, lo hace
-enseguida. Cualquier empleado con la sesión iniciada en la caja puede pulsarlo; no necesita ningún
+una fecha anterior al 28 de octubre de 2024, o en uno que no envía registros a Hacienda, lo hace en
+la siguiente consulta de la caja, en unos 15 segundos. Cualquier empleado con la sesión iniciada en la caja puede pulsarlo; no necesita ningún
 permiso. La [guía de avisos del terminal](till-notices.md#notices) explica qué muestra el diálogo
 de la caja y qué hace cada botón.
 
 La caja envía su propia hora. Cuando está a más de un minuto de la del equipo, el equipo pone su
 reloj a esa hora; cuando está a menos de un minuto, el equipo mantiene su reloj y los cobros se
-reanudan con él. En los dos casos, la campana y el correo nombran al empleado y a la caja, y la
-fila **Reloj** dice qué confirmó la hora. Otros dispositivos que no coinciden con la caja no lo
-impiden: sus lecturas se guardan con el registro. Mientras dura el arranque, dos cajas o terminales
-que coinciden con el equipo no reanudan los cobros por sí solos; los confirma una persona.
+reanudan con él. En los dos casos, la campana y el correo nombran al empleado y a la caja. Cuando se
+usa la hora de la caja, las lecturas de otros dispositivos no lo impiden. Cuando la caja coincide
+con el equipo, dos dispositivos que no coinciden con el equipo impiden la confirmación, y el diálogo
+dice por qué. Durante el arranque, dos cajas o terminales que coinciden con el equipo no reanudan
+los cobros por sí solos; la hora la confirma una persona.
 
-El arranque termina en cuanto el equipo ve que su reloj ya no está parado. Desde entonces, un
+El arranque termina en cuanto el equipo ve que el reloj ya no para los cobros. Desde entonces, un
 empleado ya no puede poner la hora desde una caja. Si el reloj vuelve a parar los cobros mientras
-el equipo está en marcha, la caja no ofrece nada, y un administrador pone la hora desde esta página,
-o desde una caja iniciando sesión ahí como administrador desde el diálogo de la caja. Si Hacienda
-responde mientras se ofrece la caja, la oferta termina y el equipo usa la hora de Hacienda por sí
-mismo.
+el equipo está en marcha, las cajas no ofrecen nada: un administrador pone la hora desde esta
+página con su propio móvil u ordenador. Si Hacienda responde mientras se ofrece **Comprobar la
+hora**, la oferta termina y el equipo usa la hora de Hacienda por sí mismo.
 
 ## El servicio de hora del equipo {#clock-service}
 
@@ -418,7 +421,7 @@ gestionar el sistema. El aviso llega solo por la campana, no por correo, y dice 
   reloj en hora por sí solo.** Solo lo dice el equipo de un local en funcionamiento; un portátil o
   un equipo de pruebas no dice nada.
 
-Cada aviso te pide que mires la fecha y la hora del equipo en esta página. Mientras el servicio no
+Cada aviso salvo el último te pide que mires la fecha y la hora del equipo en esta página. Mientras el servicio no
 mantiene el reloj en hora, el equipo sigue pudiendo poner su propio reloj durante una parada, como
 explica [Cuando se paran los cobros por la hora](box-status.md#clock-behind). Mientras la parte
 del equipo que pone su reloj en hora no responde, no puede: entonces el equipo solo puede confirmar
