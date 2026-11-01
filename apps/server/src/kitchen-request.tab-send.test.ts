@@ -4,7 +4,7 @@ import { printJobs, ticketItems, withTransaction, workingOrderLines } from "@wai
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setStationToday } from "@waitron/venue-service";
+import { setStationToday, ticketItemAllergies } from "@waitron/venue-service";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
@@ -52,6 +52,13 @@ async function lines(tx: Transaction, orderId: string) {
     .orderBy(asc(workingOrderLines.lineNo));
 }
 
+async function allergyCopies(tx: Transaction, ticketItemId: string) {
+  return tx
+    .select()
+    .from(ticketItemAllergies)
+    .where(eq(ticketItemAllergies.ticketItemId, ticketItemId));
+}
+
 async function jobsAt(tx: Transaction, printerId: string) {
   return (
     await tx
@@ -89,6 +96,8 @@ describe("A773 waiter request: tab send", () => {
       const [requested, held] = await items(tx, venue.party.tabId);
       expect(requested).toMatchObject({ requestedAt: AT, firedAt: null, passControlled: true });
       expect(held).toMatchObject({ requestedAt: null, firedAt: null, passControlled: false });
+      expect((await lines(tx, venue.party.tabId)).map((line) => line.sentAt)).toEqual([AT, null]);
+      expect(await allergyCopies(tx, held!.id)).toHaveLength(0);
       const before = await jobCounts(tx, venue);
       vi.setSystemTime(new Date(LATER));
       await sendLines(tx, venue.cfg, venue.party.tabId, []);
@@ -97,6 +106,8 @@ describe("A773 waiter request: tab send", () => {
         requested,
         { ...held, requestedAt: LATER, firedAt: null, passControlled: true },
       ]);
+      expect((await lines(tx, venue.party.tabId)).map((line) => line.sentAt)).toEqual([AT, LATER]);
+      expect(await allergyCopies(tx, held!.id)).toHaveLength(1);
       expect(await jobCounts(tx, venue)).toEqual(before);
       await sendLines(tx, venue.cfg, venue.party.tabId, []);
       expect(await items(tx, venue.party.tabId)).toEqual(afterFirst);
