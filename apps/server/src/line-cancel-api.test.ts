@@ -1429,6 +1429,8 @@ describe("the public cancellation read and command", () => {
     ["state", ["queued"]],
     ["firedAt", undefined],
     ["firedAt", "not-a-date"],
+    ["requestedAt", undefined],
+    ["stationId", undefined],
     ["quantity", 2],
     ["quantity", "2"],
     ["kitchenQuantity", undefined],

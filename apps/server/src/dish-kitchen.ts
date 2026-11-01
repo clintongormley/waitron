@@ -13,6 +13,7 @@ export interface DishKitchenItem {
   stationId: string;
   courseId: string | null;
   firedAt: string | null;
+  requestedAt: string | null;
   state: TicketState;
   /** Thousandths: what the station was asked for. */
   firedQuantity: number;
@@ -30,6 +31,7 @@ export function dishKitchenItemsQuery(tx: Transaction, dishLineIds: readonly str
       stationId: ticketItems.stationId,
       courseId: ticketItems.courseId,
       firedAt: ticketItems.firedAt,
+      requestedAt: ticketItems.requestedAt,
       state: ticketItems.state,
       firedQuantity: ticketItems.quantity,
       lineQuantity: workingOrderLines.quantity,
@@ -66,6 +68,7 @@ export async function dishKitchenItems(
       stationId: row.stationId,
       courseId: row.courseId,
       firedAt: row.firedAt,
+      requestedAt: row.requestedAt,
       state: row.state,
       firedQuantity: row.firedQuantity ?? row.lineQuantity,
       lineQuantity: row.lineQuantity,

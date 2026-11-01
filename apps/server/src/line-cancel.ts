@@ -474,6 +474,7 @@ export async function cancelItem(
               : [
                   {
                     group: groupOf(dish),
+                    requested: item!.requestedAt !== null && item!.firedAt === null,
                     item: {
                       workingOrderLineId: row.id,
                       stationId: item!.stationId,
@@ -497,8 +498,9 @@ export async function cancelItem(
             tx,
             cfg,
             bill!.id,
-            corrections.flatMap(({ group, item }) =>
-              item.fired || group === undefined
+            corrections.flatMap(({ group, requested, item }) =>
+              // Requested work printed nothing unless its group's HOLD ticket did.
+              item.fired || group === undefined || (requested && group.holdPrintedAt === null)
                 ? []
                 : [
                     {
