@@ -5,22 +5,61 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCertificateDiagnosisRunner } from "./fiscal-certificate-diagnosis-runner.js";
 import { certificateDiagnosisRuntime } from "./fiscal-certificate-diagnosis-runtime.js";
 
+const lifetime = vi.hoisted(() => ({
+  events: [] as Record<string, unknown>[],
+}));
+vi.mock("node:child_process", async (importOriginal) => {
+  const real = await importOriginal<typeof import("node:child_process")>();
+  return {
+    ...real,
+    spawn: (...args: Parameters<typeof real.spawn>) => {
+      const child = real.spawn(...args);
+      const record = (event: string, fields: Record<string, unknown> = {}) =>
+        lifetime.events.push({ atMs: performance.now(), event, pid: child.pid, ...fields });
+      record("spawn");
+      child.on("spawn", () => record("spawned"));
+      child.on("exit", (code, signal) => record("exit", { code, signal }));
+      child.on("close", (code, signal) => record("close", { code, signal }));
+      child.on("error", (error: NodeJS.ErrnoException) =>
+        record("process-error", { code: error.code }),
+      );
+      const channel = child.stdio[3];
+      channel?.on("data", (chunk: Buffer) => record("pipe-data", { bytes: chunk.length }));
+      channel?.on("end", () => record("pipe-end"));
+      channel?.on("close", () => record("pipe-close"));
+      channel?.on("error", (error: NodeJS.ErrnoException) =>
+        record("pipe-error", { code: error.code }),
+      );
+      const kill = child.kill.bind(child);
+      child.kill = (signal) => {
+        record("kill", { signal: String(signal ?? "SIGTERM") });
+        return kill(signal);
+      };
+      return child;
+    },
+  };
+});
+
 let root: string;
 const runners: ReturnType<typeof createCertificateDiagnosisRunner>[] = [];
 beforeEach(async () => {
+  lifetime.events.length = 0;
   root = await mkdtemp(join(tmpdir(), "diagnosis-process-"));
 });
 afterEach(async ({ task }) => {
   await Promise.all(runners.splice(0).map((runner) => runner.stop()));
   vi.unstubAllEnvs();
-  if (task.result?.state === "fail") {
+  if (task.result?.state === "fail" || process.env.DIAGNOSIS_PROCESS_TRACE === "1") {
     const markers = await Promise.all(
       (await readdir(root)).map(async (name) => ({
         name,
         events: await records(join(root, name)),
       })),
     );
-    console.error("Certificate child process diagnostics", markers);
+    console.error(
+      "Certificate child process diagnostics",
+      JSON.stringify({ markers, timeline: lifetime.events }),
+    );
   }
   await rm(root, { recursive: true, force: true });
 });
