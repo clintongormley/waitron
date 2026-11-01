@@ -400,6 +400,7 @@ it("refuses the populated predecessor for reset and retains every row after roll
       "_privacy_contact",
       "_station_ready_warning",
       "_recipient_identifier",
+      "_requested_release",
     ]),
   );
   let before: Record<string, unknown[]>;
