@@ -1651,7 +1651,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     const el = await mount(api);
     q(el, "create")!.click();
     await flush(el);
-    change(el, "profile-name", "Terraza");
+    change(el, "profile-name", "Patio");
     await el.updateComplete;
     return el;
   }
@@ -1763,12 +1763,12 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     await flush(el);
     q(el, "create")!.click();
     await flush(el);
-    change(el, "profile-name", "Terraza");
+    change(el, "profile-name", "Patio");
     await flush(el);
     arriveLate(profiles[0]!);
     await flush(el);
     expect(q(el, "editor-form")!.hasAttribute("data-editing-id")).toBe(false);
-    expect(q(el, "profile-name")!.value).toBe("Terraza");
+    expect(q(el, "profile-name")!.value).toBe("Patio");
   });
 
   it("puts a department name and a person's name holding a replacement pattern in as written", async () => {
