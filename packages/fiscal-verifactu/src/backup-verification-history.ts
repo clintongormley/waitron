@@ -427,6 +427,8 @@ const LINKS = [
   ["filing_cases", "registro_id", "registros_facturacion", "id"],
   ["filing_case_events", "case_id", "filing_cases", "id"],
   ["filing_case_events", "remedy_registro_id", "registros_facturacion", "id"],
+  ["fiscal_conflict_evidence", "registro_id", "registros_facturacion", "id"],
+  ["fiscal_conflict_evidence", "case_id", "filing_cases", "id"],
   ["envios", "registro_id", "registros_facturacion", "id"],
   ["acks", "registro_id", "registros_facturacion", "id"],
   ["fiscal_certificate_reminders", "install_id", "fiscal_certificate_installs", "id"],

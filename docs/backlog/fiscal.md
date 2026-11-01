@@ -409,8 +409,11 @@ guard or claiming the two checks are equivalent for every input. No combined-fau
 Task 7 must stop new issuance after a definite conflict on the active identity and offer an
 administrator a switch using fresh current recovery-key authentication. It must never switch
 automatically. The [current-contract plan](../superpowers/plans/2026-11-01-w41s-7-conflict-recovery.md)
-records the owner's 1 November decision and its permitted activation scope. The issuance stop,
-retained conflict evidence and live administrator procedure remain unimplemented.
+records the owner's 1 November decision and its permitted activation scope. Definite filing conflicts
+are retained in `fiscal_conflict_evidence`, including a later conflict on a record whose immutable case
+already exists. Active-conflict reads include historical definite cases and ignore case-resolution notes;
+retired identities keep their evidence without stopping the replacement. The issuance stop and live
+administrator procedure remain unimplemented.
 
 Corrective-record resolution, filing investigation, outside evidence and fencing for the other
 tasks, and the complete old-backup/new-hardware operational exercise remain queued. Earlier

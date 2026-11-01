@@ -13,6 +13,8 @@ import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, seedSoldRegistro, TENANT_A } from "../test/fixtures.js";
 import { activateAllocation } from "./allocation.js";
+import { recordConflictEvidence } from "./conflict-evidence.js";
+import { toAeatDate } from "./registro-row.js";
 import {
   withHourAdmission,
   type FiscalAllocation,
@@ -141,6 +143,43 @@ async function capture(populate = true) {
     );
     await suite.db.execute(
       sql`insert into filing_case_events (id, case_id, action_key, kind, person_id, action, remedy_registro_id, recorded_at) values ('10000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000001','note-1','note','10000000-0000-4000-8000-000000000003','retained note',null,${time})`,
+    );
+    const original = suite.db.get<{
+      id: string;
+      id_emisor_factura: string;
+      num_serie_factura: string;
+      fecha_expedicion_factura: string;
+    }>(sql`
+      select id, id_emisor_factura, num_serie_factura, fecha_expedicion_factura from registros_facturacion limit 1
+    `)!;
+    await withTransaction(suite.db, (tx) =>
+      recordConflictEvidence(tx, {
+        registroId: original.id,
+        caseId: "10000000-0000-4000-8000-000000000001",
+        attempt: 1,
+        cause: "fiscal.huella_divergente",
+        now: new Date(time),
+        evidence: {
+          line: {
+            IDFactura: {
+              IDEmisorFactura: original.id_emisor_factura,
+              NumSerieFactura: original.num_serie_factura,
+              FechaExpedicionFactura: toAeatDate(original.fecha_expedicion_factura),
+            },
+            RefExterna: original.id,
+            Operacion: { TipoOperacion: "Alta" },
+            EstadoRegistro: "Incorrecto",
+            CodigoErrorRegistro: 3000,
+            DescripcionErrorRegistro: "Conflicting duplicate",
+          },
+          csv: null,
+          comparison: {
+            kind: "lookup-mismatch",
+            storedFingerprint: "D".repeat(64),
+            storedSystem: null,
+          },
+        },
+      }),
     );
     await suite.db.execute(
       sql`insert into envios (registro_id, estado, proximo_intento_en, csv) select id, 'aceptado', ${time}, 'retained-csv' from registros_facturacion`,
@@ -902,10 +941,25 @@ it("admits empty migrated fiscal tables when the captured predecessor has none",
   edit("before", (db) => {
     const tables = db
       .prepare(
-        "select name from sqlite_schema where type='table' and name in ('registro_sif','fiscal_allocations','fiscal_reservations','filing_cases','filing_case_events','envios','envio_flujo','acks','fiscal_certificate_installs','fiscal_certificate_reminders')",
+        "select name from sqlite_schema where type='table' and name in ('registro_sif','fiscal_allocations','fiscal_reservations','filing_cases','filing_case_events','fiscal_conflict_evidence','envios','envio_flujo','acks','fiscal_certificate_installs','fiscal_certificate_reminders')",
       )
       .all() as { name: string }[];
     for (const table of tables) db.exec(`drop table "${table.name.replaceAll('"', '""')}"`);
   });
   expect(await verify()).toEqual(result("passed"));
+});
+
+it.each(["registro_id", "case_id"])(
+  "rejects a dangling conflict observation %s",
+  async (column) => {
+    await capture();
+    both((db) => db.exec(`update fiscal_conflict_evidence set "${column}"='missing'`));
+    expect(await verify()).toEqual(result("invalid"));
+  },
+);
+
+it("retains captured conflict observations", async () => {
+  await capture();
+  edit("after", (db) => db.exec("delete from fiscal_conflict_evidence"));
+  expect(await verify()).toEqual(result("invalid"));
 });
