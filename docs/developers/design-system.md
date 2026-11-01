@@ -5775,13 +5775,17 @@ alone (`printMovedSlips`, `apps/server/src/kitchen-print.ts`).
 
 Move dishes… draws the bill's dishes through `till-portion-picker`
 (`apps/till/src/widgets/portion-picker.ts`), which draws rows from the selection model
-(`pickRows`, `apps/till/src/state/portion-selection.ts`) and emits `portion-picks` with the picked
+(`pickGroups` and `pickRows`, `apps/till/src/state/portion-selection.ts`) and emits `portion-picks` with the picked
 line ids; the screen keeps the picks in its action draft scope, so leaving with picks or a chosen destination asks first. A
 row is one dish, or [identical portions](#identical-portions-share-one-row) with their count; its
 amount, extras included, is what its picked dishes take off the bill, or the whole row's while none
 is picked. A dish recalled into an unsent order is left out.
 
-- **A tick** is a native checkbox labelled with the dish's name. Ticking a row takes every member
+- **A tick** is a native checkbox labelled with the dish's name, then each of its extras on a line
+  of its own beneath, in the names the screen gives the bill's lines. A dish or extra adds its
+  quantity, written as the Sent list writes it ("Iberian ham ×0.32", "Onion ×2"), unless it is a
+  single item of something counted in whole units. The − and + of a row are named by the same
+  words. Ticking a row takes every member
   the floor allows; ticking a ticked row clears it. A row of several takes a − / "2 of 4" / +
   stepper once ticked, − stopping at one and + at the row's limit; a weighed or unbound line has
   the tick only.

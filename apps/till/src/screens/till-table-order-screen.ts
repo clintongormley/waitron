@@ -2622,18 +2622,18 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #sentFallback(): TemplateResult | typeof nothing {
-    const groups = this.#dishGroupsFor(this.#dishSources()).groups.map((group) => group.members);
+    const { groups } = this.#dishGroupsFor(this.#dishSources());
     if (groups.length === 0) return nothing;
     // Bill lines lack partial serving quantities, so this fallback offers no actions.
     return html`<section class="sent-fallback" data-sent-fallback>
       <h2>${t("table.sent_title")}</h2>
       <ul>
         ${groups.map(
-          ({ 0: dish, length: count }) =>
+          ({ members: { 0: dish, length: count }, extras }) =>
             html`<li data-sent-fallback-line=${dish!.id}>
               ${this.#sentFallbackLine(dish!, count)}
               <ul>
-                ${this.lines.filter((line) => line.parentLineNo === dish!.lineNo).map((extra) => html`<li data-sent-fallback-extra=${extra.id}>${this.#sentFallbackLine(extra, count)}</li>`)}
+                ${extras.map((extra) => html`<li data-sent-fallback-extra=${extra.id}>${this.#sentFallbackLine(extra, count)}</li>`)}
               </ul>
             </li>`,
         )}
@@ -5501,7 +5501,7 @@ export class TillTableOrderScreen extends LitElement {
       <till-portion-picker
         .rows=${rows}
         .picks=${this.moveDishesPicks}
-        .nameOf=${(row: PickRow) => this.#nameForLine(row.members[0]!)}
+        .nameOf=${(line: TabLine) => this.#nameForLine(line)}
         .money=${(amount: string) => this.#money(amount)}
         @portion-picks=${(event: CustomEvent<{ picks: string[] }>) => {
           event.stopPropagation();

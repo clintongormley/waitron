@@ -71,7 +71,28 @@ const STEAK = line("s1", 5, {
   unitPriceGross: "32.00",
 });
 
+const burger = (id: string, lineNo: number) =>
+  line(id, lineNo, { name: "Burger", productId: "burger", menuItemId: "burger" });
+const extra = (id: string, lineNo: number, parent: number, name: string) =>
+  line(id, lineNo, { name, productId: name, parentLineNo: parent, portion: false });
+const BURGERS = [
+  burger("b1", 1),
+  extra("x1", 2, 1, "Cheese"),
+  burger("b3", 3),
+  extra("x3", 4, 3, "Cheese"),
+  burger("b5", 5),
+  extra("x5", 6, 5, "Bacon"),
+];
+
 const STATES: [string, readonly TabLine[], BillBalance | null, Picks][] = [
+  ["rows told apart by their extras, unticked", BURGERS, null, new Set()],
+  ["rows told apart by their extras, ticked at 1 of 2", BURGERS, null, new Set(["b1"])],
+  [
+    "two weighed rows of different weights",
+    [WEIGHED, { ...WEIGHED, id: "w2", lineNo: 10, quantity: "0.500", priceQuantity: "0.500" }],
+    null,
+    new Set(),
+  ],
   ["an empty list", [], null, new Set()],
   ["a grouped row, unticked", CANAS, null, new Set()],
   ["a grouped row ticked at 2 of 4", CANAS, null, new Set(["c1", "c2"])],
@@ -95,7 +116,7 @@ function rowsOf(lines: readonly TabLine[], paid: BillBalance | null, picks: Pick
   return pickRows(pickGroups(lines, keyOf, paid, new Set()), picks);
 }
 
-const nameOf = (row: PickRow) => row.members[0]!.name ?? "";
+const nameOf = (dish: TabLine) => dish.name ?? "";
 const money = (amount: string) => formatMoney(decimal(amount), currentLocale());
 const rgb = (colour: string) => colour.match(/\d+/g)!.slice(0, 3).map(Number);
 

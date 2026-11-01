@@ -15,6 +15,8 @@ import { portionGroups } from "./portion-groups.js";
 export interface PickRow {
   /** Members in line order on this bill; one member for a line that stands alone. */
   members: readonly TabLine[];
+  /** The first member's extras, which every member's match. */
+  extras: readonly TabLine[];
   /** A row of several whole portions of a unit dish, which takes a count. False for a row of one: a
    * weighed or unbound line, which has a tick only, or a single portion. */
   counted: boolean;
@@ -38,6 +40,7 @@ const times = (each: Decimal, count: number) => multiplyDecimal(each, decimal(St
 /** One group of {@link PickGroups}: what its row is drawn from whatever the picks. */
 interface PickGroup {
   members: readonly TabLine[];
+  extras: readonly TabLine[];
   each: Decimal;
   paid: boolean;
 }
@@ -72,9 +75,11 @@ export function pickGroups(
     else siblings.push(row);
   }
   const paid = balance === null ? null : paidQuantities(balance);
+  const extrasOf = (members: readonly TabLine[]) => extras.get(members[0]!.lineNo) ?? [];
   const groups = portionGroups(dishes, keyOf, (row) => row.lineNo).map((members): PickGroup => ({
     members,
-    each: billGross([members[0]!, ...(extras.get(members[0]!.lineNo) ?? [])]),
+    extras: extrasOf(members),
+    each: billGross([members[0]!, ...extrasOf(members)]),
     paid:
       paid !== null &&
       members.some((member) => compareDecimal(decimal(paid.get(member.lineNo) ?? "0"), ZERO) > 0),
@@ -104,7 +109,7 @@ function pickedTotal(bill: PickGroups, picks: Picks): Decimal {
 }
 
 function rowOf(bill: PickGroups, group: PickGroup, picks: Picks, total: Decimal): PickRow {
-  const { members, each, paid } = group;
+  const { members, extras, each, paid } = group;
   const picked = pickedOf(members, picks);
   const floor = bill.floor;
   let limit = members.length;
@@ -122,7 +127,7 @@ function rowOf(bill: PickGroups, group: PickGroup, picks: Picks, total: Decimal)
   if (paid) blocked = { reason: "paid" };
   else if (floor !== null && (picked > limit || (picked < members.length && picked >= limit)))
     blocked = { reason: "floor", kept: floor.kept };
-  return { members, counted: members.length > 1, each, limit, blocked };
+  return { members, extras, counted: members.length > 1, each, limit, blocked };
 }
 
 /**

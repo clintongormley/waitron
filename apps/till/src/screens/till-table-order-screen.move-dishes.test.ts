@@ -225,6 +225,45 @@ describe("A803 move dishes panel", () => {
     ]);
   });
 
+  it("names each row's extras as the bill's list names them, and a weighed dish's weight", async () => {
+    const burger = (id: string, lineNo: number) =>
+      line(id, lineNo, {
+        name: "Burger",
+        productId: "burger",
+        menuItemId: "burger",
+        unitPriceGross: "9.00",
+      });
+    const extra = (id: string, lineNo: number, parent: number, over: Partial<TabLine>) =>
+      line(id, lineNo, { parentLineNo: parent, unitPriceGross: "1.00", portion: false, ...over });
+    const ham = line("ham", 5, {
+      name: "Iberian ham",
+      productId: "ham",
+      menuItemId: "ham",
+      quantity: "0.320",
+      priceQuantity: "0.320",
+      unitPrecision: 3,
+      unitPriceGross: "89.00",
+      portion: false,
+    });
+    const el = await mountScreen({
+      lines: [
+        burger("b1", 1),
+        extra("x2", 2, 1, { name: "Cheese", productId: "cheese" }),
+        burger("b3", 3),
+        extra("x4", 4, 3, { name: undefined, productId: "bacon" }),
+        ham,
+      ],
+    });
+    await openMoveDishes(el);
+    await picker(el).updateComplete;
+    const labels = [...picker(el).shadowRoot!.querySelectorAll("label")].map(textOf);
+    expect(labels).toHaveLength(3);
+    expect(labels[0]).toContain("Cheese");
+    expect(labels[0]).not.toContain("bacon");
+    expect(labels[1]).toContain("bacon");
+    expect(labels[2]).toContain("Iberian ham ×0.32");
+  });
+
   it("offers the party's other open bills with no payment in number order, then + New bill", async () => {
     const el = await mountScreen();
     await openMoveDishes(el);

@@ -2181,11 +2181,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   it right. I believe this predates slice 4a (Transfer items would leave it the same); not checked
   on `main`. It sits in A739's payment window files. Pictures `x-h-*` (`~/waitron-campaign-c/a803-4-shots/`, not in the repository).
 
-- **A1292. Move dishes… shows no weight for a weighed dish (seen in A803 slice 4a's LOOK).** Two
-  0.32 kg portions of Iberian ham are two rows reading "Iberian ham €28.48"; two different weights
-  are told apart only by price, though the order list shows the weight. Show the weight as the
-  order list does.
-
 - **A1293. The Sent summary counts weighed quantities as dishes (seen in A803 slice 4a's LOOK).** It
   read "0 ready · 6.64 firing" for 3 beers, 2 calamari, a paella and 0.64 kg of ham. I believe this
   predates slice 4a; not checked. Picture `s3-refusal-3s3` (`~/waitron-campaign-c/a803-4-shots/`, not in the repository).

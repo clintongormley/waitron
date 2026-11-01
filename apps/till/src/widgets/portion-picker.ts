@@ -1,10 +1,11 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, formatDecimalInput } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { MONEY_SCALE, decimal, multiplyDecimal, toScale } from "@waitron/shared";
-import { fill, t } from "../i18n/t.js";
+import type { TabLine } from "../api/client.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import {
   pickedCount,
@@ -14,6 +15,7 @@ import {
   type PickRow,
   type Picks,
 } from "../state/portion-selection.js";
+import { trimQuantity } from "./dish-format.js";
 
 /**
  * One bill's dishes as ticks, identical portions as one row with a count, and the reason a dish
@@ -71,6 +73,11 @@ export class TillPortionPicker extends LitElement {
         flex: 1;
         overflow-wrap: anywhere;
       }
+      .extra {
+        display: block;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
       .qty,
       .amount {
         font-variant-numeric: tabular-nums;
@@ -100,8 +107,8 @@ export class TillPortionPicker extends LitElement {
   ];
   @property({ attribute: false }) rows: readonly PickRow[] = [];
   @property({ attribute: false }) picks: Picks = new Set();
-  @property({ attribute: false }) nameOf: (row: PickRow) => string = (row) =>
-    row.members[0]!.name ?? "";
+  /** Names a dish or an extra. */
+  @property({ attribute: false }) nameOf: (line: TabLine) => string = (line) => line.name ?? "";
   @property({ attribute: false }) money: (amount: string) => string = (amount) => amount;
 
   #emit(next: Picks): void {
@@ -122,10 +129,21 @@ export class TillPortionPicker extends LitElement {
     return fill(t("table.move_dishes_floor"), { amount: this.money(row.blocked.kept) });
   }
 
+  /** A line's name, and its quantity unless it is one whole unit. */
+  #what(line: TabLine): string {
+    const quantity = trimQuantity(line.quantity);
+    const name = this.nameOf(line);
+    return line.unitPrecision === 0 && quantity === "1"
+      ? name
+      : `${name} ×${formatDecimalInput(quantity, currentLocale())}`;
+  }
+
   #row(row: PickRow): TemplateResult {
     const id = row.members[0]!.id;
     const count = row.blocked?.reason === "paid" ? 0 : pickedCount(row, this.picks);
-    const name = this.nameOf(row);
+    const dish = this.#what(row.members[0]!);
+    const extras = row.extras.map((extra) => this.#what(extra));
+    const name = [dish, ...extras].join(", ");
     const reason = this.#reason(row);
     const reasonId = `pick-reason-${id}`;
     const amount = toScale(
@@ -142,7 +160,9 @@ export class TillPortionPicker extends LitElement {
           aria-describedby=${reason === "" ? nothing : reasonId}
           @change=${() => this.#emit(toggleRow(row, this.picks))}
         />
-        <span class="name">${name}</span>
+        <span class="name"
+          >${dish}${extras.map((extra) => html`<span class="extra">${extra}</span>`)}</span
+        >
         ${
           row.counted && count === 0
             ? html`<span class="qty" data-pick-qty=${id}>${row.members.length}</span>`

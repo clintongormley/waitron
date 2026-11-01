@@ -73,7 +73,7 @@ function rowsOf(lines: readonly TabLine[], paid: BillBalance | null, picks: Pick
 
 const CANAS = [line("c1", 1), line("c2", 2), line("c3", 3), line("c4", 4)];
 const money = (amount: string) => formatMoney(decimal(amount), currentLocale());
-const nameOf = (row: PickRow) => row.members[0]!.name ?? "";
+const nameOf = (dish: TabLine) => dish.name ?? "";
 
 /** Mounts the picker and plays the screen's part: each emitted pick set is redrawn. */
 async function picker(lines: readonly TabLine[], paid: BillBalance | null = null, picks?: Picks) {
@@ -389,6 +389,105 @@ describe("till-portion-picker", () => {
     await userEvent.click(inc(el, "c1")!);
     await el.updateComplete;
     expect(q(el, '[data-pick-amount="c1"]')!.textContent!.trim()).toBe(money("15.00"));
+  });
+
+  it("A803 picker: two €9.00 Burgers with a €1.00 extra each are told apart by their extras, in the tick's name and the stepper's", async () => {
+    const burger = (id: string, lineNo: number) => dish(id, lineNo, "Burger", "9.00");
+    const extra = (
+      id: string,
+      lineNo: number,
+      parent: number,
+      name: string,
+      quantity = "1.000",
+      price = "1.00",
+    ) =>
+      line(id, lineNo, {
+        name,
+        productId: name,
+        parentLineNo: parent,
+        quantity,
+        unitPriceGross: price,
+        portion: false,
+      });
+    const lines = [
+      burger("b1", 1),
+      extra("x1", 2, 1, "Cheese"),
+      burger("b3", 3),
+      extra("x3", 4, 3, "Cheese"),
+      burger("b5", 5),
+      extra("x5", 6, 5, "Bacon"),
+      extra("x6", 9, 5, "Pickles", "1.000", "0.00"),
+      dish("b7", 7, "Burger", "8.00"),
+      extra("x7", 8, 7, "Onion", "2.000"),
+    ];
+    const { el } = await picker(lines, null, new Set(["b1", "b3"]));
+    const text = (id: string) => tick(el, id).closest("label")!.textContent!.replace(/\s+/g, " ");
+    expect(el.rows.map((row) => row.members.map((member) => member.id))).toEqual([
+      ["b1", "b3"],
+      ["b5"],
+      ["b7"],
+    ]);
+    expect(q(el, '[data-pick-amount="b1"]')!.textContent!.trim()).toBe(money("20.00"));
+    expect(q(el, '[data-pick-amount="b5"]')!.textContent!.trim()).toBe(money("10.00"));
+    expect(q(el, '[data-pick-amount="b7"]')!.textContent!.trim()).toBe(money("10.00"));
+    expect(text("b1")).toContain("Cheese");
+    expect(text("b1")).not.toContain("Bacon");
+    expect(text("b5")).toContain("Bacon");
+    expect(text("b5")).toContain("Pickles");
+    expect(text("b5")).not.toContain("Cheese");
+    expect(text("b7")).toContain("Onion ×2");
+    expect(text("b1")).not.toContain("×");
+    expect(dec(el, "b1")!.getAttribute("aria-label")).toContain("Cheese");
+    expect(inc(el, "b1")!.getAttribute("aria-label")).toContain("Cheese");
+  });
+
+  it("A803 picker: with no nameOf or money given, rows show their lines' own names and plain amounts", async () => {
+    const lines = [
+      dish("b1", 1, "Burger", "9.00"),
+      line("x2", 2, { name: "Cheese", productId: "cheese", parentLineNo: 1, portion: false }),
+      line("x3", 3, { name: undefined, productId: "pickles", parentLineNo: 1, portion: false }),
+    ];
+    const { el } = await mountWidget<TillPortionPicker>("till-portion-picker", {
+      rows: rowsOf(lines, null, new Set()),
+      picks: new Set(),
+    });
+    expect(q(el, '[data-pick-amount="b1"]')!.textContent!.trim()).toBe("19.00");
+    const label = tick(el, "b1").closest("label")!.textContent!.replace(/\s+/g, " ");
+    expect(label).toContain("Burger");
+    expect(label).toContain("Cheese");
+    expect(label).not.toContain("pickles");
+    expect(el.shadowRoot!.querySelectorAll(".extra")).toHaveLength(2);
+  });
+
+  it("A803 picker: a weighed dish shows its weight as the order list does, in English and Spanish", async () => {
+    const ham = (id: string, lineNo: number, quantity: string) =>
+      line(id, lineNo, {
+        name: "Iberian ham",
+        productId: "ham",
+        menuItemId: "ham",
+        quantity,
+        priceQuantity: quantity,
+        unitPrecision: 3,
+        unitPriceGross: "89.00",
+        portion: false,
+      });
+    const lines = [ham("h1", 1, "0.320"), ham("h2", 2, "0.320"), ham("h3", 3, "1.000")];
+    const text = (el: TillPortionPicker, id: string) =>
+      tick(el, id).closest("label")!.textContent!.replace(/\s+/g, " ");
+    const previous = currentLocale();
+    try {
+      setLocale("en-GB");
+      const { el } = await picker(lines);
+      expect(el.rows).toHaveLength(3);
+      expect(text(el, "h1")).toContain("Iberian ham ×0.32");
+      expect(text(el, "h2")).toContain("Iberian ham ×0.32");
+      expect(text(el, "h3")).toContain("Iberian ham ×1");
+      setLocale("es-ES");
+      await el.updateComplete;
+      expect(text(el, "h1")).toContain("Iberian ham ×0,32");
+    } finally {
+      setLocale(previous);
+    }
   });
 
   it("A803 picker: with no dishes, there is no tick", async () => {

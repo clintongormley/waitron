@@ -292,8 +292,9 @@ When one guest decides to pay for their own drinks, move those dishes onto a bil
 the **⋮** menu and choose **Move dishes…**. It is there for a table's bill that is still open, even
 when part of it is paid.
 
-The panel, headed with the bill, such as **Move dishes from Bill 1**, lists the bill's dishes. Tick
-a dish to move it; its extras go with it. Identical dishes share one row, such as **Caña** with a
+The panel, headed with the bill, such as **Move dishes from Bill 1**, lists the bill's dishes, each
+with its extras under its name, and a weighed dish with its weight, such as **Iberian ham ×0.32**.
+Tick a dish to move it; its extras go with it. Identical dishes share one row, such as **Caña** with a
 **4** beside it: ticking the row takes all of them, or as many as the bill's payments allow, and **−** and **+** then set how many, shown as
 **2 of 4**, with the amount of those moving. A
 weighed dish has a tick only, because it moves whole. A dish someone is changing in an unsent order

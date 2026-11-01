@@ -1476,3 +1476,5 @@ written; this section is the correction.
   list of the bill's dishes shown while the Sent read is missing uses the same grouping.
   `pickRows(groups, picks)` and `tidyPicks(before, groups, picks)` work out only the limits.
   `pickedAmount`, called only by its tests, is removed.
+- Final review: a row names its extras and, for a dish that is not one whole unit, its quantity
+  (A1292). `PickRow` gains `extras`, and the picker's `nameOf` names a line rather than a row.
