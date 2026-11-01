@@ -57,7 +57,7 @@ the words as proposed, and the grey reason gains what to do — "{amount} is alr
 bill: move fewer dishes" / «Ya se han pagado {amount} en esta cuenta: mueve menos platos». Question
 3: dishes MAY move onto a bill that already has a payment; it owes more afterwards and Merge bills
 still refuses such a bill. That replaces D4's "holding no payment", D14's destination list and the
-"other bills with no payment" checks of Tasks 7a and 11; D5 still holds, because a move only adds
+destination-payment refusal and checks of Tasks 2, 3, 7a, 9a and 11; D5 still holds, because a move only adds
 dishes and no price is negative. Question 4: the default (one tap takes the whole row).
 
 None yet for slice 4. The defaults under "Owner questions" are what the build uses. **Question 2

@@ -303,7 +303,8 @@ design's §8 test 17 lists "a move" among the writes refused `bill.refund_in_pro
 lists "transfer". Read, not run (A847's review, #1860): neither moving guests nor moving a bill
 appears to check for a pending refund, and the test covering test 17 makes no move; a transfer
 between bills appears to be refused earlier, `bill.payments_received`, because the refunded
-payment is still on the bill. Next: one route case each during a pending refund, then fix the
+payment is still on the bill. Move dishes… refuses `bill.refund_in_progress` on either bill
+(`apps/server/src/move-dishes.test.ts`). Next: one route case each during a pending refund, then fix the
 design's wording, or the code if a move can change what a bill charges (ask the owner first).
 
 ## The next identical bill payment can be answered with one that got a server error

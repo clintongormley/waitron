@@ -4752,7 +4752,7 @@ export class TillApi {
   /**
    * Move whole dishes, named by line id, from one bill of a party to another, or to a new bill of
    * the party when `toBillId` is null → `POST /api/bills/:fromBillId/move-dishes`, answering the
-   * bill they went to. Rejects, among others, `bill.line_paid`, `bill.payments_received`,
+   * bill they went to. Rejects, among others, `bill.line_paid`,
    * `tab.line_not_found`, `draft.taken_over`, `party.out_of_date` and `sale.empty_basket`.
    */
   moveDishes(
