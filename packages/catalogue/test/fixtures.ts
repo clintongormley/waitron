@@ -156,10 +156,7 @@ export interface SeededCatalogue {
   productIds: { each: string; weight: string };
 }
 
-export async function seedCatalogueFixture(
-  tx: Transaction,
-  _venue: { locationId: string },
-): Promise<SeededCatalogue> {
+export async function seedCatalogueFixture(tx: Transaction): Promise<SeededCatalogue> {
   const catalogue = await createCatalogue(tx, { name: "Deli" });
   const food = await createCategory(tx, { name: "Food" });
   const drinks = await createCategory(tx, { name: "Drinks" });

@@ -1679,7 +1679,7 @@ describe("catalogue operations", () => {
 
   it("hides every product of a deactivated catalogue", async () => {
     await asTenant(async (tx) => {
-      const fixture = await seedCatalogueFixture(tx, { locationId });
+      const fixture = await seedCatalogueFixture(tx);
       expect((await listAvailableProducts(tx)).products.length).toBe(2);
       await deactivateCatalogue(tx, fixture.catalogueId);
       expect((await listAvailableProducts(tx)).products).toEqual([]);
@@ -1688,7 +1688,7 @@ describe("catalogue operations", () => {
 
   it("returns products from a seeded catalogue that priceBasket can consume directly", async () => {
     await asTenant(async (tx) => {
-      await seedCatalogueFixture(tx, { locationId });
+      await seedCatalogueFixture(tx);
       const { products: available } = await listAvailableProducts(tx);
       expect(available.map((p) => p.category).sort()).toEqual(["Drinks", "Food"]);
       // The till prices catalogue rows by first resolving each one's customer-facing text; the

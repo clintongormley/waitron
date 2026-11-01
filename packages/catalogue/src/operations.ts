@@ -1390,6 +1390,7 @@ export async function readInvoiceLocales(tx: Transaction): Promise<string[]> {
  */
 export async function readReceiptLanguage(
   tx: Transaction,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- see the doc comment
   _locationId?: string,
 ): Promise<{ locale: string; invoiceLocales: string[] }> {
   const invoiceLocales = await readInvoiceLocales(tx);
@@ -1438,6 +1439,7 @@ export async function listAccessibleCatalogues(tx: Transaction): Promise<Accessi
  */
 export async function listAvailableProducts(
   tx: Transaction,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- see the doc comment
   _locationId?: string,
 ): Promise<{ products: AvailableProduct[]; invoiceLocales: string[] }> {
   const { ids: accessible, invoiceLocales } = await resolveAccessibleCatalogueIds(tx);
