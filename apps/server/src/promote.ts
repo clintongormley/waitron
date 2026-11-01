@@ -134,8 +134,7 @@ export async function promoteLocalSecondaryToPrimary(
 ): Promise<PromotionResult> {
   assertFenced(attestation);
 
-  // One read for the repair check and the mint: the save below is not term-guarded, and the mint's
-  // own reads already stood between a chart read and it, so a second read guarded nothing.
+  // One read for the repair check and the mint; the save below is not term-guarded.
   const held = await readNodeMembership(deps.db);
   // Fresh state, so a re-run after a half-completed promote sees what landed.
   await refreshDeploymentHolders(deps.node, deps.nodeId, deps.holders);

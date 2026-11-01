@@ -1726,14 +1726,14 @@ describe("setup-app", () => {
   it.each([
     [
       "en-GB",
-      "This server already holds saved keys for other services, and joining would make them unreadable for good. Nothing was changed. Start again on this server would remove those keys along with the rest of its restaurant files; to keep them, leave this server as it is.",
+      "This server already holds saved keys for other services, and joining would make them unreadable for good. Nothing was changed. Starting again on this server would set those keys aside or delete them, with the rest of its restaurant files; to keep them, leave this server as it is.",
     ],
     [
       "es-ES",
-      "Este servidor ya guarda claves de otros servicios y, al unirlo, dejarían de poder leerse para siempre. No se ha cambiado nada. Empezar de nuevo en este servidor quitaría esas claves junto con el resto de sus archivos del restaurante; para conservarlas, deja este servidor como está.",
+      "Este servidor ya guarda claves de otros servicios y, al unirlo, dejarían de poder leerse para siempre. No se ha cambiado nada. Empezar de nuevo en este servidor apartaría o borraría esas claves junto con el resto de sus archivos del restaurante; para conservarlas, deja este servidor como está.",
     ],
   ] as const)(
-    "says a server holding saved keys cannot join, and how to join it (%s)",
+    "says a server holding saved keys cannot join, and what starting again would do (%s)",
     async (locale, sentence) => {
       try {
         const adopt = vi

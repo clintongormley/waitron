@@ -600,9 +600,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   slice 3a.
   [Detail](backlog/setup.md#a1285-should-the-staged-reset-of-a-stopped-join-delete-secretsenv)
 
-- **A1284: where the environment sets the vault key, a Move copies a ring that is not the one in
-  use.** Left open by A947 slice 3a.
-  [Detail](backlog/setup.md#a1284-where-the-environment-sets-the-vault-key-a-move-copies-a-ring-that-is-not-the-one-in-use)
+- **A1284: where the environment sets the vault key, a Move or a join leaves a ring that is not the
+  one in use.** A joined spare then cannot open its own signing key after a restart. Left open by
+  A947 slice 3a.
+  [Detail](backlog/setup.md#a1284-where-the-environment-sets-the-vault-key-a-move-or-a-join-leaves-a-ring-that-is-not-the-one-in-use)
 
 - **A1144: after Keep, the box stays on its page even if the files are later removed by hand.**
   Left open by A1098.
@@ -5770,6 +5771,14 @@ outstanding on code that exists.
 - **A1278: the spare-adding route spends a reservation on a held chart it then refuses.** Predates
   A947 slice 3a.
   [Detail](backlog/replication-cloud.md#a1278-the-spare-adding-route-spends-a-reservation-on-a-held-chart-it-then-refuses)
+
+- **A1295: a backup's venue authority is not checked as a pair, and a restore without one keeps the
+  box's old pair.** Left open by A947 slice 3a.
+  [Detail](backlog/replication-cloud.md#a1295-a-backups-venue-authority-is-not-checked-as-a-pair-and-a-restore-without-one-keeps-the-boxs-old-pair)
+
+- **A1296: code-quality follow-ups from A947 slice 3a's finish review.** Parallel venue and node
+  code paths, a second HTTPS client, a second durable-write helper.
+  [Detail](backlog/replication-cloud.md#a1296-code-quality-follow-ups-from-a947-slice-3as-finish-review)
 
 - **A1279: a local secondary promotes only over a chart it signed itself.** No production caller.
   [Detail](backlog/replication-cloud.md#a1279-a-local-secondary-promotes-only-over-a-chart-it-signed-itself)

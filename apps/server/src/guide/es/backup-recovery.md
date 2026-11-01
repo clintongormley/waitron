@@ -53,9 +53,9 @@ página muestra los archivos, también pide, con la conexión segura del equipo,
 administrador que elegiste al configurar. **Conservarlo todo y parar** deja los archivos como están, y la página sigue
 hasta que se reinstale Waitron. **Apartar estos archivos y terminar «Empezar de nuevo»** mueve los
 archivos, sin cambios, a una carpeta nueva del equipo y termina «Empezar de nuevo»; después el
-equipo empieza una configuración inicial nueva. También guarda con ellos una copia del archivo de
-claves del equipo, porque los secretos guardados en esos archivos solo se abren con ella: quien copie
-la carpeta fuera del equipo también podrá abrirlos. Si se añaden, quitan o modifican archivos después de abrir la página,
+equipo empieza una configuración inicial nueva. También guarda una copia del archivo de
+claves del equipo en la carpeta apartada: quien copie esa carpeta fuera del equipo podrá abrir los
+secretos guardados en esos archivos. Si se añaden, quitan o modifican archivos después de abrir la página,
 el equipo rechaza la elección y no cambia nada: pulsa **Reintentar un arranque normal** para verlos
 de nuevo. A partir de la sexta contraseña incorrecta, la página te hace esperar antes del siguiente
 intento, nunca más de 15 minutos, y cada 15 minutos sin una contraseña incorrecta se perdona una. Si

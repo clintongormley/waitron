@@ -535,8 +535,7 @@ called weaker than its name, the topic file lists what it does not see.
   reads drizzle's generated snapshots, not hand-written SQL.
 - **A `local` table says what ties a row to its node** — a `node_id` column that every read and
   write names, a seal only a box holding the key ring opens, or rows the transaction that wrote
-  them deletes. A node holding another node's copy of `venue.db` must read its own rows or none. No guard makes a
-  new `local` table say which.
+  them deletes. No guard makes a new `local` table say which.
 - **Store anything that works as a live login as a hash.** Guards: database-copy cases in
   `apps/server/src/me-api.test.ts`, `apps/server/src/till-api.test.ts` and the stored-hash case in
   `packages/identity/src/management-session.test.ts`, weaker than the rule: limited credentials,

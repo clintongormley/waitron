@@ -560,15 +560,22 @@ sealed under the box's own ring stays readable after an early-stopped join; a jo
 after it replaced `secrets.env` leaves the main box's ring there. Now that the Move keeps its own
 copy (A1143), decide whether the staged reset should delete `secrets.env`.
 
-## A1284: where the environment sets the vault key, a Move copies a ring that is not the one in use
+## A1284: where the environment sets the vault key, a Move or a join leaves a ring that is not the one in use
 
 Left open by A947 slice 3a. Setup mode always writes `secrets.env` with its own key
 (`ensureBoxSecrets`, called from `apps/server/src/boot.ts` in setup mode), and in trading mode a
 non-empty `WAITRON_CREDENTIALS_KEY` in the environment wins over the file
 (`apps/server/src/box-env.ts`). So on such a box a Move copies `secrets.env`, which opens rows
 sealed in setup mode but not rows sealed in trading mode. Measured with the real `ensureBoxSecrets`
-and `loadBoxEnv` in the slice's Task R review; a Move on such a box was not run. Decide whether the
-Move should record the key in use, or refuse to copy.
+and `loadBoxEnv` in the slice's Task R review. The slice's finish-branch review (2026-11-01) then
+ran both cases in a scratch test with the key set in the environment: after a Move and a join, the
+copied ring opened neither the moved signing key nor the payment credential
+(`credentials.decrypt_failed`); and a join through the real route wrote the main box's ring to
+`secrets.env` (`apps/server/src/adopt.ts`), which the next start ignores, so the spare's new
+signing key failed `credentials.decrypt_failed`. No production box sets the key in the environment
+today (`deploy/` names none); a cloud profile can (`box-env.ts`). Decide whether the Move should
+record the key in use or refuse to copy, and whether a join should refuse before any write when
+the environment's key would hide the ring it receives.
 
 ## A1144: after Keep, the box stays on its page even if the files are later removed by hand
 

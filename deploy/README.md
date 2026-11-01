@@ -627,7 +627,7 @@ command against it treat that entrypoint differently:
   move everything in the folder it names back into the venue folder before
   `docker compose start app`. If the restore succeeded but its output shows
   `restore.db.aside_kept`, the folder that line names (`folder`) holds only the replaced
-  `venue.db`, and the replaced `node.db` too when the backup carried one;
+  `venue.db` and the replaced `node.db`;
   the next server start tries to delete it, logging `restore.db.aside_removed` when it does and
   `restore.db.aside_kept` when it cannot. A server start that finds
   such a folder holding files and no `venue.db` beside it deletes nothing and refuses to start with

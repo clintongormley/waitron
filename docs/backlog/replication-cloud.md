@@ -618,6 +618,46 @@ reservation, and both pass this chart: the main box signed it, and the readabili
 look for repeated ids. The same snapshot added on the branch still fails with that reservation.
 Wanted: refuse repeated ids before reserving.
 
+## A1295: a backup's venue authority is not checked as a pair, and a restore without one keeps the box's old pair
+
+Left open by A947 slice 3a. A spare's `tls/venue-ca.crt` and `tls/venue-ca.key` travel as optional
+backup state (`apps/server/src/backup-optional-state.ts`). Backup verification checks that
+`tls/ca.crt` and `tls/ca.key` match, but only accepts the venue pair's entries, so a backup holding
+the certificate without its key, or a mismatched pair, passes. And a restore of a backup without
+the pair onto a box that has one leaves the box's old pair in place, as it does for `backup.env`
+and `modules.json`. Read in the finish-branch fix, not run.
+
+## A1296: code-quality follow-ups from A947 slice 3a's finish review
+
+Raised by the finish-branch simplify review (2026-11-01) and not applied there, because each is a
+restructuring wider than a review fix:
+
+- The key ring's file format (`WAITRON_CREDENTIALS_KEY*`) is spelled out in
+  `apps/server/src/box-secrets.ts` (`keyRingEnv`) and `mirror-bundle.ts` (`encodeKeyRing`) as well
+  as `packages/credentials/src/keyring.ts`; adopt decodes the bundle's ring through the env format.
+  Own the format in `keyring.ts`.
+- `apps/server/src/mirror-bundle-fetch.ts` hand-writes an HTTPS client on `node:https`;
+  `tunnel-http.ts` already uses undici's `Agent({ connect: { ca } })` with `fetch`.
+- `node.dump` is opened twice in one verification run: read-only with an authorizer
+  (`backup-verification-compatibility.ts`) and writable in memory without one
+  (`packages/composition/src/node-backup-verification.ts`). Open it once, through the hardened
+  opener.
+- `packages/provisioning/src/first-setup-start-again-set-aside.ts` (`writeRingFile`) repeats
+  `writeFileDurable` (`fs-atomic.ts`) plus an exact mode and a refusal to overwrite; add those as
+  options instead.
+- The venue and node handles travel as separate fields under four names (`nodeDb`, `node`,
+  `ownerNode`, `nodeDatabase()`), with three near-identical pair types (`VenueDatabase`,
+  `VenueAndNodeHandles`, `MigrationFiles`). Pass one pair type.
+- The staged node copy is hashed twice in the staging digest
+  (`apps/server/src/first-setup-backup-recovery.ts`, `fingerprint()`).
+- "Opening a staged folder must not create an empty `node.db`" is enforced by about fifteen
+  callers (`writeStagedNodeCopy`, `openStagedCopy`, `assertStagedNodeCopy`, and a hand-rolled
+  `lstat` in `first-setup-publication.ts`). Let `validateDatabaseEntries` write the copy, and give
+  the store an option that refuses a missing `node.db`.
+- The rule "take `node.db`'s lock outside `venue.db`'s" lives only in comments at four nesting
+  sites; one `withVenueAndNodeTransaction` helper would enforce it.
+- `collectStateParts`'s `snapshotNode` callback is the same expression at three of four callers.
+
 ## A1279: a local secondary promotes only over a chart it signed itself
 
 Left open by A947 slice 3a. `promoteLocalSecondaryToPrimary` (`apps/server/src/promote.ts`) runs the

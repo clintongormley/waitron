@@ -68,7 +68,7 @@ export const shellEn = {
   "shell.adopt.request_invalid":
     "The server rejected the details. Check the address and login, then try again.",
   "shell.adopt.vault_not_empty":
-    "This server already holds saved keys for other services, and joining would make them unreadable for good. Nothing was changed. Start again on this server would remove those keys along with the rest of its restaurant files; to keep them, leave this server as it is.",
+    "This server already holds saved keys for other services, and joining would make them unreadable for good. Nothing was changed. Starting again on this server would set those keys aside or delete them, with the rest of its restaurant files; to keep them, leave this server as it is.",
   "shell.adopt.primary_unconfirmed":
     "The primary server's certificate wasn't compared, so nothing was sent. This is a fault in Waitron. Check the address and compare the certificate again.",
   "shell.adopt.login_failed":
@@ -236,7 +236,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.adopt.request_invalid":
     "El servidor ha rechazado los datos. Revisa la dirección y el inicio de sesión, e inténtalo de nuevo.",
   "shell.adopt.vault_not_empty":
-    "Este servidor ya guarda claves de otros servicios y, al unirlo, dejarían de poder leerse para siempre. No se ha cambiado nada. Empezar de nuevo en este servidor quitaría esas claves junto con el resto de sus archivos del restaurante; para conservarlas, deja este servidor como está.",
+    "Este servidor ya guarda claves de otros servicios y, al unirlo, dejarían de poder leerse para siempre. No se ha cambiado nada. Empezar de nuevo en este servidor apartaría o borraría esas claves junto con el resto de sus archivos del restaurante; para conservarlas, deja este servidor como está.",
   "shell.adopt.primary_unconfirmed":
     "No se ha comparado el certificado del servidor principal, así que no se ha enviado nada. Es un fallo de Waitron. Revisa la dirección y vuelve a comparar el certificado.",
   "shell.adopt.login_failed":
