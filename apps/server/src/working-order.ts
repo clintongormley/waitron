@@ -786,7 +786,7 @@ export async function priceOrderLines(
     const confirmedBy = await lateSend.confirm(tx, needsManager);
     for (const { index, periodName } of late) marks.set(index, { periodName, confirmedBy });
   }
-  const invoiceLocales = await readInvoiceLocales(tx, cfg.locationId);
+  const invoiceLocales = await readInvoiceLocales(tx);
   const savedLanguages = await readSavedContentLanguages(tx);
   const contentConfig = contentLanguagesOr(savedLanguages, cfg.locale);
 

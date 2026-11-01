@@ -14,7 +14,7 @@ import type { NodeId, SeriesId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -156,10 +156,7 @@ export interface SeededCatalogue {
   productIds: { each: string; weight: string };
 }
 
-export async function seedCatalogueFixture(
-  tx: Transaction,
-  venue: { locationId: string },
-): Promise<SeededCatalogue> {
+export async function seedCatalogueFixture(tx: Transaction): Promise<SeededCatalogue> {
   const catalogue = await createCatalogue(tx, { name: "Deli" });
   const food = await createCategory(tx, { name: "Food" });
   const drinks = await createCategory(tx, { name: "Drinks" });
@@ -205,7 +202,7 @@ export async function seedCatalogueFixture(
     unitPrice: "1.50",
     vatClass: "general",
   });
-  await assignCatalogueToLocation(tx, venue.locationId, catalogue.id);
+  await assignCatalogueToVenue(tx, catalogue.id);
   return {
     catalogueId: catalogue.id,
     categoryIds: { food: food.id, drinks: drinks.id },

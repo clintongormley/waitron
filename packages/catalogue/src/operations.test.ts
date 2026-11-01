@@ -32,10 +32,10 @@ const toPriceable = (p: AvailableProduct): PriceableProduct => ({
   ).product,
 });
 import {
-  addCatalogueToLocation,
+  addCatalogueToVenue,
   applyDietDerivation,
   applyRecipeDerivation,
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   catalogueExists,
   createCatalogue,
   createCategory,
@@ -46,14 +46,14 @@ import {
   listAccessibleCatalogues,
   listAvailableProducts,
   listCatalogues,
-  listCataloguesForLocation,
+  listCataloguesForVenue,
   listCategories,
   listMenuOffers,
   listProducts,
   readInvoiceLocales,
   readReceiptLanguage,
-  removeCatalogueFromLocation,
-  setLocationDefaultCatalogue,
+  removeCatalogueFromVenue,
+  setVenueDefaultCatalogue,
   updateMenuDetails,
   updateCategory,
   updateMenuItem,
@@ -895,8 +895,8 @@ describe("catalogue operations", () => {
         vatClass: "general",
         allergens: { milk: {} },
       });
-      await assignCatalogueToLocation(tx, locationId, cat.id);
-      const [available] = (await listAvailableProducts(tx, locationId)).products;
+      await assignCatalogueToVenue(tx, cat.id);
+      const [available] = (await listAvailableProducts(tx)).products;
       expect(available!.allergens).toEqual({ milk: {} });
     });
   });
@@ -929,8 +929,8 @@ describe("catalogue operations", () => {
           vatClass: "general",
         });
       }
-      await assignCatalogueToLocation(tx, locationId, cat.id);
-      const available = (await listAvailableProducts(tx, locationId)).products;
+      await assignCatalogueToVenue(tx, cat.id);
+      const available = (await listAvailableProducts(tx)).products;
 
       expect(available.find((p) => p.name === "vermut")!.unit.measure).toBe(true);
       expect(available.find((p) => p.name === "olives")!.unit).not.toHaveProperty("measure");
@@ -950,8 +950,8 @@ describe("catalogue operations", () => {
         dietOverride: { vegan: "no", halal: "yes", addContains: ["meat"] },
       });
 
-      await assignCatalogueToLocation(tx, locationId, cat.id);
-      const [available] = (await listAvailableProducts(tx, locationId)).products;
+      await assignCatalogueToVenue(tx, cat.id);
+      const [available] = (await listAvailableProducts(tx)).products;
 
       expect(available!.diet).toMatchObject({ vegan: "no", halal: "yes", contains: ["meat"] });
       expect(available!.dietOverride).toEqual({ vegan: "no", halal: "yes", addContains: ["meat"] });
@@ -1386,7 +1386,7 @@ describe("catalogue operations", () => {
     });
   });
 
-  it("lists a location's catalogue's active products only, with the category name resolved", async () => {
+  it("lists only the active products of the venue's menus, with the category name resolved", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "Deli" });
       const food = await createCategory(tx, { name: "Food" });
@@ -1407,8 +1407,8 @@ describe("catalogue operations", () => {
         vatClass: "general",
       });
       await deactivateProduct(tx, p2.id);
-      await assignCatalogueToLocation(tx, locationId, cat.id);
-      const { products: available } = await listAvailableProducts(tx, locationId);
+      await assignCatalogueToVenue(tx, cat.id);
+      const { products: available } = await listAvailableProducts(tx);
       expect(available.map((p) => p.id)).toEqual([p1.id]);
       expect(available[0]!.category).toBe("Food");
       expect(available[0]!.unitPrice).toBe("24.90");
@@ -1446,9 +1446,9 @@ describe("catalogue operations", () => {
         unitPrice: "9.00",
         vatClass: "general",
       });
-      await assignCatalogueToLocation(tx, locationId, main.id); // default
-      await addCatalogueToLocation(tx, locationId, lunch.id); // other accessible
-      const { products: rows } = await listAvailableProducts(tx, locationId);
+      await assignCatalogueToVenue(tx, main.id); // default
+      await addCatalogueToVenue(tx, lunch.id); // other accessible
+      const { products: rows } = await listAvailableProducts(tx);
       expect(rows.map((r) => r.id).sort()).toEqual([pMain.id, pLunch.id].sort());
       expect(rows.find((r) => r.id === pLunch.id)).toMatchObject({
         catalogueId: lunch.id,
@@ -1461,9 +1461,9 @@ describe("catalogue operations", () => {
     await asTenant(async (tx) => {
       const main = await createCatalogue(tx, { name: "Main" });
       const lunch = await createCatalogue(tx, { name: "Lunch" });
-      await assignCatalogueToLocation(tx, locationId, main.id);
-      await addCatalogueToLocation(tx, locationId, lunch.id);
-      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
+      await assignCatalogueToVenue(tx, main.id);
+      await addCatalogueToVenue(tx, lunch.id);
+      expect(await listAccessibleCatalogues(tx)).toEqual([
         { id: main.id, name: "Main", isDefault: true },
         { id: lunch.id, name: "Lunch", isDefault: false },
       ]);
@@ -1477,10 +1477,10 @@ describe("catalogue operations", () => {
       const main = await createCatalogue(tx, { name: "Main" });
       const zebra = await createCatalogue(tx, { name: "Zebra" });
       const alpha = await createCatalogue(tx, { name: "Alpha" });
-      await assignCatalogueToLocation(tx, locationId, main.id);
-      await addCatalogueToLocation(tx, locationId, zebra.id);
-      await addCatalogueToLocation(tx, locationId, alpha.id);
-      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
+      await assignCatalogueToVenue(tx, main.id);
+      await addCatalogueToVenue(tx, zebra.id);
+      await addCatalogueToVenue(tx, alpha.id);
+      expect(await listAccessibleCatalogues(tx)).toEqual([
         { id: main.id, name: "Main", isDefault: true },
         { id: alpha.id, name: "Alpha", isDefault: false },
         { id: zebra.id, name: "Zebra", isDefault: false },
@@ -1494,99 +1494,89 @@ describe("catalogue operations", () => {
     await asTenant(async (tx) => {
       const lunch = await createCatalogue(tx, { name: "Lunch" });
       const main = await createCatalogue(tx, { name: "Main" });
-      await addCatalogueToLocation(tx, locationId, lunch.id);
-      await assignCatalogueToLocation(tx, locationId, main.id);
-      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
+      await addCatalogueToVenue(tx, lunch.id);
+      await assignCatalogueToVenue(tx, main.id);
+      expect(await listAccessibleCatalogues(tx)).toEqual([
         { id: main.id, name: "Main", isDefault: true },
         { id: lunch.id, name: "Lunch", isDefault: false },
       ]);
     });
   });
 
-  it("readInvoiceLocales returns a location's invoice languages in order, and [] for no such location", async () => {
+  it("readInvoiceLocales returns the venue's invoice languages in order", async () => {
     await asTenant(async (tx) => {
       await tx.execute(
         sql`update locations set invoice_locales = '["es-ES","en-GB"]' where id = ${locationId}`,
       );
-      expect(await readInvoiceLocales(tx, locationId)).toEqual(["es-ES", "en-GB"]);
-      expect(await readInvoiceLocales(tx, crypto.randomUUID())).toEqual([]);
+      expect(await readInvoiceLocales(tx)).toEqual(["es-ES", "en-GB"]);
     });
   });
 
-  it("readReceiptLanguage returns a location's first saved language and the whole list", async () => {
+  it("readReceiptLanguage reads the venue's first saved language", async () => {
     await asTenant(async (tx) => {
-      await tx.execute(
-        sql`update locations set invoice_locales = '["gl-ES","es-ES"]' where id = ${locationId}`,
-      );
-      expect(await readReceiptLanguage(tx, locationId)).toEqual({
+      await tx.execute(sql`update locations set invoice_locales = '["gl-ES","es-ES"]'`);
+      expect(await readReceiptLanguage(tx)).toEqual({
         locale: "gl-ES",
         invoiceLocales: ["gl-ES", "es-ES"],
       });
     });
   });
 
-  it("readReceiptLanguage throws for no such location", async () => {
+  it("returns [] from listAccessibleCatalogues for a venue with no accessible catalogue", async () => {
     await asTenant(async (tx) => {
-      const missing = crypto.randomUUID();
-      await expect(readReceiptLanguage(tx, missing)).rejects.toThrow(`no location ${missing}`);
+      expect(await listAccessibleCatalogues(tx)).toEqual([]);
     });
   });
 
-  it("returns [] from listAccessibleCatalogues for a location with no accessible catalogue", async () => {
-    await asTenant(async (tx) => {
-      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([]);
-    });
-  });
-
-  it("removes a member catalogue from a location's accessible set", async () => {
+  it("removes a member catalogue from the venue's menu list", async () => {
     await asTenant(async (tx) => {
       const main = await createCatalogue(tx, { name: "Main" });
       const lunch = await createCatalogue(tx, { name: "Lunch" });
-      await assignCatalogueToLocation(tx, locationId, main.id);
-      await addCatalogueToLocation(tx, locationId, lunch.id);
-      await removeCatalogueFromLocation(tx, locationId, lunch.id);
-      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
+      await assignCatalogueToVenue(tx, main.id);
+      await addCatalogueToVenue(tx, lunch.id);
+      await removeCatalogueFromVenue(tx, lunch.id);
+      expect(await listAccessibleCatalogues(tx)).toEqual([
         { id: main.id, name: "Main", isDefault: true },
       ]);
     });
   });
 
-  it("removeCatalogueFromLocation is a no-op for a catalogue that is not a member", async () => {
+  it("removeCatalogueFromVenue is a no-op for a catalogue that is not a member", async () => {
     await asTenant(async (tx) => {
       const main = await createCatalogue(tx, { name: "Main" });
       const ghost = await createCatalogue(tx, { name: "Ghost" });
-      await assignCatalogueToLocation(tx, locationId, main.id);
-      await removeCatalogueFromLocation(tx, locationId, ghost.id);
-      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
+      await assignCatalogueToVenue(tx, main.id);
+      await removeCatalogueFromVenue(tx, ghost.id);
+      expect(await listAccessibleCatalogues(tx)).toEqual([
         { id: main.id, name: "Main", isDefault: true },
       ]);
     });
   });
 
   // The default lives in `locations.catalogue_id`, never as a `location_catalogues` row, so the
-  // remove route cannot drop a location to zero sellable menus.
-  it("removeCatalogueFromLocation never removes the default (it is not a member row)", async () => {
+  // remove route cannot drop the venue to zero sellable menus.
+  it("removeCatalogueFromVenue never removes the default (it is not a member row)", async () => {
     await asTenant(async (tx) => {
       const main = await createCatalogue(tx, { name: "Main" });
-      await assignCatalogueToLocation(tx, locationId, main.id);
-      await removeCatalogueFromLocation(tx, locationId, main.id);
-      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
+      await assignCatalogueToVenue(tx, main.id);
+      await removeCatalogueFromVenue(tx, main.id);
+      expect(await listAccessibleCatalogues(tx)).toEqual([
         { id: main.id, name: "Main", isDefault: true },
       ]);
     });
   });
 
   // The management screen's read: EVERY tenant catalogue (sellable here or not), each flagged
-  // `sellable` (in this location's accessible set — default OR member) and `isDefault`. `shelf` is a
-  // catalogue the tenant owns but this location does not sell, so it must appear with `sellable:false`.
-  it("lists every tenant catalogue with sellable + default flags for a location", async () => {
+  // `sellable` (in the venue's menu list — default OR member) and `isDefault`. `shelf` is a
+  // catalogue the tenant owns but the venue does not sell, so it must appear with `sellable:false`.
+  it("lists every tenant catalogue with sellable + default flags", async () => {
     await asTenant(async (tx) => {
       const main = await createCatalogue(tx, { name: "Main" });
       const lunch = await createCatalogue(tx, { name: "Lunch" });
       const shelf = await createCatalogue(tx, { name: "Shelf" });
-      await assignCatalogueToLocation(tx, locationId, main.id);
-      await addCatalogueToLocation(tx, locationId, lunch.id);
-      const rows = await listCataloguesForLocation(tx, locationId);
+      await assignCatalogueToVenue(tx, main.id);
+      await addCatalogueToVenue(tx, lunch.id);
+      const rows = await listCataloguesForVenue(tx);
       expect(rows).toHaveLength(3);
       const byId = new Map(rows.map((r) => [r.id, r]));
       expect(byId.get(main.id)).toMatchObject({ name: "Main", sellable: true, isDefault: true });
@@ -1599,26 +1589,26 @@ describe("catalogue operations", () => {
     });
   });
 
-  it("setLocationDefaultCatalogue changes the default and keeps the old default sellable", async () => {
+  it("setVenueDefaultCatalogue changes the default and keeps the old default sellable", async () => {
     await asTenant(async (tx) => {
       const house = await createCatalogue(tx, { name: "Casa" });
       const day = await createCatalogue(tx, { name: "Día" });
-      await assignCatalogueToLocation(tx, locationId, house.id);
-      await addCatalogueToLocation(tx, locationId, day.id);
-      await setLocationDefaultCatalogue(tx, locationId, day.id);
-      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
+      await assignCatalogueToVenue(tx, house.id);
+      await addCatalogueToVenue(tx, day.id);
+      await setVenueDefaultCatalogue(tx, day.id);
+      expect(await listAccessibleCatalogues(tx)).toEqual([
         { id: day.id, name: "Día", isDefault: true },
         { id: house.id, name: "Casa", isDefault: false },
       ]);
     });
   });
 
-  // No prior default (a freshly-provisioned location) → just set it, nothing to demote.
-  it("setLocationDefaultCatalogue sets the default when the location had none", async () => {
+  // No prior default (a freshly-provisioned venue) → just set it, nothing to demote.
+  it("setVenueDefaultCatalogue sets the default when the venue had none", async () => {
     await asTenant(async (tx) => {
       const house = await createCatalogue(tx, { name: "Casa" });
-      await setLocationDefaultCatalogue(tx, locationId, house.id);
-      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
+      await setVenueDefaultCatalogue(tx, house.id);
+      expect(await listAccessibleCatalogues(tx)).toEqual([
         { id: house.id, name: "Casa", isDefault: true },
       ]);
     });
@@ -1627,50 +1617,31 @@ describe("catalogue operations", () => {
   // Re-setting the same catalogue as default must NOT insert a redundant member row for it.
   // `listAccessibleCatalogues` de-duplicates and so cannot see one; this counts member rows
   // DIRECTLY.
-  it("setLocationDefaultCatalogue is idempotent when the catalogue is already the default", async () => {
+  it("setVenueDefaultCatalogue is idempotent when the catalogue is already the default", async () => {
     await asTenant(async (tx) => {
       const house = await createCatalogue(tx, { name: "Casa" });
-      await assignCatalogueToLocation(tx, locationId, house.id);
-      await setLocationDefaultCatalogue(tx, locationId, house.id);
-      expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
+      await assignCatalogueToVenue(tx, house.id);
+      await setVenueDefaultCatalogue(tx, house.id);
+      expect(await listAccessibleCatalogues(tx)).toEqual([
         { id: house.id, name: "Casa", isDefault: true },
       ]);
       const members = await tx.execute<{ count: number }>(
-        sql`select count(*) as count from location_catalogues where location_id = ${locationId}`,
+        sql`select count(*) as count from location_catalogues`,
       );
       expect(members.rows[0]!.count).toBe(0);
     });
   });
 
   describe.each([
-    ["addCatalogueToLocation", addCatalogueToLocation],
-    ["setLocationDefaultCatalogue", setLocationDefaultCatalogue],
+    ["addCatalogueToVenue", addCatalogueToVenue],
+    ["setVenueDefaultCatalogue", setVenueDefaultCatalogue],
   ] as const)("%s with an id naming nothing", (_name, write) => {
-    it("refuses an unknown location with location.not_found", async () => {
-      const house = await asTenant((tx) => createCatalogue(tx, { name: "Casa" }));
+    it("refuses an unknown catalogue with catalogue.not_found", async () => {
       const missing = crypto.randomUUID();
-      await expect(asTenant((tx) => write(tx, missing, house.id))).rejects.toMatchObject({
-        code: "location.not_found",
-        params: { locationId: missing },
-      });
-    });
-
-    it("refuses an unknown catalogue at a real location with catalogue.not_found", async () => {
-      const missing = crypto.randomUUID();
-      await expect(asTenant((tx) => write(tx, locationId, missing))).rejects.toMatchObject({
+      await expect(asTenant((tx) => write(tx, missing))).rejects.toMatchObject({
         code: "catalogue.not_found",
         params: { catalogueId: missing },
       });
-    });
-
-    it("names the location first when both ids are unknown", async () => {
-      const missing = crypto.randomUUID();
-      await expect(asTenant((tx) => write(tx, missing, crypto.randomUUID()))).rejects.toMatchObject(
-        {
-          code: "location.not_found",
-          params: { locationId: missing },
-        },
-      );
     });
   });
 
@@ -1693,32 +1664,32 @@ describe("catalogue operations", () => {
         unitPrice: "1.50",
         vatClass: "general",
       });
-      await assignCatalogueToLocation(tx, locationId, cat.id);
-      const [available] = (await listAvailableProducts(tx, locationId)).products;
+      await assignCatalogueToVenue(tx, cat.id);
+      const [available] = (await listAvailableProducts(tx)).products;
       expect(available!.category).toBeNull();
       expect(available!.courseId).toBeNull();
     });
   });
 
-  it("returns [] for a location with no catalogue assigned", async () => {
+  it("returns [] for a venue with no catalogue assigned", async () => {
     await asTenant(async (tx) => {
-      expect((await listAvailableProducts(tx, locationId)).products).toEqual([]);
+      expect((await listAvailableProducts(tx)).products).toEqual([]);
     });
   });
 
   it("hides every product of a deactivated catalogue", async () => {
     await asTenant(async (tx) => {
-      const fixture = await seedCatalogueFixture(tx, { locationId });
-      expect((await listAvailableProducts(tx, locationId)).products.length).toBe(2);
+      const fixture = await seedCatalogueFixture(tx);
+      expect((await listAvailableProducts(tx)).products.length).toBe(2);
       await deactivateCatalogue(tx, fixture.catalogueId);
-      expect((await listAvailableProducts(tx, locationId)).products).toEqual([]);
+      expect((await listAvailableProducts(tx)).products).toEqual([]);
     });
   });
 
   it("returns products from a seeded catalogue that priceBasket can consume directly", async () => {
     await asTenant(async (tx) => {
-      await seedCatalogueFixture(tx, { locationId });
-      const { products: available } = await listAvailableProducts(tx, locationId);
+      await seedCatalogueFixture(tx);
+      const { products: available } = await listAvailableProducts(tx);
       expect(available.map((p) => p.category).sort()).toEqual(["Drinks", "Food"]);
       // The till prices catalogue rows by first resolving each one's customer-facing text; the
       // resolved rows feed straight into priceBasket.

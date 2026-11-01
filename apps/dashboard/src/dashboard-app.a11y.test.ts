@@ -77,7 +77,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listCategories: vi.fn().mockResolvedValue([]),
     listProducts: vi.fn().mockResolvedValue([]),
     getLocations: vi.fn().mockResolvedValue([{ id: "loc-1", name: "Main" }]),
-    listLocationCatalogues: vi.fn().mockResolvedValue([]),
+    listVenueCatalogues: vi.fn().mockResolvedValue([]),
     getReceipt: vi.fn().mockResolvedValue({ receipt: {}, venueAddress: [] }),
     putReceipt: vi.fn().mockResolvedValue(undefined),
     listPendingSwaps: vi.fn().mockResolvedValue([]),

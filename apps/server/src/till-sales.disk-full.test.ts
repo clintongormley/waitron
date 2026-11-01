@@ -7,7 +7,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { floorZones, invoiceSeries, withTransaction } from "@waitron/db";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -46,7 +46,7 @@ useVenueDb({
         vatClass: "general",
       });
       freeId = water.id;
-      await assignCatalogueToLocation(tx, venue.cfg.locationId, cat.id);
+      await assignCatalogueToVenue(tx, cat.id);
       const [zone] = await tx
         .insert(floorZones)
         .values({ locationId: venue.cfg.locationId, name: "Free counter" })

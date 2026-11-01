@@ -6,7 +6,7 @@ import { saleLines, withTransaction, type Database } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createExtraList,
@@ -181,7 +181,7 @@ async function fileOneSale(db: Database) {
       LOCALE,
     );
     await writeProductModifiers(tx, negroni.id, [{ kind: "extras", id: extras.id }]);
-    await assignCatalogueToLocation(tx, venue.locationId, menu.id);
+    await assignCatalogueToVenue(tx, menu.id);
     return { negroni: negroni.id, hielo: hielo.id, extrasListId: extras.id };
   });
   const offers = await withTransaction(db, (tx) => offerProducts(tx, cfg));

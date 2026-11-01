@@ -16,7 +16,7 @@ import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/se
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createExtraList,
   createProduct,
@@ -81,7 +81,7 @@ async function seedVenue(db: Database): Promise<Venue> {
   };
   const ids = await withTransaction(db, async (tx) => {
     const menu = await createCatalogue(tx, { name: "Carta" });
-    await assignCatalogueToLocation(tx, locationId, menu.id);
+    await assignCatalogueToVenue(tx, menu.id);
     const product = (name: string, unitPrice: string) =>
       createProduct(tx, {
         catalogueId: menu.id,

@@ -1208,9 +1208,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   `extras.product_has_variants`; a venue holding data written before #578 would carry such an item
   across. Read, not run; nothing unless transfers from older venues matter.
 
-- **A location's menu list is read by no sale.** **Next action:** owner to decide whether to retire
-  `location_catalogues` and the management location routes.
-  [Detail](backlog/catalogue.md#a-locations-menu-list-is-read-by-no-sale)
+- **The venue's menu list is read by no sale.** **Next action:** owner to decide whether to retire
+  `location_catalogues` and the management routes `/management-api/venue/catalogues…`.
+  [Detail](backlog/catalogue.md#the-venues-menu-list-is-read-by-no-sale)
 
 - **Two signals say whether a dish is sold by weight, and they can disagree in storage.** Since B4
   the order path reads only the unit (`priceOrderLines`), so no sale reads `products.pricing_unit`.

@@ -38,7 +38,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -267,7 +267,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       });
       productIds.set(item.name, product.id);
     }
-    await assignCatalogueToLocation(tx, provisioned.locationId, cat.id);
+    await assignCatalogueToVenue(tx, cat.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const [person] = await tx
       .insert(persons)
@@ -1989,52 +1989,63 @@ describe("the invoice at full payment (design §8 test 8)", () => {
         printerLocation = other!.id;
       }
       const pagePrinterId = randomUUID();
-      await unlistFromTill();
-      if (kind !== "missing") {
-        await inTx((tx) =>
-          tx.insert(pagePrinters).values({
-            id: pagePrinterId,
-            locationId: printerLocation,
-            name: "Office",
-            host: pagePrinterId,
-            port: 631,
-            resourcePath: "/ipp/print",
-            documentFormat: "application/pdf",
-            supportedFormats: ["application/pdf"],
-            media: "iso_a4_210x297mm",
-            resolutionDpi: 300,
-            active: kind !== "disabled",
-          }),
+      try {
+        await unlistFromTill();
+        if (kind !== "missing") {
+          await inTx((tx) =>
+            tx.insert(pagePrinters).values({
+              id: pagePrinterId,
+              locationId: printerLocation,
+              name: "Office",
+              host: pagePrinterId,
+              port: 631,
+              resourcePath: "/ipp/print",
+              documentFormat: "application/pdf",
+              supportedFormats: ["application/pdf"],
+              media: "iso_a4_210x297mm",
+              resolutionDpi: 300,
+              active: kind !== "disabled",
+            }),
+          );
+          await listOnTill(pagePrinterId, printerLocation);
+        }
+        const response = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+          revision: before!.revision,
+          invoiceType: "F1",
+          recipient: {
+            taxId: "B12345674",
+            legalName: "Cliente SL",
+            address: "2 Main Street, 28013 Madrid, Madrid",
+            countryCode: "ES",
+          },
+          delivery: { medium: "a4", pagePrinterId },
+        });
+        const [saved] = await inTx((tx) =>
+          tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
         );
-        await listOnTill(pagePrinterId, printerLocation);
-      }
-      const response = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
-        revision: before!.revision,
-        invoiceType: "F1",
-        recipient: {
-          taxId: "B12345674",
-          legalName: "Cliente SL",
-          address: "2 Main Street, 28013 Madrid, Madrid",
-          countryCode: "ES",
-        },
-        delivery: { medium: "a4", pagePrinterId },
-      });
-      const [saved] = await inTx((tx) =>
-        tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
-      );
-      if (kind === "active") {
-        expect(response).toEqual({ status: 200, json: { revision: before!.revision + 1 } });
-        expect(saved!.invoiceDelivery).toEqual({
-          medium: "a4",
-          pagePrinterId,
-          personId: venue.staffId,
-        });
-      } else {
-        expect(response).toEqual({
-          status: 409,
-          json: { code: "invoice_delivery.printer_invalid", params: {} },
-        });
-        expect(saved).toEqual(before);
+        if (kind === "active") {
+          expect(response).toEqual({ status: 200, json: { revision: before!.revision + 1 } });
+          expect(saved!.invoiceDelivery).toEqual({
+            medium: "a4",
+            pagePrinterId,
+            personId: venue.staffId,
+          });
+        } else {
+          expect(response).toEqual({
+            status: 409,
+            json: { code: "invoice_delivery.printer_invalid", params: {} },
+          });
+          expect(saved).toEqual(before);
+        }
+      } finally {
+        if (kind === "other-location")
+          await inTx(async (tx) => {
+            await tx
+              .delete(deviceProfilePrinters)
+              .where(eq(deviceProfilePrinters.pagePrinterId, pagePrinterId));
+            await tx.delete(pagePrinters).where(eq(pagePrinters.id, pagePrinterId));
+            await tx.delete(locations).where(eq(locations.id, printerLocation));
+          });
       }
     },
   );
@@ -2090,20 +2101,31 @@ describe("the invoice at full payment (design §8 test 8)", () => {
 
     it("answers no invoice printer when the location has none, only another location's or a disabled one", async () => {
       await pagePrinter({ name: "Office" });
-      await pagePrinter({
+      const elsewhere = await otherLocation();
+      const elsewherePrinter = await pagePrinter({
         name: "Elsewhere",
-        locationId: await otherLocation(),
+        locationId: elsewhere,
         onTill: true,
       });
-      expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
-        status: 200,
-        json: { invoicePrinter: null, emailAvailable: false },
-      });
-      await pagePrinter({ name: "Back office", active: false, onTill: true });
-      expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
-        status: 200,
-        json: { invoicePrinter: null, emailAvailable: false },
-      });
+      try {
+        expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
+          status: 200,
+          json: { invoicePrinter: null, emailAvailable: false },
+        });
+        await pagePrinter({ name: "Back office", active: false, onTill: true });
+        expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
+          status: 200,
+          json: { invoicePrinter: null, emailAvailable: false },
+        });
+      } finally {
+        await inTx(async (tx) => {
+          await tx
+            .delete(deviceProfilePrinters)
+            .where(eq(deviceProfilePrinters.pagePrinterId, elsewherePrinter));
+          await tx.delete(pagePrinters).where(eq(pagePrinters.id, elsewherePrinter));
+          await tx.delete(locations).where(eq(locations.id, elsewhere));
+        });
+      }
     });
 
     it("answers the device's active A4 invoice printer by id and name", async () => {

@@ -1,5 +1,12 @@
 # A394 — refusal statuses by one rule: the audit and its follow-ups
 
+> **2026-11-01 (A1301 S5).** The four location menu routes moved to
+> `/management-api/venue/catalogues`, `/management-api/venue/catalogues/:catalogueId` and
+> `/management-api/venue/default-catalogue`; `location.not_found` is deleted. Text below naming them, or the location-named catalogue
+> functions S5 renamed (`addCatalogueToLocation`, `setLocationDefaultCatalogue`,
+> `assignCatalogueToLocation`, `removeCatalogueFromLocation`, `listCataloguesForLocation`),
+> describes the code when written.
+
 > **2026-10-15:** A585 part 8 retires the dashboard Rota screen and its shift dialog, and drops
 > the free-text shift/template `role`. Plan shifts in Calendar → Rota; staffing owns its shift
 > editor. References below describe the code when this document was written.

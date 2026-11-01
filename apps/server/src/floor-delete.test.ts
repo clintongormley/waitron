@@ -343,14 +343,6 @@ describe("floor hierarchy deletion", () => {
     const own = await planned(z, "Delete");
     const otherZone = await zone("Keep");
     const other = await planned(otherZone, "Keep");
-    const [otherLocation] = await inTx(v, (tx) =>
-      tx
-        .insert(locations)
-        .values({ name: "Other", invoiceLocales: ["en"], operationDescription: "Test" })
-        .returning(),
-    );
-    const foreignZone = await zone("Foreign", otherLocation!.id);
-    await planned(foreignZone, "Foreign", otherLocation!.id);
     await inTx(v, async (tx) => {
       await tx
         .update(diningTables)
@@ -379,7 +371,7 @@ describe("floor hierarchy deletion", () => {
       }),
     );
     const before = await inTx(v, snapshot);
-    const input = [foreignZone, z, z];
+    const input = [z, z];
     const result = await impact(input);
     expect(result).toEqual({
       refusals: [],

@@ -20,7 +20,7 @@ import { eq } from "drizzle-orm";
 import { Agent } from "undici";
 import { expect } from "vitest";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -376,7 +376,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
           unitPrice: "1.50",
           vatClass: "general",
         });
-        await assignCatalogueToLocation(tx, brandLocationId(venue.locationId), catalogue.id);
+        await assignCatalogueToVenue(tx, catalogue.id);
         const offers = await offerProducts(tx, {
           locationId: brandLocationId(venue.locationId),
         });

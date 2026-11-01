@@ -90,8 +90,6 @@ declare module "@waitron/shared" {
      * bytes. */
     "media.unsupported_type": { detected?: string };
     "catalogue.not_found": { catalogueId: string };
-    /** A location-menu write names a location that does not exist. */
-    "location.not_found": { locationId: string };
     "menu.name_taken": { field: "name" };
     "menu.reset_required": { menuId: string };
     "menu.clashes_unresolved": { menuId: string; count: number };

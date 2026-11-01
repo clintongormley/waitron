@@ -562,8 +562,9 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedTenant(db);
     await seedLegacySellingUnits(db);
-    // One location, so the location↔menu routes have a `:locationId` to act on. Through the table
-    // definition: `locations.id` is a `$defaultFn` generator, which a raw insert never reaches.
+    // The venue's one `locations` row: the venue menu routes act on it and `venueCfg` names its id.
+    // Through the table definition: `locations.id` is a `$defaultFn` generator, which a raw insert
+    // never reaches.
     const [loc] = await db
       .insert(locations)
       .values({ name: "Main", invoiceLocales: ["es-ES"], operationDescription: "Venta" })
@@ -1360,17 +1361,17 @@ describe("mountCatalogueApi — catalogues", () => {
   );
 });
 
-describe("mountCatalogueApi — location menus", () => {
-  // The location's default + member rows are the ONLY state shared across these tests (one venue
+describe("mountCatalogueApi — the venue's menus", () => {
+  // The venue's default + member rows are the ONLY state shared across these tests (one venue
   // file for the whole file); every catalogue a test creates gets a fresh id. Reset both so the tests
-  // are order-independent. `locationId` is set by the shared setup, which runs before this beforeEach.
+  // are order-independent.
   beforeEach(async () => {
-    await suite.db.execute(sql`delete from location_catalogues where location_id = ${locationId}`);
-    await suite.db.execute(sql`update locations set catalogue_id = null where id = ${locationId}`);
+    await suite.db.execute(sql`delete from location_catalogues`);
+    await suite.db.execute(sql`update locations set catalogue_id = null`);
   });
 
-  const cataloguesPath = () => `/management-api/locations/${locationId}/catalogues`;
-  const defaultPath = () => `/management-api/locations/${locationId}/default-catalogue`;
+  const cataloguesPath = () => "/management-api/venue/catalogues";
+  const defaultPath = () => "/management-api/venue/default-catalogue";
 
   it("GET lists every tenant catalogue with sellable + default flags (200)", async () => {
     const app = mountApp();
@@ -1388,7 +1389,7 @@ describe("mountCatalogueApi — location menus", () => {
     expect(byId.get(shelf)).toMatchObject({ sellable: false, isDefault: false });
   });
 
-  it("POST adds a catalogue to the location's accessible set (204)", async () => {
+  it("POST adds a catalogue to the venue's menu list (204)", async () => {
     const app = mountApp();
     const day = await createCatalogueVia(app, "Daily");
     const res = await send(app, "POST", cataloguesPath(), { body: { catalogueId: day } });
@@ -1400,7 +1401,7 @@ describe("mountCatalogueApi — location menus", () => {
     expect(rows.find((r) => r.id === day)).toMatchObject({ sellable: true });
   });
 
-  it("DELETE removes a catalogue from the location's accessible set (204)", async () => {
+  it("DELETE removes a catalogue from the venue's menu list (204)", async () => {
     const app = mountApp();
     const day = await createCatalogueVia(app, "Daily");
     await send(app, "POST", cataloguesPath(), { body: { catalogueId: day } });
@@ -1489,43 +1490,6 @@ describe("mountCatalogueApi — location menus", () => {
     const res = await send(app, "POST", cataloguesPath(), { body: { catalogueId: "not-a-uuid" } });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
-  });
-
-  it("GET with a non-uuid locationId → shared.invalid_id 400", async () => {
-    const res = await send(mountApp(), "GET", "/management-api/locations/not-a-uuid/catalogues");
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
-  });
-
-  describe.each([
-    ["POST", "catalogues"],
-    ["PUT", "default-catalogue"],
-  ] as const)("%s …/%s at a location that does not exist", (method, leaf) => {
-    const unknownLocationPath = (missing: string) => `/management-api/locations/${missing}/${leaf}`;
-
-    it("answers 404 location.not_found with a real catalogue", async () => {
-      const app = mountApp();
-      const house = await createCatalogueVia(app, `House ${crypto.randomUUID()}`);
-      const missing = crypto.randomUUID();
-      const res = await send(app, method, unknownLocationPath(missing), {
-        body: { catalogueId: house },
-      });
-      expect(res.status).toBe(404);
-      expect(await res.json()).toMatchObject({
-        error: { code: "location.not_found", params: { locationId: missing } },
-      });
-    });
-
-    it("answers 404 location.not_found, not catalogue.not_found, with an unknown catalogue", async () => {
-      const missing = crypto.randomUUID();
-      const res = await send(mountApp(), method, unknownLocationPath(missing), {
-        body: { catalogueId: crypto.randomUUID() },
-      });
-      expect(res.status).toBe(404);
-      expect(await res.json()).toMatchObject({
-        error: { code: "location.not_found", params: { locationId: missing } },
-      });
-    });
   });
 });
 

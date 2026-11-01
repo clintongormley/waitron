@@ -89,9 +89,7 @@ describe("demo seed end-to-end", () => {
         ],
       },
     });
-    const { products } = await withTransaction(suite.db, (tx) =>
-      listAvailableProducts(tx, venue.locationId),
-    );
+    const { products } = await withTransaction(suite.db, (tx) => listAvailableProducts(tx));
     const chicken = products.find((product) => product.name === "Roast chicken")!;
     expect(chicken.offeredModifiers.map((list) => [list.kind, list.name])).toEqual([
       ["options", "Doneness"],
@@ -120,8 +118,8 @@ describe("demo seed end-to-end", () => {
     expect(origins.rows).toEqual([{ source: "demo_seed", device_id: null }]);
 
     const read = await withTransaction(suite.db, async (tx) => {
-      const menus = await listAccessibleCatalogues(tx, venue.locationId);
-      const { products } = await listAvailableProducts(tx, venue.locationId);
+      const menus = await listAccessibleCatalogues(tx);
+      const { products } = await listAvailableProducts(tx);
       const documents = await readLiveDocuments(
         tx,
         menus.map((menu) => menu.id),

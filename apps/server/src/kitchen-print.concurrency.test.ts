@@ -15,7 +15,7 @@ import type { Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { assignCatalogueToLocation, createCatalogue, createProduct } from "@waitron/catalogue";
+import { assignCatalogueToVenue, createCatalogue, createProduct } from "@waitron/catalogue";
 import { createPrinter, deactivatePrinter } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
 import { locationId as brandLocationId, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
@@ -107,7 +107,7 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
       suite.db,
       async (tx) => {
         const cat = await createCatalogue(tx, { name: "Menu" });
-        await assignCatalogueToLocation(tx, locationId, cat.id);
+        await assignCatalogueToVenue(tx, cat.id);
         const kitchen = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
         const { id: printerId } = await createPrinter(tx, printCfg(cfg), {
           name: "Kitchen printer",

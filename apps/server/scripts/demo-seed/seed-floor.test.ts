@@ -117,7 +117,7 @@ describe("seedFloor", () => {
         select id from floor_zones where location_id = ${locationId} and name = 'Upstairs bar'`);
       const { rows: stations } = await tx.execute<{ id: string }>(sql`
         select id from kitchen_stations where location_id = ${locationId} and name = 'Downstairs bar'`);
-      const { products } = await listAvailableProducts(tx, locationId);
+      const { products } = await listAvailableProducts(tx);
       const drink = products.find((product) => product.name === "House Negroni")!;
       const makers = [];
       for (const instant of ["2026-10-02T18:00:00Z", "2026-10-06T18:00:00Z"]) {

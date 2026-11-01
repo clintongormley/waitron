@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -69,7 +69,7 @@ useVenueDb({
         vatClass: "general",
       });
       dishId = dish.id;
-      await assignCatalogueToLocation(tx, venue.cfg.locationId, catalogue.id);
+      await assignCatalogueToVenue(tx, catalogue.id);
       counter = await offerProducts(tx, venue.cfg, { productIds: [dishId] });
     });
     marta = await seedPerson("manager", "Marta");

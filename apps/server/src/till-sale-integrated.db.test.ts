@@ -10,7 +10,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { Database } from "@waitron/db";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -227,9 +227,9 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
       unitPrice: "1.50",
       vatClass: "general",
     });
-    await assignCatalogueToLocation(tx, venue.locationId, cat.id);
+    await assignCatalogueToVenue(tx, cat.id);
     return {
-      available: (await listAvailableProducts(tx, cfg.locationId)).products,
+      available: (await listAvailableProducts(tx)).products,
       offers: await offerProducts(tx, cfg, {
         orderStart: "counter",
         paidWhen: orderFlow,

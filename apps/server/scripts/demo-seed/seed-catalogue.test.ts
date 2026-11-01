@@ -243,8 +243,8 @@ describe("seedCatalogues", () => {
         locale: LOCALE,
         dataSet: CASA_DELGADO_ES,
       });
-      const menus = await listAccessibleCatalogues(tx, locationId);
-      const { products } = await listAvailableProducts(tx, locationId);
+      const menus = await listAccessibleCatalogues(tx);
+      const { products } = await listAvailableProducts(tx);
       const contentLanguages = await readContentLanguages(tx, LOCALE);
       const { rows: stationRows } = await tx.execute<{ name: string; is_default: number }>(sql`
         select name, is_default from kitchen_stations where location_id = ${locationId}`);

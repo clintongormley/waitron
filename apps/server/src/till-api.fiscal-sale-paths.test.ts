@@ -21,7 +21,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   addProductToMenu,
@@ -217,7 +217,7 @@ async function setupVenue(): Promise<{
       unitPrice: "1.50",
       vatClass: "general",
     });
-    await assignCatalogueToLocation(tx, venue.locationId, cat.id);
+    await assignCatalogueToVenue(tx, cat.id);
     const jamonItem = await addProductToMenu(tx, {
       menuId: cat.id,
       productId: jamon.id,
@@ -251,7 +251,7 @@ async function setupVenue(): Promise<{
     ]);
     return {
       catalogueId: cat.id,
-      available: (await listAvailableProducts(tx, cfg.locationId)).products.map((product) => ({
+      available: (await listAvailableProducts(tx)).products.map((product) => ({
         ...product,
         menuItemId: menuItems.get(product.id)!,
       })),

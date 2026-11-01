@@ -67,9 +67,7 @@ export async function saveThemeThroughRoute(
   });
 }
 
-/** `foreignLocationId` must hold no active department of the same name, nor a default one when this
- * department is the default, or moving it there breaks a unique index on `departments`. */
-export type UntrustedAt = { departmentId: string; locationId: string; foreignLocationId: string };
+export type UntrustedAt = { departmentId: string };
 
 export interface UntrustedCase {
   readonly name: string;
@@ -119,17 +117,4 @@ export const UNTRUSTED_CASES: readonly UntrustedCase[] = [
     JSON.stringify({ logo: `${"a".repeat(256)}.png` }),
   ),
   storedDocument("a logo that is not a library name", JSON.stringify({ logo: "../secret.png" })),
-  {
-    name: "a department not in this location",
-    async apply(db, at) {
-      await db.execute(
-        sql`update departments set location_id = ${at.foreignLocationId} where id = ${at.departmentId}`,
-      );
-    },
-    async undo(db, at) {
-      await db.execute(
-        sql`update departments set location_id = ${at.locationId} where id = ${at.departmentId}`,
-      );
-    },
-  },
 ];

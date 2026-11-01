@@ -19,7 +19,7 @@ import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/se
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -130,7 +130,7 @@ async function setup() {
     await setProductCourse(tx, cfg, dish.id, late.id);
     // Keep a reference so deletion retains the other row as well.
     await setProductCourse(tx, cfg, sauce.id, other.id);
-    await assignCatalogueToLocation(tx, locationId, catalogue.id);
+    await assignCatalogueToVenue(tx, catalogue.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const counter = await offerProducts(tx, cfg);
     return { early, late, other, dish, sauce, list, offers, counter };

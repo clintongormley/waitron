@@ -4,7 +4,7 @@ import { expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -37,7 +37,7 @@ useVenueDb({
         vatClass: "general",
       });
       productId = product.id;
-      await assignCatalogueToLocation(tx, venue.cfg.locationId, catalogue.id);
+      await assignCatalogueToVenue(tx, catalogue.id);
       counter = await offerProducts(tx, venue.cfg, { productIds: [productId] });
     });
   },

@@ -7,7 +7,7 @@ import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -158,7 +158,7 @@ describe("the category report reconciles with the till's sales", () => {
         bread: await product("Pan", null, "0.95", "reduced"),
         olives: await product("Aceitunas", null, "3.33", "general"),
       };
-      await assignCatalogueToLocation(tx, venue.locationId, menu.id);
+      await assignCatalogueToVenue(tx, menu.id);
       const [manager] = await tx
         .insert(persons)
         .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })

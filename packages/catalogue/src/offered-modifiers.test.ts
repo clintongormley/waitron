@@ -5,7 +5,7 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   addProductToMenu,
   createProduct,
@@ -90,13 +90,11 @@ const ids: Record<keyof typeof products, string> = {
   olives: "",
 };
 let catalogueId = "";
-let locationId = "";
 /** The burger's one `menu_items` row — the offer a diner orders from. */
 let offerId = "";
 
 beforeEach(async () => {
-  const venue = await seedVenue(fx.db);
-  locationId = venue.locationId;
+  await seedVenue(fx.db);
   await run(async (tx) => {
     const menu = await createCatalogue(tx, { name: "Deli" });
     catalogueId = menu.id;
@@ -115,7 +113,7 @@ beforeEach(async () => {
       grossPrice: "9.50",
     });
     offerId = offer.id;
-    await assignCatalogueToLocation(tx, locationId, menu.id);
+    await assignCatalogueToVenue(tx, menu.id);
   });
 });
 
@@ -556,7 +554,7 @@ describe("listAvailableProducts and listMenuOffers", () => {
     });
 
     const { products: available } = await run(async (tx) => {
-      return listAvailableProducts(tx, locationId);
+      return listAvailableProducts(tx);
     });
 
     const burger = available.find((product) => product.id === ids.burger)!;

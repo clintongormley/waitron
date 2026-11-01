@@ -48,22 +48,19 @@ it.each(["products", "available", "offers"] as const)(
         unitPrice: "1.00",
         vatClass: "general",
       });
-      const [location] = await tx
-        .insert(locations)
-        .values({
-          name: "Room",
-          catalogueId: menu.id,
-          invoiceLocales: ["en-GB"],
-          operationDescription: "Hospitality",
-        })
-        .returning({ id: locations.id });
+      await tx.insert(locations).values({
+        name: "Room",
+        catalogueId: menu.id,
+        invoiceLocales: ["en-GB"],
+        operationDescription: "Hospitality",
+      });
       await addProductToMenu(tx, { menuId: menu.id, productId: weighed.id, grossPrice: "3.00" });
       await addProductToMenu(tx, { menuId: menu.id, productId: each.id, grossPrice: "1.00" });
       const rows =
         surface === "products"
           ? await listProducts(tx, menu.id)
           : surface === "available"
-            ? (await listAvailableProducts(tx, location!.id)).products
+            ? (await listAvailableProducts(tx)).products
             : await listMenuOffers(tx, [menu.id]);
       const first = rows.find((row) => row.name === "Staff potatoes")!;
       const second = rows.find((row) => row.name === "Staff cup")!;

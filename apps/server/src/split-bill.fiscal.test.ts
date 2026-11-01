@@ -14,7 +14,7 @@ import type { Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -161,7 +161,7 @@ async function setupVenue(): Promise<Seeded> {
       unitPrice: "1.50",
       vatClass: "general",
     });
-    await assignCatalogueToLocation(tx, venue.locationId, cat.id);
+    await assignCatalogueToVenue(tx, cat.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const t1 = await createTable(tx, cfg, { label: "T1", zoneId: offers.zoneId });
     return { aguaId: agua.id, jamonId: jamon.id, tableId: t1.id, offers };

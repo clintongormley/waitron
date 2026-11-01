@@ -40,7 +40,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createExtraList,
@@ -208,7 +208,7 @@ async function setupVenue(): Promise<Venue> {
       LOCALE,
     );
     await writeProductModifiers(tx, productId.steak, [{ kind: "extras", id: extras.id }]);
-    await assignCatalogueToLocation(tx, locationId, catalogue.id);
+    await assignCatalogueToVenue(tx, catalogue.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     // Bottled water is handed over at the bar: no kitchen ticket, only a sent stamp.
     await setRoutingCell(

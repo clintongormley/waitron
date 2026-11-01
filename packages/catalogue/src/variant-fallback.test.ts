@@ -12,7 +12,7 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   addProductToMenu,
   createCatalogue,
   createCategory,
@@ -182,7 +182,7 @@ beforeEach(async () => {
       })
       .returning({ id: products.id });
     await tx.insert(productUnits).values({ productId: wine175!.id, unitId: largeGlass.id });
-    await assignCatalogueToLocation(tx, venue.locationId, catalogue.id);
+    await assignCatalogueToVenue(tx, catalogue.id);
     return {
       locationId: venue.locationId,
       catalogueId: catalogue.id,
@@ -458,7 +458,7 @@ describe("a variant's unit is always its product's", () => {
 describe("listAvailableProducts", () => {
   // A variant listed here would read as a product in its own right.
   it("lists the parent and neither variant", async () => {
-    const { products: listed } = await run((tx) => listAvailableProducts(tx, f.locationId));
+    const { products: listed } = await run((tx) => listAvailableProducts(tx));
     const ids = listed.map((p) => p.id);
     expect(ids).toContain(f.parentId);
     expect(ids).not.toContain(f.wine125);

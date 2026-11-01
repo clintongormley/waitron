@@ -6,7 +6,7 @@ import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it, vi } from "vitest";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -545,7 +545,7 @@ describe("the floor's attention signals", () => {
         unitPrice: "40.00",
         vatClass: "general",
       });
-      await assignCatalogueToLocation(tx, v.cfg.locationId, menu.id);
+      await assignCatalogueToVenue(tx, menu.id);
       return (await offerProducts(tx, v.cfg, { zone: "tables" })).offerFor(product.id);
     });
     const mesa2 = await v.table("Mesa 2");

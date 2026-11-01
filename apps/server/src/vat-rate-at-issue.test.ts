@@ -10,7 +10,7 @@ import { diningTables, saleLines, sales, locations, withTransaction } from "@wai
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createExtraList,
   createProduct,
@@ -203,7 +203,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
       LOCALE,
     );
     await writeProductModifiers(tx, burger.id, [{ kind: "extras", id: extras.id }]);
-    await assignCatalogueToLocation(tx, venue.locationId, menu.id);
+    await assignCatalogueToVenue(tx, menu.id);
     return {
       cana: cana.id,
       burger: burger.id,

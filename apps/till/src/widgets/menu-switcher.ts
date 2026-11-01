@@ -31,7 +31,7 @@ export class TillMenuSwitcher extends LitElement {
         flex-wrap: wrap;
         gap: var(--wt-space-2);
         /* On the inner container, not the host: with one menu render() returns nothing and the host
-           stays empty (zero height, no margin), so a single-menu location adds no space above the grid. */
+           stays empty (zero height, no margin), so a single-menu venue adds no space above the grid. */
         margin-bottom: var(--wt-space-3);
       }
     `,

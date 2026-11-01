@@ -18,7 +18,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -180,8 +180,8 @@ async function venue(): Promise<Venue> {
       unitPrice: "1.50",
       vatClass: "general",
     });
-    await assignCatalogueToLocation(tx, cfg.locationId, catalogue.id);
-    const available = (await listAvailableProducts(tx, cfg.locationId)).products;
+    await assignCatalogueToVenue(tx, catalogue.id);
+    const available = (await listAvailableProducts(tx)).products;
     const offers = await offerProducts(tx, scriptCfg, { orderStart: "counter" });
     const [staff] = await tx
       .insert(persons)

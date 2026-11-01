@@ -15,7 +15,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -155,7 +155,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       unitPrice: "3.00",
       vatClass: "general",
     });
-    await assignCatalogueToLocation(tx, provisioned.locationId, cat.id);
+    await assignCatalogueToVenue(tx, cat.id);
     return {
       cfg,
       seriesId: brandSeriesId(provisioned.seriesIds[0]!),

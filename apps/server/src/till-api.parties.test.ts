@@ -27,7 +27,7 @@ import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -252,7 +252,7 @@ describe("POST /api/tables/:id/seat", () => {
         unitPrice: "1.50",
         vatClass: "general",
       });
-      await assignCatalogueToLocation(tx, cfg.locationId, catalogue.id);
+      await assignCatalogueToVenue(tx, catalogue.id);
       const offers = await offerProducts(tx, cfg, { zone: "tables" });
       const { id } = await createTable(tx, cfg, {
         label: `Mesa ${randomUUID()}`,

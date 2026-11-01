@@ -4,7 +4,7 @@ import { locations, workingOrderLines, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createExtraList,
@@ -57,7 +57,7 @@ export async function setupVenue(): Promise<Venue> {
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const catalogueId = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: `Split extras menu ${locationId}` });
-    await assignCatalogueToLocation(tx, locationId, cat.id);
+    await assignCatalogueToVenue(tx, cat.id);
     return cat.id;
   });
   const cfg = await deviceRequestCfg(db, {

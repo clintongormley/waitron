@@ -770,14 +770,9 @@ Add a second-location draft case that fails without the `working_orders` locatio
 
 ## Loose ends left by A394-3 (#1447)
 
-- `GET …/locations/:locationId/catalogues` and the member `DELETE` answer as before for an
-  unknown location.
-- A malformed menu or location path id still answers 400 `shared.invalid_id` until A394-22,
-  while the course route answers 404.
-- The two location routes' body menu id keeps 404 until A394-11.
-- Workforce refuses an unknown BODY location as `management.request_invalid` while catalogue's
-  PATH location answers `location.not_found`. If workforce moves to the new code, declare it in
-  `packages/db/src/errors.ts`.
+- A malformed menu path id still answers 400 `shared.invalid_id` until A394-22, while the course
+  route answers 404.
+- The two venue menu routes' body menu id keeps 404 until A394-11.
 
 ## Loose ends left by A483 (#1544)
 

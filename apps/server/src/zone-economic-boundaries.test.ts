@@ -628,6 +628,7 @@ it.each([
         .update(locations)
         .set({ timeZone: saved!.timeZone })
         .where(eq(locations.id, venue.cfg.locationId));
+      await venue.db.delete(locations).where(eq(locations.id, other!.id));
     }
   },
 );

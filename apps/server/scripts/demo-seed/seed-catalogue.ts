@@ -3,11 +3,11 @@ import { kitchenStations, type Transaction } from "@waitron/db";
 import { setRoutingCell, STARTER_OPEN_PERIOD_NAMES } from "@waitron/venue-service";
 import { locationId as brandLocationId } from "@waitron/shared";
 import {
-  addCatalogueToLocation,
+  addCatalogueToVenue,
   addMember,
   addProductToMenu,
   addProducts,
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -264,10 +264,10 @@ export async function seedCatalogues(
     }
   }
 
-  await assignCatalogueToLocation(tx, locationId, casaId);
-  await addCatalogueToLocation(tx, locationId, diaId);
-  await addCatalogueToLocation(tx, locationId, deliId);
-  await addCatalogueToLocation(tx, locationId, drinksId);
+  await assignCatalogueToVenue(tx, casaId);
+  await addCatalogueToVenue(tx, diaId);
+  await addCatalogueToVenue(tx, deliId);
+  await addCatalogueToVenue(tx, drinksId);
 
   return {
     productsByImage,

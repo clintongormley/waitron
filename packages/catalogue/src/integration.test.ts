@@ -7,7 +7,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalRecordRef, SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -111,13 +111,13 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
         unitPrice: "24.90",
         vatClass: "reduced",
       });
-      await assignCatalogueToLocation(tx, locationId, cat.id);
+      await assignCatalogueToVenue(tx, cat.id);
 
       // The till's read → pricing → fiscal write, all from catalogue data. An `AvailableProduct` is
       // NOT a `PriceableProduct`: it carries the staff `name` and the customer-facing `customerName`,
       // so the customer text is resolved through `product-presentation.ts` first — the one home for
       // the blank-falls-back-to-the-staff-name rule.
-      const available = (await listAvailableProducts(tx, locationId)).products;
+      const available = (await listAvailableProducts(tx)).products;
       expect(available.map((row) => row.id)).toEqual([product.id]);
       const [ham] = available;
       expect(ham).toBeDefined();

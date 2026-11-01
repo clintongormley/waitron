@@ -560,7 +560,7 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   `listedVariantsOfProducts` (`packages/catalogue/src/operations.ts`) repeats the grouping
   `variantsOfProducts` (`packages/catalogue/src/variants.ts`) does — share one helper.
 
-## A location's menu list is read by no sale
+## The venue's menu list is read by no sale
 
 From **A sale needs a zone (lane B's B4, #571) — what is left open.** Every sale line is priced from the
 menu offers of its order's service zone. Since W97 (2026-10-06), a sale with no `zoneId` takes its
@@ -569,12 +569,13 @@ still usable when that one is not — and is refused `device_profile.no_service_
 otherwise it takes the venue's counter-default zone, and a venue with none is refused
 `service_zone.default_missing` (`resolveNewOrderZone`, `packages/venue-service/src/operations.ts`).
 
-- **A location's menu list is read by no sale.** The location's list (`locations.catalogue_id`
+- **The venue's menu list is read by no sale.** The venue's list (`locations.catalogue_id`
   plus `location_catalogues`) is still read and written by the management API's
-  location routes (`apps/server/src/catalogue-api.ts`; no dashboard screen calls them since #297),
+  routes `/management-api/venue/catalogues…` and `/management-api/venue/default-catalogue`
+  (`apps/server/src/catalogue-api.ts`; no dashboard screen calls them since #297),
   configuration transfer, both provisioning seeds, two dev scripts and the `offerProducts` test
-  helper. **Next action:** owner to decide whether to retire `location_catalogues` and the management
-  location routes.
+  helper. **Next action:** owner to decide whether to retire `location_catalogues` and those
+  management routes.
 
 ## Two signals say whether a dish is sold by weight, and they can disagree in storage
 

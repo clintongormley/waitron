@@ -217,27 +217,11 @@ describe("POST receipt draft preview", () => {
     expect(response.status).toBe(status);
     expect((await response.json()).error.code).toBe(code);
   });
-  it("refuses unknown and other-location departments with the same code", async () => {
-    for (const id of [randomUUID(), departmentId]) {
-      if (id === departmentId) {
-        const [location] = await suite.db
-          .insert(locations)
-          .values({
-            name: "Other",
-            fiscalTerritory: "ES-common",
-            invoiceLocales: ["es-ES"],
-            operationDescription: "Other",
-          })
-          .returning();
-        await suite.db
-          .update(departments)
-          .set({ locationId: location!.id })
-          .where(eq(departments.id, id));
-      }
-      const response = await ask({ ...draft(), departmentId: id });
-      expect(response.status).toBe(404);
-      expect((await response.json()).error.code).toBe("department.not_found");
-    }
+  it("refuses an unknown department", async () => {
+    const id = randomUUID();
+    const response = await ask({ ...draft(), departmentId: id });
+    expect(response.status).toBe(404);
+    expect((await response.json()).error.code).toBe("department.not_found");
   });
   it.each([
     [{}, "management.request_invalid"],

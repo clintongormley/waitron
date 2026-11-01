@@ -2,7 +2,7 @@ import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/te
 import { sql } from "drizzle-orm";
 import { withTransaction, type Database } from "@waitron/db";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -124,7 +124,7 @@ export async function setupVenue(db: Database): Promise<Venue> {
       unitPrice: "2.00",
       vatClass: "general",
     });
-    await assignCatalogueToLocation(tx, venue.locationId, cat.id);
+    await assignCatalogueToVenue(tx, cat.id);
 
     const [mgr] = await tx
       .insert(persons)

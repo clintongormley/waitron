@@ -18,7 +18,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -139,7 +139,7 @@ async function setupVenue(): Promise<Venue> {
       productId[dish] = product.id;
     }
     await routeProductTo(tx, cfg, productId.beer, barStationId);
-    await assignCatalogueToLocation(tx, locationId, catalogue.id);
+    await assignCatalogueToVenue(tx, catalogue.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const printer = async (name: string) =>
       (

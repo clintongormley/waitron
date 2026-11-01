@@ -420,6 +420,9 @@ function no longer reads the scope. It fails before the change. It is marked
 
 ## Carried to the schema plan (S20–S28)
 
+- **`readVenueInvoiceLocales`** (`packages/db/src/venue.ts`, added by S5) selects
+  `locations.invoice_locales` itself rather than going through `venueRow`, so S23 switches it with
+  `readVenue` and `readVenueClock`.
 - **Delete the interim items:** `venueLocationId` (S28); the optional location parameters of
   `seedNode` and `seedDevice` (S25 and S26, with the columns), together with the arguments still
   passed in tests no F task selected (F1's codemod rules 2–3 remove them); `scripts/a1301-seed-codemod.mjs` and
@@ -2080,7 +2083,7 @@ nothing can name a missing location any more. The tables stay `locations.catalog
 
 | File | Matching lines | What changes |
 | --- | --- | --- |
-| `packages/catalogue/src/operations.ts` | 8, 1302-1483 | Every `locationId` parameter is dropped. Renamed: `assignCatalogueToLocation`→`assignCatalogueToVenue`, `setLocationDefaultCatalogue`→`setVenueDefaultCatalogue`, `addCatalogueToLocation`→`addCatalogueToVenue`, `removeCatalogueFromLocation`→`removeCatalogueFromVenue`, `listCataloguesForLocation`→`listCataloguesForVenue`, `LocationCatalogue`→`VenueCatalogue`, `insertLocationCatalogue`→`insertVenueCatalogue`. These keep their names and only lose the id: `resolveAccessibleCatalogueIds`, `listAccessibleCatalogues`, `listAvailableProducts`, `readInvoiceLocales`, `readReceiptLanguage`. The default and the receipt languages are read through `readVenue(tx)` (`defaultCatalogueId`, `invoiceLocales`). The default is written as `update(locations).set({ catalogueId })` with no `where`, because the table holds one row. Member rows are inserted with `locationId: await venueLocationId(tx)`. Member reads and deletes lose the `location_id` filter. Both `location.not_found` throws (1327, 1349) go. Comments say "the venue's menu list". |
+| `packages/catalogue/src/operations.ts` | 8, 1302-1483 | Every `locationId` parameter is dropped. Renamed: `assignCatalogueToLocation`→`assignCatalogueToVenue`, `setLocationDefaultCatalogue`→`setVenueDefaultCatalogue`, `addCatalogueToLocation`→`addCatalogueToVenue`, `removeCatalogueFromLocation`→`removeCatalogueFromVenue`, `listCataloguesForLocation`→`listCataloguesForVenue`, `LocationCatalogue`→`VenueCatalogue`, `insertLocationCatalogue`→`insertVenueCatalogue`. These keep their names and only lose the id: `resolveAccessibleCatalogueIds`, `listAccessibleCatalogues`, `listAvailableProducts`, `readInvoiceLocales`, `readReceiptLanguage`. `resolveAccessibleCatalogueIds` reads the default and the receipt languages through `readVenue(tx)` (`defaultCatalogueId`, `invoiceLocales`); `readInvoiceLocales` and `readReceiptLanguage` read the languages through `readVenueInvoiceLocales(tx)`. The default is written as `update(locations).set({ catalogueId })` with no `where`, because the table holds one row. Member rows are inserted with `locationId: await venueLocationId(tx)`. Member reads and deletes lose the `location_id` filter. Both `location.not_found` throws (1327, 1349) go. Comments say "the venue's menu list". |
 | `packages/catalogue/src/provisioning.ts` | 2, 55-66, 100, 119, 128-133 | The seed reads `readVenue(tx)` (province, receipt languages, default menu) and the tenant's country with `readTenant(tx)`. It no longer reads `node.locationId`. It sets the first menu with `assignCatalogueToVenue(tx, catalogueId)` in place of the raw `update locations` (128-129). The member row gets `venueLocationId(tx)`. |
 | `packages/catalogue/src/index.ts` | 9, 13, 22, 28, 30, 41 | The renamed exports. |
 | `packages/catalogue/src/menu-types.ts` | 14, 122, 153-154 | Comments only: "a location's menu list" → "the venue's menu list". |
@@ -2156,7 +2159,7 @@ Consumes S1's `readVenue`, `venueLocationId`, `readVenueClock`.
   Expected: FAIL. `assignCatalogueToVenue` is not exported, and `readReceiptLanguage(tx)` throws
   `no location undefined`.
 - [ ] **Step 3: Change `operations.ts`, `provisioning.ts`, `index.ts` and `menu-types.ts`** as the
-  Files table says. `readInvoiceLocales(tx)` returns `(await readVenue(tx)).invoiceLocales`.
+  Files table says. `readInvoiceLocales(tx)` returns `readVenueInvoiceLocales(tx)`, a new `packages/db/src/venue.ts` reader that selects only the languages, so an invoice reprint that must not read the current address can call it.
   `resolveAccessibleCatalogueIds(tx)` takes the default and the languages from `readVenue(tx)`, and
   the members from every `location_catalogues` row. On a database with no venue row `readVenue`
   refuses `venue.not_found` (S1); the old "[] for no such location" answer goes with the id (Step 5).

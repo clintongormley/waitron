@@ -242,17 +242,12 @@ describe("checked department receipt write", () => {
       params: { permission: "layout.configure" },
     });
   });
-  it.each(["deleted", "other-location"])("refuses a %s department", async (kind) => {
+  it("refuses a deleted department", async () => {
     const f = await fixture();
-    if (kind === "deleted")
-      await suite.db
-        .update(departments)
-        .set({ active: false })
-        .where(eq(departments.id, f.departmentId));
-    else {
-      const other = await fixture();
-      f.cfg = other.cfg;
-    }
+    await suite.db
+      .update(departments)
+      .set({ active: false })
+      .where(eq(departments.id, f.departmentId));
     await expect(check(f, body())).rejects.toMatchObject({
       code: "department.not_found",
       params: { departmentId: f.departmentId },

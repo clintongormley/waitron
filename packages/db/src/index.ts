@@ -73,7 +73,13 @@ export {
 export * from "./schema/tenants.js";
 export { readTenant } from "./read-tenant.js";
 export type { Tenant } from "./read-tenant.js";
-export { readVenue, readVenueClock, readVenueClockAndPlace, venueLocationId } from "./venue.js";
+export {
+  readVenue,
+  readVenueClock,
+  readVenueClockAndPlace,
+  readVenueInvoiceLocales,
+  venueLocationId,
+} from "./venue.js";
 export type { Venue, VenuePlace } from "./venue.js";
 export { nodes } from "./schema/nodes.js";
 export {

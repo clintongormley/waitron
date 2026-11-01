@@ -2329,22 +2329,26 @@ describe("moveDishesToStation", () => {
         .returning({ id: locations.id });
       return brandLocationId(location!.id);
     });
-    await expect(
-      inTx(venue, (tx) =>
-        moveDishesToStation(
-          tx,
-          { ...venue.cfg, locationId: elsewhere },
-          tabId,
-          {
-            submissionId: randomUUID(),
-            lineIds: [item.workingOrderLineId],
-            stationId: grill,
-          },
-          mover(),
+    try {
+      await expect(
+        inTx(venue, (tx) =>
+          moveDishesToStation(
+            tx,
+            { ...venue.cfg, locationId: elsewhere },
+            tabId,
+            {
+              submissionId: randomUUID(),
+              lineIds: [item.workingOrderLineId],
+              stationId: grill,
+            },
+            mover(),
+          ),
         ),
-      ),
-    ).rejects.toMatchObject({ code: "working_order.not_found" });
-    expect(await snapshot(tabId, item.id)).toEqual(before);
+      ).rejects.toMatchObject({ code: "working_order.not_found" });
+      expect(await snapshot(tabId, item.id)).toEqual(before);
+    } finally {
+      await inTx(venue, (tx) => tx.delete(locations).where(eq(locations.id, elsewhere)));
+    }
   });
 
   it("refuses an unowned line and an unknown destination", async () => {
@@ -2394,24 +2398,31 @@ describe("moveDishesToStation", () => {
         .insert(kitchenStations)
         .values({ locationId: location!.id, name: "Foreign grill" })
         .returning({ id: kitchenStations.id });
-      return station!.id;
+      return { locationId: location!.id, stationId: station!.id };
     });
-    await expect(
-      inTx(venue, (tx) =>
-        moveDishesToStation(
-          tx,
-          venue.cfg,
-          one.tabId,
-          {
-            submissionId: randomUUID(),
-            lineIds: [one.item.workingOrderLineId],
-            stationId: foreignStation,
-          },
-          mover(),
+    try {
+      await expect(
+        inTx(venue, (tx) =>
+          moveDishesToStation(
+            tx,
+            venue.cfg,
+            one.tabId,
+            {
+              submissionId: randomUUID(),
+              lineIds: [one.item.workingOrderLineId],
+              stationId: foreignStation.stationId,
+            },
+            mover(),
+          ),
         ),
-      ),
-    ).rejects.toMatchObject({ code: "station.not_found" });
-    expect(await snapshot(one.tabId, one.item.id)).toEqual(before);
+      ).rejects.toMatchObject({ code: "station.not_found" });
+      expect(await snapshot(one.tabId, one.item.id)).toEqual(before);
+    } finally {
+      await inTx(venue, async (tx) => {
+        await tx.delete(kitchenStations).where(eq(kitchenStations.id, foreignStation.stationId));
+        await tx.delete(locations).where(eq(locations.id, foreignStation.locationId));
+      });
+    }
   });
 
   it("refuses a deleted station but accepts one closed for today", async () => {

@@ -51,7 +51,7 @@ describe("seedOptionLists", () => {
           steakId: steak,
           coffeeId: coffee,
           attachments: await readProductModifiers(tx, [steak, coffee]),
-          available: (await listAvailableProducts(tx, locationId)).products,
+          available: (await listAvailableProducts(tx)).products,
         };
       },
     );

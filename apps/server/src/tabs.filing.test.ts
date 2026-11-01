@@ -8,7 +8,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -143,9 +143,9 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
       unitPrice: "2.00",
       vatClass: "general",
     });
-    await assignCatalogueToLocation(tx, venue.locationId, cat.id);
+    await assignCatalogueToVenue(tx, cat.id);
     return {
-      available: (await listAvailableProducts(tx, cfg.locationId)).products,
+      available: (await listAvailableProducts(tx)).products,
       counter: await offerProducts(tx, cfg),
       tables: await offerProducts(tx, cfg, { zone: "tables" }),
     };

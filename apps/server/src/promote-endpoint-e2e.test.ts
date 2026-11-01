@@ -25,7 +25,7 @@ import { readNodeMode, setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { loadKeyRing } from "@waitron/credentials";
 import { hashPassword, hashPin, hashSecret, persons } from "@waitron/identity";
 import {
-  assignCatalogueToLocation,
+  assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
@@ -265,7 +265,7 @@ async function seedSaleVenue(admin: Database, nodeId: string): Promise<string> {
       unitPrice: "1.50",
       vatClass: "general",
     });
-    await assignCatalogueToLocation(tx, brandLocationId(MIRROR_LOCATION_ID), cat.id);
+    await assignCatalogueToVenue(tx, cat.id);
     const offers = await offerProducts(tx, {
       locationId: brandLocationId(MIRROR_LOCATION_ID),
     });
