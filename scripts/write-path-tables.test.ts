@@ -4,8 +4,9 @@ import { describe, expect, it } from "vitest";
 import { blankComments } from "../packages/shared/src/source-comments.js";
 
 /**
- * Five tables the application code may read and never write: `tenants`, `nodes`, `deployment`,
- * `mirror_config` and `node_roles`.
+ * The tables the application code may read and never write: venue.db's `tenants`, `nodes` and
+ * `deployment`, and node.db's `node_mode`, `node_mirror_link`, `node_recovery_key` and
+ * `node_signing_key`.
  *
  * NOTHING BUT THIS FILE REFUSES THEM. SQLite has no roles and no grants — one process opens one
  * file — and every path, request and provisioning alike, shares that one venue handle. So the rule
@@ -69,7 +70,7 @@ const ALLOWED: Record<string, readonly string[]> = JSON.parse(
   readFileSync(join(REPO_ROOT, "scripts", "write-path-tables.json"), "utf8"),
 );
 
-/** `mirror_config` -> `mirrorConfig`: the drizzle object a write names, from the SQL table name. */
+/** `node_mirror_link` -> `nodeMirrorLink`: the drizzle object a write names, from the SQL table name. */
 function schemaObject(table: string): string {
   return table.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
 }
@@ -107,9 +108,13 @@ const TABLES = Object.keys(ALLOWED);
 const DETECTORS = new Map(TABLES.map((table) => [table, new RegExp(detector(table), "im")]));
 const ANY_TABLE = new RegExp(TABLES.map((table) => detector(table)).join("|"), "im");
 
-/** Does this source write `table`? A comment is not code, wherever on its line it starts. */
+/**
+ * Does this source write `table`? A comment is not code, wherever on its line it starts. A table
+ * the JSON does not list gets its detector built here, so the detector's own cases can name any.
+ */
 function writes(source: string, table: string): boolean {
-  return DETECTORS.get(table)!.test(blankComments(source));
+  const found = DETECTORS.get(table) ?? new RegExp(detector(table), "im");
+  return found.test(blankComments(source));
 }
 
 const SOURCE_EXTENSIONS = [".ts", ".mts", ".cts", ".tsx"];
@@ -190,11 +195,9 @@ describe("no source writes a table the application role may only read", () => {
   it("keeps every table whose writes belong in the named provisioning or identity files", () => {
     expect(TABLES.slice().sort()).toEqual([
       "deployment",
-      "mirror_config",
       "node_mirror_link",
       "node_mode",
       "node_recovery_key",
-      "node_roles",
       "node_signing_key",
       "nodes",
       "tenants",

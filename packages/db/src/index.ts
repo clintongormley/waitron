@@ -220,23 +220,12 @@ export type { IncidentSeverity } from "./schema/incidents.js";
 export {
   deploymentEnvironmentFor,
   deploymentTableExists,
-  readBreakGlassVerifier,
-  readBreakGlassKeyName,
-  readDeploymentAxes,
   readDeploymentEnvironment,
-  readDeploymentMode,
-  readSingletonRole,
   requireStamp,
-  setBreakGlassVerifierTx,
-  setDeploymentMode,
-  setDeploymentModeTx,
-  setSingletonRole,
-  setSingletonRoleTx,
   stampDeployment,
 } from "./deployment.js";
 export type { DeploymentEnvironment, DeploymentMode, SingletonRole } from "./deployment.js";
 export * from "./schema/deployment.js";
-export * from "./schema/node-roles.js";
 export * from "./schema/node-sealed-state.js";
 export * from "./schema/recovery-packs.js";
 export {
@@ -249,8 +238,6 @@ export {
 export type { RecoveryPackPartRecord, RecoveryPackRecord } from "./recovery-packs.js";
 export { membershipRemovals } from "./schema/membership-removals.js";
 export { membershipClearances } from "./schema/membership-clearances.js";
-export { readMirrorConfig, writeMirrorConfig } from "./mirror-config.js";
-export type { MirrorConnection } from "./mirror-config.js";
 export {
   persistNodeMembershipIfNewer,
   persistNodeMembershipIfNewerTx,

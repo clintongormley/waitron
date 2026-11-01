@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { stageStreamRestore } from "./restore-request.js";
 import { recoveryStreamSourceId } from "./recovery-source.js";
@@ -12,8 +13,6 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   openVenueDatabase,
-  setBreakGlassVerifierTx,
-  withTransaction,
   nodes,
   locations,
   tenants,
@@ -162,8 +161,11 @@ it("reads the selected copy's node-key name after the live box has replaced its 
 });
 
 it("names the key a backup's node copy holds, not one its venue copy could hold", async () => {
-  await withTransaction(suite.db, (tx) =>
-    setBreakGlassVerifierTx(tx, NODE, "venue-held verifier", "Venue-held name"),
+  suite.db.run(
+    sql`create table node_recovery_key (node_id text primary key, verifier text not null, key_name text not null, updated_at text not null)`,
+  );
+  suite.db.run(
+    sql`insert into node_recovery_key values (${NODE}, 'venue-held verifier', 'Venue-held name', '2026-10-01T08:00:00.000Z')`,
   );
   artifact = await packSelected();
   expect(oldName).not.toBeNull();

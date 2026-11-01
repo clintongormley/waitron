@@ -3,7 +3,7 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "./client.js";
-import { readDeploymentEnvironment, stampDeployment } from "./deployment.js";
+import { readDeploymentEnvironment, requireStamp, stampDeployment } from "./deployment.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { CHECK_VIOLATION } from "./sql-state.js";
 import { isRefusal } from "./unique-violation.js";
@@ -31,6 +31,13 @@ describe("the deployment stamp", () => {
 
   it("reads as unstamped on a freshly migrated database", async () => {
     expect(await readDeploymentEnvironment(db)).toBeNull();
+  });
+
+  it("lets a role write through only once the database is stamped", async () => {
+    const error = await captureError(() => requireStamp(db));
+    expect(error).toMatchObject({ code: "deployment.not_stamped" });
+    await stampDeployment(db, "preproduction");
+    await expect(requireStamp(db)).resolves.toBeUndefined();
   });
 
   it("reads back what was stamped", async () => {

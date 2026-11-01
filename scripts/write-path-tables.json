@@ -1,11 +1,9 @@
 {
   "deployment": ["packages/db/src/deployment.ts"],
-  "mirror_config": ["packages/db/src/mirror-config.ts"],
   "node_mirror_link": ["packages/node-db/src/mirror-link.ts"],
   "node_mode": ["packages/node-db/src/mode.ts"],
   "node_recovery_key": ["packages/node-db/src/recovery-key.ts"],
   "node_signing_key": ["packages/credentials/src/node-signing-key.ts"],
-  "node_roles": ["packages/db/src/deployment.ts"],
   "nodes": [
     "packages/db/src/node-identity.ts",
     "packages/db/src/reserved-identity.ts",

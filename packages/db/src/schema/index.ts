@@ -52,8 +52,6 @@ export * from "./daily-closes.js";
 export * from "./incidents.js";
 export * from "./change-log.js";
 export * from "./deployment.js";
-export * from "./node-roles.js";
-export * from "./mirror-config.js";
 export * from "./node-membership.js";
 export * from "./membership-removals.js";
 export * from "./membership-clearances.js";

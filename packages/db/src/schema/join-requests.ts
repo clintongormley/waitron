@@ -36,8 +36,7 @@ export const joinRequests = table(
     // The node that received the knock (`cfg.nodeId`). Every verb in
     // `apps/server/src/join-requests.ts` filters on it, so another node holding this database
     // neither lists nor accepts the request — the same fail-closed posture as the in-memory pairing
-    // window. No foreign key to `nodes`, for the reason on `node_roles.node_id`
-    // (`./node-roles.ts`).
+    // window. No foreign key to `nodes`, for the reason on `location_id` below.
     nodeId: id("node_id").notNull(),
     // The venue the joiner belongs to — stamped from the node's own `cfg.locationId`, never asked
     // for, so a joiner says nothing about which venue it is joining. No foreign key to `locations`:

@@ -4,8 +4,6 @@ import type { ChangeSource } from "@waitron/shared";
 // Shared reason strings for the common case; a table with a more specific "why" states it inline.
 const LEDGER = "what happened, keyed by the writing node; drained back from a returned box";
 const STATE = "manager configuration / live service; copied to a standby, never drained back";
-const LOCAL =
-  "one node's own row, keyed by its node id; in venue.db like every table, read and written only by that node";
 
 /**
  * Core's tables, classified for native replication. The completeness of this list against core's
@@ -256,12 +254,6 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   ),
 
   // local — belongs to one node; each says what ties a row to its node.
-  classify("node_roles", "local", LOCAL),
-  classify(
-    "mirror_config",
-    "local",
-    "one node's link to the box it mirrors, keyed by its node id; read only by that node",
-  ),
   classify(
     "join_requests",
     "local",
