@@ -1,22 +1,19 @@
 import { and, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { TRIGGER_ABORT } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
-import { seedNode } from "../testing/seed.js";
+import { seedNode, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { dailyCloses, type DailyCloseSnapshot } from "./daily-closes.js";
-import { locations, tenants } from "./tenants.js";
 
 // The headline assertion is that `daily_closes` refuses a rewrite: the append-only triggers
 // `@waitron/store` installs for every table a module declared `appendOnly()`
 // (`packages/store/src/append-only.ts`), which `useVenueDb` installs from `CORE_MIGRATIONS`'
 // own `appendOnlyTables` list. Not covered: a `DROP TABLE`, which SQLite has no trigger event for.
 
-const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 // The counting actor recorded in `closed_by` — an identity person id, plain uuid, no FK.
 const CLOSED_BY = "cccccccc-0000-4000-8000-000000000001";
 
@@ -46,18 +43,12 @@ describe("frozen daily close schema (append-only triggers, columns, FK)", () => 
 
   beforeAll(async () => {
     const db = suite.db;
-    await db
-      .insert(tenants)
-      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
-    await db.insert(locations).values([
-      {
-        id: LOCATION_A,
-        name: "Fixture Location A",
-        invoiceLocales: ["es"],
-        operationDescription: "Hosteleria",
-      },
-    ]);
-    nodeA = await seedNode(db, brandLocationId(LOCATION_A));
+    await seedVenue(db, {
+      name: "Fixture Location A",
+      invoiceLocales: ["es"],
+      operationDescription: "Hosteleria",
+    });
+    nodeA = await seedNode(db);
   });
 
   // The Drizzle builder rather than raw SQL: `id` and `closed_at` are `$defaultFn` columns Drizzle

@@ -5,13 +5,15 @@ import { CORE_MIGRATIONS } from "../migrations.js";
 import { CHECK_VIOLATION, FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
+import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
+import { venueLocationId } from "../venue.js";
 import { catalogues, products } from "./catalogue.js";
 import { kitchenCourses } from "./kitchen-courses.js";
-import { locations, tenants } from "./tenants.js";
+import { locations } from "./tenants.js";
 
-const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
+let LOCATION_A: string;
 const LOCATION_A2 = "aaaaaaaa-0000-4000-8000-000000000002";
 const RANDOM_UUID = "99999999-9999-4999-8999-999999999999";
 
@@ -23,18 +25,18 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
 
   beforeAll(async () => {
     const db = suite.db;
-    await db
-      .insert(tenants)
-      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
-    await db.insert(locations).values([
-      { id: LOCATION_A, name: "Loc A", invoiceLocales: ["es"], operationDescription: "Hostelería" },
-      {
-        id: LOCATION_A2,
-        name: "Loc A2",
-        invoiceLocales: ["es"],
-        operationDescription: "Hostelería",
-      },
-    ]);
+    await seedVenue(db, {
+      name: "Loc A",
+      invoiceLocales: ["es"],
+      operationDescription: "Hostelería",
+    });
+    LOCATION_A = await venueLocationId(db);
+    await db.insert(locations).values({
+      id: LOCATION_A2,
+      name: "Loc A2",
+      invoiceLocales: ["es"],
+      operationDescription: "Hostelería",
+    });
     courseA = await seedCourse(LOCATION_A, "Starters");
     const [cat] = await db
       .insert(catalogues)

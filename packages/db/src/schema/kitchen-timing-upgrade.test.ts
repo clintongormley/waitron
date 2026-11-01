@@ -11,11 +11,11 @@ import { installChangeFeed } from "../change-feed.js";
 import { runMigrations } from "../migrate.js";
 import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { freshNif } from "../testing/seed.js";
+import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { deviceMadeHereStations } from "./device-made-here-stations.js";
 import { stationPrinters } from "./station-printers.js";
-import { locations } from "./tenants.js";
+import { venueLocationId } from "../venue.js";
 
 async function migrateThroughTiming(db: Database, includeTiming: boolean): Promise<void> {
   const staged = mkdtempSync(join(tmpdir(), "wt-timing-upgrade-"));
@@ -44,17 +44,12 @@ const suite = useVenueDb({
 
 it("adds timing storage without rewriting populated stations, mappings, keys or triggers", async () => {
   const db = suite.db;
-  await db.run(sql`insert into tenants (id, country, tax_id, legal_name, created_at)
-    values (1, 'ES', ${freshNif()}, 'Test SL', ${new Date().toISOString()})`);
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: "Populated kitchen",
-      invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
-    })
-    .returning();
-  const locationId = location!.id;
+  await seedVenue(db, {
+    name: "Populated kitchen",
+    invoiceLocales: ["es"],
+    operationDescription: "Hostelería",
+  });
+  const locationId = await venueLocationId(db);
   // By hand, like `device_profiles` and `devices` below: the table definitions name
   // `kitchen_stations` and `printers` columns later migrations add.
   const stationId = randomUUID();

@@ -9,11 +9,11 @@ import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FORM_FACTOR_REFUSAL } from "../trigger-refusals.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
-import { seedTenant } from "../testing/seed.js";
+import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
+import { venueLocationId } from "../venue.js";
 import { deviceProfiles } from "./device-profiles.js";
 import { devices } from "./devices.js";
-import { locations } from "./tenants.js";
 import type { LocationId } from "@waitron/shared";
 
 const TOKEN_HASH = "scrypt$00$00";
@@ -26,16 +26,12 @@ describe("device_profiles form-factor drift guard (locked while an active device
 
   beforeAll(async () => {
     db = suite.db;
-    await seedTenant(db);
-    const [location] = await db
-      .insert(locations)
-      .values({
-        name: "Loc",
-        invoiceLocales: ["es"],
-        operationDescription: "Hostelería",
-      })
-      .returning({ id: locations.id });
-    locationId = location!.id as LocationId;
+    await seedVenue(db, {
+      name: "Loc",
+      invoiceLocales: ["es"],
+      operationDescription: "Hostelería",
+    });
+    locationId = (await venueLocationId(db)) as LocationId;
   });
 
   async function freshKdsProfile(): Promise<string> {

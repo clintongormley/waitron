@@ -3,16 +3,15 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
+import { seedDevice, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { isRefusal } from "../unique-violation.js";
+import { venueLocationId } from "../venue.js";
 import { deviceProfiles } from "./device-profiles.js";
 import { deviceMadeHereStations } from "./device-made-here-stations.js";
-import { devices } from "./devices.js";
 import { kitchenStations } from "./kitchen-stations.js";
-import { locations, tenants } from "./tenants.js";
 
-const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
-const DEVICE = "aaaaaaaa-0000-4000-8000-000000000003";
+let DEVICE: string;
 const STATION = "aaaaaaaa-0000-4000-8000-000000000004";
 const GHOST = "aaaaaaaa-0000-4000-8000-000000000099";
 const PROFILE = "aaaaaaaa-0000-4000-8000-000000000005";
@@ -21,31 +20,21 @@ describe("device made-here stations schema", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   beforeEach(async () => {
-    await suite.db.insert(tenants).values({
-      id: 1,
-      country: "ES",
-      taxId: "B00000000",
-      legalName: "Fixture Tenant A",
-    });
-    await suite.db.insert(locations).values({
-      id: LOCATION,
+    await seedVenue(suite.db, {
       name: "Loc A",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
     await suite.db
       .insert(kitchenStations)
-      .values({ id: STATION, locationId: LOCATION, name: "Kitchen A" });
+      .values({ id: STATION, locationId: await venueLocationId(suite.db), name: "Kitchen A" });
     await suite.db
       .insert(deviceProfiles)
       .values({ id: PROFILE, name: "Till profile", formFactor: "till" });
-    await suite.db.insert(devices).values({
-      id: DEVICE,
-      locationId: LOCATION,
-      deviceProfileId: PROFILE,
+    ({ deviceId: DEVICE } = await seedDevice(suite.db, {
+      profileId: PROFILE,
       label: "Till device",
-      tokenHash: "scrypt$00$00",
-    });
+    }));
   });
 
   it("stores a device's made-here station once", async () => {

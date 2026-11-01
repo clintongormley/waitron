@@ -4,27 +4,25 @@ import { CORE_MIGRATIONS } from "../migrations.js";
 import { CHECK_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
+import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
+import { venueLocationId } from "../venue.js";
 import { joinRequests } from "./join-requests.js";
-import { locations, tenants } from "./tenants.js";
 
-const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
+let LOCATION_A: string;
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 describe("join_requests", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   beforeAll(async () => {
-    await suite.db
-      .insert(tenants)
-      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
-    await suite.db.insert(locations).values({
-      id: LOCATION_A,
+    await seedVenue(suite.db, {
       name: "Loc A",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
+    LOCATION_A = await venueLocationId(suite.db);
   });
 
   it("accepts a device request and a print_agent request", async () => {

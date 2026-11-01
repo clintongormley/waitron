@@ -3,17 +3,19 @@ import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
+import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
+import { venueLocationId } from "../venue.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { isRefusal } from "../unique-violation.js";
 import { NOT_NULL_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { shortNameColumns } from "../table-short-names.js";
 import { diningTables } from "./dining-tables.js";
 import { floorZones } from "./floor-zones.js";
-import { locations, tenants } from "./tenants.js";
+import { locations } from "./tenants.js";
 
-const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
+let LOCATION_A: string;
 const LOCATION_B = "aaaaaaaa-0000-4000-8000-000000000002";
 
 describe("dining_tables columns", () => {
@@ -21,23 +23,18 @@ describe("dining_tables columns", () => {
 
   beforeEach(async () => {
     const db = suite.db;
-    await db
-      .insert(tenants)
-      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
-    await db.insert(locations).values([
-      {
-        id: LOCATION_A,
-        name: "Loc A",
-        invoiceLocales: ["es"],
-        operationDescription: "Hostelería",
-      },
-      {
-        id: LOCATION_B,
-        name: "Loc B",
-        invoiceLocales: ["es"],
-        operationDescription: "Restaurant",
-      },
-    ]);
+    await seedVenue(db, {
+      name: "Loc A",
+      invoiceLocales: ["es"],
+      operationDescription: "Hostelería",
+    });
+    LOCATION_A = await venueLocationId(db);
+    await db.insert(locations).values({
+      id: LOCATION_B,
+      name: "Loc B",
+      invoiceLocales: ["es"],
+      operationDescription: "Restaurant",
+    });
   });
 
   function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {

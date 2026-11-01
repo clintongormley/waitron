@@ -1,4 +1,3 @@
-import { locationId as brandLocationId } from "@waitron/shared";
 import { desc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
@@ -8,7 +7,7 @@ import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { withTransaction } from "../tenancy.js";
 import { captureError } from "../testing/errors.js";
-import { seedDevice, seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import {
   BILL_PAYMENT_CHANGE_REFUSAL,
@@ -18,19 +17,16 @@ import {
 } from "../trigger-refusals.js";
 import { billPaymentLines, billPaymentRefunds, billPayments } from "./bill-payments.js";
 import { drawerOpens } from "./drawer-opens.js";
-import { workingOrders } from "./orders.js";
 import { sales, tenders } from "./sales.js";
 import { invoiceSeries } from "./series.js";
-import { locations, tenants } from "./tenants.js";
 
 /**
  * What this file does NOT check: that the product's writers keep the bill invariant (design §4.4) —
  * no trigger does, because the bill's total is computed by the pricing code, not stored.
  */
 
-const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
-/** An order opened from the dashboard at `LOCATION`, needing no device. */
-const DASHBOARD = { source: "dashboard", deviceId: null, locationId: LOCATION } as const;
+/** An order opened from the dashboard, needing no device. */
+const DASHBOARD = { source: "dashboard", deviceId: null } as const;
 const PERSON = "cccccccc-0000-4000-8000-000000000001";
 const MANAGER = "cccccccc-0000-4000-8000-000000000002";
 const AT = "2026-09-27T12:00:00.000Z";
@@ -54,30 +50,35 @@ describe("bill payments: the three tables, their checks and their triggers", () 
 
   beforeAll(async () => {
     const db = suite.db;
-    await db
-      .insert(tenants)
-      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant" }]);
-    await db.insert(locations).values({
-      id: LOCATION,
+    await seedVenue(db, {
       name: "Loc",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    nodeId = await seedNode(db, brandLocationId(LOCATION));
-    ({ deviceId } = await seedDevice(db, { locationId: LOCATION }));
-    ({ deviceId: device2 } = await seedDevice(db, { locationId: LOCATION }));
+    nodeId = await seedNode(db);
+    ({ deviceId } = await seedDevice(db));
+    ({ deviceId: device2 } = await seedDevice(db));
     const [series] = await db
       .insert(invoiceSeries)
       .values({ nodeId, code: "FA", purpose: "standard" })
       .returning({ id: invoiceSeries.id });
     seriesId = series!.id;
-    const orders = await db
-      .insert(workingOrders)
-      .values([
-        { ...DASHBOARD, nodeId, orderNumber: 1, status: "open", openedAt: AT },
-        { ...DASHBOARD, nodeId, orderNumber: 2, status: "open", openedAt: AT },
-      ])
-      .returning({ id: workingOrders.id });
+    const orders = [
+      await seedWorkingOrder(db, {
+        ...DASHBOARD,
+        nodeId,
+        orderNumber: 1,
+        status: "open",
+        openedAt: AT,
+      }),
+      await seedWorkingOrder(db, {
+        ...DASHBOARD,
+        nodeId,
+        orderNumber: 2,
+        status: "open",
+        openedAt: AT,
+      }),
+    ];
     billId = orders[0]!.id;
     otherBillId = orders[1]!.id;
   });

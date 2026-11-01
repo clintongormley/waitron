@@ -5,22 +5,18 @@ import { CORE_MIGRATIONS } from "../migrations.js";
 import { CHECK_VIOLATION, FOREIGN_KEY_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
-import { seedDevice } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { drawerOpens } from "./drawer-opens.js";
 import { printers } from "./printers.js";
-import { locationId as brandLocationId } from "@waitron/shared";
-import { locations, tenants } from "./tenants.js";
+import { venueLocationId } from "../venue.js";
 import { randomUUID } from "node:crypto";
-import { seedNode, seedTenant } from "../testing/seed.js";
+import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { sales, tenders } from "./sales.js";
 import { invoiceSeries } from "./series.js";
 import { tenderRefunds } from "./tender-refunds.js";
 import { billPayments } from "./bill-payments.js";
-import { workingOrders } from "./orders.js";
 
-const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const PRINTER_A = "aaaaaaaa-0000-4000-8000-000000000021";
 const PERSON = "cccccccc-0000-4000-8000-000000000001";
 const AUTHORIZER = "cccccccc-0000-4000-8000-000000000002";
@@ -32,23 +28,19 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
 
   beforeAll(async () => {
     const db = suite.db;
-    await db
-      .insert(tenants)
-      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
-    await db.insert(locations).values({
-      id: LOCATION_A,
+    await seedVenue(db, {
       name: "Loc A",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
     await db.insert(printers).values({
       id: PRINTER_A,
-      locationId: LOCATION_A,
+      locationId: await venueLocationId(db),
       name: "Impresora A",
       transport: "cloud_poll",
       pollId: "poll-a",
     });
-    ({ deviceId: deviceA } = await seedDevice(db, { locationId: brandLocationId(LOCATION_A) }));
+    ({ deviceId: deviceA } = await seedDevice(db));
   });
 
   function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -229,14 +221,14 @@ describe("settled-tender refund drawer targets", () => {
   let printerId: string;
   beforeAll(async () => {
     const db = suite.db;
-    await seedTenant(db);
-    const [location] = await db
-      .insert(locations)
-      .values({ name: "Return drawer", invoiceLocales: ["en"], operationDescription: "Meals" })
-      .returning();
-    const locationId = brandLocationId(location!.id);
-    const nodeId = await seedNode(db, locationId);
-    ({ deviceId } = await seedDevice(db, { locationId }));
+    await seedVenue(db, {
+      name: "Return drawer",
+      invoiceLocales: ["en"],
+      operationDescription: "Meals",
+    });
+    const locationId = await venueLocationId(db);
+    const nodeId = await seedNode(db);
+    ({ deviceId } = await seedDevice(db));
     const [series] = await db
       .insert(invoiceSeries)
       .values({ nodeId, code: "TR", purpose: "standard" })
@@ -287,10 +279,12 @@ describe("settled-tender refund drawer targets", () => {
       })
       .returning();
     refundId = refund!.id;
-    const [order] = await db
-      .insert(workingOrders)
-      .values({ source: "device", deviceId, nodeId, locationId, orderNumber: 1 })
-      .returning();
+    const order = await seedWorkingOrder(db, {
+      source: "device",
+      deviceId,
+      nodeId,
+      orderNumber: 1,
+    });
     const [payment] = await db
       .insert(billPayments)
       .values({
