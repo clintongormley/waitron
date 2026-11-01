@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { sessions } from "@waitron/identity";
+import { persons, sessions } from "@waitron/identity";
 import { jobOrigin } from "@waitron/shared";
 import { attendanceDayWork, timeEntries, WorkforceBackend } from "@waitron/workforce";
 import { createClockVenue, type ClockVenue } from "./testing/clock-venue.js";
@@ -141,6 +141,47 @@ describe("the till's clock across a backward step of the box's clock", () => {
     expect((await suite.db.select().from(attendanceDayWork)).map((row) => row.businessDay)).toEqual(
       ["2026-01-05"],
     );
+  });
+
+  it("lets the person clock in again after clocking out of an approved later-dated clock-in", async () => {
+    const [admin] = await suite.db
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.role, "admin"));
+    const correctionId = await withTransaction(suite.db, (tx) =>
+      backend.requestCorrection(tx, {
+        nodeId: venue.cfg.nodeId,
+        personId: venue.personId,
+        locationId: venue.cfg.locationId,
+        missingEntryKind: "in",
+        at: "2026-01-06T09:00:00.000Z",
+        offsetMinutes: 60,
+        reason: "Forgot",
+        actorPersonId: venue.personId,
+        origin: jobOrigin("dashboard"),
+      }),
+    );
+    await withTransaction(suite.db, (tx) =>
+      backend.approveCorrection(tx, {
+        nodeId: venue.cfg.nodeId,
+        correctionId,
+        approverPersonId: admin!.id,
+      }),
+    );
+    // The clock is stepped back to the day before.
+    instant = new Date("2026-01-05T10:00:00Z");
+    expect(await state()).toMatchObject({ state: "working" });
+    expect((await act("out", "2026-01-05T10:00:00Z")).status).toBe(200);
+    const out = (await rows()).at(-1)!;
+    expect(out.entryKind).toBe("out");
+    expect(await state()).toMatchObject({
+      state: "out",
+      activeLocationId: null,
+      lastEntryId: out.id,
+    });
+    const back = await act("in", "2026-01-05T11:00:00Z");
+    expect(back.status).toBe(200);
+    expect(await back.json()).toMatchObject({ state: "working" });
   });
 
   it("reads the person's latest entry once for the state when nothing needs reconciling", async () => {

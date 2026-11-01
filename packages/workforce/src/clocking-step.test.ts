@@ -8,6 +8,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { WorkforceBackend, type ClockEventInput } from "./clocking.js";
 import { readLatestLiveEntry } from "./record-reads.js";
+import { decideCorrectionGroup, requestCorrectionGroup } from "./corrections.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { seedEmployment, seedLocation, seedPerson } from "../test/fixtures.js";
 import { planningEveryStatement } from "../test/query-plans.js";
@@ -74,14 +75,19 @@ async function latest(personId: string, kind?: "in") {
   );
 }
 
-async function missing(personId: string, kind: "in" | "out", time: string): Promise<void> {
+async function missing(
+  personId: string,
+  kind: "in" | "out",
+  time: string,
+  day = "05",
+): Promise<void> {
   const correctionId = await run((tx) =>
     backend.requestCorrection(tx, {
       nodeId,
       personId,
       locationId,
       missingEntryKind: kind,
-      at: `2026-01-05T${time}:00Z`,
+      at: `2026-01-${day}T${time}:00Z`,
       offsetMinutes: 0,
       reason: "Forgot",
       actorPersonId: personId,
@@ -202,6 +208,72 @@ describe("clocking across a backward step of the box's clock", () => {
     await run((tx) => backend.clockOut(tx, at(p, "12:00")));
     await run((tx) => backend.clockIn(tx, { ...at(p, "13:00"), nodeId: second }));
     expect(await latest(p)).toEqual({ kind: "in", at: "13:00" });
+  });
+
+  it("lets a clock-out written after an approved later-dated clock-in close it", async () => {
+    const p = await worker("approved start then step");
+    await missing(p, "in", "09:00", "06");
+    // The clock is stepped back to the day before.
+    await run((tx) => backend.clockOut(tx, at(p, "10:00")));
+    const instant = async (kind?: "in") =>
+      (await run((tx) => readLatestLiveEntry(tx, p, kind ? { kind } : undefined)))?.eventAt;
+    expect(await latest(p)).toEqual({ kind: "out", at: "10:00" });
+    expect(await instant("in")).toBe("2026-01-06T09:00:00.000Z");
+    await run((tx) => backend.clockIn(tx, at(p, "11:00")));
+    expect(await latest(p)).toEqual({ kind: "in", at: "11:00" });
+    expect(await instant("in")).toBe("2026-01-05T11:00:00.000Z");
+    expect(await rowCount(p)).toBe(4);
+  });
+
+  it("lets a clock action written after an approved correction dated ahead of the clock decide", async () => {
+    const p = await worker("correction dated ahead");
+    await run((tx) => backend.clockIn(tx, at(p, "09:00")));
+    await missing(p, "out", "17:00");
+    expect(await latest(p)).toEqual({ kind: "out", at: "17:00" });
+    await run((tx) => backend.clockIn(tx, at(p, "13:00")));
+    expect(await latest(p)).toEqual({ kind: "in", at: "13:00" });
+    expect(await rejection(() => run((tx) => backend.clockIn(tx, at(p, "13:05"))))).toBe(
+      "attendance.already_open",
+    );
+  });
+
+  it("lets a clock-out after an approved clock-in close it with no step (control)", async () => {
+    const p = await worker("approved start");
+    await missing(p, "in", "09:00");
+    await run((tx) => backend.clockOut(tx, at(p, "10:00")));
+    await run((tx) => backend.clockIn(tx, at(p, "11:00")));
+    expect(await latest(p)).toEqual({ kind: "in", at: "11:00" });
+  });
+
+  it("keeps the clock-in when a missing pair dated before it is approved after it (control)", async () => {
+    const p = await worker("pair approved later");
+    await run((tx) => backend.clockIn(tx, at(p, "13:00")));
+    const pair = await run((tx) =>
+      requestCorrectionGroup(
+        tx,
+        (["07:00", "08:00"] as const).map((time, i) => ({
+          nodeId,
+          personId: p,
+          locationId,
+          missingEntryKind: i === 0 ? ("in" as const) : ("out" as const),
+          at: `2026-01-05T${time}:00Z`,
+          offsetMinutes: 0,
+          reason: "Forgot",
+          actorPersonId: p,
+          origin,
+        })),
+        "request",
+      ),
+    );
+    await run((tx) =>
+      decideCorrectionGroup(
+        tx,
+        { nodeId, correctionIds: pair, actorPersonId: manager, origin },
+        "approve",
+      ),
+    );
+    expect(await latest(p)).toEqual({ kind: "in", at: "13:00" });
+    expect(await latest(p, "in")).toEqual({ kind: "in", at: "13:00" });
   });
 
   // The plan's accepted residual (Task 15a, the lead's ruling (e)): times are still compared
