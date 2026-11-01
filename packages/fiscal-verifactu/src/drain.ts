@@ -132,7 +132,7 @@ type DueRow = RegistroRow & {
  * count, so `drainDue` can recover them even with no pending row, and so does a brake hold
  * `drainDue` would release.
  *
- * - `proximo_intento_en <= now` is INCLUSIVE. A due successor can still wait for an earlier
+ * - A due retry is `retryDue`, INCLUSIVE at `now`. A due successor can still wait for an earlier
  *   record's retry or in-flight answer.
  * - A stale claim is `claimStale`, the test `recoverStaleClaims` applies, so a row this reports
  *   stale is a row that pass will recover.

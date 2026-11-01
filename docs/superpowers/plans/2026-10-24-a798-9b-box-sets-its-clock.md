@@ -1178,8 +1178,8 @@ EDITED to pass and is not on this list is a STOP, unless the spec changes what i
     at most its stored wait ahead (`upsertFlujo` with `now + t`) and a retry at most
     `BACKOFF_MAX_MS` ahead (`backoffMs`), so each new value is one the drain could have written.
     No assertion changes; with these values the four files' 96 tests pass on the code before
-    Task 15c-1, in a throwaway worktree (`~/waitron-campaign-b/a798-9b/t15c1/old-code.out`, whose
-    5 failures are the new suite's). Task 15c-1.
+    Task 15c-1, in a throwaway worktree (`~/waitron-campaign-b/a798-9b/t15c1/old-code.out`; the
+    per-task review reran it with the committed suite). Task 15c-1.
 
 **Whole-shape lists gaining entries** (the owner's standing exception of 2026-09-27):
 2. `packages/fiscal-verifactu/src/alerts.test.ts:10-11` (`FISCAL_ALERTS` `toEqual`) gains the
@@ -3184,8 +3184,33 @@ commit, per-task review and push)*:
   never open. Retries (`retryDue`), abandoned claims (`claimStale`) and hourly probes
   (`dueProbes`) follow the rule as written; requeueing a stale claim already rewrote its retry
   time to now, and still does. `nextProbeAt` and `nextClaimOpportunity`'s oldest-claim instant
-  are unchanged: by reading, a probe or claim due by this rule is claimed or requeued in the same
-  pass, so neither is reached with one (read, not run).
+  are unchanged. A claim due by this rule is requeued at the start of the pass, so the
+  oldest-claim instant is not reached with one (the per-task review's run). `nextProbeAt` is: behind
+  a closed gate a due probe is not claimed, and it then reports a time 400 days ahead (the review's
+  run); the gate's own instant, at most one wait ahead, is already in the pass's next-due time and
+  is earlier, so the host is woken at the gate rather than 400 days on.
+
+### Task 15c-1's per-task review, folded (2026-11-01)
+
+Review C0/I1/M6 (`~/waitron-campaign-b/a798-9b/t15c1/review.md`). The reviewer ran the whole
+fiscal-verifactu package and the `apps/server` suites that run the drain, and found no stored time
+any writer leaves past the limits used here, and no gate reset on a clock that never moved.
+- **I1:** the gate case now uses a 300-second wait (not the 60 the drain assumes when none is
+  stored), checks the stored row, and runs a pass one second after the reset that must send
+  nothing; a gate inside its wait is the new control. A reset storing a wait of 0, or using 60
+  seconds, now fails it (`t15c1/mutate2.py` → `mutate2.out`).
+- **M6:** each limit has a case one millisecond past it; doubling any of the four limits fails one.
+- **M1:** the departure note said `nextProbeAt` is not reached with a due probe; it is, behind a
+  closed gate. Reworded above; no code change (the gate's earlier instant wakes the host).
+- **M2:** commit c2d0498fe's message and the audit row understated the old behaviour; the row now
+  also says a chain behind a retry stored ahead sent nothing even with a full batch due. The pull
+  request's text says so too.
+- **M3:** c2d0498fe's "21 files, 342 tests" came from
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/drain src/outbox src/write-path.e2e.test.ts inmutabilidad src/reconcile src/clock-step src/restart`;
+  the message did not name it.
+- **M4:** entry 19's old-code citation was taken with a draft of the new suite; the reviewer reran it
+  with the committed one and it holds.
+- **M5:** `workIsDue`'s comment names `retryDue`.
 
 ### Task 15's departures and notes (2026-10-31)
 
