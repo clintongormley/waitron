@@ -14,7 +14,13 @@ child exits and permits the next attempt" received
 result as main run `41195102945` that A1257 (#2342, `a9b7beebbe`) attributed to a child's exit
 arriving before its pipe data, and the failing branch already contained that fix. So either that
 was not the only cause, or the drain does not cover this ordering. The other 20 cases in the file
-passed in the same run. Next action: add pipe and exit timeline diagnostics the failing case
+passed in the same run. A re-run of the failed job (attempt 2, job 124884090494) failed the same
+case the same way. Shard 6 held the same 58 files as main's passing run `41312042233`, none of them
+changed by #2375, and #2375 changes nothing the case or its child imports (an empty
+`git diff origin/main...HEAD` over the runner, dispatch, runtime, child fixture, test and
+`packages/fiscal`). Other branches' shard 6 passed in the same hour. Locally (macOS) the case
+passed 8 of 8 runs at load average 25, and 10 of 10 beside 30 busy `yes` processes, so it was not
+reproduced. Next action: add pipe and exit timeline diagnostics the failing case
 prints on CI (the testing guide's "A child's exit can precede its readable output" names the
 runner and process suites), reproduce, and fix the cause.
 
