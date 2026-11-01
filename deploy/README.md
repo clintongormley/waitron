@@ -108,11 +108,35 @@ taking payments while the box's clock reads earlier than its last sale. `install
 synchronisation back on even where someone switched it off, so a test box whose clock is set wrong
 on purpose needs it switched off again after each `install`. `reset` does not touch it.
 
-A plain `install` on a box without AppArmor writes no `deploy/.env` at all. The box has no secret it
-needs before it boots: the venue's databases are files in the `state` volume that open with no
-password, and every other setting has a default in the image that suits a box reached at
-`waitron.local`. Apart from the AppArmor line above, the only thing that writes `.env` is installing
-a branch or a commit, which records the image tags it built there. So `install` is non-interactive
+On a host with systemd, every `install` also installs the box's clock service, which lets Waitron
+set this machine's clock when a confirmed time shows it is wrong; the app's container cannot set it
+itself. `install` fetches three files from the same ref and writes them as root, owned
+`root:root`: `deploy/box/waitron-box.sh` to `/usr/local/lib/waitron/waitron-box.sh` (mode `0755`),
+and `waitron-box.socket` and `waitron-box@.service` to `/etc/systemd/system/` (mode `0644`). The
+socket, `/run/waitron-box/box.sock`, belongs to a host group `waitron-box` with number 10001, the
+app's own group number in its container; `install` creates the group with
+`groupadd --system --gid 10001 waitron-box` when neither that name nor that number is taken. If the
+name exists with another number, or another group has the number, `install` says so and installs no
+service, because that group's members could then set the clock. Then it runs
+`systemctl daemon-reload` and `systemctl enable --now waitron-box.socket`, restarts the socket when
+its file changed, and writes `WAITRON_BOX_SOCKET_DIR=/run/waitron-box` to `.env`, so the app's
+container mounts that folder. On a host without systemd, or when a step fails, it prints one line
+saying Waitron cannot set this machine's clock itself, removes that `.env` line, and carries on.
+`reset` leaves the service and the group alone.
+
+The service runs only when the app asks, and sets the clock only while the system says its clock is
+not synchronised. To set it, it stops the running time service (such as `systemd-timesyncd` or
+chrony) with `systemctl stop`, sets the clock with `timedatectl set-time`, and starts the time
+service again, also when the request is killed at its 15-second limit. It never disables the time
+service, so after a power cut part way through, the time service starts at the next boot as usual.
+Each set it begins writes one line, naming the time asked for and the ids of who asked, to the
+system journal: `journalctl -t waitron-box` shows them.
+
+The box has no secret it needs before it boots: the venue's databases are files in the `state`
+volume that open with no password, and every other setting has a default in the image that suits a
+box reached at `waitron.local`. So `.env` holds only lines `install` writes: the AppArmor line and
+the clock service's line above, and, for a branch or a commit, the image tags it built there. A
+plain `install` on a box with neither AppArmor nor systemd writes no `deploy/.env` at all. So `install` is non-interactive
 and idempotent, and running it again later to update the box does nothing destructive, apart from deleting the
 images it ran before (see Updating and operating).
 
@@ -171,6 +195,10 @@ docker compose pull && docker compose up -d --remove-orphans   # updates to the 
 docker compose ps                             # all the services, with health
 docker compose logs -f app                    # the server's JSON lines
 ```
+
+`docker compose pull` alone installs no clock service and updates none, because only `install` does
+(see Setting up a box). A box set up before the service existed has none until `waitron.sh install`
+runs again, and until then Waitron cannot set its clock.
 
 The services are all `restart: unless-stopped`, so the box comes back on its own after a power cut and
 after the app's own requested restart at the end of the setup wizard.
@@ -632,9 +660,11 @@ command against it treat that entrypoint differently:
 ## The box's environment — `deploy/.env`
 
 `.env.example` documents every line. A box reached at `waitron.local` needs none of them set by
-hand: without AppArmor a plain `install` leaves it with no `.env` at all. Where AppArmor is on,
+hand: with neither AppArmor nor systemd a plain `install` leaves it with no `.env` at all. Where AppArmor is on,
 listing, pairing, forgetting and printing to Bluetooth printers needs the `WAITRON_PRINT_AGENT_APPARMOR` line `waitron.sh install` writes
-there once it has loaded the profile.
+there once it has loaded the profile. Where systemd runs, setting the box's clock needs the
+`WAITRON_BOX_SOCKET_DIR` line `waitron.sh install` writes once the clock service's socket has
+started (see Setting up a box).
 The box holds no database credential, because there is no database server to hold one for. Its own secrets, the vault key ring and the CA and leaf
 certificates, are minted on the first setup boot into the `state` volume and never appear here. A
 box restored from a backup brings them back and, at its first trading start, replaces the leaf with
