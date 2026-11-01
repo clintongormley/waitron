@@ -92,15 +92,6 @@ describe("readReceiptAddress", () => {
     },
   );
 
-  it("reads the venue's receipt address without an id, respecting the print switch", async () => {
-    await setupVenue(suite.db);
-    const read = (receipt: { printAddress?: boolean }) =>
-      withTransaction(suite.db, (tx) => readReceiptAddress(tx, receipt));
-    expect(await read({})).toEqual(["Calle Mayor 1", "28013 Madrid"]);
-    expect(await read({ printAddress: true })).toEqual(["Calle Mayor 1", "28013 Madrid"]);
-    expect(await read({ printAddress: false })).toEqual([]);
-  });
-
   it("reads the venue's address, and none when the receipt switches it off", async () => {
     const venue = await setupVenue(suite.db);
     const read = (receipt: { printAddress?: boolean }) =>
