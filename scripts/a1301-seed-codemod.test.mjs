@@ -483,6 +483,45 @@ describe("rules 2-4: nodes, devices and orders", () => {
     );
     expect(result.left).toEqual([]);
   });
+
+  it("keeps the non-null assertion where a declaration in one switch case shadows the order in another", () => {
+    const insert = `await db.insert(workingOrders).values({ locationId: LOC }).returning()`;
+    const input = lines(
+      VENUE_IN,
+      `const [order] = ${insert};`,
+      `switch (y) { case 1: let order = other(); break; case 2: use(order!.id); }`,
+      `switch (y) { case 1: class order {} break; default: use(order!.id); }`,
+      `switch (y) { case 1: { let order = other(); } break; case 2: use(order!.id); }`,
+      `switch (y) { case 1: const [order] = ${insert}; use(order!.id); break; case 2: use(order!.id); }`,
+    );
+    const result = transformSource(OUTSIDE, input);
+    expect(result.output).toBe(
+      lines(
+        `import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";`,
+        VENUE_OUT,
+        `const order = await seedWorkingOrder(db);`,
+        `switch (y) { case 1: let order = other(); break; case 2: use(order!.id); }`,
+        `switch (y) { case 1: class order {} break; default: use(order!.id); }`,
+        `switch (y) { case 1: { let order = other(); } break; case 2: use(order.id); }`,
+        `switch (y) { case 1: const order = await seedWorkingOrder(db); use(order.id); break; case 2: use(order!.id); }`,
+      ),
+    );
+    expect(result.left).toEqual([]);
+    const alone = transformSource(
+      OUTSIDE,
+      lines(
+        VENUE_IN,
+        `switch (y) { case 1: const [order] = ${insert}; use(order!.id); break; case 2: use(order!.id); }`,
+      ),
+    );
+    expect(alone.output).toBe(
+      lines(
+        `import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";`,
+        VENUE_OUT,
+        `switch (y) { case 1: const order = await seedWorkingOrder(db); use(order.id); break; case 2: use(order!.id); }`,
+      ),
+    );
+  });
 });
 
 describe("what it leaves alone", () => {

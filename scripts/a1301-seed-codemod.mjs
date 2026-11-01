@@ -302,8 +302,16 @@ function soleValue(sourceFile, name, position) {
   return writes.length === 1 && writes[0].getStart() < position;
 }
 
-/** The node whose span a declaration's name is visible in (an ES module: blocks scope functions). */
+/**
+ * The node whose span a declaration's name is visible in (an ES module: blocks scope functions).
+ * A block-scoped name declared directly in a `case` is visible across the whole switch body.
+ */
 function declarationScope(declaration) {
+  const scope = lexicalScope(declaration);
+  return ts.isCaseClause(scope) || ts.isDefaultClause(scope) ? scope.parent : scope;
+}
+
+function lexicalScope(declaration) {
   let node = declaration;
   while (
     ts.isBindingElement(node) ||
