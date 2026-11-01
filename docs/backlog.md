@@ -2139,10 +2139,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A1286. A bill with payments refuses with words that no longer fit Move dishes… (left open by
   A803 slice 4a).** `bill.payments_received` says "items cannot be transferred between it and
   another bill" (`apps/till/src/i18n/codes.ts`), but since slice 4a unpaid dishes may leave a
-  part-paid bill; only a destination that holds a payment is still refused. Move dishes… lists only
-  bills with no payment, so there the words show when a bill took a payment on another till after
-  the panel opened; Merge bills still uses them as written. New English and approved Spanish are
-  needed.
+  part-paid bill and may move onto one (owner, 2026-11-01): `moveDishes` no longer refuses with
+  it. Merge bills still does, and the words' second half is now untrue. New English and approved
+  Spanish are needed.
 
 - **A1287. With no party, the ⋮'s Merge bills does nothing (left open by A803 slice 4a, D15).** A
   bill with no party at a table still offers Merge bills under "Bill", but the panel lists no other
