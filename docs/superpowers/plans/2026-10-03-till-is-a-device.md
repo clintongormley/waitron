@@ -1,5 +1,7 @@
 # A till is a device (A238) — Implementation Plan
 
+_2026-11-01, A1008: the one-sale operator command and its command-only tests are retired by owner decision. References below describe the earlier tree. Stream and fingerprint-refusal assertions remain, using an open-database preproduction fixture._
+
 _2026-10-22, A973: the invoice-first settlement operator script and its test are retired by owner decision. References to that command below record the earlier tree; current build plans omit it._
 
 2026-10-16: A182 part 2 replaces authored screen canvases, their editor and the generic card grid

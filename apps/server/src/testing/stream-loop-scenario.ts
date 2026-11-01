@@ -54,7 +54,7 @@ import {
   type BucketConfig,
   type ObjectStore,
 } from "@waitron/stream";
-import { recordOneSale } from "../../scripts/record-one-sale.js";
+import { recordFixtureSale } from "../../scripts/testing/sale.js";
 import { startServer, type StartedServer } from "../boot.js";
 import { loadBoxEnv } from "../box-env.js";
 import { ensureBoxSecrets } from "../box-secrets.js";
@@ -424,16 +424,21 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
 
     clock.begin("sale-a");
     // 4. A sells, and the sale is confirmed in the bucket by RESTORING it, not by counting files.
-    const saleA = await recordOneSale(
-      {
-        nodeId: a.nodeId,
-        seriesId: a.seriesId,
-        description: "Café",
-        baseAmount: "1.50",
-        vatRate: "10.00",
-      },
-      { WAITRON_VENUE_DIR: dirsA.venue, WAITRON_ENV: "preproduction" },
-    );
+    const fixtureSale = async (venueDir: string, args: Parameters<typeof recordFixtureSale>[1]) => {
+      const store = await openVenueDatabase(venueDir, { exclusive: false });
+      try {
+        return await recordFixtureSale(store.venue, args);
+      } finally {
+        await store.close();
+      }
+    };
+    const saleA = await fixtureSale(dirsA.venue, {
+      nodeId: a.nodeId,
+      seriesId: a.seriesId,
+      description: "Café",
+      baseAmount: "1.50",
+      vatRate: "10.00",
+    });
     await waitFor("box A's sale to reach A's generation", UPLOAD_WAIT_MS, () =>
       saleInGeneration(pointerA.pointer.body.generation, saleA.saleId),
     );
@@ -598,16 +603,13 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
 
     clock.begin("sale-b");
     // 8. B sells on the series the restore opened, and the sale reaches B's generation.
-    const saleB = await recordOneSale(
-      {
-        nodeId: tradingB.WAITRON_NODE_ID!,
-        seriesId: seriesB,
-        description: "Agua",
-        baseAmount: "2.00",
-        vatRate: "10.00",
-      },
-      { WAITRON_VENUE_DIR: dirsB.venue, WAITRON_ENV: "preproduction" },
-    );
+    const saleB = await fixtureSale(dirsB.venue, {
+      nodeId: tradingB.WAITRON_NODE_ID!,
+      seriesId: seriesB,
+      description: "Agua",
+      baseAmount: "2.00",
+      vatRate: "10.00",
+    });
     await waitFor("box B's sale to reach B's generation", UPLOAD_WAIT_MS, () =>
       saleInGeneration(pointerB.pointer.body.generation, saleB.saleId),
     );
@@ -623,10 +625,12 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     };
     const timedSale = async (i: number): Promise<{ ms: number; saleId: string }> => {
       const started = performance.now();
-      const sale = await recordOneSale(
-        { ...idsB, description: `Pan ${i}`, baseAmount: "1.00", vatRate: "10.00" },
-        { WAITRON_VENUE_DIR: dirsB.venue, WAITRON_ENV: "preproduction" },
-      );
+      const sale = await fixtureSale(dirsB.venue, {
+        ...idsB,
+        description: `Pan ${i}`,
+        baseAmount: "1.00",
+        vatRate: "10.00",
+      });
       return { ms: performance.now() - started, saleId: sale.saleId };
     };
     const baseline: number[] = [];

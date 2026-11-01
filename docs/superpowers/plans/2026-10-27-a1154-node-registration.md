@@ -1,5 +1,7 @@
 # A1154 Node Registration Implementation Plan
 
+_2026-11-01, A1008: the remaining one-sale command and its argument guard are retired. The completed checks below record the earlier tree._
+
 **2026-10-28 follow-up:** A1155 renames the box identity environment settings. Use the
 [current identity settings](../../../apps/till/README.md#box-identity-and-till-settings);
 the original A1154 scope below remains unchanged.

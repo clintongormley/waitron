@@ -3,10 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { incidents, sales } from "@waitron/db";
+import { incidents, openVenueDatabase, sales } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { recordOneSale } from "./record-one-sale.js";
+import { recordFixtureSale } from "./testing/sale.js";
 import { provisionTestVenue } from "./testing/venue.js";
 import { createDemoVenueProvisioner } from "./demo-seed/testing/provision-venue.js";
 import { seedSales } from "./demo-seed/seed-sales.js";
@@ -42,7 +42,6 @@ async function box() {
   return {
     directory,
     venue: await provisionTestVenue(directory, "50000000R"),
-    env: { WAITRON_VENUE_DIR: directory, WAITRON_ENV: "preproduction" },
   };
 }
 
@@ -62,22 +61,24 @@ function read(directory: string) {
 }
 
 describe("operator scripts retain the refusal after their issuance rolls back", () => {
-  it("recordOneSale writes only its incident", async () => {
-    const { directory, venue, env } = await box();
+  it("operator-origin issuance writes only its incident", async () => {
+    const { directory, venue } = await box();
     const before = read(directory);
-    await expect(
-      recordOneSale(
-        {
+    const store = await openVenueDatabase(directory);
+    try {
+      await expect(
+        recordFixtureSale(store.venue, {
           nodeId: venue.nodeId,
           seriesId: venue.seriesId,
           description: "Test meal",
           baseAmount: "100.00",
           vatRate: "10.00",
           tipAmount: "0.00",
-        },
-        env,
-      ),
-    ).rejects.toMatchObject({ code: "fiscal.fingerprint_mismatch" });
+        }),
+      ).rejects.toMatchObject({ code: "fiscal.fingerprint_mismatch" });
+    } finally {
+      await store.close();
+    }
     expect(read(directory)).toEqual({
       ...before,
       incidents: [
