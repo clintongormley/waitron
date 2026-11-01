@@ -452,7 +452,7 @@ export async function runCleanup(run, adapter);
 
 Only then does the turn end and `step` run, outside the turn. A step may therefore record its own sub-resources without deadlocking.
 
-**`loadLedger` refuses with `ledger-invalid`** when the bytes are not canonical, when `runDir` differs from the folder being read, on an unknown kind or key, or when any path is outside `runDir` or under `/dev/`.
+**`loadLedger` refuses with `ledger-invalid`** when `ledger.json` is a symlink, missing, or not a regular file (it is opened with `O_NONBLOCK`, so a FIFO is refused rather than waited on), when the bytes are not canonical, when `runDir` differs from the folder being read, on an unknown kind or key, or when any path is outside `runDir` or under `/dev/`.
 
 **Stopping a VM.** The real `CleanupAdapter` (Linux) must check that a VM's process is the one this run started before stopping it. That belongs to the Linux pull request.
 

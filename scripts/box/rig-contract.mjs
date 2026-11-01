@@ -224,13 +224,18 @@ async function readLedger(run) {
   const { runDir } = run;
   let handle;
   try {
-    handle = await fs.open(join(runDir, "ledger.json"), constants.O_RDONLY | constants.O_NOFOLLOW);
+    // Without O_NONBLOCK, opening a FIFO waits for a writer that may never come.
+    handle = await fs.open(
+      join(runDir, "ledger.json"),
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
   } catch (error) {
     if (error.code === "ELOOP" || error.code === "ENOENT") throw rigError("ledger-invalid");
     throw error;
   }
   let text;
   try {
+    if (!(await handle.stat()).isFile()) throw rigError("ledger-invalid");
     text = await handle.readFile("utf8");
   } finally {
     await handle.close();

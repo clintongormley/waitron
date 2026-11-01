@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { constants } from "node:fs";
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { URL } from "node:url";
+import { clearTimeout, setTimeout } from "node:timers";
 import {
   RIG_CASES,
   createRun,
@@ -77,6 +78,33 @@ const scratch = async () => {
   return root;
 };
 const refused = (reason) => expect.objectContaining({ code: "rig.refused", reason });
+const mkfifo = (path) => execFileSync("mkfifo", ["-m", "600", path], { stdio: "ignore" });
+
+/**
+ * Settles `promise`, or, if it has not settled within `ms`, reports it hung and keeps opening the
+ * FIFO for writing until it does: an open waiting for a writer never times out on its own, and it
+ * would hold the test process open.
+ */
+async function settleOrRelease(promise, fifo, ms = 2000) {
+  const outcome = promise.then(
+    () => ({ fulfilled: true }),
+    (error) => ({ error }),
+  );
+  let settled = false;
+  void outcome.then(() => (settled = true));
+  let timer;
+  await Promise.race([outcome, new Promise((resolve) => (timer = setTimeout(resolve, ms)))]);
+  clearTimeout(timer);
+  const hung = !settled;
+  while (!settled) {
+    await fs
+      .open(fifo, constants.O_WRONLY | constants.O_NONBLOCK)
+      .then((writer) => writer.close())
+      .catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return { hung, ...(await outcome) };
+}
 
 describe("parseRigArgs", () => {
   it("parses --case layout --run-dir <abs> in either order", () => {
@@ -420,7 +448,7 @@ describe("withRecorded", () => {
     const noFollow = constants.O_RDONLY | constants.O_NOFOLLOW;
     expect(only("open", "sync", "rename")).toEqual([
       ["open", next, "wx"],
-      ["open", ledger, noFollow],
+      ["open", ledger, noFollow | constants.O_NONBLOCK],
       ["sync", next],
       ["rename", next, ledger],
       ["open", run.runDir, noFollow],
@@ -666,6 +694,22 @@ describe("loadLedger", () => {
     await fs.writeFile(elsewhere, ledgerText(run.runDir, run.runId, []));
     await fs.rm(join(run.runDir, "ledger.json"));
     await fs.symlink(elsewhere, join(run.runDir, "ledger.json"));
+    await expect(loadLedger(run)).rejects.toThrow(refused("ledger-invalid"));
+  });
+
+  it("a ledger.json that is a FIFO → ledger-invalid, without waiting for a writer", async () => {
+    const run = await freshRun();
+    const ledger = join(run.runDir, "ledger.json");
+    await fs.rm(ledger);
+    mkfifo(ledger);
+    const result = await settleOrRelease(loadLedger(run), ledger);
+    expect(result).toEqual({ hung: false, error: refused("ledger-invalid") });
+  });
+
+  it("a ledger.json that is a folder → ledger-invalid", async () => {
+    const run = await freshRun();
+    await fs.rm(join(run.runDir, "ledger.json"));
+    await fs.mkdir(join(run.runDir, "ledger.json"));
     await expect(loadLedger(run)).rejects.toThrow(refused("ledger-invalid"));
   });
 
