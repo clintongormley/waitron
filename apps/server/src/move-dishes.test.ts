@@ -4,13 +4,16 @@ import { describe, expect, it } from "vitest";
 import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
 import {
   billPaymentRefunds,
+  billPayments,
   parties,
+  printJobs,
   products,
   ticketItems,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { createPrinter } from "@waitron/printing";
 import { decimalToCents } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { kitchenNoteKey, readKitchenNotes, writeKitchenNote } from "@waitron/venue-service";
@@ -43,9 +46,10 @@ import {
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { readLineCancellations } from "./line-service-state.js";
 import { advanceTicketItem, storedOrderTotal } from "./working-order.js";
+import { attachPrinterToStation } from "./station-printers.js";
+import { printedLines } from "./testing/decode-ticket.js";
 import "./errors.js";
 
-// Move dishes… (A803 slice 4a, Task 2): whole dish lines to another bill of the party or a new bill.
 let v: PartyVenue;
 let offers: ZoneOffers;
 let ids: { burger: string; cheese: string; toppings: string; ham: string };
@@ -176,6 +180,27 @@ function ticketsOf(billId: string) {
     .orderBy(asc(ticketItems.id));
 }
 
+/** The kitchen's items for the lines, with the bill and station each sits on. */
+function kitchenOf(lineIds: readonly string[]) {
+  return v.db
+    .all<{
+      id: string;
+      lineId: string;
+      billId: string;
+      stationId: string;
+      state: string;
+    }>(
+      sql`select id, working_order_line_id as lineId, working_order_id as billId, station_id as stationId, state from ticket_items order by id`,
+    )
+    .filter((item) => lineIds.includes(item.lineId));
+}
+
+function revisionOf(billId: string): number {
+  return v.db.all<{ revision: number }>(
+    sql`select revision from working_orders where id = ${billId}`,
+  )[0]!.revision;
+}
+
 function bindings(lineIds: readonly string[]) {
   return v.db
     .all<{
@@ -208,7 +233,10 @@ async function editsOf(...billIds: string[]): Promise<BillEditExpected[]> {
   });
 }
 
-/** Moves `lineIds` from `from` to `to` (a new bill when null) under the party's current revision. */
+/**
+ * What the till sends with a move: the operator, the party's revision when there is a party, and
+ * the editor state of each bill the move names.
+ */
 type MoveAsk = Parameters<typeof moveDishes>[5] & { expectedEdits: BillEditExpected[] };
 
 /** What the till sends a move with, read now: the party's revision and the bills' editors. */
@@ -296,9 +324,18 @@ describe("A803 move dishes: the moves that succeed", () => {
     const family = before.filter((row) => row.id === first || row.parentLineId === first);
     expect(family.map((row) => row.name)).toEqual(["Burger", "Cheese"]);
     const [binding] = bindings([first!]);
+    const [ticket] = kitchenOf([first!]);
+    await inTx(v, (tx) => advanceTicketItem(tx, v.cfg, ticket!.id, "preparing"));
+    const kitchen = kitchenOf(family.map((row) => row.id));
+    expect(kitchen.map((item) => [item.lineId, item.state])).toEqual([[first, "preparing"]]);
+    const revisions = [revisionOf(p.bill1), revisionOf(p.bill2)];
 
     await move(p.partyId, p.bill1, p.bill2, [first!]);
 
+    expect(kitchenOf(family.map((row) => row.id))).toEqual(
+      kitchen.map((item) => ({ ...item, billId: p.bill2 })),
+    );
+    expect([revisionOf(p.bill1), revisionOf(p.bill2)]).toEqual(revisions.map((r) => r + 1));
     const after = await rowsOf(p.bill2);
     // Line numbers are the destination's own; everything else is the line as it left.
     const withoutNumber = (rows: typeof after) =>
@@ -446,8 +483,129 @@ describe("A803 move dishes: the moves that succeed", () => {
   });
 });
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Columns that differ between two twins made one after the other: times and venue-wide order numbers. */
+const UNTWINNED_COLUMN = /_at$|^(at|order_number|sent_order_number)$/;
+/** Tables whose rows are mapped first, in this order, so their ids get the same names in each twin. */
+const FIRST_TABLES = [
+  "working_orders",
+  "working_order_lines",
+  "ticket_items",
+  "working_line_portions",
+];
+
+/** The text that differs between twins: the table's name, order numbers and a slip's time. */
+function untwinned(text: string): string {
+  return text
+    .replace(/Move \d+/g, "<table>")
+    .replace(/Pedido .*/, "Pedido <number>")
+    .replace(/#\d+/g, "#<number>")
+    .replace(/^\d\d:\d\d$/, "<time>");
+}
+
+/**
+ * Every row of every table that names one of `billIds` or the id of another row taken, with ids
+ * renamed in the order they first appear and the untwinned columns dropped.
+ */
+function rowsNaming(billIds: readonly string[]) {
+  const tables = v.db
+    .all<{ name: string }>(
+      sql`select name from sqlite_master where type = 'table' and name not like 'sqlite_%' order by name`,
+    )
+    .map(({ name }) => name);
+  const contents = new Map(
+    tables.map((name) => [
+      name,
+      v.db.all<Record<string, unknown>>(sql`select * from ${sql.identifier(name)} order by rowid`),
+    ]),
+  );
+  const known = new Set(billIds);
+  const names = (row: Record<string, unknown>) =>
+    Object.values(row).some((value) => typeof value === "string" && known.has(value));
+  for (let grown = true; grown;) {
+    grown = false;
+    for (const rows of contents.values()) {
+      for (const row of rows)
+        if (typeof row.id === "string" && !known.has(row.id) && names(row)) {
+          known.add(row.id);
+          grown = true;
+        }
+    }
+  }
+  const renamed = new Map<string, string>();
+  const rename = (value: unknown) => {
+    if (typeof value !== "string") return value;
+    if (!UUID.test(value)) return untwinned(value);
+    if (!renamed.has(value)) renamed.set(value, `id${renamed.size}`);
+    return renamed.get(value);
+  };
+  const ordered = [...FIRST_TABLES, ...tables.filter((name) => !FIRST_TABLES.includes(name))];
+  const out: Record<string, unknown[]> = {};
+  for (const name of ordered) {
+    const rows = contents
+      .get(name)!
+      .filter(names)
+      .map((row) =>
+        Object.fromEntries(
+          Object.entries(row)
+            .filter(([column]) => !UNTWINNED_COLUMN.test(column))
+            .map(([column, value]) => [column, rename(value)]),
+        ),
+      );
+    if (rows.length === 0) continue;
+    if (!FIRST_TABLES.includes(name))
+      rows.sort((x, y) => JSON.stringify(x).localeCompare(JSON.stringify(y)));
+    out[name] = rows;
+  }
+  return out;
+}
+
+/** A new printer at every station the bill's kitchen items go to. */
+async function printerFor(billId: string): Promise<string> {
+  const stations = v.db.all<{ stationId: string }>(
+    sql`select distinct station_id as stationId from ticket_items where working_order_id = ${billId}`,
+  );
+  expect(stations.length).toBeGreaterThan(0);
+  return inTx(v, async (tx) => {
+    const { id } = await createPrinter(
+      tx,
+      { locationId: v.cfg.locationId },
+      { name: `Kitchen ${randomUUID()}`, transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
+    );
+    for (const { stationId } of stations)
+      await attachPrinterToStation(tx, { locationId: v.cfg.locationId, stationId, printerId: id });
+    return id;
+  });
+}
+
+/** What the printer has been sent, decoded, oldest first. */
+async function printedOn(printerId: string): Promise<string[][]> {
+  const jobs = await inTx(v, (tx) =>
+    tx
+      .select({ payload: printJobs.payload })
+      .from(printJobs)
+      .where(eq(printJobs.printerId, printerId))
+      .orderBy(sql`rowid`),
+  );
+  return jobs.map((job) => printedLines(job.payload).map(untwinned));
+}
+
+/** The jobs each of two twin actions sends the printer, one after the other. */
+async function printedBy(
+  printerId: string,
+  first: () => Promise<unknown>,
+  second: () => Promise<unknown>,
+) {
+  const before = (await printedOn(printerId)).length;
+  await first();
+  const between = (await printedOn(printerId)).length;
+  await second();
+  const jobs = await printedOn(printerId);
+  return { first: jobs.slice(before, between), second: jobs.slice(between) };
+}
+
 /** What a move leaves on the two bills, with the ids that differ between two twin parties mapped. */
-async function outcome(p: { bill1: string }, to: string) {
+async function outcome(p: { bill1: string; bill2?: string }, to: string) {
   const names = new Map<string, string>([
     [p.bill1, "source"],
     [to, "destination"],
@@ -491,7 +649,11 @@ async function outcome(p: { bill1: string }, to: string) {
         .map((notice) => ({ ...notice, working_order_id: rename(notice.working_order_id) })),
     };
   };
-  return { source: await bill(p.bill1), destination: await bill(to) };
+  return {
+    source: await bill(p.bill1),
+    destination: await bill(to),
+    rows: rowsNaming([...new Set([p.bill1, ...(p.bill2 === undefined ? [] : [p.bill2]), to])]),
+  };
 }
 
 describe("A803 move dishes: the same rows as the pickers it replaces", () => {
@@ -524,10 +686,15 @@ describe("A803 move dishes: the same rows as the pickers it replaces", () => {
       ...(await commandFor(v, a.partyId)),
       expectedEdits: await editsOf(a.bill1, a.bill2),
     };
-    await inTx(v, (tx) => transferItems(tx, v.cfg, a.bill1, a.bill2, lineNos, transfer));
-    await move(b.partyId, b.bill1, b.bill2, await pick(b.bill1));
+    const printed = await printedBy(
+      await printerFor(a.bill1),
+      () => inTx(v, (tx) => transferItems(tx, v.cfg, a.bill1, a.bill2, lineNos, transfer)),
+      async () => move(b.partyId, b.bill1, b.bill2, await pick(b.bill1)),
+    );
 
     expect(await outcome(b, b.bill2)).toEqual(await outcome(a, a.bill2));
+    expect(printed.first.length).toBeGreaterThan(0);
+    expect(printed.second).toEqual(printed.first);
   });
 
   it("A803 move dishes: to a new bill writes the same rows as Split by item of the same whole lines", async () => {
@@ -538,15 +705,50 @@ describe("A803 move dishes: the same rows as the pickers it replaces", () => {
       .slice(0, 2)
       .map((row) => ({ lineNo: row.lineNo }));
     const command = await commandFor(v, a.partyId);
-    const split = await inTx(v, async (tx) =>
-      splitBill(tx, v.cfg, a.bill1, lineNos, {
-        ...command,
-        expectedEdit: await readBillEditState(tx, a.bill1),
-      }),
+    let split = { billId: "" };
+    let moved = { billId: "" };
+    const printed = await printedBy(
+      await printerFor(a.bill1),
+      async () => {
+        split = await inTx(v, async (tx) =>
+          splitBill(tx, v.cfg, a.bill1, lineNos, {
+            ...command,
+            expectedEdit: await readBillEditState(tx, a.bill1),
+          }),
+        );
+      },
+      async () => {
+        moved = await move(b.partyId, b.bill1, null, (await dishIds(b.bill1)).slice(0, 2));
+      },
     );
-    const moved = await move(b.partyId, b.bill1, null, (await dishIds(b.bill1)).slice(0, 2));
 
     expect(await outcome(b, moved.billId)).toEqual(await outcome(a, split.billId));
+    expect(printed.first.length).toBeGreaterThan(0);
+    expect(printed.second).toEqual(printed.first);
+  });
+
+  it("A803 move dishes: from a bill with no party to a new one writes the same rows as Split by item", async () => {
+    const a = await counterOrder(v, "Burger", "Flan");
+    const b = await counterOrder(v, "Burger", "Flan");
+    for (const id of [a, b])
+      await inTx(v, (tx) => writeKitchenNote(tx, { workingOrderId: id }, 0, "All together"));
+    // These counter orders send nothing to a kitchen station, so there is no slip to compare.
+    expect(
+      v.db.all(sql`select id from ticket_items where working_order_id in (${a}, ${b})`),
+    ).toEqual([]);
+    const [burger] = await dishIds(a, "Burger");
+    const lineNo = await lineNoOf(a, burger!);
+    const split = await inTx(v, async (tx) =>
+      splitBill(tx, v.cfg, a, [{ lineNo }], {
+        operatorId: OPERATOR,
+        expectedEdit: await readBillEditState(tx, a),
+      }),
+    );
+    const moved = await move(null, b, null, await dishIds(b, "Burger"));
+
+    expect(await outcome({ bill1: b }, moved.billId)).toEqual(
+      await outcome({ bill1: a }, split.billId),
+    );
   });
 });
 
@@ -632,6 +834,39 @@ describe("A803 move dishes refuses, and changes nothing", () => {
     });
   });
 
+  it("A803 move dishes refuses: a card payment of the whole bill under way on the destination is order.payment_in_flight naming it", async () => {
+    const p = await party([dish("Caña", "2")]);
+    const [caña] = await dishIds(p.bill1);
+    v.db.run(
+      sql`update working_orders set payment_attempt_at = '2026-11-01T10:00:00.000Z' where id = ${p.bill2}`,
+    );
+    await refused(() => move(p.partyId, p.bill1, p.bill2, [caña!]), "order.payment_in_flight", {
+      workingOrderId: p.bill2,
+    });
+  });
+
+  it("A803 move dishes refuses: a card contribution still at the reader on the source is order.payment_in_flight", async () => {
+    const p = await party([dish("Caña", "2"), dish("Vino")]);
+    const [caña] = await dishIds(p.bill1);
+    await inTx(v, (tx) =>
+      tx.insert(billPayments).values({
+        workingOrderId: p.bill1,
+        submissionId: randomUUID(),
+        fingerprint: "pending card",
+        kind: "contribution",
+        method: "card",
+        applied: 500,
+        state: "pending",
+        requestedBy: OPERATOR,
+        source: v.cfg.origin.source,
+        deviceId: v.cfg.origin.deviceId,
+      }),
+    );
+    await refused(() => move(p.partyId, p.bill1, p.bill2, [caña!]), "order.payment_in_flight", {
+      workingOrderId: p.bill1,
+    });
+  });
+
   it("A803 move dishes refuses: a card refund in progress on the source is bill.refund_in_progress", async () => {
     const p = await party([dish("Caña", "2"), dish("Vino")]);
     const paymentId = await cashContribution(v, p.bill1, "5.00");
@@ -695,6 +930,15 @@ describe("A803 move dishes refuses, and changes nothing", () => {
     const ask = await readMove(p.partyId, p.bill1, other.bill2);
     await refused(() => sendMove(p.bill1, other.bill2, [caña!], ask), "bill.other_party", {
       workingOrderId: other.bill2,
+    });
+  });
+
+  it("A803 move dishes refuses: from a bill with no party, another existing bill is bill.other_party", async () => {
+    const from = await counterOrder(v, "Burger", "Flan");
+    const to = await counterOrder(v, "Flan");
+    const [burger] = await dishIds(from, "Burger");
+    await refused(() => move(null, from, to, [burger!]), "bill.other_party", {
+      workingOrderId: to,
     });
   });
 
@@ -812,7 +1056,6 @@ describe("A803 move dishes refuses, and changes nothing", () => {
     const p = await party([dish("Caña")]);
     const [caña] = await dishIds(p.bill1);
     const ask = await readMove(p.partyId, p.bill1, p.bill2);
-    await inTx(v, (tx) => insertPartyBill(tx, v.cfg, p.partyId));
     await inTx(v, (tx) =>
       tx
         .update(parties)
