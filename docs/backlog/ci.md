@@ -1133,7 +1133,7 @@ read each selected file's last collected/case/hook event and any unfinished
 Playwright API call, then reproduce that wait. A completed collection event
 separates a loaded module from an assigned file; a case-start event precedes its
 beforeEach hooks. These events do not name a pending application promise. A
-file that runs 60 seconds also gets `[file-progress] stack:` lines (see A1305
+browser file that runs 60 seconds also gets `[file-progress] stack:` lines once a page shows it (see A1305
 below). Product behavior, test assertions, test deadlines
 and shard counts have not changed in this diagnostic slice.
 
@@ -1150,7 +1150,7 @@ the Node side. The log's click lines name no browser page, so it does not show w
 pages the 82 ran on. Its `navigated to` lines do name a browser session: the clock
 file's session loaded that file at 18:58:16.788 and nothing after it, while the other
 two sessions went on loading test files until 18:58:56. No later API call in the log
-names an element the clock file clicks, and its two later cases, which each begin by clicking
+names an element the clock file clicks, and its two later cases, whose first click is on
 `edit-clock-profile`, never reached that click.
 
 A blocked main thread explains that shape and a waiting test does not. On macOS,

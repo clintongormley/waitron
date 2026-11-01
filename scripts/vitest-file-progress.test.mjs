@@ -708,6 +708,18 @@ describe("stack samples from a browser page that a file has kept busy", () => {
     expect(page.cdp.sent.filter((method) => method === "Debugger.pause")).toHaveLength(1);
   });
 
+  it("does not start a second sample while the first is still waiting", async () => {
+    const { page, tick, fire } = await runningHangFile();
+    page.cdp.evaluateAnswers = false;
+    tick(60_000);
+    await settle();
+    fire(3000);
+    await settle();
+    tick(5000);
+    await settle();
+    expect(page.cdp.sent.filter((method) => method === "Debugger.pause")).toHaveLength(1);
+  });
+
   it("writes nothing for a file whose project has no browser", async () => {
     const { reporter, lines, tick } = stackHarness();
     reporter.onInit({ projects: [{ name: "node" }, { name: "other", browser: {} }] });

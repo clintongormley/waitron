@@ -755,8 +755,7 @@ the default one; `test:shard` already names `default` and `blob`. Guard: the fil
 `scripts/ci-workflow.test.mjs`, weaker than its name — it reads `ci.yml` as text, and finds a test
 command only in a `Run the … shard` step or the stream step.
 
-In a browser project the same reporter also attaches Chrome's debugger to every test page, for
-the whole run; see "A browser file that runs 60 seconds gets a stack sample" below.
+In a browser project the same reporter also attaches Chrome's debugger to each test page it finds when a file starts, and leaves it attached; see "A browser file that runs 60 seconds gets a stack sample" below.
 
 A file whose `end` line comes more than 90 seconds after its `start` line also gets a GitHub
 warning annotation (`::warning title=Slow test file::`), because one file that long holds up its
@@ -849,10 +848,9 @@ Experiments, 1 November 2026, in headless Chromium:
   JavaScript was running.
 - In `apps/dashboard`, with `stackAfterMs` and `stackCheckMs` lowered in a scratch
   copy of the reporter: a click handler spinning forever printed a stack naming
-  `spinForever`; a test awaiting a promise that never settles printed the line
-  saying no JavaScript paused and the page answers, and that file's next case still
+  `spinForever`; a test awaiting a promise that never settles printed that version's `no JavaScript was running and the page answers` line, which it printed both when no pause arrived within 3 seconds and when the pause request was refused, and that file's next case still
   passed; and `device-profiles-screen.clock.test.ts`, paused mid-run, still passed.
-  Those runs printed the lines' earlier wording.
+  Those runs used the reporter before the refused-pause line existed.
 - A scratch reporter subclass constructed with `{ stackAfterMs: 1500, stackCheckMs: 20 }`,
   run as `pnpm --dir apps/dashboard exec vitest run
   src/screens/device-profiles-screen.clock.test.ts --reporter=default
@@ -862,7 +860,7 @@ Experiments, 1 November 2026, in headless Chromium:
 
 Cost: whole-shard cost was not measured. A local script ran that same Vitest command
 (default thresholds, so no page was paused) six times, interleaved, three with the
-debugger attached and three with a subclass skipping the attach. The means were
+debugger attached and three with a subclass skipping the attach. The means of the whole command's wall-clock time, start-up included, were
 10.08 seconds attached and 9.34 seconds not, and every run passed. That is a small, noisy local sample of one short file,
 not a shard measurement.
 
