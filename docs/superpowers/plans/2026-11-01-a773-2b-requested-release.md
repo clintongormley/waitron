@@ -52,7 +52,7 @@ and the pass depend on (master "Review Focus" 4 and 5). An implementer that pass
 with the task unfinished stops at a passing or cleanly red point, commits, and hands over (done,
 left, files, each check's state).
 
-**Task size and end state.** Each task is sized at 35–60 tool calls (estimate in its heading; read,
+**Task size and end state.** Each task is sized at 35–70 tool calls (estimate in its heading; read,
 not measured). Each ends with `pnpm --filter @waitron/server typecheck` clean (and `@waitron/db`'s when it touched the
 schema), its focused suites green, `pnpm format:check` clean, and a signed commit. No task is
 planned to end red.
@@ -250,7 +250,13 @@ groups and the pass") to say B1 landed and B2–B4 remain, with this plan linked
   `bumpRevision` run over it in `finishRelease`. `isReleased` (`:3675`), `ordersWithUnfiredDish`
   (`:3694`, feeding `unpaid-departure.ts`) and `adjustments-apply.ts` keep reading the item's
   `fired_at`, so they still see a requested dish as not released (master: "Keep those existing
-  financial gates unchanged"); B2 pins `unpaid_departure.unfired_dishes` for one.
+  financial gates unchanged"); B2 pins `unpaid_departure.unfired_dishes` for one. One shift
+  follows from Task 6 (round 3, M6): a no-preparation line in a course whose dishes are all
+  Requested is stamped sent at the request (Task 6 case 4), and `isReleased` reads a ticketless
+  line by its sent time, so that water reads as released — to `ordersWithUnfiredDish` and
+  `adjustments-apply.ts` as well — while its course's dishes are Requested. Today it reads so only
+  once its course is released. The gate code is unchanged, as the master requires; B2.1's
+  requested fixture pins the water's reading.
 
 - **D4 One release step.** New `requestHeldItems(tx, orderId, scope, at)` in
   `apps/server/src/kitchen-release.ts` replaces the three updates of finding 1. It runs two
@@ -331,20 +337,32 @@ groups and the pass") to say B1 landed and B2–B4 remain, with this plan linked
   change: `givenExtras` (`working-order.ts:6509-6535`) needs `printedHeldGroups`, which keeps only
   groups whose state is `held` (`order-groups.ts:2140-2145`), and a requested dish's group is always
   fired (`fireGroup` fires it, `fireHeldLine` and Fire now start a fired one). So no mutation control
-  is planned for it.
+  is planned for it. That last premise holds only until B2.5 (round 3, M8): if B2.5 lets
+  `moveLinesToGroup` move a Requested dish into a held group whose HOLD ticket printed, an extra
+  added to it afterwards would reach `givenExtras`; B2.5's decision on `moveLinesToGroup` settles
+  it.
 
-- **D19 "Initiated by the waiter" is the request time or the fire time.** Wherever B1 decides from a
-  stored row whether the waiter has fired a dish, it reads `initiatedAt(ticket)` (`requestedAt ??
-  firedAt`, D1), never `requestedAt` alone: a row written before the column has `fired_at` and no
-  `requested_at`, and must read as fired. This covers `DishKitchenPlace.initiatedAt` (Task 4), the
-  editable order's "a child is still held" test (`working-order.ts:6494-6497`), `anyFired` and
-  `releasedCourses` (over `initiatedItem()` / `heldItem()`). Task 4 case 6 pins it with a
-  pre-upgrade-shaped row.
+- **D19 "Initiated by the waiter" is the request time or the fire time.** At the four sites B1
+  changes — `DishKitchenPlace.initiatedAt` (Task 4), the editable order's "a child is still held"
+  test (`working-order.ts:6494-6497`, Task 4), `anyFired` (Task 3b) and `releasedCourses` (Task 6),
+  the last two over `initiatedItem()` / `heldItem()` — B1 reads `initiatedAt(ticket)`
+  (`requestedAt ?? firedAt`, D1), never `requestedAt` alone, so a row written before the column
+  (`fired_at` set, no `requested_at`) reads as fired. Task 4 cases 5 and 6 pin the two edit-path
+  sites against a raw-`firedAt` read; no B1 case can tell them from a `requestedAt`-alone read,
+  because a record with `fired_at` set makes the edit a `"change"` and never reaches them (Task 4).
+  B1 does **not** change the other places that decide "fired" from raw `fired_at`: `kitchenHas`
+  (`:5798`, "free" or "change"), `firedCourseIds` (`:5702-5707`, harmless: `fireLines`' `anyFired`
+  decides the same course), the edit's VOID (`:6075`), `planHeldCorrections` (`:6612`) and the
+  RECALLED lists (`:6158`, `:6163`, `:6183`); they are B2's (audit table). One behaviour follows
+  from leaving `kitchenHas` alone (round 3, M4): an edit to an already-released dish at a waiting
+  station takes `"change"`, so the dish is recalled (with a RECALLED slip) and sent again through
+  `fireLines`, which makes it Requested; the kitchen loses a dish it had until the pass fires. No
+  venue can reach it in B1 (the setting stays off) and no B1 case pins it; B2.2 decides it.
 
 - **D20 Legacy recall puts an item back to held, both stamps cleared.** `recallLines`' update
   (`working-order.ts:2903-2911`) sets `fired_at`, `requested_at` and `pass_controlled` back to
-  null/false. It lands in Task 3, the task that starts writing `requested_at` on released items, so
-  no commit of B1 leaves a recalled item looking Requested; otherwise, from Task 3 on, a recalled
+  null/false. It lands in Task 3a, the task that starts writing `requested_at` on released items, so
+  no commit of B1 leaves a recalled item looking Requested; otherwise, from Task 3b on, a recalled
   item's leftover `requested_at` would make `anyFired` count its course as initiated, and from Task 6
   on a later Send would skip it for good (review-1 I6). B2.2 keeps the draft recall of a requested
   dish.
@@ -382,8 +400,8 @@ D15–D18 are B3/B4 decisions recorded here so B1 does not build against them:
 | T5 "update clients atomically" on today's routes | new board route in B3, till switch and old-route retirement in B4 | D15: no throwaway adapter over today's per-order cards |
 | Proposed stale-card sentence (new EN/ES) | reuse `station.table_changed` | D18 |
 | T4 "group origin remains stable after reorder and bill move" | stable across a held-group reorder and a same-party `moveDishes` (Task 2 case 9); dishes **arriving at another party** start new groups there whose kind that party's own groups decide (D8's `groupArrived` row) | an arrival's groups are new groups of the destination party, written by `groupArrived` (`order-groups.ts:2525-2560`); the source party's groups keep their kind. Merging whole parties (`moveGroupsToParty`, `order-groups.ts:712`) writes only `party_id` and `position` (`:726`), so it keeps every kind |
-| T9 "source resend" | B1 pins the resend's write, the `existingLineIds` path of `placeGroups` (`order-groups.ts:380-396`), through `placeGroupedRound` (Task 3 case 9); the full draft recall and resend round trip is in B2.2 | a recalled source's items are deleted by the recall (`draft-recall.ts:377-382`) and come back through `fireLines`' insert, which Task 3 changes; the recall half is B2.2's code |
-| T9 "a multi-output station" | no separate case | `setupSplitExtrasVenue` gives Grill and Fryer each their own printer and a shared Pass printer (`testing/split-extras-venue.ts:84-117`); Task 3 case 1 asserts no job at Grill's two outputs and Task 4 case 1 none at Fryer's |
+| T9 "source resend" | B1 pins the resend's write, the `existingLineIds` path of `placeGroups` (`order-groups.ts:380-396`), through `placeGroupedRound` (Task 3b case 9); the full draft recall and resend round trip is in B2.2 | a recalled source's items are deleted by the recall (`draft-recall.ts:377-382`) and come back through `fireLines`' insert, which Task 3a changes; the recall half is B2.2's code |
+| T9 "a multi-output station; no duplicate item or ticket" | no separate case: folded into Task 3a case 2 | `setupSplitExtrasVenue` gives Grill and Fryer each their own printer and a shared Pass printer (`testing/split-extras-venue.ts:84-117`); round 3 ran a released counter burger and it printed at both of Grill's outputs. With nothing waiting, Task 3a case 2 asserts exactly one ticket item per line and exactly one job at each of the Grill, Pass and Kitchen printers, which is the "no duplicate" check; Task 3a case 1 and Task 4 case 1 add that a waiting station's outputs get no job |
 
 ## Consumer audit: where each current hit goes
 
@@ -393,11 +411,11 @@ any new file to the same table in the ledger.
 
 | Files (server unless prefixed) | Hits are about | PR / task |
 | --- | --- | --- |
-| `working-order.ts` `fireLines` (Task 3), `insertSplitExtras` and `applyLineEdits` extras (`:6482-6530`, Task 4), `releaseHeld`, `finishRelease` and `fireLines`' extras release (Task 5), `sendLines` and `releasedCourses` (Task 6) | writers | **B1** Tasks 3–6 |
-| `working-order.ts` `recallLines`' un-fire (`:2903-2911`) | the one writer that clears `fired_at` | **B1** Task 3 (D20) |
-| `order-groups.ts` `startGroup` callers, `placeGroups`, `fireHeldLine`, `releaseGroup`, `groupArrived` | group writers | **B1** Task 2 (kinds), Task 5 (release) |
+| `working-order.ts` `fireLines` (Tasks 3a, 3b), `insertSplitExtras` and `applyLineEdits` extras (`:6482-6530`, Task 4), `releaseHeld` and `finishRelease` (Task 5a), `fireLines`' extras release (Task 5b), `sendLines` and `releasedCourses` (Task 6) | writers | **B1** Tasks 3a–6 |
+| `working-order.ts` `recallLines`' un-fire (`:2903-2911`) | the one writer that clears `fired_at` | **B1** Task 3a (D20) |
+| `order-groups.ts` `startGroup` callers, `placeGroups`, `fireHeldLine`, `releaseGroup`, `groupArrived` | group writers | **B1** Task 2 (kinds), Task 5a (release) |
 | `station-move.ts:57-63` (`rerouteHeldAtRelease`) | reroute at release | **B1** Task 6 |
-| `kitchen-allergy.ts` freeze at first exposure | allergy snapshot | **B1** Tasks 3–5 (D7); notices B3 |
+| `kitchen-allergy.ts` freeze at first exposure | allergy snapshot | **B1** Tasks 3a, 4, 5a, 5b (D7; pinned by Task 3a case 3 and Task 4 case 7); notices B3 |
 | `working-order.ts` `servableLines`/`isReleased`/`refuseUnreleased`/`markServed` (`:3608-3810`), `ordersWithUnfiredDish`; `adjustments-apply.ts`; `unpaid-departure` | serving, money gates | B2 (serving keeps financial gates) |
 | `draft-recall.ts`, `changes-after-sending.ts` | recall | B2 |
 | `working-order.ts` `applyLineEdits`' voided items (`:6075`) and `planHeldCorrections` (`:6612-6650`) | an edit's VOID and HOLD CHANGED slips | B2 (B2.6: correction slips skip requested items) |
@@ -418,7 +436,7 @@ Measured by the probe (finding 7) or by reading the named assertion.
 | --- | --- | --- | --- |
 | `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts` | B1 Task 1 | its after-capture fix-ups, inside the loop over **every** phase (`for (const phase of ["before", "provisioned", "seeded"])`, `:115`, beside the `webauthn_challenges.purpose` push at `:146-152`), gain the four new db columns in the capture's pragma form — `kitchen_stations` `{ name: "waits_for_pass", type: "INTEGER", notnull: 1, dflt_value: "false", pk: 0 }`; `ticket_items` `{ name: "requested_at", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 }` and `{ name: "pass_controlled", type: "INTEGER", notnull: 1, dflt_value: "false", pk: 0 }`; `order_groups` `{ name: "request_kind", type: "TEXT", notnull: 1, dflt_value: "'new_order'", pk: 0 }` (the default strings exactly as the pragma prints them: the probe's failure printed `"dflt_value": "false"`; a captured `INTEGER` boolean reads `"true"`, `madrid-before-move.es.json:975-979`) — and, on every captured row of those tables, the column's stored default in the capture's own value form (read one captured row first) | adding what the capture lacks, as #2257 (`webauthn_challenges.purpose`), #2292 and #2371 did to the same list; no captured value changes |
 | `packages/db/src/configuration-transfer.test.ts` "CORE_CONFIGURATION_TRANSFER" | B1 Task 1 | a new case pins the `kitchen_stations` declaration's `omit` alone (`["waits_for_pass"]`), not its `locationColumns` | new case, not an edit; it names no location (A1301) |
-| `party-move-bill.test.ts`, `party-bill-actions.test.ts`, `attendance-line-service.test.ts` | B1 Tasks 3, 5, 6 | each gains one new `A773 waiter request` case beside the setup it reuses | new cases, not edits |
+| `party-move-bill.test.ts`, `party-bill-actions.test.ts`, `attendance-line-service.test.ts` | B1 Tasks 3b, 5b, 6 | each gains one new `A773 waiter request` case beside the setup it reuses | new cases, not edits |
 | none else in B1 | — | the probe's 60 server files, 4 db files and the schema guards passed with the columns in | — |
 | `apps/server/src/configuration-transfer.test.ts:7281` | B4 | the expected `device_profile_kitchen_screens` row gains `show_non_pass_stations: 1` | probe; a whole-row pin gaining the new column's default |
 | Madrid baseline again | B4 | the two venue-service columns | as above |
@@ -646,12 +664,12 @@ export async function nextFireKind(tx: Transaction, partyId: string): Promise<"n
   (`:928`) also setting `requestKind: "added"` → case 9 red.
 - [ ] **Commit.** `git commit -s -m "Record whether each kitchen group is a new order, the next course or an addition"`.
 
-## Task 3: a new dish's kitchen item follows its station's pass setting (about 55 calls)
+## Task 3a: a new dish's kitchen item follows its station's pass setting (about 65 calls)
 
 **Files.** Create `apps/server/src/kitchen-release.ts`, `apps/server/src/testing/pass-waiting.ts`,
 `apps/server/src/kitchen-request.send.test.ts`; modify `apps/server/src/working-order.ts`
-`fireLines` (`:2071-2380`) and `recallLines`' un-fire (`:2903-2911`, D20); add one case to
-`apps/server/src/party-move-bill.test.ts`.
+`fireLines`' inserts, sent lines, printed set and freeze (`:2071-2380`, leaving `anyFired` at
+`:2204` to Task 3b) and `recallLines`' un-fire (`:2903-2911`, D20).
 
 **Interfaces.**
 
@@ -667,7 +685,7 @@ export async function passWaitingStations(
  *  initiated → held; initiated at a waiting station → Requested; initiated elsewhere → released. */
 export function requestStamps(input: {
   at: string;
-  initiated: boolean; // the waiter fired it now (fireLines' `courseFired`, :2218-2224)
+  initiated: boolean; // the waiter fired it now (fireLines' `courseFired`, :2238-2245)
   madeHere: boolean;
   waits: boolean;     // its station is in passWaitingStations
 }): { requestedAt: string | null; firedAt: string | null; passControlled: boolean };
@@ -683,70 +701,57 @@ export async function setStationsWaitForPass(
 In `fireLines`: decide each value's `stationId` as today, read `passWaitingStations` once for
 them, and write `requestStamps({ at: firedAt, initiated: courseFired, madeHere: made, waits })`'s
 three fields into each insert value. `fired` (`:2264`, `made || courseFired`) keeps deciding
-`sentLineIds` (D3) and `DishKitchenPlace` (Task 4 renames its stamp). `anyFired` (`:2204`) becomes
-"any item of the course initiated and not made here" over `initiatedItem()` (D19). The printed set
+`sentLineIds` (D3) and `DishKitchenPlace` (Task 4 renames its stamp). The printed set
 (`:2363`) is unchanged. Requested inserted items are passed to `freezeKitchenAllergyItems` with the
 printed ones (D7). `recallLines`' update sets `firedAt: null, requestedAt: null, passControlled:
-false` (D20).
+false` (D20; it stays in this task because this task is the first writer of `requested_at`).
 
 - [ ] **Failing tests** (`kitchen-request.send.test.ts`, `A773 waiter request: send`;
   `setupSplitExtrasVenue` (Grill makes burgers; Kitchen is the default station; each station has
   its own printer and Grill and Fryer also share a Pass printer, so Grill is a two-output station,
   `testing/split-extras-venue.ts:84-117`); `decodeTicket` and `printJobs` to read what printed;
   compare whole affected rows: `requestedAt`, `firedAt`, `passControlled`, `state`, `queuedAt`).
-  Write `testing/pass-waiting.ts` first, so each case fails on an assertion, not an import:
+  Every line in this file is built with **no** `extras` field unless a case says otherwise (the
+  fixture's burger and water carry extra lists; chips at Fryer would add items and jobs the cases
+  do not count). Write `testing/pass-waiting.ts` first, so each case fails on an assertion, not
+  an import:
   1. Grill waits. A counter order (`fireNewOrder`) of a burger (Grill) and a dish routed to
      Kitchen (read the fixture's routing cells first; add a product or cell in the test if none
      routes there): the burger's item is Requested (D2) with `queuedAt` unchanged from
      the insert; the Kitchen item has `requestedAt` = `firedAt`; one job at the Kitchen printer and
      **no** job at the Grill printer or the Pass printer.
   2. Nothing waits (the default): the same order gives two released items with `requestedAt` =
-     `firedAt` and today's two jobs (bytes as before: compare with the same order in
-     `src/split-off-extras.release.test.ts`' style).
-  3. Grill waits. A table submission with a Fire now group (burger) and a held group (burger):
-     the Fire now burger Requested, the held burger with both stamps null and
-     `passControlled` false; the dish lines' `sentAt`: set on the requested one, null on the held
-     one (D3).
+     `firedAt`, exactly one ticket item per line, and **three** jobs: exactly one at each of the
+     Grill, Pass and Kitchen printers (round 3 ran this shape: a released counter burger printed
+     at `["grill", "pass"]`). This is the master's "a multi-output station; no duplicate item or
+     ticket" check ("Departures"). Bytes as before: compare with the same order in
+     `src/split-off-extras.release.test.ts`' style.
+  3. Grill waits. A table submission (`submitGroups` on the fixture's seated `party`) with a Fire
+     now group (burger) and a held group (burger): the Fire now burger Requested, the held burger
+     with both stamps null and `passControlled` false; the dish lines' `sentAt`: set on the
+     requested one, null on the held one (D3); and the Requested burger's item has an allergy
+     snapshot: `VENUE_SERVICE.readTicketAllergies(tx, [itemId]).has(itemId)` is true (D7). The
+     snapshot is checked on a table order because `resolveKitchenAllergyBlocks` takes only tickets
+     whose order has a party (`kitchen-allergy.ts:105`); a counter item never gets one, released or
+     not (round 3, P5: counter `snapshots: 0`, table round `snapshots: 1`, both released chips). A
+     party that answered "none" still gets an entry, with a null block (`kitchen-allergy.ts:128-131`,
+     read). That the Requested burger gets one is first run by this task.
   4. Made here wins: Grill waits and is the sending device's made-here station
      (`device_made_here_stations`, as `src/split-off-extras.send.test.ts:1028` sets it), and the
      burger is in a **held** group: the burger is `ready`, `requestedAt` = `firedAt` = `readyAt`,
      `passControlled` false, no job.
-  5. Every advance refuses or skips a Requested item (D11; pins of today's code, M6). A table Fire
-     now burger with nothing waiting, then its item set to the Requested shape by a direct update
-     (`requested_at` = its `fired_at`, `fired_at` null, `pass_controlled` true), so the case does
-     not depend on this task's code: `advanceTicketItem(tx, cfg, itemId, "preparing")` refuses
-     `ticket.item_held` (caught outside `withTransaction`); `advanceTicket(tx, cfg, orderId,
-     grillId, "preparing")` and `bumpGroupReady` on its group leave the row unchanged.
-  6. The course rule reads initiation (`anyFired`). Create a Starters and a Mains course with
-     `createCourse` (read the fixture's courses first; give Starters the lower `displayOrder`).
-     Grill waits. Round 1, `addTabRound`
-     (`apps/server/src/testing/order-writer-fixture.ts:171`): a burger with `courseId` Starters and
-     a burger with `courseId` Mains, both `release: true` → both Requested. Round 2, `addTabRound`:
-     a burger with `courseId` Mains and neither flag → Requested, not held. Why it detects the
-     change: Starters holds an item, so Mains is not the order's earliest course
-     (`working-order.ts:2218-2251`), and only `anyFired` lets round 2's Mains burger in; read on
-     `fired_at`, the Requested Mains burger does not count and round 2's burger stays held.
-  7. Replay: the same `submitGroups` submission sent twice with Grill waiting answers the first
+  5. Replay: the same `submitGroups` submission sent twice with Grill waiting answers the first
      answer; one item per line, stamps and every printer's job count unchanged after the second.
-  8. Counter moved to a table (`move-bill.ts:576` → `fireLines`), a **new case in
-     `party-move-bill.test.ts`** under `describe("A773 waiter request")`, beside `:1089` and
-     reusing its setup: every station of that venue waits (`setStationsWaitForPass` over the
-     venue's station ids, read from `kitchen_stations`): after the move the Tarta's one ticket item
-     is Requested and nothing prints at its station's printer.
-  9. Source resend's write (the `existingLineIds` path, `order-groups.ts:380-396`):
-     `placeGroupedRound` (`testing/group-submit-fixture.ts:110`) with `release: "fire"` and a
-     burger, Grill waiting → one item, Requested, no Grill job. (The draft recall round trip is
-     B2.2's; "Departures".)
-  10. Legacy recall puts an item back to held (D20): nothing waits; `addTabRound` a burger → its
-      item reads released with `requestedAt` = `firedAt`; `recallLines`
-      (`testing/order-writer-fixture.ts:42`) → `firedAt` null, `requestedAt` null,
-      `passControlled` false (`kitchenPhase` = `held`).
-- [ ] **RED.** `pnpm --filter @waitron/server exec vitest run src/kitchen-request.send.test.ts` and
-  `pnpm --filter @waitron/server exec vitest run src/party-move-bill.test.ts -t 'A773 waiter request'`.
-  Cases 1–4 and 6–10 fail on stamps (`requestedAt` null, or `firedAt` set at a waiting station);
-  case 5 passes from the start (it seeds its own stamps) and stays as a pin (say so in the commit).
+  6. Legacy recall puts an item back to held (D20): nothing waits; `addTabRound` a burger → its
+     item reads released with `requestedAt` = `firedAt`; `recallLines`
+     (`testing/order-writer-fixture.ts:42`) → `firedAt` null, `requestedAt` null,
+     `passControlled` false (`kitchenPhase` = `held`). Round 3 ran this case and its control
+     (P3: green with D20, red with D20 switched off, `"requestedAt": "…Z"` received).
+- [ ] **RED.** `pnpm --filter @waitron/server exec vitest run src/kitchen-request.send.test.ts`.
+  Every case fails on stamps (`requestedAt` null, or `firedAt` set at a waiting station); case 6
+  fails first on its released item's `requestedAt` null, before it reaches the recall.
 - [ ] **Minimal implementation** as "Interfaces".
-- [ ] **GREEN.** RED unfiltered (`party-move-bill.test.ts` whole); unfiltered
+- [ ] **GREEN.** RED unfiltered; unfiltered
   `src/split-off-extras.send.test.ts`, `src/split-off-extras.release.test.ts`,
   `src/split-off-extras.edit.test.ts`, `src/counter-release.test.ts`, `src/made-here.test.ts`,
   `src/made-here.routes.test.ts`, `src/till-api.groups.test.ts`, `src/order-groups.test.ts`,
@@ -755,15 +760,67 @@ false` (D20).
   `src/working-order.test.ts`; typecheck; format check.
 - [ ] **Mutation controls:** `requestStamps` ignoring `waits` → case 1 red; leaving `requestedAt`
   null when released at once → case 2 red; `sentLineIds` only on `firedAt` → case 3's `sentAt` red;
-  `requestStamps` answering held for a not-initiated item before it checks `madeHere` → case 4 red;
-  printing on `initiated` instead of `firedAt` → case 1's job count red; `anyFired` back on
-  `fired_at` → case 6 red; `recallLines` leaving `requestedAt` → case 10 red; dropping
-  `isNotNull(firedAt)` from `advanceTicket` (`:7666`) → case 5 red; and from `bumpGroupReady`
-  (`order-groups.ts:659`) → case 5 red.
+  Requested inserts not passed to `freezeKitchenAllergyItems` → case 3's snapshot red;
+  `requestStamps` answering held for a not-initiated item before it checks `madeHere` → case 4
+  red; printing on `initiated` instead of `firedAt` → case 1's job count red; `recallLines` leaving
+  `requestedAt` → case 6 red.
 - [ ] **Commit.** `git commit -s -m "Hold a new dish for the pass when its station waits for it"`
   (body: that a legacy recall now clears both stamps, and why in the same commit, D20).
 
-## Task 4: extras placed with their dish follow their own station (about 50 calls)
+## Task 3b: the course rule reads initiation; the other new-dish writers (about 45 calls)
+
+**Files.** Modify `apps/server/src/working-order.ts` `fireLines`' `anyFired` (`:2204`); add cases
+to `apps/server/src/kitchen-request.send.test.ts` and one case to
+`apps/server/src/party-move-bill.test.ts`.
+
+**Interfaces.** `anyFired` becomes "any item of the course initiated and not made here" over
+`initiatedItem()` (D19). No signature changes.
+
+- [ ] **Failing tests and pins** (`kitchen-request.send.test.ts`, same `describe`, same no-extras
+  rule):
+  7. The course rule reads initiation (`anyFired`). Create a Starters and a Mains course with
+     `createCourse` (read the fixture's courses first; give Starters the lower `displayOrder`).
+     Grill waits. Round 1, `addTabRound`
+     (`apps/server/src/testing/order-writer-fixture.ts:171`): a burger with `courseId` Starters and
+     a burger with `courseId` Mains, both `release: true` → both Requested. Round 2, `addTabRound`:
+     a burger with `courseId` Mains and neither flag → Requested, not held. Why it detects the
+     change: Starters holds an item, so Mains is not the order's earliest course
+     (`working-order.ts:2238-2251`), and only `anyFired` lets round 2's Mains burger in; read on
+     `fired_at`, the Requested Mains burger does not count and round 2's burger stays held.
+  8. Every advance refuses or skips a Requested item (D11; pins of today's code). A table Fire
+     now burger with nothing waiting, then its item set to the Requested shape by a direct update
+     (`requested_at` = its `fired_at`, `fired_at` null, `pass_controlled` true), so the case does
+     not depend on this plan's writers: `advanceTicketItem(tx, cfg, itemId, "preparing")` refuses
+     `ticket.item_held` (caught outside `withTransaction`); `advanceTicket(tx, cfg, orderId,
+     grillId, "preparing")` and `bumpGroupReady` on its group leave the row unchanged.
+  9. Source resend's write (the `existingLineIds` path, `order-groups.ts:380-396`):
+     `placeGroupedRound` (`testing/group-submit-fixture.ts:110`) with `release: "fire"` and a
+     burger, Grill waiting → one item, Requested, no Grill or Pass job. (The draft recall round
+     trip is B2.2's; "Departures".)
+  10. Counter moved to a table (`move-bill.ts:576` → `fireLines`), a **new case in
+      `party-move-bill.test.ts`** under `describe("A773 waiter request")`, beside `:1089` and
+      reusing its setup: every station of that venue waits (`setStationsWaitForPass` over the
+      venue's station ids, read from `kitchen_stations`). That venue's stations have no printer
+      until the file's `printerFor` (`:225-241`) attaches one after a send, so **before** the move
+      create one printer and attach it to every station of the venue (as `printerFor` does, over
+      `kitchen_stations` rather than the bill's items). After the move the Tarta's one ticket item
+      is Requested and that printer has no job.
+- [ ] **RED.** `pnpm --filter @waitron/server exec vitest run src/kitchen-request.send.test.ts -t 'A773 waiter request'`
+  and `pnpm --filter @waitron/server exec vitest run src/party-move-bill.test.ts -t 'A773 waiter request'`.
+  Case 7 fails with round 2's burger held. Cases 8, 9 and 10 pass from the start: 8 seeds its own
+  stamps and pins today's advance code; 9 and 10 run through the insert Task 3a changed. They stay
+  as pins (say so in the commit), each proved by a control below.
+- [ ] **Minimal implementation** as "Interfaces".
+- [ ] **GREEN.** RED unfiltered (`party-move-bill.test.ts` whole); unfiltered
+  `src/split-off-extras.send.test.ts`, `src/till-api.groups.test.ts`, `src/order-groups.test.ts`,
+  `src/draft-recall-legacy.test.ts`, `src/tabs.test.ts`, `src/working-order.test.ts`; typecheck;
+  format check.
+- [ ] **Mutation controls:** `anyFired` back on `fired_at` → case 7 red; dropping
+  `isNotNull(firedAt)` from `advanceTicket` (`:7666`) → case 8 red; and from `bumpGroupReady`
+  (`order-groups.ts:659`) → case 8 red; `requestStamps` ignoring `waits` → cases 9 and 10 red.
+- [ ] **Commit.** `git commit -s -m "Let a later round join a course the waiter has already asked for"`.
+
+## Task 4: extras placed with their dish follow their own station (about 55 calls)
 
 **Files.** Modify `apps/server/src/working-order.ts`: `DishKitchenPlace` (`:1919-1924`),
 `insertSplitExtras` (`:1927-2035`), `fireLines`' `dishPlaces` (`:2231-2286`), `finishRelease`'s
@@ -797,61 +854,87 @@ pass `initiatedAt: fired ? firedAt : null`; `finishRelease` passes `initiatedAt:
 null when its group is held or a child's ticket is still held (`initiatedAt(child.ticket) ===
 null`, replacing `child.ticket.firedAt === null` at `:6494-6497`, D19), else `routing.at`. Callers
 print `firedAt !== null` as today; HOLD CHANGED is unchanged (D14). `fireLines`' extras **release**
-(`:2322-2350`) is Task 5's.
+(`:2322-2350`) is Task 5b's.
+
+Which edits reach this code (round 3, P2, run): a parent with any record whose `fired_at` is set
+makes `kitchenHas` answer true (`:5798`), so the action is `"change"` (`:5961`) and
+`addedToExisting` (`:6476`), which keeps only `"free"` changes, leaves it out; such a dish is
+recalled and its extras come from `fireLines`' own `insertSplitExtras`. So the edit path here sees
+only parents whose records are all unfired: held, Requested, or no record at all.
 
 - [ ] **Failing tests** (`kitchen-request.extras.test.ts`, `A773 waiter request: extras`;
-  `setupSplitExtrasVenue`: chips are a burger and water extra routed to Fryer, carry gluten, and
-  Fryer has its own printer and the shared Pass printer):
+  `setupSplitExtrasVenue`: chips and onion rings are burger and water extras routed to Fryer
+  (Sides), chips carry gluten, and Fryer has its own printer and the shared Pass printer; copy the
+  edit suite's `line` and `edit` helpers, `src/split-off-extras.edit.test.ts:45-55` and `:97-112`):
   1. Fryer waits, Grill does not. Counter burger with chips: burger released and printed at
-     Grill; chips Requested, no job at the Fryer or the Pass printer; the chips item has a frozen
-     allergy snapshot (`VENUE_SERVICE.readTicketAllergies`) at the request (D7).
+     Grill; chips Requested, no job at the Fryer or the Pass printer. (No allergy snapshot is
+     asserted here: a counter order gets none, `kitchen-allergy.ts:105`; case 7 checks it.)
   2. Grill waits, Fryer does not. Counter burger with chips: burger Requested; chips released
      (`requestedAt` = `firedAt`) and printed at Fryer.
   3. `finishRelease`'s insert (review-1 C1): the setup of
      `src/split-off-extras.release.test.ts:268-308` — a held no-preparation water in a later course
      (`addTabRound` with `hold: true`) given a chips child with no item by a direct insert — with
      Fryer waiting, then `sendLines(tx, cfg, tabId, [])`: the water line's `sentAt` set; the chips'
-     new item Requested; no Fryer or Pass job. This reaches no code Task 5 or 6 changes: the tab has
-     no ticket item before the send, so `sendLines`' update returns nothing, and the chips are
-     inserted by `finishRelease`'s `insertSplitExtras` (`:2602`), which takes only extras with no
-     item (`:1965`).
+     new item Requested; no Fryer or Pass job. This reaches no code Task 5a, 5b or 6 changes (round 3,
+     P1, run: `sendLines`' update released nothing, and the chips were inserted by
+     `finishRelease`'s `insertSplitExtras`, `:2602`, which takes only extras with no item, `:1965`).
   4. Made here wins (review-1 I4): the setup of `src/split-off-extras.send.test.ts:1028` (Fryer
      made here on the sending device; a burger with chips in a held group) with Fryer also
      waiting: chips `ready`, `requestedAt` = `firedAt` = `readyAt`, `passControlled` false; the
      burger held (both null).
-  5. An edit adds chips to a Requested burger. Grill waits, Fryer does not; `addTabRound` a burger
-     (Requested since Task 3); then add chips through the edit suite's `edit` helper
-     (`src/split-off-extras.edit.test.ts:97-112`, `updateOrderLine` → `applyLineEdits`; its `:162`
-     case already reaches this extras path for a fired burger): chips released and printed at
-     Fryer; no HOLD CHANGED job.
-  6. A dish written before the column (review-1 I2, D19). Nothing waits; `addTabRound` a burger;
-     then a direct update sets its item's `requested_at` null, keeping `fired_at` = T, the shape
-     every pre-upgrade row has. (a) Fryer not waiting: the edit adds chips → chips released and
-     printed at Fryer, as `:162` today. (b) A second venue, Fryer waiting, same steps → chips
-     Requested, not held.
+  5. An edit adds chips to a Requested burger (the parent branch of D19). Grill waits, Fryer does
+     not; `addTabRound` a burger with no extras (Requested since Task 3a); then
+     `edit(tx, venue, 1, { extras: line(venue, "burger", "1", 1).extras })`: chips released and
+     printed at Fryer; no HOLD CHANGED job. The burger's only record is unfired, so the edit takes
+     `"free"` and reaches the parent's `initiatedAt` (read, not run).
+  6. An edit adds onion rings to a water whose chips are Requested (the children branch of D19,
+     `:6494-6497`). Fryer waits. `addTabRound` a water with chips (`line(venue, "water", "1", 1)`):
+     the water has no item; the chips' item is Requested. Then
+     `edit(tx, venue, 1, { extras: line(venue, "water", "1", 1, 1).extras })`: the rings' new item
+     is Requested (`requestedAt` = the edit's time, `firedAt` null, `passControlled` true), not
+     held; the chips' row identical; no Fryer or Pass job. Why it reaches the children test: the
+     water has no ticket and its chips' `fired_at` is null, so `kitchenHas` answers false, the edit
+     is `"free"`, the water is in `addedToExisting`, and its initiation is decided by the children
+     test alone. **Run at revision 3** in a throwaway worktree of `d45fe58b88`: the same shape with
+     the chips recalled rather than Requested (`split-off-extras.edit.test.ts:695`, "keeps a
+     recalled water's newly added onion rings held") passed (1 passed), and failed with
+     `expected '2026-11-01T16:16:12.513Z' to be null` when the children test was made to answer
+     false for every child; so in this setup that test alone decides the rings' stamp. `:695`
+     stays green after this task (a recalled child has both stamps null, D20) and is this case's
+     control in the other direction. The Requested-chips variant is first run by this task.
+  7. A Requested extra gets its allergy snapshot at the request (D7). Fryer waits, Grill does not.
+     `addTabRound` on the fixture's seated party's tab a burger with chips: chips Requested and
+     `VENUE_SERVICE.readTicketAllergies(tx, [chipsItemId]).has(chipsItemId)` true. Round 3 (P5,
+     run) showed the released twin of this shape gets one (`snapshots: 1`); the Requested one is
+     first run by this task.
 - [ ] **RED.** `pnpm --filter @waitron/server exec vitest run src/kitchen-request.extras.test.ts`.
-  Cases 1 and 3 fail with the chips released, 2 and 4 on `requestedAt` null, 5 with the chips held
-  (the parent's raw `firedAt` is null), 6b with the chips released; 6a passes and stays as a pin.
+  Cases 1, 3, 6 and 7 fail with the chips released (6, once the chips are Requested, with the
+  rings held; 7, once they are Requested, on the missing snapshot), 2 and 4 on `requestedAt` null,
+  5 with the chips held (the parent's raw `firedAt` is null).
 - [ ] **Minimal implementation** as "Interfaces".
 - [ ] **GREEN.** RED unfiltered; unfiltered `src/split-off-extras.edit.test.ts` (`:190` keeps HOLD
-  CHANGED for chips added to a printed held burger), `src/split-off-extras.send.test.ts` (`:956`,
-  `:1028` keep made-here extras of held dishes ready), `src/split-off-extras.release.test.ts`,
-  `src/kitchen-request.send.test.ts`, `src/kitchen-allergy.capture.test.ts`,
-  `src/kitchen-allergy.atomic.test.ts`, `src/bill-editing.order-writers.test.ts`,
-  `src/tabs.test.ts`, `src/working-order.test.ts`; typecheck; format check.
+  CHANGED for chips added to a printed held burger; `:695` and `:711` keep a recalled dish's added
+  extras held), `src/split-off-extras.send.test.ts` (`:956`, `:1028` keep made-here extras of held
+  dishes ready), `src/split-off-extras.release.test.ts`, `src/kitchen-request.send.test.ts`,
+  `src/kitchen-allergy.capture.test.ts`, `src/kitchen-allergy.atomic.test.ts`,
+  `src/bill-editing.order-writers.test.ts`, `src/tabs.test.ts`, `src/working-order.test.ts`;
+  typecheck; format check.
 - [ ] **Mutation controls:** `insertSplitExtras` deciding waiting by the dish's station → cases 1–2
   red; `finishRelease` passing `initiatedAt: null` → case 3 red; `requestStamps` answering held for
   a not-initiated item before it checks `madeHere` → case 4 red; `applyLineEdits` taking the
-  parent's `initiatedAt` from its ticket's `firedAt` → case 5 red; from its `requestedAt` alone →
-  case 6a red; the freeze kept on `firedAt !== null` → case 1's snapshot red.
+  parent's `initiatedAt` from its ticket's `firedAt` → case 5 red; the children test left on
+  `child.ticket.firedAt === null` → case 6 red (the rings held); the freeze kept on
+  `firedAt !== null` → case 7 red. **No control for "`requestedAt` alone"** at either branch: a
+  record with `fired_at` set never reaches this code (the paragraph above), so on every row that
+  does, `initiatedAt` and `requestedAt` agree, and such a mutation cannot go red here. Revision 2's
+  case 6 (a pre-upgrade fired burger) was deleted for that reason: its edit took `"change"`.
 - [ ] **Commit.** `git commit -s -m "Hold each extra for the pass by its own station's setting"`.
 
-## Task 5: one release step for held work (about 60 calls)
+## Task 5a: one release step for held groups and dishes (about 70 calls)
 
 **Files.** Modify `apps/server/src/kitchen-release.ts`, `apps/server/src/working-order.ts`
-(`releaseHeld` `:2533-2581`, `finishRelease` `:2584-2654`, `fireLines`' extras release
-`:2322-2350`); create `apps/server/src/kitchen-request.release.test.ts`; add one case to
-`apps/server/src/party-bill-actions.test.ts`.
+(`releaseHeld` `:2533-2581`, `finishRelease` `:2584-2654`); create
+`apps/server/src/kitchen-request.release.test.ts`.
 
 **Interfaces.**
 
@@ -875,11 +958,11 @@ item's waiting is decided at its new station; its `pending` probe (`:2543-2547`)
 `heldItem()`. `finishRelease` takes `requested` beside `fired`: requested lines are checked by
 `assertSendable`, stamped sent and frozen (D3, D7) and bump the revision; they are never printed,
 never given the rerouted MOVED-from ticket, and never passed to `notifyKitchenAllergyDestination`
-(D7). `sendLines` passes `requested: []` until Task 6. `fireLines`' extras release becomes
-`requestHeldItems` scoped to the extras of the initiated dishes: its released rows print as today,
-its requested rows are frozen. No other exported signature changes.
+(D7). `sendLines` passes `requested: []` until Task 6, and `fireLines`' extras release is left to
+Task 5b. No other exported signature changes.
 
-- [ ] **Failing tests** (`kitchen-request.release.test.ts`, `A773 waiter request: release`):
+- [ ] **Failing tests** (`kitchen-request.release.test.ts`, `A773 waiter request: release`; lines
+  with no extras unless a case names one):
   1. Extras released with a held group (review-1 C1's old case 4). A held burger with chips in a
      table's held group (`placeGroups`, `release: "hold"`), Fryer waiting, Grill not; `fireGroup`:
      burger released and printed at Grill; chips Requested; no Fryer or Pass job.
@@ -891,18 +974,63 @@ its requested rows are frozen. No other exported signature changes.
   4. HOLD paper: a held group whose HOLD ticket printed at Grill (Grill prints held work,
      `testing/station-printing.ts`) and at Bar; Fire with Grill waiting: Bar gets its FIRE-marked
      ticket as today; Grill gets nothing.
-  5. `fireLines`' extras release: a held no-preparation water with chips in a later course
+  5. Not swept by a later release, and a setting change releases nothing (master Contract 2:
+     "changing settings … never automatically releases … outstanding work"). A Requested burger
+     (Fire now, Grill waiting). (a) `fireOrderLines` named on its line (as an arrival does,
+     `order-groups.ts:2499`), passing a routing a minute after its request time
+     (`routingOnce(tx, cfg, new Date(Date.parse(requestedAt) + 60_000))`, `working-order.ts:1911`):
+     its row identical; no new job. (b) Then `setStationsWaitForPass(tx, false, [grill])` and the
+     same `fireOrderLines` again: its row still identical (`requestedAt` unchanged, `firedAt` null,
+     `passControlled` true); no new job at the Grill or Pass printer. (b) is the case the
+     both-stamps-null guard exists for: Grill no longer waits, so only `heldItem()` keeps the
+     second update off the burger, however "the rest" is written (round 3, I-C).
+  6. Rerouted before it is stamped (round 3, M7). A held group's burger at Grill; Grill is then
+     closed for the day (as `src/station-move.test.ts` closes a station) and the burger's product
+     now routes to Kitchen; Kitchen waits, Grill does not; `fireGroup`: the burger's `stationId`
+     is Kitchen and it is Requested there; no job at any printer. Task 6 case 3 pins the same order
+     for `sendLines`.
+- [ ] **RED.** `pnpm --filter @waitron/server exec vitest run src/kitchen-request.release.test.ts`.
+  Every case fails: 1 with the chips released, 2 and 3 with the dishes released and printed, 4
+  with a FIRE ticket at Grill, 5 with the burger released by the old update, 6 with the burger
+  released and printed at Kitchen.
+- [ ] **Minimal implementation** as "Interfaces".
+- [ ] **GREEN.** RED unfiltered; unfiltered
+  `src/order-groups.test.ts`, `src/till-api.groups.test.ts`, `src/split-off-extras.release.test.ts`,
+  `src/split-off-extras.groups.test.ts`, `src/split-off-extras.send.test.ts`,
+  `src/party-allergy.release.test.ts`, `src/kitchen-print.shared-printers.test.ts`,
+  `src/kitchen-print.concurrency.test.ts`, `src/attendance-arriving-groups.test.ts`,
+  `src/station-move.test.ts`, `src/kitchen-request.send.test.ts`,
+  `src/kitchen-request.extras.test.ts`, `src/working-order.test.ts`; the fiscal pair, unedited;
+  typecheck; format check.
+- [ ] **Mutation controls:** `requestHeldItems`' second update without `heldItem()` (on
+  `isNull(firedAt)`, with or without a "station not waiting" clause) → case 5b red; its first
+  update without `heldItem()` → case 5a red (`requestedAt` rewritten to the later instant); its
+  first update ignoring the station setting → case 2 red; `finishRelease` printing `requested` →
+  case 2's job count red; `requestHeldItems` called before `rerouteHeldAtRelease` → case 6 red
+  (the burger released and printed at the closed Grill).
+- [ ] **Commit.** `git commit -s -m "Leave requested work with the pass when the waiter fires held work"`.
+
+## Task 5b: the extras release inside a fire, and the master's replay and paid-group checks (about 45 calls)
+
+**Files.** Modify `apps/server/src/working-order.ts` (`fireLines`' extras release `:2322-2350`); add
+cases to `apps/server/src/kitchen-request.release.test.ts` and one case to
+`apps/server/src/party-bill-actions.test.ts`.
+
+**Interfaces.** `fireLines`' extras release becomes `requestHeldItems` scoped to the extras of the
+initiated dishes: its released rows print as today, its requested rows are frozen (D7). No
+signature changes.
+
+- [ ] **Failing test and pins:**
+  7. `fireLines`' extras release: a held no-preparation water with chips in a later course
      (`addTabRound` with `hold: true`: the chips get a held item, the water none), Fryer waiting;
      then `fireLines(tx, cfg, tabId, (await unsentDishLines(tx, tabId)).map((line) => ({ ...line,
      release: true })))`, as `src/split-off-extras.send.test.ts:513` does: the water's `sentAt` set;
      chips Requested; no Fryer or Pass job.
-  6. Not swept by a later release: a Requested burger (Fire now, Grill waiting), then
-     `fireOrderLines` named on its line (as an arrival does, `order-groups.ts:2499`): its row
-     identical before and after; no new job.
-  7. Replays keep stamps and print counts (master T9): `fireGroup` with Grill waiting, then the same
+  8. Replays keep stamps and print counts (master T9): `fireGroup` with Grill waiting, then the same
      call with the same `submissionId` and expected revision: the second answer equals the first;
-     the burger's row and every printer's job count unchanged. The same for `fireHeldLine`.
-  8. A paid group's fire changes no financial row (master T9), a **new case in
+     the burger's row and every printer's job count unchanged, and no Grill or Pass job after
+     either call. The same for `fireHeldLine`.
+  9. A paid group's fire changes no financial row (master T9), a **new case in
      `party-bill-actions.test.ts`** under `describe("A773 waiter request")`, beside `:608` and
      reusing `heldFlanOnCheck` (`:544`), `pay` and `fireHeld`: every station of its venue waits;
      pay the check, select whole the check's bill row, its lines and its sale and payment rows;
@@ -911,21 +1039,19 @@ its requested rows are frozen. No other exported signature changes.
      line's `sentAt`.
 - [ ] **RED.** `pnpm --filter @waitron/server exec vitest run src/kitchen-request.release.test.ts`
   and `pnpm --filter @waitron/server exec vitest run src/party-bill-actions.test.ts -t 'A773 waiter request'`.
-  Every case fails: 1 and 5 with the chips released, 2, 3, 7 and 8 with the dishes released and
-  printed, 4 with a FIRE ticket at Grill, 6 with the burger released by the old update.
+  Case 7 fails with the chips released by the old update. Cases 8 and 9 run through Task 5a's
+  `releaseHeld` and pass from the start; they stay as pins (say so in the commit), each proved by a
+  control below.
 - [ ] **Minimal implementation** as "Interfaces".
 - [ ] **GREEN.** RED unfiltered (`party-bill-actions.test.ts` whole); unfiltered
-  `src/order-groups.test.ts`, `src/till-api.groups.test.ts`, `src/split-off-extras.release.test.ts`,
-  `src/split-off-extras.groups.test.ts`, `src/split-off-extras.send.test.ts`,
-  `src/party-allergy.release.test.ts`, `src/kitchen-print.shared-printers.test.ts`,
-  `src/kitchen-print.concurrency.test.ts`, `src/attendance-arriving-groups.test.ts`,
-  `src/kitchen-request.send.test.ts`, `src/kitchen-request.extras.test.ts`,
-  `src/working-order.test.ts`; the fiscal pair, unedited; typecheck; format check.
-- [ ] **Mutation controls:** `requestHeldItems`' second update on `isNull(firedAt)` alone, without
-  `heldItem()` → case 6 red; its first update ignoring the station setting → case 2 red;
-  `finishRelease` printing `requested` → case 2's job count red; `fireLines`' extras release left as
-  the old update → case 5 red; `finishRelease` not stamping `requested` sent → case 8's `sentAt` red.
-- [ ] **Commit.** `git commit -s -m "Leave requested work with the pass when the waiter fires held work"`.
+  `src/split-off-extras.send.test.ts`, `src/split-off-extras.release.test.ts`,
+  `src/split-off-extras.groups.test.ts`, `src/kitchen-request.send.test.ts`,
+  `src/kitchen-request.extras.test.ts`, `src/working-order.test.ts`; the fiscal pair, unedited;
+  typecheck; format check.
+- [ ] **Mutation controls:** `fireLines`' extras release left as the old update → case 7 red;
+  `finishRelease` printing `requested` → case 8 red; `finishRelease` not stamping `requested` sent
+  → case 9's `sentAt` red.
+- [ ] **Commit.** `git commit -s -m "Leave a fired dish's waiting extras with the pass"`.
 
 ## Task 6: the tab's Send (about 50 calls)
 
@@ -955,7 +1081,12 @@ reads `heldItem()` (D6). No exported signature changes.
      A later course holds burger 1, burger 2 and a water (no preparation), all `addTabRound` with
      `hold: true`. `sendLines` names burger 1 → Requested; the water still unsent (burger 2 is
      held). `sendLines` names burger 2 → Requested; the water's line `sentAt` set. Nothing in the
-     course was released, which is the case today's code gets wrong.
+     course was released, which is the case today's code gets wrong. All three lines are built
+     with **no** `extras` field (not with a helper that adds chips by default, as the split-extras
+     suites' `pick` does; round 3, M2): chips on a burger, at Fryer, which does not wait, would be
+     released and put the course in the released set, so the "released rows only" control below
+     would stay green; chips on the water would give it a held item that keeps the course held, so
+     the water would never send, even on correct code.
   5. A send of only requested work still records attendance (review-1 I1), a **new case in
      `attendance-line-service.test.ts`** under `describe("A773 waiter request")`, reusing its `send`
      setup (`prepare("send")`, `:66-85`: seated with Ensalada, legacy-recalled, then sent through the
@@ -968,7 +1099,7 @@ reads `heldItem()` (D6). No exported signature changes.
   and `pnpm --filter @waitron/server exec vitest run src/attendance-line-service.test.ts -t 'A773 waiter request'`.
   Cases 1, 2, 4 and 5 fail with the Requested or held burger released by the old update (2 also
   rerouted), 3's waiting half with the burger released at Kitchen; 3's other half and 6 pass from
-  the start (6 since Task 3) and stay as pins.
+  the start (6 since Task 3a) and stay as pins.
 - [ ] **Minimal implementation** as "Interfaces".
 - [ ] **GREEN.** RED unfiltered (`attendance-line-service.test.ts` whole); unfiltered
   `src/station-move.test.ts`, `src/till-api.station-move.test.ts`,
@@ -979,17 +1110,18 @@ reads `heldItem()` (D6). No exported signature changes.
   `rerouteHeldAtRelease` on `isNull(firedAt)` → case 2 red; `requestHeldItems` called before
   `rerouteHeldAtRelease` → case 3 red; `releasedCourses`' candidates from the released rows only →
   case 4 red; its still-held read on `isNull(firedAt)` → case 4 red; the capture on released or
-  no-preparation lines only → case 5 red; `recallLines` leaving `requestedAt` (Task 3 undone) →
+  no-preparation lines only → case 5 red; `recallLines` leaving `requestedAt` (Task 3a undone) →
   case 6 red.
 - [ ] **Commit.** `git commit -s -m "Send a tab's held work to each station by its pass setting"`.
 
 ## Task 7: whole-branch run, guards, backlog and the PR (no product change, about 35 calls)
 
-- [ ] Every B1 test file unfiltered, then the GREEN lists of Tasks 2–6 once more, after a rebase on
+- [ ] Every B1 test file unfiltered, then the GREEN lists of Tasks 2–6 (3a, 3b, 5a and 5b each) once more, after a rebase on
   current main. S, the fiscal pair, the code guards. Read each `Tests` count.
-- [ ] Re-run each task's mutation controls that a later task could have weakened (Task 3's
-  "printing on `initiated`" and "recall leaving `requestedAt`", Task 4's "made here wins", Task 5's
-  "sweep" in particular); record each red-then-reverted run in the ledger.
+- [ ] Re-run each task's mutation controls that a later task could have weakened (Task 3a's
+  "printing on `initiated`" and "recall leaving `requestedAt`", Task 3b's `anyFired`, Task 4's
+  "made here wins" and children test, Task 5a's two "sweep" controls (cases 5a and 5b) and its
+  "request before reroute" in particular); record each red-then-reverted run in the ledger.
 - [ ] Re-run the audit search; confirm every hit not touched by B1 is in B2/B3/B4/D's rows.
 - [ ] Docs: no guide changes (nothing visible); `docs/developers/conventions-data.md` gains nothing
   (no new convention). Backlog: rewrite the A773-2 entry (`docs/backlog.md:88`, "A773-2 — firing
@@ -1010,11 +1142,11 @@ lists the exact pinned assertions it changes.
 
 | Task | What | Main files | Calls |
 | --- | --- | --- | --- |
-| B2.1 | Serving: `ServableLine.ticketRequestedAt`, internal `serviceRequested(line)` (initiation), Serve/Undo/All served of a requested dish and its split extras; `extraHeld` means genuinely held; `isReleased`, `ordersWithUnfiredDish` and `adjustments-apply.ts` keep `fired_at` (D3): a requested fixture in `unpaid-departure.test.ts` asserts `unpaid_departure.unfired_dishes` and unchanged sale and number rows | `working-order.ts:3590-3810`, `adjustments-apply.ts` (read only) | 45 |
-| B2.2 | Recall: draft recall of a requested dish (no RECALLED slip, no fictitious FIRE) and its source resend round trip (master T9 "source resend"; B1 Task 3 case 9 pins only the resend's write); legacy `recallLines` of a **requested** dish (B1 Task 3 already clears both stamps, D20); `changes-after-sending` treats Requested as held (pin); started or paid still refuse | `draft-recall.ts`, `order-drafts.ts:1200-1240`, `changes-after-sending.ts` | 35 |
+| B2.1 | Serving: `ServableLine.ticketRequestedAt`, internal `serviceRequested(line)` (initiation), Serve/Undo/All served of a requested dish and its split extras; `extraHeld` means genuinely held; `isReleased`, `ordersWithUnfiredDish` and `adjustments-apply.ts` keep `fired_at` (D3): a requested fixture in `unpaid-departure.test.ts` asserts `unpaid_departure.unfired_dishes` and unchanged sale and number rows, and pins that a no-preparation line sent with a Requested course reads as released (D3's shift) | `working-order.ts:3590-3810`, `adjustments-apply.ts` (read only) | 45 |
+| B2.2 | Recall: draft recall of a requested dish (no RECALLED slip, no fictitious FIRE) and its source resend round trip (master T9 "source resend"; B1 Task 3b case 9 pins only the resend's write); legacy `recallLines` of a **requested** dish (B1 Task 3a already clears both stamps, D20); an edit's recall-and-resend of an already-released dish at a waiting station, which after B1 comes back Requested (D19; decide whether it keeps its release, and pin it); `changes-after-sending` treats Requested as held (pin); started or paid still refuse | `draft-recall.ts`, `order-drafts.ts:1200-1240`, `changes-after-sending.ts` | 35 |
 | B2.3 | Cancellation context: `CancellationContext.components` gain `requestedAt` and `stationId` (server, parser, till twin `apps/till/src/api/line-cancel-types.ts`); a release racing the dialog refuses `tab.cancel_context_changed`; requested cancels take the not-started choices | `line-cancel-context.ts`, `line-cancel-input.ts`, `line-cancel.ts`, till types | 50 |
 | B2.4 | Finish table: `finishPartyService` includes held, requested, waiting and ready unserved paid dishes with exact contexts, one transaction, unchanged refund hand-off | `finish-party-service.ts`, till `widgets/finish-table-dialog.ts` (types only) | 35 |
-| B2.5 | Moves: a station move of a Requested dish keeps it Requested and pass-controlled, even to a station that does not wait; a released dish is never re-held; closing a station whose "move" choice runs `moveDishesToStation` over `stillMovable` dishes; `moveDishes`, Move this bill and `carveLines`/`splitTicketItem` carry the stamps; `groupArrivingDishes` treats a requested arrival as initiated (never re-held or re-requested); `moveLinesToGroup` refuses or keeps a requested dish (the plan reads `requireHeldGroup`'s callers and decides). GREEN adds `kitchen-delete.integration.test.ts` (master T8) | `station-move.ts`, `station-closing.ts`, `department-transfer-api.ts`, `working-order.ts` carve/split, `order-groups.ts:2431-2520`, `bill-actions.ts` | 50 |
+| B2.5 | Moves: a station move of a Requested dish keeps it Requested and pass-controlled, even to a station that does not wait; a released dish is never re-held; closing a station whose "move" choice runs `moveDishesToStation` over `stillMovable` dishes; `moveDishes`, Move this bill and `carveLines`/`splitTicketItem` carry the stamps; `groupArrivingDishes` treats a requested arrival as initiated (never re-held or re-requested); `moveLinesToGroup` refuses or keeps a requested dish (the plan reads `requireHeldGroup`'s callers and decides; if it keeps one in a held group whose HOLD ticket printed, D14's "no HOLD CHANGED for a requested extra" needs a case). GREEN adds `kitchen-delete.integration.test.ts` (master T8) | `station-move.ts`, `station-closing.ts`, `department-transfer-api.ts`, `working-order.ts` carve/split, `order-groups.ts:2431-2520`, `bill-actions.ts` | 50 |
 | B2.6 | Readers: `readGroups` readiness counts initiated parts (`order-groups.ts:1492`), reminders wait for initiated dishes to be served, held counts and floor marks count Requested as fired-not-held (`readHeldCounts`, `order-state-counts.ts`, `table-signals.ts:74`, `rest-of-order.ts:72`), output-down alerts include requested pass demand (`station-outputs-down.ts:122`), station deletion counts requested work (`station-delete.ts:76`), correction slips skip requested items (nothing printed), including an edit's VOID (`working-order.ts:6075`) and HOLD CHANGED (`planHeldCorrections`, `:6612-6650`) | as listed | 50 |
 | B2.7 | Whole-branch run, fiscal pair, backlog, PR | — | 35 |
 
@@ -1058,9 +1190,11 @@ Estimates are read, not measured.
 | 0 Preflight | 15 | none |
 | 1 Columns and phase | 35 | yes |
 | 2 Request kind | 45 | yes |
-| 3 New dishes follow the station; legacy recall clears both stamps | 55 | yes |
-| 4 Extras placed with their dish | 50 | yes |
-| 5 One release step for held work | 60 | yes |
+| 3a New dishes follow the station; legacy recall clears both stamps | 65 | yes |
+| 3b The course rule reads initiation; the other new-dish writers | 45 | yes |
+| 4 Extras placed with their dish | 55 | yes |
+| 5a One release step for held groups and dishes | 70 | yes |
+| 5b The extras release inside a fire; replay and paid-group checks | 45 | yes |
 | 6 The tab's Send | 50 | yes |
 | 7 Whole-branch run and PR | 35 | docs only |
 
@@ -1071,11 +1205,12 @@ B2: 7 tasks (about 300 calls), B3: 7 (about 315), B4: 8 (about 380).
 - **Spec and master coverage.** Contracts 1–4 → B1 Tasks 1–6; Contract 5–8 → B3.4–B3.5;
   Contracts 9–10 → B3.1–B3.3; Contracts 11–12 → B4.1–B4.2 (re-keyed, D16–D17); Contract 13 →
   B4.4. Master T8 → B2; T9 → B1 (writers) and B2.6 (floor and alert readers); T9's tests: the four
-  waiter paths (Tasks 3, 5, 6), advance refusals (Task 3 case 5), replays (Task 3 case 7, Task 5
-  case 7), a paid group (Task 5 case 8), a counter moved to a table (Task 3 case 8), source resend
-  (Task 3 case 9 and B2.2), a multi-output station ("Departures"). Spec §13's "a station that
-  waits for the pass receives nothing until the pass fires, and one that does not wait receives it
-  at once" → B1 Task 3 cases 1–2 (the receiving half in B3.5).
+  waiter paths (Tasks 3a, 5a, 6), advance refusals (Task 3b case 8), replays (Task 3a case 5, Task
+  5b case 8), a paid group (Task 5b case 9), a counter moved to a table (Task 3b case 10), source
+  resend (Task 3b case 9 and B2.2), a multi-output station with no duplicate item or ticket (Task
+  3a case 2, "Departures"), a setting change releasing nothing (Task 5a case 5b). Spec §13's "a
+  station that waits for the pass receives nothing until the pass fires, and one that does not
+  wait receives it at once" → B1 Task 3a cases 1–2 (the receiving half in B3.5).
 - **Claims checked by running:** the ADD COLUMN migrations, the schema guards and the list of
   existing checks the columns change (findings 6–7, in a throwaway worktree, removed); at
   revision 2, which test files the RED and GREEN commands select ("Revision 2"). Everything else
@@ -1092,10 +1227,10 @@ finding was checked against the code before acting; what was read or run is name
 | --- | --- |
 | **C1** Task 4 cases 3–4 run through code Task 5 changes | Fixed. The `fireGroup` case (old 4.4) moved to Task 5 (case 1) with the release step it needs, and the "second update without `heldItem()`" control with it (Task 5, against case 6). Old case 3 is replaced by the `split-off-extras.release.test.ts:268-308` setup with a mutation "`finishRelease` passes `initiatedAt: null`". **Departure from the review's fix:** that case stays in Task 4, not Task 5, because with that setup it reaches no code Task 5 or 6 changes: read `working-order.ts:2752-2805` (the tab has no ticket item, so `sendLines`' update returns nothing) and `:1960-1965` (`finishRelease`'s `insertSplitExtras` inserts the child, which has no item); Task 4 changes that insert. |
 | **I1** `sendLines` decides course release and attendance from released rows only | Confirmed by reading `:2780-2805`. Fixed: D4 and Task 6 — `requested` rows carry `courseId`, `releasedCourses` gets both sets, the capture runs when either set or the no-preparation lines is non-empty. Pinned by Task 6 case 4 (all-requested named sends release the course's water; two mutations) and case 5 (attendance, in `attendance-line-service.test.ts`). |
-| **I2** "Initiated" read from raw `requestedAt` | Fixed: D19, `initiatedAt(item)` in Task 1, `DishKitchenPlace.initiatedAt` and the children test in Task 4, pinned by Task 4 case 6 (a row with `fired_at` = T and `requested_at` null; mutation "from `requestedAt` alone"). |
+| **I2** "Initiated" read from raw `requestedAt` | Fixed: D19, `initiatedAt(item)` in Task 1, `DishKitchenPlace.initiatedAt` and the children test in Task 4, pinned by Task 4 case 6 (a row with `fired_at` = T and `requested_at` null; mutation "from `requestedAt` alone"). **Corrected at revision 3:** that case never reached the code it pinned, and review-1 I2's failure scenario cannot happen in the edit path: a parent with a fired record takes `"change"` and is recalled, never reaching `addedToExisting` (round 3, I-A, P2 run). Case 6 is now the children test with a Requested child; see "Revision 3". |
 | **I3** Task 3 case 6 cannot detect `anyFired` | Confirmed by reading `:2218-2251`. Fixed: Starters and Mains, both `release: true` in round 1, so Mains is not the earliest course and only `anyFired` admits round 2 (the review's setup, with `addTabRound`'s `release: true` in place of `placeGroups`, which passes the same flag, `order-groups.ts:415-422`). |
 | **I4** GREEN lists select no file / skip the edit and send suites | Confirmed (`rg -l updateHeldOrder apps/server/src --glob '*.test.ts'` names no `*held-order*` or `order-edit*` file). Fixed: every list names files; `split-off-extras.edit`, `.send`, `tabs` and `working-order` suites added where they pin changed code; `requestStamps`' contract says made here wins, pinned by Task 3 case 4 and Task 4 case 4. |
-| **I5** Five master T9 tests dropped | Counter moved to a table → Task 3 case 8; source resend → Task 3 case 9 (its write) and B2.2 (the round trip), a stated departure; multi-output station → rejected as a separate case, already asserted (Grill and Fryer each have two printers, `testing/split-extras-venue.ts:84-117`; Task 3 case 1, Task 4 case 1), now a departure row; paid group's fire → Task 5 case 8; `fireGroup`/`fireHeldLine` replays → Task 5 case 7. |
+| **I5** Five master T9 tests dropped | Counter moved to a table → Task 3 case 8; source resend → Task 3 case 9 (its write) and B2.2 (the round trip), a stated departure; multi-output station → rejected as a separate case, already asserted (Grill and Fryer each have two printers, `testing/split-extras-venue.ts:84-117`; Task 3 case 1, Task 4 case 1), now a departure row (**corrected at revision 3:** those cases asserted only "no job" while the station waits; the "no duplicate item or ticket" check is now Task 3a case 2, round 3 M1); paid group's fire → Task 5 case 8; `fireGroup`/`fireHeldLine` replays → Task 5 case 7. |
 | **I6** Legacy recall leaves a stuck Requested item | Confirmed: `recallLines`' update is the only writer clearing `fired_at` (`rg -n "firedAt: null" apps/server/src -g '!*.test.ts'`). Fixed in B1 (D20), but in **Task 3, not Task 5**: Task 3 is where released items first carry `requested_at`, and from then a leftover stamp would already make `anyFired` count a recalled item's course as initiated. Pinned by Task 3 case 10 and, behaviourally, Task 6 case 6; B2.2 shrunk. |
 | **I7** Tasks 4–5 will pass 100 calls | Fixed: re-cut into Tasks 4 (extras placed with the dish, 50), 5 (one release step: `requestHeldItems`, `releaseHeld`, `finishRelease`, `fireLines`' extras release, 60) and 6 (the tab's Send: `sendLines`, `releasedCourses`, reroute, 50). Grouped by function rather than the review's 5a/5b, so that each function changes in one task; old Task 6 is now Task 7. |
 | **M1** Task 2 file list misses callers and the barrel | Fixed (`rg -n "startGroup\(" apps packages`: the two test files, plus `packages/db/src/index.ts:124-129`). |
@@ -1106,7 +1241,7 @@ finding was checked against the code before acting; what was read or run is name
 | **M6** One advance refusal pinned | Task 3 case 5 covers `advanceTicketItem`, `advanceTicket` and `bumpGroupReady`, with mutations on the latter two. |
 | **M7** Two unsaid things | D7 and Task 5 say requested rows never reach `notifyKitchenAllergyDestination` (no B1 case can see it: the fixtures' parties answer "none"; B3.4 pins it); B3.4 keeps `pass_controlled` true on release. |
 | **M8** Madrid fix-up defaults | "Changed test checks" gives every phase and the exact pragma column objects (`"false"`, `"'new_order'"`). |
-| **M9** One "unknown" already answered | Removed from "does not know yet"; Task 4 case 5 points at `split-off-extras.edit.test.ts:97-112` and `:162`. |
+| **M9** One "unknown" already answered | Removed from "does not know yet"; Task 4 case 5 points at `split-off-extras.edit.test.ts:97-112` and `:162`. **Corrected at revision 3:** `:162` does not reach this extras path for a fired burger (it takes `"change"`, and its chips come from `fireLines`, round 3 P2); the pointer to it is struck from Task 4 case 5. |
 | **M10** B2.5 misses two names | Added `station-closing.ts` and `kitchen-delete.integration.test.ts`. |
 | **M11** Backlog heading | Fixed: "A773-2 — firing and the pass" (`docs/backlog.md:88`). |
 
@@ -1125,3 +1260,39 @@ filters select only the new cases: no existing test in `party-move-bill`, `party
 `attendance-line-service` or Task 1's db files contains `A773` (`rg -c A773` over them matched
 nothing), and `vitest list -t CORE_CONFIGURATION_TRANSFER` over the db file lists its three
 existing cases. The six new files' RED runs are first measured by their tasks.
+
+## Revision 3 (round-3)
+
+Answers `~/waitron-campaign-c/a773-2b-plan-review/round-3.md`, a narrow claim check of revision 2
+(`d45fe58b88`; 0 Critical, 4 Important, 8 Minor). The code is unchanged since `abfe271663`. Each
+answer is in the task text an implementer reads; this table only points at it. Task and case
+numbers in the "Revision 2" table above are revision 2's: its Task 3 cases 1–4 and 10 are now
+Task 3a cases 1–4 and 6 (its 7 is 3a's 5); its Task 3 cases 5, 6, 8 and 9 are Task 3b cases 8, 7,
+10 and 9; its Task 5 cases 1–4 and 6 are Task 5a cases 1–5; its Task 5 cases 5, 7 and 8 are Task
+5b cases 7–9.
+
+**Run at revision 3**, in a throwaway worktree (`git worktree add --detach /tmp/a773-2b-rev3
+d45fe58b88`, `pnpm install --frozen-lockfile`, removed afterwards with `git worktree remove
+--force`): `pnpm exec vitest run src/split-off-extras.edit.test.ts -t "newly added onion rings held"`
+in `apps/server` printed `Tests 1 passed | 30 skipped`; with the children test at
+`working-order.ts:6494-6497` changed to answer false for every child, the same command printed
+`Tests 1 failed` with `AssertionError: expected '2026-11-01T16:16:12.513Z' to be null`. What a
+failing probe would have printed: the case still passing under the change, meaning something else
+decides the rings' stamp. Everything else below is read, not run, unless it cites round 3's own
+runs (P1–P5).
+
+| Finding | Done |
+| --- | --- |
+| **I-A** Task 4 case 6 never reaches the code it pins | Agreed (round 3's P2 was run; reading `:5798`, `:5961`, `:6476` agrees). Case 6 deleted, with the reason in Task 4's controls. New case 6: Fryer waits, a water's chips are Requested, an edit adds onion rings → rings Requested; control "children test left on `firedAt`" → red. The probe above shows the children test alone decides the rings' stamp in that shape (with recalled chips); the Requested-chips variant is first run by Task 4. Task 4 states that no "`requestedAt` alone" control can go red at either edit-path branch. The `:162` parenthetical is struck from case 5; the I2 and M9 rows of revision 2 carry corrections. D19 says which sites its pins reach. |
+| **I-B** Task 4 case 1's snapshot cannot exist on a counter order | Agreed (`kitchen-allergy.ts:105`, read; round 3's P5, run). The snapshot clause leaves case 1 (with one line why); new Task 4 case 7 checks a Requested extra's snapshot on a table round; Task 3a case 3 (a table submission) checks a Requested dish's, with the control "Requested inserts not passed to `freezeKitchenAllergyItems`" → red. A party answering "none" still gets an entry with a null block (`kitchen-allergy.ts:128-131`, read). |
+| **I-C** Task 5's sweep control can pass vacuously; Contract 2 unpinned | Agreed. Task 5a case 5 now has (a) Grill still waiting, a later-instant `fireOrderLines` (control: first update without `heldItem()` → red), and (b) Grill's setting turned off after the request, then the same call → row identical, no job (control: second update without `heldItem()`, with or without a "not waiting" clause → red). Self-review names it as the Contract 2 pin. |
+| **I-D** Task 3 past 100 calls | Split into Task 3a (`kitchen-release.ts`, the helper, `fireLines`' inserts, printed set and freeze, D20; 6 cases, 7 controls, about 65) and Task 3b (`anyFired`; 4 cases, 4 controls, about 45). **Departure from the check's cut:** the advance-refusal case goes to 3b, not 3a; it seeds its own stamps and needs no 3a code, and moving it keeps 3a well under 100. 3b's resend and counter-move cases run through 3a's insert, so they pass from the start and are pins, each with a control. |
+| **M1** "two jobs"; the multi-output departure | Task 3a case 2 asserts three jobs, one at each of Grill, Pass and Kitchen, and one item per line; the departure row and revision 2's I5 row cite it. |
+| **M2** Task 6 case 4's extras | The case names its lines without extras, with why. Task 3a's and 5a's test files say the same for every case. |
+| **M3** "nothing prints" vacuous in `party-move-bill` | Task 3b case 10 attaches a printer to every station before the move and asserts it has no job. |
+| **M4** D19 claims too much; edit of a released dish | D19 narrowed to its four sites and names the unchanged ones; the recall-and-resend of an already-released dish at a waiting station is stated in D19 and added to B2.2. |
+| **M5** `courseFired, :2218-2224` | `:2238-2245` in Task 3a's Interfaces (read). Task 3b case 7 cites `:2238-2251`. |
+| **M6** D3 and the no-preparation shift | D3 states it; B2.1's row pins it. |
+| **M7** Release order unpinned for `releaseHeld` | Task 5a case 6 (a held group at a closed Grill rerouted to a waiting Kitchen), control "request before reroute" → red. |
+| **M8** D14's premise ends at B2.5 | D14 says so; B2.5's row names it. |
+| Task 5 size (round 3, answer 7) | Split into Task 5a (`requestHeldItems`, `releaseHeld`, `finishRelease`; 6 cases, 5 controls, about 70) and Task 5b (`fireLines`' extras release, plus the master's replay and paid-group checks as pins with controls; about 45). |
