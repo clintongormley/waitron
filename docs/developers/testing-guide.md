@@ -50,6 +50,36 @@ choose.
 Contention is a separate question and has its own section further down, "A contention test proves
 the write queue serialises writers, not that a lock blocked".
 
+## Give a fake fiscal service and its sample one controlled clock
+
+When a readiness test checks acceptance or a forced refusal, set its issue clock, the fake
+service's clock and the queue's wall clock explicitly. Keep timers running and restore the wall
+clock after the case. A fixed issue time alone can leave a newly queued record later than the
+injected drain time, so the test sends nothing.
+
+A1270 reproduced the original `fiscal-readiness-runner.test.ts` case on 1 November 2026 with
+only `Date` frozen at `2026-10-31T23:30:00Z`: under `TZ=Europe/Madrid`, the expected acceptance
+received `1112`; at noon it passed. The same night-time case under `TZ=UTC` also passed.
+The helper took the issue offset from the host, while `@waitron/verifactu` 0.2.1's fake converted
+the invoice date to UTC midnight before comparing it with `serverNow`. This is a host-zone-dependent
+fixture failure; it is not evidence that every CI host fails during that hour.
+
+The case now fixes its wall and issue clocks at noon UTC and the fake's clock one minute later,
+checks the transmitted invoice date and generation timestamp, and retains both original result
+assertions. It runs with a Madrid host zone even on a UTC machine, so the wire assertions also
+catch a return to the host-derived issue clock in CI. Run it with
+`pnpm --filter @waitron/provisioning exec vitest run src/fiscal-readiness-runner.test.ts`.
+This verifies the synthetic readiness path, not AEAT's acceptance at a Spanish midnight.
+
+| Source | Exact words | What they establish |
+| --- | --- | --- |
+| [AEAT validations v1.2.2, §3.1.3.1](https://www.agenciatributaria.es/static_files/AEAT_Desarrolladores/EEDD/IVA/VERI-FACTU/Validaciones_Errores_Veri-Factu.pdf), checked 1 November 2026 | “La FechaExpedicionFactura no podrá ser superior a la fecha actual.” | The date may not exceed the current date. This section does not name its comparison time zone. |
+| [AEAT error catalogue](https://prewww2.aeat.es/static_files/common/internet/dep/aplicaciones/es/aeat/tikeV1.0/cont/ws/errores.properties), archived source SHA-256 `06519ceb23422bd6b0ad3bfb659e3007615050da4920781d12cff536481d5902` | “El campo FechaExpedicionFactura es superior a la fecha actual.” | The wording of `1112`. It does not resolve the comparison zone. |
+
+Do not infer that the fake's UTC comparison matches AEAT from a passing synthetic sample.
+The [remaining verification](../backlog.md) needs an authoritative time-zone definition or a
+controlled preproduction boundary probe before changing the library's calendar rule.
+
 ## A recent timestamp can belong to the previous business day
 
 When a database read filters by the current business day, make your fixture's day boundary
