@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -279,7 +280,7 @@ async function total(billId: string): Promise<number> {
 /** An item payment in cash for the dish lines named. */
 async function payItems(billId: string, lineNos: number[], amount: string): Promise<void> {
   await takeBillPayment(
-    { db: v.db, backend: v.backend, clock: v.clock },
+    { db: v.db, backend: v.backend, clock: v.clock, admission: testTradingAdmission() },
     v.cfg,
     billId,
     {
@@ -534,6 +535,7 @@ describe("A803 move dishes: the moves that succeed", () => {
         p.partyId,
         burger!,
         {
+          admission: testTradingAdmission(),
           submissionId: randomUUID(),
           quantity: "1",
           outcome: "keep_charge",

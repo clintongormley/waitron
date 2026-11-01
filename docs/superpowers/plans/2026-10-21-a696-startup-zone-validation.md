@@ -542,3 +542,23 @@ No production code changed after this rebase. The completed 766-second review
 is retained; the next normal hook and exact-head CI remain required.
 The owner's new location-removal instruction adds no work to this integration;
 A1301's removal slices remain with lane B.
+
+
+### A803 integration before authorised landing, 1 November
+
+The owner approved landing PR #2369. Main then gained A803 slice 4a (#2372) and
+its backlog amendment, requiring a rebase onto `abfe271663dd069609bebf9acabc6c804544b2f6`.
+All 32 patches replayed without conflicts; the range comparison changes only import
+context around A803's added `sql` import. The first focused run reports 647 passed
+and 12 failed. Three new A803 suites call payment, cancellation or split services
+without their now-required admission holder; server types identify the same sites.
+Those fixture calls now use the existing `testTradingAdmission` helper. Their 93
+cases pass, and all 422 original expectation expressions remain identical. No
+production code changes in this integration.
+
+The other 566 selected server cases passed in the initial run. Server types and
+changed-test lint pass after correction. The five-file process matrix passes 18
+cases; till error wording passes 78. The protected write-path and inmutabilidad
+suites pass 20 and remain byte-identical to the new main base. The completed
+766-second review is retained across this rebase. A fresh normal push hook and
+current-head CI still qualify the rebased candidate before authorised landing.

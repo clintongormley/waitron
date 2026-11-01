@@ -883,7 +883,11 @@ describe("A803 A1195: a weighed portion leaves its bill whole", () => {
   it("A803 A1195: Split by item of 0.100 kg of a bound weighed portion is refused and changes nothing", async () => {
     const p = await withHam();
     expect(p.weighed.measured).toBe(true);
-    const ask = { ...(await command(p)), expectedEdit: await edit(p.billId) };
+    const ask = {
+      admission: testTradingAdmission(),
+      ...(await command(p)),
+      expectedEdit: await edit(p.billId),
+    };
     const before = moveTables();
     await expect(
       inTx(venue, (tx) =>
@@ -959,7 +963,11 @@ describe("A803 A1195: a weighed portion leaves its bill whole", () => {
         .set({ quantity: 2000 })
         .where(eq(workingOrderLines.id, first!.lineId));
     });
-    const ask = { ...(await command(p)), expectedEdit: await edit(p.billId) };
+    const ask = {
+      admission: testTradingAdmission(),
+      ...(await command(p)),
+      expectedEdit: await edit(p.billId),
+    };
     const split = await inTx(venue, (tx) =>
       splitBill(tx, venue.cfg, p.billId, [{ lineNo: firstNo, quantity: "1" }], ask),
     );
@@ -999,7 +1007,11 @@ describe("A803 A1195: a weighed portion leaves its bill whole", () => {
       await insertTabRound(tx, venue.cfg, round, round.rows);
       return round.rows[0]!.lineNo;
     });
-    const ask = { ...(await command(p)), expectedEdit: await edit(p.billId) };
+    const ask = {
+      admission: testTradingAdmission(),
+      ...(await command(p)),
+      expectedEdit: await edit(p.billId),
+    };
     const split = await inTx(venue, (tx) =>
       splitBill(tx, venue.cfg, p.billId, [{ lineNo, quantity: "0.120" }], ask),
     );
