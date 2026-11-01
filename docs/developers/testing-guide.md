@@ -97,6 +97,56 @@ Setting those two fixtures' changeover to 90 minutes after the controlled clock 
 94 passing cases with every original assertion unchanged. The group fakes only `Date` and
 restores it after each case.
 
+## Four shapes of flaky test that keep coming back
+
+Each shape below failed tests whose code under test was right, again and again across the lanes'
+logs of 3 October to 1 November 2026 (the owner's reading of those logs). The instances named are
+the ones whose fixes are on `main`.
+
+- **A random value can contain what the test looks for.** A search of a whole record or file for a
+  short literal fails when a generated id, path or time happens to contain it. A308 (#1330, "Stop
+  the stored-PIN check failing when a random id happens to contain the PIN's digits"): submission id
+  `2f655b01-9590-4fb7-94d0-f0b7777d5a8f` held the test PIN `7777`. A1010 (#1978, "Fix deployment
+  status command checks"): the temporary folder `waitron-sh-bupOFl` matched `compose .*up`. A1239
+  (#2296, "test(server): distinguish exported amounts from session timestamps"): a session opened
+  at `…:19.993Z` contained `19.99`, the colleague's pay the test searched for. Give the fixture a
+  fixed value, or compare whole values — a parsed field, a split word — never substrings. More on
+  the PIN case: [Check stored secrets as values](#check-stored-secrets-as-values-and-inspect-every-write).
+- **A wait that starts before the slow part.** A806 (#1894, "Say "this invoice number is already
+  used" when a sale would reuse one", inner commit "Give the boot email test's wait the whole
+  start-up, not just the send"): in `apps/server/src/boot.invoice-delivery.test.ts` a 5-second wait
+  for an email began at the `startServer` call, so it also had to cover all of start-up, and CI run
+  39327970268 ran it out. Start a wait's clock at the event it waits for. Where a test cannot —
+  that one's start-up fails on purpose, so it cannot wait for start-up to finish — size the wait for
+  everything before the event too; that fix made it 30 seconds.
+- **"The latest row" picked by time alone.** Rows written in the same millisecond share a time, so
+  a read ordered by time alone returns them in either order. A tie broken by id does not help here:
+  ids are random UUIDs, so the order says nothing about which row was written last. A846 (#1896,
+  inner commit "Pick the newer of two alerts handled at the same moment as the last one handled"):
+  ordering by handling time then id sometimes picked the older alert. A533 (#1606, "Orders:
+  same-moment rows keep their writing order, …") breaks such ties with SQLite's `rowid`, the order
+  the rows were written in. Order by time, then by something that follows writing order; in the
+  test, write the rows with one time and ids made to sort against the writing order
+  (`apps/server/src/testing/descending-ids.ts`), so the test fails if the tie-break goes.
+- **The edges of the day and the hour.** A test that compares "now" with a stored time can pass
+  all day and fail in the minutes around midnight, the venue's business-day change, the hour or a
+  summer-time change. A1117 (#2100, "test(server): floor suites keep their till API on a fixed clock
+  across the 05:00 day change") is the instance with a fix on `main`; the receipts are in
+  [A floor test pins the till API's clock](#a-floor-test-pins-the-till-apis-clock-away-from-the-day-change)
+  and [A recent timestamp can belong to the previous business day](#a-recent-timestamp-can-belong-to-the-previous-business-day).
+  The root `CLAUDE.md` rule that a floor suite "pins the API's clock at its own fixed time" is one
+  case of this: a test whose answer depends on the hour or the day fixes every clock it reads at a
+  time away from those edges, and a test about an edge sets the clock to each side of it on purpose.
+
+**`vitest run --project root` runs nothing.** The root `vitest.config.ts` declares no projects, so
+none is named `root`. Run on 1 November 2026 with Vitest 4.1.12 from the repository root,
+`pnpm exec vitest run --project root scripts/journal-monotonic.test.ts` printed
+`Error: No projects matched the filter "root".` and exited 1; the same command piped through
+`tail -3` showed three blank lines and the pipe exited 0, which reads as a clean pass (the trap in
+[A run that shows no `Tests` count](#a-run-that-shows-no-tests-count-is-no-evidence-that-anything-passed)).
+To run one root guard, name the file and no project:
+`pnpm exec vitest run scripts/journal-monotonic.test.ts` printed `Tests 17 passed (17)` and exited 0.
+
 **Owning and cleaning up a database in a suite**
 
 ## Don't own a database in a suite — let a helper own it.
