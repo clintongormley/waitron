@@ -2014,9 +2014,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   ticket/receipt grouping, has landed. What it leaves open is A1191–A1202, A1217 and the store limit under
   _Modules, data and code health_. Slice 2, named bills that keep their number at the table, has
   landed; it leaves open A1235–A1238. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
-  main bill, has landed (#2360); it leaves open A1256, A1258, A1261, A1263–A1267 and A1269. Remaining slices: one
-  picker for Move dishes and Split a table, including waiting courses; pre-bills after asesor S2
-  (A446). One payment pays one bill. Station modes, pass naming and grouped cross-bill
+  main bill, has landed (#2360); it leaves open A1256, A1258, A1261, A1263–A1267 and A1269. Slice
+  4a, one dish picker behind the ⋮'s **Move dishes…** in place of Split by item and Transfer items,
+  has landed. Remaining slices: 4b, waiting dishes that leave with their own copy of the course; 4c,
+  Split a table through the same picker, with A590; pre-bills after asesor S2 (A446). One payment pays one bill. Station modes, pass naming and grouped cross-bill
   firing wait for pending A773-2, independently of S2. New Spanish wording requires approval
   during implementation. Each new seating starts at Bill 1
   (owner, 2026-10-19); bills staying at their table retain their numbers.
@@ -2099,7 +2100,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   the same at 390×844 (617 px box). Nothing is lost, but the whole-table actions are easy to miss.
   Decide whether the list gets shorter (fewer items, or tighter rows) or the table section comes
   first. Pictures `x-t1-menu-open`, `k5-*` in the LOOK's folder
-  (`~/waitron-campaign-c/a803-3-shots/`, not in the repository).
+  (`~/waitron-campaign-c/a803-3-shots/`, not in the repository). Since slice 4a the bill section is
+  one item shorter (Move dishes… replaced Split by item and Transfer items); measured then: HEIGHTS_TBD.
 
 - **A1266. A payment window stays on a bill another till moved or merged away, and an unanswered
   card payment's view leaves this till's screen (left open by A803 slice 3, #2360).** Since the LOOK
@@ -2132,9 +2134,25 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   on the first question is shown on the second and sent with it, to `setMakeAt` and to the
   counter's `removeLine`. By reading, not run. Clear both when the question changes.
 
+- **A1286. A bill with payments refuses with words that no longer fit Move dishes… (left open by
+  A803 slice 4a).** `bill.payments_received` says "items cannot be transferred between it and
+  another bill" (`apps/till/src/i18n/codes.ts`), but since slice 4a unpaid dishes may leave a
+  part-paid bill; only a destination that holds a payment is still refused. Move dishes… lists only
+  bills with no payment, so there the words show when a bill took a payment on another till after
+  the panel opened; Merge bills still uses them as written. New English and approved Spanish are
+  needed.
+
+- **A1287. With no party, the ⋮'s Merge bills does nothing (left open by A803 slice 4a, D15).** A
+  bill with no party at a table still offers Merge bills under "Bill", but the panel lists no other
+  bill (`#otherBills` answers none without a party, `apps/till/src/screens/till-table-order-screen.ts`)
+  and `#onMergeBills` returns without a word when `#billComposition` answers `null`, which it does
+  with no party (`apps/till/src/till-app.ts`). By reading, not run. Slice 4a took Split by item and
+  Transfer items out of that section for the same reason. Decide whether Merge bills goes too.
+
 - **A1193. Choosing which portions of a grouped row an action takes, and Fire now on a grouped
   row (left open by A803 slice 1, D14 and D31).** Actions on a row take a count, never chosen
-  portions, and Fire now fires only the row's first portion. Slice 4's picker is meant to choose.
+  portions, and Fire now fires only the row's first portion. Since slice 4a, Move dishes… picks a
+  row's first portions too; comp, void and Fire now are unchanged.
   [Detail](backlog/till.md#a1193-choosing-which-portions-of-a-grouped-row-an-action-takes-and-fire-now-on-a-grouped-row)
 
 - **A1194. Finish table cancels a grouped row one portion at a time (left open by A803 slice 1).**
@@ -2142,15 +2160,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   where one line of three gives one cancel and one "3 x" slip. Pinned as it is by the "Finish
   table" case in `apps/server/src/order-portions.adjustments.test.ts`.
 
-- **A1195. A weighed or measured portion can still be cut in part (left open by A803 slice 1,
-  D13).** Spec §3.1 says such a line is never cut; refusing it waits for slice 4's picker. Until
-  then a partial split or transfer of a bound measured line moves the cut part with no portion of
-  its own and no portion event.
-
 - **A1196. Retire the partial-quantity server paths (left open by A803 slice 1, D12).** Partial
   transfer and split (`carveLines`), `splitUnitsWithinOrder`, and partial serve, cancel,
   adjustment and item payment stay for measured lines and lines stored before portions, and their
-  tests build grouped bills. Retire them once A1195 is settled.
+  tests build grouped bills. Since slice 4a the till calls neither `/api/bills/:id/split` nor
+  `/transfer` (Move dishes… sends whole dishes to `/move-dishes`); in `apps` and `packages` only
+  those two routes call `splitBill` and `transferItems`, and only tests call the routes.
+  Slice 4a refuses cutting a bound measured portion only on its way to another bill: a part of one
+  can still be split inside its bill (a part discount, a move to another course group), as the
+  in-bill case in `apps/server/src/order-portions.lifecycle.test.ts` pins. Retire the paths with
+  the server's split and transfer routes.
 
 - **A1197. `addTabRound` still writes grouped table lines (left open by A803 slice 1, D26).** Only
   test helpers call it (`apps/server/src/testing/party-venue.ts`,
