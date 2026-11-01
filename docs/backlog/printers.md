@@ -594,9 +594,9 @@ device rule. Spec: [A268 §4](../superpowers/specs/2026-10-04-add-a-device-desig
 Since A841 slice 7, a theme's logo (`theme_logo` in `listImageUsages`) is a second logo use that
 only the app keeps from deletion; no trigger protects it either.
 
-## A change is refused while an open order at the location holds a line
+## A change is refused while an open order holds a line
 
-- **A change is refused while an open order at the location holds a line**
+- **A change is refused while an open order holds a line**
   (`receipt.language_orders_open`; narrowed by C124, #1020, 2026-10-02, with core
   `0064_line_locale_triggers_text_only`). The order-line language triggers now check a line's
   names only when an update changes them or moves the line, so the till can still split such a

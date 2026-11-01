@@ -757,3 +757,31 @@ describe("venue defaults", () => {
     ]);
   });
 });
+
+describe("no venue row", () => {
+  it.each([
+    "/management-api/venue-details",
+    "/management-api/venue-defaults",
+    "/management-api/receipt-language",
+  ])("%s answers 409 venue.not_found", async (path) => {
+    const [venueRow] = suite.db.all<Record<string, unknown>>(
+      sql`select * from locations where id = ${venue.cfg.locationId}`,
+    );
+    await suite.db.execute(sql`pragma foreign_keys = off`);
+    try {
+      await suite.db.execute(sql`delete from locations`);
+      const response = await app().request(path, { headers: { cookie: venue.managerCookie } });
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({ error: { code: "venue.not_found", params: {} } });
+    } finally {
+      const columns = Object.keys(venueRow!);
+      await suite.db.execute(
+        sql`insert into locations (${sql.raw(columns.map((c) => `"${c}"`).join(", "))}) values (${sql.join(
+          columns.map((c) => sql`${venueRow![c]}`),
+          sql`, `,
+        )})`,
+      );
+      await suite.db.execute(sql`pragma foreign_keys = on`);
+    }
+  });
+});

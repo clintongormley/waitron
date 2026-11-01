@@ -3956,10 +3956,10 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 **Left open, for the owner, by C113 (#1014, one receipt language per location):**
 
-- **A change is refused while an open order at the location holds a line**
+- **A change is refused while an open order holds a line**
   (`receipt.language_orders_open`; narrowed by C124, #1020, 2026-10-02, with core
   `0064_line_locale_triggers_text_only`). If a language is changed underneath an open bill by
-  direct SQL, the bill's next split answers an unmapped 500 `server.internal`. [Detail](backlog/printers.md#a-change-is-refused-while-an-open-order-at-the-location-holds-a-line)
+  direct SQL, the bill's next split answers an unmapped 500 `server.internal`. [Detail](backlog/printers.md#a-change-is-refused-while-an-open-order-holds-a-line)
 
 - After a change, a paid counter sale with one dish a station took and one it did not is not
   blocked, and its send-to-prep route (`/prep`) then answers 409 `ticket.already_fired`, as it
