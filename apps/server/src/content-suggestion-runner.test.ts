@@ -1023,6 +1023,26 @@ it("a running job 24 hours old ends expired without asking Cloud", async () => {
   }
 });
 
+it("a running job made more than 24 hours ahead of the clock ends expired, as after a backward step", async () => {
+  const f = await connected();
+  try {
+    await venue(["STAFF Bread"]);
+    await inTx((tx) => startSuggestionRun(tx, context));
+    f.hold(true);
+    expect(await createContentSuggestionRunner(deps(f)).step()).toBe("again");
+    // The control: a minute inside the lifetime behind it, the runner still polls.
+    expect(await later(f, -JOB_LIFETIME_MS + 60_000).step()).toBe("wait");
+    const before = f.calls.length;
+
+    expect(await later(f, -JOB_LIFETIME_MS - 60_000).step()).toBe("again");
+    expect(f.calls).toHaveLength(before);
+    expect(await runView()).toMatchObject({ state: "expired", code: "content.suggestion_expired" });
+    expect(await inTx((tx) => readActiveSuggestionJob(tx))).toBeUndefined();
+  } finally {
+    await f.close();
+  }
+});
+
 it("a job Cloud never took ends expired after 24 hours instead of being retried for good", async () => {
   const f = await connected();
   try {

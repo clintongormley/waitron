@@ -1,9 +1,10 @@
-import { and, asc, eq, lte, or } from "drizzle-orm";
+import { and, asc, eq, or } from "drizzle-orm";
 import { invoiceDeliveries, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   claimInvoiceDelivery,
+  claimLapsed,
+  deliveryDue,
   expireInvoiceDeliveryClaims,
-  INVOICE_DELIVERY_LEASE_MS,
   reportInvoiceEmailDelivery,
   type InvoiceDelivery,
   type InvoiceDeliveryOutcome,
@@ -54,15 +55,9 @@ export async function runInvoiceEmailPass(
         and(
           eq(invoiceDeliveries.medium, "email"),
           eq(invoiceDeliveries.status, "queued"),
-          lte(invoiceDeliveries.nextAttemptAt, now.toISOString()),
+          deliveryDue(now),
         ),
-        and(
-          eq(invoiceDeliveries.status, "sending"),
-          lte(
-            invoiceDeliveries.claimedAt,
-            new Date(now.getTime() - INVOICE_DELIVERY_LEASE_MS).toISOString(),
-          ),
-        ),
+        and(eq(invoiceDeliveries.status, "sending"), claimLapsed(now)),
       ),
     )
     .limit(1);
@@ -77,7 +72,7 @@ export async function runInvoiceEmailPass(
         and(
           eq(invoiceDeliveries.medium, "email"),
           eq(invoiceDeliveries.status, "queued"),
-          lte(invoiceDeliveries.nextAttemptAt, now.toISOString()),
+          deliveryDue(now),
         ),
       )
       .orderBy(asc(invoiceDeliveries.nextAttemptAt), asc(invoiceDeliveries.id))

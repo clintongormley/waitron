@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull, lte, notInArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
 import {
   invoiceDeliveries,
   pagePrinters,
@@ -8,6 +8,7 @@ import {
 } from "@waitron/db";
 import {
   claimInvoiceDelivery,
+  deliveryDue,
   expireInvoiceDeliveryClaims,
   reportInvoiceDelivery,
   tokenHash,
@@ -59,10 +60,7 @@ export async function claimInvoicePagePrint(
       )
   ).map(({ id }) => id);
   const skipped = [...busyPrinterIds, ...(ctx.exceptPrinterIds ?? [])];
-  const due = and(
-    eq(invoiceDeliveries.status, "queued"),
-    lte(invoiceDeliveries.nextAttemptAt, now.toISOString()),
-  );
+  const due = and(eq(invoiceDeliveries.status, "queued"), deliveryDue(now));
   await tx
     .update(invoiceDeliveries)
     .set({ status: "failed", failureCode: "printer_disabled" })

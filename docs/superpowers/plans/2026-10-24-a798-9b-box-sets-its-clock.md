@@ -3172,7 +3172,8 @@ commit, per-task review and push)*:
 - **15c-3, the server's own jobs** — join requests, card-refund resend, the pairing window, cloud
   snapshots, content suggestion jobs, invoice deliveries.
 - **15c-4, schedulers and leases** — the payments reconcile scheduler, the print-job lease, the
-  backup schedule (and its two comments), then the `nowIso()` / `Date.now` grep.
+  backup schedule (and its two comments), the attendance email worker's retry time and claim lapse
+  (found while building 15c-3), then the `nowIso()` / `Date.now` grep.
 
 ### Task 15c-1's departure (2026-11-01)
 
@@ -3266,6 +3267,33 @@ moved and no sign-in limit of the same shape left out, and reran the lead's 22 c
   sentence should read "further ahead than a stated limit — its lifetime, the longest wait, or for
   the two limiters any amount"; and only `begin` in the password throttle is new in judging its own
   entry.
+
+### Task 15c-3's notes (2026-11-01)
+
+- **The cloud snapshot's limit is 25 hours, not one day.** A daily deadline is the next civil
+  day's fire, and across the night the clocks go back that lies up to 25 hours ahead: with a
+  one-day limit, a deadline just set on 24 October 2026 read as due at once and a second snapshot
+  would be taken (`cloud-snapshot-worker.test.ts`, "keeps a deadline 24.5 hours ahead across the
+  night the clocks go back"; the one-day control fails it, `~/waitron-campaign-b/a798-9b/t15c3/mutate.out`
+  control 9). A capture still waiting to be published keeps the one day it already had.
+- **A waiting capture whose publication keeps being refused** was the stuck case: before this task
+  one made before a backward step was retried and refused for the step's length, and no new
+  capture was made. It is now abandoned once made more than a day ahead, as an old one is.
+- **The pairing window shuts on a smaller step than the others.** A hold's end is its opening or
+  last renewal plus 3 minutes, so a step back longer than the time since then puts it more than
+  3 minutes ahead, and it lapses: `renew` then answers `null` for it, as for any lapsed hold
+  (`pairing-mode.test.ts`; the route's answer was not run).
+- **The card-refund window is two-sided.** A first send stamped further ahead than the
+  provider's window is treated as outside it: nothing is resent under the old key, and the refund
+  waits for a manager, as one sent too long ago does.
+- **Invoice deliveries share two conditions** (`deliveryDue`, `claimLapsed` in
+  `invoice-delivery.ts`): the claim, the claim expiry, both of the email worker's reads and the
+  page printer's pick use them, so no reader is left on the one-sided test. The longest retry wait
+  is the last of the four retry delays (10 minutes); the retry schedule now reads the same list.
+- **Found while reading, left for 15c-4:** the attendance email worker has the same shape —
+  `attendanceMail.nextAttemptAt` compared one-sided (`apps/server/src/attendance-email-worker.ts`,
+  the eligible read) and a 60-second claim lapse (`packages/workforce/src/attendance-mail.ts`,
+  `expireAttendanceMailClaims`). Read, not run.
 
 ### Task 15's departures and notes (2026-10-31)
 

@@ -488,7 +488,9 @@ export async function resumeCardRefund(
       resolver !== "loop" &&
       provider?.sendRefund !== undefined &&
       window !== null &&
-      age < window
+      age < window &&
+      // A first send stamped further ahead than the window, as after a backward step, is outside it.
+      age >= -window
     ) {
       const resent = await sendCardRefund(deps, provider, refundId, raisedBy);
       return { claimed: true, refund: resent, lookup, resent: true };

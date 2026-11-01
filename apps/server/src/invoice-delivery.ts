@@ -1,6 +1,6 @@
 import "./errors.js";
 import { createHash, randomUUID } from "node:crypto";
-import { and, desc, eq, inArray, lte, isNull, gt, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, lte, isNull, gt, or, sql, type SQL } from "drizzle-orm";
 import {
   invoiceDeliveries,
   printJobs,
@@ -181,6 +181,30 @@ export type InvoiceDeliveryOutcome =
 /** How long a claim stays current without a renewal or a report. */
 export const INVOICE_DELIVERY_LEASE_MS = 60_000;
 
+/** The waits before each automatic retry of a refused email. */
+const RETRY_DELAYS_MS = [5_000, 30_000, 120_000, 600_000];
+const LONGEST_RETRY_WAIT_MS = Math.max(...RETRY_DELAYS_MS);
+
+const shifted = (now: Date, ms: number) => new Date(now.getTime() + ms).toISOString();
+
+/** A queued delivery is due at its next attempt, or at once when that lies further ahead than the
+ * longest retry wait: it was set before the clock stepped back. */
+export function deliveryDue(now: Date): SQL {
+  return or(
+    lte(invoiceDeliveries.nextAttemptAt, now.toISOString()),
+    gt(invoiceDeliveries.nextAttemptAt, shifted(now, LONGEST_RETRY_WAIT_MS)),
+  )!;
+}
+
+/** A claim has lapsed once its lease has run out, or when it was taken further ahead than its lease:
+ * before the clock stepped back. */
+export function claimLapsed(now: Date): SQL {
+  return or(
+    lte(invoiceDeliveries.claimedAt, shifted(now, -INVOICE_DELIVERY_LEASE_MS)),
+    gt(invoiceDeliveries.claimedAt, shifted(now, INVOICE_DELIVERY_LEASE_MS)),
+  )!;
+}
+
 export function tokenHash(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
@@ -226,7 +250,7 @@ export async function claimInvoiceDelivery(
       and(
         eq(invoiceDeliveries.id, deliveryId),
         eq(invoiceDeliveries.status, "queued"),
-        lte(invoiceDeliveries.nextAttemptAt, now.toISOString()),
+        deliveryDue(now),
       ),
     )
     .returning({ generation: invoiceDeliveries.generation });
@@ -245,17 +269,7 @@ export async function expireInvoiceDeliveryClaims(
       expiredAt: now.toISOString(),
       failureCode: restart ? "restart" : "timeout",
     })
-    .where(
-      and(
-        eq(invoiceDeliveries.status, "sending"),
-        restart
-          ? undefined
-          : lte(
-              invoiceDeliveries.claimedAt,
-              new Date(now.getTime() - INVOICE_DELIVERY_LEASE_MS).toISOString(),
-            ),
-      ),
-    )
+    .where(and(eq(invoiceDeliveries.status, "sending"), restart ? undefined : claimLapsed(now)))
     .returning({ id: invoiceDeliveries.id, printJobId: invoiceDeliveries.printJobId });
   const jobIds = expired.flatMap((row) => (row.printJobId === null ? [] : [row.printJobId]));
   if (jobIds.length > 0) {
@@ -385,7 +399,6 @@ export async function reportInvoiceEmailDelivery(
   if (delivery!.medium !== "email" || delivery!.status !== "failed" || delivery!.attempts >= 5) {
     return result;
   }
-  const delays = [5_000, 30_000, 120_000, 600_000];
   // Each automatic retry keeps the completed refusal and its authenticated claim in history.
   await tx.insert(invoiceDeliveries).values({
     saleId: delivery!.saleId,
@@ -397,7 +410,7 @@ export async function reportInvoiceEmailDelivery(
     recipient: delivery!.recipient,
     personId: delivery!.personId,
     createdAt: now.toISOString(),
-    nextAttemptAt: new Date(now.getTime() + delays[delivery!.attempts - 1]!).toISOString(),
+    nextAttemptAt: new Date(now.getTime() + RETRY_DELAYS_MS[delivery!.attempts - 1]!).toISOString(),
   });
   return result;
 }

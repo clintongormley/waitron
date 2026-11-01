@@ -41,7 +41,8 @@ export function createPairingMode(
 
   const prune = (): void => {
     const t = now();
-    for (const [id, until] of holds) if (until <= t) holds.delete(id);
+    // A hold further ahead than its length was stamped before the clock stepped back: it has lapsed.
+    for (const [id, until] of holds) if (until <= t || until - t > holdMs) holds.delete(id);
     if (holds.size === 0) openSinceMs = null;
   };
   const live = (holdId: string): boolean => {

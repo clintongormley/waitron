@@ -257,6 +257,18 @@ describe("claiming an A4 delivery", () => {
     expect((await claim(v.agentOne, v.locationId, 10_000))?.claim.deliveryId).toBe(notDue);
   });
 
+  it("hands out a delivery whose next attempt lies 400 days ahead, as after a backward step", async () => {
+    const v = await venue();
+    const office = await printer(v.locationId, v.agentOne);
+    const ahead = await queueA4(await fullInvoice(v.nodeId), office, 400 * 86_400_000);
+    const inside = await queueA4(await fullInvoice(v.nodeId), office, 600_000);
+
+    const job = await claim(v.agentOne, v.locationId, 0);
+
+    expect(job?.claim.deliveryId).toBe(ahead);
+    expect((await row(inside)).status).toBe("queued");
+  });
+
   it("does not claim another location's delivery, and that location's claim takes it", async () => {
     const v = await venue();
     const terrace = await location("Terrace");

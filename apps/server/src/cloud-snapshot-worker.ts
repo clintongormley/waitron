@@ -126,6 +126,16 @@ function monthAt(at: Date, clock: ScheduleClock) {
     parts.find((p) => p.type === "year")!.value + "-" + parts.find((p) => p.type === "month")!.value
   );
 }
+/** A daily deadline lies at most one civil day ahead: under 25 hours, across the night the clocks go
+ * back. One further ahead was set before the clock stepped back, and is due. */
+const LONGEST_GAP_MS = 25 * 3600000;
+const isDue = (nextAt: number, t: number) => nextAt <= t || nextAt - t > LONGEST_GAP_MS;
+/** An unpublished capture is abandoned a day after it was made, or once it was made more than a day
+ * ahead of now, as before a backward step. */
+const pendingExpired = (p: { createdAt: number }, t: number) => {
+  const age = t - p.createdAt;
+  return age >= 86400000 || age < -86400000;
+};
 export function createCloudSnapshotWorker(deps: CloudSnapshotDeps) {
   const dir = join(deps.stateDir, "cloud-snapshots"),
     file = join(dir, "archive.enc");
@@ -182,8 +192,9 @@ export function createCloudSnapshotWorker(deps: CloudSnapshotDeps) {
         nextAt: 0,
         lastMonth: "",
       };
-      deps.onScheduled?.(state.pending || state.nextAt <= now().getTime() ? null : state.nextAt);
-      if (!state.pending && now().getTime() < state.nextAt) {
+      const due = isDue(state.nextAt, now().getTime());
+      deps.onScheduled?.(state.pending || due ? null : state.nextAt);
+      if (!state.pending && !due) {
         await rm(file, { force: true });
         return;
       }
@@ -216,14 +227,14 @@ export function createCloudSnapshotWorker(deps: CloudSnapshotDeps) {
           published = true;
         } catch (error) {
           allowed();
-          if (p.uploaded && now().getTime() - p.createdAt < 86400000) throw error;
+          if (p.uploaded && !pendingExpired(p, now().getTime())) throw error;
         }
         if (published) {
           await complete();
           return;
         }
       }
-      if (p && now().getTime() - p.createdAt >= 86400000) {
+      if (p && pendingExpired(p, now().getTime())) {
         delete state.pending;
         state.nextAt = 0;
         await save();
