@@ -615,10 +615,6 @@ export class TillTableOrderScreen extends LitElement {
         gap: var(--wt-space-2);
       }
 
-      .qty {
-        color: var(--wt-color-text-muted);
-      }
-
       .line-total {
         font-variant-numeric: tabular-nums;
       }

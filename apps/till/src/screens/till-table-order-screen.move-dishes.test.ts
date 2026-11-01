@@ -698,6 +698,30 @@ describe("A803 move dishes, as Split by item and Transfer items did:", () => {
     expect(picker(el).picks).toEqual(new Set(["c1", "c2", "c3", "c4"]));
   });
 
+  it("a − or + left over from a closed panel does not replace a new panel's picks", async () => {
+    const el = await mountScreen();
+    await openMoveDishes(el);
+    await tick(el, "c1");
+    await step(el, "dec", "c1");
+    const oldPicker = picker(el);
+    const oldDec = oldPicker.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      '[data-pick-dec="c1"]',
+    )!;
+    const oldInc = oldPicker.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      '[data-pick-inc="c1"]',
+    )!;
+    expect([oldDec.disabled, oldInc.disabled]).toEqual([false, false]);
+    expect(await send(el)).toHaveLength(1);
+    await openMoveDishes(el);
+    await tick(el, "h1");
+    for (const old of [oldDec, oldInc]) {
+      old.click();
+      await el.updateComplete;
+      await picker(el).updateComplete;
+      expect(picker(el).picks).toEqual(new Set(["h1"]));
+    }
+  });
+
   it("ticking a grouped row sends every member's id", async () => {
     const el = await mountScreen();
     await openMoveDishes(el);

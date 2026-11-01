@@ -319,12 +319,14 @@ it("departed Move dishes controls cannot change or submit a replacement flow", a
   expect(picked(screen, 1)).toBe("false");
   expect(picked(screen, 2)).toBe("true");
   expect(pressedTo(screen)).toEqual([]);
+  await click(screen, '[data-move-dishes-to="new"]');
   oldBack.click();
   oldConfirm.click();
   await screen.updateComplete;
   expect((await question(app)).open).toBe(false);
   expect(app.commands).toHaveLength(1);
   expect(picked(screen, 2)).toBe("true");
+  expect(pressedTo(screen)).toEqual(["new"]);
 });
 it("a departed destination and tick cannot alter a replacement flow", async () => {
   const { app, screen } = await mount();
