@@ -191,7 +191,7 @@ describe("boxEmailMessage for payments restarted", () => {
     expect(
       boxEmailMessage("clock.behind_chain_restarted", "es", "Corner Bistro", params).text,
     ).toBe(
-      "La hora del equipo la confirmó Ana, miembro del personal, en la caja Bar, y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
+      "La hora del equipo la confirmó Ana, empleado, en la caja Bar, y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
     );
   });
 
@@ -208,7 +208,7 @@ describe("boxEmailMessage for payments restarted", () => {
     ).toContain("confirmed by Ana, a staff member, on a till, and payments");
     expect(
       boxEmailMessage("clock.behind_chain_restarted", "es", "Corner Bistro", params).text,
-    ).toContain("la confirmó Ana, miembro del personal, en una caja, y se volvió");
+    ).toContain("la confirmó Ana, empleado, en una caja, y se volvió");
   });
 
   it("words a source it does not know as a check recorded on the box", () => {

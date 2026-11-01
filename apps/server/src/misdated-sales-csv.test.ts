@@ -234,7 +234,7 @@ describe("renderMisdatedSalesCsv", () => {
         expect(rows(renderMisdatedSalesCsv(staff))[0]![0]).toContain(
           language === "en"
             ? "confirmed by a staff member (Ana) on a till on"
-            : "un miembro del personal (Ana) en una caja",
+            : "un empleado (Ana) en una caja",
         );
       }
     });

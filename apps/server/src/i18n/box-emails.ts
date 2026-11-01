@@ -57,7 +57,7 @@ export const CLOCK_CONFIRMED_BY_WORDS = {
     admin: "un administrador",
     staff: "un empleado en una caja",
     otherwise: "una comprobación anotada en el equipo",
-    staffNamed: "un miembro del personal ({person}) en una caja",
+    staffNamed: "un empleado ({person}) en una caja",
   },
 } as const satisfies Record<"en" | "es", Record<string, string>>;
 
@@ -74,7 +74,7 @@ export const CLOCK_RESTARTED_EMAIL_WORDS = {
     subject: "Se reanudaron los cobros en {venue}",
     text: "La hora del equipo se confirmó con {confirmedBy} y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
     byStaff:
-      "La hora del equipo la confirmó {person}, miembro del personal, en {till}, y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
+      "La hora del equipo la confirmó {person}, empleado, en {till}, y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
     namedTill: "la caja {device}",
     unnamedTill: "una caja",
   },
@@ -108,7 +108,7 @@ export const CLOCK_CORRECTED_EMAIL_WORDS = {
     admin:
       "El reloj del equipo se puso con la hora del dispositivo de {person}: {step}, de {before} a {after}.",
     staff:
-      "El reloj del equipo se puso con la hora de {till}, confirmada por {person}, miembro del personal: {step}, de {before} a {after}.",
+      "El reloj del equipo se puso con la hora de {till}, confirmada por {person}, empleado: {step}, de {before} a {after}.",
     unverifiedSubject: "{venue}: el equipo no pudo confirmar que puso su reloj",
     unverified:
       "El equipo intentó poner su reloj, pero no ha podido confirmar que el cambio se aplicara. Su reloj marcaba {before} antes y {after} después ({step}). Comprueba la hora del equipo en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
