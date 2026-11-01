@@ -68,7 +68,7 @@ function balance(
   };
 }
 
-/** The screen's key: identical whole portions share a row, and a paid mark parts them. */
+/** Identical whole portions share a row, and a paid mark parts them. */
 function keyFor(lines: readonly TabLine[], paid: BillBalance | null) {
   return (row: TabLine) =>
     tabLinePortionKey(
@@ -85,6 +85,17 @@ function rowsOf(
   recalled: ReadonlySet<string> = new Set(),
 ): PickRow[] {
   return pickRows(lines, keyFor(lines, paid), paid, recalled, picks);
+}
+
+/** `tidyPicks` over the rows drawn before and the re-read bill. */
+function tidy(
+  before: readonly PickRow[],
+  lines: readonly TabLine[],
+  paid: BillBalance | null,
+  picks: Picks,
+  recalled: ReadonlySet<string> = new Set(),
+): Picks {
+  return tidyPicks(before, (drawn) => rowsOf(lines, paid, drawn, recalled), picks);
 }
 
 const ids = (row: PickRow) => row.members.map((member) => member.id);
@@ -249,7 +260,7 @@ describe("A803 selection:", () => {
     const picks = setCount(before[0]!, 2, new Set());
     const paid = balance("20.00", "5.00", [{ lineId: "c1", lineNo: 1, paidQuantity: "1.000" }]);
 
-    const tidied = tidyPicks(before, rowsOf(lines, paid, picks), picks);
+    const tidied = tidy(before, lines, paid, picks);
 
     expect(sorted(tidied)).toEqual(["c2", "c3"]);
   });
@@ -259,7 +270,7 @@ describe("A803 selection:", () => {
     const before = rowsOf(lines);
     const picks = setCount(before[0]!, 2, new Set());
 
-    const tidied = tidyPicks(before, rowsOf(lines, null, picks, new Set(["c1"])), picks);
+    const tidied = tidy(before, lines, null, picks, new Set(["c1"]));
 
     expect(sorted(tidied)).toEqual(["c2", "c3"]);
   });
@@ -270,17 +281,17 @@ describe("A803 selection:", () => {
     const picks = setCount(before[0]!, 2, new Set());
     const paid = balance("20.00", "10.00", [{ lineId: "c1", lineNo: 1, paidQuantity: "1.000" }]);
 
-    const tidied = tidyPicks(before, rowsOf(lines, paid, picks), picks);
+    const tidied = tidy(before, lines, paid, picks);
 
     expect(sorted(tidied)).toEqual(["c2", "c3"]);
   });
 
-  it("tidyPicks never keeps more than the re-read floor allows", () => {
+  it("tidyPicks keeps a ticked row of four to the two the re-read floor allows", () => {
     const lines = fourCañas();
     const before = rowsOf(lines);
     const picks = toggleRow(before[0]!, new Set());
 
-    const tidied = tidyPicks(before, rowsOf(lines, balance("20.00", "10.00"), picks), picks);
+    const tidied = tidy(before, lines, balance("20.00", "10.00"), picks);
 
     expect(sorted(tidied)).toEqual(["c1", "c2"]);
   });
@@ -289,7 +300,135 @@ describe("A803 selection:", () => {
     const before = rowsOf([dish("gone", 1, "Flan", "4.00"), line("c2", 2)]);
     const picks = new Set(["gone", "c2", "never-a-row"]);
 
-    expect(sorted(tidyPicks(before, rowsOf([line("c2", 2)]), picks))).toEqual(["c2"]);
+    expect(sorted(tidy(before, [line("c2", 2)], null, picks))).toEqual(["c2"]);
+  });
+
+  it("tidyPicks keeps the floor when two rows gain picks in one re-read: €30.00 with €15.00 received, after a1 and b4 are paid elsewhere, keeps a2, a3 and b5, and the Bravas row gives the floor reason", () => {
+    const lines = [
+      ...[1, 2, 3].map((n) => dish(`a${n}`, n, "Arroz", "5.00")),
+      ...[4, 5, 6].map((n) => dish(`b${n}`, n, "Bravas", "5.00")),
+    ];
+    const before = rowsOf(lines);
+    const picks = setCount(before[1]!, 2, setCount(before[0]!, 2, new Set()));
+    const paid = balance("30.00", "15.00", [
+      { lineId: "a1", lineNo: 1, paidQuantity: "1.000" },
+      { lineId: "b4", lineNo: 4, paidQuantity: "1.000" },
+    ]);
+
+    const tidied = tidy(before, lines, paid, picks);
+
+    expect(sorted(picks)).toEqual(["a1", "a2", "b4", "b5"]);
+    expect(sorted(tidied)).toEqual(["a2", "a3", "b5"]);
+    const rows = rowsOf(lines, paid, tidied);
+    expect(pickedAmount(rows, tidied)).toBe("15.00");
+    expect(rows.find((row) => ids(row).includes("b5"))!.blocked).toEqual({
+      reason: "floor",
+      kept: "15.00",
+    });
+  });
+
+  it("tidyPicks drops only the picks the re-read floor cannot hold: 2 Arroz and 2 Bravas at €5.00, all picked, then €20.00 with €10.00 received, keeps the two Arroz", () => {
+    const lines = [
+      dish("a1", 1, "Arroz", "5.00"),
+      dish("a2", 2, "Arroz", "5.00"),
+      dish("b3", 3, "Bravas", "5.00"),
+      dish("b4", 4, "Bravas", "5.00"),
+    ];
+    const before = rowsOf(lines);
+    let picks: Picks = new Set();
+    for (const row of before) picks = toggleRow(row, picks);
+
+    expect(sorted(tidy(before, lines, balance("20.00", "10.00"), picks))).toEqual(["a1", "a2"]);
+  });
+
+  it("tidyPicks adds the counts of two rows read before that one row now holds: a served k1 and an unserved k2 picked, then all three served, keeps k1 and k2", () => {
+    const served = { servedAt: "2026-11-01T12:00:00Z" };
+    const croqueta = (n: number, over: Partial<TabLine> = {}) =>
+      line(`k${n}`, n, {
+        name: "Croqueta",
+        productId: "croqueta",
+        menuItemId: "croqueta",
+        ...over,
+      });
+    const before = rowsOf([croqueta(1, served), croqueta(2), croqueta(3)]);
+    expect(before.map(ids)).toEqual([["k1"], ["k2", "k3"]]);
+    const picks = setCount(before[1]!, 1, setCount(before[0]!, 1, new Set()));
+
+    const lines = [croqueta(1, served), croqueta(2, served), croqueta(3, served)];
+    expect(rowsOf(lines).map(ids)).toEqual([["k1", "k2", "k3"]]);
+    expect(sorted(tidy(before, lines, null, picks))).toEqual(["k1", "k2"]);
+  });
+
+  it("tidyPicks follows the row a pick was in, not the picked dish: the only picked Caña of four, c1, paid elsewhere, hands its count to c2", () => {
+    const lines = fourCañas();
+    const before = rowsOf(lines);
+    const picks = setCount(before[0]!, 1, new Set());
+    const paid = balance("20.00", "5.00", [{ lineId: "c1", lineNo: 1, paidQuantity: "1.000" }]);
+
+    expect(sorted(picks)).toEqual(["c1"]);
+    expect(sorted(tidy(before, lines, paid, picks))).toEqual(["c2"]);
+  });
+
+  it("tidyPicks never hands a count to a paid row: c1 of three picked, then c1 and c2 paid, keeps c3", () => {
+    const lines = [line("c1", 1), line("c2", 2), line("c3", 3)];
+    const before = rowsOf(lines);
+    const picks = setCount(before[0]!, 1, new Set());
+    const paid = balance("15.00", "10.00", [
+      { lineId: "c1", lineNo: 1, paidQuantity: "1.000" },
+      { lineId: "c2", lineNo: 2, paidQuantity: "1.000" },
+    ]);
+
+    expect(rowsOf(lines, paid).map(ids)).toEqual([["c1", "c2"], ["c3"]]);
+    expect(sorted(tidy(before, lines, paid, picks))).toEqual(["c3"]);
+  });
+
+  it("tidyPicks hands a count to the first-drawn of two rows that hold equally many of its members: c1 and c2 picked of 4 Cañas, then c1 and c2 served, keeps c1 and c2", () => {
+    const lines = [line("c1", 1), line("c2", 2), line("c3", 3), line("c4", 4)];
+    const before = rowsOf(lines);
+    const picks = setCount(before[0]!, 2, new Set());
+    const served = lines.map((row) =>
+      row.lineNo <= 2 ? { ...row, servedAt: "2026-11-01T12:00:00Z" } : row,
+    );
+
+    expect(rowsOf(served).map(ids)).toEqual([
+      ["c1", "c2"],
+      ["c3", "c4"],
+    ]);
+    expect(sorted(tidy(before, served, null, picks))).toEqual(["c1", "c2"]);
+  });
+
+  it("tidyPicks keeps a row's count when picked members leave the bill: c1 and c2 picked of 4 Cañas, then both moved off, picks c3 and c4", () => {
+    const before = rowsOf(fourCañas());
+    const picks = setCount(before[0]!, 2, new Set());
+
+    expect(sorted(tidy(before, [line("c3", 3), line("c4", 4)], null, picks))).toEqual(["c3", "c4"]);
+  });
+
+  it("a row picked past its limit gives the floor reason: 4 Cañas all picked on €20.00 with €10.00 received, and one €10.00 dish picked on €10.00 with €5.00 received", () => {
+    const lines = fourCañas();
+    const all = new Set(lines.map((row) => row.id));
+    const [cañas] = rowsOf(lines, balance("20.00", "10.00"), all);
+    const flan = dish("f", 1, "Flan", "10.00");
+    const [alone] = rowsOf([flan], balance("10.00", "5.00"), new Set(["f"]));
+
+    expect(cañas!.limit).toBe(2);
+    expect(cañas!.blocked).toEqual({ reason: "floor", kept: "10.00" });
+    expect(alone!.limit).toBe(0);
+    expect(alone!.blocked).toEqual({ reason: "floor", kept: "5.00" });
+  });
+
+  it("pickedLineIds and pickedAmount leave out a pick on a row now paid", () => {
+    const croquetas = [1, 2, 3].map((n) => dish(`k${n}`, n, "Croqueta", "3.00"));
+    const picks = new Set(["k1", "k2"]);
+    const rows = rowsOf(
+      croquetas,
+      balance("9.00", "3.00", [{ lineId: "k1", lineNo: 1, paidQuantity: "1.000" }]),
+      picks,
+    );
+
+    expect(rows[0]!.blocked).toEqual({ reason: "paid" });
+    expect(pickedLineIds(rows, picks)).toEqual(["k2"]);
+    expect(pickedAmount(rows, picks)).toBe("3.00");
   });
 
   it("pickedLineIds is in line order", () => {

@@ -23,19 +23,20 @@ export interface PickRow {
   /** The money one member takes off the bill, its extras included, at the money scale. */
   each: string;
   /** The most members of this row that can be picked while the other rows' picks stay as they are:
-   * none for a paid row, and never so many that the bill would hold less than it has been paid. */
+   * none for a paid row, and never so many that the bill would hold less than it has received or
+   * reserved. */
   limit: number;
-  /** Why no (more) member of this row can be picked; null when one can, or when all are. */
+  /** Why no (more) member of this row can be picked, or why it holds more picks than its limit;
+   * null when one more can be, or when all are picked within the limit. */
   blocked: { reason: "paid" } | { reason: "floor"; kept: string } | null;
 }
 
-/** The picked line ids. */
 export type Picks = ReadonlySet<string>;
 
 const ZERO = decimal("0");
 
-function memberAmount(dish: TabLine, lines: readonly TabLine[]): Decimal {
-  const own = lines.filter((row) => row === dish || row.parentLineNo === dish.lineNo);
+function memberAmount(dish: TabLine, extras: ReadonlyMap<number, TabLine[]>): Decimal {
+  const own = [dish, ...(extras.get(dish.lineNo) ?? [])];
   return toScale(sumDecimals(own.map(tabLineGross)), MONEY_SCALE);
 }
 
@@ -54,10 +55,18 @@ export function pickRows(
   const dishes = lines.filter(
     (row) => (row.parentLineNo ?? null) === null && !recalled.has(row.id),
   );
+  const extras = new Map<number, TabLine[]>();
+  for (const row of lines) {
+    const parent = row.parentLineNo ?? null;
+    if (parent === null) continue;
+    const siblings = extras.get(parent);
+    if (siblings === undefined) extras.set(parent, [row]);
+    else siblings.push(row);
+  }
   const paid = balance === null ? null : paidQuantities(balance);
   const groups = portionGroups(dishes, keyOf, (row) => row.lineNo).map((members) => ({
     members,
-    each: memberAmount(members[0]!, lines),
+    each: memberAmount(members[0]!, extras),
     paid:
       paid !== null &&
       members.some((member) => compareDecimal(decimal(paid.get(member.lineNo) ?? "0"), ZERO) > 0),
@@ -91,7 +100,7 @@ export function pickRows(
     }
     let blocked: PickRow["blocked"] = null;
     if (isPaid) blocked = { reason: "paid" };
-    else if (kept !== null && picked < members.length && picked >= limit)
+    else if (kept !== null && (picked > limit || (picked < members.length && picked >= limit)))
       blocked = { reason: "floor", kept };
     return { members, counted: members.length > 1, each, limit, blocked };
   });
@@ -116,16 +125,22 @@ export function toggleRow(row: PickRow, picks: Picks): Picks {
 }
 
 /**
- * The picks after a re-read: each row read before hands its count to the row now holding most of
- * its members that can still be picked, which takes its first members, never more than its limit.
- * An id in no row now (gone, or recalled into a draft) is dropped.
+ * The picks after a re-read. `before` is the rows last drawn; `rowsFor` draws the re-read bill's
+ * rows over a set of picks, grouping them the same whatever the picks. Each row read before hands
+ * its count to the unpaid row now holding most of its members (on a tie, the one drawn first), and
+ * counts handed to one row add up. The rows then take their counts in the order they are drawn,
+ * each its first members and never more than its limit over the picks already placed: together
+ * they keep within the floor the rows' limits work out, and a row left short could not take one
+ * more. An id in no row now (gone, or recalled into a draft) is dropped, and its row's count
+ * stays, taken from the members left.
  */
 export function tidyPicks(
   before: readonly PickRow[],
-  after: readonly PickRow[],
+  rowsFor: (picks: Picks) => readonly PickRow[],
   picks: Picks,
 ): Picks {
-  const counts = new Map<PickRow, number>();
+  const after = rowsFor(new Set());
+  const counts = new Map<string, number>();
   for (const old of before) {
     const count = pickedCount(old, picks);
     if (count === 0) continue;
@@ -140,25 +155,37 @@ export function tidyPicks(
         shared = held;
       }
     }
-    if (home !== undefined) counts.set(home, (counts.get(home) ?? 0) + count);
+    if (home !== undefined) {
+      const key = home.members[0]!.id;
+      counts.set(key, (counts.get(key) ?? 0) + count);
+    }
   }
   let next: Picks = new Set();
-  for (const [row, count] of counts) next = setCount(row, count, next);
+  for (const { members } of after) {
+    const count = counts.get(members[0]!.id);
+    if (count === undefined) continue;
+    const row = rowsFor(next).find((drawn) => drawn.members[0]!.id === members[0]!.id)!;
+    next = setCount(row, count, next);
+  }
   return next;
 }
 
-/** The picked dishes' line ids, in line order. */
+/** The picked dishes' line ids, in line order, leaving out a pick on a paid row. */
 export function pickedLineIds(rows: readonly PickRow[], picks: Picks): string[] {
   return rows
+    .filter((row) => row.blocked?.reason !== "paid")
     .flatMap((row) => row.members.filter((member) => picks.has(member.id)))
     .sort((a, b) => a.lineNo - b.lineNo)
     .map((member) => member.id);
 }
 
-/** What the picked dishes take off the bill, their extras included, at the money scale. */
+/** What the picked dishes take off the bill, their extras included, at the money scale, leaving out
+ * a pick on a paid row. */
 export function pickedAmount(rows: readonly PickRow[], picks: Picks): string {
   let total = ZERO;
-  for (const row of rows)
+  for (const row of rows) {
+    if (row.blocked?.reason === "paid") continue;
     for (let n = pickedCount(row, picks); n > 0; n--) total = addDecimal(total, decimal(row.each));
+  }
   return toScale(total, MONEY_SCALE);
 }
