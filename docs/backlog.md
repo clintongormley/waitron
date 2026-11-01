@@ -5469,9 +5469,7 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   sentence the plan's decision 20 lists for a collect. Left open by A798-B slice 8 (#2012).
 
 - **A clock that jumps before 28-10-2024 while a card is charged answers `clock.unusable`, and the
-  till never says the card was charged.** Only a full disk and `clock.behind_chain` become
-  `sale.charged_not_recorded` (`apps/server/src/bill-payments.ts`, `apps/server/src/till-sale.ts`;
-  read, not run). Left open by A798-B slice 8 (#2012).
+  till never says the card was charged.** Left open by A798-B slice 8 (#2012).
 
 - **The design's "printing a bill carries on" is wider than the product.** No route prints a bill
   for checking; the prints are a filed sale's receipt and reprint and the kitchen reprint, so during
