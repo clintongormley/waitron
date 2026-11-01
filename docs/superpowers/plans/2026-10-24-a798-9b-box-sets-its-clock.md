@@ -1,5 +1,9 @@
 # A798-B slice 9b — the box sets its own clock, and watches its time service (BUILD PLAN)
 
+> **Status (2026-11-01): built, and parked for the owner as pull request #2331** (needs-owner-review;
+> the lane does not land it). The measurement workflow was deleted in Task 4 (`3404037e8`; `git log
+> --diff-filter=D --oneline -- .github/workflows/host-clock-measure.yml` shows it).
+
 > **Revision 5 (2026-10-31, the fresh-context review of revision 4, commit `b43a6c337`, and the
 > lead's rulings on it).** Two of revision 4's defaults are reversed by the lead, because they
 > follow the owner's words and are not the lead's to override:

@@ -151,7 +151,7 @@ come after the list above:
 - **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
   upgrades and recovery_): upgrade testing with rows the product itself writes and a real older database (owner-marked blocking before go-live); the bootable USB
   installer (B3); what the box does when a part fails but it can still sell (A798-B, the build:
-  [design](superpowers/specs/2026-10-19-a798-degraded-trading-design.md) revision 7; slices 1 to 10 landed; slices 9b and 9c are outlined).
+  [design](superpowers/specs/2026-10-19-a798-degraded-trading-design.md) revision 7; slices 1 to 10 landed; slice 9b built and parked for the owner (#2331); slice 9c outlined).
 - **The displays and the printers walked at the real box** (_The till, devices and table service_;
   _Printers, the print agent and receipts_) — till, handheld and KDS through
   [ui-review.md](ui-review.md), and the first physical print since #327.
@@ -5205,6 +5205,34 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 - **A device's or an administrator's time is self-reported.**
   [Detail](backlog/box.md#a-devices-or-an-administrators-time-is-self-reported)
 
+- **The start on a full disk deletes backups by stamp alone after a clock step.**
+  [Detail](backlog/box.md#the-start-on-a-full-disk-deletes-backups-by-stamp-alone-after-a-clock-step)
+
+- **Closing a pay period trusts the box's clock.**
+  [Detail](backlog/box.md#closing-a-pay-period-trusts-the-boxs-clock)
+
+- **A device's last-seen time across a backward clock step.**
+  [Detail](backlog/box.md#a-devices-last-seen-time-across-a-backward-clock-step)
+
+- **The box's certificate issued under a wrong clock.**
+  [Detail](backlog/box.md#the-boxs-certificate-issued-under-a-wrong-clock)
+
+- **A1268. Clock-ins are per venue: one working-time chain per box, not per node and location**
+  (owner, 2026-11-01), and the reads that still order a person's entries by time after a backward
+  clock step. [Detail](backlog/box.md#a1268-clock-ins-are-per-venue-and-the-reads-that-order-entries-by-time-after-a-backward-step)
+
+- **B3 keeps or replaces the clock requests slice 9b shipped.**
+  [Detail](backlog/box.md#b3-keeps-or-replaces-the-clock-requests-slice-9b-shipped)
+
+- **The bucket stream prunes nothing, and says nothing, while it cannot read its marker.**
+  [Detail](backlog/box.md#the-bucket-stream-prunes-nothing-and-says-nothing-while-it-cannot-read-its-marker)
+
+- **What slice 9b leaves to slice 9c and to a restart.**
+  [Detail](backlog/box.md#what-slice-9b-leaves-to-slice-9c-and-to-a-restart)
+
+- **timesyncd's clock file after a backward set has not been watched across a reboot.**
+  [Detail](backlog/box.md#timesyncds-clock-file-after-a-backward-set-has-not-been-watched-across-a-reboot)
+
 - **A second confirmation naming the same record while the first's alerts are open records no
   second alert.** The bell keys an open alert by the named record's sale, so the second folds into
   the first; `clock_confirmations` and the Box status page keep both. Left open by A798-B slice 9
@@ -5217,10 +5245,11 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 - **The box sends AEAT's QR host a HEAD once a minute by its steady clock (on every look when that clock cannot be read or went backwards) while the Veri\*Factu module reports the box's clock behind the latest sale — during a stop, and under a confirmation that lifted it — or while a clock check whose stop has ended waits for its witness**
   [Detail](backlog/box.md#the-box-sends-aeats-qr-host-a-head-once-a-minute-by-its-steady-clock-on-every-look-when-that-clock-cannot-be-read-or-went-backwards-while-the-verifactu-module-reports-the-boxs-clock-behind-the-latest-sale--during-a-stop-and-under-a-confirmation-that-lifted-it--or-while-a-clock-check-whose-stop-has-ended-waits-for-its-witness)
 
-- **The clock watch's suspend-aware clock has not been run on Linux.** It reads `/proc/uptime` so
-  that a box waking from sleep is not taken for a clock jumping forward; the tests replace the file,
-  and nobody has watched it across a real suspend or a setting of the wall clock on a Linux box
-  (`docs/developers/conventions-data.md`, "A jump"). Left open by A798-B slice 9 (#2025).
+- **The clock watch's suspend-aware clock has not been run across a real suspend on Linux.** It
+  reads `/proc/uptime` so that a box waking from sleep is not taken for a clock jumping forward.
+  Slice 9b's measurement M3 set the wall clock on a Linux runner and `/proc/uptime` did not move
+  with it; nobody has suspended a Linux box and watched it (`docs/developers/conventions-data.md`,
+  "A jump"). Left open by A798-B slice 9 (#2025).
 
 - **AEAT's time outranks the devices.**
   [Detail](backlog/box.md#aeats-time-outranks-the-devices)

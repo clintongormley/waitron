@@ -1453,8 +1453,12 @@ Whatever their browser sends counts:
   come from two different network addresses; an administrator must be signed in and, outside
   development, not on the box;
   every confirmation is kept with its proof; the sales listed as dated wrongly go to the owner.
-  Slice 9b is to add an alert and an email for every clock change the box makes. Left open by
-  A798-B slice 9 (#2025).
+  Slice 9b (#2331) changed what such a time can do: an administrator's time, and during a stop
+  found at start-up a till's time confirmed by the staff member signed in on it, can now SET the
+  box's clock, while two devices alone no longer can, and slice 9b alerts and emails every step it
+  verifies or sees move the clock by more than a second. A scripted request from any staff member
+  signed in on an enrolled till during such a stop can set any time from 28-10-2024 to 2100, with
+  that person named ([Q61](../compliance/asesor-questions.md#q61-a-system-that-corrects-its-own-clock-from-a-tills-clock-when-it-has-no-internet-added-2026-11-01)). Left open by A798-B slice 9 (#2025).
 
 ## The box sends AEAT's QR host a HEAD once a minute by its steady clock (on every look when that clock cannot be read or went backwards) while the Veri\*Factu module reports the box's clock behind the latest sale — during a stop, and under a confirmation that lifted it — or while a clock check whose stop has ended waits for its witness
 
@@ -1485,6 +1489,57 @@ A798-B slice 9b, Task 15 (its audit table, `docs/developers/conventions-data.md`
 Device last-seen stamps (`device-session.ts`, `station-outputs-down.ts`, `alert-sources.ts`) are
 compared with the clock. After a step days back, a stamp sits ahead and a device that has gone dark
 is not flagged until the clock catches up. Read, not run. Left open by A798-B slice 9b, Task 15.
+
+## A1268. Clock-ins are per venue, and the reads that order entries by time after a backward step.
+
+The owner, 2026-11-01: "Clock ins should not be per location, but per venue." Today the
+working-time chain, and the clocked-in state read from it, is one per node and location, so a
+backward step of the clock can mislead when a person moves location inside it (slice 9b plan, Task
+15a, "Accepted residual"; pinned by the residual case in `clocking-step.test.ts`). A1268 re-keys the
+chain to one per venue, which removes that case. Separately, after a backward step the hours read,
+the end-of-day pass (`intervalsFor` in `end-of-day.ts`) and the correction check
+(`validateSequence` in `corrections.ts`) still order a person's entries by `compareEvents`, so a
+session reads as written (negative or missing) and every other correction for that person is
+refused `correction.invalid` `unmatched_out` until a manager retimes the clock-in. Read, not run,
+except the retime. Left open by A798-B slice 9b, Task 15a.
+
+## B3 keeps or replaces the clock requests slice 9b shipped.
+
+Slice 9b ships the host side as a shell handler behind `waitron-box.socket`, with one text line in
+and one JSON line out, and a requester the server reports about itself that the host only logs. B3's
+plan meant to create the host service and `apps/server/src/box-host-client.ts` itself, under its
+own protocol and an actor the caller cannot mint. B3 either keeps the two clock requests on this
+wire or moves them under its own protocol, in the same change that moves the server's client; the
+contract is written into B3's plan, Task 3.1, "The clock requests slice 9b shipped". Left open by
+A798-B slice 9b (the lead's ruling (a)).
+
+## The bucket stream prunes nothing, and says nothing, while it cannot read its marker.
+
+Since slice 9b the daily prune of old stream generations ages them by the bucket's clock, read from
+the marker the stream writes when a generation opens (`#readBucketClock`,
+`packages/stream/src/supervisor.ts`). While the bucket's listing does not show that marker, the
+prune deletes nothing, every day, and logs nothing (a read that fails logs `stream.prune_failed`),
+so old generations can pile up in the bucket with no alert. Also not tested: a later generation whose marker cannot be read after an
+earlier one's could (read, not run). Left open by A798-B slice 9b, Task 15.
+
+## What slice 9b leaves to slice 9c and to a restart.
+
+- A clock wrong forward at start, or wrong backward by less than the gap to the last sale, asks
+  nobody until slice 9c's start check (slice 9b plan, decision 14).
+- A node promoted while running gets no start-up window, so no till's time can set its clock, until
+  it restarts; and a start-up window stays open while every read of the stop keeps failing
+  (decision 14; stated, not fixed).
+- The go-live migration squash folds slice 9b's table rebuild (Task 8-0) in with slice 9's
+  migration.
+
+Left open by A798-B slice 9b.
+
+## timesyncd's clock file after a backward set has not been watched across a reboot.
+
+The host handler moves the time of timesyncd's clock file (`/var/lib/systemd/timesync/clock`) back
+with a backward set (slice 9b plan, M8′). The measurement runner runs chrony, not timesyncd, so the file was made for the measurement (slice 9b
+plan, M8 and M8′); what timesyncd does with it at the next boot has not been watched. Measure it on a
+real box. Left open by A798-B slice 9b, Task 1.
 
 ## The box's certificate issued under a wrong clock.
 
@@ -1571,11 +1626,12 @@ Design revision 7 (2026-10-24); every owner question answered except one the sli
   [design](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md),
   [mock-ups](../backlog/mockups/a798-degraded-trading/README.md).
 
-Two slices from those answers are open, each its own later pull request: 9b, the box sets its own clock from a confirmed source and watches its time service ([outline](../superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md)); and 9c, a clock check at every start and after every change of the clock, with selling stopped while it waits ([outline](../superpowers/plans/2026-10-24-a798-9c-clock-check-at-start-and-change.md)). Open asesor questions:
+Two slices from those answers are open, each its own pull request: 9b, the box sets its own clock from a confirmed source and watches its time service ([plan](../superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md)), built and parked for the owner as #2331; and 9c, a clock check at every start and after every change of the clock, with selling stopped while it waits ([outline](../superpowers/plans/2026-10-24-a798-9c-clock-check-at-start-and-change.md)). Open asesor questions:
   [Q51](../compliance/asesor-questions.md#q51-a-chain-whose-record-times-step-back-once-when-the-boxs-clock-is-confirmed-added-2026-10-21-revised-2026-10-24),
-  [Q52](../compliance/asesor-questions.md#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21)
-  and
-  [Q60](../compliance/asesor-questions.md#q60-sales-dated-later-than-the-real-time-by-a-clock-that-ran-ahead-added-2026-10-24).
+  [Q52](../compliance/asesor-questions.md#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21),
+  [Q60](../compliance/asesor-questions.md#q60-sales-dated-later-than-the-real-time-by-a-clock-that-ran-ahead-added-2026-10-24)
+  and, from slice 9b,
+  [Q61](../compliance/asesor-questions.md#q61-a-system-that-corrects-its-own-clock-from-a-tills-clock-when-it-has-no-internet-added-2026-11-01).
 
 ## A1187 part 1: what its reviews left open
 
