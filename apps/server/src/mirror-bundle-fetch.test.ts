@@ -350,6 +350,28 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
   });
 
+  it("follows no redirect, so the password reaches no address the guard refuses", async () => {
+    let received = "";
+    const target = new Hono();
+    target.all("*", async (c: Context) => {
+      received += await c.req.text();
+      return c.json(SAMPLE_BUNDLE);
+    });
+    // The guard refuses this spelling of loopback, yet this machine still answers it.
+    const refused = `http://[::ffff:127.0.0.1]:${new URL(await startServer(target)).port}/`;
+    const source = new Hono();
+    source.post("/management-api/mirror-bundle", (c: Context) => c.redirect(refused, 307));
+    const base = await startServer(source);
+
+    const error = await fetchMirrorBundle(refused, CREDENTIAL, STANDBY).catch((e: unknown) => e);
+    expect(isAppError(error) && hasCode(error, "mirror.primary_url_invalid")).toBe(true);
+
+    const redirected = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
+
+    expect(isAppError(redirected) && hasCode(redirected, "mirror.bundle_fetch_failed")).toBe(true);
+    expect(received).toBe("");
+  });
+
   it("maps a network failure (nothing listening) to mirror.bundle_fetch_failed", async () => {
     // A port just closed refuses the connect fast and deterministically.
     const app = new Hono();
@@ -427,6 +449,21 @@ describe("the spare checks the main box's certificate before it sends a password
 
     expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
     expect(server.requests).toHaveLength(0);
+  });
+
+  it("sends nothing to a box under another authority even with Node's certificate checks switched off", async () => {
+    const server = await serveBundle(y, y.caPem);
+    vi.stubEnv("NODE_TLS_REJECT_UNAUTHORIZED", "0");
+    try {
+      const error = await fetchMirrorBundle(server.url, CREDENTIAL, STANDBY, x.caPem).catch(
+        (e: unknown) => e,
+      );
+
+      expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
+      expect(server.requests).toHaveLength(0);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("reads the authority certificate from a box it does not trust yet, sending no credential", async () => {

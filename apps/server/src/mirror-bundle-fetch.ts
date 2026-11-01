@@ -257,9 +257,10 @@ export async function fetchMirrorBundle(
     const answer = await withinLimit(timeoutMs, async (signal) => {
       if (https) {
         // `ca` is the confirmed AUTHORITY: trusting the box's own leaf instead would refuse it.
+        // `rejectUnauthorized` is explicit so NODE_TLS_REJECT_UNAUTHORIZED=0 cannot switch it off.
         return httpsExchange(new URL(url), {
           method: "POST",
-          trust: { ca: confirmedCaPem },
+          trust: { ca: confirmedCaPem, rejectUnauthorized: true },
           signal,
           body,
         });
@@ -269,6 +270,8 @@ export async function fetchMirrorBundle(
         headers: { "content-type": "application/json" },
         body,
         signal,
+        // A redirect would resend the password to an address `assertSafePrimaryUrl` never saw.
+        redirect: "error",
       });
       return { status: plain.status, text: await plain.text() };
     });
