@@ -205,7 +205,6 @@ describe("actionable correction projection", () => {
         id: "request",
         requestEntryIds: ["request"],
         personId: "worker",
-        locationId: "venue",
         direction: "worker_request",
         status: "waiting-manager",
         readyToApply: true,
@@ -389,30 +388,24 @@ describe("complete correction group boundaries", () => {
       },
     ]);
   });
-  it.each([
-    "decision",
-    "single",
-    "duplicate",
-    "missing",
-    "person",
-    "location",
-    "assigned",
-  ] as const)("does not invent a bundle from an inapplicable %s receipt", (kind) => {
-    const start = missingRequest("missing-in", "in", "2026-01-04T09:00:00.000Z");
-    const end = missingRequest("missing-out", "out", "2026-01-04T17:00:00.000Z");
-    const command = bundle([start, end]);
-    if (kind === "decision") command.action = "approve";
-    if (kind === "single") command.entryIds = [start.entryId];
-    if (kind === "duplicate") command.entryIds = [start.entryId, start.entryId];
-    if (kind === "missing") command.entryIds = [start.entryId, "absent"];
-    if (kind === "person") command.personId = "another";
-    if (kind === "location") command.locationId = "another";
-    const commands =
-      kind === "assigned" ? [command, { ...command, id: "duplicate-command" }] : [command];
-    const result = project([originalIn, originalOut, start, end], commands);
-    if (kind === "assigned") expect(result).toMatchObject([{ id: "command" }]);
-    else expect(result).toMatchObject([{ id: "missing-in" }, { id: "missing-out" }]);
-  });
+  it.each(["decision", "single", "duplicate", "missing", "person", "assigned"] as const)(
+    "does not invent a bundle from an inapplicable %s receipt",
+    (kind) => {
+      const start = missingRequest("missing-in", "in", "2026-01-04T09:00:00.000Z");
+      const end = missingRequest("missing-out", "out", "2026-01-04T17:00:00.000Z");
+      const command = bundle([start, end]);
+      if (kind === "decision") command.action = "approve";
+      if (kind === "single") command.entryIds = [start.entryId];
+      if (kind === "duplicate") command.entryIds = [start.entryId, start.entryId];
+      if (kind === "missing") command.entryIds = [start.entryId, "absent"];
+      if (kind === "person") command.personId = "another";
+      const commands =
+        kind === "assigned" ? [command, { ...command, id: "duplicate-command" }] : [command];
+      const result = project([originalIn, originalOut, start, end], commands);
+      if (kind === "assigned") expect(result).toMatchObject([{ id: "command" }]);
+      else expect(result).toMatchObject([{ id: "missing-in" }, { id: "missing-out" }]);
+    },
+  );
   it.each([
     "empty",
     "three",
@@ -420,7 +413,6 @@ describe("complete correction group boundaries", () => {
     "ordinary",
     "approved",
     "subject",
-    "location",
     "direction",
     "answered",
     "mixed",
@@ -438,7 +430,6 @@ describe("complete correction group boundaries", () => {
     if (kind === "ordinary") requests = [originalOut];
     if (kind === "approved") requests = [answered(req)];
     if (kind === "subject") requests = [req, requested("two", { personId: "other" })];
-    if (kind === "location") requests = [req, requested("two", { locationId: "other" })];
     if (kind === "direction")
       requests = [
         req,

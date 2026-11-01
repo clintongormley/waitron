@@ -1,5 +1,5 @@
 import { and, eq, isNull } from "drizzle-orm";
-import { locations, type Transaction } from "@waitron/db";
+import { locations, readVenue, type Transaction, venueLocationId } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type {
   AttendanceDayView,
@@ -51,16 +51,21 @@ export async function readAttendanceInbox(
         isNull(attendanceQuestions.canonicalQuestionId),
       ),
     );
-  const ownLocations = new Set([
-    ...entries.map((e) => e.locationId),
-    ...questions.map((q) => q.locationId),
-  ]);
+  const venue =
+    entries.length > 0 || items.some((item) => item.status === "waiting-worker")
+      ? {
+          id: await venueLocationId(tx),
+          ...(({ name, timeZone }) => ({ name, timeZone }))(await readVenue(tx)),
+        }
+      : null;
+  const ownLocations = new Set(questions.map((q) => q.locationId));
   const locationRows = (
     await tx
       .select({ id: locations.id, name: locations.name, timeZone: locations.timeZone })
       .from(locations)
   )
-    .filter((l) => ownLocations.has(l.id))
+    .filter((l) => ownLocations.has(l.id) && l.id !== venue?.id)
+    .concat(venue ? [venue] : [])
     .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
   const byLocation = new Map(locationRows.map((l) => [l.id, l]));
   const byId = new Map(entries.map((e) => [e.entryId, e]));
@@ -76,11 +81,10 @@ export async function readAttendanceInbox(
       entries
         .filter(
           (e) =>
-            e.locationId === question.locationId &&
-            ((e.eventAt >= question.startAt && e.eventAt < question.endAt) ||
-              e.entryId === question.openEntryId ||
-              e.entryId === question.automaticEntryId ||
-              related.has(e.entryId)),
+            (e.eventAt >= question.startAt && e.eventAt < question.endAt) ||
+            e.entryId === question.openEntryId ||
+            e.entryId === question.automaticEntryId ||
+            related.has(e.entryId),
         )
         .map((e) => recordRoot(e, byId).entryId),
     );
@@ -105,16 +109,14 @@ export async function readAttendanceInbox(
         missingKinds: answer.missingKinds,
         timeZone: location.timeZone,
         history: entries
-          .filter(
-            (e) => e.locationId === question.locationId && roots.has(recordRoot(e, byId).entryId),
-          )
+          .filter((e) => roots.has(recordRoot(e, byId).entryId))
           .sort(compareRecording),
       },
     });
   }
   for (const item of items) {
     if (item.status !== "waiting-worker") continue;
-    const location = byLocation.get(item.locationId)!;
+    const location = venue!;
     prompts.push({
       at: item.history.map((e) => e.eventAt).sort()[0]!,
       prompt: {
@@ -122,7 +124,7 @@ export async function readAttendanceInbox(
         questionId: null,
         itemId: item.id,
         personId,
-        locationId: item.locationId,
+        locationId: location.id,
         locationName: location.name,
         businessDay: null,
         day: null,
@@ -161,13 +163,11 @@ export async function readAttendanceDay(
     .where(eq(attendanceResponseCommands.personId, scope.personId));
   const record = await readTimeRecord(tx, {
     personId: scope.personId,
-    locationId: scope.locationId,
     period: { start: scope.date, end },
   });
   const shown = new Set(record.entries.map((e) => e.entry.entryId));
-  const items = projectCorrectionItems(entries, commands).filter(
-    (item) =>
-      item.locationId === scope.locationId && item.history.some((e) => shown.has(e.entryId)),
+  const items = projectCorrectionItems(entries, commands).filter((item) =>
+    item.history.some((e) => shown.has(e.entryId)),
   );
   return {
     ...scope,
@@ -186,10 +186,9 @@ export async function readAttendanceManagerQueue(
   const commands = await tx.select().from(attendanceResponseCommands);
   const items = projectCorrectionItems(entries, commands).filter(
     (item) =>
-      item.locationId === locationId &&
-      (item.status === "waiting-manager" ||
-        item.status === "waiting-worker" ||
-        item.status === "disputed"),
+      item.status === "waiting-manager" ||
+      item.status === "waiting-worker" ||
+      item.status === "disputed",
   );
   return { locationId, items };
 }

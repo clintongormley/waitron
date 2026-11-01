@@ -155,13 +155,7 @@ export async function processAttendanceDay(
   const subjects = await tx
     .selectDistinct({ personId: timeEntries.personId })
     .from(timeEntries)
-    .where(
-      and(
-        eq(timeEntries.locationId, day.locationId),
-        gte(timeEntries.eventAt, startAt),
-        lt(timeEntries.eventAt, endAt),
-      ),
-    );
+    .where(and(gte(timeEntries.eventAt, startAt), lt(timeEntries.eventAt, endAt)));
   const people =
     input.personId === undefined
       ? [
@@ -249,10 +243,8 @@ export async function processAttendanceDay(
   for (const personId of people) {
     const entries = await readRecordedEntries(tx, { personId });
     const live = liveClockEntries(entries).sort(compareEvents);
-    const effective = effectiveClockEntries(entries)
-      .filter((e) => e.locationId === day.locationId)
-      .sort(compareEvents);
-    const intervals = intervalsFor(entries).filter((i) => i.start.locationId === day.locationId);
+    const effective = effectiveClockEntries(entries).sort(compareEvents);
+    const intervals = intervalsFor(entries);
     const ownFacts = facts.filter((f) => f.personId === personId);
     const covered = new Set<AttendanceFact>();
     const matched = new Set<Interval>();
@@ -303,7 +295,6 @@ export async function processAttendanceDay(
       const breaks: AttendanceFact[] = live
         .filter(
           (e) =>
-            e.locationId === day.locationId &&
             (e.entryKind === "break_start" || e.entryKind === "break_end") &&
             compareEvents(e, start) > 0 &&
             e.eventAt < endAt &&
@@ -344,14 +335,12 @@ export async function processAttendanceDay(
         (effectiveLatest.entryKind === "in"
           ? last.at > effectiveLatest.eventAt
           : last.at >= effectiveLatest.eventAt) &&
-        last.at >= liveLatest.eventAt &&
-        liveLatest.locationId === day.locationId;
+        last.at >= liveLatest.eventAt;
       let end: string | null = null;
       if (canClose) {
         end = await backend.recordAutomaticClose(tx, {
           nodeId,
           personId,
-          locationId: day.locationId,
           openEntryId: start.entryId,
           at: last.at,
           offsetMinutes: last.offsetMinutes,

@@ -188,10 +188,7 @@ export async function executeAttendanceCommand(
     question?.personId ??
     item?.personId ??
     (payload.action === "propose" ? payload.personId : requester);
-  const locationId =
-    question?.locationId ??
-    item?.locationId ??
-    ("locationId" in payload ? payload.locationId : invalid("location_missing"));
+  const locationId = question?.locationId ?? null;
   await authority(tx, requester, authorizer, payload, personId, item);
   if (saved) return { commandId: saved.id, entryIds: saved.entryIds, replayed: true };
   if (command.expectedRevision !== (await readAttendanceRevision(tx, personId)))
@@ -210,7 +207,7 @@ export async function executeAttendanceCommand(
       }),
     ];
   } else if (payload.action === "request" || payload.action === "propose") {
-    if (payload.locationId !== locationId) invalid("question_location");
+    if (question && payload.locationId !== question.locationId) invalid("question_location");
     let missingKinds = question?.missingKinds;
     if (question) {
       const entries = await readRecordedEntries(tx, { personId });
@@ -228,8 +225,7 @@ export async function executeAttendanceCommand(
     for (const change of payload.changes) {
       if ("entryId" in change.target) {
         const [target] = await readRecordedEntries(tx, { entryId: change.target.entryId });
-        if (!target || target.personId !== personId || target.locationId !== locationId)
-          invalid("target_scope");
+        if (!target || target.personId !== personId) invalid("target_scope");
         if (question && question.automaticEntryId !== target.entryId) invalid("question_target");
       } else if (
         question &&
@@ -243,7 +239,7 @@ export async function executeAttendanceCommand(
       payload.changes.map((change) => ({
         ...("entryId" in change.target
           ? { correctsEntryId: change.target.entryId }
-          : { personId, locationId, missingEntryKind: change.target.missingKind }),
+          : { personId, missingEntryKind: change.target.missingKind }),
         nodeId: input.nodeId,
         actorPersonId: authorizer,
         origin: input.origin,

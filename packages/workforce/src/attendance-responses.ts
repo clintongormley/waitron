@@ -85,15 +85,7 @@ export function projectCorrectionItems(
     )
       continue;
     const members = command.entryIds.map((id) => requestById.get(id));
-    if (
-      members.some(
-        (r) =>
-          !r ||
-          assigned.has(r.entryId) ||
-          r.personId !== command.personId ||
-          r.locationId !== command.locationId,
-      )
-    )
+    if (members.some((r) => !r || assigned.has(r.entryId) || r.personId !== command.personId))
       continue;
     const pair = members as TimeEntryRecord[];
     const statuses = pair.map((r) => responses(entries, r).at(-1)?.correctionStatus);
@@ -129,7 +121,6 @@ export function projectCorrectionItems(
       id: group.id,
       requestEntryIds: group.requests.map((r) => r.entryId),
       personId: first.personId,
-      locationId: first.locationId,
       direction: first.extension!.direction!,
       status,
       readyToApply: !lastAnswer && !overtaken && correctionGroupCanApply(entries, group.requests),

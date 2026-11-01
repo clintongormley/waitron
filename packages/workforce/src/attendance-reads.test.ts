@@ -297,7 +297,7 @@ it("keeps all scoped original and response history when a correction crosses a m
   const feb = await day("2026-02-01");
   for (const value of [jan, feb]) {
     expect(value.items).toHaveLength(1);
-    expect(value.items[0]).toMatchObject({ status: "approved", personId, locationId });
+    expect(value.items[0]).toMatchObject({ status: "approved", personId });
     expect(value.items[0]!.history.map((e) => e.entryKind)).toEqual([
       "out",
       "correction",
@@ -309,7 +309,7 @@ it("keeps all scoped original and response history when a correction crosses a m
   expect(feb.record.sessions).toEqual([]);
   expect((await queue()).items).toEqual([]);
 });
-it("manager queue spans old dates and people but only the selected location and outstanding or disputed items", async () => {
+it("manager queue spans old dates and people and lists only outstanding or disputed items", async () => {
   const { end } = await shift();
   const worker = await request(end);
   const second = await shift(other, locationId, "2026-01-06");
@@ -331,20 +331,6 @@ it("manager queue spans old dates and people but only the selected location and 
     other,
     other,
   );
-  const elsewhere = await seedLocation(suite.db);
-  const foreign = await shift(other, elsewhere, "2026-01-07");
-  await send(
-    {
-      action: "propose",
-      personId: other,
-      locationId: elsewhere,
-      changes: [{ target: { entryId: foreign.end }, at: "2026-01-07T18:00:00Z", offsetMinutes: 0 }],
-      reason: "Other place",
-    },
-    manager,
-    manager,
-    other,
-  );
   const value = await queue();
   expect(value.items.map((i) => [i.id, i.personId, i.status])).toEqual([
     [worker.entryIds[0], personId, "waiting-manager"],
@@ -355,13 +341,9 @@ it("manager queue spans old dates and people but only the selected location and 
     correctionReason: "I left at five",
     recordedByPersonId: other,
   });
-  expect(
-    value.items.every((i) =>
-      i.history.every((e) => e.locationId === locationId && e.personId === i.personId),
-    ),
-  ).toBe(true);
+  expect(value.items.every((i) => i.history.every((e) => e.personId === i.personId))).toBe(true);
 });
-it("selected days keep relevant pending missing pairs and omit unrelated days and locations", async () => {
+it("selected days keep relevant pending missing pairs and omit unrelated days", async () => {
   const value = await send({
     action: "request",
     questionId: null,
@@ -376,7 +358,6 @@ it("selected days keep relevant pending missing pairs and omit unrelated days an
   expect(selected.items.map((i) => i.id)).toEqual([value.commandId]);
   expect(selected.record.sessions).toEqual([]);
   expect((await day("2026-01-06")).items).toEqual([]);
-  expect((await day("2026-01-05", await seedLocation(suite.db))).items).toEqual([]);
   expect((await inbox()).locations.map((l) => l.id)).toEqual([locationId]);
 });
 it.each(["", "2026-02-30", "2026-1-5", "9999-12-31"])(
@@ -440,7 +421,7 @@ it("an overtaken proposal stays visible in day history but is absent from prompt
     readyToApply: false,
   });
 });
-it("keeps a blocked proposal available to disagree while checking competing work in another location", async () => {
+it("keeps a blocked proposal available to disagree while checking competing later work", async () => {
   const { end } = await shift();
   const proposal = await send(
     {
@@ -453,12 +434,11 @@ it("keeps a blocked proposal available to disagree while checking competing work
     manager,
     manager,
   );
-  const elsewhere = await seedLocation(suite.db);
   await run((tx) =>
     backend.clockIn(tx, {
       nodeId,
       personId,
-      locationId: elsewhere,
+      locationId,
       at: "2026-01-05T18:00:00Z",
       offsetMinutes: 0,
       origin,

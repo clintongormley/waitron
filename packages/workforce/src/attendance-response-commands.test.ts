@@ -434,6 +434,36 @@ it("manager pair stays pending until the worker accepts the entire item", async 
   await intact();
 });
 
+it("stores no location on an approval of a manager's proposal and keeps the question's on an answer", async () => {
+  const payload = pair();
+  if (payload.action !== "request") throw new Error("fixture requires request");
+  const proposal = await command({
+    action: "propose",
+    personId,
+    locationId,
+    changes: payload.changes,
+    reason: "Please check these times",
+  });
+  await send(proposal, manager);
+  const acceptance = await command({ action: "accept", itemId: proposal.commandId });
+  await send(acceptance);
+  const questionId = await question();
+  const answer = await command({
+    ...payload,
+    questionId,
+    changes: [
+      { target: { missingKind: "in" }, at: "2026-01-05T18:00:00Z", offsetMinutes: 0 },
+      { target: { missingKind: "out" }, at: "2026-01-05T22:00:00Z", offsetMinutes: 0 },
+    ],
+  });
+  await send(answer);
+  const rows = new Map((await snapshot()).receipts.map((r) => [r.id, r.locationId] as const));
+  expect([
+    rows.get(proposal.commandId),
+    rows.get(acceptance.commandId),
+    rows.get(answer.commandId),
+  ]).toEqual([null, null, locationId]);
+});
 it.each(["manager", "supervisor"] as const)("%s cannot approve their own request", async (role) => {
   await suite.db.update(persons).set({ role }).where(eq(persons.id, personId));
   const value = await command(pair());

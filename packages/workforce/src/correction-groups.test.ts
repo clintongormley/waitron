@@ -170,7 +170,6 @@ it.each([
   "different-node",
   "different-actor",
   "different-person",
-  "different-location",
   "different-origin",
   "duplicate-kind",
   "equal-times",
@@ -192,7 +191,6 @@ it.each([
     inputs[1]!.actorPersonId = manager;
     inputs[1]!.personId = manager;
   }
-  if (shape === "different-location") inputs[1]!.locationId = await seedLocation(suite.db);
   if (shape === "different-origin") inputs[1]!.origin = jobOrigin("operator_script");
   if (shape === "duplicate-kind") inputs[1]!.missingEntryKind = "in";
   if (shape === "equal-times") inputs[1]!.at = inputs[0]!.at;

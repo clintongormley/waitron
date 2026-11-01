@@ -31,7 +31,6 @@ export function answerForQuestion(
       .filter(
         (e) =>
           e.personId === question.personId &&
-          e.locationId === question.locationId &&
           e.entryKind === "confirmation" &&
           e.extension?.authorKind === "worker" &&
           e.extension.respondsToEntryId === question.automaticEntryId,
@@ -41,14 +40,12 @@ export function answerForQuestion(
     const effective = effectiveClockEntries(entries).find(
       (e) =>
         e.personId === question.personId &&
-        e.locationId === question.locationId &&
         e.entryId !== question.automaticEntryId &&
         recordRoot(e, byId).entryId === question.automaticEntryId,
     );
     const request = items.find(
       (item) =>
         item.personId === question.personId &&
-        item.locationId === question.locationId &&
         item.direction === "worker_request" &&
         (item.status === "waiting-manager" || item.status === "approved") &&
         item.history.some((e) => e.entryId === question.automaticEntryId),

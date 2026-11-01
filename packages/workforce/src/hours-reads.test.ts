@@ -416,21 +416,32 @@ it("follows late other-node corrections moving a whole shift across a closed mon
   }
   expect(jan.closures[0]!.frozenWorkedMinutes).toBe(480);
 });
-it("never leaks another person or location through own open/pending/history/closures", async () => {
+it("never leaks another person through own open/pending/history/closures", async () => {
   const own = await shift();
   await shift(undefined, f.other);
   const ownRequest = await request(own.end);
-  await event("clockIn", "2026-01-06T09:00:00Z", 0, f.personId, f.elsewhere);
-  await event("clockOut", "2026-01-06T17:00:00Z", 0, f.personId, f.elsewhere);
   const value = await read();
   expect(value.workedMinutes).toBe(480);
   expect(value.pending.items.map((i) => i.id)).toEqual([ownRequest.entryIds[0]]);
-  expect(
-    value.record.entries.every(
-      (e) => e.entry.personId === f.personId && e.entry.locationId === f.locationId,
-    ),
-  ).toBe(true);
+  expect(value.record.entries.every((e) => e.entry.personId === f.personId)).toBe(true);
   expect(value.openShifts).toEqual([]);
+});
+it("counts a shift clocked in on one node and out on another once", async () => {
+  const second = await seedNode(f.suite.db, brandLocationId(f.locationId));
+  await f.run((tx) => f.backend.clockIn(tx, f.event("2026-01-05T09:00:00Z")));
+  await f.run((tx) =>
+    f.backend.clockOut(tx, { ...f.event("2026-01-05T17:00:00Z"), nodeId: second }),
+  );
+  const value = await read();
+  expect(value.record.sessions.map((s) => s.workedMinutes)).toEqual([480]);
+  expect(value.workedMinutes).toBe(480);
+  const closed = await freeze();
+  expect(closed.snapshot.sessions.map((s) => [s.personId, s.workedMinutes])).toEqual([
+    [f.personId, 480],
+  ]);
+  const before = await f.entries();
+  expect(await f.process({ facts: [] })).toEqual({ automaticEntryIds: [], questionIds: [] });
+  expect(await f.entries()).toEqual(before);
 });
 it("manager includes minimal names, zero-hour people and suspended history without mutating any attendance facts", async () => {
   await shift(undefined, f.other);
