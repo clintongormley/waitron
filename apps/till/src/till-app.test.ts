@@ -7530,14 +7530,12 @@ describe("till-app", () => {
     async (locale) => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, locale }),
-        parkOrder: vi
-          .fn()
-          .mockRejectedValue({
-            code: "sif.allocation_invalid",
-            reason: "conflict_requires_administrator",
-            recoveryUrl: "/manage/recovery/fiscal-conflict",
-            status: 409,
-          }),
+        parkOrder: vi.fn().mockRejectedValue({
+          code: "sif.allocation_invalid",
+          reason: "conflict_requires_administrator",
+          recoveryUrl: "/manage/recovery/fiscal-conflict",
+          status: 409,
+        }),
       });
       const c = await toCounter(el);
       c.store.addProduct(cafe, "2");
@@ -10499,14 +10497,12 @@ describe("till-app", () => {
       "offers module recovery on a counter reader refusal with charged=%s",
       async (charged) => {
         const { el } = await mountApp({
-          pay: vi
-            .fn()
-            .mockRejectedValue({
-              code: charged ? "sale.charged_not_recorded" : "sif.allocation_invalid",
-              reason: charged ? "issuance_refused" : "conflict_requires_administrator",
-              recoveryUrl: "/manage/recovery/fiscal-conflict",
-              status: 409,
-            }),
+          pay: vi.fn().mockRejectedValue({
+            code: charged ? "sale.charged_not_recorded" : "sif.allocation_invalid",
+            reason: charged ? "issuance_refused" : "conflict_requires_administrator",
+            recoveryUrl: "/manage/recovery/fiscal-conflict",
+            status: 409,
+          }),
         });
         const c = await toCounter(el);
         c.store.addProduct(cafe, "1");
@@ -10525,13 +10521,11 @@ describe("till-app", () => {
 
     it("keeps separate-terminal refund advice beside module recovery", async () => {
       const { el } = await mountApp({
-        recordSale: vi
-          .fn()
-          .mockRejectedValue({
-            code: "sif.allocation_invalid",
-            recoveryUrl: "/manage/recovery/fiscal-conflict",
-            status: 409,
-          }),
+        recordSale: vi.fn().mockRejectedValue({
+          code: "sif.allocation_invalid",
+          recoveryUrl: "/manage/recovery/fiscal-conflict",
+          status: 409,
+        }),
       });
       const c = await toCounter(el);
       c.store.addProduct(cafe, "2");
