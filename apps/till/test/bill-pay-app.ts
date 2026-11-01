@@ -316,7 +316,7 @@ export function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     getInvoiceDeliveryOptions: vi.fn().mockResolvedValue({ invoicePrinter: null }),
     getTabLines: vi.fn().mockResolvedValue({ lines: bill120, revision: 0 }),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [], printProblems: [] }),
-    splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
+    moveDishes: vi.fn().mockResolvedValue({ billId: "wo-check" }),
     recordSale: vi.fn().mockRejectedValue({ code: "bill.payments_received" }),
     collectOrder: vi.fn().mockRejectedValue({ code: "bill.payments_received" }),
     pay: vi.fn().mockRejectedValue({ code: "bill.payments_received" }),

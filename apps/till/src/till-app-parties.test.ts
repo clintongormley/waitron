@@ -11691,6 +11691,22 @@ describe("till-app: bill composition editing observations", () => {
   });
 
   it.each(commands.filter((command) => command.method !== "mergeBills"))(
+    "$name over the different-people limit refuses a missing affected observation before asking",
+    async (command) => {
+      const { el } = await mountApp({
+        listDrafts: observations(command.newBill ? "wo-4" : "wo-check"),
+        getPartyBills: vi.fn().mockResolvedValue([{ ...tabBill, total: "3500.00" }, checkBill]),
+      });
+      const order = await openMesa(el);
+      emit(order, command.event, command.detail);
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-confirm-different-people]")).toBeNull();
+      expect(api[command.method]).not.toHaveBeenCalled();
+      expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+    },
+  );
+
+  it.each(commands.filter((command) => command.method !== "mergeBills"))(
     "$name keeps the shown observation while the different-people confirmation is open",
     async (command) => {
       let newer = false;

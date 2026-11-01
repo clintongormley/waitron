@@ -3825,7 +3825,7 @@ describe("till-app: a change refused on a bill that holds money", () => {
   it("says why a move of dishes to another bill holding money was refused, and reads the bills again", async () => {
     const moveDishes = vi
       .fn()
-      .mockRejectedValue({ code: "bill.payments_received", status: 409, workingOrderId: "wo-4" });
+      .mockRejectedValue({ code: "bill.payments_received", status: 409, workingOrderId: "wo-9" });
     const { el, order, reads } = await openHolding({ moveDishes });
     const before = listed(order);
 
