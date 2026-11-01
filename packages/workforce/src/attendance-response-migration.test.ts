@@ -6,10 +6,9 @@ import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, newId, runMigrations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
-import { WorkforceBackend } from "./clocking.js";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { readChain } from "./chain.js";
-import { verifyChain } from "./chain-hash.js";
+import { computeEntryHash, verifyChain } from "./chain-hash.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
@@ -175,20 +174,56 @@ describe("populated A10-3 response-table upgrade", () => {
     const subject = await seedPerson(db);
     const place = await seedLocation(db);
     const node = await seedNode(db, brandLocationId(place));
-    const backend = new WorkforceBackend();
-    const input = {
-      nodeId: node,
-      personId: subject,
-      locationId: place,
-      offsetMinutes: 0,
-      origin: jobOrigin("dashboard"),
+    // Raw inserts, not today's writer, which cannot run on this older schema.
+    const extension = {
+      authorKind: "worker" as const,
+      direction: null,
+      missingEntryKind: null,
+      respondsToEntryId: null,
+      payPeriodClosureId: null,
     };
-    await withTransaction(db, (tx) =>
-      backend.clockIn(tx, { ...input, at: "2026-01-05T09:00:00Z" }),
-    );
-    await withTransaction(db, (tx) =>
-      backend.clockOut(tx, { ...input, at: "2026-01-05T17:00:00Z" }),
-    );
+    const ids = [newId(), newId()];
+    let prevEntryHash: string | null = null;
+    for (const [index, entryKind] of (["in", "out"] as const).entries()) {
+      const content = {
+        sequenceNo: index + 1,
+        personId: subject,
+        locationId: place,
+        nodeId: node,
+        entryKind,
+        eventAt: index === 0 ? "2026-01-05T09:00:00.000Z" : "2026-01-05T17:00:00.000Z",
+        recordedAt: `2026-01-05T17:00:0${index}.000Z`,
+        eventOffsetMinutes: 0,
+        recordedByPersonId: subject,
+        capturedBySource: "dashboard" as const,
+        capturedByDeviceId: null,
+        correctsEntryId: null,
+        correctionReason: null,
+        correctionStatus: null,
+        correctionActorId: null,
+        prevEntryHash,
+        extension,
+      };
+      const entryHash = computeEntryHash(content);
+      await db.execute(sql`
+      insert into time_entries (
+        id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+        recorded_by_person_id, captured_by_source, recorded_at, author_kind, entry_hash,
+        prev_entry_hash, sequence_no, is_first_entry
+      ) values (
+        ${ids[index]}, ${subject}, ${place}, ${node}, ${entryKind}, ${content.eventAt}, 0,
+        ${subject}, 'dashboard', ${content.recordedAt}, 'worker', ${entryHash},
+        ${prevEntryHash}, ${index + 1}, ${index === 0 ? 1 : 0}
+      )`);
+      prevEntryHash = entryHash;
+    }
+    await db.execute(sql`
+    insert into workforce_chains (
+      node_id, location_id, sequence_no, last_entry_id, last_entry_hash, last_recorded_at, updated_at
+    ) values (
+      ${node}, ${place}, 2, ${ids[1]}, ${prevEntryHash},
+      '2026-01-05T17:00:01.000Z', '2026-01-05T17:00:01.000Z'
+    )`);
     const [question] = await db
       .insert(attendanceQuestions)
       .values({

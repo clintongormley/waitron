@@ -390,7 +390,7 @@ describe("complete captured workforce backup evidence", () => {
   });
   it("detects damage on another location", async () => {
     await both(
-      `update time_entries set entry_hash='${"A".repeat(64)}' where location_id='${otherPlace}' and sequence_no=1`,
+      `update time_entries set entry_hash='${"A".repeat(64)}' where id=(select id from time_entries where node_id='${node}' and location_id='${otherPlace}' order by sequence_no limit 1)`,
     );
     invalid(await run(), "chain");
   });
