@@ -92,6 +92,7 @@ class ActionsLeaveApp extends LitElement {
         @transfer-lines=${this.accept}
         @split-table=${this.accept}
         @merge-bills=${this.accept}
+        @move-dishes=${this.accept}
         @switch-bill=${this.accept}
         @new-bill=${this.accept}
       ></till-table-order-screen
@@ -114,7 +115,9 @@ async function click(screen: TillTableOrderScreen, selector: string) {
   screen.shadowRoot!.querySelector<HTMLElement>(selector)!.click();
   await screen.updateComplete;
 }
-async function mount(verb: "split" | "transfer" | "split-table" | "merge" = "split") {
+async function mount(
+  verb: "split" | "transfer" | "split-table" | "merge" | "move-dishes" = "split",
+) {
   const { el: app } = await mountWidget<ActionsLeaveApp>("actions-leave-test-app", {});
   const screen = app.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
   await screen.updateComplete;
@@ -537,4 +540,127 @@ it("A803 switcher: an old Discard answer from the switcher does not replace a st
   await screen.updateComplete;
   expect(selected(screen, "split", 2)).toBe("true");
   expect(app.commands.map((command) => command.type)).toEqual(["split-lines"]);
+});
+
+async function pickDish(screen: TillTableOrderScreen, id = "line-1") {
+  const picker = screen.shadowRoot!.querySelector("till-portion-picker")!;
+  await picker.updateComplete;
+  picker.shadowRoot!.querySelector<HTMLInputElement>(`[data-pick="${id}"]`)!.click();
+  await screen.updateComplete;
+  await picker.updateComplete;
+}
+const movePicks = (screen: TillTableOrderScreen) =>
+  screen.shadowRoot!.querySelector("till-portion-picker")!.picks;
+const moveOpen = (screen: TillTableOrderScreen) =>
+  screen.shadowRoot!.querySelector("[data-move-dishes]") !== null;
+async function escape(screen: TillTableOrderScreen) {
+  screen
+    .shadowRoot!.querySelector("[data-move-dishes] h2")!
+    .dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true }));
+  await screen.updateComplete;
+}
+
+it.each([
+  ["Back", (screen: TillTableOrderScreen) => click(screen, "[data-action-back]")],
+  ["Escape", escape],
+])(
+  "A803 move dishes unsaved: %s with a dish picked asks, keeps the picks on stay and sends nothing on Discard",
+  async (_, leave) => {
+    const { app, screen } = await mount("move-dishes");
+    expect(unload()).toBe(false);
+    await pickDish(screen);
+    expect(unload()).toBe(true);
+    await leave(screen);
+    expect((await question(app)).open).toBe(true);
+    await answer(app, "keep");
+    expect(moveOpen(screen)).toBe(true);
+    expect(movePicks(screen)).toEqual(new Set(["line-1"]));
+    await leave(screen);
+    await answer(app, "discard");
+    await expect.poll(() => moveOpen(screen)).toBe(false);
+    expect(app.commands).toEqual([]);
+    expect(unload()).toBe(false);
+  },
+);
+it("A803 move dishes unsaved: switching bill with a dish picked asks, and keeps the picks on stay", async () => {
+  const { app, screen } = await mount("move-dishes");
+  await pickDish(screen);
+  await click(screen, '[data-bill-switcher] [data-switch-bill="other"]');
+  expect((await question(app)).open).toBe(true);
+  await answer(app, "keep");
+  expect(app.commands).toEqual([]);
+  expect(movePicks(screen)).toEqual(new Set(["line-1"]));
+  await click(screen, '[data-bill-switcher] [data-switch-bill="other"]');
+  await answer(app, "discard");
+  await expect
+    .poll(() => app.commands)
+    .toEqual([{ type: "switch-bill", detail: { workingOrderId: "other" } }]);
+  expect(moveOpen(screen)).toBe(false);
+});
+it("A803 move dishes unsaved: leaving the table with a dish picked asks, and keeps the picks on stay", async () => {
+  const { app, screen } = await mount("move-dishes");
+  await pickDish(screen);
+  const stay = app.leave.coordinator.request({
+    scopes: [screen],
+    reason: "navigation",
+    proceed() {},
+  });
+  await answer(app, "keep");
+  expect(await stay).not.toBe("proceeded");
+  expect(movePicks(screen)).toEqual(new Set(["line-1"]));
+  const go = app.leave.coordinator.request({
+    scopes: [screen],
+    reason: "navigation",
+    proceed() {},
+  });
+  await answer(app, "discard");
+  expect(await go).toBe("proceeded");
+  expect(app.commands).toEqual([]);
+  expect(unload()).toBe(false);
+});
+it("A803 move dishes unsaved: a destination alone is unsaved work, as Transfer's target is", async () => {
+  const { app, screen } = await mount("move-dishes");
+  await click(screen, '[data-move-dishes-to="new"]');
+  expect(unload()).toBe(true);
+  await click(screen, "[data-action-back]");
+  expect((await question(app)).open).toBe(true);
+});
+it("A803 move dishes unsaved: with nothing picked, Back and switching bill ask nothing", async () => {
+  const { app, screen } = await mount("move-dishes");
+  expect(unload()).toBe(false);
+  await click(screen, "[data-action-back]");
+  expect(moveOpen(screen)).toBe(false);
+  expect((await question(app)).open).toBe(false);
+  await click(screen, "[data-move-split]");
+  await click(screen, '[data-action="move-dishes"]');
+  await click(screen, '[data-bill-switcher] [data-switch-bill="other"]');
+  await expect
+    .poll(() => app.commands)
+    .toEqual([{ type: "switch-bill", detail: { workingOrderId: "other" } }]);
+  expect((await question(app)).open).toBe(false);
+});
+it("A803 move dishes unsaved: a refresh is not a change, and keeps a pick it does not touch", async () => {
+  const { screen } = await mount("move-dishes");
+  screen.lines = lines.map((line) => ({ ...line }));
+  await screen.updateComplete;
+  expect(unload()).toBe(false);
+  await pickDish(screen);
+  screen.lines = lines.map((line) => ({ ...line }));
+  await screen.updateComplete;
+  expect(movePicks(screen)).toEqual(new Set(["line-1"]));
+  expect(unload()).toBe(true);
+});
+it("A803 move dishes unsaved: Move releases the protection before it sends", async () => {
+  const { app, screen } = await mount("move-dishes");
+  await pickDish(screen);
+  await click(screen, '[data-move-dishes-to="other"]');
+  screen
+    .shadowRoot!.querySelector("[data-move-dishes-confirm]")!
+    .dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+  await screen.updateComplete;
+  expect(app.commands).toEqual([
+    { type: "move-dishes", detail: { lineIds: ["line-1"], toBillId: "other" } },
+  ]);
+  expect(app.protectionAtSubmit).toEqual([false]);
+  expect((await question(app)).open).toBe(false);
 });

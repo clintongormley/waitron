@@ -163,7 +163,13 @@ import "../widgets/dead-ends-section.js";
 import { PAY_WAYS, paidQuantities, payLines } from "../state/bill-payment.js";
 import { billHasUnsent, billUnsentText } from "../state/bill-unsent.js";
 import { portionGroups, sentSlicePortionKey, tabLinePortionKey } from "../state/portion-groups.js";
-import { pickRows, pickedLineIds, type PickRow, type Picks } from "../state/portion-selection.js";
+import {
+  pickRows,
+  pickedLineIds,
+  tidyPicks,
+  type PickRow,
+  type Picks,
+} from "../state/portion-selection.js";
 import "../widgets/portion-picker.js";
 import { billControlStyles, billSwitcher, tableMenu } from "./table-bill-controls.js";
 
@@ -239,6 +245,8 @@ interface ActionDraft {
   toBillId: string | null;
   lines: Set<number>;
   quantities: Map<number, string>;
+  picks: Picks;
+  moveTo: string | null | undefined;
 }
 
 /** Move this bill's choice: to a table, with who the picker showed seated there, or to the counter. */
@@ -282,6 +290,10 @@ interface DraftMoveOpening {
 }
 
 /** The element `node` renders inside: its slot, its parent, or the host of its shadow root. */
+function samePicks(a: Picks, b: Picks): boolean {
+  return a.size === b.size && [...a].every((id) => b.has(id));
+}
+
 function composedParent(node: Element): Element | null {
   const root = node.getRootNode();
   return node.assignedSlot ?? node.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
@@ -1285,6 +1297,8 @@ export class TillTableOrderScreen extends LitElement {
   /** Where Move dishes… sends the picks: a bill's id, null for a new bill, undefined while none is
    * chosen. */
   @state() private moveDishesTo: string | null | undefined = undefined;
+  /** The rows Move dishes… last drew, which a re-read's picks are tidied from. */
+  #moveDishesDrawn?: readonly PickRow[];
 
   readonly #actionId = {};
   #actionScope?: DraftScope<ActionDraft>;
@@ -1308,6 +1322,8 @@ export class TillTableOrderScreen extends LitElement {
       toBillId: this.transferToBillId,
       lines: new Set(this.transferLineNos),
       quantities: new Map(this.splitQuantities),
+      picks: new Set(this.moveDishesPicks),
+      moveTo: this.moveDishesTo,
     };
   }
 
@@ -1315,6 +1331,7 @@ export class TillTableOrderScreen extends LitElement {
     if (
       this.actionVerb !== "split" &&
       this.actionVerb !== "transfer" &&
+      this.actionVerb !== "move-dishes" &&
       this.actionStep !== "split-table" &&
       this.actionStep !== "split-table-bill"
     ) {
@@ -1333,6 +1350,7 @@ export class TillTableOrderScreen extends LitElement {
         ...value,
         lines: new Set(value.lines),
         quantities: new Map(value.quantities),
+        picks: new Set(value.picks),
       }),
       equal: (a, b) =>
         a.tableId === b.tableId &&
@@ -1340,13 +1358,17 @@ export class TillTableOrderScreen extends LitElement {
         a.lines.size === b.lines.size &&
         [...a.lines].every((line) => b.lines.has(line)) &&
         a.quantities.size === b.quantities.size &&
-        [...a.quantities].every(([line, quantity]) => b.quantities.get(line) === quantity),
+        [...a.quantities].every(([line, quantity]) => b.quantities.get(line) === quantity) &&
+        a.moveTo === b.moveTo &&
+        samePicks(a.picks, b.picks),
       restore: (value) => {
         this.splitTableId = value.tableId;
         this.transferToBillId = value.toBillId;
         this.transferLineNos = new Set(value.lines);
         this.splitQuantities = new Map(value.quantities);
         this.splitAttempted = false;
+        this.moveDishesPicks = new Set(value.picks);
+        this.moveDishesTo = value.moveTo;
       },
     });
     this.#actionScope.commit(this.#actionBaseline);
@@ -1945,6 +1967,7 @@ export class TillTableOrderScreen extends LitElement {
       this.#lineByNo = new Map(this.lines.map((line) => [line.lineNo, line]));
     }
     this.#tidyPickedPortions();
+    this.#tidyMovePicks();
     // A tab switch must not carry a half-open action flow across: its targets belong to the OLD tab.
     if (changed.has("orderId") && changed.get("orderId") !== undefined) {
       this.#closeActions();
@@ -2608,13 +2631,18 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
-  #sentFallback(): TemplateResult | typeof nothing {
-    const recalled = new Set(
+  /** The bill lines recalled into this person's draft or another person's. */
+  #recalledLineIds(): Set<string> {
+    return new Set(
       [
         ...(this.#draftStore?.lines ?? []),
         ...this.otherDrafts.flatMap((draft) => draft.lines),
       ].flatMap((line) => (line.source === undefined ? [] : [line.source.line.id])),
     );
+  }
+
+  #sentFallback(): TemplateResult | typeof nothing {
+    const recalled = this.#recalledLineIds();
     const dishes = this.lines.filter((line) => !this.#isChild(line) && !recalled.has(line.id));
     if (dishes.length === 0) return nothing;
     const groups = portionGroups(
@@ -4803,6 +4831,7 @@ export class TillTableOrderScreen extends LitElement {
     this.splitAttempted = false;
     this.moveDishesPicks = new Set();
     this.moveDishesTo = undefined;
+    this.#moveDishesDrawn = undefined;
   }
 
   #dispatch(type: string, detail: unknown): void {
@@ -5706,9 +5735,22 @@ export class TillTableOrderScreen extends LitElement {
       this.lines,
       (dish) => this.#fallbackPortionKey(dish),
       this.#balanceShown(),
-      new Set(),
+      this.#recalledLineIds(),
       picks,
     );
+  }
+
+  /** A re-read can pay, recall or regroup picked dishes; the picks follow what is drawn now. */
+  #tidyMovePicks(): void {
+    if (this.actionStep !== "move-dishes" || this.#moveDishesDrawn === undefined) return;
+    const next = tidyPicks(
+      this.#moveDishesDrawn,
+      (picks) => this.#moveDishesRows(picks),
+      this.moveDishesPicks,
+    );
+    if (samePicks(next, this.moveDishesPicks)) return;
+    this.moveDishesPicks = next;
+    this.#actionScope?.changed();
   }
 
   /** The chosen destination while it is still offered: a re-read can take a bill out of the party's
@@ -5721,6 +5763,7 @@ export class TillTableOrderScreen extends LitElement {
 
   #moveDishesStep(): TemplateResult {
     const rows = this.#moveDishesRows();
+    this.#moveDishesDrawn = rows;
     const lineIds = pickedLineIds(rows, this.moveDishesPicks);
     const chosen = this.#moveDishesChosen();
     const canMove = lineIds.length > 0 && chosen !== undefined;

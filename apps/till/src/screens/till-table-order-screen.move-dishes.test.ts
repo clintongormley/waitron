@@ -3,10 +3,13 @@ import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./till-table-order-screen.js";
-import type { TillTableOrderScreen } from "./till-table-order-screen.js";
+import type { OtherDraft, TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { BillBalance, PartyBill, TableParty, TableState, TabLine } from "../api/client.js";
 import { partyBill, switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 import type { TillPortionPicker } from "../widgets/portion-picker.js";
+import { DraftStore } from "../state/draft-sync.js";
+import type { OrderLine } from "../state/working-order.js";
+import { beer } from "./till-table-order-screen.test-helpers.js";
 
 function line(id: string, lineNo: number, over: Partial<TabLine> = {}): TabLine {
   return {
@@ -77,12 +80,21 @@ const BILLS = [
 ];
 
 async function mountScreen(
-  over: { bills?: PartyBill[]; balance?: BillBalance | null; party?: TableParty | null } = {},
+  over: {
+    bills?: PartyBill[];
+    balance?: BillBalance | null;
+    party?: TableParty | null;
+    lines?: TabLine[];
+    draftStore?: DraftStore;
+    otherDrafts?: OtherDraft[];
+  } = {},
 ) {
   const shownParty = over.party === undefined ? party : over.party;
   const { el } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
     products: [],
-    lines: [...CANAS, HAM],
+    lines: over.lines ?? [...CANAS, HAM],
+    ...(over.draftStore === undefined ? {} : { draftStore: over.draftStore }),
+    ...(over.otherDrafts === undefined ? {} : { otherDrafts: over.otherDrafts }),
     orderId: "wo-2",
     party: shownParty,
     bills: over.bills ?? BILLS,
@@ -397,5 +409,121 @@ describe("A803 move dishes panel", () => {
     expect(picker(el).picks).toEqual(new Set());
     expect(pressed(el)).toEqual([]);
     expect(confirm(el).disabled).toBe(true);
+  });
+});
+
+/** A draft line that recalls `dish` from the bill. */
+function recall(dish: TabLine): OrderLine {
+  return {
+    product: beer,
+    quantity: "1.000",
+    draftLineId: `recalled-${dish.id}`,
+    noMerge: true,
+    source: { line: dish, extras: [], netAmount: dish.unitPriceGross },
+  };
+}
+
+function otherDraft(...dishes: TabLine[]): OtherDraft {
+  return {
+    id: "other",
+    revision: 2,
+    ownerName: "Ana",
+    takenFromYou: false,
+    lines: dishes.map(recall),
+  };
+}
+
+describe("A803 move dishes refresh:", () => {
+  async function moveTo(el: TillTableOrderScreen) {
+    const sent = capture(el, "move-dishes");
+    await userEvent.click(destinations(el).at(-1)!);
+    await el.updateComplete;
+    await userEvent.click(confirm(el));
+    await el.updateComplete;
+    return sent;
+  }
+
+  it("a re-read that pays one picked dish elsewhere keeps the row's first unpaid members", async () => {
+    const el = await mountScreen();
+    await openMoveDishes(el);
+    await tick(el, "c1");
+    await step(el, "dec", "c1");
+    await step(el, "dec", "c1");
+    expect(picker(el).picks).toEqual(new Set(["c1", "c2"]));
+    el.billBalance = {
+      workingOrderId: "wo-2",
+      status: "open",
+      total: "32.00",
+      received: "5.00",
+      reserved: "0.00",
+      outstanding: "27.00",
+      tips: "0.00",
+      payments: [],
+      paidLines: [{ lineId: "c1", lineNo: 1, paidQuantity: "1.000" }],
+    };
+    await el.updateComplete;
+    await picker(el).updateComplete;
+    expect(picker(el).picks).toEqual(new Set(["c2", "c3"]));
+    expect(await moveTo(el)).toEqual([{ lineIds: ["c2", "c3"], toBillId: null }]);
+  });
+
+  it("a re-read in which identical dishes join a ticked row keeps its count from the row's first members, and Move sends exactly those", async () => {
+    const noted = (dish: TabLine) => ({ ...dish, note: "no ice" });
+    const el = await mountScreen({
+      lines: [CANAS[0]!, CANAS[1]!, noted(CANAS[2]!), noted(CANAS[3]!), HAM],
+    });
+    await openMoveDishes(el);
+    await tick(el, "c3");
+    expect(picker(el).picks).toEqual(new Set(["c3", "c4"]));
+    el.lines = [...CANAS, HAM];
+    await el.updateComplete;
+    await picker(el).updateComplete;
+    expect(picker(el).rows[0]!.members.map((member) => member.id)).toEqual([
+      "c1",
+      "c2",
+      "c3",
+      "c4",
+    ]);
+    expect(picker(el).picks).toEqual(new Set(["c1", "c2"]));
+    expect(await moveTo(el)).toEqual([{ lineIds: ["c1", "c2"], toBillId: null }]);
+  });
+
+  it("a dish recalled into this person's draft, and one recalled into another person's, are in no row, and 2 of 3 never takes them", async () => {
+    const draft = new DraftStore();
+    draft.appendLines([recall(CANAS[0]!)]);
+    const el = await mountScreen({ draftStore: draft, otherDrafts: [otherDraft(HAM)] });
+    await openMoveDishes(el);
+    expect(picker(el).rows.map((row) => row.members.map((member) => member.id))).toEqual([
+      ["c2", "c3", "c4"],
+    ]);
+    await tick(el, "c2");
+    await step(el, "dec", "c2");
+    expect(picker(el).picks).toEqual(new Set(["c2", "c3"]));
+    expect(await moveTo(el)).toEqual([{ lineIds: ["c2", "c3"], toBillId: null }]);
+  });
+
+  it("a picked dish recalled into another person's draft before a refresh drops out of the picks", async () => {
+    const el = await mountScreen();
+    await openMoveDishes(el);
+    await tick(el, "h1");
+    el.otherDrafts = [otherDraft(HAM)];
+    await el.updateComplete;
+    await picker(el).updateComplete;
+    expect(picker(el).picks).toEqual(new Set());
+    expect(confirm(el).disabled).toBe(true);
+  });
+
+  it("a picked Caña recalled into this person's draft leaves the row's count taken from the Cañas left", async () => {
+    const draft = new DraftStore();
+    const el = await mountScreen({ draftStore: draft });
+    await openMoveDishes(el);
+    await tick(el, "c1");
+    await step(el, "dec", "c1");
+    await step(el, "dec", "c1");
+    draft.appendLines([recall(CANAS[0]!)]);
+    await el.updateComplete;
+    await picker(el).updateComplete;
+    expect(picker(el).picks).toEqual(new Set(["c2", "c3"]));
+    expect(await moveTo(el)).toEqual([{ lineIds: ["c2", "c3"], toBillId: null }]);
   });
 });
