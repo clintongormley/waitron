@@ -964,9 +964,17 @@ export function pickedCount(row: PickRow, picks: Picks): number;
 export function setCount(row: PickRow, count: number, picks: Picks): Picks;
 /** None picked → every member the floor allows (D16); any picked → none. */
 export function toggleRow(row: PickRow, picks: Picks): Picks;
-/** After a re-read: drop ids no longer in any row (gone, paid elsewhere, recalled); a regrouped row
- * keeps its first members, as many as were picked, never more than it has or the floor allows. */
-export function tidyPicks(rows: readonly PickRow[], picks: Picks): Picks;
+/** After a re-read. `before` is the rows last drawn; `rowsFor` draws the re-read bill's rows over a
+ * set of picks. Each old row hands its count to the unpaid row now holding most of its members
+ * (a tie: the one drawn first; counts handed to one row add up). The rows then take their counts
+ * in drawn order, each its first members, never more than its limit over the picks placed so far,
+ * so together they keep the floor. An id in no row now (gone, recalled) is dropped; its row's
+ * count stays, taken from the members left. */
+export function tidyPicks(
+  before: readonly PickRow[],
+  rowsFor: (picks: Picks) => readonly PickRow[],
+  picks: Picks,
+): Picks;
 export function pickedLineIds(rows: readonly PickRow[], picks: Picks): string[]; // line order
 export function pickedAmount(rows: readonly PickRow[], picks: Picks): string;
 ```
@@ -1076,7 +1084,10 @@ Split by item and Transfer items stay in the ⋮ until Task 9a.
 ## Task 7b: the picks as unsaved work, refreshes, and recalled dishes (≈45 calls)
 
 **Files.** TOS (`ActionDraft` `:234` gains `picks: Set<string>` and `moveTo`;
-`#watchActions`/`#actionPayload` carry them; a refresh runs `tidyPicks`; new `#recalledLineIds()`
+`#watchActions`/`#actionPayload` carry them; the screen keeps the `PickRow[]` it last drew, and a
+refresh runs `tidyPicks(lastDrawn, (picks) => pickRows(lines, keyOf, #balanceShown(), #recalledLineIds(), picks), picks)`
+over the re-read lines, with `keyOf` the screen's `#fallbackPortionKey`, so rows that gain picks
+together keep the floor (Task 5); new `#recalledLineIds()`
 holding the set `#sentFallback` builds today (`:2598-2605`), used by `#sentFallback` and by
 `pickRows` (D17), with `#sentFallback`'s behaviour unchanged); `till-table-order-screen.move-dishes.test.ts`;
 `till-table-order-screen.actions-unsaved.test.ts` (new cases).
