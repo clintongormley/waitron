@@ -3985,9 +3985,11 @@ is `packages/fiscal-verifactu/src/clock-behind.restart.test.ts` unless another i
 `packages/fiscal-verifactu/drizzle/0011_clock_checks_and_confirmations.sql`. `clock_checks` holds
 one row each time a check of the clock opens: the reading, the boot-time clock's reading and boot
 id, the latest record and every chain's largest `secuencia` (`detail.heads`).
-`clock_confirmations` holds one row each time a check closes: its `source` (`authority`,
-`devices`, `admin` or `elapsed`), the person for `admin` (a CHECK requires a person id on an
-`admin` row, refuses one on any other, and refuses an empty one), the witnesses and the chain heads
+`clock_confirmations` holds one row each time a check closes, and since slice 9b one for each
+verified step the box makes to its clock ([below](#the-box-sets-its-own-clock)): its `source`
+(`authority`, `devices`, `admin`, `staff` or `elapsed`), the person for `admin` and `staff` (a
+CHECK requires a person id on those rows, refuses one on any other, and refuses an empty one;
+slice 9b's `0012_clock_confirmations_staff.sql` widened both CHECKs), the witnesses and the chain heads
 as `proof`, the corrected start of the stop as `proof.closing`, and, for a closing that lifted a
 stop, the record it names (`registro_id`, `record_at`). A unique index on `check_id` allows one
 closing per check; `registro_id` is indexed but not unique, so a second confirmation of the same
@@ -3995,9 +3997,10 @@ record is normal.
 `seq` orders both tables, never a time, because the clock is what is in doubt. Only
 `openClockCheck` (`clock-checks.ts`) inserts into `clock_checks`, always with `reason:
 "behind_chain"`; the CHECK also allows `start`, `change` and `disagrees`, which nothing on this
-branch writes. Only `writeClosing` (`clock-checks.ts`) and `confirmClockStop`
-(`clock-confirmation.ts`) insert into `clock_confirmations` (`git grep -n
-'insert(clockChecks)\|insert(clockConfirmations)'` over the non-test sources, 2026-10-24).
+branch writes. Only `writeClosing` (`clock-checks.ts`), `confirmClockStop`
+(`clock-confirmation.ts`) and, since slice 9b, `confirmClockStep` (`clock-step.ts`) insert into
+`clock_confirmations` (`git grep -n 'insert(clockChecks)\|insert(clockConfirmations)'` over the
+non-test sources, re-run 2026-11-01).
 `clock_stop_restarts`, the restart's table, stays in the schema and the append-only list, written
 by nothing, for the go-live migration squash to drop.
 
@@ -4068,8 +4071,9 @@ check closes in one of three ways:
 
 - **A lift, during the stop.** `confirmClockStop` (`clock-confirmation.ts`) writes a confirmation
   naming the latest record and closing this stop's check, and records `clock.behind_chain_restarted`
-  beside it. The watch calls it on a look whose `clockStopState` proof is `ready`; the
-  administrator's route calls it too (below). A confirmation that finds no open check, or one whose
+  beside it. The watch calls it on a look whose `clockStopState` proof is `ready` (since slice 9b,
+  not on devices alone while the start-up window is open, [below](#the-box-sets-its-own-clock)); the
+  administrator's route calls it too (below), and so does a till's agreeing check. A confirmation that finds no open check, or one whose
   stop came back, closes that one and opens one in its own transaction, whose closing is then
   `partial` (`closingProof`, `clock-checks.ts`).
 - **By itself, after the stop ends** (real time passes the record, or the clock is put right). The
@@ -4176,13 +4180,25 @@ time that the system is suspended." Those three were read on 2026-10-23, not run
 so an hour asleep looked like the wall clock stepping an hour forward and recorded a
 `clock.behind_chain_disproved` for the sales under a lift (the review's simulated timings; the
 "sleeps an hour" case in `apps/server/src/clock-watch.elapsed.test.ts`, which failed before this).
-Not measured on Linux: what `/proc/uptime` reads across a real suspend or a setting of the wall
-clock — no Linux machine was reachable when this was written; the tests replace the file. On macOS,
+Across a setting of the wall clock, `/proc/uptime` moved 0.020 s while the wall clock moved
+120.25 s (slice 9b's M3, a GitHub Linux runner,
+[run 41173702824](https://github.com/clintongormley/waitron/actions/runs/41173702824)). Not
+measured on Linux: what it reads across a real suspend; the tests replace the file. On macOS,
 `os.uptime()` was not used: measured 2026-10-23 (Node v26.11.1), it read whole seconds and equalled
 `date +%s` less `sysctl kern.boottime`, so it is derived from the wall clock there. The witness store
 (`clock-witnesses.ts`) still judges freshness by `performance.now()`, so after a suspend it stops
 handing out the device readings and the agreeing AEAT readings taken before it, as it does after a
 step of the wall clock; a device whose equipment poll runs reports every 15 seconds (`apps/till/src/state/equipment-poll.ts`).
+
+A step the box makes itself is not a jump (slice 9b). The watch is one of the correction's anchors:
+`stepComing` and `reanchor` each first turn every disagreeing AEAT reading not yet taken into a
+disproof and record it, and from `stepComing` until `reanchor` has finished that recording no look
+compares the wall clock with the one before; `reanchor` then makes the clock as it finds it the
+next look's starting point (`apps/server/src/clock-watch.ts`). So no reading measured on the old
+clock is left to disprove the lift the step writes. Either throws when it cannot record (and, once
+the watch has stopped, when a disproof is left unrecorded): a throw from `stepComing` refuses the
+set `pending_disproofs`, one from `reanchor` keeps the step's row waiting
+(`clock-watch.anchor.test.ts`).
 
 **AEAT's time** (decision 1, P3, P5, P11). Two sources feed AEAT witnesses: a submission reply's
 `TimestampPresentacion` (`apps/server/src/time-health.ts`, plus 500 ms, its uncertainty half the
@@ -4210,10 +4226,258 @@ closings and presses they name. What nothing checks:
   unnoticed;
 - that a new reader of the stop lifts with the others: the "answers the same from the stop, the
   staff notice and the bell" case names those three;
-- that only `writeClosing` and `confirmClockStop` write the table: nothing refuses another writer,
+- that only `writeClosing`, `confirmClockStop` and `confirmClockStep` write the table: nothing refuses another writer,
   and a row it wrote that passes the cover's checks would cover.
 
 ### The box sets its own clock
+
+Built by A798-B slice 9b ([plan](../superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md)).
+The app's container cannot set the clock, so a small root program on the box's own system, outside
+the container — the **host service** — sets it when the server asks. The box sets its clock only
+inside a stop it already has: the clock behind the latest record, or the clock before 28-10-2024
+(`clock.unusable`). It opens no stop of its own.
+
+**The host service** (`deploy/box/`). `waitron-box.socket` listens on `/run/waitron-box/box.sock`
+(`Accept=yes`, owner `root`, group `waitron-box`, mode `0660`, at most four connections at once) and
+starts one `waitron-box@.service` per connection. That runs `waitron-box.sh` as root, its error
+output to the journal, ended after 15 seconds (`RuntimeMaxSec=15`). One request line goes in (at
+most 700 characters, read within 5 seconds, or the answer is `request_invalid`) and one JSON line
+comes out:
+
+- `clock.status` answers `{"ok":true,"service":…,"unit":…,"synchronised":…,"lastSyncAt":…,"nowMs":…}`.
+  `service` is `off` when time synchronisation is switched off, `stopped` when it is on but no time
+  service listed in systemd's `ntp-units.d` folders is running, and `on` otherwise; `lastSyncAt` is
+  when `/run/systemd/timesync/synchronized` was last touched.
+- `clock.set <epochMs> <requester>` is refused (`{"ok":false,"reason":…}`) `target_invalid` (not
+  13 digits with no leading zero, or before 2024-10-28, or from 2100 on), `requester_invalid` (not
+  one line of printable ASCII from `{` to `}`, at most 512 bytes), `synchronised` (the system says
+  its clock is synchronised) or `busy` (another set holds the lock). Otherwise it writes one
+  `logger -t waitron-box` line naming the target and the requester; stops each running listed time
+  service with `systemctl stop`, which changes nothing on disk, where `timedatectl set-ntp false`
+  would disable it; runs `timedatectl set-time` (which sets the battery clock too) to the target
+  plus the time since the request arrived; moves timesyncd's saved clock file to the new time when
+  there is one; and starts the services again — also from a `trap` on any exit, and, after a kill,
+  from the unit's `ExecStopPost=`. It answers `{"ok":true,"beforeMs":…,"afterMs":…}`, or `set_failed`.
+  Any other line answers `unknown_request`.
+
+The requester is JSON the server reports about itself: the host only logs it, never runs it, and
+does not check it. The server alone decides whether a set is allowed. `waitron.sh install` installs
+the service (`install_box_service`, [deploy README](../../deploy/README.md#setting-up-a-box)), and
+the app mounts the socket's folder only once `.env` names it (`WAITRON_BOX_SOCKET_DIR`,
+`deploy/compose.yml`).
+
+**The server's client** (`apps/server/src/box-host-client.ts`). `clockStatus()` waits 2 seconds and
+`setClock()` 20, longer than the host's own 15-second limit. Every failure is an answer, never a
+throw: `missing` (no connection was made), `lost` (the connection broke, or closed with no answer,
+after the request was sent, so the clock may have moved), `refused`, `timeout` or `malformed`.
+Time health and the `clock.sync_off` warning (`apps/server/src/clock-sync-alert.ts`: `off`,
+`stopped`, `unsynchronised`, and `unreachable` in production only) read the status through one
+60-second cache, which a set clears.
+
+**Who may set it** (`apps/server/src/clock-correction.ts`, one correction per server, built in
+`boot.ts`):
+
+- the clock watch, from AEAT's time, by itself, when AEAT disagrees during the clock-behind stop
+  (`setFromAuthority`, `apps/server/src/clock-watch.ts`); `clock.unusable` has no automatic set;
+- an administrator, from their own device, at any time during either stop:
+  `POST /api/box/clock-set` (`apps/server/src/box-health-api.ts`, `person.admin`), after the same
+  challenge as slice 9's confirmation;
+- on a till, `POST /api/box-clock/challenge` and `POST /api/box-clock/confirm`
+  (`apps/server/src/till-box-clock-api.ts`): any staff member the till's profile admits, during
+  the start-up window only (below), or an administrator signed in on the till or named with their
+  PIN, at any time.
+
+Never from devices alone, never while the host says the clock is synchronised, and never when the
+host service does not answer. A person's set hands the correction no witnesses: what set the clock
+is that person's device, stored as their reading.
+
+**The order** (`setInTurn`). Every set, and every confirmation that can lift or close a stop (the
+watch's `confirm` and `closeWaiting`, `POST /api/box/clock-confirm`, a till's agreeing check), runs
+in the correction's one-at-a-time **turn**, so nothing lifts or closes the stop between a set's
+judging and its row. The turn is always taken around a whole transaction, never inside one:
+`withTransaction` holds the write lock (`packages/db/src/tenancy.ts`), and a set holding the turn
+waits for that lock, so a caller waiting for the turn inside a transaction would never finish.
+Inside the turn, each refusal asking nothing further:
+
+1. `pending_disproofs` while an earlier step's row is still waiting to be written;
+2. `stale` (below), then `target_invalid` (the target before 2024-10-28 or from 2100 on);
+3. in one write-lock turn with no change-list drain: `not_stopped` unless the stop still holds;
+   for a staff member, then the till's admission and the window (`not_admitted`, `not_start_up`,
+   `authority_pending`);
+4. the host's status: `host_unavailable`, then `synchronised`;
+5. for a person: `witnessed` when AEAT has a reading taken during this stop, agreeing or not, so the
+   box sets or confirms from AEAT itself; then `agrees` when the device is within a minute, so
+   confirming is the way;
+6. each anchor's `stepComing` (a throw refuses `pending_disproofs`), then `stale` again;
+7. the set: read the wall and boot-time clocks, raise the step counter, ask the host, read both
+   again. It is verified when the host answered and the wall clock is within 2 000 ms of the target
+   plus the boot-time clock's elapsed time;
+8. every anchor's `reanchor`, refused or not; then, when the set verified or the clock moved by more
+   than a second, the witness store is emptied and the step recorded (below).
+
+A set the host refused, timed out on or lost, with the clock moved by a second or less, answers
+`refused` (`host_unavailable` when there was no socket). A clock that moved without verifying —
+landed off the target, or never confirmed by the host — answers `unverified`.
+
+**The step counter and `stale`.** The correction counts every `clock.set` it sends, whatever the
+answer (`steps()`). A caller notes the count, and the box's wall and steady clocks where it measured
+its offset (`stepsSeen`, `measuredAt`). The set is `stale` when the count has moved since, or the
+wall clock has moved against the steady clock by more than 1 000 ms (a step by the time service or
+by hand): an offset is valid only while the clock has not stepped since it was measured.
+
+**A step's row and alert** (`confirmClockStep`, `packages/fiscal-verifactu/src/clock-step.ts`). A
+verified step writes one `clock_confirmations` row: `box_clock_at` the reading before,
+`confirmed_at` the reading after (the time the cover takes as adopted), `step_ms` the measured step
+rounded, `source` `authority`, `admin` or `staff`, `person_id` the person, `reason` `behind_chain`
+or `unusable`, and in `proof` what set the clock (AEAT's reading, or the person's reading with
+`device` naming the till when there was one) plus `step: { beforeAt, afterAt, stepMs, targetAt }`.
+For the clock-behind stop it also closes the open check (opening one at the before reading if none
+is open), stores `heads` and `closing` as slice 9 does, lists the wrongly dated sales
+(`recordMisdated`), and names the latest record — a lift, with `clock.behind_chain_restarted` — when
+the after reading is still more than a minute behind it. A `clock.unusable` step names no check and
+no record. Every verified step, and every unverified one that moved the clock by more than a second,
+records `clock.corrected` (a warning, `system.manage`): who, which till, both readings with their
+offsets, the step, and whether it verified; recording it first marks any open `clock.corrected`
+handled. An unverified step writes no row and lifts nothing. The managers' email duty emails each
+`clock.corrected` once, even after a later step has marked it handled (`remember`,
+`apps/server/src/box-alert-email.ts`). Limits: a restart before it is sent loses the email of an
+alert already handled, and once it is handled an address the mail server refused outright is not
+tried again.
+
+**A step whose row cannot be written** (a full disk, or an anchor whose `reanchor` failed) is kept in
+memory and written by `writePending()` on the watch's next look, only after that look has recorded
+its disproofs; until then every set answers `pending_disproofs`. A restart loses it, and the host's
+journal line is then the only record. Logged `clock_correction.row_pending`.
+
+**The watch's backoff.** After an automatic set answered `refused` or `unverified`, the watch asks for
+no automatic set in that check for 10 minutes by the steady clock, doubling after each further one
+up to 4 hours; a new check starts again with none. Refusals that ask the host nothing are not backed
+off, and a person's set never is.
+
+**Backups across a step** (Tasks 14 and 14a). A backup's age is the stamp in its name, so after a
+step forward every archive taken under the slow clock looks old, and after a step back the archives
+taken under the fast clock never age. So while the latest step the box made is younger than the
+backup retention in days (`latestClockStep`: the latest `clock.corrected` with a non-zero `stepMs`,
+verified or not), an archive stamped before the step's after reading, or more than a minute ahead of
+the clock, is **held** (`clockStepHold`, `apps/server/src/backup-sweep.ts`). `pruneBackend` keeps
+the `retain` newest held archives and deletes the other held ones, and applies both caps to the rest
+as before, so a destination holds at most twice `retain`; making room offers held archives last
+([above](#a-backup-run-makes-room-for-itself-or-is-refused-before-it-copies)). A step dated more than
+a minute ahead of the clock holds nothing, and a step that cannot be read deletes nothing. With no
+hold, an archive stamped more than a minute ahead still ranks after every other when pruning by
+count. **Limit:** only steps the box made are recorded, so a step by the time service, or by hand on
+the host, holds nothing; nor does a step whose row and alert are still waiting to be written. The
+stream's generations need no hold: they are aged by the bucket's own clock (the table below).
+
+**The working-time record across a step back** (Tasks 15a and 15b). Every clock action is still
+written as before, with the time the clock read; only how a person's state is worked out changed.
+`readLatestLiveEntry` (`packages/workforce/src/record-reads.ts`) takes, in each chain (one node and
+one location), the person's latest direct entry by its position (`sequence_no`), since within one
+chain a later position is a later write whatever the clock said; across chains, the latest of those
+by time (`compareEvents`); and an approved missing-entry correction dated after that entry decides
+instead. The clocking routes (`currentState`, `packages/workforce/src/clocking.ts`), the till's
+state (`apps/server/src/till-clock-state.ts`) and the attendance reconcile's clock-in
+(`apps/server/src/attendance-discovery.ts`) all read it, so after a step back a person can clock out
+and in again and the till agrees. While the clock only moves forward it answers what the old read
+did. Accepted: across chains times are still compared, so a move between two locations on one node
+inside the step can read wrong until real time passes the earlier entry (item A1268 makes the chain
+one per venue); the hours read, the end-of-day pass and the correction check still order by time.
+Guards: `packages/workforce/src/clocking-step.test.ts`, `apps/server/src/till-clock-step.test.ts`.
+
+**The start-up window** (`apps/server/src/clock-start-up.ts`). The owner's rule (2026-10-31): when
+the box cannot check the time on the internet at a start, a till proposes the likely time and a
+person confirms it. A server process that is the primary when it starts opens a window as boot
+creates it; on any other node it starts closed. It closes for good the first time any reader of the
+stop finds none holding — the watch's look, the tills' notice read, or a till route — counting a stop
+a confirmation has lifted. It has no time limit, and a reading before 28-10-2024 keeps it open. It
+also keeps what AEAT said during it: not asked, unanswered or answered (the watch's ask, and an AEAT
+time noted from a filing reply).
+
+- **The till's offer.** While the window is open, a stop holds and AEAT cannot help (the clock reads
+  before 28-10-2024, the box does not file or cannot ask AEAT, or AEAT has not answered), the box
+  sends the tills `clock.check_time` from a source of its own (`clockCheckNoticeSource`, owner
+  `box-clock`, `apps/server/src/box-staff-notices.ts`); the till's clock line then offers “Check
+  the time”.
+- **The till's check.** Both routes are refused `same_machine` from the box itself outside
+  development, `device_profile.not_admitted` when the till's profile does not admit the person
+  (checked again inside the write), and `not_stopped` with no stop; for a staff member also
+  `not_start_up` once the window has closed and `authority_pending` while AEAT has not been asked
+  and could be. The confirm carries the till's own clock, never a typed time, and the box takes its
+  time at the round trip's midpoint. A till within a minute, uncertainty included, confirms the
+  box's time with no step through slice 9's `confirmClockStop` with the person — refused `stale`
+  when the clock stepped while it waited, and `contrary_proof` when AEAT or a group of devices
+  disagrees; a till that differs sets the clock through the correction. An administrator is checked
+  as the drawer route checks its override and is not bounded by the window.
+- **No devices-only lift during start-up** (decision 18). While the window is open, the watch lifts
+  on a `ready` proof only when AEAT is among the agreeing witnesses; two agreeing devices alone
+  lift nothing until it closes, and Box status's Clock row does not say "Proof found" for them (its
+  read carries `startUp`).
+
+Limits, stated, not fixed: a node promoted while running has no window until it restarts; on a node
+demoted while running the watch's looks, which stop off the primary, no longer close it; while every
+read of the stop fails, the window stays as it was. Until slice 9c, a clock wrong forward at a
+start, or wrong backward by less than the gap to the last sale, raises no stop, so nobody is asked.
+
+**The `staff` source and its one migration** (Task 8-0). A staff member's confirmation or step is
+`source = 'staff'` with their `person_id`, and the till is under `proof.device` (fiscal code never
+names a till, `scripts/no-till-as-issuer.test.ts`).
+`packages/fiscal-verifactu/drizzle/0012_clock_confirmations_staff.sql` adds `staff` to
+`clock_confirmations_source_ck` and makes `clock_confirmations_person_ck` read "a person exactly
+when the source is `admin` or `staff`". A CHECK change makes drizzle-kit rebuild the table (copy
+into `__new_clock_confirmations`, drop, rename). Nothing references the table and no trigger body
+in any set names it, so the drop deletes nothing else and is refused by nothing; its own append-only
+triggers go with it and `applyMigrations` puts them back after the set (`installAppendOnlyTriggers`,
+`packages/migrations/src/apply.ts`). Boot counts only triggers missing before the migration
+(`missingBeforeMigration`, `apps/server/src/boot.ts`), so the rebuild raises no
+`append_only.triggers_restored`. Guard: `packages/fiscal-verifactu/src/clock-confirmations-upgrade.test.ts`,
+an upgrade from the shipped table. Pre-live, nothing else carries old rows forward (CLAUDE.md §3).
+Task 15a's read adds one index, `packages/workforce/drizzle/0011_person_chain_index.sql`.
+
+#### A drizzle table rebuild is rehearsed on `node:sqlite`, never the `sqlite3` CLI
+
+drizzle-kit's rebuild writes the new table's CHECKs naming `"__new_<table>"` and then renames the
+table. The app's engine rewrites those names; macOS's `sqlite3` command line does not, and refuses
+the rename. Run 2026-11-01 on this Mac, on a two-column reproduction of that shape: `sqlite3` 3.51.0
+printed `error in table t after rename: no such column: __new_t.a` and exited 1, while Node
+v26.11.1's `node:sqlite` (SQLite 3.54.0) ran the same statements and stored the CHECK as
+`"t".a > 0 OR "t".a = -1`. So a rehearsal on the command line fails a migration the app runs; run
+it on `node:sqlite`.
+
+**Measured** (Tasks 1 and 4, on GitHub `ubuntu-24.04` runners with systemd 255 and chrony as the
+time service; every printed line is in the plan's "Measured for 9b" table):
+
+- `set-time` was refused while chrony ran ("Automatic time synchronization is enabled") and accepted
+  once it was stopped: after `@<seconds>.250` the wall clock was 0.007 s from the target,
+  `/proc/uptime` and the boot id were unchanged, so was the unit's enablement, and the battery clock
+  moved 121 s; starting chrony again brought the clock back to network time (M2–M4,
+  [run 41173702824](https://github.com/clintongormley/waitron/actions/runs/41173702824)).
+- systemd refused to start a socket whose `SocketGroup=10001` names no host group
+  (`Failed to resolve group 10001: No such process`, `status=216/GROUP`) and started it once a
+  group `waitron-box` of gid 10001 existed; a container running as uid and gid 10001 with no added
+  capability then read the status, set the host's clock and saw the host's boot id
+  (M5, M5b, [run 41172990866](https://github.com/clintongormley/waitron/actions/runs/41172990866),
+  [run 41173702824](https://github.com/clintongormley/waitron/actions/runs/41173702824)).
+  `systemd-analyze verify` accepted the numeric group, so it is no evidence (M9). Without the bind
+  the client answered `unavailable ENOENT` in 2 ms (M6).
+- The shipped files: the handler answered an unprivileged container, landed 22 ms from the target
+  and started chrony again; a backward set moved a timesyncd clock file made for the run to the new
+  time; an instance killed at its 15-second limit had chrony started again by `ExecStopPost=`,
+  leaving no marker (M5′, M8′, M10′,
+  [run 41175687596](https://github.com/clintongormley/waitron/actions/runs/41175687596),
+  [run 41176674962](https://github.com/clintongormley/waitron/actions/runs/41176674962)).
+
+Not measured: what timesyncd does with its clock file at the next boot (the runners run chrony), and
+Docker Desktop (M7).
+
+Guards: `apps/server/src/clock-correction.test.ts`, `clock-watch.correction.test.ts`,
+`clock-watch.anchor.test.ts`, `clock-watch.start-up.test.ts`, `clock-start-up.test.ts`,
+`clock-set.route.test.ts`, `till-box-clock-api.test.ts`, `boot.clock-correction.test.ts` and
+`boot.clock-start-up.test.ts` beside them; `packages/fiscal-verifactu/src/clock-step.test.ts`;
+`apps/server/src/backup-sweep.test.ts`, `backup-room.test.ts`, `low-space-backups.test.ts`; and
+`scripts/waitron-box-sh.test.mjs` — weaker than the rule: the handler's suite runs it against stub
+`timedatectl`, `systemctl` and the rest, never systemd; the route suites cover the routes they name.
+Nothing checks that a new caller takes the turn outside its transaction, or that a new job comparing
+a stored time with the clock is in the table below.
 
 #### Jobs that compare a stored time with the clock, across a step of days
 
@@ -4651,7 +4915,17 @@ at most once, so a run with room takes no write-lock turn to read it. A box whos
 answer, or a read that throws (logged `backup.installation_start_unreadable`) deletes nothing; the
 room check still runs. A bucket destination has no folder and is never deleted from.
 
-**Deleting.** Oldest first (ties by key), one at a time. Before each, the file must still be a plain
+**After a step of the clock** (A798-B slice 9b, Task 14a), making room uses the hold that backup
+pruning uses ([The box sets its own clock](#the-box-sets-its-own-clock)). An archive the hold covers
+(`heldByStep`, `apps/server/src/backup-room.ts`) is offered only after every archive it does not
+cover, and "never the newest" then means the newest archive the hold does not cover, or the newest
+covered one when it covers them all. A step that cannot be read offers nothing (logged
+`backup.clock_step_unreadable`). The backup run passes the hold it read for pruning; the free-space
+watch reads the step itself and offers nothing while the running backup duty's retention in days is
+unknown. The start on a full disk passes no hold, so it still deletes by stamp alone (backlog: "The
+start on a full disk deletes backups by stamp alone after a clock step").
+
+**Deleting.** Oldest first (ties by key), held archives last, one at a time. Before each, the file must still be a plain
 file and its folder's real path the one it was listed by, or it is skipped. Free space is read again
 after each, and deleting stops once that reading reaches the goal or the deleted sizes cover the
 shortfall first read. Each deletion logs `backup.archive_deleted` with `destination`, `key`, `bytes`
@@ -4716,7 +4990,8 @@ by `since` even when it missed the run that cleared it.
   archives, as its pruning can.
 - An archive stamped while a clock read ahead can look newer than the installation start and so be
   deleted, and stays "the newest" in its folder until a later one exists, so the real latest backup
-  can be deleted.
+  can be deleted. A step the box made puts it last and stops it counting as the newest, but only
+  while the hold lasts; a clock that runs ahead with no step the box made changes nothing.
 - A restore reading an archive in another process can race its deletion (A1127's limit). Not
   measured.
 - The folder check before each deletion narrows, but does not close, the window in which a folder
