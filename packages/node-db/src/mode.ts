@@ -2,7 +2,6 @@ import { eq } from "drizzle-orm";
 import {
   now,
   requireStamp,
-  tableExists,
   withNodeTransaction,
   type DeploymentMode,
   type NodeDatabase,
@@ -13,15 +12,14 @@ import type { VenueAndNodeHandles } from "./handles.js";
 import { nodeMode } from "./schema/node-mode.js";
 
 /**
- * Both of one node's axes from ONE read of its row, so the pair is never torn. A node with no row,
- * or a node file whose migrations have not run, reads as a sole primary: a box between its first
- * migration and its first role write must still sell.
+ * Both of one node's axes from ONE read of its row, so the pair is never torn. A node with no row
+ * reads as a sole primary: a box between its first migration and its first role write must still
+ * sell.
  */
 export async function readNodeMode(
   node: NodeDatabase | NodeTransaction,
   nodeId: string,
 ): Promise<{ mode: DeploymentMode; singletonRole: SingletonRole }> {
-  if (!(await tableExists(node, "node_mode"))) return { mode: "primary", singletonRole: "primary" };
   const [row] = await node
     .select({ mode: nodeMode.mode, singletonRole: nodeMode.singletonRole })
     .from(nodeMode)

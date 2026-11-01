@@ -1,11 +1,5 @@
 import { eq } from "drizzle-orm";
-import {
-  now,
-  tableExists,
-  withNodeTransaction,
-  type NodeDatabase,
-  type NodeTransaction,
-} from "@waitron/db";
+import { now, withNodeTransaction, type NodeDatabase, type NodeTransaction } from "@waitron/db";
 import { nodeMirrorLink } from "./schema/node-mirror-link.js";
 
 /**
@@ -19,15 +13,11 @@ export interface MirrorConnection {
   originNodeId: string;
 }
 
-/**
- * This node's mirror link, or `null` when the table is absent or this node has no row. Callers must
- * not tell those two apart: both mean nothing has adopted this node as a mirror.
- */
+/** This node's mirror link, or `null` when this node has no row: nothing has adopted it as a mirror. */
 export async function readMirrorLink(
   node: NodeDatabase | NodeTransaction,
   nodeId: string,
 ): Promise<MirrorConnection | null> {
-  if (!(await tableExists(node, "node_mirror_link"))) return null;
   const [row] = await node
     .select({
       relayUrl: nodeMirrorLink.relayUrl,

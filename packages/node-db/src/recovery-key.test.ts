@@ -23,10 +23,11 @@ const OTHER = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 describe("before any migration set has run", () => {
   const bare = useVenueDb({ migrations: [] });
 
-  it("reads null for both the verifier and the name when the table itself is absent", async () => {
-    expect(await readRecoveryKeyVerifier(bare.node, NODE)).toBeNull();
-    expect(await readRecoveryKeyName(bare.node, NODE)).toBeNull();
-    expect(await readRecoveryKey(bare.node, NODE)).toBeNull();
+  it("is refused rather than read as holding no key, for the verifier and the name alike", async () => {
+    const absent = /no such table: node_recovery_key/;
+    await expect(readRecoveryKeyVerifier(bare.node, NODE)).rejects.toThrow(absent);
+    await expect(readRecoveryKeyName(bare.node, NODE)).rejects.toThrow(absent);
+    await expect(readRecoveryKey(bare.node, NODE)).rejects.toThrow(absent);
   });
 });
 

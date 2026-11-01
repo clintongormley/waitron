@@ -28,8 +28,10 @@ const SAMPLE: Parameters<typeof writeMirrorLink>[2] = {
 describe("before any migration set has run", () => {
   const bare = useVenueDb({ migrations: [] });
 
-  it("reads null when the table itself is absent", async () => {
-    expect(await readMirrorLink(bare.node, NODE)).toBeNull();
+  it("is refused rather than read as unadopted", async () => {
+    await expect(readMirrorLink(bare.node, NODE)).rejects.toThrow(
+      /no such table: node_mirror_link/,
+    );
   });
 });
 

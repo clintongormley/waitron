@@ -252,11 +252,11 @@ describe("a spare whose venue.db is replaced by the main box's", () => {
     expect((await readFile(join(box.dir, NODE_FILE))).equals(b.nodeBytes)).toBe(true);
   });
 
-  it("would have read a sole primary had it read the copied venue.db", async () => {
+  it("would have been refused had it read the copied venue.db", async () => {
     const box = await bHoldingAsVenue();
-    const fromCopy = await readNodeMode(box.venue as unknown as NodeDatabase, b.id);
-    console.log("reading the copied venue.db decides", fromCopy);
-    expect(fromCopy).toEqual({ mode: "primary", singletonRole: "primary" });
+    await expect(readNodeMode(box.venue as unknown as NodeDatabase, b.id)).rejects.toThrow(
+      /no such table: node_mode/,
+    );
   });
 
   it("start-up's promotion repair leaves it a mirror on the copied chart", async () => {
@@ -321,6 +321,8 @@ describe("a spare whose venue.db is replaced by the main box's", () => {
     await close(box.store);
     for (const suffix of ["", "-wal", "-shm"])
       await rm(join(box.dir, NODE_FILE + suffix), { force: true });
+    // As a start does: it migrates the node.db it finds missing before reading it.
+    await applyMigrations(box.dir, migrationOptionsFor(manifestSets(), null));
     const reopened = await openStore(box.dir);
 
     expect(await readNodeMode(reopened.node, b.id)).toEqual({

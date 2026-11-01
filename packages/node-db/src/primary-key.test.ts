@@ -20,8 +20,10 @@ const NEXT_PRIMARY = "ffffffff-ffff-4fff-8fff-ffffffffffff";
 describe("before any migration set has run", () => {
   const bare = useVenueDb({ migrations: [] });
 
-  it("reads null when the table itself is absent", async () => {
-    expect(await readPinnedPrimaryKey(bare.node, NODE)).toBeNull();
+  it("is refused rather than read as holding no key", async () => {
+    await expect(readPinnedPrimaryKey(bare.node, NODE)).rejects.toThrow(
+      /no such table: node_primary_key/,
+    );
   });
 });
 

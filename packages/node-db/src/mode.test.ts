@@ -36,11 +36,10 @@ async function rejection(promise: Promise<unknown>): Promise<unknown> {
 describe("a node file with no migration set applied", () => {
   const bare = useVenueDb({ migrations: [] });
 
-  it("reads as a sole primary", async () => {
-    expect(await readNodeMode(bare.node, NODE)).toEqual({
-      mode: "primary",
-      singletonRole: "primary",
-    });
+  // Every start migrates node.db before reading it; an unmigrated file is refused, never read as a
+  // sole primary.
+  it("is refused rather than read as a sole primary", async () => {
+    await expect(readNodeMode(bare.node, NODE)).rejects.toThrow(/no such table: node_mode/);
   });
 });
 

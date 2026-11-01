@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { now, tableExists, type NodeDatabase, type NodeTransaction } from "@waitron/db";
+import { now, type NodeDatabase, type NodeTransaction } from "@waitron/db";
 import { nodePrimaryKey } from "./schema/node-primary-key.js";
 
 export interface PinnedPrimaryKey {
@@ -7,12 +7,11 @@ export interface PinnedPrimaryKey {
   publicKey: string;
 }
 
-/** The main box's key this node pinned, or `null` when the table is absent or holds none for it. */
+/** The main box's key this node pinned, or `null` when the table holds none for it. */
 export async function readPinnedPrimaryKey(
   node: NodeDatabase | NodeTransaction,
   nodeId: string,
 ): Promise<PinnedPrimaryKey | null> {
-  if (!(await tableExists(node, "node_primary_key"))) return null;
   const [row] = await node
     .select({ primaryNodeId: nodePrimaryKey.primaryNodeId, publicKey: nodePrimaryKey.publicKey })
     .from(nodePrimaryKey)

@@ -49,8 +49,10 @@ const PUBLIC_KEY = pair.publicKey.export({ format: "der", type: "spki" }).toStri
 describe("before the node set has run", () => {
   const bare = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
 
-  it("reads null when node.db has no signing-key table", async () => {
-    expect(await readNodeSigningKey(bare.node, RING_V1, NODE)).toBeNull();
+  it("refuses a read when node.db has no signing-key table", async () => {
+    await expect(readNodeSigningKey(bare.node, RING_V1, NODE)).rejects.toThrow(
+      /no such table: node_signing_key/,
+    );
   });
 
   it("rotates nothing in node.db when it has no signing-key table", async () => {
