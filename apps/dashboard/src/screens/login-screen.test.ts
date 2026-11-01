@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebAuthnAbortService } from "@simplewebauthn/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
+import { passkeyRefusalExpectedText } from "../i18n/passkey-refusal-expected-words.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { DashboardApi } from "../api/client.js";
 import { NavigationGuard } from "@waitron/ui";
@@ -4139,6 +4140,7 @@ it.each(["en-GB", "es-ES"])(
         expect(await bottomOf(el)).toBe(codeMessage("passkey.verification_failed")),
       );
       if (locale === "en-GB") expect(await bottomOf(el)).not.toContain("administrator");
+      expect(await bottomOf(el)).toBe(passkeyRefusalExpectedText[locale === "en-GB" ? "en" : "es"]);
       expect(loggedIn).toHaveLength(0);
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=use-password]")!.click();
       await el.updateComplete;
@@ -4147,6 +4149,10 @@ it.each(["en-GB", "es-ES"])(
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
       await vi.waitFor(() => expect(loggedIn).toHaveLength(1));
       expect(loggedIn[0]).toMatchObject({ personId: "p1", loginMethod: "password" });
+      expect(api.login).toHaveBeenCalledExactlyOnceWith({
+        email: "owner@x.com",
+        password: "correct horse battery",
+      });
     } finally {
       setLocale(previousLocale);
     }
