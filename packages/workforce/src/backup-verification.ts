@@ -134,7 +134,10 @@ function entry(row: BackupRow): VerifiableEntry {
     extension,
   };
 }
-function scope(row: BackupRow): string {
+function chainScope(row: BackupRow): string {
+  return JSON.stringify([text(row, "node_id"), text(row, "location_id")]);
+}
+function closureScope(row: BackupRow): string {
   return JSON.stringify([text(row, "node_id"), text(row, "location_id")]);
 }
 async function checkTime(query: BackupQuery): Promise<{ chain: boolean; head: boolean }> {
@@ -146,7 +149,7 @@ async function checkTime(query: BackupQuery): Promise<{ chain: boolean; head: bo
       "select * from time_entries order by node_id, location_id, sequence_no",
     )) {
       try {
-        const key = scope(row);
+        const key = chainScope(row);
         const group = groups.get(key) ?? { entries: [], last: row };
         group.entries.push(entry(row));
         group.last = row;
@@ -162,7 +165,7 @@ async function checkTime(query: BackupQuery): Promise<{ chain: boolean; head: bo
   if (await has(query, "workforce_chains")) {
     for await (const row of query.rows("select * from workforce_chains")) {
       try {
-        const key = scope(row);
+        const key = chainScope(row);
         const last = groups.get(key)?.last;
         seen.add(key);
         if (last === undefined) {
@@ -203,7 +206,7 @@ async function checkClosures(query: BackupQuery): Promise<boolean> {
   let valid = true;
   for await (const row of query.rows("select * from pay_period_closures")) {
     try {
-      const key = scope(row);
+      const key = closureScope(row);
       const group = groups.get(key) ?? [];
       group.push({
         id: text(row, "id"),

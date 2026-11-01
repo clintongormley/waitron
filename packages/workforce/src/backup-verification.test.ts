@@ -265,6 +265,28 @@ describe("complete captured workforce backup evidence", () => {
     );
     invalid(await run(), "history");
   });
+  it("verifies closures at two locations of one node as two chains", async () => {
+    await original.db.transaction((tx) =>
+      closePayPeriod(tx, {
+        nodeId: node,
+        locationId: otherPlace,
+        period: { start: "2026-02-01", end: "2026-03-01" },
+        clock: { timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] },
+        now: "2026-03-01T00:00:01.000Z",
+        ruleset: makeRuleset(),
+        origin: jobOrigin("dashboard"),
+      }),
+    );
+    const [closure] = await original.db
+      .select()
+      .from(payPeriodClosures)
+      .where(sql`node_id = ${node} and location_id = ${otherPlace}`);
+    await restored.db.insert(payPeriodClosures).values(closure!);
+    expect(await original.db.select().from(timeEntries)).toEqual(
+      await restored.db.select().from(timeEntries),
+    );
+    expect(await run()).toEqual(passed);
+  });
   it("accepts legacy entries with no record extension", async () => {
     const added = await original.db.transaction((tx) =>
       appendToChain(
