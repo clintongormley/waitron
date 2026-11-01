@@ -169,6 +169,7 @@ import { singletonPass } from "./singleton-pass.js";
 import { stripeAccountResolver, defaultMakeStripe } from "./stripe-account.js";
 import { mountWebhook } from "./webhook.js";
 import { TradingAdmission } from "./trading-admission.js";
+import { moduleRecordGeneration } from "./module-record-generation.js";
 import { readZoneContext, validateRetainedZoneClock } from "./venue-zone-context.js";
 import { zoneRepairGate } from "./zone-repair-serving.js";
 import { mountVenueZoneRepairApi } from "./venue-zone-repair-api.js";
@@ -2362,6 +2363,15 @@ async function bootServer(
       holders.mode.current === "primary" && holders.singletonRole.current === "primary" && !fenced,
   });
   const routeCtx: ModuleRouteContext = {
+    recordGeneration: moduleRecordGeneration({
+      nodeId: tradingContext.nodeId,
+      environment: config.environment,
+      clock: tillClock,
+      mode: () => holders.mode.current,
+      role: () => holders.singletonRole.current,
+      fenced: () => fenced,
+      trading: tradingAdmission,
+    }),
     liveOperations: createLiveModuleOperation({
       node: { nodeId: tradingContext.nodeId, locationId: tradingContext.locationId },
       preparation: nodePreparation,

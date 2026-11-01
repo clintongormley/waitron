@@ -20,6 +20,7 @@ import type {
   ReceiptPaperWidth,
   Decimal,
   LocationId,
+  NodeId,
   DeleteImpactRefusal,
   DeleteImpactItem,
 } from "@waitron/shared";
@@ -29,7 +30,7 @@ import type { Logger } from "@waitron/server-kit";
 import type { RecoveryPackPage } from "@waitron/recovery-pack";
 import type { MigrationSet, MigrationSetSource } from "@waitron/migrations";
 import { appendOnlyTablesIn, type ClassifiedTable } from "@waitron/sync-enrolment";
-import type { FiscalContribution } from "@waitron/fiscal";
+import type { FiscalContribution, TrustedClock } from "@waitron/fiscal";
 import type { ModuleProvisioning } from "./provisioning.js";
 import type {
   ModuleOperationPreparation,
@@ -80,11 +81,13 @@ export interface FloorPlanSets {
   zonesShowing(tx: Transaction, setId: string): Promise<string[]>;
 }
 
-/**
- * `nodeId` is read only inside `core.seatTable`, which boot binds, so it never enters `cfg`. The
- * tab it opens records the `dashboard` as its origin.
- */
 export interface ModuleRouteContext {
+  recordGeneration?: {
+    nodeId: NodeId;
+    environment: "production" | "preproduction";
+    clock: TrustedClock;
+    requireWritable(): void;
+  };
   liveOperations?: LiveModuleOperationBridge;
   db: Database;
   cfg: {

@@ -52,6 +52,7 @@ export async function applyRecordCorrection(
     environment: Entorno;
     enabledRemedies: ReadonlySet<RemedyKind>;
     request: RecordCorrectionRequest;
+    descriptionDecision?: { description: string };
     now: Date;
   },
 ): Promise<{ registroId: string; eventId: string }> {
@@ -78,7 +79,22 @@ export async function applyRecordCorrection(
     throw new AppError("fiscal.remedy_invalid", { registroId: request.registroId });
   }
   // Serialise dates before sorting keys: canonicalJson reads enumerable object keys.
-  const action = canonicalJson(JSON.parse(JSON.stringify(request)) as unknown);
+  // HTTP decisions exclude generation facts that the server rebinds on each attempt.
+  const action = canonicalJson(
+    JSON.parse(
+      JSON.stringify(
+        input.descriptionDecision === undefined
+          ? request
+          : {
+              caseId: request.caseId,
+              registroId: request.registroId,
+              actionKey: request.actionKey,
+              reason: request.reason,
+              facts: input.descriptionDecision,
+            },
+      ),
+    ) as unknown,
+  );
   const [stored] = await tx
     .select()
     .from(filingCaseEvents)
@@ -113,6 +129,7 @@ export async function applyRecordCorrection(
     (filingCase.cause !== "fiscal.registro_rechazado" &&
       filingCase.cause !== "fiscal.aceptado_con_errores") ||
     (delivery?.estado !== "rechazado" && delivery?.estado !== "aceptado_con_errores") ||
+    (input.descriptionDecision !== undefined && delivery?.estado !== "rechazado") ||
     request.pending.correctsRegistroId !== request.registroId
   ) {
     throw new AppError("fiscal.remedy_invalid", { registroId: request.registroId });

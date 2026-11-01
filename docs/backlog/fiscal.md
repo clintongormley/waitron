@@ -489,8 +489,26 @@ version cases and report a malformed predecessor without rewriting it.
 
 The public `POST /management-api/fiscal-records/remedy` route refuses every remedy kind.
 Client-supplied enablement and operator fields cannot grant authority. No production action is
-enabled: the successful HTTP request adapter and trusted node/clock binding, held-record release,
-staff cancellation/refund qualification and the live second-correction probe remain Task 8 work.
+enabled. The HTTP adapter below covers only a synthetic rejected-description correction; other
+corrected facts and accepted-with-errors decisions, held-record release, staff cancellation/refund
+qualification and the live second-correction probe remain Task 8 work.
+
+**1 November 2026, Task 8 synthetic HTTP description correction.** With an explicit server-side
+test policy, the route appends a correction and resolves its case. It accepts a description, case
+and record references, reason and action key; it refuses unknown fields, including client claims
+about policy, operator, node, deployment, software identity or generation time. Boot supplies
+record-generation facts through the module route context. Its write check reads the current mode,
+primary role and fence and requires trading admission; the adapter binds the clock to the stored
+issue zone inside the write transaction. The invoice identity, amounts, tax breakdown, recipient
+and corrective/substitution fields come from the selected immutable record. Tests preserve these
+fields across a summer-to-winter offset change and retain the original invoice calendar day.
+
+The saved decision excludes server generation facts, so a retry after the clock advances returns
+the committed record and event. A changed description under that action key is refused; a changed
+original delivery outcome after commit does not generate another correction. Two successive
+rejected versions are exercised through HTTP with the earlier records and case facts retained.
+These are synthetic checks, not AEAT acceptance or legal enablement. The production policy
+remains empty; every disputed production action is refused.
 
  Earlier
 Task 7 automatic-switch requirements below are historical; the 1 November decision supersedes them.
