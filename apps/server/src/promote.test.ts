@@ -339,7 +339,11 @@ describe("promoteLocalSecondaryToPrimary", () => {
 
     expect((error as Error).message).toBe("node.db write refused");
     expect(entries.filter((entry) => entry.event === "promotion.role_write_failed")).toEqual([
-      { level: "warn", event: "promotion.role_write_failed", detail: { errorCode: "unknown" } },
+      {
+        level: "warn",
+        event: "promotion.role_write_failed",
+        detail: { errorCode: "unknown", error: "node.db write refused" },
+      },
     ]);
     expect(entries.map((entry) => entry.event)).not.toContain("promotion.completed");
     expect(await readNodeMode(suite.node, nodeId)).toEqual({
@@ -746,7 +750,11 @@ describe("promoteMirrorToPrimary", () => {
 
     expect(result).toEqual({ alreadyPrimary: false, seriesId: standardSeriesId });
     expect(entries.filter((entry) => entry.event === "promotion.role_write_failed")).toEqual([
-      { level: "warn", event: "promotion.role_write_failed", detail: { errorCode: "unknown" } },
+      {
+        level: "warn",
+        event: "promotion.role_write_failed",
+        detail: { errorCode: "unknown", error: "node.db write refused" },
+      },
     ]);
     expect(entries.map((entry) => entry.event)).not.toContain("promotion.completed");
     expect((await readNodeMembership(db))?.body.term).toBe(4);
@@ -768,13 +776,15 @@ describe("promoteMirrorToPrimary", () => {
     expect(first).toEqual({ alreadyPrimary: false, seriesId: standardSeriesId });
     const termAfterFirst = (await readNodeMembership(db))?.body.term;
 
-    const second = await promoteMirrorToPrimary(deps(log), { oldNodeNeutralised: true });
+    const d = deps(log);
+    const second = await promoteMirrorToPrimary(d, { oldNodeNeutralised: true });
 
     expect(second).toEqual({ alreadyPrimary: false, seriesId: standardSeriesId });
     expect(await readNodeMode(suite.node, nodeId)).toEqual({
       mode: "primary",
       singletonRole: "primary",
     });
+    expect(d.holders.mode.current).toBe("primary");
     expect((await readNodeMembership(db))?.body.term).toBe(termAfterFirst);
     expect(entries.map((entry) => entry.event)).toContain("promotion.role_finished");
   });

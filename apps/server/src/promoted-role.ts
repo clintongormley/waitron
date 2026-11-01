@@ -21,7 +21,8 @@ export interface FinishPromotedRoleDeps {
  * Writes primary/primary to node.db when the held chart is one this box signed with its own key
  * naming itself the serving primary: a promotion whose venue save committed and whose role write
  * was lost. Trusting only this box's own key is what keeps this from being a self-promotion: no
- * other box's chart, and no chart merely claiming this box as signer, can move it.
+ * other box's chart, and no chart merely claiming this box as signer, can move it. A signing key
+ * the ring cannot open makes it throw rather than answer "nothing", leaving the mode as it was.
  */
 export async function finishPromotedRole(
   deps: FinishPromotedRoleDeps,

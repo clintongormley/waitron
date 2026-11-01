@@ -201,6 +201,33 @@ describe("finishPromotedRole", () => {
     expect((await readNodeMode(suite.node, nodeId)).mode).toBe("mirror");
   });
 
+  it("refuses, leaving the mode alone, when this box's signing key cannot be opened", async () => {
+    const { nodeId, privateKey } = await mirrorBox();
+    await hold(suite.db, chart(nodeId, "serving-primary"), privateKey);
+    const otherRing = loadKeyRing({
+      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xe).toString("base64"),
+      WAITRON_CREDENTIALS_KEY_VERSION: "1",
+    });
+    const entries: LogEntry[] = [];
+
+    await expect(
+      finishPromotedRole({
+        venue: suite.db,
+        node: suite.node,
+        ring: otherRing,
+        nodeId,
+        log: (level, event, detail) => {
+          entries.push({ level, event, detail });
+        },
+      }),
+    ).rejects.toMatchObject({ code: "credentials.decrypt_failed" });
+    expect(entries).toEqual([]);
+    expect(await readNodeMode(suite.node, nodeId)).toEqual({
+      mode: "mirror",
+      singletonRole: "secondary",
+    });
+  });
+
   it("does nothing when this box holds no signing key", async () => {
     const { privateKey } = await mirrorBox();
     const keyless = "keyless-spare";

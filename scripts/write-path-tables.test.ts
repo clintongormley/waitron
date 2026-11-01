@@ -8,9 +8,8 @@ import { blankComments } from "../packages/shared/src/source-comments.js";
  * `deployment`, and node.db's `node_mode`, `node_mirror_link`, `node_recovery_key` and
  * `node_signing_key`.
  *
- * NOTHING BUT THIS FILE REFUSES THEM. SQLite has no roles and no grants — one process opens one
- * file — and every path, request and provisioning alike, shares that one venue handle. So the rule
- * survives only as a convention over source text, and this guard is the whole of its enforcement.
+ * NOTHING BUT THIS FILE REFUSES THEM. SQLite has no roles and no grants, so the rule survives only
+ * as a convention over source text, and this guard is the whole of its enforcement.
  * Read the four hedges below before trusting it.
  *
  * It is about WHICH FILE does the write, not about being a request: a request may reach these

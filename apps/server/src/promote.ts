@@ -1,5 +1,5 @@
 import "./errors.js";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import {
   persistNodeMembershipIfNewerTx,
   readLiveSeriesIdTx,
@@ -93,7 +93,14 @@ async function writePrimaryRole(deps: PromoteDeps): Promise<void> {
       await setSingletonRoleTx(tx, deps.nodeId, "primary");
     });
   } catch (error) {
-    deps.log("warn", "promotion.role_write_failed", { errorCode: codeOf(error) });
+    // An engine refusal carries no code of ours, so its message is logged too. These statements
+    // write only the mode, the role and the node id, so the message can hold nothing secret.
+    deps.log("warn", "promotion.role_write_failed", {
+      errorCode: codeOf(error),
+      ...(isAppError(error)
+        ? {}
+        : { error: error instanceof Error ? error.message : String(error) }),
+    });
     throw error;
   }
 }
