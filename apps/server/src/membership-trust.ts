@@ -4,7 +4,7 @@ import type { KeyRing } from "@waitron/credentials";
 import { nodeSigningPublicKey } from "@waitron/credentials";
 import { readPinnedPrimaryKey } from "@waitron/node-db";
 import {
-  verifyMembershipDocument,
+  verifyDocumentSigner,
   type SignedMembershipDocument,
   type TrustSet,
 } from "@waitron/membership";
@@ -36,17 +36,18 @@ export async function readStoredTrustSet(deps: StoredTrustDeps): Promise<TrustSe
 }
 
 /**
- * Refuses to sign over a held chart whose signer or signature no stored key vouches for. A null
- * chart passes, and so does a malformed one: the checks after this one refuse it with their own
- * codes. No held chart is passed as the third argument, because the removal rule would refuse a
- * retirement chart signed by the spare it evicts.
+ * Refuses to sign over a held chart whose signer or signature no stored key vouches for, whatever
+ * its shape, and one too broken to tell (`reason: "malformed"`). A null chart passes, and so does a
+ * malformed one a stored key signed: the checks after this one refuse it with their own codes. The
+ * removal rule is not applied, because it would refuse a retirement chart signed by the spare it
+ * evicts.
  */
 export async function assertHeldDocumentTrusted(
   deps: StoredTrustDeps,
   held: SignedMembershipDocument | null,
 ): Promise<void> {
   if (held === null) return;
-  const verdict = verifyMembershipDocument(held, await readStoredTrustSet(deps), null);
-  if (verdict.valid || verdict.reason === "malformed") return;
+  const verdict = verifyDocumentSigner(held, await readStoredTrustSet(deps));
+  if (verdict.trusted) return;
   throw new AppError("membership.held_untrusted", { reason: verdict.reason });
 }

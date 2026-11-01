@@ -474,7 +474,21 @@ describe("promoteLocalSecondaryToPrimary", () => {
     const error = await captureError(() =>
       promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
     );
-    expect(isAppError(error) && error.code).toBe("membership.revoked_duplicate");
+    expect(isAppError(error) && error.code).toBe("membership.held_untrusted");
+    expect(isAppError(error) && error.params).toEqual({ reason: "untrusted_signer" });
+    expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("secondary");
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+  });
+
+  it("refuses a held document no stored key vouches for that carries an unsigned field beside its body", async () => {
+    const { db, deps, nodeId } = await localSecondary();
+    const doc = { ...heldTermThreeDoc(nodeId, "unpinned-old-node"), note: "x" };
+    await writeNodeMembership(db, doc as SignedMembershipDocument);
+    const error = await captureError(() =>
+      promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
+    );
+    expect(isAppError(error) && error.code).toBe("membership.held_untrusted");
+    expect(isAppError(error) && error.params).toEqual({ reason: "untrusted_signer" });
     expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("secondary");
     expect((await readNodeMembership(db))?.body.term).toBe(3);
   });
@@ -943,7 +957,23 @@ describe("promoteMirrorToPrimary", () => {
     const err = await captureError(() =>
       promoteMirrorToPrimary(deps(noopLog, persist), { oldNodeNeutralised: true }),
     );
-    expect(isAppError(err) && err.code).toBe("membership.revoked_duplicate");
+    expect(isAppError(err) && err.code).toBe("membership.held_untrusted");
+    expect(isAppError(err) && err.params).toEqual({ reason: "untrusted_signer" });
+    expect(persist).not.toHaveBeenCalled();
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+    expect((await readNodeMode(suite.node, nodeId)).mode).toBe("mirror");
+  });
+
+  it("refuses a held document no stored key vouches for that carries an unsigned field beside its body", async () => {
+    const { db, deps, nodeId } = await mirror();
+    const doc = { ...heldTermThreeDoc(nodeId, "unpinned-old-primary"), note: "x" };
+    await writeNodeMembership(db, doc as SignedMembershipDocument);
+    const persist = vi.fn(async () => {});
+    const err = await captureError(() =>
+      promoteMirrorToPrimary(deps(noopLog, persist), { oldNodeNeutralised: true }),
+    );
+    expect(isAppError(err) && err.code).toBe("membership.held_untrusted");
+    expect(isAppError(err) && err.params).toEqual({ reason: "untrusted_signer" });
     expect(persist).not.toHaveBeenCalled();
     expect((await readNodeMembership(db))?.body.term).toBe(3);
     expect((await readNodeMode(suite.node, nodeId)).mode).toBe("mirror");

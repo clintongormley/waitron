@@ -8,6 +8,7 @@ export type {
   TrustSet,
   VerifyFailure,
   VerifyResult,
+  SignerVerdict,
   AcceptResult,
 } from "./types.js";
 
@@ -23,6 +24,7 @@ export { endorseKey, verifyEndorsement } from "./endorsement.js";
 export {
   isMembershipDocument,
   signDocumentBody,
+  verifyDocumentSigner,
   verifyMembershipDocument,
   MAX_NODES,
   MAX_REVOKED,

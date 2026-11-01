@@ -135,13 +135,34 @@ describe("the held document's check against the keys this box stores", () => {
     expect(isAppError(error) && error.params).toEqual({ reason: "endorsement_invalid" });
   });
 
-  it("leaves a malformed document to the checks after it", async () => {
+  it("leaves a malformed document the pinned main box signed to the checks after it", async () => {
     const { nodeId } = await box();
-    const stranger = generateNodeKeyPair();
-    const doc = signed("stranger", stranger.privateKey);
-    const malformed = { ...doc, body: { ...doc.body, revoked: ["gone", "gone"] } };
+    await pinMainBoxKey(suite.node, nodeId, { nodeId: MAIN_ID, publicKey: MAIN.publicKey });
+    const malformed = { ...signed(MAIN_ID, MAIN.privateKey), note: "x" };
     await expect(
       assertHeldDocumentTrusted(deps(nodeId), malformed as SignedMembershipDocument),
     ).resolves.toBeUndefined();
+  });
+
+  it("refuses a malformed document a stranger signed, with reason untrusted_signer", async () => {
+    const { nodeId } = await box();
+    await pinMainBoxKey(suite.node, nodeId, { nodeId: MAIN_ID, publicKey: MAIN.publicKey });
+    const malformed = { ...signed("stranger", generateNodeKeyPair().privateKey), note: "x" };
+    const error = await captureError(() =>
+      assertHeldDocumentTrusted(deps(nodeId), malformed as SignedMembershipDocument),
+    );
+    expect(isAppError(error) && error.code).toBe("membership.held_untrusted");
+    expect(isAppError(error) && error.params).toEqual({ reason: "untrusted_signer" });
+  });
+
+  it("refuses a document too broken to verify, with reason malformed", async () => {
+    const { nodeId } = await box();
+    await pinMainBoxKey(suite.node, nodeId, { nodeId: MAIN_ID, publicKey: MAIN.publicKey });
+    const unsigned = { ...signed(MAIN_ID, MAIN.privateKey), signature: undefined };
+    const error = await captureError(() =>
+      assertHeldDocumentTrusted(deps(nodeId), unsigned as unknown as SignedMembershipDocument),
+    );
+    expect(isAppError(error) && error.code).toBe("membership.held_untrusted");
+    expect(isAppError(error) && error.params).toEqual({ reason: "malformed" });
   });
 });

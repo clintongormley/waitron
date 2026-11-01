@@ -27,6 +27,7 @@ import {
   verifyMembershipDocument,
   type MembershipNode,
   type NodeKeyPair,
+  type SignedMembershipDocument,
 } from "@waitron/membership";
 import { planVenue, type AdoptResult } from "@waitron/provisioning";
 import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
@@ -1041,10 +1042,86 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     });
 
     expect(res.status).toBe(409);
-    expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
-      "membership.revoked_duplicate",
-    );
+    expect(await res.json()).toEqual({
+      error: { code: "membership.held_untrusted", params: { reason: "untrusted_signer" } },
+    });
     expect(await readNodeMembership(db)).toEqual(chartBefore);
+  });
+
+  /** Holds a chart signed by a key this box never stored, then changed as `alter` says. */
+  async function holdStrangerChart(
+    designated: AdoptResult,
+    alter: (doc: SignedMembershipDocument) => object = (doc) => doc,
+  ): Promise<void> {
+    const seedTerm = ((await readNodeMembership(db))?.body.term ?? -1) + 1;
+    const doc = signedMembershipDoc(seedTerm, {
+      signerNodeId: "stranger",
+      nodes: [
+        {
+          nodeId: designated.nodeId,
+          contactUrl: "https://box.deli.test",
+          standing: "serving-primary",
+        },
+      ],
+    });
+    await writeNodeMembership(db, alter(doc) as SignedMembershipDocument);
+  }
+
+  it("refuses a held document no stored key vouches for that carries an unsigned field beside its body", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+    await holdStrangerChart(designated, (doc) => ({ ...doc, note: "x" }));
+    const chartBefore = await readNodeMembership(db);
+
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      ...validStandby(),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: { code: "membership.held_untrusted", params: { reason: "untrusted_signer" } },
+    });
+    expect(await readNodeMembership(db)).toEqual(chartBefore);
+  });
+
+  it("refuses a held document too broken to verify with 409 membership.held_untrusted", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+    await holdStrangerChart(designated, (doc) => ({ ...doc, signature: undefined }));
+    const chartBefore = await readNodeMembership(db);
+
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      ...validStandby(),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: { code: "membership.held_untrusted", params: { reason: "malformed" } },
+    });
+    expect(await readNodeMembership(db)).toEqual(chartBefore);
+  });
+
+  it("refuses a held document no stored key vouches for before reserving anything", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+    await holdStrangerChart(designated);
+    const counterBefore = await allocationSnapshot();
+
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      ...validStandby(),
+    });
+
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
+      "membership.held_untrusted",
+    );
+    expect(await allocationSnapshot()).toEqual(counterBefore);
   });
 
   it("adds a spare after another spare retired itself", async () => {

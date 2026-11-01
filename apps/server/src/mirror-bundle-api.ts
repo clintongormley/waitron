@@ -27,7 +27,11 @@ import {
   MAX_CHART_WRITE_ROUNDS,
   mintNextMembershipDocument,
 } from "./membership-mint.js";
-import { assertHeldDocumentTrusted, HELD_DOCUMENT_REFUSALS } from "./membership-trust.js";
+import {
+  assertHeldDocumentTrusted,
+  HELD_DOCUMENT_REFUSALS,
+  type StoredTrustDeps,
+} from "./membership-trust.js";
 import { withAuthenticatedOperation } from "./operation-authentication.js";
 import { parseStandbyOperationInput } from "./recovery-module-operation.js";
 import type { ModuleOperations } from "@waitron/module";
@@ -109,6 +113,9 @@ export function mountMirrorBundleApi(
 
       const assemble = async (moduleOperations?: ModuleOperations) => {
         if (deps.relayUrl === undefined) throw new AppError("mirror.no_relay", {});
+        // Before assembly, so a refused chart spends no reservation. Each mint round below checks
+        // the chart it re-reads again.
+        await assertHeldDocumentTrusted(trustDeps(deps), await readNodeMembership(deps.appDb));
 
         const bundle = await assembleMirrorBundle({
           appDb: deps.appDb,
@@ -169,6 +176,11 @@ export function mountMirrorBundleApi(
   );
 }
 
+/** The designated main box's own stored keys, which it trusts the held chart against. */
+function trustDeps(deps: MirrorBundleApiDeps): StoredTrustDeps {
+  return { node: deps.node, ring: deps.ring, nodeId: deps.designated.nodeId };
+}
+
 // A refused write means this mint was built on a stale chart: re-read and mint again, never force.
 async function appendStandbyToChart(
   deps: MirrorBundleApiDeps,
@@ -181,10 +193,7 @@ async function appendStandbyToChart(
     refuseFullChart(held, standbyNodeId);
     // Only a fault in Waitron produces a held chart no stored key vouches for today; a Cloud peer's
     // charts would be refused here too, a limit the backlog records.
-    await assertHeldDocumentTrusted(
-      { node: deps.node, ring: deps.ring, nodeId: deps.designated.nodeId },
-      held,
-    );
+    await assertHeldDocumentTrusted(trustDeps(deps), held);
     const document = await mintNextMembershipDocument(
       { db: deps.appDb, node: deps.node, ring: deps.ring },
       {

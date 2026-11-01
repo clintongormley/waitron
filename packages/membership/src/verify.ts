@@ -8,6 +8,7 @@ import type {
   MembershipNode,
   NodeStanding,
   SignedMembershipDocument,
+  SignerVerdict,
   TrustSet,
   VerifyResult,
 } from "./types.js";
@@ -121,4 +122,48 @@ export function verifyMembershipDocument(
     signerNodeId: doc.signerNodeId,
     nodes: doc.body.nodes,
   };
+}
+
+/**
+ * Whether a key `trustSet` vouches for signed this document, whatever else is wrong with its shape:
+ * `verifyMembershipDocument` answers `malformed` before it looks at the signer, which cannot tell a
+ * malformed chart this box signed from one a stranger did. A document too broken to name a signer
+ * or to be verified answers `malformed`. An endorsement is read by its four fields alone, and one
+ * without four text fields is skipped, which can only withhold trust.
+ */
+export function verifyDocumentSigner(doc: unknown, trustSet: TrustSet): SignerVerdict {
+  if (!isRecord(doc)) return { trusted: false, reason: "malformed" };
+  const { signerNodeId, signature, body, endorsements } = doc;
+  if (typeof signerNodeId !== "string" || typeof signature !== "string")
+    return { trusted: false, reason: "malformed" };
+  if (!isRecord(body) || Array.isArray(body)) return { trusted: false, reason: "malformed" };
+  if (!Array.isArray(endorsements) || endorsements.length > MAX_ENDORSEMENTS)
+    return { trusted: false, reason: "malformed" };
+  const readable = endorsements.flatMap((e: unknown): Endorsement[] =>
+    isRecord(e) &&
+    typeof e.nodeId === "string" &&
+    typeof e.publicKey === "string" &&
+    typeof e.endorsedBy === "string" &&
+    typeof e.signature === "string"
+      ? [
+          {
+            nodeId: e.nodeId,
+            publicKey: e.publicKey,
+            endorsedBy: e.endorsedBy,
+            signature: e.signature,
+          },
+        ]
+      : [],
+  );
+  const signerKey = resolveSignerKey(signerNodeId, readable, trustSet);
+  if (signerKey === null) {
+    return {
+      trusted: false,
+      reason: endorsements.length > 0 ? "endorsement_invalid" : "untrusted_signer",
+    };
+  }
+  if (!verifyBytes(bodyMessage(body as unknown as MembershipDocumentBody), signature, signerKey)) {
+    return { trusted: false, reason: "bad_signature" };
+  }
+  return { trusted: true, signerNodeId };
 }

@@ -208,7 +208,19 @@ describe("retireSelf", () => {
     await writeNodeMembership(db, strangerSigned(body));
 
     const err = await captureError(() => retireSelf(deps(noopLog)));
-    expect(isAppError(err) && err.code).toBe("membership.revoked_duplicate");
+    expect(isAppError(err) && err.code).toBe("membership.held_untrusted");
+    expect(isAppError(err) && err.params).toEqual({ reason: "untrusted_signer" });
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+  });
+
+  it("refuses a held document no stored key vouches for that carries an unsigned field beside its body", async () => {
+    const { deps, nodeId } = await fencedNode();
+    const doc = { ...strangerSigned(fencedBody(nodeId)), note: "x" };
+    await writeNodeMembership(db, doc as SignedMembershipDocument);
+
+    const err = await captureError(() => retireSelf(deps(noopLog)));
+    expect(isAppError(err) && err.code).toBe("membership.held_untrusted");
+    expect(isAppError(err) && err.params).toEqual({ reason: "untrusted_signer" });
     expect((await readNodeMembership(db))?.body.term).toBe(3);
   });
 });
