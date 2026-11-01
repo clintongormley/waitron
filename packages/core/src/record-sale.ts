@@ -1,12 +1,12 @@
 import { saleLineRows } from "./sale-line-rows.js";
 // Side-effect only: registers this package's error codes (./errors.ts).
 import "./errors.js";
-import { operationDescriptionFor } from "./sale-location.js";
+import { operationDescriptionFor } from "./operation-description.js";
 import { eq } from "drizzle-orm";
 import {
   allocateInvoiceNumber,
   invoiceSeries,
-  locations,
+  readVenue,
   saleLines,
   tenants,
   workingOrders,
@@ -275,9 +275,8 @@ export async function recordSale(
   const [bill] =
     counterparty !== null && input.workingOrderId !== undefined
       ? await tx
-          .select({ openedAt: workingOrders.openedAt, timeZone: locations.timeZone })
+          .select({ openedAt: workingOrders.openedAt })
           .from(workingOrders)
-          .innerJoin(locations, eq(locations.id, workingOrders.locationId))
           .where(eq(workingOrders.id, input.workingOrderId))
       : [];
   const operationDate =
@@ -286,7 +285,7 @@ export async function recordSale(
       : bill === undefined
         ? new Date(now.instant.getTime() + now.offsetMinutes * 60_000).toISOString().slice(0, 10)
         : new Intl.DateTimeFormat("en-CA", {
-            timeZone: bill.timeZone,
+            timeZone: (await readVenue(tx)).timeZone,
             calendar: "iso8601",
             numberingSystem: "latn",
             year: "numeric",
@@ -345,12 +344,7 @@ export async function recordSale(
     await settleSale(tx, { saleId, tenders: input.settlement.tenders });
   }
 
-  const descriptionOfOperation = await operationDescriptionFor(
-    tx,
-    input.origin,
-    input.nodeId,
-    input.operationDescription,
-  );
+  const descriptionOfOperation = await operationDescriptionFor(tx, input.operationDescription);
 
   // The module builds the fiscal record behind this one call; this package never touches a
   // module's tables.

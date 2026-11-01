@@ -20,7 +20,7 @@ import {
   type TrustedClock,
   type VatBreakdownLine,
 } from "@waitron/fiscal";
-import { locations, nodes, withTransaction, type Transaction } from "@waitron/db";
+import { readVenue, nodes, withTransaction, type Transaction } from "@waitron/db";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { Database } from "@waitron/db";
 import {
@@ -156,14 +156,13 @@ async function nodeBackend(
   environment: DeploymentEnvironment,
 ): Promise<FiscalBackend> {
   const [node] = await tx
-    .select({ filingModule: nodes.filingModule, territory: locations.fiscalTerritory })
+    .select({ filingModule: nodes.filingModule })
     .from(nodes)
-    .innerJoin(locations, eq(locations.id, nodes.locationId))
     .where(eq(nodes.id, nodeId));
   if (node === undefined) throw new Error(`seedSales: no node ${nodeId}`);
   const modules = enabledModules(
     ALL_MODULES,
-    venueModuleConfig(parseModuleConfig({}, ALL_MODULES), node.territory),
+    venueModuleConfig(parseModuleConfig({}, ALL_MODULES), (await readVenue(tx)).fiscalTerritory),
   );
   return fiscalSlot(modules, node.filingModule).makeBackend({ db, clock, environment });
 }

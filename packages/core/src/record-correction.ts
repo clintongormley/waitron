@@ -1,7 +1,7 @@
 import { saleLineRows } from "./sale-line-rows.js";
 // Side-effect only: registers this package's error codes (./errors.ts).
 import "./errors.js";
-import { operationDescriptionFor } from "./sale-location.js";
+import { operationDescriptionFor } from "./operation-description.js";
 import { eq, sql } from "drizzle-orm";
 import { allocateInvoiceNumber, invoiceSeries, saleLines, saleVoids, sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -295,12 +295,7 @@ export async function recordCorrection(
         saleLineRows(saleId, input.lines, { corrective: true }),
     );
 
-  const descriptionOfOperation = await operationDescriptionFor(
-    tx,
-    input.origin,
-    input.nodeId,
-    input.operationDescription,
-  );
+  const descriptionOfOperation = await operationDescriptionFor(tx, input.operationDescription);
 
   const fiscal = await backend.recordCorrection(
     tx,

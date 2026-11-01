@@ -1,7 +1,7 @@
 import { saleLineRows } from "./sale-line-rows.js";
 // Side-effect only: registers this package's error codes (./errors.ts).
 import "./errors.js";
-import { operationDescriptionFor } from "./sale-location.js";
+import { operationDescriptionFor } from "./operation-description.js";
 import { eq, inArray } from "drizzle-orm";
 import {
   allocateInvoiceNumber,
@@ -223,12 +223,7 @@ export async function recordSubstitution(
     }
   }
 
-  const descriptionOfOperation = await operationDescriptionFor(
-    tx,
-    input.origin,
-    input.nodeId,
-    input.operationDescription,
-  );
+  const descriptionOfOperation = await operationDescriptionFor(tx, input.operationDescription);
 
   const fiscal = await backend.recordSubstitution(
     tx,

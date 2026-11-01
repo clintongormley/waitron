@@ -210,7 +210,7 @@ description, the installed fiscal module's default (`venueFields.defaults.operat
 Veri\*Factu's “Venta en establecimiento”); with neither, the sale is refused with
 `department.operation_description_required`. Core passes a supplied
 `operationDescription` to the fiscal backend as `descriptionOfOperation`; only when that input
-is absent does `operationDescriptionFor` read `locations.operation_description`. An explicit empty
+is absent does `operationDescriptionFor` read the venue's operation description. An explicit empty
 string stays empty. The supplied/absent cases are exercised by the three core record suites;
 `packages/fiscal-verifactu/src/backend.ts` files the selected string. These columns are
 presentation columns, like `unit_name`.
