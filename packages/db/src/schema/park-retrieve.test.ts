@@ -2,19 +2,16 @@ import { randomUUID } from "node:crypto";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { locationId as brandLocationId } from "@waitron/shared";
 import type { Database } from "../client.js";
 import { refusalOn } from "../constraint-target.js";
 import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
-import { seedDevice, seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { catalogues, products } from "./catalogue.js";
 import { invoiceSeries } from "./series.js";
-import { locations, tenants } from "./tenants.js";
 
-const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const BOGUS_PRODUCT = "99999999-9999-4999-8999-999999999999";
 const AT = "2026-07-20T19:20:30+00:00";
 // The trigger checks description KEYS against the venue's invoice_locales (es, ca).
@@ -36,12 +33,15 @@ function insertSaleSql(opts: {
     )`;
 }
 
-// `id` is supplied for the reason {@link insertSaleSql} records.
 async function openOrder(admin: Database, orderNumber: number): Promise<string> {
-  const result = await admin.execute<{ id: string }>(
-    sql`insert into working_orders (id, source, device_id, location_id, order_number, status, opened_at) values (${randomUUID()}, 'device', ${deviceA}, ${LOCATION_A}, ${orderNumber}, 'open', ${AT}) returning id`,
-  );
-  return result.rows[0]!.id;
+  const order = await seedWorkingOrder(admin, {
+    source: "device",
+    deviceId: deviceA,
+    orderNumber,
+    status: "open",
+    openedAt: AT,
+  });
+  return order.id;
 }
 
 describe("park & retrieve schema", () => {
@@ -49,19 +49,13 @@ describe("park & retrieve schema", () => {
 
   beforeAll(async () => {
     const admin = suite.db;
-    await admin
-      .insert(tenants)
-      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
-    await admin.insert(locations).values([
-      {
-        id: LOCATION_A,
-        name: "Fixture Location A",
-        invoiceLocales: ["es", "ca"],
-        operationDescription: "Hostelería",
-      },
-    ]);
-    nodeA = await seedNode(admin, brandLocationId(LOCATION_A));
-    ({ deviceId: deviceA } = await seedDevice(admin, { locationId: LOCATION_A }));
+    await seedVenue(admin, {
+      name: "Fixture Location A",
+      invoiceLocales: ["es", "ca"],
+      operationDescription: "Hostelería",
+    });
+    nodeA = await seedNode(admin);
+    ({ deviceId: deviceA } = await seedDevice(admin));
     const [series] = await admin
       .insert(invoiceSeries)
       .values({ nodeId: nodeA, code: "FA", purpose: "standard" })

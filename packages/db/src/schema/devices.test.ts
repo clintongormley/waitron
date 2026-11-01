@@ -6,16 +6,18 @@ import { restrictRefused } from "../constraint-target.js";
 import { FOREIGN_KEY_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
+import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
+import { venueLocationId } from "../venue.js";
 import { deviceProfiles } from "./device-profiles.js";
 import { devices } from "./devices.js";
 import { pagePrinters } from "./page-printers.js";
 import { printers } from "./printers.js";
-import { locations, tenants } from "./tenants.js";
+import { locations } from "./tenants.js";
 
 // What this suite proves is the column mapping and the location foreign key.
-const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
+let LOCATION_A: string;
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const KDS_PROFILE_A = "eeeeeeee-0000-4000-8000-000000000001";
 const KDS_PROFILE_B = "eeeeeeee-0000-4000-8000-000000000002";
@@ -32,23 +34,18 @@ describe("devices schema (columns, FKs, unique)", () => {
   // rows seeded once would be gone and every foreign key below would fire for the wrong reason.
   beforeEach(async () => {
     const db = suite.db;
-    await db
-      .insert(tenants)
-      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
-    await db.insert(locations).values([
-      {
-        id: LOCATION_A,
-        name: "Loc A",
-        invoiceLocales: ["es"],
-        operationDescription: "Hostelería",
-      },
-      {
-        id: LOCATION_B,
-        name: "Loc B",
-        invoiceLocales: ["es"],
-        operationDescription: "Hostelería",
-      },
-    ]);
+    await seedVenue(db, {
+      name: "Loc A",
+      invoiceLocales: ["es"],
+      operationDescription: "Hostelería",
+    });
+    LOCATION_A = await venueLocationId(db);
+    await db.insert(locations).values({
+      id: LOCATION_B,
+      name: "Loc B",
+      invoiceLocales: ["es"],
+      operationDescription: "Hostelería",
+    });
     await db.insert(deviceProfiles).values([
       { id: KDS_PROFILE_A, name: "KDS A", formFactor: "kds" },
       { id: KDS_PROFILE_B, name: "KDS B", formFactor: "kds" },

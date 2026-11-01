@@ -6,8 +6,10 @@ import { checkFailed, refusalOn } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { withTransaction } from "../tenancy.js";
+import { venueLocationId } from "../venue.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
+import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { diningTables } from "./dining-tables.js";
 import {
@@ -28,9 +30,8 @@ import {
 } from "./floor-plans.js";
 import { floorZones } from "./floor-zones.js";
 import { parties } from "./parties.js";
-import { locations, tenants } from "./tenants.js";
 
-const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
+let LOCATION: string;
 const ZONE = "bbbbbbbb-0000-4000-8000-000000000001";
 const OTHER_ZONE = "bbbbbbbb-0000-4000-8000-000000000002";
 const PLAN = "cccccccc-0000-4000-8000-000000000001";
@@ -52,14 +53,12 @@ describe("floor plan tables", () => {
 
   beforeEach(async () => {
     const db = suite.db;
-    await db
-      .insert(tenants)
-      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
-    await db
-      .insert(locations)
-      .values([
-        { id: LOCATION, name: "Loc A", invoiceLocales: ["es"], operationDescription: "Hostelería" },
-      ]);
+    await seedVenue(db, {
+      name: "Loc A",
+      invoiceLocales: ["es"],
+      operationDescription: "Hostelería",
+    });
+    LOCATION = await venueLocationId(db);
     await db.insert(floorZones).values([
       { id: ZONE, locationId: LOCATION, name: "Dining room" },
       { id: OTHER_ZONE, locationId: LOCATION, name: "Terrace" },

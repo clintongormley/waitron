@@ -1,19 +1,16 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { triggerRaised } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
-import { seedDevice, seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { invoicePdfDownloads } from "./invoice-pdf-downloads.js";
 import { sales } from "./sales.js";
 import { invoiceSeries } from "./series.js";
-import { locations, tenants } from "./tenants.js";
 
-const LOCATION = "aaaaaaaa-0000-4000-8000-000000000002";
 const PERSON = "cccccccc-0000-4000-8000-000000000002";
 
 describe("invoice PDF download record", () => {
@@ -21,17 +18,13 @@ describe("invoice PDF download record", () => {
 
   it("refuses an unknown sale, keeps a known one's row, and refuses any change to it", async () => {
     const db = suite.db;
-    await db
-      .insert(tenants)
-      .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture" });
-    await db.insert(locations).values({
-      id: LOCATION,
+    await seedVenue(db, {
       name: "Fixture",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    const nodeId = await seedNode(db, brandLocationId(LOCATION));
-    const { deviceId } = await seedDevice(db, { locationId: LOCATION });
+    const nodeId = await seedNode(db);
+    const { deviceId } = await seedDevice(db);
     const [series] = await db
       .insert(invoiceSeries)
       .values({ nodeId, code: "F", purpose: "full" })

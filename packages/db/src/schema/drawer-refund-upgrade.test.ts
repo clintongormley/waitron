@@ -3,13 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { locationId } from "@waitron/shared";
 import type { Database } from "../client.js";
 import { runMigrations } from "../migrate.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { seedDevice, seedTenant } from "../testing/seed.js";
+import { seedDevice, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
-import { locations } from "./tenants.js";
+import { venueLocationId } from "../venue.js";
 import { printers } from "./printers.js";
 
 async function beforeRefundDrawer(db: Database): Promise<void> {
@@ -33,16 +32,16 @@ const suite = useVenueDb({ migrations: [], setup: beforeRefundDrawer, resetPerTe
 
 it("adds the refund drawer target without changing existing audit facts", async () => {
   const db = suite.db;
-  await seedTenant(db);
-  const [place] = await db
-    .insert(locations)
-    .values({ name: "Existing audit", invoiceLocales: ["en"], operationDescription: "Meals" })
-    .returning();
-  const { deviceId } = await seedDevice(db, { locationId: locationId(place!.id) });
+  await seedVenue(db, {
+    name: "Existing audit",
+    invoiceLocales: ["en"],
+    operationDescription: "Meals",
+  });
+  const { deviceId } = await seedDevice(db);
   const [printer] = await db
     .insert(printers)
     .values({
-      locationId: place!.id,
+      locationId: await venueLocationId(db),
       name: "Existing drawer",
       transport: "cloud_poll",
       pollId: "existing",

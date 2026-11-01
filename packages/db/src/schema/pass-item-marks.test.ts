@@ -1,23 +1,22 @@
 import { eq, sql } from "drizzle-orm";
 import { getTableConfig } from "drizzle-orm/sqlite-core";
 import { beforeEach, describe, expect, it } from "vitest";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
-import { seedNode } from "../testing/seed.js";
+import { seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { isRefusal } from "../unique-violation.js";
 import { catalogues, products } from "./catalogue.js";
 import { deviceProfiles } from "./device-profiles.js";
 import { devices } from "./devices.js";
 import { kitchenStations } from "./kitchen-stations.js";
-import { workingOrderLines, workingOrders } from "./orders.js";
+import { workingOrderLines } from "./orders.js";
 import { passItemMarks } from "./pass-item-marks.js";
-import { locations, tenants } from "./tenants.js";
 import { ticketItems } from "./ticket-items.js";
+import { venueLocationId } from "../venue.js";
 
-const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
+let LOCATION: string;
 const AT = "2026-10-01T10:00:00.000Z";
 
 describe("pass_item_marks schema", () => {
@@ -27,18 +26,17 @@ describe("pass_item_marks schema", () => {
 
   beforeEach(async () => {
     const db = suite.db;
-    await db.insert(tenants).values({ id: 1, country: "ES", taxId: "B00000000", legalName: "F" });
-    await db.insert(locations).values({
-      id: LOCATION,
+    await seedVenue(db, {
       name: "Kitchen",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
+    LOCATION = await venueLocationId(db);
     const [station] = await db
       .insert(kitchenStations)
       .values({ locationId: LOCATION, name: "Grill" })
       .returning({ id: kitchenStations.id });
-    const nodeId = await seedNode(db, brandLocationId(LOCATION));
+    const nodeId = await seedNode(db);
     const [catalogue] = await db
       .insert(catalogues)
       .values({ name: "Menu" })
@@ -53,22 +51,18 @@ describe("pass_item_marks schema", () => {
         vatClass: "general",
       })
       .returning({ id: products.id });
-    const [order] = await db
-      .insert(workingOrders)
-      .values({
-        source: "dashboard",
-        deviceId: null,
-        locationId: LOCATION,
-        nodeId,
-        orderNumber: 1,
-        status: "open",
-        openedAt: AT,
-      })
-      .returning({ id: workingOrders.id });
+    const order = await seedWorkingOrder(db, {
+      source: "dashboard",
+      deviceId: null,
+      nodeId,
+      orderNumber: 1,
+      status: "open",
+      openedAt: AT,
+    });
     const [line] = await db
       .insert(workingOrderLines)
       .values({
-        workingOrderId: order!.id,
+        workingOrderId: order.id,
         lineNo: 1,
         productId: product!.id,
         name: "Food",
@@ -84,7 +78,7 @@ describe("pass_item_marks schema", () => {
       .insert(ticketItems)
       .values({
         nodeId,
-        workingOrderId: order!.id,
+        workingOrderId: order.id,
         workingOrderLineId: line!.id,
         stationId: station!.id,
       })

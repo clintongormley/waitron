@@ -868,14 +868,14 @@ argument left.
 /** Writes the taxpayer row (seedTenant) and the one venue. Refuses (plain Error) when a venue row
  *  already exists. Defaults: name "Test venue", invoiceLocales ["es"], operationDescription
  *  "Restaurant"; every other column its schema default. */
-export function seedVenue(db: Database, overrides?: Partial<Venue>): Promise<void>;
+export function seedVenue(db: Database | Transaction, overrides?: Partial<Venue>): Promise<void>;
 
 /** One node; at the venue unless `location` is given (interim: only for a test that keeps a
  *  second location row until its schema slice deletes the case). */
-export function seedNode(db: Database, location?: LocationId): Promise<NodeId>;
+export function seedNode(db: Database | Transaction, location?: LocationId): Promise<NodeId>;
 
 /** As today, with `locationId` now optional: omitted, the device is at the venue. */
-export function seedDevice(db: Database, opts?: {
+export function seedDevice(db: Database | Transaction, opts?: {
   locationId?: LocationId | string; label?: string;
   formFactor?: …; capabilities?: string[]; profileId?: string;
 }): Promise<{ deviceId: DeviceId; profileId: string }>;
@@ -883,7 +883,7 @@ export function seedDevice(db: Database, opts?: {
 /** One working order at the venue. Defaults: source "dashboard", orderNumber 1 (a non-device
  *  source needs no device under `originChecks`). Returns the inserted row. */
 export function seedWorkingOrder(
-  db: Database,
+  db: Database | Transaction,
   values?: Partial<Omit<typeof workingOrders.$inferInsert, "locationId">>,
 ): Promise<typeof workingOrders.$inferSelect>;
 ```
@@ -891,7 +891,9 @@ export function seedWorkingOrder(
 `seedVenue` maps `defaultCatalogueId` to `locations.catalogue_id`. Tests that still need the venue's
 row id for a column a later schema slice drops (a station's, a printer's, a floor zone's
 `location_id`) read it with `await venueLocationId(db)`; no helper returns or accepts a venue id.
-`seedKitchenStation` is left as it is (a core table, S24's fixtures).
+`seedKitchenStation` keeps its location parameter (a core table, S24's fixtures). Every helper
+takes a database or a transaction handle: tests seed inside transactions, and the codemod cannot
+see types.
 
 ### The codemod: `scripts/a1301-seed-codemod.mjs`
 
@@ -899,7 +901,7 @@ A Node script using the TypeScript compiler API (the root's `typescript`, versio
 nodes, then splicing source text so formatting outside each edit is untouched; `prettier --write`
 tidies afterwards. Exports `transformSource(path, source) → { output, edits, left }` for its test and
 a `main(argv)`: `node scripts/a1301-seed-codemod.mjs [--write] <file…>`; without `--write` it prints
-the report and writes nothing. It reads `.ts` and `.mjs` files. It is a `.mjs` under `scripts/`, so
+the report and writes nothing. It reads `.ts` and `.mjs` files (and treats `.js`/`.cjs` as JavaScript too). It is a `.mjs` under `scripts/`, so
 the root project measures its coverage at 98/98/98/95 (`vitest.config.ts` `include:
 ["scripts/**/*.mjs", …]`) and the pre-push hook runs it with the root guards: its test must reach
 every branch.
@@ -913,17 +915,23 @@ file and the file is reported):
    optionally ending `.returning(…)` or `.onConflictDoNothing(…)` — as an expression statement, or as
    `const [B] = await <chain>` → `await seedVenue(R, {…})` with `id` dropped and `catalogueId`
    renamed `defaultCatalogueId` (no second argument when nothing is left).
-   - `id: X` where `X` is a module-level `const X = <expression>`: if `X` still has references after
-     rules 2–4, the declaration becomes `let X: string;` and `X = await venueLocationId(R);` is
+   - `id: X` where `X` is a module-level `const X = <literal>`: if `X` still has references after
+     rules 2–4, the declaration becomes `let X: string;` (`let X;` in a JavaScript file) and `X = await venueLocationId(R);` is
      inserted after the `seedVenue` statement; if it has none, the declaration is deleted.
    - `const [B] = …`: kept only if `B` has no reference left after rules 2–4 (the statement becomes
      plain `await seedVenue(…)`); otherwise reported.
-2. **Nodes.** `seedNode(R, A)` → `seedNode(R)`.
+2. **Nodes.** `seedNode(R, A)` → `seedNode(R)`, only when `A` names the one seeded location: the
+   identifier the insert writes as `id: X` (bare or in a brand call; `X` declared once in the file
+   and never written, or a `let X;` written once before the insert), or `B.id` of its `const [B] = …returning()` with no
+   projection. Any other argument (a literal, a property of a fixture, a value other than the
+   insert's own id) is reported and left. The same test applies to rules 3 and 4's `locationId`.
 3. **Devices.** `seedDevice(R, { locationId: A, …rest })` (also shorthand `{ locationId }`) →
    `seedDevice(R, { …rest })`, or `seedDevice(R)` when nothing is left.
 4. **Orders.** `await R.insert(workingOrders).values({ …, locationId: A, … })` — one object literal,
    `workingOrders` or `schema.workingOrders` — as an expression statement → `await seedWorkingOrder(R, {…rest})`;
-   as `const [B] = await <chain>.returning(…)` → `const B = await seedWorkingOrder(R, {…rest})`.
+   as `const [B] = await <chain>.returning(…)` → `const B = await seedWorkingOrder(R, {…rest})`,
+   and a `!` on a use of `B` after the statement, in its block and not redeclared, is dropped. A `.returning({…})` projection is rewritten only
+   when every key is its column's own name and `B` is read only through those keys.
 5. **Imports.** Adds `seedVenue`/`seedWorkingOrder` to the file's existing seed import, or a new one
    (`@waitron/db/testing/seed.js` outside `packages/db`; the relative `testing/seed.js` path inside
    it); adds `venueLocationId` from `@waitron/db` (relative `venue.js` inside `packages/db`) when rule
@@ -939,7 +947,19 @@ file and the file is reported):
 - raw `insert(nodes)` / `insert(devices)` (rule-less on purpose: in a table's own schema test they
   test that table);
 - a `const [B]` whose `B` is still referenced;
-- an `id:` that is not a module-level `const`;
+- an `id:` that is not a module-level `const`, or whose initializer is not a literal;
+- a location argument that does not name the seeded location (rule 2's test);
+- a `locations` or `workingOrders` insert in a shape the rules do not cover (an order without a
+  `locationId` key among them);
+- a `locations` insert inside a helper function or loop, or of a row count the codemod cannot
+  read: every location rule is skipped for that file;
+- an id constant that can be read before the statement that now assigns it (at module load, or in
+  an earlier hook);
+- an order binding read through a projection the full row does not reproduce;
+- a name the rewrite would add (`seedVenue`, `seedWorkingOrder`, `venueLocationId`) that the file
+  already declares or imports from elsewhere;
+- an upgrade test (a file name containing `upgrade`): its database can stop at an earlier
+  migration, so no location rule applies;
 - a file that writes its own `tenants` row (`insert(tenants)` / `insert into tenants`): `seedVenue`
   writes one too, so the order must be read by hand;
 - a file that defines its own `seedVenue` (`function seedVenue` or `const seedVenue`): the codemod
@@ -958,6 +978,16 @@ file and the file is reported):
 - A second location row: the first row goes through `seedVenue`; the second stays a raw insert, and
   calls that use it keep their explicit location argument. The schema slice that drops that table's
   `location_id` deletes the case.
+- A location argument that does not name the seeded location: read what it holds. The venue →
+  drop it by hand; a second location → the recipe above.
+- An order read through a projection the full row does not reproduce: switch the reads to the
+  row's own column names and use `seedWorkingOrder`, or keep the raw insert and take its
+  `locationId` from `venueLocationId`.
+- An id constant whose initializer is not a literal, or that is read before the seed assigns it:
+  replace its reads with `await venueLocationId(R)` placed after `seedVenue`, keeping any side
+  effect the initializer had.
+- An upgrade test: move it onto the helpers by hand only if it still passes at its migration point
+  (the three in `packages/db` do); otherwise its location row stays a raw insert.
 - A test whose purpose is the `locations` table or its side tables (the invoice-locales check, the
   change feed's `locations` source, the business-day side tables, `location_catalogues`) is left
   whole: S23 replaces those tables.
@@ -970,7 +1000,7 @@ file and the file is reported):
 
 - [ ] **Step 1: Write the failing tests** in `seed.test.ts` (its `afterEach` already empties the
   tables; add `working_orders`):
-  - "seedVenue writes the taxpayer and the one venue": after `seedVenue(db, { name: "Casa", timeZone: "Atlantic/Canary" })`,
+  - "seedVenue writes the taxpayer and the one venue": after `seedVenue(db, { name: "House", timeZone: "Atlantic/Canary" })`,
     `readTenant` is non-null and `readVenue(db)` `toEqual`s the defaults plus the two overrides.
   - "seedVenue refuses a second venue": a second call rejects with a message naming the existing row.
   - "seedNode with no location puts the node at the venue": the node's `location_id` equals
@@ -989,9 +1019,12 @@ file and the file is reported):
 - [ ] **Step 2: Run** `pnpm --filter @waitron/db exec vitest run src/testing/seed.test.ts` — FAIL:
   `seedVenue` and `seedWorkingOrder` are not exported, and `seedNode(db)` with no location inserts a
   null `location_id`, which the column refuses.
-- [ ] **Step 3: Implement** the four helpers. `seedVenue` uses drizzle's `insert(locations)` (the
-  existing raw-SQL reason in `seedTenant` — earlier migration points — does not apply: no upgrade
-  test seeds a venue through this helper).
+- [ ] **Step 3: Implement** the four helpers. `seedVenue` uses drizzle's `insert(locations)`, and
+  the location defaults read the venue through `venueLocationId`, so both need today's columns.
+  Three `packages/db` upgrade tests were moved onto the helpers by hand
+  (`schema/kitchen-timing-upgrade`, `drawer-refund-upgrade`, `sale-receipt-guests-upgrade`); a
+  schema slice that changes what `seedVenue` writes or `venueLocationId` reads checks them. The
+  codemod leaves every upgrade test alone.
 - [ ] **Step 4: Run** step 2's command — PASS; `pnpm --filter @waitron/db typecheck`.
 - [ ] **Step 5: Commit** `git commit -s -m "db testing: seed the venue, and nodes, devices and orders at it"`.
 

@@ -4,21 +4,36 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import type { Database } from "../client.js";
 import { useVenueDb } from "./venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
+import { catalogues } from "../schema/catalogue.js";
 import { deviceProfiles } from "../schema/device-profiles.js";
 import { devices } from "../schema/devices.js";
 import { kitchenStations } from "../schema/kitchen-stations.js";
+import { nodes } from "../schema/nodes.js";
 import { locations } from "../schema/tenants.js";
-import { freshNif, seedDevice, seedKitchenStation, seedNode, seedTenant } from "./seed.js";
+import { readTenant } from "../read-tenant.js";
+import { readVenue, venueLocationId } from "../venue.js";
+import { withTransaction } from "../tenancy.js";
+import {
+  freshNif,
+  seedDevice,
+  seedKitchenStation,
+  seedNode,
+  seedTenant,
+  seedVenue,
+  seedWorkingOrder,
+} from "./seed.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 // Each case gets empty mutable fixture tables while sharing the migrated database.
 afterEach(async () => {
+  await suite.db.execute(sql`delete from working_orders`);
   await suite.db.execute(sql`delete from devices`);
   await suite.db.execute(sql`delete from device_profiles`);
   await suite.db.execute(sql`delete from kitchen_stations`);
   await suite.db.execute(sql`delete from nodes`);
   await suite.db.execute(sql`delete from locations`);
+  await suite.db.execute(sql`delete from catalogues`);
   await suite.db.execute(sql`delete from tenants`);
 });
 
@@ -60,6 +75,49 @@ describe("seedTenant", () => {
   });
 });
 
+describe("seedVenue", () => {
+  let db: Database;
+
+  beforeEach(async () => {
+    db = suite.db;
+  });
+
+  it("seedVenue writes the taxpayer and the one venue", async () => {
+    await seedVenue(db, { name: "House", timeZone: "Atlantic/Canary" });
+    expect(await readTenant(db)).not.toBeNull();
+    expect(await readVenue(db)).toEqual({
+      name: "House",
+      invoiceLocales: ["es"],
+      operationDescription: "Restaurant",
+      fiscalTerritory: "ES-common",
+      addressLine1: null,
+      addressLine2: null,
+      postalCode: null,
+      city: null,
+      province: null,
+      timeZone: "Atlantic/Canary",
+      dayCutover: "06:00:00",
+      defaultCatalogueId: null,
+    });
+  });
+
+  it("seedVenue writes defaultCatalogueId as the venue's catalogue", async () => {
+    const [catalogue] = await db
+      .insert(catalogues)
+      .values({ name: "Menu" })
+      .returning({ id: catalogues.id });
+    await seedVenue(db, { defaultCatalogueId: catalogue!.id });
+    expect((await readVenue(db)).defaultCatalogueId).toBe(catalogue!.id);
+  });
+
+  it("seedVenue refuses a second venue", async () => {
+    await seedVenue(db);
+    expect((await readVenue(db)).name).toBe("Test venue");
+    const existing = await venueLocationId(db);
+    await expect(seedVenue(db)).rejects.toThrow(existing);
+  });
+});
+
 describe("seedNode", () => {
   let db: Database;
 
@@ -68,8 +126,6 @@ describe("seedNode", () => {
   });
 
   it("inserts one node for the tenant + location and returns its id", async () => {
-    // seedNode takes the location as given, so build it first: a node FKs it, and
-    // there is deliberately no seedLocation helper.
     await seedTenant(db);
     const [loc] = await db
       .insert(locations)
@@ -86,6 +142,30 @@ describe("seedNode", () => {
     );
     expect((result.rows[0] as { n: number }).n).toBe(1);
   });
+
+  it("seedNode with an explicit location puts the node there, not at the venue", async () => {
+    await seedVenue(db);
+    const [second] = await db
+      .insert(locations)
+      .values({ name: "Second", invoiceLocales: ["es"], operationDescription: "Restaurant" })
+      .returning({ id: locations.id });
+    const node = await seedNode(db, brandLocationId(second!.id));
+    const [row] = await db
+      .select({ locationId: nodes.locationId })
+      .from(nodes)
+      .where(eq(nodes.id, node));
+    expect(row!.locationId).toBe(second!.id);
+  });
+
+  it("seedNode with no location puts the node at the venue", async () => {
+    await seedVenue(db);
+    const node = await seedNode(db);
+    const [row] = await db
+      .select({ locationId: nodes.locationId })
+      .from(nodes)
+      .where(eq(nodes.id, node));
+    expect(row!.locationId).toBe(await venueLocationId(db));
+  });
 });
 
 describe("seedKitchenStation", () => {
@@ -95,8 +175,7 @@ describe("seedKitchenStation", () => {
     db = suite.db;
   });
 
-  // Build the tenant + location the station FKs first (as seedNode's suite does), then seed the station.
-  async function seedVenue() {
+  async function seedTenantAndLocation() {
     await seedTenant(db);
     const [loc] = await db
       .insert(locations)
@@ -110,7 +189,7 @@ describe("seedKitchenStation", () => {
   }
 
   it("defaults to a DEFAULT station named 'Cocina' and returns its id", async () => {
-    const { location } = await seedVenue();
+    const { location } = await seedTenantAndLocation();
     const id = await seedKitchenStation(db, { locationId: location });
     // Read through the table rather than as raw SQL: SQLite stores a flag as 0/1 and only the
     // column's own mapping turns it back into a boolean.
@@ -122,7 +201,7 @@ describe("seedKitchenStation", () => {
   });
 
   it("honours an overridden name and is_default", async () => {
-    const { location } = await seedVenue();
+    const { location } = await seedTenantAndLocation();
     const id = await seedKitchenStation(db, {
       locationId: location,
       name: "Barra",
@@ -198,5 +277,74 @@ describe("seedDevice", () => {
       })
       .from(deviceProfiles);
     expect(profiles).toEqual([{ formFactor: "phone-portrait", capabilities: ["take-cash"] }]);
+  });
+
+  it("seedDevice with an explicit locationId puts the device there, not at the venue", async () => {
+    await seedVenue(db);
+    const [second] = await db
+      .insert(locations)
+      .values({ name: "Second", invoiceLocales: ["es"], operationDescription: "Restaurant" })
+      .returning({ id: locations.id });
+    const { deviceId } = await seedDevice(db, { locationId: second!.id });
+    const [row] = await db
+      .select({ locationId: devices.locationId })
+      .from(devices)
+      .where(eq(devices.id, deviceId));
+    expect(row!.locationId).toBe(second!.id);
+  });
+
+  it("seedDevice with no locationId puts the device at the venue", async () => {
+    await seedVenue(db);
+    const { deviceId } = await seedDevice(db);
+    const [row] = await db
+      .select({ locationId: devices.locationId })
+      .from(devices)
+      .where(eq(devices.id, deviceId));
+    expect(row!.locationId).toBe(await venueLocationId(db));
+  });
+
+  it("seedDevice with no venue refuses before writing a profile", async () => {
+    const error: unknown = await seedDevice(db).catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ code: "venue.not_found" });
+    expect(await db.select({ id: deviceProfiles.id }).from(deviceProfiles)).toEqual([]);
+    expect(await db.select({ id: devices.id }).from(devices)).toEqual([]);
+  });
+});
+
+describe("seedWorkingOrder", () => {
+  let db: Database;
+
+  beforeEach(async () => {
+    db = suite.db;
+  });
+
+  it("seedWorkingOrder writes an open order at the venue", async () => {
+    await seedVenue(db);
+    const venueId = await venueLocationId(db);
+    const order = await seedWorkingOrder(db);
+    expect(order).toMatchObject({
+      status: "open",
+      source: "dashboard",
+      orderNumber: 1,
+      locationId: venueId,
+    });
+    const node = await seedNode(db);
+    const overridden = await seedWorkingOrder(db, { orderNumber: 7, nodeId: node });
+    expect(overridden).toMatchObject({ orderNumber: 7, nodeId: node, locationId: venueId });
+  });
+});
+
+describe("the helpers inside a transaction", () => {
+  it("take the transaction handle withTransaction gives its body", async () => {
+    const order = await withTransaction(suite.db, async (tx) => {
+      await seedTenant(tx);
+      await seedVenue(tx, { name: "In a transaction" });
+      const node = await seedNode(tx);
+      await seedDevice(tx);
+      await seedKitchenStation(tx, { locationId: brandLocationId(await venueLocationId(tx)) });
+      return seedWorkingOrder(tx, { nodeId: node });
+    });
+    expect((await readVenue(suite.db)).name).toBe("In a transaction");
+    expect(order.locationId).toBe(await venueLocationId(suite.db));
   });
 });

@@ -1,21 +1,20 @@
 import { eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { locationId as brandLocationId } from "@waitron/shared";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { UNIQUE_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
-import { seedNode } from "../testing/seed.js";
+import { seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { catalogues, products } from "./catalogue.js";
 import { kitchenStations } from "./kitchen-stations.js";
-import { workingOrderLines, workingOrders } from "./orders.js";
-import { locations, tenants } from "./tenants.js";
+import { workingOrderLines } from "./orders.js";
 import { ticketItems } from "./ticket-items.js";
+import { venueLocationId } from "../venue.js";
 
-const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
+let LOCATION_A: string;
 const AT = "2026-07-20T19:20:30+00:00";
 // The locale trigger checks description KEYS against the venue's invoice_locales (['es'] here).
 const DESCRIPTIONS_A = { es: "Café solo" };
@@ -30,18 +29,13 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
 
   beforeAll(async () => {
     const db = suite.db;
-    await db
-      .insert(tenants)
-      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
-    await db.insert(locations).values([
-      {
-        id: LOCATION_A,
-        name: "Fixture Location A",
-        invoiceLocales: ["es"],
-        operationDescription: "Hostelería",
-      },
-    ]);
-    nodeA = await seedNode(db, brandLocationId(LOCATION_A));
+    await seedVenue(db, {
+      name: "Fixture Location A",
+      invoiceLocales: ["es"],
+      operationDescription: "Hostelería",
+    });
+    LOCATION_A = await venueLocationId(db);
+    nodeA = await seedNode(db);
     const [catA] = await db
       .insert(catalogues)
       .values({ name: "Deli A" })
@@ -71,19 +65,15 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     product: string,
   ): Promise<{ orderId: string; lineId: string }> {
     orderNumberSeq += 1;
-    const [order] = await suite.db
-      .insert(workingOrders)
-      .values({
-        source: "dashboard",
-        deviceId: null,
-        locationId: LOCATION_A,
-        nodeId: node,
-        orderNumber: orderNumberSeq,
-        status: "open",
-        openedAt: AT,
-      })
-      .returning({ id: workingOrders.id });
-    const orderId = order!.id;
+    const order = await seedWorkingOrder(suite.db, {
+      source: "dashboard",
+      deviceId: null,
+      nodeId: node,
+      orderNumber: orderNumberSeq,
+      status: "open",
+      openedAt: AT,
+    });
+    const orderId = order.id;
     const [line] = await suite.db
       .insert(workingOrderLines)
       .values({

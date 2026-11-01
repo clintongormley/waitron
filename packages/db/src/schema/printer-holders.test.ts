@@ -2,13 +2,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { isUniqueViolation } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
+import { seedDevice, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { deviceProfiles } from "./device-profiles.js";
-import { devices } from "./devices.js";
 import { printerHolders } from "./printer-holders.js";
 import { printers } from "./printers.js";
-import { locations, tenants } from "./tenants.js";
+import { venueLocationId } from "../venue.js";
 
 describe("printer_holders", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -19,35 +19,23 @@ describe("printer_holders", () => {
 
   beforeEach(async () => {
     const db = suite.db;
-    await db
-      .insert(tenants)
-      .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" })
-      .onConflictDoNothing({ target: tenants.id });
-    const [location] = await db
-      .insert(locations)
-      .values({ name: "Loc A", invoiceLocales: ["es"], operationDescription: "Hostelería" })
-      .returning({ id: locations.id });
+    await seedVenue(db, {
+      name: "Loc A",
+      invoiceLocales: ["es"],
+      operationDescription: "Hostelería",
+    });
+    const locationId = await venueLocationId(db);
     const [profile] = await db
       .insert(deviceProfiles)
       .values({ name: "Profile", formFactor: "till" })
       .returning({ id: deviceProfiles.id });
-    const made = await db
-      .insert(devices)
-      .values(
-        ["Till A", "Till B"].map((label) => ({
-          locationId: location!.id,
-          deviceProfileId: profile!.id,
-          label,
-          tokenHash: "scrypt$00$00",
-        })),
-      )
-      .returning({ id: devices.id });
-    [deviceA, deviceB] = made.map((d) => d.id) as [string, string];
+    ({ deviceId: deviceA } = await seedDevice(db, { profileId: profile!.id, label: "Till A" }));
+    ({ deviceId: deviceB } = await seedDevice(db, { profileId: profile!.id, label: "Till B" }));
     const madePrinters = await db
       .insert(printers)
       .values(
         ["10.0.0.1", "10.0.0.2"].map((host) => ({
-          locationId: location!.id,
+          locationId,
           name: host,
           transport: "network_tcp" as const,
           host,

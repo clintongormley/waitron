@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
-import { seedDevice, seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { receiptReprints } from "./receipt-reprints.js";
@@ -11,9 +10,9 @@ import { printJobs } from "./print-jobs.js";
 import { printers } from "./printers.js";
 import { sales } from "./sales.js";
 import { invoiceSeries } from "./series.js";
-import { locations, tenants } from "./tenants.js";
+import { venueLocationId } from "../venue.js";
 
-const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
+let LOCATION: string;
 let deviceA = "";
 const PERSON = "cccccccc-0000-4000-8000-000000000001";
 
@@ -22,17 +21,14 @@ describe("receipt reprint record", () => {
 
   it("refuses an unknown sale and a second record of the same job", async () => {
     const db = suite.db;
-    await db
-      .insert(tenants)
-      .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture" });
-    await db.insert(locations).values({
-      id: LOCATION,
+    await seedVenue(db, {
       name: "Fixture",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    const nodeId = await seedNode(db, brandLocationId(LOCATION));
-    ({ deviceId: deviceA } = await seedDevice(db, { locationId: LOCATION }));
+    LOCATION = await venueLocationId(db);
+    const nodeId = await seedNode(db);
+    ({ deviceId: deviceA } = await seedDevice(db));
     const [series] = await db
       .insert(invoiceSeries)
       .values({ nodeId, code: "A" })

@@ -5,13 +5,14 @@ import type { Database } from "../client.js";
 import { RESTRICT_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
+import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
+import { venueLocationId } from "../venue.js";
 import { deviceProfiles } from "./device-profiles.js";
 import { devices } from "./devices.js";
 import { printers } from "./printers.js";
-import { locations, tenants } from "./tenants.js";
 
-const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
+let LOCATION_A: string;
 const PRINTER_A = "11111111-0000-4000-8000-0000000000a3";
 const PROFILE_A = "11111111-0000-4000-8000-0000000000a4";
 const TOKEN_HASH = "scrypt$00$00";
@@ -23,22 +24,15 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
   let admin: Database;
 
   // Drizzle rather than raw SQL: the `$defaultFn` columns are JavaScript generators, not SQL
-  // DEFAULTs, and drizzle encodes `invoice_locales` as the JSON text the column holds.
+  // DEFAULTs.
   beforeAll(async () => {
     admin = suite.db;
-    await admin
-      .insert(tenants)
-      .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" })
-      .onConflictDoNothing({ target: tenants.id });
-    await admin
-      .insert(locations)
-      .values({
-        id: LOCATION_A,
-        name: "Loc A",
-        invoiceLocales: ["es"],
-        operationDescription: "Hostelería",
-      })
-      .onConflictDoNothing({ target: locations.id });
+    await seedVenue(admin, {
+      name: "Loc A",
+      invoiceLocales: ["es"],
+      operationDescription: "Hostelería",
+    });
+    LOCATION_A = await venueLocationId(admin);
     // cloud_poll needs only `poll_id` under `printers_transport_fields_ck`.
     await admin
       .insert(printers)

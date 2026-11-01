@@ -1,24 +1,23 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { locationId as brandLocationId } from "@waitron/shared";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
-import { seedNode } from "../testing/seed.js";
+import { seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
+import { venueLocationId } from "../venue.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { diningTables } from "./dining-tables.js";
 import { floorZones } from "./floor-zones.js";
 import { workingOrders } from "./orders.js";
-import { locations, tenants } from "./tenants.js";
 
 // The proof by deletion switches off EVERY foreign key at once, so it separates "a foreign key
 // refused this" from "a CHECK or a trigger did", not one foreign key from another;
 // `pragma foreign_key_list` is read alongside to pin WHICH key covers the column.
-const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
+let LOCATION_A: string;
 
 /** Runs `body` with every foreign key switched off, restoring enforcement afterwards. The pragma
  * has no effect inside a transaction, so this runs on the handle rather than through
@@ -47,14 +46,13 @@ describe("an order's delivery table", () => {
 
   beforeAll(async () => {
     const db = suite.db;
-    await db.insert(tenants).values({ id: 1, country: "ES", taxId: "B00000000", legalName: "T A" });
-    await db.insert(locations).values({
-      id: LOCATION_A,
+    await seedVenue(db, {
       name: "Loc A",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    nodeA = await seedNode(db, brandLocationId(LOCATION_A));
+    LOCATION_A = await venueLocationId(db);
+    nodeA = await seedNode(db);
   });
 
   /** One active table. The Drizzle builder, since `id` and `created_at` are `$defaultFn` columns. */
@@ -76,18 +74,14 @@ describe("an order's delivery table", () => {
   async function openWo(): Promise<string> {
     orderSeq += 1;
     return inTx(async (tx) => {
-      const [row] = await tx
-        .insert(workingOrders)
-        .values({
-          source: "dashboard",
-          deviceId: null,
-          locationId: LOCATION_A,
-          nodeId: nodeA,
-          orderNumber: orderSeq,
-          status: "open",
-        })
-        .returning({ id: workingOrders.id });
-      return row!.id;
+      const row = await seedWorkingOrder(tx, {
+        source: "dashboard",
+        deviceId: null,
+        nodeId: nodeA,
+        orderNumber: orderSeq,
+        status: "open",
+      });
+      return row.id;
     });
   }
 

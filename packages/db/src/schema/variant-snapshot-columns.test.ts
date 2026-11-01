@@ -7,14 +7,13 @@ import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { VARIANT_LOCALES_REFUSAL } from "../trigger-refusals.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
+import { seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { catalogues, products } from "./catalogue.js";
-import { workingOrderLines, workingOrders } from "./orders.js";
-import { locations, tenants } from "./tenants.js";
+import { workingOrderLines } from "./orders.js";
 
-const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
-/** An order opened from the dashboard at `LOCATION`, needing no device. */
-const DASHBOARD = { source: "dashboard", deviceId: null, locationId: LOCATION } as const;
+/** An order opened from the dashboard, needing no device. */
+const DASHBOARD = { source: "dashboard", deviceId: null } as const;
 const AT = "2026-07-20T19:20:30+00:00";
 
 // Bilingual on purpose: a single-locale venue cannot tell "exactly these locales" from
@@ -32,11 +31,7 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger", () 
 
   beforeAll(async () => {
     db = suite.db;
-    await db
-      .insert(tenants)
-      .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant" });
-    await db.insert(locations).values({
-      id: LOCATION,
+    await seedVenue(db, {
       name: "Fixture Location",
       invoiceLocales: [...LOCALES],
       operationDescription: "Hostelería",
@@ -56,11 +51,13 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger", () 
       })
       .returning({ id: products.id });
     productId = prod!.id;
-    const [order] = await db
-      .insert(workingOrders)
-      .values({ ...DASHBOARD, orderNumber: 1, status: "open", openedAt: AT })
-      .returning({ id: workingOrders.id });
-    orderId = order!.id;
+    const order = await seedWorkingOrder(db, {
+      ...DASHBOARD,
+      orderNumber: 1,
+      status: "open",
+      openedAt: AT,
+    });
+    orderId = order.id;
   });
 
   function lineValues(overrides: Record<string, unknown> = {}) {

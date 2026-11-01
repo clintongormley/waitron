@@ -1,24 +1,22 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { locationId as brandLocationId } from "@waitron/shared";
 import type { Transaction } from "../client.js";
 import { checkFailed, refusalOn } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { UNIQUE_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
-import { seedNode } from "../testing/seed.js";
+import { seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { diningTables } from "./dining-tables.js";
 import { floorZones } from "./floor-zones.js";
-import { workingOrders } from "./orders.js";
 import { parties, partyTables, serviceCommands } from "./parties.js";
-import { locations, tenants } from "./tenants.js";
+import { venueLocationId } from "../venue.js";
 
-const LOCATION = "bbbbbbbb-0000-4000-8000-000000000001";
-/** An order opened from the dashboard at `LOCATION`, needing no device. */
-const DASHBOARD = { source: "dashboard", deviceId: null, locationId: LOCATION } as const;
+let LOCATION: string;
+/** An order opened from the dashboard, needing no device. */
+const DASHBOARD = { source: "dashboard", deviceId: null } as const;
 const OPERATOR = "bbbbbbbb-2222-4000-8000-000000000001";
 
 describe("parties, party_tables and service_commands", () => {
@@ -31,14 +29,13 @@ describe("parties, party_tables and service_commands", () => {
 
   beforeAll(async () => {
     const db = suite.db;
-    await db.insert(tenants).values({ id: 1, country: "ES", taxId: "B00000000", legalName: "T" });
-    await db.insert(locations).values({
-      id: LOCATION,
+    await seedVenue(db, {
       name: "Room",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    nodeId = await seedNode(db, brandLocationId(LOCATION));
+    LOCATION = await venueLocationId(db);
+    nodeId = await seedNode(db);
   });
 
   async function table(label: string): Promise<string> {
@@ -191,13 +188,10 @@ describe("parties, party_tables and service_commands", () => {
   it("keys a working order to its party", async () => {
     const id = await party();
     orderSeq += 1;
-    const [order] = await inTx((tx) =>
-      tx
-        .insert(workingOrders)
-        .values({ ...DASHBOARD, nodeId, orderNumber: orderSeq, partyId: id })
-        .returning({ partyId: workingOrders.partyId }),
+    const order = await inTx((tx) =>
+      seedWorkingOrder(tx, { ...DASHBOARD, nodeId, orderNumber: orderSeq, partyId: id }),
     );
-    expect(order!.partyId).toBe(id);
+    expect(order.partyId).toBe(id);
     const keys = suite.db.all<{ table: string; from: string; to: string }>(
       sql.raw(`select "table", "from", "to" from pragma_foreign_key_list('working_orders')`),
     );

@@ -1,4 +1,3 @@
-import { locationId as brandLocationId } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
@@ -7,7 +6,7 @@ import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { withTransaction } from "../tenancy.js";
 import { captureError } from "../testing/errors.js";
-import { seedDevice, seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { isRefusal } from "../unique-violation.js";
 import {
@@ -16,12 +15,10 @@ import {
   saleLinePortions,
   workingLinePortions,
 } from "./order-portions.js";
-import { workingOrderLines, workingOrders } from "./orders.js";
+import { workingOrderLines } from "./orders.js";
 import { saleLines, sales } from "./sales.js";
 import { invoiceSeries } from "./series.js";
-import { locations, tenants } from "./tenants.js";
 
-const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
 const COHORT = "bbbbbbbb-0000-4000-8000-000000000001";
 const GHOST = "bbbbbbbb-0000-4000-8000-0000000000ff";
 const AT = "2026-10-27T12:00:00.000Z";
@@ -44,31 +41,26 @@ describe("A803 portions: the registry, bindings, sale links and events", () => {
 
   beforeEach(async () => {
     db = suite.db;
-    await db
-      .insert(tenants)
-      .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant" });
-    await db.insert(locations).values({
-      id: LOCATION,
+    await seedVenue(db, {
       name: "Loc",
       invoiceLocales: ["en"],
       operationDescription: "Restaurant",
     });
-    const nodeId = await seedNode(db, brandLocationId(LOCATION));
-    const { deviceId } = await seedDevice(db, { locationId: LOCATION });
-    const orders = await db
-      .insert(workingOrders)
-      .values(
-        [1, 2].map((orderNumber) => ({
-          source: "dashboard" as const,
+    const nodeId = await seedNode(db);
+    const { deviceId } = await seedDevice(db);
+    const orders: { id: string }[] = [];
+    for (const orderNumber of [1, 2]) {
+      orders.push(
+        await seedWorkingOrder(db, {
+          source: "dashboard",
           deviceId: null,
-          locationId: LOCATION,
           nodeId,
           orderNumber,
-          status: "open" as const,
+          status: "open",
           openedAt: AT,
-        })),
-      )
-      .returning({ id: workingOrders.id });
+        }),
+      );
+    }
     orderId = orders[0]!.id;
     otherOrderId = orders[1]!.id;
     const [series] = await db

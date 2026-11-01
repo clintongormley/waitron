@@ -1,19 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
 import { checkFailed, refusalOn } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
+import { seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { isRefusal } from "../unique-violation.js";
 import { orderDrafts } from "./order-drafts.js";
 import { orderGroups } from "./order-groups.js";
-import { workingOrderLines, workingOrders } from "./orders.js";
+import { workingOrderLines } from "./orders.js";
 import { parties } from "./parties.js";
-import { locations } from "./tenants.js";
 
 const OWNER = "cccccccc-2222-4000-8000-000000000001";
 const COLLEAGUE = "cccccccc-2222-4000-8000-000000000002";
@@ -34,30 +34,26 @@ describe("recalled draft line reservations", () => {
   const inTx = <T>(fn: (tx: Transaction) => Promise<T> | T): Promise<T> =>
     withTransaction(suite.db, async (tx) => await fn(tx));
 
+  beforeAll(async () => {
+    await seedVenue(suite.db, {
+      name: "Dining room",
+      invoiceLocales: ["en"],
+      operationDescription: "Restaurant",
+    });
+  });
+
   async function fixture() {
     return inTx(async (tx) => {
-      const [location] = await tx
-        .insert(locations)
-        .values({
-          name: "Dining room",
-          invoiceLocales: ["en"],
-          operationDescription: "Restaurant",
-        })
-        .returning();
       const [party] = await tx.insert(parties).values({ openedBy: OWNER }).returning();
-      const [bill] = await tx
-        .insert(workingOrders)
-        .values({
-          source: "dashboard",
-          locationId: location!.id,
-          orderNumber: 1,
-          partyId: party!.id,
-        })
-        .returning();
+      const bill = await seedWorkingOrder(tx, {
+        source: "dashboard",
+        orderNumber: 1,
+        partyId: party!.id,
+      });
       const [source] = await tx
         .insert(workingOrderLines)
         .values({
-          workingOrderId: bill!.id,
+          workingOrderId: bill.id,
           lineNo: 1,
           name: "Recorded dish",
           descriptions: { en: "Recorded dish" },
@@ -75,24 +71,20 @@ describe("recalled draft line reservations", () => {
         .insert(orderDrafts)
         .values({
           partyId: party!.id,
-          billId: bill!.id,
+          billId: bill.id,
           ownerId: OWNER,
         })
         .returning();
-      const [otherBill] = await tx
-        .insert(workingOrders)
-        .values({
-          source: "dashboard",
-          locationId: location!.id,
-          orderNumber: 2,
-          partyId: party!.id,
-        })
-        .returning();
+      const otherBill = await seedWorkingOrder(tx, {
+        source: "dashboard",
+        orderNumber: 2,
+        partyId: party!.id,
+      });
       const [otherDraft] = await tx
         .insert(orderDrafts)
         .values({
           partyId: party!.id,
-          billId: otherBill!.id,
+          billId: otherBill.id,
           ownerId: COLLEAGUE,
         })
         .returning();

@@ -1,15 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { checkFailed } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION, NOT_NULL_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
+import { seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { isRefusal } from "../unique-violation.js";
 import { workingOrders } from "./orders.js";
-import { locations } from "./tenants.js";
 
 const ANA = "cccccccc-2222-4000-8000-000000000001";
 const LUIS = "cccccccc-2222-4000-8000-000000000002";
@@ -17,26 +17,18 @@ const LUIS = "cccccccc-2222-4000-8000-000000000002";
 describe("bill editing state", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
-  async function bill() {
-    return withTransaction(suite.db, async (tx) => {
-      const [location] = await tx
-        .insert(locations)
-        .values({
-          name: "Dining room",
-          invoiceLocales: ["en"],
-          operationDescription: "Restaurant",
-        })
-        .returning();
-      const [row] = await tx
-        .insert(workingOrders)
-        .values({
-          source: "dashboard",
-          locationId: location!.id,
-          orderNumber: 1,
-        })
-        .returning();
-      return row!;
+  beforeAll(async () => {
+    await seedVenue(suite.db, {
+      name: "Dining room",
+      invoiceLocales: ["en"],
+      operationDescription: "Restaurant",
     });
+  });
+
+  async function bill() {
+    return withTransaction(suite.db, (tx) =>
+      seedWorkingOrder(tx, { source: "dashboard", orderNumber: 1 }),
+    );
   }
 
   const read = (billId: string) =>

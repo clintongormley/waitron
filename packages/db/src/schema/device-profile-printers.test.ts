@@ -5,13 +5,14 @@ import { CORE_MIGRATIONS } from "../migrations.js";
 import { CHECK_VIOLATION, FOREIGN_KEY_VIOLATION } from "../sql-state.js";
 import { isRefusal, isUniqueViolation } from "../unique-violation.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
+import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
+import { venueLocationId } from "../venue.js";
 import { deviceProfilePrinters } from "./device-profile-printers.js";
 import { deviceProfiles } from "./device-profiles.js";
 import { pagePrinters } from "./page-printers.js";
 import { printers } from "./printers.js";
-import { locations, tenants } from "./tenants.js";
 
 describe("device_profile_printers defaults", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -22,14 +23,12 @@ describe("device_profile_printers defaults", () => {
 
   beforeEach(async () => {
     const db = suite.db;
-    await db
-      .insert(tenants)
-      .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" })
-      .onConflictDoNothing({ target: tenants.id });
-    const [location] = await db
-      .insert(locations)
-      .values({ name: "Loc A", invoiceLocales: ["es"], operationDescription: "Hostelería" })
-      .returning({ id: locations.id });
+    await seedVenue(db, {
+      name: "Loc A",
+      invoiceLocales: ["es"],
+      operationDescription: "Hostelería",
+    });
+    const venueId = await venueLocationId(db);
     const [made] = await db
       .insert(deviceProfiles)
       .values({ name: "Profile", formFactor: "till" })
@@ -39,7 +38,7 @@ describe("device_profile_printers defaults", () => {
       .insert(printers)
       .values(
         ["10.0.0.1", "10.0.0.2"].map((host) => ({
-          locationId: location!.id,
+          locationId: venueId,
           name: host,
           transport: "network_tcp" as const,
           host,
@@ -51,7 +50,7 @@ describe("device_profile_printers defaults", () => {
     const [madePage] = await db
       .insert(pagePrinters)
       .values({
-        locationId: location!.id,
+        locationId: venueId,
         name: "Office printer",
         host: "10.0.0.9",
         port: 631,

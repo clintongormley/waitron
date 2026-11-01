@@ -1,4 +1,3 @@
-import { locationId as brandLocationId } from "@waitron/shared";
 import { and, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
@@ -13,11 +12,12 @@ import {
 import { isRefusal } from "../unique-violation.js";
 import { withTransaction } from "../tenancy.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
-import { seedDevice, seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { saleLines, sales, tenders } from "./sales.js";
 import { invoiceSeries } from "./series.js";
-import { locations, tenants } from "./tenants.js";
+import { locations } from "./tenants.js";
+import { venueLocationId } from "../venue.js";
 
 /**
  * What this file does NOT check:
@@ -29,7 +29,7 @@ import { locations, tenants } from "./tenants.js";
  *    matches the key's column.
  */
 
-const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
+let LOCATION_A: string;
 const AT = "2026-07-20T19:20:30+00:00";
 
 let seriesA = "";
@@ -37,24 +37,19 @@ let nodeA = "";
 let deviceA = "";
 
 async function seed(db: Database): Promise<void> {
-  await db
-    .insert(tenants)
-    .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
-  await db.insert(locations).values([
-    {
-      id: LOCATION_A,
-      name: "Fixture Location A",
-      invoiceLocales: ["es", "ca"],
-      operationDescription: "Hostelería",
-    },
-  ]);
-  nodeA = await seedNode(db, brandLocationId(LOCATION_A));
+  await seedVenue(db, {
+    name: "Fixture Location A",
+    invoiceLocales: ["es", "ca"],
+    operationDescription: "Hostelería",
+  });
+  LOCATION_A = await venueLocationId(db);
+  nodeA = await seedNode(db);
   const [a] = await db
     .insert(invoiceSeries)
     .values({ nodeId: nodeA, code: "FA", purpose: "standard" })
     .returning({ id: invoiceSeries.id });
   seriesA = a!.id;
-  ({ deviceId: deviceA } = await seedDevice(db, { locationId: LOCATION_A }));
+  ({ deviceId: deviceA } = await seedDevice(db));
 }
 
 function saleValues(overrides: Record<string, unknown> = {}) {

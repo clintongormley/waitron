@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
@@ -9,9 +8,8 @@ import { isRefusal } from "../unique-violation.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { seedNode } from "../testing/seed.js";
+import { seedNode, seedVenue } from "../testing/seed.js";
 import { invoiceSeries } from "./series.js";
-import { locations, tenants } from "./tenants.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
@@ -21,8 +19,6 @@ afterEach(async () => {
   await suite.db.execute(sql`delete from locations`);
   await suite.db.execute(sql`delete from tenants`);
 });
-
-const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 
 // seed() creates two nodes so the per-node uniqueness tests have a second node to collide
 // against.
@@ -36,19 +32,13 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
 }
 
 async function seed(db: Database): Promise<void> {
-  await db
-    .insert(tenants)
-    .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
-  await db.insert(locations).values([
-    {
-      id: LOCATION_A,
-      name: "Fixture Location A",
-      invoiceLocales: ["es", "ca"],
-      operationDescription: "Hostelería",
-    },
-  ]);
-  nodeA1 = await seedNode(db, brandLocationId(LOCATION_A));
-  nodeA2 = await seedNode(db, brandLocationId(LOCATION_A));
+  await seedVenue(db, {
+    name: "Fixture Location A",
+    invoiceLocales: ["es", "ca"],
+    operationDescription: "Hostelería",
+  });
+  nodeA1 = await seedNode(db);
+  nodeA2 = await seedNode(db);
 }
 
 describe("invoice_series schema", () => {
@@ -131,7 +121,7 @@ describe("invoice_series schema", () => {
     // column-object error. `id` is named explicitly because `invoice_series.id` is
     // `$defaultFn(newId)` — a JavaScript generator rather than a SQL DEFAULT, which a raw insert
     // never reaches.
-    const node = await seedNode(db, brandLocationId(LOCATION_A));
+    const node = await seedNode(db);
     const meta = await rows<{ notnull: number }>(
       db,
       sql`select "notnull" from pragma_table_info('invoice_series') where name = 'node_id'`,

@@ -24,14 +24,15 @@ import { verifyAmendmentChain, type VerifiableAmendment } from "./order-amendmen
 import { FOREIGN_KEY_VIOLATION, TRIGGER_ABORT } from "./sql-state.js";
 import { isRefusal } from "./unique-violation.js";
 import { captureError, engineErrorMessage } from "./testing/errors.js";
-import { seedDevice, seedNode } from "./testing/seed.js";
+import { seedDevice, seedNode, seedVenue } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 import { withTransaction } from "./tenancy.js";
+import { venueLocationId } from "./venue.js";
 import { orderAmendments } from "./schema/order-amendments.js";
 import { workingOrders } from "./schema/orders.js";
-import { locations, tenants } from "./schema/tenants.js";
+import { locations } from "./schema/tenants.js";
 
-const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
+let LOCATION_A: string;
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const OPERATOR_A = "aaaaaaaa-2222-4000-8000-000000000001";
 const OTHER_ACTOR = "cccccccc-2222-4000-8000-000000000001";
@@ -52,27 +53,22 @@ describe("order_amendments append helper", () => {
   // Working orders are seeded per-test (see openOrder).
   beforeAll(async () => {
     const admin = suite.db;
-    await admin
-      .insert(tenants)
-      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
-    await admin.insert(locations).values([
-      {
-        id: LOCATION_A,
-        name: "Fixture Location A",
-        invoiceLocales: ["es"],
-        operationDescription: "Hostelería",
-      },
-      {
-        id: LOCATION_B,
-        name: "Fixture Location B",
-        invoiceLocales: ["es"],
-        operationDescription: "Hostelería",
-      },
-    ]);
-    nodeA = await seedNode(admin, brandLocationId(LOCATION_A));
+    await seedVenue(admin, {
+      name: "Fixture Location A",
+      invoiceLocales: ["es"],
+      operationDescription: "Hostelería",
+    });
+    LOCATION_A = await venueLocationId(admin);
+    nodeA = await seedNode(admin);
+    ({ deviceId: deviceA1 } = await seedDevice(admin));
+    ({ deviceId: deviceA2 } = await seedDevice(admin));
+    await admin.insert(locations).values({
+      id: LOCATION_B,
+      name: "Fixture Location B",
+      invoiceLocales: ["es"],
+      operationDescription: "Hostelería",
+    });
     nodeB = await seedNode(admin, brandLocationId(LOCATION_B));
-    ({ deviceId: deviceA1 } = await seedDevice(admin, { locationId: brandLocationId(LOCATION_A) }));
-    ({ deviceId: deviceA2 } = await seedDevice(admin, { locationId: brandLocationId(LOCATION_A) }));
   });
 
   /** Seeds one fresh open working order and returns its id. A fresh chain per test so sequence

@@ -5,10 +5,12 @@ import { refusalOn } from "../constraint-target.js";
 import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
+import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { nodes } from "./nodes.js";
-import { locations, tenants } from "./tenants.js";
+import { locations } from "./tenants.js";
+import { venueLocationId } from "../venue.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
@@ -18,7 +20,7 @@ afterEach(async () => {
   await suite.db.execute(sql`delete from tenants`);
 });
 
-const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
+let LOCATION_A: string;
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const NODE_A1 = "aaaaaaaa-2222-4000-8000-000000000001";
 // Never seeded — the FK target for the "location does not exist" rejection below.
@@ -31,23 +33,18 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
 }
 
 async function seed(db: Database): Promise<void> {
-  await db
-    .insert(tenants)
-    .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
-  await db.insert(locations).values([
-    {
-      id: LOCATION_A,
-      name: "Fixture Location A",
-      invoiceLocales: ["es"],
-      operationDescription: "Restaurant",
-    },
-    {
-      id: LOCATION_B,
-      name: "Fixture Location B",
-      invoiceLocales: ["es"],
-      operationDescription: "Restaurant",
-    },
-  ]);
+  await seedVenue(db, {
+    name: "Fixture Location A",
+    invoiceLocales: ["es"],
+    operationDescription: "Restaurant",
+  });
+  LOCATION_A = await venueLocationId(db);
+  await db.insert(locations).values({
+    id: LOCATION_B,
+    name: "Fixture Location B",
+    invoiceLocales: ["es"],
+    operationDescription: "Restaurant",
+  });
 }
 
 describe("nodes schema", () => {

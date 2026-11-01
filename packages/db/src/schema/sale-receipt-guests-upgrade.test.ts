@@ -5,19 +5,15 @@ import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { installAppendOnlyTriggers } from "@waitron/store";
-import { locationId as brandLocationId } from "@waitron/shared";
 import type { Database } from "../client.js";
 import { runMigrations } from "../migrate.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { TRIGGER_ABORT } from "../sql-state.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
-import { seedDevice, seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { isRefusal } from "../unique-violation.js";
 import { invoiceSeries } from "./series.js";
-import { locations, tenants } from "./tenants.js";
-
-const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
 
 async function migrateBeforeRename(db: Database): Promise<void> {
   const staged = mkdtempSync(join(tmpdir(), "wt-guest-count-upgrade-"));
@@ -38,17 +34,13 @@ async function migrateBeforeRename(db: Database): Promise<void> {
 }
 
 async function seedSales(db: Database, count: number): Promise<string[]> {
-  await db
-    .insert(tenants)
-    .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture" });
-  await db.insert(locations).values({
-    id: LOCATION,
+  await seedVenue(db, {
     name: "Fixture",
     invoiceLocales: ["es"],
     operationDescription: "Hostelería",
   });
-  const nodeId = await seedNode(db, brandLocationId(LOCATION));
-  const { deviceId } = await seedDevice(db, { locationId: LOCATION });
+  const nodeId = await seedNode(db);
+  const { deviceId } = await seedDevice(db);
   const [series] = await db
     .insert(invoiceSeries)
     .values({ nodeId, code: "A" })

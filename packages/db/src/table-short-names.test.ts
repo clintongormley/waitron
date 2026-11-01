@@ -3,14 +3,15 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { diningTables } from "./schema/dining-tables.js";
 import { floorZones } from "./schema/floor-zones.js";
-import { locations, tenants } from "./schema/tenants.js";
 import {
   SHORT_NAME_KEY_BATCH,
   shortNameColumns,
   storeTableShortNameKeys,
 } from "./table-short-names.js";
 import { withTransaction } from "./tenancy.js";
+import { seedVenue } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
+import { venueLocationId } from "./venue.js";
 
 describe("shortNameColumns", () => {
   it("writes the folded key beside the short name, and nulls for none", () => {
@@ -21,19 +22,15 @@ describe("shortNameColumns", () => {
 
 describe("storeTableShortNameKeys", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
-  const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
 
   async function insertTables(rows: readonly { label: string; shortName: string | null }[]) {
     return withTransaction(suite.db, async (tx) => {
-      await tx
-        .insert(tenants)
-        .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant" });
-      await tx.insert(locations).values({
-        id: LOCATION,
+      await seedVenue(tx, {
         name: "Loc",
         invoiceLocales: ["es"],
         operationDescription: "Restaurant",
       });
+      const LOCATION = await venueLocationId(tx);
       const [zone] = await tx
         .insert(floorZones)
         .values({ locationId: LOCATION, name: "Zone" })

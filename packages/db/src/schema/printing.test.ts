@@ -10,15 +10,16 @@ import {
 } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
+import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { printAgents } from "./print-agents.js";
 import { printJobs } from "./print-jobs.js";
 import { printers } from "./printers.js";
-import { locations, tenants } from "./tenants.js";
+import { venueLocationId } from "../venue.js";
 
 // What this suite proves is the column mapping, the defaults, the CHECKs and the foreign keys.
-const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
+let LOCATION_A: string;
 const GHOST_LOCATION = "dddddddd-0000-4000-8000-000000000099";
 const TOKEN_HASH = "scrypt$00$00";
 const HELLO = new TextEncoder().encode("Hello");
@@ -27,15 +28,12 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
   beforeAll(async () => {
-    await suite.db
-      .insert(tenants)
-      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
-    await suite.db.insert(locations).values({
-      id: LOCATION_A,
+    await seedVenue(suite.db, {
       name: "Loc A",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
+    LOCATION_A = await venueLocationId(suite.db);
   });
 
   function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
