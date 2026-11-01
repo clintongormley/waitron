@@ -157,6 +157,29 @@ obtain an owner decision before changing that behavior.
 
 **Interfaces:** `HostRequest` discriminated union in `host-protocol.mjs`: `network.read`, `network.scan`, `network.join`, `network.forget`, `screen.read`, `screen.set`, `tag.write`, `first-start.status`; disk-document and cutover operations added only in slice 8. `NetworkSnapshot={wired:{connected:boolean,address:string|null},wifi:{connectedSsid:string|null,networks:readonly {ssid:string,signal:number}[]}}`. `handleHostRequest(request:unknown, actor:VerifiedHostActor):Promise<HostReply>` validates fixed fields and actor/permission at each action. `boxHostCall<T>(request:HostRequest):Promise<T>` in new server client wraps the private socket with bounded request/response sizes/timeouts; no arbitrary path or command execution.
 
+**The clock requests slice 9b shipped** (A798-B slice 9b, #2331, added 2026-11-01): a contract
+between the server and the host that B3 keeps or migrates. `waitron.sh install` installs a socket
+unit, `deploy/box/waitron-box.socket`, listening on `/run/waitron-box/box.sock` (`Accept=yes`,
+owner `root`, group `waitron-box`, mode `0660`; `waitron-box` is a host group of gid 10001, the
+app's own gid), and its template `deploy/box/waitron-box@.service`, one root instance per
+connection running `/usr/local/lib/waitron/waitron-box.sh` under `RuntimeMaxSec=15`. This plan's
+`waitron-box.service` would collide with them by name, and its socket with that path. 9b also
+creates `apps/server/src/box-host-client.ts`, which this plan's file map lists as new, so B3
+changes or replaces 9b's client rather than creating it. The wire is one text line in (at most 700
+characters) and one JSON line out. `clock.status` answers
+`{"ok":true,"service":…,"unit":…,"synchronised":…,"lastSyncAt":…,"nowMs":…}`, with `service`
+`"on"`, `"off"` or `"stopped"`.
+`clock.set <epochMs> <requester>` answers `{"ok":true,"beforeMs":…,"afterMs":…}`, or
+`{"ok":false,"reason":…}` with `target_invalid`, `requester_invalid`, `synchronised`, `busy` or
+`set_failed`; a line too long or too slow is `request_invalid`, any other line `unknown_request`.
+The server sends four requester shapes, ids only: `{"source":"authority","check":<id or null>}`
+from the clock watch, `{"source":"admin","person":<id>}` from the dashboard, and
+`{"source":"staff" or "admin","person":<id>,"device":<id>}` from a till. The requester is JSON the
+server reports about itself, which the host checks only for form and then logs: weaker than this
+plan's `VerifiedHostActor`, which "caller JSON … cannot mint", since the server alone authorizes a
+set. B3 either keeps the two requests on this wire or moves them under its own protocol and actor,
+in the same change that moves the server's client.
+
 **Proposed boot-copy contract:** `network.mjs` owns a bounded versioned join record at fixed
 `/boot/waitron-recovery/wifi.json`: SSID, password and only adapter-required validated security/join
 fields, never an arbitrary profile. Host-only internal reconciliation accepts authoritative normal

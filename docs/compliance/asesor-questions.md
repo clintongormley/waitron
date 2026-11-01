@@ -25,6 +25,8 @@ changes neither S4 nor the earlier dated owner decision.
 
 **2026-10-24, A798-B slice 9 revised (the box's clock confirmed):** [Q51](#q51-a-chain-whose-record-times-step-back-once-when-the-boxs-clock-is-confirmed-added-2026-10-21-revised-2026-10-24) was revised for the owner's answers of 2026-10-24: payments restart by themselves once AEAT, two devices or an administrator's own device confirms the box's clock, with no 24-hour cap and no manager's button. [Q52](#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21) gained a pointer. [Q60](#q60-sales-dated-later-than-the-real-time-by-a-clock-that-ran-ahead-added-2026-10-24) (sales a clock running ahead dated later than the real time, which the box now lists) was added after Q52. None is in the shortened list or the Word copies, and no enquiry has been sent.
 
+**2026-11-01, A798-B slice 9b (the box sets its own clock):** [Q61](#q61-a-system-that-corrects-its-own-clock-from-a-tills-clock-when-it-has-no-internet-added-2026-11-01) (a system that corrects its own clock, when it cannot reach AEAT's time, from a till's clock a staff member confirms or from an administrator's own device) was added after Q60. The behaviour is built in pull request #2331, which waits for the owner. It is not in the shortened list or the Word copies, and no enquiry has been sent.
+
 Companion to [verifactu-findings.md](verifactu-findings.md), which records what is already
 settled. **Do not ask about anything in that document** — it is sourced from AEAT and BOE
 primary texts. These are the items that research could not resolve.
@@ -3871,6 +3873,63 @@ change nothing else. Built by A798-B slice 9 (#2025), revised 2026-10-24; parked
 who handled it and an optional note, and each list downloads as a CSV for the adviser (series and
 number, invoice date, time recorded, real time unknown, amount, and whether the invoice date may
 differ from the day the sale was made).
+
+This records a question; no enquiry has been sent.
+
+### Q61. A system that corrects its own clock from a till's clock when it has no internet (added 2026-11-01)
+
+**Why it matters.** Every record is dated by the box's own clock, and while that clock reads more
+than a minute earlier than the latest record, or a date before 28-10-2024, the box takes no payment
+(Q51). A box that starts with no internet cannot ask AEAT the time. So the box now corrects its own
+clock (the system clock and the battery-backed clock) during such a stop, from one of three sources:
+AEAT's time, by itself, with nobody asked; just after a start, when AEAT has not answered or cannot
+be asked, the clock of one of its own tills, once any staff member signed in on that till confirms
+the time it shows; and, at any time, an administrator's own phone or computer, when they confirm
+it. Nobody types a time: the till or the device sends its own clock. Two tills on their own no
+longer confirm the time just after a start. Each correction is kept in a table whose rows cannot be
+changed or deleted — who confirmed, which till, the box's time before and after, and the size of
+the step — and the managers are alerted on the dashboard and by email. A correction the box cannot
+confirm took effect is alerted the same way but writes no row. Records written before the
+correction keep the time they were given; the box already lists those dated later than the real
+time (Q60). The risk: during a stop found at start-up, any staff member signed in on a till joined
+to the box could send a crafted request setting any time between 28-10-2024 and the year 2100, and
+would be named in the row and the alert. A later version (slice 9c, not built) plans this check at
+every start without internet, which would carry the same risk to every such start.
+
+> Cuando el equipo arranca sin conexión a internet no puede consultar la hora de la AEAT. Si en ese
+> momento su reloj va más de un minuto por detrás del último registro, o marca una fecha anterior al
+> 28-10-2024, el sistema deja de cobrar (pregunta Q51). Para salir de esa situación, el sistema
+> corrige ahora su propio reloj (el del sistema operativo y el reloj interno con batería) a partir
+> de una de tres fuentes: la hora de la AEAT, por sí solo y sin preguntar a nadie; justo después del
+> arranque, si la AEAT no ha respondido o no se le puede preguntar, el reloj de una de sus propias
+> cajas, cuando cualquier miembro del personal con sesión iniciada en esa caja confirma la hora que
+> muestra; y, en cualquier momento, el teléfono u ordenador de un administrador, cuando este lo
+> confirma. Nadie escribe una hora: la caja o el dispositivo envía su propio reloj. Dos cajas por sí
+> solas ya no confirman la hora justo después del arranque. Cada corrección queda en una tabla cuyas
+> filas no pueden modificarse ni borrarse (quién confirmó, desde qué caja, la hora del equipo antes
+> y después, y el tamaño del salto), y se avisa a los responsables en el panel de gestión y por
+> correo electrónico. Si el sistema no puede comprobar que la corrección se aplicó, avisa igual pero
+> no escribe la fila. Los registros generados antes de la corrección conservan la hora con la que se
+> generaron; el sistema ya lista los que tienen una hora posterior a la real (pregunta Q60). El
+> riesgo: durante una parada detectada al arrancar, cualquier miembro del personal con sesión
+> iniciada en una caja dada de alta en el equipo podría enviar una petición manipulada que fije
+> cualquier hora entre el 28-10-2024 y el año 2100, y su nombre quedaría en la fila y en el aviso.
+> Una versión posterior, aún no desarrollada, prevé esta comprobación en cada arranque sin internet,
+> lo que extendería el mismo riesgo a todos esos arranques.
+>
+> **(a)** ¿Puede un SIF corregir su propio reloj, cuando no puede consultar la hora de la AEAT, a
+> partir del reloj de una de sus cajas una vez que una persona presente confirma esa hora en la caja,
+> o a partir del dispositivo de un administrador, teniendo en cuenta el riesgo descrito?
+>
+> **(b)** ¿Qué debe registrar de cada corrección? ¿Basta con lo descrito, debe constar algo más, o
+> debe comunicarse a la AEAT?
+>
+> **(c)** ¿Necesitan los registros fechados con el reloj anterior a la corrección algún tratamiento
+> además de la lista que el sistema ya entrega al titular?
+
+**Proposed interim treatment (owner, 2026-10-31):** the box sets its clock from the three sources
+above, records and alerts every correction, and changes no record. Built by A798-B slice 9b
+(#2331); parked for the owner.
 
 This records a question; no enquiry has been sent.
 
