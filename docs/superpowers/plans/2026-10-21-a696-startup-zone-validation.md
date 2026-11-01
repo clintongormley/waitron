@@ -254,7 +254,7 @@ A new failed-start case first observed an un-aborted Cloud worker when snapshot 
 
 - [x] **Coverage ledger:** Map design §1 to Tasks 4/7–19; §2 to 4/5/8/10–12/18/19; §3 to 3/7–9/18; §4 to 1–3/14; §5 to 4/10–14/17/18; §6 to 10–19; §7 to all focused controls and Tasks 17–19. Enumerate walk-up, held, placed, zero-due, manual/integrated/offline, recovered capture, deferred/later settlement, bill worker/retry/attestation, save/edit/split/adjustment, unpaid departure, cancellation/generic R5, F1/F3/void, emergency, isolated readiness, installed/CLI seeds, live CLIs and fixed demos, with actual case/command receipts. No missing family or dependency is waived by a passing helper.
 - [x] **Verification:** Run focused changed behaviour, Task 13's unedited fiscal checks and `pnpm exec vitest run scripts/alert-codes.test.ts scripts/errors-reachable.test.ts scripts/module-seams.test.ts scripts/workspace-cycles.test.ts scripts/guide-links.test.ts`; inspect counts and failures. Review `git diff <base> --name-only` for protected paths and `git diff --check`. Check developer/package README/operator claims across the complete changed path set. No local whole-workspace suite or duplicated hook; unrun checks stay pending.
-- [ ] **Commit/readiness:** Use `git commit -s` for final docs/receipts. Once all required work, including integration dependencies, passes, announce readiness for `finish-branch` and continue under the parent's workflow authorization. One Claude run-it whole-branch review after initial rebase belongs there, in an independent installed complete-candidate checkout. Read completed findings and fix them with focused checks. Retain approval across later rebases; inspect integration and rerun affected checks without another review solely for rebase.
+- [x] **Commit/readiness:** Use `git commit -s` for final docs/receipts. Once all required work, including integration dependencies, passes, announce readiness for `finish-branch` and continue under the parent's workflow authorization. One Claude run-it whole-branch review after initial rebase belongs there, in an independent installed complete-candidate checkout. Read completed findings and fix them with focused checks. Retain approval across later rebases; inspect integration and rerun affected checks without another review solely for rebase.
 - [ ] **FULL PR:** Push through normal hook, wait for required current-head CI coverage/merge jobs and inspect actual selected package scope, including the matrix children. Preserve 98/98/98/95 and mutation requirements. Finish green and leave this fiscal PR **waiting for owner landing**; no auto-merge. The parent handles backlog residuals, later authorized land-branch and cleanup. Wider A166 and A444 remain open. Plan publication alone claims no passing runtime, payment, browser, fiscal or restore acceptance.
 
 
@@ -334,3 +334,41 @@ supersedes Task 20's reservation of that file for this status update only; it do
 changes to another lane's work. The separate fiscal PR still needs full review/CI qualification
 and owner landing. The watcher-requested A1242 and A1252 observations are recorded separately
 in the CI backlog; they change no product code.
+
+
+### Whole-branch review and corrections, 1 November
+
+The required independent installed Claude run-it review completed in 766 seconds against
+`612535109230027092a40e9be50f43b8a8aa16f3`, reviewing `e9786061f`. Both findings are accepted.
+The archive/bucket preservation suite still selected a retired four-symbol series; the current
+fixture uses `A-0CNNY`. Its sample also preceded the owning helper's later records. The driver
+observed both successive two-case failures, then used the actual series and chronological sample
+clock; both cases now pass with every matcher retained. Earlier dated receipts did not establish
+this suite's passing state after the rebase.
+
+A padded saved zone was normalized for admission while other readers used its raw text. Six new
+server cases reproduce ordinary duties starting and repair refusing it; direct issuance, reuse and
+recovery cases fail separately. `classifySavedTimeZone` now validates stored spelling with Intl;
+`classifyTimeZone` still normalizes new input. Every classifier consumer is traced: raw context,
+issuance, reuse and recovery presentation use the saved check; request/candidate/country inputs
+keep normalization. No old row is silently rewritten. The repaired row is saved canonically by
+explicit confirmation. Supported aliases, missing values and unexpected runtime faults retain
+their separate cases.
+
+Checking recovery presentation exposed eight more stale test setups using main's removed
+installation-code/last-hour fields. Their setup now uses main's second-clock/preview contract.
+The old waiting target/date assertions are retired because `3ba85c7a6` (PR #1990), subsequently
+`62a2b62bb`, renders a countdown there. The test now checks its exact `30:00`, retaining the UTC
+comparison/ISO, raw selection, unavailable credentials, accessibility and width assertions. Before
+the classifier fix it distinguishes 16 padded failures from eight invalid-zone passes; afterwards
+all 24 pass, plus the unchanged owning recovery-hour browser suite. Actual padded recovery captures
+were inspected in both languages/themes at phone and desktop widths.
+
+Final focused corrections pass shared53, fiscal23, provisioning19, server80, recovery/browser/
+protected113, and startup-unwind/repair-API86. The protected pair is unchanged. A complete installed
+candidate then normalizes saved names again: two shared assertions fail and both padded boot cases
+start duties. Restored shared53 and boot2 pass. These are the named boundary receipts, not proof
+about every consumer or duty. The report's broader unverified claims remain explicitly unverified
+in the retained triage. Review, timing/usage, red/green/control logs and exact candidate hash live
+in Lane E `receipts/a696-resume-20261101/`. Normal push-hook and current-head CI qualification
+remain pending; the FULL PR box remains open for their external evidence and owner handoff.
