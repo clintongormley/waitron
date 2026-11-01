@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, locations, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CATALOGUE_MIGRATIONS, contentLanguages } from "@waitron/catalogue";
-import { locationId } from "@waitron/shared";
 import { departmentReceiptLanguages } from "./department-receipt-languages.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
@@ -13,14 +12,11 @@ async function read(receiptLanguage: string, languages?: string[], country: stri
     await suite.db
       .insert(tenants)
       .values({ id: 1, country, taxId: "B12345678", legalName: "Venue SL" });
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: randomUUID(),
-      invoiceLocales: [receiptLanguage],
-      operationDescription: "Bootstrap",
-    })
-    .returning();
+  await suite.db.insert(locations).values({
+    name: randomUUID(),
+    invoiceLocales: [receiptLanguage],
+    operationDescription: "Bootstrap",
+  });
   if (languages !== undefined) {
     await suite.db
       .insert(contentLanguages)
@@ -33,9 +29,7 @@ async function read(receiptLanguage: string, languages?: string[], country: stri
         set: { defaultLanguage: languages[0]!, languages },
       });
   }
-  return withTransaction(suite.db, (tx) =>
-    departmentReceiptLanguages(tx, { locationId: locationId(location!.id) }),
-  );
+  return withTransaction(suite.db, (tx) => departmentReceiptLanguages(tx));
 }
 
 describe("department receipt languages", () => {

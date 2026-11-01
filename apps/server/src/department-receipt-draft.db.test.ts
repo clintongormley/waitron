@@ -131,11 +131,7 @@ describe("checked department receipt write", () => {
     await save(f, input);
     expect((await suite.db.select().from(departmentReceipts))[0]!.receipt).toEqual(input.receipt);
     await withTransaction(suite.db, async (tx) => {
-      expect((await departmentReceiptLanguages(tx, f.cfg)).languages).toEqual([
-        "gl-ES",
-        "es-ES",
-        "ca-ES",
-      ]);
+      expect((await departmentReceiptLanguages(tx)).languages).toEqual(["gl-ES", "es-ES", "ca-ES"]);
       const printed = await VENUE_SERVICE.readPrintedDepartmentReceipt(
         tx,
         { ...f.cfg, receiptLanguages: ["eu-ES", "gl-ES"] },

@@ -108,8 +108,8 @@ export async function seedDemoRestaurant(
       await publishMenu(tx, menuId, menuDocumentHash(document), "demo-seed");
     }
     return {
-      products: (await listAvailableProducts(tx, locationId)).products,
-      invoiceLocale: (await readReceiptLanguage(tx, locationId)).locale,
+      products: (await listAvailableProducts(tx)).products,
+      invoiceLocale: (await readReceiptLanguage(tx)).locale,
       passStationIds: { kitchen: stationIds.kitchen, deli: stationIds.deli },
     };
   });

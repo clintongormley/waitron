@@ -94,7 +94,7 @@ export async function readInvoiceDocument(
     departmentId?: string;
   }) => console.warn("receipt.optional_read_failed", event);
   const header = await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId);
-  const current = await readReceiptLanguage(tx, cfg.locationId);
+  const current = await readReceiptLanguage(tx);
   const department =
     header?.departmentId == null
       ? null

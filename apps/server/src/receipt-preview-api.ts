@@ -311,7 +311,7 @@ export function mountReceiptPreviewApi(
           deps.validateOperationDescription,
           { touch: body.passive !== true, allowEmptyDescription: true },
         );
-        const languages = await departmentReceiptLanguages(tx, deps.cfg);
+        const languages = await departmentReceiptLanguages(tx);
         const locale =
           body.language === undefined
             ? languages.receiptLanguage

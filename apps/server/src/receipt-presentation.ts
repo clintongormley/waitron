@@ -18,7 +18,7 @@ export async function readReceiptPresentation(
   }
 > {
   const header = await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId);
-  const current = await readReceiptLanguage(tx, cfg.locationId);
+  const current = await readReceiptLanguage(tx);
   const diagnostic = (event: { operation: string; code: string; departmentId?: string }) =>
     console.warn("receipt.optional_read_failed", event);
   const department =

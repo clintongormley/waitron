@@ -31,7 +31,7 @@ export async function checkedDepartmentReceiptWrite(
     permission: "layout.configure",
     touch: options.touch,
   });
-  const languages = await departmentReceiptLanguages(tx, cfg);
+  const languages = await departmentReceiptLanguages(tx);
   const scope = { ...cfg, receiptLanguages: languages.storageLanguages };
   const current = await VENUE_SERVICE.readDepartmentReceipt(tx, scope, departmentId);
   const checked = validateDepartmentReceiptWrite(

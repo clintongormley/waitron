@@ -70,10 +70,8 @@ export function mountDepartmentReceiptSettingsApi(
       const cfg = deps.venueCfg();
       const body = await withTransaction(deps.db, async (tx) => {
         await authorize(tx, sessionId);
-        const { receiptLanguage, languages, storageLanguages } = await departmentReceiptLanguages(
-          tx,
-          cfg,
-        );
+        const { receiptLanguage, languages, storageLanguages } =
+          await departmentReceiptLanguages(tx);
         const stored = await VENUE_SERVICE.readDepartmentReceipt(
           tx,
           { ...cfg, receiptLanguages: storageLanguages },
