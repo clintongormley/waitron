@@ -5,9 +5,9 @@ import ts from "typescript";
 
 // Moves a test file onto the shared venue seed helpers (A1301 F1): `seedVenue` for its one
 // `locations` row, `seedNode`/`seedDevice` without a location, `seedWorkingOrder` for an order.
-// Every rule applies only to a file holding exactly one `locations` insert, and never to an upgrade
-// test, whose database stops at an earlier migration than the helpers read; what it cannot prove
-// safe to rewrite it reports as `path:line: reason` for a hand edit. It splices text by node positions and never
+// Every rule applies only to a file holding exactly one `locations` insert, and never to a file
+// whose name contains `upgrade`; what it cannot prove safe to rewrite it reports as
+// `path:line: reason` for a hand edit. It splices text by node positions and never
 // reprints the tree, so `prettier --write` tidies afterwards.
 //
 // Usage: node scripts/a1301-seed-codemod.mjs [--write] <file…>   (without --write, writes nothing)
@@ -53,13 +53,14 @@ const REASON = {
   notVenue: "location argument does not name the seeded venue: not dropped",
   projection: "order binding read through a returning(…) projection: not rewritten",
   idNotLiteral: "id constant's initializer is not a literal: not removed",
-  upgrade: "upgrade test: its database stops at an earlier migration, so no location rule applied",
+  upgrade:
+    "file name contains `upgrade`: an upgrade test's database can stop at an earlier migration, so no location rule applied",
 };
 
 const collision = (name) =>
   `${name} is already declared or imported from elsewhere: rule not applied`;
 
-/** Brand helpers whose call around a plain value is itself a plain value (`locationId(…)`). */
+/** Import names of the helpers that brand a location id (`locationId(…)`), seen through by `unwrap`. */
 const BRAND_HELPER = /^(as|brand|to)?locationid$/i;
 
 const TEST_CALLS = new Set([
@@ -203,7 +204,12 @@ function statementOf(awaitNode) {
   ) {
     return undefined;
   }
-  return { statement: list.parent, start: list.parent.getStart(), binding: elements[0].name.text };
+  return {
+    statement: list.parent,
+    start: list.parent.getStart(),
+    binding: elements[0].name.text,
+    declaration: elements[0],
+  };
 }
 
 function keyOf(property) {
@@ -239,39 +245,44 @@ function isReference(node) {
   return true;
 }
 
-/** Each parse's identifier references outside its imports, by name: built once per parse. */
-const referenceIndexes = new WeakMap();
+/**
+ * Each parse's identifiers, built in one walk: `references` outside its imports, `declarations`
+ * (a node matching `DECLARATIONS` with an identifier name) and `writes` (an identifier inside an
+ * assignment's left side or a `for … in/of` head, or stepped by `++`/`--`), each by name.
+ */
+const indexes = new WeakMap();
 
-function references(sourceFile, name) {
-  let index = referenceIndexes.get(sourceFile);
-  if (!index) {
-    index = new Map();
-    const visit = (node) => {
-      if (ts.isImportDeclaration(node)) return;
-      if (ts.isIdentifier(node) && isReference(node)) {
-        if (!index.has(node.text)) index.set(node.text, []);
-        index.get(node.text).push(node);
-      }
-      ts.forEachChild(node, visit);
-    };
-    visit(sourceFile);
-    referenceIndexes.set(sourceFile, index);
-  }
-  return index.get(name) ?? [];
+function indexOf(sourceFile) {
+  let index = indexes.get(sourceFile);
+  if (index) return index;
+  index = { references: new Map(), declarations: new Map(), writes: new Map() };
+  const add = (map, name, node) => {
+    if (!map.has(name)) map.set(name, []);
+    map.get(name).push(node);
+  };
+  const visit = (node, inImport, writing) => {
+    if (DECLARATIONS.some((is) => is(node)) && node.name && ts.isIdentifier(node.name)) {
+      add(index.declarations, node.name.text, node);
+    }
+    if (ts.isIdentifier(node)) {
+      if (!inImport && isReference(node)) add(index.references, node.text, node);
+      if (writing || INCREMENTS.has(node.parent.operator)) add(index.writes, node.text, node);
+    }
+    const kind = node.operatorToken?.kind;
+    const assigns = kind >= ts.SyntaxKind.FirstAssignment && kind <= ts.SyntaxKind.LastAssignment;
+    const loopHead = ts.isForInOrOfStatement(node) ? node.initializer : undefined;
+    const importing = inImport || ts.isImportDeclaration(node);
+    ts.forEachChild(node, (child) =>
+      visit(child, importing, writing || (assigns && child === node.left) || child === loopHead),
+    );
+  };
+  visit(sourceFile, false, false);
+  indexes.set(sourceFile, index);
+  return index;
 }
 
-/** True when `node` is assigned (also inside a destructuring target), stepped, or a loop variable. */
-function isWrite(node) {
-  if (INCREMENTS.has(node.parent.operator)) return true;
-  for (let child = node, current = node.parent; !ts.isSourceFile(current);) {
-    const kind = current.operatorToken?.kind;
-    const assigns = kind >= ts.SyntaxKind.FirstAssignment && kind <= ts.SyntaxKind.LastAssignment;
-    if (assigns && current.left === child) return true;
-    if (ts.isForInOrOfStatement(current) && current.initializer === child) return true;
-    child = current;
-    current = current.parent;
-  }
-  return false;
+function references(sourceFile, name) {
+  return indexOf(sourceFile).references.get(name) ?? [];
 }
 
 /**
@@ -279,15 +290,9 @@ function isWrite(node) {
  * and holds one value from before `position` on: never written, or a `let` written once before it.
  */
 function soleValue(sourceFile, name, position) {
-  const declarations = [];
-  const writes = [];
-  walk(sourceFile, (node) => {
-    const declares = DECLARATIONS.some((is) => is(node));
-    if (declares && node.name && ts.isIdentifier(node.name) && node.name.text === name) {
-      declarations.push(node);
-    }
-    if (ts.isIdentifier(node) && node.text === name && isWrite(node)) writes.push(node);
-  });
+  const index = indexOf(sourceFile);
+  const declarations = index.declarations.get(name) ?? [];
+  const writes = index.writes.get(name) ?? [];
   if (declarations.length !== 1) return false;
   const [declaration] = declarations;
   if (ts.isImportSpecifier(declaration) || ts.isImportClause(declaration)) return true;
@@ -295,6 +300,48 @@ function soleValue(sourceFile, name, position) {
   if (!ts.isVariableDeclaration(declaration)) return false;
   if (declaration.initializer) return writes.length === 0;
   return writes.length === 1 && writes[0].getStart() < position;
+}
+
+/** The node whose span a declaration's name is visible in (an ES module: blocks scope functions). */
+function declarationScope(declaration) {
+  let node = declaration;
+  while (
+    ts.isBindingElement(node) ||
+    ts.isArrayBindingPattern(node) ||
+    ts.isObjectBindingPattern(node)
+  ) {
+    node = node.parent;
+  }
+  if (ts.isFunctionExpression(node) || ts.isClassExpression(node)) return node;
+  if (ts.isParameter(node) || ts.isCatchClause(node.parent)) return node.parent;
+  if (ts.isImportSpecifier(node) || ts.isImportClause(node) || ts.isNamespaceImport(node)) {
+    return node.getSourceFile();
+  }
+  if (!ts.isVariableDeclaration(node)) return node.parent;
+  const list = node.parent;
+  if (list.flags & ts.NodeFlags.BlockScoped) {
+    return ts.isVariableStatement(list.parent) ? list.parent.parent : list.parent;
+  }
+  let scope = list.parent;
+  while (!ts.isSourceFile(scope) && !ts.isFunctionLike(scope)) scope = scope.parent;
+  return scope;
+}
+
+/**
+ * True when `use` means the binding `declaration` that `statement` declares: it sits after the
+ * statement in the statement's own block, and no other declaration of its name both reaches it and
+ * lies inside that block or is scoped inside it.
+ */
+function resolvesTo(use, declaration, statement) {
+  const block = statement.parent;
+  const holds = (node, inner) => node.getStart() <= inner.getStart() && inner.end <= node.end;
+  if (use.getStart() < statement.end || !holds(block, use)) return false;
+  const others = indexOf(use.getSourceFile()).declarations.get(use.text);
+  return others.every((other) => {
+    if (other === declaration) return true;
+    const scope = declarationScope(other);
+    return !holds(scope, use) || !(holds(block, scope) || holds(block, other));
+  });
 }
 
 /** `expression` without the wrappers that change no value: parentheses, `as`, `satisfies`, `!`. */
@@ -779,7 +826,10 @@ export function transformSource(path, source) {
     if (!namesVenue(propertyValue(location))) return report(insert, REASON.notVenue);
     removed.push({ start: location.getStart(), end: location.end });
     for (const use of uses) {
-      if (ts.isNonNullExpression(use.parent)) bangs.push({ start: use.end, end: use.parent.end });
+      const ours = resolvesTo(use, context.declaration, context.statement);
+      if (ours && ts.isNonNullExpression(use.parent)) {
+        bangs.push({ start: use.end, end: use.parent.end });
+      }
     }
     const call = `await ${callText("seedWorkingOrder", insert, carriedObject(chain.arg, [location]))}`;
     edits.push({

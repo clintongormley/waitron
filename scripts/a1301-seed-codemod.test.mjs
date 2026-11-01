@@ -438,6 +438,51 @@ describe("rules 2-4: nodes, devices and orders", () => {
     );
     expect(result.left).toEqual([{ line: 5, reason: NOT_VENUE }]);
   });
+
+  it("drops the non-null assertion only where the name still means the rewritten order: after it, in its block, not redeclared", () => {
+    const input = (declare) =>
+      lines(
+        `import { order } from "./orders.js";`,
+        VENUE_IN,
+        `it("a", async () => {`,
+        `  const early = () => order!.id;`,
+        `  ${declare} = await db.insert(workingOrders).values({ locationId: LOC }).returning();`,
+        `  use(order!.id, () => order!.id);`,
+        `  const inner = (order) => order!.id;`,
+        `  function named() { const order = other(); return order!.id; }`,
+        `  const destructured = ({ order }) => order!.id;`,
+        `  const expression = function order() { return order!.id; };`,
+        `  for (const order of list) use(order!.id);`,
+        `  try { use(order!.id); } catch (order) { use(order!.id); }`,
+        `  { const [order] = await db.select().from(t); use(order!.id); }`,
+        `  { use(order!.id); }`,
+        `  function hoisted() { var order = other(); { use(order!.id); } }`,
+        `  { class order {} use(order!.id); }`,
+        `  { function order() {} use(order!.id); }`,
+        `});`,
+        `it("b", async () => {`,
+        `  const [order] = await db.select().from(t);`,
+        `  use(order!.id);`,
+        `});`,
+        `use(order!.id);`,
+      );
+    const result = transformSource(OUTSIDE, input(`const [order]`));
+    expect(result.output).toBe(
+      input(`const order`)
+        .replace(
+          VENUE_IN,
+          `${SEED.replace("seedVenue", "seedVenue, seedWorkingOrder")}\n${VENUE_OUT}`,
+        )
+        .replace(
+          `= await db.insert(workingOrders).values({ locationId: LOC }).returning();`,
+          `= await seedWorkingOrder(db);`,
+        )
+        .replace(`use(order!.id, () => order!.id);`, `use(order.id, () => order.id);`)
+        .replace(`try { use(order!.id); }`, `try { use(order.id); }`)
+        .replace(`  { use(order!.id); }`, `  { use(order.id); }`),
+    );
+    expect(result.left).toEqual([]);
+  });
 });
 
 describe("what it leaves alone", () => {
@@ -828,7 +873,7 @@ describe("what it reports and leaves", () => {
         {
           line: 1,
           reason:
-            "upgrade test: its database stops at an earlier migration, so no location rule applied",
+            "file name contains `upgrade`: an upgrade test's database can stop at an earlier migration, so no location rule applied",
         },
       ],
     });
