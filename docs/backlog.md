@@ -5869,6 +5869,10 @@ For package distribution and the four-minute target, use the
 - **A1089 merge read-back: server coverage upload timed out.**
   [Detail](backlog/ci.md#a1089-merge-read-back-server-coverage-upload-timed-out).
 
+- **`mutation-shared` sometimes runs past its 10-minute job limit, where it usually takes about 3
+  minutes.** Seen twice, with no change to `packages/shared` behind either; the cause is unknown.
+  [Detail](backlog/ci.md#mutation-shared-sometimes-runs-past-its-10-minute-job-limit).
+
 - **The first fiscal-hour end-to-end file exceeds the four-minute job budget on slow CI runners.**
   Four successful main runs on 24 October measured the file alone at 248–250 seconds. Split or
   reduce its repeated setup while preserving its restart assertions.

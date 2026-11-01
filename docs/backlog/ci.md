@@ -1195,3 +1195,22 @@ Audit these remaining CLI callers and their containing test or hook deadlines. B
 - `packages/fiscal-verifactu/src/recovery-pdf-node.test.ts`: a 60-second build limit.
 - `packages/provisioning/src/cli-entry.test.ts`: a 120-second build limit leaves no allowance
   beyond the metadata subprocess budgets for compilation. No timeout failure was reproduced.
+
+## `mutation-shared` sometimes runs past its 10-minute job limit
+
+The job's mutation step (`pnpm --filter @waitron/shared mutation`) usually finishes the job in 3 to
+4 minutes: on pull request #2331 it took between 2m53s and 3m59s in seven runs from 01:48 to 05:58
+UTC on 2026-11-01. Two runs instead reached the job's `timeout-minutes: 10` and were cancelled with
+"The job has exceeded the maximum execution time of 10m0s":
+
+- #2144's merge run 40520210328 (2026-10-27); the watcher's notes put it down to a runner about
+  five times slower than usual, and a re-run passed.
+- #2331's run 41280853700 on `82cec3f5a` (2026-11-01, step started 06:31:24 UTC). Every other job in
+  that run passed. The branch's only change under `packages/shared` (a duration formatter and its
+  test, commit `0bd9ab3a8`) had passed this job in five runs before it. GitHub returned
+  `BlobNotFound` for the job's log, so where the time went is not known.
+
+Not yet known: whether the runner was slow or Stryker stalled. Next time, keep the log (or add
+Stryker's progress output to the step) and compare the step's duration with the run's other jobs
+before deciding which. Left open by A798-B slice 9b, recorded under the CI failure rule.
+
