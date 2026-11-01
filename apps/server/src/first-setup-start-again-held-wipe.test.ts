@@ -192,7 +192,7 @@ it("a deletion already marked: Start again answers setup.start_again_incomplete 
   await writeStartAgainMarker(
     f.roots,
     await startAgainMarkerFor(
-      await assertStartAgainAllowedOnDisk(f.roots, { held: true }),
+      await assertStartAgainAllowedOnDisk(f.roots, { held: true, nodeId: state.frozen.nodeId }),
       { attemptId: state.frozen.attemptId, frozenDigest: firstSetupFrozenDigest(state) },
       { held: true },
     ),

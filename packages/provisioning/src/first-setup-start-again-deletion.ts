@@ -81,9 +81,10 @@ type Roots = { stateDir: string; venueDir: string };
 /**
  * `discarding`: the id of the backup recovery this Start again is about to discard. `held`: the
  * setup database holds what activation wrote, so the `modules.json` activation writes after its
- * commit is deleted with it rather than refused.
+ * commit is deleted with it rather than refused. `nodeId`: the attempt's node; without it, no
+ * node.db row counts as the attempt's.
  */
-type Options = { discarding?: string; held?: true };
+type Options = { discarding?: string; held?: true; nodeId?: string };
 const MODULES = "modules.json";
 /** A marker that names `modules.json` was taken with `held`. */
 const heldBy = (marker: StartAgainMarker): Options =>
@@ -445,23 +446,23 @@ export async function clearStartAgainMarker(venueDir: string): Promise<void> {
 }
 
 /**
- * The most rows a first setup attempt may leave in each node.db table: its recovery-key check
- * (`installStagedNodeKey`) and its sealed signing key. The signing key is allowed before first
- * setup writes it there, so that move does not make every held box refuse Start again.
+ * The most rows a first setup attempt may leave in each node.db table, each of them the attempt's
+ * own node's: its recovery-key check (`installStagedNodeKey`).
  */
 export const NODE_ROWS_A_FIRST_SETUP_WRITES: Readonly<Record<string, number>> = {
   [getTableName(nodeMode)]: 0,
   [getTableName(nodeMirrorLink)]: 0,
   [getTableName(nodePrimaryKey)]: 0,
   [getTableName(nodeRecoveryKey)]: 1,
-  [getTableName(nodeSigningKey)]: 1,
+  [getTableName(nodeSigningKey)]: 0,
 };
 
 /**
  * Why Start again may not delete this node.db, or null: it holds nothing, or exactly the node
- * migration set's tables and journal with no more rows than a first setup attempt writes.
+ * migration set's tables and journal with no more rows than a first setup attempt writes, all of
+ * them `nodeId`'s.
  */
-function nodeRefusal(connection: DatabaseSync): string | null {
+function nodeRefusal(connection: DatabaseSync, nodeId: string | undefined): string | null {
   const objects = connection
     .prepare("select type, name from sqlite_schema where name not like 'sqlite\\_%' escape '\\'")
     .all() as { type: string; name: string }[];
@@ -470,12 +471,22 @@ function nodeRefusal(connection: DatabaseSync): string | null {
     NODE_MIGRATIONS.migrationsTable,
     ...Object.keys(NODE_ROWS_A_FIRST_SETUP_WRITES),
   ];
-  const table = (name: string) =>
-    objects.some((found) => found.type === "table" && found.name === name);
-  if (objects.length !== expected.length || !expected.every(table)) return "node.db holds a table";
+  if (!objects.every((found) => found.type === "table" && expected.includes(found.name)))
+    return "node.db holds a table";
+  if (objects.length !== expected.length) return "node.db lacks the node tables";
+  // SQLite counts from the smallest index unless told not to; a damaged index alone must not
+  // make a readable table count as empty.
+  const count = (name: string, where = "", ...values: string[]) =>
+    (
+      connection
+        .prepare(`select count(*) as rows from ${quoteIdent(name)} not indexed ${where}`)
+        .get(...values) as { rows: number }
+    ).rows;
   for (const [name, most] of Object.entries(NODE_ROWS_A_FIRST_SETUP_WRITES)) {
-    const counted = connection.prepare(`select count(*) as rows from ${quoteIdent(name)}`).get();
-    if ((counted as { rows: number }).rows > most) return "node.db holds a row";
+    const rows = count(name);
+    if (rows > most) return `node.db holds a row: ${name}`;
+    if (rows > 0 && (nodeId === undefined || count(name, "where node_id is not ?", nodeId) > 0))
+      return `node.db holds another node's row: ${name}`;
   }
   return null;
 }
@@ -534,7 +545,7 @@ export async function assertStartAgainAllowedOnDisk(
       );
     let refusal: string | null;
     try {
-      refusal = nodeRefusal(opened.connection);
+      refusal = nodeRefusal(opened.connection, options.nodeId);
     } catch {
       throw notReady("node.db unreadable");
     } finally {

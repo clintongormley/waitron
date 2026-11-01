@@ -1,3 +1,4 @@
+import { closeSync, openSync, writeSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
@@ -63,6 +64,32 @@ const signingKeyRow = (nodeId: string) =>
   `insert into node_signing_key (node_id, ciphertext, iv, auth_tag, key_version, updated_at)
    values ('${nodeId}', x'00', zeroblob(12), zeroblob(16), 1, '2026-10-31T00:00:00.000Z')`;
 
+/** Overwrites the root page of every node.db index with junk, leaving the tables' own pages whole. */
+function damageNodeIndexes(roots: { venueDir: string }) {
+  const path = join(roots.venueDir, "node.db");
+  const node = new DatabaseSync(path);
+  let size: number;
+  let pages: number[];
+  try {
+    node.exec("pragma wal_checkpoint(TRUNCATE)");
+    size = (node.prepare("pragma page_size").get() as { page_size: number }).page_size;
+    pages = (
+      node
+        .prepare("select rootpage from sqlite_schema where type = 'index' and rootpage > 0")
+        .all() as { rootpage: number }[]
+    ).map(({ rootpage }) => rootpage);
+  } finally {
+    node.close();
+  }
+  expect(pages.length).toBeGreaterThan(0);
+  const fd = openSync(path, "r+");
+  try {
+    for (const page of pages) writeSync(fd, Buffer.alloc(size, 0xab), 0, size, size * (page - 1));
+  } finally {
+    closeSync(fd);
+  }
+}
+
 async function files(dir: string) {
   const result: Record<string, string> = {};
   for (const name of (await fs.readdir(dir)).sort())
@@ -72,21 +99,13 @@ async function files(dir: string) {
 
 it.each<[string, (roots: { venueDir: string }) => Promise<void>]>([
   ["only the node set's tables and its journal, as a setup-mode start leaves it", async () => {}],
-  ["an attempt's recovery-key check", (roots) => recoveryKeyRow(roots)],
-  ["an attempt's sealed signing key", (roots) => withNode(roots, signingKeyRow(NODE_ID))],
-  [
-    "an attempt's recovery-key check and signing key",
-    async (roots) => {
-      await recoveryKeyRow(roots);
-      await withNode(roots, signingKeyRow(NODE_ID));
-    },
-  ],
+  ["the attempt's recovery-key check", (roots) => recoveryKeyRow(roots)],
 ])(
   "Start again accepts a node.db holding %s, names it in the marker and deletes it",
   async (_name, seed) => {
     const roots = await attemptWithMigratedNode();
     await seed(roots);
-    const canonical = await assertStartAgainAllowedOnDisk(roots);
+    const canonical = await assertStartAgainAllowedOnDisk(roots, { nodeId: NODE_ID });
     const marker = await startAgainMarkerFor(canonical, ATTEMPT);
     expect(marker.files.map((entry) => `${entry.root}:${entry.name}`)).toContain("venue:node.db");
     await writeStartAgainMarker(canonical, marker);
@@ -108,7 +127,7 @@ it.each<[string, string, string]>([
     "create trigger tr after insert on node_mode begin select 1; end",
     "node.db holds a table",
   ],
-  ["only part of the node set", "drop table node_primary_key", "node.db holds a table"],
+  ["only part of the node set", "drop table node_primary_key", "node.db lacks the node tables"],
   [
     "another table in place of one of the node set's",
     "drop table node_primary_key; create table t(x)",
@@ -122,46 +141,69 @@ it.each<[string, string, string]>([
   [
     "the node set's tables without its journal",
     "drop table __drizzle_migrations_node",
-    "node.db holds a table",
+    "node.db lacks the node tables",
   ],
   [
     "a mirror link",
     `insert into node_mirror_link values ('${NODE_ID}', 'https://relay', 'box', 'pem', '${randomUUID()}', '2026-10-31T00:00:00.000Z')`,
-    "node.db holds a row",
+    "node.db holds a row: node_mirror_link",
   ],
   [
     "a role",
     `insert into node_mode (node_id, updated_at) values ('${NODE_ID}', '2026-10-31T00:00:00.000Z')`,
-    "node.db holds a row",
+    "node.db holds a row: node_mode",
   ],
   [
     "a main box's key",
     `insert into node_primary_key values ('${NODE_ID}', '${randomUUID()}', 'key', '2026-10-31T00:00:00.000Z')`,
-    "node.db holds a row",
+    "node.db holds a row: node_primary_key",
   ],
   [
     "two recovery-key checks",
     `insert into node_recovery_key values ('${NODE_ID}', 'v', 'One', '2026-10-31T00:00:00.000Z'),
        ('${randomUUID()}', 'v', 'Two', '2026-10-31T00:00:00.000Z')`,
-    "node.db holds a row",
+    "node.db holds a row: node_recovery_key",
   ],
   [
-    "two signing keys",
-    `${signingKeyRow(NODE_ID)}; ${signingKeyRow(randomUUID())}`,
-    "node.db holds a row",
+    "another node's recovery-key check",
+    `insert into node_recovery_key values ('${randomUUID()}', 'v', 'Other', '2026-10-31T00:00:00.000Z')`,
+    "node.db holds another node's row: node_recovery_key",
   ],
+  ["a signing key", signingKeyRow(NODE_ID), "node.db holds a row: node_signing_key"],
 ])(
   "Start again refuses a migrated node.db holding %s, and nothing changes",
   async (_name, sql, reason) => {
     const roots = await attemptWithMigratedNode();
     await withNode(roots, sql);
     const before = { venue: await files(roots.venueDir), state: await files(roots.stateDir) };
-    await expect(assertStartAgainAllowedOnDisk(roots)).rejects.toMatchObject(notReady(reason));
+    await expect(assertStartAgainAllowedOnDisk(roots, { nodeId: NODE_ID })).rejects.toMatchObject(
+      notReady(reason),
+    );
     expect({ venue: await files(roots.venueDir), state: await files(roots.stateDir) }).toEqual(
       before,
     );
   },
 );
+
+it("Start again told no attempt's node refuses a node.db holding a recovery-key check", async () => {
+  const roots = await attemptWithMigratedNode();
+  await recoveryKeyRow(roots);
+  await expect(assertStartAgainAllowedOnDisk(roots)).rejects.toMatchObject(
+    notReady("node.db holds another node's row: node_recovery_key"),
+  );
+});
+
+it("Start again counts a node.db table's rows from the table itself, not from a damaged index", async () => {
+  const roots = await attemptWithMigratedNode();
+  await withNode(
+    roots,
+    `insert into node_mode (node_id, updated_at) values ('${NODE_ID}', '2026-10-31T00:00:00.000Z')`,
+  );
+  damageNodeIndexes(roots);
+  await expect(assertStartAgainAllowedOnDisk(roots, { nodeId: NODE_ID })).rejects.toMatchObject(
+    notReady("node.db holds a row: node_mode"),
+  );
+});
 
 it("every node.db table has a decision on how many rows a first setup may leave in it", () => {
   expect(Object.keys(NODE_ROWS_A_FIRST_SETUP_WRITES).sort()).toEqual(

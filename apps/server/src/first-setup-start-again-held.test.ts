@@ -119,6 +119,20 @@ it("in the held state, Start again deletes a node.db holding the node set's tabl
   await expectStartAgainDeleted(f.roots);
 });
 
+it("in the held state, a node.db whose recovery-key check names another node refuses Start again setup.not_ready, and nothing changes", async () => {
+  const f = await heldSetup({ recovery: false });
+  const node = new DatabaseSync(join(f.roots.venueDir, "node.db"));
+  node.exec(`update node_recovery_key set node_id = '${crypto.randomUUID()}'`);
+  node.close();
+  expect(nodeHoldings(f)).toMatchObject({ node_recovery_key: 1 });
+  holdingsRead.calls = 0;
+  await expectRefused(f, {
+    code: "setup.not_ready",
+    reason: "node.db holds another node's row: node_recovery_key",
+  });
+  expect(holdingsRead.calls).toBe(0);
+});
+
 it("in the held state, a node.db holding a mirror link refuses Start again setup.not_ready, and nothing changes", async () => {
   const f = await heldSetup();
   const node = new DatabaseSync(join(f.roots.venueDir, "node.db"));
@@ -127,7 +141,10 @@ it("in the held state, a node.db holding a mirror link refuses Start again setup
   );
   node.close();
   holdingsRead.calls = 0;
-  await expectRefused(f, { code: "setup.not_ready", reason: "node.db holds a row" });
+  await expectRefused(f, {
+    code: "setup.not_ready",
+    reason: "node.db holds a row: node_mirror_link",
+  });
   expect(holdingsRead.calls).toBe(0);
 });
 

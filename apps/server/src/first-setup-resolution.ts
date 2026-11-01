@@ -356,7 +356,11 @@ export function createFirstSetupResolutionActions(
       unavailable();
     const heldOption = held ? { held: true as const } : {};
     // Before the read, which may copy the whole database: a refusal here costs nothing.
-    const box = await assertStartAgainAllowedOnDisk(roots, { ...discarding, ...heldOption });
+    const box = await assertStartAgainAllowedOnDisk(roots, {
+      ...discarding,
+      ...heldOption,
+      nodeId: state.frozen.nodeId,
+    });
     let databaseUnreadable = false;
     if (held || readFirst) {
       if (host.modules === undefined) unavailable();
@@ -506,7 +510,10 @@ export function createFirstSetupResolutionActions(
                 );
               },
             );
-            await assertStartAgainAllowedOnDisk(box, heldOption);
+            await assertStartAgainAllowedOnDisk(box, {
+              ...heldOption,
+              nodeId: state.frozen.nodeId,
+            });
             marker = await markerFor(box, state, heldOption);
           }
           await writeStartAgainMarker(box, marker);
