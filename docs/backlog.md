@@ -5199,6 +5199,14 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   Design revision 7 (2026-10-24).
   [Detail](backlog/box.md#a798-b-build-degraded-but-trading-what-the-box-does-and-tells-staff-when-a-part-fails-but-it-can-still-sell)
 
+- **One steady-clock helper instead of hand-written clock-step-back guards** (owner, 2026-11-01,
+  answering #2331). Many timers, throttles and watches across the packages and apps each guard by
+  hand against the wall clock stepping back (for example `packages/identity/src/pin-throttle.ts`,
+  `apps/server/src/backup-schedule.ts`, `packages/fiscal-verifactu/src/drain.ts`). Move them onto one
+  shared helper that measures elapsed time on a steady clock. Start by listing every site
+  (`git grep -n -i -E "went backwards|step(s|ped)? back|backward"` outside tests) and the rule each
+  applies today; behaviour is kept site by site. Raised by #2331's review, not yet designed.
+
 - **AEAT's time for a confirmation comes from its QR validation host, not from a `consultar` reply.**
   [Detail](backlog/box.md#aeats-time-for-a-confirmation-comes-from-its-qr-validation-host-not-from-a-consultar-reply)
 
