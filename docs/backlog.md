@@ -6454,11 +6454,28 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `readVenueClockAndPlace` and the interim `venueLocationId` are on main, so S2–S12 and S16 can
   start. F1 landed (#2383): `@waitron/db/testing/seed.js` has `seedVenue` and `seedWorkingOrder`,
   `packages/db`'s tests seed through them, and `scripts/a1301-seed-codemod.mjs` rewrites the common
-  shapes and reports the rest, so F2–F5 can start. S13–S15 can start now that A1268 has landed (#2375), S18 waits for S2–S17, and the schema
+  shapes and reports the rest, so F2–F5 can start. S5 landed (#2386): the default and extra menus
+  and the receipt languages are read from the one venue (`readVenueInvoiceLocales` in `@waitron/db`
+  reads the languages alone), the menu routes moved to `/management-api/venue/…`, and
+  `location.not_found` is gone. S13–S15 can start now that A1268 has landed (#2375), S18 waits for S2–S17, and the schema
   slices S20–S28 get a plan of their own, which first settles what the venue id sent to Cloud and
   naming the backup folder becomes.
   [Design](superpowers/specs/2026-11-01-a1301-remove-location-design.md),
   [plan](superpowers/plans/2026-11-01-a1301-remove-location.md)
+
+- **A1301 S5 left "location" in files other slices own.** Two parameters in
+  `packages/catalogue/src/operations.ts` are named `_locationId` and never read; they go when S2's
+  callers stop passing them. Wording to change: `apps/server/src/testing/zone-offers.ts` and a
+  `till-api.test.ts` comment (F5), `apps/server/scripts/demo-seed/seed-catalogue.ts` (S19), and the
+  English and Spanish guide `content-and-images.md`, whose receipt-language paragraph still speaks
+  of "the location's default".
+  `floor-delete.test.ts`'s "empty and foreign zone selections…" case still leaves a second
+  location behind; it is the file's last case today (S9).
+
+- **The venue's menu routes are named unlike their neighbours.** S5 moved them to
+  `/management-api/venue/…`, as the A1301 plan chose, while the other venue routes are one
+  hyphenated segment (`/management-api/venue-details`, `/venue-defaults`). Pick one shape before
+  go-live.
 
 - **`seedVenue` checks for a venue, then inserts it, in two steps.** Two calls running at once on
   one database can both write a venue (found by finish-branch's second Codex review on #2383, not
