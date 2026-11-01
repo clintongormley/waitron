@@ -632,6 +632,17 @@ describe("missing-attendance delivery worker", () => {
     expect(send).toHaveBeenCalledTimes(3);
     expect((await mail())[0]!.status).toBe("sent");
   });
+  it("sends a retry stamped more than its fifteen-minute delay ahead, as after a step back", async () => {
+    await seedMissing();
+    send.mockResolvedValue("rejected");
+    await pass();
+    expect((await mail())[0]!.nextAttemptAt).toBe("2026-01-08T06:15:00.000Z");
+    now = new Date("2026-01-08T00:00:00Z");
+    send.mockResolvedValue("sent");
+    await pass();
+    expect(send).toHaveBeenCalledTimes(2);
+    expect((await mail())[0]!.status).toBe("sent");
+  });
   it("treats a thrown transport as unknown and keeps the worker question", async () => {
     await seedMissing();
     send.mockRejectedValue(new Error("private transport detail"));

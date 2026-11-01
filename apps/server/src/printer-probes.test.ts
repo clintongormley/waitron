@@ -34,6 +34,21 @@ describe("printer address requests", () => {
     probes.add({ host: "10.0.0.9" });
     expect(probes.current()).toHaveLength(2);
   });
+  it("drops a request ending further ahead than its 30 seconds, as after a step back, and frees its slot", () => {
+    let now = 400 * 86_400_000;
+    const probes = createPrinterProbes(() => now);
+    for (let i = 1; i <= 8; i++) probes.add({ host: `10.0.0.${i}` });
+    now = 400 * 86_400_000 - 1;
+    expect(probes.current()).toEqual([]);
+    expect(probes.add({ host: "10.0.0.9" }).host).toBe("10.0.0.9");
+  });
+  it("keeps a request ending exactly 30 seconds ahead", () => {
+    let now = 1000;
+    const probes = createPrinterProbes(() => now);
+    probes.add({ host: "10.0.0.1" });
+    now = 1000;
+    expect(probes.current()).toEqual([{ host: "10.0.0.1", port: 9100, expiresInMs: 30000 }]);
+  });
   it.each([null, undefined, [], "bad"])("refuses malformed request %s", (input) => {
     expect(() => createPrinterProbes().add(input)).toThrowError(
       expect.objectContaining({ code: "management.request_invalid" }),

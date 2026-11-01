@@ -10,7 +10,12 @@ import { ArchiveReadBudget } from "./archive-read-budget.js";
 import { packArchiveStream, type ArchiveInputEntry } from "./backup-archive-file.js";
 import { buildManifest, type BackupManifest } from "./backup-manifest.js";
 import type { BackupSchedule } from "./backup-config.js";
-import { MAX_SLEEP_MS, nextFireMs, type ScheduleClock } from "./backup-schedule.js";
+import {
+  MAX_SLEEP_MS,
+  longestFireAheadMs,
+  nextFireMs,
+  type ScheduleClock,
+} from "./backup-schedule.js";
 import type { DeploymentEnvironment } from "./config.js";
 import { errnoOf } from "./errno.js";
 import { freeBytes, type Statfs } from "./free-bytes.js";
@@ -420,7 +425,8 @@ export async function pruneBackend(
 
 /**
  * Takes a copy at once, then sleeps toward each next fire in chunks of at most `MAX_SLEEP_MS`, so a
- * clock jump is noticed within the hour. A failed tick is logged with its code, never its message,
+ * step of the clock is noticed within the hour: a step forward past the fire fires then, and a step
+ * back that leaves the fire further ahead than the schedule puts one works the fire out again. A failed tick is logged with its code, never its message,
  * which could carry a path; an abort mid-tick is a cancellation, not a failure.
  */
 export async function runBackupSweep(deps: BackupSweepDeps): Promise<void> {
@@ -447,12 +453,19 @@ export async function runBackupSweep(deps: BackupSweepDeps): Promise<void> {
       deps.onScheduled?.(fireAt);
       // `fireAt` is fixed for the cycle, so a time zone or cutover change lands at the next fire.
       // Never recompute it mid-wait: an interval schedule's next fire is `now + ms`, so each wake
-      // would push it out again.
+      // would push it out again. The one exception is a `fireAt` the clock stepped back from.
+      const longestAhead = longestFireAheadMs(deps.schedule);
+      let steppedBack = false;
       while (!deps.signal.aborted && now().getTime() < fireAt) {
+        if (fireAt - now().getTime() > longestAhead) {
+          steppedBack = true;
+          break;
+        }
         const chunk = Math.min(MAX_SLEEP_MS, fireAt - now().getTime());
         await deps.sleep(chunk, deps.signal);
       }
       if (deps.signal.aborted) break;
+      if (steppedBack) continue;
       deps.onScheduled?.(null);
       await tick(deps);
     }

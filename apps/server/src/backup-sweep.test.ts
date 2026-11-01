@@ -21,6 +21,7 @@ import {
   runOnce,
 } from "./backup-sweep.js";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
+import type { BackupSchedule } from "./backup-config.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
 import { backupArchiveKey, parseBackupArchiveKey } from "./backup-keys.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
@@ -872,6 +873,98 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
       "2026-11-05T02:36:00.000Z",
     ]);
     expect(backend.objects.size).toBe(3);
+  });
+
+  describe("a step back of the box's clock during the wait", () => {
+    const HOUR = 3600000;
+    const DAY = 24 * HOUR;
+
+    // Steps the clock back by `stepMs` at the first wait, then moves it on by each wait; stops at the
+    // second archive, or after three days of waiting.
+    async function archivesAfterStep(schedule: BackupSchedule, start: string, stepMs: number) {
+      const controller = new AbortController();
+      let now = Date.parse(start);
+      const archived: number[] = [];
+      const deadlines: Array<number | null> = [];
+      let waited = 0;
+      await runBackupSweep(
+        loopDeps(new FakeBackend("step"), {
+          signal: controller.signal,
+          now: () => new Date(now),
+          log: vi.fn(),
+          schedule,
+          readClock: async () => ({
+            timeZone: "Europe/Madrid",
+            dayCutover: "05:00",
+            cutoverChanges: [],
+          }),
+          onScheduled: (at) => deadlines.push(at),
+          archive: async (outFile) => {
+            archived.push(now);
+            await writeFile(outFile, "DUMP-BYTES");
+            if (archived.length === 2) controller.abort();
+          },
+          sleep: async (ms) => {
+            if (waited === 0) now -= stepMs;
+            else now += ms;
+            waited += ms;
+            if (waited > 3 * DAY) controller.abort();
+          },
+        }),
+      );
+      return {
+        archived,
+        deadlines: deadlines.filter((at) => at !== null),
+        stepped: Date.parse(start) - stepMs,
+      };
+    }
+
+    it("takes the next archive one interval after a step back 400 days", async () => {
+      const { archived, stepped } = await archivesAfterStep(
+        { kind: "interval", ms: DAY },
+        "2026-11-03T12:00:00Z",
+        400 * DAY,
+      );
+      expect(archived).toHaveLength(2);
+      expect(archived[1]).toBe(stepped + DAY);
+    });
+
+    it("takes the next archive at the next 03:00 after a step back 400 days", async () => {
+      const { archived } = await archivesAfterStep(
+        { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 0 } },
+        "2026-11-03T12:00:00Z",
+        400 * DAY,
+      );
+      expect(archived.map((at) => new Date(at).toISOString())).toEqual([
+        "2026-11-03T12:00:00.000Z",
+        "2025-09-30T01:00:00.000Z",
+      ]);
+    });
+
+    it("with no step, takes the next archive one interval on", async () => {
+      const { archived, deadlines } = await archivesAfterStep(
+        { kind: "interval", ms: DAY },
+        "2026-11-03T12:00:00Z",
+        0,
+      );
+      expect(archived[1]! - archived[0]!).toBe(DAY);
+      expect(deadlines).toEqual([archived[0]! + DAY]);
+    });
+
+    it("keeps its deadline through a step that leaves it a whole interval ahead, and not a millisecond more", async () => {
+      // The first wait sleeps no time here, so the step alone sets how far ahead the deadline lies.
+      for (const [stepMs, kept] of [
+        [0, true],
+        [1, false],
+      ] as const) {
+        const { deadlines } = await archivesAfterStep(
+          { kind: "interval", ms: DAY },
+          "2026-11-03T12:00:00Z",
+          stepMs,
+        );
+        expect(deadlines.length === 1).toBe(kept);
+      }
+    });
   });
 
   describe("the staging turn", () => {

@@ -81,6 +81,20 @@ describe("attendance mail claims", () => {
     expect(second!.token).not.toBe(first.token);
     expect(await row()).toMatchObject({ status: "sending", outcome: null });
   });
+  it("claims a retry stamped more than its 15-minute wait ahead, as after a step back, and not one exactly 15 minutes ahead", async () => {
+    const { reportAttendanceMail } = await import("./attendance-mail.js");
+    const first = (await claim())!;
+    await withTransaction(suite.db, (tx) => reportAttendanceMail(tx, first, "rejected", now));
+    expect(await claim(now)).toBeNull();
+    expect(await claim(new Date(now.getTime() - 1))).not.toBeNull();
+  });
+  it("claims a retry stamped 400 days ahead", async () => {
+    const { reportAttendanceMail } = await import("./attendance-mail.js");
+    const first = (await claim())!;
+    const ahead = new Date(now.getTime() + 400 * 86_400_000);
+    await withTransaction(suite.db, (tx) => reportAttendanceMail(tx, first, "rejected", ahead));
+    expect(await claim(now)).not.toBeNull();
+  });
   it.each(["sending", "sent", "unknown", "cancelled"] as const)(
     "never reclaims %s",
     async (status) => {
@@ -150,6 +164,22 @@ describe("attendance mail claims", () => {
     expect(await suite.db.select().from(attendanceQuestions)).toMatchObject([
       { id: questionId, resolvedByEntryId: null },
     ]);
+  });
+  it("expires a claim stamped more than its 60 seconds ahead, as after a step back, and not one exactly 60 seconds ahead", async () => {
+    const { expireAttendanceMailClaims } = await import("./attendance-mail.js");
+    await claim();
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        expireAttendanceMailClaims(tx, new Date(now.getTime() - 60_000)),
+      ),
+    ).toBe(0);
+    expect((await row()).status).toBe("sending");
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        expireAttendanceMailClaims(tx, new Date(now.getTime() - 60_001)),
+      ),
+    ).toBe(1);
+    expect(await row()).toMatchObject({ status: "unknown", outcome: "unknown" });
   });
   it("refuses a missing delivery without changing the real row", async () => {
     const { claimAttendanceMail, reportAttendanceMail } = await import("./attendance-mail.js");

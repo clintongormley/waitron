@@ -32,6 +32,7 @@ import type { BackupStatus } from "./backup-status.js";
 import type { DiskFullState } from "./disk-full-state.js";
 import type { FreeSpaceState } from "./free-space-watch.js";
 import { type InvoiceDeliveryStatus, readInvoiceDeliveriesFor } from "./invoice-delivery-status.js";
+import { latestNextAttempt } from "./invoice-delivery.js";
 import type { PageTestPages } from "./page-test-pages.js";
 import type { AwaitingCertStatus } from "./pass.js";
 import type { SealedStateStatus } from "./sealed-state.js";
@@ -478,9 +479,12 @@ export function undeliveredInvoice(
     };
   }
   if (current.medium !== "a4" || current.status !== "queued") return null;
-  // A queued row's time is its `next_attempt_at`, which is never null.
-  const due = current.at!;
-  if (now.getTime() - Date.parse(due) < A4_UNCLAIMED_AFTER_MS) return null;
+  // A queued row's time is its `next_attempt_at`, which is never null. One further ahead than the
+  // longest retry wait was stamped before the clock stepped back: it is due now, and when it became
+  // due is unknown.
+  const stampedAhead = Date.parse(current.at!) > Date.parse(latestNextAttempt(now));
+  const due = stampedAhead ? now.toISOString() : current.at!;
+  if (!stampedAhead && now.getTime() - Date.parse(due) < A4_UNCLAIMED_AFTER_MS) return null;
   const printer = officePrinter();
   const hold = context.sendingHolds.get(printer.id) ?? context.testPages.holdOn(printer.id);
   if (hold !== null) return { kind: "queued_behind_hold", since: due, printer: printer.name, hold };

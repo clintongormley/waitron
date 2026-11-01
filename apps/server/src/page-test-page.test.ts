@@ -982,6 +982,66 @@ describe("a test page the printer is holding", () => {
   });
 });
 
+describe("a test page's time limits after a step back of the clock", () => {
+  const printers = [
+    {
+      id: "x",
+      active: true,
+      agentId: "agent",
+      documentFormat: "application/pdf" as const,
+      resolutionDpi: 300,
+    },
+  ];
+  const DAY = 86_400_000;
+
+  it("ends a page claimed further ahead than its 60 s lease, frees its printer, and keeps one exactly 60 s ahead", () => {
+    for (const [back, status] of [
+      [60_000, "printing"],
+      [60_001, "unknown"],
+      [400 * DAY, "unknown"],
+    ] as const) {
+      const state = { now: at(0) };
+      const pages = createPageTestPages(() => state.now);
+      pages.request("x", "es-ES");
+      pages.claim("agent", printers);
+      state.now = at(-back);
+      expect(pages.read("x")!.status).toBe(status);
+      expect(pages.printingOn()).toEqual(status === "printing" ? ["x"] : []);
+    }
+  });
+
+  it("fails a page requested further ahead than its five-minute window, and keeps one exactly five minutes ahead", () => {
+    for (const [back, status] of [
+      [300_000, "waiting"],
+      [300_001, "failed"],
+    ] as const) {
+      const state = { now: at(0) };
+      const pages = createPageTestPages(() => state.now);
+      pages.request("x", "es-ES");
+      state.now = at(-back);
+      expect(pages.read("x")!.status).toBe(status);
+    }
+  });
+
+  it("forgets an outcome finished further ahead than its ten minutes, and keeps one exactly ten minutes ahead", () => {
+    for (const [back, kept] of [
+      [600_000, true],
+      [600_001, false],
+    ] as const) {
+      const state = { now: at(0) };
+      const pages = createPageTestPages(() => state.now);
+      pages.request("x", "es-ES");
+      const job = pages.claim("agent", printers)!;
+      pages.report(
+        { deliveryId: job.id, generation: 1, token: job.token, holder: "agent" },
+        { status: "sent" },
+      );
+      state.now = at(-back);
+      expect(pages.read("x") !== null).toBe(kept);
+    }
+  });
+});
+
 describe("the print agent's own client", () => {
   it("claims, fetches and reports a test page over the same routes it uses for invoices", async () => {
     const v = await venue({ render: async () => Buffer.from([1, 2, 3]) });

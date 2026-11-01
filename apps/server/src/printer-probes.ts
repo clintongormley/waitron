@@ -9,6 +9,8 @@ interface PrinterAddressProbe {
   expiresAt: number;
 }
 
+const PROBE_MS = 30_000;
+
 /** Requests are transient and bounded independently of the broader discovery window. */
 export function createPrinterProbes(now: () => number = Date.now): {
   add(input: unknown): PrinterAddressProbe;
@@ -17,7 +19,9 @@ export function createPrinterProbes(now: () => number = Date.now): {
   const targets = new Map<string, PrinterAddressProbe>();
   const current = (): { host: string; port: number; expiresInMs: number }[] => {
     const instant = now();
-    for (const [key, target] of targets) if (target.expiresAt <= instant) targets.delete(key);
+    // One ending further ahead than its window was added before the clock stepped back.
+    for (const [key, target] of targets)
+      if (target.expiresAt <= instant || target.expiresAt - instant > PROBE_MS) targets.delete(key);
     return [...targets.values()].map(({ host, port, expiresAt }) => ({
       host,
       port,
@@ -51,7 +55,7 @@ export function createPrinterProbes(now: () => number = Date.now): {
       const key = `${host}:${port}`;
       if (!targets.has(key) && targets.size >= 8) throw new AppError("printer.probe_busy", {});
       const requestedAt = now();
-      const target = { host, port, requestedAt, expiresAt: requestedAt + 30_000 };
+      const target = { host, port, requestedAt, expiresAt: requestedAt + PROBE_MS };
       targets.set(key, target);
       return target;
     },

@@ -3190,6 +3190,7 @@ commit, per-task review and push)*:
   (found while building 15c-3), the office printer's "unclaimed" alert (`alert-sources.ts`) and a
   test page's lease (`page-test-pages.ts`, `settle`) (both from 15c-3's review), then the
   `nowIso()` / `Date.now` grep.
+- **15c-5, the print agent** — found by 15c-4's grep; below.
 
 ### Task 15c-1's departure (2026-11-01)
 
@@ -3332,6 +3333,40 @@ on a clock that never moved for five of the six jobs.
 - **M3:** accepted and recorded in the join-requests audit row.
 - **M1, M2:** moved to Task 15c-4 (the office printer's "unclaimed" alert in `alert-sources.ts`;
   a test page's lease in `page-test-pages.ts`, which keeps its printer out of the A4 pick).
+
+### Task 15c-4's notes (2026-11-01)
+
+- **The backup schedule's limit** (`longestFireAheadMs`): one interval, or the longest gap between
+  allowed days plus 25 hours. The extra day is the hour the clocks go back and a later day start
+  saved for tomorrow: a Sunday automatic backup with the day start moved from 00:00 to 23:59 across
+  25 October 2026 puts its fire more than 8 days ahead with no step
+  (`backup-schedule.test.ts`, "a later day start puts a Sunday automatic fire over 8 days ahead").
+  The bound is checked by walking `nextFireMs` from fire to fire, where a fire is furthest ahead,
+  across both changes of the clocks, for six day sets, four times of day and four clocks. A fire
+  further ahead than the bound is worked out again at the next wake (within the hour), never shifted.
+- **The office printer's "unclaimed" alert** reports a queued A4 copy stamped further ahead than the
+  longest retry wait at once, dated now: the pick now hands such a copy out, so it is due, and when
+  it became due is unknown. Treating it as due now and then waiting two minutes would never raise it,
+  since each read starts the two minutes again.
+- **The attendance reminder's retry** shares one condition, `attendanceMailDue`, between the claim and
+  the worker's eligible read, as invoice deliveries do; its 15-minute wait is the only retry wait.
+  A claim taken more than 60 seconds ahead ends `unknown`, never resent, as an abandoned claim does.
+- **The grep** (`nowIso()` and `Date.now` not followed by `(`, non-test source under `apps/` and
+  `packages/`) found no `nowIso()` used in a comparison: every hit stamps a write. Of the `Date.now`
+  defaults, the PIN, account-action, device-join and pairing limiters were done in 15c-2 and 15c-3.
+  New: printer address probes (`printer-probes.ts`, fixed here) and the print agent's Bluetooth
+  recheck and paired-device reuse (`apps/print-agent/src/linux-devices.ts`) and server certificate
+  refetch (`server-ca.ts`): Task 15c-5.
+- **Left:** `forgetLapsed` in `page-print-api.ts` keeps a claim's in-memory record stamped ahead until
+  the clock catches up; the database's claim, which decides, has lapsed by `claimLapsed`.
+
+### Task 15c-5: the print agent's own limits *(added while building Task 15c-4, 2026-11-01)*
+
+The rule of Task 15c, test first, for three in-memory limits in `apps/print-agent/src`: the Bluetooth
+recheck (`linux-devices.ts`, `recheckDue`, `BLUETOOTH_RECHECK_MS`), paired-device reuse
+(`PAIRED_REUSE_MS`, a reuse decided from a start time further ahead than its limit is not a reuse)
+and the server certificate refetch (`server-ca.ts`, `lastFetchAt` against its interval). Each gets
+its failing case, a control just inside the limit and a deletion control. Read, not run, when added.
 
 ### Task 15's departures and notes (2026-10-31)
 

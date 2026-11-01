@@ -11,6 +11,7 @@ export {
 } from "./schema/attendance.js";
 export { enqueueAttendanceDay } from "./attendance-state.js";
 export {
+  attendanceMailDue,
   claimAttendanceMail,
   expireAttendanceMailClaims,
   reportAttendanceMail,
