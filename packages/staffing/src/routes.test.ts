@@ -634,7 +634,7 @@ describe("the staffing paint routes", () => {
     expect(read.areas.map((a) => a.weekdays)).toEqual([week(), week()]);
   });
 
-  it("validates a block against the location's own changeover", async () => {
+  it("validates a block against the venue's own changeover", async () => {
     const p = await painted();
     await withTransaction(suite.db, (tx) =>
       tx

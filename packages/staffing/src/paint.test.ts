@@ -426,7 +426,7 @@ describe("special-day staffing", () => {
     });
   });
 
-  it("carries the location's changeover", async () => {
+  it("carries the venue's changeover", async () => {
     const v = await venue();
     await inTx((tx) =>
       tx
@@ -727,7 +727,7 @@ describe("switched-off areas", () => {
   );
 });
 
-describe("location clock", () => {
+describe("venue clock", () => {
   it("orders blocks of one start by their end, then staff role, then headcount", async () => {
     const v = await venue();
     const [first, second] = [v.waiter, v.cook].sort();
@@ -747,7 +747,7 @@ describe("location clock", () => {
     ).toEqual(ordered);
   });
 
-  it("orders blocks from the location's changeover", async () => {
+  it("orders blocks from the venue's changeover", async () => {
     const v = await venue();
     await inTx((tx) =>
       tx

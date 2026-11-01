@@ -28,7 +28,6 @@ import "./errors.js";
 
 export type { SeasonStaffingEdit, SpecialDayStaffingEdit };
 
-/** Only the scope venue-service's season and day-plan readers still take (A1301 S8). */
 type ScopeCfg = { locationId: string };
 
 const venueScope = (cfg: ScopeCfg) => ({ locationId: locationId(cfg.locationId) });

@@ -115,7 +115,6 @@ export async function listStaffRolesWithHolderNames(tx: Transaction): Promise<Li
       })
       .from(personStaffRoles)
       .innerJoin(persons, eq(persons.id, personStaffRoles.personId))
-      .innerJoin(staffRoles, eq(staffRoles.id, personStaffRoles.staffRoleId))
       .orderBy(asc(personStaffRoles.personId)),
   );
   const compare = createLabelComparator();
