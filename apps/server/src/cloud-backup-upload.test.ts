@@ -1,4 +1,4 @@
-import { it, expect } from "vitest";
+import { it, expect, vi } from "vitest";
 import { createServer } from "node:https";
 import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
@@ -93,6 +93,52 @@ it("uploads with capture credentials and a conditional PUT; retries need no read
       uploadCloudCapture(g, bytes, { ca: tls.caCertPem, signal: c.signal }),
     ).rejects.toMatchObject({ code: "cloud.unavailable" });
   } finally {
+    server.closeAllConnections();
+    await new Promise<void>((r, j) => server.close((e) => (e ? j(e) : r())));
+  }
+});
+it("sends nothing to an endpoint under another authority even with Node's certificate checks switched off", async () => {
+  const tls = mintSelfSignedServerCert({
+    hostnames: ["localhost"],
+    ipAddresses: ["127.0.0.1"],
+    now: new Date(),
+  });
+  const other = mintSelfSignedServerCert({
+    hostnames: ["localhost"],
+    ipAddresses: ["127.0.0.1"],
+    now: new Date(),
+  });
+  let requests = 0;
+  const server = createServer({ key: tls.serverKeyPem, cert: tls.serverCertPem }, (req, res) => {
+    requests++;
+    req.resume();
+    res.end();
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const id = randomUUID(),
+    g: CloudCaptureGrant = {
+      id,
+      installationId: randomUUID(),
+      venueId: randomUUID(),
+      keyVersion: 1,
+      location: {
+        endpoint: `https://127.0.0.1:${(server.address() as { port: number }).port}`,
+        bucket: "venue-one",
+        region: "local",
+      },
+      incomingKey: "incoming/" + id,
+      recoveryKey: randomBytes(32).toString("base64url"),
+      credentials: { accessKeyId: "upload", secretAccessKey: "secret", sessionToken: "token" },
+      expiresAt: new Date(Date.now() + 900000).toISOString(),
+    };
+  vi.stubEnv("NODE_TLS_REJECT_UNAUTHORIZED", "0");
+  try {
+    await expect(
+      uploadCloudCapture(g, Buffer.from("archive"), { ca: other.caCertPem }),
+    ).rejects.toMatchObject({ code: "cloud.unavailable" });
+    expect(requests).toBe(0);
+  } finally {
+    vi.unstubAllEnvs();
     server.closeAllConnections();
     await new Promise<void>((r, j) => server.close((e) => (e ? j(e) : r())));
   }

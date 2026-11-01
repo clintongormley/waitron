@@ -38,7 +38,8 @@ async function upload(
       forcePathStyle: true,
       maxAttempts: 1,
       requestChecksumCalculation: "WHEN_REQUIRED",
-      requestHandler: { httpsAgent: new Agent({ ca: options.ca }) },
+      // Explicit so NODE_TLS_REJECT_UNAUTHORIZED=0 cannot switch it off.
+      requestHandler: { httpsAgent: new Agent({ ca: options.ca, rejectUnauthorized: true }) },
     });
     const signal = options.signal
       ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)])
