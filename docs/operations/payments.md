@@ -2,8 +2,9 @@
 
 For a table bill, use **Pay items** for particular dishes, **Contribute** for an amount
 towards the bill, or **Split equally** for the people still to pay. Review the amount applied,
-tip and change before taking payment. **Split by item** creates another bill; **Pay items**
-keeps the payment on this bill.
+tip and change before taking payment. **Move dishes…** with **+ New bill** puts whole dishes on
+another bill, and a part-paid bill's unpaid dishes may go too; **Pay items** keeps the payment on
+this bill.
 
 These are the current table-payment actions. The separate payment-window and bill/table
 redesigns remain pending until their implementations land.

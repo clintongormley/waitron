@@ -348,7 +348,7 @@ async function resolveMoveLines(
  * party, or to a new bill (a new counter order when the bill has none). The source may be partly
  * paid: a paid dish stays (`bill.line_paid`) and the source keeps at least what it has received. An
  * existing destination holds no payment. To a new bill, a dish the kitchen holds outside a held
- * group is refused `tab.split_held_line`, as Split by item refuses it.
+ * group is refused `tab.split_held_line`, as `splitBill` refuses it.
  */
 export async function moveDishes(
   tx: Transaction,

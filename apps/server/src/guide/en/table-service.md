@@ -185,12 +185,13 @@ with it, and the bill and the kitchen agree on which burger is which.
 
 While the dishes are the same you still see one row, **2 × Burger**, on the bill and in **Sent**. A
 row parts as soon as one dish differs, for example once one burger is served or comped. Tapping a
-row in **Sent** marks all of it served; **Mark served** in the row's details asks how many. **Split by item** lets you choose how many of a row go to
-the new bill, each with its own extras, while **Transfer items** moves the whole row. **Comp** and
-**Void** work on the row and let you choose how many of its dishes.
+row in **Sent** marks all of it served; **Mark served** in the row's details asks how many.
+[**Move dishes…**](table-service.md#move-dishes) lets you choose how many of a row go to another bill, each with
+its own extras. **Comp** and **Void** work on the row and let you choose how many of its dishes.
 
 A weighed dish is different, because each one is weighed on its own: adding the same weighed dish
-twice gives two lines rather than one of double the weight. At a table or at the counter you can add up to 99 of one dish at a time.
+twice gives two lines rather than one of double the weight, and a weighed dish moves to another bill
+whole. At a table or at the counter you can add up to 99 of one dish at a time.
 
 At the counter, an order you park and open again shows its 2 × Burger as one row while none of it
 is paid.
@@ -246,9 +247,8 @@ it on screen.
 
 Everything else you do at the table is in the **⋮** menu beside the switcher, in two parts. The
 first, headed with the bill on screen, such as **Bill 2 · Clint**, acts on that bill alone: **Name
-this bill**, **Split by item**, **Transfer items**, **Merge bills**, **Move this bill**, **Comp the
-bill**, **Full invoice**, **Receipt copy** and **Cancel and credit**, each when it applies to the
-bill. The second, **Whole table**, acts on everyone at the table: **Allergies**, **Name the party**,
+this bill**, **Move dishes…**, **Merge bills**, **Move this bill**, **Comp the bill**, **Full
+invoice**, **Receipt copy** and **Cancel and credit**, each when it applies to the bill. The second, **Whole table**, acts on everyone at the table: **Allergies**, **Name the party**,
 **Guests**, **Mark bill requested for …** with the party's name (once requested, **Cancel the bill
 request for …**), **Split a table** (when the party sits at more than one table), **Join a table**,
 **Move guests** and **Finish table**. An action that needs a choice, such as which bill to merge
@@ -285,6 +285,39 @@ If you choose **Finish table** while a bill is still unpaid, the till says **A b
 is still unpaid. Take payment before finishing the table** above the foot. **Take payment** puts an
 unpaid bill on screen so you can take its payment, and **Record unpaid departure** records that the
 guests left without paying.
+
+## Move dishes to another bill {#move-dishes}
+
+When one guest decides to pay for their own drinks, move those dishes onto a bill of their own. Open
+the **⋮** menu and choose **Move dishes…**. It is there for a table's bill that is still open, even
+when part of it is paid.
+
+The panel, headed with the bill, such as **Move dishes from Bill 1**, lists the bill's dishes. Tick
+a dish to move it; its extras go with it. Identical dishes share one row, such as **4 × Caña**:
+ticking the row takes all of them, and **−** and **+** then set how many, shown as **2 of 4**. A
+weighed dish has a tick only, because it moves whole. A dish someone is changing in an unsent order
+is not listed.
+
+Some ticks are grey, with the reason under the dish:
+
+- **Paid**: the dish is already paid, so it stays on this bill. Refund its payment first to move it.
+- **€40.00 is already paid on this bill**: moving this dish, or one more of the row, would leave the
+  bill owing less than has been paid on it. The other dishes can still go.
+
+Under **Move to**, choose where the dishes go: one of the table's other bills that has no payment
+yet, or **+ New bill**. **Move** stays quiet until you have ticked a dish and chosen where it goes.
+After the move, a new bill is put on screen; moving onto another bill leaves this one on screen.
+Each dish keeps its course and stays sent, fired or served as it was. If the till says **Send held
+items to the kitchen before moving them to another bill**, send them first, or move them onto one of
+the table's other bills instead. Moving the last unpaid dishes off a part-paid bill leaves it paid
+in full, and its invoice is issued.
+
+If someone paid a dish on another till while the panel was open, the move is refused with the
+reason, such as **This item has already been paid for, so it cannot be changed, moved or charged
+again. Refund its payment first**, and nothing moves. If the move would leave the bill owing less
+than has been paid, the till says how much and offers **Refund {amount}**. If someone else has
+unsent dishes on either bill, take over their order first. Open **Move dishes…** again to choose
+afresh.
 
 ## Name a bill {#bill-names}
 

@@ -1075,12 +1075,13 @@ Tab button and no side drawer.
 - **The ⋮** is a `wt-row-actions` (label "Table actions", `align="end"`, `opens-below`) holding two
   `role="group"` sections, each named by its visible heading through `aria-labelledby` and split by
   a rule. The bill section, headed with the bill on screen's short label and left out when no bill
-  is on screen, lists for an open owing bill Name this bill, Split by item, Transfer items, Merge
-  bills, Move this bill, Comp the bill and Full invoice, in that order; Receipt copy and Cancel and
-  credit join it where the bill offers them. Whole table lists Allergies, Name the party, Guests,
+  is on screen, lists Name this bill, then for an open bill Move dishes… and, while it holds no
+  payment, Merge bills, then Move this bill, Comp the bill and Full invoice, in that order; Receipt
+  copy and Cancel and credit join it where the bill offers them. Whole table lists Allergies, Name the party, Guests,
   Mark bill requested (or Cancel the bill request), Split a table (two or more tables only), Join a
-  table, Move guests and Finish table. With no party it offers Split by item, Transfer items and
-  Merge bills under "Bill" and Join a table and Move guests under Whole table. Full invoice, in the
+  table, Move guests and Finish table. With no party it offers Merge bills under "Bill" and Join a
+  table and Move guests under Whole table; Move dishes… is not offered there, because the app moves
+  dishes only between a party's bills. Full invoice, in the
   ⋮ and on the payment step alike, is offered only for a bill still owing with no invoice number.
 - **The action panel.** A ⋮ item that needs a choice draws its step in `aside.action-panel`
   (`data-action-panel`) beside the order while it is open. Its heading takes focus and the panel is
@@ -5750,7 +5751,7 @@ capitals between `**` above each such run; correction and MOVED slips print none
 An order, at a table or the counter, stores each dish as its own portion, so two identical burgers
 are two lines. Screens draw identical portions in identical state as one row with a count, placed where its first member
 would stand, its members in line order: the till's Sent panel, its sent-line fallback list and the
-Transfer items and Split by item pickers (`portionGroups`, `tabLinePortionKey`,
+Move dishes picker (`portionGroups`, `tabLinePortionKey`,
 `sentSlicePortionKey`, `apps/till/src/state/portion-groups.ts`), the kitchen screen's cards and the
 pass ("2× Burger", `kitchenPortionKey`), the counter basket's retrieved order while none of it is
 paid (`foldRetrievedPortions`, `apps/till/src/state/counter-portion-rows.ts`), and the dashboard's
@@ -5763,13 +5764,41 @@ one in a unit with no decimals; a weighed or measured line, and a line no portio
 always stand alone.
 
 On the till, Mark served and Undo served on a grouped row ask how many and act on its first that
-many members; Recall and Move station take every member; Transfer items ticks the whole row; Split
-by item's stepper picks its first members whole; Comp, discounts and Void act on the row, all of it
+many members; Recall and Move station take every member; Move dishes… picks the row's first members
+whole ([The dish picker](#the-dish-picker)); Comp, discounts and Void act on the row, all of it
 or a count of it; Fire now fires the first member only, because its request names one line. On the
 kitchen screen a tap or a move takes every member, and the pass only draws the rows. These lists keep
 one row per portion: Pay items, until the A739 payment window releases its files; the counter basket
 once any of its order is paid (`foldRetrievedPortions`); and MOVED slips, which lay out each line
 alone (`printMovedSlips`, `apps/server/src/kitchen-print.ts`).
+
+### The dish picker
+
+Move dishes… draws the bill's dishes through `till-portion-picker`
+(`apps/till/src/widgets/portion-picker.ts`), which draws rows from the selection model
+(`pickRows`, `apps/till/src/state/portion-selection.ts`) and emits `portion-picks` with the picked
+line ids; the screen keeps the picks in its action draft scope, so leaving with picks asks first. A
+row is one dish, or [identical portions](#identical-portions-share-one-row) with their count; its
+extras are in its amount and move with it. A dish recalled into an unsent order is left out.
+
+- **A tick** is a native checkbox labelled with the dish's name. Ticking a row takes every member
+  the floor allows; ticking a ticked row clears it. A row of several takes a − / "2 of 4" / +
+  stepper once ticked, − stopping at one and + at the row's limit; a weighed or unbound line has
+  the tick only.
+- **A blocked row** shows its tick greyed with the reason under the dish, tied to the tick by
+  `aria-describedby`: "Paid" for a dish with any quantity paid, and "{amount} is already paid on
+  this bill" when one more would leave the bill's total below what it has received or reserved. A
+  row holding picks keeps its tick usable so it can be cleared. The greyed box is drawn by the
+  widget, because the browser's own disabled box is too faint on the light page.
+- **The destinations** follow under "Move to": the party's other open bills holding no payment, by
+  short label in number order, then "+ New bill". Nothing is chosen at first.
+- **Move** stays quiet and disabled until a dish and a destination are chosen.
+
+The floor in the picker is the till's estimate from the bill's balance; the server's own check
+decides, and its refusal closes the panel with its words. Guards: `portion-selection.test.ts`,
+`portion-picker.test.ts` and `portion-picker.a11y.test.ts` (one widget, both themes), and
+`till-table-order-screen.move-dishes.test.ts`; nothing checks another screen that might draw its
+own dish list instead of this widget.
 
 ### The kitchen screen's cards
 
