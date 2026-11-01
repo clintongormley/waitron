@@ -64,7 +64,7 @@ describe("operator scripts retain the refusal after their issuance rolls back", 
   it("operator-origin issuance writes only its incident", async () => {
     const { directory, venue } = await box();
     const before = read(directory);
-    const store = await openVenueDatabase(directory);
+    const store = await openVenueDatabase(directory, { exclusive: false });
     try {
       await expect(
         recordFixtureSale(store.venue, {
