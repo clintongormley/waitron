@@ -274,7 +274,7 @@ export function mountVenueSettingsApi(
             throw error;
           throw refuse("fiscal_format");
         }
-        const at = new Date();
+        const at = (deps.now ?? (() => new Date()))();
         const { issuer, businessDayClock } = await readVenueDetails(tx, at);
         const stored = normalizeVenueText(issuer.legalName);
         if (legalName === stored && expected === stored) throw refuse("unchanged");
