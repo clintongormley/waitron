@@ -98,7 +98,8 @@ items by location. A correction or confirmation is tied to the entry it answers 
 the person only. This takes in what revision 1 kept as D5. Where the attendance tables still need
 a place for a correction item — a manager's proposal shown to the worker, and the required
 `location_id` of an approve, decline, accept or disagree command — it is the box's configured
-location, which the server routes already hold (plan, open question 1).
+location, which the server routes already hold (`deps.cfg.locationId`) — not the location a
+request names, which may differ (plan, open question 1).
 
 **D5.** Removed in revision 2 (see D4).
 
