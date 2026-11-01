@@ -12,6 +12,7 @@ import {
 } from "@waitron/membership";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { readNodeIdentityKey } from "./node-identity.js";
+import "./errors.js";
 
 export interface StoredTrustDeps {
   readonly node: NodeDatabase;
