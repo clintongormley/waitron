@@ -116,7 +116,7 @@ one-for-one replacement of a core table. All four are classified `state`, as the
 | `address_line1`, `address_line2`, `postal_code`, `city`, `province` | `venue_settings`, same names | printed on receipts and invoices; `city`/`province` drive holidays and receipt language |
 | `time_zone` (default `Europe/Madrid`) | `venue_settings.time_zone` | see §2.4 for A696 |
 | `day_cutover` (default `06:00:00`) | `venue_settings.day_cutover` | |
-| `bump_mode` | **deleted, unused** | "Read by nothing: each station has its own `bump_mode`" (`tenants.ts:20-24`); re-checked: `git grep -n -E 'locations\.bumpMode\|l\.bump_mode\|locations\.bump_mode' -- apps packages ':!**/drizzle/**'` prints nothing (the `bumpMode` readers in `apps/server/src/kitchen.ts:146` read `kitchenStations`). The exported `bumpMode` type in `tenants.ts:25` stays, because `kitchen_stations` uses it (`kitchen-stations.ts:35`) |
+| `bump_mode` | **deleted, unused** | "Read by nothing: each station has its own `bump_mode`" (`tenants.ts:20-24`); re-checked: `git grep -n -E 'locations\.bumpMode\|l\.bump_mode\|locations\.bump_mode' -- apps packages ':!**/drizzle/**'` prints nothing (the `bumpMode` readers in `apps/server/src/kitchen.ts:146` read `kitchenStations`). The `bumpMode` builder in `tenants.ts:25` goes with the column; `kitchen_stations` types its own `bump_mode` with `BumpMode` from `@waitron/shared` |
 | `fire_control` | **deleted, unused** | only the configuration bundle reads or writes it (`packages/provisioning/src/configuration-transfer.ts:104,174,536`; re-checked with `git grep -n -w -E 'fireControl\|fire_control' -- 'apps/*/src/**' 'packages/*/src/**' ':!*.test.ts'`), and its removal is already planned under A773-2 (`docs/backlog/kitchen.md:296`). Whichever lands first does it; the other drops the step. When firing is built it adds its own setting |
 | `catalogue_id` (the default menu) | `venue_settings.default_catalogue_id` → `catalogues.id` | `catalogues` is a core table (`packages/db/src/schema/catalogue.ts:28`), so this stays a core-to-core key, as today |
 | `location_catalogues(location_id, catalogue_id)` | `venue_catalogues(catalogue_id)` primary key | the extra menus offered; kept separate from the default on purpose — "membership and the default stay independent" (`packages/catalogue/src/operations.ts:1310-1316`) |
@@ -124,8 +124,8 @@ one-for-one replacement of a core table. All four are classified `state`, as the
 | `location_day_cutover_changes(location_id, effective_business_day, day_cutover)` | `day_cutover_changes(effective_business_day` primary key`, day_cutover)` | same checks |
 
 `nodes.location_id` and every other `location_id` column are deleted with nothing in their place
-(§4). The `locations` table itself keeps its columns, unread, from S23 until S28 drops the whole
-table; cutting it to its id in S23 would mean an extra rebuild of a table 37 others point at (§4).
+(§4). The `locations` table itself keeps its columns from S23 until S28 drops the whole table: it is read
+only for its id, by `venueLocationId`, and still written at setup; cutting it to its id in S23 would mean an extra rebuild of a table 37 others point at (§4).
 
 ### 2.2 Settings held per location in other tables
 
@@ -145,9 +145,11 @@ through the order. Two consequences:
 
 - After S23 these four no longer read `working_orders` or `locations`, so they are not in the way of
   the `working_orders` rebuild (S27) or the `locations` drop (S28).
-- A line whose order does not exist is no longer refused by these four. The plan confirms, by running
-  the existing `line-orphaned` case in `scripts/behavioural-triggers.test.ts`, that the line's foreign
-  key and the `working_order_lines_require_open_parent_*` triggers still refuse it.
+- A line whose order does not exist is no longer refused by these four. The plan adds a case to
+  `scripts/behavioural-triggers.test.ts` that inserts a line naming an order that does not exist and
+  expects the open-parent refusal (`working_order_lines_require_open_parent_insert`); that file's
+  connection runs with foreign keys off, so the foreign key is not what refuses it. The existing
+  `line-orphaned` case covers only the delete path.
 
 What the behaviour cases in `scripts/behavioural-triggers.test.ts:288-405` become:
 
@@ -171,7 +173,8 @@ The design's first draft cited `8ec592f10f`, which is not an ancestor of that he
 through `nodes.location_id`, refusing `venue.time_zone_target_invalid` with reason `node`, `mismatch`
 (a `scope.locationId` that differs from the node's) or `location`. `prepareIssueClock` (`:25-38`)
 freezes `offsetMinutes` from that zone. In `packages/fiscal-verifactu/src/backend.ts` the offset is
-`FechaHoraHusoGenRegistro`'s and also shifts an annulment's `FechaExpedicionFacturaAnulada`; the
+`FechaHoraHusoGenRegistro`'s and is also used to rebuild an annulment's
+`FechaExpedicionFacturaAnulada`, whose rendered day it leaves unchanged; the
 record time is in the huella (fiscal-check.md "The hash, checked by running it"). Traced by reading,
 not run. **This changes one fiscal-check finding once #2369 lands:** fiscal-check.md (at `790214ba8c`)
 found the record offset taken from the host's clock, "never `locations.time_zone`". After #2369,
@@ -179,7 +182,9 @@ moving the zone from `locations` to `venue_settings` moves the source of a hashe
 the same, so no hash changes, but the slices that move it (S2, S23) are fiscal and the owner lands
 them.
 
-Every caller at `7e824ae233`, and the slice that changes it:
+Every non-test caller at `7e824ae233`
+(`git grep -n -E 'prepareIssueClock|readIssueZone' 7e824ae233 -- ':!*.test.ts' ':!*.md'`), and the
+slice that changes it:
 
 | Caller | Slice |
 | --- | --- |
@@ -191,6 +196,11 @@ Every caller at `7e824ae233`, and the slice that changes it:
 | `packages/fiscal-verifactu/src/void-issue-clock.ts:24` (annulments; its own `mismatch` at `:23` compares a sale's node with its record's node, not a location, and stays) | S2 |
 | `packages/provisioning/src/fiscal-readiness-runner.ts:111` | S2 |
 | `packages/provisioning/src/recover-provisioned-venue.ts:45` (passes `locationId`) | S2 |
+| `apps/server/scripts/daily-close-demo.ts:176,205,249` | S2 |
+| `apps/server/scripts/daily-close-z-demo.ts:190` | S2 |
+| `apps/server/scripts/modelo-303-demo.ts:503,544` | S2 |
+| `apps/server/scripts/demo-seed/seed.ts:78` (`readIssueZone(tx, venue)`; `venue` carries `locationId`) | S2 |
+| `apps/server/scripts/record-one-sale.ts:145`, `demo-seed/seed-sales.ts:249` | S2 |
 
 A696 also adds location-keyed code outside the fiscal path: `apps/server/src/venue-zone-context.ts`
 (its own copy of the three refusals, `:41-50`), `venue-zone-repair.ts`, `venue-zone-repair-api.ts`,
@@ -434,9 +444,9 @@ proves it with a grep.
   ubicación"); `en/backup-recovery.md:106` ("its source, business, location") and
   `es/backup-recovery.md:117-118` ("el local"); and A696's `en/time-zone.md` ("the venue's location")
   and `es/time-zone.md` ("la ubicación del local"). Search Spanish with plain words, not bracket
-  classes: `git grep -i 'ubicación' -- apps/server/src/guide` finds both `content-and-images.md`
-  lines, but `git grep -i -E 'ubicaci[oó]n'` finds none, because the multi-byte `ó` inside the
-  brackets does not match.
+  classes or `.`: `git grep -i 'ubicación' -- apps/server/src/guide` finds both `content-and-images.md`
+  lines, but `git grep -i -E 'ubicaci[oó]n'` and `git grep -E 'ubicaci.n'` find none, because neither
+  matches the two-byte `ó`.
 - **Translation keys** (inventory.md §5): `attendance.location`, `attendance.time_skipped`,
   `receipts.venue_wide`, `receipts.no_address`, `receipts.trading_name_location`, `location_settings.*`,
   `planned.location`, `planned.no_location`, `clock.other_location` (A1268), `venue.section.location`,
@@ -486,12 +496,17 @@ and resets, and keeps the working-time hashes byte-for-byte as today until S22.
 
 **Which file belongs to which slice.** The slice tables name files, but a sweep found 280 source files
 naming the word that the first draft's lists never mentioned. So the rule is by area: every non-test
-file under `apps/*/src` and `packages/*/src` that matches
-`git grep -l -E '(^|[^A-Za-z])[Ll]ocations?([^A-Za-z]|$)|[Ll]ocation(Id|_id|Name|[A-Z_])|[a-z]Location' -- 'apps/*/src/**' 'packages/*/src/**' ':!*.test.ts' ':!**/drizzle/**' ':!*.md'`
+file under `apps/`, `packages/` and `scripts/` that matches
+`git grep -l -E '(^|[^A-Za-z])[Ll]ocations?([^A-Za-z]|$)|[Ll]ocation(Id|_id|Name|[A-Z_])|[a-z]Location' -- 'apps/**' 'packages/**' 'scripts/**' ':!*.test.ts' ':!*.test.mjs' ':!**/drizzle/**' ':!*.md'`
 belongs to the slice whose area (the "Area and named files" column) contains it; files the table
-names explicitly override the rule. The plan runs that grep at its own head (it matched 560 files at
-`e32b9f3866`, browser `location.reload()` and unrelated words such as `ServerKeyLocation` included), assigns every file, and fails its own review if any is
-unassigned. Each slice's done-check is that grep over its area printing nothing but `venueLocationId`
+names explicitly override the rule. Outside `src`, the fiscal demo scripts go to S2 (§2.4's table),
+the `test/` fixture folders (`apps/server/test`, `apps/dashboard/test` and their package
+equivalents) to the F slices, and every other file to the slice whose area holds it, else S18. The
+plan runs that grep at its own head, assigns every file, and fails its own review if any is
+unassigned. Limited to `apps/*/src` and `packages/*/src` it matched 560 files at `e32b9f3866`
+(browser `location.reload()` and unrelated words such as `ServerKeyLocation` included); a narrower
+`locationId|location_id|LocationId` grep found about 45 more non-test files outside those folders
+(round3.md I3), so the wider paths are needed. Each slice's done-check is that grep over its area printing nothing but `venueLocationId`
 calls, schema files and unrelated words the plan lists; S18's is the grep over everything.
 
 **What makes a slice owner-landed.** The owner lands a slice that (a) changes code on the path that
@@ -500,14 +515,16 @@ an invoice record or sent to AEAT is read from, (c) touches a path that writes a
 identity, or (d) rebuilds a table invoice records point at by foreign key. The lane lands the rest.
 By that rule the daily-close hash's clock (S1) and the working-time hashes (S22) are lane slices: they
 are hashes of their own, not invoice records, and A1301 does not change their values except as the
-owner answers questions 1 and 2.
+owner answers questions 1 and 2. S10 (the print agent's job claim) and S24 (which rebuilds
+`print_jobs`, `page_printers` and `print_agents`, which `invoice_deliveries` points at) are lane
+slices too: an invoice delivery is not an invoice record, and neither slice changes an invoice byte.
 
 **Each code slice** also deletes the tests that exist only to prove a cross-location refusal
 (fiscal-check.md gives `allocation-operation.test.ts:680` and `cloud-preparation.test.ts:487` as
 examples) and moves its callers of `readLocationClock(tx, id)` to `readVenueClock(tx)`.
 
 **The test fixtures.** Tests insert the rows the schema slices drop: 419 test files run
-`insert(locations)` (244 in `apps/server`, 69 `packages/venue-service`, 62 `packages/db`), 197 insert
+`insert(locations)` (239 in `apps/server`, 69 `packages/venue-service`, 62 `packages/db`), 197 insert
 `nodes`, `devices` or `working_orders`, 18 more write `insert into locations` in raw SQL, and 888 name
 `locationId` (491 in `apps/server`). Left alone, S25–S28 would each edit hundreds of files. So five
 fixture slices (F1–F5) run before the window: F1 makes the helpers in `packages/db/src/testing/seed.ts`
@@ -543,7 +560,7 @@ Guard groups named below:
 | Id | Goal | Area and named files | Depends on | Lands | Guards |
 | --- | --- | --- | --- | --- | --- |
 | **S1** | The venue accessor: `readVenue(tx)`, `readVenueClock(tx)`, interim `venueLocationId(tx)`; repoint the readers already named "venue" and A696's zone code | `packages/db/src/venue.ts` (new); `packages/reporting/src/*` (`business-day.ts`, `record-daily-close.ts:40`, `overdue-orders.ts`); `apps/server/src/venue-*.ts` (`venue-locale.ts`, `venue-time-zone.ts`, `venue-address.ts`, `venue-details.ts`, A696's `venue-zone-context.ts`, `venue-zone-repair.ts`, `venue-zone-repair-api.ts`), `zone-repair-serving.ts`, `location-settings-api.ts` (renamed `venue-settings-api.ts`), `business-day-start.ts`; dashboard `screens/venue-zone-repair.ts` | A696 (#2369) landed | lane | code |
-| **S2** | Invoice record inputs and invoice documents read the venue: operation description fallback, a full invoice's operation date zone, the issue zone (`IssueScope` loses `locationId`), the printed and emailed invoice's address and language | `packages/core/src/sale-location.ts`, `record-sale.ts:276-294`, `record-correction.ts`, `record-substitution.ts`; `packages/fiscal/src/issue-clock.ts`; every caller in §2.4's table; `apps/server/src/invoice-document.ts`, `invoice-print.ts`, `invoice-page-print.ts`, `invoice-email-contact.ts`, `invoice-delivery*.ts`; `packages/shared/src/record-export-types.ts`; `apps/server/scripts/record-one-sale.ts`, demo `seed-sales.ts` | S1 | **owner** (a, b) | fiscal pair, code |
+| **S2** | Invoice record inputs and invoice documents read the venue: operation description fallback, a full invoice's operation date zone, the issue zone (`IssueScope` loses `locationId`), the printed and emailed invoice's address and language | `packages/core/src/sale-location.ts`, `record-sale.ts:276-294`, `record-correction.ts`, `record-substitution.ts`; `packages/fiscal/src/issue-clock.ts`; every caller in §2.4's table; `apps/server/src/invoice-document.ts`, `invoice-print.ts`, `invoice-page-print.ts`, `invoice-email-contact.ts`, `invoice-delivery*.ts`; `packages/shared/src/record-export-types.ts`; `apps/server/scripts/record-one-sale.ts`, `daily-close-demo.ts`, `daily-close-z-demo.ts`, `modelo-303-demo.ts`, demo `seed.ts` and `seed-sales.ts` | S1 | **owner** (a, b) | fiscal pair, code |
 | **S3** | Fiscal-verifactu stops reading a location: "same venue" node checks deleted, certificate dates and query month from the venue zone, recovery document's venue name, dormant-standby state and join bundle lose `locationId` (host file reset, §4) | `packages/fiscal-verifactu/src/*` (fiscal-check.md groups 2–4, 17 source files) and its test helpers; `packages/fiscal/src/contribution.ts`; `apps/server/src/mirror-bundle.ts`, `fiscal-certificate-api.ts`, `box-health-api.ts` | S1 | **owner** (c) | fiscal pair, code |
 | **S4** | Standby adoption stays refused on purpose: before inserting the standby's `nodes` row, the establish step refuses with a named code while the venue's rows are absent (proposed `adoption.venue_not_copied`; the plan settles the name against the registry), so the outcome is today's (latch kept, `adoption.establish_failed` logged) but no longer rests on a foreign key; `PendingAdoption` loses `locationId` (host file reset, §4); the `finish-adoption.ts:32-43` comment is rewritten to name the new refusal | `apps/server/src/adopt.ts`, `finish-adoption.ts`, `apps/server/src/reserved-identity.ts`, `packages/db/src/reserved-identity.ts`, `packages/provisioning/src/tenant-guard.ts` | S1; lands before S25 | **owner** (c) | fiscal pair, code; a test asserting the new code, and a control showing the step still refuses with the `nodes` foreign key removed in a scratch schema |
 | **S5** | Catalogue: the default and extra menus belong to the venue; routes move to `/management-api/venue/catalogues…`; `location.not_found` deleted | `packages/catalogue/src/*`; `apps/server/src/catalogue-api.ts`; dashboard callers and `codes.ts`; till menu switcher | S1 | lane | code |
@@ -568,9 +585,9 @@ Guard groups named below:
 | --- | --- | --- | --- | --- |
 | **F1** | The seed helpers become the one source of venue, node, device and order rows; `packages/db` tests move onto them | `packages/db/src/testing/seed.ts` and `packages/db` tests (62 files insert `locations`, 24 insert nodes, devices or orders, overlapping, at `e32b9f3866`) | S1 | lane |
 | **F2** | Packages' tests move onto the helpers | every other package's tests and `src/testing/*` (files inserting `locations`: venue-service 69, printing 12, the rest under 6 each) | F1 | lane |
-| **F3** | `apps/server` tests whose path under `src/` starts `a`–`f` | 113 files that insert one of the four tables | F1 | lane |
+| **F3** | `apps/server` tests whose path under `src/` starts `a`–`f` | 109 files that insert one of the four tables | F1 | lane |
 | **F4** | `apps/server`, `g`–`r` | 99 files | F1 | lane |
-| **F5** | `apps/server`, `s`–`z` (with `src/testing/*`), the root `scripts/*.test.ts` raw-SQL seeds, and `apps/dashboard`/`apps/till` where they seed a database | 74 `apps/server` files plus the rest | F1 | lane |
+| **F5** | `apps/server`, `s`–`z` (with `src/testing/*`), the four `apps/server/scripts/` test files, the root `scripts/*.test.ts` raw-SQL seeds, and `apps/dashboard`/`apps/till` where they seed a database | 78 `apps/server` files plus the rest | F1 | lane |
 
 ### Schema slices (migration; every venue reset)
 
@@ -583,7 +600,7 @@ from before this cannot be restored or imported".
 | **S20** | bookings, staffing, workforce-es (`convenio_config` one row) | three packages' `schema/`, `drizzle/`, classification, own fixtures | S9, S13, S18, F2 | lane |
 | **S21** | venue-service's 8 tables; one-default keys on the flag column | `packages/venue-service/src/schema/*`, `drizzle/`, own fixtures | S6, S8, S18, F2 | lane |
 | **S22** | workforce tables, including append-only `time_entries` and `pay_period_closures`; the two hash functions per the owner's answers; closures one chain per node | `packages/workforce/src/schema/*`, `chain-hash.ts`, `pay-period-chain.ts`, `pay-period-close.ts`, `drizzle/`; backup verification grouping; own fixtures | owner questions 1 and 2; S13, S18, F2 | lane, after the owner's answers |
-| **S23** | Core settings move: create `venue_settings`, `venue_catalogues`, `business_day_settings`, `day_cutover_changes`; drop the three old side tables; `readVenue`/`readVenueClock` and every writer switch; the four language-check triggers recreated reading `venue_settings` (§2.3, with the behaviour cases); the live-venue guard and S4's check read `venue_settings` (§3); `locations` left as it is, unread; live-query table lists (`packages/*/src/dashboard/live-queries.ts`, `apps/dashboard/src/api/live-queries.ts`) | `packages/db/src/schema/*`, `drizzle/`, `venue.ts`, `classification.ts`; writers in `venue-apply.ts`, `venue-settings-api.ts`, `business-day-start.ts`, zone repair, `configuration-transfer.ts`; `tenant-guard.ts` and its five readers (§3); `seedVenue` | S18, F1–F5 | **owner** (b, c) |
+| **S23** | Core settings move: create `venue_settings`, `venue_catalogues`, `business_day_settings`, `day_cutover_changes`; drop the three old side tables; `readVenue`/`readVenueClock` and every writer switch; the four language-check triggers recreated reading `venue_settings` (§2.3, with the behaviour cases); the live-venue guard and S4's check read `venue_settings` (§3); `locations` left as it is, read only for its id by `venueLocationId` and still written at setup; live-query table lists (`packages/*/src/dashboard/live-queries.ts`, `apps/dashboard/src/api/live-queries.ts`) | `packages/db/src/schema/*`, `drizzle/`, `venue.ts`, `classification.ts`; writers in `venue-apply.ts`, `venue-settings-api.ts`, `business-day-start.ts`, zone repair, `configuration-transfer.ts`; `tenant-guard.ts` and its five readers (§3); `seedVenue` | S18, F1–F5 | **owner** (b, c) |
 | **S24** | Core floor, kitchen and printing tables lose `location_id` | `dining_tables`, `floor_plan_sets`, `floor_zones`, `kitchen_stations`, `kitchen_courses`, `print_agents`, `printers`, `print_jobs`, `page_printers` schemas, `drizzle/`; their fixtures | S23 | lane |
 | **S25** | `nodes` loses `location_id` (a rebuild; 22 child keys, §4) | `packages/db/src/schema/*`, `drizzle/`, `seedNode`; `insertReservedNodeTx` and `node-identity.ts` writers | S4, S23, S24 | **owner** (c, d) |
 | **S26** | `devices` loses `location_id`; `device_profile_form_factor_locked` dropped before and recreated after | `packages/db/src/schema/*`, `drizzle/`, `seedDevice` | S25 | **owner** (d) |
@@ -598,7 +615,7 @@ S18 waits for S2–S17. S19's plan-only part can start now. S20, S21 and S22 can
 S23–S28 one after another.
 
 **The reset window.** S20–S28 land back to back in one window the watcher announces, each PR's first
-line as above. The laptop dev-stack slots (`wa-wt reset`), the Santet venue (its own
+line as above. The watcher opens the window only once owner questions 1 and 2 are answered. The laptop dev-stack slots (`wa-wt reset`), the Santet venue (its own
 `local/square/reset.sh`) and the owner's home box are reset once after the window — or once after
 A760 if it follows directly (§4).
 
@@ -696,18 +713,24 @@ the location itself.
 
 ### Question 4 — does the working-time export name the workplace only by the venue's name? (S14 waits)
 
-The art. 34.9 export carries two workplace columns today, in several of its tables
-(`packages/workforce-es/src/record-export.ts:30-31`, used at `:97,252,336,369`): "Workplace reference
-/ Referencia del centro", the location's internal id, and "Workplace / Centro de trabajo", its name.
+The export names the workplace in two columns of its opening table — "Workplace reference /
+Referencia del centro", the location's internal id, and "Workplace / Centro de trabajo", its name — and
+its entries and closures tables carry the reference column alone
+(`packages/workforce-es/src/record-export.ts:30-31`, `:97`, `:252`, `:336-337`, `:369`).
 With one venue the reference identifies nothing the name does not. The rule: **does the export name
 the workplace by the venue's name alone?**
 
-Worked example, the first columns of the export's opening (metadata) table:
+Worked example, the first columns of the export's opening table and of its entries table:
 
-- Today: `Workplace reference | Workplace | From | Before (excluded) | Version | …` with
-  `6f1c…a2 | Casa Delgado | 2026-10-01 | 2026-11-01 | …`
-- (a) Drop the reference: `Workplace | From | Before (excluded) | Version | …` with
-  `Casa Delgado | 2026-10-01 | 2026-11-01 | …`
+- Today, opening table: `Workplace reference | Workplace | From | Before (excluded) | Version | …`
+  with `6f1c…a2 | Casa Delgado | 2026-10-01 | 2026-11-01 | …`; entries table:
+  `Entry reference | Worker reference | Worker | Workplace reference | Event | …` with
+  `e-41 | p-7 | Ana Ruiz | 6f1c…a2 | …` (the closures table carries the same reference).
+- (a) Drop the reference: opening table `Workplace | From | Before (excluded) | Version | …` with
+  `Casa Delgado | 2026-10-01 | 2026-11-01 | …`; entries table
+  `Entry reference | Worker reference | Worker | Event | …` with `e-41 | p-7 | Ana Ruiz | …`.
+  The entries and closures tables then carry no workplace column; the opening table names the venue
+  once for the whole file.
 - (b) Keep the column and fill it with the box's node id: a stable code per box, which changes when a
   box is restored or a standby promoted.
 
@@ -743,7 +766,7 @@ workplace) would be a new field the venue enters, and a separate item if wanted.
    PRs at the plan's head.
 9. **`fire_control` and A773-2.** Whichever lands second drops its removal step.
 10. **Spanish wording found by eye.** Spanish says "local" for both the premises and "local network",
-    and a bracket class in `git grep` misses "ubicación" (§5). The review checks S19 searched with
+    and a bracket class or `.` in `git grep` misses "ubicación" (§5). The review checks S19 searched with
     plain words, from the English keys.
 
 ## 9. Provenance
@@ -769,10 +792,10 @@ fiscal-check.md …". Re-checked for this design, by running or reading at `7902
 13. A760 is a pure squash — read `docs/operations/a760-migration-squash.md` lines 1-40.
 14. The default menu and the extra menus are independent by design — read `packages/catalogue/src/operations.ts:1310-1378`.
 15. The proposed table and function names are free — `git grep` for `table("venue…"`, `table("business_day…"`, `table("day_cutover…"` and `readVenue`/`readVenueClock` printed nothing.
-16. Test fallout — `git grep -l 'insert(locations)' -- '*.test.ts'` (419 files), `git grep -l -w locationId -- '*.test.ts'` (888), `git grep -l -E 'insert\((nodes|devices|workingOrders)\)' -- '*.test.ts'` (197), `git grep -l -i 'insert into locations' -- '*.test.ts' '*.test.mjs'` (18), each grouped by package; F3–F5's counts from `git grep -l -E 'insert\((locations|nodes|devices|workingOrders)\)|insert into locations' -- 'apps/server/*.test.ts' 'apps/server/src/testing/*'` (286 files) split by the first letter of the path under `src/`.
+16. Test fallout — `git grep -l 'insert(locations)' -- '*.test.ts'` (419 files), `git grep -l -w locationId -- '*.test.ts'` (888), `git grep -l -E 'insert\((nodes|devices|workingOrders)\)' -- '*.test.ts'` (197), `git grep -l -i 'insert into locations' -- '*.test.ts' '*.test.mjs'` (18), each grouped by package; F3–F5's counts from `git grep -l -E 'insert\((locations|nodes|devices|workingOrders)\)|insert into locations' -- 'apps/server/*.test.ts' 'apps/server/src/testing/*'` (286 files) split by the first letter of the path under `src/`; re-run in round 3 as 239 for `apps/server` and 109/99/78 for F3/F4/F5, four of the 286 under `apps/server/scripts/`.
 17. Source files naming the word — the §6 grep matched 560 non-test files under `apps/*/src` and `packages/*/src`; the review's sweep found 280 basenames the first draft never named, and the files it sampled were re-checked by counting matches in each.
-18. The Spanish search — `git grep -n -i 'ubicación' -- apps/server/src/guide` printed 2 lines; `git grep -n -i -E 'ubicaci[oó]n'` printed 0.
-19. The art. 34.9 export's workplace columns — read `packages/workforce-es/src/record-export.ts:24-50` and the `locationId`/`locationName` lines.
+18. The Spanish search — `git grep -n -i 'ubicación' -- apps/server/src/guide` printed 2 lines; `git grep -n -i -E 'ubicaci[oó]n'` printed 0; `git grep -n -E 'ubicaci.n'` printed 0.
+19. The art. 34.9 export's workplace columns — read `packages/workforce-es/src/record-export.ts:24-50`, `:92-110` (`ENTRY_KEYS`) and `:365-372` (the closures section).
 
 ## Appendix A. Review 1 folds
 
@@ -803,3 +826,28 @@ its `file:line` before folding; none was rejected.
   **M6** → folded (§2.3). **M7** → folded (the owner-landed rule; invoice documents moved into S2).
   **M8** → folded (question 1 names Santet and the home box). **M9** → folded ("Words used below").
   **M10** → folded (§4, schema PR first lines).
+
+## Appendix B. Round 3 claim-check folds
+
+`~/waitron-campaign/a1301/round3.md`. Each fix applied as its wording says.
+
+- **R3-I1** → folded: question 4 says the two columns sit together only in the opening table and the
+  entries and closures tables carry the reference alone; option (a) says what those two tables are
+  left with; the worked example shows the entries table before and after.
+- **R3-I2** → folded: the `line-orphaned` citation removed; the plan adds an insert case expecting
+  `require_open_parent_insert`'s refusal, and the text says foreign keys are off on that connection.
+- **R3-I3** → folded: the four demo scripts added to §2.4's table and S2's files; the area grep widened
+  to `apps/**`, `packages/**` and `scripts/**`, with the files outside `src` assigned (S2, the F slices,
+  else S18).
+- **R3-M1** → folded: the false `bumpMode` keep-reason replaced with the round's wording (the builder
+  goes; `kitchen_stations` uses `BumpMode` from `@waitron/shared`).
+- **R3-M2** → folded: 244 → 239 and F3/F5 113/74 → 109/78; F5 takes the four `apps/server/scripts/`
+  test files; §9.16 notes the re-run.
+- **R3-M3** → folded: `locations` is "read only for its id, by `venueLocationId`, and still written at
+  setup" from S23 until S28, not "unread".
+- **R3-M4** → folded: §5, §8 risk 10 and §9.18 say a bracket class or `.` misses the two-byte `ó`.
+- **R3-M5** → folded: S10 and S24 stay lane slices; §6 says an invoice delivery is not an invoice record
+  and neither slice changes an invoice byte.
+- **R3-M6** → folded: the watcher opens the reset window only once questions 1 and 2 are answered.
+- **R3-M7** → folded: §2.4 says the offset is used to rebuild the annulment's
+  `FechaExpedicionFacturaAnulada`, whose rendered day it leaves unchanged.
