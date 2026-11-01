@@ -38,6 +38,7 @@ export const HEAVY_FILES = {
     "src/components/wt-dialog.ts": 6,
   },
   "ui-core": {},
+  shared: {},
 };
 
 /**

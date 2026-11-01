@@ -226,7 +226,7 @@ describe("the selection follows each package's own stryker config", () => {
 });
 
 describe("HEAVY_FILES", () => {
-  it("splits db's sales schema in three and ui's combobox, data table and dialog, and no ui-core file", () => {
+  it("splits db's sales schema and ui's large components, keeping ui-core and shared whole", () => {
     expect(HEAVY_FILES).toEqual({
       db: { "src/schema/sales.ts": 3 },
       ui: {
@@ -235,6 +235,7 @@ describe("HEAVY_FILES", () => {
         "src/components/wt-dialog.ts": 6,
       },
       "ui-core": {},
+      shared: {},
     });
   });
 
@@ -252,6 +253,13 @@ describe("HEAVY_FILES", () => {
 });
 
 describe("shardFiles", () => {
+  it("partitions every shared mutation target into four nonempty whole-file shards", () => {
+    const shards = [1, 2, 3, 4].map((shard) => shardFilesOf("shared", shard, 4, root));
+    expect(shards.every((paths) => paths.length > 0)).toBe(true);
+    expect(shards.flat().some((path) => path.includes(":"))).toBe(false);
+    expect(shards.flat().sort()).toEqual(eligibleFiles("shared"));
+  });
+
   it("refuses a package it has no heavy-file list for", () => {
     expect(() => shardFilesOf("nope", 1, 1, root)).toThrow(/unknown package "nope"/);
   });

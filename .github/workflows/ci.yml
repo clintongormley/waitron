@@ -3530,24 +3530,16 @@ jobs:
           pnpm "$@" --no-sort --workspace-concurrency=2 test:coverage \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
-  # packages/shared is pure functions over strings and BigInt: no browser, no database, no
-  # async. That makes it the cheapest mutation target in the repo, so its break: 90 is checked on a
-  # pull request whose resolved scope contains it (the paragraph below), rather than only in
-  # mutation.yml's nightly run, which checks ui-core's, ui's and db's bars on each package's merged
-  # shard score (mutation-ui-core-aggregate, mutation-ui-aggregate, mutation-db-aggregate).
-  #
-  # It gated every pull request until this gate was added; it now gates the ones whose resolved
-  # scope contains packages/shared, by the same scope-membership mechanism as the scoped test shards
-  # above (see gateOutputs in scripts/changed-scope.mjs).
-  # Cheapness is not on its own a reason to run: this job took 55s on run 30650089655 (17:10:36 →
-  # 17:11:31) and was nowhere near that run's critical path — but a job the diff could not have
-  # affected has nothing to say about it, whatever it costs, and scoping only the expensive one of a
-  # matched pair would leave the mechanism reading as a special case rather than as the rule.
+  # Whole-file shards preserve every mutation target; the aggregate enforces the package floor.
   mutation-shared:
     needs: changes
     if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.shared == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - id: checkout
         name: Check out the code
@@ -3600,7 +3592,112 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpm --filter @waitron/shared mutation
+      - name: Run shared mutation shard ${{ matrix.shard }}
+        env:
+          SHARD: ${{ matrix.shard }}
+          TOTAL: ${{ strategy.job-total }}
+        run: |
+          set -euo pipefail
+          FILES=$(node scripts/mutation-shard.mjs shared "$SHARD" "$TOTAL")
+          if [ -z "$FILES" ]; then
+            echo "shard $SHARD/$TOTAL selected no files" >&2
+            exit 1
+          fi
+          echo "Shard $SHARD/$TOTAL mutates: $FILES"
+          pnpm --filter @waitron/shared exec stryker run stryker.ci.config.mjs --mutate "$FILES"
+
+      - id: upload_blob
+        name: Upload the mutation report
+        if: always()
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        continue-on-error: true
+        with:
+          name: mutation-report-shared-shard-${{ matrix.shard }}
+          path: packages/shared/reports/mutation/mutation.json
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Retry artifact upload
+        if: always() && steps.upload_blob.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        with:
+          name: mutation-report-shared-shard-${{ matrix.shard }}
+          path: packages/shared/reports/mutation/mutation.json
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+
+  mutation-shared-aggregate:
+    needs: [changes, mutation-shared]
+    if: always() && (needs.changes.outputs.code == 'true' && needs.changes.outputs.shared == 'true') && needs.changes.outputs.reuse != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - id: checkout
+        name: Check out the code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+        timeout-minutes: 2
+        continue-on-error: true
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+      - name: Stop the first checkout's leftover git
+        if: steps.checkout.outcome == 'failure'
+        run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
+      - name: Check out the code, second attempt
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+        timeout-minutes: 2
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+
+      - id: setup-node
+        name: Set up Node
+        uses: actions/setup-node@v7
+        timeout-minutes: 2
+        continue-on-error: true
+        with:
+          node-version-file: ".nvmrc"
+          package-manager-cache: false
+      - name: Set up Node, second attempt
+        if: steps.setup-node.outcome == 'failure'
+        uses: actions/setup-node@v7
+        timeout-minutes: 2
+        with:
+          node-version-file: ".nvmrc"
+          package-manager-cache: false
+
+      - id: download
+        name: Download every shard report
+        uses: actions/download-artifact@v8
+        timeout-minutes: 1
+        continue-on-error: true
+        with:
+          pattern: mutation-report-shared-shard-*
+          path: mutation-reports
+
+      - name: Clear the partial artifact download
+        if: steps.download.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "mutation-reports"
+
+      - name: Download every shard report, second attempt
+        if: steps.download.outcome == 'failure'
+        uses: actions/download-artifact@v8
+        timeout-minutes: 1
+        with:
+          pattern: mutation-report-shared-shard-*
+          path: mutation-reports
+
+      - name: Score the package
+        run: node scripts/mutation-aggregate.mjs mutation-reports --package shared --shards 4 --break 90
 
   # The aggregate gate. This file's header covers what branch protection requires and why the job
   # ids above are free to change; what follows is only how this job itself works.
@@ -3651,6 +3748,7 @@ jobs:
       - test-light-a
       - test-light-b
       - mutation-shared
+      - mutation-shared-aggregate
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Naming a permission drops the workflow's defaults. This job checks nothing out, so it holds
@@ -3663,8 +3761,8 @@ jobs:
       # change could not affect; a job skipped because something it needs failed is caught by that
       # failure. The step has no `if:`, so it always runs and prints what each needed job reported.
       #
-      # One exception to "skipped passes": a coverage merge job skipped while `changes` selected its
-      # package fails, because then that package's coverage bar was never checked. The table at the
+      # One exception to "skipped passes": a score job skipped while `changes` selected its
+      # package fails, because then that package's floor was never checked. The table at the
       # top of the script names each merge job's gate and package. When a job also failed, that
       # failure's message is the one printed.
       #
@@ -3685,6 +3783,7 @@ jobs:
               "test-till-merge": { gate: "till", package: "@waitron/till" },
               "test-dashboard-merge": { gate: "dashboard", package: "@waitron/dashboard" },
               "test-venue-service-merge": { gate: "venue_service", package: "@waitron/venue-service" },
+              "mutation-shared-aggregate": { gate: "shared", package: "@waitron/shared", kind: "mutation score" },
             } as $merges
             | $ENV.NEEDS | fromjson
             | if type != "object" or length == 0 then error("no needed job results to read") else . end
@@ -3702,7 +3801,7 @@ jobs:
               (map(select(.value.result == "skipped" and $merges[.key] != null
                           and $scope.reuse != "true"
                           and $scope.code == "true" and $scope[$merges[.key].gate] == "true")
-                   | "\($merges[.key].package) was selected but its coverage merge job \(.key) was skipped")
+                   | "\($merges[.key].package) was selected but its \($merges[.key].kind // "coverage merge") job \(.key) was skipped")
                | if length > 0 then error(join("; ")) else empty end)
           '
 

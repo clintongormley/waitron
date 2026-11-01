@@ -40,7 +40,8 @@ const ROOT_SCOPE_PREFIXES = ["scripts/", ".husky/", ".github/"];
  * Hand-written. `scripts/root-scope-consumers.test.mjs` fails when a root `scripts/` file is named
  * by a member file through a relative path, or run by a line starting `node scripts/` in a ci.yml
  * job that tests a member through one quoted `pnpm --filter`, and is not listed here for that
- * member — or when an entry here is neither. Weaker than its name in the ways its header states —
+ * member, including the literal mutation selection and score commands — or when an entry here is
+ * neither. Weaker than its name in the ways its header states —
  * it reads member files and ci.yml as text, so among other gaps a path built from parts, or a
  * script fed from a pipe in ci.yml, is invisible to it.
  */
@@ -88,6 +89,8 @@ export const ROOT_SCOPE_CONSUMERS = new Map([
     ],
   ],
   ["scripts/setup-litestream.mjs", ["apps/server"]],
+  ["scripts/mutation-shard.mjs", ["packages/shared"]],
+  ["scripts/mutation-aggregate.mjs", ["packages/shared"]],
   ["scripts/setup-s3-test-server.mjs", ["apps/server"]],
   ["scripts/vitest-duration-sequencer.mjs", ["apps/server"]],
   [

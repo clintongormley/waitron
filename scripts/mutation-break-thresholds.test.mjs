@@ -7,6 +7,7 @@
 // Weaker than its name in one way worth stating: it reads the workflow as TEXT for the sharded
 // packages' bars and their shards' upload paths, so a step that reached the same command or path
 // through a variable would be invisible to it. It never runs Stryker to see a report written.
+// Shared keeps its local floor here; ci-workflow.test.mjs checks its combined CI floor in ci.yml.
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,6 +38,19 @@ function mutationPackages() {
 }
 
 describe("every mutation-tested package declares the bar it fails at", () => {
+  it("keeps shared's local floor while its CI shards emit reports for the combined floor", async () => {
+    const local = JSON.parse(
+      readFileSync(join(root, "packages/shared/stryker.config.json"), "utf8"),
+    );
+    const { default: shard } = await import("../packages/shared/stryker.ci.config.mjs");
+    expect(local.thresholds.break).toBe(90);
+    expect(shard.mutate).toEqual(local.mutate);
+    expect(shard.thresholds.break).toBe(0);
+    expect(shard.incremental).toBe(false);
+    expect(shard.reporters).toContain("json");
+    expect(shard.jsonReporter.fileName).toBe("reports/mutation/mutation.json");
+  });
+
   it(
     "finds the packages that run mutation testing",
     { timeout: PNPM_LS_SPAWN_TIMEOUT_MS * 2 },
