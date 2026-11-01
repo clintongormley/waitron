@@ -87,7 +87,7 @@ it("keeps setup boot's request identification and reset refusal on encoded line 
 describe("the real till routes over HTTP", () => {
   const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
-  it("retains request identification on malformed clock paths without granting a clock action", async () => {
+  it("retains till session checks and request headers for malformed clock paths", async () => {
     const at = new Date("2030-02-05T09:00:00Z");
     const venue = await createClockVenue(suite.db, () => at);
     const app = new Hono();

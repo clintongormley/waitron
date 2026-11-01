@@ -190,13 +190,15 @@ The same file sends real HTTP requests through the till API. A clock read withou
 returns `401 session.required`; a signed-in read returns `200` and `state: "out"`.
 Malformed clock POSTs return 404 with request identification, and the signed-in state stays
 `out`. These requests did not demonstrate a protected action or data disclosure through the
-router defect. They do not establish safety for every route.
+router defect. This isolated till app selected TrieRouter and passed on both dependency
+versions; it is a compatibility control. These requests do not establish safety for every route.
 
 Read the 4.13.14, 4.13.15 and 4.13.16 release notes before repeating the upgrade.
-The five security fixes in 4.13.16 address earlier versions, rather than naming 4.13.16 as
-affected. The GitHub global advisory query for `ecosystem=npm` and `affects=hono@4.13.16`
-returned an empty list on 1 November 2026. That is a dated lookup, not a guarantee about future
-advisories.
+The publisher's five advisory ranges end at 4.13.15 or exclude 4.13.16, making 4.13.16
+their first patched release. The complete publisher advisory list was also checked on
+1 November 2026. Two older publisher ranges omit their upper bounds; their normalized
+GitHub entries bound them below 4.12.2 and 4.10.2 respectively. This is a dated review of
+published ranges, not a guarantee about future advisories.
 
 The production TypeScript scan of `apps/` and `packages/` found no imports of `hono/mount`,
 `hono/validator`, `hono/css` or `hono/csrf`. The `.mount()` call in `boot.ts` invokes Waitron's
@@ -211,6 +213,8 @@ one reproduced here.
 | [Form advisory](https://github.com/honojs/hono/security/advisories/GHSA-4h7h-rv7c-7m2v) | “another legal parameter” | Extra multipart parameters can cause the form validator to see an empty object through 4.13.15. |
 | [CSS advisory](https://github.com/honojs/hono/security/advisories/GHSA-3gg2-335m-rxc6) | “Interpolated string values are escaped one at a time” | A closing style tag split across values can escape the earlier protection through 4.13.15. |
 | [CSRF advisory](https://github.com/honojs/hono/security/advisories/GHSA-46wx-v44x-9hh2) | “content type `text/ping`” | Hyperlink auditing can skip that middleware's origin check before 4.13.16. |
+| [Older language advisory](https://github.com/advisories/GHSA-xh87-mx6m-69f3) | “>= 4.12.0, < 4.12.2” | The normalized range supplies the missing upper bound. |
+| [Older CORS advisory](https://github.com/advisories/GHSA-m732-5p4w-x69g) | “>= 1.1.0, < 4.10.2” | The normalized range supplies the missing upper bound. |
 | [4.13.16 release](https://github.com/honojs/hono/releases/tag/v4.13.16) | “This release includes fixes” | The release lists all five security fixes and the JWT signature/header tightening. |
 
 **Vitest-family ignore qualification (owner, 2026-10-17).** Keep this open until Dependabot's next
