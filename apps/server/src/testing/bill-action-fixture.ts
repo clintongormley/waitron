@@ -3,6 +3,7 @@ import { readBillEditState } from "../bill-editing.js";
 import {
   mergeBills as merge,
   mergeCheckedBills as checked,
+  moveDishes as moveLines,
   splitBill as split,
   transferItems as transfer,
   type BillCommand,
@@ -65,6 +66,24 @@ export async function transferItems(
     for (const id of [...new Set([from, into])].sort())
       expectedEdits.push(await readBillEditState(tx, id));
   return transfer(tx, cfg, from, into, transfers, {
+    ...command,
+    expectedEdits: command.expectedEdits ?? expectedEdits,
+  });
+}
+
+export async function moveDishes(
+  tx: Transaction,
+  cfg: OriginConfig,
+  from: string,
+  to: string | null,
+  lineIds: readonly string[],
+  command: BillCommand & { expectedEdits?: BillEditExpected[] },
+) {
+  const expectedEdits: BillEditExpected[] = [];
+  if (command.expectedEdits === undefined)
+    for (const id of [...new Set([from, ...(to === null ? [] : [to])])].sort())
+      expectedEdits.push(await readBillEditState(tx, id));
+  return moveLines(tx, cfg, from, to, lineIds, {
     ...command,
     expectedEdits: command.expectedEdits ?? expectedEdits,
   });
