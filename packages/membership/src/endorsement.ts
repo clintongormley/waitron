@@ -26,6 +26,15 @@ export function endorseKey(
   };
 }
 
+/** Whether `endorserPublicKey` signed this endorsement's node id and key. */
+export function verifyEndorsement(endorsement: Endorsement, endorserPublicKey: string): boolean {
+  return verifyBytes(
+    endorsementMessage(endorsement.nodeId, endorsement.publicKey),
+    endorsement.signature,
+    endorserPublicKey,
+  );
+}
+
 /**
  * An endorsement extends trust only if its endorser is already trusted AND its signature verifies.
  * Bounded by the number of endorsements, so a cycle cannot loop forever.

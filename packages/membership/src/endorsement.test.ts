@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { generateNodeKeyPair } from "./crypto.js";
-import { endorseKey, resolveSignerKey } from "./endorsement.js";
+import { endorseKey, resolveSignerKey, verifyEndorsement } from "./endorsement.js";
 import type { Endorsement, TrustSet } from "./types.js";
 
 describe("resolveSignerKey", () => {
@@ -66,5 +66,41 @@ describe("resolveSignerKey", () => {
     const eBbyC = endorseKey("B", b.publicKey, "C", c.privateKey);
     const eCbyB = endorseKey("C", c.publicKey, "B", b.privateKey);
     expect(resolveSignerKey("B", [eBbyC, eCbyB], {})).toBeNull(); // neither roots at setup
+  });
+});
+
+describe("verifyEndorsement", () => {
+  it("passes an endorsement signed by the endorser's key", () => {
+    const a = generateNodeKeyPair();
+    const b = generateNodeKeyPair();
+    expect(verifyEndorsement(endorseKey("B", b.publicKey, "A", a.privateKey), a.publicKey)).toBe(
+      true,
+    );
+  });
+
+  it("fails under a key other than the one that signed it", () => {
+    const a = generateNodeKeyPair();
+    const b = generateNodeKeyPair();
+    const other = generateNodeKeyPair();
+    expect(
+      verifyEndorsement(endorseKey("B", b.publicKey, "A", a.privateKey), other.publicKey),
+    ).toBe(false);
+  });
+
+  it("fails once the endorsed public key is changed", () => {
+    const a = generateNodeKeyPair();
+    const b = generateNodeKeyPair();
+    const swapped = {
+      ...endorseKey("B", b.publicKey, "A", a.privateKey),
+      publicKey: generateNodeKeyPair().publicKey,
+    };
+    expect(verifyEndorsement(swapped, a.publicKey)).toBe(false);
+  });
+
+  it("fails once the endorsed node id is changed", () => {
+    const a = generateNodeKeyPair();
+    const b = generateNodeKeyPair();
+    const moved = { ...endorseKey("B", b.publicKey, "A", a.privateKey), nodeId: "C" };
+    expect(verifyEndorsement(moved, a.publicKey)).toBe(false);
   });
 });

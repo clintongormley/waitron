@@ -42,6 +42,11 @@ export function caCertPath(stateDir: string): string {
   return join(stateDir, "tls", "ca.crt");
 }
 
+/** The box CA private key's path, beside {@link caCertPath}. */
+export function caKeyPath(stateDir: string): string {
+  return join(stateDir, "tls", "ca.key");
+}
+
 function boxTlsPaths(stateDir: string) {
   const tlsDir = join(stateDir, "tls");
   return {
@@ -49,8 +54,49 @@ function boxTlsPaths(stateDir: string) {
     certFile: join(tlsDir, "server.crt"),
     keyFile: join(tlsDir, "server.key"),
     caCertFile: caCertPath(stateDir),
-    caKeyFile: join(tlsDir, "ca.key"),
+    caKeyFile: caKeyPath(stateDir),
   };
+}
+
+/** A key ring with its keys in base64, as `secrets.env` holds them. */
+export interface EncodedKeyRing {
+  key: string;
+  version: number;
+  previous?: { key: string; version: number };
+}
+
+/**
+ * Replaces `secrets.env` whole with `ring`, so the next boot opens what the main box sealed.
+ */
+export async function writeCredentialsRing(stateDir: string, ring: EncodedKeyRing): Promise<void> {
+  await writeFileAtomic(join(stateDir, "secrets.env"), formatEnvFile(keyRingEnv(ring)), 0o600);
+}
+
+/** The ring's variables, as `loadKeyRing` reads them; the previous pair only when it has one. */
+export function keyRingEnv(ring: EncodedKeyRing): Record<string, string> {
+  const env: Record<string, string> = {
+    WAITRON_CREDENTIALS_KEY: ring.key,
+    WAITRON_CREDENTIALS_KEY_VERSION: String(ring.version),
+  };
+  if (ring.previous !== undefined) {
+    env.WAITRON_CREDENTIALS_KEY_PREVIOUS = ring.previous.key;
+    env.WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION = String(ring.previous.version);
+  }
+  return env;
+}
+
+/**
+ * Keeps the main box's certificate authority beside this box's own, under names the listener does
+ * not read.
+ */
+export async function writeVenueAuthority(
+  stateDir: string,
+  authority: { certPem: string; keyPem: string },
+): Promise<void> {
+  const tlsDir = join(stateDir, "tls");
+  await mkdir(tlsDir, { recursive: true, mode: 0o700 });
+  await writeFileAtomic(join(tlsDir, "venue-ca.crt"), authority.certPem, 0o600);
+  await writeFileAtomic(join(tlsDir, "venue-ca.key"), authority.keyPem, 0o600);
 }
 
 function leafIpv4s(listIpv4: () => string[]): string[] {

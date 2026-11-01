@@ -5,10 +5,23 @@ import {
   type Database,
   type NodeDatabase,
 } from "@waitron/db";
-import { setNodeModeTx, writeMirrorLinkTx } from "@waitron/node-db";
-import { sealNodeSigningKeyTx, type KeyRing } from "@waitron/credentials";
+import {
+  pinPrimaryKeyTx,
+  setNodeModeTx,
+  setRecoveryKeyTx,
+  writeMirrorLinkTx,
+} from "@waitron/node-db";
+import {
+  listCredentials,
+  loadKeyRing,
+  sealNodeSigningKeyTx,
+  type KeyRing,
+} from "@waitron/credentials";
+import { hashSecret } from "@waitron/identity";
+import { verifyEndorsement } from "@waitron/membership";
 import {
   assertNoForeignTenant,
+  generatePassword,
   assertNoOperationalVenue,
   readTenantIdentities,
   readOperationalVenueIds,
@@ -16,7 +29,8 @@ import {
 import { enabledModules, parseModuleOverrides, type ModuleConfig } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
-import { mintBreakGlassKey } from "./break-glass.js";
+import { chooseBreakGlassKeyName } from "./break-glass.js";
+import { keyRingEnv, writeVenueAuthority, type EncodedKeyRing } from "./box-secrets.js";
 import type { DeploymentEnvironment } from "./config.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
@@ -49,10 +63,13 @@ export interface AdoptDeps {
   /** Writes `deployment`. Nothing in the engine refuses this write;
    * `scripts/write-path-tables.test.ts` is what keeps it in named files. */
   ownerDb: Database;
-  /** This box's node.db, where its role, its mirror link and its signing key are written. */
+  /** This box's node.db, where its role, its mirror link, its signing key, its recovery-key check
+   * and the main box's public key are written. */
   ownerNode: NodeDatabase;
-  /** Seals this box's signing key. */
+  /** The ring this box booted with. Adopt replaces it with the bundle's and seals nothing under it. */
   ring: KeyRing;
+  /** Replaces `secrets.env` whole with the main box's ring, so the next boot opens what it sealed. */
+  persistCredentialsRing: (ring: EncodedKeyRing) => Promise<void>;
   /** Sends the standby identity so the primary can reserve and endorse it. The fetcher, not this
    * orchestrator, throws `mirror.bundle_fetch_failed`. */
   fetchBundle: (
@@ -126,15 +143,39 @@ export async function adoptFromPrimary(
   }
 
   assertAdoptionModules(enabledModules(ALL_MODULES, moduleConfig));
+
+  // Joining replaces this box's ring with the main box's, so a row sealed under its own would
+  // never open again.
+  if ((await listCredentials(deps.ownerDb)).length > 0) {
+    throw new AppError("mirror.vault_not_empty", {});
+  }
+  // This proves only that the bundle agrees with itself, not who sent it: checking the main box's
+  // certificate fingerprint before the password is sent is the next step (the design's trust
+  // section, docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md).
+  const { endorsement } = bundle.reservedIdentity;
+  if (
+    endorsement.endorsedBy !== designated.nodeId ||
+    !verifyEndorsement(endorsement, bundle.primaryPublicKey)
+  ) {
+    throw new AppError("mirror.bundle_fetch_failed", {});
+  }
+  const ring = loadKeyRing(keyRingEnv(bundle.credentialsRing));
+  const recoverySecret = generatePassword();
+  const recoveryVerifier = hashSecret(recoverySecret);
+
   await hooks.beforeFirstWrite();
   await stampDeployment(deps.ownerDb, bundle.environment);
-  // The role and the link are written together, so node.db never holds a mirror with no link.
-  // The key is sealed here, before finishing adoption puts its public half in venue.db, as
-  // everywhere a signing key is first made: a public key with no private half could never sign as
-  // this box.
-  await withNodeTransaction(deps.ownerNode, async (tx) => {
+  await deps.persistCredentialsRing(bundle.credentialsRing);
+  await writeVenueAuthority(deps.stateDir, {
+    certPem: bundle.boxCaPem,
+    keyPem: bundle.boxCaKeyPem,
+  });
+  // One transaction, so node.db never holds a mirror with no link, key or pin. The key is sealed
+  // here, before finishing adoption puts its public half in venue.db, as everywhere a signing key
+  // is first made: a public key with no private half could never sign as this box.
+  const recoveryKeyName = await withNodeTransaction(deps.ownerNode, async (tx) => {
     await setNodeModeTx(tx, standby.nodeId, "mirror");
-    await sealNodeSigningKeyTx(tx, deps.ring, standby.nodeId, standby.privateKey);
+    await sealNodeSigningKeyTx(tx, ring, standby.nodeId, standby.privateKey);
     await writeMirrorLinkTx(tx, standby.nodeId, {
       relayUrl: bundle.relayUrl,
       boxHostname: bundle.boxHostname,
@@ -142,6 +183,13 @@ export async function adoptFromPrimary(
       // The PRIMARY's id, which the venue's rows carry, not the standby's own.
       originNodeId: designated.nodeId,
     });
+    const name = await chooseBreakGlassKeyName(deps.ownerDb, tx, standby.nodeId);
+    await setRecoveryKeyTx(tx, standby.nodeId, recoveryVerifier, name);
+    await pinPrimaryKeyTx(tx, standby.nodeId, {
+      primaryNodeId: designated.nodeId,
+      publicKey: bundle.primaryPublicKey,
+    });
+    return name;
   });
   // Unconditional, even `{}`, so a re-adopt overwrites.
   await deps.persistModuleConfig(moduleConfig);
@@ -162,10 +210,5 @@ export async function adoptFromPrimary(
     accountKey: bundle.accountKey,
   });
   // Returned exactly once and never logged; only its verifier is stored.
-  const key = await mintBreakGlassKey(
-    { venue: deps.ownerDb, node: deps.ownerNode },
-    standby.nodeId,
-  );
-
-  return { breakGlassSecret: key.secret, breakGlassKeyName: key.name };
+  return { breakGlassSecret: recoverySecret, breakGlassKeyName: recoveryKeyName };
 }

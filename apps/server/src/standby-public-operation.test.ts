@@ -70,6 +70,7 @@ beforeAll(async () => {
   stateDir = await mkdtemp(join(tmpdir(), "waitron-standby-public-"));
   await mkdir(join(stateDir, "tls"));
   await writeFile(join(stateDir, "tls", "ca.crt"), "public-test-ca");
+  await writeFile(join(stateDir, "tls", "ca.key"), "public-test-ca-key");
 });
 afterAll(async () => {
   if (stateDir !== undefined) await rm(stateDir, { recursive: true, force: true });

@@ -95,6 +95,7 @@ beforeAll(async () => {
   stateDir = await mkdtemp(join(tmpdir(), "allocated-standby-host-"));
   await mkdir(join(stateDir, "tls"));
   await writeFile(join(stateDir, "tls", "ca.crt"), "public-test-ca");
+  await writeFile(join(stateDir, "tls", "ca.key"), "public-test-ca-key");
 });
 afterAll(async () => {
   if (stateDir !== undefined) await rm(stateDir, { recursive: true, force: true });
@@ -449,6 +450,7 @@ it("a refused public adoption retains its independently signed reservation witho
         stateDir: adoptionDir,
         persistTrading: async () => {},
         persistModuleConfig: async () => {},
+        persistCredentialsRing: async () => {},
         fetchBundle: async (_url, _credential, standby) => {
           target = standby.nodeId;
           const held = joinRequest(target, "reserve");

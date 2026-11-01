@@ -287,6 +287,7 @@ const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
   "setup.request_invalid": 400,
   "mirror.primary_url_invalid": 400,
   "mirror.bundle_fetch_failed": 502,
+  "mirror.vault_not_empty": 409,
   "password.invalid": 401,
   "setup.operation_conflict": 409,
   "setup.already_provisioning": 409,

@@ -1717,6 +1717,33 @@ describe("setup-app", () => {
   );
 
   it.each([
+    [
+      "en-GB",
+      "This server already holds saved keys for other services, and joining would make them unreadable for good. Nothing was changed. Start again on this server, then add it as a mirror.",
+    ],
+    [
+      "es-ES",
+      "Este servidor ya guarda claves de otros servicios y, al unirlo, dejarían de poder leerse para siempre. No se ha cambiado nada. Empieza de nuevo en este servidor y después añádelo como réplica.",
+    ],
+  ] as const)(
+    "says a server holding saved keys cannot join, and how to join it (%s)",
+    async (locale, sentence) => {
+      try {
+        const adopt = vi
+          .fn()
+          .mockRejectedValue({ code: "mirror.vault_not_empty", params: {}, status: 409 });
+        const el = await mountSetupApp(stubApi({ adopt }));
+        setLocale(locale);
+        adoptRequest(el);
+        await flush(el);
+        expect(await bottomOf(await screenHost(el, "connect"))).toBe(sentence);
+      } finally {
+        setLocale("en-GB");
+      }
+    },
+  );
+
+  it.each([
     ["mirror.primary_url_invalid", {}, "primaryUrl", "Check the primary server address."],
     [
       "setup.request_invalid",

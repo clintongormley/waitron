@@ -16,7 +16,9 @@ import { readMirrorLink, setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
 import { loadKeyRing } from "@waitron/credentials";
+import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
 import { adoptFromPrimary, type AdoptHooks, type AdoptRequest } from "./adopt.js";
+import { writeCredentialsRing } from "./box-secrets.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { parseEnvFile } from "./env-file.js";
 import { PENDING_ADOPTION_FILE, type PendingAdoption } from "./finish-adoption.js";
@@ -45,6 +47,7 @@ const ADOPT_BODY = JSON.stringify({
   credential: { personId: "88888888-8888-8888-8888-888888888888", password: "a-password" },
 });
 
+const PRIMARY_KEYS = generateNodeKeyPair();
 const BUNDLE: MirrorBundle = {
   designated: {
     locationId: "33333333-3333-4333-8333-333333333333",
@@ -62,14 +65,17 @@ const BUNDLE: MirrorBundle = {
       "fiscal-verifactu": { nif: "90000001K", idSistemaInformatico: "WS", numeroInstalacion: 7 },
     },
     series: [{ code: "SA-7", purpose: "standard" }],
-    endorsement: {
-      nodeId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-      publicKey: "STANDBY_PUB",
-      endorsedBy: PRIMARY_NODE_ID,
-      signature: "SIG",
-    },
+    endorsement: endorseKey(
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "STANDBY_PUB",
+      PRIMARY_NODE_ID,
+      PRIMARY_KEYS.privateKey,
+    ),
   },
   moduleOverrides: {},
+  primaryPublicKey: PRIMARY_KEYS.publicKey,
+  credentialsRing: { key: Buffer.alloc(32, 6).toString("base64"), version: 1 },
+  boxCaKeyPem: "-----BEGIN PRIVATE KEY-----\nfake\n-----END PRIVATE KEY-----\n",
 };
 
 const dirs: string[] = [];
@@ -268,6 +274,7 @@ describe("runStagedReset", () => {
             persistModuleConfig: async (config) => {
               await writeModuleConfig(stateDir, config);
             },
+            persistCredentialsRing: (ring) => writeCredentialsRing(stateDir, ring),
             stateDir,
             database: venueDir,
           },

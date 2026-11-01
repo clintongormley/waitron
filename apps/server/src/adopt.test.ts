@@ -1,15 +1,32 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import { locations, readDeploymentEnvironment, stampDeployment, tenants } from "@waitron/db";
+import {
+  locations,
+  readDeploymentEnvironment,
+  stampDeployment,
+  tenants,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { readMirrorLink, readNodeMode, readRecoveryKeyName } from "@waitron/node-db";
+import {
+  readMirrorLink,
+  readNodeMode,
+  readPinnedPrimaryKey,
+  readRecoveryKeyName,
+} from "@waitron/node-db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { isEnabled, type ModuleConfig } from "@waitron/module";
 import { isAppError } from "@waitron/shared";
-import { loadKeyRing, nodeSigningPublicKey, readNodeSigningKey } from "@waitron/credentials";
+import {
+  loadKeyRing,
+  nodeSigningPublicKey,
+  putCredential,
+  readNodeSigningKey,
+} from "@waitron/credentials";
+import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
 import {
   adoptFromPrimary,
   type AdoptCredential,
@@ -20,6 +37,8 @@ import { ALL_MODULES } from "./modules.js";
 import type { MirrorBundle, ReservedIdentity } from "./mirror-bundle.js";
 import type { PendingAdoption } from "./finish-adoption.js";
 import { verifyBreakGlass } from "./break-glass.js";
+import { keyRingEnv, writeCredentialsRing } from "./box-secrets.js";
+import { parseEnvFile } from "./env-file.js";
 
 vi.mock("./modules.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./modules.js")>();
@@ -40,18 +59,25 @@ const DESIGNATED = {
   nodeId: "44444444-4444-4444-8444-444444444444",
 } as const;
 
+const PRIMARY_KEYS = generateNodeKeyPair();
+
 const RESERVED: ReservedIdentity = {
   modules: {
     "fiscal-verifactu": { nif: "90000001K", idSistemaInformatico: "WS", numeroInstalacion: 7 },
   },
   series: [{ code: "SA-7", purpose: "standard" }],
-  endorsement: {
-    nodeId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-    publicKey: "STANDBY_PUB",
-    endorsedBy: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-    signature: "SIG",
-  },
+  endorsement: endorseKey(
+    "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "STANDBY_PUB",
+    DESIGNATED.nodeId,
+    PRIMARY_KEYS.privateKey,
+  ),
 };
+
+// The main box's ring, distinct from the spare's own `RING`.
+// Same version as `RING`, so opening under the wrong one fails on the key, not the version.
+const BUNDLE_RING = { key: Buffer.alloc(32, 0x6b).toString("base64"), version: 1 };
+const CA_KEY_PEM = "-----BEGIN PRIVATE KEY-----\nfake-authority\n-----END PRIVATE KEY-----\n";
 
 function makeBundle(over: Partial<MirrorBundle> = {}): MirrorBundle {
   return {
@@ -65,6 +91,9 @@ function makeBundle(over: Partial<MirrorBundle> = {}): MirrorBundle {
     accountKey: Buffer.alloc(32, 9).toString("base64"),
     reservedIdentity: RESERVED,
     moduleOverrides: {},
+    primaryPublicKey: PRIMARY_KEYS.publicKey,
+    credentialsRing: BUNDLE_RING,
+    boxCaKeyPem: CA_KEY_PEM,
     ...over,
   };
 }
@@ -108,6 +137,7 @@ function deps(
       s: { nodeId: string; publicKey: string; contactUrl: string },
     ) => Promise<MirrorBundle>;
     environment?: "production" | "preproduction";
+    persistCredentialsRing?: (ring: MirrorBundle["credentialsRing"]) => Promise<void>;
   } = {},
 ) {
   return {
@@ -119,6 +149,8 @@ function deps(
     fetchBundle: extra.fetchBundle ?? (async () => makeBundle()),
     persistTrading: extra.persistTrading ?? (async () => {}),
     persistModuleConfig: extra.persistModuleConfig ?? (async () => {}),
+    persistCredentialsRing:
+      extra.persistCredentialsRing ?? ((ring) => writeCredentialsRing(stateDir, ring)),
     stateDir,
     database: "mirror_db",
   };
@@ -259,7 +291,11 @@ describe("adoptFromPrimary (mirror adopt)", () => {
       REQ,
       NO_HOOKS,
     );
-    const sealed = await readNodeSigningKey(suite.node, RING, sent!.nodeId);
+    const sealed = await readNodeSigningKey(
+      suite.node,
+      loadKeyRing(keyRingEnv(BUNDLE_RING)),
+      sent!.nodeId,
+    );
     expect(sealed).not.toBeNull();
     expect(nodeSigningPublicKey(sealed!)).toBe(sent!.publicKey);
     const latch = await readFile(join(stateDir, "pending-adoption.json"), "utf8");
@@ -458,5 +494,173 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     );
     expect(persisted).toBeDefined();
     expect(isEnabled(persisted!, toggleable)).toBe(false);
+  });
+  it("installs the main box's ring before sealing its own key", async () => {
+    let sent: { nodeId: string; publicKey: string } | undefined;
+    await adoptFromPrimary(
+      deps({
+        fetchBundle: async (_u, _c, s) => {
+          sent = s;
+          return makeBundle();
+        },
+      }),
+      REQ,
+      NO_HOOKS,
+    );
+    const secretsFile = join(stateDir, "secrets.env");
+    const env = parseEnvFile(await readFile(secretsFile, "utf8"));
+    expect(env).toEqual({
+      WAITRON_CREDENTIALS_KEY: BUNDLE_RING.key,
+      WAITRON_CREDENTIALS_KEY_VERSION: "1",
+    });
+    expect((await stat(secretsFile)).mode & 0o777).toBe(0o600);
+    const sealed = await readNodeSigningKey(suite.node, loadKeyRing(env), sent!.nodeId);
+    expect(nodeSigningPublicKey(sealed!)).toBe(sent!.publicKey);
+    const underOldRing = await readNodeSigningKey(suite.node, RING, sent!.nodeId).catch(
+      (e: unknown) => e,
+    );
+    expect(isAppError(underOldRing) && underOldRing.code).toBe("credentials.decrypt_failed");
+  });
+
+  it("writes the previous key's two variables when the bundle carries one", async () => {
+    const previous = { key: Buffer.alloc(32, 0x6c).toString("base64"), version: 2 };
+    await adoptFromPrimary(
+      deps({
+        fetchBundle: async () => makeBundle({ credentialsRing: { ...BUNDLE_RING, previous } }),
+      }),
+      REQ,
+      NO_HOOKS,
+    );
+    expect(parseEnvFile(await readFile(join(stateDir, "secrets.env"), "utf8"))).toEqual({
+      WAITRON_CREDENTIALS_KEY: BUNDLE_RING.key,
+      WAITRON_CREDENTIALS_KEY_VERSION: "1",
+      WAITRON_CREDENTIALS_KEY_PREVIOUS: previous.key,
+      WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "2",
+    });
+  });
+
+  it("keeps the main box's authority certificate and key as venue-ca files, 0600", async () => {
+    await adoptFromPrimary(deps(), REQ, NO_HOOKS);
+    const crt = join(stateDir, "tls", "venue-ca.crt");
+    const key = join(stateDir, "tls", "venue-ca.key");
+    expect(await readFile(crt, "utf8")).toBe(makeBundle().boxCaPem);
+    expect(await readFile(key, "utf8")).toBe(CA_KEY_PEM);
+    expect((await stat(crt)).mode & 0o777).toBe(0o600);
+    expect((await stat(key)).mode & 0o777).toBe(0o600);
+  });
+
+  it("pins the main box's public key", async () => {
+    let ownNodeId = "";
+    await adoptFromPrimary(
+      deps({
+        persistTrading: async (args) => {
+          ownNodeId = args.nodeId;
+        },
+      }),
+      REQ,
+      NO_HOOKS,
+    );
+    expect(await readPinnedPrimaryKey(suite.node, ownNodeId)).toEqual({
+      primaryNodeId: DESIGNATED.nodeId,
+      publicKey: PRIMARY_KEYS.publicKey,
+    });
+  });
+
+  it("writes no role, key or pin when the main box's ring cannot be saved", async () => {
+    const error = await adoptFromPrimary(
+      deps({
+        persistCredentialsRing: async () => {
+          throw new Error("disk refused");
+        },
+      }),
+      REQ,
+      NO_HOOKS,
+    ).catch((e: unknown) => e);
+    expect((error as Error).message).toBe("disk refused");
+    for (const table of ["node_mode", "node_signing_key", "node_primary_key"]) {
+      expect((await suite.node.execute(sql.raw(`select node_id from ${table}`))).rows).toEqual([]);
+    }
+  });
+
+  async function writtenNothing(): Promise<void> {
+    expect(await readDeploymentEnvironment(suite.db)).toBeNull();
+    for (const table of [
+      "node_mode",
+      "node_mirror_link",
+      "node_signing_key",
+      "node_recovery_key",
+      "node_primary_key",
+    ]) {
+      expect((await suite.node.execute(sql.raw(`select node_id from ${table}`))).rows).toEqual([]);
+    }
+    expect(await readdir(stateDir)).toEqual([]);
+  }
+
+  it.each([
+    [
+      "signed by a key other than the main box's",
+      { primaryPublicKey: generateNodeKeyPair().publicKey },
+    ],
+    [
+      "naming an endorser other than the main box",
+      {
+        reservedIdentity: {
+          ...RESERVED,
+          endorsement: {
+            ...RESERVED.endorsement,
+            endorsedBy: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          },
+        },
+      },
+    ],
+    [
+      "whose endorsed key was changed",
+      {
+        reservedIdentity: {
+          ...RESERVED,
+          endorsement: { ...RESERVED.endorsement, publicKey: "OTHER_PUB" },
+        },
+      },
+    ],
+  ] as const)(
+    "refuses a bundle whose endorsement does not verify (%s), writing nothing",
+    async (_case, over) => {
+      const beforeFirstWrite = vi.fn(async () => {});
+      const error = await adoptFromPrimary(
+        deps({ fetchBundle: async () => makeBundle(over as Partial<MirrorBundle>) }),
+        REQ,
+        { beforeFirstWrite },
+      ).catch((e: unknown) => e);
+      expect(isAppError(error) && error.code).toBe("mirror.bundle_fetch_failed");
+      expect(isAppError(error) && error.params).toEqual({});
+      expect(beforeFirstWrite).not.toHaveBeenCalled();
+      await writtenNothing();
+    },
+  );
+
+  it("refuses mirror.vault_not_empty, writing nothing", async () => {
+    await suite.db
+      .insert(tenants)
+      .values({ id: 1, country: "ES", taxId: "80000001K", legalName: "Same taxpayer SL" });
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, RING, {
+        purpose: "payments.sumup",
+        value: {
+          apiKey: "sup_sk_x",
+          merchantCode: "MABC123",
+          affiliateAppId: "-",
+          affiliateKey: "-",
+        },
+      }),
+    );
+    const beforeFirstWrite = vi.fn(async () => {});
+    const error = await adoptFromPrimary(deps(), REQ, { beforeFirstWrite }).catch(
+      (e: unknown) => e,
+    );
+    expect(isAppError(error) && error.code).toBe("mirror.vault_not_empty");
+    expect(isAppError(error) && error.params).toEqual({});
+    expect(JSON.stringify(error)).not.toContain(BUNDLE_RING.key);
+    expect(beforeFirstWrite).not.toHaveBeenCalled();
+    await writtenNothing();
   });
 });

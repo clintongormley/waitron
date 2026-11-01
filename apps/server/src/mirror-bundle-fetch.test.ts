@@ -35,6 +35,9 @@ const SAMPLE_BUNDLE: MirrorBundle = {
     },
   },
   moduleOverrides: {},
+  primaryPublicKey: "PRIMARY_PUB",
+  credentialsRing: { key: Buffer.alloc(32, 5).toString("base64"), version: 1 },
+  boxCaKeyPem: "-----BEGIN PRIVATE KEY-----\nFAKE\n-----END PRIVATE KEY-----\n",
 };
 
 const CREDENTIAL: AdoptCredential = {
@@ -79,6 +82,19 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     const bundle = await fetchMirrorBundle(await startServer(app), CREDENTIAL, STANDBY);
     expect(bundle).toEqual(expected);
     expect(bundle.designated).not.toHaveProperty("seriesId");
+  });
+
+  it("keeps a key ring's previous key and version", async () => {
+    const rotating = {
+      ...SAMPLE_BUNDLE,
+      credentialsRing: {
+        ...SAMPLE_BUNDLE.credentialsRing,
+        previous: { key: Buffer.alloc(32, 6).toString("base64"), version: 2 },
+      },
+    };
+    const app = new Hono();
+    app.post("/management-api/mirror-bundle", (c) => c.json(rotating));
+    expect(await fetchMirrorBundle(await startServer(app), CREDENTIAL, STANDBY)).toEqual(rotating);
   });
 
   it("POSTs the credential to /management-api/mirror-bundle and parses a 200 into a MirrorBundle", async () => {
@@ -270,6 +286,36 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
       },
     ],
     ["null module overrides", { ...SAMPLE_BUNDLE, moduleOverrides: null }],
+    ["no main box public key", { ...SAMPLE_BUNDLE, primaryPublicKey: undefined }],
+    ["no authority key", { ...SAMPLE_BUNDLE, boxCaKeyPem: undefined }],
+    ["no key ring", { ...SAMPLE_BUNDLE, credentialsRing: undefined }],
+    ["an array key ring", { ...SAMPLE_BUNDLE, credentialsRing: [] }],
+    [
+      "a numeric ring key",
+      { ...SAMPLE_BUNDLE, credentialsRing: { ...SAMPLE_BUNDLE.credentialsRing, key: 42 } },
+    ],
+    [
+      "a string ring version",
+      { ...SAMPLE_BUNDLE, credentialsRing: { ...SAMPLE_BUNDLE.credentialsRing, version: "1" } },
+    ],
+    [
+      "a null previous key",
+      { ...SAMPLE_BUNDLE, credentialsRing: { ...SAMPLE_BUNDLE.credentialsRing, previous: null } },
+    ],
+    [
+      "a previous key with no version",
+      {
+        ...SAMPLE_BUNDLE,
+        credentialsRing: { ...SAMPLE_BUNDLE.credentialsRing, previous: { key: "AAAA" } },
+      },
+    ],
+    [
+      "a previous key with a numeric key",
+      {
+        ...SAMPLE_BUNDLE,
+        credentialsRing: { ...SAMPLE_BUNDLE.credentialsRing, previous: { key: 4, version: 2 } },
+      },
+    ],
   ])("maps 200 JSON with %s to mirror.bundle_fetch_failed", async (_shape, body) => {
     const app = new Hono();
     app.post("/management-api/mirror-bundle", (c: Context) =>

@@ -292,7 +292,12 @@ import { mountGuidePages } from "./guide-pages.js";
 import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
 import { startMenuActivation } from "./menu-activation.js";
 import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
-import { ensureBoxSecrets, mintedBoxLeaf, tightenTlsDir } from "./box-secrets.js";
+import {
+  ensureBoxSecrets,
+  mintedBoxLeaf,
+  tightenTlsDir,
+  writeCredentialsRing,
+} from "./box-secrets.js";
 import { resolveTradingTls } from "./trading-tls.js";
 import {
   assertRestoredMembershipReadable,
@@ -1459,6 +1464,7 @@ async function bootServer(
               ownerDb: db,
               ownerNode: store.node,
               ring,
+              persistCredentialsRing: (r) => writeCredentialsRing(config.stateDir, r),
               fetchBundle: fetchMirrorBundle,
               advertisedOrigin: config.advertisedOrigin,
               environment: config.environment,

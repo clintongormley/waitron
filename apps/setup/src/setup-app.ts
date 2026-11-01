@@ -246,6 +246,7 @@ const VENUE_ERROR_MESSAGES: Record<string, StringKey> = {
 const ADOPT_ERROR_MESSAGES: Record<string, StringKey> = {
   ...FIRST_SETUP_ERROR_MESSAGES,
   "mirror.bundle_fetch_failed": "shell.adopt.bundle_fetch_failed",
+  "mirror.vault_not_empty": "shell.adopt.vault_not_empty",
   "password.invalid": "shell.adopt.login_failed",
   "setup.request_invalid": "shell.adopt.request_invalid",
   "setup.not_ready": "shell.not_ready",

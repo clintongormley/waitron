@@ -18,7 +18,7 @@ export { generateNodeKeyPair, signBytes, verifyBytes } from "./crypto.js";
 
 // resolveSignerKey is deliberately NOT exported: it is quadratic in an uncapped endorsement list,
 // which only verify.ts's MAX_ENDORSEMENTS bounds.
-export { endorseKey } from "./endorsement.js";
+export { endorseKey, verifyEndorsement } from "./endorsement.js";
 
 export {
   isMembershipDocument,

@@ -11,7 +11,9 @@ import { ALLOCATED_FISCAL_STANDBY, FISCAL_OPERATIONS } from "@waitron/fiscal-ver
 import type { WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { loadKeyRing } from "@waitron/credentials";
+import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
 import { adoptFromPrimary } from "./adopt.js";
+import { writeCredentialsRing } from "./box-secrets.js";
 import {
   readPendingAdoption,
   runFinishAdoption,
@@ -27,6 +29,7 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 const LOCATION = "a7000000-0000-4000-8000-000000000001";
 const PRIMARY = "a7000000-0000-4000-8000-000000000002";
 const STANDBY = "a7000000-0000-4000-8000-000000000003";
+const PRIMARY_KEYS = generateNodeKeyPair();
 const credential = {
   personId: "a7000000-0000-4000-8000-000000000004",
   password: "synthetic-login",
@@ -59,9 +62,12 @@ function bundle(): MirrorBundle {
     reservedIdentity: {
       modules: { "fiscal-verifactu": { version: 1, evidence: {} } },
       series: [],
-      endorsement: {} as never,
+      endorsement: endorseKey(STANDBY, "synthetic-standby-key", PRIMARY, PRIMARY_KEYS.privateKey),
     },
     moduleOverrides: {},
+    primaryPublicKey: PRIMARY_KEYS.publicKey,
+    credentialsRing: { key: Buffer.alloc(32, 5).toString("base64"), version: 1 },
+    boxCaKeyPem: "synthetic-ca-key",
   };
 }
 function deps(value = bundle()) {
@@ -77,6 +83,8 @@ function deps(value = bundle()) {
     fetchBundle: async () => value,
     persistTrading: async () => {},
     persistModuleConfig: async () => {},
+    persistCredentialsRing: (ring: MirrorBundle["credentialsRing"]) =>
+      writeCredentialsRing(stateDir, ring),
     stateDir,
     database: "synthetic-spare",
   };

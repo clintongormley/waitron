@@ -67,6 +67,8 @@ export const shellEn = {
     "Couldn't join the primary server: it couldn't be reached, it refused the request, or its reply couldn't be used. Check that the address is your restaurant's primary Waitron server, then try again.",
   "shell.adopt.request_invalid":
     "The server rejected the details. Check the address and login, then try again.",
+  "shell.adopt.vault_not_empty":
+    "This server already holds saved keys for other services, and joining would make them unreadable for good. Nothing was changed. Start again on this server, then add it as a mirror.",
   "shell.adopt.login_failed":
     "The login failed. Check the admin person ID, password and authenticator code, then try again.",
   "shell.adopt.generic":
@@ -231,6 +233,8 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "No se ha podido unir al servidor principal: no se ha podido contactar con él, ha rechazado la solicitud o su respuesta no se ha podido usar. Comprueba que la dirección es la del servidor principal de Waitron de tu restaurante e inténtalo de nuevo.",
   "shell.adopt.request_invalid":
     "El servidor ha rechazado los datos. Revisa la dirección y el inicio de sesión, e inténtalo de nuevo.",
+  "shell.adopt.vault_not_empty":
+    "Este servidor ya guarda claves de otros servicios y, al unirlo, dejarían de poder leerse para siempre. No se ha cambiado nada. Empieza de nuevo en este servidor y después añádelo como réplica.",
   "shell.adopt.login_failed":
     "No se ha podido iniciar sesión. Revisa el ID de persona, la contraseña y el código del autenticador del administrador, e inténtalo de nuevo.",
   "shell.adopt.generic":

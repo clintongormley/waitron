@@ -1140,6 +1140,11 @@ declare module "@waitron/shared" {
      */
     "mirror.bundle_fetch_failed": Record<string, never>;
     /**
+     * A box joining as a spare already holds a sealed vault row. Joining replaces its key ring with
+     * the main box's, so that row would never open again; nothing has been written.
+     */
+    "mirror.vault_not_empty": Record<string, never>;
+    /**
      * The membership document could not be written because every read-mint-write round lost its
      * term race. The mirror-bundle adopt handshake refuses rather than force a write that would drop
      * the winner's node from the chart; transient, so the caller retries. `attempts` is the round

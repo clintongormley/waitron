@@ -20,12 +20,28 @@ function isNullableString(value: unknown): boolean {
   return value === null || typeof value === "string";
 }
 
+function isKeyEntry(value: unknown): value is Record<string, unknown> {
+  return isRecord(value) && typeof value.key === "string" && typeof value.version === "number";
+}
+
+function isEncodedKeyRing(value: unknown): boolean {
+  return isKeyEntry(value) && (value.previous === undefined || isKeyEntry(value.previous));
+}
+
 function isMirrorBundle(value: unknown): value is MirrorBundle {
   if (!isRecord(value)) return false;
   const { designated, tenant, primaryNode, reservedIdentity, moduleOverrides, wireguardPublicKey } =
     value;
   if (
-    !hasStrings(value, ["boxHostname", "boxCaPem", "relayUrl", "accountKey"]) ||
+    !hasStrings(value, [
+      "boxHostname",
+      "boxCaPem",
+      "relayUrl",
+      "accountKey",
+      "primaryPublicKey",
+      "boxCaKeyPem",
+    ]) ||
+    !isEncodedKeyRing(value.credentialsRing) ||
     (value.environment !== "production" && value.environment !== "preproduction") ||
     (wireguardPublicKey !== undefined && typeof wireguardPublicKey !== "string") ||
     !isRecord(designated) ||

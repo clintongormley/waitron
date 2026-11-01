@@ -319,11 +319,13 @@ async function post(app: Hono, body: unknown): Promise<Response> {
 beforeAll(async () => {
   stateDir = await mkdtemp(join(tmpdir(), "waitron-mirror-bundle-api-state-"));
   await mkdir(join(stateDir, "tls"), { recursive: true });
-  await writeFile(
-    join(stateDir, "tls", "ca.crt"),
-    mintSelfSignedServerCert({ hostnames: ["waitron.local"], ipAddresses: [], now: new Date() })
-      .caCertPem,
-  );
+  const ca = mintSelfSignedServerCert({
+    hostnames: ["waitron.local"],
+    ipAddresses: [],
+    now: new Date(),
+  });
+  await writeFile(join(stateDir, "tls", "ca.crt"), ca.caCertPem);
+  await writeFile(join(stateDir, "tls", "ca.key"), ca.caKeyPem);
 
   db = suite.db;
 }, 180_000);
