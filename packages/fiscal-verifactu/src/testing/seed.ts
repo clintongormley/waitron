@@ -68,8 +68,9 @@ async function ensureTaxpayer(tx: Transaction, nif: string): Promise<void> {
     .onConflictDoNothing();
 }
 
-/** Inserts one location and returns its id — the FK a node and a device both need. */
 async function insertLocation(tx: Transaction, label: string): Promise<string> {
+  const existing = await tx.select({ id: locations.id }).from(locations).limit(2);
+  if (existing.length === 1) return existing[0]!.id;
   const [locationRow] = await tx
     .insert(locations)
     .values({

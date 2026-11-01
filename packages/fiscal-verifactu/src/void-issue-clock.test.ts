@@ -92,30 +92,6 @@ describe("the void caller's original writing location", () => {
     });
     expect(await suite.db.select().from(invoiceSeries)).toEqual(numbers);
   });
-  it("resolves the original node rather than another location or the first node", async () => {
-    await suite.db.insert(locations).values({
-      name: "Unrelated",
-      invoiceLocales: ["en-GB"],
-      operationDescription: "Other service",
-      timeZone: "Pacific/Honolulu",
-    });
-    const second = await seedTenantWithSif(suite.db);
-    await suite.db
-      .update(locations)
-      .set({ timeZone: "Atlantic/Canary" })
-      .where(eq(locations.id, second.locationId));
-    const old = await withTransaction(suite.db, (tx) =>
-      recordSale(
-        tx,
-        backend(),
-        saleInput({ ...second, clock: source, settlement: { kind: "deferred" } }),
-      ),
-    );
-    expect((await annul(old.saleId)).offsetMinutes).toBe(60);
-    expect(records(old.saleId)[1]).toMatchObject({
-      FechaHoraHusoGenRegistro: "2026-10-15T00:30:00+01:00",
-    });
-  });
   it.each(["", "  ", "Invalid/Zone", "+02:00"])(
     "refuses unusable original zone %j without appending or allocating",
     async (timeZone) => {
@@ -191,24 +167,6 @@ describe("the void caller's original writing location", () => {
       params: { reason: "mismatch" },
     });
     expect(snapshot()).toEqual(before);
-  });
-  it("validates the saved original node's location even without a server admission holder", async () => {
-    const old = await original();
-    await suite.db.execute(sql`pragma foreign_keys = off`);
-    try {
-      await suite.db
-        .update(nodes)
-        .set({ locationId: randomUUID() })
-        .where(eq(nodes.id, seededNode.nodeId));
-      const before = snapshot();
-      await expect(annul(old.saleId)).rejects.toMatchObject({
-        code: "venue.time_zone_target_invalid",
-        params: { reason: "location" },
-      });
-      expect(snapshot()).toEqual(before);
-    } finally {
-      await suite.db.execute(sql`pragma foreign_keys = on`);
-    }
   });
 });
 

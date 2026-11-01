@@ -222,14 +222,18 @@ function freshNif(): string {
 async function insertLocationNodeSeries(
   tx: Transaction,
 ): Promise<{ locationId: string; nodeId: NodeId; seriesId: SeriesId }> {
-  const [location] = await tx
-    .insert(locations)
-    .values({
-      name: "Sala principal",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
-    })
-    .returning({ id: locations.id });
+  const existing = await tx.select({ id: locations.id }).from(locations).limit(2);
+  const [location] =
+    existing.length === 1
+      ? existing
+      : await tx
+          .insert(locations)
+          .values({
+            name: "Sala principal",
+            invoiceLocales: ["es-ES"],
+            operationDescription: "Venta en establecimiento",
+          })
+          .returning({ id: locations.id });
   const [node] = await tx
     .insert(nodes)
     .values({ locationId: location!.id, name: "Node 1" })
