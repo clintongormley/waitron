@@ -21,7 +21,6 @@ function closure(over: Partial<PayPeriodClosure> = {}): PayPeriodClosure {
   const bytes = JSON.stringify([
     row.id,
     row.nodeId,
-    row.locationId,
     row.period.start,
     row.period.end,
     row.clock.timeZone,
@@ -54,7 +53,6 @@ describe("pay-period closure verification", () => {
   it.each([
     ["id", { id: "different" }],
     ["node", { nodeId: "different" }],
-    ["location", { locationId: "different" }],
     ["period start", { period: { start: "2026-01-02", end: "2026-02-01" } }],
     ["period end", { period: { start: "2026-01-01", end: "2026-03-01" } }],
     ["zone", { clock: { timeZone: "UTC", dayCutover: "06:00", cutoverChanges: [] } }],

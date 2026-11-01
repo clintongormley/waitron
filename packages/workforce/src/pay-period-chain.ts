@@ -14,7 +14,6 @@ function canonicalEntry(row: ProjectedRecordEntry) {
     entry: {
       entryId: e.entryId,
       personId: e.personId,
-      locationId: e.locationId,
       nodeId: e.nodeId,
       entryKind: e.entryKind,
       eventAt: e.eventAt,
@@ -51,10 +50,9 @@ function canonicalEntry(row: ProjectedRecordEntry) {
   };
 }
 
-function canonicalSession(s: WorkSession): WorkSession {
+function canonicalSession(s: WorkSession): Omit<WorkSession, "locationId"> {
   return {
     personId: s.personId,
-    locationId: s.locationId,
     workDate: s.workDate,
     startedAt: s.startedAt,
     startOffsetMinutes: s.startOffsetMinutes,
@@ -80,7 +78,7 @@ function canonicalSnapshot(snapshot: PayPeriodSnapshot) {
         (a, b) =>
           compare(a.personId, b.personId) ||
           compare(a.startedAt, b.startedAt) ||
-          compare(a.locationId, b.locationId),
+          compare(a.endedAt, b.endedAt),
       ),
     entries: snapshot.entries
       .map(canonicalEntry)
@@ -120,7 +118,6 @@ export function computeClosureHash(row: Omit<PayPeriodClosure, "closureHash">): 
   const bytes = JSON.stringify([
     row.id,
     row.nodeId,
-    row.locationId,
     row.period.start,
     row.period.end,
     row.clock.timeZone,
@@ -148,9 +145,7 @@ export function verifyPayPeriodClosures(rows: readonly PayPeriodClosure[]): Chai
       return { ok: false, reason: "genesis", sequenceNo: 1 };
     if (
       previous !== undefined &&
-      (row.prevClosureHash !== previous.closureHash ||
-        row.nodeId !== previous.nodeId ||
-        row.locationId !== previous.locationId)
+      (row.prevClosureHash !== previous.closureHash || row.nodeId !== previous.nodeId)
     ) {
       return { ok: false, reason: "broken_link", sequenceNo: row.sequenceNo };
     }
