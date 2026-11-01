@@ -302,6 +302,13 @@ describe("seedDevice", () => {
       .where(eq(devices.id, deviceId));
     expect(row!.locationId).toBe(await venueLocationId(db));
   });
+
+  it("seedDevice with no venue refuses before writing a profile", async () => {
+    const error: unknown = await seedDevice(db).catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ code: "venue.not_found" });
+    expect(await db.select({ id: deviceProfiles.id }).from(deviceProfiles)).toEqual([]);
+    expect(await db.select({ id: devices.id }).from(devices)).toEqual([]);
+  });
 });
 
 describe("seedWorkingOrder", () => {
@@ -334,6 +341,7 @@ describe("the helpers inside a transaction", () => {
       await seedVenue(tx, { name: "In a transaction" });
       const node = await seedNode(tx);
       await seedDevice(tx);
+      await seedKitchenStation(tx, { locationId: brandLocationId(await venueLocationId(tx)) });
       return seedWorkingOrder(tx, { nodeId: node });
     });
     expect((await readVenue(suite.db)).name).toBe("In a transaction");

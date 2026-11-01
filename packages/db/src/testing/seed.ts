@@ -67,7 +67,7 @@ export async function seedNode(db: Database | Transaction, location?: LocationId
  * named 'Cocina' — the fixture shape the till suites need so a fire's default-station fallback
  * ({@link fireLines}) resolves. */
 export async function seedKitchenStation(
-  db: Database,
+  db: Database | Transaction,
   opts: { locationId: LocationId; name?: string; isDefault?: boolean },
 ): Promise<string> {
   const { locationId, name = "Cocina", isDefault = true } = opts;
@@ -94,6 +94,7 @@ export async function seedDevice(
 ): Promise<{ deviceId: DeviceId; profileId: string }> {
   deviceCounter += 1;
   const label = opts.label ?? `Device ${deviceCounter}`;
+  const locationId = opts.locationId ?? (await venueLocationId(db));
   const profileId =
     opts.profileId ??
     (
@@ -109,7 +110,7 @@ export async function seedDevice(
   const [row] = await db
     .insert(devices)
     .values({
-      locationId: opts.locationId ?? (await venueLocationId(db)),
+      locationId,
       deviceProfileId: profileId,
       label,
       tokenHash: "seeded",
