@@ -62,7 +62,7 @@ describe("pass_item_marks schema", () => {
     const [line] = await db
       .insert(workingOrderLines)
       .values({
-        workingOrderId: order!.id,
+        workingOrderId: order.id,
         lineNo: 1,
         productId: product!.id,
         name: "Food",
@@ -78,7 +78,7 @@ describe("pass_item_marks schema", () => {
       .insert(ticketItems)
       .values({
         nodeId,
-        workingOrderId: order!.id,
+        workingOrderId: order.id,
         workingOrderLineId: line!.id,
         stationId: station!.id,
       })

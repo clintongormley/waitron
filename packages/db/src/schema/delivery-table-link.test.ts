@@ -81,7 +81,7 @@ describe("an order's delivery table", () => {
         orderNumber: orderSeq,
         status: "open",
       });
-      return row!.id;
+      return row.id;
     });
   }
 

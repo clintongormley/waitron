@@ -288,7 +288,7 @@ describe("settled-tender refund drawer targets", () => {
     const [payment] = await db
       .insert(billPayments)
       .values({
-        workingOrderId: order!.id,
+        workingOrderId: order.id,
         submissionId: randomUUID(),
         fingerprint: "bill-drawer",
         kind: "contribution",

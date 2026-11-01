@@ -191,7 +191,7 @@ describe("parties, party_tables and service_commands", () => {
     const order = await inTx((tx) =>
       seedWorkingOrder(tx, { ...DASHBOARD, nodeId, orderNumber: orderSeq, partyId: id }),
     );
-    expect(order!.partyId).toBe(id);
+    expect(order.partyId).toBe(id);
     const keys = suite.db.all<{ table: string; from: string; to: string }>(
       sql.raw(`select "table", "from", "to" from pragma_foreign_key_list('working_orders')`),
     );

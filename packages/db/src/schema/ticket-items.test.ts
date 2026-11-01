@@ -73,7 +73,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
       status: "open",
       openedAt: AT,
     });
-    const orderId = order!.id;
+    const orderId = order.id;
     const [line] = await suite.db
       .insert(workingOrderLines)
       .values({

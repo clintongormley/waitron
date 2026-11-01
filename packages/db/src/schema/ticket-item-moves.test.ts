@@ -67,7 +67,7 @@ describe("ticket_item_moves schema", () => {
     const [line] = await db
       .insert(workingOrderLines)
       .values({
-        workingOrderId: order!.id,
+        workingOrderId: order.id,
         lineNo: 1,
         productId: product!.id,
         name: "Food",

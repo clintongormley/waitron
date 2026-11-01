@@ -31,7 +31,7 @@ describe("charged service cancellations", () => {
       const [line] = await tx
         .insert(workingOrderLines)
         .values({
-          workingOrderId: bill!.id,
+          workingOrderId: bill.id,
           lineNo: 1,
           name: "Recorded dish",
           descriptions: { en: "Recorded dish" },
