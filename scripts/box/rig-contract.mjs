@@ -116,25 +116,33 @@ export async function createRun(runDir) {
   return { runDir, rootId: `${stat.dev}:${stat.ino}`, runId };
 }
 
-/** Loop devices are named by their recorded backing image, never by device id. A cleanup step names its path with its resource's field. */
+/**
+ * Loop devices are named by their recorded backing image, never by device id. A cleanup step names
+ * its path with its resource's field. `file` marks a kind whose step creates the file at its path
+ * and whose cleanup removes or reads that file.
+ */
 const KINDS = Object.freeze({
   image: {
     field: "path",
+    file: true,
     action: "remove-file",
     call: (/** @type {CleanupAdapter} */ a, /** @type {string} */ p) => a.removeFile(p),
   },
   loop: {
     field: "image",
+    file: false,
     action: "detach-loops",
     call: (/** @type {CleanupAdapter} */ a, /** @type {string} */ p) => a.detachLoops(p),
   },
   mount: {
     field: "target",
+    file: false,
     action: "unmount",
     call: (/** @type {CleanupAdapter} */ a, /** @type {string} */ p) => a.unmount(p),
   },
   vm: {
     field: "pidFile",
+    file: true,
     action: "stop-vm",
     call: (/** @type {CleanupAdapter} */ a, /** @type {string} */ p) => a.stopVm(p),
   },
@@ -239,10 +247,11 @@ async function lstatIfPresent(path) {
 
 /**
  * A hard link, or a name whose letters fold in a way the lower-casing misses, still reaches the
- * ledger or its staging file; the device and inode do not lie.
- * @param {string} runDir @param {string} path
+ * ledger or its staging file; the device and inode do not lie. A file kind's path must be a
+ * regular file, or absent when its step never made it.
+ * @param {string} runDir @param {string} path @param {boolean} file
  */
-async function checkNotLedger(runDir, path) {
+async function checkTarget(runDir, path, file) {
   const target = await lstatIfPresent(path);
   if (target === null) return;
   for (const name of RESERVED) {
@@ -250,6 +259,7 @@ async function checkNotLedger(runDir, path) {
     if (reserved?.dev === target.dev && reserved.ino === target.ino)
       throw rigError("resource-is-ledger");
   }
+  if (file && !target.isFile()) throw rigError("resource-not-file");
 }
 
 /** A ledger naming another run's id is refused as run-dir-replaced. @param {RigRun} run */
@@ -301,13 +311,36 @@ export async function loadLedger(run) {
 }
 
 /**
+ * Recording states intent, not ownership. Refused here: a second record of one resource; a loop
+ * whose image is not an image this run recorded; and an image or pid file path that already
+ * exists, because cleanup removes or reads it. A mount's folder must exist before its step, so it
+ * is not refused for existing. Called while holding the staging-file lock.
+ * @param {readonly RigResource[]} resources @param {NonNullable<ReturnType<typeof resourceShape>>} shape
+ */
+async function checkNew(resources, shape) {
+  const { resource, path, kind } = shape;
+  const recorded = (/** @type {string} */ name, /** @type {string} */ field) =>
+    resources.some(
+      (other) =>
+        other.kind === name && /** @type {Record<string, string>} */ (other)[field] === path,
+    );
+  if (recorded(resource.kind, kind.field)) throw rigError("resource-duplicate");
+  if (resource.kind === "loop" && !recorded("image", "path"))
+    throw rigError("loop-image-unrecorded");
+  // A process running as this user can still create the path after this check and before the
+  // step; cleanup would then remove or read a file the run did not create.
+  if (kind.file && (await lstatIfPresent(path)) !== null) throw rigError("resource-exists");
+}
+
+/**
  * Creating ledger.json.next with wx before reading the ledger makes the staging file a lock
  * across processes: a second writer cannot read the ledger until the first has renamed its copy
  * into place. ledger-busy means the staging file is there: another process is recording, or a
  * crash left it behind. A left-behind one refuses every later record until a person removes it.
- * @param {RigRun} run @param {RigResource} resource @param {string} path
+ * @param {RigRun} run @param {NonNullable<ReturnType<typeof resourceShape>>} shape
  */
-async function appendToLedger(run, resource, path) {
+async function appendToLedger(run, shape) {
+  const { resource, path } = shape;
   await checkRoot(run);
   await checkBeneath(run.runDir, path);
   const next = join(run.runDir, "ledger.json.next");
@@ -320,6 +353,7 @@ async function appendToLedger(run, resource, path) {
   }
   try {
     const resources = await readLedger(run);
+    await checkNew(resources, shape);
     await handle.writeFile(ledgerBytes(run.runDir, run.runId, [...resources, resource]));
     await handle.sync();
   } catch (error) {
@@ -341,7 +375,8 @@ async function appendToLedger(run, resource, path) {
 const turns = new Map();
 
 /**
- * Durably records the resource, then runs step. step never runs if recording fails. Calls on one
+ * Durably records the resource, then runs step. step never runs if recording fails, and recording
+ * refuses what cleanup could not safely undo (see checkNew). Calls on one
  * run folder take turns in this process; the staging file keeps other processes out.
  * step runs after the turn ends, so it may record its own sub-resources.
  * @template T @param {RigRun} run @param {RigResource} resource @param {() => T | Promise<T>} step @returns {Promise<T>}
@@ -351,9 +386,7 @@ export async function withRecorded(run, resource, step) {
   const shape = resourceShape(resource);
   if (shape === null) throw rigError("resource-invalid");
   if (!insideRun(run.runDir, shape.path)) throw rigError("resource-outside-run");
-  const turn = (turns.get(run.runDir) ?? Promise.resolve()).then(() =>
-    appendToLedger(run, shape.resource, shape.path),
-  );
+  const turn = (turns.get(run.runDir) ?? Promise.resolve()).then(() => appendToLedger(run, shape));
   turns.set(
     run.runDir,
     turn.catch(() => {}),
@@ -371,7 +404,7 @@ function cleanupSteps(resources) {
       action: shape.kind.action,
       [shape.kind.field]: shape.path,
     });
-    return { step, path: shape.path, call: shape.kind.call };
+    return { step, path: shape.path, file: shape.kind.file, call: shape.kind.call };
   });
 }
 
@@ -383,8 +416,9 @@ export function planCleanup(resources) {
 /**
  * Cleans up exactly what the run's ledger records, in reverse order. Before each step it checks
  * again that the run folder has createRun's device and inode, that its ledger still names this
- * run's id and reads back, that the step's path is reached through no symlink, and that it is not
- * the ledger or its staging file under another name (resource-is-ledger); a step that
+ * run's id and reads back, that the step's path is reached through no symlink, that it is not
+ * the ledger or its staging file under another name (resource-is-ledger), and that an image or
+ * pid file path is a regular file or absent (resource-not-file); a step that
  * fails a check is counted as failed and never reaches the adapter. Runs every step even after
  * failures. Each failed entry's reason is the refusal's reason, or adapter-failed for any other
  * error. A staging file left beside the ledger afterwards, or one whose presence cannot be checked,
@@ -396,11 +430,11 @@ export async function runCleanup(run, adapter) {
   const resources = await loadLedger(run);
   /** @type {FailedStep[]} */
   const failed = [];
-  for (const { step, path, call } of cleanupSteps(resources)) {
+  for (const { step, path, file, call } of cleanupSteps(resources)) {
     try {
       await loadLedger(run);
       await checkBeneath(run.runDir, path);
-      await checkNotLedger(run.runDir, path);
+      await checkTarget(run.runDir, path, file);
       await call(adapter, path);
     } catch (error) {
       const reason = error?.code === "rig.refused" ? error.reason : "adapter-failed";

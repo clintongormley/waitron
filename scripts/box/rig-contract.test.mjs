@@ -299,6 +299,16 @@ const fakeAdapter = (failing = new Set()) => {
   };
 };
 
+/** A cleanup adapter whose removeFile really unlinks. */
+const unlinkingAdapter = () => {
+  const { calls, adapter } = fakeAdapter();
+  adapter.removeFile = async (path) => {
+    calls.push(["removeFile", path]);
+    await fs.unlink(path);
+  };
+  return { calls, adapter };
+};
+
 describe("withRecorded", () => {
   it("step sees its resource already in ledger.json on disk", async () => {
     const run = await freshRun();
@@ -630,10 +640,93 @@ describe("withRecorded", () => {
   it("existing real folders on the way are accepted", async () => {
     const run = await freshRun();
     await fs.mkdir(join(run.runDir, "vm"));
-    await fs.writeFile(join(run.runDir, "vm", "qemu.pid"), "1");
     const vm = { kind: "vm", pidFile: join(run.runDir, "vm", "qemu.pid") };
     await withRecorded(run, vm, () => {});
     expect(await loadLedger(run)).toEqual([vm]);
+  });
+
+  it("an image path that already exists → resource-exists, step never called, and cleanup leaves the file", async () => {
+    const run = await freshRun();
+    const path = join(run.runDir, "disk.img");
+    await fs.writeFile(path, "not this run's");
+    const before = await readLedgerText(run.runDir);
+    let called = false;
+    await expect(
+      withRecorded(run, { kind: "image", path }, () => {
+        called = true;
+        return fs.writeFile(path, "made", { flag: "wx" });
+      }),
+    ).rejects.toThrow(refused("resource-exists"));
+    expect(called).toBe(false);
+    expect(await readLedgerText(run.runDir)).toBe(before);
+    expect((await fs.readdir(run.runDir)).sort()).toEqual(["disk.img", "ledger.json"]);
+    const { calls, adapter } = unlinkingAdapter();
+    expect(await runCleanup(run, adapter)).toEqual({ status: "clean", failed: [] });
+    expect(calls).toEqual([]);
+    expect(await fs.readFile(path, "utf8")).toBe("not this run's");
+  });
+
+  it.each([
+    ["a pid file that already exists", (path) => fs.writeFile(path, "1"), "vm"],
+    ["a folder at an image path", (path) => fs.mkdir(path), "image"],
+    ["a FIFO at a pid file path", (path) => mkfifo(path), "vm"],
+  ])("%s → resource-exists, step never called", async (_name, make, kind) => {
+    const run = await freshRun();
+    const path = join(run.runDir, "thing");
+    await make(path);
+    const resource = kind === "vm" ? { kind, pidFile: path } : { kind, path };
+    let called = false;
+    await expect(
+      withRecorded(run, resource, () => {
+        called = true;
+      }),
+    ).rejects.toThrow(refused("resource-exists"));
+    expect(called).toBe(false);
+    expect(await loadLedger(run)).toEqual([]);
+  });
+
+  it.each([
+    ["an image", (dir) => ({ kind: "image", path: join(dir, "disk.img") })],
+    ["a loop", (dir) => ({ kind: "loop", image: join(dir, "disk.img") })],
+    ["a mount", (dir) => ({ kind: "mount", target: join(dir, "mnt") })],
+    ["a vm", (dir) => ({ kind: "vm", pidFile: join(dir, "qemu.pid") })],
+  ])("%s recorded twice → resource-duplicate, step never called", async (_name, make) => {
+    const run = await freshRun();
+    const image = { kind: "image", path: join(run.runDir, "disk.img") };
+    await withRecorded(run, image, () => {});
+    const resource = make(run.runDir);
+    if (resource.kind !== "image") await withRecorded(run, resource, () => {});
+    const before = await readLedgerText(run.runDir);
+    let called = false;
+    await expect(
+      withRecorded(run, resource, () => {
+        called = true;
+      }),
+    ).rejects.toThrow(refused("resource-duplicate"));
+    expect(called).toBe(false);
+    expect(await readLedgerText(run.runDir)).toBe(before);
+    expect(await fs.readdir(run.runDir)).toEqual(["ledger.json"]);
+  });
+
+  it.each([
+    ["a stray file", async (dir) => fs.writeFile(join(dir, "disk.img"), "")],
+    [
+      "a path recorded as a mount, not an image",
+      async (dir, run) =>
+        withRecorded(run, { kind: "mount", target: join(dir, "disk.img") }, () => {}),
+    ],
+  ])("a loop on %s → loop-image-unrecorded, step never called", async (_name, setup) => {
+    const run = await freshRun();
+    await setup(run.runDir, run);
+    const before = await readLedgerText(run.runDir);
+    let called = false;
+    await expect(
+      withRecorded(run, { kind: "loop", image: join(run.runDir, "disk.img") }, () => {
+        called = true;
+      }),
+    ).rejects.toThrow(refused("loop-image-unrecorded"));
+    expect(called).toBe(false);
+    expect(await readLedgerText(run.runDir)).toBe(before);
   });
 
   it("two processes recording into one run folder → every resource whose step ran is in the ledger", async () => {
@@ -881,7 +974,14 @@ describe("runCleanup", () => {
       { kind: "mount", target: join(run.runDir, "mnt") },
       { kind: "vm", pidFile: join(run.runDir, "qemu.pid") },
     ];
-    for (const resource of resources) await withRecorded(run, resource, () => undefined);
+    const make = {
+      image: (resource) => fs.writeFile(resource.path, "", { flag: "wx" }),
+      loop: () => undefined,
+      mount: (resource) => fs.mkdir(resource.target),
+      vm: (resource) => fs.writeFile(resource.pidFile, "1", { flag: "wx" }),
+    };
+    for (const resource of resources)
+      await withRecorded(run, resource, () => make[resource.kind](resource));
     return resources;
   };
 
@@ -966,15 +1066,56 @@ describe("runCleanup", () => {
     ]);
   });
 
+  it.each([
+    ["a recorded image replaced by a folder", "image", "remove-file", (path) => fs.mkdir(path)],
+    ["a recorded pid file replaced by a FIFO", "vm", "stop-vm", (path) => mkfifo(path)],
+  ])("%s → resource-not-file, the adapter never called", async (_name, kind, action, make) => {
+    const run = await freshRun();
+    const path = join(run.runDir, "thing");
+    const field = kind === "vm" ? "pidFile" : "path";
+    await withRecorded(run, { kind, [field]: path }, () => make(path));
+    const { calls, adapter } = unlinkingAdapter();
+    expect(await runCleanup(run, adapter)).toEqual({
+      status: "incomplete",
+      failed: [{ action, [field]: path, reason: "resource-not-file" }],
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it("an image whose step failed before making it → still passed to the adapter", async () => {
+    const run = await freshRun();
+    const image = { kind: "image", path: join(run.runDir, "disk.img") };
+    const failure = new Error("step failed");
+    await expect(
+      withRecorded(run, image, () => {
+        throw failure;
+      }),
+    ).rejects.toBe(failure);
+    const { calls, adapter } = fakeAdapter();
+    expect(await runCleanup(run, adapter)).toEqual({ status: "clean", failed: [] });
+    expect(calls).toEqual([["removeFile", image.path]]);
+  });
+
+  it("an unexpected error while comparing a step's path with the ledger → that step fails unrun as adapter-failed", async () => {
+    const run = await freshRun();
+    const image = { kind: "image", path: join(run.runDir, "disk.img") };
+    await withRecorded(run, image, () => fs.writeFile(image.path, ""));
+    const failure = Object.assign(new Error("EACCES: test"), { code: "EACCES" });
+    const ledger = join(run.runDir, "ledger.json");
+    hooks.fail = (name, path) => (name === "lstat" && path === ledger ? failure : undefined);
+    const { calls, adapter } = fakeAdapter();
+    expect(await runCleanup(run, adapter)).toEqual({
+      status: "incomplete",
+      failed: [{ action: "remove-file", path: image.path, reason: "adapter-failed" }],
+    });
+    expect(calls).toEqual([]);
+  });
+
   it("a recorded image hard-linked to the ledger → resource-is-ledger, the ledger kept", async () => {
     const run = await freshRun();
     const image = { kind: "image", path: join(run.runDir, "disk.img") };
     await withRecorded(run, image, () => fs.link(join(run.runDir, "ledger.json"), image.path));
-    const { calls, adapter } = fakeAdapter();
-    adapter.removeFile = async (path) => {
-      calls.push(["removeFile", path]);
-      await fs.unlink(path);
-    };
+    const { calls, adapter } = unlinkingAdapter();
     expect(await runCleanup(run, adapter)).toEqual({
       status: "incomplete",
       failed: [{ action: "remove-file", path: image.path, reason: "resource-is-ledger" }],
