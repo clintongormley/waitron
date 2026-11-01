@@ -243,16 +243,85 @@ A new failed-start case first observed an un-aborted Cloud worker when snapshot 
 
 **Files/ownership:** Add server `zone-clock-stop-interaction.test.ts` using the landed A798 public-state/write-boundary API, plus its existing clock fixtures. Consumes Task 18 and the actual released A798 interface; creates no A798 implementation or policy.
 
-- [ ] **Red:** With both stops, confirming A696 changes zone/revision/handled event only and leaves A798's exact refusal. Clearing A798 alone leaves A696 closed. The minimum/latest-generation comparison remains UTC across chains; zone confirmation changes neither the clock nor `system.manage`. A798's webhook exception still receives Task 5's A696 refusal, with no new settled evidence.
-- [ ] **Minimal/gate:** Compose the independent guards. If A798's needed interface has not landed, leave this named integration task incomplete, record the required branch/interface, and continue only independent work; no fake passing substitute.
-- [ ] **Focused red/green/control:** `pnpm --filter @waitron/server exec vitest run src/zone-clock-stop-interaction.test.ts`; run the specific landed A798 clock suite. Omit each independent check separately and assert the retained other refusal, then restore/pass.
-- [ ] **Commit:** `git commit -s` with `test: keep venue zone and clock stops independent`.
+- [x] **Red:** With both stops, confirming A696 changes zone/revision/handled event only and leaves A798's exact refusal. Clearing A798 alone leaves A696 closed. The minimum/latest-generation comparison remains UTC across chains; zone confirmation changes neither the clock nor `system.manage`. A798's webhook exception still receives Task 5's A696 refusal, with no new settled evidence.
+- [x] **Minimal/gate:** Compose the independent guards. If A798's needed interface has not landed, leave this named integration task incomplete, record the required branch/interface, and continue only independent work; no fake passing substitute.
+- [x] **Focused red/green/control:** `pnpm --filter @waitron/server exec vitest run src/zone-clock-stop-interaction.test.ts`; run the specific landed A798 clock suite. Omit each independent check separately and assert the retained other refusal, then restore/pass.
+- [x] **Commit:** `git commit -s` with `test: keep venue zone and clock stops independent`.
 
 ### Task 20: Complete coverage ledger, focused gates and FULL PR handoff
 
 **Files/ownership:** Update this plan's execution receipts and relevant developer/runbook prose only for observed behaviour. Parent coordinates `docs/backlog.md` and minimal A166 residuals; never touch reserved `docs/backlog/fiscal.md` or rewrite old spec bodies. Consumes prior receipts; produces a reviewable FULL fiscal branch, not an automatic merge.
 
-- [ ] **Coverage ledger:** Map design §1 to Tasks 4/7–19; §2 to 4/5/8/10–12/18/19; §3 to 3/7–9/18; §4 to 1–3/14; §5 to 4/10–14/17/18; §6 to 10–19; §7 to all focused controls and Tasks 17–19. Enumerate walk-up, held, placed, zero-due, manual/integrated/offline, recovered capture, deferred/later settlement, bill worker/retry/attestation, save/edit/split/adjustment, unpaid departure, cancellation/generic R5, F1/F3/void, emergency, isolated readiness, installed/CLI seeds, live CLIs and fixed demos, with actual case/command receipts. No missing family or dependency is waived by a passing helper.
-- [ ] **Verification:** Run focused changed behaviour, Task 13's unedited fiscal checks and `pnpm exec vitest run scripts/alert-codes.test.ts scripts/errors-reachable.test.ts scripts/module-seams.test.ts scripts/workspace-cycles.test.ts scripts/guide-links.test.ts`; inspect counts and failures. Review `git diff <base> --name-only` for protected paths and `git diff --check`. Check developer/package README/operator claims across the complete changed path set. No local whole-workspace suite or duplicated hook; unrun checks stay pending.
+- [x] **Coverage ledger:** Map design §1 to Tasks 4/7–19; §2 to 4/5/8/10–12/18/19; §3 to 3/7–9/18; §4 to 1–3/14; §5 to 4/10–14/17/18; §6 to 10–19; §7 to all focused controls and Tasks 17–19. Enumerate walk-up, held, placed, zero-due, manual/integrated/offline, recovered capture, deferred/later settlement, bill worker/retry/attestation, save/edit/split/adjustment, unpaid departure, cancellation/generic R5, F1/F3/void, emergency, isolated readiness, installed/CLI seeds, live CLIs and fixed demos, with actual case/command receipts. No missing family or dependency is waived by a passing helper.
+- [x] **Verification:** Run focused changed behaviour, Task 13's unedited fiscal checks and `pnpm exec vitest run scripts/alert-codes.test.ts scripts/errors-reachable.test.ts scripts/module-seams.test.ts scripts/workspace-cycles.test.ts scripts/guide-links.test.ts`; inspect counts and failures. Review `git diff <base> --name-only` for protected paths and `git diff --check`. Check developer/package README/operator claims across the complete changed path set. No local whole-workspace suite or duplicated hook; unrun checks stay pending.
 - [ ] **Commit/readiness:** Use `git commit -s` for final docs/receipts. Once all required work, including integration dependencies, passes, announce readiness for `finish-branch` and continue under the parent's workflow authorization. One Claude run-it whole-branch review after initial rebase belongs there, in an independent installed complete-candidate checkout. Read completed findings and fix them with focused checks. Retain approval across later rebases; inspect integration and rerun affected checks without another review solely for rebase.
 - [ ] **FULL PR:** Push through normal hook, wait for required current-head CI coverage/merge jobs and inspect actual selected package scope, including the matrix children. Preserve 98/98/98/95 and mutation requirements. Finish green and leave this fiscal PR **waiting for owner landing**; no auto-merge. The parent handles backlog residuals, later authorized land-branch and cleanup. Wider A166 and A444 remain open. Plan publication alone claims no passing runtime, payment, browser, fiscal or restore acceptance.
+
+
+### Execution update, 1 November: current-main integration and Task 19
+
+The resumed tree is based on `ac8faa0a12e4b08e5d177edb47cff460258ea089`.
+Integration commit `96ef38d5d` preserves the newer node configuration, portion-based orders,
+clock-behind checks, full-disk checks, recovery packs and five-symbol minute identities.
+Main retired the period-end-offset model and `settle-invoice-first.ts`; the earlier Task 3 and
+Task 14 descriptions of those interfaces are historical. Candidate validation now retains the
+actual `department_day_ranges`, cutover history and revision; the retired script's two added
+cases were removed with that entry point. No protected fiscal writer or golden was changed.
+
+Task 19 uses the released backend clock-stop and confirmation interfaces. Four real cases
+check exact clock refusal/minimum UTC date across original offsets, unchanged fiscal/person/session
+rows, zone repair and restart-required admission, authority-witness clock confirmation,
+pre-reader refusal, and installed Stripe signature verification. Managers already have
+`system.manage`: the test preserves the existing authorization result rather than assuming
+that they lack it. Repair changes neither that result nor the clock reading.
+
+The installed complete candidate passes all four cases. Independently omitting zone admission,
+the bill reader's clock check, and webhook write admission produces the intended failed
+assertions. In the clock omission, the provider collect count becomes one instead of zero;
+a later fiscal refusal cannot hide it. Restoring the candidate passes all four again. The
+owning clock-behind payment/refund suites passed 25 cases during integration.
+
+### Task 20 coverage ledger
+
+The commands below are focused Vitest runs through the named package. Earlier task execution
+notes retain the original red/green and omission receipts; this table connects their boundaries
+to the design and the resumed integration checks. It does not qualify live provider or AEAT acceptance.
+
+| Design | Tasks and exercised boundary | Command/case receipt |
+| --- | --- | --- |
+| §1: saved-zone issue clocks and admission | 4/7–19: raw target/context, startup, all issuance callers, presentation, restore and independent clock stop | Server `trading-admission.test.ts`, `venue-zone-context.test.ts`, `boot.zone-admission.test.ts`; fiscal `issue-clock.test.ts`; the economic families below. Resumed startup/context/repair/webhook run: 90 passed. |
+| §2: independent economic stops | 4/5/8/10–12/18/19: HTTP/direct writes, signed webhook, provider preparation and worker finalization | Server `zone-economic-boundaries.test.ts`, `zone-bill-payment-boundaries.test.ts`, `zone-webhook-admission.test.ts`, `zone-clock-stop-interaction.test.ts`; Task 12's payment/refund/attestation run: 737 passed. Resumed dedicated economic suites: 89 passed; Task 19 restored control: 4 passed. |
+| §3: restricted repair | 3/7–9/18: missing/invalid classification, permission, preview, atomic confirmation, response-before-restart and duty unwind | Server `venue-zone-repair.test.ts`, `venue-zone-repair-api.test.ts`, `boot.failed-start.test.ts`, `zone-restored-boot.test.ts`; dashboard repair/unsaved/a11y/app/code suites: 544 passed during integration. Staff sign-in extension: 4 passed, eight actual captures. |
+| §4: every saved-zone writer | 1–3/14: explicit ES/GB country lists, planner, direct apply, independent bundle/request checks, reuse and script inserts | Shared `time-zone.test.ts`, country-es/GB tests, country-packs `registry.test.ts`, provisioning `venue-plan.test.ts`, `venue-apply.e2e.test.ts`, `configuration-transfer.boundaries.test.ts`; server `configuration-transfer.clock.test.ts` and `zone-script-callers.test.ts`. Original controls are in Tasks 1–3/14; package-wide current-head CI remains required. |
+| §5: issue time versus existing facts | 4/10–14/17/18: fresh finalization clock, pinned preparation clock, replay before reading, old records/QR facts and recovery identities | Server `till-sale-integrated.test.ts`, bill issuance/replay tests, `zone-preservation.test.ts`, `zone-preservation.restore.test.ts`, `zone-restore-entry.test.ts`; fiscal-verifactu `completed-recovery-zone.test.ts` and `void-issue-clock.test.ts`. Resumed adapter checks: 22 passed; restore/clock run: 11 passed. |
+| §6: calendar and caller coverage | 10–19: walk-up, held, placed, zero-due, manual/integrated/offline, recovered capture, deferred collection, worker/retry/attestation, save/edit/split/adjustment, unpaid departure, cancellation, core F1/F3/R5/void/emergency, readiness and scripts | `zone-process-matrix.test.ts`: 18 parent cases passed under separate UTC/Madrid processes. Each process runs whole-order 39, bill 35, auto-issue 7, core-only 11, readiness 1, scripts 11 and core-only emergency 10 selected owning cases, retaining their assertions. Ten chronological real-cash vectors assert exact instant/date/offset/generation/hash/history across midnight and both DST transitions. |
+| §7: executable failure controls | All task controls, especially 17–19 | Task 17's missing/duplicate/count/vector/family controls and Task 18's duty/restart/write omissions remain recorded above. Task 19's three independent omissions fail and restored candidate passes. No provider call is inferred solely from a downstream append refusal. |
+
+The scripts family covers installed Demo refusal before catalogue/sales, backdated seed offsets,
+`record-one-sale`, fixed August daily-close/Z/modelo-303 demos and explicit non-issuing allergens
+seed validation. Readiness uses a separate provisioned database. The matrix labels F1/F3/R5,
+void and emergency as core-only, without implying a public route. Recovered capture and deferred
+collection retain original money facts; issuance uses its own fresh prepared reading.
+
+Additional resumed checks: the unedited golden write-path and inmutabilidad suites pass 20 cases;
+root alert/error/module/dependency/guide guards pass 4,080; server, dashboard, fiscal and provisioning
+type checks and changed TypeScript lint pass. `git diff --check` passes. The integration assertion
+inventory checks 7,556 existing direct expectation chains in 69 changed test files against the
+rebased pre-integration tree. Input admission holders preserve matcher arguments; deliberate
+A696-only adaptations cover the retired interfaces, new incident note field, minute identities,
+earlier unknown-identity refusal and the current recovery pack's two pages/server-key attachment.
+Protected test files have no diff against the captured main base.
+
+The changed developer receipt, hour-recovery runbook, guide twins and repository README references
+were inspected alongside the complete test diff. The old adviser-export backlog claim is removed:
+exports continue to read saved issue dates; new invoices now receive the saved-zone date. Wider
+A166 and A444 remain open. The repair refusal now offers the existing sign-out/sign-in flow, in
+English and Spanish. Actual repair captures include errors and restart/load failure at phone and
+desktop widths in both themes; real rendered guide checks pass eight views. A staff screenshot
+setup initially changed only the logo theme; mounting each explicit host theme corrects that
+measurement. It was a capture setup correction, not evidence of a production theme defect.
+
+Local terminal logs, full test diff, integration assertion inventory, omitted-guard experiments and
+visual artifacts are retained in Lane E `receipts/a696-resume-20261101/`. Whole-branch review,
+normal push hook and required current-head CI remain pending at this checkpoint. This is a fiscal
+PR for owner landing; local focused passes alone do not complete the FULL PR checkbox above.

@@ -255,7 +255,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **A696. Invoice issue dates and record offsets follow the process zone.**
   Every new invoice date/offset, ordinary receipt and till must use the saved venue zone, DST included; old records stay unchanged.
-  Implementation and runtime acceptance remain open; the separate FULL fiscal PR finishes green for the owner to land.
+  Implementation and focused runtime checks are complete on the A696 branch; whole-branch review and current-head CI remain open before the owner lands its separate FULL fiscal PR.
   [Detail](backlog/fiscal.md#a696-invoice-issue-dates-and-record-offsets-follow-the-process-zone).
 
 - **A444. A full invoice for a meal past midnight should carry the day the meal ends.** Automatic bill-close dating excludes Bill requested and staff date choice. Exact H2 scope approved; build waits for released A696/A739 integration and the fiscal-branch slot. Fiscal: the owner lands it.
@@ -5405,10 +5405,6 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 - **The real time of a sale dated wrongly is unknown**: the adviser's file says "Unknown" on every
   row and gives a time each sale was made before instead (A1088 decision 8). Slice 9c's clock
   checks are the first place a real time could be worked out. Left open by A1088.
-
-- **The adviser's file writes invoice dates that follow the server's own time zone until A696 is
-  built**: the file writes the stored issue date, which follows the process zone today (A1088
-  decision 7). Left open by A1088. [A696](backlog/fiscal.md#walk-up-invoice-dates-follow-the-server-process-time-zone)
 
 - **The bell's and the Alerts screen's Mark handled take no note**, and the Alerts screen's Handled
   tab shows no notes; only the Box status page writes and shows them (A1088 decision 4). Left open
