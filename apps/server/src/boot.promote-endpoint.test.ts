@@ -187,7 +187,7 @@ async function seedMirrorIdentity(db: Database, node: NodeDatabase): Promise<{ n
     signature: "endorsement-sig",
   };
   await establishReservedStandbyIdentity(
-    { ownerDb: db, ring: RING },
+    { ownerDb: db },
     {
       locationId: MIRROR_LOCATION_ID,
       standby,

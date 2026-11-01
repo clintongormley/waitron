@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { generateNodeKeyPair } from "@waitron/membership";
-import type { KeyRing } from "@waitron/credentials";
 import {
   insertReservedNodeTx,
   insertReservedSeriesTx,
@@ -43,7 +42,7 @@ export function generateStandbyIdentity(): StandbyIdentity {
  * set chooses what establishes; each module validates its own opaque state.
  */
 export async function establishReservedStandbyIdentity(
-  deps: { ownerDb: Database; ring: KeyRing },
+  deps: { ownerDb: Database },
   args: {
     locationId: string;
     standby: StandbyPublicIdentity;

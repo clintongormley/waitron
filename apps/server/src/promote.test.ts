@@ -434,7 +434,7 @@ describe("promoteMirrorToPrimary", () => {
       signature: "endorsement-sig",
     };
     await establishReservedStandbyIdentity(
-      { ownerDb: db, ring: RING },
+      { ownerDb: db },
       {
         locationId,
         standby,

@@ -301,7 +301,7 @@ describe("opaque authenticated standby carriers", () => {
     );
     await withOperationAuthority(scope, "admin", (authority) =>
       establishReservedStandbyIdentity(
-        { ownerDb: suite.db, ring: RING },
+        { ownerDb: suite.db },
         { ...args, moduleOperations: operations(authority, scope) },
       ),
     );
@@ -326,7 +326,7 @@ describe("opaque authenticated standby carriers", () => {
     );
     await expect(
       establishReservedStandbyIdentity(
-        { ownerDb: suite.db, ring: RING },
+        { ownerDb: suite.db },
         { ...args, moduleOperations: operations(authority, scope) },
       ),
     ).rejects.toMatchObject({ code: "module.operation_invalid" });
@@ -724,7 +724,7 @@ describe("opaque authenticated standby carriers", () => {
     let pending!: Promise<unknown>;
     await withOperationAuthority(scope, "admin", async (authority) => {
       pending = establishReservedStandbyIdentity(
-        { ownerDb: suite.db, ring: RING },
+        { ownerDb: suite.db },
         { ...args, moduleOperations: operations(authority, scope) },
       );
       await entered;
@@ -857,7 +857,7 @@ it("collects outside establishment evidence before sealing the spare's key", asy
   });
   await withOperationAuthority(scope, "admin", (authority) =>
     establishReservedStandbyIdentity(
-      { ownerDb: suite.db, ring: RING },
+      { ownerDb: suite.db },
       { ...args, moduleOperations: operations(authority, scope) },
     ),
   );
@@ -881,7 +881,7 @@ it("does not create a spare node or sealed key after outside collection refuses"
   await expect(
     withOperationAuthority(scope, "admin", (authority) =>
       establishReservedStandbyIdentity(
-        { ownerDb: suite.db, ring: RING },
+        { ownerDb: suite.db },
         { ...args, moduleOperations: operations(authority, scope) },
       ),
     ),
@@ -905,7 +905,7 @@ it("refuses a carrier that smuggles invoice series beside a module that opens th
   );
   await expect(
     establishReservedStandbyIdentity(
-      { ownerDb: suite.db, ring: RING },
+      { ownerDb: suite.db },
       {
         ...args,
         reserved: { ...args.reserved, series: [{ code: "unexpected", purpose: "standard" }] },
@@ -949,7 +949,7 @@ it("snapshots the submitted spare and reservation before its first credential re
       },
     ),
   );
-  const pending = establishReservedStandbyIdentity({ ownerDb: suite.db, ring: RING }, args);
+  const pending = establishReservedStandbyIdentity({ ownerDb: suite.db }, args);
   args.standby.nodeId = crypto.randomUUID();
   args.reserved.modules[binding.module] = { reserved: false };
   args.nodeName = "Changed caller";
@@ -1019,7 +1019,7 @@ it.each(["reserve", "establish"])(
               moduleOperations: operations(authority, scope),
             })
           : establishReservedStandbyIdentity(
-              { ownerDb: suite.db, ring: RING },
+              { ownerDb: suite.db },
               { ...args, moduleOperations: operations(authority, scope) },
             );
       await entered;

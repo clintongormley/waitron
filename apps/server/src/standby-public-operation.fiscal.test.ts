@@ -34,6 +34,7 @@ import { nodeId } from "@waitron/shared";
 import { type ReservedIdentity } from "./mirror-bundle.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
+import { sealAdoptedStandbyKey } from "./testing/adopted-standby-key.js";
 import { promoteMirrorToPrimary } from "./promote.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
@@ -226,7 +227,7 @@ async function establish(
   await writeFile(configuration().confirmationPath, JSON.stringify(request.confirmation));
   await withOperationAuthority(request.binding, request.operatorId, (authority) =>
     establishReservedStandbyIdentity(
-      { ownerDb: spare.db, ring: RING },
+      { ownerDb: spare.db },
       {
         locationId: LOCATION,
         standby: held.standby,
@@ -243,6 +244,7 @@ async function establish(
   );
 }
 async function promote(held: Awaited<ReturnType<typeof reserve>>, key: string, current = true) {
+  await sealAdoptedStandbyKey(spare.node, RING, held.standby);
   const binding = {
     module: "fiscal-verifactu",
     action: "promote",

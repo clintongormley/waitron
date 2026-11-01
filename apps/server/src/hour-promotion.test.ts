@@ -1037,7 +1037,7 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
   const establish = () =>
     s.withOperation(operation, credentials, {}, (modules, moduleOperations) =>
       establishReservedStandbyIdentity(
-        { ownerDb: spare.db, ring },
+        { ownerDb: spare.db },
         {
           locationId: target.locationId,
           standby: identity,

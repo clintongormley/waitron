@@ -70,7 +70,7 @@ describe("establishReservedStandbyIdentity", () => {
     const fixture = await preparedReservation(standby);
     await fixture.authorised("establish", (operation) =>
       establishReservedStandbyIdentity(
-        { ownerDb: suite.db, ring: RING },
+        { ownerDb: suite.db },
         {
           locationId,
           standby,
@@ -131,7 +131,7 @@ describe("establishReservedStandbyIdentity", () => {
     const fixture = await preparedReservation(first);
     await fixture.authorised("establish", (operation) =>
       establishReservedStandbyIdentity(
-        { ownerDb: suite.db, ring: RING },
+        { ownerDb: suite.db },
         {
           ...base,
           modules: allocatedStandbyModules(ALL_MODULES, fixture),
@@ -148,7 +148,7 @@ describe("establishReservedStandbyIdentity", () => {
     const second = { ...generateStandbyIdentity(), nodeId: first.nodeId };
     const reservationsBefore = await suite.db.select().from(fiscalReservations);
     await establishReservedStandbyIdentity(
-      { ownerDb: suite.db, ring: RING },
+      { ownerDb: suite.db },
       {
         ...base,
         standby: second,
@@ -176,7 +176,7 @@ describe("establishReservedStandbyIdentity", () => {
     await expect(
       fixture.authorised("establish", (operation) =>
         establishReservedStandbyIdentity(
-          { ownerDb: suite.db, ring: RING },
+          { ownerDb: suite.db },
           {
             locationId,
             standby,
@@ -213,7 +213,7 @@ describe("establishReservedStandbyIdentity", () => {
     await expect(
       fixture.authorised("establish", (operation) =>
         establishReservedStandbyIdentity(
-          { ownerDb: suite.db, ring: RING },
+          { ownerDb: suite.db },
           {
             locationId,
             standby,
@@ -243,7 +243,7 @@ describe("establishReservedStandbyIdentity", () => {
   it("establishes the node with no reserved series when the bundle carries no `series` key and no module reserves", async () => {
     const standby = generateStandbyIdentity();
     await establishReservedStandbyIdentity(
-      { ownerDb: suite.db, ring: RING },
+      { ownerDb: suite.db },
       {
         locationId,
         standby,

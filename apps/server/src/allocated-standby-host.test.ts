@@ -215,7 +215,7 @@ async function establish(
   await writeFile(configuration().confirmationPath, JSON.stringify(request.confirmation));
   await withOperationAuthority(request.binding, request.operatorId, (authority) =>
     establishReservedStandbyIdentity(
-      { ownerDb: spare.db, ring: RING },
+      { ownerDb: spare.db },
       {
         locationId: LOCATION,
         standby: held.standby,
@@ -378,7 +378,7 @@ it("reserves and adopts without an active SIF or series, then opens all purposes
   expect((await readNodeMode(spare.node, held.standby.nodeId)).singletonRole).toBe("primary");
 });
 
-it("rolls back the sealed key and spare node when the carrier includes premature series", async () => {
+it("refuses premature series and leaves no spare node, reservation or signing key", async () => {
   const held = await reserve();
   await expect(
     establish(held, { ...held.reserved, series: [{ code: "A-P000042", purpose: "standard" }] }),

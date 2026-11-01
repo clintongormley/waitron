@@ -101,8 +101,7 @@ export async function runFinishAdoption(deps: {
   log: Logger;
 }): Promise<void> {
   const establish =
-    deps.establish ??
-    ((args) => establishReservedStandbyIdentity({ ownerDb: deps.ownerDb, ring: deps.ring }, args));
+    deps.establish ?? ((args) => establishReservedStandbyIdentity({ ownerDb: deps.ownerDb }, args));
   const ensureViewer = deps.ensureViewer ?? (() => ensureMirrorViewer(deps.ownerDb));
 
   const pending = await readPendingAdoption(deps.stateDir);

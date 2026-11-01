@@ -65,7 +65,7 @@ export async function establishDormantContract(args: {
   );
   await fixture.authorised("establish", (operation) =>
     establishReservedStandbyIdentity(
-      { ownerDb: args.db, ring: args.ring },
+      { ownerDb: args.db },
       {
         locationId: args.locationId,
         standby: args.standby,
