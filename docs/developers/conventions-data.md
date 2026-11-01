@@ -4320,14 +4320,15 @@ Inside the turn, each refusal asking nothing further:
    confirming is the way;
 6. each anchor's `stepComing` (a throw refuses `pending_disproofs`); then steps 3 and 5 again,
    because AEAT can answer or the stop end during the waits (a refusal there re-anchors every
-   anchor); then `stale` again;
+   anchor; so does an error thrown there, which is then passed on); then `stale` again;
 7. the set: read the wall and boot-time clocks, raise the step counter, ask the host, read both
    again. It is verified when the host answered and the wall clock is within 2 000 ms of the target
    plus the boot-time clock's elapsed time;
 8. every anchor's `reanchor`, refused or not; then, when the set verified or the clock moved by more
    than a second, the witness store is emptied and the step recorded (below).
 
-A set the host refused, timed out on or lost, with the clock moved by a second or less, answers
+A set the host refused, timed out on or lost (a client that throws instead of answering is treated
+as `lost` and logged `clock_correction.set_threw`), with the clock moved by a second or less, answers
 `refused` (`host_unavailable` when there was no socket). A clock that moved without verifying —
 landed off the target, or never confirmed by the host — answers `unverified`.
 
@@ -4358,8 +4359,9 @@ tried again.
 
 **A step whose row cannot be written** (a full disk, or an anchor whose `reanchor` failed) is kept in
 memory and written by `writePending()` on the watch's next look, only after that look has recorded
-its disproofs; until then every set answers `pending_disproofs`. A restart loses it, and the host's
-journal line is then the only record. Logged `clock_correction.row_pending`.
+its disproofs; until then every set answers `pending_disproofs`. A restart loses the row and its alert;
+the step then shows only in the box's logs: the host's journal line and Waitron's own
+`clock_correction.row_pending`.
 
 **The watch's backoff.** After an automatic set answered `refused` or `unverified`, the watch asks for
 no automatic set in that check for 10 minutes by the steady clock, doubling after each further one
@@ -4378,8 +4380,9 @@ as before, so a destination holds at most twice `retain`; making room offers hel
 a minute ahead of the clock holds nothing, and a step that cannot be read deletes nothing. With no
 hold, an archive stamped more than a minute ahead still ranks after every other when pruning by
 count. **Limit:** only steps the box made are recorded, so a step by the time service, or by hand on
-the host, holds nothing. From just before the box asks the host to set its clock until the host's
-answer is judged, no archive is deleted at all. After that, a step the box made holds as a recorded
+the host, holds nothing. A backup run or a making-room pass that reads the step from just before the box asks
+the host to set its clock until the host's answer is judged deletes nothing; one that read it
+earlier judges ages by the clock as it read it then. After that, a step the box made holds as a recorded
 one, including while its row and alert wait to be written (`unwrittenStep`, `latestClockStepFor` in
 `apps/server/src/clock-correction.ts`). The
 stream's generations need no hold: they are aged by the bucket's own clock (the table below).
@@ -4390,8 +4393,8 @@ written as before, with the time the clock read; only how a person's state is wo
 one location), the person's latest direct entry by its position (`sequence_no`), since within one
 chain a later position is a later write whatever the clock said; across chains, the latest of those
 by time (`compareEvents`); and an approved missing-entry correction dated after that entry decides
-instead, unless a direct entry of the same kind was written after the correction in the
-correction's own chain. The clocking routes (`currentState`, `packages/workforce/src/clocking.ts`), the till's
+instead, unless a clock action was written after the correction in the correction's own
+chain (for the clock-in read, a clock-in). The clocking routes (`currentState`, `packages/workforce/src/clocking.ts`), the till's
 state (`apps/server/src/till-clock-state.ts`) and the attendance reconcile's clock-in
 (`apps/server/src/attendance-discovery.ts`) all read it, so after a step back a person can clock out
 and in again and the till agrees. While the clock only moves forward and no correction is dated

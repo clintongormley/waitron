@@ -1553,8 +1553,9 @@ clock check waits. Read, not run. Left open by A798-B slice 9b, Task 15.
 
 AEAT agreeing with the box restarts payments even if two
   devices disagree (the bell still shows their `clock.disagrees`); AEAT disagreeing blocks the
-  devices and an administrator until the box next sets its clock (a set the host accepts empties
-  the stored readings, `apps/server/src/clock-correction.ts`). Since slice 9b the box sets its clock from
+  devices and an administrator until the stop ends or the box next sets its clock (a set the box
+  verifies, or that moves the clock by more than a second, empties the stored readings,
+  `apps/server/src/clock-correction.ts`). Since slice 9b the box sets its clock from
   AEAT's disagreeing time itself, and an administrator's set is refused `witnessed`. The disagreement is kept in memory,
   so restarting the server forgets it. Slice 8's own ways out remain: the clock put right, or real
   time passing the record. The owner may prefer it to lapse at a step (owner FYI 6). Left open by A798-B slice 9 (#2025).

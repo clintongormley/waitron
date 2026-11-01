@@ -2000,6 +2000,7 @@ export function clockCorrection(deps: {
 - The order: the stop judged (`clockStopState` in `read`), `clockStatus`, every anchor's
   `stepComing`, the readings, `setClock`, the readings, every anchor's `reanchor`, `store.clear`,
   `confirmClockStep`, then `onCorrected` — asserted as one list of calls.
+  _Superseded 2026-11-01: see "The finish-branch review, folded"._
 - An anchor whose `reanchor` rejects (a full-disk write) → the clock set, no `confirmClockStep`
   now; the next `writePending()` writes the row once.
 - Synchronised → `{ set: false, reason: "synchronised" }`, no `setClock`, no anchor told;
@@ -2763,6 +2764,7 @@ review, I3): the hold covers only steps the BOX made, each of which records `clo
 whether or not it was verified; a step by the time service itself, or by hand on the host, holds
 nothing, and its archives are pruned by today's rule plus the future-stamped ranking. A step whose
 row waits in the correction's queue (`writePending`) holds nothing until it is written.
+_Superseded 2026-11-01: see "The finish-branch review, folded"._
 
 **Files.** `apps/server/src/backup-sweep.ts`, `backup-sweep.test.ts`;
 `packages/fiscal/src/backend.ts` and `packages/fiscal-verifactu/src/clock-step.ts`
@@ -2955,6 +2957,7 @@ two locations sit in two chains (clock in at A, out at A, in at B → 1, 2, 1 on
    latest such correction by `compareEvents` decides, as today.
 While the box's clock only moves forward, each chain's latest by position is also its latest by
 `event_at`, so this answers what today's rule answers.
+_Superseded 2026-11-01: see "The finish-branch review, folded"._
 
 **It changes only how state is DERIVED, never what is recorded.** `append` (`clocking.ts:614-642`)
 and the chain's `attemptAppend` (`chain.ts:102-…`) are not touched: an entry's `event_at` is still
@@ -3721,17 +3724,19 @@ reproduced three behaviour defects; each was fixed test first, and each changes 
 - **Task 10's order, and decision 6.** AEAT could answer while a person's set waited on the host's
   status or an anchor's `stepComing`, and the set still went ahead. After the anchors' waits the set
   now judges the stop again, with the till's check and, for `admin` and `staff`, `witnessed` and
-  `agrees`, re-anchoring every anchor on a refusal, then refuses `stale` again
+  `agrees`, re-anchoring every anchor on a refusal or a throw, then refuses `stale` again; a host
+  client that throws is treated as a lost answer
   (`apps/server/src/clock-correction.ts`).
 - **Task 14's limit.** A backup run between the host moving the clock and the step's row being
   written pruned as if no step had happened, and the rule above accepted that for a row waiting in
-  `writePending`. Now nothing is deleted from just before the host is asked until its answer is
-  judged; after that a step holds from its after reading, also while its row waits
+  `writePending`. Now a backup run or a making-room pass that reads the step from just before the host is asked
+  until its answer is judged deletes nothing; after that a step holds from its after reading, also while its row waits
   (`unwrittenStep`, `latestClockStepFor`).
 - **Task 15a's rule, step 3.** An approved missing-entry correction dated after the latest direct
   entry still decided after a direct entry of the same kind was written after it in its own chain,
   so a clock-out after an approved later-dated clock-in left the person unable to clock in again.
-  Such a correction no longer decides. This also holds with no step, for a correction dated ahead
+  Such a correction no longer decides once a clock action (for the clock-in read, a clock-in) was
+  written after it in its own chain. This also holds with no step, for a correction dated ahead
   of the clock, so "while the box's clock only moves forward … this answers what today's rule
   answers" now needs "and no approved correction is dated ahead of it"
   (`packages/workforce/src/record-reads.ts`).
