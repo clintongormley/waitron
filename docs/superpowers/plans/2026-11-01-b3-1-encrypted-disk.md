@@ -44,7 +44,7 @@ Nothing here runs on a box, and nothing here is a qualified boot path.
 1. **A disk that is partly Waitron's**, after an interrupted header write. Examples: only the partition type survives; only the subsystem field survives; the two header copies disagree; the partition name is wrong; or a Waitron-named partition sits on a Windows disk. Expected: the classification is `unknown` (needs a keyboard), never `recognised-other` (erased without asking). Task 1.
 2. **Two internal disks, or an external SSD the system does not mark removable.** Expected: `multiple` with `diskId: null`, never the first disk found. An `unknown` attachment counts as internal, and duplicate disk ids are refused. Task 1.
 3. **A forged or very long name tag** (accented, longer than 48 UTF-8 bytes, or holding Waitron's marker text). Expected: the result is exactly the same as with no tag. Task 1.
-4. **A `@host-state` mount that is missing, malformed, or belongs to another disk or folder.** Expected: zero file calls, zero files created, and no key handed out. Tasks 4 and 5.
+4. **A `@host-state` mount that is missing, malformed, or belongs to another disk or folder.** Expected: zero files created and no key handed out. Zero file calls when the mount check throws, answers malformed, or names another disk or hostRoot. A removed root or a changed rootId costs one lstat of hostRoot. Tasks 4 and 5.
 5. **An interrupted write, or a record copied under another disk's UUID.** Expected: no partial record is ever handed over, and disk A's key never opens for disk B. Task 5 states exactly which outcome each interrupted stage gives.
 
 ---
@@ -309,7 +309,7 @@ Slice 2 treats a throw as "write nothing".
   - `two internal Windows disks → {kind:"multiple", diskId:null}`.
   - `two internal complete Waitron disks → multiple`.
   - `one internal plus one "unknown" attachment → multiple`.
-  - **Legitimate-case control**, with disks listed in this order: an **external** complete Waitron disk, then the `installer` stick, then one internal `windowsDisk`. Expected: `recognised-other` with the **internal** disk's id. Ignoring attachment would pick the first disk.
+  - **Legitimate-case control**, with disks listed in this order: an **external** complete Waitron disk, then the `installer` stick, then one internal `windowsDisk`. Expected: `recognised-other` with the **internal** disk's id. Ignoring attachment counts three disks and gives multiple.
   - `only external disks → {kind:"none", diskId:null}`.
   - `two disks with the same diskId → disk.observation_invalid`.
 
@@ -557,7 +557,7 @@ That array is the only copy this pull request zeros. Strings parsed from the fil
   - `disk-recovery is a symlink to a folder holding a valid record → path-unsafe`.
   - `the record is a symlink → path-unsafe`.
 
-  **Permissions, one level at a time.** The real-mode cases use `chmod`. The owner cases wrap `io.lstat` so that exactly one path reports `uid: ownerUid + 1`.
+  **Permissions, one level at a time.** The real-mode cases use `chmod`. The owner cases wrap io.lstat for hostRoot and disk-recovery, and wrap io.open so the returned handle's stat() reports uid: ownerUid + 1 for the record. The owner is never taken from an lstat of the record.
   - `hostRoot mode 0755 → permissions-unsafe`.
   - `disk-recovery mode 0755 → permissions-unsafe`.
   - `record mode 0644 → permissions-unsafe`.
@@ -578,7 +578,8 @@ That array is the only copy this pull request zeros. Strings parsed from the fil
   - Remove the strict validation of the seam's answer → the malformed-answer tests fail.
   - Compare only the inode part of `rootId` → "real inode, different device" fails.
   - Remove the owner comparison → all three owner tests fail.
-  - Check the owner on the record only → the `hostRoot` and `disk-recovery` owner tests fail.
+  - Check the owner on the record only (through its handle's stat()) → the `hostRoot` and `disk-recovery` owner tests fail.
+  - Take the record's owner from an lstat before the open instead of from its handle → the record-owner test fails, because only io.open's handle reports the wrong uid.
   - Remove the record-UUID comparison → `record-mismatch` fails.
   - Remove the `fill(0)` → both zeroing tests fail.
 - [ ] **Step 6: Commit:** `feat(box): read a disk's retained recovery key only from its checked host-state record`. The commit body says that the uid-0 check has not run as root, and that the real mount check waits for the Linux rig.
@@ -602,7 +603,7 @@ That array is the only copy this pull request zeros. Strings parsed from the fil
 5. Write `.next` with `wx`, mode `0600`.
 6. Flush the file.
 7. Rename it to `<uuid>.json`.
-8. Flush the folder.
+8. Flush the folder. A failure here is reported as publication-unverified.
 9. Read the record back through Task 4's parser. Refuse `publication-unverified` if it is not identical.
 
 **After an interrupted store.** These injected failures only imitate a power cut (see "Out").
@@ -610,7 +611,7 @@ That array is the only copy this pull request zeros. Strings parsed from the fil
 | Failing stage | `store` result | Afterwards |
 | --- | --- | --- |
 | `writeFile`, `syncFile` or `rename` | `io-failed` | `withKey` refuses `record-missing`. A leftover `.next` may remain; the next store removes it. |
-| `syncDirectory` (the rename already happened) | `publication-unverified` | `withKey` hands over the **whole new** key. A retry gives `record-exists`. Callers read the record that now exists rather than writing again; this is the same shape as A950's `journal.test.mjs:471-501`. |
+| `syncDirectory` (the rename already happened) | `publication-unverified` | `withKey` hands over the **whole new** key. A retry gives `record-exists`. Callers read the record that now exists rather than writing again; this is the same shape as A950's `journal.test.mjs:471-501` (its `publish` reads back separately at `journal.mjs:372-379`, and `:427-430` maps every failure that is not already a journal refusal to `publication-unverified`). |
 | any | — | No stage ever lets `withKey` hand over a partial key. |
 
 - [ ] **Step 1: Write the failing tests.**
@@ -621,6 +622,7 @@ That array is the only copy this pull request zeros. Strings parsed from the fil
   - `withKey started straight after store, on the same instance → receives the new key` (it queues behind the store's turn).
   - `it.each(["writeFile","syncFile","rename"])`: fail that stage through `deps.io` → `io-failed`, then `withKey` gives `record-missing`, then a fresh store succeeds and removes the leftover `.next`.
   - `syncDirectory fails after the rename → publication-unverified`; `withKey` gives the whole new key; a second store gives `record-exists`.
+  - `the read-back returns different bytes (wrap io.open after the rename) → publication-unverified`.
   - `a truncated leftover .next (half the bytes) is ignored by withKey and removed by the next store`.
   - **Review Focus 4:**
     - `hostRoot removed (stand-in still answers) → mount-unverified, nothing created`;
@@ -634,7 +636,8 @@ That array is the only copy this pull request zeros. Strings parsed from the fil
   - Write straight to `<uuid>.json` instead of `.next` → the `rename` failure case fails, because the record appears without a rename.
   - Remove the `record-exists` check → both "existing record" tests fail.
   - Remove the turn → the concurrent-store test fails (run it 20 times).
-  - Skip the read-back → the `syncDirectory` case no longer gives `publication-unverified`.
+  - Skip the read-back → the different-bytes test fails.
+  - Report a step-8 failure as io-failed → the syncDirectory case fails.
 - [ ] **Step 6: Commit:** `feat(box): store a disk's recovery key once, atomically, on the checked host-state mount`.
 
 ### Task 6: key-leak sweep
@@ -650,7 +653,7 @@ That array is the only copy this pull request zeros. Strings parsed from the fil
 - lowercase and uppercase hex;
 - hex with spaces (`03 0a 11 …`);
 - base64 and base64url;
-- the decimal list joined with `", "` and with `","` (the form `util.inspect` and `Array.join` print);
+- the decimal list joined with `", "` and with `","` (the forms `Array.join` prints);
 - `JSON.stringify` of the array (`{"0":3,"1":10,…}`);
 - **every 8-byte window** of the key, in hex and in decimal-list form, so that a slice also counts as a leak.
 
@@ -662,13 +665,15 @@ That array is the only copy this pull request zeros. Strings parsed from the fil
 
   While doing so, spy on `console.*`, `process.stdout.write` and `process.stderr.write`. Collect every returned value and every thrown error's `message`, `stack`, `JSON.stringify(error)` and `util.inspect(error, { depth: 10 })`.
 
+  Before matching the decimal forms, collapse every run of whitespace in the collected text to one space. util.inspect pads and wraps arrays; Array.join does not.
+
   Assert:
   - no form appears in any of them;
   - no console, stdout or stderr call happened at all;
   - the only files under the temporary root that contain any form are `<uuid>.json` and a leftover `<uuid>.json.next`, both in the `0700` folder. Scan every other file.
 - [ ] **Step 2: Run** `pnpm exec vitest run scripts/box/disk-key.test.mjs`. If the sweep fails on today's code, fix the leak in `disk-key.mjs` and say so in the commit.
 - [ ] **Step 3: Deletion controls (proving the sweep catches leaks).** For each one, make the change, see the sweep fail, then restore:
-  - add `err.input = input` where a refusal is built;
+  - add `err.input = input` where a refusal is built (caught through `JSON.stringify(error)`'s `{"0":3,…}` form, not through `util.inspect`);
   - put the key's hex into a refusal's `reason`;
   - `console.log` the decoded key in `withKey`.
 - [ ] **Step 4: Run the coverage command** for `disk-key.mjs` again. It is unchanged unless a leak was fixed.
