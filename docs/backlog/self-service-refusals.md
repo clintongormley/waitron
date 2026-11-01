@@ -1190,3 +1190,8 @@ configuration, with each choice explained and a safe Stop. Source inspection fin
 `apps/server/src/backup-api.ts` prefers the saved key's fingerprint; this change does not qualify
 a status reload as confirmation of the effective key. No repair of that conflict or opening of
 an existing encrypted backup was qualified by this wording change.
+
+**2026-11-01 review qualification:** the added cases leave by removing the screen element.
+They do not exercise navigation through the unsaved-changes prompt. They read the downloaded
+key files, but check only that the Copy controls exist; clipboard contents were not exercised.
+Keep these limits separate from the open authenticated diagnosis and correction workflow.

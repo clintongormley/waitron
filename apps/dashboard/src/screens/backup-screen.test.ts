@@ -2074,6 +2074,17 @@ describe("keeping recovery keys after an unconfirmed change", () => {
             expect(alertText(el)).toContain("Stop changing keys here");
             expect(alertText(el)).toContain("cannot diagnose the conflicting backup-key settings");
             expect(alertText(el)).not.toMatch(/ask|administrator|try again/i);
+          } else {
+            expect(alertText(el)).toContain("No se pudo confirmar la clave guardada");
+            expect(alertText(el)).toContain(
+              "Conserva tanto la clave anterior como la que acabas de guardar.",
+            );
+            expect(alertText(el)).toContain("No sigas cambiando claves aquí");
+            expect(alertText(el)).toContain("no puede diagnosticar el conflicto de configuración");
+            expect(alertText(el)).toContain("ni confirmar qué clave abre una copia");
+            expect(alertText(el)).not.toMatch(
+              /pide|administrador|contacta|soporte|inténtalo de nuevo|vuelve a intentarlo/i,
+            );
           }
           const newDownload = q(el, "[data-test=download-key]") as HTMLAnchorElement;
           expect(await (await fetch(newDownload.href)).text()).toContain("MINTED-KEY-abcdef012345");
