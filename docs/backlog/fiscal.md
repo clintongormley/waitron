@@ -425,7 +425,17 @@ file's edit scope is authorised. The live procedure is documented in
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
 Corrective-record resolution, filing investigation, outside evidence and fencing for the other
-tasks, and the complete old-backup/new-hardware operational exercise remain queued. Earlier
+tasks, and the complete old-backup/new-hardware operational exercise remain queued.
+
+**1 November 2026, Task 8 storage decision (owner).** A correction keeps the invoice's issuer,
+number and issue date. Its nullable `corrects_registro_id` names the version it replaces;
+a unique index permits one replacement per version, and the invoice-identity index applies
+only to originals. This permits successive corrections without updating earlier records.
+The generated storage migration adds the column and replaces indexes; it does not rebuild
+the table. Correction payload persistence, administrator-only remedy operations, held-case
+resolution and the real AEAT second-correction proof remain part of Task 8 before publication.
+Disputed production remedies stay disabled pending Q35/Q37/Q38/Q40 or a case-specific owner decision.
+ Earlier
 Task 7 automatic-switch requirements below are historical; the 1 November decision supersedes them.
 
 **2026-10-12, a conflict no longer holds its chain (owner).** A record AEAT refuses as a duplicate

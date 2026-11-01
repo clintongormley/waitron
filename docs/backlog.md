@@ -386,7 +386,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **W41s. Fiscal prevention and offline recovery** — corrective-record resolution, filing
   investigation, outside evidence and fencing for the remaining tasks, and the complete
-  old-backup/new-hardware exercise remain queued.
+  old-backup/new-hardware exercise remain queued. Task 8 must preserve complete new correction
+  payloads and prove two successive corrections of one invoice against AEAT preproduction.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment
