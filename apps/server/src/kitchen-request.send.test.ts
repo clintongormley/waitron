@@ -1,6 +1,6 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   captureError,
   deviceMadeHereStations,
@@ -44,6 +44,15 @@ beforeAll(() => {
   db = suite.db;
   useSplitExtrasDb(db);
 });
+const hostTimeZone = process.env.TZ;
+afterEach(() => {
+  vi.useRealTimers();
+  if (hostTimeZone === undefined) delete process.env.TZ;
+  else process.env.TZ = hostTimeZone;
+});
+
+/** A fixed clock for the cases that compare a stamp the database fills, or a ticket's bytes. */
+const AT = "2026-03-14T12:00:00.000Z";
 
 type Venue = Awaited<ReturnType<typeof setupSplitExtrasVenue>>;
 
@@ -71,6 +80,15 @@ async function jobsAt(tx: Transaction, printerId: string) {
       .from(printJobs)
       .where(eq(printJobs.printerId, printerId))
   ).map((job) => decodeTicket(job.payload));
+}
+
+async function payloadHashes(tx: Transaction, printerId: string) {
+  return (
+    await tx
+      .select({ payload: printJobs.payload })
+      .from(printJobs)
+      .where(eq(printJobs.printerId, printerId))
+  ).map((job) => createHash("sha256").update(job.payload).digest("hex"));
 }
 
 async function jobCounts(tx: Transaction, venue: Venue) {
@@ -112,6 +130,7 @@ const burgerLine = (venue: Venue) => ({
 
 describe("A773 waiter request: send", () => {
   it("requests a new dish at a waiting station and releases the rest, printing only the released", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       await setStationsWaitForPass(tx, true, [venue.stations.grill]);
@@ -126,19 +145,21 @@ describe("A773 waiter request: send", () => {
       const kitchen = rows.find((row) => row.stationId === venue.stations.kitchen)!;
       expect(burger).toEqual({
         ...burger,
-        requestedAt: expect.any(String),
+        requestedAt: AT,
         firedAt: null,
         passControlled: true,
         state: "queued",
+        queuedAt: AT,
         readyAt: null,
       });
       expect(kitchenPhase(burger)).toBe("requested");
       expect(kitchen).toEqual({
         ...kitchen,
-        requestedAt: kitchen.firedAt,
-        firedAt: expect.any(String),
+        requestedAt: AT,
+        firedAt: AT,
         passControlled: false,
         state: "queued",
+        queuedAt: AT,
         readyAt: null,
       });
       expect(await jobCounts(tx, venue)).toEqual({
@@ -153,6 +174,9 @@ describe("A773 waiter request: send", () => {
   });
 
   it("releases at once when nothing waits: one item per line, one job at each output", async () => {
+    // A ticket prints the time in the process's time zone, so the bytes below hold only in this one.
+    process.env.TZ = "Europe/Madrid";
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       const salad = await kitchenDish(tx, venue);
@@ -182,6 +206,16 @@ describe("A773 waiter request: send", () => {
       expect((await jobsAt(tx, venue.printers.grill))[0]).toContain("BURG");
       expect((await jobsAt(tx, venue.printers.pass))[0]).toContain("BURG");
       expect((await jobsAt(tx, venue.printers.kitchen))[0]).toContain("SALAD");
+      // The bytes the same order printed at 4a9a9f05bf, before an item could wait for the pass.
+      expect({
+        grill: await payloadHashes(tx, venue.printers.grill),
+        pass: await payloadHashes(tx, venue.printers.pass),
+        kitchen: await payloadHashes(tx, venue.printers.kitchen),
+      }).toEqual({
+        grill: ["6549922446e2db088ab2b797c87b9b80e45d92d526d23ccaf4decb93edfd2951"],
+        pass: ["6549922446e2db088ab2b797c87b9b80e45d92d526d23ccaf4decb93edfd2951"],
+        kitchen: ["efa65d125caeea238d9a00e704dcd97d64c126bb30b823dc2164a8b7bde8ea9e"],
+      });
     });
   });
 
@@ -202,9 +236,17 @@ describe("A773 waiter request: send", () => {
       expect(rows).toHaveLength(2);
       const requested = rows.find((row) => row.requestedAt !== null)!;
       const held = rows.find((row) => row.id !== requested?.id)!;
+      const sent = new Map(
+        (
+          await tx
+            .select({ id: workingOrderLines.id, sentAt: workingOrderLines.sentAt })
+            .from(workingOrderLines)
+            .where(eq(workingOrderLines.workingOrderId, venue.party.tabId))
+        ).map((line) => [line.id, line.sentAt]),
+      );
       expect(requested).toEqual({
         ...requested,
-        requestedAt: expect.any(String),
+        requestedAt: sent.get(requested.lineId),
         firedAt: null,
         passControlled: true,
         state: "queued",
@@ -216,14 +258,6 @@ describe("A773 waiter request: send", () => {
         passControlled: false,
         state: "queued",
       });
-      const sent = new Map(
-        (
-          await tx
-            .select({ id: workingOrderLines.id, sentAt: workingOrderLines.sentAt })
-            .from(workingOrderLines)
-            .where(eq(workingOrderLines.workingOrderId, venue.party.tabId))
-        ).map((line) => [line.id, line.sentAt]),
-      );
       expect(sent.get(requested.lineId)).toEqual(expect.any(String));
       expect(sent.get(held.lineId)).toBeNull();
       expect((await VENUE_SERVICE.readTicketAllergies(tx, [requested.id])).has(requested.id)).toBe(
@@ -296,7 +330,15 @@ describe("A773 waiter request: send", () => {
       const rowsAfterFirst = await items(tx, venue.party.tabId);
       const jobsAfterFirst = await jobCounts(tx, venue);
       expect(rowsAfterFirst).toHaveLength(2);
+      const requestedBurger = rowsAfterFirst.find((row) => row.passControlled)!;
+      const releasedSalad = rowsAfterFirst.find((row) => !row.passControlled)!;
       expect(rowsAfterFirst.filter((row) => row.passControlled)).toHaveLength(1);
+      expect(requestedBurger).toEqual({
+        ...requestedBurger,
+        requestedAt: releasedSalad.firedAt,
+        firedAt: null,
+      });
+      expect(releasedSalad.firedAt).toEqual(expect.any(String));
       expect(jobsAfterFirst).toMatchObject({ grill: 0, pass: 0, kitchen: 1 });
       const second = await submitGroups(tx, venue.cfg, venue.party.partyId, input);
       expect(second).toEqual(first);
@@ -324,6 +366,35 @@ describe("A773 waiter request: send", () => {
       const [recalled] = await items(tx, venue.party.tabId);
       expect(recalled).toEqual({
         ...released,
+        requestedAt: null,
+        firedAt: null,
+        passControlled: false,
+      });
+      expect(kitchenPhase(recalled!)).toBe("held");
+    });
+  });
+
+  it("a legacy recall puts a requested item back to held, no longer pass-controlled", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      await setStationsWaitForPass(tx, true, [venue.stations.grill]);
+      await addTabRound(tx, venue.cfg, venue.party.tabId, [burgerLine(venue)]);
+      const [requested] = await items(tx, venue.party.tabId);
+      expect(requested).toEqual({
+        ...requested,
+        requestedAt: expect.any(String),
+        firedAt: null,
+        passControlled: true,
+      });
+      const [line] = await tx
+        .select({ lineNo: workingOrderLines.lineNo, sentAt: workingOrderLines.sentAt })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.id, requested!.lineId));
+      expect(requested!.requestedAt).toBe(line!.sentAt);
+      await recallLines(tx, venue.cfg, venue.party.tabId, [line!.lineNo]);
+      const [recalled] = await items(tx, venue.party.tabId);
+      expect(recalled).toEqual({
+        ...requested,
         requestedAt: null,
         firedAt: null,
         passControlled: false,
