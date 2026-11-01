@@ -11,6 +11,7 @@ import {
   deviceBindingColumns,
   assertProfileAction,
   deviceProfileJoin,
+  requireDevice,
   recordSighting,
   sightingDue,
   toDeviceBinding,
@@ -87,11 +88,12 @@ export async function signedInPersonOn(
  * and a logged-out session fail as a missing cookie does. A session whose device has been revoked
  * throws `device.unauthorized`. Login and logout deliberately do not call this. With `permission`,
  * the session's person must also hold it (`authorize`, no override), checked in the same
- * transaction; with `action`, the device's active profile must permit it (`assertProfileAction`).
+ * transaction; with `action`, the device's active profile must permit it (`assertProfileAction`)
+ * and the request must prove that same device.
  * When a full disk refuses that transaction, the same checks run outside it and nothing is stamped.
  */
 export async function requireSession(
-  deps: { db: Database },
+  deps: { db: Database; devMode?: boolean },
   c: Context,
   options: { permission?: Permission; action?: ProfileAction; passive?: boolean } = {},
 ): Promise<{ personId: string; sessionId: string; deviceId: DeviceId; device: DeviceBinding }> {
@@ -131,6 +133,10 @@ export async function requireSession(
   } catch (error) {
     if (!diskFullIn(error)) throw error;
     row = await check(deps.db, false);
+  }
+  if (options.action !== undefined) {
+    const proven = await requireDevice(deps, c);
+    if (proven.deviceId !== row.deviceId) throw new AppError("device.unauthorized", {});
   }
   return {
     personId: row.personId,

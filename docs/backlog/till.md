@@ -1006,6 +1006,19 @@ responses do not establish successful sales, refunds or printing. The specific o
 control used a real offered item. The proposed `401 device.unauthorized` check failed with
 `200`. The probe and route table are retained with the local A941 campaign receipts.
 
+**Implementation checkpoint, 2026-11-01:** `requireSession` with an `action` also authenticates
+the request's enrolled device and checks it against the session's device. The HTTP cases in
+`apps/server/src/till-device-proof.test.ts` exercise missing, malformed, wrong-token and
+other-device cookies with a valid PIN session and order body. Each answers
+`401 device.unauthorized`; a matching device creates the order, and the session-only order list
+still answers. The profile-action and profile-zone fixtures now carry their enrolled device
+cookie alongside the session cookie, with their existing assertions preserved.
+
+Finish the routes that check a tender or print capability separately, and the routes whose
+profile check happens inside the write transaction. Give each a refusing request and a valid
+device control. The complete item still needs both dashboard exception controls, the full
+route remap, branch review and current-head CI before publication.
+
 Still separate: a maintained route-to-profile-action table with a guard that walks the routes,
 and printer identity (the design's sub-project C). Handheld actions follow the profile, not the
 old design's device-kind table: placing, collecting, cancelling, cash, the drawer, integrated

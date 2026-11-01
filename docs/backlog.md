@@ -3158,11 +3158,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **Location-consistency guard** — nothing enforces that a sale-capable device's own location
   (`devices.location_id`) is the box's configured location. Guard at enrol or first sale.
 
-- **Refuse a request from a device that is not enrolled (A941).** A valid PIN session can create
-  an order without a `waitron_device` cookie. Its enrolled device still supplies the profile
-  checks; the missing-cookie case does not pass a null device to those checks. The 2026-08-30
-  design requires the device cookie on sensitive requests. Enforce that requirement without
-  changing the dashboard's own routes. Full review required.
+- **Finish request-device proof on sensitive till routes (A941).** The shared action-session
+  path now checks the enrolled device cookie against the session's device. Finish the tender,
+  printing and transaction-time action paths, retaining the dashboard's own routes and the
+  existing profile restrictions. Full review required.
   [Detail](backlog/till.md#refuse-a-request-from-a-device-that-is-not-enrolled)
 
 - **Malformed sale and cancellation bodies answer 500.** With an authenticated, permitted till,

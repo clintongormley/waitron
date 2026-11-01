@@ -311,7 +311,7 @@ async function signIn(profileId: string): Promise<string> {
     body: JSON.stringify({ personId, pin: "5555" }),
   });
   expect(login.status).toBe(200);
-  return login.headers.get("set-cookie")!.split(";")[0]!;
+  return `${login.headers.get("set-cookie")!.split(";")[0]!}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
 }
 
 async function profile(): Promise<string> {
