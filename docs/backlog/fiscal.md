@@ -489,9 +489,23 @@ version cases and report a malformed predecessor without rewriting it.
 
 The public `POST /management-api/fiscal-records/remedy` route refuses every remedy kind.
 Client-supplied enablement and operator fields cannot grant authority. No production action is
-enabled. The HTTP adapter below covers only a synthetic rejected-description correction; other
-corrected facts and accepted-with-errors decisions, held-record release, staff cancellation/refund
+enabled. The HTTP adapter below covers synthetic description corrections for rejected records and
+records accepted with errors; other corrected facts, held-record release, staff cancellation/refund
 qualification and the live second-correction probe remain Task 8 work.
+
+**2 November 2026, Task 8 explicit accepted-with-errors description decisions.** With a synthetic
+server policy, `priorOutcome: "accepted-with-errors"` requires both an accepted-with-errors delivery
+and that cause on the selected filing case. The correction retains `Subsanacion=S` and
+`RechazoPrevio=N`; the rejected path retains S/X. Omitting the selection means rejected, so omitted
+and explicit rejected decisions share one saved result. A changed selection under a saved action
+key is refused. Retries after a later delivery outcome and clock change preserve the saved result.
+The tests compare earlier records, deliveries and case facts, including two successive synthetic
+accepted-with-errors corrections. These are local engineering checks, not AEAT acceptance or a
+decision that a particular invoice error permits this remedy. Production policies remain empty.
+
+| Source, checked 2 November 2026 | Exact words | Scope |
+| --- | --- | --- |
+| [AEAT service description v1.0.3, §9.1.2, p.56](https://sede.agenciatributaria.gob.es/static_files/AEAT_Desarrolladores/EEDD/IVA/VERI-FACTU/Veri-Factu_Descripcion_SWeb.pdf) | “No informar <RechazoPrevio> o informarlo con valor N” | The ordinary correction operation uses S with an absent or N prior-rejection marker. The section covers accepted records, including acceptance with errors, when another invoicing remedy is not required. This does not settle the adviser's open questions. |
 
 **1 November 2026, Task 8 synthetic HTTP description correction.** With an explicit server-side
 test policy, the route appends a correction and resolves its case. It accepts a description, case

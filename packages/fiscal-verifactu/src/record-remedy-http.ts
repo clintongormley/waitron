@@ -33,7 +33,9 @@ export async function applyDescriptionCorrection(
   raw: unknown,
 ) {
   const body = object(raw);
-  only(body, ["kind", "caseId", "registroId", "actionKey", "reason", "facts"]);
+  only(body, ["kind", "caseId", "registroId", "actionKey", "reason", "facts", "priorOutcome"]);
+  const priorOutcome = body.priorOutcome === undefined ? "rejected" : body.priorOutcome;
+  if (priorOutcome !== "rejected" && priorOutcome !== "accepted-with-errors") invalid();
   const facts = object(body.facts);
   only(facts, ["description"]);
   const description = text(facts.description);
@@ -92,7 +94,7 @@ export async function applyDescriptionCorrection(
     CuotaTotal: original.CuotaTotal,
     ImporteTotal: original.ImporteTotal,
     Subsanacion: "S",
-    RechazoPrevio: "X",
+    RechazoPrevio: priorOutcome === "rejected" ? "X" : "N",
     SistemaInformatico: {
       ...producerFields(SOFTWARE_IDENTITY, { legalName: tenant.legalName, nif: sif.nif }),
       NombreSistemaInformatico: SOFTWARE_IDENTITY.name,
@@ -112,7 +114,7 @@ export async function applyDescriptionCorrection(
     environment: generation.environment,
     enabledRemedies,
     now: reading.instant,
-    descriptionDecision: { description },
+    descriptionDecision: { description, priorOutcome },
     request: {
       caseId,
       registroId,

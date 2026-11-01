@@ -127,6 +127,228 @@ async function snapshot() {
   };
 }
 
+async function acceptedDescriptionDecision() {
+  const saleId = await seedSale(suite.db, node, 2);
+  return withTransaction(suite.db, async (tx) => {
+    const original = await appendToChain(
+      tx,
+      node.nodeId,
+      altaFor(node, saleId, 2, 2, "preproduction"),
+    );
+    await tx.insert(envios).values({
+      registroId: original.id,
+      estado: "aceptado_con_errores",
+      codigoError: "2000",
+      csv: "ACCEPTED-ORIGINAL-CSV",
+      confirmadoEn: NOW,
+    });
+    const filingCase = await openFilingCase(tx, {
+      registroId: original.id,
+      cause: "fiscal.aceptado_con_errores",
+      evidence: {
+        codigo: 2000,
+        mensaje: "Synthetic description error",
+        csv: "ACCEPTED-ORIGINAL-CSV",
+      },
+      now: NOW,
+    });
+    return {
+      ...body,
+      caseId: filingCase.id,
+      registroId: original.id,
+      actionKey: "accepted-description-correction",
+      priorOutcome: "accepted-with-errors",
+    };
+  });
+}
+
+it("appends an explicitly selected accepted-with-errors description correction with S/N markers", async () => {
+  const decision = await acceptedDescriptionDecision();
+  const before = await snapshot();
+  const res = await send(decision);
+  expect(res.status).toBe(200);
+  const result = (await res.json()) as { registroId: string; eventId: string };
+  const after = await snapshot();
+  expect(after.records).toHaveLength(3);
+  expect(after.records.slice(0, 2)).toEqual(before.records);
+  expect(after.records[2]).toMatchObject({
+    id: result.registroId,
+    correctsRegistroId: decision.registroId,
+    numSerieFactura: "A/2",
+    fechaExpedicionFactura: "2026-07-20",
+    descripcionOperacion: "Corrected restaurant service",
+    subsanacion: "S",
+    rechazoPrevio: "N",
+    anteriorHuella: before.records[1]!.huella,
+  });
+  expect(after.deliveries.slice(0, 2)).toEqual(before.deliveries);
+  expect(after.deliveries[2]).toMatchObject({ registroId: result.registroId, estado: "pendiente" });
+  expect(after.cases.find((item) => item.id === body.caseId)).toEqual(
+    before.cases.find((item) => item.id === body.caseId),
+  );
+  expect(after.cases.find((item) => item.id === decision.caseId)).toMatchObject({
+    status: "resolved",
+    events: [{ id: result.eventId, remedyRegistroId: result.registroId, personId }],
+  });
+});
+
+it("replays an accepted-with-errors decision after a late outcome and clock change", async () => {
+  const decision = await acceptedDescriptionDecision();
+  const first = await send(decision);
+  expect(first.status).toBe(200);
+  const result = await first.json();
+  instant = new Date(NOW.getTime() + 120_000);
+  await suite.db
+    .update(envios)
+    .set({ estado: "aceptado" })
+    .where(eq(envios.registroId, decision.registroId as string));
+  const before = await snapshot();
+  const replay = await send(decision);
+  expect(replay.status).toBe(200);
+  expect(await replay.json()).toEqual(result);
+  expect(await snapshot()).toEqual(before);
+});
+
+it("refuses a changed prior-outcome decision under the saved HTTP action key", async () => {
+  const decision = await acceptedDescriptionDecision();
+  expect((await send(decision)).status).toBe(200);
+  const before = await snapshot();
+  const res = await send({ ...decision, priorOutcome: "rejected" });
+  expect(res.status).toBe(409);
+  expect(await res.json()).toMatchObject({ error: { code: "filing_case.action_mismatch" } });
+  expect(await snapshot()).toEqual(before);
+});
+
+it("retains the explicit rejected decision's S/X markers", async () => {
+  const before = await snapshot();
+  const res = await send({ ...body, priorOutcome: "rejected" });
+  expect(res.status).toBe(200);
+  const after = await snapshot();
+  expect(after.records[0]).toEqual(before.records[0]);
+  expect(after.records[1]).toMatchObject({ subsanacion: "S", rechazoPrevio: "X" });
+});
+
+it("treats omitted and explicit rejected decisions as the same retry", async () => {
+  const first = await send();
+  expect(first.status).toBe(200);
+  const result = await first.json();
+  const before = await snapshot();
+  const replay = await send({ ...body, priorOutcome: "rejected" });
+  expect(replay.status).toBe(200);
+  expect(await replay.json()).toEqual(result);
+  expect(await snapshot()).toEqual(before);
+});
+
+it.each(
+  [null, [], ["rejected"], {}, "accepted", "X", 1, true, false].map((priorOutcome) => ({
+    priorOutcome,
+  })),
+)("refuses malformed prior-outcome selection %j", async ({ priorOutcome }) => {
+  const before = await snapshot();
+  const res = await send({ ...body, priorOutcome });
+  expect(res.status).toBe(400);
+  expect(await res.json()).toMatchObject({ error: { code: "fiscal.remedy_request_invalid" } });
+  expect(await snapshot()).toEqual(before);
+});
+
+it.each(["rechazado", "pendiente", "enviando", "detenido", "aceptado", "retenido"])(
+  "refuses outcome %s for an accepted-with-errors decision",
+  async (estado) => {
+    const decision = await acceptedDescriptionDecision();
+    await suite.db
+      .update(envios)
+      .set({ estado })
+      .where(eq(envios.registroId, decision.registroId as string));
+    const before = await snapshot();
+    const res = await send(decision);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: { code: "fiscal.remedy_invalid" } });
+    expect(await snapshot()).toEqual(before);
+  },
+);
+
+it("refuses a claimed accepted-with-errors decision on a rejected case even when delivery now matches", async () => {
+  await suite.db
+    .update(envios)
+    .set({ estado: "aceptado_con_errores" })
+    .where(eq(envios.registroId, body.registroId as string));
+  const before = await snapshot();
+  const res = await send({ ...body, priorOutcome: "accepted-with-errors" });
+  expect(res.status).toBe(400);
+  expect(await res.json()).toMatchObject({ error: { code: "fiscal.remedy_invalid" } });
+  expect(await snapshot()).toEqual(before);
+});
+
+it("refuses a rejected decision on an accepted-with-errors case even when delivery now matches", async () => {
+  const decision = await acceptedDescriptionDecision();
+  await suite.db
+    .update(envios)
+    .set({ estado: "rechazado" })
+    .where(eq(envios.registroId, decision.registroId as string));
+  const before = await snapshot();
+  const res = await send({ ...decision, priorOutcome: "rejected" });
+  expect(res.status).toBe(400);
+  expect(await res.json()).toMatchObject({ error: { code: "fiscal.remedy_invalid" } });
+  expect(await snapshot()).toEqual(before);
+});
+
+it("retains S/N and the same invoice identity across two accepted-with-errors corrections", async () => {
+  const decision = await acceptedDescriptionDecision();
+  const first = await send(decision);
+  expect(first.status).toBe(200);
+  const saved = (await first.json()) as { registroId: string };
+  const nextCase = await withTransaction(suite.db, async (tx) => {
+    await tx
+      .update(envios)
+      .set({ estado: "aceptado_con_errores", codigoError: "2000", csv: "FIRST-CORRECTION-CSV" })
+      .where(eq(envios.registroId, saved.registroId));
+    return openFilingCase(tx, {
+      registroId: saved.registroId,
+      cause: "fiscal.aceptado_con_errores",
+      evidence: { codigo: 2000, mensaje: "Another synthetic error", csv: "FIRST-CORRECTION-CSV" },
+      now: NOW,
+    });
+  });
+  const before = await snapshot();
+  const res = await send({
+    ...decision,
+    caseId: nextCase.id,
+    registroId: saved.registroId,
+    actionKey: "second-accepted-correction",
+    facts: { description: "Second corrected service" },
+  });
+  expect(res.status).toBe(200);
+  const after = await snapshot();
+  expect(after.records).toHaveLength(4);
+  expect(after.records.slice(0, 3)).toEqual(before.records);
+  expect(after.records[3]).toMatchObject({
+    correctsRegistroId: saved.registroId,
+    numSerieFactura: "A/2",
+    fechaExpedicionFactura: "2026-07-20",
+    subsanacion: "S",
+    rechazoPrevio: "N",
+    anteriorHuella: before.records[2]!.huella,
+    descripcionOperacion: "Second corrected service",
+  });
+  expect(after.deliveries.slice(0, 3)).toEqual(before.deliveries);
+  expect(after.cases.find((item) => item.id === decision.caseId)).toEqual(
+    before.cases.find((item) => item.id === decision.caseId),
+  );
+});
+
+it.each([false, true])(
+  "keeps an accepted-with-errors remedy disabled at the server on replay %s",
+  async (replay) => {
+    const decision = await acceptedDescriptionDecision();
+    if (replay) expect((await send(decision)).status).toBe(200);
+    const before = await snapshot();
+    const res = await send(decision, false);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "fiscal.remedy_disabled" } });
+    expect(await snapshot()).toEqual(before);
+  },
+);
+
 it("appends a description correction through HTTP with the server's clock, installation and original identity", async () => {
   const before = await snapshot();
   const res = await send();

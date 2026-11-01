@@ -52,7 +52,10 @@ export async function applyRecordCorrection(
     environment: Entorno;
     enabledRemedies: ReadonlySet<RemedyKind>;
     request: RecordCorrectionRequest;
-    descriptionDecision?: { description: string };
+    descriptionDecision?: {
+      description: string;
+      priorOutcome: "rejected" | "accepted-with-errors";
+    };
     now: Date;
   },
 ): Promise<{ registroId: string; eventId: string }> {
@@ -129,7 +132,11 @@ export async function applyRecordCorrection(
     (filingCase.cause !== "fiscal.registro_rechazado" &&
       filingCase.cause !== "fiscal.aceptado_con_errores") ||
     (delivery?.estado !== "rechazado" && delivery?.estado !== "aceptado_con_errores") ||
-    (input.descriptionDecision !== undefined && delivery?.estado !== "rechazado") ||
+    (input.descriptionDecision !== undefined &&
+      (input.descriptionDecision.priorOutcome === "rejected"
+        ? delivery?.estado !== "rechazado" || filingCase.cause !== "fiscal.registro_rechazado"
+        : delivery?.estado !== "aceptado_con_errores" ||
+          filingCase.cause !== "fiscal.aceptado_con_errores")) ||
     request.pending.correctsRegistroId !== request.registroId
   ) {
     throw new AppError("fiscal.remedy_invalid", { registroId: request.registroId });
