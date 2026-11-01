@@ -317,7 +317,7 @@ D1–D20 are the slice plan's and bind unchanged. These are B2's, dated 2026-11-
   dish or extra as **waiting** (held only when genuinely held; waiting when a not-made-here part
   is queued or preparing and initiated). `readHeldCounts` and the release reminders are already
   right (pins). **The rest of the order is not changed in B2** (review 1, I5): `readRestOfOrder`
-  keeps `held: firedAt === null`, so another station's dish waiting for the pass still prints HELD
+  keeps `held: firedAt === null`, so another station's dish waiting for the pass still prints "(on hold)"
   after it on a cook's ticket (`kitchen-ticket.ts:395`) and reads `held: true` in the station
   queue's `rest` entries (`working-order.ts:8235`), its two consumers. That is kitchen paper a cook
   reads, so it is Owner question 4; the default keeps today's mark, which says what the cook needs
@@ -425,10 +425,14 @@ exposes the setting. They go to `~/waitron-campaign-c/questions.md` with B3's co
 4. **Another station's dish waiting for the pass, on a cook's ticket** (review 1, I5). A table
    orders a burger with chips; the Grill does not wait, the Fryer does. The Grill's ticket lists
    the rest of the order: "1 x Chips — Fryer". The chips are waiting for the pass to send them to
-   the Fryer. Should the Grill's ticket print **"1 x Chips — Fryer HELD"** (**default**, today's
-   wording: the Fryer does not have them yet) or **"1 x Chips — Fryer"** with no mark (the waiter
-   has asked for them)? The same answer applies to the station screen's "rest of the order" list.
-   **How the build proceeds:** B2 keeps HELD (D33) and pins it (B2.6a case 6), so nothing waits on
+   the Fryer. Should the Grill's ticket print **"1 x Chips — Fryer (on hold)"** ("(en espera)" on
+   a Spanish ticket; **default**, today's wording: the Fryer does not have them yet) or
+   **"1 x Chips — Fryer"** with no mark (the waiter has asked for them)? The same answer applies to
+   the station screen's "rest of the order" list. Today's Grill ticket for one Fire now round of a
+   burger and chips (round 3's run E22): `Kitchen` / `P1` / `1` / `23:05` / `1.000 x Burger` /
+   `-- Also on this order --` / `1.000 x Chips — Fryer (on hold)`; the word comes from
+   `kitchenTicketWords().onHold` (`apps/server/src/i18n/kitchen-ticket.ts:14,49`).
+   **How the build proceeds:** B2 keeps the mark (D33) and pins it (B2.6a case 6), so nothing waits on
    the answer; if the owner chooses no mark, the change is one line in `rest-of-order.ts:72` plus
    inverting that pin, made in B3.3 (which owns the station queue's fields) or B4 (wording).
 
@@ -450,7 +454,7 @@ exposes the setting. They go to `~/waitron-campaign-c/questions.md` with B3's co
 - [ ] Ledger: lane C's campaign ledger (`~/waitron-campaign-c/item-a773-2b-ledger.md`) stands in for
   `docs/handoffs/`, as it did for B1; add a "B2" section (`Status: in progress`).
 
-## Task B2.1: serving a Requested dish (about 60 calls)
+## Task B2.1: serving a Requested dish (about 80 calls)
 
 **Files.** Modify `apps/server/src/working-order.ts` (`ServableLine` `:3628-3642`, `servableLines`
 `:3648-3706`, new `serviceRequested` beside `isReleased` `:3715`, `refuseUnreleased` `:3772-3776`)
@@ -478,6 +482,10 @@ export function serviceRequested(
 `released` from `serviceRequested`. `serviceRequested` is exported because `order-groups.ts` needs
 it (here and in B2.5b). `isReleased`, `ordersWithUnfiredDish` and `adjustments-apply.ts` are not
 touched.
+
+**If it runs long.** Estimated at about 80 calls (round 3, M5; read, not measured). Split point:
+cases 1–7 and 9 with their mutation controls first; then case 8, case 10, the money-gate pin and the
+remaining controls.
 
 - [ ] **Failing tests and pins** (`kitchen-request.serve.test.ts`, `describe("A773 requested
   lifecycle: serving")`; `setupSplitExtrasVenue` with its seated `party`; lines with no `extras`
@@ -609,7 +617,9 @@ No product change is planned; if a case goes red, stop and report (D24 would be 
      the dish is Requested (assert its item's stamps); the admin takes the bill with a first save;
      then the operator's recall, with an `expectedEdit` read **fresh** by `readBillEditState`
      (so only the other-editor check can refuse, not a stale edit state), refuses
-     `draft.taken_over` (caught outside the transaction) and `rows()` is identical.
+     `draft.taken_over` (caught outside the transaction) and `rows()` is identical. The case sets
+     every station back to not waiting in a `finally`, as B2.5b case 5 does (the file's venue is
+     shared, `resetPerTest: false`, `bill-editing.commands.test.ts:35-43`).
   4. **Started refuses.** Grill waits, Fryer does not; a Fire now burger with chips; the chips'
      item advanced to `preparing` (`advanceTicketItem`): recalling the burger refuses
      `ticket.already_started`, nothing written.
@@ -626,7 +636,11 @@ No product change is planned; if a case goes red, stop and report (D24 would be 
      (assert its `order_draft_recalled_lines` row). Then `markGroupServed` of the group, and
      `fireOrderLines` naming both lines: the burger's line `servedQuantity` 0 and no ticket item for
      it; the water's line served (1000), which shows the group action ran; every printer's job
-     count unchanged. Uses a released water so the case does not depend on B2.1.
+     count unchanged. Uses a released water so the case does not depend on B2.1. The
+     `fireOrderLines` half covers the master's T8 wording and has no failing mutation: a recalled
+     dish has no ticket item and its `sent_at` is set, so neither `releaseHeld` nor
+     `heldNoRouteLines` (`working-order.ts:2494-2495`) picks it up (round 3, M2; read, not run).
+     Only the serving half has a control.
   (Legacy `recallLines` of a Requested dish is already pinned by B1:
   `kitchen-request.send.test.ts:377`.)
 - [ ] **RED (all pins).** `pnpm --filter @waitron/server exec vitest run src/kitchen-request.recall.test.ts`
@@ -1010,9 +1024,14 @@ case is a stop.
   `src/kitchen-request.release.test.ts`; typecheck; format check.
 - [ ] **Mutation controls:** `refuseHeld` back on `ticketFiredAt === null` → cases 1, 2 red;
   `refuseHeld` dropped entirely → case 4 red; `groupArrivingDishes` back on `isReleased` → cases 5
-  and 5b red; the arrival's `firing` date for a released-or-Requested line taken from the routing
-  time instead of `ticketFiredAt ?? sentAt` → case 5's `firedAt` red (case 5 has the Requested dish
-  as its only arriving line, so the group's earliest time is the Flan's own; review 1, I4).
+  and 5b red; the arrival's `firing` date for a released-or-Requested line taken from the write's
+  time (`new Date().toISOString()`) instead of `ticketFiredAt ?? sentAt` → case 5 red on the
+  group's `firedAt` assertion (case 5 has the Requested dish as its only arriving line, so the
+  group's earliest time is the Flan's own; review 1, I4; round 3's E16). Case 5 has no routing
+  time: nothing in it is immediate, so `routing` is `undefined`. A `TypeError` (for example from
+  `routing!.at`, round 3's E17) does not count as this control going red; `groupArrived` choosing
+  its **latest** line instead of its earliest (`>` for `<` at `order-groups.ts:2578`) → case 5b
+  red while case 5 stays green (measured in round 3, E18).
 - [ ] **Measured at planning** (a throwaway test file on `setupPartyVenue` with Entrantes and
   Postres, a minimal D31 applied to `order-groups.ts` and a minimal `serviceRequested` to
   `working-order.ts`, all reverted and the file deleted): with the change, case 5 passed (the
@@ -1147,7 +1166,7 @@ Fixture fix in `station-outputs-down.test.ts:647`.
      `@waitron/venue-service` and compare the new rows' `stationId`s with `[bar]`). The notice
      assertion is the one that can fail: measured, a widened filter sends the Requested burger as a
      HOLD-flavoured correction (its `firedAt` is null and it has a group, so `holdGroupId` is set at
-     `:932`), which prints nothing at Grill because the group's HOLD ticket never printed, but does
+     `:937`), which prints nothing at Grill because the group's HOLD ticket never printed, but does
      record a Grill notice. A jobs-only assertion stayed green under that mutation.
 - [ ] **RED.** `pnpm --filter @waitron/server exec vitest run src/kitchen-request.alerts.test.ts`:
   1 and 4 fail; 2, 3, 5 and 6 pass (pins).
@@ -1268,7 +1287,7 @@ Each run separately; read exit status and a nonzero `Tests` count.
   check); B3.4/B3.5 pin what the release does with it.
 - **A release to a station whose output is down** (D34): whether the pass is warned before
   pressing Fire, since the closed-station printer-down alert rises only once the dish is released.
-- **The rest of the order's wording** (D33, Owner question 4): if the owner chooses no HELD mark
+- **The rest of the order's wording** (D33, Owner question 4): if the owner chooses no "(on hold)" mark
   for a dish waiting for the pass, B3.3 or B4 changes `rest-of-order.ts:72` and inverts B2.6a
   case 6.
 - **Races with the pass's release** (D40): Serve, cancel, Recall and moves against Fire, with
@@ -1282,7 +1301,7 @@ Estimates are read, not measured.
 | Task | What | Calls | Commit |
 | --- | --- | --- | --- |
 | 0 | Preflight | 15 | none |
-| B2.1 | Serving a Requested dish (partial serving and pre-column rows included); money gates pinned | 60 | yes |
+| B2.1 | Serving a Requested dish (partial serving and pre-column rows included); money gates pinned | 80 | yes |
 | B2.2a | Recall to the draft, and a recalled source left alone (pins) | 45 | yes |
 | B2.2b | An edit keeps each record's phase and request time | 55 | yes |
 | B2.3a | Cancellation context on the server; no paper for Requested | 55 | yes |
@@ -1295,8 +1314,8 @@ Estimates are read, not measured.
 | B2.7 | Whole-branch run, settings-off comparison, backlog, PR | 45 | docs only |
 
 Order: B2.1 first (B2.5b and B2.6a use `serviceRequested`); B2.3a before B2.3b and B2.4; the rest
-in the order listed. About 535 calls in all (500 before review 1), against the outline's 300; no
-task is above 60, well under the 100-call limit: the outline's B2.5 and
+in the order listed. About 555 calls in all, against the outline's 300; every task but B2.1 is at
+or below 60, and B2.1 (about 80) names its split point; all are under the 100-call limit: the outline's B2.5 and
 B2.6 each held two independent readers' worth of work, and B2.2 and B2.3 each a server and a
 client half.
 
@@ -1439,3 +1458,23 @@ versions of D21/D31 were applied to `working-order.ts`, `order-groups.ts`, `draf
 (measured; replaced by the check inside `requireBillEditor`); and M7's control turns the pin red
 only through kitchen notices, not paper (measured; the pin asserts both). No finding was declined.
 
+## Revision 3 (round-3)
+
+Round 3 (`~/waitron-campaign-c/a773-2b2-plan-review/round-3.md`, 0 Critical, 2 Important, 5 Minor)
+is answered in the task text above; the evidence is the report's runs, named per line. No new
+experiment ran for this revision.
+
+- **I1:** B2.5b's date control now takes the write's time (`new Date().toISOString()`, round 3's
+  E16, revision 2's measurement) and says case 5 has no routing time and that a `TypeError` (E17)
+  does not count as red. Revision 2's I4 line above calls this "the routing-time control"; what it
+  measured was `new Date()`.
+- **I2:** Owner question 4 and D33 quote the ticket as it prints today, `1.000 x Chips — Fryer (on
+  hold)` and "(en espera)" in Spanish (E22, `kitchen-ticket.ts:14,49`), with E22's ticket as the
+  worked example; "Left for B3" says "(on hold)" too.
+- **M1:** B2.2a case 3 sets every station back to not waiting in a `finally`.
+- **M2:** B2.2a case 7 says its `fireOrderLines` half is a pin with no failing mutation (read, not
+  run, as the report says).
+- **M3:** B2.5b gains the control "`groupArrived` choosing its latest line" → 5b red, 5 green (E18).
+- **M4:** B2.6b case 6 cites `kitchen-print.ts:937`.
+- **M5:** B2.1 re-estimated at about 80 calls with the report's split point; the task list and total
+  updated. Not split, since the report suggests a split point to use if it runs long, not a split.
