@@ -28,7 +28,7 @@ export interface VenuePlace {
   city: string | null;
 }
 
-async function venueRow(tx: Transaction): Promise<Venue & { id: string }> {
+async function venueRow(tx: Transaction): Promise<{ id: string; venue: Venue }> {
   const rows = await tx
     .select({
       id: locations.id,
@@ -49,12 +49,12 @@ async function venueRow(tx: Transaction): Promise<Venue & { id: string }> {
     .limit(2);
   if (rows.length === 0) throw new AppError("venue.not_found", {});
   if (rows.length > 1) throw new AppError("provisioning.second_venue", {});
-  return rows[0]!;
+  const { id, ...venue } = rows[0]!;
+  return { id, venue };
 }
 
 export async function readVenue(tx: Transaction): Promise<Venue> {
-  const { id: _id, ...venue } = await venueRow(tx);
-  return venue;
+  return (await venueRow(tx)).venue;
 }
 
 function storedCutover(value: string): string {
@@ -64,14 +64,14 @@ function storedCutover(value: string): string {
 export async function readVenueClockAndPlace(
   tx: Transaction,
 ): Promise<{ clock: BusinessDayClock; place: VenuePlace }> {
-  const venue = await venueRow(tx);
+  const { id, venue } = await venueRow(tx);
   const changes = await tx
     .select({
       effectiveBusinessDay: locationDayCutoverChanges.effectiveBusinessDay,
       dayCutover: locationDayCutoverChanges.dayCutover,
     })
     .from(locationDayCutoverChanges)
-    .where(eq(locationDayCutoverChanges.locationId, venue.id))
+    .where(eq(locationDayCutoverChanges.locationId, id))
     .orderBy(asc(locationDayCutoverChanges.effectiveBusinessDay));
   return {
     clock: {
