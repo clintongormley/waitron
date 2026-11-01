@@ -21,13 +21,12 @@ import {
 import {
   authorizeManager,
   beginOwnPasskeyCheck,
-  hashSecret,
   persons,
   type TotpKeyRing,
 } from "@waitron/identity";
 import type { ProvisionedNode, WaitronModule } from "@waitron/module";
 import { readRecoveryKeyName, setRecoveryKeyTx } from "@waitron/node-db";
-import { generatePassword, newBreakGlassKeyName } from "@waitron/provisioning";
+import { newBreakGlassKeyName } from "@waitron/provisioning";
 import { renderRecoveryPack, type PackLocale } from "@waitron/recovery-pack";
 import {
   createErrorBoundary,
@@ -37,7 +36,7 @@ import {
 import { AppError } from "@waitron/shared";
 import { readHeldArchiveSettingsIn, type ArchiveSettings } from "./archive-settings.js";
 import { inTurn } from "./attempt-turns.js";
-import { takenKeyNames } from "./break-glass.js";
+import { makeBreakGlassSecret, takenKeyNames } from "./break-glass.js";
 import {
   archiveDestinations,
   loadKeyRotatedAt,
@@ -397,8 +396,7 @@ export function mountBackupRecoveryPackMakeApi(
           const env = await deps.readBoxEnv();
           const seat = await serverKeySeat(deps.modules, deps.documentEvidence);
           const madeAt = deps.now().toISOString();
-          const newSecret = request.newServerKey ? generatePassword() : undefined;
-          const verifier = newSecret === undefined ? undefined : hashSecret(newSecret);
+          const replacement = request.newServerKey ? makeBreakGlassSecret() : undefined;
           return withNodeTransaction(deps.nodeDb, async (nodeTx) => {
             const made = await withTransaction(deps.db, (tx) =>
               makePack(tx, nodeTx, deps, {
@@ -408,8 +406,8 @@ export function mountBackupRecoveryPackMakeApi(
                 env,
                 seat,
                 madeAt,
-                newSecret,
-                verifier,
+                newSecret: replacement?.secret,
+                verifier: replacement?.verifier,
               }),
             );
             // venue.db's pack record is saved first and the key in node.db follows. If this save
