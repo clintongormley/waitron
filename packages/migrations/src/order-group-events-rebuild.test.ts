@@ -22,18 +22,16 @@ function scratchDir(prefix: string): string {
   return dir;
 }
 
-/** Core's set, its journal cut after the migration that adds the firer columns, as a box had it. */
-function coreBeforeRebuild(core: VenueMigrationOptions): VenueMigrationOptions {
+/** Core's set, its journal cut to the entries before the first `cut` names, as a box had it. */
+function coreCut(
+  core: VenueMigrationOptions,
+  cut: (entries: { tag: string }[]) => number,
+): VenueMigrationOptions {
   const staged = scratchDir("wt-order-group-events-core-");
   cpSync(core.migrationsFolder, staged, { recursive: true });
   const path = join(staged, "meta", "_journal.json");
   const journal = JSON.parse(readFileSync(path, "utf8")) as { entries: { tag: string }[] };
-  const columns = journal.entries.findIndex(({ tag }) =>
-    tag.endsWith("_order_group_firer_columns"),
-  );
-  expect(columns).toBeGreaterThanOrEqual(0);
-  expect(journal.entries[columns + 1]?.tag).toMatch(/_order_group_firer_checks$/);
-  journal.entries = journal.entries.slice(0, columns + 1);
+  journal.entries = journal.entries.slice(0, cut(journal.entries));
   writeFileSync(path, JSON.stringify(journal));
   // Today's append-only list names tables later migrations create; keep only the cut's own.
   const created = new Set(
@@ -48,6 +46,26 @@ function coreBeforeRebuild(core: VenueMigrationOptions): VenueMigrationOptions {
     migrationsFolder: staged,
     appendOnlyTables: (core.appendOnlyTables ?? []).filter((table) => created.has(table)),
   };
+}
+
+/** Core cut after the migration that adds the firer columns. */
+function coreBeforeRebuild(core: VenueMigrationOptions): VenueMigrationOptions {
+  return coreCut(core, (entries) => {
+    const columns = entries.findIndex(({ tag }) => tag.endsWith("_order_group_firer_columns"));
+    expect(columns).toBeGreaterThanOrEqual(0);
+    expect(entries[columns + 1]?.tag).toMatch(/_order_group_firer_checks$/);
+    return columns + 1;
+  });
+}
+
+/** Core cut before `0201_retire_main_bill_triggers`: a box holding a party cannot take its
+ * `0202_retire_main_bill` without a venue reset (`RESETS` in `scripts/migration-upgrade.test.ts`). */
+function coreBeforeMainBillRetired(core: VenueMigrationOptions): VenueMigrationOptions {
+  return coreCut(core, (entries) => {
+    const retired = entries.findIndex(({ tag }) => tag.endsWith("_retire_main_bill_triggers"));
+    expect(retired).toBeGreaterThan(0);
+    return retired;
+  });
 }
 
 async function inVenue<T>(directory: string, body: (db: Database) => Promise<T> | T): Promise<T> {
@@ -74,7 +92,10 @@ it("keeps an event written before the rebuild, and a start's migrate still refus
       values (${EVENT}, ${PARTY}, null, 'reordered', ${PERSON}, '{}', ${now})`);
   });
 
-  await applyMigrations(directory, sets);
+  await applyMigrations(
+    directory,
+    sets.map((set) => (set === core ? coreBeforeMainBillRetired(core) : set)),
+  );
 
   await inVenue(directory, async (db) => {
     const read = () =>
