@@ -416,7 +416,8 @@ Both forms wipe every volume in the table above. Plain `reset` keeps four things
   certificate signed by it. Because that folder survives, a device that has already been told to
   trust this box does not need to trust it again after a plain `reset`. Two files in it go:
   `venue-ca.crt` and `venue-ca.key`, the other server's certificate authority that joining it as a
-  spare left on this box.
+  spare left on this box, together with their working copies `venue-ca.crt.tmp` and
+  `venue-ca.key.tmp`, which a join stopped while writing them can leave.
 - `first-setup-start-again-confirmations/`, one small record for each Start again confirmed while
   the venue database was missing or partly unreadable, or that discarded a stopped backup recovery:
   whose setup it was, that it was confirmed on the repair page with nobody signed in, when, and the
@@ -457,8 +458,8 @@ a terminal, given the admin login the join used; the server refuses it in any ot
 restarts and, before the server opens the database, removes the venue's databases (`venue.db`,
 `node.db` and their side files, and Litestream's folder beside them), `modules.json`,
 `pending-adoption.json`, the record of the stopped join, the other server's certificate authority
-the join left in `tls/` (`venue-ca.crt` and `venue-ca.key`) and, last, its own request file,
-`reset-request.json`; everything else, including the box's own certificate files in `tls/`,
+the join left in `tls/` (`venue-ca.crt` and `venue-ca.key`, and their `.tmp` working copies) and,
+last, its own request file, `reset-request.json`; everything else, including the box's own certificate files in `tls/`,
 `secrets.env` and `backup.env`, is kept. It does nothing if the box has meanwhile got a `trading.env` or
 holds a venue. It does not remove this box from the other server's list of machines, nor release
 the installation number reserved for it there. To take the box off that list, open the other

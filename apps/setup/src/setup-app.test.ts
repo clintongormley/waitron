@@ -1794,16 +1794,18 @@ describe("setup-app", () => {
     },
   );
 
-  it.each([
+  const UNCONFIRMED = [
     [
       "en-GB",
-      "The primary server's certificate wasn't compared, so nothing was sent. Press Continue to compare it.",
+      "The primary server's certificate wasn't compared, so nothing was sent. This is a fault in Waitron. Check the address and compare the certificate again.",
     ],
     [
       "es-ES",
-      "No se ha comparado el certificado del servidor principal, así que no se ha enviado nada. Pulsa Continuar para compararlo.",
+      "No se ha comparado el certificado del servidor principal, así que no se ha enviado nada. Es un fallo de Waitron. Revisa la dirección y vuelve a comparar el certificado.",
     ],
-  ] as const)(
+  ] as const;
+
+  it.each(UNCONFIRMED)(
     "says an unconfirmed certificate sent nothing and reopens the address step (%s)",
     async (locale, sentence) => {
       try {
@@ -1818,6 +1820,27 @@ describe("setup-app", () => {
         expect(await bottomOf(connect)).toBe(sentence);
         expect(connect.shadowRoot!.querySelector("[data-test=continue]")).not.toBeNull();
         expect(connect.shadowRoot!.querySelector("[data-test=password]")).toBeNull();
+      } finally {
+        setLocale("en-GB");
+      }
+    },
+  );
+
+  it.each(UNCONFIRMED)(
+    "after a compared certificate is refused as unconfirmed, names only what the login step offers (%s)",
+    async (locale, sentence) => {
+      try {
+        const adopt = vi
+          .fn()
+          .mockRejectedValue({ code: "mirror.primary_unconfirmed", params: {}, status: 409 });
+        const el = await mountSetupApp(stubApi({ adopt }));
+        setLocale(locale);
+        adoptRequest(el, adoptBody);
+        await flush(el);
+        const connect = await screenHost(el, "connect");
+        expect(await bottomOf(connect)).toBe(sentence);
+        expect(connect.shadowRoot!.querySelector("[data-test=continue]")).toBeNull();
+        expect(connect.shadowRoot!.querySelector("[data-test=check-address]")).not.toBeNull();
       } finally {
         setLocale("en-GB");
       }
@@ -2116,6 +2139,20 @@ describe("setup-app", () => {
         credential: { ...sentBody.credential, totp: "654321" },
         confirmedCaPem: OTHER_CERTIFICATE.pem,
       });
+    });
+
+    it("after a join refused at the login, drops the login's message once the person goes back to the address", async () => {
+      const adopt = vi
+        .fn()
+        .mockRejectedValue({ code: "password.invalid", params: {}, status: 401 });
+      const el = await mountSetupApp(stubApi({ adopt }));
+      await typeAndConnect(el);
+      const connect = await screenHost(el, "connect");
+      expect(await bottomOf(connect)).toContain("The login failed.");
+      button(connect, "check-address")!.click();
+      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      expect(input(connect, "primaryUrl").readOnly).toBe(false);
+      expect(await bottomOf(connect)).toBe("");
     });
 
     it("after a join refused for its address, reopens the address step marked and editable, and reads the corrected one", async () => {

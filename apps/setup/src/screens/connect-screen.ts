@@ -117,6 +117,9 @@ export class SetupConnectScreen extends LitElement {
   /** An adopt failure the shell routed back here that names no field this form shows. */
   @property() errorMessage?: string;
 
+  /** Whether `errorMessage` is about the login, which the address step does not show. */
+  @property({ type: Boolean }) errorAboutLogin = false;
+
   /** A field the shell found an adopt refusal to be about. It never disables Connect. */
   @property() invalidField?: ConnectField;
 
@@ -311,6 +314,7 @@ export class SetupConnectScreen extends LitElement {
   /** Back to the editable address, keeping the login; Continue then reads and compares again. */
   #checkAddress(): void {
     this.fieldRefusalDismissed = true;
+    if (this.errorAboutLogin) this.refusalDismissed = true;
     this.#show("address");
   }
 

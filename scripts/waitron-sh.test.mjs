@@ -1752,6 +1752,8 @@ describe("waitron.sh reset", () => {
       "server.key",
       "venue-ca.crt",
       "venue-ca.key",
+      "venue-ca.crt.tmp",
+      "venue-ca.key.tmp",
     ]) {
       writeFileSync(join(state, "tls", name), name);
     }

@@ -119,6 +119,9 @@ async function halfAdoptedBox(): Promise<{
   await writeFile(join(stateDir, "tls", "ca.crt"), "ca");
   await writeFile(join(stateDir, "tls", "venue-ca.crt"), "venue ca");
   await writeFile(join(stateDir, "tls", "venue-ca.key"), "venue ca key");
+  // A join stopped between writing the working copies and renaming them leaves these.
+  await writeFile(join(stateDir, "tls", "venue-ca.crt.tmp"), "venue ca");
+  await writeFile(join(stateDir, "tls", "venue-ca.key.tmp"), "venue ca key");
   await writeFile(join(stateDir, "secrets.env"), "S=1\n");
   await writeFile(join(stateDir, "backup.env"), "B=1\n");
 
@@ -150,6 +153,8 @@ async function snapshot(stateDir: string): Promise<string[]> {
     "trading.env",
     "tls/venue-ca.crt",
     "tls/venue-ca.key",
+    "tls/venue-ca.crt.tmp",
+    "tls/venue-ca.key.tmp",
   ];
   return Promise.all(
     paths.map(async (path) => {
@@ -225,6 +230,8 @@ describe("runStagedReset", () => {
       "reset-request.json",
       "tls/venue-ca.crt",
       "tls/venue-ca.key",
+      "tls/venue-ca.crt.tmp",
+      "tls/venue-ca.key.tmp",
     ]) {
       expect(existsSync(join(stateDir, gone)), gone).toBe(false);
     }

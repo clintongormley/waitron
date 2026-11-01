@@ -7,7 +7,7 @@ import { readOperationalVenueIds, readTenantIdentities } from "@waitron/provisio
 import { VENUE_FILE } from "@waitron/store";
 import { wipeVenueDatabases } from "./db-wipe.js";
 import { PENDING_ADOPTION_FILE } from "./finish-adoption.js";
-import { writeFileAtomic } from "./fs-atomic.js";
+import { stagedPath, writeFileAtomic } from "./fs-atomic.js";
 import type { Logger } from "./logger.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 
@@ -104,13 +104,16 @@ export async function runStagedReset(
       return false;
     }
     await wipeVenueDatabases(deps.venueDir, deps.stateDir);
-    // The join's copy of the other venue's authority goes with the join.
+    // The join's copy of the other venue's authority goes with the join, with the working copies
+    // a join stopped before their rename leaves.
     for (const file of [
       PENDING_ADOPTION_FILE,
       "modules.json",
       "setup-operation.json",
       "tls/venue-ca.crt",
       "tls/venue-ca.key",
+      stagedPath("tls/venue-ca.crt"),
+      stagedPath("tls/venue-ca.key"),
     ]) {
       await rm(join(deps.stateDir, file), { force: true });
     }

@@ -691,6 +691,14 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     app.use("/setup-api/*", async (c, next) => {
       if (c.req.method !== "POST" || c.req.path.startsWith("/setup-api/first-setup/"))
         return next();
+      // The certificate read writes nothing, so a main box that never answers it holds no other
+      // setup request back.
+      if (c.req.path === "/setup-api/primary-certificate")
+        return boundary(c, log, async () => {
+          await firstSetup.assertOtherAllowed();
+          await next();
+          return c.res;
+        });
       return boundary(c, log, () =>
         firstSetup.coordinator.run(async (hold) => {
           await firstSetup.assertOtherAllowed();

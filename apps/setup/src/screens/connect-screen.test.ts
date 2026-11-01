@@ -684,6 +684,26 @@ describe("setup-connect-screen: comparing the primary server's fingerprint", () 
     });
   });
 
+  it("drops a refusal of the login once the person goes back to the address, which shows no login field", async () => {
+    const { el } = await mount({
+      request: REQUEST,
+      errorMessage: "The login failed.",
+      errorAboutLogin: true,
+    });
+    expect(await bottomOf(el)).toBe("The login failed.");
+    await pressed(el, "check-address");
+    expect(await bottomOf(el)).toBe("");
+  });
+
+  it("keeps a refusal that is not about the login when the person goes back to the address", async () => {
+    const { el } = await mount({
+      request: REQUEST,
+      errorMessage: "Check that the address is right.",
+    });
+    await pressed(el, "check-address");
+    expect(await bottomOf(el)).toBe("Check that the address is right.");
+  });
+
   it("asks for no hidden field to be corrected once the person goes back to the address", async () => {
     const { el } = await mount({ request: REQUEST, invalidField: "password" });
     expect(await bottomOf(el)).toBe(FIX_FIELDS);

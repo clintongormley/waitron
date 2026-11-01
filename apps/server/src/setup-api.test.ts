@@ -3047,6 +3047,68 @@ describe("POST /setup-api/primary-certificate — the main box's authority, read
     }
   });
 
+  it("answers another setup request at once while a certificate read is still waiting, since the read writes nothing", async () => {
+    let answerRead!: (value: null) => void;
+    const read = new Promise<null>((resolve) => {
+      answerRead = resolve;
+    });
+    const readPrimaryCertificate = vi.fn(() => read);
+    const app = new Hono();
+    const { deps } = makeAdoptDeps({
+      firstSetup: {
+        coordinator: createFirstSetupCoordinator(),
+        assertOtherAllowed: async () => {},
+      },
+      readPrimaryCertificate,
+    });
+    mountSetup(app, deps, noopLog);
+
+    const waiting = postCertificate(app, { primaryUrl: "https://main.example" });
+    await vi.waitFor(() => expect(readPrimaryCertificate).toHaveBeenCalledOnce());
+    const other = app.request("/setup-api/adopt", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    let timer: NodeJS.Timeout | undefined;
+    const answered = await Promise.race([
+      other,
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve("still waiting"), 2_000);
+      }),
+    ]);
+    clearTimeout(timer);
+    answerRead(null);
+
+    expect(answered).toBeInstanceOf(Response);
+    expect(((await (answered as Response).json()) as { error: { code: string } }).error.code).toBe(
+      "setup.request_invalid",
+    );
+    expect((await waiting).status).toBe(200);
+  });
+
+  it("still refuses a certificate read while another first setup is under way", async () => {
+    const readPrimaryCertificate = vi.fn(async () => null);
+    const app = new Hono();
+    const { deps } = makeAdoptDeps({
+      firstSetup: {
+        coordinator: createFirstSetupCoordinator(),
+        assertOtherAllowed: async () => {
+          throw new AppError("setup.attempt_conflict", {});
+        },
+      },
+      readPrimaryCertificate,
+    });
+    mountSetup(app, deps, noopLog);
+
+    const res = await postCertificate(app, { primaryUrl: "https://main.example" });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
+      "setup.attempt_conflict",
+    );
+    expect(readPrimaryCertificate).not.toHaveBeenCalled();
+  });
+
   it("refuses a body with no address as 400 setup.request_invalid", async () => {
     const app = new Hono();
     const { deps } = makeAdoptDeps();

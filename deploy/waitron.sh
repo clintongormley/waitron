@@ -810,7 +810,7 @@ wipe_box() {
     # Same container shape as the trading.env read above, and `--entrypoint` for the same reason.
     docker compose -f "$WAITRON_DIR/compose.yml" run --rm --no-deps -T \
       --entrypoint sh app \
-      -c 'find "${WAITRON_STATE_DIR:?}" -mindepth 1 -maxdepth 1 ! -name tls ! -name first-setup-start-again-confirmations ! -name first-setup-start-again-choices ! -name first-setup-set-aside -exec rm -rf {} + && rm -f "${WAITRON_STATE_DIR:?}/tls/venue-ca.crt" "${WAITRON_STATE_DIR:?}/tls/venue-ca.key"'
+      -c 'find "${WAITRON_STATE_DIR:?}" -mindepth 1 -maxdepth 1 ! -name tls ! -name first-setup-start-again-confirmations ! -name first-setup-start-again-choices ! -name first-setup-set-aside -exec rm -rf {} + && rm -f "${WAITRON_STATE_DIR:?}/tls/venue-ca.crt" "${WAITRON_STATE_DIR:?}/tls/venue-ca.key" "${WAITRON_STATE_DIR:?}/tls/venue-ca.crt.tmp" "${WAITRON_STATE_DIR:?}/tls/venue-ca.key.tmp"'
   fi
 }
 
