@@ -456,6 +456,21 @@ The generated marker migration adds columns without rebuilding the table. These 
 not implement administrator remedy actions, select the current version for filing, resolve held
 cases or prove acceptance by AEAT. Those remain Task 8 work before publication.
 
+**1 November 2026, Task 8 cancellation and consultation checks.** The cancellation queries use
+the alta with no replacement. `drain.record-versions.test.ts` exercises two corrections: older
+refusals do not set aside a cancellation after the current version is accepted; an unknown
+current outcome keeps the cancellation and its later records unsent; a refused current version
+sets the cancellation aside. A held cancellation is not set aside using an older refusal while
+the current version is unknown. Every case compares the immutable record rows before and after.
+
+`reconcile.record-versions.test.ts` exercises a consultation reporting only the second
+correction's reference. Earlier delivery rows and acknowledgements stay unchanged; the current
+version still receives lost-acknowledgement recovery or no-trace resubmission. The reconciliation
+write transaction rechecks which versions remain current after the network request; a correction
+appended during that request prevents a stale resubmission of its predecessor. These tests use
+the library's fake authority; live second-correction acceptance, the administrator action boundary,
+supported-payload audit and the other backend version decisions remain unfinished.
+
  Earlier
 Task 7 automatic-switch requirements below are historical; the 1 November decision supersedes them.
 

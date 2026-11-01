@@ -151,7 +151,10 @@ export async function reconcile(
   // T2
   const detectedAt = deps.clock.now().instant;
   await withTransaction(deps.db, async (tx) => {
+    // A correction can commit while consulta is in flight; its predecessor must stay untouched.
+    const currentIds = new Set((await rowsForPeriod(tx, normalizedPeriod)).map((row) => row.id));
     for (const row of rows) {
+      if (!currentIds.has(row.id)) continue;
       const found = authority.get(row.id) ?? reportedThroughAnulacion(row, authority);
       const reported = found?.estado ?? null;
 
@@ -246,6 +249,10 @@ async function rowsForPeriod(
     from envios e
     join registros_facturacion r on r.id = e.registro_id
     where substr(r.fecha_expedicion_factura, 1, 7) = ${`${period.year}-${period.month}`}
+      and not exists (
+        select 1 from registros_facturacion replacement
+        where replacement.corrects_registro_id = r.id
+      )
   `);
   return rows.map((row) => ({
     ...row,

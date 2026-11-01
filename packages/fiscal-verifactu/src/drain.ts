@@ -628,7 +628,7 @@ async function claimBatch(
       join waiting w on w.id = r.id
       where e.estado = 'pendiente' and ${retryDue(sql`e.proximo_intento_en`, now)}
         ${alreadyBlocked === null ? sql`` : sql`and r.sif_id not in ${alreadyBlocked}`}
-        -- A cancellation can alter the authority's row under this invoice key before our original's
+        -- A cancellation can alter the authority's row under this invoice key before the current alta's
         -- duplicate reply reveals that the row belongs to someone else.
         and (r.tipo_registro != 'anulacion' or exists (
           select 1 from registros_facturacion original
@@ -638,6 +638,10 @@ async function claimBatch(
             and original.id_emisor_factura = r.id_emisor_factura
             and original.num_serie_factura = r.num_serie_factura
             and original.fecha_expedicion_factura = r.fecha_expedicion_factura
+            and not exists (
+              select 1 from registros_facturacion replacement
+              where replacement.corrects_registro_id = original.id
+            )
             and original_envio.estado in ('aceptado', 'aceptado_con_errores', 'rechazado', 'detenido')
         ))
         and not exists (
@@ -655,6 +659,10 @@ async function claimBatch(
                     and prior_original.id_emisor_factura = prior.id_emisor_factura
                     and prior_original.num_serie_factura = prior.num_serie_factura
                     and prior_original.fecha_expedicion_factura = prior.fecha_expedicion_factura
+                    and not exists (
+                      select 1 from registros_facturacion replacement
+                      where replacement.corrects_registro_id = prior_original.id
+                    )
                     and prior_original_envio.estado in ('aceptado', 'aceptado_con_errores', 'rechazado', 'detenido')
                 )))))
         )
@@ -785,19 +793,17 @@ async function pendingWasSendable(
  * `rechazado` with one and the same code. A held row becomes `detenido` with `incidencia`, so
  * every later claimed row of its chain is held with it.
  *
- * A cancellation whose original (same chain, same invoice identity) is `rechazado` is set aside
+ * A cancellation whose current alta (same chain, same invoice identity) is `rechazado` is set aside
  * instead (`setAside`): `retenido`, with an incident and a filing case of its own
- * (`fiscal.anulacion_retenida`) for a person to resolve, never sent, and holding nothing behind it. Nothing in this repository sets
- * `SinRegistroPrevio`, which AEAT documents for cancelling an original it refused.
+ * (`fiscal.anulacion_retenida`) for a person to resolve, never sent, and holding nothing behind it.
  *
  * A row still awaiting its answer (`pendiente` or `enviando`) breaks a run. So when the row right
  * after a run was sent and its answer is unreadable or missing, the run rule does not hold the rows
  * added after it: they are sent with its retry, and a later row is held only once the refusals
  * immediately before it make a run of the limit.
  *
- * A cancellation whose original, on the same chain, is `detenido` is held by the first rule: that
- * original is an earlier row of the chain. Once that original is `rechazado`, the cancellation is
- * set aside in the same transaction (`setAsideHeldCancellations`).
+ * A held cancellation is set aside only after its current alta is `rechazado`
+ * (`setAsideHeldCancellations`).
  *
  * Short of such a run, a `rechazado` row holds nothing behind it (design §7.1,
  * docs/superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md).
@@ -873,7 +879,7 @@ async function haltOpenChainClaims(
   return kept;
 }
 
-/** True when `record`, the alias in the enclosing query, is a cancellation whose original alta
+/** True when `record`, the alias in the enclosing query, is a cancellation whose current alta
  * (same chain, same invoice identity) is `rechazado`. */
 function cancelsRefusedOriginal(record: "r"): SQL {
   const alias = sql.raw(record);
@@ -885,11 +891,15 @@ function cancelsRefusedOriginal(record: "r"): SQL {
       and original.id_emisor_factura = ${alias}.id_emisor_factura
       and original.num_serie_factura = ${alias}.num_serie_factura
       and original.fecha_expedicion_factura = ${alias}.fecha_expedicion_factura
+      and not exists (
+        select 1 from registros_facturacion replacement
+        where replacement.corrects_registro_id = original.id
+      )
       and original_envio.estado = 'rechazado'
   ))`;
 }
 
-/** Sets a cancellation of a refused original aside: `retenido`, never sent, with an incident and a
+/** Sets a cancellation of a refused current alta aside: `retenido`, never sent, with an incident and a
  * filing case of its own for a person to resolve. */
 async function setAside(
   tx: Transaction,
@@ -914,7 +924,7 @@ async function setAside(
   });
 }
 
-/** Sets aside each `detenido` cancellation whose original has since been refused, as
+/** Sets aside each `detenido` cancellation whose current alta has since been refused, as
  * `haltOpenChainClaims` does at claim time. Already counted halted when it was held. */
 async function setAsideHeldCancellations(
   tx: Transaction,
