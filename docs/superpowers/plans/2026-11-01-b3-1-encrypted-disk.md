@@ -426,7 +426,7 @@ export async function createRun(runDir);
  * @typedef {{kind:'image', path:string}
  *   | {kind:'loop', image:string}       loop devices are found by their recorded backing image, never named by id
  *   | {kind:'mount', target:string}
- *   | {kind:'vm', pidFile:string}} RigResource   every path absolute, normalised, strictly inside runDir, never ledger.json
+ *   | {kind:'vm', pidFile:string}} RigResource   every path absolute, normalised, strictly inside runDir, with no part named ledger.json or ledger.json.next in any letter case
  * @typedef {{action:'stop-vm', pidFile:string}|{action:'unmount', target:string}
  *   |{action:'detach-loops', image:string}|{action:'remove-file', path:string}} CleanupStep
  * @typedef {{ stopVm(pidFile:string):Promise<void>, unmount(target:string):Promise<void>,
@@ -458,7 +458,7 @@ Only then does the turn end and `step` run, outside the turn. A step may therefo
 
 Contract notes from the per-task review (2026-11-01):
 - **Run checks.** `withRecorded`, `loadLedger` and `runCleanup` check the run as text first (`run-invalid`, then Task 2's `run-dir-*` reasons), then `lstat` the run folder: anything but a real folder whose `dev:ino` equals `rootId` is `run-dir-replaced`.
-- **Symlinks on the way.** A resource path reached through an existing symlink is refused when recorded (`resource-through-symlink`); at cleanup that step fails without reaching the adapter. `ledger.json.next` is refused as a resource like `ledger.json`.
+- **Symlinks on the way.** A resource path reached through an existing symlink is refused when recorded (`resource-through-symlink`); at cleanup that step fails without reaching the adapter. A path with any part named `ledger.json` or `ledger.json.next`, compared lower-cased, is refused as `resource-outside-run` before any file call, because a case-insensitive file system opens `LEDGER.JSON` as the ledger. At cleanup, a step whose path has the device and inode of the ledger or its staging file (a hard link, or a name the lower-casing misses) fails as `resource-is-ledger` without reaching the adapter.
 - **Cleanup takes no plan.** `runCleanup(run, adapter)` loads the ledger and re-checks the run folder and each path before every step; `planCleanup` stays pure and refuses unknown or inherited kinds.
 - **Across processes.** The append opens `ledger.json.next` with `wx` before reading the ledger, so the staging file is the lock: a second process gets `EEXIST`, and a staging file left by a crash refuses every later record until removed.
 - **The real adapter's duty (not built in this pull request).** These checks go by path; the Linux adapter must open every path beneath the run folder without following a symlink, with `openat2` and `RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS`.

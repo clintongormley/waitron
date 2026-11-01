@@ -426,15 +426,30 @@ describe("withRecorded", () => {
     ["an escape through ..", (dir) => ({ kind: "vm", pidFile: `${dir}/../vm.pid` })],
     ["the ledger itself", (dir) => ({ kind: "image", path: `${dir}/ledger.json` })],
     ["the ledger's staging file", (dir) => ({ kind: "image", path: `${dir}/ledger.json.next` })],
-  ])("%s → rig.refused resource-outside-run", async (_name, make) => {
+    ["the ledger in capitals", (dir) => ({ kind: "image", path: `${dir}/LEDGER.JSON` })],
+    [
+      "the ledger in capitals as a mount",
+      (dir) => ({ kind: "mount", target: `${dir}/LEDGER.JSON` }),
+    ],
+    [
+      "the staging file in mixed case",
+      (dir) => ({ kind: "vm", pidFile: `${dir}/Ledger.Json.Next` }),
+    ],
+    [
+      "a deeper part named like the ledger",
+      (dir) => ({ kind: "image", path: `${dir}/a/Ledger.json` }),
+    ],
+  ])("%s → rig.refused resource-outside-run, before any file call", async (_name, make) => {
     const run = await freshRun();
     const before = await readLedgerText(run.runDir);
     let called = false;
+    events.length = 0;
     await expect(
       withRecorded(run, make(run.runDir), () => {
         called = true;
       }),
     ).rejects.toThrow(refused("resource-outside-run"));
+    expect(events).toEqual([]);
     expect(called).toBe(false);
     expect(await readLedgerText(run.runDir)).toBe(before);
   });
@@ -765,6 +780,10 @@ describe("loadLedger", () => {
       (dir, id) => ledgerText(dir, id, [{ kind: "image", path: `${dir}/ledger.json.next` }]),
     ],
     [
+      "the ledger in capitals",
+      (dir, id) => ledgerText(dir, id, [{ kind: "image", path: `${dir}/LEDGER.JSON` }]),
+    ],
+    [
       "an extra resource key",
       (dir, id) => ledgerText(dir, id, [{ kind: "image", path: `${dir}/a`, note: "x" }]),
     ],
@@ -945,6 +964,42 @@ describe("runCleanup", () => {
       ["detach-loops", "run-dir-replaced"],
       ["remove-file", "run-dir-replaced"],
     ]);
+  });
+
+  it("a recorded image hard-linked to the ledger → resource-is-ledger, the ledger kept", async () => {
+    const run = await freshRun();
+    const image = { kind: "image", path: join(run.runDir, "disk.img") };
+    await withRecorded(run, image, () => fs.link(join(run.runDir, "ledger.json"), image.path));
+    const { calls, adapter } = fakeAdapter();
+    adapter.removeFile = async (path) => {
+      calls.push(["removeFile", path]);
+      await fs.unlink(path);
+    };
+    expect(await runCleanup(run, adapter)).toEqual({
+      status: "incomplete",
+      failed: [{ action: "remove-file", path: image.path, reason: "resource-is-ledger" }],
+    });
+    expect(calls).toEqual([]);
+    expect(await loadLedger(run)).toEqual([image]);
+  });
+
+  it("a recorded pid file hard-linked to a left staging file → resource-is-ledger, both kept", async () => {
+    const run = await freshRun();
+    const vm = { kind: "vm", pidFile: join(run.runDir, "qemu.pid") };
+    await withRecorded(run, vm, () => {});
+    const next = join(run.runDir, "ledger.json.next");
+    await fs.writeFile(next, "partial");
+    await fs.link(next, vm.pidFile);
+    const { calls, adapter } = fakeAdapter();
+    expect(await runCleanup(run, adapter)).toEqual({
+      status: "incomplete",
+      failed: [
+        { action: "stop-vm", pidFile: vm.pidFile, reason: "resource-is-ledger" },
+        { action: "remove-file", path: next, reason: "ledger-busy" },
+      ],
+    });
+    expect(calls).toEqual([]);
+    expect(await fs.readFile(next, "utf8")).toBe("partial");
   });
 
   it("an empty ledger → clean, no adapter calls", async () => {

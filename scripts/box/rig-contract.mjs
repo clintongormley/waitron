@@ -162,15 +162,23 @@ function resourceShape(value) {
   return { resource: /** @type {RigResource} */ ({ kind: name, [kind.field]: path }), path, kind };
 }
 
-/** Text only; checkBeneath looks at the file system. @param {string} runDir @param {string} path */
+const RESERVED = Object.freeze(["ledger.json", "ledger.json.next"]);
+
+/**
+ * Text only; checkBeneath looks at the file system. Reserved names are compared lower-cased because
+ * a case-insensitive file system opens LEDGER.JSON as the ledger.
+ * @param {string} runDir @param {string} path
+ */
 function insideRun(runDir, path) {
   return (
     isAbsolute(path) &&
     !path.includes("\0") &&
     resolve(path) === path &&
     path.startsWith(runDir + "/") &&
-    path !== join(runDir, "ledger.json") &&
-    path !== join(runDir, "ledger.json.next")
+    !path
+      .slice(runDir.length + 1)
+      .split("/")
+      .some((part) => RESERVED.includes(part.toLowerCase()))
   );
 }
 
@@ -216,6 +224,31 @@ async function checkBeneath(runDir, path) {
       throw error;
     }
     if (stat.isSymbolicLink()) throw rigError("resource-through-symlink");
+  }
+}
+
+/** @param {string} path */
+async function lstatIfPresent(path) {
+  try {
+    return await fs.lstat(path, { bigint: true });
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+/**
+ * A hard link, or a name whose letters fold in a way the lower-casing misses, still reaches the
+ * ledger or its staging file; the device and inode do not lie.
+ * @param {string} runDir @param {string} path
+ */
+async function checkNotLedger(runDir, path) {
+  const target = await lstatIfPresent(path);
+  if (target === null) return;
+  for (const name of RESERVED) {
+    const reserved = await lstatIfPresent(join(runDir, name));
+    if (reserved?.dev === target.dev && reserved.ino === target.ino)
+      throw rigError("resource-is-ledger");
   }
 }
 
@@ -350,7 +383,8 @@ export function planCleanup(resources) {
 /**
  * Cleans up exactly what the run's ledger records, in reverse order. Before each step it checks
  * again that the run folder has createRun's device and inode, that its ledger still names this
- * run's id and reads back, and that the step's path is reached through no symlink; a step that
+ * run's id and reads back, that the step's path is reached through no symlink, and that it is not
+ * the ledger or its staging file under another name (resource-is-ledger); a step that
  * fails a check is counted as failed and never reaches the adapter. Runs every step even after
  * failures. Each failed entry's reason is the refusal's reason, or adapter-failed for any other
  * error. A staging file left beside the ledger afterwards, or one whose presence cannot be checked,
@@ -366,6 +400,7 @@ export async function runCleanup(run, adapter) {
     try {
       await loadLedger(run);
       await checkBeneath(run.runDir, path);
+      await checkNotLedger(run.runDir, path);
       await call(adapter, path);
     } catch (error) {
       const reason = error?.code === "rig.refused" ? error.reason : "adapter-failed";
