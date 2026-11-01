@@ -414,7 +414,9 @@ Both forms wipe every volume in the table above. Plain `reset` keeps four things
 
 - `tls/`, which holds the certificate authority the box's devices already trust and the box's own
   certificate signed by it. Because that folder survives, a device that has already been told to
-  trust this box does not need to trust it again after a plain `reset`.
+  trust this box does not need to trust it again after a plain `reset`. Two files in it go:
+  `venue-ca.crt` and `venue-ca.key`, the other server's certificate authority that joining it as a
+  spare left on this box.
 - `first-setup-start-again-confirmations/`, one small record for each Start again confirmed while
   the venue database was missing or partly unreadable, or that discarded a stopped backup recovery:
   whose setup it was, that it was confirmed on the repair page with nobody signed in, when, and the
@@ -454,9 +456,10 @@ A box whose join to another server stopped partway can also be reset from the se
 a terminal, given the admin login the join used; the server refuses it in any other state. The box
 restarts and, before the server opens the database, removes the venue's databases (`venue.db`,
 `node.db` and their side files, and Litestream's folder beside them), `modules.json`,
-`pending-adoption.json`, the record of the stopped join and, last, its own request file,
-`reset-request.json`; everything else, including the
-certificate (`tls/`), `secrets.env` and `backup.env`, is kept. It does nothing if the box has meanwhile got a `trading.env` or
+`pending-adoption.json`, the record of the stopped join, the other server's certificate authority
+the join left in `tls/` (`venue-ca.crt` and `venue-ca.key`) and, last, its own request file,
+`reset-request.json`; everything else, including the box's own certificate files in `tls/`,
+`secrets.env` and `backup.env`, is kept. It does nothing if the box has meanwhile got a `trading.env` or
 holds a venue. It does not remove this box from the other server's list of machines, nor release
 the installation number reserved for it there. To take the box off that list, open the other
 server's dashboard, then Settings, then Servers, and in the box's row menu choose Remove and then

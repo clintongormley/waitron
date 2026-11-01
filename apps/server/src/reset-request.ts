@@ -104,7 +104,14 @@ export async function runStagedReset(
       return false;
     }
     await wipeVenueDatabases(deps.venueDir, deps.stateDir);
-    for (const file of [PENDING_ADOPTION_FILE, "modules.json", "setup-operation.json"]) {
+    // The join's copy of the other venue's authority goes with the join.
+    for (const file of [
+      PENDING_ADOPTION_FILE,
+      "modules.json",
+      "setup-operation.json",
+      "tls/venue-ca.crt",
+      "tls/venue-ca.key",
+    ]) {
       await rm(join(deps.stateDir, file), { force: true });
     }
     // Last, so a start cut short re-runs the reset; once the record is gone a re-run discards.

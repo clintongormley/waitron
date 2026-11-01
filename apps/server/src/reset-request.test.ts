@@ -117,6 +117,8 @@ async function halfAdoptedBox(): Promise<{
   await writeFile(join(stateDir, PENDING_ADOPTION_FILE), "{}");
   await mkdir(join(stateDir, "tls"));
   await writeFile(join(stateDir, "tls", "ca.crt"), "ca");
+  await writeFile(join(stateDir, "tls", "venue-ca.crt"), "venue ca");
+  await writeFile(join(stateDir, "tls", "venue-ca.key"), "venue ca key");
   await writeFile(join(stateDir, "secrets.env"), "S=1\n");
   await writeFile(join(stateDir, "backup.env"), "B=1\n");
 
@@ -146,6 +148,8 @@ async function snapshot(stateDir: string): Promise<string[]> {
     PENDING_ADOPTION_FILE,
     "setup-operation.json",
     "trading.env",
+    "tls/venue-ca.crt",
+    "tls/venue-ca.key",
   ];
   return Promise.all(
     paths.map(async (path) => {
@@ -219,6 +223,8 @@ describe("runStagedReset", () => {
       PENDING_ADOPTION_FILE,
       "setup-operation.json",
       "reset-request.json",
+      "tls/venue-ca.crt",
+      "tls/venue-ca.key",
     ]) {
       expect(existsSync(join(stateDir, gone)), gone).toBe(false);
     }
@@ -264,7 +270,18 @@ describe("runStagedReset", () => {
             }),
             fetchBundle: async (_url, _credential, standby) => {
               standbyNodeId = standby.nodeId;
-              return BUNDLE;
+              return {
+                ...BUNDLE,
+                reservedIdentity: {
+                  ...BUNDLE.reservedIdentity,
+                  endorsement: endorseKey(
+                    standby.nodeId,
+                    standby.publicKey,
+                    PRIMARY_NODE_ID,
+                    PRIMARY_KEYS.privateKey,
+                  ),
+                },
+              };
             },
             advertisedOrigin: "https://standby.example",
             environment: "preproduction",

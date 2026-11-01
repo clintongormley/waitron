@@ -1737,6 +1737,41 @@ describe("waitron.sh reset", () => {
     expect(readdirSync(join(state, "tls"))).toEqual(["ca.pem"]);
   });
 
+  it("the reset's state clean-up removes the venue authority a join left in tls/ and keeps the box's own files", () => {
+    const match = readFileSync(SCRIPT, "utf8").match(
+      /-c '(find "\$\{WAITRON_STATE_DIR:\?\}"[^']*)'/,
+    );
+    expect(match).not.toBeNull();
+    const state = mkdtempSync(join(tmpdir(), "waitron-sh-state-"));
+    dirs.push(state);
+    mkdirSync(join(state, "tls"));
+    for (const name of [
+      "ca.crt",
+      "ca.key",
+      "server.crt",
+      "server.key",
+      "venue-ca.crt",
+      "venue-ca.key",
+    ]) {
+      writeFileSync(join(state, "tls", name), name);
+    }
+    writeFileSync(join(state, "secrets.env"), "WAITRON_CREDENTIALS_KEY=x\n");
+    const r = spawnSync("sh", ["-c", match[1]], {
+      encoding: "utf8",
+      env: { PATH: process.env.PATH, WAITRON_STATE_DIR: state },
+      timeout: 10_000,
+    });
+    expect(r.status).toBe(0);
+    expect(readdirSync(state)).toEqual(["tls"]);
+    expect(readdirSync(join(state, "tls")).sort()).toEqual([
+      "ca.crt",
+      "ca.key",
+      "server.crt",
+      "server.key",
+    ]);
+    expect(readFileSync(join(state, "tls", "ca.key"), "utf8")).toBe("ca.key");
+  });
+
   it("stops, naming --yes, when nobody can confirm and --yes was not given", () => {
     const sb = sandbox();
     installedBox(sb);
