@@ -2,14 +2,9 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  CORE_MIGRATIONS,
-  stampDeployment,
-  setBreakGlassVerifierTx,
-  setSingletonRoleTx,
-  withTransaction,
-  type Transaction,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, stampDeployment, type Transaction } from "@waitron/db";
+import { withNodeTransaction } from "@waitron/db";
+import { setRecoveryKeyTx, setSingletonRoleTx, NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashSecret } from "@waitron/identity";
 import {
@@ -23,7 +18,7 @@ import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { locationId, nodeId } from "@waitron/shared";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
 const node = {
   nodeId: nodeId("c0000000-0000-4000-8000-000000000002"),
   locationId: locationId("c0000000-0000-4000-8000-000000000001"),
@@ -43,8 +38,8 @@ let writable = true;
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "live-module-operation-"));
   await stampDeployment(suite.db, "preproduction");
-  await withTransaction(suite.db, (tx) =>
-    setBreakGlassVerifierTx(tx, node.nodeId, verifier, "paper-1"),
+  await withNodeTransaction(suite.node, (tx) =>
+    setRecoveryKeyTx(tx, node.nodeId, verifier, "paper-1"),
   );
   writable = true;
 });
@@ -84,6 +79,7 @@ function service(reader?: () => Promise<void>, modules?: readonly WaitronModule[
   });
   return createNodeOperationPreparation({
     db: suite.db,
+    nodeDb: suite.node,
     node,
     modules: modules ?? [module],
     stateDir: join(root!, "state"),
@@ -168,11 +164,13 @@ it.each(["key", "role", "writable"])(
   async (changed) => {
     const s = service(async () => {
       if (changed === "key")
-        await withTransaction(suite.db, (tx) =>
-          setBreakGlassVerifierTx(tx, node.nodeId, hashSecret("new-key"), "paper-2"),
+        await withNodeTransaction(suite.node, (tx) =>
+          setRecoveryKeyTx(tx, node.nodeId, hashSecret("new-key"), "paper-2"),
         );
       if (changed === "role")
-        await withTransaction(suite.db, (tx) => setSingletonRoleTx(tx, node.nodeId, "secondary"));
+        await withNodeTransaction(suite.node, (tx) =>
+          setSingletonRoleTx(tx, node.nodeId, "secondary"),
+        );
       if (changed === "writable") writable = false;
     });
     await expect(
@@ -193,11 +191,13 @@ it.each(["key", "role", "writable"])(
     await expect(
       s.withLiveRecovery(binding, secret, isolation, async (scope) => {
         if (changed === "key")
-          await withTransaction(suite.db, (tx) =>
-            setBreakGlassVerifierTx(tx, node.nodeId, hashSecret("new-key"), "paper-2"),
+          await withNodeTransaction(suite.node, (tx) =>
+            setRecoveryKeyTx(tx, node.nodeId, hashSecret("new-key"), "paper-2"),
           );
         if (changed === "role")
-          await withTransaction(suite.db, (tx) => setSingletonRoleTx(tx, node.nodeId, "secondary"));
+          await withNodeTransaction(suite.node, (tx) =>
+            setSingletonRoleTx(tx, node.nodeId, "secondary"),
+          );
         if (changed === "writable") writable = false;
         return scope.commit(async () => {
           entered = true;

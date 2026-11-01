@@ -3,7 +3,9 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { locations, nodes, setBreakGlassVerifierTx, withTransaction } from "@waitron/db";
+import { locations, nodes, withTransaction } from "@waitron/db";
+import { withNodeTransaction } from "@waitron/db";
+import { setRecoveryKeyTx } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashSecret } from "@waitron/identity";
 import { emptyDrainResult } from "@waitron/fiscal";
@@ -52,8 +54,8 @@ it("serves the cold recovery URL and authenticates its enabled module route at r
     await tx.delete(locations).where(eq(locations.id, TENANT_B.locationId));
   });
   const key = "synthetic-boot-current-recovery-key";
-  await withTransaction(suite.db, (tx) =>
-    setBreakGlassVerifierTx(tx, liveConflictNode.nodeId, hashSecret(key), "boot-key-1"),
+  await withNodeTransaction(suite.node, (tx) =>
+    setRecoveryKeyTx(tx, liveConflictNode.nodeId, hashSecret(key), "boot-key-1"),
   );
   const scratch = await mkdtemp(join(tmpdir(), "conflict-boot-"));
   cleanups.push(() => rm(scratch, { recursive: true, force: true }));

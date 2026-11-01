@@ -70,7 +70,8 @@ export function createNodeOperationPreparation(options: {
     const role = await readNodeMode(options.nodeDb, node.nodeId);
     if (
       options.isLiveWritable?.() === false ||
-      role.mode !== "primary" || role.singletonRole !== "primary"
+      role.mode !== "primary" ||
+      role.singletonRole !== "primary"
     )
       throw new AppError("node.read_only", {});
   };

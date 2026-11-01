@@ -1,16 +1,13 @@
 import { beforeEach, expect, it } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  stampDeployment,
-  setBreakGlassVerifierTx,
-  withTransaction,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, stampDeployment } from "@waitron/db";
+import { withNodeTransaction } from "@waitron/db";
+import { setRecoveryKeyTx, NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashSecret } from "@waitron/identity";
 import { readOperationAuthority } from "@waitron/module";
 import { withRecoveryKeyAuthority } from "./operation-authentication.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
 const binding = {
   module: "test-regime",
   action: "conflict-switch",
@@ -24,12 +21,15 @@ const deps = {
   get db() {
     return suite.db;
   },
+  get node() {
+    return suite.node;
+  },
   nodeId: binding.targetNodeId,
 };
 beforeEach(async () => {
   await stampDeployment(suite.db, "preproduction");
-  await withTransaction(suite.db, (tx) =>
-    setBreakGlassVerifierTx(tx, binding.targetNodeId, verifier, "paper-1"),
+  await withNodeTransaction(suite.node, (tx) =>
+    setRecoveryKeyTx(tx, binding.targetNodeId, verifier, "paper-1"),
   );
 });
 
@@ -97,13 +97,8 @@ it("rechecks a key replaced while the authenticated operation waits before commi
       binding,
       secret,
       async (_authority, commit) => {
-        await withTransaction(suite.db, (tx) =>
-          setBreakGlassVerifierTx(
-            tx,
-            binding.targetNodeId,
-            hashSecret("replacement-key"),
-            "paper-2",
-          ),
+        await withNodeTransaction(suite.node, (tx) =>
+          setRecoveryKeyTx(tx, binding.targetNodeId, hashSecret("replacement-key"), "paper-2"),
         );
         return commit(async () => {
           committed = true;

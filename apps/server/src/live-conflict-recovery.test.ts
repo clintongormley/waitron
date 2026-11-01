@@ -8,8 +8,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isNull, sql } from "drizzle-orm";
 import * as identity from "@waitron/identity";
-import * as dbApi from "@waitron/db";
-import { invoiceSeries, setBreakGlassVerifierTx, withTransaction } from "@waitron/db";
+import * as nodeApi from "@waitron/node-db";
+import { invoiceSeries, withTransaction } from "@waitron/db";
+import { withNodeTransaction } from "@waitron/db";
+import { setRecoveryKeyTx } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { type ModuleRouteContext, type LiveModuleOperationBridge } from "@waitron/module";
@@ -71,8 +73,8 @@ beforeEach(async () => {
       vi.setSystemTime(Date.now() + ms);
     },
   });
-  await withTransaction(suite.db, (tx) =>
-    setBreakGlassVerifierTx(tx, node.nodeId, verifier, "key-1"),
+  await withNodeTransaction(suite.node, (tx) =>
+    setRecoveryKeyTx(tx, node.nodeId, verifier, "key-1"),
   );
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
   monotonic = 0;
@@ -94,6 +96,7 @@ function service() {
     stateDir: join(root!, "state"),
     venueDir: join(root!, "venue"),
     db: suite.db,
+    nodeDb: suite.node,
     node,
     modules: ALL_MODULES.filter((m) => m.name === "fiscal-verifactu"),
     coordinator: createFirstSetupCoordinator(),
@@ -293,7 +296,7 @@ it.each([
 it("the real admission gate bounds wrong-key work before parsing, verifier reads and hashing", async () => {
   const m = mounted();
   const hashes = vi.spyOn(identity, "verifySecretAsync");
-  const reads = vi.spyOn(dbApi, "readBreakGlassVerifier");
+  const reads = vi.spyOn(nodeApi, "readRecoveryKeyVerifier");
   for (let i = 0; i < 60; i++)
     expect((await m.send(request({ recoveryKey: "wrong-key" }))).status).toBe(401);
   expect(hashes).toHaveBeenCalledTimes(60);
@@ -334,8 +337,8 @@ it("a management cookie cannot authorise without the current key", async () => {
       })
     ).status,
   ).toBe(401);
-  await withTransaction(suite.db, (tx) =>
-    setBreakGlassVerifierTx(tx, node.nodeId, identity.hashSecret("replacement"), "key-2"),
+  await withNodeTransaction(suite.node, (tx) =>
+    setRecoveryKeyTx(tx, node.nodeId, identity.hashSecret("replacement"), "key-2"),
   );
   expect((await m.send(request())).status).toBe(401);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
@@ -395,8 +398,8 @@ it("refuses a key replaced while comparing clocks and writes no activation", asy
     }),
   );
   await entered.promise;
-  await withTransaction(suite.db, (tx) =>
-    setBreakGlassVerifierTx(tx, node.nodeId, identity.hashSecret("replacement"), "key-2"),
+  await withNodeTransaction(suite.node, (tx) =>
+    setRecoveryKeyTx(tx, node.nodeId, identity.hashSecret("replacement"), "key-2"),
   );
   release.resolve();
   const refused = await pending;
@@ -419,13 +422,8 @@ it("rechecks the current key in the activation commit after preparation", async 
             ...scope,
             commit: async (run) => {
               if (rotate && ++commits === 3)
-                await withTransaction(suite.db, (tx) =>
-                  setBreakGlassVerifierTx(
-                    tx,
-                    node.nodeId,
-                    identity.hashSecret("replacement"),
-                    "key-2",
-                  ),
+                await withNodeTransaction(suite.node, (tx) =>
+                  setRecoveryKeyTx(tx, node.nodeId, identity.hashSecret("replacement"), "key-2"),
                 );
               return scope.commit(run);
             },

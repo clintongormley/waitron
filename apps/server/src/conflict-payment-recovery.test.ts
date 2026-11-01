@@ -7,7 +7,9 @@ import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
 import { afterEach, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import { setBreakGlassVerifierTx, stampDeployment, withTransaction } from "@waitron/db";
+import { stampDeployment, withTransaction } from "@waitron/db";
+import { withNodeTransaction } from "@waitron/db";
+import { setRecoveryKeyTx } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashSecret } from "@waitron/identity";
@@ -168,14 +170,15 @@ it("finalises an already captured bill once after the actual administrator switc
   const node = { nodeId: venue.cfg.nodeId, locationId: venue.cfg.locationId };
   const key = "synthetic-conflict-current-key";
   await stampDeployment(suite.db, "preproduction");
-  await withTransaction(suite.db, (tx) =>
-    setBreakGlassVerifierTx(tx, node.nodeId, hashSecret(key), "key-1"),
+  await withNodeTransaction(suite.node, (tx) =>
+    setRecoveryKeyTx(tx, node.nodeId, hashSecret(key), "key-1"),
   );
   scratch = await mkdtemp(join(tmpdir(), "conflict-payment-"));
   const preparation = createNodeOperationPreparation({
     stateDir: join(scratch, "state"),
     venueDir: join(scratch, "venue"),
     db: suite.db,
+    nodeDb: suite.node,
     node,
     modules: ALL_MODULES.filter((m) => m.name === "fiscal-verifactu"),
     coordinator: createFirstSetupCoordinator(),
