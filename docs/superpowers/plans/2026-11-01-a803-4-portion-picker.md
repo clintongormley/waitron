@@ -45,8 +45,8 @@ can pay or take over, and the received-money floor). Worktree
 planned to end red. If one does, stop at a cleanly red point, list the failing files and cases in the
 ledger, and make them green first in the next sitting.
 
-**A working product at every commit.** Task 7 adds Move dishes… to the ⋮ beside Split by item and
-Transfer items; Task 9 takes those two out. The server keeps `/split` and `/transfer` (A1196 retires
+**A working product at every commit.** Task 7a adds Move dishes… to the ⋮ beside Split by item and
+Transfer items; Task 9a takes those two off the screen and 9b retires their handlers. The server keeps `/split` and `/transfer` (A1196 retires
 them). So every commit of 4a is a working till against a working server.
 
 ## Owner answers
@@ -54,8 +54,8 @@ them). So every commit of 4a is a working till against a working server.
 None yet for slice 4. The defaults under "Owner questions" are what the build uses. **Question 2
 (deleted till checks) is written to `~/waitron-campaign-c/questions.md` at Task 0**, before any file
 it names is edited; the build goes ahead on its default meanwhile, as the owner's 2026-10-05 rule
-allows, and the PR cannot land until it is answered. Questions 1 and 3 go to `questions.md` and the
-PR at Task 13, with Task 12's pictures.
+allows, and the PR cannot land until it is answered. Questions 1, 3 and 4 go to `questions.md` and
+the PR at Task 13, with Task 12's pictures.
 
 Earlier owner answers this plan applies are under "Owner decisions this plan applies".
 
@@ -175,8 +175,11 @@ command `moveDishes` and route `POST /api/bills/:id/move-dishes` that moves name
 (with their extras, portion ids, tickets and kitchen state) to an existing bill of the party or to a
 new bill, allowing a part-paid source, keeping the floor, issuing the source's invoice when the move
 leaves it fully paid (as Split by item does); the ⋮'s **Move dishes…** replacing Split by item and
-Transfer items; no partial cut of a bound portion on any server path (A1195); EN/ES guides; the
-design-system contract; LOOK; backlog.
+Transfer items; Split by item, Transfer items and Move dishes never cut a bound measured (weighed)
+portion when moving it to another bill (A1195, Task 1). Partial paths inside one bill stay as they are: a part
+discount, a part moved to another course group, a station split, part serves and part cancels of a
+measured portion (`order-portions.filing.test.ts:665` pins a part cancel), all under A1196. EN/ES
+guides and the operator runbook; the design-system contract; LOOK; backlog.
 
 **Out of 4a.** Split a table's picker, whole-bill ticks, guest counts and the four awkward cases
 (4c); waiting-course copies on any path (4b); A590 (4c); retiring the server's `/split` and
@@ -189,7 +192,7 @@ chain or filing (H2); bill names on paper (owner, 2026-10-30: never).
 
 | Item | 4a? | Closing check |
 | --- | --- | --- |
-| A1195 (a weighed portion can be cut) | **Closes in 4a** (Task 1) | `A803 A1195:` cases in `order-portions.lifecycle.test.ts`: a part split and a part transfer of a bound 0.350 kg portion are refused `tab.transfer_quantity_invalid` with every row unchanged; an unbound weighed line still splits (`transfer-lines.test.ts:372` unchanged and green); deletion control turns the refusal cases red |
+| A1195 (a weighed portion can be cut) | **Closes in 4a** (Task 1) | `A803 A1195:` cases in `order-portions.lifecycle.test.ts`: a part split and a part transfer of a bound 0.350 kg portion to another bill are refused `tab.transfer_quantity_invalid` with every row unchanged; a part of the same bound line split inside its own bill (`splitLinesWithinOrder`, what a part discount and a course-group move use) is unchanged; an unbound weighed line still splits (`transfer-lines.test.ts:372` unchanged and green); deletion control turns the refusal cases red. A1195's text is about "a partial split or transfer" (`docs/backlog.md:2132-2135`); A1196 keeps the in-bill partial paths |
 | A1193 (which portions an action takes; Fire now) | No | Retained; its text gains "Move dishes… picks a row's first portions (4a); comp, void and Fire now are unchanged" |
 | A1194 (Finish table cancels one at a time) | No | Retained |
 | A1196 (retire partial-quantity paths) | No | Retained; its text gains "since 4a the till calls neither `/api/bills/:id/split` nor `/transfer`" (Task 13, after `rg -n "/split\`|/transfer\`" apps/till/src -g '!*.test.ts'` prints nothing) |
@@ -267,12 +270,20 @@ the picker shows reuses an approved string (D11).
   draft → `draft.out_of_date` (`requireUnreservedTransfers`, unchanged). A stale id is refused, never
   replaced by another portion (master plan, "Deterministic count picker"). No new error code.
 
-- **D3 Which portions a count takes.** Within a row of identical portions (one `portionGroups` row,
-  so one state, price and extras), "2 of 4" takes the row's **first** two members by line number,
-  as Split by item does today (`#stepSplitGroup`). Rows already separate unsent, waiting, sent,
-  served, paid and differently priced portions (`tabLinePortionKey`, `#fallbackPortionKey`), so the
-  master plan's state order is the row order itself; inside a row line number is the creation order
-  (spec §7 leaves this to the builder). The till sends the chosen members' ids (D2).
+- **D3 Which portions a count takes.** First the ineligible go: a dish recalled into a draft is in
+  no row (D17), and a paid dish is blocked (D12), as the master plan's "Deterministic count picker"
+  says ("Filter ineligible paid/reserved portions first"). Within a row of identical portions (one
+  `portionGroups` row, so one state, price and extras), "2 of 4" is the row's **first** two members
+  by line number on this bill, as Split by item does today (`#stepSplitGroup`). Rows already
+  separate unsent, waiting, sent, served, paid and differently priced portions (`tabLinePortionKey`,
+  `#fallbackPortionKey`), so the master plan's state order is the row order itself. Line number is
+  the order a dish joined this bill, not the order it was created: a dish moved in takes a number
+  past the bill's highest (`moveOrderLines`, `working-order.ts:4052-4058`, "Destination numbers
+  start beyond its current maximum"), so a dish moved out and back sorts after newer identical ones.
+  The master plan's "creation ordinal, then UUID" would need the portion's cohort and ordinal on the
+  till's line read, which it does not carry (finding 1); within one row the members are identical,
+  so the order decides only which identical dish goes, never what is charged (Departures). The till
+  sends the chosen members' ids (D2).
 
 - **D4 The source may be part-paid; the destination keeps today's Transfer rule.** Source: open
   (`refuseClosedBill`: not paid, presented or abandoned); payments allowed; a paid line refuses
@@ -304,9 +315,33 @@ the picker shows reuses an approved string (D11).
   today. Same party, same tables: the slips and notices are whatever a whole-line Transfer items or
   Split by item writes for the same lines; Task 2 pins that by twin fixtures (D1).
 
-- **D9 No replay.** No `submissionId`: the party revision and the bills' editor versions refuse a
-  resend after a lost reply (finding 9). The till re-reads on any refusal, as it does for Transfer
-  items.
+- **D9 No replay, and what the till does with a refusal.** No `submissionId`. For a bill of a
+  party, the party revision refuses a resend after a lost reply: `guardPathParty` moves it on
+  (`bill-actions.ts:119`), and the review's E1 (cases C and D) saw a second split from one read
+  refused `party.out_of_date`; Task 3 pins it for `moveDishes`. A bill with no party has no
+  revision; there a resend names lines that are no longer on the source and is refused
+  `tab.line_not_found` (Task 3 pins it). The till never sends that one: it offers no Move dishes…
+  without a party (D15). The till handles a refusal as `#onTransferLines` does today
+  (`till-app.ts:15946-15975`, through `#onBillPairRefusal` `:15767`), so the panel is already
+  closed and:
+  - `party.out_of_date` reloads the order and says what changed (`#onTableRefusal` →
+    `#onPartyOutOfDate`, `:12081-12105`);
+  - a money refusal (`BILL_MONEY_REFUSALS`, `till-app.ts:656-663`: `bill.payments_received`,
+    `bill.line_paid`, `bill.received_exceeds_total`, `bill.refund_in_progress`,
+    `order.payment_in_flight`, `working_order.not_open`) shows its words and reads the party's
+    bills and the shown bill's balance again (`#onBillMoneyRefusal` → `#loadPartyBills`), not its
+    lines; the balance's `paidLines` then grey a newly paid dish the next time the picker opens;
+  - `service_zone.mode_incompatible` shows `table.bills_served_differently`;
+  - `tab.split_held_line` shows `table.split_held_error` (as `#onSplitLines`);
+  - `draft.out_of_date` and `draft.taken_over` show their own approved words (`i18n/codes.ts:346`,
+    `:354`) by setting `{ code }`, as `#onRelocationRefusal` does (`till-app.ts:15780-15786`).
+    Today's `#onTransferLines` would send them to `tableWriteError`, which has no draft codes in
+    `TABLE_REFUSALS` (`:611`) and so shows `table.error`; Move dishes is a new handler and takes the
+    relocation path's better words;
+  - anything else shows its words (`tableWriteError`) and re-reads neither the lines nor the floor,
+    as `till-app-table-service.test.ts:1229-1250` pins for a refused transfer today;
+  - every refusal then runs `#refreshBillDraft`, which reads the bill's drafts again, so another
+    person's unsent dishes show with the existing Take over (slice 3).
 
 - **D10 The picker is one till widget; the screen owns the draft.** `widgets/portion-picker.ts`
   (`till-portion-picker`) draws rows from the selection model and emits picks; it holds no staged
@@ -325,29 +360,67 @@ the picker shows reuses an approved string (D11).
   server's refusals, through the handlers that already word them. `table.split_options_together`,
   `table.split_modifier_error`, `table.split_pick_lines`, `table.split_confirm`,
   `table.split_no_lines`, `table.split_quantity*`, `table.split_group_line`, `table.transfer_*` go in
-  Task 9 when `rg` shows their last user gone.
+  Task 9b when `rg` shows their last user gone.
 
 - **D12 The floor in the picker.** For the bill on screen, "kept money" is `received + reserved`
   from its `BillBalance`. A row's next tick is greyed when `total − (picked amount + one more
   member's amount) < kept`, with `table.move_dishes_floor` naming `kept` as the reason (spec §6: "€40
-  is already paid on this bill"). A member's amount is its dish and extras' line totals from the
-  till's existing line-total helper (find it with `rg -n "lineTotal|lineGross" apps/till/src/state`;
-  do not write a second money formula). A row whose members are paid (`paidLines`) is greyed with
-  "Paid". Exact `Decimal` throughout, no floats. The server stays the authority: if it refuses anyway,
-  the existing refusal (D11) is shown and the picks are kept.
+  is already paid on this bill"). A member's amount is the sum of `tabLineGross` (`state/adjust-target.ts:53`,
+  the helper the screen's `#lineGrossByLineNo` uses, TOS `:1925`) over the dish and its extras; no
+  second money formula (`lineGross` in `state/order-line.ts:27` is for draft lines and is not used).
+  A row whose members are paid (`paidLines`) is greyed with "Paid". Exact `Decimal` throughout, no
+  floats. **The greying is the till's estimate**: whether a group of dishes priced together can put
+  a cent of the bill's total somewhere other than the sum of its lines' `tabLineGross` at the €40.00
+  boundary was not measured. The server's `assertBillInvariant` stays the authority: if it refuses
+  anyway, the panel has already closed (as today's pickers do on send, `#retireActions` then
+  `#closeActions`, TOS `:5143-5151`), and the refusal's words with "Refund {amount}" are shown (D9,
+  D11); the waiter opens Move dishes… again over the re-read balance.
 
 - **D13 Row actions unchanged.** Comp, Void, Mark served and Fire now on a grouped row keep slice
   1's behaviour (D31/D32 there). The picker is for moves.
 
 - **D14 Which bills are offered as destination.** The other open bills of the party with no payment
   (`#otherBills()`, `TOS:4768`, unchanged), each by its short label, in number order, then
-  `+ New bill`. With no party, only `+ New bill`. Nothing is chosen at first; Move stays quiet until
-  at least one dish and a destination are chosen (root `CLAUDE.md` §3, Forms: "stay quiet while
-  awaiting a choice, selection").
+  `+ New bill`. Nothing is chosen at first; Move stays quiet until at least one dish and a
+  destination are chosen (root `CLAUDE.md` §3, Forms: "stay quiet while awaiting a choice,
+  selection").
 
-- **D15 Where Move dishes… is offered.** On the bill on screen when it is open (not presented, not
-  paid), with or without payments, at a table or with no party: wherever Split by item is offered
-  today (`TOS:5428`).
+- **D15 Where Move dishes… is offered.** On the bill on screen of a party when it is open (not
+  presented, not paid), with or without payments: wherever Split by item is offered today with a
+  party (`TOS:5428`). **Not with no party.** The app's `#billComposition` answers `null` when
+  `orderParty` is `null` (`till-app.ts:15841-15846`), so today's `#onSplitLines`,
+  `#onTransferLines` and `#onMergeBills` all return without a word there, and a Move dishes built
+  the same way would be a control that does nothing. The no-party bill section that offers them
+  came with slice 3 (`git log -S'billItems: lineVerbs'` names #2360 only). 4a takes Split by item
+  and Transfer items out of it and adds no Move dishes… (a W row on
+  `till-table-order-screen.table-menu.test.ts:224`); Merge bills stays there, and Task 13 records
+  in the backlog that with no party it does nothing (by reading `#onMergeBills`, `:15882-15887`).
+  The server's `moveDishes` keeps a no-party path, as `splitBill` has (Task 2 case 8), for A1196 to
+  retire with the others.
+
+- **D16 What a tick takes.** Ticking a row takes **every** member of it the floor allows; − lowers
+  the count from the last member, + raises it; ticking a ticked row clears it. This is what both
+  pickers do today: Transfer items "picks or drops every member" (`#toggleTransferLine`, TOS
+  `:5130`) and Split by item "picks every member whole, or drops every member" (`#toggleSplitLine`,
+  `:5155`), then steps down (`#stepSplitGroup`, `:5169`). The spec (§3.6, "identical ones as one row
+  with a '2 of 4' count") and board 08 (a ticked Caña row at "2 of 4") show a count but not what the
+  first tick takes; board 08's own rule for a bill ("Ticking a bill takes all of it") reads the same
+  way. Owner question 4 asks it, defaulting to this; it does not block landing, because the default
+  keeps today's behaviour. When taking the whole row would break the floor, the tick takes the
+  first members that keep it and + is greyed with the floor reason; when even one would break it,
+  the tick itself is greyed (D12). After a re-read regroups a row, the row keeps its count, taken
+  from its first members (Split by item's rule, `#tidyPickedPortions` `:5093`). Transfer items'
+  rule, untick the row, goes with the old picker: a B row (spec §3.6, one picker with a count, so
+  the count shown is what is sent).
+
+- **D17 A dish recalled into a draft is not in the picker.** It is being changed in a draft, this
+  person's or another's, and today's sent list leaves it out the same way (`#sentFallback`, TOS
+  `:2598-2605`, builds the `recalled` set from `#draftStore` and `otherDrafts`). Task 7b moves that
+  set into one `#recalledLineIds()` used by both. Without this a count could take a recalled dish
+  by line number and the server would refuse the whole move `draft.out_of_date`
+  (`requireUnreservedTransfers`, `bill-actions.ts:50-73`), with the waiter unable to step past it,
+  since the row always takes its first members. A dish recalled after the picker opened drops out of
+  the picks at the next refresh (`tidyPicks`); the server stays the authority.
 
 ## Departures from the master plan, and where it no longer matches the code
 
@@ -364,6 +437,7 @@ the picker shows reuses an approved string (D11).
 | Split-table body with `allSelected: "move-guests" \| "split-anyway"` | 4c; the server needs no such flag (Move guests is its own command) | 4c outline |
 | "notice rows … include only moved dishes" | true for 4a's same-party moves; Split a table's party-wide reach changes in 4c | finding 8 |
 | `A803 selection` "a whole part-paid bill remains selectable with its payments" | 4c | whole-bill picks are 4c |
+| "Deterministic count picker": "…then creation ordinal, then UUID" | line number on this bill inside a row (D3) | the till's line read carries no cohort or ordinal (finding 1); members of a row are identical, so the order picks which identical dish goes, never the money |
 
 ## Current code map (main `e5bfb0b07`)
 
@@ -391,24 +465,36 @@ rg -n 'transferLineNos|splitQuantities|splitAttempted|#pickerRows|#tidyPickedPor
 rg -n 'table\.(split_(pick_lines|confirm|no_lines|quantity|group_line|options_together|modifier_error)|transfer_|action_split"|action_transfer)' apps/till/src docs/developers apps/server/src/guide
 rg -n 'Split by item|Transfer items|Dividir por artículo|Transferir artículos' apps docs/developers docs/operations
 rg -n '/api/bills/\$\{[^}]*\}/(split|transfer)' apps/till/src
-rg -n 'carveOffLines\(|carveLines\(' apps/server/src -g '!*.test.ts'
+rg -n 'carveOffLines\(|carveLines\(|splitLinesWithinOrder\(|splitUnitsWithinOrder\(' apps/server/src -g '!*.test.ts'
+rg -c 'split-lines|transfer-lines|transferItems|splitBill' apps/till/src -g '*.test.ts'
 ```
+
+The last two, rerun at review 1 (`e5bfb0b07`): `carveLines` is reached from `splitBill`
+(`bill-actions.ts:191`) and `transferItems` (`:305`) with two different bills, and with one bill
+from `splitLinesWithinOrder` (`working-order.ts:4909`, called by `adjustments-apply.ts:1278`,
+`:1295` and `order-groups.ts:1125`, `:1249`) and `splitUnitsWithinOrder` (`:4924`, called by
+`order-groups.ts:1303`). Ten till test files reach the old pickers: `till-app-parties` (49),
+`till-app` (36), `till-table-order-screen` (25), `till-app-bill-payments` (18),
+`till-app-table-service` (10), `till-table-order-screen.actions-unsaved` (10), `api/client` (8),
+`till-app-drafts` (6), `till-table-order-screen.table-menu` (3), `till-table-order-screen.a11y` (1).
 
 | Consumer (non-test) | Task |
 | --- | --- |
-| `working-order.ts` `carveLines` partial branch (bound portion refusal) | 1 |
+| `working-order.ts` `carveLines` partial branch (refusal of a bound **measured** portion, only when the dish leaves its bill: `fromTabId !== toTabId`) | 1 |
 | `bill-actions.ts` new `moveDishes` (and private `resolveMoveLines`) | 2, 3 |
 | `till-api.ts` new route, STATUS unchanged (no new code) | 4 |
-| till `api/client.ts` new `moveDishes`; `splitBill`/`transferItems` deleted | 4, 9 |
+| till `api/client.ts` new `moveDishes`; `splitBill`/`transferItems` deleted | 4, 9b |
 | till `state/portion-selection.ts` (new) | 5 |
 | till `widgets/portion-picker.ts` (new) | 6 |
-| TOS: `ActionVerb` gains `"move-dishes"`, `ActionStep` gains `"move-dishes"`, `ActionDraft` gains picked ids and destination, ⋮ item, panel step, `#closeActions` | 7 |
+| TOS: `ActionVerb` gains `"move-dishes"`, `ActionStep` gains `"move-dishes"`, ⋮ item, panel step, `#closeActions` (7a); `ActionDraft` gains picked ids and destination, `tidyPicks` on refresh (7b) | 7a, 7b |
 | till-app: `#onMoveDishes`, binding | 8 |
-| TOS: transfer/split pickers, verbs, modes, state, `#tidyPickedPortions`, `#holdsDishWithExtrasToPart` | 9 |
-| till-app: `#onTransferLines`, `#onSplitLines`, bindings, `tab.transfer_modifier_line` mapping | 9 |
-| till `i18n/strings.ts` new keys (7) and retired keys | 6/7/8 (new), 9 (retired) |
+| TOS: transfer/split pickers, verbs, modes, state, `#tidyPickedPortions`, `#holdsDishWithExtrasToPart` | 9a |
+| till-app: `#onTransferLines`, `#onSplitLines`, bindings, `tab.transfer_modifier_line` mapping | 9b |
+| till `i18n/strings.ts` new keys (7) and retired keys | 6/7a (new), 9b (retired) |
 | Guides `apps/server/src/guide/{en,es}/table-service.md` `{#portions}` (EN `:180-196`), `{#bill-switcher}` (EN `:232-287`), new `{#move-dishes}` | 11 |
-| `docs/developers/design-system.md` ⋮ list (`:1075-1083`), "Identical portions share one row" | 11 |
+| `docs/developers/design-system.md` ⋮ list (`:1075-1083`, including the no-party sentence `:1082`), "Identical portions share one row" (`:5753`, `:5766`) | 11 |
+| `docs/operations/payments.md:5` ("**Split by item** creates another bill") | 11 |
+| TOS `#sentFallback`'s recalled set, moved into `#recalledLineIds()` (D17) | 7b |
 
 ## Guard suites
 
@@ -449,41 +535,58 @@ each is confirmed at its task's red run.
 
 | Test | Kind | Before → after | Source | Task |
 | --- | --- | --- | --- | --- |
-| Any server case cutting part of a **bound** weighed portion with `splitBill`/`transferItems`/`carveOffLines` (found by Task 1's red run; `transfer-lines.test.ts:372` uses an unbound `openTab` line and is expected to stay green) | B | the part cut succeeds → refused `tab.transfer_quantity_invalid`, rows unchanged | spec §3.1; owner at slice 1's landing (A1195) | 1 |
-| `apps/till/src/screens/till-table-order-screen.table-menu.test.ts` (the ⋮'s item list for an open bill, a part-paid bill, no party) | W | `Split by item`, `Transfer items` → `Move dishes…` at Split by item's place; every other item and its order unchanged | spec §3.6 | 7 (added), 9 (removed) |
-| TOS tests for Split by item (`till-table-order-screen.test.ts` from `:4226`) and Transfer items (`:6264-6504`) whose behaviour Move dishes keeps (dispatch of the chosen lines, grouped rows sending every member, "2 of 3", re-tidying after a refresh `:6540-6676`, only whole lines sent) | R | the same assertion through the Move dishes panel and its `move-dishes` event (`lineIds` instead of `lineNo`s naming the same lines) | spec §3.6, D2 | 9 |
-| TOS Split by item cases for a partial quantity of one line, its decimal box and its errors (`:4226-…`, "partial quantities, errors") | **Q2** | deleted: no part of a line moves (spec §3.1); replaced by "a weighed dish has a tick and no count" and "an unbound line of three moves whole" | spec §3.1, D2 | 9 |
-| TOS "Dishes with options must be moved in full" help (`table.split_options_together`) case | **Q2** | deleted with the help: whole lines always carry their extras | D2 | 9 |
-| `till-table-order-screen.actions-unsaved.test.ts:143-449` (split quantities, transfer target) | R | the same leave/keep/discard assertions over Move dishes' picks and destination | D10 | 9 |
-| `till-table-order-screen.a11y.test.ts:779-997` (transfer and split pickers, grouped stepper) | R | axe over the Move dishes panel in both themes, grouped, weighed, paid and floor rows | D10 | 9 |
-| `till-app.test.ts:10010-10187` (transfer and split reloads; €3,000 question) | R | the same through `move-dishes` (new bill and existing destination) | spec §3.6 | 9 |
-| `till-app.test.ts:10224` (`tab.transfer_modifier_line` → `table.split_modifier_error`) | **Q2** | deleted: Move dishes never names an extra, so the till never sends what that code refuses; a server case keeps the refusal of a named extra (Task 3) | D2 | 9 |
-| `till-app-parties.test.ts` split-lines flows (`:1817-…`: the bill shown after a split, refusals) | R | the same through Move dishes to a new bill (D7) | D7 | 9 |
-| `till-app-bill-payments.test.ts:3769-3821` money refusals on transfer and split | R | the same refusal handling (`#onBillMoneyRefusal`, "Refund {amount}") through Move dishes | D11 | 9 |
-| `till-app-bill-payments.test.ts` case that a transfer **from** a bill with a payment is refused / not offered (if present; found at Task 9) | B | Move dishes from a part-paid bill is offered and its unpaid dishes move | spec §3.8 | 9 |
-| `till-app-drafts.test.ts:1448`, `:3440-3494` (drafts survive split-off bills) | R | the same through Move dishes to a new bill | D7 | 9 |
-| `api/client.test.ts:3181`, `:3210`, `:3272` (request shapes of `splitBill`, `transferItems`) | **Q2** | deleted with the two client methods; new `moveDishes` request-shape cases (Task 4) | D1 | 9 |
+| `apps/till/src/screens/till-table-order-screen.table-menu.test.ts` (the ⋮'s item list for an open bill and a part-paid bill) | W | `Split by item`, `Transfer items` → `Move dishes…` at Split by item's place; every other item and its order unchanged | spec §3.6 | 7a (added), 9a (removed) |
+| `till-table-order-screen.table-menu.test.ts:224` ("with no party: Split by item, Transfer items and Merge bills under Bill…") | W | the Bill list `["Split by item", "Transfer items", "Merge bills"]` → `["Merge bills"]`; the Whole table list unchanged; the case name follows | D15 (no party: the app's `#billComposition` answers `null`, so neither old item nor Move dishes could send anything) | 9a |
+| TOS `:6375` "offers nothing to transfer to, under the plain heading, for an order that belongs to no party" | B | the ⋮ of an order with no party has no Move dishes… item (at least as strict: nothing to open, so nothing to move) | spec §3.6 ("between bills of the same party"), D15 | 9a |
+| TOS `:6283` "offers neither merge nor transfer a bill holding a pending payment…" (its transfer half) | R | Move dishes' destinations leave out the bill holding a pending payment; `targetIds` read from the Move to list; the merge half unchanged | D4, D14 | 9a |
+| TOS `:6649` "A803 portion grouping: a ticked Transfer row that another portion joins on a refresh is shown and sent as unticked" | B | the row keeps its count, taken from its first members, and Move sends exactly those ids (Split by item's rule, `:6676`, which stays R) | spec §3.6 (one picker whose count is what is sent), D16 | 9a |
+| TOS tests for Split by item (`till-table-order-screen.test.ts` from `:4226`) and Transfer items (`:6264-6504`) whose behaviour Move dishes keeps (dispatch of the chosen lines; a ticked grouped row sending every member, `:6540`, `:6578`; "2 of 3", `:6598`, `:6626`; a picked Split line keeping its count after a refresh, `:6676`; only whole lines sent) | R | the same assertion through the Move dishes panel and its `move-dishes` event (`lineIds` instead of `lineNo`s naming the same lines). They stay R because a tick takes the whole row and − steps it down, as today (D16) | spec §3.6, D2, D16 | 9a |
+| TOS Split by item cases for a partial quantity of one line, its decimal box and its errors (`:4226-…`, "partial quantities, errors") | **Q2** | deleted: no part of a line moves (spec §3.1); replaced by "a weighed dish has a tick and no count" and "an unbound line of three moves whole" | spec §3.1, D2 | 9a |
+| TOS "Dishes with options must be moved in full" help (`table.split_options_together`) case | **Q2** | deleted with the help: whole lines always carry their extras | D2 | 9a |
+| `till-table-order-screen.actions-unsaved.test.ts:143-449` (split quantities, transfer target) | R | the same leave/keep/discard assertions over Move dishes' picks and destination | D10 | 9a |
+| `till-table-order-screen.a11y.test.ts:779-997` (transfer and split pickers, grouped stepper) | R | axe over the Move dishes panel in both themes, grouped, weighed, paid and floor rows | D10 | 9a |
+| `till-app.test.ts:10010-10187` (transfer and split reloads; €3,000 question) | R | the same through `move-dishes` (new bill and existing destination) | spec §3.6 | 9b |
+| `till-app.test.ts:10224` (`tab.transfer_modifier_line` → `table.split_modifier_error`) | **Q2** | deleted: Move dishes never names an extra, so the till never sends what that code refuses; a server case keeps the refusal of a named extra (Task 3) | D2 | 9b |
+| `till-app-parties.test.ts` split-lines flows (`:1817-…`: the bill shown after a split, refusals) | R | the same through Move dishes to a new bill (D7) | D7 | 9b |
+| `till-app-bill-payments.test.ts:3769-3821` money refusals on transfer and split | R | the same refusal handling (`#onBillMoneyRefusal`, "Refund {amount}") through Move dishes | D11 | 9b |
+| `till-app-bill-payments.test.ts` case that a transfer **from** a bill with a payment is refused / not offered (if present; found at Task 9b) | B | Move dishes from a part-paid bill is offered and its unpaid dishes move | spec §3.8 | 9b |
+| `till-app-drafts.test.ts:1448`, `:3440-3494` (drafts survive split-off bills) | R | the same through Move dishes to a new bill | D7 | 9b |
+| `api/client.test.ts:3210` (`transferItems` request shape), `:3272` (`splitBill` request shape), and the `transferItems` and `splitBill` rows of the `it.each` at `:4513` ("%s sends the party revisions it was given") | **Q2** | deleted with the two client methods; new `moveDishes` request-shape cases and a `moveDishes` row in the `:4513` table (Task 4). `:3181` is `mergeBills` and is not touched | D1 | 9b |
+| `apps/till/src/till-app-table-service.test.ts:1152-1153` ("%s sends nothing to the server" on an empty order: the `transfer-lines` and `split-lines` rows) | R | one `move-dishes` row with `lineIds: []`, asserting `moveDishes` is not called, with the other assertions of the case unchanged | spec §3.6 | 8 (row added), 9b (old rows removed) |
+| `till-app-table-service.test.ts:1187` ("a %s refused because a card payment of the order is running says so", the `transfer-lines` row) | R | the same through `move-dishes`, `moveDishes` rejecting `order.payment_in_flight` | D9 | 8 (row added), 9b |
+| `till-app-table-service.test.ts:1232` ("a refused %s shows table.error and re-reads neither the tab nor the floor", the `transfer-lines` row) | R | the same through `move-dishes`, `moveDishes` rejecting `tab.not_open` | D9 | 8 (row added), 9b |
+| `till-app-table-service.test.ts:1352-1353` ("a %s refused because an item is already paid for says so in that code's own words") | R | one `move-dishes` row, `moveDishes` rejecting `bill.line_paid` | D9 | 8 (row added), 9b |
+| `till-app-table-service.test.ts:1369` ("a split refused for any other reason shows table.error and keeps paying the original tab") | R | the same through `move-dishes` to a new bill; every assertion unchanged | D7, D9 | 9b |
+| `till-app-table-service.test.ts:297-298` (the fake API's `transferItems` and `splitBill`) | F | the fake loses the two methods the till no longer has, and gains `moveDishes` (adding is not an edit) | D1 | 8 (add), 9b (remove) |
 
-No server test changes in Tasks 2–4: `splitBill`, `transferItems` and their routes are unchanged.
+No existing server test changes in Tasks 1–4. Task 1's refusal is expected to turn no existing
+case red (its receipts); `splitBill`, `transferItems` and their routes are otherwise unchanged.
 
 ## Owner questions
 
 Each has a default the build uses; a different answer changes only the tasks named. **Question 2
-is written to `questions.md` at Task 0, before any file it names is edited.** Questions 1 and 3 go to
-`questions.md` and the PR at Task 13 with pictures from Task 12 (saved as
+is written to `questions.md` at Task 0, before any file it names is edited.** Questions 1, 3 and 4 go
+to `questions.md` and the PR at Task 13 with pictures from Task 12 (saved as
 `docs/backlog/mockups/a803-bills-and-tables/slice4a-*.png` and copied with the question text to
 `~/My Drive/Waitron mockups/2026-11-0x A803 slice 4a <topic>/`). **The PR is parked
-`needs-owner-review` and cannot land until questions 1 and 2 are answered**; question 3 does not
-block.
+`needs-owner-review` and cannot land until questions 1 and 2 are answered**; questions 3 and 4 do
+not block.
 
 1. **The words for Move dishes, in English and Spanish** (blocks landing). Default: the seven in
    "Spanish" above, plus the guide section «Mover platos a otra cuenta» (Task 11). Worked example:
    Table 4, Bill 1 holds 4 × Caña, 2 × Croquetas and 0.350 kg of Jamón; €40 has been paid on it as a
    contribution. The waiter taps ⋮ → «Mover platos…»; the panel reads «Mover platos de Cuenta 1»;
-   the Caña row, ticked and counted up twice, reads «Caña  2 de 4»; the Jamón row has a tick and no
-   count; if ticking one more dish would leave the bill owing less than €40, that tick is grey and
-   says «Ya se han pagado 40,00 € en esta cuenta»; under «Mover a» the waiter chooses «Cuenta 2» or
-   «+ Cuenta nueva» and taps «Mover». Changes Tasks 6–8 and 11 strings only.
+   the Caña row, ticked (which takes all four, D16) and counted down twice with −, reads «Caña
+   2 de 4»; the Jamón row has a tick and no count; if ticking one more dish would leave the bill
+   owing less than €40, that tick is grey and says «Ya se han pagado 40,00 € en esta cuenta»; under
+   «Mover a» the waiter chooses «Cuenta 2» or «+ Cuenta nueva» and taps «Mover». Two things to
+   look at: (a) the grey reason says what happened but not what to do; the next step is to move
+   fewer dishes, or give money back first with the payment's Refund, and an alternative wording
+   that says so is «Ya se han pagado 40,00 € en esta cuenta: mueve menos platos» / "€40.00 is
+   already paid on this bill: move fewer dishes" (the refusal after Move already offers
+   "Refund {amount}", `bill.received_exceeds_total_excess`); (b) «platos» also covers drinks such
+   as Caña; the existing Transfer items words say «artículos» («Transferir artículos»), so
+   «Mover artículos…» is the alternative. Changes Tasks 6, 7a and 11 strings only.
 2. **Deleted till checks** (blocks landing). The full text, ready to paste, is in Task 0. Default:
    yes to every item. A "no" to an item keeps the retired control and its test (for example, keep
    Split by item's part-of-a-line quantity), which contradicts spec §3.1 for weighed dishes; the
@@ -500,8 +603,17 @@ block.
    coffee from Bill 1 to Bill 2. Default: Bill 2 is not in «Mover a»; the coffee can go to «+ Cuenta
    nueva». Alternative: Bill 2 is offered, and owes €1.50 more afterwards. Changes D4, D14, Tasks 2
    and 7.
+4. **What does ticking a row of identical dishes take?** (does not block). Default (D16): all of
+   them, and − takes them back one at a time, as Split by item and Transfer items do today. The
+   spec and board 08 show a row at "2 of 4" but not what the first tick takes. Worked example:
+   Bill 1 has 4 × Caña. Default: one tap on the Caña tick reads «Caña 4 de 4»; two taps on − make
+   it «2 de 4». Alternative: the first tap takes one («Caña 1 de 4») and + adds the next. Under
+   either, if the bill has €40 paid on it, a tick or + never takes a dish that would leave it owing
+   less than €40. Changes D16 and Tasks 5–7b, and the re-pointed till checks that tick a grouped
+   row (`till-table-order-screen.test.ts:6540`, `:6578`, `:6598`, `:6626`) become behaviour
+   changes.
 
-## Task 0: preflight, reservations and Owner question 2 (no commit, ≈15 calls)
+## Task 0: preflight, reservations and Owner question 2 (no commit, ≈20 calls)
 
 - [ ] `git -C /Users/clintongormley/workspace/worktrees/waitron-feat-a803-4-portion-picker status --short`
       clean apart from this plan's commit; `git log -1`. If main moved, rebase and re-resolve each
@@ -520,6 +632,21 @@ block.
       admission argument and check as `splitBill`** (whoever lands second adapts; do not wait). Lane
       F's `feat/a739-payment-window` (`3e45abdc6`) is parked; a read-only reference. Lane C's own
       A797 slices 10–11 edit TOS's foot and switcher, not the action panel.
+- [ ] **Record 4a's reservation for the watcher** (its note of 2026-11-01 ~05:20 in lane C's
+      `questions.md`: before slice 4 touches bill or payment files, keep out of the paths A696
+      reserves "or say in yours which you need"). At planning lane E had recorded none
+      (`grep -n 'A696' ~/waitron-campaign-e/questions.md` shows no reservation section). Append to
+      `~/waitron-campaign-c/questions.md` one `##` section, "A803 slice 4a reservation — FYI, no
+      answer needed (lane C, <date>)", listing the files 4a changes: `apps/server/src/bill-actions.ts`
+      (new `moveDishes`), `apps/server/src/till-api.ts` (new route beside `/split`),
+      `apps/server/src/working-order.ts` (`carveLines` partial branch only),
+      `apps/server/src/testing/bill-action-fixture.ts`, `apps/till/src/api/client.ts`,
+      `apps/till/src/till-app.ts`, `apps/till/src/screens/till-table-order-screen.ts`,
+      `apps/till/src/i18n/strings.ts`, the two `table-service.md` guides,
+      `docs/developers/design-system.md`, `docs/operations/payments.md`; and that 4a changes no
+      payment, issuance or filing function (`issueIfFullyPaid` is called, not changed). If lane E
+      has since recorded a reservation overlapping these, say which paths overlap in the same
+      section, and carry on (the watcher sequences).
 - [ ] **Re-check Owner question 2's list**, each command's output against the items:
       `rg -n "split-lines|transfer-lines|data-split-|data-transfer-|split_options_together|split_modifier_error|transferItems|splitBill" apps/till/src -g '*.test.ts' -l`
       and `rg -n "quantity:" apps/till/src/api/client.test.ts | rg -n "split|transfer"`. Add any file
@@ -543,9 +670,10 @@ block.
       >    always takes its extras.
       > 3. **`till-app.test.ts:10224`**: the till's wording for `tab.transfer_modifier_line`. Move
       >    dishes never names an extra on its own; a server test keeps that refusal.
-      > 4. **`apps/till/src/api/client.test.ts:3181`, `:3210`, `:3272`**: the request shapes of the
-      >    till's `splitBill` and `transferItems`, which go (the server keeps both routes until
-      >    backlog A1196 retires them). New cases pin `moveDishes`' request.
+      > 4. **`apps/till/src/api/client.test.ts:3210` and `:3272`, and two rows of the table at
+      >    `:4513`**: the request shapes of the till's `transferItems` and `splitBill`, which go (the
+      >    server keeps both routes until backlog A1196 retires them). New cases pin `moveDishes`'
+      >    request. (`:3181`, Merge bills' request, stays.)
       >
       > Answer "a803-4a q2 y" for all, or name the items you want done differently.
 
@@ -554,34 +682,77 @@ block.
       `pnpm --filter @waitron/server exec vitest run src/order-portions.lifecycle.test.ts src/transfer-lines.test.ts src/party-bill-actions.test.ts`
       and `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.test.ts src/screens/till-table-order-screen.actions-unsaved.test.ts src/screens/till-table-order-screen.table-menu.test.ts`.
 
-## Task 1: a bound portion is never cut (A1195) (≈35 calls)
+## Task 1: a weighed portion is never cut on its way to another bill (A1195) (≈40 calls)
 
 **Files.** `apps/server/src/working-order.ts` (`carveLines` partial branch `:4650-4700`: before
-`partials.push`, refuse a line bound to a portion); tests `apps/server/src/order-portions.lifecycle.test.ts`.
+`refusePaidLines`, when `fromTabId !== toTabId`, refuse a partial line bound to a **measured**
+portion); tests `apps/server/src/order-portions.lifecycle.test.ts`.
 
-- [ ] Cases `A803 A1195:` (`useVenueDb`, a table bill with a bound 0.350 kg Ham portion and a bound
-      Burger, built through the real table send so the lines are bound): "Split by item of 0.100 kg
-      of a bound weighed portion is refused `tab.transfer_quantity_invalid` naming its line and
-      quantity, and no row of `working_order_lines`, `working_line_portions`, `order_portion_events`,
-      `ticket_items` or `working_orders` changes" (rows read before and after, outside the failed
-      transaction); "the same by Transfer items"; "the whole 0.350 kg still moves, keeping its
-      portion id and writing one `moved` event"; "an unbound weighed line still splits" (an `openTab`
-      line, as `transfer-lines.test.ts:372`).
+**Why only there (review 1, C1).** `carveLines` serves two kinds of caller. With two bills:
+`splitBill` (`bill-actions.ts:191`) and `transferItems` (`:305`), the paths A1195 names ("a partial
+split or transfer of a bound measured line", `docs/backlog.md:2132-2135`). With one bill:
+`splitLinesWithinOrder` (`working-order.ts:4909`; a part discount, `adjustments-apply.ts:1278`,
+`:1295`; part of a line moved to another course group, `order-groups.ts:1125`, `:1249`) and
+`splitUnitsWithinOrder` (`:4924`; `order-groups.ts:1303`), which A1196 keeps ("partial serve, cancel,
+adjustment"). Spec §3.1's "never cut" is about moving dishes between bills; a part discount inside
+one bill does not move a dish. **Why measured only.** By reading, a unit portion's line holds one
+dish: raising a bound unmeasured dish adds copies rather than raising its line (`risesByCopies`,
+`order-portions.ts:263-269`; master plan, "A quantity increase creates more unit portions"), and
+no whole part of a line of one exists to cut. The one unit-bound line of two the sweep met is a
+hand-edited fixture (`simplified-limit.test.ts:757-759`). Receipts, all run at
+review 1's revision in a throwaway worktree at `e5bfb0b07`, with every server test file that names
+`splitBill`, `transferItems`, the `/split` or `/transfer` routes, `carveOffLines`,
+`splitLinesWithinOrder` or `splitUnitsWithinOrder`, plus the adjustments, order-groups,
+order-portions, line-cancel, line-service-split, station-move, split-off-extras, pass-board,
+kitchen-allergy.lifecycle, till-api.unroutable-dish, management-api.station-disable and
+order-drafts.db files (78 files):
+- the review's E3: refusing every bound line, with no bill condition, turned two in-bill cases red
+  (`pass-board.test.ts` "A773 no dispatch state: splitting keeps the source mark…",
+  `station-move.test.ts` "copies a dish's move records…to the line a quantity split makes");
+- refusing every bound line only when `fromTabId !== toTabId`: 77 files green, one case red,
+  `simplified-limit.test.ts:753` "moving part of a line onto a bill that would go over the limit is
+  refused" (a unit-bound line hand-edited to two, expecting the limit's 409; it got 400);
+- refusing only a bound **measured** line when `fromTabId !== toTabId`: that case green, and a
+  control copied from it with the line rebound to a new measured portion was refused 400
+  `tab.transfer_quantity_invalid` with both bills' lines unchanged. (The 78-file sweep of this
+  variant is recorded in "Review answers".)
+
+- [ ] Cases `A803 A1195:` (`useVenueDb`, a table bill with a bound 0.350 kg Ham portion, sold by
+      weight so its portion is measured, and a bound Burger, built through the real table send so
+      the lines are bound): "Split by item of 0.100 kg of a bound weighed portion is refused
+      `tab.transfer_quantity_invalid` naming its line and quantity, and no row of
+      `working_order_lines`, `working_line_portions`, `order_portion_events`, `ticket_items` or
+      `working_orders` changes" (rows read before and after, outside the failed transaction); "the
+      same by Transfer items"; "the whole 0.350 kg still moves, keeping its portion id and writing
+      one `moved` event"; "an unbound weighed line still splits" (an `openTab` line, as
+      `transfer-lines.test.ts:372`); "**inside its own bill, 0.100 kg of the bound weighed portion
+      still splits off** (`splitLinesWithinOrder`, as a part discount does): two lines, the binding
+      stays on the source line, as today" (A1196 keeps it; the case pins that Task 1 did not reach
+      it).
 - [ ] RED: `pnpm --filter @waitron/server exec vitest run src/order-portions.lifecycle.test.ts -t 'A803 A1195'`
-      — the two refusal cases fail on "resolved instead of rejected"; the other two pass (they
-      describe kept behaviour; state so in the ledger).
-- [ ] Implement: read the partial lines' bindings once (`readPortionBindings(tx, ids)`), and refuse
-      the lowest-numbered bound one with the existing code and params. One-line comment at the site:
-      a bound portion is one dish and is moved whole (spec §3.1).
-- [ ] GREEN: the file unfiltered; then
-      `pnpm --filter @waitron/server exec vitest run src/transfer-lines.test.ts src/split-bill.test.ts src/party-bill-actions.test.ts src/order-groups.test.ts src/line-service-split.test.ts src/station-move.test.ts src/split-off-extras.split.test.ts`
-      (every caller of `carveOffLines`/`splitUnitsWithinOrder` in tests); F; Filing; server types.
-      A red case outside `A803 A1195` is a Changed-test-checks B row only if it cuts a **bound**
-      weighed portion; anything else is a stop.
-- [ ] Deletion control: remove the new refusal → the two refusal cases fail; restore.
-- [ ] Commit: "Never cut a dish portion in part when splitting or transferring a bill".
+      — the two refusal cases fail on "resolved instead of rejected" (the review's E2 saw a part of a
+      bound measured line cut today); the other three pass (they describe kept behaviour; state so
+      in the ledger).
+- [ ] Implement: when `fromTabId !== toTabId` and `partials` is not empty, read the partial lines'
+      portions once with `readGrowingPortions(tx, ids)` (`order-portions.ts:271`, which carries
+      `measured`), and refuse the lowest-numbered line whose portion is measured with the existing
+      code and params (`{ tabId, lineNo, quantity }`). One-line comment at the site: a weighed
+      portion is one dish and leaves its bill whole (spec §3.1); A1196 keeps the in-bill splits.
+- [ ] GREEN: the file unfiltered; then every file the receipts above ran, from `apps/server`:
 
-## Task 2: `moveDishes`, the moves that succeed (≈60 calls)
+      ```
+      env -u AI_AGENT -u CLAUDECODE pnpm exec vitest run $( { rg -l 'splitBill|transferItems|/split`|/transfer`|"/split"|/transfer"|carveOffLines|splitUnitsWithinOrder|splitLinesWithinOrder' src -g '*.test.ts'; ls src/adjustments*.test.ts src/order-groups*.test.ts src/order-portions*.test.ts src/line-cancel*.test.ts src/line-service-split.test.ts src/station-move.test.ts src/split-off-extras*.test.ts src/split-bill*.test.ts src/pass-board.test.ts src/kitchen-allergy.lifecycle.test.ts src/till-api.unroutable-dish.test.ts src/management-api.station-disable.test.ts src/order-drafts.db.test.ts; } | sed 's#^\./##' | sort -u )
+      ```
+
+      (78 files at review 1, about three minutes; read the Tests count); F; Filing; server types. **No
+      existing case is expected red** (receipts above). A red case is a stop: ledger, revert, ask;
+      it is not a Changed-test-checks row.
+- [ ] Deletion controls: (a) remove the new refusal → the two refusal cases fail; restore. (b) drop
+      the `fromTabId !== toTabId` condition → the in-bill case fails; restore. (c) drop the
+      measured condition → `simplified-limit.test.ts:753` fails, 400 for 409; restore.
+- [ ] Commit: "Never cut a weighed dish when splitting or transferring part of it to another bill".
+
+## Task 2: `moveDishes`, the moves that succeed (≈65 calls)
 
 **Files.** `apps/server/src/bill-actions.ts` (new exported `moveDishes`, D1; private
 `resolveMoveLines(tx, billId, lineIds): Promise<{ lineNo: number }[]>` for D2's checks);
@@ -631,6 +802,14 @@ to, transfers, { refuseHeld: toBillId === null, actorId })`; `bumpRevision([from
          `ticket_items`, `working_line_portions`, `order_portion_events` (without ids and times), the
          two bills' totals and `kitchen_notices` and print-job bytes (decoded), with the generated
          ids mapped. Untouched bills only, since `transferItems` refuses a part-paid source.
+      10. **Cancelled, charge kept** (master plan `A803 moves`, "cancelled"): "a Burger cancelled
+         with its charge kept moves with its cancellation: on Bill 2 its line reads
+         `cancelledQuantity` 1, Bill 1's total drops by its charge and Bill 2's rises by it". Expected
+         from reading: a whole-line move updates the line in place (`moveOrderLines`,
+         `working-order.ts:4052-4058`), and a cancellation is stored against the line's id
+         (`line_service_cancellations`, read by `readLineCancellations`,
+         `apps/server/src/line-service-state.ts:51-95`), so it travels with the line. If the red run
+         shows otherwise, that is a stop: ledger and decision request, not a quiet fix.
 - [ ] RED: `pnpm --filter @waitron/server exec vitest run src/move-dishes.test.ts -t 'A803 move dishes'`
       — first red is the missing export; with a stub that throws, every case must fail on its own
       assertion (record that run).
@@ -643,7 +822,7 @@ to, transfers, { refuseHeld: toBillId === null, actorId })`; `bumpRevision([from
       such a dish — add one to the twin fixture so it does.
 - [ ] Commit: "Move chosen dishes to another bill of the party, or a new bill, in one step".
 
-## Task 3: `moveDishes` refuses, and changes nothing (≈55 calls)
+## Task 3: `moveDishes` refuses, and changes nothing (≈60 calls)
 
 **Files.** `apps/server/src/move-dishes.test.ts`; `bill-actions.ts` only if a case finds a gap.
 
@@ -664,7 +843,10 @@ domain code and params (CLAUDE.md §4: "Rejected writes assert the domain error 
         "different service mode → `service_zone.mode_incompatible`"; "the source itself →
         `tab.transfer_self`";
       - source: "presented → `bill.presented`"; "paid → `bill.paid`"; "abandoned → `tab.not_open`";
-      - lines: "an id not on the source (on Bill 2) → `tab.line_not_found` `{ tabId, lineId }`";
+      - lines: "an id not on the source → `tab.line_not_found` `{ tabId, lineId }`, and nothing
+        moved": the id named is Bill 2's line 1, and Bill 1 also has a line 1, so a check that
+        looked the id up anywhere and moved by line number would move Bill 1's line 1 instead (the
+        substitution the master plan forbids); the fixture says so in a comment;
         "an extra's id → `tab.transfer_modifier_line`"; "the same id twice →
         `tab.transfer_duplicate_line`"; "none → `sale.empty_basket`"; "a dish recalled into a draft
         → `draft.out_of_date`";
@@ -680,14 +862,17 @@ domain code and params (CLAUDE.md §4: "Rejected writes assert the domain error 
       person first; the move is refused `draft.out_of_date` or `draft.taken_over` (record which)";
       "two moves from one read: the second is refused `party.out_of_date`, and exactly one new bill
       exists"; "a resend of a successful move (its reply lost) is refused `party.out_of_date` and
-      makes no second bill and no second kitchen notice" (D9).
+      makes no second bill and no second kitchen notice" (D9); "on a bill with no party, a resend of
+      a successful move to a new bill is refused `tab.line_not_found` naming the first moved id,
+      and makes no second counter order" (D9; the till never sends it, D15).
 - [ ] RED/GREEN: `pnpm --filter @waitron/server exec vitest run src/move-dishes.test.ts -t 'A803 move dishes (refuses|race)'`.
       Cases that already pass (the checks are reused) are recorded as such in the ledger; each still
       needs its deletion control below to show it can fail.
 - [ ] Deletion controls, one at a time: drop `assertBillInvariant` → the floor and €40 race cases
       fail; drop `refuseBillWithPayments(toBillId)` → the destination-payment case fails; drop
-      `requireBillEditors` → the editor cases fail; skip `resolveMoveLines`' source check → the
-      foreign-id case fails.
+      `requireBillEditors` → the editor cases fail; skip `resolveMoveLines`' source check (look the
+      id up on any bill and send its line number) → the foreign-id case fails because Bill 1's
+      line 1 moved, not on a `tab.line_not_found` from `carveLines`.
 - [ ] GREEN: the file unfiltered; F; server types.
 - [ ] Commit: "Pin what Move dishes refuses, and that a refused move changes nothing".
 
@@ -706,8 +891,12 @@ answer 200 `{ billId: string }`.
 
 Route: `requireSession(deps, c, { action: "take-orders" })`; `requireTabParam`; `lineIds` must be an
 array of UUID strings, else `invalid("lineIds")` (400); `toBillId` `null` or `requireOtherBill(…, "toBillId")`;
-`billCommand(personId, body)`; `parseBillEditExpecteds(body.expectedEdits)`;
+`billCommand(personId, body)`;
 `withIssuanceTransaction`: `checkZones(tx, deps.cfg, session, [{ orderId: from }, …(toBillId ? [{ orderId: toBillId }] : [])])`,
+then `parseBillEditExpecteds(body.expectedEdits)` inside the transaction, after the zones, as the
+transfer and merge routes do (transfer: zones `till-api.ts:4221`, edits `:4224`; merge: `:4182`,
+`:4200`; the split route parses its one `expectedEdit` the same way, `:4130`, `:4133`), so a body refused for its zone needs no valid
+`expectedEdits` and the profile-zones rows can send the same body shape as transfer's;
 `moveDishes`, `issueIfFullyPaid(tx, fiscal, saleCfg, from, personId)` (D5),
 `captureKitchenActivity(…, [from, result.billId])`. No new STATUS entry (every code is mapped).
 
@@ -732,7 +921,8 @@ moveDishes(
 - [ ] Profile rows (new rows only): `take-orders` refuses without it; a source or destination bill in
       a zone the device does not serve is refused, as transfer's `(from)`/`(to)` rows.
 - [ ] Client cases `A803 move dishes client:` the exact method, path and body for a new bill and an
-      existing one (the wire literal above), and the answer passed through.
+      existing one (the wire literal above), and the answer passed through; and a `moveDishes` row
+      in the `it.each` at `client.test.ts:4513` ("%s sends the party revisions it was given").
 - [ ] RED: `pnpm --filter @waitron/server exec vitest run src/till-api.move-dishes.test.ts src/till-api.profile-actions.test.ts src/till-api.profile-zones.test.ts -t 'A803|move-dishes'`
       (404 status first); `pnpm --filter @waitron/till exec vitest run src/api/client.test.ts -t 'A803 move dishes client'`.
 - [ ] Implement.
@@ -742,16 +932,17 @@ moveDishes(
       destination's `checkZones` subject → its zone row fails.
 - [ ] Commit: "Add the move-dishes route and the till's client call".
 
-## Task 5: the selection model (≈45 calls)
+## Task 5: the selection model (≈50 calls)
 
 **Files.** New `apps/till/src/state/portion-selection.ts`, `portion-selection.test.ts`.
 
 ```ts
 export interface PickRow {
-  /** Members in line order; one member for a line that stands alone. */
+  /** Members in line order on this bill (D3); one member for a line that stands alone. */
   members: readonly TabLine[];
-  /** A whole portion of a unit dish: the row takes a count. False: a weighed, unbound or partly
-   * paid line, which has a tick only. */
+  /** A whole portion of a unit dish in a row of several: the row takes a count. False: a weighed
+   * or unbound line, which has a tick only, or a partly paid line, which stands alone and is
+   * blocked `paid`, so it cannot be ticked at all. */
   counted: boolean;
   /** The money one member takes off the bill, its extras included, as a decimal string. */
   each: string;
@@ -764,40 +955,54 @@ export function pickRows(
   lines: readonly TabLine[],
   keyOf: (dish: TabLine) => string | null,
   balance: BillBalance | null,
+  recalled: ReadonlySet<string>, // line ids recalled into any draft; left out of every row (D17)
   picks: Picks,
 ): PickRow[];
 export function pickedCount(row: PickRow, picks: Picks): number;
-/** The row's first `count` members picked, the rest dropped (D3). */
+/** The row's first `count` members picked, the rest dropped (D3); never past what the floor
+ * allows. */
 export function setCount(row: PickRow, count: number, picks: Picks): Picks;
-export function toggleRow(row: PickRow, picks: Picks): Picks; // none → first member; any → none
-/** After a re-read: drop vanished ids; a regrouped row keeps its first members, as many as were
- * picked, never more than it has. */
+/** None picked → every member the floor allows (D16); any picked → none. */
+export function toggleRow(row: PickRow, picks: Picks): Picks;
+/** After a re-read: drop ids no longer in any row (gone, paid elsewhere, recalled); a regrouped row
+ * keeps its first members, as many as were picked, never more than it has or the floor allows. */
 export function tidyPicks(rows: readonly PickRow[], picks: Picks): Picks;
 export function pickedLineIds(rows: readonly PickRow[], picks: Picks): string[]; // line order
 export function pickedAmount(rows: readonly PickRow[], picks: Picks): string;
 ```
 
 `keyOf` is the screen's `#fallbackPortionKey` (so paid quantities and allergy guests part rows, as
-today). `blocked` follows D12: a member with a paid quantity → `paid`; else picking one more member
-would leave `total − picked − each < received + reserved` → `floor` with `kept = received + reserved`.
-No balance read (a bill with no payment) → nothing is blocked by floor or paid.
+today). `recalled` is the screen's `#recalledLineIds()` (D17, Task 7b). `blocked` follows D12: a
+member with a paid quantity → `paid`; else picking one more member would leave
+`total − picked − each < received + reserved` → `floor` with `kept = received + reserved`. No
+balance read (a bill with no payment) → nothing is blocked by floor or paid. A member's amount is
+`tabLineGross` over the dish and its extras (D12).
 
-- [ ] Cases `A803 selection:` "4 identical Cañas form one counted row; count 2 picks the first two
-      line ids"; "toggling a ticked grouped row clears it; toggling an empty one picks its first
-      member"; "a weighed line is its own row, not counted"; "an unbound line of 3 is its own row,
-      not counted, and moves whole"; "a paid Croqueta's row is blocked `paid`; its unpaid twins form
-      their own row"; "€52.00 with €40.00 received: a €12.00 row is pickable, and once picked, a €0.01
-      row is blocked `floor` with kept `40.00`"; "a contribution marks no dish paid" (spec §6);
-      "`tidyPicks` after a re-read in which one picked member was paid elsewhere keeps the row's
-      first unpaid members, as many as were picked"; "a vanished id is dropped"; "`pickedLineIds` is in
-      line order"; "`pickedAmount` sums dish and extras exactly" (a €0.05 × 3 case and a 10% extra
-      case, against the till's existing line-total helper, D12).
+- [ ] Cases `A803 selection:` "4 identical Cañas form one counted row; ticking it picks all four;
+      count 2 then picks the first two line ids"; "toggling a ticked grouped row clears it, and so
+      does toggling a partly picked one"; "€52.00 with €40.00 received and 4 × €5.00 Caña: ticking
+      the row picks the first two (€10.00 leaves €42.00; a third would leave €37.00) and the row is
+      then blocked `floor`, so + cannot add a third"; "a weighed line is its own row, not counted";
+      "an unbound line of 3 is its own row, not counted, and moves whole"; "a paid Croqueta's row is
+      blocked `paid`; its unpaid twins form their own row"; "€52.00 with €40.00 received: a €12.00
+      row is pickable, and once picked, a €0.01 row is blocked `floor` with kept `40.00`"; "a
+      contribution marks no dish paid" (spec §6); **"a Caña recalled into a draft is in no row: of
+      4 Cañas with the first recalled, the row reads 3 and count 2 picks the second and third"**
+      (D17; the master plan's "Filter ineligible paid/reserved portions first"); "`tidyPicks` after
+      a re-read in which one picked member was paid elsewhere keeps the row's first unpaid members,
+      as many as were picked"; "`tidyPicks` after a re-read in which a picked member was recalled
+      drops it and keeps the row's count from its first remaining members"; "a vanished id is
+      dropped"; "`pickedLineIds` is in line order"; "`pickedAmount` sums dish and extras exactly"
+      (a €0.05 × 3 case and a 10% extra case, against `tabLineGross`, D12).
 - [ ] RED: `pnpm --filter @waitron/till exec vitest run src/state/portion-selection.test.ts -t 'A803 selection'`
       (missing module first; then with stubs returning empty, each case on its assertion).
-- [ ] Implement; reuse `portionGroups`, `paidQuantities`, the till's decimal helpers.
+- [ ] Implement; reuse `portionGroups`, `paidQuantities`, `tabLineGross`, the till's decimal
+      helpers.
 - [ ] GREEN: the file unfiltered; till types.
 - [ ] Deletion controls: compare `<=` for `<` in the floor test → the €40.00 boundary case fails;
-      take the last members instead of the first → the count case fails.
+      take the last members instead of the first → the count case fails; ignore `recalled` → the
+      recalled case fails; make `toggleRow` take one member → the "ticking it picks all four" case
+      fails.
 - [ ] Commit: "Model which dishes of a bill are picked, and which cannot be".
 
 ## Task 6: the picker widget (≈60 calls)
@@ -818,8 +1023,8 @@ blocked row, a visible reason line referenced by `aria-describedby` (`bill_pay.p
 member is floor-blocked), as `#splitGroupQuantity` does. An empty list shows `table.move_dishes_none`.
 Tokens only (`--wt-*`); tap targets at least `--wt-tap-min`.
 
-- [ ] Cases `A803 picker:` ticking a grouped row emits its first member; + emits the first two; −
-      at 1 is disabled; a weighed row has no count control; a paid row's tick is disabled and its
+- [ ] Cases `A803 picker:` ticking a grouped row of four emits all four (D16); − then emits the
+      first three; − at 1 is disabled; + at the member count is disabled; a weighed row has no count control; a paid row's tick is disabled and its
       reason reads "Paid"; a floor-blocked row's reason reads "€40.00 is already paid on this bill"
       (English, then Spanish via the locale); a ticked row whose next member is floor-blocked has +
       disabled; keyboard: Space toggles, Tab reaches −/+; the event detail is in line order; every
@@ -829,76 +1034,110 @@ Tokens only (`--wt-*`); tap targets at least `--wt-tap-min`.
 - [ ] RED: `pnpm --filter @waitron/till exec vitest run src/widgets/portion-picker.test.ts src/widgets/portion-picker.a11y.test.ts -t 'A803'`.
 - [ ] Implement.
 - [ ] GREEN: both files unfiltered; Style and fields; Words and codes; till types.
-- [ ] Deletion control: drop `aria-describedby` → the reason-association case fails; drop the
-      disabled state on a paid row → the paid case fails.
+- [ ] Deletion controls: drop `aria-describedby` → the reason-association case fails; drop the
+      disabled state on a paid row → the paid case fails; emit only the first member on a tick →
+      the "emits all four" case fails.
 - [ ] Commit: "Add the dish picker: ticks, counts and why a dish cannot be picked".
 
-## Task 7: Move dishes… in the ⋮ and its panel (≈65 calls)
+## Task 7a: Move dishes… in the ⋮, its panel and what Move sends (≈50 calls)
 
 **Files.** TOS (`ActionVerb` `:230` gains `"move-dishes"`; `ActionStep` `:391` gains
 `"move-dishes"`; state `moveDishesPicks: Picks`, `moveDishesTo: string | null | undefined`
-(`undefined` = nothing chosen, `null` = new bill); `ActionDraft` gains `picks: Set<string>` and
-`moveTo`; `#watchActions`/`#actionPayload` carry them; `#closeActions` resets them; the ⋮'s bill
-section gains Move dishes… at Split by item's place, offered as D15; the panel step
-`#moveDishesStep()` draws heading `table.move_dishes_heading` with the bill's short label, the
-picker, "Move to" (`table.move_dishes_to`) with the destinations of D14 as `wt-choice-row`s
-(`aria-pressed`), and Back plus Move (`table.move_dishes_confirm`), quiet until at least one pick and a
-destination; Move dispatches `move-dishes` `{ lineIds, toBillId }`; a refresh runs `tidyPicks`; the
-balance shown (`#balanceShown`) feeds `pickRows`), `strings.ts` (`table.action_move_dishes`,
-`table.move_dishes_heading`, `table.move_dishes_to`, `table.move_dishes_confirm`); new
-`screens/till-table-order-screen.move-dishes.test.ts`; `till-table-order-screen.actions-unsaved.test.ts`
-(new cases); `till-table-order-screen.table-menu.test.ts` (W row: the new item).
+(`undefined` = nothing chosen, `null` = new bill); `#closeActions` resets them; the ⋮'s bill
+section gains Move dishes… at Split by item's place, offered as D15 (a party's open bill, with or
+without payments; never with no party); the panel step `#moveDishesStep()` draws heading
+`table.move_dishes_heading` with the bill's short label, the picker, "Move to"
+(`table.move_dishes_to`) with the destinations of D14 as `wt-choice-row`s (`aria-pressed`), and
+Back plus Move (`table.move_dishes_confirm`), quiet until at least one pick and a destination; Move
+dispatches `move-dishes` `{ lineIds, toBillId }`, then `#retireActions` and `#closeActions` as
+`#confirmTransfer` does (TOS `:5143-5151`); the balance shown (`#balanceShown`) feeds `pickRows`),
+`strings.ts` (`table.action_move_dishes`, `table.move_dishes_heading`, `table.move_dishes_to`,
+`table.move_dishes_confirm`); new `screens/till-table-order-screen.move-dishes.test.ts`;
+`till-table-order-screen.table-menu.test.ts` (W row: the new item; nothing added with no party).
 
-Split by item and Transfer items stay in the ⋮ until Task 9.
+Split by item and Transfer items stay in the ⋮ until Task 9a.
 
-- [ ] Cases `A803 move dishes panel:` the ⋮ on an open bill lists Move dishes… where Split by item
-      is; on a part-paid open bill too; not on a presented or paid bill; choosing it opens the panel
-      with its heading focused; the destinations are the party's other open bills with no payment in
-      number order then "+ New bill"; with no party only "+ New bill"; Move is quiet (native
-      `disabled`) until a dish and a destination are chosen; Move dispatches exactly
-      `{ lineIds: [first two Caña ids], toBillId: <Bill 2 id> }` and `{ …, toBillId: null }`; a
-      re-read that pays one picked dish elsewhere keeps the row's first unpaid members (`tidyPicks`);
-      the panel closes after Move.
-- [ ] Cases in `actions-unsaved` `A803 move dishes unsaved:` with picks made, Back/Escape/switch bill/
-      leave the table ask before discarding, and keep the picks on "stay"; with nothing picked they
-      do not ask; a refresh does not count as a change.
-- [ ] RED: `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.move-dishes.test.ts src/screens/till-table-order-screen.actions-unsaved.test.ts src/screens/till-table-order-screen.table-menu.test.ts -t 'A803'`.
+- [ ] Cases `A803 move dishes panel:` the ⋮ on an open bill of a party lists Move dishes… where
+      Split by item is; on a part-paid open bill too; not on a presented or paid bill; **not with no
+      party** (D15); choosing it opens the panel with its heading focused; the destinations are the
+      party's other open bills with no payment in number order then "+ New bill"; Move is quiet
+      (native `disabled`) until a dish and a destination are chosen; ticking the 4-Caña row and
+      pressing − twice, then Move, dispatches exactly `{ lineIds: [first two Caña ids], toBillId:
+      <Bill 2 id> }`, and with "+ New bill" `{ …, toBillId: null }`; the panel closes after Move.
+- [ ] RED: `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.move-dishes.test.ts src/screens/till-table-order-screen.table-menu.test.ts -t 'A803'`.
 - [ ] Implement.
-- [ ] GREEN: the three files unfiltered, plus `src/screens/till-table-order-screen.test.ts`
-      (unchanged) and `src/screens/till-table-order-screen.bill-controls.a11y.test.ts`; Words and
-      codes; till types.
-- [ ] Deletion controls: drop the picks from `#actionPayload` → an unsaved case fails; send line
-      numbers instead of ids → the dispatch case fails.
+- [ ] GREEN: both files unfiltered, plus `src/screens/till-table-order-screen.test.ts` (unchanged)
+      and `src/screens/till-table-order-screen.bill-controls.a11y.test.ts`; Words and codes; till
+      types.
+- [ ] Deletion controls: send line numbers instead of ids → the dispatch case fails; offer the item
+      with no party → the no-party case fails.
 - [ ] Commit: "Offer Move dishes… in the table's ⋮, with the dish picker and where to move them".
 
-## Task 8: the app moves the dishes (≈60 calls)
+## Task 7b: the picks as unsaved work, refreshes, and recalled dishes (≈45 calls)
+
+**Files.** TOS (`ActionDraft` `:234` gains `picks: Set<string>` and `moveTo`;
+`#watchActions`/`#actionPayload` carry them; a refresh runs `tidyPicks`; new `#recalledLineIds()`
+holding the set `#sentFallback` builds today (`:2598-2605`), used by `#sentFallback` and by
+`pickRows` (D17), with `#sentFallback`'s behaviour unchanged); `till-table-order-screen.move-dishes.test.ts`;
+`till-table-order-screen.actions-unsaved.test.ts` (new cases).
+
+- [ ] Cases in `move-dishes` `A803 move dishes refresh:` a re-read that pays one picked dish
+      elsewhere keeps the row's first unpaid members (`tidyPicks`); a re-read in which another
+      identical dish joins a ticked row keeps the row's count from its first members, and Move sends
+      exactly those (D16); **a dish recalled into this person's draft, and one recalled into another
+      person's (`otherDrafts`), are in no row, and "2 of 3" never takes them** (D17); a picked dish
+      recalled before a refresh drops out of the picks.
+- [ ] Cases in `actions-unsaved` `A803 move dishes unsaved:` with picks made, Back/Escape/switch
+      bill/leave the table ask before discarding, and keep the picks on "stay"; with nothing picked
+      they do not ask; a refresh does not count as a change.
+- [ ] RED: `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.move-dishes.test.ts src/screens/till-table-order-screen.actions-unsaved.test.ts -t 'A803'`.
+- [ ] Implement.
+- [ ] GREEN: both files unfiltered, plus `src/screens/till-table-order-screen.sent-fallback.test.ts`
+      and `src/screens/till-table-order-screen.recalled-layout.test.ts` (unchanged: the moved
+      recalled set); till types.
+- [ ] Deletion controls: drop the picks from `#actionPayload` → an unsaved case fails; pass an empty
+      recalled set to `pickRows` → the recalled case fails.
+- [ ] Commit: "Keep Move dishes' picks as unsaved work, and leave recalled dishes out".
+
+## Task 8: the app moves the dishes (≈65 calls)
 
 **Files.** `apps/till/src/till-app.ts` (new `#onMoveDishes(event, confirmed?)` modelled on
-`#onTransferLines` `:15946` and `#onSplitLines` `:15978`: `#billComposition([active, toBillId?])`,
-`#askDifferentPeople`, `#ownBillsChange`, `asked.api.moveDishes(...)` with `asked.expectedEdits`;
-refusals: `tab.split_held_line` → `table.split_held_error`, money refusals → `#onBillMoneyRefusal`,
-`draft.*` → the existing take-over flow, others → `#onBillPairRefusal`; success: a new bill
-`#chooseBill(billId)` (D7), then `#reloadOrder` and `#refreshBillDraft`; binding beside `:19602-19609`);
-new `apps/till/src/till-app-move-dishes.test.ts`.
+`#onTransferLines` `:15946` and `#onSplitLines` `:15978`: nothing sent for an empty `lineIds`;
+`#billComposition([active, toBillId?])`, `#askDifferentPeople`, `#ownBillsChange`,
+`asked.api.moveDishes(...)` with `asked.expectedEdits`; refusals as D9: `tab.split_held_line` →
+`table.split_held_error`, `draft.out_of_date`/`draft.taken_over` → `{ code }`, the rest →
+`#onBillPairRefusal` (which sends money refusals to `#onBillMoneyRefusal`, the mode refusal to
+`table.bills_served_differently` and the rest to `#onTableRefusal`), then `#refreshBillDraft`;
+success: a new bill `#chooseBill(billId)` (D7), then `#reloadOrder` and `#refreshBillDraft`;
+binding beside `:19602-19609`); new `apps/till/src/till-app-move-dishes.test.ts`; the fake API of
+`till-app-table-service.test.ts` (`:297-298`) gains `moveDishes`, and its `it.each` tables at
+`:1152`, `:1187`, `:1232` and `:1352` gain a `move-dishes` row each (new checks; the old rows go in
+Task 9b).
 
 - [ ] Cases `A803 move dishes app:` with the app's fake API: "Move to a new bill sends the picked
       ids with the two revisions and the source's editor, then shows the new bill"; "Move to Bill 2
-      sends both editors in bill-id order and stays on Bill 1"; "over the simplified-invoice limit the
-      question comes first, and No sends nothing"; "`bill.received_exceeds_total` shows the approved
-      sentence with Refund {amount}"; "`bill.line_paid` shows its sentence and re-reads the bill";
-      "`draft.taken_over` shows Take over for the named bill and moves nothing"; "a refusal keeps the
-      panel's picks" (the waiter can change and retry); "a reply after the waiter switched bills does
-      not change the screen" (`#billCompositionCurrent`); "the request after a refused one carries the
-      re-read revisions".
-- [ ] RED: `pnpm --filter @waitron/till exec vitest run src/till-app-move-dishes.test.ts -t 'A803 move dishes app'`.
+      sends both editors in bill-id order and stays on Bill 1"; "over the simplified-invoice limit
+      the question comes first, and No sends nothing"; "`bill.received_exceeds_total` shows the
+      approved sentence with Refund {amount}"; "`bill.line_paid` shows its sentence and reads the
+      party's bills and the bill's balance again (`getPartyBills` once more), not its lines
+      (`getTabLines` not called again)"; "`party.out_of_date` reloads the order and says what
+      changed"; "`draft.taken_over` shows its own words, reads the bill's drafts again, and moves
+      nothing"; "a refusal leaves the source bill on screen with the panel closed, and opening Move
+      dishes… again starts with nothing picked over the re-read balance" (D12); "a reply after the
+      waiter switched bills does not change the screen" (`#billCompositionCurrent`); "the request
+      after a refused one carries the re-read revisions". The `till-app-table-service.test.ts` rows:
+      an empty `lineIds` sends nothing; `order.payment_in_flight` says so; `tab.not_open` shows
+      `table.error` and re-reads neither the tab nor the floor; `bill.line_paid` in its own words.
+- [ ] RED: `pnpm --filter @waitron/till exec vitest run src/till-app-move-dishes.test.ts src/till-app-table-service.test.ts -t 'A803 move dishes app|move-dishes'`.
 - [ ] Implement.
-- [ ] GREEN: the file unfiltered; `src/till-app.test.ts src/till-app-parties.test.ts src/till-app-bill-payments.test.ts`
+- [ ] GREEN: both files unfiltered; `src/till-app.test.ts src/till-app-parties.test.ts src/till-app-bill-payments.test.ts src/till-app-drafts.test.ts`
       (unchanged); till types.
 - [ ] Deletion controls: drop `#chooseBill` → the new-bill case fails; drop `#askDifferentPeople`
-      → the limit case fails.
+      → the limit case fails; route `draft.taken_over` through `#onBillPairRefusal` → the draft case
+      fails (it would read `table.error`).
 - [ ] Commit: "Move the picked dishes from the table screen".
 
-## Task 9: Split by item and Transfer items leave the till (≈65 calls; split 9a/9b if it passes 60)
+## Task 9a: the two old pickers leave the table screen (≈55 calls)
 
 **Files.** TOS (remove verbs `"transfer"`/`"split"`, steps `"transfer-lines"`/`"split-lines"`,
 `transferLineNos`, `splitQuantities`, `splitAttempted`, `#transferLinesStep`, `#transferLineRow`,
@@ -906,39 +1145,60 @@ new `apps/till/src/till-app-move-dishes.test.ts`.
 `#toggleTransferLine`, `#confirmTransfer`, `#toggleSplitLine`, `#stepSplitGroup`,
 `#setSplitQuantity`, `#stepSplitQuantity`, `#splitPrecision`, `#splitQuantityError`, `#splitErrors`,
 `#confirmSplit`, `#holdsDishWithExtrasToPart`, the old `#tidyPickedPortions` branches, `#pickBill`'s
-transfer arm; the ⋮ items; `ActionDraft`'s `lines`/`quantities` if unused); till-app
-(`#onTransferLines`, `#onSplitLines`, their bindings); `api/client.ts` (`splitBill`, `transferItems`,
-`TabTransfer` if unused — `rg` first); `strings.ts` (D11's retired keys, each after `rg` shows no
-user); the tests in "Changed test checks" rows of Task 9.
+transfer arm; the two ⋮ items, at a party and with no party (D15); `ActionDraft`'s
+`lines`/`quantities` if unused); the screen tests in the "Changed test checks" rows marked 9a
+whose file is `till-table-order-screen*.test.ts`. The app's `#onTransferLines`/`#onSplitLines` stay
+until 9b: the app tests emit those events straight at the screen element, so they stay green.
 
-- [ ] First run the consumer trace; every hit is in this task's list or the ledger.
-- [ ] Re-point each R row at Move dishes, keeping its assertion; make each B row's new expectation;
-      delete each Q2 row (only those), each with its replacement case named in Owner question 2.
+- [ ] First run the consumer trace; every hit is in 9a's or 9b's list or the ledger.
+- [ ] Re-point each R row at Move dishes, keeping its assertion; make each B row's new expectation
+      (`:6375`, `:6649`); the W row at `table-menu.test.ts:224`; delete each Q2 row of these files
+      (only those), each with its replacement case named in Owner question 2.
 - [ ] RED (the re-pointed and B rows fail before the removal is complete, against the old controls):
-      `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.test.ts src/screens/till-table-order-screen.actions-unsaved.test.ts src/screens/till-table-order-screen.a11y.test.ts src/screens/till-table-order-screen.table-menu.test.ts src/till-app.test.ts src/till-app-parties.test.ts src/till-app-bill-payments.test.ts src/till-app-drafts.test.ts src/api/client.test.ts`.
+      `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.test.ts src/screens/till-table-order-screen.actions-unsaved.test.ts src/screens/till-table-order-screen.a11y.test.ts src/screens/till-table-order-screen.table-menu.test.ts`.
 - [ ] Implement the removal.
-- [ ] GREEN: the same command; `rg -n "split-lines|transfer-lines|splitBill\(|transferItems\(" apps/till/src`
-      prints nothing; Words and codes (`errors-reachable` still green: the server codes are thrown by
-      the kept server paths); Style and fields; till types; `pnpm format:check`.
+- [ ] GREEN: the same command, plus `src/till-app.test.ts src/till-app-parties.test.ts src/till-app-bill-payments.test.ts src/till-app-drafts.test.ts src/till-app-table-service.test.ts`
+      (unchanged in 9a); `rg -n '"transfer-lines"|"split-lines"' apps/till/src/screens -g '!*.test.ts'`
+      prints nothing; Style and fields; till types.
+- [ ] Commit: "Take Split by item and Transfer items off the table screen".
+
+## Task 9b: the app's handlers, the client calls and the words go (≈45 calls)
+
+**Files.** till-app (`#onTransferLines`, `#onSplitLines`, their bindings, the
+`tab.transfer_modifier_line` mapping); `api/client.ts` (`splitBill`, `transferItems`, `TabTransfer`
+if unused — `rg` first); `strings.ts` (D11's retired keys, each after `rg` shows no user); the app
+and client tests in the "Changed test checks" rows marked 9b (`till-app.test.ts`,
+`till-app-parties.test.ts`, `till-app-bill-payments.test.ts`, `till-app-drafts.test.ts`,
+`till-app-table-service.test.ts`, `api/client.test.ts`).
+
+- [ ] Re-point each R row, make each B row's expectation, delete each Q2 row (`till-app.test.ts:10224`;
+      `client.test.ts:3210`, `:3272` and the two `:4513` rows), and drop the F row's fake methods.
+- [ ] RED (re-pointed rows fail while the old handlers still answer the old events):
+      `pnpm --filter @waitron/till exec vitest run src/till-app.test.ts src/till-app-parties.test.ts src/till-app-bill-payments.test.ts src/till-app-drafts.test.ts src/till-app-table-service.test.ts src/api/client.test.ts`.
+- [ ] Implement the removal.
+- [ ] GREEN: the same command and 9a's screen command; `rg -n "split-lines|transfer-lines|splitBill\(|transferItems\(" apps/till/src`
+      prints nothing; Words and codes (`errors-reachable` still green: the server codes are thrown
+      by the kept server paths); Style and fields; till types; `pnpm format:check`.
 - [ ] Commit: "Retire Split by item and Transfer items from the till".
 
-## Task 10: whole-slice run and controls (no commit unless a fixture moves, ≈45 calls)
+## Task 10: whole-slice run and controls (no commit unless a fixture moves, ≈50 calls)
 
 - [ ] `memory_pressure | grep free` first; size concurrency to it (CLAUDE.md, "Test concurrency
       follows measured headroom").
 - [ ] Unfiltered: `pnpm --filter @waitron/server exec vitest run src/move-dishes.test.ts src/till-api.move-dishes.test.ts src/order-portions.lifecycle.test.ts src/party-bill-actions.test.ts src/transfer-lines.test.ts src/split-bill.test.ts src/till-api.transfer.test.ts src/till-api.split-bill.test.ts src/till-api.profile-actions.test.ts src/till-api.profile-zones.test.ts src/bill-editing.split-transfer.test.ts src/adjustments-bill-payments.test.ts src/simplified-limit.test.ts`.
-- [ ] Unfiltered: `pnpm --filter @waitron/till exec vitest run src/state/portion-selection.test.ts src/widgets/portion-picker.test.ts src/widgets/portion-picker.a11y.test.ts src/screens/till-table-order-screen.move-dishes.test.ts src/screens/till-table-order-screen.test.ts src/screens/till-table-order-screen.actions-unsaved.test.ts src/screens/till-table-order-screen.a11y.test.ts src/screens/till-table-order-screen.table-menu.test.ts src/screens/till-table-order-screen.bill-controls.a11y.test.ts src/till-app-move-dishes.test.ts src/till-app.test.ts src/till-app-parties.test.ts src/till-app-bill-payments.test.ts src/till-app-drafts.test.ts src/api/client.test.ts`.
+- [ ] Unfiltered: `pnpm --filter @waitron/till exec vitest run src/state/portion-selection.test.ts src/widgets/portion-picker.test.ts src/widgets/portion-picker.a11y.test.ts src/screens/till-table-order-screen.move-dishes.test.ts src/screens/till-table-order-screen.test.ts src/screens/till-table-order-screen.actions-unsaved.test.ts src/screens/till-table-order-screen.a11y.test.ts src/screens/till-table-order-screen.table-menu.test.ts src/screens/till-table-order-screen.bill-controls.a11y.test.ts src/screens/till-table-order-screen.sent-fallback.test.ts src/screens/till-table-order-screen.recalled-layout.test.ts src/till-app-move-dishes.test.ts src/till-app.test.ts src/till-app-parties.test.ts src/till-app-bill-payments.test.ts src/till-app-drafts.test.ts src/till-app-table-service.test.ts src/api/client.test.ts`.
 - [ ] H2, F, Filing, S, G, Words and codes, Style and fields, both typechecks; the `git diff`
       check under "Guard suites" prints nothing.
+- [ ] The server list again with Task 1's 78-file command (its receipts), unfiltered.
 - [ ] Re-run every deletion control of Tasks 1–8 once against the finished code (CLAUDE.md §4,
       "Re-run deletion controls after restructuring"); record each red count.
 - [ ] `pnpm --filter @waitron/server test:coverage` and `pnpm --filter @waitron/till test:coverage`
       only if a coverage question arises (CI owns the bar).
 
-## Task 11: guides and the design-system contract (≈35 calls)
+## Task 11: guides, the runbook and the design-system contract (≈40 calls)
 
 **Files.** `apps/server/src/guide/en/table-service.md`, `apps/server/src/guide/es/table-service.md`,
-`docs/developers/design-system.md`.
+`docs/developers/design-system.md`, `docs/operations/payments.md` (an operator runbook).
 
 - [ ] EN `{#portions}`: replace the Split by item / Transfer items sentence with Move dishes…
       (whole dishes, a count for identical ones, weighed ones whole). EN `{#bill-switcher}`: the ⋮'s
@@ -947,10 +1207,15 @@ user); the tests in "Changed test checks" rows of Task 9.
       why, the destinations (other bills with no payment, + New bill), what stays (a dish's course,
       kitchen state, extras), the refusals and Refund {amount}. ES twins with the shared ids
       (proposal, Owner question 1).
-- [ ] design-system: the ⋮ bill list (`:1075-1083`); "Identical portions share one row" names the
+- [ ] design-system: the ⋮ bill list (`:1075-1083`, and `:1082`'s no-party sentence, which now
+      names only Merge bills, D15); "Identical portions share one row" names the
       Move dishes picker in place of the two old pickers; a new "The dish picker" contract (ticks,
       counts, blocked rows with a visible reason, quiet Move, the destinations' order), with its
       guards named and any "weaker than its name" hedge.
+- [ ] `docs/operations/payments.md:5`: "**Split by item** creates another bill" becomes Move
+      dishes… → + New bill (whole dishes; a part-paid bill's unpaid dishes may go). Then
+      `rg -n 'Split by item|Transfer items|Dividir por artículo|Transferir artículos' apps docs/developers docs/operations -g '!*.test.ts'`
+      prints only `strings.ts` keys Task 9b kept for A1196, if any (each named in the ledger).
 - [ ] G; `pnpm exec vitest run scripts/claude-md-pointers.test.ts`; LOOK the served
       `/help/en/table-service#move-dishes` and `/help/es/…` in Task 12.
 - [ ] Commit: "Explain Move dishes in the table-service guide and the design contract".
@@ -972,18 +1237,23 @@ user); the tests in "Changed test checks" rows of Task 9.
       copy them, with each question's text, to Google Drive (`~/My Drive/Waitron mockups/`).
 - [ ] Each LOOK finding is fixed test-first in its own commit or recorded in the backlog.
 
-## Task 13: backlog, questions, PR text, hand-off (≈25 calls)
+## Task 13: backlog, questions, PR text, hand-off (≈30 calls)
 
 - [ ] `docs/backlog.md`: A803's entry says slice 4a landed and what 4b and 4c hold; delete A1195
       (its check, Task 1, passed); update A1193, A1196 and A1265 as "Scope" says; a new entry for
       each LOOK finding not fixed; a new entry for `bill.payments_received`'s wording, which after
       4a over-claims ("items cannot be transferred between it and another bill") and needs new
-      approved Spanish (Owner question 3 may settle it).
-- [ ] Questions 1 and 3 to `~/waitron-campaign-c/questions.md` (one at a time format, pictures named);
+      approved Spanish (Owner question 3 may settle it); a new entry: with no party the ⋮'s Merge
+      bills does nothing (`#onMergeBills` returns when `#billComposition` answers `null`,
+      `till-app.ts:15882-15887`; by reading, D15); A1196's text also gains that A1195's refusal
+      covers moves to another bill only, so a part of a weighed line can still be split inside its
+      bill (a part discount, a course-group move), as Task 1's in-bill case pins.
+- [ ] Questions 1, 3 and 4 to `~/waitron-campaign-c/questions.md` (one at a time format, pictures named);
       the changed-checks FYI entry ("A803 slice 4a (#PR) — changed test checks, FYI, no answer
       needed") pointing at the receipt.
 - [ ] PR body, in plain English: what the waiter sees; no venue reset; "Changed test checks"
-      (with the receipt); "For the owner" (Q1, Q2 block landing; Q3 default); the A696 note; then
+      (with the receipt); "For the owner" (Q1, Q2 block landing; Q3 and Q4 defaults); the A696
+      note; then
       `/finish-branch` with the plan named.
 - [ ] Ledger: `Status: in progress` until landed; then 4b's plan is next.
 
@@ -1068,7 +1338,7 @@ Review weight FULL (wire contract, concurrency, money floor, allergies across pa
 | `A803 waiting copy` | 4b |
 | `A803 race replay` | 4a Task 3 (moves); 4c (splits) |
 | "relax transfer's untouched rule only for unpaid portions; keep merge's" | 4a D4 (Merge untouched) |
-| Cancel/Escape/navigation/switch-bill/reconnect; disabled rows' reason not by colour alone | 4a Tasks 6, 7 |
+| Cancel/Escape/navigation/switch-bill/reconnect; disabled rows' reason not by colour alone | 4a Tasks 6, 7b |
 | LOOK boards 08–10 | 4a Task 12 (rows), 4c (the split) |
 | Defect ledger: A590 | 4c; the other rows stay retained as the master plan says |
 | EN/ES guides | 4a Task 11, 4b, 4c |
@@ -1077,19 +1347,67 @@ Review weight FULL (wire contract, concurrency, money floor, allergies across pa
 
 | Task | What | Est. calls | Ends |
 | --- | --- | --- | --- |
-| 0 | preflight; Owner question 2 to `questions.md` | 15 | no commit |
-| 1 | a bound portion is never cut (A1195) | 35 | green |
-| 2 | `moveDishes`, the moves that succeed, twins | 60 | green |
-| 3 | `moveDishes` refusals and races, rows unchanged | 55 | green |
+| 0 | preflight; 4a's reservation; Owner question 2 to `questions.md` | 20 | no commit |
+| 1 | a weighed portion is never cut on its way to another bill (A1195) | 40 | green |
+| 2 | `moveDishes`, the moves that succeed, twins, a cancelled dish | 65 | green |
+| 3 | `moveDishes` refusals and races, rows unchanged | 60 | green |
 | 4 | route, issuance, profile rows, client | 55 | green |
-| 5 | selection model | 45 | green |
+| 5 | selection model (whole-row tick, recalled dishes left out) | 50 | green |
 | 6 | picker widget, a11y | 60 | green |
-| 7 | ⋮ item and panel, unsaved | 65 | green |
-| 8 | app handler | 60 | green |
-| 9 | old pickers out of the till (Q2) | 65 | green |
-| 10 | whole-slice run, deletion controls | 45 | no commit |
-| 11 | guides, design contract | 35 | green |
+| 7a | ⋮ item (not with no party), panel, what Move sends | 50 | green |
+| 7b | picks as unsaved work, refreshes, recalled dishes | 45 | green |
+| 8 | app handler, refusals as D9, table-service rows | 65 | green |
+| 9a | old pickers off the table screen (Q2) | 55 | green |
+| 9b | old handlers, client calls and words out (Q2) | 45 | green |
+| 10 | whole-slice run, deletion controls | 50 | no commit |
+| 11 | guides, runbook, design contract | 40 | green |
 | 12 | LOOK, pictures | 50 | pictures committed in 13 |
-| 13 | backlog, questions, PR | 25 | green |
+| 13 | backlog, questions, PR | 30 | green |
 
-About 670 calls for 4a, roughly half of slice 3. 4b is about 6 tasks; 4c about 12.
+About 780 calls for 4a, in 16 tasks, none planned above 65. 4b is about 6 tasks; 4c about 12.
+
+## Review answers (review-1)
+
+Review: `~/waitron-campaign-c/a803-4-plan-review/review-1.md` (1 Critical, 7 Important, 8 Minor),
+of the plan at `686f9b81f`. Every finding was checked against the code at `e5bfb0b07` before it was
+acted on; none is rejected. What was run, rather than read, is named.
+
+**Experiments run for this revision**, in a throwaway detached worktree at `e5bfb0b07`
+(`/tmp/a803-4-rev`, `pnpm install --frozen-lockfile`, removed afterwards with
+`git worktree remove --force`), each with `env -u AI_AGENT -u CLAUDECODE TESTCONTAINERS_RYUK_DISABLED=true pnpm exec vitest run …`
+in `apps/server` over the 78 files of Task 1's GREEN command, Tests count read:
+
+- **R1**: a refusal of every bound line in `carveLines`' partial branch, only when
+  `fromTabId !== toTabId` (the review's recommended variant). Result: 77 files passed, 1 failed;
+  4,080 passed, 1 failed: `simplified-limit.test.ts:753`, "expected 400 to be 409" (a unit-bound
+  line hand-edited to two, part-transferred to another bill). The probe's log line fired once, in
+  that case. What a pass would have meant: the review's variant is safe as written; it is not.
+- **R2**: the same, but only for a line whose portion is `measured`. A control case was added
+  beside `:753`, rebinding the line to a new measured portion (inserted, since `order_portions` is
+  append-only: the first attempt to update it was refused "order_portions is append-only"). Result:
+  `:753` passed, and the control was refused 400 `tab.transfer_quantity_invalid` with both bills'
+  lines unchanged. Then the 78 files: 78 passed, 4,082 tests passed (the original 4,081 plus the
+  control); the probe's log line fired once, in the control only.
+
+| Finding | Answer |
+| --- | --- |
+| **C1** refusal on a path shared with in-bill splits | **Fixed.** Task 1 refuses only when the dish leaves its bill (`fromTabId !== toTabId`) **and** its portion is measured, which is A1195's own wording ("a partial split or transfer of a bound measured line"). The review's variant (any bound line, across bills) was run (R1) and turns `simplified-limit.test.ts:753` red, so it was narrowed to measured portions (R2, all 78 files green). Every caller of `carveLines` is listed in Task 1 with file:line; the GREEN command is the 78-file sweep (a command that selects by `rg` plus named globs, checked to list the same 78 files as R1 and R2); a new in-bill case pins that a part of a bound weighed line still splits inside its own bill (A1196); three deletion controls. The B row for Task 1 is gone: no existing case is expected to change, and a red one is a stop. |
+| **I1** count picker takes recalled dishes | **Fixed.** D17: a dish recalled into any draft is in no row, using the set `#sentFallback` already builds (TOS `:2598-2605`, moved into `#recalledLineIds()` in Task 7b). `pickRows` takes `recalled`; Task 5 case "of 4 Cañas with the first recalled, count 2 picks the second and third"; Task 7b cases for this person's and another person's drafts and for a pick recalled before a refresh; a deletion control. D3 now opens with the master plan's "Filter ineligible paid/reserved portions first". |
+| **I2** what a tick takes | **Decided, D16: a tick takes the whole row** (every member the floor allows), − steps down, as both pickers do today (`#toggleTransferLine` `:5130`, `#toggleSplitLine` `:5155`, `#stepSplitGroup` `:5169`). Spec §3.6 and board 08 show "2 of 4" but not the first tick, so it is Owner question 4, default whole row, **not blocking** (the default is today's behaviour). The R rows now hold (they tick whole rows and step down); Q1's example now reads "ticked (all four) and counted down twice". One check does change: `:6649` (Transfer's untick-on-regroup) becomes a B row, since one picker keeps one rule, Split's count (`:6676`). |
+| **I3** `till-app-table-service.test.ts` missing; D9 wrong | **Fixed.** Five places in that file, not three: `:1152-1153`, `:1187`, `:1232`, `:1352-1353`, `:1369`, plus the fake at `:297-298`; each is a row (R, or F for the fake). Task 8 adds `move-dishes` rows to the four tables and runs the file; 9b removes the old rows; Task 10 runs it. D9 rewritten to what the code does (`#onTransferLines` → `#onBillPairRefusal` → `#onBillMoneyRefusal` reads bills and balance, `#onTableRefusal` reloads only on `party.out_of_date`, the rest re-read nothing), and `draft.*` take the relocation path's own words. Reading also found D12 and Task 8 promising "the picks are kept" after a refusal while the panel closes on send (`#retireActions`/`#closeActions`, TOS `:5143-5151`); both now say the panel closes and the waiter reopens it. |
+| **I4** Q2 cites `:3181` (mergeBills) | **Fixed.** Q2 item 4 and its row cite `:3210` and `:3272`, plus the `transferItems` and `splitBill` rows of the `it.each` at `:4513`, which the plan had missed (`rg -n 'transferItems\|splitBill' apps/till/src/api/client.test.ts` shows `:4565`, `:4588`); `:3181` is named as untouched. Task 0 still re-checks before posting. |
+| **I5** Move dishes with no party sends nothing | **Fixed, by not offering it.** D15: no Move dishes… with no party, because `#billComposition` answers `null` there (`till-app.ts:15841-15846`). The no-party ⋮ loses Split by item and Transfer items (a W row on `table-menu.test.ts:224`, and a B row on TOS `:6375`). Merge bills stays there and is equally inert; Task 13 records that in the backlog rather than widening 4a. The server's no-party path stays for parity with `splitBill`. |
+| **I6** scope over-claims | **Fixed.** Scope says Split by item, Transfer items and Move dishes never cut a bound measured portion on its way to another bill, and names the partial paths that stay (in-bill splits, part serves, part cancels such as `order-portions.filing.test.ts:665`) under A1196; Task 13 adds that to A1196's text. |
+| **I7** runbook | **Fixed.** `docs/operations/payments.md:5` is in the consumer table and Task 11, with a closing `rg` over `apps docs/developers docs/operations`. Only it and `design-system.md` name the old controls in docs (`rg -ln` over `docs` and the READMEs, outside superpowers, backlog, handoffs and compliance). |
+| **M1** line number is not creation order | **Fixed.** D3 says line number is the order a dish joined this bill (`moveOrderLines`, `working-order.ts:4052-4058`), and a Departures row records why not "creation ordinal, then UUID": the till's line read has no ordinal, and members of a row are identical. |
+| **M2** cancelled dish not covered | **Fixed.** Task 2 case 10: a dish cancelled with its charge kept moves with its cancellation, expected because the cancellation is keyed by line id (`line-service-state.ts:51-95`) and a whole-line move keeps the id; a different result is a stop. |
+| **M3** foreign-id control | **Fixed.** The case names Bill 2's line 1 while Bill 1 has a line 1, asserts nothing moved, and the control says it fails because Bill 1's line 1 moved, not on `carveLines`' own `tab.line_not_found`. |
+| **M4** D9 for a bill with no party | **Fixed.** D9 says a no-party resend is refused `tab.line_not_found` (Task 3 case), and that the till never sends it (D15), so no new words are needed. |
+| **M5** A696 reservation | **Fixed.** Task 0 posts 4a's file list to lane C's `questions.md` as an FYI reservation, and names overlaps if lane E has since recorded one (none at revision: `grep -n 'A696' ~/waitron-campaign-e/questions.md` shows no reservation section). |
+| **M6** wrong helper | **Fixed.** D12 and Task 5 name `tabLineGross` (`state/adjust-target.ts:53`, used by TOS `#lineGrossByLineNo` `:1925`) and say `lineGross` is for draft lines; D12 says the greying is an unmeasured estimate at the cent and the server stays the authority. |
+| **M7** `counted` comment | **Fixed.** The comment says a partly paid line stands alone and is blocked `paid`, so it cannot be ticked. |
+| **M8** words and check order | **Fixed.** Q1 now asks about a floor reason that names the next step (with a proposed wording) and about «platos» for drinks, with «artículos» as the alternative. The route parses `expectedEdits` inside the transaction after `checkZones`, as transfer (`till-api.ts:4221`, `:4224`) and merge (`:4182`, `:4200`) do. |
+
+**Task changes.** Task 7 split into 7a (⋮, panel, what Move sends) and 7b (unsaved picks,
+refreshes, recalled dishes); Task 9 split into 9a (screen) and 9b (app, client, words). Estimates
+rise to about 780 calls; no task is planned above 65.
