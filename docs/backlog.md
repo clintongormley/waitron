@@ -5324,9 +5324,9 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 - **The box's certificate issued under a wrong clock.**
   [Detail](backlog/box.md#the-boxs-certificate-issued-under-a-wrong-clock)
 
-- **A1268. Clock-ins are per venue: one working-time chain per box, not per node and location**
-  (owner, 2026-11-01), and the reads that still order a person's entries by time after a backward
-  clock step. [Detail](backlog/box.md#a1268-clock-ins-are-per-venue-and-the-reads-that-order-entries-by-time-after-a-backward-step)
+- **A1268. Clock-ins are per venue: no location on clock entries, sessions, corrections or
+  pay-period closures, one working-time chain per node** (owner, 2026-11-01), and the reads that
+  still order a person's entries by time after a backward clock step. [Detail](backlog/box.md#a1268-clock-ins-are-per-venue-and-the-reads-that-order-entries-by-time-after-a-backward-step)
 
 - **B3 keeps or replaces the clock requests slice 9b shipped.**
   [Detail](backlog/box.md#b3-keeps-or-replaces-the-clock-requests-slice-9b-shipped)

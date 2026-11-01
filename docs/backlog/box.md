@@ -1550,8 +1550,10 @@ is not flagged until the clock catches up. Read, not run. Left open by A798-B sl
 The owner, 2026-11-01: "Clock ins should not be per location, but per venue." Today the
 working-time chain, and the clocked-in state read from it, is one per node and location, so a
 backward step of the clock can mislead when a person moves location inside it (slice 9b plan, Task
-15a, "Accepted residual"; pinned by the residual case in `clocking-step.test.ts`). A1268 re-keys the
-chain to one per venue, which removes that case. Separately, after a backward step the hours read,
+15a, "Accepted residual"; pinned by the residual case in `clocking-step.test.ts`). A1268 takes the
+location out of working time and keeps one chain per node, which removes that case; one pull
+request, #2375 (`docs/superpowers/plans/2026-11-01-a1268-clock-ins-per-venue.md`, revision 2).
+Separately, after a backward step the hours read,
 the end-of-day pass (`intervalsFor` in `end-of-day.ts`) and the correction check
 (`validateSequence` in `corrections.ts`) still order a person's entries by `compareEvents`, so a
 session reads as written (negative or missing) and every other correction for that person is
