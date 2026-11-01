@@ -5789,7 +5789,8 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 - **A1251. Finish qualifying and reviewing historical PRs that skipped the Claude run-it review.**
   Exclude documentation-only changes, verified test-data/name renames and changes already reviewed.
   Review each remaining squash against its parent and check findings against current main before
-  opening a repair. Check refusal wording independently of its translation lookup.
+  opening a repair. Check refusal wording against independent expectations kept in the app's
+  `i18n` area.
   Use the [qualified public-connection wording receipt](backlog/self-service-refusals.md#tls-repair)
   without treating browser refusal checks as certificate-recovery qualification.
   Check the later regional demo guides’ photo-library name claims against image metadata and the
