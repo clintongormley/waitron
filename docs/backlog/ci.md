@@ -1177,12 +1177,38 @@ the rest of the job's recorded duration.
 | test-server (20) | 271 | 236 | 35 | `src/first-setup-backup-resume-authority.test.ts` (141.6) |
 | test-server (16) | 275 | 231 | 44 | `src/hour-recovery-placement-2.test.ts` (160.4) |
 
-Keep the three later main-run observations open. Count runs that execute every
-server shard; a run that reuses PR evidence supplies no new server timing.
-Retain whole-job, test-step and per-file times when a job exceeds the target.
-Use those measurements to choose further packing or suite-setup work while
-preserving every behavioural assertion. The measurements above do not establish
-a cause for every over-budget group.
+**1 November follow-up:** the three natural full main observations now exist:
+[41288426367](https://github.com/clintongormley/waitron/actions/runs/41288426367),
+[41278766733](https://github.com/clintongormley/waitron/actions/runs/41278766733) and
+[41272334746](https://github.com/clintongormley/waitron/actions/runs/41272334746).
+Each successfully executes all 20 ordinary server shards. Their maximum whole jobs
+are 278, 292 and 306 seconds, respectively. The observation wait is complete; the
+all-jobs target still has residual work.
+
+| Run / shard | Whole job (s) | Test step (s) | Setup and cleanup (s) | Longest file (s) |
+| --- | ---: | ---: | ---: | --- |
+| 41288426367 / 3 | 276 | 230 | 46 | `first-setup-backup-resume-publication.test.ts` (177.8) |
+| 41288426367 / 10 | 276 | 225 | 51 | `first-setup-backup-recovery-preparation.test.ts` (149.8) |
+| 41288426367 / 19 | 278 | 236 | 42 | `restore-emergency-crash.e2e.test.ts` (123.7); `first-setup-backup-lease.test.ts` also takes 118.3 |
+| 41278766733 / 11 | 292 | 250 | 42 | `first-setup-backup-reopen.test.ts` (174.1); `first-setup-database-holdings-damage.test.ts` also takes 147.4 |
+| 41272334746 / 5 | 306 | 239 | 67 | `first-fiscal-hour.e2e.test.ts` (183.1) |
+
+The first three rows cover every over-270-second job in the latest run; the final
+two identify the longest job in each older observation. Retain whole-job,
+test-step and per-file times when choosing further packing or suite-setup work,
+with every behavioural assertion preserved. These measurements identify
+contributors; they do not establish the cause of every aggregate delay.
+
+A1242's separate publication/fallback qualification is complete. Main run
+[41282000200](https://github.com/clintongormley/waitron/actions/runs/41282000200)
+reuses successful PR run 41281175428, reports `code=true`, and successfully pushes
+both `:main` images. PR #2365's tested head tree
+`b5eeb91d4b82ec128a9c356e03f0330b780884e2` differs from its main squash tree
+`bc1116107149662396b1b46ff1900d791c91bf9f`; main run 41278766733 reports
+`reuse=false` and runs the full global suite successfully. Earlier post-fix run
+41183258278 and docs run 41183408052 both report `code=false`, with publication
+skipped. The API tree pairs, job scopes and publication logs are retained in
+Lane E `receipts/a696-resume-20261101/`.
 
 
 ## Deadline command through a directory symlink

@@ -6015,10 +6015,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   Qualify its entrypoint check with symlink and physical-path controls, then make both run the
   child. [Observed reproduction](backlog/ci.md#deadline-command-through-a-directory-symlink).
 
-- **A1242: qualify publishing after reused CI and the differing-tree fallback on real main pushes.**
-  Retain real main run ids proving publication after reuse and the full suite after an unequal-tree
-  merge.
-
 - **A1213. Does a re-run till shard's report reach `test-till-merge`?** Seen once, not proven, in
   A1125's CI (#2238, 2026-10-29), while the merge still used the download action. Since A1216 the
   merge runs `scripts/download-coverage-blobs.mjs`, which keeps the highest-id copy of each report
@@ -6130,12 +6126,11 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **`apps/server/src/invoice-pdf.test.ts` took 162 s on one CI run**
   [Detail](backlog/ci.md#the-invoice-pdf-test-took-162-s-on-one-ci-run).
 
-- **A1252. Qualify three main runs after splitting the held-setup suite.**
-  The split retains A1131's three fresh-box restore cases from PR #2335.
-  The final PR run still has complete jobs above the target; see the
-  [timings and remaining work](backlog/ci.md#a1252-remaining-server-job-time-after-the-held-setup-split).
-  Read three later main runs that execute every server shard; each job should
-  take at most about 4.5 minutes, or name the slow suite and its cause.
+- **A1252. Bring the remaining server jobs to about 4.5 minutes.**
+  Three later full main observations are complete; their maximum jobs take 278, 292 and 306 seconds.
+  Investigate the named backup, restore and first-fiscal setup suites plus job setup time before
+  choosing further packing or suite work. Preserve the held split and every behavioural assertion.
+  [Measurements and remaining work](backlog/ci.md#a1252-remaining-server-job-time-after-the-held-setup-split).
   [Method](developers/ci-and-gates.md#refresh-after-the-held-setup-suites-grew).
 
 - **The server's duration table needs a staleness warning.** Flag missing files and
