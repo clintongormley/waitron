@@ -37,13 +37,8 @@ beforeEach(async () => {
     .returning({ id: persons.id });
   [personId, other, manager] = rows.map((r) => r.id) as [string, string, string];
 });
-async function shift(
-  subject = personId,
-  location = locationId,
-  date = "2026-01-05",
-  offsetMinutes = 0,
-) {
-  const input = { nodeId, personId: subject, locationId: location, offsetMinutes, origin };
+async function shift(subject = personId, date = "2026-01-05", offsetMinutes = 0) {
+  const input = { nodeId, personId: subject, offsetMinutes, origin };
   await run((tx) => backend.clockIn(tx, { ...input, at: `${date}T09:00:00Z` }));
   const start = (await readRecordedEntries(suite.db, { personId: subject })).find(
     (e) => e.entryKind === "in" && e.eventAt === `${date}T09:00:00.000Z`,
@@ -288,7 +283,7 @@ it("retains historical locations and their current named zones, excluding locati
   });
 });
 it("keeps all scoped original and response history when a correction crosses a month", async () => {
-  const { end } = await shift(personId, locationId, "2026-01-31");
+  const { end } = await shift(personId, "2026-01-31");
   const response = await request(end, "2026-02-01T00:30:00Z");
   await send({ action: "approve", itemId: response.entryIds[0]! }, manager, manager);
   const jan = await day("2026-01-31");
@@ -310,7 +305,7 @@ it("keeps all scoped original and response history when a correction crosses a m
 it("manager queue spans old dates and people and lists only outstanding or disputed items", async () => {
   const { end } = await shift();
   const worker = await request(end);
-  const second = await shift(other, locationId, "2026-01-06");
+  const second = await shift(other, "2026-01-06");
   const disputed = await send(
     {
       action: "propose",
@@ -453,7 +448,7 @@ it("keeps a blocked proposal available to disagree while checking competing late
   expect((await queue()).items[0]).toMatchObject({ status: "disputed", readyToApply: false });
 });
 it("both split shifts remain visible after a delayed missing-shift approval", async () => {
-  await shift(personId, locationId, "2026-01-06");
+  await shift(personId, "2026-01-06");
   const pair = await send({
     action: "request",
     questionId: null,

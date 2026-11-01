@@ -45,7 +45,6 @@ export function attendanceFixture() {
   const event = (at: string) => ({
     nodeId,
     personId,
-    locationId,
     at,
     offsetMinutes: 0,
     origin: jobOrigin("dashboard"),

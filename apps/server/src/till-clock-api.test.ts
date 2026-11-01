@@ -113,6 +113,9 @@ describe("signed-in own till clock routes", () => {
     }
     expect(await state()).toMatchObject({ state: "out" });
     expect(await count()).toBe(4);
+    expect(
+      (await readChain(suite.db, { nodeId: venue.cfg.nodeId })).map((e) => e.entryKind),
+    ).toEqual(["break_start", "break_end", "out"]);
   });
 
   it("keeps an automatic state read passive and records a submitted action as device activity", async () => {

@@ -390,29 +390,17 @@ it("forbids another subject's target, manager actions, overrides and stale own r
   });
   expect(snapshot()).toEqual(before);
 });
-it("only admits the configured own workplace, and a person with clock entries is read only at the venue", async () => {
+async function otherWorkplace() {
   const [other] = await suite.db
     .insert(locations)
     .values({ name: "Old", invoiceLocales: ["es"], operationDescription: "Restaurant" })
     .returning();
-  const route = own + `hours?locationId=${other!.id}&kind=month&date=2026-01-05`;
-  let response = await ask(route);
-  expect(response.status).toBe(403);
-  expect(await response.json()).toMatchObject({ error: { code: "attendance.not_permitted" } });
-  await withTransaction(suite.db, async (tx) => {
-    const common = {
-      ...venue.cfg,
-      personId: venue.personId,
-      origin: jobOrigin("dashboard"),
-      offsetMinutes: 60,
-    };
-    await backend.clockIn(tx, { ...common, at: "2026-01-06T09:00:00Z" });
-    await backend.clockOut(tx, { ...common, at: "2026-01-06T17:00:00Z" });
-  });
-  expect((await ask(route)).status).toBe(403);
+  return other!;
+}
+async function askQuestionAt(other: { id: string }, personId = venue.personId) {
   await suite.db.insert(attendanceQuestions).values({
-    locationId: other!.id,
-    personId: venue.personId,
+    locationId: other.id,
+    personId,
     businessDay: "2026-01-04",
     kind: "missing-times",
     active: false,
@@ -424,9 +412,50 @@ it("only admits the configured own workplace, and a person with clock entries is
     endAt: "2026-01-05T04:00:00.000Z",
     missingKinds: ["in", "out"],
   });
-  response = await ask(route);
-  expect(response.status).toBe(400);
-  expect(await response.json()).toMatchObject({ error: { code: "provisioning.second_venue" } });
+}
+it("admits another own workplace only where a person with no clock entries has a question", async () => {
+  const other = await otherWorkplace();
+  const [worker] = await suite.db
+    .insert(persons)
+    .values({ displayName: "New worker", role: "staff" })
+    .returning({ id: persons.id });
+  const cookie = `${MANAGEMENT_COOKIE}=${
+    (await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId: worker!.id })))
+      .token
+  }`;
+  const route = own + `hours?locationId=${other.id}&kind=month&date=2026-01-05`;
+  let response = await ask(route, undefined, cookie);
+  expect(response.status).toBe(403);
+  expect(await response.json()).toMatchObject({ error: { code: "attendance.not_permitted" } });
+  await askQuestionAt(other, worker!.id);
+  response = await ask(route, undefined, cookie);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    personId: worker!.id,
+    locationId: other.id,
+    workedMinutes: 0,
+  });
+});
+it("refuses a person with clock entries everywhere once a second location row exists", async () => {
+  const other = await otherWorkplace();
+  const route = own + `hours?locationId=${other.id}&kind=month&date=2026-01-05`;
+  await withTransaction(suite.db, async (tx) => {
+    const common = {
+      ...venue.cfg,
+      personId: venue.personId,
+      origin: jobOrigin("dashboard"),
+      offsetMinutes: 60,
+    };
+    await backend.clockIn(tx, { ...common, at: "2026-01-06T09:00:00Z" });
+    await backend.clockOut(tx, { ...common, at: "2026-01-06T17:00:00Z" });
+  });
+  expect((await ask(route)).status).toBe(403);
+  await askQuestionAt(other);
+  for (const place of [other.id, venue.cfg.locationId]) {
+    const response = await ask(own + `hours?locationId=${place}&kind=month&date=2026-01-05`);
+    expect(response.status, place).toBe(400);
+    expect(await response.json()).toMatchObject({ error: { code: "provisioning.second_venue" } });
+  }
 });
 it("rechecks a revoked own session after authentication and before the human write", async () => {
   expect((await ask(own + path())).status).toBe(200);

@@ -251,7 +251,6 @@ describe("clocking across a backward step of the box's clock", () => {
     expect(await latest(p, "in")).toEqual({ kind: "in", at: "13:00" });
   });
 
-  // One chain per node: the clock-in written after the step is the latest write.
   it("reads the clock-in written after a step", async () => {
     const p = await worker("residual");
     await run((tx) => backend.clockIn(tx, at(p, "21:00")));

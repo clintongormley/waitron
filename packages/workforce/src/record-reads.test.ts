@@ -29,10 +29,9 @@ const rules = {
   overtimeModel: "daily-accrual" as const,
   dailyTargetMinutes: null,
 };
-const event = (at: string, subject = personId, location = locationId) => ({
+const event = (at: string, subject = personId) => ({
   nodeId,
   personId: subject,
-  locationId: location,
   at,
   offsetMinutes: 0,
   origin,

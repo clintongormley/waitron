@@ -312,7 +312,7 @@ it("records trusted requester and device, then replays before the old revision a
   expect(inbox.prompts).toEqual([]);
 });
 
-it("refuses arbitrary workplaces but permits recorded historical workplaces", async () => {
+it("refuses arbitrary workplaces but permits a workplace where the worker has a question", async () => {
   const valid = await command();
   const [other] = await suite.db
     .insert(locations)

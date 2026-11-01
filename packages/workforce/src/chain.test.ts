@@ -111,26 +111,28 @@ describe("appendToChain", () => {
     expect(rows[0]!.last_recorded_at).not.toBeNull();
   });
 
-  it("keeps one chain per node", async () => {
-    const otherNode = await seedNode(suite.db, brandLocationId(locationId));
+  it("keeps one chain per node for every person on it", async () => {
+    const colleague = await seedPerson(suite.db, "Luis");
     await suite.db.transaction((tx) =>
       appendToChain(tx, { nodeId }, inputAt("2026-01-05T09:00:00Z")),
     );
     await suite.db.transaction((tx) =>
-      appendToChain(tx, { nodeId }, inputAt("2026-01-05T10:00:00Z")),
+      appendToChain(
+        tx,
+        { nodeId },
+        { ...inputAt("2026-01-05T09:30:00Z"), personId: colleague, recordedByPersonId: colleague },
+      ),
     );
     const chain = await readChain(suite.db, { nodeId });
-    expect(chain.map((e) => e.sequenceNo)).toEqual([1, 2]);
+    expect(chain.map((e) => [e.personId, e.sequenceNo])).toEqual([
+      [personId, 1],
+      [colleague, 2],
+    ]);
     expect(verifyChain(chain)).toEqual({ ok: true });
-    const other = await suite.db.transaction((tx) =>
-      appendToChain(tx, { nodeId: otherNode }, inputAt("2026-01-05T09:00:00Z")),
-    );
-    expect(other.sequenceNo).toBe(1);
-    expect((await readChain(suite.db, { nodeId: otherNode }))[0]?.isFirstEntry).toBe(true);
   });
 
-  it("keeps one chain per node; two nodes at one location do not collide", async () => {
-    // Two nodes write one location across a promotion, taking the same sequence_no values.
+  it("keeps one chain per node; two nodes do not collide", async () => {
+    // Two nodes write one venue across a promotion, taking the same sequence_no values.
     const nodeB = await seedNode(suite.db, brandLocationId(locationId));
     const k1 = key(nodeId);
     const k2 = key(nodeB);

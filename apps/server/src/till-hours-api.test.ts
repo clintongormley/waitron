@@ -148,7 +148,7 @@ it.each(["ended", "disabled", "deleted", "suspended", "admission", "profile", "l
     expect(snapshot()).toEqual(before);
   },
 );
-it("refuses a random workplace, and a person with clock entries is read only at the venue", async () => {
+it("refuses a random workplace, and a person with clock entries everywhere once a second location row exists", async () => {
   const [other] = await suite.db
     .insert(locations)
     .values({ name: "Historic", invoiceLocales: ["es"], operationDescription: "Restaurant" })
@@ -182,9 +182,11 @@ it("refuses a random workplace, and a person with clock entries is read only at 
     endAt: "2026-01-05T04:00:00.000Z",
     missingKinds: ["in", "out"],
   });
-  response = await read(query);
-  expect(response.status).toBe(400);
-  expect(await response.json()).toMatchObject({ error: { code: "provisioning.second_venue" } });
+  for (const place of [other!.id, venue.cfg.locationId]) {
+    response = await read(`locationId=${place}&kind=month&date=2026-01-05`);
+    expect(response.status, place).toBe(400);
+    expect(await response.json()).toMatchObject({ error: { code: "provisioning.second_venue" } });
+  }
 });
 it("scopes frozen snapshots and current entries to the session person", async () => {
   const [other] = await suite.db.select().from(persons).where(eq(persons.role, "admin"));

@@ -286,6 +286,16 @@ it("keeps the captured record, names and input after later writes", async () => 
     workedMinutes: 540,
   });
 });
+it("exports a shift begun on one node and ended on another as one session", async () => {
+  const otherNode = await seedNode(suite.db, brandLocationId(locationId));
+  await run((tx) => backend.clockIn(tx, event("2026-01-05T09:00:00Z")));
+  await run((tx) => backend.clockOut(tx, { ...event("2026-01-05T17:00:00Z"), nodeId: otherNode }));
+  await close();
+  const exported = await doc({ personId: worker });
+  for (const key of ["sessions", "frozen-sessions"])
+    expect(cells(exported, key).map((r) => r.workedMinutes)).toEqual([480]);
+});
+
 it("exports empty and open history without inventing a completed session", async () => {
   const empty = await doc();
   expect(cells(empty, "sessions")).toEqual([]);
