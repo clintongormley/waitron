@@ -1,8 +1,8 @@
 import { eq } from "drizzle-orm";
 import {
   nodes,
-  tenants,
   locationBusinessDaySettings,
+  readTenant,
   readVenueClockAndPlace,
   type Transaction,
 } from "@waitron/db";
@@ -32,17 +32,15 @@ export interface ZoneContext {
 export async function readZoneContext(tx: Transaction, scope: IssueScope): Promise<ZoneContext> {
   const [node] = await tx.select({ id: nodes.id }).from(nodes).where(eq(nodes.id, scope.nodeId));
   if (node === undefined) throw new AppError("venue.time_zone_target_invalid", { reason: "node" });
-  const [tenant] = await tx
-    .select({ legalName: tenants.legalName, country: tenants.country })
-    .from(tenants)
-    .where(eq(tenants.id, 1));
-  if (tenant === undefined) throw new AppError("venue.not_found", {});
+  const tenant = await readTenant(tx);
+  if (tenant === null) throw new AppError("venue.not_found", {});
   const { clock, place } = await readVenueClockAndPlace(tx);
   // Keyed by the venue's row id, so the table holds at most one row.
   const [settings] = await tx.select().from(locationBusinessDaySettings).limit(1);
   return {
     nodeId: scope.nodeId,
-    ...tenant,
+    legalName: tenant.legalName,
+    country: tenant.country,
     province: place.province,
     savedZone: classifySavedTimeZone(clock.timeZone),
     clock,

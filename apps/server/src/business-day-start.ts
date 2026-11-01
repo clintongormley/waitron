@@ -200,7 +200,10 @@ export async function writeBusinessDayStart(
   const proposal = proposalOf(input);
   const model = await readBusinessDayClockModel(tx, at);
   assertRevision(model, proposal.expectedClockRevision);
-  const unchanged = async () => ({ changed: false, model: await readVenueDetails(tx, at) });
+  const unchanged = async () => ({
+    changed: false,
+    model: await readVenueDetails(tx, at, model),
+  });
   if (
     model.pending === null &&
     proposal.dayCutover === cutoverForBusinessDay(model.clock, model.currentBusinessDay!)

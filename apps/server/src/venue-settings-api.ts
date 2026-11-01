@@ -4,12 +4,13 @@ import { readCatalogueSettings, saveCatalogueSettings } from "@waitron/catalogue
 import {
   locations,
   readVenue,
-  readVenueClock,
   venueLocationId,
   withTransaction,
   type Database,
   type Transaction,
+  type Venue,
 } from "@waitron/db";
+import type { ReceiptLanguageRules } from "@waitron/country";
 import type { FiscalContribution } from "@waitron/fiscal";
 import { authorizeManager } from "@waitron/identity";
 import { readPrivacyContact, renameTaxpayer, savePrivacyContact } from "@waitron/provisioning";
@@ -67,14 +68,24 @@ async function ordersBlockingReceiptLanguage(tx: Transaction): Promise<number> {
   return rows[0]!.count;
 }
 
-/** The venue's saved receipt languages. */
-async function storedLanguages(tx: Transaction): Promise<string[]> {
-  return (await readVenue(tx)).invoiceLocales;
+interface ReceiptLanguageState {
+  venue: Venue;
+  rules: ReceiptLanguageRules;
 }
 
-/** Saves `language` as the venue's one receipt language, under the pack's and the region's rules. */
-async function writeReceiptLanguage(tx: Transaction, language: string): Promise<void> {
-  const rules = await readVenueReceiptLanguageRules(tx);
+async function readReceiptLanguageState(tx: Transaction): Promise<ReceiptLanguageState> {
+  const venue = await readVenue(tx);
+  return { venue, rules: await readVenueReceiptLanguageRules(tx, venue) };
+}
+
+/** Saves `language` as the venue's one receipt language, under the pack's and the region's rules,
+ * and answers the state as saved. */
+async function writeReceiptLanguage(
+  tx: Transaction,
+  state: ReceiptLanguageState,
+  language: string,
+): Promise<ReceiptLanguageState> {
+  const { venue, rules } = state;
   if (!rules.choices.includes(language)) {
     throw new AppError("management.request_invalid", { field: "receiptLanguage" });
   }
@@ -84,25 +95,28 @@ async function writeReceiptLanguage(tx: Transaction, language: string): Promise<
       language: rules.fixed.locale,
     });
   }
-  const stored = await storedLanguages(tx);
+  const stored = venue.invoiceLocales;
   // Saving the list the venue already holds changes no line's key.
-  if (stored.length === 1 && stored[0] === language) return;
+  if (stored.length === 1 && stored[0] === language) return state;
   const count = await ordersBlockingReceiptLanguage(tx);
   if (count > 0) {
     throw new AppError("receipt.language_orders_open", { field: "receiptLanguage", count });
   }
+  const invoiceLocales = [language];
   await tx
     .update(locations)
-    .set({ invoiceLocales: [language] })
+    .set({ invoiceLocales })
     .where(eq(locations.id, await venueLocationId(tx)));
+  return { rules, venue: { ...venue, invoiceLocales } };
 }
 
-async function readVenueDefaults(tx: Transaction): Promise<VenueDefaults> {
-  const rules = await readVenueReceiptLanguageRules(tx);
-  const [receiptLanguage] = await storedLanguages(tx);
+async function readVenueDefaults(
+  tx: Transaction,
+  { venue, rules }: ReceiptLanguageState,
+): Promise<VenueDefaults> {
   const { defaultProductVatClass } = await readCatalogueSettings(tx);
   return {
-    receiptLanguage: receiptLanguage!,
+    receiptLanguage: venue.invoiceLocales[0]!,
     receiptLanguageChoices: [...rules.choices],
     fixedReceiptLanguage: rules.fixed?.locale ?? null,
     defaultProductVatClass,
@@ -214,10 +228,7 @@ export function mountVenueSettingsApi(
     run(c, log, async () => {
       const model = await gated(
         requireManagementSession(c),
-        async (tx) => ({
-          details: await readVenueDetails(tx),
-          clock: await readVenueClock(tx),
-        }),
+        async (tx) => ({ clock: (await readVenueDetails(tx)).businessDayClock.clock }),
         "venue.view",
       );
       const preview = venueClockPreview(
@@ -263,7 +274,8 @@ export function mountVenueSettingsApi(
             throw error;
           throw refuse("fiscal_format");
         }
-        const { issuer } = await readVenueDetails(tx);
+        const at = new Date();
+        const { issuer, businessDayClock } = await readVenueDetails(tx, at);
         const stored = normalizeVenueText(issuer.legalName);
         if (legalName === stored && expected === stored) throw refuse("unchanged");
         // A match after normalising stands for the stored spelling, which the write compares exactly.
@@ -272,7 +284,7 @@ export function mountVenueSettingsApi(
           legalName,
         });
         if (!renamed) throw new AppError("venue.detail_changed", { field: "legalName" });
-        return { model: await readVenueDetails(tx) };
+        return { model: await readVenueDetails(tx, at, businessDayClock) };
       });
       return c.json(result);
     }),
@@ -281,9 +293,12 @@ export function mountVenueSettingsApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const answer = await gated(sessionId, async (tx) => {
-        const rules = await readVenueReceiptLanguageRules(tx);
-        const [language] = await storedLanguages(tx);
-        return { language, choices: rules.choices, fixed: rules.fixed ?? null };
+        const { venue, rules } = await readReceiptLanguageState(tx);
+        return {
+          language: venue.invoiceLocales[0],
+          choices: rules.choices,
+          fixed: rules.fixed ?? null,
+        };
       });
       return c.json(answer);
     }),
@@ -313,7 +328,13 @@ export function mountVenueSettingsApi(
   app.get("/management-api/venue-defaults", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      return c.json(await gated(sessionId, readVenueDefaults, "venue.view"));
+      return c.json(
+        await gated(
+          sessionId,
+          async (tx) => readVenueDefaults(tx, await readReceiptLanguageState(tx)),
+          "venue.view",
+        ),
+      );
     }),
   );
   app.put("/management-api/venue-defaults", (c) =>
@@ -322,16 +343,21 @@ export function mountVenueSettingsApi(
       const body = await readJsonBody<unknown>(c);
       const answer = await gated(sessionId, async (tx) => {
         const request = venueDefaultsRequest(body);
+        let state: ReceiptLanguageState | undefined;
         if ("receiptLanguage" in request) {
           if (typeof request.receiptLanguage !== "string")
             throw new AppError("management.request_invalid", { field: "receiptLanguage" });
-          await writeReceiptLanguage(tx, request.receiptLanguage);
+          state = await writeReceiptLanguage(
+            tx,
+            await readReceiptLanguageState(tx),
+            request.receiptLanguage,
+          );
         }
         if ("defaultProductVatClass" in request)
           await saveCatalogueSettings(tx, {
             defaultProductVatClass: request.defaultProductVatClass,
           });
-        return readVenueDefaults(tx);
+        return readVenueDefaults(tx, state ?? (await readReceiptLanguageState(tx)));
       });
       return c.json(answer);
     }),

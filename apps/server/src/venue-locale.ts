@@ -7,6 +7,7 @@ import {
   withTransaction,
   type Database,
   type Transaction,
+  type Venue,
 } from "@waitron/db";
 import { contentLanguagesOr, readSavedContentLanguages } from "@waitron/catalogue";
 import type { ReceiptLanguageRules } from "@waitron/country";
@@ -68,11 +69,17 @@ export async function readVenueContentLanguageRules(db: Database): Promise<Conte
 }
 
 /** The receipt languages the venue's country pack offers, and the one its region fixes, if any,
- * read in the caller's transaction. */
+ * read in the caller's transaction. `venue`, when given, is the venue row the caller already read
+ * in it. */
 export async function readVenueReceiptLanguageRules(
   tx: Transaction,
+  venue?: Pick<Venue, "province">,
 ): Promise<ReceiptLanguageRules> {
-  return resolveInstalledReceiptLanguageRules(await geographyIn(tx));
+  if (venue === undefined) return resolveInstalledReceiptLanguageRules(await geographyIn(tx));
+  return resolveInstalledReceiptLanguageRules({
+    country: await countryIn(tx),
+    area: venue.province,
+  });
 }
 
 /**
