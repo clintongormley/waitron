@@ -137,7 +137,7 @@ const CORE_TRANSFER: ModuleConfigurationTransfer = {
  * `@waitron/identity` and `@waitron/layouts` are ordinary dependencies of the packages that use them,
  * not slots, and the guard says nothing about them.
  *
- * Each `migrations` object carries the exact `{ name, table, from }` from
+ * Each `migrations` object carries the exact `{ name, table, from }`, and `database` where set, from
  * `packages/migrations/migrations.manifest.json`; `composition.test.ts` pins the two byte-for-byte
  * while both exist. `requires` must name every set whose table this set's SQL `REFERENCES`, puts a
  * trigger `ON`, or names inside a trigger body. Two modules fill the `fiscal` slot —

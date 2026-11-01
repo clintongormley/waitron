@@ -1,7 +1,7 @@
 import { classify, type ClassifiedTable } from "@waitron/sync-enrolment";
 
 const LOCAL =
-  "this box's own row, in node.db, which is never streamed; keyed by this box's node id, which every read and write names";
+  "this box's own row, in node.db, which is never streamed; keyed by this box's node id, which every read and write names, except that a key-ring rotation reads every node_signing_key row";
 
 export const NODE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("node_mode", "local", LOCAL),

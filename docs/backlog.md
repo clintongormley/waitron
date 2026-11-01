@@ -596,6 +596,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   key ring the Move stored beside the folder.
   [Detail](backlog/setup.md#a1143-files-a-move-set-aside-have-no-way-back-in-the-app)
 
+- **A1285: should the staged reset of a stopped join delete `secrets.env`?** Left open by A947
+  slice 3a.
+  [Detail](backlog/setup.md#a1285-should-the-staged-reset-of-a-stopped-join-delete-secretsenv)
+
 - **A1284: where the environment sets the vault key, a Move copies a ring that is not the one in
   use.** Left open by A947 slice 3a.
   [Detail](backlog/setup.md#a1284-where-the-environment-sets-the-vault-key-a-move-copies-a-ring-that-is-not-the-one-in-use)
@@ -5841,8 +5845,7 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   end-to-end proof. Do not restart the cloud-standby work until the boundary contract is settled.
   [Detail](backlog/replication-cloud.md#waitron-retains)
 
-- **SQLite + Litestream replaces PostgreSQL.** Next: slice 3, seats and promotion. Its first task
-  is already decided: credentials move to a venue key stored in `venue.db` only in locked form.
+- **SQLite + Litestream replaces PostgreSQL.** Next: slice 3, seats and promotion.
   [Detail](backlog/replication-cloud.md#sqlite--litestream-replaces-postgresql)
 
 - **Loose ends left by the SQLite failover-loop prototype gate.** Validate every supported object

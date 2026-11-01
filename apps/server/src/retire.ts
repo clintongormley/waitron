@@ -37,7 +37,7 @@ export interface RetireResult {
 /**
  * A fenced (`sell-only`) node evicts itself with a document signed by its own key, persisted
  * term-guarded. Every gate throws before any write and the document is signed in memory before the
- * persist, so a refusal or a signing failure leaves the node exactly as it was.
+ * persist.
  */
 export async function retireSelf(deps: RetireDeps): Promise<RetireResult> {
   const held = await readNodeMembership(deps.appDb);

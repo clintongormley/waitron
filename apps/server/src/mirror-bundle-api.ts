@@ -114,8 +114,8 @@ export function mountMirrorBundleApi(
 
       const assemble = async (moduleOperations?: ModuleOperations) => {
         if (deps.relayUrl === undefined) throw new AppError("mirror.no_relay", {});
-        // Before assembly, so a refused chart spends no reservation. Each mint round below checks
-        // the chart it re-reads again.
+        // Before assembly, so a chart too broken to read, or one no stored key vouches for, spends no
+        // reservation. Each mint round below checks the chart it re-reads again.
         const held = await readNodeMembership(deps.appDb);
         assertHeldDocumentReadable(held);
         await assertHeldDocumentTrusted(trustDeps(deps), held);

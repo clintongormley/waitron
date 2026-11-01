@@ -552,11 +552,13 @@ folder, which the repair page's moved-folder message does not name: it names
 `state/…/<stem>/state` and `venue/…/<stem>` (`movedFolder`, `apps/server/src/recovery-start-again.ts`;
 the message predates the slice).
 
-A staged reset of a stopped join keeps `secrets.env` (its list in `runStagedReset`,
-`apps/server/src/reset-request.ts`, leaves it out). That was kept so a Move folder sealed under the
-box's own ring stays readable after an early-stopped join; a join that stopped after it replaced
-`secrets.env` leaves the main box's ring there. Now that the Move keeps its own copy, decide whether
-the staged reset should delete `secrets.env`.
+## A1285: should the staged reset of a stopped join delete `secrets.env`?
+
+Left open by A947 slice 3a. A staged reset of a stopped join keeps `secrets.env` (its list in
+`runStagedReset`, `apps/server/src/reset-request.ts`, leaves it out). That was kept so a Move folder
+sealed under the box's own ring stays readable after an early-stopped join; a join that stopped
+after it replaced `secrets.env` leaves the main box's ring there. Now that the Move keeps its own
+copy (A1143), decide whether the staged reset should delete `secrets.env`.
 
 ## A1284: where the environment sets the vault key, a Move copies a ring that is not the one in use
 

@@ -1517,8 +1517,11 @@ open under Task 1b. _2026-10-04 (A238):_ `tills` is gone; `sessions.device_id` n
 
 **What ties a `local` row to its node, and which ties are pinned.** A `local` table's reason says
 which of three ties it uses: a `node_id` column every read and write names (the five `node.db`
-tables, `join_requests`, `node_sealed_state`, `recovery_packs`), a seal only that node's key opens (`tenant_credentials`), or rows
-the transaction that wrote them deletes (`change_log`). Identity has no `local` table: slice-2
+tables, `join_requests`, `node_sealed_state`, `recovery_packs`; `rotateNodeSigningKeys` in
+`packages/credentials/src/node-signing-key.ts` reads every `node_signing_key` row on purpose, so a
+re-key leaves none on the old key), a seal only a box holding the key ring opens
+(`tenant_credentials`, whose ring a joining spare receives from the main box), or rows the
+transaction that wrote them deletes (`change_log`). Identity has no `local` table: slice-2
 Task 1b reclassified its logins and sign-in ceremonies `state`, with a login's cookie token stored
 only as its hash (`packages/identity/src/classification.ts`; #554, and the owner's decision that a
 login survives a rebuild and a promotion). Pinned,

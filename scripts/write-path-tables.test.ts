@@ -54,16 +54,13 @@ const REPO_ROOT = join(import.meta.dirname, "..");
  *                                                provision route.
  *   `packages/db/src/reserved-identity.ts`       writes a standby's dormant node row, from the boot
  *                                                adoption worker.
- *   `packages/db/src/deployment.ts`              stamps the environment, from the setup-mode
- *                                                provision and adopt routes and the
- *                                                `waitron-provision` command line; writes a node's
- *                                                mode from adopt and the mirror promotion (a
- *                                                `mirror` mode write sets the singleton role with
- *                                                it); its singleton role from both promote paths
- *                                                and the boot demote; and its break-glass verifier
- *                                                from adopt, through the break-glass mint.
- *   `packages/db/src/mirror-config.ts`           writes the cloud mirror's connection config, from
- *                                                the setup-mode adopt route.
+ *   `packages/db/src/deployment.ts`              stamps the environment.
+ *   `packages/node-db/src/mirror-link.ts`        writes this node's mirror link.
+ *   `packages/node-db/src/mode.ts`               writes this node's mode and singleton role.
+ *   `packages/node-db/src/primary-key.ts`        pins the primary's public key on this node.
+ *   `packages/node-db/src/recovery-key.ts`       writes this node's recovery-key verifier and name.
+ *   `packages/credentials/src/node-signing-key.ts` seals a node's signing key, and re-seals every
+ *                                                row not on the key ring's current key.
  */
 const ALLOWED: Record<string, readonly string[]> = JSON.parse(
   readFileSync(join(REPO_ROOT, "scripts", "write-path-tables.json"), "utf8"),

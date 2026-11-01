@@ -90,11 +90,7 @@ export type DeploymentMode = "primary" | "mirror";
  * `primary` — or sells only. */
 export type SingletonRole = "primary" | "secondary";
 
-/**
- * Refuses a role write on a database that has not been stamped with its environment. These are
- * promotion primitives: a mis-sequenced adopt or promote that "succeeded" before the stamp would
- * leave a node's role recorded on a database nothing has claimed for an environment.
- */
+/** Refuses a role write on a database that has not been stamped with its environment. */
 export async function requireStamp(tx: Transaction): Promise<void> {
   const [row] = await tx.select({ id: deployment.id }).from(deployment).where(eq(deployment.id, 1));
   if (row === undefined) throw new AppError("deployment.not_stamped", {});

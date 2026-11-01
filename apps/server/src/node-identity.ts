@@ -17,7 +17,6 @@ import {
 import { AppError, isAppError } from "@waitron/shared";
 import "./errors.js";
 
-/** The purpose the node's Ed25519 membership private key is sealed under. */
 export const NODE_KEY_PURPOSE = "membership.node_key";
 
 /**

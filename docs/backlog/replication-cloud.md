@@ -237,8 +237,7 @@ its cloud support-service proposal is tracked in Cloud and is not approved by th
 
 ## SQLite + Litestream replaces PostgreSQL
 
-Next: slice 3, seats and promotion. Its first task is already decided: credentials move to a venue
-key stored in `venue.db` only in locked form. Do not reopen it. See
+Next: slice 3, seats and promotion. See
 [Decisions and deliberate limits](#decisions-and-deliberate-limits).
 
 ## Validate every supported object store
@@ -270,7 +269,7 @@ Cloud's production store still needs its own run.
   "refuses a document signed by a key only venue.db names" in
   `apps/server/src/membership-trust.test.ts`); this restore start's check is unchanged.
 
-## Only the start that finishes a restore checks the row's signature
+## A mirror, fenced or adopting start does not check the held row's signature
 
 - A mirror or fenced start
   checks only that it can be read and is shaped as a document (A53); a start still finishing an
@@ -714,16 +713,12 @@ credential sealing and scheduler takeover remain unverified.
 
 - A node row holding no endorsement still signs `endorsements: []`, and no first-start case
   asserts it.
-- A comment claims more than the code keeps: `retireSelf`'s header (`apps/server/src/retire.ts`)
-  says a signing failure "leaves the node exactly as it was". Signing empties pending
-  `change_log` rows, so they are not strictly untouched; no case
-  losing a real one is known. Narrow it the next time the file is edited.
 - [Restore fencing when the cloud peer does not answer](#a-restored-box-whose-cloud-peer-does-not-answer-during-its-first-start-signs-the-next-term-and-removes-the-marker).
 - The pointer's term is taken without checking its signature, as the supervisor already does, so
   whoever can write the bucket can push a restored box's term up (never down).
 - A sell-only local secondary that is not fenced runs the first start and signs the next term.
 - [Trust in the restored copy’s own keys](#the-restored-membership-rows-check-assertrestoredmembershipvalid-678-trusts-the-keys-the-restored-copy-holds).
-- [Signature checks outside the restore first start](#only-the-start-that-finishes-a-restore-checks-the-rows-signature).
+- [Signature checks on a mirror, fenced or adopting start](#a-mirror-fenced-or-adopting-start-does-not-check-the-held-rows-signature).
 - [Curated refusal for malformed membership with no restore marker](#on-a-start-with-no-restore-marker-text-that-is-not-json-or-a-machine-list-that-is-not-a-list-fails-with-the-generic-text).
 - A mirror that deferred its first start and is then promoted without a restart
   (`promoteMirrorToPrimary`) keeps the bucket copy held, reading off with the reason
