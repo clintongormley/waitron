@@ -2101,7 +2101,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Decide whether the list gets shorter (fewer items, or tighter rows) or the table section comes
   first. Pictures `x-t1-menu-open`, `k5-*` in the LOOK's folder
   (`~/waitron-campaign-c/a803-3-shots/`, not in the repository). Since slice 4a the bill section is
-  one item shorter (Move dishes… replaced Split by item and Transfer items); measured then: HEIGHTS_TBD.
+  one item shorter (Move dishes… replaced Split by item and Transfer items). Measured then (slice
+  4a's LOOK, list content 647 px): at 1280×900 it fits in English and Spanish (649 px); at 390×844
+  it scrolls by 8 px in English and 78 px in Spanish, where the list starts lower.
 
 - **A1266. A payment window stays on a bill another till moved or merged away, and an unanswered
   card payment's view leaves this till's screen (left open by A803 slice 3, #2360).** Since the LOOK
@@ -2148,6 +2150,52 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   and `#onMergeBills` returns without a word when `#billComposition` answers `null`, which it does
   with no party (`apps/till/src/till-app.ts`). By reading, not run. Slice 4a took Split by item and
   Transfer items out of that section for the same reason. Decide whether Merge bills goes too.
+
+- **A1288. Move dishes… shows a dish paid on another till as tickable until the till next reads
+  the bill (seen in A803 slice 4a's LOOK).** On one table the open panel greyed the dish "Paid"
+  10 seconds after the payment, on another about 2 seconds after; a panel opened a second after a
+  payment showed it tickable for 4 seconds. Move in that gap is refused (`bill.line_paid`) and
+  nothing moves, but the waiter sees a choice the till then refuses. After that refusal the foot's
+  "Still to pay at this table" stayed at the old figure until the table was opened again, while the
+  bill itself was right. Decide whether the panel re-reads the bill on opening and the foot after a
+  money refusal. Pictures `s4-stale-paid-row`, `s3-refusal-3s3` (`~/waitron-campaign-c/a803-4-shots/`, not in the repository).
+
+- **A1289. Moving dishes onto a bill with someone else's unsent dish says "This order belongs to
+  someone else. Reload the table to see it" (seen in A803 slice 4a's LOOK).** It names neither the
+  person nor the bill, reloading does not help, and Take over sits on the other bill, where the
+  waiter has to find it. The panel offered that bill with no sign of the unsent dish. The words are
+  the approved `draft.taken_over` text the plan chose (D9); after Take over the move works. Decide
+  the words, and whether the refusal offers Take over in place. Pictures `s7-*`, `s8-*` (`~/waitron-campaign-c/a803-4-shots/`, not in the repository).
+
+- **A1290. The table screen's action panel can put Back and its action half below the window, and
+  "+ New bill" touches Back (seen in A803 slice 4a's LOOK).** At 1280×900 Move dishes… opens at the
+  lower left, the order heading, bill switcher and ⋮ scroll out of view and the space to the right
+  stays empty; Back measured y 858, 44 px high, in a 900 px window. On a short list "+ New bill" sits
+  against Back with no gap. Both are the shared action panel's layout (`aside.action-panel` in
+  `apps/till/src/screens/till-table-order-screen.ts`). Pictures `k2-panel-open`, `k5-move-active`
+  (`~/waitron-campaign-c/a803-4-shots/`, not in the repository).
+
+- **A1291. Another till's open Pay items list is not refreshed when dishes leave its bill (seen in
+  A803 slice 4a's LOOK).** After a move, the dialog's totals updated but its list still showed the
+  dishes that left; paying one gave "Something went wrong, try again", and reopening the dialog put
+  it right. I believe this predates slice 4a (Transfer items would leave it the same); not checked
+  on `main`. It sits in A739's payment window files. Pictures `x-h-*` (`~/waitron-campaign-c/a803-4-shots/`, not in the repository).
+
+- **A1292. Move dishes… shows no weight for a weighed dish (seen in A803 slice 4a's LOOK).** Two
+  0.32 kg portions of Iberian ham are two rows reading "Iberian ham €28.48"; two different weights
+  are told apart only by price, though the order list shows the weight. Show the weight as the
+  order list does.
+
+- **A1293. The Sent summary counts weighed quantities as dishes (seen in A803 slice 4a's LOOK).** It
+  read "0 ready · 6.64 firing" for 3 beers, 2 calamari, a paella and 0.64 kg of ham. I believe this
+  predates slice 4a; not checked. Picture `s3-refusal-3s3` (`~/waitron-campaign-c/a803-4-shots/`, not in the repository).
+
+- **A1294. An extra whose dish is on another bill would be drawn as a dish in Move dishes… (left
+  open by A803 slice 4a).** The picker takes a line with no parent as a dish
+  (`apps/till/src/state/portion-selection.ts`), and the database's parent key
+  (`working_order_lines_parent_fk`, `packages/db/src/schema/orders.ts`) does not require the parent
+  to be on the same bill. Believed impossible, since every move takes extras with their dish; by
+  reading, not tested. Decide whether the key should say so.
 
 - **A1193. Choosing which portions of a grouped row an action takes, and Fire now on a grouped
   row (left open by A803 slice 1, D14 and D31).** Actions on a row take a count, never chosen
