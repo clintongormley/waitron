@@ -468,8 +468,16 @@ correction's reference. Earlier delivery rows and acknowledgements stay unchange
 version still receives lost-acknowledgement recovery or no-trace resubmission. The reconciliation
 write transaction rechecks which versions remain current after the network request; a correction
 appended during that request prevents a stale resubmission of its predecessor. These tests use
-the library's fake authority; live second-correction acceptance, the administrator action boundary,
-supported-payload audit and the other backend version decisions remain unfinished.
+the library's fake authority; live second-correction acceptance, the administrator action boundary
+and held-case resolution remain unfinished.
+
+**1 November 2026, Task 8 payload and backend version admission.** The row converter refuses
+optional library fields without stored counterparts rather than silently discarding them, including
+explicit `N` flags. It also refuses caller-supplied `RefExterna`: the drainer assigns the stored row
+id when submitting. Credit-note and substitution admission use the unreplaced version's invoice
+type; a correction from F2 to F1 therefore refuses the existing R5/F3 paths, while a correction to
+F2 permits them. Void identity and origin come from the issued original, while its chain pointer
+uses the current head. These are synthetic storage and backend checks; no new remedy is enabled.
 
  Earlier
 Task 7 automatic-switch requirements below are historical; the 1 November decision supersedes them.

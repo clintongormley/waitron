@@ -393,8 +393,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   Stored remedy markers now survive row conversion and XML assembly; the chain writer accepts
   successive same-invoice correction links and refuses a competing replacement with a domain code.
   Cancellation admission and consultation reconciliation now select the unreplaced version;
-  reconciliation rechecks after its network wait. Administrator actions, the remaining backend
-  version decisions, supported-payload audit and live second-correction probe remain unfinished.
+  reconciliation rechecks after its network wait. Credit-note and substitution admission use the
+  current corrected invoice type; voids keep the issued sale's origin. The row converter refuses
+  optional library fields it cannot retain, including a caller-supplied submission reference.
+  Administrator actions, held-case resolution and the live second-correction probe remain unfinished.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment

@@ -1,4 +1,6 @@
+import "./errors.js";
 import { getTableColumns } from "drizzle-orm";
+import { AppError } from "@waitron/shared";
 import { formatDateTime } from "@waitron/verifactu";
 import type {
   DesgloseRectificacion,
@@ -110,6 +112,31 @@ export function toRegistroRow(
   record: RegistroAlta | RegistroAnulacion,
   ctx: RegistroRowContext,
 ): RegistroRowInsert {
+  // RefExterna is assigned from the stored row id at submission; the other fields have no
+  // storage column. Refuse their presence rather than append a record we cannot replay intact.
+  const unsupported = isAlta(record)
+    ? ([
+        "RefExterna",
+        "FechaOperacion",
+        "FacturaSimplificadaArt7273",
+        "FacturaSinIdentifDestinatarioArt61d",
+        "Macrodato",
+        "EmitidaPorTerceroODestinatario",
+        "Tercero",
+        "Cupon",
+        "NumRegistroAcuerdoFacturacion",
+        "IdAcuerdoSistemaInformatico",
+      ] as const)
+    : (["RefExterna", "GeneradoPor", "Generador"] as const);
+  const fields = unsupported.filter(
+    (field) => field in record && Reflect.get(record, field) !== undefined,
+  );
+  if (fields.length > 0) {
+    throw new AppError("fiscal.record_invalid", {
+      fields,
+      codes: fields.map(() => "UNSUPPORTED_FIELD"),
+    });
+  }
   const anterior = record.Encadenamiento.RegistroAnterior;
   const common = {
     source: ctx.origin.source,

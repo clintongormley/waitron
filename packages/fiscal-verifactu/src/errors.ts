@@ -84,12 +84,7 @@ declare module "@waitron/shared" {
     "chain.append_contention": { nodeId: string; attempts: number };
 
     /**
-     * `attemptAppend` (./chain.ts) refused a record that `@waitron/verifactu`'s `validate` reports
-     * as one AEAT could not accept, or as having a malformed fingerprint. Raised BEFORE the insert, so nothing is written and the chain
-     * head does not move: `registros_facturacion` is append-only and hash-chained, so refusing a
-     * record is the only remedy that leaves the venue repairable.
-     *
-     * Params carry the offending FIELD NAMES and the validator's ISSUE CODES — never the offending
+     * Params carry the offending field names and issue codes — never the offending
      * values. The shared error boundary writes params into `waitron.log`, which the
      * unauthenticated recovery page renders to anyone on the venue's LAN
      * (`apps/server/src/recovery-surface.ts`), so an operator's data must never travel here.
