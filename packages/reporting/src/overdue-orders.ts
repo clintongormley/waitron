@@ -2,10 +2,10 @@ import { and, eq, isNull, ne } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import {
   kitchenStations,
-  nodes,
   orderTableLabels,
   ticketItems,
   workingOrderLines,
+  venueLocationId,
   workingOrders,
 } from "@waitron/db";
 import { BAND_RANK, classifyBand, worstBand } from "@waitron/shared";
@@ -126,14 +126,9 @@ export async function computeOverdueOrders(
   }
 
   if (late.length === 0) return [];
-  // The node exists: `ticket_items.node_id` references it, and a late order has a ticket item here.
-  const [node] = await tx
-    .select({ locationId: nodes.locationId })
-    .from(nodes)
-    .where(eq(nodes.id, input.nodeId));
   const tableLabels = await orderTableLabels(
     tx,
-    node!.locationId,
+    await venueLocationId(tx),
     late.map(({ orderId, order }) => ({ id: orderId, ...order })),
   );
   const results: OverdueOrder[] = late.map(({ orderId, order, band, worstLine }) => ({

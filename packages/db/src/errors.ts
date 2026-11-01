@@ -51,6 +51,15 @@ declare module "@waitron/shared" {
      * `<table>.<column>`. Declared with identical params in `apps/server/src/errors.ts`. */
     "setup.request_invalid": { field: string };
     /**
+     * No venue row, or no taxpayer row: setup has not run, which a set-up box reaches only through
+     * a fault in Waitron. Once venue settings have their own table it is the refusal when that table
+     * has no row.
+     */
+    "venue.not_found": Record<string, never>;
+    /** A database holds more than one venue row. Declared with identical params in
+     * `packages/provisioning/src/errors.ts`. */
+    "provisioning.second_venue": Record<string, never>;
+    /**
      * A database already belongs to a different environment. Never overwritten: the rows written
      * under the first stamp cannot be moved to the second — an invoice series that filed to
      * pre-production has a numbering hole in production that nothing can fill.

@@ -37,7 +37,7 @@ export async function recordDailyClose(
 
   const clock = await resolveVenueClock(tx, input.nodeId);
   if (input.timeZone !== clock.timeZone)
-    throw new Error("reporting: supplied time zone must match the node location");
+    throw new Error("reporting: supplied time zone must match the venue's time zone");
   const head = await readChainHead(tx, input.nodeId);
 
   const close = await computeDailyClose(tx, {

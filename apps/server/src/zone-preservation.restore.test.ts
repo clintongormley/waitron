@@ -10,7 +10,7 @@ import {
 } from "../test/hour-recovery-host.js";
 import { eq, sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
-import { invoiceSeries, locations, openVenueDatabase, withTransaction } from "@waitron/db";
+import { invoiceSeries, locations, nodes, openVenueDatabase, withTransaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { recordDailyClose } from "@waitron/reporting";
 import { recordSale } from "@waitron/core";
@@ -21,6 +21,7 @@ import { drain } from "@waitron/fiscal-verifactu/src/drain.js";
 import { assertValid, computeHuella } from "@waitron/verifactu";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
+import { TENANT_B } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { saleId, seriesId } from "@waitron/shared";
 import { runRestore } from "./restore-command.js";
 
@@ -28,6 +29,9 @@ it.each(["archive", "bucket"] as const)(
   "%s entry preserves old identities and first-drain payloads before the next saved-zone issue",
   async (kind) => {
     vi.setSystemTime(new Date("2026-10-15T12:00:00Z"));
+    // The shared fixture seeds a second venue row, which the daily close's clock read refuses.
+    await suite.db.delete(nodes).where(eq(nodes.locationId, TENANT_B.locationId));
+    await suite.db.delete(locations).where(eq(locations.id, TENANT_B.locationId));
     await recoveryInvoices();
     const [standard] = await suite.db
       .select()

@@ -1,6 +1,12 @@
 import { asc, eq, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
-import { locations, nodes, locationDayCutoverChanges, type Transaction } from "@waitron/db";
+import {
+  locations,
+  nodes,
+  locationDayCutoverChanges,
+  readVenueClock,
+  type Transaction,
+} from "@waitron/db";
 import { businessDayAt, businessDayBoundaryAt, businessDayBounds } from "@waitron/shared";
 import type { BusinessDayClock, NodeId } from "@waitron/shared";
 import type { DailyCloseInput, PeriodVatInput } from "./types.js";
@@ -210,12 +216,9 @@ export async function resolveVenueClock(
   tx: Transaction,
   nodeId: string,
 ): Promise<BusinessDayClock> {
-  const [node] = await tx
-    .select({ locationId: nodes.locationId })
-    .from(nodes)
-    .where(eq(nodes.id, nodeId));
+  const [node] = await tx.select({ id: nodes.id }).from(nodes).where(eq(nodes.id, nodeId));
   if (node === undefined) throw new Error(`reporting: no node ${nodeId}`);
-  return readLocationClock(tx, node.locationId);
+  return readVenueClock(tx);
 }
 
 export function currentBusinessDay(input: BusinessDayClock): string {
