@@ -144,8 +144,9 @@ export async function promoteLocalSecondaryToPrimary(
 
   const held = await readNodeMembership(deps.db);
   assertNotFenced(held, deps.nodeId);
-  // Only a fault in Waitron produces a held chart no stored key vouches for today; a Cloud peer's
-  // charts would be refused here too, a limit the backlog records.
+  // A held chart no stored key vouches for comes from a fault in Waitron, a Cloud peer, or (with
+  // three or more boxes) a main box that changed twice since this box joined. The backlog records
+  // the last two.
   await assertHeldDocumentTrusted(deps, held);
   const document = await mintNextMembershipDocument(
     { db: deps.db, node: deps.node, ring: deps.ring },
@@ -246,8 +247,9 @@ export async function promoteMirrorToPrimary(
 
   const held = await readNodeMembership(deps.db);
   assertNotFenced(held, deps.nodeId);
-  // Only a fault in Waitron produces a held chart no stored key vouches for today; a Cloud peer's
-  // charts would be refused here too, a limit the backlog records.
+  // A held chart no stored key vouches for comes from a fault in Waitron, a Cloud peer, or (with
+  // three or more boxes) a main box that changed twice since this box joined. The backlog records
+  // the last two.
   await assertHeldDocumentTrusted(deps, held);
   const document = await mintNextMembershipDocument(
     { db: deps.db, node: deps.node, ring: deps.ring },
