@@ -249,7 +249,7 @@ files, each check's state) into the ledger before going on.
    then their clock-out at the second location is refused and a repeat clock-in there is accepted
    and written, so the record gains clock-ins with no clock-out between them, and a retime does not
    change what the till reads. It needs two locations on one box. The lead's ruling (e), re-put to
-   the owner in `questions.md`. *(Owner, 2026-11-01: "Clock ins should not be per location, but per venue." The chain and the clocked-in state become one per venue, which removes this case; re-keying the chain is item A1268, queued after this slice because it changes the working-time record's chain key. Until A1268 lands, the case stands as described.)*
+   the owner in `questions.md`. *(Owner, 2026-11-01: "Clock ins should not be per location, but per venue." The chain and the clocked-in state become one per venue, which removes this case; re-keying the chain is item A1268, queued after this slice because it changes the working-time record's chain key. Until A1268 lands, the case stands as described.)* *(2026-11-01: A1268 PR 1 keyed the chain by node alone; the case no longer arises, and the residual test in `clocking-step.test.ts` now pins the fixed behaviour.)*
 8. **New in revision 4, cost corrected in revision 5: "start-up" is this server's start, a restart
    included.** A stop counts as found at start-up when it holds from the moment the server process
    starts and no reader of the stop has seen it end since; the first look (or till read) that finds
@@ -2990,6 +2990,7 @@ a restore. So the record can gain a clock-in with no clock-out before it, and a 
 refused, in that window; a manager's retime does not change the reading, since the state read
 leaves retimes out. Task 19 adds the backlog line; the owner FYI list carries it as FYI 7.
 *(Owner, 2026-11-01: "Clock ins should not be per location, but per venue." The chain and the clocked-in state become one per venue, which removes this case; re-keying the chain is item A1268, queued after this slice because it changes the working-time record's chain key. Until A1268 lands, the case stands as described.)*
+*(2026-11-01: A1268 PR 1 keyed the chain by node alone; the case no longer arises, and the residual test in `clocking-step.test.ts` now pins the fixed behaviour.)*
 
 **Files.** Modify `packages/workforce/src/record-reads.ts` (`readLatestLiveEntries`, whose only
 caller is `currentState` — `/usr/bin/grep -rn readLatestLiveEntries packages apps
@@ -3818,7 +3819,7 @@ follows the ruling.
    said nothing recorded is wrong, only the state the till shows; Task 15a's review ran the case
    and found a clock-out at the new location refused and a repeat clock-in written, until real time
    passes the earlier entry. The ruling stands for the build with that consequence stated, and is
-   re-put to the owner in `questions.md`.)*
+   re-put to the owner in `questions.md`.)* *(2026-11-01: A1268 PR 1 keyed the chain by node alone; the case no longer arises, and the residual test in `clocking-step.test.ts` now pins the fixed behaviour.)*
 
 Revision 5 adds two, on the fresh-context review of revision 4: **(R1)** while the start-up window
 is open, two agreeing devices do not lift the stop by themselves (decision 18); **(R2)** a staff

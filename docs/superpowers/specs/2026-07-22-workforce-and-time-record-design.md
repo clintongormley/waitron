@@ -280,6 +280,10 @@ step. The distributed picture appears only in the multi-till + separate-server t
 > promotion — ingest continues on whichever node is primary, and the location's history is read
 > across the per-node chains rather than from one. See the swap design §4.4.
 
+> **2026-11-01 — one chain per node (A1268 PR 1).** The chain is keyed by `node_id` alone; each
+> entry keeps its own `location_id`. See
+> `docs/superpowers/specs/2026-11-01-a1268-clock-ins-per-venue-design.md`.
+
 **Escalation (deferred — trigger: the published RD demands capture-window cryptographic
 tamper-evidence):** add lightweight **per-device local chaining** so the offline buffer is itself
 chained before sync. Off by default; the ingest chain is designed to fold device sub-chains in.
@@ -371,7 +375,7 @@ never gated behind rostering.
 | Worker identity | **Slice of Identity #5 first** — one `person` + PIN + minimal role, shared by till login and clock-in |
 | Immutability model | Immutable **history** not values; corrections = append rows referencing the original |
 | Storage integrity | **Role-revocation floor + hash chain** (both, per user) |
-| Chain scope | **Per location (centro de trabajo), central-server ingest** — not per-till _(2026-09-07: rekeyed per (node, location) — see §5)_ |
+| Chain scope | **Per location (centro de trabajo), central-server ingest** — not per-till _(2026-09-07: rekeyed per (node, location) — see §5)_ _(2026-11-01: one chain per node — see §5)_ |
 | Offline | Events captured offline, buffered (locally role-revoked), chained at central ingest; project by timestamp |
 | Time-entries shape | **Single unified append-only stream** (events + corrections) |
 | Clock-in method | **PIN / card**; biometrics off by default (AEPD) |
