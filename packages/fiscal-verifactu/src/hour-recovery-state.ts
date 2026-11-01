@@ -53,9 +53,7 @@ export const readHourRecoveryState: NonNullable<
         : undefined;
     if (
       dormant !== undefined &&
-      (dormant.scope.taxpayerNif !== tenant.taxId ||
-        dormant.scope.environment !== environment ||
-        dormant.locationId !== node.locationId)
+      (dormant.scope.taxpayerNif !== tenant.taxId || dormant.scope.environment !== environment)
     )
       return refuse();
     const bases = dormant?.bases ?? (await liveSeriesBases(tx, node));

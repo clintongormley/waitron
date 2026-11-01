@@ -358,12 +358,9 @@ async function reservationRow(query: BackupQuery, row: BackupRow): Promise<Backu
     row.node_id === row.source_node_id
   )
     return "invalid";
-  const source = await first(query, "select location_id from nodes where id=?", [
-    row.source_node_id!,
-  ]);
-  const target = await first(query, "select location_id from nodes where id=?", [row.node_id!]);
-  if (source === undefined || target === undefined || source.location_id !== target.location_id)
-    return "invalid";
+  const source = await first(query, "select id from nodes where id=?", [row.source_node_id!]);
+  const target = await first(query, "select id from nodes where id=?", [row.node_id!]);
+  if (source === undefined || target === undefined) return "invalid";
   if (proof.kind === "paper-declared-reservation") {
     try {
       const held = readDeclaredStandbyInput(proof);

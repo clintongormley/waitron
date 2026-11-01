@@ -67,12 +67,9 @@ async function check(
       throw new BackupCheckUnavailable("decryption_unavailable");
     return opened.reason === "old_encryption" ? "unsupported" : "invalid";
   }
-  const node = await first(query, "select location_id from nodes where id=?", [
-    context.source.nodeId,
-  ]);
+  const node = await first(query, "select id from nodes where id=?", [context.source.nodeId]);
   const tenant = await first(query, "select tax_id from tenants where id=1");
-  if (node?.location_id !== context.source.locationId || typeof tenant?.tax_id !== "string")
-    return "invalid";
+  if (node === undefined || typeof tenant?.tax_id !== "string") return "invalid";
   const { details } = opened;
   if (details.taxId !== null && details.taxId !== normaliseTaxId(tenant.tax_id)) return "invalid";
   if (!(await exists(query, "fiscal_certificate_installs"))) return "invalid";

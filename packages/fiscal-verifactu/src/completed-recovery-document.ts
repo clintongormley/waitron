@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { deployment, locations, readTenant, type Transaction } from "@waitron/db";
+import { deployment, readVenue, readTenant, type Transaction } from "@waitron/db";
 import type { ModuleBackupContribution, ProvisionedNode } from "@waitron/module";
 import { AppError, classifySavedTimeZone } from "@waitron/shared";
 import { currentSif } from "./registro-sif.js";
@@ -31,14 +31,10 @@ async function recoveryScope(
     .where(eq(deployment.id, 1));
   const environment = stamp?.environment ?? null;
   const sif = await currentSif(tx, node.nodeId);
-  const [venue] = await tx
-    .select({ name: locations.name, timeZone: locations.timeZone })
-    .from(locations)
-    .where(eq(locations.id, node.locationId));
+  const venue = await readVenue(tx);
   if (
     tenant === null ||
     (environment !== "production" && environment !== "preproduction") ||
-    venue === undefined ||
     sif.nif !== tenant.taxId ||
     keyNodeId !== node.nodeId
   )

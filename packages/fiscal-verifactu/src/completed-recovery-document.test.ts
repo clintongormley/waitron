@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   deployment,
   invoiceSeries,
@@ -100,10 +100,11 @@ describe("the pack's server-key page seat", () => {
       newKey?: typeof newKey;
       keyInForce?: typeof keyInForce;
       evidence?: Record<string, unknown>;
+      target?: typeof node;
     } = {},
   ) {
     return withTransaction(suite.db, (tx) =>
-      FISCAL_RECOVERY_PACK_PAGE(tx, node, {
+      FISCAL_RECOVERY_PACK_PAGE(tx, options.target ?? node, {
         keyInForce: options.keyInForce ?? keyInForce,
         ...(options.newKey ? { newKey: options.newKey } : {}),
         createdAt: "2026-10-18T12:00:00.000Z",
@@ -113,6 +114,23 @@ describe("the pack's server-key page seat", () => {
     );
   }
 
+  // A1301: deleted with cfg in S18
+  it("names the venue without reading the supplied location scope", async () => {
+    const result = await page({
+      target: { ...node, locationId: locationId("a0000000-0000-4000-8000-000000000091") },
+      newKey,
+    });
+    expect(result.keyFile).toEqual({ ...scope, nodeKey });
+  });
+  it("refuses a missing venue with venue.not_found", async () => {
+    await suite.db.execute(sql`pragma foreign_keys = off`);
+    try {
+      await suite.db.delete(locations);
+      await expect(page()).rejects.toMatchObject({ code: "venue.not_found" });
+    } finally {
+      await suite.db.execute(sql`pragma foreign_keys = on`);
+    }
+  });
   it.each(["en", "es"] as const)(
     "with a new key (%s) draws that key and returns its key file, changing no fiscal state",
     async (locale) => {
