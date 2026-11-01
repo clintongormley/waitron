@@ -1,6 +1,6 @@
 # A1268 — working time is per venue: one pull request (#2375, revised)
 
-**Status:** built (Tasks 0–10), under review as #2375; it lands only after that review and green CI.
+**Status:** landed as #2375 (2026-11-01); part 2 is the backlog entry "A1268 part 2".
 
 > **Revision 2 (2026-11-01).** Rewritten for the owner's per-venue decisions (design revision 2):
 > no location on clock entries, sessions, corrections, confirmations or pay-period closures; both
