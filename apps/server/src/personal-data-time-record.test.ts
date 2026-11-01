@@ -31,12 +31,7 @@ const START = "2026-01-01";
 const END = "2026-03-21";
 const COLLEAGUE_NAME = "Colleague Canary";
 const logger = vi.fn();
-let locationId: string,
-  otherLocationId: string,
-  martaId: string,
-  colleagueId: string,
-  loneId: string,
-  cookie: string;
+let locationId: string, martaId: string, colleagueId: string, cookie: string;
 
 beforeEach(async () => {
   await seedTenant(suite.db);
@@ -50,70 +45,32 @@ beforeEach(async () => {
     })
     .returning();
   locationId = location!.id;
-  const [other] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Other venue",
-      invoiceLocales: ["es"],
-      operationDescription: "Sale on premises",
-      timeZone: "Europe/Madrid",
-    })
-    .returning();
-  otherLocationId = other!.id;
   const nodeId = await seedNode(suite.db, brandLocationId(locationId));
-  const [marta, colleague, lone] = await suite.db
+  const [marta, colleague] = await suite.db
     .insert(persons)
     .values([
       { displayName: "Marta López", email: "marta@example.test", role: "staff" },
       { displayName: COLLEAGUE_NAME, email: "colleague@example.test", role: "staff" },
-      { displayName: "Lone Person", email: "lone@example.test", role: "staff" },
     ])
     .returning();
   martaId = marta!.id;
   colleagueId = colleague!.id;
-  loneId = lone!.id;
   const backend = new WorkforceBackend();
   const origin = jobOrigin("dashboard");
-  const event = (personId: string, at: string, offsetMinutes: number, where = locationId) => ({
+  const event = (personId: string, at: string, offsetMinutes: number) => ({
     nodeId,
-    locationId: where,
     personId,
     offsetMinutes,
     origin,
     at,
   });
-  const shift = async (
-    personId: string,
-    from: string,
-    to: string,
-    offset: number,
-    where = locationId,
-  ) => {
-    await withTransaction(suite.db, (tx) =>
-      backend.clockIn(tx, event(personId, from, offset, where)),
-    );
-    await withTransaction(suite.db, (tx) =>
-      backend.clockOut(tx, event(personId, to, offset, where)),
-    );
+  const shift = async (personId: string, from: string, to: string, offset: number) => {
+    await withTransaction(suite.db, (tx) => backend.clockIn(tx, event(personId, from, offset)));
+    await withTransaction(suite.db, (tx) => backend.clockOut(tx, event(personId, to, offset)));
   };
   // The files print each entry's recording time, so it must never spell a colleague probe below.
   vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-04-01T12:00:00Z") });
   try {
-    // At the other location only: Marta earlier than her first day here, the lone person at all.
-    await shift(
-      martaId,
-      "2025-12-15T09:00:00.000Z",
-      "2025-12-15T17:00:00.000Z",
-      60,
-      otherLocationId,
-    );
-    await shift(
-      loneId,
-      "2026-01-04T09:00:00.000Z",
-      "2026-01-04T17:00:00.000Z",
-      60,
-      otherLocationId,
-    );
     await shift(martaId, "2026-01-02T00:30:00.000Z", "2026-01-02T06:00:00.000Z", -120);
     await shift(colleagueId, "2026-01-03T10:07:00.000Z", "2026-01-03T18:43:00.000Z", 60);
     await shift(martaId, "2026-02-10T09:00:00.000Z", "2026-02-10T17:00:00.000Z", 60);
@@ -249,10 +206,6 @@ describe("the server's working-time part", () => {
 
   it("builds no files when the node has no location", async () => {
     expect(await files({ locationId: null })).toEqual([]);
-  });
-
-  it("builds no files for a person whose only entries are at another location", async () => {
-    expect(await files({ personId: loneId })).toEqual([]);
   });
 
   it("adds no part without workforce, nor without workforce-es", () => {

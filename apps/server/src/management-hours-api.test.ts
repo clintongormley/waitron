@@ -15,6 +15,7 @@ import {
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import {
   WorkforceBackend,
+  attendanceQuestions,
   readAttendanceInbox,
   timeEntries,
   upsertAttendanceQuestion,
@@ -389,7 +390,7 @@ it("forbids another subject's target, manager actions, overrides and stale own r
   });
   expect(snapshot()).toEqual(before);
 });
-it("only admits the configured or historically recorded own workplace", async () => {
+it("only admits the configured own workplace, and a person with clock entries is read only at the venue", async () => {
   const [other] = await suite.db
     .insert(locations)
     .values({ name: "Old", invoiceLocales: ["es"], operationDescription: "Restaurant" })
@@ -401,7 +402,6 @@ it("only admits the configured or historically recorded own workplace", async ()
   await withTransaction(suite.db, async (tx) => {
     const common = {
       ...venue.cfg,
-      locationId: other!.id,
       personId: venue.personId,
       origin: jobOrigin("dashboard"),
       offsetMinutes: 60,
@@ -409,13 +409,24 @@ it("only admits the configured or historically recorded own workplace", async ()
     await backend.clockIn(tx, { ...common, at: "2026-01-06T09:00:00Z" });
     await backend.clockOut(tx, { ...common, at: "2026-01-06T17:00:00Z" });
   });
-  response = await ask(route);
-  expect(response.status).toBe(200);
-  expect(await response.json()).toMatchObject({
-    personId: venue.personId,
+  expect((await ask(route)).status).toBe(403);
+  await suite.db.insert(attendanceQuestions).values({
     locationId: other!.id,
-    workedMinutes: 480,
+    personId: venue.personId,
+    businessDay: "2026-01-04",
+    kind: "missing-times",
+    active: false,
+    shiftKey: "old-place",
+    evidenceKeys: ["retained"],
+    createdAt: "2026-01-04T12:00:00.000Z",
+    inactiveReason: "retired",
+    startAt: "2026-01-04T04:00:00.000Z",
+    endAt: "2026-01-05T04:00:00.000Z",
+    missingKinds: ["in", "out"],
   });
+  response = await ask(route);
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ error: { code: "provisioning.second_venue" } });
 });
 it("rechecks a revoked own session after authentication and before the human write", async () => {
   expect((await ask(own + path())).status).toBe(200);

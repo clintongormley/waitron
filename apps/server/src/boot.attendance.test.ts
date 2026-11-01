@@ -128,7 +128,6 @@ for (const enabled of [true, false]) {
             other = person!.id;
             await new WorkforceBackend().clockIn(tx, {
               nodeId: f.venue.cfg.nodeId,
-              locationId: f.venue.cfg.locationId,
               personId: f.venue.personId,
               at: "2026-01-05T09:00:00Z",
               offsetMinutes: 60,

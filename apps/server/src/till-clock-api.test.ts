@@ -12,7 +12,7 @@ import {
   verifyChain,
   WorkforceBackend,
 } from "@waitron/workforce";
-import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { jobOrigin } from "@waitron/shared";
 import { createClockVenue, type ClockVenue } from "./testing/clock-venue.js";
 import type { TillClockState } from "./till-clock-state.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -89,46 +89,30 @@ describe("signed-in own till clock routes", () => {
     expect(await count()).toBe(1);
   });
 
-  it("refuses break and out writes on a shift at another location, while a matching-location shift succeeds", async () => {
-    const [other] = await suite.db
-      .insert(locations)
-      .values({ name: "Other shift", invoiceLocales: ["es"], operationDescription: "Restaurant" })
-      .returning({ id: locations.id });
-    const foreignNode = await seedNode(suite.db, brandLocationId(other!.id));
+  it("lets break and out writes close a shift begun on another node", async () => {
+    const otherNode = await seedNode(suite.db, venue.cfg.locationId);
     const backend = new WorkforceBackend();
-    const foreign = {
-      personId: venue.personId,
-      locationId: other!.id,
-      nodeId: foreignNode,
-      at: instant.toISOString(),
-      offsetMinutes: 60,
-      origin: jobOrigin("dashboard"),
-    };
-    await withTransaction(suite.db, (tx) => backend.clockIn(tx, foreign));
-    const before = await state();
-    expect(before).toMatchObject({
-      state: "working",
-      activeLocationId: other!.id,
-      firstClockIn: true,
-    });
-    for (const path of ["out", "break-start", "break-end"] as const) {
-      const response = await request(path, { expectedEntryId: before.lastEntryId });
-      expect(response.status).toBe(403);
-      expect(await response.json()).toMatchObject({ error: { code: "attendance.not_permitted" } });
-    }
-    expect(await count()).toBe(1);
     await withTransaction(suite.db, (tx) =>
-      backend.clockOut(tx, { ...foreign, at: "2026-01-05T09:01:00Z" }),
+      backend.clockIn(tx, {
+        personId: venue.personId,
+        nodeId: otherNode,
+        at: instant.toISOString(),
+        offsetMinutes: 60,
+        origin: jobOrigin("dashboard"),
+      }),
     );
-    instant = new Date("2026-01-05T09:02:00Z");
-    expect((await request("in", { expectedEntryId: (await state()).lastEntryId })).status).toBe(
-      200,
-    );
-    expect(await state()).toMatchObject({
-      state: "working",
-      activeLocationId: venue.cfg.locationId,
-      firstClockIn: false,
-    });
+    expect(await state()).toMatchObject({ state: "working", firstClockIn: false });
+    for (const [minute, path] of [
+      [1, "break-start"],
+      [2, "break-end"],
+      [3, "out"],
+    ] as const) {
+      instant = new Date(`2026-01-05T09:0${minute}:00Z`);
+      const response = await request(path, { expectedEntryId: (await state()).lastEntryId });
+      expect(response.status).toBe(200);
+    }
+    expect(await state()).toMatchObject({ state: "out" });
+    expect(await count()).toBe(4);
   });
 
   it("keeps an automatic state read passive and records a submitted action as device activity", async () => {
@@ -295,7 +279,6 @@ describe("signed-in own till clock routes", () => {
       locationId: venue.cfg.locationId,
       businessDay: "2026-01-05",
       state: "out",
-      activeLocationId: null,
       lastEntryId: null,
       firstClockIn: true,
     });
@@ -311,7 +294,6 @@ describe("signed-in own till clock routes", () => {
       expect(await response.json()).toEqual({
         ...previous,
         state: want,
-        activeLocationId: want === "out" ? null : venue.cfg.locationId,
         lastEntryId: expect.any(String),
         firstClockIn: false,
       });
@@ -406,7 +388,7 @@ describe("signed-in own till clock routes", () => {
     instant = new Date("2026-01-05T10:30:00Z");
     const response = await request("out", { expectedEntryId: (await state()).lastEntryId });
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ state: "out", activeLocationId: null });
+    expect(await response.json()).toMatchObject({ state: "out" });
     const rows = await readChain(suite.db, {
       nodeId: venue.cfg.nodeId,
     });

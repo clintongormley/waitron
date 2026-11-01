@@ -54,7 +54,6 @@ async function seed() {
   await withTransaction(suite.db, async (tx) => {
     await backend.clockIn(tx, {
       nodeId,
-      locationId,
       personId,
       at: "2026-01-05T09:00:00Z",
       offsetMinutes: 60,
@@ -158,7 +157,6 @@ describe("attendance duty pass", () => {
     await withTransaction(suite.db, (tx) =>
       backend.clockIn(tx, {
         nodeId: oldNode,
-        locationId,
         personId,
         at: "2026-01-05T09:00:00Z",
         offsetMinutes: 60,
@@ -287,7 +285,6 @@ describe("a running shift across a clock days off", () => {
     await withTransaction(suite.db, async (tx) => {
       await backend.clockIn(tx, {
         nodeId,
-        locationId,
         personId,
         at: "2026-01-07T08:00:00Z",
         offsetMinutes: 60,
@@ -316,7 +313,6 @@ describe("a running shift across a clock days off", () => {
     withTransaction(suite.db, (tx) =>
       backend[kind](tx, {
         nodeId,
-        locationId,
         personId,
         at,
         offsetMinutes: 60,

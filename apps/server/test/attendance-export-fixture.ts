@@ -53,7 +53,7 @@ export async function seedAttendanceExport(db: Database) {
   });
   await run((tx) => backend.clockIn(tx, event("2026-01-05T08:00:00Z")));
   await run((tx) => backend.clockOut(tx, event("2026-01-05T16:00:00Z")));
-  const record = await run((tx) => backend.timeRecord(tx, { locationId, period }));
+  const record = await run((tx) => backend.timeRecord(tx, { period }));
   const target = record.entries.find((e) => e.entry.entryKind === "out")!.entry.entryId;
   const correction = await run((tx) =>
     backend.requestCorrection(tx, {
@@ -76,7 +76,6 @@ export async function seedAttendanceExport(db: Database) {
   const closure = await run((tx) =>
     closePayPeriod(tx, {
       nodeId,
-      locationId,
       period,
       clock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
       now: "2026-02-01T06:00:00Z",
