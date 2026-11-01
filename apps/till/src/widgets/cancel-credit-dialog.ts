@@ -1,3 +1,4 @@
+import { recoveryLink, recoveryRefusalText } from "./recovery-refusal.js";
 import { LitElement, css, html, type PropertyValues } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
@@ -119,6 +120,8 @@ export class TillCancelCreditDialog extends LitElement {
   }
 
   #refusalText(refusal: DialogRefusal): string {
+    const recovery = recoveryRefusalText(refusal);
+    if (recovery !== null) return recovery;
     if (this.fromCounter && refusal.code === "network")
       return t("cancel_credit.unconfirmed_counter");
     return Object.hasOwn(REFUSALS, refusal.code)
@@ -195,7 +198,8 @@ export class TillCancelCreditDialog extends LitElement {
             : t("cancel_credit.done").replace("{number}", () => done.creditNote!)
         }
       </p>
-      <wt-form-actions>
+      <wt-form-actions
+        >${recoveryLink(this.shownRefusal)}
         <wt-button variant="primary" data-cancel-credit-finished @click=${() => this.#cancel()}>
           ${t("cancel_credit.done_action")}
         </wt-button>
@@ -224,7 +228,8 @@ export class TillCancelCreditDialog extends LitElement {
           )}
       ></wt-input>
       <p class="muted" data-cancel-credit-next>${t("cancel_credit.approval_next")}</p>
-      <wt-form-actions .error=${this.#bottomMessage(fieldError)}>
+      <wt-form-actions .error=${this.#bottomMessage(fieldError)}
+        >${recoveryLink(this.shownRefusal)}
         <wt-button
           slot="cancel"
           variant="secondary"

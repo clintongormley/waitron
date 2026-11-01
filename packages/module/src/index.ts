@@ -128,6 +128,10 @@ export type {
   OperationClient,
 } from "./operation-preparation.js";
 export { withPreparedModuleOperations } from "./operation-preparation.js";
+export type {
+  LiveModuleOperationScope,
+  LiveModuleOperationBridge,
+} from "./operation-preparation.js";
 export type { Reconciliation } from "./reconcile.js";
 export { reconcile } from "./reconcile.js";
 export { selectTimeRecordExport } from "./record-export.js";

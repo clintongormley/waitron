@@ -91,10 +91,6 @@ declare module "@waitron/shared" {
      * `sales_series_invoice_number_key`'s unique violation, so the number the series allocated is
      * already a sale's in that series. */
     "sale.number_reused": { seriesId: string; invoiceNumber: number };
-    /**
-     * `saleId` names no row in `sales`. An operational failure: "no fiscal condition blocks a
-     * void" is about chain-integrity failures, not about there being nothing to void.
-     */
     "sale.not_found": { saleId: string };
     /** Thrown by `recordVoid` for a sale that already has a `sale_voids` row: the translation of
      * `sale_voids_sale_id_key`'s unique violation, which is the control against double-voiding. */

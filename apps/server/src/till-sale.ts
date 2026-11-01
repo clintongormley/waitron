@@ -632,13 +632,7 @@ export type IntegratedPayDeps = TillSaleDeps & {
   readerId?: string;
   /** The device profile the route checked the request under, passed to `provider.collect`. */
   deviceProfileId?: string;
-  /**
-   * Set by the till's routes: a full disk, or a clock behind the latest fiscal record, after a card
-   * was charged — after `collect` returned a charge, while filing a charge an earlier attempt
-   * captured, or (full disk only) on the SumUp or Stripe terminal adapter's own save of the charge
-   * inside `collect` — answers `sale.charged_not_recorded`, so staff are told not to charge again.
-   * Unset, the refusal passes through: `storage.disk_full` or `clock.behind_chain`.
-   */
+  /** Report a known charge separately when storage, the clock or held issuance prevents its invoice. */
   sayCardChargedNotRecorded?: boolean;
 };
 
@@ -710,6 +704,7 @@ async function runPayWorkingOrder(
         if (preRead || (deps.disk?.noted() ?? false)) refuseForDiskStop(deps.log, req.id);
         const reading = deps.clock.now();
         await deps.backend.refuseWhileClockBehind(tx, reading);
+        await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
 
         const attendanceAt = deps.attendance === undefined ? undefined : reading.instant;
 
@@ -1234,6 +1229,8 @@ async function payIntegrated(
           : { kind: "recover" as const, captured, attendanceKey };
       }
 
+      await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
+
       if (locked.status === "placed") await refusePlacedPaymentInFlight(deps.db, tx, [req.id]);
 
       await requireOrderBillEditor(tx, req.id, { operatorId, expectedEdit: req.expectedEdit });
@@ -1280,6 +1277,8 @@ async function payIntegrated(
 
     if (locked !== undefined) {
       await storeSentReceiptLanguage(tx, req.id, locked, req.receiptLanguage);
+    } else {
+      await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
     }
     const order: GrossOrder =
       locked === undefined
@@ -2180,6 +2179,7 @@ async function runCollectOrder(
       if (preRead || (deps.disk?.noted() ?? false)) refuseForDiskStop(deps.log, req.id);
       const reading = deps.clock.now();
       await deps.backend.refuseWhileClockBehind(tx, reading);
+      await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
 
       await requireEconomicWrite(tx, cfg, deps.admission);
       const attendanceAt = deps.attendance === undefined ? undefined : reading.instant;

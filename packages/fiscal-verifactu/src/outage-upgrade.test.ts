@@ -30,7 +30,12 @@ const suite = useVenueDb({
               migrationsFolder: directory,
               appendOnlyTables: set.appendOnlyTables?.filter(
                 (table) =>
-                  !["clock_stop_restarts", "clock_checks", "clock_confirmations"].includes(table),
+                  ![
+                    "clock_stop_restarts",
+                    "clock_checks",
+                    "clock_confirmations",
+                    "fiscal_conflict_evidence",
+                  ].includes(table),
               ),
             }
           : set,
@@ -58,6 +63,7 @@ it("adds clean outage defaults to populated predecessor sidecars without changin
     values (1, '2026-07-21T00:01:00.000Z', 60)`);
   const before = (await suite.db.execute(sql`select * from registros_facturacion`)).rows;
   await runMigrations(suite.db, FISCAL_MIGRATIONS);
+  expect((await suite.db.execute(sql`select * from fiscal_conflict_evidence`)).rows).toEqual([]);
   expect(
     (
       await suite.db.execute(

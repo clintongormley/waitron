@@ -1,3 +1,4 @@
+import { recoveryLink, recoveryRefusalText } from "./recovery-refusal.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
@@ -296,7 +297,7 @@ export class TillTenderRefundDialog extends LitElement {
     if (this.shownRefusal === null) return "";
     if (this.shownRefusal.code === "network") return t("tender_refund.pending");
     if (this.shownRefusal.code === "storage") return t("tender_refund.storage");
-    return codeMessage(this.shownRefusal.code);
+    return recoveryRefusalText(this.shownRefusal) ?? codeMessage(this.shownRefusal.code);
   }
   #emit(type: string, detail: unknown = {}): void {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
@@ -507,7 +508,7 @@ export class TillTenderRefundDialog extends LitElement {
       ${!this.result && (selected || this.attempt) && tenderRefundAmount(this.draft.appliedAmount) !== null && tenderRefundAmount(this.draft.tipAmount) !== null ? html`<p data-total>${t("tender_refund.total")} · ${this.#money(moneyPlus(tenderRefundAmount(this.draft.appliedAmount)!, tenderRefundAmount(this.draft.tipAmount)!))}</p>` : nothing}
       ${recoverable && !this.result ? html`<p data-outcome role="status">${t("tender_refund.pending")}</p>` : nothing}
       <wt-form-actions .error=${message}
-        >${this.#cancelButton()}
+        >${recoveryLink(this.shownRefusal)}${this.#cancelButton()}
         ${
           recoverable
             ? html`<wt-button

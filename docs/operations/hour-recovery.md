@@ -4,6 +4,53 @@ Choose a usable archive, bucket copy or Waitron Cloud backup, then find the reco
 key name matches that copy. A newer sheet may contain a replacement key that an older backup
 does not accept. Keep the archive password or Cloud login separate from the node recovery key.
 
+## Switch a running box after an invoice identity conflict
+
+When a filing response conflicts with this box's active invoice identity, new invoices and new
+collections or refunds stop. Money already captured remains recorded for later completion. Keep any
+old or copied box offline before proceeding; your answers on this page do not stop that other box.
+
+Open **Open recovery** beside the till refusal, or open `/manage/recovery/fiscal-conflict` on this
+box over HTTPS. Use the current live box's recovery key. A dashboard sign-in, backup password or
+key from an older backup does not replace it. Enter the key and choose **Check conflict** to inspect
+the affected invoice and identity. Confirm that the old box is offline and no parallel recovery is
+underway, then choose **Compare clocks**.
+
+The procedure compares clocks and waits for an available UTC minute using the same admission rules
+as recovery. Keep the page open during its countdown. Its automatic checks run no faster than once
+every five seconds; when the wait ends, compare clocks again. Review the selected identity and
+choose **Switch identity** explicitly. No countdown or background task activates it for you.
+
+The request limit is shared by everyone using this box's recovery route: 60 admitted requests
+per fixed one-minute window, with at most two requests running. The recovery key does not bypass
+that limit. Invalid TLS, origin or site checks are refused before this budget is used. Other devices can keep recovery unavailable by sending accepted HTTPS requests or holding their
+bodies open. Close other recovery pages and stop those requests, or isolate untrusted devices on the
+venue network, before retrying. **Stop** ends this page's work; it does not clear the box's shared
+request budget. After a rate refusal, enter the current key again before retrying. This limit
+bounds admitted work, not availability under hostile network traffic.
+
+The switch uses the live database. It keeps your orders, payments and issued records, retires the
+old identity and series from further issuance, and starts the new series at one. It leaves the
+original rejected record rejected and its filing case open. It neither restores a backup nor fixes
+missing history or proves that another box stopped. The payment loop can finish a captured bill in
+the new series without collecting again; do not charge that customer a second time.
+
+If the activation response is lost, check the same attempt with the current key. A confirmed stored
+result reports the already committed switch. A retained attempt whose result cannot be confirmed
+requires **Start a new attempt**, with a fresh clock comparison and another available minute.
+**Stop** clears the entered key and confirmations and stops this page's checks; it cannot undo a
+switch already committed. Reopen the page to check its result. Never delete the retained attempt
+or reuse its minute to force a retry.
+
+Qualification: `apps/server/src/live-conflict-recovery.test.ts` exercises real activation, exact
+replay and a sale queued behind commit or rollback. `conflict-payment-recovery.test.ts` completes
+one captured bill after the actual switch and checks a second payment-loop pass.
+`boot.conflict-recovery.test.ts` checks a real HTTPS listener, enabled module authentication and
+the dashboard entry at the cold recovery URL; its SPA file is a fixture, not a browser rendering
+check. The public bootstrap and fiscal dashboard browser suites check rendering, key entry,
+explicit activation, Stop, lost replies and discarded drafts. These use local controlled services,
+not AEAT acceptance or proof of another machine's isolation.
+
 ## Check the selected copy
 
 Open Restore in setup and select the copy. Review its taxpayer, environment, source, saved node

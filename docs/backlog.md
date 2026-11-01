@@ -374,11 +374,18 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   distinguishing case. Preserve both guards while adding that qualification.
   [Detail](backlog/fiscal.md#pin-the-early-recovery-source-refusal).
 
-- **W41s. Fiscal prevention and offline recovery** — stop issuance after a definite conflict on the active identity,
-  then require an administrator to switch it using the current recovery key. Automatic conflict switching is excluded
-  by the owner's 1 November decision. Task 7's [current-contract plan](superpowers/plans/2026-11-01-w41s-7-conflict-recovery.md)
-  covers that procedure; implementation remains open. Corrective-record resolution, filing investigation, outside
-  evidence and fencing for the other tasks, and the complete old-backup/new-hardware exercise remain queued.
+- **Pin key rotation between the live recovery preparation reads.** Keep the existing commit-time
+  check and add a case that specifically fails when an earlier preparation recheck is deleted.
+  [Detail](backlog/fiscal.md#pin-key-rotation-between-recovery-preparation-reads).
+
+- **Reconcile the protected fiscal write-path test's old policy quotation.** Its header still says
+  no fiscal condition blocks a sale; the approved local conflict stop is an exception. Keep its
+  behavioral assertions and protected-file scope intact.
+  [Detail](backlog/fiscal.md#protected-write-path-test-policy-quotation).
+
+- **W41s. Fiscal prevention and offline recovery** — corrective-record resolution, filing
+  investigation, outside evidence and fencing for the remaining tasks, and the complete
+  old-backup/new-hardware exercise remain queued.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment
@@ -5463,9 +5470,7 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   sentence the plan's decision 20 lists for a collect. Left open by A798-B slice 8 (#2012).
 
 - **A clock that jumps before 28-10-2024 while a card is charged answers `clock.unusable`, and the
-  till never says the card was charged.** Only a full disk and `clock.behind_chain` become
-  `sale.charged_not_recorded` (`apps/server/src/bill-payments.ts`, `apps/server/src/till-sale.ts`;
-  read, not run). Left open by A798-B slice 8 (#2012).
+  till never says the card was charged.** Left open by A798-B slice 8 (#2012).
 
 - **The design's "printing a bill carries on" is wider than the product.** No route prints a bill
   for checking; the prints are a filed sale's receipt and reprint and the kitchen reprint, so during

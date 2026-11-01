@@ -11,6 +11,7 @@ import {
 } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { isTakePaymentRefusal } from "../state/bill-payment.js";
+import { recoveryRefusalText } from "./recovery-refusal.js";
 
 /** A refusal's code, the request field it names when it names one, for a tip the venue does not
  * take the most the card can be charged, and the permission an `authorization.not_permitted`
@@ -23,6 +24,7 @@ import { isTakePaymentRefusal } from "../state/bill-payment.js";
  * in the till's own sentences. `text`, when given, is what to say, worded by the caller. */
 export interface PayRefusal {
   code: string;
+  recoveryUrl?: string;
   text?: string;
   unsent?: BillUnsent;
   billLabel?: string;
@@ -49,6 +51,8 @@ function chargeableText(amount: string): string {
 
 /** With `checkTime`, a clock stop's words point at the till's "Check the time". */
 export function refusalText(refusal: PayRefusal, checkTime = false): string {
+  const recovery = recoveryRefusalText(refusal);
+  if (recovery !== null) return recovery;
   if (refusal.text !== undefined) return refusal.text;
   if (refusal.unsent !== undefined) return billUnsentText(refusal.billLabel);
   if (isTakePaymentRefusal(refusal)) return t("take_payment.not_permitted");

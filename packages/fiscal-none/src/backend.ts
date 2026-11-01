@@ -31,6 +31,10 @@ export class NoneBackend implements FiscalBackend {
 
   assertRecordableAt(): void {}
 
+  refuseNewIssuance(): Promise<void> {
+    return Promise.resolve();
+  }
+
   clockBehindLatestRecord(): Promise<ClockBehindLatestRecord | null> {
     return Promise.resolve(null);
   }

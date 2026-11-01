@@ -7086,6 +7086,7 @@ export async function issueUnpaidInvoice(
 ): Promise<IssuedInvoice> {
   await requireEconomicWrite(tx, cfg, admission);
   const { id, priced, clock } = invoice;
+  await backend.refuseNewIssuance(tx, cfg.nodeId);
   const selected = await selectOrderInvoice(tx, backend, cfg, id, priced.total);
   const language = await saleLanguageFor(tx, cfg.locationId, selected.receiptLocale, {
     log,

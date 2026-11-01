@@ -18,11 +18,13 @@ import type {
   RegistroAlta,
 } from "@waitron/verifactu";
 import { deleteAck, writeAck } from "./acks.js";
+import { recordConflictEvidence, type ConflictComparison } from "./conflict-evidence.js";
 import type { FacturaParams, LineaParams, Operacion } from "./errors.js";
 import {
   openAcceptedWithErrorsCase,
   openFilingCase,
   recordsBefore,
+  type FilingCase,
   type FilingCaseCause,
 } from "./filing-cases.js";
 import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.js";
@@ -1263,7 +1265,21 @@ interface StoredError {
 
 /** A missing fingerprint or invoice leaves the duplicate unresolved. `storedError` is set when
  * AEAT's consulta shows the stored copy accepted with errors. */
-type Lookup = { matched: boolean | null; storedError: StoredError | null } | { failed: unknown };
+type Lookup =
+  | {
+      matched: true;
+      storedError: StoredError | null;
+    }
+  | {
+      matched: null;
+      storedError: StoredError | null;
+    }
+  | {
+      matched: false;
+      storedError: StoredError | null;
+      comparison: Extract<ConflictComparison, { kind: "lookup-mismatch" }>;
+    }
+  | { failed: unknown };
 
 /** A reply line matched to its claimed row. */
 interface ResolvedLine {
@@ -1551,8 +1567,8 @@ async function openCase(
   linea: RespuestaLinea,
   csv: string | null,
   now: Date,
-): Promise<void> {
-  await openFilingCase(tx, {
+): Promise<FilingCase> {
+  return openFilingCase(tx, {
     registroId: row.id,
     cause,
     evidence: {
@@ -1673,7 +1689,7 @@ async function raiseIncident(
 async function routeB(
   client: VerifactuClient,
   row: DueRow,
-): Promise<{ matched: boolean | null; storedError: StoredError | null }> {
+): Promise<Exclude<Lookup, { failed: unknown }>> {
   const [ejercicio, periodo] = row.fecha_expedicion_factura.split("-");
   const fecha = toAeatDate(row.fecha_expedicion_factura);
   let page: RespuestaConsulta["ClavePaginacion"];
@@ -1706,8 +1722,27 @@ async function routeB(
               mensaje: stored!.DescripcionErrorRegistro ?? null,
             }
           : null;
-      if (huella !== row.huella) return { matched: false, storedError };
       const sistema = stored?.DatosRegistroFacturacion.SistemaInformatico;
+      const comparison = {
+        kind: "lookup-mismatch" as const,
+        storedFingerprint: huella,
+        storedSystem:
+          typeof sistema === "object" && sistema !== null
+            ? {
+                taxId: "NIF" in sistema && typeof sistema.NIF === "string" ? sistema.NIF : null,
+                softwareId:
+                  "IdSistemaInformatico" in sistema &&
+                  typeof sistema.IdSistemaInformatico === "string"
+                    ? sistema.IdSistemaInformatico
+                    : null,
+                installation:
+                  "NumeroInstalacion" in sistema && typeof sistema.NumeroInstalacion === "string"
+                    ? sistema.NumeroInstalacion
+                    : null,
+              }
+            : null,
+      };
+      if (huella !== row.huella) return { matched: false, storedError, comparison };
       if (typeof sistema !== "object" || sistema === null) return { matched: null, storedError };
       const original = fromRegistroRow(row).SistemaInformatico;
       const matched =
@@ -1717,7 +1752,7 @@ async function routeB(
         sistema.IdSistemaInformatico === original.IdSistemaInformatico &&
         "NumeroInstalacion" in sistema &&
         sistema.NumeroInstalacion === original.NumeroInstalacion;
-      return { matched, storedError };
+      return matched ? { matched: true, storedError } : { matched: false, storedError, comparison };
     }
     const next = respuesta.ClavePaginacion;
     if (respuesta.IndicadorPaginacion !== "S" || next === undefined) return UNSETTLED;
@@ -1813,7 +1848,19 @@ async function handleDuplicate(
   if (row.probe === undefined || String(linea.CodigoErrorRegistro) !== row.probe.runCode) {
     await raiseIncident(tx, row, "error", new AppError(cause, { registroId: row.id }), now, result);
   }
-  await openCase(tx, row, cause, linea, csv, now);
+  const opened = await openCase(tx, row, cause, linea, csv, now);
+  await recordConflictEvidence(tx, {
+    registroId: row.id,
+    caseId: opened.id,
+    attempt: row.intentos,
+    cause,
+    evidence: {
+      line: linea,
+      csv,
+      comparison: lookup === null ? { kind: "annulled" } : lookup.comparison,
+    },
+    now,
+  });
   result.recordsHalted += 1;
 }
 

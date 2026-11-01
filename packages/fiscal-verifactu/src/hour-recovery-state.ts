@@ -39,7 +39,7 @@ export const readHourRecoveryState: NonNullable<
   };
   if (
     binding.module !== "fiscal-verifactu" ||
-    !["restore", "promote"].includes(binding.action) ||
+    !["restore", "promote", "conflict-switch"].includes(binding.action) ||
     binding.targetNodeId !== node.nodeId
   )
     return refuse();

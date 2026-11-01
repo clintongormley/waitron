@@ -196,6 +196,13 @@ schema's columns. Keep its populated rows, audit history and whole-database comp
 explicit empty-table expectation for each new table the upgrade creates. Do not make a live request
 handler understand an old schema just to populate a test.
 
+A predecessor's append-only list must name only tables that exist at that migration cut. On
+1 November 2026, W41s-7's new conflict ledger made the clock-confirmation and outage upgrade
+fixtures fail during setup: today's trigger list named `fiscal_conflict_evidence` before its
+creation. Those fixture lists now omit that later table only during predecessor setup; the upgrade
+still creates it, and both cases assert it starts empty. Existing history and immutability
+assertions remain. Production classification and trigger installation are unchanged.
+
 Receipt, 2026-10-17, A773-1: running
 `pnpm --filter @waitron/server exec vitest run src/canvas-retirement-upgrade.test.ts` after integration
 failed while populating the predecessor. Calling the same group submission directly exposed
@@ -2353,6 +2360,12 @@ regressions now request the real listeners: `apps/server/src/boot.test.ts` fetch
 and the CA certificate, and `node-entry.test.ts` fetches the recovery listener's trust page.
 
 ## Test provider HTTP refusals through the real client, as well as a throwing fake seat.
+
+The dashboard request primitive retains structured details as `{code, params, status}`; the till
+client flattens them. On 1 November 2026, W41s-7's new recovery-refusal checks initially threw flat
+`reason` fields and passed against matching UI code. Replaying HTTP envelopes through the real
+`createRequest` exposed three failures. The component now reads `params.reason`, and the checks
+exercise the HTTP parser. Read the client boundary before choosing a refusal fixture's shape.
 
 The SumUp unpair route's fake proved that a thrown error preserved the local reader, but the HTTP
 client silently accepted 401/403/409. The reader-deletion regressions now reject those responses

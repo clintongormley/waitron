@@ -17,10 +17,8 @@ interface ClockDependencies {
   internet?: (environment: DeploymentEnvironment) => Promise<HourClockObservation>;
   release?: () => number | null;
 }
-export interface SetupBrowserClockSample {
-  readonly challengeId: string;
-  readonly instantMs: number;
-}
+export type { SetupBrowserClockSample } from "./hour-clock.js";
+import type { SetupBrowserClockSample } from "./hour-clock.js";
 interface Reading {
   readonly id: string;
   readonly observations: readonly HourClockObservation[];

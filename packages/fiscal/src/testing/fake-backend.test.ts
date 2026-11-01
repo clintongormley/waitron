@@ -107,7 +107,11 @@ describe("recordSale", () => {
   beforeEach(() => suite.db.transaction((tx) => backend.registerNode(tx, NODE_A)));
 
   it("returns a ref naming the backend and the record", async () => {
-    const ref = await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_A, 1)));
+    const ref = await suite.db.transaction(async (tx) => {
+      const fiscal: FiscalBackend = backend;
+      await fiscal.refuseNewIssuance(tx, NODE_A);
+      return backend.recordSale(tx, saleOn(NODE_A, 1));
+    });
     expect(ref.backend).toBe("fake");
     expect(ref.recordId).toMatch(/^fake-/);
     expect(ref.state).toBe("pending");

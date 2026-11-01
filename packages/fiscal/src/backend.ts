@@ -1,4 +1,5 @@
 import "./errors.js";
+import { AppError } from "@waitron/shared";
 import type { Decimal, NodeId, SaleId, SaleOrigin, SeriesId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import type { RecipientIdentifierType } from "@waitron/country";
@@ -7,6 +8,8 @@ import type { TrustedReading } from "./clock.js";
 import type { ClockWitness } from "./clock-witnesses.js";
 
 export type { VatBreakdownLine };
+
+export class IssuanceRefusedError extends AppError {}
 
 /** `recorded` means the required record exists locally, whether or not anything has been sent. */
 export type FiscalState = "recorded" | "pending" | "acknowledged" | "rejected";
@@ -373,6 +376,8 @@ export interface FiscalBackend {
    * regime's record, or `null` when it sets no cap. */
   readonly recipientNameMaxLength: number | null;
 
+  refuseNewIssuance(tx: Transaction, nodeId: NodeId): Promise<void>;
+
   /**
    * Throws this regime's refusal when a record stamped with `reading` could never be accepted, so a
    * caller can refuse before money moves. A regime with no such rule returns.
@@ -502,7 +507,7 @@ export interface FiscalBackend {
   /**
    * Whatever this backend must check about what it has already recorded, before recording
    * anything more. The caller records the report and surfaces it to staff; it must NEVER branch on
-   * `ok` to abandon the sale: no fiscal condition blocks a sale.
+   * `ok` to abandon the sale.
    * A backend with nothing to check answers `{ ok: true, checked: 0, issues: [] }`.
    */
   checkIntegrity(tx: Transaction, nodeId: NodeId): Promise<IntegrityReport>;

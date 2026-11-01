@@ -20,6 +20,7 @@ const OWNED = [
   "fiscal_allocations",
   "fiscal_certificate_installs",
   "fiscal_certificate_reminders",
+  "fiscal_conflict_evidence",
   "fiscal_reservations",
   "registro_sif",
   "registros_facturacion",

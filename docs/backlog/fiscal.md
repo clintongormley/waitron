@@ -404,13 +404,25 @@ failed the assertion rejecting a different artifact; a restored driver selection
 The earlier refusal lacks a distinguishing case. Add that qualification without changing either
 guard or claiming the two checks are equivalent for every input. No combined-fault probe was run.
 
-## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
+## Pin key rotation between recovery preparation reads
 
-Task 7 must stop new issuance after a definite conflict on the active identity and offer an
-administrator a switch using fresh current recovery-key authentication. It must never switch
-automatically. The [current-contract plan](../superpowers/plans/2026-11-01-w41s-7-conflict-recovery.md)
-records the owner's 1 November decision and its permitted activation scope. The issuance stop,
-retained conflict evidence and live administrator procedure remain unimplemented.
+W41s-7's first installed run-it review on 1 November 2026 deleted the three preparation-time
+`authorize(binding)` calls in `apps/server/src/node-operation-preparation.ts` together. The selected
+293 server cases passed, including the case named for a key replaced while comparing clocks.
+Deleting the commit-time key check failed three cases. Add a case whose result distinguishes an
+early refusal from that later activation refusal, without deleting either guard or broadening the
+current-key authority. This was a minor qualification gap, separate from the tested commit fence.
+
+## Protected write-path test policy quotation
+
+W41s-7's two run-it reviews found the header of
+`packages/fiscal-verifactu/src/write-path.e2e.test.ts` still quoting “no fiscal condition blocks a
+sale”. The owner-approved local conflict stop is narrower than that old quotation. The protected
+file and all its assertions remain unchanged; reconcile its explanatory header when that protected
+file's edit scope is authorised. The live procedure is documented in
+[hour recovery](../operations/hour-recovery.md#switch-a-running-box-after-an-invoice-identity-conflict).
+
+## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
 Corrective-record resolution, filing investigation, outside evidence and fencing for the other
 tasks, and the complete old-backup/new-hardware operational exercise remain queued. Earlier

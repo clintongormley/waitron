@@ -13,7 +13,14 @@ it.each(["en", "es"])(
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
     const html = await response.text();
-    for (const section of ["interrupted-setup", "source", "proof", "series", "resume"])
+    for (const section of [
+      "interrupted-setup",
+      "source",
+      "proof",
+      "series",
+      "resume",
+      "invoice-conflict",
+    ])
       expect(html).toContain(`id="${section}"`);
     const markdown = readGuide(guideRoot(), language, "backup-recovery")!;
     expect(renderGuide(markdown, GUIDE_PAGES).sections.map((section) => section.id)).toEqual([
@@ -22,6 +29,7 @@ it.each(["en", "es"])(
       "proof",
       "series",
       "resume",
+      "invoice-conflict",
     ]);
   },
 );

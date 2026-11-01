@@ -330,6 +330,7 @@ function deps(db: Database): TillApiDeps {
     backend: {
       clockBehindLatestRecord: async () => null,
       refuseWhileClockBehind: async () => {},
+      refuseNewIssuance: async () => {},
     } as Partial<FiscalBackend> as FiscalBackend,
     clock: systemClock(),
     cfg,

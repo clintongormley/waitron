@@ -46,6 +46,7 @@ export async function withRecoveryKeyAuthority<T>(
     authority: OperationAuthority,
     commit: <R>(body: (tx: Transaction) => Promise<R>) => Promise<R>,
   ) => Promise<T>,
+  allowedActions: readonly string[] = ["restore", "promote"],
 ): Promise<T> {
   const binding = { ...operation };
   const targetNodeId = deps.nodeId;
@@ -56,7 +57,7 @@ export async function withRecoveryKeyAuthority<T>(
     typeof secret !== "string" ||
     secret.length === 0 ||
     binding.targetNodeId !== targetNodeId ||
-    !["restore", "promote"].includes(binding.action)
+    !allowedActions.includes(binding.action)
   )
     return refuse();
   const verifier = await readRecoveryKeyVerifier(deps.node, targetNodeId);

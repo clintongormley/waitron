@@ -312,7 +312,8 @@ declare module "@waitron/shared" {
      */
     "sale.charged_not_recorded": {
       workingOrderId: string;
-      reason: "disk_full" | "clock_behind_chain";
+      reason: "disk_full" | "clock_behind_chain" | "issuance_refused";
+      recoveryUrl?: string;
     };
     /**
      * A tender method this till does not support. `method` echoes the request so a translator can
@@ -984,6 +985,7 @@ declare module "@waitron/shared" {
      * throttle is not a fact about the caller.
      */
     "device.join_rate_limited": Record<string, never>;
+    "recovery.rate_limited": Record<string, never>;
     /**
      * The admin tapped a number that is not this request's. The request is DELETED, not offered
      * again: a wrong tap denies, which is what makes one-in-three an acceptable guess rate.

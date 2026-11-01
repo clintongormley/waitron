@@ -1,3 +1,4 @@
+import { recoveryLink } from "./recovery-refusal.js";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -1197,7 +1198,8 @@ export class TillBillPayDialog extends LitElement {
   #nextActions(): SheetView {
     const left = this.taken?.pending === undefined ? this.#sharesLeft() : 0;
     const label = left > 0 ? this.#nextShareLabel(this.#shareRun!) : t("bill_pay.next");
-    const actions = html`<wt-form-actions slot="footer">
+    const actions = html`<wt-form-actions slot="footer"
+      >${recoveryLink(this.shownRefusal)}
       <wt-button
         slot="cancel"
         variant="secondary"
@@ -1508,7 +1510,8 @@ export class TillBillPayDialog extends LitElement {
       ${this.#wayFields(errors)} ${this.#methodFields(errors)}
       ${this.askingSecondCard ? this.#secondCardAsk() : nothing}
       ${this.#methods().length === 0 ? this.#notice() : nothing}`;
-    const actions = html`<wt-form-actions slot="footer" .error=${bottom}>
+    const actions = html`<wt-form-actions slot="footer" .error=${bottom}
+      >${recoveryLink(this.shownRefusal)}
       <wt-button
         slot="cancel"
         variant="secondary"
@@ -2009,8 +2012,8 @@ export class TillBillPayDialog extends LitElement {
           : nothing
       }
       ${guestsShown ? this.#guests(errors.get("guests")) : nothing}`;
-    const actions = html`<wt-form-actions slot="footer" .error=${bottom}>
-      ${this.#backButton()}
+    const actions = html`<wt-form-actions slot="footer" .error=${bottom}
+      >${recoveryLink(this.shownRefusal)} ${this.#backButton()}
       <wt-button
         variant="primary"
         data-pay-confirm
@@ -2086,7 +2089,7 @@ export class TillBillPayDialog extends LitElement {
     return {
       body,
       actions: html`<wt-form-actions slot="footer" .error=${bottom}
-        >${this.#backButton()}</wt-form-actions
+        >${recoveryLink(this.shownRefusal)}${this.#backButton()}</wt-form-actions
       >`,
     };
   }

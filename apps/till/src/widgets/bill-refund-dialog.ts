@@ -1,3 +1,4 @@
+import { recoveryLink, recoveryRefusalText } from "./recovery-refusal.js";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
@@ -334,7 +335,7 @@ export class TillBillRefundDialog extends LitElement {
   #refusalText(refusal: DialogRefusal): string {
     if (refusal.code === "network") return t("bill_refund.unconfirmed");
     if (refusal.code === "approvers") return t("bill_refund.approvers_failed");
-    return codeMessage(refusal.code);
+    return recoveryRefusalText(refusal) ?? codeMessage(refusal.code);
   }
 
   #fieldErrors(own: ReadonlyMap<Field, string>): Map<Field, string> {
@@ -460,8 +461,8 @@ export class TillBillRefundDialog extends LitElement {
       <p class="muted" data-refund-next>
         ${t(this.payment.entry === "manual" ? "bill_refund.terminal_next" : "bill_refund.approval_next")}
       </p>
-      <wt-form-actions .error=${this.#bottomMessage(errors)}>
-        ${this.#cancelButton()}
+      <wt-form-actions .error=${this.#bottomMessage(errors)}
+        >${recoveryLink(this.shownRefusal)} ${this.#cancelButton()}
         <wt-button
           variant=${this.#reason() && !this.reasonsLoading ? "primary" : "secondary"}
           data-refund-continue
@@ -546,8 +547,8 @@ export class TillBillRefundDialog extends LitElement {
     return html`<p class="instruction" data-refund-terminal>
         ${t("bill_refund.terminal").replace("{amount}", () => this.#money(amount))}
       </p>
-      <wt-form-actions .error=${this.#bottomMessage(new Map())}>
-        ${this.#cancelButton()}
+      <wt-form-actions .error=${this.#bottomMessage(new Map())}
+        >${recoveryLink(this.shownRefusal)} ${this.#cancelButton()}
         <wt-button
           variant="primary"
           data-refund-terminal-done

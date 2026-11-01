@@ -95,6 +95,7 @@
       "registros_facturacion",
       "filing_cases",
       "filing_case_events",
+      "fiscal_conflict_evidence",
       "fiscal_allocations",
       "fiscal_reservations",
       "clock_stop_restarts",

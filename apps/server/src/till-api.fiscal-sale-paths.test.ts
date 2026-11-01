@@ -2,6 +2,7 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { randomUUID } from "node:crypto";
+import { openFilingCase } from "@waitron/fiscal-verifactu/src/filing-cases.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
@@ -488,6 +489,50 @@ describe("POST /api/session (PIN login body handling)", () => {
 });
 
 describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
+  it("returns the active conflict refusal for new cash while replaying the original ticket", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const deviceCookie = await enrolTillCookie(cfg);
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
+    const id = randomUUID();
+    const pay = (workingOrderId: string) =>
+      app.request("/api/sales", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+        body: JSON.stringify({
+          workingOrderId,
+          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+          tender: { method: "cash", amount: "1.50" },
+        }),
+      });
+    const original = await pay(id);
+    expect(original.status).toBe(200);
+    const ticket = await original.json();
+    const [record] = await suite.db.select().from(registrosFacturacion);
+    await withTransaction(suite.db, (tx) =>
+      openFilingCase(tx, {
+        registroId: record!.id,
+        cause: "fiscal.duplicado_anulado",
+        evidence: { codigo: 3000, mensaje: "Invoice identity conflict", csv: null },
+        now: clock.now().instant,
+      }),
+    );
+    const refused = await pay(randomUUID());
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({
+      error: {
+        code: "sif.allocation_invalid",
+        params: { reason: "conflict_requires_administrator" },
+      },
+    });
+    const replay = await pay(id);
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toEqual(ticket);
+    expect(await suite.db.select().from(registrosFacturacion)).toEqual([record]);
+  });
+
   it("logs in, rings a cash sale, returns the ticket, and writes a chained fiscal record", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)

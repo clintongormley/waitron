@@ -192,3 +192,11 @@ Cuando eliges el botón de restaurar, la página dice «Configurando este servid
 mantengas abierta. El equipo guarda la solicitud y se reinicia. Si se detiene después de guardar la
 solicitud, el siguiente arranque la ejecuta; si se detiene mientras escribe la copia en su sitio,
 cada arranque siguiente la vuelve a ejecutar.
+
+## Un conflicto de facturación en un equipo en marcha {#invoice-conflict}
+
+Si el equipo conserva tus pedidos y pagos pero deja de emitir facturas por un conflicto de
+identidad, sigue [Recuperar una identidad de facturación](box-status.md#invoice-conflict) con su clave
+de recuperación actual. Ese procedimiento cambia la identidad activa sin restaurar una copia.
+Conserva el registro rechazado y su incidencia abierta. Desconecta cualquier equipo antiguo o
+copiado antes de continuar.

@@ -175,3 +175,10 @@ restore, the page returns to the form and you enter the node recovery key again.
 Once you choose the restore button, the page says "Provisioning this server" and asks you to keep it
 open. The box saves the request and restarts. If it stops after saving the request, the next start
 runs it; if it stops while writing the backup into place, every later start runs it again.
+
+## An invoice conflict on a running box {#invoice-conflict}
+
+If the box still has your orders and payments but stops issuing invoices after an identity
+conflict, use [Recover an invoice identity](box-status.md#invoice-conflict) with its current recovery
+key. That procedure switches the live identity without restoring a backup. It keeps the rejected
+record and its open case. Take any old or copied box offline before continuing.
