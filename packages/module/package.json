@@ -20,7 +20,7 @@
     "@waitron/shared": "workspace:*",
     "@waitron/store": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
-    "hono": "^4.13.14",
+    "hono": "^4.13.16",
     "semver": "^7.7.0"
   },
   "devDependencies": {
