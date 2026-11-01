@@ -448,7 +448,7 @@ async function jobsOf(saleId: string) {
 /** The office printer's agent claims the oldest due A4 delivery. */
 async function agentClaims(v: Venue, now = new Date()): Promise<PagePrintJob> {
   const { job } = await withTransaction(suite.db, (tx) =>
-    claimInvoicePagePrint(tx, v.agentId, { locationId: v.cfg.locationId }, now),
+    claimInvoicePagePrint(tx, v.agentId, {}, now),
   );
   return job!;
 }

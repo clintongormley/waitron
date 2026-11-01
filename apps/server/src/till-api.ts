@@ -2511,7 +2511,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         const saleId = await zonedSale(tx, session, id);
         await expireInvoiceDeliveryClaims(tx);
         return readInvoiceDeliveries(tx, saleId, {
-          emailAvailable: (sale) => canEmailInvoice(tx, sale, transport),
+          emailAvailable: (sale) => canEmailInvoice(tx, sale.id, transport),
           printers: (sale) => tillInvoicePrinters(tx, session, sale),
         });
       });

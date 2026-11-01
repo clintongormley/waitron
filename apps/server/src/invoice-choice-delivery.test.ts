@@ -129,7 +129,6 @@ describe("invoice-choice email contact selection", () => {
       const input = {
         delivery: delivery(),
         invoiceType: "F1" as const,
-        locationId: f.cfg.locationId,
         context,
         source: kind === "order" ? { kind, orderId: f.orderId } : { kind, saleId: f.saleId },
       };
@@ -236,7 +235,6 @@ describe("invoice-choice A4 staging", () => {
       checkedInvoiceChoiceDelivery(tx, {
         delivery: { medium: "a4", pagePrinterId },
         invoiceType: "F1",
-        locationId: f.cfg.locationId,
         context,
         source: { kind: "order", orderId: f.orderId },
         invoicePrinter: async () => printer,

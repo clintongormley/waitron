@@ -8,7 +8,7 @@ import {
 } from "./invoice-email-contact.js";
 import { optionalDocument } from "./optional-document.js";
 import type { InvoicePrinter } from "./receipt-print.js";
-import { AppError, isValidEmail, locationId } from "@waitron/shared";
+import { AppError, isValidEmail } from "@waitron/shared";
 
 export type InvoiceChoiceDeliveryContext = {
   personId: string;
@@ -28,7 +28,6 @@ export async function checkedInvoiceChoiceDelivery(
   input: {
     delivery: unknown;
     invoiceType: "F1" | "F2";
-    locationId: string;
     source: InvoiceEmailContactSource;
     context: InvoiceChoiceDeliveryContext | undefined;
     /** The staging device's invoice printer; absent when no device stages the choice. */
@@ -56,11 +55,7 @@ export async function checkedInvoiceChoiceDelivery(
   if (input.context?.emailAvailable !== true) {
     throw new AppError("invoice_delivery.email_unavailable", {});
   }
-  const contact = await resolveInvoiceEmailContact(
-    tx,
-    { locationId: locationId(input.locationId) },
-    input.source,
-  );
+  const contact = await resolveInvoiceEmailContact(tx, input.source);
   if (contact === null) throw new AppError("invoice_delivery.email_unavailable", {});
   return {
     medium: "email",

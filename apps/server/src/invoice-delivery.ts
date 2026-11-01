@@ -6,7 +6,6 @@ import {
   printJobs,
   printers,
   sales,
-  nodes,
   pagePrinters,
   type A4FailureCode,
   type Transaction,
@@ -46,7 +45,7 @@ export async function reserveInvoiceDelivery(
   options: { allowInactivePagePrinter?: boolean } = {},
 ): Promise<InvoiceDelivery> {
   const [sale] = await tx
-    .select({ recipient: sales.counterpartyTaxId, nodeId: sales.nodeId })
+    .select({ recipient: sales.counterpartyTaxId })
     .from(sales)
     .where(eq(sales.id, saleId));
   if (sale === undefined) throw new AppError("invoice_delivery.not_found", {});
@@ -74,10 +73,8 @@ export async function reserveInvoiceDelivery(
     const [printer] = await tx
       .select({ active: pagePrinters.active })
       .from(pagePrinters)
-      .innerJoin(nodes, eq(nodes.locationId, pagePrinters.locationId))
       .where(
         and(
-          eq(nodes.id, sale.nodeId),
           eq(pagePrinters.id, input.pagePrinterId),
           options.allowInactivePagePrinter === true ? undefined : eq(pagePrinters.active, true),
         ),

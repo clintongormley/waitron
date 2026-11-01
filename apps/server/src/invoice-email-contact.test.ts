@@ -102,9 +102,9 @@ async function authored(departmentId: string, receipt: Record<string, unknown>) 
     .onConflictDoUpdate({ target: departmentReceipts.departmentId, set: { receipt } });
 }
 const read = (
-  cfg: { locationId: ReturnType<typeof locationId> },
-  source: Parameters<typeof resolveInvoiceEmailContact>[2],
-) => withTransaction(suite.db, (tx) => resolveInvoiceEmailContact(tx, cfg, source));
+  _cfg: { locationId: ReturnType<typeof locationId> },
+  source: Parameters<typeof resolveInvoiceEmailContact>[1],
+) => withTransaction(suite.db, (tx) => resolveInvoiceEmailContact(tx, source));
 
 describe("independent invoice email contact", () => {
   it.each(["order", "sale"] as const)(
@@ -170,20 +170,12 @@ describe("independent invoice email contact", () => {
       email: "new@example.com",
     });
   });
-  it("uses designated local fallback for null recorded department and does not borrow another location", async () => {
+  it("uses designated fallback for null recorded department", async () => {
     const f = await fixture(true);
-    const other = await fixture();
     await authored(f.primary, { email: "wrong-location@example.com" });
     await authored(f.fallback, { email: "first-default@example.com" });
-    await authored(other.fallback, { email: "local-default@example.com" });
     expect(await read(f.cfg, { kind: "sale", saleId: f.saleId })).toEqual({
       email: "first-default@example.com",
-    });
-    expect(await read(other.cfg, { kind: "order", orderId: f.orderId })).toEqual({
-      email: "local-default@example.com",
-    });
-    expect(await read(other.cfg, { kind: "sale", saleId: f.saleId })).toEqual({
-      email: "local-default@example.com",
     });
   });
 });
@@ -203,19 +195,6 @@ describe("contact imported-row boundaries", () => {
     await suite.db.update(departments).set({ active: false }).where(eq(departments.id, f.primary));
     expect(await read(f.cfg, { kind: "sale", saleId: f.saleId })).toEqual({
       email: "disabled@example.com",
-    });
-  });
-  it("refuses a cross-location department in imported order context and uses its own default", async () => {
-    const f = await fixture();
-    const other = await fixture();
-    await authored(other.primary, { email: "foreign@example.com" });
-    await authored(f.fallback, { email: "local@example.com" });
-    await suite.db
-      .update(orderServiceContexts)
-      .set({ departmentId: other.primary })
-      .where(eq(orderServiceContexts.workingOrderId, f.orderId));
-    expect(await read(f.cfg, { kind: "order", orderId: f.orderId })).toEqual({
-      email: "local@example.com",
     });
   });
 });

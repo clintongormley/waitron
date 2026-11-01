@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   invoiceDeliveries,
@@ -1034,12 +1034,9 @@ describe("readInvoiceDeliveries", () => {
     });
   });
 
-  it("asks its caller for the printers of each full invoice, with the sale's own location", async () => {
+  it("asks its caller for printers only for full invoices", async () => {
     const v = await venue();
     const saleId = await invoice(v.nodeId);
-    const terrace = await location("Terrace");
-    const terraceNode = await seedNode(suite.db, brandLocation(terrace));
-    const other = await invoice(terraceNode);
     const simplified = await invoice(v.nodeId, false);
     const asked: InvoiceDeliverySale[] = [];
     const offer: Offer = async (sale) => {
@@ -1047,19 +1044,15 @@ describe("readInvoiceDeliveries", () => {
       return [];
     };
 
-    for (const id of [saleId, other, simplified]) await read(id, true, offer);
+    for (const id of [saleId, simplified]) await read(id, true, offer);
 
-    expect(asked).toEqual([
-      { id: saleId, locationId: v.locationId },
-      { id: other, locationId: terrace },
-    ]);
+    expect(asked).toEqual([{ id: saleId, locationId: v.locationId }]);
   });
 
   it("reads several sales at once exactly as it reads each one", async () => {
     const v = await venue();
     const office = await pagePrinter(v.locationId);
-    const terrace = await location("Terrace");
-    const terraceNode = await seedNode(suite.db, brandLocation(terrace));
+    const terraceNode = await seedNode(suite.db, brandLocation(v.locationId));
     const failedA4 = await invoice(v.nodeId);
     await attempt(v, failedA4, "a4", "failed", office);
     const printed = await invoice(v.nodeId);
@@ -1083,4 +1076,29 @@ describe("readInvoiceDeliveries", () => {
     expect(batch.get(simplified)).toBeNull();
     expect(batch.get(fresh)!.actions.print).toBeNull();
   });
+});
+
+it("reads the venue once when reading several full-invoice deliveries", async () => {
+  const v = await venue();
+  const ids = [await invoice(v.nodeId), await invoice(v.nodeId)];
+  const session = (
+    suite.db as unknown as { session: { prepareQuery: (...args: unknown[]) => unknown } }
+  ).session;
+  const original = session.prepareQuery.bind(session);
+  const statements: string[] = [];
+  const spy = vi.spyOn(session, "prepareQuery").mockImplementation((...args) => {
+    statements.push((args[0] as { sql: string }).sql);
+    return original(...args);
+  });
+  try {
+    const batch = await withTransaction(suite.db, (tx) =>
+      readInvoiceDeliveriesFor(tx, ids, { emailAvailable: false }),
+    );
+    expect([...batch.keys()].sort()).toEqual([...ids].sort());
+    expect(statements.filter((statement) => statement.includes('from "locations"'))).toHaveLength(
+      1,
+    );
+  } finally {
+    spy.mockRestore();
+  }
 });

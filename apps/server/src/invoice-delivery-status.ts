@@ -1,6 +1,12 @@
 import "./errors.js";
 import { and, desc, eq, inArray } from "drizzle-orm";
-import { invoiceDeliveries, nodes, printJobs, sales, type Transaction } from "@waitron/db";
+import {
+  invoiceDeliveries,
+  printJobs,
+  sales,
+  venueLocationId,
+  type Transaction,
+} from "@waitron/db";
 import { MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED } from "@waitron/printing";
 import { AppError } from "@waitron/shared";
 import type { InvoiceDelivery } from "./invoice-delivery.js";
@@ -89,7 +95,6 @@ export type InvoiceDeliverySaleReadOptions = {
 /** The status, with what the reader read on the way that an action deciding on it needs again. */
 export interface InvoiceDeliveryState {
   status: InvoiceDeliveryStatus;
-  locationId: string;
   printers: OfferedPrinter[];
   receipt: OriginalReceiptPrint;
   /**
@@ -140,9 +145,8 @@ async function readStates(
   const { emailAvailable, printers: offer = async () => [] } = options;
   const ids = [...saleIds];
   const found = await tx
-    .select({ id: sales.id, recipient: sales.counterpartyTaxId, locationId: nodes.locationId })
+    .select({ id: sales.id, recipient: sales.counterpartyTaxId })
     .from(sales)
-    .innerJoin(nodes, eq(nodes.id, sales.nodeId))
     .where(inArray(sales.id, ids));
   const rows = await tx
     .select()
@@ -172,13 +176,16 @@ async function readStates(
   const rowsOf = bySale(rows);
   const jobsOf = bySale(jobs);
   const states = new Map<string, InvoiceDeliveryState | null>();
+  const venueId = found.some((sale) => sale.recipient !== null)
+    ? await venueLocationId(tx)
+    : undefined;
   for (const sale of found) {
     if (sale.recipient === null) {
       states.set(sale.id, null);
       continue;
     }
     const receipt = receipts.get(sale.id)!;
-    const located = { id: sale.id, locationId: sale.locationId };
+    const located = { id: sale.id, locationId: venueId! };
     const printers = await offer(located);
     const emailable =
       typeof emailAvailable === "boolean" ? emailAvailable : await emailAvailable(located);
@@ -187,7 +194,6 @@ async function readStates(
     const withdrawn = receiptPrinterWithdrawn(saleRows, saleJobs, receipt, printers);
     states.set(sale.id, {
       status: deliveryStatus(saleRows, saleJobs, receipt, withdrawn, printers, emailable),
-      locationId: sale.locationId,
       printers,
       receipt,
       receiptPrinterWithdrawn: withdrawn,

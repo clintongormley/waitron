@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -166,12 +166,12 @@ async function queueA4(saleId: string, pagePrinterId: string, ms = 0) {
 
 function pull(
   agentId: string,
-  locationId: string,
+  _locationId: string,
   ms: number,
   exceptPrinterIds: readonly string[] = [],
 ) {
   return withTransaction(suite.db, (tx) =>
-    claimInvoicePagePrint(tx, agentId, { locationId, exceptPrinterIds }, at(ms)),
+    claimInvoicePagePrint(tx, agentId, { exceptPrinterIds }, at(ms)),
   );
 }
 
@@ -257,6 +257,29 @@ describe("claiming an A4 delivery", () => {
     expect((await claim(v.agentOne, v.locationId, 10_000))?.claim.deliveryId).toBe(notDue);
   });
 
+  it("claims a due A4 delivery whatever the printer's location column holds", async () => {
+    const v = await venue();
+    const office = await printer(v.locationId, v.agentOne);
+    const id = await queueA4(await fullInvoice(v.nodeId), office);
+    await suite.db.execute(sql`pragma foreign_keys = off`);
+    try {
+      await suite.db
+        .update(pagePrinters)
+        .set({ locationId: randomUUID() })
+        .where(eq(pagePrinters.id, office));
+      const { job } = await withTransaction(suite.db, (tx) =>
+        claimInvoicePagePrint(tx, v.agentOne, {}, at(1_000)),
+      );
+      expect(job?.claim.deliveryId).toBe(id);
+    } finally {
+      await suite.db
+        .update(pagePrinters)
+        .set({ locationId: v.locationId })
+        .where(eq(pagePrinters.id, office));
+      await suite.db.execute(sql`pragma foreign_keys = on`);
+    }
+  });
+
   it("hands out a delivery whose next attempt lies 400 days ahead, as after a backward step", async () => {
     const v = await venue();
     const office = await printer(v.locationId, v.agentOne);
@@ -267,21 +290,6 @@ describe("claiming an A4 delivery", () => {
 
     expect(job?.claim.deliveryId).toBe(ahead);
     expect((await row(inside)).status).toBe("queued");
-  });
-
-  it("does not claim another location's delivery, and that location's claim takes it", async () => {
-    const v = await venue();
-    const terrace = await location("Terrace");
-    const office = await printer(v.locationId, v.agentOne);
-    const id = await queueA4(await fullInvoice(v.nodeId), office);
-    await suite.db
-      .update(pagePrinters)
-      .set({ locationId: terrace })
-      .where(eq(pagePrinters.id, office));
-
-    expect(await claim(v.agentOne, v.locationId, 1_000)).toBeUndefined();
-    expect((await row(id)).status).toBe("queued");
-    expect((await claim(v.agentOne, terrace, 1_000))?.claim.deliveryId).toBe(id);
   });
 
   it("does not claim another agent's printer, nor one with no agent, and its own agent claims it", async () => {
@@ -304,17 +312,10 @@ describe("claiming an A4 delivery", () => {
     const v = await venue();
     const disabled = await printer(v.locationId, v.agentOne);
     const active = await printer(v.locationId, v.agentOne);
-    const terrace = await location("Terrace");
-    const elsewhere = await printer(v.locationId, v.agentOne);
     const dead = await queueA4(await fullInvoice(v.nodeId), disabled, 1_000);
     const notDue = await queueA4(await fullInvoice(v.nodeId), disabled, 9_000);
     const live = await queueA4(await fullInvoice(v.nodeId), active, 2_000);
-    const otherLocation = await queueA4(await fullInvoice(v.nodeId), elsewhere, 1_000);
     await suite.db.update(pagePrinters).set({ active: false }).where(eq(pagePrinters.id, disabled));
-    await suite.db
-      .update(pagePrinters)
-      .set({ active: false, locationId: terrace })
-      .where(eq(pagePrinters.id, elsewhere));
     const before = await row(dead);
 
     const job = await claim(v.agentOne, v.locationId, 5_000);
@@ -326,7 +327,6 @@ describe("claiming an A4 delivery", () => {
       failureCode: "printer_disabled",
     });
     expect((await row(notDue)).status).toBe("queued");
-    expect((await row(otherLocation)).status).toBe("queued");
   });
 
   it("gives a second claim before the lease ends nothing", async () => {
@@ -757,19 +757,11 @@ describe("one A4 job per printer", () => {
     expect((await row(olderOnX)).status).toBe("queued");
   });
 
-  it("counts another agent's claim on a printer as busy, and lists only this location's printers", async () => {
+  it("counts another agent's claim on a printer as busy", async () => {
     const v = await venue();
-    const terrace = await location("Terrace");
     const x = await printer(v.locationId, v.agentTwo);
-    const elsewhere = await printer(v.locationId, v.agentOne);
     await queueA4(await fullInvoice(v.nodeId), x, 0);
-    await queueA4(await fullInvoice(v.nodeId), elsewhere, 0);
-    await suite.db
-      .update(pagePrinters)
-      .set({ locationId: terrace })
-      .where(eq(pagePrinters.id, elsewhere));
     expect((await pull(v.agentTwo, v.locationId, 1_000)).job).toBeDefined();
-    expect((await pull(v.agentOne, terrace, 1_000)).job).toBeDefined();
     const later = await queueA4(await fullInvoice(v.nodeId), x, 1_000);
     await suite.db.update(pagePrinters).set({ agentId: v.agentOne }).where(eq(pagePrinters.id, x));
 

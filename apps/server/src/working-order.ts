@@ -4465,7 +4465,6 @@ export async function setOrderInvoiceChoice(
     const invoiceDelivery = await checkedInvoiceChoiceDelivery(tx, {
       delivery: request.delivery,
       invoiceType: request.invoiceType,
-      locationId: order.locationId,
       source: { kind: "order", orderId },
       context: deliveryContext,
       invoicePrinter: async () =>
