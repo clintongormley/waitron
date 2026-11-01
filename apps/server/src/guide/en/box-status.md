@@ -208,9 +208,10 @@ While the box waits, the **Clock** row says **Waiting for proof that the clock i
 agency's time (when the box sends it records), or two tills or handhelds.** Once the proof is in, it
 says **Proof found: payments restart within a few seconds.**, and the box takes payments again
 within about 15 seconds. [Just after a start](box-status.md#clock-at-start), two devices alone do
-not restart payments, so while the tax agency's time does not agree the row says **Waiting for proof that
-the clock is right: the tax agency's time (when the box sends it records), “Check the time” on a
-till, or an administrator's device. The box has just started, so two tills or handhelds are not
+not restart payments, so until the tax agency's time agrees, and unless other clocks say the box's
+clock is wrong, the row says **Waiting for proof that the clock is right: the tax agency's time
+(when the box sends it records), “Check the time” on a till if the tax agency does not answer, or
+an administrator's device. The box started with payments stopped, so two tills or handhelds are not
 enough.**
 
 Sometimes the other clocks say the opposite: two or more tills or handhelds agree with each other

@@ -3523,6 +3523,24 @@ no "Proof found", the start-up waiting line; window closed → today's words (co
 The read: `box-status.route` or the health builder passes the window. **Deletion control:** drop
 the window from the row's choice → the open-window case says "Proof found".
 
+### Task 16a's notes and per-task review, folded (2026-11-01)
+
+- Built in 8da493da8. The read carries `startUp: boolean`; boot builds `clockStopReader` and
+  `clockCheckWaitingReader` once, beside the rest of the start's wiring, instead of on every Box
+  status request (neither keeps state of its own). The row shows the start-up line when the window
+  is open, the tax agency does not agree and the proof is `none` or `ready`; `contrary` and
+  `confirmed` keep their own lines, as the watch does.
+- Changed test text: `boot.clock-start-up.test.ts`'s first case was titled "handed to the watch and
+  the tills only"; it now also names Box status's clock read, with an assertion that the reader
+  gets the same window object. No assertion changed. Fixtures that grew `startUp: false`: the
+  `clockStop()` helper (`box-status-rows.test.ts`), `PROOF_READY` (a11y), `STOP` and `STOPPED`
+  (`box-status-screen.test.ts`).
+- Review C0/I0/M3, folded: the line names "Check the time" only "if the tax agency does not answer"
+  (the till offers it only then, `clock-start-up.ts` `tillMayOffer`); "the box has just started"
+  became "the box started with payments stopped" (the window lasts for the whole stop found at the
+  start); the guide's sentence says "until the tax agency's time agrees, and unless other clocks
+  say the box's clock is wrong". EN and ES.
+
 ### Task 17: LOOK, without the dev stack
 
 The dev stack (`wa-wt demo`) needs Docker, which is not answering on this Mac, so the LOOK uses the

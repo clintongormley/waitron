@@ -790,7 +790,7 @@ describe("the Clock row while payments are stopped for the clock", () => {
   it("never says proof is found for devices alone during start-up, and names who can confirm", () => {
     const devices = clockStop().agreeing.devices;
     const startUpLine =
-      "Waiting for proof that the clock is right: the tax agency's time (when the box sends it records), “Check the time” on a till, or an administrator's device. The box has just started, so two tills or handhelds are not enough.";
+      "Waiting for proof that the clock is right: the tax agency's time (when the box sends it records), “Check the time” on a till if the tax agency does not answer, or an administrator's device. The box started with payments stopped, so two tills or handhelds are not enough.";
     const devicesOnly = clockRow({
       notices: [CLOCK_BEHIND],
       clockStop: clockStop({ agreeing: { authority: null, devices }, startUp: true }),
@@ -826,7 +826,7 @@ describe("the Clock row while payments are stopped for the clock", () => {
       clockStop: clockStop({ proof: "none", agreeing: NO_WITNESS, startUp: true }),
     });
     expect(clock.details.at(-1)).toBe(
-      "Esperando una prueba de que la hora es correcta: la de Hacienda (si el equipo le envía registros), «Comprobar la hora» en una caja, o el dispositivo de un administrador. El equipo acaba de arrancar, así que no bastan dos cajas o terminales.",
+      "Esperando una prueba de que la hora es correcta: la de Hacienda (si el equipo le envía registros), «Comprobar la hora» en una caja si Hacienda no responde, o el dispositivo de un administrador. El equipo arrancó con los cobros parados, así que no bastan dos cajas o terminales.",
     );
   });
 

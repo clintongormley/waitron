@@ -220,10 +220,11 @@ Mientras el equipo espera, la fila **Reloj** dice **Esperando una prueba de que 
 la de Hacienda (si el equipo le envía registros), o la de dos cajas o terminales.** Cuando llega la
 prueba, dice **Hay prueba: los cobros se reanudan en unos segundos.**, y el equipo vuelve a cobrar
 en unos 15 segundos. [Justo después de un arranque](box-status.md#clock-at-start), dos
-dispositivos solos no reanudan los cobros, así que mientras la hora de Hacienda no coincida la fila
-dice **Esperando una prueba de que la hora es correcta: la de Hacienda (si el equipo le envía
-registros), «Comprobar la hora» en una caja, o el dispositivo de un administrador. El equipo acaba
-de arrancar, así que no bastan dos cajas o terminales.**
+dispositivos solos no reanudan los cobros, así que hasta que la hora de Hacienda coincida, y salvo
+que otros relojes digan que la hora del equipo está mal, la fila dice **Esperando una prueba de que
+la hora es correcta: la de Hacienda (si el equipo le envía registros), «Comprobar la hora» en una
+caja si Hacienda no responde, o el dispositivo de un administrador. El equipo arrancó con los cobros
+parados, así que no bastan dos cajas o terminales.**
 
 A veces los otros relojes dicen lo contrario: dos o más cajas o terminales coinciden entre sí en que
 el reloj del equipo va desviado más de un minuto, o la hora de Hacienda no coincide con él durante
