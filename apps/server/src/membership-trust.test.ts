@@ -18,6 +18,7 @@ import {
   MAX_NODES,
   MAX_REVOKED,
   signDocumentBody,
+  verifyDocumentSigner,
   type Endorsement,
   type MembershipDocumentBody,
   type SignedMembershipDocument,
@@ -129,6 +130,32 @@ describe("the held document's check against the keys this box stores", () => {
     );
     expect(isAppError(error) && error.params).toEqual({ reason: "bad_signature" });
   });
+
+  it.each(["this box", "the pinned main box"])(
+    "refuses a document signed with a key venue.db names for %s, with reason bad_signature",
+    async (whose) => {
+      const { db, nodeId } = await box();
+      const [loc] = await db
+        .insert(locations)
+        .values({ name: "Terraza", invoiceLocales: ["es-ES"], operationDescription: "Venta" })
+        .returning({ id: locations.id });
+      const mainId = await seedNode(db, brandLocationId(loc!.id));
+      await pinMainBoxKey(suite.node, nodeId, { nodeId: mainId, publicKey: MAIN.publicKey });
+      const signerId = whose === "this box" ? nodeId : mainId;
+      const attacker = generateNodeKeyPair();
+      await setNodePublicKey(db, signerId, attacker.publicKey);
+      const doc = signed(signerId, attacker.privateKey);
+      // venue.db's own keys would trust it, so only a trust set read from node.db refuses it.
+      expect(verifyDocumentSigner(doc, await readMembershipTrustSet(db))).toEqual({
+        trusted: true,
+        signerNodeId: signerId,
+      });
+
+      const error = await captureError(() => assertHeldDocumentTrusted(deps(nodeId), doc));
+      expect(isAppError(error) && error.code).toBe("membership.held_untrusted");
+      expect(isAppError(error) && error.params).toEqual({ reason: "bad_signature" });
+    },
+  );
 
   it("refuses a spare's document whose endorsement the pinned key did not sign, with reason endorsement_invalid", async () => {
     const { nodeId } = await box();
