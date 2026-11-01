@@ -288,7 +288,7 @@ describe("startup zone admission", () => {
 
   it.each([
     new AppError("venue.time_zone_conversion_failed", { reason: "invalid_instant" }),
-    new AppError("venue.time_zone_target_invalid", { reason: "mismatch" }),
+    new AppError("venue.not_found", {}),
     new TypeError("synthetic formatter failure"),
   ])("keeps a startup classification failure fatal without granting repair (%j)", async (fault) => {
     vi.mocked(readZoneContext).mockRejectedValueOnce(fault);

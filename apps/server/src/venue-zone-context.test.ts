@@ -117,13 +117,17 @@ describe("raw saved zone context", () => {
   });
   it("refuses a context with no taxpayer identity", async () => {
     await suite.db.execute(sql`delete from tenants`);
-    await expect(read()).rejects.toMatchObject({ code: "venue.not_found", params: {} });
+    const error: unknown = await read().catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ code: "venue.not_found" });
+    expect((error as { params: unknown }).params).toEqual({});
   });
   it("refuses with no venue row", async () => {
     await suite.db.execute(sql`pragma foreign_keys = off`);
     try {
       await suite.db.delete(locations);
-      await expect(read()).rejects.toMatchObject({ code: "venue.not_found", params: {} });
+      const error: unknown = await read().catch((caught: unknown) => caught);
+      expect(error).toMatchObject({ code: "venue.not_found" });
+      expect((error as { params: unknown }).params).toEqual({});
     } finally {
       await suite.db.execute(sql`pragma foreign_keys = on`);
     }

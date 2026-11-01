@@ -5,7 +5,7 @@ import { mountDepartmentReceiptSettingsApi } from "./department-receipt-api.js";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { withTransaction } from "@waitron/db";
+import { locations, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { venueFiscalSelection } from "@waitron/provisioning";
@@ -764,9 +764,7 @@ describe("no venue row", () => {
     "/management-api/venue-defaults",
     "/management-api/receipt-language",
   ])("%s answers 409 venue.not_found", async (path) => {
-    const [venueRow] = suite.db.all<Record<string, unknown>>(
-      sql`select * from locations where id = ${venue.cfg.locationId}`,
-    );
+    const [venueRow] = await suite.db.select().from(locations);
     await suite.db.execute(sql`pragma foreign_keys = off`);
     try {
       await suite.db.execute(sql`delete from locations`);
@@ -774,13 +772,7 @@ describe("no venue row", () => {
       expect(response.status).toBe(409);
       expect(await response.json()).toEqual({ error: { code: "venue.not_found", params: {} } });
     } finally {
-      const columns = Object.keys(venueRow!);
-      await suite.db.execute(
-        sql`insert into locations (${sql.raw(columns.map((c) => `"${c}"`).join(", "))}) values (${sql.join(
-          columns.map((c) => sql`${venueRow![c]}`),
-          sql`, `,
-        )})`,
-      );
+      await suite.db.insert(locations).values(venueRow!);
       await suite.db.execute(sql`pragma foreign_keys = on`);
     }
   });

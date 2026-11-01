@@ -898,9 +898,7 @@ Open:
   can make such a loop was not checked. `partyFamilies`, the reverse lookup of `partySurvivors`,
   stayed in `apps/server/src/parties.ts`, while `partySurvivors` is in
   `packages/db/src/party-table-labels.ts`. Left by
-  #906's review: `computeOverdueOrders` is the one report function that reads its own node's
-  location rather than being handed one (adding `locationId` to `OverdueOrdersInput` was
-  suggested, not done); no case pins what a correction slip prints for a counter order delivered
+  #906's review: no case pins what a correction slip prints for a counter order delivered
   to a table; and a database built on purpose with a delivery table in another location now
   names the order by its own label — no product path creates that state, and whether every
   existing venue database is free of it was not checked.

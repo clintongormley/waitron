@@ -56,7 +56,8 @@ declare module "@waitron/shared" {
      * has no row.
      */
     "venue.not_found": Record<string, never>;
-    /** A database holds more than one venue row. Declared with identical params in
+    /** A database holds more than one venue row, which only a fault in Waitron produces. Declared
+     * with identical params in
      * `packages/provisioning/src/errors.ts`. */
     "provisioning.second_venue": Record<string, never>;
     /**

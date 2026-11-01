@@ -26,9 +26,9 @@ import {
 } from "./testing/bill-venue.js";
 import "./errors.js";
 
-// A receipt-language change is refused while an open order at the location holds a line: the till
-// can still split such a line, inserting a copy keyed under the old language, or move it to another
-// bill, and the database's line triggers refuse both once the location's language differs. A placed
+// A receipt-language change is refused while an open order holds a line: the till can still split
+// such a line, inserting a copy keyed under the old language, or move it to another bill, and the
+// database's line triggers refuse both once the venue's language differs. A placed
 // or paid order's lines, and an open order with none, take no such write, so they do not block.
 let venue: BillVenue;
 let counter: ZoneOffers;

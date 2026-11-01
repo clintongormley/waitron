@@ -585,7 +585,7 @@ export const en = {
   "nav.content_languages": "Content languages",
   "venue_settings.description": "Invoice operation description",
   "venue_settings.help":
-    "This text is copied onto future fiscal records for this location. Existing records keep their original description.",
+    "This text is copied onto future fiscal records for this venue. Existing records keep their original description.",
   "venue_settings.help_label": "Help with the operation description",
   "venue_settings.required": "Enter the invoice operation description.",
   "venue_settings.invalid":
