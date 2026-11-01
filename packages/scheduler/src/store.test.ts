@@ -529,6 +529,20 @@ describe("times stamped ahead of the clock", () => {
     expect(reclaimed).toMatchObject({ attempts: 2 });
   });
 
+  it("reclaimStale reclaims a running row started a millisecond further ahead than staleAfterMs", async () => {
+    const claimed = await withTransaction(suite.db, (tx) =>
+      claimGap(tx, {
+        duty: DUTY,
+        period: dayPeriod(new Date("2026-02-05T00:00:00Z")),
+        now: new Date(NOW.getTime() + HOUR + 1),
+      }),
+    );
+    const reclaimed = await withTransaction(suite.db, (tx) =>
+      reclaimStale(tx, { id: claimed!.id, now: NOW, staleAfterMs: HOUR }),
+    );
+    expect(reclaimed).toMatchObject({ attempts: 2 });
+  });
+
   it("reclaimStale refuses a running row started exactly staleAfterMs ahead", async () => {
     const claimed = await withTransaction(suite.db, (tx) =>
       claimGap(tx, {
