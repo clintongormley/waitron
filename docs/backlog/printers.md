@@ -822,7 +822,7 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
   copy reads the party as it is then: a count changed after payment, or a new bill
   the party opens after paying, changes or removes the line on that copy, while the order label
   stays as recorded. While a party, with any party joined into it, holds more than one bill that is
-  not abandoned (bills kept separate after joining tables, or a split by item), none of those bills
+  not abandoned (the bills of joined tables, or a split by item), none of those bills
   prints the line, and nor does a bill of a party joined into another (`readReceiptGuests`,
   `apps/server/src/receipt-guests.ts`).
 

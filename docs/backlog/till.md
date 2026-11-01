@@ -2208,7 +2208,10 @@ money in flight, since a move changes no amount (plan P19). Stated at its site i
 - **"Ready" and "Fired N min ago" on the table screen stay as built (owner, 2026-10-17).** They
   were the service plan's default (Task 5, #750).
 - **A child extras row in the Tab drawer stays on its own indented, muted, smaller line (owner,
-  2026-10-17)**, matching A738's approved order layout.
+  2026-10-17)**, matching A738's approved order layout. (2026-11-01: the Tab drawer is gone since
+  A803 slice 3; a child extras row is now drawn on its own muted, smaller line in `till-sent-orders`
+  (`apps/till/src/widgets/sent-orders.ts`), and indented as well in the table screen's fallback list
+  while `currentOrders` is null (`#sentFallback`, `apps/till/src/screens/till-table-order-screen.ts`).)
 - **Void works on every bill, split or not (owner, 2026-10-17, withdrawing the 2026-09-26 decision
   that a split check gets no Void).** It follows A758's cancel rules; the server already allows it.
 - **A home-page shortcut whose target a newly read menu version lacks disappears with no notice

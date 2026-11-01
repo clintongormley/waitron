@@ -8771,7 +8771,7 @@ describe("recalled draft source splitting", () => {
       expect(api.takeOverDraft).not.toHaveBeenCalled();
     });
 
-    it("recalls onto the shown split bill without following the party's main bill", async () => {
+    it("recalls onto the shown split bill without following the bill the floor names", async () => {
       const { el, order } = await recallOpening({
         recallToDraft: vi.fn(async () => {
           const own = server.save("v1", {

@@ -61,10 +61,6 @@ import {
  * `packages/db/drizzle/0124_devices_recreate_form_factor_trigger.sql`.
  * `packages/db/drizzle/0064_line_locale_triggers_text_only.sql` re-creates the two locale update
  * triggers to fire only when an update changes the name map each one checks or moves the line.
- * Some triggers ACT rather than refuse.
- * The two of `packages/db/drizzle/0038_main_bill_release.sql`, re-created by `0045`: a
- * party's `main_bill_id` is cleared when that bill leaves `open`, or leaves the party (to another
- * party or to the counter).
  * `packages/db/drizzle/0024_bill_payment_triggers.sql` adds the state guards on `bill_payments` and
  * `bill_payment_refunds`, and a trigger on each refusing every delete — those two refuse by design
  * whatever the row, so they have no accepting control here.

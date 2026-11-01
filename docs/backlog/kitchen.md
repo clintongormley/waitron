@@ -35,7 +35,7 @@ Left open:
   (`readLinesSoldInEach`), or with no unit recorded on the line — are added together or split;
   a venue-made unit that counts pieces (a "portion"), even one spelled like Each, prints line
   by line, because nothing records a unit's kind (a unit field would need a migration).
-- Every pass press moves the party's revision, so a waiter's open Tab drawer meets
+- Every pass press moves the party's revision, so a waiter's open table screen meets
   `party.out_of_date` after it and reads again.
 - Setting up a venue from an imported configuration deletes every kitchen station, and the
   `kitchen_print_jobs` station key has no delete rule; whether that venue can already hold

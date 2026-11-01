@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import type { WtRowActions } from "@waitron/ui/src/components/wt-row-actions.js";
+import type { WtRowActions } from "@waitron/ui";
 import { setLocale } from "../i18n/t.js";
 import type { PartyBill, TableParty } from "../api/client.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";

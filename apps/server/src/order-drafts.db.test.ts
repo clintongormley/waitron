@@ -1059,7 +1059,7 @@ describe("draft bill ownership", () => {
     expect(await withTransaction(db, (tx) => firstOpenBillOf(tx, partyId))).toBe(tabId);
   });
 
-  it("refuses a legacy draft without a bill instead of interpreting it as the main bill", async () => {
+  it("refuses a legacy draft without a bill", async () => {
     const v = await setupVenue();
     const { partyId, tabId } = await seated(v);
     const draft = await onBill(v, partyId, tabId);
@@ -3449,7 +3449,7 @@ async function openOwnersOn(partyId: string): Promise<string[]> {
 }
 
 describe("merging parties (D2)", () => {
-  it("keeps the same owner's drafts separate when the joined tables keep separate bills", async () => {
+  it("keeps the same owner's drafts separate when tables are joined", async () => {
     const v = await setupVenue();
     const into = await seated(v);
     const from = await seated(v, "Mesa 7");

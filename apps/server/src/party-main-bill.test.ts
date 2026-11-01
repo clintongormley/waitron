@@ -338,7 +338,7 @@ describe("the party's name", () => {
 });
 
 describe("pay, then order dessert", () => {
-  it("opens a new tab on the same party and leaves the earlier sale untouched", async () => {
+  it("a round naming no bill lands on the next bill the test helper makes, on the same party, and leaves the earlier sale untouched", async () => {
     const table20 = await v.table("Mesa 20");
     const { partyId, tabId } = await seat(v, table20, 2);
     await order(v, tabId, "Burger", "Vino");
@@ -378,7 +378,7 @@ describe("pay, then order dessert", () => {
     });
   });
 
-  it("shows the table held with no bill open until the next round opens one", async () => {
+  it("shows the table held with no bill open, opening on the paid bill", async () => {
     const table21 = await v.table("Mesa 21");
     const { partyId, tabId } = await seat(v, table21, 2);
     await order(v, tabId, "Burger");
@@ -447,7 +447,7 @@ describe("pay, then order dessert", () => {
     }
   });
 
-  it("keeps the party seated when its tab is abandoned, and the next round opens a new tab", async () => {
+  it("keeps the party seated when its tab is abandoned, and the next round lands on the next bill the test helper makes", async () => {
     const table24 = await v.table("Mesa 24");
     const { partyId, tabId } = await seat(v, table24);
     await order(v, tabId, "Burger");
@@ -475,7 +475,7 @@ describe("A803 no main bill:", () => {
     inTx(v, (tx) => tx.update(workingOrders).set({ openedAt }).where(eq(workingOrders.id, billId)));
 
   it("a seated table's floor row names Bill 1 as the bill it opens on", async () => {
-    const table = await v.table("Mesa no main 1");
+    const table = await v.table("Table seated 1");
     const { partyId, tabId } = await seat(v, table);
 
     expect(await numbersOf(v, partyId)).toEqual([[tabId, 1, null]]);
@@ -483,7 +483,7 @@ describe("A803 no main bill:", () => {
   });
 
   it("after the only bill is paid the floor row names it, and an order needs a bill made with createPartyBill", async () => {
-    const table = await v.table("Mesa no main 2");
+    const table = await v.table("Table seated 2");
     const { partyId, tabId } = await seat(v, table);
     await order(v, tabId, "Burger");
     await pay(v, tabId, "12.00");
@@ -512,8 +512,8 @@ describe("A803 no main bill:", () => {
   });
 
   it("a send naming a bill that has since moved to another party refuses bill.other_party, and no line, draft or bill is written", async () => {
-    const table = await v.table("Mesa no main 3");
-    const freeTable = await v.table("Mesa no main 3b");
+    const table = await v.table("Table seated 3");
+    const freeTable = await v.table("Table seated 3b");
     const { partyId, tabId } = await seat(v, table);
     await order(v, tabId, "Burger", "Vino");
     const second = await split(v, partyId, tabId, [2]);
@@ -547,7 +547,7 @@ describe("A803 no main bill:", () => {
   });
 
   it("a send naming a bill of this party that is not the lowest-numbered lands on exactly that bill", async () => {
-    const table = await v.table("Mesa no main 4");
+    const table = await v.table("Table seated 4");
     const { partyId, tabId } = await seat(v, table);
     await order(v, tabId, "Burger", "Vino");
     const second = await split(v, partyId, tabId, [2]);
@@ -565,7 +565,7 @@ describe("A803 no main bill:", () => {
 
   it("the floor row opens on the lowest-numbered owing bill, else the highest-numbered shown bill", async () => {
     // Opening order is seeded against number order: Bill 3 opened first, then Bill 2, then Bill 1.
-    const owingTable = await v.table("Mesa no main 5");
+    const owingTable = await v.table("Table seated 5");
     const owing = await seat(v, owingTable);
     const owing2 = await newBill(owing.partyId);
     const owing3 = await newBill(owing.partyId);
@@ -585,7 +585,7 @@ describe("A803 no main bill:", () => {
 
     expect(await openingBillOf(owingTable)).toBe(owing2);
 
-    const paidTable = await v.table("Mesa no main 5b");
+    const paidTable = await v.table("Table seated 5b");
     const paid = await seat(v, paidTable);
     const paid2 = await newBill(paid.partyId);
     const abandoned = await newBill(paid.partyId);

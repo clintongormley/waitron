@@ -9193,7 +9193,7 @@ describe("till-app", () => {
       await flush(el);
 
       // An occupied table already has a tab — no seatTable call, just the transition. The screen
-      // points at the RESUMED party's main bill, not a new one.
+      // opens on the bill the floor names for the RESUMED party, not a new one.
       expect(seatTable).not.toHaveBeenCalled();
       // The table-order drill overlays the still-mounted floor tab.
       expect(floor(el)).not.toBeNull();

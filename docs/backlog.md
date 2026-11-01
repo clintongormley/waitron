@@ -2066,9 +2066,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A1264. A bill another till merged or moved away is noticed only on the 15-second timer (left
   open by A803 slice 3, #PR).** The till has no push from the server. Since the LOOK fix F1 it
   re-reads the party's bills on its draft timer and after a refused save; a window focus, or the
-  page becoming visible again, re-reads the draft but not the bills, so the screen can keep the
-  gone bill for up to 15 seconds after the till is picked up. Re-read the bills there too
-  (`apps/till/src/till-app.ts`).
+  page becoming visible again, re-reads the draft but not the bills (by reading, not run), so the
+  screen can keep the gone bill for up to 15 seconds after the till is picked up. Re-read the
+  bills there too (`apps/till/src/till-app.ts`).
 
 - **A1265. The table screen's ⋮ list is taller than the room below it, so Finish table starts
   below the fold (seen in A803 slice 3's LOOK, finding F8).** At 1280×900 the list holds 743 px
@@ -2905,7 +2905,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Loose ends left by service Task 5 (#750, kitchen, pass and table screen by group).**
   - A fired group with nothing for the kitchen (bottled water, say) never reads Ready.
-  - Every pass press moves the party's revision, so a waiter's open Tab drawer meets
+  - Every pass press moves the party's revision, so a waiter's open table screen meets
     `party.out_of_date` after it and reads again.
 
 - **Loose ends left by service Task 7 (#789, each person's draft kept on the server).** A draft

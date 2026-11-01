@@ -155,7 +155,7 @@ describe("the default guests (readReceiptGuests)", () => {
     expect(await guestsOnPaying(four.tabId, "32.00")).toBe(5);
   });
 
-  it("prints nothing on joined tables whose bills were kept separate", async () => {
+  it("prints nothing on joined tables, each keeping its bill", async () => {
     const mesa4 = await v.table("Invitados 6b 4");
     const mesa5 = await v.table("Invitados 6b 5");
     const four = await seat(v, mesa4, 2);

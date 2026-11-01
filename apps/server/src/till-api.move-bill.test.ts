@@ -118,7 +118,7 @@ function revisionOf(partyId: string): number {
   return row!.revision;
 }
 
-/** Ana's second bill, split off her main bill with the named lines, and Luis at another table. */
+/** Ana's second bill, split off the bill made at her seating with the named lines, and Luis at another table. */
 async function splitAtTwoParties(names: string[], lineNos: number[]) {
   const ana = await seatedWith(venue, ...names);
   const luis = await seatedWith(venue, "Caña");
@@ -188,7 +188,7 @@ async function freeTable(): Promise<string> {
   return id;
 }
 
-/** An open counter order in the tables' zone, so its service mode matches a party's main bill. */
+/** An open counter order in the tables' zone, so its service mode matches the bills of a party seated there. */
 async function counterOrder(...names: string[]): Promise<string> {
   const id = randomUUID();
   await parkOrder({ db: venue.db }, venue.cfg, {
@@ -693,7 +693,7 @@ describe("paying a moved bill, by its state", () => {
 });
 
 describe("a move while a whole bill is being paid by card at the reader", () => {
-  it("keeps the moved bill separate from a receiving main bill being paid in full, and both complete", async () => {
+  it("keeps the moved bill separate from the receiving table's bill made at seating, being paid in full, and both complete", async () => {
     const { luis, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
     const { release, paying } = await wholeBillAtReader(luis.tabId);
 
@@ -712,7 +712,7 @@ describe("a move while a whole bill is being paid by card at the reader", () => 
     expect(linesNamed(billId)).toEqual(["Pulpo"]);
   });
 
-  it("keeps a counter order being paid in full separate from the party's main bill, and its card completes on it", async () => {
+  it("keeps a counter order being paid in full separate from the party's bill made at seating, and its card completes on it", async () => {
     const luis = await seatedWith(venue, "Caña");
     const orderId = await counterOrder("Tarta");
     const { release, paying } = await wholeBillAtReader(orderId);
@@ -732,7 +732,7 @@ describe("a move while a whole bill is being paid by card at the reader", () => 
     expect(linesNamed(luis.tabId)).toEqual(["Caña"]);
   });
 
-  it("keeps the moved bill separate from a receiving main bill with a card refund in progress", async () => {
+  it("keeps the moved bill separate from the receiving table's bill made at seating, with a card refund in progress", async () => {
     const ana = await seatedWith(venue, "Tarta", "Pulpo");
     const luis = await seatedWith(venue, "Croquetas");
     const split = await post(

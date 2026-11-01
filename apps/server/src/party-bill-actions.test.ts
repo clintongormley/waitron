@@ -1312,8 +1312,8 @@ describe("A803 table actions (writers):", () => {
   }
 
   it("Move this bill to a free table", async () => {
-    const { second } = await twoBills("Mesa nomain move free");
-    const free = await v.table("Mesa nomain move free to");
+    const { second } = await twoBills("Table move free");
+    const free = await v.table("Table move free to");
 
     const { partyId } = await moveTo(second, { tableId: free });
 
@@ -1321,8 +1321,8 @@ describe("A803 table actions (writers):", () => {
   });
 
   it("Move this bill onto a seated party", async () => {
-    const { second } = await twoBills("Mesa nomain move seated");
-    const there = await presentedParty("Mesa nomain move seated to");
+    const { second } = await twoBills("Table move seated");
+    const there = await presentedParty("Table move seated to");
     const table = (await activeTablesOf(v, there.partyId))[0]!;
 
     const result = await moveTo(second, { tableId: table });
@@ -1331,8 +1331,8 @@ describe("A803 table actions (writers):", () => {
   });
 
   it("Join a seated table", async () => {
-    const joiner = await presentedParty("Mesa nomain join from");
-    const held = await seat(v, await v.table("Mesa nomain join held"));
+    const joiner = await presentedParty("Table join from");
+    const held = await seat(v, await v.table("Table join held"));
     const heldTable = (await activeTablesOf(v, held.partyId))[0]!;
     const joining = {
       ...(await commandFor(v, joiner.partyId)),
@@ -1346,9 +1346,9 @@ describe("A803 table actions (writers):", () => {
   });
 
   it("Join a free table, for a party with no bill, gives it one bill", async () => {
-    const { partyId, tabId } = await seat(v, await v.table("Mesa nomain join empty"));
+    const { partyId, tabId } = await seat(v, await v.table("Table join empty"));
     await moveTo(tabId, { counter: { zoneId: null } });
-    const free = await v.table("Mesa nomain join empty to");
+    const free = await v.table("Table join empty to");
     const joining = await commandFor(v, partyId);
 
     const result = await inTx(v, (tx) => joinTables(tx, v.cfg, partyId, free, joining));
@@ -1357,7 +1357,7 @@ describe("A803 table actions (writers):", () => {
   });
 
   it("Split a table taking an open bill leaves the staying party its own bill", async () => {
-    const { partyId, tabId, second } = await atTwoTables("Mesa nomain split bill");
+    const { partyId, tabId, second } = await atTwoTables("Table split bill");
     await orderForParty(v, partyId, ["Burger", "Vino"]);
     const taken = await splitOff(partyId, tabId, [2]);
     const splitting = await commandFor(v, partyId);
@@ -1369,7 +1369,7 @@ describe("A803 table actions (writers):", () => {
   });
 
   it("Split a table with no bill gives the new party an empty bill", async () => {
-    const { partyId, tabId, second } = await atTwoTables("Mesa nomain split none");
+    const { partyId, tabId, second } = await atTwoTables("Table split none");
     const splitting = await commandFor(v, partyId);
 
     const result = await inTx(v, (tx) => splitTable(tx, v.cfg, partyId, second, null, splitting));
@@ -1379,7 +1379,7 @@ describe("A803 table actions (writers):", () => {
   });
 
   it("Split a table taking the staying party's only bill", async () => {
-    const { partyId, tabId, second } = await atTwoTables("Mesa nomain split last");
+    const { partyId, tabId, second } = await atTwoTables("Table split last");
     const splitting = await commandFor(v, partyId);
 
     const result = await inTx(v, (tx) => splitTable(tx, v.cfg, partyId, second, tabId, splitting));

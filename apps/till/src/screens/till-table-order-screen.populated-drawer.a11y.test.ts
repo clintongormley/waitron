@@ -35,7 +35,7 @@ afterEach(async () => {
   await page.viewport(1280, 900);
 });
 
-describe.each(["en", "es"] as const)("populated table drawer in %s", (locale) => {
+describe.each(["en", "es"] as const)("table menu with sent dishes in %s", (locale) => {
   describe.each(["light", "dark"] as const)("%s", (theme) => {
     it.each([390, 1280])(
       "keeps dish details and Void in Sent, with no duplicate list at %i",

@@ -2503,7 +2503,7 @@ describe("till-app: table actions on the party", () => {
     });
   });
 
-  it("opens the party's main bill once the bill on screen has gone with the table split off", async () => {
+  it("opens the bill the floor names once the bill on screen has gone with the table split off", async () => {
     const atTwo = seated({}, { tableIds: ["t4", "t5"] });
     const table5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
     const reads = floorThat(
@@ -5693,7 +5693,7 @@ describe("till-app: opening a seated table", () => {
     expect(order.orderId).toBe("wo-check");
   });
 
-  it("opens the first unpaid bill when the party has no main bill, its main having been paid", async () => {
+  it("opens the first unpaid bill when the floor names no bill and Bill 1 is paid", async () => {
     const paid: PartyBill = {
       ...tabBill,
       workingOrderId: "wo-paid",
@@ -7042,7 +7042,7 @@ describe("till-app: the order's groups", () => {
     });
   });
 
-  it("sends the party's draft from a bill split off the main bill, naming no bill unless one is chosen", async () => {
+  it("sends the party's draft from a bill split off Bill 1, naming no bill unless one is chosen", async () => {
     const { el } = await mountApp({
       submitDraft: answering({ tabId: "wo-4", revision: 4, groups: [] }),
     });
@@ -7151,7 +7151,7 @@ describe("till-app: the order's groups", () => {
     });
   });
 
-  it("takes the party from the floor read after a send from another bill landed on the main bill, when the floor has it at a later revision", async () => {
+  it("takes the party from the floor read after a send from another bill landed on Bill 1, when the floor has it at a later revision", async () => {
     let landed = false;
     const later = seated({}, { revision: 6, name: "Ana" });
     const { el } = await mountApp({
@@ -8606,7 +8606,7 @@ describe("till-app: submitting the draft", () => {
     expect(toast(el)?.open ?? false).toBe(false);
   });
 
-  describe("a partial submission after the party's main bill changes", () => {
+  describe("a partial submission after the bill the floor names changes", () => {
     const onRecordedBill = (over: Record<string, unknown> = {}) => ({
       ...withCourses(),
       submitDraft: answering({ tabId: "wo-4", revision: 4, groups: [] }),

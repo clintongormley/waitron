@@ -1295,7 +1295,7 @@ it("rereads a stale party note and keeps the current line draft", async () => {
   expect(tableScreen(el).draftStore).toBe(store);
   expect(tableHeading(el).shadowRoot!.querySelector("wt-dialog")).toBeNull();
 });
-it("saves a party note when settlement left no main bill", async () => {
+it("saves a party note when the floor names no bill for the party", async () => {
   const party = { ...tableParty(), openingBillId: null };
   const { el } = await mountedTable({}, party);
   expect(tableScreen(el).orderId).toBeUndefined();

@@ -407,7 +407,7 @@ const bill = (over: Partial<PartyBill>): PartyBill => ({
   receiptAvailable: false,
   ...over,
 });
-/** The party's main bill, and a bill split off it, both untouched. */
+/** The bill made at seating, and a bill split off it, both untouched. */
 const tabBill = bill({});
 const checkBill = bill({
   workingOrderId: "wo-check",
@@ -3975,7 +3975,7 @@ describe("till-table-order-screen", () => {
       expect(el.orderId).toBe("wo-check");
     });
 
-    it("does not fall back to the main bill for an addition on a split bill", async () => {
+    it("does not move an addition on a split bill to the bill the floor names", async () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-check", courses });
       await ringCafe(el);
       el.party = { ...anaParty, openingBillId: "wo-part" };
@@ -4009,7 +4009,7 @@ describe("till-table-order-screen", () => {
       await assertOwnSend(el, grid(el).store);
     });
 
-    it("does not invent a new bill when the party has no main bill", async () => {
+    it("does not invent a new bill when the floor names no bill for the party", async () => {
       const { el } = await mount({
         party: { ...anaParty, openingBillId: null },
         bills: [{ ...paidBill, billNumber: 1 }, checkBill],
@@ -4071,7 +4071,7 @@ describe("till-table-order-screen", () => {
       expect(el.orderId).toBe("wo-check");
     });
 
-    it("does not follow a main-bill refresh away from its current store", async () => {
+    it("does not follow a change of the bill the floor names away from its current store", async () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-4", courses });
       await ringCafe(el);
       const own = grid(el).store;
@@ -4082,14 +4082,14 @@ describe("till-table-order-screen", () => {
       expect(el.orderId).toBe("wo-4");
     });
 
-    it("sends to the current main bill through its own store without a bill override", async () => {
+    it("sends to the bill the floor names through its own store without a bill override", async () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-4", courses });
       await ringCafe(el);
       await assertOwnSend(el, grid(el).store);
       expect(el.orderId).toBe("wo-4");
     });
 
-    it("keeps the former main bill's store after another bill becomes main", async () => {
+    it("keeps the bill on screen's store after the floor names another bill", async () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-4", courses });
       await ringCafe(el);
       const own = grid(el).store;
@@ -4099,7 +4099,7 @@ describe("till-table-order-screen", () => {
       expect(el.orderId).toBe("wo-4");
     });
 
-    it("does not switch stores when another device creates the party's main bill", async () => {
+    it("does not switch stores when another device makes the bill the floor names", async () => {
       const { el } = await mount({
         party: { ...anaParty, openingBillId: null },
         bills: [{ ...paidBill, billNumber: 1 }, checkBill],
@@ -6476,7 +6476,7 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector("[data-transfer-lines]")).not.toBeNull();
     });
 
-    it("offers Split on a bill split off before, as on the main bill", async () => {
+    it("offers Split on a bill split off before, as on Bill 1", async () => {
       const { el } = await mount({ ...partyBills(), lines: [pendingLine], orderId: "wo-check" });
       await toMenu(el);
       let captured: CustomEvent | undefined;
@@ -6492,7 +6492,7 @@ describe("till-table-order-screen", () => {
       expect(captured!.detail).toEqual({ transfers: [{ lineNo: 1 }] });
     });
 
-    it("merges into the bill on screen from the main bill when the bill on screen was split off", async () => {
+    it("merges into the bill on screen from Bill 1 when the bill on screen was split off", async () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-check" });
       await toMenu(el);
       click(el, '[data-action="merge"]');

@@ -187,8 +187,8 @@ export async function recordUnpaidDeparture(
 }
 
 /**
- * `bills` in the order they were opened. Invoices follow this order, not the list's bill-number
- * order (plan D15 addendum; the owner's choice is pending in the PR).
+ * `bills` in the order they were opened; a departure's invoices follow it, not the list's
+ * bill-number order (plan D15 addendum).
  */
 async function inOpeningOrder(tx: Transaction, bills: FamilyBill[]): Promise<FamilyBill[]> {
   const opened = await tx

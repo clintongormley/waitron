@@ -74,7 +74,7 @@ async function floorGuests(tableId: string): Promise<number | null> {
   return tables.find((t) => t.id === tableId)!.party!.guestCount;
 }
 
-/** Ana at two tables, her main bill (Tarta) and a split bill (Pulpo). */
+/** Ana at two tables, the bill made at her seating (Tarta) and a split bill (Pulpo). */
 async function anaAtTwo() {
   const ana = await seatedWith(venue, "Tarta", "Pulpo");
   const second = await freeTable();
