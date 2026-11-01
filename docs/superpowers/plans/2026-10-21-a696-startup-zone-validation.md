@@ -463,3 +463,28 @@ values for only those five entries; every other entry remains unchanged. This le
 sequencer use the observed costs when assigning and ordering files. It is not proof of the next
 run's job durations. Assertion bodies, case counts, deadlines and production code remain unchanged;
 normal hook and exact-head CI still qualify the scheduling-data update before owner handoff.
+
+
+### Required integration rebase, 1 November
+
+Main advanced to`d4cb662803856f665e0ee946c0344b5465dd04ea` with B3's installer work and
+A798-B9b's host-clock integration. Source overlap requires this rebase; the earlier CI receipts
+remain evidence only for their named heads. The29commits replay with conflicts in two appended
+translation-test blocks and the duration table. Both test blocks survive in each translation
+suite. Every main duration entry is retained, with only A696's five measured entries added.
+Range-diff shows unchanged patches elsewhere. The prior766-second review is retained.
+
+A new host-clock test mounts the till API without its now-required admission holder. The compiler
+reportsTS2741 at that fixture. Add the same explicit ready holder used by sibling till-API tests,
+retaining every assertion. The owning41cases pass, server types pass, and the broader startup/
+clock/refund/profile integration passes631cases. Dashboard app/code600 and till code78 pass.
+The protected fiscal pair passes20cases, with byte equality against this new main verified.
+The process matrix and fresh normal-hook/current-head CI qualification still follow.
+
+The first attempted calibration push began even after an overlap probe failed because a shell
+newline allowed its next command to run. Only that owned push's seven recorded processes were
+stopped; its remote head stayed12b6bf6fa. Later push orchestration checks subprocess failures before
+starting the push. The interrupted hook is not a successful gate receipt.
+
+The rebased process matrix passes all18cases/5files in75.67seconds locally, largest70.6seconds.
+This completes the named rebase checks; the next push must still pass its normal hook and exact-head CI.
