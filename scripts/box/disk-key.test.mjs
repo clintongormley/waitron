@@ -1,9 +1,11 @@
 import { Buffer } from "node:buffer";
+import { execFileSync } from "node:child_process";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { constants } from "node:fs";
+import { clearTimeout, setTimeout } from "node:timers";
 import {
   HOST_ROOT,
   createDiskRecoveryStore,
@@ -19,10 +21,63 @@ const recordText = (diskUuid, keyHex = hex(KEY)) =>
   JSON.stringify({ version: 1, diskUuid, key: keyHex }) + "\n";
 const refused = (reason) => expect.objectContaining({ code: "disk_recovery.refused", reason });
 
+// The module's default io is not injectable, so reaching it with a staged FIFO goes through the
+// module's own `node:fs/promises`; with no hook set this is the real writeFile.
+const fsHooks = vi.hoisted(() => ({ writeFile: undefined }));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const real = await importOriginal();
+  return { ...real, writeFile: (...args) => (fsHooks.writeFile ?? real.writeFile)(...args) };
+});
+
 const parents = [];
 afterEach(async () => {
+  fsHooks.writeFile = undefined;
   for (const parent of parents.splice(0)) await fs.rm(parent, { recursive: true, force: true });
 });
+
+const mkfifo = (path) => execFileSync("mkfifo", ["-m", "600", path]);
+
+/**
+ * Settles `promise`, or, if it has not settled within `ms`, reports it hung and keeps opening each
+ * FIFO in `fifos` for writing until it does: an open waiting for a writer never times out on its
+ * own, and it would hold the test process open.
+ */
+async function settleOrRelease(promise, fifos, ms = 2000) {
+  const outcome = promise.then(
+    () => ({ fulfilled: true }),
+    (error) => ({ error }),
+  );
+  let settled = false;
+  void outcome.then(() => (settled = true));
+  let timer;
+  await Promise.race([outcome, new Promise((resolve) => (timer = setTimeout(resolve, ms)))]);
+  clearTimeout(timer);
+  const hung = !settled;
+  while (!settled) {
+    for (const fifo of fifos) {
+      await fs
+        .open(fifo, constants.O_WRONLY | constants.O_NONBLOCK)
+        .then((writer) => writer.close())
+        .catch(() => {});
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return { hung, ...(await outcome) };
+}
+
+/** Wraps `fs.open` so each handle answers `stat` and `readFile` through `handleOverrides`. */
+const openWith =
+  (handleOverrides) =>
+  async (...args) => {
+    const handle = await fs.open(...args);
+    return new Proxy(handle, {
+      get(target, key) {
+        if (Object.hasOwn(handleOverrides, key)) return handleOverrides[key](target);
+        const value = Reflect.get(target, key);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  };
 
 const rootIdOf = async (path) => {
   const stats = await fs.lstat(path, { bigint: true });
@@ -372,6 +427,30 @@ describe("withKey: symlinks inside the root", () => {
       refused("path-unsafe"),
     );
   });
+
+  it("the record is a FIFO → path-unsafe without waiting for a writer, and the store's turn is released", async () => {
+    const f = await fixture({ record: false });
+    const record = join(f.folder, `${DISK_A}.json`);
+    mkfifo(record);
+    const store = f.make();
+    const consume = vi.fn();
+    const outcome = await settleOrRelease(store.withKey({ diskUuid: DISK_A }, consume), [record]);
+    expect(outcome).toEqual({ hung: false, error: refused("path-unsafe") });
+    expect(consume).not.toHaveBeenCalled();
+    await fs.rm(record);
+    await f.writeRecord(`${DISK_A}.json`, recordText(DISK_A));
+    expect((await readKey(store)).copy).toEqual(KEY);
+  });
+
+  it("the record has a second hard link → path-unsafe", async () => {
+    const f = await fixture();
+    await fs.link(join(f.folder, `${DISK_A}.json`), join(f.parent, "second-name.json"));
+    const consume = vi.fn();
+    await expect(f.make().withKey({ diskUuid: DISK_A }, consume)).rejects.toEqual(
+      refused("path-unsafe"),
+    );
+    expect(consume).not.toHaveBeenCalled();
+  });
 });
 
 describe("withKey: permissions, one level at a time", () => {
@@ -394,6 +473,18 @@ describe("withKey: permissions, one level at a time", () => {
   it("record mode 0644 → permissions-unsafe", async () => {
     const f = await fixture();
     await fs.chmod(join(f.folder, `${DISK_A}.json`), 0o644);
+    await expect(f.make().withKey({ diskUuid: DISK_A }, vi.fn())).rejects.toEqual(
+      refused("permissions-unsafe"),
+    );
+  });
+
+  it.each([
+    ["hostRoot", "0750", (f) => f.hostRoot],
+    ["disk-recovery", "0750", (f) => f.folder],
+    ["the record", "0640", (f) => join(f.folder, `${DISK_A}.json`)],
+  ])("%s with group bits only (mode %s) → permissions-unsafe", async (_, mode, pathOf) => {
+    const f = await fixture();
+    await fs.chmod(pathOf(f), Number.parseInt(mode, 8));
     await expect(f.make().withKey({ diskUuid: DISK_A }, vi.fn())).rejects.toEqual(
       refused("permissions-unsafe"),
     );
@@ -474,6 +565,30 @@ describe("withKey: corrupt records", () => {
     );
     expect(consume).not.toHaveBeenCalled();
   });
+
+  it("a valid record whose handle reports 1025 bytes → record-corrupt, and the record is never read", async () => {
+    const f = await fixture();
+    const readFile = vi.fn();
+    const { io } = countingIo({
+      open: openWith({
+        stat: (handle) => async (options) => {
+          const stats = await handle.stat(options);
+          return new Proxy(stats, {
+            get(target, key) {
+              if (key === "size") return 1025;
+              const value = Reflect.get(target, key);
+              return typeof value === "function" ? value.bind(target) : value;
+            },
+          });
+        },
+        readFile: () => readFile,
+      }),
+    });
+    await expect(f.make({ io }).withKey({ diskUuid: DISK_A }, vi.fn())).rejects.toEqual(
+      refused("record-corrupt"),
+    );
+    expect(readFile).not.toHaveBeenCalled();
+  });
 });
 
 describe("withKey: bad input", () => {
@@ -535,6 +650,47 @@ describe("withKey: other file errors", () => {
       .withKey({ diskUuid: DISK_A }, vi.fn())
       .catch((e) => e);
     expect(error.message).toBe("disk_recovery.refused");
+  });
+
+  const forged = () =>
+    Object.assign(new Error("disk_recovery.refused"), {
+      code: "disk_recovery.refused",
+      reason: "record-missing",
+      detail: "carried along",
+    });
+
+  it("a file operation that throws its own error carrying the refusal code → io-failed, not that error", async () => {
+    const f = await fixture();
+    const thrown = forged();
+    const { io } = countingIo({
+      lstat: async () => {
+        throw thrown;
+      },
+    });
+    const error = await f
+      .make({ io })
+      .withKey({ diskUuid: DISK_A }, vi.fn())
+      .catch((e) => e);
+    expect(error).not.toBe(thrown);
+    expect(error).toEqual(refused("io-failed"));
+    expect(error).not.toHaveProperty("detail");
+  });
+
+  it("the same on the store side → io-failed, not that error", async () => {
+    const f = await fixture({ record: false });
+    const thrown = forged();
+    const { io } = countingIo({
+      writeFile: async () => {
+        throw thrown;
+      },
+    });
+    const error = await f
+      .make({ io })
+      .store({ diskUuid: DISK_A, key: KEY })
+      .catch((e) => e);
+    expect(error).not.toBe(thrown);
+    expect(error).toEqual(refused("io-failed"));
+    expect(error).not.toHaveProperty("detail");
   });
 });
 
@@ -730,6 +886,19 @@ describe("store: interrupted writes", () => {
     await expect(f.make({ io }).store({ diskUuid: DISK_A, key: KEY })).rejects.toEqual(
       refused("publication-unverified"),
     );
+  });
+
+  it("a FIFO where the staged file should be → the default io's flush refuses it without waiting for a writer", async () => {
+    const f = await fixture({ record: false });
+    const next = join(f.folder, `${DISK_A}.json.next`);
+    const record = join(f.folder, `${DISK_A}.json`);
+    fsHooks.writeFile = async (path) => mkfifo(path);
+    const outcome = await settleOrRelease(
+      f.make({ io: undefined }).store({ diskUuid: DISK_A, key: KEY }),
+      [next, record],
+    );
+    expect(outcome).toEqual({ hung: false, error: refused("io-failed") });
+    expect(await exists(record)).toBe(false);
   });
 
   it("a truncated leftover .next (half the bytes) is ignored by withKey and removed by the next store", async () => {

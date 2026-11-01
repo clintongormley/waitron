@@ -37,11 +37,15 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const KEY_HEX = /^[0-9a-f]{64}$/;
 const MAX_RECORD_BYTES = 1024;
 const FOLDER = "disk-recovery";
+// Without O_NONBLOCK, opening a FIFO waits for a writer that may never come, and the store's turn
+// with it; with it, the open returns and the handle's stat shows what the path really is.
+const OPEN_FILE = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK;
 
-/** @param {string} path @param {number} flags */
-async function syncPath(path, flags) {
+/** @param {string} path @param {number} flags @param {boolean} fileOnly */
+async function syncPath(path, flags, fileOnly) {
   const handle = await fs.open(path, flags);
   try {
+    if (fileOnly && !(await handle.stat()).isFile()) throw new Error(`not a regular file: ${path}`);
     await handle.sync();
   } finally {
     await handle.close();
@@ -57,19 +61,25 @@ const defaultIo = {
   rename: fs.rename,
   unlink: fs.unlink,
   readdir: fs.readdir,
-  syncFile: (path) => syncPath(path, constants.O_RDONLY | constants.O_NOFOLLOW),
+  syncFile: (path) => syncPath(path, OPEN_FILE, true),
   syncDirectory: (path) =>
-    syncPath(path, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW),
+    syncPath(path, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW, false),
 };
+
+// Only refusals built here pass through unchanged: an injected io's error that merely carries the
+// code would otherwise reach the caller with whatever else it holds.
+const refusals = new WeakSet();
 
 /** @param {string} reason */
 function refusal(reason) {
-  return Object.assign(new Error(CODE), { code: CODE, reason });
+  const error = Object.assign(new Error(CODE), { code: CODE, reason });
+  refusals.add(error);
+  return error;
 }
 
 /** @param {unknown} error */
 function isRefusal(error) {
-  return error instanceof Error && /** @type {{code?:unknown}} */ (error).code === CODE;
+  return refusals.has(/** @type {object} */ (error));
 }
 
 /** @param {unknown} value */
@@ -223,10 +233,7 @@ export function createDiskRecoveryStore(deps) {
     // checks and the open below, and root is already trusted (spec §7.5).
     let handle;
     try {
-      handle = await io.open(
-        join(folder, `${diskUuid}.json`),
-        constants.O_RDONLY | constants.O_NOFOLLOW,
-      );
+      handle = await io.open(join(folder, `${diskUuid}.json`), OPEN_FILE);
     } catch (error) {
       if (errnoCode(error) === "ENOENT") throw refusal("record-missing");
       if (errnoCode(error) === "ELOOP") throw refusal("path-unsafe");
@@ -235,6 +242,8 @@ export function createDiskRecoveryStore(deps) {
     try {
       const record = await handle.stat();
       if (!record.isFile()) throw refusal("path-unsafe");
+      // A record with a second name is ambiguous, and spec §7.5 refuses ambiguous records.
+      if (record.nlink !== 1) throw refusal("path-unsafe");
       if (!ownedSafely(record)) throw refusal("permissions-unsafe");
       if (record.size > MAX_RECORD_BYTES) throw refusal("record-corrupt");
       return parseRecord(await handle.readFile("utf8"), diskUuid);
