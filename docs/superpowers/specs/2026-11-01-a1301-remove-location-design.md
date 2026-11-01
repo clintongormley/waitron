@@ -741,8 +741,8 @@ workplace) would be a new field the venue enters, and a separate item if wanted.
 goes. The opening table names the venue once for the whole file
 (`Workplace | From | Before (excluded) | …`); the entries and closures tables carry no workplace
 column; no official workplace code is added now. **S14 builds it**, and waits only for A1268 to
-land. #2375 does not remove the column: at `8eddd1a4f7` (still open, its head unchanged since
-14:15) the export still declares it (`record-export.ts:30`) and fills it from each entry (`:252`)
+land. #2375 does not remove the column: at `8eddd1a4f7` (still open, head committed 15:09 CET, PR
+unchanged since 15:15 CET) the export still declares it (`record-export.ts:30`) and fills it from each entry (`:252`)
 and each closure (`:372`), and its only change to the file adds the skip-numbers note. A1268's
 revision takes the location off entries and closures, which leaves those two fills with no value
 to read, so it may remove them itself; S14's plan reads A1268's merged file and removes what is

@@ -12,14 +12,16 @@ amended; "§N" below means a section of it). Research inputs: `~/waitron-campaig
 
 **Plan head:** main `0160250f67` (2026-11-01). Five writers read the code in parallel, so line
 numbers were read at the head each slice section names: main `abfe271663`, or A696's branch
-`origin/feat/a696-startup-zone-validation` (PR #2369, still open; it lands before S1). **A696's
-head is `623a2d59c4`**, rebased onto `abfe271663`; the first draft read it at `7e824ae233`.
+`origin/feat/a696-startup-zone-validation` (PR #2369, merged 2026-11-01 as `929c1e70e0`, whose
+code is `623a2d59c4`'s; the branch is deleted, so read those lines at main `929c1e70e0` or later).
+**A696's last head was `623a2d59c4`**, rebased onto `abfe271663`; the first draft read it at `7e824ae233`.
 `git diff --name-only 7e824ae233 623a2d59c4` lists 54 files. Of the files this plan cites, only
 `apps/server/src/working-order.ts`, `till-api.ts`, `till-api.profile-actions.test.ts`,
 `till-api.profile-zones.test.ts`, `docs/backlog.md`, `docs/backlog/till.md` and
-`docs/developers/conventions-data.md` are among them, and every line this plan cites at A696's head
-in those files was re-read at `623a2d59c4`. Every other cited file is byte-identical at the two
-heads, so "A696's head" below means `623a2d59c4`. Every implementer re-reads the lines at their own
+`docs/developers/conventions-data.md` are among them, and every line this plan cites in those files
+was re-read at `623a2d59c4`. Every other cited file is byte-identical at the two heads.
+`git diff --stat 623a2d59c4 929c1e70e0` lists only `docs/backlog/ci.md`, which this plan does not
+cite, so every line cited at `623a2d59c4` reads the same at main `929c1e70e0`. Every implementer re-reads the lines at their own
 head before editing, and **deletes a test case by its title, never by its line number**: a
 deletion list's line number only says where the title stood at the cited head.
 
@@ -47,7 +49,7 @@ The design's readers should know these; each is explained where it bites.
    `adoption.venue_not_copied`: no `adoption.*` error code exists, and the registry names an adopted
    standby's refusals `mirror.*`.
 4. **`apps/server/src/first-fiscal-setup.e2e.test.ts` is edited by S16**, limited to the lines that
-   build the setup request (246-254 and 368 at A696's head). One assertion line (`:248`) is
+   build the setup request (246-254 and 368 at main `929c1e70e0`). One assertion line (`:248`) is
    re-pointed at the same value under a new name, and no assertion's value changes; S16's PR names
    it. S17 later deletes its `fireControl` check, because `fireControl` leaves the bundle (§2.1).
 5. **A new error code, `venue.not_found`**, is what the accessor throws on a database with no venue
@@ -130,7 +132,7 @@ invoice records point at by foreign key (§6). The lane lands the rest.
 
 | Slice | Tasks | Depends on | Lands | Review | Branch |
 | --- | --- | --- | --- | --- | --- |
-| S1 | 4 (S1a–S1d) | A696 (#2369) landed | lane | FULL | `refactor/a1301-s1-venue-accessor` |
+| S1 | 4 (S1a–S1d) | A696 landed (#2369, `929c1e70e0`) | lane | FULL | `refactor/a1301-s1-venue-accessor` |
 | F1 | 5 (F1a, F1b1, F1b2, F1c, F1d) | S1 | lane | FULL | `refactor/a1301-f1-seed-helpers` |
 | S2 | 5 (S2-1–S2-5) | S1 | **owner** (a, b) | FULL | `refactor/a1301-s2-invoice-inputs` |
 | S3 | 4 (S3-1–S3-4) | S1; reuses S2-1 Step 1 if S2 is ahead, else S3-4 does it | **owner** (c) | FULL | `refactor/a1301-s3-fiscal-verifactu` |
@@ -266,9 +268,13 @@ assertion names the design decision that changes it (§8 risk 7). Nothing else i
 ### A database with a second venue row
 
 Once a function reads through the accessor, a test database holding two `locations` rows makes it
-throw `provisioning.second_venue`, and one holding none makes it throw `venue.not_found`. **When a
-code task routes a reader through the accessor, it runs the touched packages' tests and fixes every
-suite that then fails with `provisioning.second_venue` or `venue.not_found`:**
+throw `provisioning.second_venue`, and one holding none makes it throw `venue.not_found`. **Whichever
+slice first routes a reader that a suite exercises through the accessor, whatever slice that is,
+runs the touched packages' tests and fixes that suite's seeding**: every suite that then fails with
+`provisioning.second_venue` or `venue.not_found` is made to hold one venue, without changing an
+assertion, and the slice names each suite it changed in its PR. This covers a second location seeded
+in a suite's setup (a `beforeAll`, a shared fixture or helper, a recovery fixture) as well as one
+seeded inside a case:
 
 - a case that exists only to prove a cross-location refusal is DELETED with its check, and named in
   the PR (the rule above);
@@ -280,6 +286,8 @@ suite that then fails with `provisioning.second_venue` or `venue.not_found`:**
   slice's), but the row breaks every later case once this slice reads through the accessor. So this
   slice makes that case delete the rows it inserted, in a `finally` at its end, changing no
   assertion, and names the case in its PR; the owning slice still deletes the case with its check.
+  A second row the suite's setup seeds only for such a case moves into that case, under the same
+  `finally`.
   This edit is allowed in the drawer suites (S10's list) too. If the case's **own** assertions then
   fail because of its own second row, this slice stops and lands after the owning slice instead.
   Eleven `apps/server` suites with `resetPerTest: false` insert `locations` two or more times at
@@ -288,8 +296,9 @@ suite that then fails with `provisioning.second_venue` or `venue.not_found`:**
   `venue-time-zone`, `workforce-api`, each `.test.ts`). One known case: in the drawer suite
   `bill-payments-api.test.ts`, "stages only the local active A4 printer over HTTP: %s" (its
   `"other-location"` row, `:1971`) and "answers no invoice printer when the location has none, only
-  another location's or a disabled one" (`:2091`) are S2-3's to delete; S10a or S11a, whichever
-  lands before S2, makes them clean up.
+  another location's or a disabled one" (`:2091`) are S2-3's to delete. Whichever slice first
+  makes a later case in that file fail, while S2 has not landed, makes these two cases clean up: S5 does (its `readReceiptLanguage` sits on the receipt
+  path, `receipt-print.ts:197`; measured, 23 later cases fail), and so may S10a and S11a.
 
 Find the suites before running: `git grep -c -E 'insert\((schema\.)?locations\)|seedVenue\(|seedLocation\(|insertLocation\(' -- <test files>`
 and read every file that prints 2 or more. Several suites share one database across cases
@@ -359,7 +368,7 @@ function no longer reads the scope. It fails before the change. It is marked
 - Implementers run at medium effort: `subagent_type: "implementer"`. Each task is sized for one
   implementer in well under 100 tool calls; one that passes about 150 calls stops at a passing (or
   cleanly red) point, commits, and hands over.
-- **S1 waits for A696 (#2369) to land.** Every slice after it re-runs its grep at its own head before
+- **A696 landed (#2369, `929c1e70e0`) before S1.** Every slice after it re-runs its grep at its own head before
   starting.
 - **Overlap with an open pull request (including #2375, A1268) is never a reason to wait** (owner's
   coordination rule, 2026-11-01): whoever lands second rebases. Each slice lists the open PRs that
@@ -399,7 +408,7 @@ function no longer reads the scope. It fails before the change. It is marked
   (`Workplace | From | Before (excluded) | …`, the name from `readVenue`), and the entries and
   closures tables carry no workplace column; no official workplace code is added. Its plan reads
   A1268's merged `packages/workforce-es/src/record-export.ts` first, so the two do not collide: at
-  #2375's head `8eddd1a4f7` (open, unchanged since 14:15) the reference column is still declared
+  #2375's head `8eddd1a4f7` (open, head committed 15:09 CET, PR unchanged since 15:15 CET) the reference column is still declared
   (`:30`) and filled per entry (`:252`) and per closure (`:372`), and #2375's only change to the file
   adds the skip-numbers note (`git diff $(git merge-base origin/main 8eddd1a4f7) 8eddd1a4f7 --
   packages/workforce-es/src/record-export.ts`: 4 lines added). If A1268's revision removes the
@@ -432,8 +441,8 @@ function no longer reads the scope. It fails before the change. It is marked
     (`packages/stream/src/names.ts:26-28`); and `apps/server/src/restore-stream.ts:217` reads
     `locations where id = venueId`, where `venueId` is the backup settings' venue id (`:180-187`).
   - **Waitron Cloud's pairing value.** At pairing the box sends
-    `localVenueId: tradingContext.locationId` (`boot.ts:2759,2768` at main; `:2884,2893` at A696's
-    head) and signs it into the pairing bytes (`apps/server/src/cloud-client.ts:269-276`); Cloud keeps
+    `localVenueId: tradingContext.locationId` (`boot.ts:2759,2768` at main; `:2884,2893` at
+    main `929c1e70e0`) and signs it into the pairing bytes (`apps/server/src/cloud-client.ts:269-276`); Cloud keeps
     it and keys its stream pointers by it ("Cloud follow-up" below).
   S18 removes `TradingContext.locationId` and S25 drops `nodes.location_id`, so the decision is
   needed before S18. Neither `localVenueId` nor `cloud-client.ts` is in `file-assignment.tsv`: the
@@ -460,11 +469,11 @@ settings routes, the business-day start) and reporting's daily-close and overdue
 it, so none of them takes or passes a location id. Rename `location-settings-api.ts` to
 `venue-settings-api.ts` and the dashboard's `location_settings.*` keys to `venue_settings.*`.
 
-- **Depends on:** A696 (#2369) landed.
+- **Depends on:** A696 landed (#2369, `929c1e70e0`).
 - **Lands:** lane. None of rules a–d applies: the daily-close hash's clock is a hash of its own, not
   an invoice record, and its value does not change (§6). S1 deliberately does not touch the four
   readers whose callers sit on the invoice path (see "Left for S2").
-- **Lines** were read at A696's head (`7e824ae233`, re-checked at `623a2d59c4`; header).
+- **Lines** were read at `7e824ae233` and re-checked at `623a2d59c4`, the same lines as main `929c1e70e0` (header).
 - **Branch:** `refactor/a1301-s1-venue-accessor`.
 - **Review path:** FULL — a cross-package contract (a new `@waitron/db` API every later slice uses).
 - **Guards:** code guards.
@@ -542,7 +551,7 @@ export function venueLocationId(tx: Transaction): Promise<string>;
 
 ### Files
 
-The TSV's 18 S1 files, at A696's head (`git grep -n -E "$P" "${REF}" -- <file>`), and what changes:
+The TSV's 18 S1 files, at main `929c1e70e0` (`git grep -n -E "$P" "${REF}" -- <file>`), and what changes:
 
 | File | Matches | What changes |
 | --- | --- | --- |
@@ -647,12 +656,20 @@ would make S1 owner-landed. Task S2-5 converts the four and every caller (also
   `pnpm --filter @waitron/server exec vitest run <files…>`, the files from
   `git grep -l -E 'resolveVenueClock|mountOrdersApi|mountReportApi|backup-deletion-alert|recordDailyClose' -- 'apps/server/**/*.test.ts'`
   (24 at `623a2d59c4`; read each file's `Tests` count). Handle each `provisioning.second_venue` or
-  `venue.not_found` failure by the header's rule "A database with a second venue row". One case is
-  known: `orders-api.test.ts`'s "dates reads and staff reprint visibility by the data node, keeping
-  writes at the own location" (`:455` at `623a2d59c4`) inserts a second location and node to show
-  reads dated by the data node's location while writes go to the other; it exists only for two
-  locations, so S1a deletes it, named in the commit. That file shares one database across cases
-  (`resetPerTest: false`, `:38`), so its second row would otherwise break the cases after it.
+  `venue.not_found` failure by the header's rule "A database with a second venue row". Four of the 24
+  files fail when `resolveVenueClock` refuses a second row (measured at `623a2d59c4` with the refusal
+  simulated: 29 cases). `orders-api.test.ts`: "dates reads and staff reprint visibility by the data
+  node, keeping writes at the own location" (`:455`) exists only for two locations, so S1a deletes it,
+  named in the commit (it has its own database, `:445-453`, so it breaks nothing else); the `it.each`
+  "reprints a saved invoice with its trading context's printer, write location and practice marking"
+  (`:360`) inserts its second location into the shared database (`:367`), so it is changed to print at
+  the venue's own location, keeping its practice-marking assertions. `report-api.categories.test.ts`
+  seeds a second location in its setup (`:153`) for S11c's `:465` case: S1a moves that row and its
+  printer into the `:465` case, deleting them in a `finally`, and names the case for S11c.
+  `orders-invoice-deliveries.test.ts` (`withExtraOffices`, `:194`; the `:1026` case) and
+  `zone-preservation.restore.test.ts` (its recovery fixture's second row) are handled by the header's
+  rule. If these four suites take S1a past about 100 tool calls, hand them over (header, "Execution
+  notes").
 - [ ] **Step 5: Done-check** on `packages/reporting/src/{business-day,overdue-orders,record-daily-close,index}.ts`
   — may print only `readLocationClock`, `readLocationClockAndPlace`, `LocationPlace` and their query
   (S18), the `locations`/`locationDayCutoverChanges` table identifiers (S23), and `venueLocationId`.
@@ -799,7 +816,7 @@ lines each; `git grep -c location_settings -- apps packages`).
 `gh pr list --state open --json number,headRefName,files` on 2026-11-01 (main `abfe271663`; the
 `files` list is capped at 100, so #2369 and #2373 were re-read with `gh pr diff <n> --name-only`):
 
-- #2369 `feat/a696-startup-zone-validation` — S1's base: lands first.
+- #2369 (A696) — S1's base: merged as `929c1e70e0`.
 - #2373 `feat/w41s7-conflict-recovery` — `apps/server/src/boot.ts`, `apps/server/src/errors.ts`.
 - #2377 `chore/a1008-retire-sale-script` — `apps/server/test-durations.json`.
 
@@ -1094,7 +1111,7 @@ the same value read today; Task S2-1 proves that for the hashed one.
 
 ### What S2 changes in a fiscal record: the values traced to the bytes
 
-| Value | Read today (A696 head) | Read after S2 | Where it lands | Bytes |
+| Value | Read today (main `929c1e70e0`) | Read after S2 | Where it lands | Bytes |
 | --- | --- | --- | --- | --- |
 | Issue zone → `offsetMinutes` | `readIssueZone`: `nodes.location_id` → `locations.time_zone` (`packages/fiscal/src/issue-clock.ts:7-23`); `prepareIssueClock` freezes `timeZoneOffsetMinutes(zone, instant)` (`:25-38`) | `readVenue(tx).timeZone`, the same `locations` row until S23 | `recordSale` takes one reading (`packages/core/src/record-sale.ts:274`), stores `issued_offset_minutes` (`:313`) and hands `issuedAt`/`offsetMinutes` to the backend (`:364-365`); `VerifactuBackend.recordSale` puts them in `FechaExpedicionFactura` and `generadoEn`/`offsetMinutes` (`packages/fiscal-verifactu/src/backend.ts:296,311-312`), which `appendToChain` (`:315`) hashes as `FechaHoraHusoGenRegistro` and stores (`registro-row.ts:130`, column `schema/registros.ts:93`). Annulments: `prepareFiscalVoidClock` → `prepareIssueClock({ nodeId })` (`void-issue-clock.ts:24`) → `recordVoid`'s `now` (`backend.ts:420`) → `FechaExpedicionFacturaAnulada` (`:429-431`) and `generadoEn`/`offsetMinutes` (`:436-437`) | **None.** Same zone string from the same row, so the same offset at every instant. Task S2-1's test pins the record text across a daylight-saving change, before and after, with a control |
 | Operation description fallback | `operationDescriptionFor`: the supplied text, else `locations.operation_description` through `devices.location_id` or `nodes.location_id` (`sale-location.ts:12-32`) | the supplied text, else `readVenue(tx).operationDescription` | `record-sale.ts:348-353` → `descriptionOfOperation` (`:366`) → `DescripcionOperacion` (`backend.ts:303`; corrections `:528`, substitutions `:651`) → stored `descripcion_operacion` (`registro-row.ts:157`, `schema/registros.ts:76`) → read back into the AEAT body (`registro-row.ts:394`). Not a huella input (`registro-row.ts:391-393` and the design's §3 probe: `SAME` for a changed description, `DIFFERENT` for the control) | **None.** Production routes always supply a description (fiscal-check.md path 1); the fallback paths read the same row's same text |
@@ -1105,8 +1122,8 @@ Plainly: **no byte of an invoice record, huella, chain, invoice number or AEAT w
 S2**, provided `readVenue` returns the single `locations` row's `time_zone` and
 `operation_description` unchanged (S1's contract).
 
-Lines in S2, S3 and S4 were read at A696's head (`7e824ae233`, re-checked at `623a2d59c4`; header)
-unless they say main. A696 lands before
+Lines in S2, S3 and S4 were read at `7e824ae233` and re-checked at `623a2d59c4`, the same lines as
+main `929c1e70e0` (header), unless they say main. A696 landed before
 S1, and these slices start after S1, so these are the lines the implementer meets (give or take S1's
 edits). Every task in S2, S3 and S4 runs the fiscal pair unedited.
 
@@ -1124,7 +1141,7 @@ Two things the golden case does and does not check, so nobody leans on it for mo
 ### Files
 
 From the TSV (`file-assignment.tsv`, slice `S2`), grouped by task. Lines are the pattern's matches at
-A696's head (`623a2d59c4`).
+main `929c1e70e0`.
 
 **Task S2-1 — the issue zone**
 
@@ -1281,7 +1298,8 @@ or dates a sale fails. Two kinds exist:
     now reuses the first call's row, so the venue's name, invoice languages and description are the
     first helper's.
   - The helpers are shared well beyond the fiscal pair. 32 test files call `seedTenantWithSif`, 11
-    of them two or more times (`clock-behind.restart.test.ts` 5 times; `clock-stop-incidents`,
+    of them two or more times (`clock-behind.restart.test.ts` 5 times;
+    `write-path.e2e.test.ts` 4; `clock-stop-incidents`,
     `drain`, `reconcile`, `start-again-holdings` and `void-issue-clock` 3 times each; counted with
     `git grep -c 'seedTenantWithSif(' -- '*.test.ts'` at `623a2d59c4`). Outside the package, 45 test
     files import one of the two helper files (41 in `apps/server`, one each in
@@ -1546,7 +1564,7 @@ Return shapes unchanged.
 
 ### Open PRs touching S2's files (`gh pr list --state open`, 2026-11-01)
 
-- **#2369 A696** — every zone file here; lands before S1, so it is the base, not a conflict.
+- **#2369 A696** — every zone file here; landed (`929c1e70e0`), so it is the base, not a conflict.
 - **#2373 W41s-7** (`feat/w41s7-conflict-recovery`, "Stop invoice identity conflicts…") —
   `apps/server/src/bill-payments.ts`, `till-sale.ts`, `working-order.ts`, `boot.ts`, `errors.ts`,
   `packages/core/src/record-sale.test.ts`. Rebase around it.
@@ -1593,7 +1611,7 @@ Nothing. Traced:
 ### Files
 
 TSV slice `S3`, 26 files, split as the summary proposes (§4: S3a/S3b/S3c) with S3b cut in two.
-Matching lines at A696's head (`623a2d59c4`), excluding the `allocation` words the pattern also matches
+Matching lines at main `929c1e70e0`, excluding the `allocation` words the pattern also matches
 (`git grep -n -P '(?<![Aa]l)(locationId|location_id|\blocations?\b|LocationId)'`).
 
 **Task S3-1 — certificates (S3a)**
@@ -1978,7 +1996,7 @@ merge base and head), which names none of them.
 
 ## Notes shared by S5–S8
 
-Lines in S5–S8 were read at main `abfe271663`; A696's lines at A696's head (`623a2d59c4`; header). Open-PR lists come from
+Lines in S5–S8 were read at main `abfe271663`; A696's lines at main `929c1e70e0` (header). Open-PR lists come from
 `gh pr list --state open --json number,headRefName,files`, completed with
 `gh api repos/{owner}/{repo}/pulls/<n>/files --paginate` because `gh pr list` stops at 100 files a
 PR (#2369 has 381, #2373 has 131).
@@ -2042,7 +2060,7 @@ These are outside S5's own files and change by one argument at the call (header 
 | Caller (owning slice) | Line | Change |
 | --- | --- | --- |
 | `apps/server/src/department-receipt-languages.ts` (S6) | 17 | `readReceiptLanguage(tx)`. `cfg` stays: `:27` still passes it to `readOfferedReceiptLanguages`, which is S2-5's (moved from S1). If S2 has landed, `cfg` is now unused: drop it (`:15`, the `LocationId` import at `:4`) and its callers' argument, `department-receipt-api.ts:73-75` and `department-receipt-draft.ts:34` (S6), `receipt-preview-api.ts:314` (S11); otherwise S2-5 does. |
-| `apps/server/src/venue-settings-api.ts` (S1's rename of `location-settings-api.ts`) | 66-68 at A696's head | `readInvoiceLocales(tx)`, if S1 left the call (S1 reads the languages from `readVenue`). |
+| `apps/server/src/venue-settings-api.ts` (S1's rename of `location-settings-api.ts`) | 66-68 at main `929c1e70e0` | `readInvoiceLocales(tx)`, if S1 left the call (S1 reads the languages from `readVenue`). |
 | `apps/server/src/invoice-document.ts` (S2) | 101 | **Not edited while S2 has not landed** (header rule): `readReceiptLanguage` keeps an ignored optional second parameter, `_locationId?: string`, so this call compiles unchanged, and S2 drops the argument. If S2 has landed, `readReceiptLanguage(tx)` here, argument only. |
 | `apps/server/src/receipt-presentation.ts` (S2) | 21 | As `invoice-document.ts:101`. |
 | `apps/server/src/page-printers-api.ts` (S10) | 149 | `readReceiptLanguage(tx)` |
@@ -2190,11 +2208,11 @@ Consumes S1's `readVenue`, `venueLocationId`, `readVenueClock`.
 
 ### Open PRs touching S5's files
 
-- **#2369** (`feat/a696-startup-zone-validation`): `apps/dashboard/src/api/client.ts`,
+- **#2369** (A696, merged as `929c1e70e0`): `apps/dashboard/src/api/client.ts`,
   `apps/dashboard/src/i18n/codes.ts`, `codes.test.ts`, `apps/server/scripts/allergens-demo.ts`,
   `apps/server/scripts/demo-seed/seed.ts`, `apps/server/src/location-settings-api.ts`,
   `apps/server/src/testing/adjustment-venue.ts`, `bill-venue.ts`, `party-venue.ts`,
-  `apps/server/src/working-order.ts`, `docs/backlog.md`. It lands before S1, so S5 is written on top
+  `apps/server/src/working-order.ts`, `docs/backlog.md`. It landed before S1, so S5 is written on top
   of it.
 - **#2373** (`feat/w41s7-conflict-recovery`): `apps/server/src/working-order.ts`, `docs/backlog.md`.
 - **#2377** (`chore/a1008-retire-sale-script`): `docs/backlog.md`, `docs/backlog/catalogue.md`.
@@ -2583,8 +2601,8 @@ Docs: `docs/backlog.md:1480-1483`. "also reads the tenant, location and holiday 
 
 ## Rules shared by S9–S12
 
-Lines in S9–S12 were read at main `abfe271663` unless they say otherwise; A696's lines at A696's
-head (`623a2d59c4`; header). Each file's lines were read with the design's pattern (`git grep -n -E "$P" -- <file>`).
+Lines in S9–S12 were read at main `abfe271663` unless they say otherwise; A696's lines at
+main `929c1e70e0` (header). Each file's lines were read with the design's pattern (`git grep -n -E "$P" -- <file>`).
 These rules add to the header's; a task's own text overrides them only where it says so.
 
 1. **Reads lose the location filter; writes fill the column from the venue.** A query that filters
@@ -2936,7 +2954,7 @@ name)`, `disablePagePrinter(tx, id, now?)`; `routeToDemoPrinter(tx, printerId)`.
 
 ### Open PRs touching S10's files
 
-- **#2369** (A696, lands before S1): `apps/server/src/receipt-print.ts`, plus tests
+- **#2369** (A696, landed as `929c1e70e0`): `apps/server/src/receipt-print.ts`, plus tests
   `orders-reprint.test.ts`, `receipt-print.test.ts`, `station-outputs-down.test.ts`,
   `page-print-agent-e2e.test.ts`. Gone by the time S10 starts.
 - **#2373** (W41s-7): no S10 source file; it touches `till-api.ts` and `till-api.test.ts`, which
@@ -2966,9 +2984,9 @@ from the venue. `station.no_default` loses its `locationId` detail (design §5).
   prints nothing at `623a2d59c4`; their test helpers are F2's.
 
 **What S11 leaves to S2: the design's `working-order.ts:7038`.** The design's `:7038` is A696's
-numbering at `7e824ae233`. At A696's head `623a2d59c4` the same line is `:7056`,
+numbering at `7e824ae233`. At main `929c1e70e0` the same line is `:7056`,
 `await prepareIssueClock(tx, cfg, clock),` inside `priceForIssuance` (`:7044`)
-(`git show origin/feat/a696-startup-zone-validation:apps/server/src/working-order.ts | sed -n 7043,7062p`);
+(`git show 929c1e70e0:apps/server/src/working-order.ts | sed -n 7043,7062p`);
 at `abfe271663`, before A696, line 7038 is the comment above `priceForIssuance`.
 **S11 leaves the `prepareIssueClock(tx, cfg, clock)` call in `priceForIssuance` to S2**, whatever its
 line number is then. S11 also leaves, inside `issueUnpaidInvoice`, `saleLanguageFor(tx,
@@ -3162,7 +3180,7 @@ likewise); `packages/adjustments/src/routes.ts`,
   `tender-refund-api.ts`, `tender-refund-sends.ts`, `tender-refunds.ts`, `working-order.ts`; tests
   `bill-refunds.card.test.ts`, `tender-refunds.test.ts`, `tender-refund-management.test.ts`.
   S11a and S11c rebase around it.
-- **#2369** (A696, lands before S1): `adjustments-apply.ts`, `bill-refunds.ts`,
+- **#2369** (A696, landed as `929c1e70e0`): `adjustments-apply.ts`, `bill-refunds.ts`,
   `finish-party-service.ts`, `line-cancel-api.ts`, `order-drafts.ts`, `payments-api.ts`,
   `tender-refund-api.ts`, `tender-refund-sends.ts`, `tender-refunds.ts`, `unpaid-departure.ts`,
   `working-order.ts`, and 26 of S11's test files.
@@ -3243,8 +3261,11 @@ admission by location (`admit`) — out of A1268 — S12").
   those `it.each` tables stays as it is (the refund tables' `"device"`, `"deleted"`, `"retired"`
   variants keep the device refusal covered).
 - [ ] **Step 5:** run `pnpm --filter @waitron/server exec vitest run src/till-api.profile-actions.test.ts
-  src/till-api.profile-zones.test.ts` FIRST and confirm `git diff --stat` shows neither file
-  changed; then `device-session*.test.ts`, `device-zones*.test.ts`, `till-api.allergy*.test.ts`,
+  src/till-api.profile-zones.test.ts` FIRST and confirm `git diff --stat` shows
+  `till-api.profile-actions.test.ts` unchanged and `till-api.profile-zones.test.ts` changed only in
+  the five map-row comments (`git diff -U0` of it shows only lines `:94-98`), no assertion changed,
+  and the commit and PR name that comment edit; then `device-session*.test.ts`,
+  `device-zones*.test.ts`, `till-api.allergy*.test.ts`,
   `till-api.kitchen-note.test.ts`, `line-cancel*.test.ts`, `order-kitchen-note*.test.ts`,
   `party-allergy*.test.ts`, `till-attendance-api.test.ts`, `till-hours-api.test.ts`,
   `till-clock-api.test.ts`, `till-api.receipt.test.ts`, `till-api.fiscal-sale-paths.test.ts`,
@@ -3291,7 +3312,8 @@ admission by location (`admit`) — out of A1268 — S12").
 - [ ] **Step 5:** run `pnpm --filter @waitron/server exec vitest run` on `device*.test.ts`,
   `join-requests*.test.ts`, `promote*.test.ts`, `till-setup*.test.ts`, `till-api.test.ts`,
   `till-api.station-today.test.ts`, `till-api.deliveries.test.ts`, `till-api.allergy*.test.ts` —
-  PASS; `till-api.profile-actions.test.ts` and `till-api.profile-zones.test.ts` again, unedited;
+  PASS; `till-api.profile-actions.test.ts` and `till-api.profile-zones.test.ts` again, with no
+  change beyond S12a's five comment lines;
   code guards; `pnpm --filter @waitron/server typecheck`; `pnpm format:check`.
 - [ ] **Step 6: done-check** over the files: prints only `venueLocationId`, `device.ts:47-51` (S26),
   the S6 forwarding lines in `device-api.ts`, `device.ts:326`'s seat scope (S18),
@@ -3392,7 +3414,7 @@ Every caller, from `git grep -n -E 'getLocations|LocationSummary|/management-api
 
 ### Open PRs touching S12's files
 
-- **#2369** (A696, lands before S1): `apps/dashboard/src/api/client.ts`, `apps/server/src/till-api.ts`,
+- **#2369** (A696, landed as `929c1e70e0`): `apps/dashboard/src/api/client.ts`, `apps/server/src/till-api.ts`,
   and 37 S12 test files, among them `till-api.profile-actions.test.ts` and
   `till-api.profile-zones.test.ts`.
 - **#2373** (W41s-7): tests `till-api.test.ts`, `till-api.fiscal-sale-paths.test.ts`,
@@ -3404,8 +3426,8 @@ Every caller, from `git grep -n -E 'getLocations|LocationSummary|/management-api
 
 ## Names used in S16, S17 and F2–F5
 
-Lines in these sections were read at main `abfe271663` and, in a file A696 changes, at A696's head
-(`7e824ae233`, re-checked at `623a2d59c4`; `git show origin/feat/a696-startup-zone-validation:<path>`). Every implementer re-runs
+Lines in these sections were read at main `abfe271663` and, in a file A696 changes, at
+`7e824ae233`, re-checked at `623a2d59c4`, the same lines as main `929c1e70e0` (`git show 929c1e70e0:<path>`). Every implementer re-runs
 the listing commands at their own head: line numbers move.
 
 - **FX**, the fixture grep: `FX='insert\((schema\.)?(locations|nodes|devices|workingOrders)\)|[Ii][Nn][Ss][Ee][Rr][Tt] [Ii][Nn][Tt][Oo] "?locations'`
@@ -3449,8 +3471,9 @@ reset (design §4, "Host files").
   changes one: the request's values are unchanged, only their nesting.
 - **Also must pass:** `pnpm --filter @waitron/server exec vitest run src/first-fiscal-setup.e2e.test.ts`.
   It cannot stay byte-for-byte unedited: its lines `:246-254` and `:368` build the claim from the
-  request's and the preview's `location` (read at A696's head, `623a2d59c4`). Task S16b edits the lines that build
-  the setup request, inside `:246-254` and `:368`, and changes no assertion; the diff of that file
+  request's and the preview's `location` (read at main `929c1e70e0`). Task S16b edits the lines that build
+  the setup request, inside `:246-254` and `:368`, and changes no assertion's value (`:248` reads the same value under a new name;
+  amendment 4); the diff of that file
   must show no other changed line (`git diff -U0 main -- apps/server/src/first-fiscal-setup.e2e.test.ts`).
   **S16's PR names this file and these lines.**
 
@@ -3496,7 +3519,7 @@ has none of the four parent keys, so rule 1 leaves it.
 
 ### Files
 
-Every S16 file in the TSV, with what changes (lines at A696's head, `623a2d59c4`):
+Every S16 file in the TSV, with what changes (lines at main `929c1e70e0`):
 
 | File | Task | What changes |
 | --- | --- | --- |
@@ -3684,10 +3707,12 @@ refusal's `locationName`; `venue-screen.demo-region.test.ts`'s `locationName` is
 
 - [ ] **Step 1: failing tests.** `apps/server/src/recovery-backup-preview.test.ts`: the preview's
   expected object has `venueName: <seeded venue name>` and no `locationName`; the existing
-  unknown-node case keeps `restore.identity_unknown` unchanged. Add "refuses a copy with no venue row
-  as an unknown identity": a backup copy whose `locations` table is empty gives
-  `restore.identity_unknown { nodeId }`, not `venue.not_found` (it passes before the change, where the
-  `where id = node.locationId` read finds no row, and pins that S16c keeps the code).
+  unknown-node case keeps `restore.identity_unknown` unchanged. Add "refuses a copy with two venue rows
+  as an unknown identity": a backup copy holding a second `locations` row gives
+  `restore.identity_unknown { nodeId }`, not `provisioning.second_venue`. It fails before the change
+  (the preview reads the node's own row and succeeds) and passes only once S16c catches the
+  accessor's codes. A copy with no venue row is already refused earlier, by `readArtifactNode`'s join
+  (`restore.ts:874-879`, kept until S18), so it cannot test the catch.
   `scripts/personal-log-params.test.ts:125` row becomes `["restore.stream_venue_unconfirmed.venueName",
   "the name of the venue"]`. Both fail before: the preview returns `locationName`, and the guard's
   `stalePairs` check (`personal-log-params.test.ts:535`) reports a `NOT_PERSONAL` entry whose key the
@@ -3779,7 +3804,7 @@ checks; review 1a, I5). Same steps as S16e.
 
 ### Open PRs touching S16's files (`gh pr list --state open`, full file lists from `gh pr diff <n> --name-only`, 2026-11-01)
 
-- **#2369** (A696, lands before S1): `venue-apply.ts`, `venue-plan.ts`, `recover-provisioned-venue.ts`,
+- **#2369** (A696, landed as `929c1e70e0`): `venue-apply.ts`, `venue-plan.ts`, `recover-provisioned-venue.ts`,
   and 44 of the 158 request-shape test files (for example `setup-api.country-pack.test.ts`,
   `venue-plan.test.ts`, `venue-apply.test.ts`, `fiscal-readiness-runner.test.ts`,
   `apps/setup/src/screens/venue-screen.test.ts`).
@@ -3910,7 +3935,7 @@ above: `apps/server` 11, `packages/catalogue` 3, `packages/db` 1, `packages/staf
   — PASS.
 - [ ] **Step 3:** code guards; `pnpm format:check`.
 - [ ] **Done-check:** the Tests paragraph's bundle-shape grep
-  (`venue\.location([^A-Za-z]|$)|location: \{|\.location\.|locationColumns|fireControl`) over the
+  (`venue\.location([^A-Za-z]|$)|location: \{|\.location\.|locationColumns|fireControl|catalogueId`) over the
   eighteen files prints no line that builds or reads a bundle (a `location: {` that is not a bundle,
   such as a bucket's, stays).
 - [ ] **Commit:** `git commit -s -m "test: bundle tests in every package take format 10"`.
@@ -3956,7 +3981,7 @@ above: `apps/server` 11, `packages/catalogue` 3, `packages/db` 1, `packages/staf
 
 ### Open PRs touching S17's files
 
-- **#2369** (A696, lands first): `packages/provisioning/src/configuration-transfer.ts` and its tests
+- **#2369** (A696, landed as `929c1e70e0`): `packages/provisioning/src/configuration-transfer.ts` and its tests
   (`configuration-transfer.test.ts`, `configuration-transfer.clock.test.ts`,
   `configuration-transfer.boundaries.test.ts`).
 - **#2373**, **#2375**, **#2377**: `docs/developers/conventions-data.md` (other sections).
@@ -4270,7 +4295,7 @@ Its `locations` rows (`:290,362,370,428`) and the cases on them are S23's (desig
 only: whoever lands second rebases.
 
 **Open PRs touching F5's non-test files:** **#2377** (A1008) edits
-`apps/server/src/testing/stream-loop-scenario.ts`; **#2369** (A696, lands first) edits
+`apps/server/src/testing/stream-loop-scenario.ts`; **#2369** (A696, landed as `929c1e70e0`) edits
 `adjustment-venue.ts`, `bill-venue.ts`, `kitchen-allergy-fixture.ts`, `party-venue.ts`,
 `signed-in-till.ts` and adds `zone-process-child.ts`.
 
@@ -4327,7 +4352,7 @@ landed.
 | `scripts/cloud-cost/conformance-prepare.mjs:20` | imports `tenants,locations` from Waitron `packages/db/src/schema/tenants.ts` (at the replay pin) | **S23** creates `venue_settings` and moves the venue's settings into it. `locations` stays, but only its id is read (design §6, S23 row). **S28** drops `locations` (design S28; `file-assignment.tsv:433` gives `tenants.ts` to S28) | Remove `locations` from the import list. Import whatever writes the venue at the new pin, either `venue_settings` (S23) or F1's `seedVenue` (`packages/db/src/testing/seed.ts`, F1's "Helper API" above) | Moving `replayRevision` past S23. Required past S28 |
 | `scripts/cloud-cost/conformance-prepare.mjs:25`; `scripts/cloud-cost/fixtures/source-clock-conformance.test.mjs:39,44` | imports `readLocationClock` from `packages/reporting/src/business-day.ts` and calls `readLocationClock(tx, locationId)`. The fixture inserts rows into `location_day_cutover_changes(location_id,…)` | **S1** adds `readVenueClock(tx)` in `packages/db/src/venue.ts` (S1's "API" above). `readLocationClock` stays until **S18** (S1's Files table above; design S18 row). **S23** renames the table to `day_cutover_changes` (design S23 row) | Call `readVenueClock(tx)` from `@waitron/db` with no id. Insert into `day_cutover_changes` with no `location_id` | Possible from S1. Required once the pin passes S18 (the function) and S23 (the table) |
 | `scripts/cloud-cost/waitron-adapter.mjs:56-67,103-110` | builds a venue by inserting directly into `tenants`, `locations` (from `initial.location`: name, invoiceLocales, operationDescription, timeZone, dayCutover) and `nodes` with `locationId` | **S23**: `readVenue` reads `venue_settings`, so a venue made by a bare `locations` insert is incomplete. **S25** drops `nodes.location_id`. **S28** drops `locations` | Create the venue with Waitron's `seedVenue`/`seedNode` (F1) or `provisionVenue`. Drop `locationId` from the `nodes` insert. Flatten `initial.location` into venue fields, matching S16's request shape (S16's "The new request shape" above) | Moving the pin past S23. Required past S25 and S28 |
-| `scripts/cloud-cost/waitron-adapter.mjs:113` | writes `WAITRON_TILL_NODE_ID` and `WAITRON_TILL_LOCATION_ID` into `trading.env` | **Not A1301: #2198** removed both settings. Since then Waitron reads only `WAITRON_NODE_ID` (`apps/server/src/trading-config.ts:31-35`) | Write `WAITRON_NODE_ID` only | Any move of `replayRevision` past `b1b0f10952`, now, ahead of A1301 |
+| `scripts/cloud-cost/waitron-adapter.mjs:113` | writes `WAITRON_TILL_NODE_ID` and `WAITRON_TILL_LOCATION_ID` into `trading.env` | **Not A1301: #2198** removed both settings. Since then Waitron writes only `WAITRON_NODE_ID` for identity (`trading-config.ts:31-42`) and reads only it (`node-config.ts:35`) | Write `WAITRON_NODE_ID` only | Any move of `replayRevision` past `b1b0f10952`, now, ahead of A1301 |
 | `scripts/cloud-cost/local.mjs:171-182` (`readReplayClock`) | `SELECT time_zone, day_cutover FROM locations WHERE id=?` and `location_day_cutover_changes WHERE location_id=?` on a captured Waitron `venue.db` | **S23** moves the time zone and day cut-over into `venue_settings` and `day_cutover_changes` and drops the old side tables | Read the one `venue_settings` row and `day_cutover_changes`, with no id | Moving the pin past S23 (the captured database follows the pin) |
 | `scripts/cloud-cost/private-replay.mjs:33`, `source-bills.mjs:73-75`, `source-days.mjs:24` | `JOIN nodes n … WHERE n.location_id=?`; `SELECT id FROM locations WHERE id=?` | **S25** (`nodes.location_id`), **S28** (`locations`) | Remove the location filter, since a database holds one venue. Stop passing `locationId` through `isolated-replay.mjs:91,109,174`, `run-local.mjs:26`, `local.mjs:148-152,200,210`, `private-replay.mjs:24,74,104-119` and `fixtures/streamed-day-smoke.mjs:32-33,42`. Update the synthetic schemas in `source-bills.test.mjs:23-25`, `source-days.test.mjs:37-39,105` and `source-clock.test.mjs:24-26,76-100`, plus the `locationId` arguments in `fixtures/*-conformance.test.mjs` | Moving the pin past S25. Required past S28 |
 | `scripts/cloud-cost/fixtures/remote-browser-backend.mjs:14-16,28,31` | provisioning request with `location: {name, fiscalTerritory, …}`; `mountReportApi(…, cfg: {nodeId, locationId})`; `mountCatalogueApi(…, venueCfg: {nodeId, locationId})`; `provisioned.locationId`. Runs at `browserRevision` `99c265981b` | **S16** flattens the request (S16's "The new request shape" above). **S5** changes the catalogue API (`catalogue-api.ts`). **S11c** changes `report-api.ts`. **S18** removes `cfg.locationId` and `ProvisionedNode.locationId` (the F tasks' category 4 above) | Send the flat request once the pin passes S16. Drop `locationId` from both `cfg` objects once it passes S18 | Moving `browserRevision` past S16, then past S18 |
@@ -4389,7 +4414,7 @@ could not be applied exactly as written.
    part had treated all three readers as S1's; its "allowed leftover" lines were rewritten. Review 1
    (1a, I4) then moved a fourth, `readReceiptAddress`, to S2-5 by the same rule (amendment 1).
 2. **S5's `departmentReceiptLanguages` `cfg`.** The S5 part said the parameter becomes unused once
-   `readReceiptLanguage` loses its id. At A696's head it does not:
+   `readReceiptLanguage` loses its id. At main `929c1e70e0` it does not:
    `apps/server/src/department-receipt-languages.ts:27` still passes `cfg` to
    `readOfferedReceiptLanguages`, which D1 makes S2's. The plan has whichever of S5 and S2-5 lands
    second drop it.
@@ -4498,3 +4523,22 @@ the fold departs from the reviewer's wording, the line says why.
 - **1b-M7** → folded: S5–S8 depend on S1 only (fold note 15).
 - **1b-M8** → folded: amendment 11.
 - **1b-M9** → folded: 79 files; `:291`; `venue-apply.ts:325` at `623a2d59c4`; S9a's reason; S12b passes `venueLocationId` to `narrowDeviceKitchenScreens` now (`kitchen-screens.ts:892`). The `recipes`/`payments` leftovers: the design grep over their `src` prints nothing at `623a2d59c4`, so no task is needed.
+
+### Round 3 folds
+
+From the round-3 claim check of the fold (`round3-plan.md`, read at `623a2d59c4`, probes run at
+`2f93f68061`):
+
+- **I1** → folded: S1a Step 4 names the four failing suites (29 cases) and what S1a does with each.
+- **I2** → folded: the header's bill-payments line names S5 as a slice that breaks that suite; D2 is
+  general (whichever slice first routes a suite's reader through the accessor fixes its seeding,
+  setup-seeded rows included).
+- **I3** → folded: S16c's new case uses a copy with two venue rows.
+- **I4** → folded: S12a Step 5 and S12b Step 5 allow the five `profile-zones` comment lines.
+- **M1** → folded: A696 merged as `929c1e70e0`; branch commands and "A696's head" citations read
+  main `929c1e70e0` (`git diff --stat 623a2d59c4 929c1e70e0` lists only `docs/backlog/ci.md`).
+- **M2** → folded: S16's "Also must pass" says no assertion's value changes.
+- **M3** → folded: S2-1 Step 1 lists `write-path.e2e.test.ts` 4.
+- **M4** → folded: the Cloud row cites the writer and the reader.
+- **M5** → folded: S17a2's done-check quotes the grep with `catalogueId`.
+- **M6** → folded: #2375's times are in CET, in the plan and the design.
