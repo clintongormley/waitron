@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, afterAll, beforeEach, expect, it, vi } from "vitest";
 import { and, eq, isNull, sql } from "drizzle-orm";
-import { loadKeyRing, tryGetCredential } from "@waitron/credentials";
+import { loadKeyRing, readNodeSigningKey } from "@waitron/credentials";
 import { deployment, invoiceSeries, locations, nodes, tenants, withTransaction } from "@waitron/db";
 import { readNodeMode, setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -36,6 +36,7 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { adoptFromPrimary } from "./adopt.js";
 import { readPendingAdoption } from "./finish-adoption.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
+import { sealAdoptedStandbyKey } from "./testing/adopted-standby-key.js";
 import { promoteMirrorToPrimary } from "./promote.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
@@ -231,6 +232,7 @@ async function establish(
   );
 }
 async function promote(held: Awaited<ReturnType<typeof reserve>>, key: string, current = true) {
+  await sealAdoptedStandbyKey(spare.node, RING, held.standby);
   const binding = {
     module: "fiscal-verifactu",
     action: "promote",
@@ -386,7 +388,7 @@ it("rolls back the sealed key and spare node when the carrier includes premature
   });
   expect(await spare.db.select().from(nodes).where(eq(nodes.id, held.standby.nodeId))).toEqual([]);
   expect(await spare.db.select().from(fiscalReservations)).toEqual([]);
-  expect(await tryGetCredential(spare.db, RING, { purpose: "membership.node_key" })).toBeNull();
+  expect(await readNodeSigningKey(spare.node, RING, held.standby.nodeId)).toBeNull();
 });
 
 it("retains a dormant spare when independent current consumption is absent at takeover", async () => {
@@ -440,6 +442,7 @@ it("a refused public adoption retains its independently signed reservation witho
       {
         ownerDb: unadopted.db,
         ownerNode: unadopted.node,
+        ring: RING,
         advertisedOrigin: "https://spare.test",
         environment: "preproduction",
         database: "synthetic-empty-spare",
@@ -490,6 +493,6 @@ it("a refused public adoption retains its independently signed reservation witho
   expect(await unadopted.db.select().from(nodes)).toEqual([]);
   expect(await unadopted.db.select().from(fiscalReservations)).toEqual([]);
   expect(await unadopted.db.select().from(fiscalAllocations)).toEqual([]);
-  expect(await tryGetCredential(unadopted.db, RING, { purpose: "membership.node_key" })).toBeNull();
+  expect(await readNodeSigningKey(unadopted.node, RING, target)).toBeNull();
   expect(await readPendingAdoption(adoptionDir)).toBeNull();
 });

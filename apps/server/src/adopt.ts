@@ -6,6 +6,7 @@ import {
   type NodeDatabase,
 } from "@waitron/db";
 import { setNodeModeTx, writeMirrorLinkTx } from "@waitron/node-db";
+import { sealNodeSigningKeyTx, type KeyRing } from "@waitron/credentials";
 import {
   assertNoForeignTenant,
   assertNoOperationalVenue,
@@ -48,8 +49,10 @@ export interface AdoptDeps {
   /** Writes `deployment`. Nothing in the engine refuses this write;
    * `scripts/write-path-tables.test.ts` is what keeps it in named files. */
   ownerDb: Database;
-  /** This box's node.db, where its role and its mirror link are written. */
+  /** This box's node.db, where its role, its mirror link and its signing key are written. */
   ownerNode: NodeDatabase;
+  /** Seals this box's signing key. */
+  ring: KeyRing;
   /** Sends the standby identity so the primary can reserve and endorse it. The fetcher, not this
    * orchestrator, throws `mirror.bundle_fetch_failed`. */
   fetchBundle: (
@@ -126,8 +129,11 @@ export async function adoptFromPrimary(
   await hooks.beforeFirstWrite();
   await stampDeployment(deps.ownerDb, bundle.environment);
   // The role and the link are written together, so node.db never holds a mirror with no link.
+  // The key is sealed here, before finishing adoption puts its public half in venue.db: a public
+  // key with no private half would be worse than the reverse.
   await withNodeTransaction(deps.ownerNode, async (tx) => {
     await setNodeModeTx(tx, standby.nodeId, "mirror");
+    await sealNodeSigningKeyTx(tx, deps.ring, standby.nodeId, standby.privateKey);
     await writeMirrorLinkTx(tx, standby.nodeId, {
       relayUrl: bundle.relayUrl,
       boxHostname: bundle.boxHostname,
@@ -140,7 +146,7 @@ export async function adoptFromPrimary(
   await deps.persistModuleConfig(moduleConfig);
   await writePendingAdoption(deps.stateDir, {
     locationId: designated.locationId,
-    standby,
+    standby: { nodeId: standby.nodeId, publicKey: standby.publicKey },
     nodeName: `${bundle.primaryNode.name} (standby)`,
     filingModule: bundle.primaryNode.filingModule,
     taxModule: bundle.primaryNode.taxModule,

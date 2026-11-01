@@ -110,7 +110,7 @@ async function environment(ownNode: boolean, pending = false) {
       join(state, "pending-adoption.json"),
       JSON.stringify({
         locationId: LOCATION,
-        standby: { nodeId: NODE, publicKey: "pub", privateKey: "priv" },
+        standby: { nodeId: NODE, publicKey: "pub" },
         nodeName: "standby",
         filingModule: "fiscal-none",
         taxModule: null,

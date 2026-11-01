@@ -30,7 +30,7 @@ async function tempDir(): Promise<string> {
 const STANDBY_NODE_ID = "33333333-3333-4333-8333-333333333333";
 const PENDING: PendingAdoption = {
   locationId: "55555555-5555-4555-8555-555555555555",
-  standby: { nodeId: STANDBY_NODE_ID, publicKey: "pub", privateKey: "priv" },
+  standby: { nodeId: STANDBY_NODE_ID, publicKey: "pub" },
   nodeName: "standby",
   filingModule: "fiscal-verifactu",
   taxModule: null,

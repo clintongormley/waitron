@@ -159,6 +159,7 @@ async function seedMirror(
   };
   const fixture = await establishDormantContract({
     db: admin,
+    node,
     ring: RING,
     locationId: MIRROR_LOCATION_ID,
     sourceId: MIRROR_ORIGIN_NODE_ID,

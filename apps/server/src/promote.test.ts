@@ -36,6 +36,7 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
+import { sealAdoptedStandbyKey } from "./testing/adopted-standby-key.js";
 import { singletonPass } from "./singleton-pass.js";
 import { DRAIN_DUTY } from "./pass.js";
 import {
@@ -424,6 +425,7 @@ describe("promoteMirrorToPrimary", () => {
     const nif = t.rows[0]!.tax_id;
 
     const standby = generateStandbyIdentity();
+    await sealAdoptedStandbyKey(suite.node, RING, standby);
     await setNodeMode({ venue: db, node: suite.node }, standby.nodeId, "mirror");
     const endorsement: Endorsement = {
       nodeId: standby.nodeId,

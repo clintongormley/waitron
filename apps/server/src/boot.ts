@@ -1457,6 +1457,7 @@ async function bootServer(
             {
               ownerDb: db,
               ownerNode: store.node,
+              ring,
               fetchBundle: fetchMirrorBundle,
               advertisedOrigin: config.advertisedOrigin,
               environment: config.environment,

@@ -68,6 +68,10 @@ function deps(value = bundle()) {
   return {
     ownerDb: suite.db,
     ownerNode: suite.node,
+    ring: loadKeyRing({
+      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 4).toString("base64"),
+      WAITRON_CREDENTIALS_KEY_VERSION: "1",
+    }),
     advertisedOrigin: "https://spare.test",
     environment: "preproduction" as const,
     fetchBundle: async () => value,
@@ -180,7 +184,7 @@ it("a pending allocated adoption refuses without creating a selling identity and
   const pending: PendingAdoption = {
     locationId: LOCATION,
     originNodeId: PRIMARY,
-    standby: { nodeId: STANDBY, publicKey: "synthetic-public", privateKey: "synthetic-private" },
+    standby: { nodeId: STANDBY, publicKey: "synthetic-public" },
     nodeName: "Spare",
     filingModule: "fiscal-verifactu",
     taxModule: null,

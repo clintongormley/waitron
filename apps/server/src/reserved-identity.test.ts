@@ -1,7 +1,12 @@
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { loadKeyRing, tryGetCredential, type KeyRing } from "@waitron/credentials";
+import {
+  loadKeyRing,
+  readNodeSigningKey,
+  tryGetCredential,
+  type KeyRing,
+} from "@waitron/credentials";
 import { deployment, invoiceSeries, locations, nodes, withTransaction } from "@waitron/db";
 import { ALLOCATED_FISCAL_STANDBY, currentSif } from "@waitron/fiscal-verifactu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -82,13 +87,8 @@ describe("establishReservedStandbyIdentity", () => {
         },
       ),
     );
-    // sealed private key present
-    const cred = await withTransaction(suite.db, (tx) =>
-      tryGetCredential(tx, RING, {
-        purpose: "membership.node_key",
-      }),
-    );
-    expect(cred?.privateKey).toBe(standby.privateKey);
+    expect(await readNodeSigningKey(suite.node, RING, standby.nodeId)).toBeNull();
+    expect(await tryGetCredential(suite.db, RING, { purpose: "membership.node_key" })).toBeNull();
     const reservations = await suite.db.select().from(fiscalReservations);
     expect(reservations).toHaveLength(1);
     expect(reservations[0]?.installationIdentity).toBe("P000042");
@@ -145,7 +145,8 @@ describe("establishReservedStandbyIdentity", () => {
         },
       ),
     );
-    const second = generateStandbyIdentity();
+    const second = { ...generateStandbyIdentity(), nodeId: first.nodeId };
+    const reservationsBefore = await suite.db.select().from(fiscalReservations);
     await establishReservedStandbyIdentity(
       { ownerDb: suite.db, ring: RING },
       {
@@ -160,19 +161,13 @@ describe("establishReservedStandbyIdentity", () => {
         },
       },
     );
-    // the vault still holds the FIRST key; the SECOND node has no reserved SIF
-    const cred = await withTransaction(suite.db, (tx) =>
-      tryGetCredential(tx, RING, {
-        purpose: "membership.node_key",
-      }),
+    const node = await suite.db.execute<{ public_key: string }>(
+      sql`select public_key from nodes where id = ${first.nodeId}`,
     );
-    expect(cred?.privateKey).toBe(first.privateKey);
-    const rows = await withTransaction(suite.db, (tx) =>
-      tx.execute<{ n: number }>(
-        sql`select cast(count(*) as int) as n from registro_sif where node_id = ${second.nodeId}`,
-      ),
-    );
-    expect(rows.rows[0]!.n).toBe(0);
+    expect(node.rows).toEqual([{ public_key: first.publicKey }]);
+    expect(await suite.db.select().from(fiscalReservations)).toEqual(reservationsBefore);
+    expect(await tryGetCredential(suite.db, RING, { purpose: "membership.node_key" })).toBeNull();
+    expect(await readNodeSigningKey(suite.node, RING, first.nodeId)).toBeNull();
   });
 
   it("refuses a bundle whose fiscal reservation is missing, before writing the node", async () => {
@@ -200,7 +195,7 @@ describe("establishReservedStandbyIdentity", () => {
     });
     const node = await suite.db.execute(sql`select 1 from nodes where id = ${standby.nodeId}`);
     expect(node.rows).toEqual([]);
-    expect(await tryGetCredential(suite.db, RING, { purpose: "membership.node_key" })).toBeNull();
+    expect(await readNodeSigningKey(suite.node, RING, standby.nodeId)).toBeNull();
     expect(await suite.db.select().from(fiscalReservations)).toEqual([]);
     expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
     const series = await suite.db.execute(
@@ -237,7 +232,7 @@ describe("establishReservedStandbyIdentity", () => {
     });
     const node = await suite.db.execute(sql`select 1 from nodes where id = ${standby.nodeId}`);
     expect(node.rows).toEqual([]);
-    expect(await tryGetCredential(suite.db, RING, { purpose: "membership.node_key" })).toBeNull();
+    expect(await readNodeSigningKey(suite.node, RING, standby.nodeId)).toBeNull();
     expect(await suite.db.select().from(fiscalReservations)).toEqual([]);
     expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
     const series = await suite.db.execute(

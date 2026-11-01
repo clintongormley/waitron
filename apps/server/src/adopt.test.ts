@@ -9,6 +9,7 @@ import { readMirrorLink, readNodeMode, readRecoveryKeyName } from "@waitron/node
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { isEnabled, type ModuleConfig } from "@waitron/module";
 import { isAppError } from "@waitron/shared";
+import { loadKeyRing, nodeSigningPublicKey, readNodeSigningKey } from "@waitron/credentials";
 import {
   adoptFromPrimary,
   type AdoptCredential,
@@ -75,6 +76,10 @@ const CREDENTIAL: AdoptCredential = {
 const REQ = { primaryUrl: "https://primary.test/", credential: CREDENTIAL } as const;
 const ADVERTISED_ORIGIN = "https://standby.deli.test";
 const NO_HOOKS: AdoptHooks = { beforeFirstWrite: async () => {} };
+const RING = loadKeyRing({
+  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x5a).toString("base64"),
+  WAITRON_CREDENTIALS_KEY_VERSION: "1",
+});
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -108,6 +113,7 @@ function deps(
   return {
     ownerDb: suite.db,
     ownerNode: suite.node,
+    ring: RING,
     advertisedOrigin: ADVERTISED_ORIGIN,
     environment: extra.environment ?? ("preproduction" as const),
     fetchBundle: extra.fetchBundle ?? (async () => makeBundle()),
@@ -179,6 +185,22 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     }
   });
 
+  it("leaves no mirror role or link behind when its signing key cannot be sealed", async () => {
+    await suite.node.execute(
+      sql.raw(`create trigger refuse_signing_key before insert on node_signing_key
+        begin select raise(abort, 'refused by test'); end`),
+    );
+    try {
+      await expect(adoptFromPrimary(deps(), REQ, NO_HOOKS)).rejects.toThrow("refused by test");
+      expect((await suite.node.execute(sql`select node_id from node_mode`)).rows).toEqual([]);
+      expect((await suite.node.execute(sql`select node_id from node_mirror_link`)).rows).toEqual(
+        [],
+      );
+    } finally {
+      await suite.node.execute(sql`drop trigger if exists refuse_signing_key`);
+    }
+  });
+
   it("hands over the stored name with the recovery key", async () => {
     let ownNodeId = "";
     const result = await adoptFromPrimary(
@@ -219,12 +241,32 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(pending.originNodeId).toBe(DESIGNATED.nodeId);
     expect(pending.standby.nodeId).toBe(capturedStandby!.nodeId);
     expect(pending.standby.publicKey).toBe(capturedStandby!.publicKey);
-    // Persisted for the finish worker to seal; never sent to the primary.
-    expect(typeof pending.standby.privateKey).toBe("string");
-    expect(pending.standby.privateKey.length).toBeGreaterThan(0);
+    expect(pending.standby).not.toHaveProperty("privateKey");
     expect(pending.nodeName).toBe("Caja 1 (standby)");
     expect(pending.filingModule).toBe("fiscal-verifactu");
     expect(pending.reserved).toEqual(RESERVED);
+  });
+
+  it("seals the spare's own key in node.db at adopt, and the latch holds no private key", async () => {
+    let sent: { nodeId: string; publicKey: string } | undefined;
+    await adoptFromPrimary(
+      deps({
+        fetchBundle: async (_u, _c, s) => {
+          sent = s;
+          return makeBundle();
+        },
+      }),
+      REQ,
+      NO_HOOKS,
+    );
+    const sealed = await readNodeSigningKey(suite.node, RING, sent!.nodeId);
+    expect(sealed).not.toBeNull();
+    expect(nodeSigningPublicKey(sealed!)).toBe(sent!.publicKey);
+    const latch = await readFile(join(stateDir, "pending-adoption.json"), "utf8");
+    expect(latch).not.toContain(sealed!);
+    expect(await suite.db.execute(sql`select 1 from tenant_credentials`)).toMatchObject({
+      rows: [],
+    });
   });
 
   it("threads this node's advertised origin to the primary as the standby's contactUrl", async () => {

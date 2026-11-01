@@ -530,7 +530,6 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
         standby: {
           nodeId: "88888888-8888-4888-8888-888888888888",
           publicKey: "pub",
-          privateKey: "priv",
         },
         nodeName: "standby",
         filingModule: "fiscal-verifactu",

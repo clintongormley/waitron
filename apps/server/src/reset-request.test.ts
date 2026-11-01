@@ -15,6 +15,7 @@ import {
 import { readMirrorLink, setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
+import { loadKeyRing } from "@waitron/credentials";
 import { adoptFromPrimary, type AdoptHooks, type AdoptRequest } from "./adopt.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { parseEnvFile } from "./env-file.js";
@@ -251,6 +252,10 @@ describe("runStagedReset", () => {
           {
             ownerDb: store.venue,
             ownerNode: store.node,
+            ring: loadKeyRing({
+              WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
+              WAITRON_CREDENTIALS_KEY_VERSION: "1",
+            }),
             fetchBundle: async (_url, _credential, standby) => {
               standbyNodeId = standby.nodeId;
               return BUNDLE;

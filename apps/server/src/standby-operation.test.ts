@@ -14,7 +14,12 @@ import {
 } from "@waitron/db";
 import { NODE_MIGRATIONS, readNodeMode, setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CREDENTIALS_MIGRATIONS, loadKeyRing, tryGetCredential } from "@waitron/credentials";
+import {
+  CREDENTIALS_MIGRATIONS,
+  loadKeyRing,
+  readNodeSigningKey,
+  tryGetCredential,
+} from "@waitron/credentials";
 import { generateNodeKeyPair } from "@waitron/membership";
 import {
   readOperationAuthority,
@@ -306,7 +311,7 @@ describe("opaque authenticated standby carriers", () => {
     expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
   });
 
-  it("rolls back the node and sealed key when establishment authority is stale", async () => {
+  it("rolls back the node when establishment authority is stale", async () => {
     const args = adoptionArgs();
     const scope = { ...binding, action: "establish", targetNodeId: args.standby.nodeId };
     const authority = await withOperationAuthority(scope, "admin", async (token) => token);
@@ -334,6 +339,7 @@ describe("opaque authenticated standby carriers", () => {
         tryGetCredential(tx, RING, { purpose: "membership.node_key" }),
       ),
     ).toBeNull();
+    expect(await readNodeSigningKey(suite.node, RING, args.standby.nodeId)).toBeNull();
   });
 
   it("activates a dormant module before reading series and commits with the role change", async () => {
@@ -881,7 +887,7 @@ it("does not create a spare node or sealed key after outside collection refuses"
     ),
   ).rejects.toThrow("outside source refused");
   expect(await suite.db.select().from(nodes).where(eq(nodes.id, args.standby.nodeId))).toEqual([]);
-  expect(await tryGetCredential(suite.db, RING, { purpose: "membership.node_key" })).toBeNull();
+  expect(await readNodeSigningKey(suite.node, RING, args.standby.nodeId)).toBeNull();
 });
 
 it("refuses a carrier that smuggles invoice series beside a module that opens them on activation", async () => {
@@ -908,7 +914,7 @@ it("refuses a carrier that smuggles invoice series beside a module that opens th
   ).rejects.toMatchObject({ code: "module.operation_invalid", params: { module: binding.module } });
   expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
   expect(await suite.db.select().from(nodes).where(eq(nodes.id, args.standby.nodeId))).toEqual([]);
-  expect(await tryGetCredential(suite.db, RING, { purpose: "membership.node_key" })).toBeNull();
+  expect(await readNodeSigningKey(suite.node, RING, args.standby.nodeId)).toBeNull();
 });
 
 it("refuses a reservation contribution that opens series before its declared activation", async () => {
@@ -1029,7 +1035,7 @@ it.each(["reserve", "establish"])(
       expect(await suite.db.select().from(nodes).where(eq(nodes.id, args.standby.nodeId))).toEqual(
         [],
       );
-      expect(await tryGetCredential(suite.db, RING, { purpose: "membership.node_key" })).toBeNull();
+      expect(await readNodeSigningKey(suite.node, RING, args.standby.nodeId)).toBeNull();
     }
   },
 );

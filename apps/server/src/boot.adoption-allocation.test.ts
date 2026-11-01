@@ -83,7 +83,7 @@ it("boot retains allocation-dependent adoption as pending without an ambient ses
   const pending: PendingAdoption = {
     locationId: LOCATION,
     originNodeId: PRIMARY,
-    standby: { nodeId: STANDBY, publicKey: "synthetic-public", privateKey: "synthetic-private" },
+    standby: { nodeId: STANDBY, publicKey: "synthetic-public" },
     nodeName: "Spare",
     filingModule: "none",
     taxModule: "vat",
