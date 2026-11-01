@@ -28,7 +28,6 @@ const absent = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] }
 const at = "2026-01-05T09:00:00.000Z";
 const person = "10000000-0000-4000-8000-000000000001";
 const place = "10000000-0000-4000-8000-000000000002";
-const otherPlace = "10000000-0000-4000-8000-000000000003";
 const node = "10000000-0000-4000-8000-000000000004";
 const retired = "10000000-0000-4000-8000-000000000005";
 const codes = ["data", "chain", "head", "history"] as const;
@@ -39,20 +38,19 @@ beforeEach(async () => {
   for (const suite of [original, restored]) {
     await seedTenant(suite.db);
     await suite.db.insert(persons).values({ id: person, displayName: "Worker" });
-    await suite.db.insert(locations).values([
-      { id: place, name: "Main", invoiceLocales: ["en"], operationDescription: "Sale" },
-      { id: otherPlace, name: "Archive", invoiceLocales: ["en"], operationDescription: "Sale" },
-    ]);
+    await suite.db
+      .insert(locations)
+      .values([{ id: place, name: "Main", invoiceLocales: ["en"], operationDescription: "Sale" }]);
     await suite.db.insert(nodes).values([
       { id: node, locationId: place, name: "Current" },
       { id: retired, locationId: place, name: "Retired" },
     ]);
   }
-  const append = (nodeId: string, locationId: string, entry: Partial<TimeEntryAppend> = {}) =>
+  const append = (nodeId: string, entry: Partial<TimeEntryAppend> = {}) =>
     original.db.transaction((tx) =>
       appendToChain(
         tx,
-        { nodeId, locationId },
+        { nodeId },
         {
           personId: person,
           entryKind: "in",
@@ -72,14 +70,10 @@ beforeEach(async () => {
         () => new Date(at),
       ),
     );
-  for (const [n, p] of [
-    [node, place],
-    [retired, place],
-    [node, otherPlace],
-  ]) {
-    const first = await append(n!, p!);
-    await append(n!, p!, { entryKind: "out", eventAt: "2026-01-05T17:00:00.000Z" });
-    const request = await append(n!, p!, {
+  for (const n of [node, retired, node]) {
+    const first = await append(n);
+    await append(n, { entryKind: "out", eventAt: "2026-01-05T17:00:00.000Z" });
+    const request = await append(n, {
       entryKind: "correction",
       correctsEntryId: first.id,
       correctionReason: "Wrong time",
@@ -94,7 +88,7 @@ beforeEach(async () => {
       },
     });
     requestId = request.id;
-    await append(n!, p!, {
+    await append(n, {
       entryKind: "correction",
       correctsEntryId: first.id,
       correctionReason: "Wrong time",
@@ -109,7 +103,7 @@ beforeEach(async () => {
         payPeriodClosureId: null,
       },
     });
-    await append(n!, p!, {
+    await append(n, {
       entryKind: "out",
       recordedByPersonId: null,
       eventAt: "2026-01-05T18:00:00.000Z",
@@ -130,7 +124,6 @@ beforeEach(async () => {
     await original.db.transaction((tx) =>
       closePayPeriod(tx, {
         nodeId: node,
-        locationId: place,
         period: { start, end },
         clock: { timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] },
         now: `2026-0${index + 1}-01T00:00:01.000Z`,
@@ -142,10 +135,9 @@ beforeEach(async () => {
   await original.db.transaction((tx) =>
     closePayPeriod(tx, {
       nodeId: retired,
-      locationId: otherPlace,
-      period: { start: "2026-01-01", end: "2026-02-01" },
+      period: { start: "2026-04-01", end: "2026-05-01" },
       clock: { timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] },
-      now: "2026-02-01T00:00:01.000Z",
+      now: "2026-05-01T00:00:01.000Z",
       ruleset: makeRuleset(),
       origin: jobOrigin("dashboard"),
     }),
@@ -234,9 +226,9 @@ function invalid(result: Awaited<ReturnType<typeof run>>, code: (typeof codes)[n
 }
 
 describe("complete captured workforce backup evidence", () => {
-  it("walks every node-location time chain and stored head including retired nodes", async () => {
+  it("walks every node's time chain and stored head including retired nodes", async () => {
     expect(await run()).toEqual(passed);
-    expect(original.db.all(sql`select * from workforce_chains`)).toHaveLength(3);
+    expect(original.db.all(sql`select * from workforce_chains`)).toHaveLength(2);
   });
   it.each(["before", "after"])(
     "validates %s evidence independently of row comparison",
@@ -258,17 +250,36 @@ describe("complete captured workforce backup evidence", () => {
       invalid(await run(), "history");
     },
   );
-  it("checks retired-node closure history at another location", async () => {
+  it("checks retired-node closure history", async () => {
     await both(
       `update pay_period_closures set closure_hash='${"C".repeat(64)}' where node_id='${retired}'`,
     );
     invalid(await run(), "history");
   });
+  it("verifies a node's closures as one chain", async () => {
+    await original.db.transaction((tx) =>
+      closePayPeriod(tx, {
+        nodeId: node,
+        period: { start: "2026-05-01", end: "2026-06-01" },
+        clock: { timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] },
+        now: "2026-06-01T00:00:01.000Z",
+        ruleset: makeRuleset(),
+        origin: jobOrigin("dashboard"),
+      }),
+    );
+    const [closure] = await original.db
+      .select()
+      .from(payPeriodClosures)
+      .where(sql`node_id = ${node} and period_start = '2026-05-01'`);
+    expect(closure!.sequenceNo).toBe(4);
+    await restored.db.insert(payPeriodClosures).values(closure!);
+    expect(await run()).toEqual(passed);
+  });
   it("accepts legacy entries with no record extension", async () => {
     const added = await original.db.transaction((tx) =>
       appendToChain(
         tx,
-        { nodeId: retired, locationId: place },
+        { nodeId: retired },
         {
           personId: person,
           entryKind: "in",
@@ -288,7 +299,7 @@ describe("complete captured workforce backup evidence", () => {
     await restored.db
       .update(workforceChains)
       .set(head)
-      .where(sql`node_id=${retired} and location_id=${place}`);
+      .where(sql`node_id=${retired}`);
     expect(await run()).toEqual(passed);
   });
   it.each([
@@ -306,13 +317,10 @@ describe("complete captured workforce backup evidence", () => {
     await both(`update time_entries set ${change} where node_id='${retired}' and sequence_no=1`);
     invalid(await run(), "chain");
   });
-  it.each(["node_id=x'01'", "location_id=x'01'"])(
-    "rejects malformed stored head scope %s",
-    async (change) => {
-      await both(`update workforce_chains set ${change} where node_id='${retired}'`);
-      invalid(await run(), "head");
-    },
-  );
+  it.each(["node_id=x'01'"])("rejects malformed stored head scope %s", async (change) => {
+    await both(`update workforce_chains set ${change} where node_id='${retired}'`);
+    invalid(await run(), "head");
+  });
   it.each(["last_entry_id='orphan'", "last_entry_hash='orphan'", "last_recorded_at='orphan'"])(
     "rejects an empty head with %s",
     async (change) => {
@@ -331,11 +339,7 @@ describe("complete captured workforce backup evidence", () => {
     },
   );
   it.each([
-    [
-      "time decoder",
-      "select * from time_entries order by node_id, location_id, sequence_no",
-      "person_id",
-    ],
+    ["time decoder", "select * from time_entries order by node_id, sequence_no", "person_id"],
     ["head decoder", "select * from workforce_chains", "node_id"],
     ["closure decoder", "select * from pay_period_closures", "snapshot"],
   ])(
@@ -360,13 +364,13 @@ describe("complete captured workforce backup evidence", () => {
   });
   it.each([node, retired])("detects old middle damage on node %s", async (n) => {
     await both(
-      `update time_entries set event_offset_minutes=120 where node_id='${n}' and location_id='${place}' and sequence_no=2`,
+      `update time_entries set event_offset_minutes=120 where node_id='${n}' and sequence_no=2`,
     );
     invalid(await run(), "chain");
   });
-  it("detects damage on another location", async () => {
+  it("detects damage to a later entry in a node's chain", async () => {
     await both(
-      `update time_entries set entry_hash='${"A".repeat(64)}' where location_id='${otherPlace}' and sequence_no=1`,
+      `update time_entries set entry_hash='${"A".repeat(64)}' where node_id='${node}' and sequence_no=5`,
     );
     invalid(await run(), "chain");
   });
@@ -484,9 +488,7 @@ describe("complete captured workforce backup evidence", () => {
         db,
         "delete from workforce_chains; delete from time_entries; delete from pay_period_closures",
       );
-      await db
-        .insert(workforceChains)
-        .values({ nodeId: node, locationId: place, updatedAt: new Date(at) });
+      await db.insert(workforceChains).values({ nodeId: node, updatedAt: new Date(at) });
     }
     expect(await run()).toEqual(passed);
   });

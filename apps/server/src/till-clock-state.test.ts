@@ -53,11 +53,10 @@ beforeEach(async () => {
   otherPersonId = people[1]!.id;
 });
 
-function event(at: string, subject = personId, place = locationId, node = nodeId) {
+function event(at: string, subject = personId, node = nodeId) {
   return {
     personId: subject,
     nodeId: node,
-    locationId: place,
     at,
     offsetMinutes: 60,
     origin: jobOrigin("dashboard"),
@@ -90,7 +89,7 @@ describe("till own clock state", () => {
       withTransaction(suite.db, (tx) =>
         appendToChain(
           tx,
-          { nodeId, locationId },
+          { nodeId },
           {
             personId,
             entryKind: "correction",
@@ -138,7 +137,7 @@ describe("till own clock state", () => {
     const automatic = await withTransaction(suite.db, (tx) =>
       appendToChain(
         tx,
-        { nodeId, locationId },
+        { nodeId },
         {
           personId,
           entryKind: "out",
@@ -159,7 +158,7 @@ describe("till own clock state", () => {
     await withTransaction(suite.db, (tx) =>
       appendToChain(
         tx,
-        { nodeId, locationId },
+        { nodeId },
         {
           personId,
           entryKind: "confirmation",
@@ -195,7 +194,6 @@ describe("till own clock state", () => {
       locationId,
       businessDay: "2026-01-05",
       state: "out",
-      activeLocationId: null,
       lastEntryId: null,
       firstClockIn: true,
     });
@@ -211,7 +209,6 @@ describe("till own clock state", () => {
         locationId,
         businessDay: "2026-01-05",
         state,
-        activeLocationId: state === "out" ? null : locationId,
         lastEntryId: await lastId(),
         firstClockIn: false,
       });
@@ -223,7 +220,7 @@ describe("till own clock state", () => {
     });
   });
 
-  it("keeps yesterday's open shift open and uses its active location", async () => {
+  it("keeps yesterday's open shift open", async () => {
     await withTransaction(suite.db, (tx) => backend.clockIn(tx, event("2026-01-04T18:00:00Z")));
     const [other] = await suite.db
       .insert(locations)
@@ -237,12 +234,10 @@ describe("till own clock state", () => {
       .returning({ id: locations.id });
     expect(await read()).toMatchObject({
       state: "working",
-      activeLocationId: locationId,
       firstClockIn: true,
     });
     expect(await read("2026-01-05T12:00:00Z", other!.id)).toMatchObject({
       state: "working",
-      activeLocationId: locationId,
       locationId: other!.id,
       firstClockIn: true,
     });
@@ -275,7 +270,7 @@ describe("till own clock state", () => {
       withTransaction(suite.db, (tx) =>
         appendToChain(
           tx,
-          { locationId, nodeId: node },
+          { nodeId: node },
           {
             personId,
             entryKind,

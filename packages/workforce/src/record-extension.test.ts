@@ -22,7 +22,6 @@ const extension = {
 const content: EntryHashInput = {
   sequenceNo: 1,
   personId: "p",
-  locationId: "l",
   nodeId: "n",
   entryKind: "in",
   eventAt: "2026-01-05T09:00:00.000Z",
@@ -84,7 +83,7 @@ it("round-trips an automatic end with no human recorder and verifies its hash", 
   await suite.db.transaction((tx) =>
     appendToChain(
       tx,
-      { nodeId, locationId },
+      { nodeId },
       {
         personId,
         entryKind: "out",
@@ -96,7 +95,7 @@ it("round-trips an automatic end with no human recorder and verifies its hash", 
       },
     ),
   );
-  const rows = await readChain(suite.db, { nodeId, locationId });
+  const rows = await readChain(suite.db, { nodeId });
   expect(rows).toHaveLength(1);
   expect(rows[0]).toMatchObject({ recordedByPersonId: null, extension: automatic });
   expect(verifyChain(rows)).toEqual({ ok: true });
@@ -122,7 +121,7 @@ it("confirmation leaves the last captured out as the current state", async () =>
   await suite.db.transaction((tx) =>
     appendToChain(
       tx,
-      { nodeId, locationId },
+      { nodeId },
       {
         personId,
         entryKind: "confirmation",
@@ -154,7 +153,7 @@ it.each([undefined, false])(
       suite.db.transaction((tx) =>
         appendToChain(
           tx,
-          { nodeId, locationId },
+          { nodeId },
           {
             personId,
             entryKind: "in",
@@ -184,7 +183,7 @@ it("refuses a self-approval flag on an ordinary clock entry without changing the
     suite.db.transaction((tx) =>
       appendToChain(
         tx,
-        { nodeId, locationId },
+        { nodeId },
         {
           personId,
           entryKind: "in",
@@ -217,7 +216,7 @@ it.each(["chain", "record"])(
       entryHash: computeEntryHash(original),
     });
     if (reader === "chain")
-      expect(verifyChain(await readChain(suite.db, { nodeId, locationId }))).toEqual({
+      expect(verifyChain(await readChain(suite.db, { nodeId }))).toEqual({
         ok: false,
         reason: "hash_mismatch",
         sequenceNo: 1,

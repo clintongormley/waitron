@@ -24,11 +24,7 @@ declare module "@waitron/shared" {
     /** `appendToChain` (../chain.ts) exhausted `MAX_APPEND_ATTEMPTS`, each attempt refused by
      * `time_entries_chain_position_uq`. With one write transaction at a time on the venue file,
      * whether anything still reaches this is not established. */
-    "attendance.append_contention": {
-      nodeId: string;
-      locationId: string;
-      attempts: number;
-    };
+    "attendance.append_contention": { nodeId: string; attempts: number };
     /** A correction or an approval named an entry that does not exist. */
     "correction.target_not_found": { entryId: string };
     /** The approver's `persons.role` is not supervisor, manager or admin. */

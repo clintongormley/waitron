@@ -240,7 +240,6 @@ export async function insertTimeEntry(
   params: {
     nodeId: string;
     personId: string;
-    locationId: string;
     entryKind?: WorkforceEntryKind;
     eventAt?: string;
     offsetMinutes?: number;
@@ -249,7 +248,7 @@ export async function insertTimeEntry(
   await tx.transaction((inner) =>
     appendToChain(
       inner,
-      { nodeId: params.nodeId, locationId: params.locationId },
+      { nodeId: params.nodeId },
       {
         personId: params.personId,
         entryKind: params.entryKind ?? "in",

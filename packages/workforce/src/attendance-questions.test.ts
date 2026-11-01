@@ -57,7 +57,6 @@ async function openShift() {
   await run((tx) =>
     new WorkforceBackend().clockIn(tx, {
       nodeId,
-      locationId,
       personId,
       at: "2026-01-05T09:00:00Z",
       offsetMinutes: 0,
@@ -147,7 +146,6 @@ describe("durable own attendance questions", () => {
     const end = await run((tx) =>
       backend.recordAutomaticClose(tx, {
         nodeId,
-        locationId,
         personId,
         openEntryId: open,
         at: "2026-01-05T17:00:00Z",
@@ -192,7 +190,6 @@ describe("durable own attendance questions", () => {
     const end = await run((tx) =>
       backend.recordAutomaticClose(tx, {
         nodeId,
-        locationId,
         personId,
         openEntryId: open,
         at: "2026-01-05T17:00:00Z",
@@ -241,7 +238,6 @@ describe("durable own attendance questions", () => {
       const end = await run((tx) =>
         new WorkforceBackend().recordAutomaticClose(tx, {
           nodeId,
-          locationId,
           personId,
           openEntryId: open,
           at: "2026-01-05T17:00:00Z",
@@ -264,7 +260,6 @@ describe("durable own attendance questions", () => {
     const end = await run((tx) =>
       new WorkforceBackend().recordAutomaticClose(tx, {
         nodeId,
-        locationId,
         personId,
         openEntryId: open,
         at: "2026-01-05T17:00:00Z",

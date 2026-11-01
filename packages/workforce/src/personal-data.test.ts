@@ -423,10 +423,10 @@ const COLLEAGUE_VALUES = [
  * returns the two entries' ids. */
 async function clockInThenAutomaticOut(
   db: Database,
-  input: { nodeId: string; personId: string; locationId: string; inAt: string; outAt: string },
+  input: { nodeId: string; personId: string; inAt: string; outAt: string },
 ): Promise<[string, string]> {
-  const { nodeId, personId, locationId } = input;
-  await insertTimeEntry(db, { nodeId, personId, locationId, entryKind: "in", eventAt: input.inAt });
+  const { nodeId, personId } = input;
+  await insertTimeEntry(db, { nodeId, personId, entryKind: "in", eventAt: input.inAt });
   const [open] = await db
     .select({ id: timeEntries.id })
     .from(timeEntries)
@@ -435,7 +435,6 @@ async function clockInThenAutomaticOut(
     new WorkforceBackend().recordAutomaticClose(tx, {
       nodeId,
       personId,
-      locationId,
       openEntryId: open!.id,
       at: input.outAt,
       offsetMinutes: 0,
@@ -460,7 +459,6 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
   const [openEntry, automaticEntry] = await clockInThenAutomaticOut(db, {
     nodeId,
     personId: marta,
-    locationId,
     inAt: "2026-03-07T08:00:00Z",
     outAt: "2026-03-08T04:00:00Z",
   });
@@ -1008,7 +1006,6 @@ describe("WORKFORCE_PERSONAL_DATA", () => {
     const [openEntry, automaticEntry] = await clockInThenAutomaticOut(suite.db, {
       nodeId,
       personId: person,
-      locationId,
       inAt: "2026-06-02T08:00:00Z",
       outAt: "2026-06-03T04:00:00Z",
     });

@@ -145,7 +145,6 @@ export interface TillClockState {
   locationId: string;
   businessDay: string;
   state: TillClockStatus;
-  activeLocationId: string | null;
   lastEntryId: string | null;
   firstClockIn: boolean;
 }

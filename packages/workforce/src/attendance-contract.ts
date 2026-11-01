@@ -40,7 +40,7 @@ export interface AttendanceResponseReceipt {
   requestedByPersonId: string;
   authorizedByPersonId: string;
   personId: string;
-  locationId: string;
+  locationId: string | null;
   questionId: string | null;
   action: AttendanceCommandPayload["action"];
   input: AttendanceCommandPayload;
@@ -51,7 +51,6 @@ export interface CorrectionItem {
   id: string;
   requestEntryIds: string[];
   personId: string;
-  locationId: string;
   direction: "worker_request" | "manager_proposal";
   status: "waiting-manager" | "waiting-worker" | "approved" | "declined" | "disputed" | "overtaken";
   readyToApply: boolean;

@@ -43,7 +43,6 @@ function pair(
   return kinds.map((missingEntryKind, i) => ({
     nodeId,
     personId,
-    locationId,
     missingEntryKind,
     actorPersonId,
     origin,
@@ -53,9 +52,7 @@ function pair(
   }));
 }
 async function clock(kind: "clockIn" | "clockOut" | "breakStart" | "breakEnd", at: string) {
-  return run((tx) =>
-    backend[kind](tx, { nodeId, personId, locationId, at, offsetMinutes: 0, origin }),
-  );
+  return run((tx) => backend[kind](tx, { nodeId, personId, at, offsetMinutes: 0, origin }));
 }
 async function record() {
   return run((tx) =>
@@ -63,7 +60,7 @@ async function record() {
   );
 }
 async function intact() {
-  expect(verifyChain(await readChain(suite.db, { nodeId, locationId }))).toEqual({ ok: true });
+  expect(verifyChain(await readChain(suite.db, { nodeId }))).toEqual({ ok: true });
 }
 
 it("requests and approves a historical missing shift before later real events as one valid sequence", async () => {
@@ -153,10 +150,7 @@ it("proposes a historical manager pair and applies it only after the worker acce
 async function snapshot() {
   return {
     entries: await suite.db.select().from(timeEntries).orderBy(timeEntries.id),
-    heads: await suite.db
-      .select()
-      .from(workforceChains)
-      .orderBy(workforceChains.nodeId, workforceChains.locationId),
+    heads: await suite.db.select().from(workforceChains).orderBy(workforceChains.nodeId),
   };
 }
 async function refused(action: () => Promise<unknown>, code = "correction.invalid") {
@@ -173,7 +167,6 @@ it.each([
   "different-node",
   "different-actor",
   "different-person",
-  "different-location",
   "different-origin",
   "duplicate-kind",
   "equal-times",
@@ -195,7 +188,6 @@ it.each([
     inputs[1]!.actorPersonId = manager;
     inputs[1]!.personId = manager;
   }
-  if (shape === "different-location") inputs[1]!.locationId = await seedLocation(suite.db);
   if (shape === "different-origin") inputs[1]!.origin = jobOrigin("operator_script");
   if (shape === "duplicate-kind") inputs[1]!.missingEntryKind = "in";
   if (shape === "equal-times") inputs[1]!.at = inputs[0]!.at;
@@ -454,7 +446,7 @@ it("records a worker's disagreement on both manager proposals and leaves actual 
 
 it("answers an earlier node's pair on a new node without changing its chain", async () => {
   const ids = await run((tx) => corrections.requestCorrectionGroup(tx, pair(), "request"));
-  const oldChain = await readChain(suite.db, { nodeId, locationId });
+  const oldChain = await readChain(suite.db, { nodeId });
   const nextNode = await seedNode(suite.db, brandLocationId(locationId));
   await run((tx) =>
     corrections.decideCorrectionGroup(
@@ -463,8 +455,8 @@ it("answers an earlier node's pair on a new node without changing its chain", as
       "approve",
     ),
   );
-  expect(await readChain(suite.db, { nodeId, locationId })).toEqual(oldChain);
-  expect(verifyChain(await readChain(suite.db, { nodeId: nextNode, locationId }))).toEqual({
+  expect(await readChain(suite.db, { nodeId })).toEqual(oldChain);
+  expect(verifyChain(await readChain(suite.db, { nodeId: nextNode }))).toEqual({
     ok: true,
   });
   expect((await record()).sessions.map((s) => s.workedMinutes)).toEqual([60]);

@@ -29,10 +29,9 @@ const rules = {
   overtimeModel: "daily-accrual" as const,
   dailyTargetMinutes: null,
 };
-const event = (at: string, subject = personId, location = locationId) => ({
+const event = (at: string, subject = personId) => ({
   nodeId,
   personId: subject,
-  locationId: location,
   at,
   offsetMinutes: 0,
   origin,
@@ -77,11 +76,10 @@ async function correct(target: string, at: string) {
   return { request, answer };
 }
 async function freezeJanuary() {
-  const record = await run((tx) => backend.timeRecord(tx, { period: january, locationId }));
+  const record = await run((tx) => backend.timeRecord(tx, { period: january }));
   const row: Omit<PayPeriodClosure, "closureHash"> = {
     id: "018ee400-0000-7000-8000-000000000001",
     nodeId,
-    locationId,
     period: january,
     clock: { timeZone: "UTC", dayCutover: "06:00", cutoverChanges: [] },
     scheduledCloseAt: "2026-02-01T06:00:00.000Z",
@@ -217,26 +215,23 @@ it("keeps another node's proposal and answer attached to the original worker day
   expect(record.sessions[0]!.workedMinutes).toBe(540);
   expect(record.entries.find((e) => e.entry.entryId === request)!.entry.nodeId).toBe(second);
 });
-it("keeps split shifts and two locations scoped without another worker's entries", async () => {
+it("keeps split shifts scoped without another worker's entries", async () => {
   await day();
-  const second = await seedLocation(suite.db);
-  await run((tx) => backend.clockIn(tx, event("2026-01-05T18:00:00Z", personId, second)));
-  await run((tx) => backend.clockOut(tx, event("2026-01-05T20:00:00Z", personId, second)));
+  await run((tx) => backend.clockIn(tx, event("2026-01-05T18:00:00Z")));
+  await run((tx) => backend.clockOut(tx, event("2026-01-05T20:00:00Z")));
   await run((tx) => backend.clockIn(tx, event("2026-01-05T09:00:00Z", other)));
   await run((tx) => backend.clockOut(tx, event("2026-01-05T17:00:00Z", other)));
   const record = await query();
   expect(record.sessions.map((s) => s.workedMinutes)).toEqual([480, 120]);
   expect(record.entries.every((e) => e.entry.personId === personId)).toBe(true);
-  const scoped = await run((tx) =>
-    backend.timeRecord(tx, { period: january, personId, locationId: second }),
-  );
-  expect(scoped.sessions.map((s) => s.workedMinutes)).toEqual([120]);
-  expect(scoped.entries).toHaveLength(2);
 });
-it("rejects an unscoped record query", async () => {
-  await expect(run((tx) => backend.timeRecord(tx, { period: january }))).rejects.toMatchObject({
-    code: "attendance.invalid",
-  });
+it("reads the venue's record when no person is named", async () => {
+  await day();
+  await run((tx) => backend.clockIn(tx, event("2026-01-05T09:00:00Z", other)));
+  await run((tx) => backend.clockOut(tx, event("2026-01-05T17:00:00Z", other)));
+  const record = await run((tx) => backend.timeRecord(tx, { period: january }));
+  expect(record.sessions.map((s) => s.personId).sort()).toEqual([personId, other].sort());
+  expect(record.entries).toHaveLength(4);
 });
 it("includes the end of a session starting in the period and ending in the next month", async () => {
   await run((tx) => backend.clockIn(tx, event("2026-01-31T23:00:00Z")));
@@ -255,7 +250,7 @@ it.each([
 ])("refuses a malformed explicit record query %j", async (patch) => {
   await expect(
     run((tx) =>
-      backend.timeRecord(tx, { period: january, personId, locationId, ...patch } as Parameters<
+      backend.timeRecord(tx, { period: january, personId, ...patch } as Parameters<
         WorkforceBackend["timeRecord"]
       >[1]),
     ),
@@ -268,7 +263,6 @@ it("does not automatically close a live in already closed by an approved missing
     backend.requestCorrection(tx, {
       nodeId,
       personId,
-      locationId,
       missingEntryKind: "out",
       at: "2026-01-05T17:00:00Z",
       offsetMinutes: 0,
@@ -285,7 +279,6 @@ it("does not automatically close a live in already closed by an approved missing
       backend.recordAutomaticClose(tx, {
         nodeId,
         personId,
-        locationId,
         openEntryId,
         at: "2026-01-05T18:00:00Z",
         offsetMinutes: 0,
@@ -300,7 +293,6 @@ it("lets an approved missing end close the prior live shift and permits the next
     backend.requestCorrection(tx, {
       nodeId,
       personId,
-      locationId,
       missingEntryKind: "out",
       at: "2026-01-05T17:00:00Z",
       offsetMinutes: 0,
@@ -340,11 +332,10 @@ async function twoPeopleClosedJanuary() {
     );
   const outs = await suite.db.select().from(timeEntries).where(eq(timeEntries.entryKind, "out"));
   const outOf = (subject: string) => outs.filter((e) => e.personId === subject)[0]!.id;
-  const record = await run((tx) => backend.timeRecord(tx, { period: january, locationId }));
+  const record = await run((tx) => backend.timeRecord(tx, { period: january }));
   const row: Omit<PayPeriodClosure, "closureHash"> = {
     id: "018ee400-0000-7000-8000-000000000002",
     nodeId,
-    locationId,
     period: january,
     clock: { timeZone: "UTC", dayCutover: "06:00", cutoverChanges: [] },
     scheduledCloseAt: "2026-02-01T06:00:00.000Z",
@@ -422,14 +413,13 @@ it("gives one person exactly the full closure read cut to her in JavaScript", as
 it("gives one person each closure's snapshot cut to her", async () => {
   const { closureId } = await twoPeopleClosedJanuary();
   const { full, own } = await run(async (tx) => ({
-    full: await readClosures(tx, { locationId, period: january }),
+    full: await readClosures(tx, { period: january }),
     own: await readTimeRecord(tx, { period: january, personId }),
   }));
   const snapshot = full[0]!.snapshot;
   expect(own.closures).toEqual([
     {
       closureId,
-      locationId,
       period: january,
       closedAt: full[0]!.closedAt,
       closureHash: full[0]!.closureHash,

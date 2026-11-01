@@ -16,7 +16,6 @@ const item: CorrectionItem = {
   id: "request-1",
   requestEntryIds: ["request-1"],
   personId: "worker",
-  locationId: "shop",
   direction: "worker_request",
   status: "waiting-manager",
   readyToApply: true,
@@ -29,7 +28,6 @@ const item: CorrectionItem = {
     {
       entryId: "request-1",
       personId: "worker",
-      locationId: "shop",
       nodeId: "node",
       entryKind: "correction",
       eventAt: "2026-10-14T16:30:00.000Z",
@@ -66,7 +64,6 @@ const day: AttendanceDayView = {
         entry: {
           entryId: "out-1",
           personId: "worker",
-          locationId: "shop",
           nodeId: "node",
           entryKind: "out",
           eventAt: "2026-10-14T16:00:00.000Z",

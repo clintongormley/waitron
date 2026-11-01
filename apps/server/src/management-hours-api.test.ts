@@ -15,6 +15,7 @@ import {
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import {
   WorkforceBackend,
+  attendanceQuestions,
   readAttendanceInbox,
   timeEntries,
   upsertAttendanceQuestion,
@@ -104,7 +105,7 @@ async function command() {
 function snapshot() {
   return {
     entries: suite.db.all(sql`select * from time_entries order by id`),
-    heads: suite.db.all(sql`select * from workforce_chains order by node_id, location_id`),
+    heads: suite.db.all(sql`select * from workforce_chains order by node_id`),
     questions: suite.db.all(sql`select * from attendance_questions order by id`),
     mail: suite.db.all(sql`select * from attendance_mail order by id`),
   };
@@ -389,19 +390,58 @@ it("forbids another subject's target, manager actions, overrides and stale own r
   });
   expect(snapshot()).toEqual(before);
 });
-it("only admits the configured or historically recorded own workplace", async () => {
+async function otherWorkplace() {
   const [other] = await suite.db
     .insert(locations)
     .values({ name: "Old", invoiceLocales: ["es"], operationDescription: "Restaurant" })
     .returning();
-  const route = own + `hours?locationId=${other!.id}&kind=month&date=2026-01-05`;
-  let response = await ask(route);
+  return other!;
+}
+async function askQuestionAt(other: { id: string }, personId = venue.personId) {
+  await suite.db.insert(attendanceQuestions).values({
+    locationId: other.id,
+    personId,
+    businessDay: "2026-01-04",
+    kind: "missing-times",
+    active: false,
+    shiftKey: "old-place",
+    evidenceKeys: ["retained"],
+    createdAt: "2026-01-04T12:00:00.000Z",
+    inactiveReason: "retired",
+    startAt: "2026-01-04T04:00:00.000Z",
+    endAt: "2026-01-05T04:00:00.000Z",
+    missingKinds: ["in", "out"],
+  });
+}
+it("admits another own workplace only where a person with no clock entries has a question", async () => {
+  const other = await otherWorkplace();
+  const [worker] = await suite.db
+    .insert(persons)
+    .values({ displayName: "New worker", role: "staff" })
+    .returning({ id: persons.id });
+  const cookie = `${MANAGEMENT_COOKIE}=${
+    (await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId: worker!.id })))
+      .token
+  }`;
+  const route = own + `hours?locationId=${other.id}&kind=month&date=2026-01-05`;
+  let response = await ask(route, undefined, cookie);
   expect(response.status).toBe(403);
   expect(await response.json()).toMatchObject({ error: { code: "attendance.not_permitted" } });
+  await askQuestionAt(other, worker!.id);
+  response = await ask(route, undefined, cookie);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    personId: worker!.id,
+    locationId: other.id,
+    workedMinutes: 0,
+  });
+});
+it("refuses a person with clock entries everywhere once a second location row exists", async () => {
+  const other = await otherWorkplace();
+  const route = own + `hours?locationId=${other.id}&kind=month&date=2026-01-05`;
   await withTransaction(suite.db, async (tx) => {
     const common = {
       ...venue.cfg,
-      locationId: other!.id,
       personId: venue.personId,
       origin: jobOrigin("dashboard"),
       offsetMinutes: 60,
@@ -409,13 +449,13 @@ it("only admits the configured or historically recorded own workplace", async ()
     await backend.clockIn(tx, { ...common, at: "2026-01-06T09:00:00Z" });
     await backend.clockOut(tx, { ...common, at: "2026-01-06T17:00:00Z" });
   });
-  response = await ask(route);
-  expect(response.status).toBe(200);
-  expect(await response.json()).toMatchObject({
-    personId: venue.personId,
-    locationId: other!.id,
-    workedMinutes: 480,
-  });
+  expect((await ask(route)).status).toBe(403);
+  await askQuestionAt(other);
+  for (const place of [other.id, venue.cfg.locationId]) {
+    const response = await ask(own + `hours?locationId=${place}&kind=month&date=2026-01-05`);
+    expect(response.status, place).toBe(400);
+    expect(await response.json()).toMatchObject({ error: { code: "provisioning.second_venue" } });
+  }
 });
 it("rechecks a revoked own session after authentication and before the human write", async () => {
   expect((await ask(own + path())).status).toBe(200);

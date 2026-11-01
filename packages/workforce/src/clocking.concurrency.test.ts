@@ -38,7 +38,7 @@ beforeEach(async () => {
 });
 
 function event(at: string): ClockEventInput {
-  return { nodeId, personId, locationId, at, offsetMinutes: 0, origin: jobOrigin("dashboard") };
+  return { nodeId, personId, at, offsetMinutes: 0, origin: jobOrigin("dashboard") };
 }
 
 /**
@@ -59,7 +59,7 @@ async function attemptClockIn(at: string): Promise<string> {
 }
 
 async function countInEntries(): Promise<number> {
-  const chain = await readChain(suite.db, { nodeId, locationId });
+  const chain = await readChain(suite.db, { nodeId });
   return chain.filter((e) => e.personId === personId && e.entryKind === "in").length;
 }
 
@@ -69,7 +69,6 @@ describe("clockIn admits one of two concurrent same-person clock-ins", () => {
     await insertTimeEntry(suite.db, {
       nodeId,
       personId: otherPersonId,
-      locationId,
       eventAt: "2026-01-05T05:00:00Z",
     });
 

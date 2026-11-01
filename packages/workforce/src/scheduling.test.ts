@@ -828,14 +828,12 @@ describe("getPlannedVsActual", () => {
     await insertTimeEntry(suite.db, {
       nodeId: node,
       personId: person,
-      locationId: loc,
       entryKind: "in",
       eventAt: inAt,
     });
     await insertTimeEntry(suite.db, {
       nodeId: node,
       personId: person,
-      locationId: loc,
       entryKind: "out",
       eventAt: outAt,
     });
@@ -945,7 +943,7 @@ describe("getPlannedVsActual", () => {
     expect(days).toEqual(["2026-03-08"]);
   });
 
-  it("scopes to the queried location — another location's published shifts and entries do not leak in", async () => {
+  it("scopes shifts to the queried location — another location's published shifts do not leak in", async () => {
     const loc = await seedLocation(suite.db);
     const other = await seedLocation(suite.db);
     const p = await seedPerson(suite.db, `scope-${crypto.randomUUID()}`);
@@ -956,7 +954,6 @@ describe("getPlannedVsActual", () => {
       endsAt: "2026-03-05T13:00:00Z",
     });
     await publishWeek(other);
-    await seedSession(p, other, "2026-03-05T09:00:00Z", "2026-03-05T13:00:00Z");
     const rows = await run((tx) =>
       backend.getPlannedVsActual(tx, { locationId: loc, period: week }),
     );

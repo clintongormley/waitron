@@ -30,7 +30,6 @@ function session(
 ): WorkSession {
   return {
     personId,
-    locationId: "loc-1",
     workDate,
     startedAt,
     startOffsetMinutes: 0,

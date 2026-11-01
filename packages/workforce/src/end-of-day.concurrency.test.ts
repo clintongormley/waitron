@@ -11,9 +11,7 @@ const gate = () => {
   return { waiting, release };
 };
 const validChain = async () =>
-  expect(
-    verifyChain(await readChain(f.suite.db, { nodeId: f.nodeId, locationId: f.locationId })),
-  ).toEqual({ ok: true });
+  expect(verifyChain(await readChain(f.suite.db, { nodeId: f.nodeId }))).toEqual({ ok: true });
 
 describe("queued attendance processing and live clock transitions", () => {
   it("two passes queued behind a held writer commit one automatic end and question", async () => {

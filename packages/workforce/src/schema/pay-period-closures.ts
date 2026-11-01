@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { count, day, id, json, label, locations, newId, nodes, table, tsString } from "@waitron/db";
+import { count, day, id, json, label, newId, nodes, table, tsString } from "@waitron/db";
 import type { BusinessDayClock } from "@waitron/shared";
 import type { PayPeriodSnapshot } from "../record-types.js";
 
@@ -11,9 +11,6 @@ export const payPeriodClosures = table(
     nodeId: id("node_id")
       .notNull()
       .references(() => nodes.id, { onDelete: "restrict" }),
-    locationId: id("location_id")
-      .notNull()
-      .references(() => locations.id, { onDelete: "restrict" }),
     periodStart: day("period_start").notNull(),
     periodEnd: day("period_end").notNull(),
     clock: json<BusinessDayClock>("clock").notNull(),
@@ -25,8 +22,8 @@ export const payPeriodClosures = table(
     closureHash: label("closure_hash").notNull(),
   },
   (t) => [
-    uniqueIndex("pay_period_closures_chain_position_uq").on(t.nodeId, t.locationId, t.sequenceNo),
-    uniqueIndex("pay_period_closures_period_uq").on(t.locationId, t.periodStart, t.periodEnd),
+    uniqueIndex("pay_period_closures_chain_position_uq").on(t.nodeId, t.sequenceNo),
+    uniqueIndex("pay_period_closures_period_uq").on(t.periodStart, t.periodEnd),
     check("pay_period_closures_period_ck", sql`${t.periodEnd} > ${t.periodStart}`),
     check("pay_period_closures_sequence_ck", sql`${t.sequenceNo} > 0`),
     check(

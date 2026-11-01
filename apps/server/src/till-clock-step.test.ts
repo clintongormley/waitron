@@ -1,7 +1,7 @@
 import { StatementSync } from "node:sqlite";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { locations, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { persons, sessions } from "@waitron/identity";
@@ -72,7 +72,6 @@ describe("the till's clock across a backward step of the box's clock", () => {
 
     expect(await state()).toMatchObject({
       state: "out",
-      activeLocationId: null,
       lastEntryId: out.id,
     });
 
@@ -93,20 +92,10 @@ describe("the till's clock across a backward step of the box's clock", () => {
     expect((await request("in")).status).toBe(200);
     expect(await state()).toMatchObject({ state: "working" });
     expect((await act("out", "2026-01-05T16:00:00Z")).status).toBe(200);
-    expect(await state()).toMatchObject({ state: "out", activeLocationId: null });
+    expect(await state()).toMatchObject({ state: "out" });
   });
 
-  it("reads the later-dated location's entry when the person moved location (control)", async () => {
-    const [other] = await suite.db
-      .insert(locations)
-      .values({
-        name: "Other venue",
-        invoiceLocales: ["es"],
-        operationDescription: "Restaurant",
-        timeZone: "Europe/Madrid",
-        dayCutover: "05:00:00",
-      })
-      .returning({ id: locations.id });
+  it("reads a clock-in written by another path after a clock-out (control)", async () => {
     instant = new Date("2026-01-05T08:00:00Z");
     expect((await request("in")).status).toBe(200);
     expect((await act("out", "2026-01-05T12:00:00Z")).status).toBe(200);
@@ -114,19 +103,14 @@ describe("the till's clock across a backward step of the box's clock", () => {
       backend.clockIn(tx, {
         personId: venue.personId,
         nodeId: venue.cfg.nodeId,
-        locationId: other!.id,
         at: "2026-01-05T13:00:00.000Z",
         offsetMinutes: 60,
         origin: jobOrigin("dashboard"),
       }),
     );
-    const atOther = (await rows()).find((row) => row.locationId === other!.id)!;
+    const later = (await rows()).at(-1)!;
     instant = new Date("2026-01-05T13:30:00Z");
-    expect(await state()).toMatchObject({
-      state: "working",
-      activeLocationId: other!.id,
-      lastEntryId: atOther.id,
-    });
+    expect(await state()).toMatchObject({ state: "working", lastEntryId: later.id });
   });
 
   it("reconciles the business day of the clock-in written after the step", async () => {
@@ -152,7 +136,6 @@ describe("the till's clock across a backward step of the box's clock", () => {
       backend.requestCorrection(tx, {
         nodeId: venue.cfg.nodeId,
         personId: venue.personId,
-        locationId: venue.cfg.locationId,
         missingEntryKind: "in",
         at: "2026-01-06T09:00:00.000Z",
         offsetMinutes: 60,
@@ -176,7 +159,6 @@ describe("the till's clock across a backward step of the box's clock", () => {
     expect(out.entryKind).toBe("out");
     expect(await state()).toMatchObject({
       state: "out",
-      activeLocationId: null,
       lastEntryId: out.id,
     });
     const back = await act("in", "2026-01-05T11:00:00Z");

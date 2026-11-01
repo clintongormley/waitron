@@ -41,11 +41,10 @@ async function worker(name: string): Promise<string> {
   return personId;
 }
 
-function at(personId: string, time: string, location = locationId): ClockEventInput {
+function at(personId: string, time: string): ClockEventInput {
   return {
     nodeId,
     personId,
-    locationId: location,
     at: `2026-01-05T${time}:00Z`,
     offsetMinutes: 0,
     origin,
@@ -85,7 +84,6 @@ async function missing(
     backend.requestCorrection(tx, {
       nodeId,
       personId,
-      locationId,
       missingEntryKind: kind,
       at: `2026-01-${day}T${time}:00Z`,
       offsetMinutes: 0,
@@ -154,28 +152,6 @@ describe("clocking across a backward step of the box's clock", () => {
     expect(await latest(await worker("never clocked"))).toBeUndefined();
   });
 
-  it("reads the latest chain's entry when the person moved location (control)", async () => {
-    const p = await worker("moved");
-    const a = await seedLocation(suite.db);
-    const b = await seedLocation(suite.db);
-    await run((tx) => backend.clockIn(tx, at(p, "09:00", a)));
-    await run((tx) => backend.clockOut(tx, at(p, "12:00", a)));
-    await run((tx) => backend.clockIn(tx, at(p, "13:00", b)));
-    const { rows } = await suite.db.execute<{ location_id: string; sequence_no: number }>(
-      sql`select location_id, sequence_no from time_entries where person_id = ${p} order by event_at`,
-    );
-    expect(rows.map((r) => [r.location_id, Number(r.sequence_no)])).toEqual([
-      [a, 1],
-      [a, 2],
-      [b, 1],
-    ]);
-    const entry = await run((tx) => readLatestLiveEntry(tx, p));
-    expect({ kind: entry?.entryKind, locationId: entry?.locationId }).toEqual({
-      kind: "in",
-      locationId: b,
-    });
-  });
-
   it("lets an approved missing clock-out dated after the latest clock-in decide (control)", async () => {
     const p = await worker("missing after");
     await run((tx) => backend.clockIn(tx, at(p, "09:00")));
@@ -201,7 +177,7 @@ describe("clocking across a backward step of the box's clock", () => {
     expect(await latest(p)).toEqual({ kind: "out", at: "14:00" });
   });
 
-  it("keeps a chain per node as well as per location", async () => {
+  it("keeps a chain per node", async () => {
     const p = await worker("two nodes");
     const second = await seedNode(suite.db, brandLocationId(locationId));
     await run((tx) => backend.clockIn(tx, at(p, "09:00")));
@@ -254,7 +230,6 @@ describe("clocking across a backward step of the box's clock", () => {
         (["07:00", "08:00"] as const).map((time, i) => ({
           nodeId,
           personId: p,
-          locationId,
           missingEntryKind: i === 0 ? ("in" as const) : ("out" as const),
           at: `2026-01-05T${time}:00Z`,
           offsetMinutes: 0,
@@ -276,33 +251,28 @@ describe("clocking across a backward step of the box's clock", () => {
     expect(await latest(p, "in")).toEqual({ kind: "in", at: "13:00" });
   });
 
-  // The plan's accepted residual (Task 15a, the lead's ruling (e)): times are still compared
-  // across chains, so a move of location within a backward step reads the other chain's later
-  // entry until real time passes it, and the clock actions follow that reading.
-  it("still reads another location's later-dated entry after a step, as the plan accepts", async () => {
-    const p = await worker("residual");
-    const a = await seedLocation(suite.db);
-    const b = await seedLocation(suite.db);
-    await run((tx) => backend.clockIn(tx, at(p, "21:00", a)));
-    await run((tx) => backend.clockOut(tx, at(p, "21:10", a)));
+  it("reads the clock-in written after a step", async () => {
+    const p = await worker("after step");
+    await run((tx) => backend.clockIn(tx, at(p, "21:00")));
+    await run((tx) => backend.clockOut(tx, at(p, "21:10")));
     // The clock is stepped back an hour.
-    await run((tx) => backend.clockIn(tx, at(p, "20:15", b)));
-    expect(await latest(p)).toEqual({ kind: "out", at: "21:10" });
-    expect(await rejection(() => run((tx) => backend.clockOut(tx, at(p, "20:40", b))))).toBe(
-      "attendance.no_open_entry",
+    await run((tx) => backend.clockIn(tx, at(p, "20:15")));
+    expect(await latest(p)).toEqual({ kind: "in", at: "20:15" });
+    expect(await rejection(() => run((tx) => backend.clockIn(tx, at(p, "20:30"))))).toBe(
+      "attendance.already_open",
     );
-    await run((tx) => backend.clockIn(tx, at(p, "20:45", b)));
+    await run((tx) => backend.clockOut(tx, at(p, "20:40")));
     expect(await rowCount(p)).toBe(4);
+    expect(await latest(p)).toEqual({ kind: "out", at: "20:40" });
   });
 
   // This read runs on every clock action while the venue's write lock is held, and a person's
   // entries grow for as long as they work there.
   it("finds the deciding entry through indexes, never reading the person's whole history", async () => {
     const p = await worker("planned");
-    const other = await seedLocation(suite.db);
     await run((tx) => backend.clockIn(tx, at(p, "09:00")));
     await run((tx) => backend.clockOut(tx, at(p, "12:00")));
-    await run((tx) => backend.clockIn(tx, at(p, "13:00", other)));
+    await run((tx) => backend.clockIn(tx, at(p, "13:00")));
     await missing(p, "out", "17:00");
     for (const kind of [undefined, "in"] as const) {
       const plans = await run(async (tx) => {
@@ -312,7 +282,7 @@ describe("clocking across a backward step of the box's clock", () => {
       });
       expect(plans.filter((line) => /TEMP B-TREE|\(person_id=\?\)$/.test(line))).toEqual([]);
       expect(plans).toContain(
-        "SEARCH head USING INDEX time_entries_person_chain_idx (person_id=? AND node_id=? AND location_id=?)",
+        "SEARCH head USING INDEX time_entries_person_chain_idx (person_id=? AND node_id=?)",
       );
       expect(
         plans.filter((line) => line.startsWith("SCAN") && !/^SCAN workforce_chains\b/.test(line)),

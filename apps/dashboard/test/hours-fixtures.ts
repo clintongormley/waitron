@@ -6,7 +6,6 @@ export function hoursView(patch: Partial<PersonHours> = {}): PersonHours {
     locationId = patch.locationId ?? "venue";
   const entry = attendanceEntry({
     personId,
-    locationId,
     eventAt: "2026-01-05T17:00:00.000Z",
     offsetMinutes: 60,
   });
@@ -26,7 +25,6 @@ export function hoursView(patch: Partial<PersonHours> = {}): PersonHours {
         sessions: [
           {
             personId,
-            locationId,
             workDate: "2026-01-05",
             startedAt: "2026-01-05T09:00:00.000Z",
             startOffsetMinutes: 60,
@@ -43,7 +41,6 @@ export function hoursView(patch: Partial<PersonHours> = {}): PersonHours {
       sessions: [
         {
           personId,
-          locationId,
           workDate: "2026-01-05",
           startedAt: "2026-01-05T09:00:00.000Z",
           startOffsetMinutes: 60,
@@ -91,7 +88,6 @@ export function hoursWithPending(): PersonHours {
   const view = hoursView();
   const item = attendanceItem({
     personId: "p1",
-    locationId: "venue",
     direction: "worker_request",
     status: "waiting-manager",
   });

@@ -26,7 +26,7 @@ const suite = useVenueDb({
 });
 
 function event(personId: string, at: string): ClockEventInput {
-  return { nodeId, personId, locationId, at, offsetMinutes: 0, origin: jobOrigin("dashboard") };
+  return { nodeId, personId, at, offsetMinutes: 0, origin: jobOrigin("dashboard") };
 }
 
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -74,10 +74,10 @@ async function insertApprovedCorrection(row: {
   // Raw, with `id` supplied, because this is a row the chain append path would never write.
   await suite.db.execute(sql`
     insert into time_entries (
-      id, captured_by_source, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+      id, captured_by_source, person_id, node_id, entry_kind, event_at, event_offset_minutes,
       recorded_by_person_id, recorded_at, corrects_entry_id, correction_reason, correction_status,
       correction_actor_id, entry_hash, prev_entry_hash, sequence_no, is_first_entry)
-    values (${newId()}, 'dashboard', ${row.personId}, ${locationId}, ${row.node}, 'correction', ${row.eventAt}, 0,
+    values (${newId()}, 'dashboard', ${row.personId}, ${row.node}, 'correction', ${row.eventAt}, 0,
       ${row.actorId}, ${row.recordedAt}, ${row.correctsEntryId}, 'cross-node merge', 'approved',
       ${row.actorId}, ${"A".repeat(64)}, ${"B".repeat(64)}, ${row.sequenceNo}, false)`);
 }

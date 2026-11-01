@@ -280,6 +280,10 @@ step. The distributed picture appears only in the multi-till + separate-server t
 > promotion — ingest continues on whichever node is primary, and the location's history is read
 > across the per-node chains rather than from one. See the swap design §4.4.
 
+> **2026-11-01 — working time is per venue (A1268).** One chain per node; clock entries and
+> pay-period closures store no location, and neither hash includes one. See
+> `docs/superpowers/specs/2026-11-01-a1268-clock-ins-per-venue-design.md`.
+
 **Escalation (deferred — trigger: the published RD demands capture-window cryptographic
 tamper-evidence):** add lightweight **per-device local chaining** so the offline buffer is itself
 chained before sync. Off by default; the ingest chain is designed to fold device sub-chains in.
@@ -306,7 +310,7 @@ in an interface, field name, or doc comment.
   `TimeEntry`, `WorkSession` (the projected workday: start/end, pauses, worked minutes, overtime),
   `Shift`, `Roster`, `Absence`, `Correction`.
 - **The generic engine:** the append-only immutable chained time-entry stream + role-revocation +
-  per-location chain (§5 — now keyed per (node, location); see the 2026-09-07 rekey pointer there); the work-session projection; the scheduling engine; and a **rule-validation
+  per-location chain (§5 — now keyed per (node, location); see the 2026-09-07 rekey pointer there) _(2026-11-01: one chain per node — see §5)_; the work-session projection; the scheduling engine; and a **rule-validation
   engine** that consumes an injected ruleset.
 - **`WorkTimeRuleset` interface** — max weekly minutes, min inter-shift rest, break thresholds,
   weekly rest, overtime cap, night window + premium. The *engine* is generic; the *numbers and rules*
@@ -371,7 +375,7 @@ never gated behind rostering.
 | Worker identity | **Slice of Identity #5 first** — one `person` + PIN + minimal role, shared by till login and clock-in |
 | Immutability model | Immutable **history** not values; corrections = append rows referencing the original |
 | Storage integrity | **Role-revocation floor + hash chain** (both, per user) |
-| Chain scope | **Per location (centro de trabajo), central-server ingest** — not per-till _(2026-09-07: rekeyed per (node, location) — see §5)_ |
+| Chain scope | **Per location (centro de trabajo), central-server ingest** — not per-till _(2026-09-07: rekeyed per (node, location) — see §5)_ _(2026-11-01: one chain per node — see §5)_ |
 | Offline | Events captured offline, buffered (locally role-revoked), chained at central ingest; project by timestamp |
 | Time-entries shape | **Single unified append-only stream** (events + corrections) |
 | Clock-in method | **PIN / card**; biometrics off by default (AEPD) |

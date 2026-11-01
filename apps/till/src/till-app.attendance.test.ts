@@ -37,7 +37,7 @@ async function questionButton(el: TillApp, selector: string) {
   await userEvent.click(questions(el)!.shadowRoot!.querySelector<HTMLElement>(selector)!);
 }
 function inbox(): AttendanceInbox {
-  const entry = attendanceEntry({ personId: "p1", locationId: "venue" });
+  const entry = attendanceEntry({ personId: "p1" });
   return {
     ...attendanceInbox([
       attendancePrompt({
@@ -81,7 +81,7 @@ describe("till attendance sign-in flow", () => {
 
   it("an already-working operator answers a proposal with distinct times, then returns to work", async () => {
     const f = await clockApp({ state: clockState("working", "in") });
-    const item = attendanceItem({ personId: "p1", locationId: "venue" });
+    const item = attendanceItem({ personId: "p1" });
     const prompt = attendancePrompt({
       kind: "proposal",
       questionId: null,
@@ -384,7 +384,7 @@ describe("till correction editors and manager PIN", () => {
 
   it("disagreement requires a reason and sends no invented time or manager identity", async () => {
     const f = await clockApp({ state: clockState("working", "in") });
-    const item = attendanceItem({ personId: "p1", locationId: "venue" });
+    const item = attendanceItem({ personId: "p1" });
     f.api.getAttendanceInbox
       .mockResolvedValueOnce({
         ...empty(),
@@ -453,7 +453,6 @@ describe("till correction editors and manager PIN", () => {
       const f = await clockApp({ state: clockState("working", "in") });
       const item = attendanceItem({
         personId: "p1",
-        locationId: "venue",
         direction: "worker_request",
         status: "waiting-manager",
       });
@@ -508,7 +507,6 @@ describe("till correction editors and manager PIN", () => {
     const f = await clockApp({ state: clockState("working", "in") });
     const item = attendanceItem({
       personId: "p1",
-      locationId: "venue",
       direction: "worker_request",
       status: "waiting-manager",
     });
@@ -571,7 +569,6 @@ it("a lost PIN approval is recovered from the day and retried with the same comm
     direction: "worker_request",
     status: "waiting-manager",
     personId: "p1",
-    locationId: "venue",
   });
   f.api.getAttendanceInbox.mockResolvedValue({ ...empty(), items: [item] });
   f.api.getAttendanceDay.mockImplementation(async (date, locationId) => ({
@@ -633,7 +630,7 @@ it("a recorded day's retime keeps its target and recovers a lost reply through t
         date === "2026-10-14"
           ? [
               {
-                entry: attendanceEntry({ personId: "p1", locationId: "venue" }),
+                entry: attendanceEntry({ personId: "p1" }),
                 author: { kind: "automatic", personId: null },
                 effective: true,
                 confirmed: true,
@@ -708,7 +705,6 @@ it("a new correction offers the matching pending request's PIN approval, and Can
     direction: "worker_request",
     status: "waiting-manager",
     personId: "p1",
-    locationId: "venue",
   });
   f.api.getAttendanceInbox
     .mockResolvedValueOnce(inbox())
@@ -776,7 +772,6 @@ it("closing during an approver read retires that opening and does not block a re
   const f = await clockApp({ state: clockState("working", "in") });
   const item = attendanceItem({
     personId: "p1",
-    locationId: "venue",
     direction: "worker_request",
     status: "waiting-manager",
   });

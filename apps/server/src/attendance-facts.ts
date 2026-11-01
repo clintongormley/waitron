@@ -37,9 +37,9 @@ export async function readAttendanceFacts(
       from bill_payments p join working_orders o on o.id = p.working_order_id
       where o.location_id = ${day.locationId} and p.received_at is not null
       union all
-      select 'clock', e.id, e.person_id, e.location_id, 'break', e.event_at
-      from time_entries e where e.location_id = ${day.locationId}
-      and (e.entry_kind in ('break_start', 'break_end') or (
+      select 'clock', e.id, e.person_id, ${day.locationId}, 'break', e.event_at
+      from time_entries e
+      where (e.entry_kind in ('break_start', 'break_end') or (
         e.entry_kind = 'correction' and e.correction_status = 'approved'
         and e.corrects_entry_id is null and e.missing_entry_kind in ('break_start', 'break_end')))
     )

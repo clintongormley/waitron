@@ -408,7 +408,6 @@ describe("attendance source facts", () => {
         backend.requestCorrection(tx, {
           nodeId,
           personId: ana,
-          locationId,
           missingEntryKind,
           at,
           offsetMinutes: 0,

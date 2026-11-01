@@ -86,7 +86,7 @@ async function ask(
 }
 const snapshot = () => ({
   entries: suite.db.all(sql`select * from time_entries order by id`),
-  heads: suite.db.all(sql`select * from workforce_chains order by node_id, location_id`),
+  heads: suite.db.all(sql`select * from workforce_chains order by node_id`),
   closures: suite.db.all(sql`select * from pay_period_closures order by id`),
   questions: suite.db.all(sql`select * from attendance_questions order by id`),
   mail: suite.db.all(sql`select * from attendance_mail order by id`),
@@ -221,7 +221,7 @@ describe("authenticated working-time downloads", () => {
       expect((await ask("manager", {}, managerCookie)).status).toBe(200);
     },
   );
-  it("restricts own workplace, allows historical workplace and refuses missing location or person after authority", async () => {
+  it("restricts own workplace, allows one where the worker has a question and refuses missing location or person after authority", async () => {
     const [unrelated] = await suite.db
       .insert(locations)
       .values({ name: "Unrelated", invoiceLocales: ["en"], operationDescription: "Sale" })
@@ -240,7 +240,7 @@ describe("authenticated working-time downloads", () => {
     );
     expect(provider.prepare).not.toHaveBeenCalled();
     const alternate = mount();
-    // The current appliance location differs; the worker still has history at the selected one.
+    // The current appliance location differs; the worker has a question at the selected one.
     const historical = new Hono();
     const deps = {
       db: suite.db,
@@ -249,6 +249,21 @@ describe("authenticated working-time downloads", () => {
       exporter: provider,
     };
     mountManagementAttendanceApi(historical, deps, logger);
+    expect((await ask("own", {}, staffCookie, historical)).status).toBe(403);
+    await suite.db.insert(attendanceQuestions).values({
+      locationId: fixture.locationId,
+      personId: fixture.personId,
+      businessDay: "2026-01-04",
+      kind: "missing-times",
+      active: false,
+      shiftKey: "old-place",
+      evidenceKeys: ["retained"],
+      createdAt: "2026-01-04T12:00:00.000Z",
+      inactiveReason: "retired",
+      startAt: "2026-01-04T04:00:00.000Z",
+      endAt: "2026-01-05T04:00:00.000Z",
+      missingKinds: ["in", "out"],
+    });
     expect((await ask("own", {}, staffCookie, historical)).status).toBe(200);
     expect((await ask("own", {}, staffCookie, alternate)).status).toBe(200);
   });
@@ -358,7 +373,6 @@ describe("authenticated working-time downloads", () => {
     const backend = new WorkforceBackend();
     await withTransaction(suite.db, async (tx) => {
       const record = await backend.timeRecord(tx, {
-        locationId: fixture.locationId,
         personId: fixture.personId,
         period: { start: "2026-01-01", end: "2026-02-01" },
       });

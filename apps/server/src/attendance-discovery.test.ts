@@ -42,7 +42,6 @@ const now = new Date("2026-01-09T12:00:00Z");
 const scope = () => ({ locationId, now, batchSize: 2 });
 const event = (at: string) => ({
   personId,
-  locationId,
   nodeId,
   at,
   offsetMinutes: 60,
@@ -358,6 +357,54 @@ describe("durable attendance discovery", () => {
       completed: true,
     });
   });
+  // Discovery reads every node's clock entries on each pass, and the table only grows.
+  it("reads each node's clock entries by position", async () => {
+    const { beginAttendanceDiscovery, discoverAttendanceDays } =
+      await import("./attendance-discovery.js");
+    await run((tx) => backend.clockIn(tx, event("2026-01-07T08:00:00Z")));
+    const plans: string[][] = [];
+    const planning = (tx: Transaction) =>
+      new Proxy(tx, {
+        get: (target, key, receiver) =>
+          key === "execute"
+            ? (query: ReturnType<typeof sql>) => {
+                plans.push(
+                  target
+                    .execute<{ detail: string }>(sql`explain query plan ${query}`)
+                    .rows.map((row) => row.detail),
+                );
+                return target.execute(query);
+              }
+            : Reflect.get(target, key, receiver),
+      });
+    await run((tx) =>
+      beginAttendanceDiscovery(planning(tx), { locationId, generation: "open-one" }),
+    );
+    await run((tx) => discoverAttendanceDays(planning(tx), scope()));
+    const clockPlans = plans.filter((plan) => plan.some((line) => /\btime_entries\b/.test(line)));
+    expect(clockPlans).not.toEqual([]);
+    for (const plan of clockPlans) {
+      expect(plan.filter((line) => /^SCAN time_entries\b/.test(line))).toEqual([]);
+      expect(plan.some((line) => line.includes("time_entries_chain_position_uq"))).toBe(true);
+    }
+  });
+
+  it("reconciles the ended day of a shift begun on another node before clocking", async () => {
+    const { reconcileAttendanceBeforeClock } = await import("./attendance-discovery.js");
+    const otherNode = await seedNode(suite.db, brandLocationId(locationId));
+    await run((tx) => backend.clockIn(tx, { ...event("2026-01-05T08:00:00Z"), nodeId: otherNode }));
+    expect(
+      await run((tx) =>
+        reconcileAttendanceBeforeClock(
+          tx,
+          { nodeId, locationId, personId },
+          new Date("2026-01-06T12:00:00Z"),
+        ),
+      ),
+    ).toBeNull();
+    expect((await rows()).map((r) => r.businessDay)).toEqual(["2026-01-05"]);
+  });
+
   it("dirties original and retimed days for a late approved correction without changing time rows", async () => {
     await run((tx) => backend.clockIn(tx, event("2026-01-05T08:00:00Z")));
     await run((tx) => backend.clockOut(tx, event("2026-01-05T17:00:00Z")));

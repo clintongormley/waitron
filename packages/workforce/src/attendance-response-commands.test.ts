@@ -67,12 +67,11 @@ async function revision(subject = personId) {
   expect(responses).toHaveProperty("readAttendanceRevision", expect.any(Function));
   return run((tx) => responses.readAttendanceRevision(tx, subject));
 }
-function clock(at: string, subject = personId, location = locationId, node = nodeId) {
+function clock(at: string, subject = personId, node = nodeId) {
   return run((tx) =>
     backend.clockIn(tx, {
       nodeId: node,
       personId: subject,
-      locationId: location,
       at,
       offsetMinutes: 0,
       origin,
@@ -109,7 +108,6 @@ it("revision changes for an older event appended on a different node", async () 
     backend.clockOut(tx, {
       nodeId,
       personId,
-      locationId,
       at: "2026-01-06T17:00:00Z",
       offsetMinutes: 0,
       origin,
@@ -140,11 +138,10 @@ it("revision ignores another worker's entries and questions", async () => {
   await question(other);
   expect(await revision()).toBe(before);
 });
-it("revision covers a historical location as well as the current one", async () => {
+it("revision covers an entry written on another node", async () => {
   const before = await revision();
-  const historical = await seedLocation(suite.db);
-  const historicalNode = await seedNode(suite.db, brandLocationId(historical));
-  await clock("2026-01-05T09:00:00Z", personId, historical, historicalNode);
+  const otherNode = await seedNode(suite.db, brandLocationId(locationId));
+  await clock("2026-01-05T09:00:00Z", personId, otherNode);
   expect(await revision()).not.toBe(before);
 });
 it("revision covers question retirement with no legal append", async () => {
@@ -217,10 +214,7 @@ function pair(): AttendanceCommandPayload {
 async function snapshot() {
   return {
     entries: await suite.db.select().from(timeEntries).orderBy(timeEntries.id),
-    heads: await suite.db
-      .select()
-      .from(workforceChains)
-      .orderBy(workforceChains.nodeId, workforceChains.locationId),
+    heads: await suite.db.select().from(workforceChains).orderBy(workforceChains.nodeId),
     receipts: await suite.db
       .select()
       .from(attendanceResponseCommands)
@@ -233,7 +227,7 @@ async function refused(action: () => unknown, code: string) {
   expect(await snapshot()).toEqual(before);
 }
 async function intact() {
-  expect(verifyChain(await readChain(suite.db, { nodeId, locationId }))).toEqual({ ok: true });
+  expect(verifyChain(await readChain(suite.db, { nodeId }))).toEqual({ ok: true });
 }
 async function automaticQuestion() {
   await clock("2026-01-05T09:00:00Z");
@@ -242,7 +236,6 @@ async function automaticQuestion() {
     backend.recordAutomaticClose(tx, {
       nodeId,
       personId,
-      locationId,
       openEntryId,
       at: "2026-01-05T17:00:00Z",
       offsetMinutes: 0,
@@ -437,6 +430,36 @@ it("manager pair stays pending until the worker accepts the entire item", async 
   await intact();
 });
 
+it("stores no location on an approval of a manager's proposal and keeps the question's on an answer", async () => {
+  const payload = pair();
+  if (payload.action !== "request") throw new Error("fixture requires request");
+  const proposal = await command({
+    action: "propose",
+    personId,
+    locationId,
+    changes: payload.changes,
+    reason: "Please check these times",
+  });
+  await send(proposal, manager);
+  const acceptance = await command({ action: "accept", itemId: proposal.commandId });
+  await send(acceptance);
+  const questionId = await question();
+  const answer = await command({
+    ...payload,
+    questionId,
+    changes: [
+      { target: { missingKind: "in" }, at: "2026-01-05T18:00:00Z", offsetMinutes: 0 },
+      { target: { missingKind: "out" }, at: "2026-01-05T22:00:00Z", offsetMinutes: 0 },
+    ],
+  });
+  await send(answer);
+  const rows = new Map((await snapshot()).receipts.map((r) => [r.id, r.locationId] as const));
+  expect([
+    rows.get(proposal.commandId),
+    rows.get(acceptance.commandId),
+    rows.get(answer.commandId),
+  ]).toEqual([null, null, locationId]);
+});
 it.each(["manager", "supervisor"] as const)("%s cannot approve their own request", async (role) => {
   await suite.db.update(persons).set({ role }).where(eq(persons.id, personId));
   const value = await command(pair());
@@ -791,7 +814,7 @@ it("replay survives closing and reopening a persisted venue copy", async () => {
       expect(reopened.venue.execute(sql`select * from time_entries order by id`).rows).toEqual(
         before,
       );
-      expect(verifyChain(await readChain(reopened.venue, { nodeId, locationId }))).toEqual({
+      expect(verifyChain(await readChain(reopened.venue, { nodeId }))).toEqual({
         ok: true,
       });
     } finally {
@@ -827,10 +850,10 @@ it("a till decision on another node keeps the selected manager and device origin
       e.capturedByDeviceId,
     ]),
   ).toEqual(requested.entryIds.map((id) => [decisionNode, id, manager, "device", deviceId]));
-  expect(verifyChain(await readChain(suite.db, { nodeId: earlierNode, locationId }))).toEqual({
+  expect(verifyChain(await readChain(suite.db, { nodeId: earlierNode }))).toEqual({
     ok: true,
   });
-  expect(verifyChain(await readChain(suite.db, { nodeId: decisionNode, locationId }))).toEqual({
+  expect(verifyChain(await readChain(suite.db, { nodeId: decisionNode }))).toEqual({
     ok: true,
   });
 });
@@ -915,7 +938,6 @@ it("approval after a frozen 480-minute period adds a live 60-minute impact witho
   const frozen = await run((tx) =>
     api.closePayPeriod(tx, {
       nodeId,
-      locationId,
       period: { start: "2026-01-01", end: "2026-02-01" },
       clock: { timeZone: "UTC", dayCutover: "04:00", cutoverChanges: [] },
       now: "2026-02-01T04:00:00Z",

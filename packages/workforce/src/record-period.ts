@@ -20,15 +20,14 @@ export function recordInPeriod(record: TimeRecord, period: Period): TimeRecord {
       .filter((e) => entryDate(e) >= period.start && entryDate(e) < period.end)
       .map((e) => recordRoot(e, byId).entryId),
   );
-  const sessionsBySubject = new Map<string, { sessions: typeof sessions; index: number }>();
+  const sessionsByPerson = new Map<string, { sessions: typeof sessions; index: number }>();
   for (const session of sessions) {
-    const key = JSON.stringify([session.personId, session.locationId]);
-    const group = sessionsBySubject.get(key) ?? { sessions: [], index: 0 };
+    const group = sessionsByPerson.get(session.personId) ?? { sessions: [], index: 0 };
     group.sessions.push(session);
-    sessionsBySubject.set(key, group);
+    sessionsByPerson.set(session.personId, group);
   }
   for (const e of effectiveClockEntries(entries).sort(compareEvents)) {
-    const group = sessionsBySubject.get(JSON.stringify([e.personId, e.locationId]));
+    const group = sessionsByPerson.get(e.personId);
     if (group === undefined) continue;
     while (group.index < group.sessions.length && e.eventAt > group.sessions[group.index]!.endedAt)
       group.index++;

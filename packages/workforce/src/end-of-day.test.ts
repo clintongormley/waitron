@@ -57,9 +57,7 @@ describe("completed attendance day", () => {
     expect(await f.entries()).toEqual(before);
     const [work] = await f.suite.db.select().from(attendanceDayWork);
     expect(work).toMatchObject({ dirtyRevision: 1, evaluatedRevision: 1, deferredShiftIds: [] });
-    expect(
-      verifyChain(await readChain(f.suite.db, { nodeId: f.nodeId, locationId: f.locationId })),
-    ).toEqual({ ok: true });
+    expect(verifyChain(await readChain(f.suite.db, { nodeId: f.nodeId }))).toEqual({ ok: true });
   });
   it.each([
     { times: [] },
@@ -121,9 +119,7 @@ describe("completed attendance day", () => {
       eventAt: "2026-01-05T16:40:00.000Z",
       prevEntryHash: before[1]!.entryHash,
     });
-    expect(
-      verifyChain(await readChain(f.suite.db, { nodeId: f.nodeId, locationId: f.locationId })),
-    ).toEqual({ ok: true });
+    expect(verifyChain(await readChain(f.suite.db, { nodeId: f.nodeId }))).toEqual({ ok: true });
   });
   it("leaves a corrected start after the proposed end as missing, with unchanged rows and head", async () => {
     const open = await f.open();

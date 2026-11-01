@@ -182,7 +182,7 @@ describe("attendance obligations follow current clock and planning evidence", ()
     await f.run((tx) =>
       appendToChain(
         tx,
-        { nodeId: f.nodeId, locationId: f.locationId },
+        { nodeId: f.nodeId },
         {
           personId: f.personId,
           entryKind: "in",

@@ -1,6 +1,5 @@
 /**
- * Concurrent callers of `appendToChain` leave ONE contiguous, re-verifying chain per (node,
- * location).
+ * Concurrent callers of `appendToChain` leave ONE contiguous, re-verifying chain per node.
  *
  * Weaker than its name: nothing here checks that the writers actually overlap, and it does not show
  * that the venue file's write queue is what keeps positions distinct. `racePair`
@@ -35,8 +34,8 @@ beforeEach(async () => {
   nodeId = await seedNode(suite.db, brandLocationId(locationId));
 });
 
-function key(location = locationId, node = nodeId): ChainKey {
-  return { nodeId: node, locationId: location };
+function key(node = nodeId): ChainKey {
+  return { nodeId: node };
 }
 
 function inputAt(at: string): TimeEntryAppend {
@@ -67,7 +66,7 @@ function appendAll(chains: (i: number) => ChainKey, count = WRITERS) {
 }
 
 describe("appendToChain under concurrent callers", () => {
-  it("commits all 20 concurrent appends to one location chain", async () => {
+  it("commits all 20 concurrent appends to one node's chain", async () => {
     const results = await appendAll(() => key());
     expect(results).toHaveLength(WRITERS);
     expect(await readChain(suite.db, key())).toHaveLength(WRITERS);
@@ -98,10 +97,10 @@ describe("appendToChain under concurrent callers", () => {
     const nodeB = await seedNode(suite.db, brandLocationId(locationId));
     const perNode = WRITERS / 2;
     // Interleaved, so each node produces sequence_no 1..perNode.
-    await appendAll((i) => key(locationId, i % 2 === 0 ? nodeId : nodeB));
+    await appendAll((i) => key(i % 2 === 0 ? nodeId : nodeB));
 
-    const chainA = await readChain(suite.db, key(locationId, nodeId));
-    const chainB = await readChain(suite.db, key(locationId, nodeB));
+    const chainA = await readChain(suite.db, key(nodeId));
+    const chainB = await readChain(suite.db, key(nodeB));
     const expectedPositions = Array.from({ length: perNode }, (_, i) => i + 1);
     expect(chainA.map((e) => e.sequenceNo)).toEqual(expectedPositions);
     expect(chainB.map((e) => e.sequenceNo)).toEqual(expectedPositions);

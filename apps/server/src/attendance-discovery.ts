@@ -28,7 +28,7 @@ export async function reconcileAttendanceBeforeClock(
   at: Date,
 ): Promise<TillClockState | null> {
   const state = await readTillClockState(tx, scope, at);
-  if (state.state === "out" || state.activeLocationId !== scope.locationId) return state;
+  if (state.state === "out") return state;
   const start = await readLatestLiveEntry(tx, scope.personId, { kind: "in" });
   if (!start) return state;
   const clock = await readLocationClock(tx, scope.locationId);
@@ -180,7 +180,7 @@ function scanScope(locationId: string) {
     eq(attendanceSourceState.recordKind, "scan"),
   );
 }
-async function endpoints(tx: Transaction, locationId: string) {
+async function endpoints(tx: Transaction) {
   const result: { source: Source; key: string; endpoint: number }[] = [];
   for (const source of rowSources) {
     const { rows } = await tx.execute<{ endpoint: number }>(
@@ -189,7 +189,7 @@ async function endpoints(tx: Transaction, locationId: string) {
     result.push({ source: source.source, key: source.key, endpoint: rows[0]!.endpoint });
   }
   const { rows } = await tx.execute<{ key: string; endpoint: number }>(
-    sql`select node_id as key, max(sequence_no) as endpoint from time_entries where location_id = ${locationId} group by node_id`,
+    sql`select node_id as key, sequence_no as endpoint from workforce_chains`,
   );
   for (const row of rows) result.push({ source: "clock", ...row });
   return result;
@@ -204,7 +204,7 @@ export async function beginAttendanceDiscovery(
     throw new AppError("attendance.invalid", { reason: "empty discovery generation" });
   const clock = await readLocationClock(tx, scope.locationId);
   await tx.delete(attendanceSourceState).where(scanScope(scope.locationId));
-  for (const endpoint of await endpoints(tx, scope.locationId)) {
+  for (const endpoint of await endpoints(tx)) {
     await tx.insert(attendanceSourceState).values({
       locationId: scope.locationId,
       ...endpoint,
@@ -347,7 +347,7 @@ async function sourcePage(tx: Transaction, scan: Scan, limit: number): Promise<S
   if (scan.source === "clock") {
     return (
       await tx.execute<SourceRow>(
-        sql`select sequence_no as position, id as key, person_id as personId, location_id as locationId, event_at as at, entry_kind as outcome, coalesce(corrects_entry_id, responds_to_entry_id) as relatedId from time_entries where node_id = ${scan.key} and location_id = ${scan.locationId} and sequence_no > ${scan.cursor} and sequence_no <= ${scan.endpoint} order by sequence_no limit ${limit}`,
+        sql`select sequence_no as position, id as key, person_id as personId, ${scan.locationId} as locationId, event_at as at, entry_kind as outcome, coalesce(corrects_entry_id, responds_to_entry_id) as relatedId from time_entries where node_id = ${scan.key} and sequence_no > ${scan.cursor} and sequence_no <= ${scan.endpoint} order by sequence_no limit ${limit}`,
       )
     ).rows;
   }
@@ -424,7 +424,7 @@ export async function discoverAttendanceDays(
     Object.assign(rotaScan, { cursor: 0, completed: rotaScan.endpoint === 0, fingerprint });
   }
 
-  for (const endpoint of await endpoints(tx, scope.locationId)) {
+  for (const endpoint of await endpoints(tx)) {
     const saved = scans.find((s) => s.source === endpoint.source && s.key === endpoint.key);
     if (!saved) {
       const [created] = await tx

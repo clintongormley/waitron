@@ -27,7 +27,7 @@ it.each(["accept", "disagree"] as const)(
     const f = await clockApp({ state: clockState("working", "in") });
     await signIn(f.el);
     await working(f.el);
-    const item = attendanceItem({ personId: "p1", locationId: "venue" });
+    const item = attendanceItem({ personId: "p1" });
     const prompt = attendancePrompt({
       personId: "p1",
       locationId: "venue",

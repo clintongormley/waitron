@@ -46,7 +46,6 @@ const pending: CorrectionItem = {
   id: itemId,
   requestEntryIds: [itemId],
   personId: worker,
-  locationId,
   direction: "worker_request",
   status: "waiting-manager",
   readyToApply: true,
@@ -59,7 +58,6 @@ const pending: CorrectionItem = {
     {
       entryId: itemId,
       personId: worker,
-      locationId,
       nodeId,
       entryKind: "correction",
       eventAt: "2026-10-13T15:00:00.000Z",

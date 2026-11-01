@@ -43,7 +43,6 @@ describe("till-shell", () => {
           locationId: "venue",
           businessDay: "2026-10-14",
           state,
-          activeLocationId: state === "out" ? null : "venue",
           lastEntryId: "entry",
           firstClockIn: false,
         },
@@ -100,7 +99,6 @@ describe("till-shell", () => {
           locationId: "venue",
           businessDay: "2026-10-14",
           state: "on_break",
-          activeLocationId: "venue",
           lastEntryId: "entry",
           firstClockIn: false,
         },
@@ -119,38 +117,22 @@ describe("till-shell", () => {
     }
   });
 
-  it.each([null, "another-venue"])(
-    "unknown or another-location clock state offers Retry or an explanation and disables clock writes (%s)",
-    async (activeLocation) => {
-      const { el } = await mountWidget<TillShell>("till-shell", {
-        formFactor: "tablet-landscape",
-        operatorName: "Ana",
-        clockAvailable: true,
-        clockError: "Could not read the clock",
-        clockState:
-          activeLocation === null
-            ? null
-            : {
-                personId: "ana",
-                locationId: "venue",
-                businessDay: "2026-10-14",
-                state: "working",
-                activeLocationId: activeLocation,
-                lastEntryId: "entry",
-                firstClockIn: false,
-              },
-      });
-      expect(
-        el.shadowRoot!.querySelector("[data-clock-action]")?.hasAttribute("disabled") ?? true,
-      ).toBe(true);
-      expect(el.shadowRoot!.querySelector(".logout")?.hasAttribute("disabled")).toBe(false);
-      if (activeLocation === null)
-        expect(el.shadowRoot!.querySelector("[data-clock-state]")?.textContent).toContain(
-          t("clock.unknown"),
-        );
-      else expect(el.shadowRoot!.textContent).toContain(t("clock.other_location"));
-    },
-  );
+  it("unknown clock state offers Retry and disables clock writes", async () => {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "tablet-landscape",
+      operatorName: "Ana",
+      clockAvailable: true,
+      clockError: "Could not read the clock",
+      clockState: null,
+    });
+    expect(
+      el.shadowRoot!.querySelector("[data-clock-action]")?.hasAttribute("disabled") ?? true,
+    ).toBe(true);
+    expect(el.shadowRoot!.querySelector(".logout")?.hasAttribute("disabled")).toBe(false);
+    expect(el.shadowRoot!.querySelector("[data-clock-state]")?.textContent).toContain(
+      t("clock.unknown"),
+    );
+  });
   it("renders the fixed primary buttons and marks the active one", async () => {
     const { el } = await mountWidget<TillShell>("till-shell", {
       formFactor: "till",
@@ -525,7 +507,6 @@ describe("till-shell", () => {
               locationId: "venue",
               businessDay: "2026-10-14",
               state: "working",
-              activeLocationId: "venue",
               lastEntryId: "entry",
               firstClockIn: false,
             },
@@ -867,7 +848,6 @@ describe("a handheld's More", () => {
       locationId: "venue",
       businessDay: "2026-10-14",
       state: "working",
-      activeLocationId: "venue",
       lastEntryId: "entry",
       firstClockIn: false,
     },
@@ -1414,7 +1394,6 @@ describe("till-shell at phone width", () => {
       locationId: "venue",
       businessDay: "2026-10-14",
       state: "working",
-      activeLocationId: "venue",
       lastEntryId: "entry",
       firstClockIn: false,
     },
@@ -1996,7 +1975,6 @@ describe("till-shell above phone width", () => {
             locationId: "venue",
             businessDay: "2026-10-14",
             state: "working",
-            activeLocationId: "venue",
             lastEntryId: "entry",
             firstClockIn: false,
           },

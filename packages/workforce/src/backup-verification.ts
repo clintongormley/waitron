@@ -115,7 +115,6 @@ function entry(row: BackupRow): VerifiableEntry {
   return {
     sequenceNo: integer(row, "sequence_no"),
     personId: text(row, "person_id"),
-    locationId: text(row, "location_id"),
     nodeId: text(row, "node_id"),
     entryKind: text(row, "entry_kind"),
     eventAt: instant(row, "event_at"),
@@ -134,8 +133,8 @@ function entry(row: BackupRow): VerifiableEntry {
     extension,
   };
 }
-function scope(row: BackupRow): string {
-  return JSON.stringify([text(row, "node_id"), text(row, "location_id")]);
+function chainScope(row: BackupRow): string {
+  return JSON.stringify([text(row, "node_id")]);
 }
 async function checkTime(query: BackupQuery): Promise<{ chain: boolean; head: boolean }> {
   const groups = new Map<string, { entries: VerifiableEntry[]; last: BackupRow }>();
@@ -143,10 +142,10 @@ async function checkTime(query: BackupQuery): Promise<{ chain: boolean; head: bo
   let head = true;
   if (await has(query, "time_entries")) {
     for await (const row of query.rows(
-      "select * from time_entries order by node_id, location_id, sequence_no",
+      "select * from time_entries order by node_id, sequence_no",
     )) {
       try {
-        const key = scope(row);
+        const key = chainScope(row);
         const group = groups.get(key) ?? { entries: [], last: row };
         group.entries.push(entry(row));
         group.last = row;
@@ -162,7 +161,7 @@ async function checkTime(query: BackupQuery): Promise<{ chain: boolean; head: bo
   if (await has(query, "workforce_chains")) {
     for await (const row of query.rows("select * from workforce_chains")) {
       try {
-        const key = scope(row);
+        const key = chainScope(row);
         const last = groups.get(key)?.last;
         seen.add(key);
         if (last === undefined) {
@@ -203,12 +202,11 @@ async function checkClosures(query: BackupQuery): Promise<boolean> {
   let valid = true;
   for await (const row of query.rows("select * from pay_period_closures")) {
     try {
-      const key = scope(row);
+      const key = chainScope(row);
       const group = groups.get(key) ?? [];
       group.push({
         id: text(row, "id"),
         nodeId: text(row, "node_id"),
-        locationId: text(row, "location_id"),
         period: { start: text(row, "period_start"), end: text(row, "period_end") },
         clock: json(row, "clock") as PayPeriodClosure["clock"],
         snapshot: json(row, "snapshot") as PayPeriodClosure["snapshot"],

@@ -11,7 +11,6 @@ export interface TillClockState {
   locationId: string;
   businessDay: string;
   state: TillClockStatus;
-  activeLocationId: string | null;
   lastEntryId: string | null;
   firstClockIn: boolean;
 }
@@ -46,7 +45,6 @@ export async function readTillClockState(
     .where(
       and(
         eq(timeEntries.personId, scope.personId),
-        eq(timeEntries.locationId, scope.locationId),
         liveEntry,
         sql`${liveKind} = 'in'`,
         gte(timeEntries.eventAt, bounds.startAt),
@@ -60,7 +58,6 @@ export async function readTillClockState(
     locationId: scope.locationId,
     businessDay,
     state,
-    activeLocationId: state === "out" ? null : latest!.locationId,
     lastEntryId: latest?.entryId ?? null,
     firstClockIn: clockedIn === undefined,
   };

@@ -116,7 +116,7 @@ async function snapshot() {
     rows: await suite.db.select().from(timeEntries),
     questions: await suite.db.select().from(attendanceQuestions),
     commands: suite.db.all(sql`select * from attendance_response_commands order by id`),
-    heads: suite.db.all(sql`select * from workforce_chains order by node_id, location_id`),
+    heads: suite.db.all(sql`select * from workforce_chains order by node_id`),
   };
 }
 async function pending() {
@@ -230,6 +230,7 @@ it.each(routes)("rejects a profile without clock-in on %s", async (path, body) =
 it.each(["ended", "disabled", "deleted", "admission", "suspended", "location"] as const)(
   "rechecks %s admission on every attendance route",
   async (kind) => {
+    const valid = await command();
     if (kind === "ended")
       await suite.db
         .update(sessions)
@@ -263,10 +264,7 @@ it.each(["ended", "disabled", "deleted", "admission", "suspended", "location"] a
     }
     const before = await snapshot();
     for (const [path, body] of routes) {
-      const response = await request(
-        pathOf(path),
-        body === undefined ? undefined : await command(),
-      );
+      const response = await request(pathOf(path), body === undefined ? undefined : valid);
       expect(response.status, path).toBe(kind === "ended" ? 401 : 403);
       expect(await response.json()).toMatchObject({
         error: {
@@ -299,7 +297,6 @@ it("records trusted requester and device, then replays before the old revision a
     recordedByPersonId: venue.personId,
     capturedBySource: "device",
     capturedByDeviceId: venue.deviceId,
-    locationId: venue.cfg.locationId,
     nodeId: venue.cfg.nodeId,
     eventAt: "2026-01-05T18:00:00.000Z",
   });
@@ -315,7 +312,8 @@ it("records trusted requester and device, then replays before the old revision a
   expect(inbox.prompts).toEqual([]);
 });
 
-it("refuses arbitrary workplaces but permits recorded historical workplaces", async () => {
+it("refuses arbitrary workplaces but permits a workplace where the worker has a question", async () => {
+  const valid = await command();
   const [other] = await suite.db
     .insert(locations)
     .values({ name: "Other", invoiceLocales: ["es"], operationDescription: "Restaurant" })
@@ -323,7 +321,7 @@ it("refuses arbitrary workplaces but permits recorded historical workplaces", as
   const path = `day?date=2026-01-05&locationId=${other!.id}`;
   expect((await request(path)).status).toBe(403);
   const body = {
-    ...(await command()),
+    ...valid,
     locationId: other!.id,
     changes: [
       { target: { missingKind: "in" }, at: "2026-01-04T09:00:00Z", offsetMinutes: 60 },
@@ -347,8 +345,9 @@ it("refuses arbitrary workplaces but permits recorded historical workplaces", as
     endAt: "2026-01-05T04:00:00.000Z",
     missingKinds: ["in", "out"],
   });
-  expect((await request(path)).status).toBe(200);
-  body.expectedRevision = await revision();
+  const day = await request(path);
+  expect(day.status).toBe(200);
+  body.expectedRevision = ((await day.json()) as { revision: string }).revision;
   expect((await request("commands", body)).status).toBe(200);
 });
 

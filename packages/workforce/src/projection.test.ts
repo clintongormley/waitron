@@ -17,7 +17,6 @@ function entry(
   entryKind: WorkforceEntryKind,
   eventAt: string,
   opts: {
-    locationId?: string;
     nodeId?: string;
     offsetMinutes?: number;
     entryId?: string;
@@ -32,7 +31,6 @@ function entry(
   return {
     entryId: opts.entryId ?? `e${seq}`,
     personId,
-    locationId: opts.locationId ?? "loc-1",
     nodeId: opts.nodeId ?? "node-1",
     entryKind,
     eventAt,
@@ -73,7 +71,6 @@ describe("projectWorkSessions", () => {
     expect(sessions).toEqual([
       {
         personId: "p1",
-        locationId: "loc-1",
         workDate: "2026-01-05",
         startedAt: "2026-01-05T09:00:00Z",
         startOffsetMinutes: 0,

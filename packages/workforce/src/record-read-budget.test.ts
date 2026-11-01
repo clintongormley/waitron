@@ -78,7 +78,7 @@ it("reads only the latest live instant when checking an ordinary clock action", 
       backend.clockOut(tx, event(personId, "2026-01-05T17:00:00Z")),
     );
   }
-  expect(verifyChain(await readChain(suite.db, { nodeId, locationId }))).toEqual({ ok: true });
+  expect(verifyChain(await readChain(suite.db, { nodeId }))).toEqual({ ok: true });
 });
 it("reads a correction target directly without decoding its person's other entries", async () => {
   const result = await timeRows(() =>
@@ -124,7 +124,7 @@ it("does not decode another person's incomplete attribution during an own-record
   await withTransaction(suite.db, (tx) =>
     appendToChain(
       tx,
-      { nodeId, locationId },
+      { nodeId },
       {
         personId,
         entryKind: "in",
@@ -172,7 +172,7 @@ it("orders simultaneous live events by chain position and ignores the later ackn
     ).rejects.toMatchObject({ code: "attendance.already_open" });
   });
   expect(result.rows).toBe(1);
-  expect(verifyChain(await readChain(suite.db, { nodeId, locationId }))).toEqual({ ok: true });
+  expect(verifyChain(await readChain(suite.db, { nodeId }))).toEqual({ ok: true });
 });
 
 it("uses an approved missing start as live state while ignoring its pending request", async () => {
@@ -183,7 +183,6 @@ it("uses an approved missing start as live state while ignoring its pending requ
     backend.requestCorrection(tx, {
       nodeId,
       personId: worker,
-      locationId,
       missingEntryKind: "in",
       at: "2026-01-06T09:00:00Z",
       offsetMinutes: 0,
@@ -206,5 +205,5 @@ it("uses an approved missing start as live state while ignoring its pending requ
     ).rejects.toMatchObject({ code: "attendance.already_open" });
   });
   expect(result.rows).toBe(1);
-  expect(verifyChain(await readChain(suite.db, { nodeId, locationId }))).toEqual({ ok: true });
+  expect(verifyChain(await readChain(suite.db, { nodeId }))).toEqual({ ok: true });
 });

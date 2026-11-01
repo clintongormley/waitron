@@ -53,10 +53,7 @@ async function windowFor(
   const date = input.selection.date === undefined ? businessDay : input.selection.date;
   if (!isRecordDate(date)) throw invalid();
   if (input.selection.kind === "pay-period") {
-    const saved = await readClosures(tx, {
-      locationId: input.locationId,
-      period: { start: date, end: nextDate(date) },
-    });
+    const saved = await readClosures(tx, { period: { start: date, end: nextDate(date) } });
     return {
       businessDay,
       period: saved[0]?.period ?? resolvePayPeriod(await readPayPeriodSettings(tx), date),
@@ -103,17 +100,15 @@ async function personInWindow(
   const { personId, locationId } = input;
   if (typeof personId !== "string" || !personId) throw invalid();
   const { period, businessDay } = window;
-  const entries = await readRecordedEntries(tx, { personId, locationId });
-  const record = await readTimeRecord(tx, { personId, locationId, period });
+  const entries = await readRecordedEntries(tx, { personId });
+  const record = await readTimeRecord(tx, { personId, period });
   const inbox = await readAttendanceInbox(tx, personId);
   const fullRecord = projectTimeRecord(entries);
   const openShifts = openShiftsFor(entries);
   const pending = {
     prompts: inbox.prompts.filter((p) => p.locationId === locationId),
-    items: inbox.items.filter(
-      (i) =>
-        i.locationId === locationId &&
-        ["waiting-manager", "waiting-worker", "disputed"].includes(i.status),
+    items: inbox.items.filter((i) =>
+      ["waiting-manager", "waiting-worker", "disputed"].includes(i.status),
     ),
     automaticEntryIds: fullRecord.entries
       .filter(
@@ -150,7 +145,7 @@ async function personInWindow(
       workedMinutes: sessions.reduce((sum, s) => sum + s.workedMinutes, 0),
     });
   }
-  const saved = await readClosures(tx, { locationId, period });
+  const saved = await readClosures(tx, { period });
   const closures = record.closures.map((view) => {
     const closure = saved.find((row) => row.id === view.closureId)!;
     return {

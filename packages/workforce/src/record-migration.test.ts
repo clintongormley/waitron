@@ -140,11 +140,11 @@ describe("empty automatic-author upgrade", () => {
     const nodeId = await seedNode(suite.db, brandLocationId(locationId));
     suite.db.execute(sql`
       insert into time_entries (
-        id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+        id, person_id, node_id, entry_kind, event_at, event_offset_minutes,
         recorded_by_person_id, captured_by_source, recorded_at, author_kind,
         entry_hash, sequence_no, is_first_entry
       ) values (
-        ${newId()}, ${personId}, ${locationId}, ${nodeId}, 'out', '2026-01-05T18:00:00.000Z', 0,
+        ${newId()}, ${personId}, ${nodeId}, 'out', '2026-01-05T18:00:00.000Z', 0,
         null, 'dashboard', '2026-01-06T09:00:00.000Z', 'automatic', ${"A".repeat(64)}, 1, true
       )`);
     expect(

@@ -27,7 +27,6 @@ function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 async function clockDay(
   personId: string,
   nodeId: string,
-  locationId: string,
   date: string,
   from: string,
   to: string,
@@ -36,7 +35,6 @@ async function clockDay(
     backend.clockIn(tx, {
       nodeId,
       personId,
-      locationId,
       at: `${date}T${from}:00Z`,
       offsetMinutes: 0,
       origin: jobOrigin("dashboard"),
@@ -46,7 +44,6 @@ async function clockDay(
     backend.clockOut(tx, {
       nodeId,
       personId,
-      locationId,
       at: `${date}T${to}:00Z`,
       offsetMinutes: 0,
       origin: jobOrigin("dashboard"),
@@ -63,7 +60,7 @@ describe("workSummary driven by a resolved convenio_config ruleset", () => {
     await seedEmployment(suite.db, { personId, contractedMinutesPerWeek: 2400 });
     await seedConvenioConfig(suite.db, { locationId });
     for (const day of ["2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08", "2026-01-09"]) {
-      await clockDay(personId, nodeId, locationId, day, "08:00", "17:00");
+      await clockDay(personId, nodeId, day, "08:00", "17:00");
     }
 
     const ruleset = await run((tx) => resolveWorkTimeRuleset(tx, { locationId }));
@@ -108,8 +105,8 @@ describe("workSummary driven by a resolved convenio_config ruleset", () => {
       locationId: periodLoc,
       overtimeModel: "period_net",
     });
-    await clockDay(personId, dailyNode, dailyLoc, "2026-01-05", "08:00", "17:00"); // 9h
-    await clockDay(personId, dailyNode, dailyLoc, "2026-01-06", "09:00", "16:00"); // 7h
+    await clockDay(personId, dailyNode, "2026-01-05", "08:00", "17:00"); // 9h
+    await clockDay(personId, dailyNode, "2026-01-06", "09:00", "16:00"); // 7h
 
     const query = {
       personId,

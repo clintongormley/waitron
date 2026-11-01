@@ -2,7 +2,7 @@ import "./errors.js";
 import { and, eq } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { attendanceQuestions, timeEntries } from "@waitron/workforce";
+import { attendanceQuestions } from "@waitron/workforce";
 
 export async function assertOwnAttendanceLocation(
   tx: Transaction,
@@ -10,12 +10,6 @@ export async function assertOwnAttendanceLocation(
 ): Promise<void> {
   const { personId, locationId, currentLocationId } = scope;
   if (locationId === currentLocationId) return;
-  const [entry] = await tx
-    .select({ id: timeEntries.id })
-    .from(timeEntries)
-    .where(and(eq(timeEntries.personId, personId), eq(timeEntries.locationId, locationId)))
-    .limit(1);
-  if (entry) return;
   const [question] = await tx
     .select({ id: attendanceQuestions.id })
     .from(attendanceQuestions)

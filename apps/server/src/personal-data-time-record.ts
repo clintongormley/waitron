@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   selectTimeRecordExport,
   type ModulePersonalData,
@@ -13,7 +13,7 @@ import { renderAttendancePdf } from "./attendance-export-pdf.js";
 
 export const TIME_RECORD_FILES = ["time-record.pdf", "time-record.csv"] as const;
 
-/** The person's working-time record at this node's location, through the same export seat and the
+/** The person's working-time record at the venue, through the same export seat and the
  * same call the own-export route makes. Empty unless `workforce` (whose tables the exporter reads)
  * and an exporter are both enabled. */
 export function timeRecordPersonalData(modules: readonly WaitronModule[]): PersonalDataPart[] {
@@ -31,9 +31,7 @@ export function timeRecordPersonalData(modules: readonly WaitronModule[]): Perso
           last: sql<string | null>`max(${localDay})`,
         })
         .from(timeEntries)
-        .where(
-          and(eq(timeEntries.personId, subject.personId), eq(timeEntries.locationId, locationId)),
-        );
+        .where(eq(timeEntries.personId, subject.personId));
       if (days?.first == null || days.last == null) return async () => [];
       const today = civilDateOf(subject.at, subject.timeZone);
       const format = await exporter.prepare(tx, {

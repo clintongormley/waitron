@@ -128,7 +128,6 @@ for (const enabled of [true, false]) {
             other = person!.id;
             await new WorkforceBackend().clockIn(tx, {
               nodeId: f.venue.cfg.nodeId,
-              locationId: f.venue.cfg.locationId,
               personId: f.venue.personId,
               at: "2026-01-05T09:00:00Z",
               offsetMinutes: 60,
@@ -217,7 +216,6 @@ for (const enabled of [true, false]) {
             beforeServerStarts();
             const before = await readChain(suite.db, {
               nodeId: f.venue.cfg.nodeId,
-              locationId: f.venue.cfg.locationId,
             });
             const generation = (await suite.db.select().from(attendanceSourceState)).find(
               (s) => s.recordKind === "scan",
@@ -235,7 +233,6 @@ for (const enabled of [true, false]) {
             expect(
               await readChain(suite.db, {
                 nodeId: f.venue.cfg.nodeId,
-                locationId: f.venue.cfg.locationId,
               }),
             ).toEqual(before);
             expect(sender).toHaveBeenCalledTimes(1);

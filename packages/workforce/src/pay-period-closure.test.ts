@@ -38,7 +38,6 @@ beforeEach(async () => {
 });
 const event = (at: string, personId = worker) => ({
   nodeId,
-  locationId,
   personId,
   at,
   offsetMinutes: 0,
@@ -48,7 +47,6 @@ const close = (patch: Partial<Parameters<typeof api.closePayPeriod>[1]> = {}) =>
   run((tx) =>
     api.closePayPeriod(tx, {
       nodeId,
-      locationId,
       period,
       clock,
       now: "2026-11-01T05:00:00Z",
@@ -157,7 +155,7 @@ it("freezes an already counted automatic end without a worker response or change
   expect(
     (await run((tx) => backend.getPlannedVsActual(tx, { locationId, period })))[0]!.workedMinutes,
   ).toBe(480);
-  expect(api.verifyChain(await api.readChain(suite.db, { nodeId, locationId }))).toEqual({
+  expect(api.verifyChain(await api.readChain(suite.db, { nodeId }))).toEqual({
     ok: true,
   });
   expect(api.verifyPayPeriodClosures([frozen])).toEqual({ ok: true });
@@ -211,6 +209,18 @@ it("serialises simultaneous closes into one closure and one marker", async () =>
   expect(
     (await suite.db.select().from(api.timeEntries)).filter((e) => e.entryKind === "confirmation"),
   ).toHaveLength(1);
+});
+it("closes a period once for the venue", async () => {
+  const first = await close();
+  const secondNode = await seedNode(suite.db, brandedLocationId(locationId));
+  const again = await close({ nodeId: secondNode });
+  expect(again.id).toBe(first.id);
+  expect(await api.readPayPeriodClosures(suite.db, { period })).toHaveLength(1);
+  const february = await close({
+    period: { start: "2026-11-01", end: "2026-12-01" },
+    now: "2026-12-01T05:00:00Z",
+  });
+  expect(february.sequenceNo).toBe(2);
 });
 it("rolls back closure, markers and time-chain head when a second marker is refused", async () => {
   await automatic();
@@ -340,7 +350,6 @@ it("freezes missing-entry requests and competing disputes without inventing a se
     backend.requestCorrection(tx, {
       nodeId,
       personId: worker,
-      locationId,
       missingEntryKind: "in",
       at: "2026-10-05T09:00:00Z",
       offsetMinutes: 0,
@@ -353,7 +362,6 @@ it("freezes missing-entry requests and competing disputes without inventing a se
     backend.proposeCorrection(tx, {
       nodeId,
       personId: other,
-      locationId,
       missingEntryKind: "in",
       at: "2026-10-05T10:00:00Z",
       offsetMinutes: 0,
@@ -393,7 +401,6 @@ it("freezes accepted missing clock-in and clock-out entries with their requests"
       backend.requestCorrection(tx, {
         nodeId,
         personId: worker,
-        locationId,
         missingEntryKind,
         at,
         offsetMinutes: 0,
@@ -411,11 +418,6 @@ it("freezes accepted missing clock-in and clock-out entries with their requests"
   expect(frozen.snapshot.entries).toHaveLength(4);
   expect(frozen.snapshot.markedAutomaticEntryIds).toEqual([]);
 });
-it.each([null, "", []])("refuses a malformed closure read location %j", async (bad) => {
-  await expect(
-    api.readPayPeriodClosures(suite.db, { locationId: bad as string, period }),
-  ).rejects.toMatchObject({ code: "pay_period.invalid" });
-});
 it("reads overlapping closures and verifies successive months on the same chain", async () => {
   const first = await close();
   const nextPeriod = { start: "2026-11-01", end: "2026-12-01" };
@@ -425,16 +427,12 @@ it("reads overlapping closures and verifies successive months on the same chain"
   expect(api.verifyPayPeriodClosures([second, first])).toEqual({ ok: true });
   expect(
     await api.readPayPeriodClosures(suite.db, {
-      locationId,
       period: { start: "2026-10-15", end: "2026-11-15" },
     }),
   ).toEqual([first, second]);
-  expect(await api.readPayPeriodClosures(suite.db, { locationId, period: nextPeriod })).toEqual([
-    second,
-  ]);
+  expect(await api.readPayPeriodClosures(suite.db, { period: nextPeriod })).toEqual([second]);
   expect(
     await api.readPayPeriodClosures(suite.db, {
-      locationId,
       period: { start: "2026-12-01", end: "2027-01-01" },
     }),
   ).toEqual([]);
@@ -444,7 +442,7 @@ it("reads and replays every person's frozen history when the caller's object als
   await automatic(other);
   const first = await close();
   expect(first.snapshot.summaries.map((s) => s.personId).sort()).toEqual([other, worker].sort());
-  const withPerson = { locationId, period, personId: worker };
+  const withPerson = { period, personId: worker };
   expect(await api.readPayPeriodClosures(suite.db, withPerson)).toEqual([first]);
   expect(
     await close({ personId: worker } as Partial<Parameters<typeof api.closePayPeriod>[1]>),

@@ -53,11 +53,11 @@ function shape(over: Partial<Shape> = {}): Shape {
 async function insert(s: Shape, sequence = 1) {
   const id = newId();
   await suite.db.execute(sql`insert into time_entries (
- id, person_id, location_id, node_id, entry_kind, event_at, recorded_at, event_offset_minutes,
+ id, person_id, node_id, entry_kind, event_at, recorded_at, event_offset_minutes,
  recorded_by_person_id, captured_by_source, author_kind, correction_direction, missing_entry_kind,
  responds_to_entry_id, pay_period_closure_id, corrects_entry_id, correction_status, correction_reason,
  correction_actor_id, entry_hash, sequence_no, is_first_entry
- ) values (${id}, ${s.subject}, ${locationId}, ${nodeId}, ${s.kind}, '2026-01-05T09:00:00.000Z',
+ ) values (${id}, ${s.subject}, ${nodeId}, ${s.kind}, '2026-01-05T09:00:00.000Z',
  '2026-01-05T09:00:00.000Z', 0, ${s.recorder}, 'dashboard', ${s.author}, ${s.direction}, ${s.missing},
  ${s.response}, ${s.closure}, ${s.target}, ${s.status}, ${s.reason}, ${s.actor}, ${"A".repeat(64)}, ${sequence}, 1)`);
   return id;
@@ -177,8 +177,8 @@ describe("pay period schema", () => {
   it("writes a frozen closure, refuses changing or deleting it, and accepts its counting marker", async () => {
     const id = newId();
     await suite.db
-      .execute(sql`insert into pay_period_closures (id, node_id, location_id, period_start, period_end, clock, scheduled_close_at, closed_at, snapshot, sequence_no, prev_closure_hash, closure_hash)
-   values (${id}, ${nodeId}, ${locationId}, '2026-01-01', '2026-02-01', '{"timeZone":"Europe/Madrid","dayCutover":"06:00"}', '2026-02-01T05:00:00.000Z', '2026-02-01T05:00:00.000Z', '{"sessions":[],"entries":[],"summaries":[],"markedAutomaticEntryIds":[]}', 1, null, ${"A".repeat(64)})`);
+      .execute(sql`insert into pay_period_closures (id, node_id, period_start, period_end, clock, scheduled_close_at, closed_at, snapshot, sequence_no, prev_closure_hash, closure_hash)
+   values (${id}, ${nodeId}, '2026-01-01', '2026-02-01', '{"timeZone":"Europe/Madrid","dayCutover":"06:00"}', '2026-02-01T05:00:00.000Z', '2026-02-01T05:00:00.000Z', '{"sessions":[],"entries":[],"summaries":[],"markedAutomaticEntryIds":[]}', 1, null, ${"A".repeat(64)})`);
     const target = await insert(shape({ kind: "out", author: "automatic", recorder: null }));
     await insert(
       shape({

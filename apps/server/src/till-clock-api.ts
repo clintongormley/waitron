@@ -149,16 +149,9 @@ async function writeClock(
   before: TillClockState,
   at: Date,
 ): Promise<TillClockState> {
-  if (
-    action !== "in" &&
-    before.activeLocationId !== null &&
-    before.activeLocationId !== deps.cfg.locationId
-  )
-    throw new AppError("attendance.not_permitted", { personId: session.personId });
   const clock = await readLocationClock(tx, deps.cfg.locationId);
   const input = {
     nodeId: deps.cfg.nodeId,
-    locationId: deps.cfg.locationId,
     personId: session.personId,
     recordedByPersonId: session.personId,
     at: at.toISOString(),

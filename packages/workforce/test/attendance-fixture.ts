@@ -1,5 +1,5 @@
 import { beforeEach } from "vitest";
-import { CORE_MIGRATIONS, type Transaction, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, newId, type Transaction, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
@@ -22,7 +22,7 @@ export function attendanceFixture() {
   beforeEach(async () => {
     await seedTenant(suite.db);
     locationId = await seedLocation(suite.db);
-    elsewhere = await seedLocation(suite.db);
+    elsewhere = newId();
     nodeId = await seedNode(suite.db, brandLocationId(locationId));
     const rows = await suite.db
       .insert(persons)
@@ -45,7 +45,6 @@ export function attendanceFixture() {
   const event = (at: string) => ({
     nodeId,
     personId,
-    locationId,
     at,
     offsetMinutes: 0,
     origin: jobOrigin("dashboard"),

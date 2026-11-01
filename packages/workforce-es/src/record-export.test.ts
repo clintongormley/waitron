@@ -60,7 +60,6 @@ beforeEach(async () => {
 });
 const event = (at: string, personId = worker) => ({
   nodeId,
-  locationId,
   personId,
   at,
   offsetMinutes: 0,
@@ -80,24 +79,23 @@ const doc = async (patch: Partial<RecordExportInput> = {}) => {
 const cells = (d: RecordExportDocument, key: string) =>
   d.sections.find((s) => s.key === key)!.rows.map((r) => r.cells);
 const rows = (d: RecordExportDocument) => d.sections.flatMap((s) => s.rows.map((r) => r.cells));
-const read = () => run((tx) => backend.timeRecord(tx, { period, locationId, personId: worker }));
+const read = () => run((tx) => backend.timeRecord(tx, { period, personId: worker }));
 async function day(automatic = false, personId = worker) {
   await run((tx) => backend.clockIn(tx, event("2026-01-05T09:00:00Z", personId)));
-  const entries = await run((tx) => backend.timeRecord(tx, { period, personId, locationId }));
+  const entries = await run((tx) => backend.timeRecord(tx, { period, personId }));
   const openEntryId = entries.entries[0]!.entry.entryId;
   if (automatic)
     return run((tx) =>
       backend.recordAutomaticClose(tx, { ...event("2026-01-05T17:00:00Z", personId), openEntryId }),
     );
   await run((tx) => backend.clockOut(tx, event("2026-01-05T17:00:00Z", personId)));
-  return (await run((tx) => backend.timeRecord(tx, { period, personId, locationId }))).entries[1]!
-    .entry.entryId;
+  return (await run((tx) => backend.timeRecord(tx, { period, personId }))).entries[1]!.entry
+    .entryId;
 }
 const close = () =>
   run((tx) =>
     closePayPeriod(tx, {
       nodeId,
-      locationId,
       period,
       clock: { timeZone: "UTC", dayCutover: "06:00", cutoverChanges: [] },
       now: "2026-02-01T06:00:00Z",
@@ -288,6 +286,16 @@ it("keeps the captured record, names and input after later writes", async () => 
     workedMinutes: 540,
   });
 });
+it("exports a shift begun on one node and ended on another as one session", async () => {
+  const otherNode = await seedNode(suite.db, brandLocationId(locationId));
+  await run((tx) => backend.clockIn(tx, event("2026-01-05T09:00:00Z")));
+  await run((tx) => backend.clockOut(tx, { ...event("2026-01-05T17:00:00Z"), nodeId: otherNode }));
+  await close();
+  const exported = await doc({ personId: worker });
+  for (const key of ["sessions", "frozen-sessions"])
+    expect(cells(exported, key).map((r) => r.workedMinutes)).toEqual([480]);
+});
+
 it("exports empty and open history without inventing a completed session", async () => {
   const empty = await doc();
   expect(cells(empty, "sessions")).toEqual([]);
@@ -476,4 +484,32 @@ it.each([
 ] as const)("exports access-holder labels for $locale", async ({ locale, holders }) => {
   const exported = await doc({ locale });
   expect(cells(exported, "metadata").map((row) => row.accessHolder)).toEqual(holders);
+});
+it("names the venue once and gives entries and closures no workplace column", async () => {
+  await day();
+  await close();
+  const english = await doc({ locale: "en" });
+  const metadata = english.sections.find((s) => s.key === "metadata")!;
+  expect(metadata.columns.map((c) => c.key)).toEqual([
+    "locationName",
+    "periodStart",
+    "periodEnd",
+    "audience",
+    "retainUntil",
+    "accessHolder",
+  ]);
+  expect(metadata.columns.slice(0, 3).map((c) => c.label)).toEqual([
+    "Workplace",
+    "From",
+    "Before (excluded)",
+  ]);
+  for (const key of ["history", "frozen-history", "closures"])
+    expect(english.sections.find((s) => s.key === key)!.columns.map((c) => c.key)).not.toContain(
+      "locationId",
+    );
+  expect(english.notes.filter((note) => note.includes("Chain position"))).toEqual([]);
+  const spanish = await doc({ locale: "es" });
+  expect(spanish.sections.find((s) => s.key === "metadata")!.columns[0]!.label).toBe(
+    "Centro de trabajo",
+  );
 });

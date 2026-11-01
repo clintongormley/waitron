@@ -1,5 +1,7 @@
 # A1268 — working time is per venue: one pull request (#2375, revised)
 
+**Status:** built (Tasks 0–10), under review as #2375; it lands only after that review and green CI.
+
 > **Revision 2 (2026-11-01).** Rewritten for the owner's per-venue decisions (design revision 2):
 > no location on clock entries, sessions, corrections, confirmations or pay-period closures; both
 > hashes lose the location; the export names the venue once. Revision 1's PR 2 is not built. The

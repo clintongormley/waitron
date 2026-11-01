@@ -40,7 +40,6 @@ beforeEach(async () => {
 afterEach(() => vi.useRealTimers());
 const event = (at: string) => ({
   nodeId,
-  locationId,
   personId: worker,
   at,
   offsetMinutes: 0,
@@ -61,7 +60,6 @@ const close = () =>
   run((tx) =>
     closePayPeriod(tx, {
       nodeId,
-      locationId,
       period,
       clock: { timeZone: "UTC", dayCutover: "06:00", cutoverChanges: [] },
       now: "2026-02-01T06:00:00Z",
@@ -115,7 +113,6 @@ it("exports a worker request and manager approval with their separate authors an
   expect(result.entradas!.find((e) => e.entryId === answer)).toEqual({
     entryId: answer,
     personId: worker,
-    locationId,
     tipo: "correction",
     tipoEntradaFaltante: null,
     direccionCorreccion: "worker_request",
@@ -240,7 +237,6 @@ it("exports missing in/out requests and a decline even when no session exists", 
         backend.requestCorrection(tx, {
           nodeId,
           personId: worker,
-          locationId,
           missingEntryKind,
           at,
           offsetMinutes: 0,

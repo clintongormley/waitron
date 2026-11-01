@@ -38,7 +38,7 @@ async function freshPerson(name: string): Promise<string> {
 }
 
 function event(personId: string, at: string): ClockEventInput {
-  return { nodeId, personId, locationId, at, offsetMinutes: 0, origin: jobOrigin("dashboard") };
+  return { nodeId, personId, at, offsetMinutes: 0, origin: jobOrigin("dashboard") };
 }
 
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -133,7 +133,6 @@ describe("clock state machine", () => {
       backend.clockIn(tx, {
         nodeId,
         personId: p,
-        locationId,
         at: "2026-01-05T09:00:00Z",
         offsetMinutes: 0,
         origin: deviceOrigin(deviceId),

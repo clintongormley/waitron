@@ -5336,9 +5336,7 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 - **The box's certificate issued under a wrong clock.**
   [Detail](backlog/box.md#the-boxs-certificate-issued-under-a-wrong-clock)
 
-- **A1268. Clock-ins are per venue: no location on clock entries, sessions, corrections or
-  pay-period closures, one working-time chain per node** (owner, 2026-11-01), and the reads that
-  still order a person's entries by time after a backward clock step. [Detail](backlog/box.md#a1268-clock-ins-are-per-venue-and-the-reads-that-order-entries-by-time-after-a-backward-step)
+- **A1268 part 2: pair a person's entries by write order after a backward clock step.** [Detail](backlog/box.md#a1268-part-2-pair-a-persons-entries-by-write-order-after-a-backward-clock-step)
 
 - **B3 keeps or replaces the clock requests slice 9b shipped.**
   [Detail](backlog/box.md#b3-keeps-or-replaces-the-clock-requests-slice-9b-shipped)
@@ -6448,8 +6446,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   the venue only). The build plan covers S1–S12, S16, S17 and F1–F5; the watcher hands out its
   slices. S1 landed (#2379): `@waitron/db`'s `readVenue`, `readVenueClock`,
   `readVenueClockAndPlace` and the interim `venueLocationId` are on main, so S2–S12, S16 and F1 can
-  start. S13–S15 wait for A1268, S18 for S2–S17, and the schema slices S20–S28 get a plan of their
-  own, which first settles what the venue id sent to Cloud and naming the backup folder becomes.
+  start. S13–S15 can start now that A1268 has landed (#2375), S18 waits for S2–S17, and the schema
+  slices S20–S28 get a plan of their own, which first settles what the venue id sent to Cloud and
+  naming the backup folder becomes.
   [Design](superpowers/specs/2026-11-01-a1301-remove-location-design.md),
   [plan](superpowers/plans/2026-11-01-a1301-remove-location.md)
 
@@ -7051,7 +7050,7 @@ Spain-hosting assumption; wider country policy belongs to Cloud.
 **The laboral advisor** (a _graduado social / gestoría_) has its own list in
 [asesor-laboral-questions.md](compliance/asesor-laboral-questions.md). Nothing there blocks the build;
 two items want confirming before go-live (the digital-registro RD's status; the provincial convenio
-and figures), plus whether a location's exported working-time record may show per-node chains. The
+and figures), plus whether the venue's exported working-time record may show per-node chains. The
 gestoría's payroll import layout is the one build dependency (it fixes the D3 export format). A tip
 collected through the card terminal is business income — an accounting/payroll matter, not the
 factura.

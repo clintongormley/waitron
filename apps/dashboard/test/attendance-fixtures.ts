@@ -5,7 +5,6 @@ export function attendanceEntry(patch: Partial<TimeEntryRecord> = {}): TimeEntry
   return {
     entryId: "automatic-out",
     personId: "worker",
-    locationId: "deli",
     nodeId: "node",
     entryKind: "out",
     eventAt: "2026-10-13T23:30:00.000Z",
@@ -60,7 +59,6 @@ export function attendanceItem(patch: Partial<CorrectionItem> = {}): CorrectionI
     id: "proposal",
     requestEntryIds: ["proposed-out"],
     personId: "worker",
-    locationId: "deli",
     direction: "manager_proposal",
     status: "waiting-worker",
     readyToApply: true,
@@ -106,7 +104,6 @@ export function attendanceItem(patch: Partial<CorrectionItem> = {}): CorrectionI
   item.history = item.history.map((entry) => ({
     ...entry,
     personId: item.personId,
-    locationId: item.locationId,
     recordedByPersonId:
       entry.recordedByPersonId === "worker" ? item.personId : entry.recordedByPersonId,
   }));

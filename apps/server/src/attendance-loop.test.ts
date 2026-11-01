@@ -54,7 +54,6 @@ async function seed() {
   await withTransaction(suite.db, async (tx) => {
     await backend.clockIn(tx, {
       nodeId,
-      locationId,
       personId,
       at: "2026-01-05T09:00:00Z",
       offsetMinutes: 60,
@@ -158,14 +157,13 @@ describe("attendance duty pass", () => {
     await withTransaction(suite.db, (tx) =>
       backend.clockIn(tx, {
         nodeId: oldNode,
-        locationId,
         personId,
         at: "2026-01-05T09:00:00Z",
         offsetMinutes: 60,
         origin: jobOrigin("dashboard"),
       }),
     );
-    const before = await readChain(suite.db, { nodeId: oldNode, locationId });
+    const before = await readChain(suite.db, { nodeId: oldNode });
     await withTransaction(suite.db, (tx) =>
       recordAttendanceFact(tx, {
         source: "order",
@@ -179,11 +177,11 @@ describe("attendance duty pass", () => {
       }),
     );
     await settle();
-    expect(await readChain(suite.db, { nodeId: oldNode, locationId })).toEqual(before);
+    expect(await readChain(suite.db, { nodeId: oldNode })).toEqual(before);
     expect((await snapshot()).entries.filter((e) => e.entryKind === "out")).toMatchObject([
       { nodeId, eventAt: "2026-01-05T16:40:00.000Z" },
     ]);
-    expect(verifyChain(await readChain(suite.db, { nodeId, locationId }))).toEqual({ ok: true });
+    expect(verifyChain(await readChain(suite.db, { nodeId }))).toEqual({ ok: true });
   });
   it("bootstraps before closing and replays a committed day without another end", async () => {
     await seed();
@@ -200,7 +198,7 @@ describe("attendance duty pass", () => {
     expect(first.work.every((w) => w.dirtyRevision === w.evaluatedRevision)).toBe(true);
     expect(await pass()).toEqual({ processed: false, more: false });
     expect(await snapshot()).toEqual(first);
-    expect(verifyChain(await readChain(suite.db, { nodeId, locationId }))).toEqual({ ok: true });
+    expect(verifyChain(await readChain(suite.db, { nodeId }))).toEqual({ ok: true });
   });
   it("processes at most one completed day per pass and catches up later", async () => {
     await seed();
@@ -287,7 +285,6 @@ describe("a running shift across a clock days off", () => {
     await withTransaction(suite.db, async (tx) => {
       await backend.clockIn(tx, {
         nodeId,
-        locationId,
         personId,
         at: "2026-01-07T08:00:00Z",
         offsetMinutes: 60,
@@ -316,7 +313,6 @@ describe("a running shift across a clock days off", () => {
     withTransaction(suite.db, (tx) =>
       backend[kind](tx, {
         nodeId,
-        locationId,
         personId,
         at,
         offsetMinutes: 60,
@@ -345,7 +341,7 @@ describe("a running shift across a clock days off", () => {
       ["out", "2026-01-07T08:30:00.000Z", "automatic"],
       ["in", "2026-01-07T10:00:00.000Z", "worker"],
     ]);
-    expect(verifyChain(await readChain(suite.db, { nodeId, locationId }))).toEqual({ ok: true });
+    expect(verifyChain(await readChain(suite.db, { nodeId }))).toEqual({ ok: true });
   });
 
   it("a clock 400 days behind closes nothing; after the step forward the worker clocks out and in", async () => {
@@ -361,7 +357,7 @@ describe("a running shift across a clock days off", () => {
       ["out", "2026-01-07T09:30:00.000Z", "worker"],
       ["in", "2026-01-07T10:00:00.000Z", "worker"],
     ]);
-    expect(verifyChain(await readChain(suite.db, { nodeId, locationId }))).toEqual({ ok: true });
+    expect(verifyChain(await readChain(suite.db, { nodeId }))).toEqual({ ok: true });
   });
 });
 

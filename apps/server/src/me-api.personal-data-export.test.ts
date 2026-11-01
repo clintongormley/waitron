@@ -107,7 +107,6 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
     await withTransaction(suite.db, (tx) =>
       new WorkforceBackend().clockIn(tx, {
         nodeId: NODE_ID,
-        locationId: location!.id,
         personId: row!.id,
         offsetMinutes: 60,
         origin: jobOrigin("dashboard"),

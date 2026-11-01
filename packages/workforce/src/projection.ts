@@ -16,7 +16,6 @@ export type CorrectionStatus = "requested" | "approved" | "declined" | "disputed
 export interface TimeEntryRecord extends RecordAttribution {
   entryId: string;
   personId: string;
-  locationId: string;
   nodeId: string;
   entryKind: WorkforceEntryKind;
   /** On a `correction`, the CORRECTED clock time, not a recording time — that is `recordedAt`. */
@@ -31,7 +30,6 @@ export interface TimeEntryRecord extends RecordAttribution {
 /** One projected workday: an `in`→`out` shift with its breaks netted out. */
 export interface WorkSession {
   personId: string;
-  locationId: string;
   /** The worker's LOCAL calendar day. */
   workDate: string;
   /** The raw UTC instant; render it with `localWallClock(startedAt, startOffsetMinutes)`. */
@@ -116,7 +114,6 @@ function closeShift(personId: string, open: OpenShift, out: TimeEntryRecord): Wo
   const spanMs = Date.parse(out.eventAt) - Date.parse(open.start.eventAt);
   return {
     personId,
-    locationId: open.start.locationId,
     workDate: localDate(open.start.eventAt, open.start.offsetMinutes),
     startedAt: open.start.eventAt,
     startOffsetMinutes: open.start.offsetMinutes,

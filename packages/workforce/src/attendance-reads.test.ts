@@ -37,21 +37,16 @@ beforeEach(async () => {
     .returning({ id: persons.id });
   [personId, other, manager] = rows.map((r) => r.id) as [string, string, string];
 });
-async function shift(
-  subject = personId,
-  location = locationId,
-  date = "2026-01-05",
-  offsetMinutes = 0,
-) {
-  const input = { nodeId, personId: subject, locationId: location, offsetMinutes, origin };
+async function shift(subject = personId, date = "2026-01-05", offsetMinutes = 0) {
+  const input = { nodeId, personId: subject, offsetMinutes, origin };
   await run((tx) => backend.clockIn(tx, { ...input, at: `${date}T09:00:00Z` }));
-  const start = (
-    await readRecordedEntries(suite.db, { personId: subject, locationId: location })
-  ).find((e) => e.entryKind === "in" && e.eventAt === `${date}T09:00:00.000Z`)!.entryId;
+  const start = (await readRecordedEntries(suite.db, { personId: subject })).find(
+    (e) => e.entryKind === "in" && e.eventAt === `${date}T09:00:00.000Z`,
+  )!.entryId;
   await run((tx) => backend.clockOut(tx, { ...input, at: `${date}T17:00:00Z` }));
-  const end = (
-    await readRecordedEntries(suite.db, { personId: subject, locationId: location })
-  ).find((e) => e.entryKind === "out" && e.eventAt === `${date}T17:00:00.000Z`)!.entryId;
+  const end = (await readRecordedEntries(suite.db, { personId: subject })).find(
+    (e) => e.entryKind === "out" && e.eventAt === `${date}T17:00:00.000Z`,
+  )!.entryId;
   return { start, end };
 }
 async function send(
@@ -185,7 +180,6 @@ it("uses saved business bounds and retains an automatic original outside the bus
     backend.clockIn(tx, {
       nodeId,
       personId,
-      locationId,
       at: "2026-01-06T00:30:00Z",
       offsetMinutes: 60,
       origin,
@@ -196,7 +190,6 @@ it("uses saved business bounds and retains an automatic original outside the bus
     backend.recordAutomaticClose(tx, {
       nodeId,
       personId,
-      locationId,
       openEntryId: start,
       at: "2026-01-06T02:00:00Z",
       offsetMinutes: 60,
@@ -290,14 +283,14 @@ it("retains historical locations and their current named zones, excluding locati
   });
 });
 it("keeps all scoped original and response history when a correction crosses a month", async () => {
-  const { end } = await shift(personId, locationId, "2026-01-31");
+  const { end } = await shift(personId, "2026-01-31");
   const response = await request(end, "2026-02-01T00:30:00Z");
   await send({ action: "approve", itemId: response.entryIds[0]! }, manager, manager);
   const jan = await day("2026-01-31");
   const feb = await day("2026-02-01");
   for (const value of [jan, feb]) {
     expect(value.items).toHaveLength(1);
-    expect(value.items[0]).toMatchObject({ status: "approved", personId, locationId });
+    expect(value.items[0]).toMatchObject({ status: "approved", personId });
     expect(value.items[0]!.history.map((e) => e.entryKind)).toEqual([
       "out",
       "correction",
@@ -309,10 +302,10 @@ it("keeps all scoped original and response history when a correction crosses a m
   expect(feb.record.sessions).toEqual([]);
   expect((await queue()).items).toEqual([]);
 });
-it("manager queue spans old dates and people but only the selected location and outstanding or disputed items", async () => {
+it("manager queue spans old dates and people and lists only outstanding or disputed items", async () => {
   const { end } = await shift();
   const worker = await request(end);
-  const second = await shift(other, locationId, "2026-01-06");
+  const second = await shift(other, "2026-01-06");
   const disputed = await send(
     {
       action: "propose",
@@ -331,20 +324,6 @@ it("manager queue spans old dates and people but only the selected location and 
     other,
     other,
   );
-  const elsewhere = await seedLocation(suite.db);
-  const foreign = await shift(other, elsewhere, "2026-01-07");
-  await send(
-    {
-      action: "propose",
-      personId: other,
-      locationId: elsewhere,
-      changes: [{ target: { entryId: foreign.end }, at: "2026-01-07T18:00:00Z", offsetMinutes: 0 }],
-      reason: "Other place",
-    },
-    manager,
-    manager,
-    other,
-  );
   const value = await queue();
   expect(value.items.map((i) => [i.id, i.personId, i.status])).toEqual([
     [worker.entryIds[0], personId, "waiting-manager"],
@@ -355,13 +334,9 @@ it("manager queue spans old dates and people but only the selected location and 
     correctionReason: "I left at five",
     recordedByPersonId: other,
   });
-  expect(
-    value.items.every((i) =>
-      i.history.every((e) => e.locationId === locationId && e.personId === i.personId),
-    ),
-  ).toBe(true);
+  expect(value.items.every((i) => i.history.every((e) => e.personId === i.personId))).toBe(true);
 });
-it("selected days keep relevant pending missing pairs and omit unrelated days and locations", async () => {
+it("selected days keep relevant pending missing pairs and omit unrelated days", async () => {
   const value = await send({
     action: "request",
     questionId: null,
@@ -376,7 +351,6 @@ it("selected days keep relevant pending missing pairs and omit unrelated days an
   expect(selected.items.map((i) => i.id)).toEqual([value.commandId]);
   expect(selected.record.sessions).toEqual([]);
   expect((await day("2026-01-06")).items).toEqual([]);
-  expect((await day("2026-01-05", await seedLocation(suite.db))).items).toEqual([]);
   expect((await inbox()).locations.map((l) => l.id)).toEqual([locationId]);
 });
 it.each(["", "2026-02-30", "2026-1-5", "9999-12-31"])(
@@ -440,7 +414,7 @@ it("an overtaken proposal stays visible in day history but is absent from prompt
     readyToApply: false,
   });
 });
-it("keeps a blocked proposal available to disagree while checking competing work in another location", async () => {
+it("keeps a blocked proposal available to disagree while checking competing later work", async () => {
   const { end } = await shift();
   const proposal = await send(
     {
@@ -453,12 +427,10 @@ it("keeps a blocked proposal available to disagree while checking competing work
     manager,
     manager,
   );
-  const elsewhere = await seedLocation(suite.db);
   await run((tx) =>
     backend.clockIn(tx, {
       nodeId,
       personId,
-      locationId: elsewhere,
       at: "2026-01-05T18:00:00Z",
       offsetMinutes: 0,
       origin,
@@ -476,7 +448,7 @@ it("keeps a blocked proposal available to disagree while checking competing work
   expect((await queue()).items[0]).toMatchObject({ status: "disputed", readyToApply: false });
 });
 it("both split shifts remain visible after a delayed missing-shift approval", async () => {
-  await shift(personId, locationId, "2026-01-06");
+  await shift(personId, "2026-01-06");
   const pair = await send({
     action: "request",
     questionId: null,
@@ -516,7 +488,6 @@ it("an approved missing out permits the next clock-in without closing a later ac
     backend.clockIn(tx, {
       nodeId,
       personId,
-      locationId,
       at: "2026-01-05T09:00:00Z",
       offsetMinutes: 0,
       origin,
@@ -534,7 +505,6 @@ it("an approved missing out permits the next clock-in without closing a later ac
     backend.clockIn(tx, {
       nodeId,
       personId,
-      locationId,
       at: "2026-01-06T09:00:00Z",
       offsetMinutes: 0,
       origin,
@@ -546,7 +516,6 @@ it("an approved missing out permits the next clock-in without closing a later ac
       backend.clockIn(tx, {
         nodeId,
         personId,
-        locationId,
         at: "2026-01-06T10:00:00Z",
         offsetMinutes: 0,
         origin,
@@ -557,7 +526,6 @@ it("an approved missing out permits the next clock-in without closing a later ac
     backend.clockOut(tx, {
       nodeId,
       personId,
-      locationId,
       at: "2026-01-06T17:00:00Z",
       offsetMinutes: 0,
       origin,
@@ -598,7 +566,6 @@ it("selects calendar work dates from stored offsets after the location zone chan
     backend.clockIn(tx, {
       nodeId,
       personId,
-      locationId,
       at: "2026-01-05T23:30:00Z",
       offsetMinutes: 120,
       origin,
@@ -608,7 +575,6 @@ it("selects calendar work dates from stored offsets after the location zone chan
     backend.clockOut(tx, {
       nodeId,
       personId,
-      locationId,
       at: "2026-01-06T01:00:00Z",
       offsetMinutes: 120,
       origin,
@@ -632,7 +598,6 @@ it("approves an older missing out behind a newer actual in without closing the c
     backend.clockIn(tx, {
       nodeId,
       personId,
-      locationId,
       at: "2026-01-06T09:00:00Z",
       offsetMinutes: 0,
       origin,
@@ -655,7 +620,6 @@ it("approves an older missing out behind a newer actual in without closing the c
       backend.clockIn(tx, {
         nodeId,
         personId,
-        locationId,
         at: "2026-01-06T10:00:00Z",
         offsetMinutes: 0,
         origin,
@@ -666,7 +630,6 @@ it("approves an older missing out behind a newer actual in without closing the c
     backend.clockOut(tx, {
       nodeId,
       personId,
-      locationId,
       at: "2026-01-06T17:00:00Z",
       offsetMinutes: 0,
       origin,
