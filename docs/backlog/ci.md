@@ -520,6 +520,11 @@ infer either from the missing outcome alone.
 
 ## Decisions and deliberate limits
 
+- **Investigate CI failures before retrying (owner, 2026-10-31, A1243).** Follow the
+  [CI-failure rule](../developers/ci-and-gates.md#what-to-do-when-ci-fails). Record a recurring
+  unrelated failure against its root-cause fix before obtaining a clean run for unrelated work;
+  a passing re-run is never the repair.
+
 - **The IPP polling-clock fixture observes server connections, not the next agent pause (A1251,
   #2092).** Keep the exact 295 ms first-query assertion. In disposable probes, adding one
   `setImmediate` turn after the agent reads a job reply made both cases report 300 ms; five turns
@@ -747,7 +752,8 @@ reorder" (`packages/ui/src/components/wt-data-table.test.ts`), once in a `packag
 run; and "cancel keeps reassignment selections and target until explicit local Discard"
 (`apps/dashboard/src/screens/units-reassignment.unsaved.test.ts`), once in seven runs, then six
 passes alone. Neither types a search. **Next action:** reproduce each under load and fix at the
-root (standing rule: a flaky test is fixed, never re-run to green).
+root. Apply the [CI-failure rule](../developers/ci-and-gates.md#what-to-do-when-ci-fails)
+before retrying unrelated work; a later pass does not fix either test.
 
 ## A printers-screen test failed once during A435 step 2's review fixes
 
@@ -767,8 +773,9 @@ src/till-app ...`). On 2026-10-26 it failed in A797 slice 3 Task 5a's first full
 src/widgets/till-shell.test.ts`, then passed six times: three alone, two with its file, and two
 later full runs. The suite runs as a till, where slice 3's bar is a fixed empty list. No cause was
 found and the failure output was not kept. **Next action:** reproduce it under load by repeating
-the combined run, keep the failure output, name the cause and fix it (standing rule: a flaky test
-is fixed at the root, never re-run to green).
+the combined run, keep the failure output, name the cause and fix it. Apply the
+[CI-failure rule](../developers/ci-and-gates.md#what-to-do-when-ci-fails) before retrying
+unrelated work; a later pass does not fix this test.
 
 ## Other `uses:` steps that fetch over the network have no step time limit, and the runner's own action download at job set-up is bounded only by long limits of its own (left open by A935)
 

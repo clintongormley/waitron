@@ -6720,6 +6720,9 @@ shipping-style wizard; `wa-wt reset demo|onboarding [worktree-name]` wipes and r
 
 ## Standing decisions
 
+- **Investigate CI failures before retrying (owner, 2026-10-31, A1243).**
+  [Decision and limits](backlog/ci.md#decisions-and-deliberate-limits).
+
 - **Dashboard live reads follow the document lifecycle (A1229, 2026-10-30).**
   [Decision and limits](backlog/dashboard.md#decisions-and-deliberate-limits).
 

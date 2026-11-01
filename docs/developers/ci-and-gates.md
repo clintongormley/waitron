@@ -1444,7 +1444,49 @@ counts, not the times; and each test job's 10-minute `timeout-minutes` (the "bou
 case in the same file) is the only one that stops a job: GitHub cancels it at 10 minutes, which fails
 the `ci` check. Nothing measures a job's time against 4 minutes.
 
+### What to do when CI fails
+
+A passing re-run does not explain a failure. Before you retry, read the failed step, keep its
+log and record the error and whether any test ran. Check the same failure's history on `main`,
+other branches and the campaign failure lists, then write down what you found.
+
+The owner set the rule on 31 October 2026:
+
+> Failing tests need to be fixed, but it's important to not just keep repeating the same
+> test when for instance there is a problem with GitHub. We can retry later, but tests that fail
+> regularly, i.e. flaky, the root cause needs to be fixed to avoid wasting time on unrelated test
+> failures.
+
+> This is not a simple rule like repeat once.
+
+There is no fixed number of re-runs. This decision replaces blanket instructions to never re-run
+or never re-run unchanged code. Choose the next action from the evidence:
+
+- **GitHub or registry trouble.** A runner that never starts or is lost, an outage, a refused
+  download or upload, or a step taking far longer than usual needs infrastructure investigation.
+  Check the service status and the job's history before assigning the cause. Once the evidence
+  points to the service, wait for a reason to expect a different result, such as a cleared incident
+  or some hours having passed. Work on something else meanwhile. If the same failure keeps
+  recurring while the service is healthy, fix the workflow's missing timeout, retry or cache.
+- **A test broken by your change.** Fix the change. Re-running it does not repair it.
+- **An unrelated test with the same recorded failure before.** Treat the repeated failure as a
+  flaky test, a defect whose root-cause fix takes priority. Add this occurrence to the item that
+  owns that fix, or create a backlog entry if none exists. Once you have recorded it, you may
+  obtain a clean run to land unrelated work while the fix is pending. The clean run qualifies
+  that branch; it does not fix the flaky test.
+- **An unrelated test failing this way for the first time.** Investigate it as a possible real
+  defect. Check changes on `main`, shared fixtures and the runner before assuming chance.
+
+Never keep re-running in hope of green, call a later pass a fix, or skip, disable or loosen a
+check to get past the failure. The rules for deliberately changed test expectations still apply.
+Do not leave an item parked indefinitely with an unknown cause: if you cannot reproduce it
+locally, reproduce it on the test box or add diagnostics in CI. Required checks must still pass
+on the branch's current head before you land it.
+
 ### A job far over its usual time on unchanged code: read the runner's setup times first
+
+Use the [failure rule above](#what-to-do-when-ci-fails) to decide whether to re-run. The two
+incidents below retain the runner-timing evidence from 16 October 2026.
 
 A test job that runs several times its usual length can be a slow RUNNER rather than a slow file.
 The tell is in the job's own log, before any test starts: the pnpm self-install
