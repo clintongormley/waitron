@@ -1522,7 +1522,7 @@ describe("catalogue operations", () => {
     });
   });
 
-  it("returns [] from listAccessibleCatalogues for a location with no accessible catalogue", async () => {
+  it("returns [] from listAccessibleCatalogues for a venue with no accessible catalogue", async () => {
     await asTenant(async (tx) => {
       expect(await listAccessibleCatalogues(tx)).toEqual([]);
     });
@@ -1604,7 +1604,7 @@ describe("catalogue operations", () => {
   });
 
   // No prior default (a freshly-provisioned location) → just set it, nothing to demote.
-  it("setVenueDefaultCatalogue sets the default when the location had none", async () => {
+  it("setVenueDefaultCatalogue sets the default when the venue had none", async () => {
     await asTenant(async (tx) => {
       const house = await createCatalogue(tx, { name: "Casa" });
       await setVenueDefaultCatalogue(tx, house.id);

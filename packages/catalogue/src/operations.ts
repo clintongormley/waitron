@@ -1310,7 +1310,6 @@ export async function deactivateProduct(tx: Transaction, id: string): Promise<vo
 }
 
 export async function assignCatalogueToVenue(tx: Transaction, catalogueId: string): Promise<void> {
-  // The table holds the venue's one row.
   await tx.update(locations).set({ catalogueId });
 }
 

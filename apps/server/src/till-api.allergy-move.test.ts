@@ -7,8 +7,10 @@ import {
   devices,
   deviceProfiles,
   lineServiceCancellations,
+  locations,
   products,
   workingOrderLines,
+  workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
@@ -398,6 +400,43 @@ for (const action of ["preview", "move"] as const) {
       expect((await f.request(suffix, body)).status).toBe(200);
     },
   );
+  it(`${action} refuses a source bill from another location`, async () => {
+    const f = await fixture();
+    const [other] = await v.db
+      .insert(locations)
+      .values({
+        name: "Other location",
+        invoiceLocales: ["en-GB"],
+        operationDescription: "Hospitality",
+      })
+      .returning();
+    const [bill] = await v.db
+      .select({ locationId: workingOrders.locationId })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, f.billId));
+    try {
+      await v.db
+        .update(workingOrders)
+        .set({ locationId: other!.id })
+        .where(eq(workingOrders.id, f.billId));
+      const before = frozen();
+      await refused(
+        await f.request(
+          action === "preview" ? "/allergy-preview" : "",
+          action === "preview" ? f.body : adoption(f),
+        ),
+        409,
+        "tab.not_open",
+      );
+      expect(frozen()).toEqual(before);
+    } finally {
+      await v.db
+        .update(workingOrders)
+        .set({ locationId: bill!.locationId })
+        .where(eq(workingOrders.id, f.billId));
+      await v.db.delete(locations).where(eq(locations.id, other!.id));
+    }
+  });
 }
 
 it("previews parent nutrition and distinct extras, retaining unknown versus reviewed empty", async () => {

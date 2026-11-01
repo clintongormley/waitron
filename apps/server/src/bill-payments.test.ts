@@ -26,6 +26,7 @@ import {
   invoiceSeries,
   invoiceDeliveries,
   pagePrinters,
+  locations,
   tenders,
   tenantReceipts,
   tenants,
@@ -2667,60 +2668,85 @@ describe("the invoice at full payment", () => {
     expect(saved!.invoiceDelivery).toEqual({ medium: "receipt" });
   });
 
-  it.each(["active", "disabled", "missing"] as const)(
+  it.each(["active", "disabled", "other-location", "missing"] as const)(
     "stages only an active local A4 destination: %s",
     async (kind) => {
       const billId = await tabWith("Caña");
+      const otherLocationId = randomUUID();
+      if (kind === "other-location")
+        await inTx((tx) =>
+          tx.insert(locations).values({
+            id: otherLocationId,
+            name: "Other",
+            invoiceLocales: ["es-ES"],
+            operationDescription: "Restaurant",
+          }),
+        );
       const pagePrinterId = randomUUID();
-      if (kind !== "missing")
-        await inTx(async (tx) => {
-          await tx.insert(pagePrinters).values({
-            id: pagePrinterId,
-            locationId: venue.cfg.locationId,
-            name: "Office",
-            host: pagePrinterId,
-            port: 631,
-            resourcePath: "/ipp/print",
-            documentFormat: "application/pdf",
-            supportedFormats: ["application/pdf"],
-            media: "iso_a4_210x297mm",
-            resolutionDpi: 300,
-            active: kind !== "disabled",
+      try {
+        if (kind !== "missing")
+          await inTx(async (tx) => {
+            await tx.insert(pagePrinters).values({
+              id: pagePrinterId,
+              locationId: kind === "other-location" ? otherLocationId : venue.cfg.locationId,
+              name: "Office",
+              host: pagePrinterId,
+              port: 631,
+              resourcePath: "/ipp/print",
+              documentFormat: "application/pdf",
+              supportedFormats: ["application/pdf"],
+              media: "iso_a4_210x297mm",
+              resolutionDpi: 300,
+              active: kind !== "disabled",
+            });
+            await tillInvoicePrinter(
+              tx,
+              pagePrinterId,
+              kind === "other-location" ? otherLocationId : venue.cfg.locationId,
+            );
           });
-          await tillInvoicePrinter(tx, pagePrinterId, venue.cfg.locationId);
-        });
-      const request = {
-        revision: 0,
-        invoiceType: "F1" as const,
-        recipient: {
-          taxId: "B12345674",
-          legalName: "Cliente SL",
-          address: "2 Main Street, 28013 Madrid, Madrid",
-          countryCode: "ES",
-        },
-        delivery: { medium: "a4", pagePrinterId },
-      };
-      const context = { personId: OPERATOR, emailAvailable: false };
-      if (kind === "active") {
-        expect(
-          await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, request, context),
-        ).toBe(1);
-        const [saved] = await inTx((tx) =>
-          tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
-        );
-        expect(saved!.invoiceDelivery).toEqual({
-          medium: "a4",
-          pagePrinterId,
-          personId: OPERATOR,
-        });
-      } else {
-        await expect(
-          setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, request, context),
-        ).rejects.toMatchObject({ code: "invoice_delivery.printer_invalid", params: {} });
-        const [saved] = await inTx((tx) =>
-          tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
-        );
-        expect(saved).toMatchObject({ revision: 0, invoiceType: "F2", invoiceDelivery: null });
+        const request = {
+          revision: 0,
+          invoiceType: "F1" as const,
+          recipient: {
+            taxId: "B12345674",
+            legalName: "Cliente SL",
+            address: "2 Main Street, 28013 Madrid, Madrid",
+            countryCode: "ES",
+          },
+          delivery: { medium: "a4", pagePrinterId },
+        };
+        const context = { personId: OPERATOR, emailAvailable: false };
+        if (kind === "active") {
+          expect(
+            await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, request, context),
+          ).toBe(1);
+          const [saved] = await inTx((tx) =>
+            tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+          );
+          expect(saved!.invoiceDelivery).toEqual({
+            medium: "a4",
+            pagePrinterId,
+            personId: OPERATOR,
+          });
+        } else {
+          await expect(
+            setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, request, context),
+          ).rejects.toMatchObject({ code: "invoice_delivery.printer_invalid", params: {} });
+          const [saved] = await inTx((tx) =>
+            tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+          );
+          expect(saved).toMatchObject({ revision: 0, invoiceType: "F2", invoiceDelivery: null });
+        }
+      } finally {
+        if (kind === "other-location")
+          await inTx(async (tx) => {
+            await tx
+              .delete(deviceProfilePrinters)
+              .where(eq(deviceProfilePrinters.pagePrinterId, pagePrinterId));
+            await tx.delete(pagePrinters).where(eq(pagePrinters.id, pagePrinterId));
+            await tx.delete(locations).where(eq(locations.id, otherLocationId));
+          });
       }
     },
   );
