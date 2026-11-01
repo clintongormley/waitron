@@ -2288,7 +2288,6 @@ export async function fireLines(
         kept === undefined
           ? madeHere.has(stationId)
           : kept.madeHere && kept.stationId === stationId;
-      // A line not fired now is HELD (`fired_at` NULL) until release, unless it is made here.
       const fired = made || courseFired;
       if (fired) sentLineIds.push(line.id);
       dishPlaces.push({
@@ -2788,7 +2787,7 @@ export async function sendLines(
   }
   const heldGroupLineIds = heldGroupLines.map((line) => line.id);
   const heldGroupLineIdSet = new Set(heldGroupLineIds);
-  // An empty list fires every HELD line of the tab outside a held group.
+  // An empty list sends every held line of the tab outside a held group.
   const namedLineIds = namedLines.map((line) => line.id);
   const firedNow = routing.at.toISOString();
   const ticketScope =
@@ -4204,8 +4203,9 @@ export interface TabLine {
   /** When the line was first released: fired, or for a no-preparation line, when it would have
    * fired. A recall clears `firedAt` and keeps this. */
   sentAt: string | null;
-  /** Null when the line is HELD or has no ticket item at all. A following extra has none; a split-off
-   * extra has its own. A parent can lack one too: `openTab` inserts its initial lines without firing. */
+  /** Null while the line is held or Requested, or has no ticket item at all. A following extra has
+   * none; a split-off extra has its own. A parent can lack one too: `openTab` inserts its initial
+   * lines without firing. */
   firedAt: string | null;
   /** Null when the line has no ticket item. A following extra has none; a split-off extra has its own. */
   state: TicketState | null;
@@ -7663,7 +7663,8 @@ export function advanceSet(to: Exclude<TicketState, "queued">) {
     : { state: to, readyAt: at };
 }
 
-/** Advance one fired ticket item one step. A held item is refused `ticket.item_held`. */
+/** Advance one fired ticket item one step. An item not released yet (`fired_at` is null: held, or
+ *  Requested and waiting for the pass) is refused `ticket.item_held`. */
 export async function advanceTicketItem(
   tx: Transaction,
   cfg: TradingContext,
@@ -7810,7 +7811,7 @@ export interface StationQueueItem {
   group?: QueueGroup;
   /** The period this dish was confirmed sent after; absent when it was not. */
   afterPeriod?: string;
-  /** `null` while the item is HELD. */
+  /** `null` while the item is held or Requested (waiting for the pass). */
   firedAt: string | null;
   /** Snapshotted at fire, so a later draft edit never changes what the kitchen already sees. */
   note: string | null;
