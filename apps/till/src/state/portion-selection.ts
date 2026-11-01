@@ -46,7 +46,7 @@ interface PickGroup {
 }
 
 /** A bill's dishes grouped into Move dishes…' rows. The grouping does not depend on the picks, so
- * one grouping serves every drawing of the rows until the bill is read again. */
+ * one grouping serves every drawing of the rows until what it is grouped from changes. */
 export interface PickGroups {
   readonly groups: readonly PickGroup[];
   /** The bill's total and what it has received or reserved; null with no balance read. */

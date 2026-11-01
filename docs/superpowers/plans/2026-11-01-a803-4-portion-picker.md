@@ -1474,7 +1474,8 @@ written; this section is the correction.
 - Final review: `pickRows` is split. `pickGroups(lines, keyOf, balance, recalled)` groups the bill,
   and the screen keeps that grouping until what it is drawn from changes (`#dishGroupsFor`); the
   list of the bill's dishes shown while the Sent read is missing uses the same grouping.
-  `pickRows(groups, picks)` and `tidyPicks(before, groups, picks)` work out only the limits.
+  `pickRows(groups, picks)` works out each row's limit and blocked reason, and
+  `tidyPicks(before, groups, picks)` places the picks again over the kept groups.
   `pickedAmount`, called only by its tests, is removed.
 - Final review: a row names its extras and, for a dish that is not one whole unit, its quantity
   (A1292). `PickRow` gains `extras`, and the picker's `nameOf` names a line rather than a row.

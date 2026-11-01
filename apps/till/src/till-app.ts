@@ -15774,7 +15774,8 @@ export class TillApp extends LitElement {
   }
 
   /** `service_zone.mode_incompatible`'s own words are about a table; between two bills it means
-   * the two are served in different ways. */
+   * the two are served in different ways. `draft.out_of_date` and `draft.taken_over` show their own
+   * words. */
   async #onBillPairRefusal(error: unknown): Promise<void> {
     const code = (error as { code?: string } | undefined)?.code;
     if (code === "service_zone.mode_incompatible") this.errorKey = "table.bills_served_differently";
