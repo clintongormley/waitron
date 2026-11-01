@@ -15776,8 +15776,9 @@ export class TillApp extends LitElement {
   /** `service_zone.mode_incompatible`'s own words are about a table; between two bills it means
    * the two are served in different ways. */
   async #onBillPairRefusal(error: unknown): Promise<void> {
-    if ((error as { code?: string } | undefined)?.code === "service_zone.mode_incompatible")
-      this.errorKey = "table.bills_served_differently";
+    const code = (error as { code?: string } | undefined)?.code;
+    if (code === "service_zone.mode_incompatible") this.errorKey = "table.bills_served_differently";
+    else if (code === "draft.out_of_date" || code === "draft.taken_over") this.errorKey = { code };
     else if (isBillMoneyRefusal(error)) await this.#onBillMoneyRefusal(error);
     else await this.#onTableRefusal(error);
   }
@@ -15983,8 +15984,6 @@ export class TillApp extends LitElement {
       if (!this.#billCompositionCurrent(asked)) return;
       const code = (error as { code?: string } | undefined)?.code;
       if (code === "tab.split_held_line") this.errorKey = "table.split_held_error";
-      else if (code === "draft.out_of_date" || code === "draft.taken_over")
-        this.errorKey = { code };
       else await this.#onBillPairRefusal(error);
       if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
       return;

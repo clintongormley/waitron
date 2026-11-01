@@ -295,6 +295,24 @@ describe("A803 move dishes app:", () => {
     },
   );
 
+  it.each(["draft.taken_over", "draft.out_of_date"])(
+    "Merge bills refused %s shows the words Move dishes shows for it",
+    async (code) => {
+      const { el, order } = await open({
+        mergeBills: vi.fn().mockRejectedValue({ code, status: 409 }),
+      });
+      const draftReads = api.listDrafts.mock.calls.length;
+
+      emit(order, "merge-bills", { fromBillId: "bill-1" });
+      await flush(el, 6);
+
+      expect(api.mergeBills).toHaveBeenCalledTimes(1);
+      expect(bannerText(el)).toContain(codeMessage(code));
+      expect(bannerText(el)).not.toContain(t("table.error"));
+      expect(api.listDrafts.mock.calls.length).toBeGreaterThan(draftReads);
+    },
+  );
+
   it("tab.split_held_line shows the held-dish sentence", async () => {
     const { el, order } = await open({
       moveDishes: vi.fn().mockRejectedValue({ code: "tab.split_held_line", status: 409 }),
