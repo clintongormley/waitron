@@ -5754,6 +5754,11 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   another recovery step. Strengthen its Spanish checks to reject a support referral and require
   leaving without applying. [Archive settings findings](backlog/ci.md#a1251-archive-settings-advice-needs-its-own-condition).
 
+- **Spanish separately installed certificate guidance is checked only against its translation.**
+  Add an independent check for address checking, stopping on a certificate warning and the page's
+  replacement limit. The earlier Spanish installer referral passes the whole current page suite.
+  [Observed control](backlog/ci.md#spanish-separately-installed-certificate-test-checks-mapping-only).
+
 - **A1251: qualify artifact-upload retries after a step timeout.**
   Check the first attempt's recorded outcome and whether its retry runs; the existing collision
   probe does not cover a timeout or an interrupted upload. [Detail](backlog/ci.md#a1251-qualify-artifact-upload-retries-after-a-step-timeout).

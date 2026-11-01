@@ -269,6 +269,21 @@ An older, separate wording mismatch remains in `apps/dashboard/src/i18n/codes.ts
 Align the inline instruction with the available action when reworking this refusal; preserve its
 cause and the distinction between a failed write and a successful write whose reload failed.
 
+## Spanish separately installed certificate test checks mapping only
+
+A1251's review of the #2055 test repair found another mapping-only assertion in
+`apps/server/src/connection-bootstrap-page.test.ts`, in the separately supplied certificate case.
+Restoring the Spanish `operator` installer's referral left all 24 page cases passing, both in the
+reviewer's checkout and the driver's independent control on the repaired test. Restoring the
+current wording also passes all 24. Run
+`pnpm --filter @waitron/server exec vitest run src/connection-bootstrap-page.test.ts`.
+
+The old wording came from #1929 and was replaced by #2064; #2055 changed only `failed`. Keep this
+follow-up separate from the #2055 repair. Add independent Spanish checks for the HTTPS address
+choice, stopping on a certificate warning, the page's replacement limit and absence of a referral.
+Retain the existing locale-mapping, local Stop and no-write assertions. This is a test gap; the
+control does not establish a defect in the current certificate workflow.
+
 ## A1251: qualify artifact-upload retries after a step timeout
 
 Before treating artifact-upload retries as qualified for stalled connections, run a bounded
