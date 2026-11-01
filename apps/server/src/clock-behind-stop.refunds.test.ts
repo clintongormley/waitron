@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import type { Hono } from "hono";
@@ -231,7 +232,7 @@ it("the tender-refund loop leaves a pending refund untouched during the stop, an
   );
   // Reserved and never sent, as a crash before the first send leaves it.
   const reserved = await beginSettledTenderRefund(
-    loopDeps(clockAt(now)),
+    { ...loopDeps(clockAt(now)), admission: testTradingAdmission() },
     requestCfg(venue.cfg, { deviceId: venue.deviceId }),
     saleId,
     refundBody(tenderId),
@@ -247,7 +248,10 @@ it("the tender-refund loop leaves a pending refund untouched during the stop, an
   const looked = lookups();
   const behind = now - 10 * MINUTE;
 
-  const paused = await recoverTenderRefunds(loopDeps(clockAt(behind)));
+  const paused = await recoverTenderRefunds({
+    ...loopDeps(clockAt(behind)),
+    admission: testTradingAdmission(),
+  });
 
   expect(await tenderRefundRows(saleId)).toEqual([row]);
   expect(paused.nextDueAt).toEqual(new Date(behind + MINUTE));
@@ -255,7 +259,10 @@ it("the tender-refund loop leaves a pending refund untouched during the stop, an
   expect(refundSends()).toBe(sends);
   expect(lookups()).toBe(looked);
 
-  await recoverTenderRefunds(loopDeps(clockAt(now + MINUTE)));
+  await recoverTenderRefunds({
+    ...loopDeps(clockAt(now + MINUTE)),
+    admission: testTradingAdmission(),
+  });
 
   expect(await tenderRefundRows(saleId)).toMatchObject([
     { state: "failed", failedAt: new Date(now + MINUTE).toISOString(), sentAt: null },
@@ -270,13 +277,19 @@ it("the bill-refund half of the pass leaves a pending refund untouched during th
   const sends = refundSends();
   const providerRefunds = providerRefundCount();
 
-  const paused = await settlePendingBillPayments(loopDeps(clockAt(now - 10 * MINUTE)));
+  const paused = await settlePendingBillPayments({
+    ...loopDeps(clockAt(now - 10 * MINUTE)),
+    admission: testTradingAdmission(),
+  });
 
   expect(paused.refundsCompleted).toBe(0);
   expect(await rowsOf()).toEqual([row]);
   expect(providerRefundCount()).toBe(providerRefunds);
 
-  const after = await settlePendingBillPayments(loopDeps(clockAt(now + MINUTE)));
+  const after = await settlePendingBillPayments({
+    ...loopDeps(clockAt(now + MINUTE)),
+    admission: testTradingAdmission(),
+  });
 
   expect(after.refundsCompleted).toBe(1);
   expect(await rowsOf()).toMatchObject([{ state: "completed" }]);
@@ -389,7 +402,10 @@ it("raises no unresolved alert for a refund an hour old while the clock reads be
   await soldAt(now + 120 * MINUTE, "cash");
   const alerts = unresolvedAlerts();
 
-  await settlePendingBillPayments(loopDeps(clockAt(now + 90 * MINUTE)));
+  await settlePendingBillPayments({
+    ...loopDeps(clockAt(now + 90 * MINUTE)),
+    admission: testTradingAdmission(),
+  });
 
   expect(unresolvedAlerts()).toBe(alerts);
   expect(await rowsOf()).toEqual([row]);
@@ -480,7 +496,7 @@ it("leaves a tender refund pending when the clock steps back during the loop's l
   const { clock, stepTo } = steppingClock(now + MINUTE);
   const restore = stepAfter("lookupRefund", () => stepTo(now - 10 * MINUTE));
   try {
-    await recoverTenderRefunds(loopDeps(clock));
+    await recoverTenderRefunds({ ...loopDeps(clock), admission: testTradingAdmission() });
 
     expect(await tenderRefundRows(saleId)).toMatchObject([
       { state: "pending", completedAt: null, failedAt: null },
@@ -497,7 +513,7 @@ it("leaves a bill refund pending when the clock steps back during the loop's loo
   const { clock, stepTo } = steppingClock(now + MINUTE);
   const restore = stepAfter("lookupRefund", () => stepTo(now - 10 * MINUTE));
   try {
-    await settlePendingBillPayments(loopDeps(clock));
+    await settlePendingBillPayments({ ...loopDeps(clock), admission: testTradingAdmission() });
 
     expect(await rowsOf()).toMatchObject([{ state: "pending", completedAt: null, failedAt: null }]);
     expect(providerRefundCount()).toBe(providerRefunds);
@@ -525,7 +541,10 @@ it("leaves a new tender refund pending when the clock steps back while it is sen
     restore();
   }
 
-  await recoverTenderRefunds(loopDeps(clockAt(now + MINUTE)));
+  await recoverTenderRefunds({
+    ...loopDeps(clockAt(now + MINUTE)),
+    admission: testTradingAdmission(),
+  });
 
   expect(await tenderRefundRows(saleId)).toMatchObject([
     { state: "completed", completedAt: new Date(now + MINUTE).toISOString() },
@@ -546,10 +565,20 @@ it("refuses a manager's confirmed outcome of a bill or tender refund while the c
   const confirmed = { attestedBy: venue.adminId, note: "Seen on the provider's dashboard" };
 
   await expect(
-    attestCardRefund(loopDeps(clockAt(behind)), billRow!.id, "completed", confirmed),
+    attestCardRefund(
+      { ...loopDeps(clockAt(behind)), admission: testTradingAdmission() },
+      billRow!.id,
+      "completed",
+      confirmed,
+    ),
   ).rejects.toMatchObject(behindChain(behind));
   await expect(
-    attestTenderRefund(loopDeps(clockAt(behind)), tenderRow!.id, "completed", confirmed),
+    attestTenderRefund(
+      { ...loopDeps(clockAt(behind)), admission: testTradingAdmission() },
+      tenderRow!.id,
+      "completed",
+      confirmed,
+    ),
   ).rejects.toMatchObject(behindChain(behind));
 
   expect(await rowsOf()).toEqual([billRow]);

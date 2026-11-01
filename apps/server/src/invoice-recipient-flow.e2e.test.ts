@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -150,7 +151,12 @@ describe.each(cases)("recipient flow: $name", ({ recipient }) => {
     await choose(id, recipient);
     await saved(id, recipient);
     await placeOrder(
-      { db: suite.db, backend: venue.backend, clock: venue.clock },
+      {
+        admission: testTradingAdmission(),
+        db: suite.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
       venue.cfg,
       id,
       venue.operatorId,

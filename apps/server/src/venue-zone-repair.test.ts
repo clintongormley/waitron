@@ -108,6 +108,7 @@ describe("atomic unusable-zone confirmation", () => {
         detectedAt: AT.toISOString(),
         acknowledgedAt: AT.toISOString(),
         acknowledgedBy: actor,
+        acknowledgedNote: null,
         params: {
           ...scope,
           timeZone: "Europe/Madrid",

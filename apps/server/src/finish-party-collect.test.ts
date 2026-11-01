@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
@@ -78,11 +79,15 @@ interface Table {
 }
 
 async function pay(billId: string, amount: string) {
-  await payWorkingOrder({ db: venue.db, backend: venue.backend, clock: venue.clock }, venue.cfg, {
-    id: billId,
-    tender: { method: "cash", amount },
-    lines: [],
-  });
+  await payWorkingOrder(
+    { admission: testTradingAdmission(), db: venue.db, backend: venue.backend, clock: venue.clock },
+    venue.cfg,
+    {
+      id: billId,
+      tender: { method: "cash", amount },
+      lines: [],
+    },
+  );
 }
 
 async function partyRevision(partyId: string) {
@@ -126,6 +131,7 @@ async function table(
           quantity: lines[lineNo - 1]!.quantity ?? "1",
         })),
         {
+          admission: testTradingAdmission(),
           operatorId: venue.staffId,
           partyId: p.partyId,
           expectedPartyRevision: await partyRevision(p.partyId),
@@ -924,7 +930,12 @@ async function payAsFullInvoice(billId: string, cents: number) {
       .returning();
     const { invoice } = await completeBillPayment(
       tx,
-      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
       venue.cfg,
       payment!.id,
       new Date(),

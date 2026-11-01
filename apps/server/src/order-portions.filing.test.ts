@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { setImmediate as yieldTurn } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
@@ -260,7 +261,14 @@ function cardDeps(charge: boolean): IntegratedPayDeps {
     refund: fail,
     partialRefund: fail,
   };
-  return { db: venue.db, backend: venue.backend, clock: venue.clock, provider, readerRef: "r1" };
+  return {
+    admission: testTradingAdmission(),
+    db: venue.db,
+    backend: venue.backend,
+    clock: venue.clock,
+    provider,
+    readerRef: "r1",
+  };
 }
 
 /** The filed rows of a bill of two sweets as portions, each linked to both. */
@@ -337,7 +345,12 @@ describe("A803 portions: filing a bill of portions", () => {
   it("A803 portions: issuing an unpaid invoice links its rows to their portions", async () => {
     const { billId, portions } = await seed(sweets("3"));
 
-    await issueOrderInvoice(venue, venue.cfg, billId, venue.operatorId);
+    await issueOrderInvoice(
+      { ...venue, admission: testTradingAdmission() },
+      venue.cfg,
+      billId,
+      venue.operatorId,
+    );
 
     expect(await filedRows(billId)).toEqual([
       {
@@ -354,7 +367,7 @@ describe("A803 portions: filing a bill of portions", () => {
     const { billId, portions } = await seed(sweets("2"));
 
     await payWorkingOrder(
-      venue,
+      { ...venue, admission: testTradingAdmission() },
       venue.cfg,
       {
         id: billId,
@@ -473,6 +486,7 @@ describe("A803 portions: filing a bill of portions", () => {
           tx,
           venue.cfg,
           {
+            admission: testTradingAdmission(),
             orderId: billId,
             expectedEdit: await readBillEditState(tx, billId),
             submissionId: randomUUID(),
@@ -528,7 +542,12 @@ describe("A803 portions: filing a bill of portions", () => {
     );
     try {
       await expect(
-        issueOrderInvoice(venue, venue.cfg, billId, venue.operatorId),
+        issueOrderInvoice(
+          { ...venue, admission: testTradingAdmission() },
+          venue.cfg,
+          billId,
+          venue.operatorId,
+        ),
       ).rejects.toMatchObject({ code: "product.unavailable" });
     } finally {
       await inTx(venue, (tx) =>
@@ -579,7 +598,12 @@ describe("A803 portions: filing a bill of portions", () => {
     );
     try {
       await expect(
-        issueOrderInvoice(venue, venue.cfg, billId, venue.operatorId),
+        issueOrderInvoice(
+          { ...venue, admission: testTradingAdmission() },
+          venue.cfg,
+          billId,
+          venue.operatorId,
+        ),
       ).rejects.toMatchObject({ code: "product.unavailable" });
     } finally {
       await inTx(venue, (tx) =>
@@ -701,6 +725,7 @@ describe("A803 portions: a cancel's refund value on a paid bill", () => {
         tx,
         venue.cfg,
         {
+          admission: testTradingAdmission(),
           orderId: billId,
           expectedEdit: await readBillEditState(tx, billId),
           submissionId: randomUUID(),
@@ -808,6 +833,7 @@ describe("A803 portions: a cancel's refund value on a paid bill", () => {
           tx,
           venue.cfg,
           {
+            admission: testTradingAdmission(),
             orderId: billId,
             expectedEdit: await readBillEditState(tx, billId),
             submissionId: randomUUID(),
@@ -913,6 +939,7 @@ describe("A803 portion grouping: the dashboard's order detail", () => {
           tx,
           venue.cfg,
           {
+            admission: testTradingAdmission(),
             orderId: billId,
             expectedEdit: await readBillEditState(tx, billId),
             submissionId: randomUUID(),
@@ -1142,7 +1169,11 @@ describe("A803 portions: raising a dish", () => {
         lineNo,
         { quantity },
         await readOrderRevision(tx, billId),
-        { operatorId: venue.adminId, expectedEdit: await readBillEditState(tx, billId) },
+        {
+          admission: testTradingAdmission(),
+          operatorId: venue.adminId,
+          expectedEdit: await readBillEditState(tx, billId),
+        },
       ),
     );
   }
@@ -1291,7 +1322,11 @@ describe("A803 portions: raising a dish", () => {
           1,
           { quantity: "2", extras: withBacon },
           await readOrderRevision(tx, billId),
-          { operatorId: venue.adminId, expectedEdit: await readBillEditState(tx, billId) },
+          {
+            admission: testTradingAdmission(),
+            operatorId: venue.adminId,
+            expectedEdit: await readBillEditState(tx, billId),
+          },
         ),
       );
 
@@ -1412,15 +1447,20 @@ describe("A803 portions: raising a dish", () => {
     const today = await billOf(burgersWithCheese("2"), { bound: false });
     const [first, second] = bound.portions;
     const revision = await inTx(venue, (tx) => readOrderRevision(tx, bound.billId));
-    await updateHeldOrder({ db: venue.db }, venue.cfg, bound.billId, {
-      operatorId: venue.adminId,
-      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, bound.billId)),
-      revision,
-      lines: [first!, second!].map((portion) => ({
-        workingOrderLineId: portion.lineId,
-        ...burgersWithCheese("2")[0]!,
-      })),
-    });
+    await updateHeldOrder(
+      { admission: testTradingAdmission(), db: venue.db },
+      venue.cfg,
+      bound.billId,
+      {
+        operatorId: venue.adminId,
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, bound.billId)),
+        revision,
+        lines: [first!, second!].map((portion) => ({
+          workingOrderLineId: portion.lineId,
+          ...burgersWithCheese("2")[0]!,
+        })),
+      },
+    );
     await raise(today.billId, 1, "4");
 
     const dishes = linesOf(bound.billId).filter((line) => line.dishNo === null);
@@ -1541,7 +1581,7 @@ describe("A803 portions: raising a dish", () => {
       await readOrderRevision(tx, billId),
       await readBillEditState(tx, billId),
     ]);
-    await updateHeldOrder({ db: venue.db }, venue.cfg, billId, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db: venue.db }, venue.cfg, billId, {
       operatorId: venue.adminId,
       expectedEdit,
       revision,
@@ -2042,15 +2082,20 @@ describe("A803 portions: raising a dish", () => {
         { guestId: guests[0]!.id, draftLineId: null, workingLineId: first!.lineId },
       ]);
     });
-    await updateHeldOrder({ db: venue.db }, venue.cfg, bound.billId, {
-      operatorId: venue.adminId,
-      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, bound.billId)),
-      revision: await inTx(venue, (tx) => readOrderRevision(tx, bound.billId)),
-      lines: [first!, second!].map((portion) => ({
-        workingOrderLineId: portion.lineId,
-        ...burgersWithCheese("2")[0]!,
-      })),
-    });
+    await updateHeldOrder(
+      { admission: testTradingAdmission(), db: venue.db },
+      venue.cfg,
+      bound.billId,
+      {
+        operatorId: venue.adminId,
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, bound.billId)),
+        revision: await inTx(venue, (tx) => readOrderRevision(tx, bound.billId)),
+        lines: [first!, second!].map((portion) => ({
+          workingOrderLineId: portion.lineId,
+          ...burgersWithCheese("2")[0]!,
+        })),
+      },
+    );
 
     // The copies follow the dishes they copy, in the order the edit names them: lines 5 and 7.
     const ticked = venue.db.all<{ lineNo: number }>(

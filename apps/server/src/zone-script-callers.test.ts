@@ -1,6 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync, rmSync } from "node:fs";
-import { settleInvoiceFirst } from "../scripts/settle-invoice-first.js";
 import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -175,7 +174,7 @@ describe("saved-zone script callers", () => {
       ]);
     },
   );
-  it.each(["record-one-sale", "settle-invoice-first"])(
+  it.each(["record-one-sale"])(
     "built %s dates its actual new fiscal records in Madrid under a UTC host",
     async (name) => {
       const venue = await provision();
@@ -185,16 +184,13 @@ describe("saved-zone script callers", () => {
         `const OriginalDate=Date;global.Date=class extends OriginalDate {constructor(...args){super(...(args.length?args:["2026-10-14T23:30:00Z"]))} static now(){return OriginalDate.parse("2026-10-14T23:30:00Z")}};`,
       );
       const binary = await bundle(name, "", true);
-      const args =
-        name === "record-one-sale"
-          ? [venue.nodeId, venue.seriesId, "Soup", "1.00", "10.00"]
-          : [venue.nodeId, venue.seriesId, venue.seriesIds[2]!];
+      const args = [venue.nodeId, venue.seriesId, "Soup", "1.00", "10.00"];
       const result = run(binary, args, { NODE_OPTIONS: `--require=${preload}` });
       expect(result).toEqual({ status: 0, output: expect.any(String) });
       const rows = suite.db.all(
         sql`select issued_at, issued_offset_minutes from sales order by invoice_number`,
       );
-      expect(rows).toHaveLength(name === "record-one-sale" ? 1 : 2);
+      expect(rows).toHaveLength(1);
       for (const row of rows)
         expect(row).toMatchObject({
           issued_at: "2026-10-14T23:30:00.000Z",
@@ -210,29 +206,6 @@ describe("saved-zone script callers", () => {
       }
     },
   );
-});
-
-it("prepares a later correction independently across the autumn offset change", async () => {
-  const venue = await provision();
-  vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-25T00:30:00Z") });
-  await settleInvoiceFirst(
-    {
-      nodeId: venue.nodeId,
-      standardSeriesId: venue.seriesId,
-      rectificativeSeriesId: venue.seriesIds[2]!,
-    },
-    { WAITRON_ENV: "preproduction", WAITRON_VENUE_DIR: venueDir() },
-    (line) => {
-      if (line.startsWith("1.")) vi.setSystemTime(new Date("2026-10-25T01:30:00Z"));
-    },
-  );
-  const rows = suite.db.all(
-    sql`select issued_at, issued_offset_minutes from sales order by issued_at`,
-  );
-  expect(rows).toEqual([
-    { issued_at: "2026-10-25T00:30:00.000Z", issued_offset_minutes: 120 },
-    { issued_at: "2026-10-25T01:30:00.000Z", issued_offset_minutes: 60 },
-  ]);
 });
 
 it.each(["daily-close-demo", "daily-close-z-demo", "modelo-303-demo"])(

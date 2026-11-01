@@ -65,7 +65,7 @@ import type {
   BillFunds,
 } from "./bill-allocation.js";
 import { issuancePass } from "./issuance-pass.js";
-import { issueMoment } from "./issue-moment.js";
+import { issueMoment, pinnedAt } from "./issue-moment.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
@@ -1068,7 +1068,7 @@ async function beginBillPayment(
   req: BillPaymentRequest,
   operator: { personId: string; sessionId: string },
   state: "received" | "pending",
-  reading: { instant: Date; offsetMinutes: number },
+  read: TillSaleDeps["clock"]["now"],
   refusals: { diskFull: () => boolean; log?: Logger },
   attendance?: AttendanceRecorder,
 ): Promise<{ replay: PaymentRow } | { payment: PaymentRow; total: Decimal }> {
@@ -1089,6 +1089,10 @@ async function beginBillPayment(
   if (earlier.refund !== undefined) {
     throw new AppError("submission.id_reused", { submissionId: req.submissionId });
   }
+  deps.admission.require();
+  const reading = read();
+  if (!Number.isFinite(reading.instant.getTime()))
+    throw new AppError("venue.time_zone_conversion_failed", { reason: "invalid_instant" });
   await deps.backend.refuseWhileClockBehind(tx, reading);
 
   await requireOpenBill(tx, workingOrderId);
@@ -1114,8 +1118,7 @@ async function beginBillPayment(
   );
 
   await requireEconomicWrite(tx, cfg, deps.admission);
-  if (state === "pending") await prepareIssueClock(tx, cfg, deps.clock);
-  const now = reading.instant;
+  if (state === "pending") await prepareIssueClock(tx, cfg, pinnedAt(deps.clock, reading));
   const [payment] = await tx
     .insert(billPayments)
     .values({
@@ -1199,8 +1202,6 @@ export async function takeBillPayment(
   return withIssuanceTransaction(
     deps.db,
     async (tx) => {
-      const reading = deps.clock.now();
-      const receivedAt = reading.instant;
       const begun = await beginBillPayment(
         tx,
         deps,
@@ -1209,12 +1210,13 @@ export async function takeBillPayment(
         req,
         operator,
         "received",
-        reading,
+        () => deps.clock.now(),
         { diskFull: () => preRead || (deps.disk?.noted() ?? false), log: deps.log },
         deps.attendance,
       );
       if ("replay" in begun) return resultOf(tx, deps, cfg, begun.replay, null);
       const { payment } = begun;
+      const receivedAt = new Date(payment.receivedAt!);
       const printers = printerLookup(tx, cfg.origin);
       if (req.method === "card") {
         await recordManualCardPayment(tx, {
@@ -1457,7 +1459,7 @@ export async function takeReaderBillPayment(
         req,
         operator,
         "pending",
-        deps.clock.now(),
+        () => deps.clock.now(),
         { diskFull: () => preRead || (deps.disk?.noted() ?? false), log: deps.log },
         deps.attendance,
       );

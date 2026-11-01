@@ -2272,7 +2272,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     const held = await ticketOfLine(tabId, 2);
     await asApp(cfg, (tx) => setChangesAfterSending(tx, "never"));
 
-    await updateHeldOrder({ db }, cfg, tabId, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
       operatorId: OPERATOR,
       revision: await revisionOf(tabId),
       lines: [{ menuItemId: aguaOffer, quantity: "1" }],
@@ -2293,7 +2293,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     const before = await linesOf(tabId);
 
     await expect(
-      updateHeldOrder({ db }, cfg, tabId, {
+      updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
         operatorId: OPERATOR,
         revision: await revisionOf(tabId),
         lines: [{ menuItemId: aguaOffer, quantity: "1" }],

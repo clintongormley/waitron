@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -70,11 +71,15 @@ async function bill(lines: RoundLine[], release: "fire" | "hold" = "hold"): Prom
 }
 
 async function pay(b: Bill, amount: string) {
-  await payWorkingOrder({ db: venue.db, backend: venue.backend, clock: venue.clock }, venue.cfg, {
-    id: b.billId,
-    tender: { method: "cash", amount },
-    lines: [],
-  });
+  await payWorkingOrder(
+    { admission: testTradingAdmission(), db: venue.db, backend: venue.backend, clock: venue.clock },
+    venue.cfg,
+    {
+      id: b.billId,
+      tender: { method: "cash", amount },
+      lines: [],
+    },
+  );
   const [sale] = await venue.db.select().from(sales).where(eq(sales.workingOrderId, b.billId));
   const [tender] = await venue.db.select().from(tenders).where(eq(tenders.saleId, sale!.id));
   return { saleId: sale!.id, tenderId: tender!.id };
@@ -103,7 +108,14 @@ async function cancel(
       submissionId: randomUUID(),
       ...(refundHandoff ? { refundHandoff: true } : {}),
     };
-    return cancelItem(tx, venue.cfg, b.partyId, lineId, ask, venue.managerId);
+    return cancelItem(
+      tx,
+      venue.cfg,
+      b.partyId,
+      lineId,
+      { ...ask, admission: testTradingAdmission() },
+      venue.managerId,
+    );
   });
   const linked = answer.refundLinks?.[0]?.adjustmentId;
   if (linked !== undefined) return linked;
@@ -265,6 +277,7 @@ describe("a refund names the cancels it pays back", () => {
           tx,
           venue.cfg,
           {
+            admission: testTradingAdmission(),
             expectedEdit: await readBillEditState(tx, b.billId),
             orderId: b.billId,
             expectedRevision: order!.revision,
@@ -530,6 +543,7 @@ describe("a PIN-approved linked refund cannot exceed its cancels", () => {
         b.partyId,
         row.lineId,
         {
+          admission: testTradingAdmission(),
           quantity: "1",
           expectedEdit: await readBillEditState(tx, b.billId),
           outcome: "remove_charge",

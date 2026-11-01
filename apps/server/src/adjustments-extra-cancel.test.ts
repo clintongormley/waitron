@@ -680,7 +680,7 @@ describe("cancelling an extra of a held dish (B11g)", () => {
             note: null,
             operatorId: venue.staffId,
           }));
-          await inTx(venue, (tx) => apply(tx, command));
+          await inTx(venue, (tx) => apply(tx, { ...command, admission: testTradingAdmission() }));
         }
       });
 

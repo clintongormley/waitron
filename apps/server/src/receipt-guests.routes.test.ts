@@ -723,7 +723,12 @@ describe("/api/pay with nothing to charge on a placed party bill", () => {
   it("stores the chosen count", async () => {
     const v = await venue(suite.db);
     const billId = await partyBill(v, 4, { menuItemId: v.tableFreeItemId, quantity: "1" });
-    await placeOrder({ admission: testTradingAdmission(), db: v.db, backend: v.backend, clock }, v.cfg, billId, v.staffId);
+    await placeOrder(
+      { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock },
+      v.cfg,
+      billId,
+      v.staffId,
+    );
     const pay = await payByReader(v, { lines: [], guestCount: 2 }, { id: billId });
     expect(pay.status).toBe(200);
     expect((pay.body as { outcome: string }).outcome).toBe("captured");

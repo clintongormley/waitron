@@ -139,11 +139,11 @@ describe.each(["UTC", "Europe/Madrid"])("invoice calendars in a fresh %s process
 
   it.each([
     ["whole-order", 39, "till-sale-integrated.test.ts"],
-    ["bill-payment", 34, "zone-bill-payment-boundaries.test.ts"],
+    ["bill-payment", 35, "zone-bill-payment-boundaries.test.ts"],
     ["auto-issue", 7, "zone-economic-boundaries.test.ts"],
     ["core-only", 11, "zone-core-capabilities.test.ts"],
     ["readiness", 1, "fiscal-readiness-runner.verifactu.test.ts"],
-    ["scripts", 13, "zone-script-callers.test.ts"],
+    ["scripts", 11, "zone-script-callers.test.ts"],
     ["core-only-emergency", 10, "void-issue-clock.test.ts"],
   ] as const)("runs %s with its original behavioral assertions", async (family, count, source) => {
     const output = (await child(timeZone, "families", family)) as unknown as {

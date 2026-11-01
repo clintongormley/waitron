@@ -22,12 +22,12 @@ import { withOperationAuthority } from "@waitron/module";
 import { createEmergencyAllocationPreparation } from "./emergency-preparation.js";
 import { decodeRegistroRow } from "./registro-row.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenantWithSif, type SeededTillWithSif } from "../test/fixtures.js";
+import { seedTenantWithSif, type SeededNodeWithSif } from "../test/fixtures.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const AT = "2026-10-14T23:30:00.000Z";
-let till: SeededTillWithSif;
+let till: SeededNodeWithSif;
 const scratch: string[] = [];
 afterEach(async () => {
   vi.useRealTimers();
@@ -219,7 +219,7 @@ it("an active emergency identity uses the caller's issue instant rather than all
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   const binding = {
     module: "fiscal-verifactu",
-    action: "re-register",
+    action: "restore",
     eventId: "clock-emergency",
     sourceId: "archive-clock",
     targetNodeId: node.nodeId,

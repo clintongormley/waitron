@@ -327,7 +327,13 @@ describe("bill payments refused before the reader", () => {
     const p = provider();
     const collect = vi.spyOn(p, "collect");
     await expect(
-      takeReaderBillPayment({ ...deps(), provider: p, disk }, v.cfg, billId, ask(true), collector),
+      takeReaderBillPayment(
+        { admission: testTradingAdmission(), ...deps(), provider: p, disk },
+        v.cfg,
+        billId,
+        ask(true),
+        collector,
+      ),
     ).rejects.toMatchObject({ code: "storage.disk_full" });
     expect(collect).not.toHaveBeenCalled();
     expect(await suite.db.select().from(billPayments)).toEqual([]);
@@ -346,7 +352,13 @@ describe("bill payments refused before the reader", () => {
     const p = provider();
     const collect = vi.spyOn(p, "collect");
     await expect(
-      takeReaderBillPayment({ ...deps(), provider: p, disk }, v.cfg, billId, ask(true), collector),
+      takeReaderBillPayment(
+        { admission: testTradingAdmission(), ...deps(), provider: p, disk },
+        v.cfg,
+        billId,
+        ask(true),
+        collector,
+      ),
     ).rejects.toMatchObject({ code: "storage.disk_full" });
     expect(collect).not.toHaveBeenCalled();
     const [failed] = await suite.db.select().from(billPayments);
@@ -359,7 +371,15 @@ describe("bill payments refused before the reader", () => {
     const p = provider();
     const collect = vi.spyOn(p, "collect");
     await expect(reader(p)).rejects.toMatchObject({ code: "clock.unusable" });
-    await expect(takeBillPayment(deps(), v.cfg, billId, ask(), collector)).rejects.toMatchObject({
+    await expect(
+      takeBillPayment(
+        { ...deps(), admission: testTradingAdmission() },
+        v.cfg,
+        billId,
+        ask(),
+        collector,
+      ),
+    ).rejects.toMatchObject({
       code: "clock.unusable",
     });
     expect(collect).not.toHaveBeenCalled();

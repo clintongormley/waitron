@@ -343,12 +343,16 @@ export async function pay(
   amount: string,
   ...guestCount: [] | [number | null]
 ): Promise<void> {
-  await payWorkingOrder({ admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock }, v.cfg, {
-    id: billId,
-    lines: [],
-    tender: { method: "cash", amount },
-    ...(guestCount.length === 0 ? {} : { guestCount: guestCount[0] }),
-  });
+  await payWorkingOrder(
+    { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
+    v.cfg,
+    {
+      id: billId,
+      lines: [],
+      tender: { method: "cash", amount },
+      ...(guestCount.length === 0 ? {} : { guestCount: guestCount[0] }),
+    },
+  );
 }
 
 /**

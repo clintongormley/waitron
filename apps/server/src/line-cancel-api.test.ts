@@ -220,11 +220,20 @@ describe("the public cancellation read and command", () => {
 
   async function paidFixture() {
     const p = await fixture();
-    await payWorkingOrder({ db: venue.db, backend: venue.backend, clock: venue.clock }, venue.cfg, {
-      id: p.billId,
-      tender: { method: "cash", amount: "26.00" },
-      lines: [],
-    });
+    await payWorkingOrder(
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
+      venue.cfg,
+      {
+        id: p.billId,
+        tender: { method: "cash", amount: "26.00" },
+        lines: [],
+      },
+    );
     return p;
   }
   async function cancelRows(p: Fixture) {

@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -53,7 +54,7 @@ async function counterWithCourses() {
 describe("A773 counter release", () => {
   it("sends every course without changing recorded courses, line order or prices", async () => {
     const { v, id, courses, lines } = await counterWithCourses();
-    await placeOrder(v, v.cfg, id, OPERATOR);
+    await placeOrder({ ...v, admission: testTradingAdmission() }, v.cfg, id, OPERATOR);
     const after = await inTx(v, async (tx) => ({
       order: (await tx.select().from(workingOrders).where(eq(workingOrders.id, id)))[0]!,
       lines: await tx
@@ -93,7 +94,7 @@ describe("A773 counter release", () => {
   it("releases every course on payment and refuses duplicate kitchen sends", async () => {
     const { v, id, lines } = await counterWithCourses();
     await payWorkingOrder(
-      v,
+      { ...v, admission: testTradingAdmission() },
       v.cfg,
       { id, tender: { method: "cash", amount: "72.00" }, lines: [] },
       OPERATOR,

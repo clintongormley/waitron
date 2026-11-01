@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -300,11 +301,15 @@ describe("A773 lifetime", () => {
     const order = await billWith(v, [{ name: "Pizza", quantity: "3", olives: 2 }], {
       shape: "grouped",
     });
-    await payWorkingOrder({ db: v.db, backend: v.backend, clock: v.clock }, v.cfg, {
-      id: order.billId,
-      tender: { method: "cash", amount: "36.00" },
-      lines: [],
-    });
+    await payWorkingOrder(
+      { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
+      v.cfg,
+      {
+        id: order.billId,
+        tender: { method: "cash", amount: "36.00" },
+        lines: [],
+      },
+    );
     const rows = await inTx(v, (tx) =>
       tx
         .select()
@@ -325,6 +330,7 @@ describe("A773 lifetime", () => {
         order.partyId,
         parent.id,
         {
+          admission: testTradingAdmission(),
           expectedEdit: await readBillEditState(tx, order.billId),
           expectedContext: await readCancellationContext(tx, order.partyId, parent.id),
           expectedPartyRevision: command.expectedPartyRevision,

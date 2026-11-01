@@ -4476,7 +4476,12 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
           .orderBy(workingOrderLines.lineNo)
       ).map((item) => item.firedAt !== null);
 
-    await placeOrder({ admission: testTradingAdmission(), db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR);
+    await placeOrder(
+      { admission: testTradingAdmission(), db, backend: stubBackend, clock: stubClock },
+      cfg,
+      id,
+      OPERATOR,
+    );
     expect(await fired()).toEqual([true, true]);
     await withTransaction(db, async (tx) =>
       fireOrderLines(

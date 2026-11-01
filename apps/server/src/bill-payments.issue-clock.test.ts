@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { setImmediate as yieldTurn } from "node:timers/promises";
 import { eq, sql } from "drizzle-orm";
@@ -271,7 +272,7 @@ describe("the invoice at full payment", () => {
       const completed = await inTx((tx) =>
         completeBillPayment(
           tx,
-          { ...fiscal(), clock: issueClock },
+          { admission: testTradingAdmission(), ...fiscal(), clock: issueClock },
           venue.cfg,
           paymentId,
           new Date("2026-10-06T22:10:00Z"),
@@ -338,7 +339,7 @@ describe("the invoice at full payment", () => {
       const completed = await inTx((tx) =>
         completeBillPayment(
           tx,
-          { ...fiscal(), clock: issueClock },
+          { admission: testTradingAdmission(), ...fiscal(), clock: issueClock },
           venue.cfg,
           paymentId,
           new Date("2026-10-06T22:10:00Z"),

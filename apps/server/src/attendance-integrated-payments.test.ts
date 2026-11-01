@@ -529,7 +529,12 @@ describe("integrated whole-order attendance", () => {
     });
     disk.noteRefused();
     await expect(
-      payWorkingOrderIntegrated({ ...deps(), disk }, v.cfg, req, collector),
+      payWorkingOrderIntegrated(
+        { admission: testTradingAdmission(), ...deps(), disk },
+        v.cfg,
+        req,
+        collector,
+      ),
     ).rejects.toMatchObject({ code: "storage.disk_full" });
     expect(provider.collectCalls).toHaveLength(0);
     expect(await operations()).toEqual([]);
@@ -545,7 +550,12 @@ describe("integrated whole-order attendance", () => {
       full: () => Promise.resolve(false),
     };
     await expect(
-      payWorkingOrderIntegrated({ ...deps(), disk }, v.cfg, request(), collector),
+      payWorkingOrderIntegrated(
+        { admission: testTradingAdmission(), ...deps(), disk },
+        v.cfg,
+        request(),
+        collector,
+      ),
     ).rejects.toMatchObject({ code: "storage.disk_full" });
     expect(provider.collectCalls).toHaveLength(0);
     expect(await operations()).toEqual([
@@ -556,7 +566,12 @@ describe("integrated whole-order attendance", () => {
   it("keeps no attendance row when a walk-up card sale is refused under a clock in 2001", async () => {
     at("2001-01-01T11:00:00.000Z");
     await expect(
-      payWorkingOrderIntegrated(deps(), v.cfg, request(), collector),
+      payWorkingOrderIntegrated(
+        { ...deps(), admission: testTradingAdmission() },
+        v.cfg,
+        request(),
+        collector,
+      ),
     ).rejects.toMatchObject({ code: "clock.unusable" });
     expect(provider.collectCalls).toHaveLength(0);
     expect(await operations()).toEqual([]);

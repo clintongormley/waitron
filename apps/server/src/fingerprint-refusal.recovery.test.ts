@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -77,6 +78,7 @@ beforeEach(async () => {
   mountPaymentsApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: suite.db,
       backend: venue.backend,
       clock: venue.clock,
@@ -123,6 +125,7 @@ function snapshot() {
 
 const settle = () =>
   settlePendingBillPayments({
+    admission: testTradingAdmission(),
     db: suite.db,
     backend: venue.backend,
     clock: venue.clock,

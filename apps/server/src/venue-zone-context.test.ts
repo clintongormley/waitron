@@ -21,7 +21,6 @@ import {
 } from "@waitron/venue-service";
 import * as details from "./venue-details.js";
 import * as businessDay from "./business-day-start.js";
-import { VENUE_SERVICE } from "./modules.js";
 import {
   readZoneContext,
   validateRetainedZoneClock,
@@ -248,22 +247,20 @@ describe("retained clock candidate validation", () => {
     });
     expect((await read()).savedZone).toEqual({ kind: "invalid" });
   });
-  it("checks real saved schedules through the service slot with the candidate clock", async () => {
+  it("preserves real saved schedules while validating the candidate clock", async () => {
     await suite.db
       .update(locations)
       .set({ timeZone: "Europe/Madrid" })
       .where(eq(locations.id, scope.locationId));
     const cfg = { locationId: locationId(scope.locationId) };
-    const periodId = await withTransaction(suite.db, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const menu = await createCatalogue(tx, { name: "Test menu" });
       const department = await createDepartment(tx, cfg, { name: "Dining", orderStart: "counter" });
-      const period = await saveMenuPeriod(
-        tx,
-        cfg,
-        department.id,
-        { name: "Lunch", menuId: menu.id, staffMenuIds: [] },
-        0,
-      );
+      const period = await saveMenuPeriod(tx, cfg, department.id, {
+        name: "Lunch",
+        menuId: menu.id,
+        staffMenuIds: [],
+      });
       await replaceMenuWeek(
         tx,
         cfg,
@@ -277,24 +274,18 @@ describe("retained clock candidate validation", () => {
       );
       return period.id;
     });
-    await suite.db.execute(
-      sql`update menu_periods set end_offset_minutes = -120 where id = ${periodId}`,
-    );
     await suite.db
       .update(locations)
       .set({ timeZone: "Invalid/Zone" })
       .where(eq(locations.id, scope.locationId));
     const before = retained();
-    const slot = vi.spyOn(VENUE_SERVICE, "assertPeriodEndOffsets");
-    await expect(preview()).rejects.toMatchObject({
-      code: "menu_timetable.invalid",
-      params: { reason: "end_offset", periodId },
-    });
-    expect(slot).toHaveBeenCalledWith(expect.anything(), cfg, {
+    const schedules = suite.db.all(sql`select * from department_day_ranges`);
+    expect(await preview()).toEqual({
       timeZone: "Europe/Madrid",
       dayCutover: "06:00",
       cutoverChanges: [],
     });
+    expect(suite.db.all(sql`select * from department_day_ranges`)).toEqual(schedules);
     expect(retained()).toEqual(before);
   });
 });

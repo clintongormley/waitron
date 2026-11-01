@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { asc, eq, inArray } from "drizzle-orm";
@@ -403,7 +404,11 @@ describe("A803 bill numbers: move bill", () => {
       };
     };
     const asked = await finishBody();
-    const refusal = await captureError(() => inTx(v, (tx) => finishPartyService(tx, v.cfg, asked)));
+    const refusal = await captureError(() =>
+      inTx(v, (tx) =>
+        finishPartyService(tx, v.cfg, { ...asked, admission: testTradingAdmission() }),
+      ),
+    );
     expect(refusal).toMatchObject({ code: "party.unserved_dishes" });
     const { dishes } = (refusal as AppError).params as unknown as {
       dishes: { billId: string; billRevision: number }[];
@@ -412,6 +417,7 @@ describe("A803 bill numbers: move bill", () => {
 
     await inTx(v, (tx) =>
       finishPartyService(tx, v.cfg, {
+        admission: testTradingAdmission(),
         ...collecting,
         collect: {
           bills: [{ billId: tabId, expectedBillRevision: dishes[0]!.billRevision }],

@@ -1494,6 +1494,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: suite.db,
         backend,
         clock,

@@ -3137,7 +3137,13 @@ describe("the invoice at full payment", () => {
         ]);
       });
       const issued = await inTx((tx) =>
-        issueIfFullyPaid(tx, { admission: testTradingAdmission(), ...fiscal() }, venue.cfg, billId, OPERATOR),
+        issueIfFullyPaid(
+          tx,
+          { admission: testTradingAdmission(), ...fiscal() },
+          venue.cfg,
+          billId,
+          OPERATOR,
+        ),
       );
       expect(issued).toMatchObject({ total: "43.00" });
       const [sale] = await inTx((tx) =>
@@ -3500,28 +3506,4 @@ async function invoiceContactDepartment() {
       .where(eq(departments.locationId, venue.cfg.locationId)),
   );
   return rows.find((row) => row.isDefault)!.id;
-}
-
-async function withSavedIssueZone<T>(
-  tx: Transaction,
-  offsetMinutes: number,
-  issue: () => Promise<T>,
-): Promise<T> {
-  const zones: Record<number, string> = { 60: "Etc/GMT-1", 0: "Etc/UTC", [-480]: "Etc/GMT+8" };
-  const [location] = await tx
-    .select()
-    .from(locations)
-    .where(eq(locations.id, venue.cfg.locationId));
-  await tx
-    .update(locations)
-    .set({ timeZone: zones[offsetMinutes] })
-    .where(eq(locations.id, venue.cfg.locationId));
-  try {
-    return await issue();
-  } finally {
-    await tx
-      .update(locations)
-      .set({ timeZone: location!.timeZone })
-      .where(eq(locations.id, venue.cfg.locationId));
-  }
 }

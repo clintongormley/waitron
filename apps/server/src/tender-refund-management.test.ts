@@ -611,7 +611,8 @@ it("uses the transaction-owning confirmed-outcome helper without a second provid
   const t = await pending();
   const result = await attestTenderRefund(
     {
-      db: store.db, backend: venue.backend,
+      db: store.db,
+      backend: venue.backend,
       admission: testTradingAdmission(),
       cfg: venue.cfg,
       clock: venue.clock,

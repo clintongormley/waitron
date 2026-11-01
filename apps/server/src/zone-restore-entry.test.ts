@@ -11,7 +11,6 @@ import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { invoiceSeries, locations, openVenueDatabase } from "@waitron/db";
-import { nodeId } from "@waitron/shared";
 import { restoreFromArtifact } from "./restore.js";
 import { previewRecoveryArchive } from "./recovery-backup-preview.js";
 import { packArchive } from "./backup-archive.js";
@@ -66,9 +65,9 @@ it.each(["", "Not/A_Zone", "+02:00", "UTC"])(
           .filter((row) => row.retiredAt === null)
           .map(({ code, nextNumber }) => ({ code, nextNumber })),
       ).toEqual([
-        { code: "A-06RC", nextNumber: 1 },
-        { code: "FF-06RC", nextNumber: 1 },
-        { code: "R-06RC", nextNumber: 1 },
+        { code: "A-0CNQT", nextNumber: 1 },
+        { code: "FF-0CNQT", nextNumber: 1 },
+        { code: "R-0CNQT", nextNumber: 1 },
       ]);
     } finally {
       await placed.close();
@@ -103,9 +102,9 @@ it("retains an invalid zone through signed-pointer bucket preview, preparation a
         .filter((row) => row.retiredAt === null)
         .map(({ code, nextNumber }) => ({ code, nextNumber })),
     ).toEqual([
-      { code: "A-06RD", nextNumber: 1 },
-      { code: "FF-06RD", nextNumber: 1 },
-      { code: "R-06RD", nextNumber: 1 },
+      { code: "A-0CNSP", nextNumber: 1 },
+      { code: "FF-0CNSP", nextNumber: 1 },
+      { code: "R-0CNSP", nextNumber: 1 },
     ]);
   } finally {
     await placed.close();
@@ -120,7 +119,9 @@ it.each(["archive", "stream"] as const)(
     const destination = join(f.roots.venueDir, "venue.db");
     await writeFile(destination, "original destination");
     const service = createSelectedRecoveryPreparation({ ...f.options, secret: "wrong node key" });
-    await expect(service.prepare({ action: "clock-challenge" })).rejects.toMatchObject({
+    await expect(
+      service.prepare({ action: "clock-challenge" }, { onBox: false }),
+    ).rejects.toMatchObject({
       code: "promotion.break_glass_invalid",
     });
     const restore = {
@@ -146,7 +147,7 @@ it("an artifact naming an unknown recovery node still refuses before placement",
       ? {
           ...entry,
           bytes: Buffer.from(
-            `WAITRON_TILL_NODE_ID=00000000-0000-4000-8000-000000000099\nWAITRON_TILL_LOCATION_ID=${node.locationId}\n`,
+            `WAITRON_NODE_ID=00000000-0000-4000-8000-000000000099\nWAITRON_LOCATION_ID=${node.locationId}\n`,
           ),
         }
       : entry,
@@ -160,20 +161,17 @@ it("an artifact naming an unknown recovery node still refuses before placement",
   };
   const destination = join(f.roots.venueDir, "venue.db");
   await writeFile(destination, "original destination");
-  const selected = await previewRecoveryArchive(restore);
-  expect(selected.nodeRecoveryKeyName).toBeNull();
-  const targetNodeId = nodeId("00000000-0000-4000-8000-000000000099");
-  const service = createSelectedRecoveryPreparation({
-    ...f.options,
-    selected,
-    binding: { ...f.options.binding, sourceId: selected.sourceId, targetNodeId },
-    node: { ...node, nodeId: targetNodeId },
+  await expect(previewRecoveryArchive(restore)).rejects.toMatchObject({
+    code: "restore.identity_unknown",
   });
-  await expect(service.prepare({ action: "clock-challenge" })).rejects.toMatchObject({
-    code: "module.operation_invalid",
+  await expect(
+    restoreFromArtifact({
+      ...restore,
+      modules: f.service.modules,
+      withModuleOperations: f.service.runner(f.outcome.input),
+    }),
+  ).rejects.toMatchObject({
+    code: "restore.identity_unknown",
   });
-  expect(() => service.runner(f.outcome.input)).toThrowError(
-    expect.objectContaining({ code: "module.operation_invalid" }),
-  );
   expect(await readFile(destination, "utf8")).toBe("original destination");
 });

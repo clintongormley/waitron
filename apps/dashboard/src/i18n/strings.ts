@@ -1,4 +1,7 @@
 export const en = {
+  "zone_repair.sign_in": "Sign in as a manager",
+  "zone_repair.sign_in_explanation":
+    "To confirm the time zone, sign in with an account that can configure the venue. This signs you out and opens sign-in.",
   "permission_sign_in.heading": "Sign in for this action",
   "permission_sign_in.explanation":
     "Signing in changes the dashboard account. Choose the source again after signing in; the action will not run automatically.",
@@ -15,7 +18,7 @@ export const en = {
   "zone_repair.not_needed": "The venue already has a valid time zone. Check its current status.",
   "zone_repair.heading": "Confirm the venue time zone",
   "zone_repair.explanation":
-    "The venue’s saved time zone is missing or invalid. Trading is stopped. Ask a manager to confirm it.",
+    "The venue’s saved time zone is missing or invalid. Trading is stopped until the correct time zone is confirmed.",
   "zone_repair.zone": "Time zone",
   "zone_repair.choose": "Choose a time zone",
   "zone_repair.confirm": "I confirm that this is the correct time zone for this venue.",
@@ -3745,6 +3748,9 @@ export type StringKey = keyof typeof en;
 
 // Not Partial: an untranslated key fails typecheck rather than falling through to English.
 export const es: Record<StringKey, string> = {
+  "zone_repair.sign_in": "Iniciar sesión como responsable",
+  "zone_repair.sign_in_explanation":
+    "Para confirmar la zona horaria, inicia sesión con una cuenta que pueda configurar el local. Se cerrará tu sesión y se abrirá el inicio de sesión.",
   "permission_sign_in.heading": "Identifícate para esta acción",
   "permission_sign_in.explanation":
     "Identificarte cambia la cuenta del panel. Vuelve a elegir el origen después de identificarte; la acción no se ejecutará automáticamente.",
@@ -3761,7 +3767,7 @@ export const es: Record<StringKey, string> = {
   "zone_repair.not_needed": "El local ya tiene una zona horaria válida. Consulta su estado actual.",
   "zone_repair.heading": "Confirmar la zona horaria del local",
   "zone_repair.explanation":
-    "La zona horaria guardada del local falta o no es válida. Las ventas están detenidas. Pide a un responsable que la confirme.",
+    "La zona horaria guardada del local falta o no es válida. Las ventas están detenidas hasta que se confirme la zona horaria correcta.",
   "zone_repair.zone": "Zona horaria",
   "zone_repair.choose": "Elige una zona horaria",
   "zone_repair.confirm": "Confirmo que esta es la zona horaria correcta para este local.",

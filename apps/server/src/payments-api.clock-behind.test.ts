@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -102,6 +103,7 @@ function paymentsAt(ms: number): Hono {
   mountPaymentsApi(
     app,
     {
+      admission: testTradingAdmission(),
       db: venue.db,
       backend: venue.backend,
       clock: clockAt(ms),

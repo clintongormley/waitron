@@ -1,4 +1,4 @@
-import { leaveCoordinatorFor, navigationGuardFor } from "@waitron/ui";
+import { chooseTheme, leaveCoordinatorFor, navigationGuardFor } from "@waitron/ui";
 import { commands, page, userEvent } from "vitest/browser";
 import { applyTokens, currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
@@ -9309,4 +9309,60 @@ it("expires a dirty repair session without retaining its draft or leave question
   expect(after.defaultPrevented).toBe(false);
   expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   expect(el.shadowRoot!.querySelector("dashboard-venue-zone-repair")).toBeNull();
+});
+
+describe.each(["light", "dark"] as const)("staff zone repair in %s", (theme) => {
+  it.each([
+    ["en-GB", "Sign in as a manager", "signs you out"],
+    ["es-ES", "Iniciar sesión como responsable", "cerrará tu sesión"],
+  ])(
+    "offers staff a manager sign-in from zone repair in %s and opens login after signing them out",
+    async (locale, label, explanation) => {
+      chooseTheme(theme);
+      const api = stubApi({
+        getMe: vi.fn().mockResolvedValue({
+          ...meResponse,
+          locale,
+          sessionDefault: locale,
+          role: "staff",
+          permissions: [],
+          tradingAdmission: { state: "invalid" },
+        }),
+      });
+      const { el } = await mountWidget<DashboardApp>(
+        "dashboard-app",
+        { api, request: stubRequest },
+        theme,
+      );
+      await expect
+        .poll(() => el.shadowRoot!.querySelector("dashboard-venue-zone-repair"))
+        .not.toBeNull();
+      const button = el.shadowRoot!.querySelector<HTMLElement>("[data-test=zone-sign-in]");
+      expect(button).not.toBeNull();
+      expect(button!.textContent).toContain(label);
+      expect(
+        el.shadowRoot!.querySelector("[data-test=zone-sign-in-explanation]")!.textContent,
+      ).toContain(explanation);
+      const viewport = { width: innerWidth, height: innerHeight };
+      try {
+        for (const width of [390, 1280]) {
+          await page.viewport(width, 900);
+          await el.updateComplete;
+          expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
+          await page.screenshot({
+            path: `__screenshots__/a696-sign-in/${locale}-${theme}-${width}.png`,
+            fullPage: true,
+          });
+        }
+      } finally {
+        chooseTheme("device");
+        await page.viewport(viewport.width, viewport.height);
+      }
+      button!.click();
+      await expect.poll(() => login(el)).not.toBeNull();
+      expect(api.logout).toHaveBeenCalledOnce();
+      expect(el.shadowRoot!.querySelector("dashboard-venue-zone-repair")).toBeNull();
+      expect(api.getContentLanguages).not.toHaveBeenCalled();
+    },
+  );
 });

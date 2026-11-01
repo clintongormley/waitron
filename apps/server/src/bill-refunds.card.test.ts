@@ -1836,7 +1836,8 @@ describe("a refund the provider here cannot answer for", () => {
 
     const resumed = await resumeCardRefund(
       {
-        db: venue.db, backend: venue.backend,
+        db: venue.db,
+        backend: venue.backend,
         admission: testTradingAdmission(),
         cfg: venue.cfg,
         clock: systemClock(),

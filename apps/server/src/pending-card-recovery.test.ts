@@ -211,7 +211,10 @@ describe("automatic card capture recovery", () => {
       new AppError("storage.disk_full", {}),
     );
 
-    const answer = await recoverAutomaticCardPayments(deps);
+    const answer = await recoverAutomaticCardPayments({
+      ...deps,
+      admission: testTradingAdmission(),
+    });
 
     expect(answer.filed).toBe(0);
     expect(answer.errors).toEqual([

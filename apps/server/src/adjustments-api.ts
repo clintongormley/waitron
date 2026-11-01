@@ -249,7 +249,12 @@ export function mountAdjustmentsApi(
             const applied = await applyAdjustment(
               tx,
               cfg,
-              { ...ask, admission: deps.admission, submissionId, ...(approver === undefined ? {} : { approver }) },
+              {
+                ...ask,
+                admission: deps.admission,
+                submissionId,
+                ...(approver === undefined ? {} : { approver }),
+              },
               deps.venueLocale,
               attempts,
               deps.attendance === undefined

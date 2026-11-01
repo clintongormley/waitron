@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { billPayments, newId, withTransaction } from "@waitron/db";
@@ -56,7 +57,14 @@ describe("where a bill's card registers itself as in flight", () => {
       let live: boolean | undefined;
       try {
         paying = takeReaderBillPayment(
-          { db: suite.db, backend: v.backend, clock: v.clock, provider: reader, disk: disk() },
+          {
+            admission: testTradingAdmission(),
+            db: suite.db,
+            backend: v.backend,
+            clock: v.clock,
+            provider: reader,
+            disk: disk(),
+          },
           v.cfg,
           billId,
           {
@@ -119,7 +127,14 @@ describe("a bill's card when a transaction ahead in the write queue notes a full
     const disk = roomyState();
     const release = holdQueue(() => inside(disk));
     const paying = takeReaderBillPayment(
-      { db: suite.db, backend: v.backend, clock: v.clock, provider: reader, disk },
+      {
+        admission: testTradingAdmission(),
+        db: suite.db,
+        backend: v.backend,
+        clock: v.clock,
+        provider: reader,
+        disk,
+      },
       v.cfg,
       billId,
       {

@@ -35,7 +35,9 @@ async function calendar(directory: string) {
       offerProducts(tx, v.cfg, { productIds: [product.id] }),
     );
     const results = [];
-    for (const [key, timeZone, at] of scenarios) {
+    for (const [key, timeZone, at] of [...scenarios].sort(
+      (a, b) => Date.parse(a[2]) - Date.parse(b[2]),
+    )) {
       await store.venue
         .update(locations)
         .set({ timeZone })

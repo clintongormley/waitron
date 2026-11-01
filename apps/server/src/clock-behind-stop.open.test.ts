@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { Hono } from "hono";
@@ -215,8 +216,18 @@ describe("while the latest record is a day after the box's clock", () => {
       zoneId: open.counter.zoneId,
       operatorId: venue.operatorId,
     });
-    await issueOrderInvoice(deps, venue.cfg, billId, venue.operatorId);
-    await placeOrder(deps, venue.cfg, billId, venue.operatorId);
+    await issueOrderInvoice(
+      { ...deps, admission: testTradingAdmission() },
+      venue.cfg,
+      billId,
+      venue.operatorId,
+    );
+    await placeOrder(
+      { ...deps, admission: testTradingAdmission() },
+      venue.cfg,
+      billId,
+      venue.operatorId,
+    );
     const behind = nowMs() - DAY;
     const app = venue.appAt(clockAt(behind));
     await expectSaleStopped(behind);

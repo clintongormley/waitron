@@ -1294,11 +1294,15 @@ describe("readCurrentOrders (spec §4)", () => {
       }),
     );
     await serve(v, s.partyId, [{ lineId: croqLine!.id, quantity: "1" }]);
-    await payWorkingOrder({ admission: testTradingAdmission(), db: suite.db, backend, clock }, v.cfg, {
-      id: s.tabId,
-      lines: [],
-      tender: { method: "cash", amount: "18.00" },
-    });
+    await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      v.cfg,
+      {
+        id: s.tabId,
+        lines: [],
+        tender: { method: "cash", amount: "18.00" },
+      },
+    );
     const laterBill = await inTx((tx) => insertPartyBill(tx, v.cfg, s.partyId));
     const mains = await group(
       v,

@@ -1875,6 +1875,16 @@ export class DashboardApp extends LitElement {
               .sessionKey=${`${this.myPersonId}:${this.sessionGeneration}`}
               .reload=${this.reload}
             ></dashboard-venue-zone-repair>
+            ${
+              !this.#sessionPermissions.includes("venue.configure")
+                ? html`<p data-test="zone-sign-in-explanation">
+                      ${t("zone_repair.sign_in_explanation")}
+                    </p>
+                    <wt-button data-test="zone-sign-in" @click=${() => void this.#onLogout()}
+                      >${t("zone_repair.sign_in")}</wt-button
+                    >`
+                : nothing
+            }
             <wt-button
               data-test="zone-logout"
               variant="secondary"

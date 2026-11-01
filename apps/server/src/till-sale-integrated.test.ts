@@ -252,7 +252,7 @@ describe("saved-zone payment transactions", () => {
           tx,
           zoneVenue.backend,
           zoneVenue.cfg,
-          await priceForIssuance(tx, clock, zoneVenue.cfg, req.id),
+          await priceForIssuance(tx, clock, zoneVenue.backend, zoneVenue.cfg, req.id),
           zoneVenue.operatorId,
           testTradingAdmission(),
         );

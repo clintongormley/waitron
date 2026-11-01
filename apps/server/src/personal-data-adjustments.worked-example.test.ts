@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -185,7 +186,14 @@ async function voidLine(
       submissionId: randomUUID(),
       ...choice,
     };
-    await cancelItem(tx, venue.cfg, bill.partyId, lineId, ask, operatorId);
+    await cancelItem(
+      tx,
+      venue.cfg,
+      bill.partyId,
+      lineId,
+      { ...ask, admission: testTradingAdmission() },
+      operatorId,
+    );
   });
   // Two cancels in one millisecond would tie on `created_at` and be ordered by their random ids.
   await new Promise((resolve) => setTimeout(resolve, 2));

@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -309,8 +310,18 @@ describe("late issuance rolls back its initiating command", () => {
       ).status,
     ).toBe(200);
     const deps = { db: suite.db, backend: venue.backend, clock: venue.clock };
-    await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
-    await placeOrder(deps, venue.cfg, id, venue.operatorId);
+    await issueOrderInvoice(
+      { ...deps, admission: testTradingAdmission() },
+      venue.cfg,
+      id,
+      venue.operatorId,
+    );
+    await placeOrder(
+      { ...deps, admission: testTradingAdmission() },
+      venue.cfg,
+      id,
+      venue.operatorId,
+    );
     const before = snapshot();
     fault.enabled = true;
     const answer = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/cancel`, {

@@ -541,7 +541,7 @@ it.each(["en-GB", "ca-ES"])(
       zoneId,
       lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
     });
-    await placeOrder(deps(), cfg, id, OPERATOR);
+    await placeOrder({ ...deps(), admission: testTradingAdmission() }, cfg, id, OPERATOR);
     const jobs = (await printJobsFor(cfg)).filter((job) => job.printerId === printerId);
     expect(jobs).toHaveLength(1);
     const ticket = decodeTicket(new Uint8Array(jobs[0]!.payload));
@@ -593,7 +593,9 @@ it("prints one non-fiscal numbered collection ticket when a pay-on-collection or
   expect(opensDrawer(new Uint8Array(jobs[0]!.payload))).toBe(false);
   expect(await registroCount(cfg)).toBe(0);
   expect(await drawerOpensFor(cfg)).toEqual([]);
-  await expect(placeOrder({ ...deps(), admission: testTradingAdmission() }, cfg, id, OPERATOR)).resolves.toEqual({
+  await expect(
+    placeOrder({ ...deps(), admission: testTradingAdmission() }, cfg, id, OPERATOR),
+  ).resolves.toEqual({
     id,
     status: "placed",
   });
@@ -931,7 +933,7 @@ describe("simplified invoice original requests", () => {
       await configureReceipt(cfg, { printerId });
       const workingOrderId = randomUUID();
       await recordTillSale(
-        deps(),
+        { ...deps(), admission: testTradingAdmission() },
         cfg,
         {
           workingOrderId,
@@ -965,7 +967,7 @@ describe("simplified invoice original requests", () => {
     const { cfg, each, zoneId } = await setupVenue();
     const workingOrderId = randomUUID();
     const ticket = await recordTillSale(
-      deps(),
+      { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
         workingOrderId,
@@ -3862,7 +3864,7 @@ describe("the theme's logo on thermal receipts", () => {
       .where(eq(zoneServicePolicies.zoneId, zoneId));
     const sell = () =>
       recordTillSale(
-        deps(),
+        { ...deps(), admission: testTradingAdmission() },
         cfg,
         {
           zoneId,
@@ -4090,7 +4092,7 @@ it("keeps the original history after printer deletion and prints a marked copy o
   await configureReceipt(cfg, { printerId: firstPrinter });
   const workingOrderId = randomUUID();
   const ticket = await recordTillSale(
-    deps(),
+    { ...deps(), admission: testTradingAdmission() },
     cfg,
     {
       workingOrderId,
@@ -4150,9 +4152,9 @@ describe("A964 collection language", () => {
         });
         const submit = () =>
           mode === "ticket_then_pay"
-            ? placeOrder(deps(), cfg, id, OPERATOR)
+            ? placeOrder({ ...deps(), admission: testTradingAdmission() }, cfg, id, OPERATOR)
             : recordTillSale(
-                deps(),
+                { ...deps(), admission: testTradingAdmission() },
                 cfg,
                 { workingOrderId: id, lines: [], tender: { method: "cash", amount: "2.00" } },
                 OPERATOR,

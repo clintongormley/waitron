@@ -2,7 +2,7 @@
 
 ## When trading is stopped {#stopped}
 
-If the venue's saved time zone is missing or invalid, Waitron stops trading before starting its payment and invoice work. Sign in to the dashboard. You can still sign out; a manager with permission to configure the venue can confirm its time zone.
+If the venue's saved time zone is missing or invalid, Waitron stops trading before starting its payment and invoice work. Sign in to the dashboard. If your account cannot configure the venue, choose **Sign in as a manager**. This signs you out and opens sign-in. Use an account with permission to configure the venue to confirm its time zone.
 
 ## Choose and confirm {#confirm}
 

@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
@@ -52,11 +53,15 @@ useVenueDb({
 });
 
 async function pay(billId: string, amount: string) {
-  await payWorkingOrder({ db: venue.db, backend: venue.backend, clock: venue.clock }, venue.cfg, {
-    id: billId,
-    tender: { method: "cash", amount },
-    lines: [],
-  });
+  await payWorkingOrder(
+    { admission: testTradingAdmission(), db: venue.db, backend: venue.backend, clock: venue.clock },
+    venue.cfg,
+    {
+      id: billId,
+      tender: { method: "cash", amount },
+      lines: [],
+    },
+  );
 }
 
 async function partyRevision(partyId: string) {
@@ -139,6 +144,7 @@ async function cancelKeepingCharge(partyId: string, billId: string) {
         partyId,
         line.id,
         {
+          admission: testTradingAdmission(),
           expectedEdit: await readBillEditState(tx, billId),
           expectedContext: await readCancellationContext(tx, partyId, line.id),
           expectedPartyRevision: await partyRevision(partyId),
@@ -174,6 +180,7 @@ describe("releaseHeldWorkOf", () => {
     const p = await billWith(venue, [{ name: "Burger", quantity: "2" }], { release: "hold" });
     const split = await inTx(venue, async (tx) =>
       splitBill(tx, venue.cfg, p.billId, [{ lineNo: 1, quantity: "1" }], {
+        admission: testTradingAdmission(),
         operatorId: venue.staffId,
         partyId: p.partyId,
         expectedPartyRevision: await partyRevision(p.partyId),
@@ -214,6 +221,7 @@ describe("releaseHeldWorkOf", () => {
     const p = await billWith(venue, [{ name: "Burger", quantity: "2" }], { release: "hold" });
     const split = await inTx(venue, async (tx) =>
       splitBill(tx, venue.cfg, p.billId, [{ lineNo: 1, quantity: "1" }], {
+        admission: testTradingAdmission(),
         operatorId: venue.staffId,
         partyId: p.partyId,
         expectedPartyRevision: await partyRevision(p.partyId),

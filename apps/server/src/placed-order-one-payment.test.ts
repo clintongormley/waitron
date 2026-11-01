@@ -257,7 +257,14 @@ describe("a placed order's collect while its card is in flight", () => {
 /** A card payment of `id` through the orchestration, with `provider` as its reader. */
 function payWith(provider: FakePaymentProvider, id: string, disk?: DiskFullState) {
   return payWorkingOrderIntegratedOrchestration(
-    { admission: testTradingAdmission(), db: venue.db, backend: venue.backend, clock: venue.clock, provider, disk },
+    {
+      admission: testTradingAdmission(),
+      db: venue.db,
+      backend: venue.backend,
+      clock: venue.clock,
+      provider,
+      disk,
+    },
     venue.cfg,
     { id, lines: [] },
   );

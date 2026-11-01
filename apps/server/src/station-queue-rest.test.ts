@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
@@ -328,6 +329,7 @@ describe("station queue bump mode", () => {
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db,
         backend: {} as FiscalBackend,
         clock: systemClock(),

@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
@@ -465,7 +466,12 @@ describe("readOrderStateCounts", () => {
 
   it("counts a sent order's dish as waiting, and a handed-over one as ordered only", async () => {
     const id = await parked([["Tarta", "1"]], "ticket_then_pay");
-    await placeOrder(deps(), venue.cfg, id, venue.operatorId);
+    await placeOrder(
+      { ...deps(), admission: testTradingAdmission() },
+      venue.cfg,
+      id,
+      venue.operatorId,
+    );
     expect(await countsOf([id])).toEqual(new Map([[id, { ...zero, ordered: 1, waiting: 1 }]]));
 
     await markCollected({ db: venue.db }, venue.cfg, id);

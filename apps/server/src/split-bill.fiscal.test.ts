@@ -336,7 +336,11 @@ describe("split-bill: pay each check files its own registro", () => {
     const { cfg } = seeded;
     const deps = { db: suite.db, backend, clock };
 
-    const { tabId, a, b, c, rA, rB, rC } = await splitIntoThreeChecks(seeded, deps, "grouped");
+    const { tabId, a, b, c, rA, rB, rC } = await splitIntoThreeChecks(
+      seeded,
+      { ...deps, admission: testTradingAdmission() },
+      "grouped",
+    );
 
     const { registros, originLines, filed } = await asApp(cfg, async (tx) => ({
       registros: await tx.select({ id: registrosFacturacion.id }).from(registrosFacturacion),

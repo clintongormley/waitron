@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -150,8 +151,13 @@ async function placedIssuedOrder(): Promise<string> {
     zoneId: counter.zoneId,
     operatorId: venue.operatorId,
   });
-  await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
-  await placeOrder(deps, venue.cfg, id, venue.operatorId);
+  await issueOrderInvoice(
+    { ...deps, admission: testTradingAdmission() },
+    venue.cfg,
+    id,
+    venue.operatorId,
+  );
+  await placeOrder({ ...deps, admission: testTradingAdmission() }, venue.cfg, id, venue.operatorId);
   return id;
 }
 
@@ -449,6 +455,7 @@ describe("a bill's reader payment when the bill's sale fails for a full disk aft
 
     spy.mockRestore();
     await settlePendingBillPayments({
+      admission: testTradingAdmission(),
       db: venue.db,
       backend: venue.backend,
       clock: venue.clock,
@@ -665,6 +672,7 @@ describe.each(REAL_PROVIDERS)(
 
       await real.provider.resolvePending(new Date());
       await settlePendingBillPayments({
+        admission: testTradingAdmission(),
         db: venue.db,
         backend: venue.backend,
         clock: venue.clock,

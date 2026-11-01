@@ -1141,7 +1141,7 @@ describe("department transfer read boundaries", () => {
         .set({ quantity: 2000 })
         .where(eq(workingOrderLines.workingOrderId, f.tab));
       await placeOrder(
-        { db: suite.db, backend: v.backend, clock: v.clock },
+        { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
         requestCfg(v.cfg, f.source),
         f.tab,
         personId,
@@ -1957,7 +1957,7 @@ describe("human transfer identities", () => {
     f.tab = await counterOrder(v, "Burger", "Paella");
     await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
     await placeOrder(
-      { db: suite.db, backend: v.backend, clock: v.clock },
+      { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
       requestCfg(v.cfg, f.source),
       f.tab,
       personId,

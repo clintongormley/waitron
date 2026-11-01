@@ -7051,7 +7051,11 @@ export async function priceForIssuance(
   return {
     id,
     identities: order.identities,
-    ...issueMoment(await prepareIssueClock(tx, cfg, clock), await issuancePass(tx, cfg, id, order), backend),
+    ...issueMoment(
+      await prepareIssueClock(tx, cfg, clock),
+      await issuancePass(tx, cfg, id, order),
+      backend,
+    ),
   };
 }
 

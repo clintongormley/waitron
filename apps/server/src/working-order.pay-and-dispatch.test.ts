@@ -1444,7 +1444,14 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
       OPERATOR,
     );
 
-    await expect(placeOrder({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, id, OPERATOR)).resolves.toEqual({
+    await expect(
+      placeOrder(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        cfg,
+        id,
+        OPERATOR,
+      ),
+    ).resolves.toEqual({
       id,
       status: "placed",
     });

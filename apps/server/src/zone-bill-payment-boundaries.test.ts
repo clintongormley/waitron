@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { billPayments, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -19,16 +19,17 @@ import { zonePaymentVenue } from "./testing/zone-payment-venue.js";
 import { send } from "./testing/bill-venue.js";
 
 let v: Awaited<ReturnType<typeof zonePaymentVenue>>;
-useVenueDb({
-  resetPerTest: false,
+const suite = useVenueDb({
   timeoutMs: 60_000,
   migrations: migrationOptionsFor(manifestSets(), null),
-  setup: async (db) => {
-    v = await zonePaymentVenue(db);
-  },
 });
+afterEach(() => vi.useRealTimers());
 const night = [{ instant: "2026-10-14T23:30:00.000Z", offset: 120 }];
-beforeEach(() => v.set("2026-10-14T23:30:00.000Z"));
+beforeEach(async () => {
+  vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-03-28T12:00:00Z") });
+  v = await zonePaymentVenue(suite.db);
+  v.set("2026-10-14T23:30:00.000Z");
+});
 function close(state: string) {
   const admission = new TradingAdmission();
   if (state === "restart_required") admission.requireRestart();

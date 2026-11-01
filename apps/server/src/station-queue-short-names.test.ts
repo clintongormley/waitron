@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { and, eq, isNull } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -206,6 +207,7 @@ describe("the till's station route carries the short names", () => {
     mountTillApi(
       app,
       {
+        admission: testTradingAdmission(),
         db: v.db,
         backend: v.backend,
         clock: v.clock,

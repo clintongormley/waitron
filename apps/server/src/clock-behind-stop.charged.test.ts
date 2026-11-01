@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
@@ -219,8 +220,13 @@ async function placedIssuedOrder(clock: TrustedClock): Promise<string> {
     zoneId: counter.zoneId,
     operatorId: venue.operatorId,
   });
-  await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
-  await placeOrder(deps, venue.cfg, id, venue.operatorId);
+  await issueOrderInvoice(
+    { ...deps, admission: testTradingAdmission() },
+    venue.cfg,
+    id,
+    venue.operatorId,
+  );
+  await placeOrder({ ...deps, admission: testTradingAdmission() }, venue.cfg, id, venue.operatorId);
   return id;
 }
 
@@ -287,7 +293,11 @@ it("the automatic recovery files nothing during the stop, then files it", async 
   });
   const before = collects();
 
-  const stopped = await recoverAutomaticCardPayments({ ...venue, clock: clockAt(behind) });
+  const stopped = await recoverAutomaticCardPayments({
+    admission: testTradingAdmission(),
+    ...venue,
+    clock: clockAt(behind),
+  });
 
   expect(stopped.filed).toBe(0);
   expect(stopped.errors).toEqual([
@@ -296,6 +306,7 @@ it("the automatic recovery files nothing during the stop, then files it", async 
   expect(registroCount(venue, billId)).toBe(0);
 
   const resumed = await recoverAutomaticCardPayments({
+    admission: testTradingAdmission(),
     ...venue,
     clock: clockAt(now + MINUTE),
   });
@@ -326,6 +337,7 @@ it("a card on a bill as the stop begins says so, and the pending pass completes 
   expect(registroCount(venue, billId)).toBe(0);
 
   await settlePendingBillPayments({
+    admission: testTradingAdmission(),
     db: venue.db,
     backend: venue.backend,
     clock: clockAt(now + 2 * MINUTE),

@@ -2,7 +2,7 @@
 
 ## Cuando las ventas están detenidas {#stopped}
 
-Si la zona horaria guardada del local falta o no es válida, Waitron detiene las ventas antes de iniciar los cobros y la facturación. Inicia sesión en el panel. Puedes cerrar sesión; un responsable con permiso para configurar el local puede confirmar su zona horaria.
+Si la zona horaria guardada del local falta o no es válida, Waitron detiene las ventas antes de iniciar los cobros y la facturación. Inicia sesión en el panel. Si tu cuenta no puede configurar el local, pulsa **Iniciar sesión como responsable**. Se cerrará tu sesión y se abrirá el inicio de sesión. Usa una cuenta con permiso para configurar el local para confirmar su zona horaria.
 
 ## Elegir y confirmar {#confirm}
 

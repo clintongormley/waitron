@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { setImmediate as yieldTurn } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
@@ -174,7 +175,7 @@ function saleOf(orderId: string) {
 async function walkUp(lines: TabRoundLine[], amount: string): Promise<string> {
   const id = randomUUID();
   await payWorkingOrder(
-    venue,
+    { ...venue, admission: testTradingAdmission() },
     venue.cfg,
     { id, expectedEdit: null, lines, zoneId: counter.zoneId, tender: { method: "cash", amount } },
     venue.operatorId,
@@ -193,7 +194,7 @@ async function park(lines: TabRoundLine[]): Promise<{ id: string; orderNumber: n
 
 async function payParked(id: string, amount: string): Promise<void> {
   await payWorkingOrder(
-    venue,
+    { ...venue, admission: testTradingAdmission() },
     venue.cfg,
     {
       id,
@@ -240,7 +241,14 @@ function cardDeps(charge: boolean): IntegratedPayDeps {
     refund: fail,
     partialRefund: fail,
   };
-  return { db: venue.db, backend: venue.backend, clock: venue.clock, provider, readerRef: "r1" };
+  return {
+    admission: testTradingAdmission(),
+    db: venue.db,
+    backend: venue.backend,
+    clock: venue.clock,
+    provider,
+    readerRef: "r1",
+  };
 }
 
 const sorted = (values: (string | null)[]) => [...values].sort();
@@ -371,7 +379,7 @@ describe("A1208 counter orders are written as portions", () => {
       await readBillEditState(tx, id),
     ]);
 
-    await updateHeldOrder({ db: venue.db }, venue.cfg, id, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db: venue.db }, venue.cfg, id, {
       operatorId: venue.operatorId,
       expectedEdit,
       revision,
@@ -398,7 +406,7 @@ describe("A1208 counter orders are written as portions", () => {
 
     await expect(
       payWorkingOrder(
-        venue,
+        { ...venue, admission: testTradingAdmission() },
         venue.cfg,
         {
           id,
@@ -488,7 +496,7 @@ describe("A1208 a counter order of more portions than one statement can bind", (
       await readBillEditState(tx, id),
     ]);
 
-    await updateHeldOrder({ db: venue.db }, venue.cfg, id, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db: venue.db }, venue.cfg, id, {
       operatorId: venue.operatorId,
       expectedEdit,
       revision,
@@ -512,7 +520,7 @@ describe("A1208 a counter order of more portions than one statement can bind", (
       await readBillEditState(tx, id),
     ]);
 
-    await updateHeldOrder({ db: venue.db }, venue.cfg, id, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db: venue.db }, venue.cfg, id, {
       operatorId: venue.operatorId,
       expectedEdit,
       revision,
@@ -538,7 +546,7 @@ describe("A1208 a counter order of more portions than one statement can bind", (
       await readBillEditState(tx, id),
     ]);
 
-    await updateHeldOrder({ db: venue.db }, venue.cfg, id, {
+    await updateHeldOrder({ admission: testTradingAdmission(), db: venue.db }, venue.cfg, id, {
       operatorId: venue.operatorId,
       expectedEdit,
       revision,
@@ -566,7 +574,12 @@ describe("A1208 a counter order of more portions than one statement can bind", (
     });
 
     const { payment } = await takeBillPayment(
-      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
       venue.cfg,
       id,
       {
@@ -608,6 +621,7 @@ describe("A1208 a counter order of more portions than one statement can bind", (
         tx,
         venue.cfg,
         {
+          admission: testTradingAdmission(),
           submissionId: randomUUID(),
           expectedEdit: await readBillEditState(tx, id),
           orderId: id,

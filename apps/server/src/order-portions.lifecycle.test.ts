@@ -1,3 +1,4 @@
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { setImmediate as yieldTurn } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -292,7 +293,10 @@ describe("A803 portion lifecycle: moves", () => {
     const [first] = p.portions;
     const ask = { ...(await command(p)), expectedEdit: await edit(p.billId) };
     const result = await inTx(venue, (tx) =>
-      splitBill(tx, venue.cfg, p.billId, [{ lineNo: 1 }], ask),
+      splitBill(tx, venue.cfg, p.billId, [{ lineNo: 1 }], {
+        ...ask,
+        admission: testTradingAdmission(),
+      }),
     );
     expect(eventsOf(p.portions)).toEqual([
       {
@@ -395,17 +399,22 @@ describe("A803 portion lifecycle: cancellations", () => {
       .select({ revision: workingOrders.revision })
       .from(workingOrders)
       .where(eq(workingOrders.id, p.billId));
-    await updateHeldOrder({ db: venue.db }, venue.cfg, p.billId, {
-      operatorId: venue.adminId,
-      expectedEdit: await edit(p.billId),
-      revision: order!.revision,
-      lines: [
-        {
-          workingOrderLineId: second!.lineId,
-          ...burgersWithCheese("1")[0]!,
-        },
-      ],
-    });
+    await updateHeldOrder(
+      { admission: testTradingAdmission(), db: venue.db },
+      venue.cfg,
+      p.billId,
+      {
+        operatorId: venue.adminId,
+        expectedEdit: await edit(p.billId),
+        revision: order!.revision,
+        lines: [
+          {
+            workingOrderLineId: second!.lineId,
+            ...burgersWithCheese("1")[0]!,
+          },
+        ],
+      },
+    );
     expect(bindingOf(first!.lineId)).toEqual([]);
     expect(registryHas(first!.portionId)).toBe(true);
     expect(bindingOf(second!.lineId)).toEqual([{ portion_id: second!.portionId }]);
@@ -439,6 +448,7 @@ describe("A803 portion lifecycle: cancellations", () => {
         p.partyId,
         first!.lineId,
         {
+          admission: testTradingAdmission(),
           submissionId: randomUUID(),
           quantity: "1",
           outcome: "keep_charge",
@@ -574,8 +584,14 @@ describe("A803 portion lifecycle: end to end through a submitted draft", () => {
 
   async function splitOff(p: Submitted, lineNo: number): Promise<string> {
     const command = { ...(await ask(p)), expectedEdit: await edit(p.billId) };
-    return (await inTx(venue, (tx) => splitBill(tx, venue.cfg, p.billId, [{ lineNo }], command)))
-      .billId;
+    return (
+      await inTx(venue, (tx) =>
+        splitBill(tx, venue.cfg, p.billId, [{ lineNo }], {
+          ...command,
+          admission: testTradingAdmission(),
+        }),
+      )
+    ).billId;
   }
 
   async function payInCash(billId: string): Promise<void> {
@@ -742,7 +758,10 @@ describe("A803 portion lifecycle: end to end through a submitted draft", () => {
     const command = { ...(await ask(p)), expectedEdit: stale };
     await expect(
       inTx(venue, (tx) =>
-        splitBill(tx, venue.cfg, p.billId, [{ lineNo: p.portions[0]!.lineNo }], command),
+        splitBill(tx, venue.cfg, p.billId, [{ lineNo: p.portions[0]!.lineNo }], {
+          ...command,
+          admission: testTradingAdmission(),
+        }),
       ),
     ).rejects.toMatchObject({ code: "draft.out_of_date" });
     expect(tables()).toEqual(before);

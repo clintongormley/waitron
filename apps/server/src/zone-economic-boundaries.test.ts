@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { withTransaction, workingOrderLines, billPayments } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -42,6 +42,7 @@ useVenueDb({
   resetPerTest: false,
   timeoutMs: 60_000,
   setup: async (db) => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-14T23:30:00Z") });
     venue = await provisionBillVenue(db);
     ready = new TradingAdmission();
     ready.admit();
@@ -69,6 +70,7 @@ useVenueDb({
     });
   },
 });
+afterAll(() => vi.useRealTimers());
 const closedStates = ["unchecked", "missing", "invalid", "restart_required"] as const;
 function closed(state: (typeof closedStates)[number]) {
   const admission = new TradingAdmission();
@@ -114,7 +116,7 @@ async function issued(id: string) {
       tx,
       venue.backend,
       venue.cfg,
-      await priceForIssuance(tx, venue.clock, venue.cfg, id),
+      await priceForIssuance(tx, venue.clock, venue.backend, venue.cfg, id),
       venue.operatorId,
       ready,
     );
@@ -220,7 +222,7 @@ describe("direct economic orchestration before startup admission", () => {
         note: null,
       };
       const invoice = await withTransaction(venue.db, (tx) =>
-        priceForIssuance(tx, venue.clock, venue.cfg, id),
+        priceForIssuance(tx, venue.clock, venue.backend, venue.cfg, id),
       );
       const before = snapshot();
       const write = () => {
@@ -323,7 +325,7 @@ it("an admitted direct issue uses the writing location's calendar and preserves 
   };
   const before = venue.db.all(sql`select * from registros_facturacion order by rowid`);
   await withTransaction(venue.db, async (tx) => {
-    const invoice = await priceForIssuance(tx, clock, venue.cfg, id);
+    const invoice = await priceForIssuance(tx, clock, venue.backend, venue.cfg, id);
     await issueUnpaidInvoice(tx, venue.backend, venue.cfg, invoice, venue.operatorId, ready);
   });
   const [sale] = venue.db.all(
@@ -451,7 +453,7 @@ it.each(["save", "line", "split", "adjustment", "auto-issue", "departure", "cred
       id = party.tabId;
       partyId = party.partyId;
     } else if (operation === "credit") await issued(id);
-    else await received(id, operation === "auto-issue" ? 2420 : 1210);
+    else await received(id, operation === "auto-issue" || operation === "line" ? 2420 : 1210);
     const actor = await operator();
     const before = venue.db.all(sql`select * from registros_facturacion order by rowid`);
     const authority = { admission: ready, operatorId: venue.adminId, expectedEdit: null };
@@ -491,7 +493,7 @@ it.each(["save", "line", "split", "adjustment", "auto-issue", "departure", "cred
           return;
         }
         if (operation === "line")
-          await updateOrderLine(tx, venue.cfg, id, 1, { quantity: "1" }, 0, authority);
+          await updateOrderLine(tx, venue.cfg, id, 1, { note: "No salt" }, 0, authority);
         if (operation === "split")
           await splitBill(tx, venue.cfg, id, [{ lineNo: 1, quantity: "1" }], {
             ...authority,

@@ -1129,7 +1129,12 @@ describe("Cancel item service command", () => {
         { release: "hold" },
       );
       await payWorkingOrder(
-        { db: venue.db, backend: venue.backend, clock: venue.clock },
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
         venue.cfg,
         { id: order.billId, tender: { method: "cash", amount: "47.99" }, lines: [] },
       );
@@ -1164,6 +1169,7 @@ describe("Cancel item service command", () => {
             order.partyId,
             line.id,
             {
+              admission: testTradingAdmission(),
               quantity: "1",
               expectedEdit: await readBillEditState(tx, order.billId),
               outcome: "keep_charge",
@@ -1309,11 +1315,20 @@ describe("Cancel item service command", () => {
 
 describe("What a cancel records for refunds", () => {
   async function pay(billId: string, amount: string) {
-    await payWorkingOrder({ db: venue.db, backend: venue.backend, clock: venue.clock }, venue.cfg, {
-      id: billId,
-      tender: { method: "cash", amount },
-      lines: [],
-    });
+    await payWorkingOrder(
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
+      venue.cfg,
+      {
+        id: billId,
+        tender: { method: "cash", amount },
+        lines: [],
+      },
+    );
   }
   async function adjust(order: Fixture, args: { action: "comp" }) {
     const ask = await askFor(order);
@@ -1322,6 +1337,7 @@ describe("What a cancel records for refunds", () => {
         tx,
         venue.cfg,
         {
+          admission: testTradingAdmission(),
           expectedEdit: ask.expectedEdit,
           orderId: order.billId,
           expectedRevision: ask.expectedBillRevision,
@@ -1523,6 +1539,7 @@ describe("What a cancel records for refunds", () => {
         order.billId,
         [{ lineNo: order.parent.lineNo, quantity: "2" }],
         {
+          admission: testTradingAdmission(),
           partyId: order.partyId,
           expectedPartyRevision: party!.revision,
           operatorId: venue.staffId,

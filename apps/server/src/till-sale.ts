@@ -1189,11 +1189,10 @@ async function payIntegrated(
         ticket: await readSettledTicket(deps.backend, tx, cfg, req.id),
       };
     }
-    const reading = deps.clock.now();
-    await deps.backend.refuseWhileClockBehind(tx, reading);
-
     await requireEconomicWrite(tx, cfg, deps.admission);
-    await prepareIssueClock(tx, cfg, deps.clock);
+    const reading = deps.clock.now();
+    await prepareIssueClock(tx, cfg, pinnedAt(deps.clock, reading));
+    await deps.backend.refuseWhileClockBehind(tx, reading);
 
     if (locked !== undefined && locked.status !== "open" && locked.status !== "placed") {
       throw new AppError("working_order.not_open", { workingOrderId: req.id });
@@ -1299,7 +1298,7 @@ async function payIntegrated(
           })
         : await priceStoredOrderForIssuance(tx, req.id);
     // Before the reader is asked: P3 could never file this sale.
-    deps.backend.assertRecordableAt(deps.clock.now());
+    deps.backend.assertRecordableAt(reading);
     await selectOrderInvoice(tx, deps.backend, cfg, req.id, order.gross.total);
     await readSaleOperationDescription(tx, cfg, { kind: "order", orderId: req.id });
     const wasPlaced = locked?.status === "placed";
