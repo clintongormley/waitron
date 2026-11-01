@@ -6287,6 +6287,10 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 _Formerly parts of B9 and Track C._ Open work:
 [backlog/dependencies.md](backlog/dependencies.md).
 
+- **A1302 — qualify the ten npm minor and patch updates in [PR #2376](https://github.com/clintongormley/waitron/pull/2376).**
+  Read each intervening release, check version pins and bundled notices, and compare built output
+  with main for any bundler or compiler bump before landing.
+
 - **A Vitest 5 retry has to re-measure mutation — nothing about Stryker 10 settles it.**
   [Detail](backlog/dependencies.md#a-vitest-5-retry-has-to-re-measure-mutation--nothing-about-stryker-10-settles-it)
 
