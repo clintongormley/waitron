@@ -49,10 +49,9 @@ function key(node = nodeId): ChainKey {
   return { nodeId: node };
 }
 
-function inputAt(at: string, location = locationId): TimeEntryAppend {
+function inputAt(at: string): TimeEntryAppend {
   return {
     personId,
-    locationId: location,
     entryKind: "in",
     eventAt: at,
     eventOffsetMinutes: 0,
@@ -112,20 +111,19 @@ describe("appendToChain", () => {
     expect(rows[0]!.last_recorded_at).not.toBeNull();
   });
 
-  it("keeps one chain per node across locations", async () => {
-    const otherLocation = await seedLocation(suite.db);
-    const otherNode = await seedNode(suite.db, brandLocationId(otherLocation));
+  it("keeps one chain per node", async () => {
+    const otherNode = await seedNode(suite.db, brandLocationId(locationId));
     await suite.db.transaction((tx) =>
       appendToChain(tx, { nodeId }, inputAt("2026-01-05T09:00:00Z")),
     );
     await suite.db.transaction((tx) =>
-      appendToChain(tx, { nodeId }, inputAt("2026-01-05T10:00:00Z", otherLocation)),
+      appendToChain(tx, { nodeId }, inputAt("2026-01-05T10:00:00Z")),
     );
     const chain = await readChain(suite.db, { nodeId });
     expect(chain.map((e) => e.sequenceNo)).toEqual([1, 2]);
     expect(verifyChain(chain)).toEqual({ ok: true });
     const other = await suite.db.transaction((tx) =>
-      appendToChain(tx, { nodeId: otherNode }, inputAt("2026-01-05T09:00:00Z", otherLocation)),
+      appendToChain(tx, { nodeId: otherNode }, inputAt("2026-01-05T09:00:00Z")),
     );
     expect(other.sequenceNo).toBe(1);
     expect((await readChain(suite.db, { nodeId: otherNode }))[0]?.isFirstEntry).toBe(true);
@@ -325,7 +323,6 @@ describe("appendToChain", () => {
             .transaction(async (nested) => {
               await nested.insert(timeEntries).values({
                 personId,
-                locationId,
                 nodeId,
                 entryKind: "in",
                 eventAt: "2026-01-05T08:00:00.000Z",
@@ -395,7 +392,6 @@ describe("appendToChain commits the correction and capture content to the hash",
     const base = await suite.db.transaction((tx) =>
       appendToChain(tx, key(), {
         personId,
-        locationId,
         entryKind: "in",
         eventAt: "2026-01-05T09:00:00Z",
         eventOffsetMinutes: 0,
@@ -406,7 +402,6 @@ describe("appendToChain commits the correction and capture content to the hash",
     await suite.db.transaction((tx) =>
       appendToChain(tx, key(), {
         personId,
-        locationId,
         entryKind: "correction",
         eventAt: "2026-01-05T18:00:00Z",
         eventOffsetMinutes: 0,

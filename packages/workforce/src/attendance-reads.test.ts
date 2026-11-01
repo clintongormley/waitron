@@ -45,13 +45,13 @@ async function shift(
 ) {
   const input = { nodeId, personId: subject, locationId: location, offsetMinutes, origin };
   await run((tx) => backend.clockIn(tx, { ...input, at: `${date}T09:00:00Z` }));
-  const start = (
-    await readRecordedEntries(suite.db, { personId: subject, locationId: location })
-  ).find((e) => e.entryKind === "in" && e.eventAt === `${date}T09:00:00.000Z`)!.entryId;
+  const start = (await readRecordedEntries(suite.db, { personId: subject })).find(
+    (e) => e.entryKind === "in" && e.eventAt === `${date}T09:00:00.000Z`,
+  )!.entryId;
   await run((tx) => backend.clockOut(tx, { ...input, at: `${date}T17:00:00Z` }));
-  const end = (
-    await readRecordedEntries(suite.db, { personId: subject, locationId: location })
-  ).find((e) => e.entryKind === "out" && e.eventAt === `${date}T17:00:00.000Z`)!.entryId;
+  const end = (await readRecordedEntries(suite.db, { personId: subject })).find(
+    (e) => e.entryKind === "out" && e.eventAt === `${date}T17:00:00.000Z`,
+  )!.entryId;
   return { start, end };
 }
 async function send(
@@ -185,7 +185,6 @@ it("uses saved business bounds and retains an automatic original outside the bus
     backend.clockIn(tx, {
       nodeId,
       personId,
-      locationId,
       at: "2026-01-06T00:30:00Z",
       offsetMinutes: 60,
       origin,
@@ -196,7 +195,6 @@ it("uses saved business bounds and retains an automatic original outside the bus
     backend.recordAutomaticClose(tx, {
       nodeId,
       personId,
-      locationId,
       openEntryId: start,
       at: "2026-01-06T02:00:00Z",
       offsetMinutes: 60,
@@ -438,7 +436,6 @@ it("keeps a blocked proposal available to disagree while checking competing late
     backend.clockIn(tx, {
       nodeId,
       personId,
-      locationId,
       at: "2026-01-05T18:00:00Z",
       offsetMinutes: 0,
       origin,
@@ -496,7 +493,6 @@ it("an approved missing out permits the next clock-in without closing a later ac
     backend.clockIn(tx, {
       nodeId,
       personId,
-      locationId,
       at: "2026-01-05T09:00:00Z",
       offsetMinutes: 0,
       origin,
@@ -514,7 +510,6 @@ it("an approved missing out permits the next clock-in without closing a later ac
     backend.clockIn(tx, {
       nodeId,
       personId,
-      locationId,
       at: "2026-01-06T09:00:00Z",
       offsetMinutes: 0,
       origin,
@@ -526,7 +521,6 @@ it("an approved missing out permits the next clock-in without closing a later ac
       backend.clockIn(tx, {
         nodeId,
         personId,
-        locationId,
         at: "2026-01-06T10:00:00Z",
         offsetMinutes: 0,
         origin,
@@ -537,7 +531,6 @@ it("an approved missing out permits the next clock-in without closing a later ac
     backend.clockOut(tx, {
       nodeId,
       personId,
-      locationId,
       at: "2026-01-06T17:00:00Z",
       offsetMinutes: 0,
       origin,
@@ -578,7 +571,6 @@ it("selects calendar work dates from stored offsets after the location zone chan
     backend.clockIn(tx, {
       nodeId,
       personId,
-      locationId,
       at: "2026-01-05T23:30:00Z",
       offsetMinutes: 120,
       origin,
@@ -588,7 +580,6 @@ it("selects calendar work dates from stored offsets after the location zone chan
     backend.clockOut(tx, {
       nodeId,
       personId,
-      locationId,
       at: "2026-01-06T01:00:00Z",
       offsetMinutes: 120,
       origin,
@@ -612,7 +603,6 @@ it("approves an older missing out behind a newer actual in without closing the c
     backend.clockIn(tx, {
       nodeId,
       personId,
-      locationId,
       at: "2026-01-06T09:00:00Z",
       offsetMinutes: 0,
       origin,
@@ -635,7 +625,6 @@ it("approves an older missing out behind a newer actual in without closing the c
       backend.clockIn(tx, {
         nodeId,
         personId,
-        locationId,
         at: "2026-01-06T10:00:00Z",
         offsetMinutes: 0,
         origin,
@@ -646,7 +635,6 @@ it("approves an older missing out behind a newer actual in without closing the c
     backend.clockOut(tx, {
       nodeId,
       personId,
-      locationId,
       at: "2026-01-06T17:00:00Z",
       offsetMinutes: 0,
       origin,

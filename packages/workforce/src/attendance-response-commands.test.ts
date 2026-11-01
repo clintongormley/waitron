@@ -67,12 +67,11 @@ async function revision(subject = personId) {
   expect(responses).toHaveProperty("readAttendanceRevision", expect.any(Function));
   return run((tx) => responses.readAttendanceRevision(tx, subject));
 }
-function clock(at: string, subject = personId, location = locationId, node = nodeId) {
+function clock(at: string, subject = personId, node = nodeId) {
   return run((tx) =>
     backend.clockIn(tx, {
       nodeId: node,
       personId: subject,
-      locationId: location,
       at,
       offsetMinutes: 0,
       origin,
@@ -109,7 +108,6 @@ it("revision changes for an older event appended on a different node", async () 
     backend.clockOut(tx, {
       nodeId,
       personId,
-      locationId,
       at: "2026-01-06T17:00:00Z",
       offsetMinutes: 0,
       origin,
@@ -140,11 +138,10 @@ it("revision ignores another worker's entries and questions", async () => {
   await question(other);
   expect(await revision()).toBe(before);
 });
-it("revision covers a historical location as well as the current one", async () => {
+it("revision covers an entry written on another node", async () => {
   const before = await revision();
-  const historical = await seedLocation(suite.db);
-  const historicalNode = await seedNode(suite.db, brandLocationId(historical));
-  await clock("2026-01-05T09:00:00Z", personId, historical, historicalNode);
+  const otherNode = await seedNode(suite.db, brandLocationId(locationId));
+  await clock("2026-01-05T09:00:00Z", personId, otherNode);
   expect(await revision()).not.toBe(before);
 });
 it("revision covers question retirement with no legal append", async () => {
@@ -239,7 +236,6 @@ async function automaticQuestion() {
     backend.recordAutomaticClose(tx, {
       nodeId,
       personId,
-      locationId,
       openEntryId,
       at: "2026-01-05T17:00:00Z",
       offsetMinutes: 0,
@@ -942,7 +938,6 @@ it("approval after a frozen 480-minute period adds a live 60-minute impact witho
   const frozen = await run((tx) =>
     api.closePayPeriod(tx, {
       nodeId,
-      locationId,
       period: { start: "2026-01-01", end: "2026-02-01" },
       clock: { timeZone: "UTC", dayCutover: "04:00", cutoverChanges: [] },
       now: "2026-02-01T04:00:00Z",

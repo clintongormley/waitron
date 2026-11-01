@@ -50,14 +50,13 @@ async function event(
   at: string,
   offsetMinutes = 0,
   personId = f.personId,
-  locationId = f.locationId,
 ) {
-  await f.run((tx) => f.backend[kind](tx, { ...f.event(at), offsetMinutes, personId, locationId }));
+  await f.run((tx) => f.backend[kind](tx, { ...f.event(at), offsetMinutes, personId }));
   return (await f.entries()).at(-1)!.id;
 }
-async function shift(date = "2026-01-05", personId = f.personId, locationId = f.locationId) {
-  const start = await event("clockIn", `${date}T09:00:00Z`, 0, personId, locationId);
-  const end = await event("clockOut", `${date}T17:00:00Z`, 0, personId, locationId);
+async function shift(date = "2026-01-05", personId = f.personId) {
+  const start = await event("clockIn", `${date}T09:00:00Z`, 0, personId);
+  const end = await event("clockOut", `${date}T17:00:00Z`, 0, personId);
   return { start, end };
 }
 async function send(
@@ -114,7 +113,6 @@ function freeze() {
   return f.run((tx) =>
     api.closePayPeriod(tx, {
       nodeId: f.nodeId,
-      locationId: f.locationId,
       period: { start: "2026-01-01", end: "2026-02-01" },
       clock,
       now: "2026-02-01T04:00:00Z",

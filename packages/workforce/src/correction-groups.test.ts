@@ -53,9 +53,7 @@ function pair(
   }));
 }
 async function clock(kind: "clockIn" | "clockOut" | "breakStart" | "breakEnd", at: string) {
-  return run((tx) =>
-    backend[kind](tx, { nodeId, personId, locationId, at, offsetMinutes: 0, origin }),
-  );
+  return run((tx) => backend[kind](tx, { nodeId, personId, at, offsetMinutes: 0, origin }));
 }
 async function record() {
   return run((tx) =>

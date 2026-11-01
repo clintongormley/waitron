@@ -123,7 +123,7 @@ describe("the D1a time & attendance tables", () => {
   }
 
   it("rejects an entry_kind outside the enum", async () => {
-    const { personId, locationId, nodeId } = await seedPersonAndLocation();
+    const { personId, nodeId } = await seedPersonAndLocation();
     // Every other column valid, so the row cannot be refused on the wrong constraint.
     const error = await captureError(() =>
       suite.db.execute(sql`
@@ -139,7 +139,7 @@ describe("the D1a time & attendance tables", () => {
   });
 
   it("rejects an event_offset_minutes outside the ±840 range", async () => {
-    const { personId, locationId, nodeId } = await seedPersonAndLocation();
+    const { personId, nodeId } = await seedPersonAndLocation();
     // Every other column valid, so ONLY the offset check is violated.
     const error = await captureError(() =>
       suite.db.execute(sql`
@@ -202,7 +202,7 @@ describe("the D1b correction columns", () => {
   }
 
   it("accepts a fully-populated correction row (the ADD VALUE 'correction' landed)", async () => {
-    const { personId, locationId, nodeId, entryId } = await seedBaseEntry();
+    const { personId, nodeId, entryId } = await seedBaseEntry();
     await suite.db.execute(sql`
       insert into time_entries (
         id, captured_by_source, person_id, node_id, entry_kind, event_at, event_offset_minutes,
@@ -219,7 +219,7 @@ describe("the D1b correction columns", () => {
 
   it("rejects a half-populated correction via the shape check", async () => {
     // corrects_entry_id set but the other three correction columns null: neither shape.
-    const { personId, locationId, nodeId, entryId } = await seedBaseEntry();
+    const { personId, nodeId, entryId } = await seedBaseEntry();
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
@@ -234,7 +234,7 @@ describe("the D1b correction columns", () => {
   });
 
   it("rejects a base event carrying a stray correction column", async () => {
-    const { personId, locationId, nodeId } = await seedBaseEntry();
+    const { personId, nodeId } = await seedBaseEntry();
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
@@ -249,7 +249,7 @@ describe("the D1b correction columns", () => {
   });
 
   it("rejects a correction whose corrects_entry_id references no entry", async () => {
-    const { personId, locationId, nodeId } = await seedBaseEntry();
+    const { personId, nodeId } = await seedBaseEntry();
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (

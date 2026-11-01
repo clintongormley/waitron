@@ -105,7 +105,6 @@ const fact = (
   recordedAt: "2026-01-07T12:00:00.000Z",
   offsetMinutes: 0,
   personId: "worker",
-  locationId: "venue",
   nodeId: "node-a",
   sequenceNo: 1,
   recordedByPersonId: "worker",
@@ -355,7 +354,7 @@ describe("actionable correction projection", () => {
   });
   it("ignores unrelated subject responses and retains inputs unchanged", () => {
     const req = requested();
-    const other = answered(req, "approved", { personId: "other", locationId: "elsewhere" });
+    const other = answered(req, "approved", { personId: "other" });
     const entries = [other, req, originalOut, originalIn];
     const before = structuredClone(entries);
     expect(project(entries)).toMatchObject([

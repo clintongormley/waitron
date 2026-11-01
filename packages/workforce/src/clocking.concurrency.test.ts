@@ -38,7 +38,7 @@ beforeEach(async () => {
 });
 
 function event(at: string): ClockEventInput {
-  return { nodeId, personId, locationId, at, offsetMinutes: 0, origin: jobOrigin("dashboard") };
+  return { nodeId, personId, at, offsetMinutes: 0, origin: jobOrigin("dashboard") };
 }
 
 /**

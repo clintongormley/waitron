@@ -48,14 +48,13 @@ beforeEach(async () => {
       { id: retired, locationId: place, name: "Retired" },
     ]);
   }
-  const append = (nodeId: string, locationId: string, entry: Partial<TimeEntryAppend> = {}) =>
+  const append = (nodeId: string, entry: Partial<TimeEntryAppend> = {}) =>
     original.db.transaction((tx) =>
       appendToChain(
         tx,
         { nodeId },
         {
           personId: person,
-          locationId,
           entryKind: "in",
           eventAt: at,
           eventOffsetMinutes: 60,
@@ -73,14 +72,10 @@ beforeEach(async () => {
         () => new Date(at),
       ),
     );
-  for (const [n, p] of [
-    [node, place],
-    [retired, place],
-    [node, otherPlace],
-  ]) {
-    const first = await append(n!, p!);
-    await append(n!, p!, { entryKind: "out", eventAt: "2026-01-05T17:00:00.000Z" });
-    const request = await append(n!, p!, {
+  for (const n of [node, retired, node]) {
+    const first = await append(n);
+    await append(n, { entryKind: "out", eventAt: "2026-01-05T17:00:00.000Z" });
+    const request = await append(n, {
       entryKind: "correction",
       correctsEntryId: first.id,
       correctionReason: "Wrong time",
@@ -95,7 +90,7 @@ beforeEach(async () => {
       },
     });
     requestId = request.id;
-    await append(n!, p!, {
+    await append(n, {
       entryKind: "correction",
       correctsEntryId: first.id,
       correctionReason: "Wrong time",
@@ -110,7 +105,7 @@ beforeEach(async () => {
         payPeriodClosureId: null,
       },
     });
-    await append(n!, p!, {
+    await append(n, {
       entryKind: "out",
       recordedByPersonId: null,
       eventAt: "2026-01-05T18:00:00.000Z",
@@ -131,7 +126,6 @@ beforeEach(async () => {
     await original.db.transaction((tx) =>
       closePayPeriod(tx, {
         nodeId: node,
-        locationId: place,
         period: { start, end },
         clock: { timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] },
         now: `2026-0${index + 1}-01T00:00:01.000Z`,
@@ -143,7 +137,6 @@ beforeEach(async () => {
   await original.db.transaction((tx) =>
     closePayPeriod(tx, {
       nodeId: retired,
-      locationId: otherPlace,
       period: { start: "2026-04-01", end: "2026-05-01" },
       clock: { timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] },
       now: "2026-05-01T00:00:01.000Z",
@@ -291,7 +284,6 @@ describe("complete captured workforce backup evidence", () => {
         { nodeId: retired },
         {
           personId: person,
-          locationId: place,
           entryKind: "in",
           eventAt: at,
           eventOffsetMinutes: 0,

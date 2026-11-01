@@ -230,7 +230,6 @@ describe("obsolete rota attendance obligations", () => {
     await run((tx) =>
       backend.clockIn(tx, {
         personId,
-        locationId,
         nodeId,
         at: "2026-01-05T09:00:00Z",
         offsetMinutes: 0,
@@ -293,7 +292,6 @@ describe("obsolete rota attendance obligations", () => {
     await run((tx) =>
       backend.clockIn(tx, {
         nodeId,
-        locationId,
         personId,
         at: "2026-01-05T09:00:00Z",
         offsetMinutes: 0,

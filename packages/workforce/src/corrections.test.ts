@@ -26,7 +26,7 @@ const suite = useVenueDb({
 });
 
 function event(personId: string, at: string): ClockEventInput {
-  return { nodeId, personId, locationId, at, offsetMinutes: 0, origin: jobOrigin("dashboard") };
+  return { nodeId, personId, at, offsetMinutes: 0, origin: jobOrigin("dashboard") };
 }
 
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {

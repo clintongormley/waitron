@@ -41,11 +41,10 @@ async function worker(name: string): Promise<string> {
   return personId;
 }
 
-function at(personId: string, time: string, location = locationId): ClockEventInput {
+function at(personId: string, time: string): ClockEventInput {
   return {
     nodeId,
     personId,
-    locationId: location,
     at: `2026-01-05T${time}:00Z`,
     offsetMinutes: 0,
     origin,
@@ -85,7 +84,6 @@ async function missing(
     backend.requestCorrection(tx, {
       nodeId,
       personId,
-      locationId,
       missingEntryKind: kind,
       at: `2026-01-${day}T${time}:00Z`,
       offsetMinutes: 0,
@@ -152,26 +150,6 @@ describe("clocking across a backward step of the box's clock", () => {
     expect(await latest(p)).toEqual({ kind: "out", at: "17:00" });
     expect(await latest(p, "in")).toEqual({ kind: "in", at: "09:00" });
     expect(await latest(await worker("never clocked"))).toBeUndefined();
-  });
-
-  it("reads the latest entry when the person moved location (control)", async () => {
-    const p = await worker("moved");
-    const a = await seedLocation(suite.db);
-    const b = await seedLocation(suite.db);
-    await run((tx) => backend.clockIn(tx, at(p, "09:00", a)));
-    await run((tx) => backend.clockOut(tx, at(p, "12:00", a)));
-    await run((tx) => backend.clockIn(tx, at(p, "13:00", b)));
-    const { rows } = await suite.db.execute<{ sequence_no: number }>(
-      sql`select sequence_no from time_entries where person_id = ${p} order by event_at`,
-    );
-    // The suite shares one node across its cases, so positions are read relative to the first.
-    const first = Number(rows[0]!.sequence_no);
-    expect(rows.map((r) => Number(r.sequence_no) - first + 1)).toEqual([1, 2, 3]);
-    const entry = await run((tx) => readLatestLiveEntry(tx, p));
-    expect({ kind: entry?.entryKind, locationId: entry?.locationId }).toEqual({
-      kind: "in",
-      locationId: b,
-    });
   });
 
   it("lets an approved missing clock-out dated after the latest clock-in decide (control)", async () => {
@@ -275,19 +253,17 @@ describe("clocking across a backward step of the box's clock", () => {
   });
 
   // One chain per node: the clock-in written after the step is the latest write.
-  it("reads the clock-in at another location written after a step", async () => {
+  it("reads the clock-in written after a step", async () => {
     const p = await worker("residual");
-    const a = await seedLocation(suite.db);
-    const b = await seedLocation(suite.db);
-    await run((tx) => backend.clockIn(tx, at(p, "21:00", a)));
-    await run((tx) => backend.clockOut(tx, at(p, "21:10", a)));
+    await run((tx) => backend.clockIn(tx, at(p, "21:00")));
+    await run((tx) => backend.clockOut(tx, at(p, "21:10")));
     // The clock is stepped back an hour.
-    await run((tx) => backend.clockIn(tx, at(p, "20:15", b)));
+    await run((tx) => backend.clockIn(tx, at(p, "20:15")));
     expect(await latest(p)).toEqual({ kind: "in", at: "20:15" });
-    expect(await rejection(() => run((tx) => backend.clockIn(tx, at(p, "20:30", b))))).toBe(
+    expect(await rejection(() => run((tx) => backend.clockIn(tx, at(p, "20:30"))))).toBe(
       "attendance.already_open",
     );
-    await run((tx) => backend.clockOut(tx, at(p, "20:40", b)));
+    await run((tx) => backend.clockOut(tx, at(p, "20:40")));
     expect(await rowCount(p)).toBe(4);
     expect(await latest(p)).toEqual({ kind: "out", at: "20:40" });
   });
@@ -296,10 +272,9 @@ describe("clocking across a backward step of the box's clock", () => {
   // entries grow for as long as they work there.
   it("finds the deciding entry through indexes, never reading the person's whole history", async () => {
     const p = await worker("planned");
-    const other = await seedLocation(suite.db);
     await run((tx) => backend.clockIn(tx, at(p, "09:00")));
     await run((tx) => backend.clockOut(tx, at(p, "12:00")));
-    await run((tx) => backend.clockIn(tx, at(p, "13:00", other)));
+    await run((tx) => backend.clockIn(tx, at(p, "13:00")));
     await missing(p, "out", "17:00");
     for (const kind of [undefined, "in"] as const) {
       const plans = await run(async (tx) => {
