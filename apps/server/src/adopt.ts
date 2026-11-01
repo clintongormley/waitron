@@ -5,23 +5,16 @@ import {
   type Database,
   type NodeDatabase,
 } from "@waitron/db";
-import {
-  pinPrimaryKeyTx,
-  setNodeModeTx,
-  setRecoveryKeyTx,
-  writeMirrorLinkTx,
-} from "@waitron/node-db";
+import { pinPrimaryKeyTx, setNodeModeTx, writeMirrorLinkTx } from "@waitron/node-db";
 import {
   listCredentials,
   loadKeyRing,
   sealNodeSigningKeyTx,
   type KeyRing,
 } from "@waitron/credentials";
-import { hashSecret } from "@waitron/identity";
 import { verifyEndorsement } from "@waitron/membership";
 import {
   assertNoForeignTenant,
-  generatePassword,
   assertNoOperationalVenue,
   readTenantIdentities,
   readOperationalVenueIds,
@@ -29,7 +22,7 @@ import {
 import { enabledModules, parseModuleOverrides, type ModuleConfig } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
-import { chooseBreakGlassKeyName } from "./break-glass.js";
+import { makeBreakGlassSecret, mintBreakGlassKeyTx } from "./break-glass.js";
 import { keyRingEnv, writeVenueAuthority, type EncodedKeyRing } from "./box-secrets.js";
 import type { DeploymentEnvironment } from "./config.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
@@ -168,8 +161,7 @@ export async function adoptFromPrimary(
     throw new AppError("mirror.bundle_fetch_failed", {});
   }
   const ring = loadKeyRing(keyRingEnv(bundle.credentialsRing));
-  const recoverySecret = generatePassword();
-  const recoveryVerifier = hashSecret(recoverySecret);
+  const recovery = makeBreakGlassSecret();
 
   await hooks.beforeFirstWrite();
   await stampDeployment(deps.ownerDb, bundle.environment);
@@ -191,8 +183,7 @@ export async function adoptFromPrimary(
       // The PRIMARY's id, which the venue's rows carry, not the standby's own.
       originNodeId: designated.nodeId,
     });
-    const name = await chooseBreakGlassKeyName(deps.ownerDb, tx, standby.nodeId);
-    await setRecoveryKeyTx(tx, standby.nodeId, recoveryVerifier, name);
+    const { name } = await mintBreakGlassKeyTx(deps.ownerDb, tx, standby.nodeId, recovery);
     await pinPrimaryKeyTx(tx, standby.nodeId, {
       primaryNodeId: designated.nodeId,
       publicKey: bundle.primaryPublicKey,
@@ -218,5 +209,5 @@ export async function adoptFromPrimary(
     accountKey: bundle.accountKey,
   });
   // Returned exactly once and never logged; only its verifier is stored.
-  return { breakGlassSecret: recoverySecret, breakGlassKeyName: recoveryKeyName };
+  return { breakGlassSecret: recovery.secret, breakGlassKeyName: recoveryKeyName };
 }

@@ -57,19 +57,39 @@ export async function chooseBreakGlassKeyName(
   );
 }
 
+/** A fresh break-glass secret and its verifier, derived outside any transaction. */
+export interface BreakGlassSecret {
+  secret: string;
+  verifier: string;
+}
+
+export function makeBreakGlassSecret(): BreakGlassSecret {
+  const secret = generatePassword();
+  return { secret, verifier: hashSecret(secret) };
+}
+
+/** Saves `made`'s verifier under a fresh key name inside the caller's node transaction. */
+export async function mintBreakGlassKeyTx(
+  venue: Database | Transaction,
+  tx: NodeTransaction,
+  nodeId: string,
+  made: BreakGlassSecret,
+): Promise<{ secret: string; name: string }> {
+  const name = await chooseBreakGlassKeyName(venue, tx, nodeId);
+  await setRecoveryKeyTx(tx, nodeId, made.verifier, name);
+  return { secret: made.secret, name };
+}
+
 /** Refuses `deployment.not_stamped` on a venue.db no environment has claimed. */
 export async function mintBreakGlassKey(
   handles: VenueAndNodeHandles,
   nodeId: string,
 ): Promise<{ secret: string; name: string }> {
   await requireStamp(handles.venue);
-  const secret = generatePassword();
-  const verifier = hashSecret(secret);
-  return withNodeTransaction(handles.node, async (tx) => {
-    const name = await chooseBreakGlassKeyName(handles.venue, tx, nodeId);
-    await setRecoveryKeyTx(tx, nodeId, verifier, name);
-    return { secret, name };
-  });
+  const made = makeBreakGlassSecret();
+  return withNodeTransaction(handles.node, (tx) =>
+    mintBreakGlassKeyTx(handles.venue, tx, nodeId, made),
+  );
 }
 
 /** `false`, never a throw, for a node with no verifier. */
