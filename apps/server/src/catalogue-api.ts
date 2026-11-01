@@ -130,7 +130,7 @@ export interface CatalogueApiDeps {
   /** The content languages the venue must keep; none when absent. */
   contentLanguageRules?: ContentLanguageRules;
   db: Database;
-  /** Required by the routes that read the venue's settings; `requireVenueCfg` throws without it. */
+  /** Required by the course and made-at routes; `requireVenueCfg` throws without it. */
   venueCfg?: TradingContext;
   venueLocale?: string;
 }
@@ -1619,11 +1619,9 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
 /** A misconfiguration guard, not a request fault: `boot.ts` always supplies `venueCfg`. */
 function requireVenueCfg(deps: CatalogueApiDeps): TradingContext {
   /* v8 ignore start -- boot always threads a venueCfg; only a harness that omits it AND calls a route
-     that reads the venue's settings reaches this, which no suite does — surfaced as a 500 by `run`. */
+     that needs it reaches this, which no suite does — surfaced as a 500 by `run`. */
   if (deps.venueCfg === undefined) {
-    throw new Error(
-      "mountCatalogueApi: venueCfg is required by routes that read the venue's settings",
-    );
+    throw new Error("mountCatalogueApi: venueCfg is required by the course and made-at routes");
   }
   /* v8 ignore stop */
   return deps.venueCfg;
