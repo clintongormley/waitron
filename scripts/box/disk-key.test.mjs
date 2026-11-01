@@ -3,7 +3,8 @@ import { execFileSync } from "node:child_process";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
+import { inspect } from "node:util";
 import { constants } from "node:fs";
 import { clearTimeout, setTimeout } from "node:timers";
 import {
@@ -1212,5 +1213,353 @@ describe("store: bad input", () => {
     await expect(f.make().store(input)).rejects.toEqual(refused("input-invalid"));
     expect(f.counting.calls).toEqual([]);
     expect(f.inspectHostState).not.toHaveBeenCalled();
+  });
+});
+
+describe("key-leak sweep", () => {
+  const decimal = (bytes, separator) => Array.from(bytes).join(separator);
+  const windows = Array.from({ length: KEY.length - 7 }, (_, i) => KEY.subarray(i, i + 8));
+  const FORMS = [
+    ["hex", hex(KEY)],
+    ["upper hex", hex(KEY).toUpperCase()],
+    ["spaced hex", Array.from(KEY, (byte) => byte.toString(16).padStart(2, "0")).join(" ")],
+    ["base64", Buffer.from(KEY).toString("base64")],
+    ["base64url", Buffer.from(KEY).toString("base64url")],
+    ['decimal ", "', decimal(KEY, ", ")],
+    ['decimal ","', decimal(KEY, ",")],
+    ["array-like JSON", JSON.stringify(KEY)],
+    ...windows.flatMap((window, i) => [
+      [`hex window ${i}`, hex(window)],
+      [`upper hex window ${i}`, hex(window).toUpperCase()],
+      [`decimal ", " window ${i}`, decimal(window, ", ")],
+      [`decimal "," window ${i}`, decimal(window, ",")],
+    ]),
+  ];
+  /** The names of every form `text` holds, whitespace runs collapsed so wrapped arrays still match. */
+  const formsIn = (text) => {
+    const collapsed = text.replace(/\s+/g, " ");
+    return FORMS.filter(([, form]) => text.includes(form) || collapsed.includes(form)).map(
+      ([name]) => name,
+    );
+  };
+
+  /** Fails like a real file operation, but carries the key, so a pass-through would show it. */
+  const leakyFailure = (stage) =>
+    Object.assign(new Error(`fake ${stage} failure ${hex(KEY)}`), { code: "EIO", key: KEY });
+  const failAt = (stage) => async () => {
+    throw leakyFailure(stage);
+  };
+  const lstatFailingAt = (path, change) => async (target, options) =>
+    target === path ? change(await fs.lstat(target, options)) : fs.lstat(target, options);
+  const afterRenameIo = (overrides, onRename = () => {}) => {
+    let renamed = false;
+    return countingIo({
+      rename: async (...args) => {
+        await fs.rename(...args);
+        renamed = true;
+        onRename();
+      },
+      open: async (...args) => {
+        const handle = await fs.open(...args);
+        if (!renamed) return handle;
+        return new Proxy(handle, {
+          get(target, key) {
+            if (Object.hasOwn(overrides, key)) return overrides[key](target);
+            const value = Reflect.get(target, key);
+            return typeof value === "function" ? value.bind(target) : value;
+          },
+        });
+      },
+    }).io;
+  };
+  const read = (setup, options = {}) => ({ side: "read", setup, ...options });
+  const write = (setup, options = {}) => ({ side: "write", setup, ...options });
+  const answerWith = (change) => (f) => ({ inspectHostState: async () => change({ ...f.answer }) });
+
+  /** Each scenario: what to set up, then which store options to use (from the fixture). */
+  const scenarios = {
+    "read: success": read(async () => {}),
+    "read: throwing consume": read(async () => {}, {
+      consume: async () => {
+        throw new Error("consumer failed");
+      },
+    }),
+    "read: input-invalid (path)": read(async () => {}, { input: { diskUuid: "../x" } }),
+    "read: input-invalid (missing)": read(async () => {}, { input: undefined }),
+    "read: mount-unverified (seam throws)": read(async () => {}, {
+      deps: () => ({ inspectHostState: failAt("inspectHostState") }),
+    }),
+    "read: mount-unverified (other hostRoot)": read(async () => {}, {
+      deps: answerWith((a) => ({ ...a, hostRoot: "/elsewhere" })),
+    }),
+    "read: mount-unverified (hostRoot removed)": read(async (f) =>
+      fs.rm(f.hostRoot, { recursive: true }),
+    ),
+    "read: disk-mismatch": read(async () => {}, {
+      deps: answerWith((a) => ({ ...a, diskUuid: DISK_B })),
+    }),
+    "read: root-changed": read(async () => {}, {
+      deps: answerWith((a) => ({ ...a, rootId: "1:1" })),
+    }),
+    "read: path-unsafe (disk-recovery is a file)": read(
+      async (f) => {
+        await fs.rm(f.folder, { recursive: true });
+        await fs.writeFile(f.folder, "");
+      },
+      { record: false },
+    ),
+    "read: path-unsafe (record is a symlink)": read(
+      async (f) => {
+        await fs.writeFile(join(f.parent, "target"), "");
+        await fs.symlink(join(f.parent, "target"), join(f.folder, `${DISK_A}.json`));
+      },
+      { record: false },
+    ),
+    "read: path-unsafe (record is a folder)": read(
+      async (f) => fs.mkdir(join(f.folder, `${DISK_A}.json`)),
+      { record: false },
+    ),
+    "read: path-unsafe (second hard link)": read(async (f) =>
+      fs.link(join(f.folder, `${DISK_A}.json`), join(f.folder, `${DISK_B}.json`)),
+    ),
+    "read: permissions-unsafe (record mode)": read(async (f) =>
+      fs.chmod(join(f.folder, `${DISK_A}.json`), 0o644),
+    ),
+    "read: permissions-unsafe (folder owner)": read(async () => {}, {
+      deps: (f) => ({ io: countingIo({ lstat: lstatFailingAt(f.folder, foreignOwner) }).io }),
+    }),
+    "read: record-missing (no folder)": read(async () => {}, { record: false, folder: false }),
+    "read: record-missing (no record)": read(async () => {}, { record: false }),
+    "read: record-corrupt (upper-case hex)": read(
+      async (f) => f.writeRecord(`${DISK_A}.json`, recordText(DISK_A, hex(KEY).toUpperCase())),
+      { record: false },
+    ),
+    "read: record-corrupt (extra key)": read(
+      async (f) =>
+        f.writeRecord(
+          `${DISK_A}.json`,
+          JSON.stringify({ version: 1, diskUuid: DISK_A, key: hex(KEY), note: "x" }) + "\n",
+        ),
+      { record: false },
+    ),
+    "read: record-mismatch": read(
+      async (f) => f.writeRecord(`${DISK_B}.json`, recordText(DISK_A)),
+      { input: { diskUuid: DISK_B }, deps: answerWith((a) => ({ ...a, diskUuid: DISK_B })) },
+    ),
+    "read: io-failed (lstat)": read(async () => {}, {
+      deps: () => ({ io: countingIo({ lstat: failAt("lstat") }).io }),
+    }),
+    "read: io-failed (open)": read(async () => {}, {
+      deps: () => ({ io: countingIo({ open: failAt("open") }).io }),
+    }),
+    "read: io-failed (readFile)": read(async () => {}, {
+      deps: () => ({
+        io: countingIo({ open: openWith({ readFile: () => failAt("readFile") }) }).io,
+      }),
+    }),
+
+    "write: success": write(async () => {}),
+    "write: record-exists": write(async () => {}, { record: true }),
+    "write: input-invalid (all-zero key)": write(async () => {}, {
+      input: { diskUuid: DISK_A, key: new Uint8Array(32) },
+    }),
+    "write: input-invalid (31 bytes)": write(async () => {}, {
+      input: { diskUuid: DISK_A, key: KEY.slice(0, 31) },
+    }),
+    "write: input-invalid (plain array)": write(async () => {}, {
+      input: { diskUuid: DISK_A, key: Array.from(KEY) },
+    }),
+    "write: input-invalid (upper-case UUID)": write(async () => {}, {
+      input: { diskUuid: DISK_A.toUpperCase(), key: KEY },
+    }),
+    "write: input-invalid (missing)": write(async () => {}, { input: undefined }),
+    "write: mount-unverified": write(async () => {}, {
+      deps: () => ({ inspectHostState: failAt("inspectHostState") }),
+    }),
+    "write: disk-mismatch": write(async () => {}, {
+      deps: answerWith((a) => ({ ...a, diskUuid: DISK_B })),
+    }),
+    "write: root-changed": write(async () => {}, {
+      deps: answerWith((a) => ({ ...a, rootId: "1:1" })),
+    }),
+    "write: path-unsafe": write(async (f) => {
+      await fs.rm(f.folder, { recursive: true });
+      await fs.mkdir(join(f.parent, "elsewhere"), { mode: 0o700 });
+      await fs.symlink(join(f.parent, "elsewhere"), f.folder);
+    }),
+    "write: permissions-unsafe": write(async (f) => fs.chmod(f.hostRoot, 0o755)),
+    "write: io-failed (lstat of the folder)": write(async () => {}, {
+      deps: (f) => ({
+        io: countingIo({
+          lstat: lstatFailingAt(f.folder, () => {
+            throw leakyFailure("lstat");
+          }),
+        }).io,
+      }),
+    }),
+    "write: io-failed (mkdir)": write(async () => {}, {
+      folder: false,
+      deps: () => ({ io: countingIo({ mkdir: failAt("mkdir") }).io }),
+    }),
+    "write: io-failed (syncDirectory of hostRoot)": write(async () => {}, {
+      deps: () => ({ io: countingIo({ syncDirectory: failAt("syncDirectory") }).io }),
+    }),
+    "write: io-failed (unlink)": write(async () => {}, {
+      deps: () => ({ io: countingIo({ unlink: failAt("unlink") }).io }),
+    }),
+    "write: io-failed (writeFile, half written)": write(async () => {}, {
+      deps: () => ({
+        io: countingIo({
+          writeFile: async (path, data, options) => {
+            await fs.writeFile(path, data.slice(0, data.length >> 1), options);
+            throw leakyFailure("writeFile");
+          },
+        }).io,
+      }),
+    }),
+    "write: io-failed (syncFile)": write(async () => {}, {
+      deps: () => ({ io: countingIo({ syncFile: failAt("syncFile") }).io }),
+    }),
+    "write: io-failed (rename)": write(async () => {}, {
+      deps: () => ({ io: countingIo({ rename: failAt("rename") }).io }),
+    }),
+    "write: publication-unverified (folder flush)": write(async () => {}, {
+      deps: (f) => ({
+        io: countingIo({
+          syncDirectory: async (path) =>
+            path === f.folder ? failAt("syncDirectory")() : REAL_IO.syncDirectory(path),
+        }).io,
+      }),
+    }),
+    "write: publication-unverified (read-back differs)": write(async () => {}, {
+      deps: () => ({
+        io: afterRenameIo({ readFile: () => async () => recordText(DISK_A, hex(OTHER_KEY)) }),
+      }),
+    }),
+    "write: publication-unverified (read-back stat fails)": write(async () => {}, {
+      deps: () => ({ io: afterRenameIo({ stat: () => failAt("stat") }) }),
+    }),
+    "write: publication-unverified (mount gone after rename)": write(async () => {}, {
+      deps: (f) => {
+        let renamed = false;
+        return {
+          io: afterRenameIo({}, () => (renamed = true)),
+          inspectHostState: async () => {
+            if (renamed) throw leakyFailure("inspectHostState");
+            return { ...f.answer };
+          },
+        };
+      },
+    }),
+  };
+
+  const REASONS = [
+    "input-invalid",
+    "mount-unverified",
+    "disk-mismatch",
+    "root-changed",
+    "path-unsafe",
+    "permissions-unsafe",
+    "record-missing",
+    "record-corrupt",
+    "record-mismatch",
+    "record-exists",
+    "publication-unverified",
+    "io-failed",
+  ];
+  const RECORD_NAME =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.json(\.next)?$/;
+
+  /** What a call returned or threw, as the texts a caller, a logger or a crash report could show. */
+  async function outcomeOf(call) {
+    try {
+      const value = await call;
+      const texts = [String(value), JSON.stringify(value) ?? "", inspect(value, { depth: 10 })];
+      return { reason: "fulfilled", texts };
+    } catch (error) {
+      const texts = [
+        String(error?.message),
+        String(error?.stack),
+        JSON.stringify(error) ?? "",
+        inspect(error, { depth: 10 }),
+      ];
+      return { reason: error?.reason ?? error?.message, texts };
+    }
+  }
+
+  /** Every file, link and name under the fixture; only a record or its staging file may hold the key. */
+  async function strayCopies(f, dir = f.parent) {
+    const found = [];
+    const folder = await fs.lstat(f.folder).catch(() => null);
+    const recordFolder = folder?.isDirectory() && (folder.mode & 0o777) === 0o700;
+    for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      for (const form of formsIn(entry.name)) found.push(`${path} (name): ${form}`);
+      if (entry.isSymbolicLink()) {
+        for (const form of formsIn(await fs.readlink(path))) found.push(`${path} (link): ${form}`);
+      } else if (entry.isDirectory()) {
+        found.push(...(await strayCopies(f, path)));
+      } else if (entry.isFile()) {
+        const allowed =
+          recordFolder && dirname(path) === f.folder && RECORD_NAME.test(basename(path));
+        if (!allowed)
+          for (const form of formsIn(await fs.readFile(path, "utf8")))
+            found.push(`${path}: ${form}`);
+      }
+    }
+    return found;
+  }
+
+  it("no path puts the key in a returned value, an error, a console or stream write, or a stray file", async () => {
+    const spies = [
+      ...Object.keys(console)
+        .filter((name) => typeof console[name] === "function")
+        .map((name) => [`console.${name}`, vi.spyOn(console, name).mockImplementation(() => {})]),
+      ["process.stdout.write", vi.spyOn(process.stdout, "write").mockImplementation(() => true)],
+      ["process.stderr.write", vi.spyOn(process.stderr, "write").mockImplementation(() => true)],
+    ];
+    const leaks = [];
+    const reached = new Set();
+    let writes;
+    try {
+      const check = async (label, call) => {
+        const { reason, texts } = await outcomeOf(call);
+        reached.add(reason);
+        for (const text of texts) for (const form of formsIn(text)) leaks.push(`${label}: ${form}`);
+      };
+      const fixtures = [];
+      for (const [label, scenario] of Object.entries(scenarios)) {
+        const f = await fixture({
+          record: scenario.record ?? scenario.side === "read",
+          folder: scenario.folder ?? true,
+        });
+        await scenario.setup(f);
+        fixtures.push([label, f]);
+        const store = f.make(scenario.deps?.(f) ?? {});
+        if (scenario.side === "read") {
+          const input = "input" in scenario ? scenario.input : { diskUuid: DISK_A };
+          await check(label, store.withKey(input, scenario.consume ?? (async () => {})));
+        } else {
+          const input = "input" in scenario ? scenario.input : { diskUuid: DISK_A, key: KEY };
+          await check(label, store.store(input));
+        }
+      }
+      await check("fixed store", storeDiskRecovery({ diskUuid: DISK_A, key: KEY }));
+      await check("fixed store, array key", storeDiskRecovery({ diskUuid: DISK_A, key: [...KEY] }));
+      await check(
+        "fixed withKey",
+        withDiskRecovery({ diskUuid: DISK_A }, async () => {}),
+      );
+      for (const [label, f] of fixtures)
+        for (const stray of await strayCopies(f)) leaks.push(`${label}: ${stray}`);
+    } finally {
+      writes = spies
+        .filter(([, spy]) => spy.mock.calls.length > 0)
+        .map(([name, spy]) => `${name} x${spy.mock.calls.length}`);
+      for (const [, spy] of spies) spy.mockRestore();
+    }
+    expect(leaks).toEqual([]);
+    expect(writes).toEqual([]);
+    expect([...reached].sort()).toEqual([...REASONS, "fulfilled", "consumer failed"].sort());
   });
 });
