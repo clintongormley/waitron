@@ -9,7 +9,7 @@ import { clockDateTime, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { trackDialog } from "./track-dialog.js";
 import "./supervisor-override-dialog.js";
-import { overrideErrorText, type OverrideConfirmDetail } from "./supervisor-override-dialog.js";
+import type { OverrideConfirmDetail } from "./supervisor-override-dialog.js";
 
 type Override = { personId: string; pin: string };
 
@@ -32,7 +32,12 @@ type View =
   | { kind: "done"; text: string }
   | { kind: "refused"; text: string; checkAgain: boolean; admin: boolean };
 
-const PIN_REFUSALS = new Set(["pin.invalid", "pin.throttled", "authorization.not_permitted"]);
+/** An administrator's PIN refused at the confirm, by code. */
+const PIN_REFUSALS: Record<string, StringKey> = {
+  "pin.invalid": "box_time.admin_refused.pin_invalid",
+  "pin.throttled": "box_time.admin_refused.pin_throttled",
+  "authorization.not_permitted": "box_time.admin_refused.not_permitted",
+};
 
 /** The box's set and confirm refusals a person can act on, by reason. */
 const REASONS: Record<string, { key: StringKey; checkAgain: boolean }> = {
@@ -133,10 +138,10 @@ export class TillBoxTimeDialog extends LitElement {
       this.dispatchEvent(new CustomEvent("box-time-done", { bubbles: true, composed: true }));
     } catch (error) {
       const code = (error as { code?: unknown } | null)?.code;
-      if (override !== undefined && typeof code === "string" && PIN_REFUSALS.has(code)) {
+      if (override !== undefined && typeof code === "string" && Object.hasOwn(PIN_REFUSALS, code)) {
         this.view = {
           kind: "refused",
-          text: overrideErrorText(code),
+          text: t(PIN_REFUSALS[code]!),
           checkAgain: false,
           admin: true,
         };

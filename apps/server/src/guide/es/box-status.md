@@ -179,8 +179,8 @@ internet**, como explica [su servicio de hora](box-status.md#clock-service).
 Mientras el equipo está en marcha, una parada así es también un aviso en la campana y un
 [correo](box-status.md#emails) a todas las personas que pueden gestionar el sistema, también a los
 administradores. La campana te envía a esta página. El correo dice que un administrador puede
-poner la hora desde su propio móvil u ordenador en esta página y, si el equipo acaba de arrancar,
-que cualquier empleado puede hacerlo desde una caja.
+poner la hora desde su propio móvil u ordenador en esta página, y cuándo puede hacerlo cualquier
+empleado desde una caja ([justo después de un arranque](box-status.md#clock-at-start)).
 
 Hay tres salidas:
 

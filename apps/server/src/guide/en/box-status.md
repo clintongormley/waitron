@@ -169,8 +169,8 @@ whether it is **Kept in time over the internet** or **Not kept in time over the 
 While the box is running, a stop like this is also an alert in the bell and an
 [email](box-status.md#emails) to everyone who can manage the system, administrators included. The
 bell sends you to this page. The email says that an administrator can set the clock from their own
-phone or computer on this page, and, if the box has just started, that any staff member can do it
-from a till.
+phone or computer on this page, and when any staff member can do it from a till instead
+([just after a start](box-status.md#clock-at-start)).
 
 There are three ways out:
 

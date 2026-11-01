@@ -84,6 +84,25 @@ describe("the clock stop emails", () => {
   );
 });
 
+describe("the clock stop emails' till offer", () => {
+  it.each(["clock.unusable", "clock.behind_chain"] as const)(
+    "%s offers a till for a stop the box started with, never for one just after a start",
+    (code) => {
+      const { en, es } = BOX_EMAIL_WORDS[code];
+      expect(en.text).not.toMatch(/just started|just after a start/);
+      expect(es.text).not.toMatch(/acaba de arrancar|justo después de arrancar/);
+      expect(en.text).toMatch(/if the box started with (its clock wrong|payments stopped)/);
+      expect(es.text).toMatch(/si el equipo arrancó con (la hora mal|los cobros parados)/);
+    },
+  );
+
+  it("offers a till for a behind-the-last-sale stop only when the tax agency does not answer", () => {
+    const { en, es } = BOX_EMAIL_WORDS["clock.behind_chain"];
+    expect(en.text.match(/the tax agency does not answer/g)).toHaveLength(2);
+    expect(es.text.match(/Hacienda no responde/g)).toHaveLength(2);
+  });
+});
+
 describe("boxEmailMessage for a clock stop", () => {
   const PARAMS = {
     clockAt: "2025-03-14T08:12:00.000Z",

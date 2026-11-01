@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { en, es } from "../i18n/strings.js";
 import { clockDateTime, setLocale } from "../i18n/t.js";
-import { codeMessage } from "../i18n/codes.js";
 import "./box-time-dialog.js";
 import type { BoxTimeApi, TillBoxTimeDialog } from "./box-time-dialog.js";
 
@@ -393,9 +392,9 @@ describe("till-box-time-dialog", () => {
     });
 
     it.each([
-      ["pin.invalid", en["pin.invalid"]],
-      ["pin.throttled", en["pin.throttled"]],
-      ["authorization.not_permitted", codeMessage("authorization.not_permitted")],
+      ["pin.invalid", en["box_time.admin_refused.pin_invalid"]],
+      ["pin.throttled", en["box_time.admin_refused.pin_throttled"]],
+      ["authorization.not_permitted", en["box_time.admin_refused.not_permitted"]],
     ])(
       "shows a PIN refused at the confirm (%s) and offers the sign-in again",
       async (code, text) => {
@@ -451,4 +450,45 @@ describe("till-box-time-dialog", () => {
       expect(api.boxClockConfirm).not.toHaveBeenCalled();
     });
   });
+  it("words an administrator's refused PIN as sentences of its own, in each language", () => {
+    const keys = [
+      "box_time.admin_refused.pin_invalid",
+      "box_time.admin_refused.pin_throttled",
+      "box_time.admin_refused.not_permitted",
+    ] as const;
+    for (const words of [en, es])
+      for (const key of keys) {
+        expect(words[key], key).toMatch(/\.$/);
+        expect(words[key], key).not.toBe(words["pin.invalid"]);
+        expect(words[key], key).not.toMatch(/Choose someone|Elige a alguien/);
+      }
+  });
+
+  it("promises no confirm after host_unavailable, which only a till that differs meets", () => {
+    expect(en["box_time.refused.host_unavailable"]).not.toMatch(/confirm/i);
+    expect(es["box_time.refused.host_unavailable"]).not.toMatch(/confirm/i);
+  });
+
+  for (const [language, differs] of [
+    ["es", true],
+    ["es", false],
+    ["en", true],
+    ["en", false],
+  ] as const)
+    it(`keeps each button's label on one line at phone width (${language}, ${differs ? "differs" : "agrees"})`, async () => {
+      setLocale(language);
+      await page.viewport(390, 844);
+      try {
+        const el = await open(fakeApi(differs ? BOX_BEHIND : BOX_AGREES));
+        for (const name of ["not-now", "primary"]) {
+          const button = control(el, name)!;
+          const range = document.createRange();
+          range.selectNodeContents(button);
+          const lines = new Set([...range.getClientRects()].map((rect) => Math.round(rect.top)));
+          expect(lines.size, `${name}: ${flat(button)}`).toBe(1);
+        }
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    });
 });

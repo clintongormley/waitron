@@ -170,6 +170,8 @@ Run in this order. A STOP stops the build there and the lead reports to the coor
 16. **Guides, English and Spanish** — `apps/server/src/guide/{en,es}/box-status.md` and
     `till-notices.md`.
 17. **LOOK, without the dev stack** — browser-test screenshots of the dashboard and the till.
+    17a. **What the LOOK found** — `box-time-dialog.ts`, `box-status-screen.ts`, `i18n/*`,
+    `box-emails.ts`, the guides.
 18. **Developer docs, the asesor question, the deploy README, B3's contract** —
     `conventions-data.md`, `asesor-questions.md`, `deploy/README.md`, `CLAUDE.md`,
     `docs/superpowers/plans/2026-10-26-b3-usb-installer.md`.
@@ -1157,7 +1159,12 @@ EDITED to pass and is not on this list is a STOP, unless the spec changes what i
    case (`:84-94`) builds its expectation from the words file and passes unedited. Task 13b.
    (`/usr/bin/grep -rln 'whoever installed\|two tills switched on' apps packages --include='*.test.ts'`,
    run 2026-10-31, printed this file and `recovery-surface.test.ts`, whose lines are about a
-   different page and are not touched.)
+   different page and are not touched.) *(Task 17a.)* The same case's expected text changes again:
+   "if the box has just started" and "except just after a start" become "if the box started with
+   payments stopped and the tax agency does not answer" and "except when the box started with
+   payments stopped: then two tills are not enough", because the till is offered only while a stop
+   found at start-up lasts and, for this stop, once the tax agency has not answered or cannot be
+   asked (`apps/server/src/clock-start-up.ts`, `tillMayOffer` and `admit`).
 
 18. *(Added while building Task 15a, 2026-10-31; the lead's ruling under Task 15a's STOP.)*
     `packages/workforce/src/record-read-budget.test.ts:152` and `:174` ("keeps simultaneous live
@@ -3564,6 +3571,43 @@ and the reworded `clock.unusable` and `clock.behind_chain`) are written to a fil
 lead opens every image and notes what it saw in the ledger — in particular that the dialog's two
 times and its buttons fit a 390-wide phone in Spanish without clipping; a defect goes back to its
 task.
+
+### Task 17a: What the LOOK found
+
+Added after Task 17's LOOK (shots in `~/waitron-campaign-b/a798-9b-shots/`). Built test first:
+
+1. The till's `host_unavailable` refusal ended "If this device's time agrees with the box's, you
+   can still confirm it", with only Close offered. The till meets `host_unavailable` only when its
+   time differs from the box's: an agreeing time is confirmed without asking the host
+   (`apps/server/src/till-box-clock-api.ts`, the `CLOCK_WITNESS_MARGIN_MS` branch). The sentence
+   goes, in English and Spanish.
+2. The dashboard's set refused `same_machine` kept "Use this time". `same_machine` joins
+   `SET_ENDS_THE_QUESTION`, and a fresh challenge refused `same_machine` or `not_stopped` during a
+   set ends the question too (`CHECK_ENDS_THE_QUESTION`).
+3. At 390 wide in Spanish the till's "Ahora no" wrapped to two lines, squeezed by "Usar la hora de
+   este dispositivo": `wt-form-actions` keeps its cancel button out of the wrapping group. The
+   Spanish button becomes "Usar esta hora", the dashboard's words for the same act after the same
+   question; the guide quotes it. A browser case checks each button's label is one line at 390, in
+   both languages, for both questions.
+4. The dashboard's Spanish `witnessed` refusal said "Agencia Tributaria"; every other clock
+   sentence says "Hacienda". A case holds every Spanish `box_status.clock*` sentence to that.
+5. Not changed: the dashboard dialog's gap under its heading when a refusal ends the question
+   measures 41 px against 33 px under a paragraph (`a798-9b-scripts/gap.cjs` over the 390 shots) —
+   the shared dialog's heading margin — and main already draws the same layout for a refused
+   confirmation, whose tests pin the sentence in the footer.
+6. The administrator's three PIN refusals on the till reused the supervisor dialog's sentences
+   (no full stop; "Choose someone who can"). They get their own `box_time.admin_refused.*`
+   sentences, English and Spanish.
+7. The `clock.unusable` and `clock.behind_chain` emails said a staff member can act from a till
+   "if the box has just started". They now say "if the box started with its clock wrong" and, for
+   the stop behind the last sale, "if the box started with payments stopped and the tax agency does
+   not answer" (changed test check 9). The guides' paraphrases follow. Not changed:
+   `clock.behind_chain`'s inline bullets, which main already sends.
+
+Focused commands: `pnpm --filter @waitron/till exec vitest run src/widgets/box-time-dialog.test.ts`,
+`pnpm --filter @waitron/dashboard exec vitest run src/screens/box-status-screen.test.ts`,
+`pnpm --filter @waitron/server exec vitest run src/box-alert-email.test.ts src/guide-content.test.ts`,
+`pnpm exec vitest run scripts/guide-links.test.ts`.
 
 ### Task 18: Developer docs, CLAUDE.md, the deploy README, the asesor question and B3's contract
 

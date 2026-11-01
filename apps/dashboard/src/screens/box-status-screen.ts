@@ -63,7 +63,16 @@ const SET_FAILURES = {
 } as const satisfies Record<string, StringKey>;
 
 /** Refused sets a second press could only meet again, so the question goes. */
-const SET_ENDS_THE_QUESTION: ReadonlySet<string> = new Set(["not_stopped", "witnessed", "stale"]);
+const SET_ENDS_THE_QUESTION: ReadonlySet<string> = new Set([
+  "same_machine",
+  "not_stopped",
+  "witnessed",
+  "stale",
+]);
+
+/** The check's own refusals, met by a set's fresh challenge, that a second press could only meet
+ * again. */
+const CHECK_ENDS_THE_QUESTION: ReadonlySet<string> = new Set(["same_machine", "not_stopped"]);
 
 /** LOCAL copy of `IDLE_TIMEOUT_MS` (`packages/identity/src/management-session.ts:13`): a step
  * past it either way ends the dashboard session that asked for it. */
@@ -524,9 +533,11 @@ export class BoxStatusScreen extends LitElement {
       if (fresh !== null && reason === "agrees") {
         this.clockReading = { ...fresh, agrees: true };
       } else {
+        const checkReason = refusalReason(error);
         if (
           codeOf(error) === "clock.set_failed" ||
-          (reason !== null && SET_ENDS_THE_QUESTION.has(reason))
+          (reason !== null && SET_ENDS_THE_QUESTION.has(reason)) ||
+          (checkReason !== null && CHECK_ENDS_THE_QUESTION.has(checkReason))
         )
           this.clockReading = null;
         this.clockCheckError = setRefusal(error);

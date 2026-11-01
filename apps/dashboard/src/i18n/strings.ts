@@ -7415,7 +7415,7 @@ export const es: Record<StringKey, string> = {
   "box_status.clock.admin.set.refused.synchronised":
     "El equipo se pone en hora por internet y dice que su hora es correcta, así que no toma la hora de un dispositivo. Si la hora de tu dispositivo es correcta, comprueba la conexión a internet del equipo.",
   "box_status.clock.admin.set.refused.witnessed":
-    "El equipo tiene la hora de la Agencia Tributaria, así que confirma o corrige su reloj con esa hora por sí mismo, no con la de un dispositivo. Si un intento falla, vuelve a intentarlo más tarde.",
+    "El equipo tiene la hora de Hacienda, así que confirma o corrige su reloj con esa hora por sí mismo, no con la de un dispositivo. Si un intento falla, vuelve a intentarlo más tarde.",
   "box_status.clock.admin.set.refused.stale":
     "El reloj del equipo ha cambiado mientras se comprobaba. Cierra esto y vuelve a comprobarlo.",
   "box_status.clock.admin.set.refused.host_unavailable":

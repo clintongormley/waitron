@@ -66,7 +66,7 @@ the box also restart payments, unless the stop has lasted since the box started.
 the clock.
 
 **Check the time** at the end of a red clock line, instead of **Tell a manager**, means the box
-has just started with its clock in doubt and could not reach the tax agency's time. It ends either
+started with its clock in doubt and could not reach the tax agency's time. It ends either
 of the two red clock lines above. A refused payment then says to use **Check the time** at the top
 of the screen. Tap **Check the time** to open its dialog; when another notice shows first, open the
 list and tap it there. Anyone signed in on the till can use it.

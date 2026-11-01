@@ -1823,6 +1823,10 @@ export const en = {
   "box_time.close": "Close",
   "box_time.check_again": "Check again",
   "box_time.admin": "Administrator sign-in",
+  "box_time.admin_refused.pin_invalid": "Wrong PIN. Sign in again to try once more.",
+  "box_time.admin_refused.pin_throttled": "Too many wrong PINs. Wait a moment, then sign in again.",
+  "box_time.admin_refused.not_permitted":
+    "The person who signed in is no longer an administrator, so they cannot set the box's clock. Another administrator can sign in.",
   "box_time.refused.not_stopped": "The box's clock no longer needs checking.",
   "box_time.refused.not_start_up":
     "The box has been running since its clock was last right, so a staff member can no longer set it from a device. An administrator can, here.",
@@ -1835,7 +1839,7 @@ export const en = {
   "box_time.refused.synchronised":
     "The box keeps its clock in time over the internet, so it does not take a time from a device. Check this device's own clock.",
   "box_time.refused.host_unavailable":
-    "This box cannot read or set its own clock: the part of the box that does that is not answering. If the box can reach the internet, its own time service may still put the clock right by itself. If this device's time agrees with the box's, you can still confirm it.",
+    "This box cannot read or set its own clock: the part of the box that does that is not answering. If the box can reach the internet, its own time service may still put the clock right by itself.",
   "box_time.refused.stale": "The box's clock changed while this was being checked.",
   "box_time.refused.check_expired": "This took too long.",
   "box_time.refused.same_machine":
@@ -3634,13 +3638,19 @@ export const es: Record<StringKey, string> = {
   "box_time.agrees":
     "El reloj del equipo marca {box} y este dispositivo coincide. Si es la hora correcta, confírmala: se puede volver a cobrar. Se avisa a todos los encargados de que fuiste tú.",
   "box_time.not_now": "Ahora no",
-  "box_time.use_till": "Usar la hora de este dispositivo",
+  "box_time.use_till": "Usar esta hora",
   "box_time.time_right": "La hora es correcta",
   "box_time.set_to": "El reloj del equipo marca ahora {after}.",
   "box_time.confirmed": "La hora del equipo está confirmada.",
   "box_time.close": "Cerrar",
   "box_time.check_again": "Comprobar otra vez",
   "box_time.admin": "Acceso de administrador",
+  "box_time.admin_refused.pin_invalid":
+    "PIN incorrecto. Vuelve a iniciar sesión para intentarlo otra vez.",
+  "box_time.admin_refused.pin_throttled":
+    "Demasiados PIN incorrectos. Espera un momento y vuelve a iniciar sesión.",
+  "box_time.admin_refused.not_permitted":
+    "La persona que ha iniciado sesión ya no tiene permisos de administrador, así que no puede poner en hora el reloj del equipo. Puede iniciar sesión otro administrador.",
   "box_time.refused.not_stopped": "Ya no hace falta comprobar el reloj del equipo.",
   "box_time.refused.not_start_up":
     "El equipo lleva en marcha desde la última vez que su reloj estaba bien, así que un empleado ya no puede ponerlo en hora desde un dispositivo. Un administrador sí puede, aquí.",
@@ -3653,7 +3663,7 @@ export const es: Record<StringKey, string> = {
   "box_time.refused.synchronised":
     "El equipo mantiene su reloj en hora por internet, así que no toma la hora de un dispositivo. Comprueba el reloj de este dispositivo.",
   "box_time.refused.host_unavailable":
-    "Este equipo no puede leer ni poner su propio reloj en hora: la parte del equipo que lo hace no responde. Si el equipo tiene conexión a internet, puede que su servicio de hora aún corrija el reloj por sí solo. Si la hora de este dispositivo coincide con la del equipo, aún puedes confirmarla.",
+    "Este equipo no puede leer ni poner su propio reloj en hora: la parte del equipo que lo hace no responde. Si el equipo tiene conexión a internet, puede que su servicio de hora aún corrija el reloj por sí solo.",
   "box_time.refused.stale": "El reloj del equipo ha cambiado mientras se comprobaba.",
   "box_time.refused.check_expired": "Ha tardado demasiado.",
   "box_time.refused.same_machine":

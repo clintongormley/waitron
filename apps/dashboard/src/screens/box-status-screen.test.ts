@@ -1374,7 +1374,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
         "same_machine",
         "box_status.clock.admin.set.refused.same_machine",
         "This screen is the box itself, so its clock is the box's own. Use your phone or another computer.",
-        false,
+        true,
       ],
       [
         "not_stopped",
@@ -1445,19 +1445,33 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       }
     });
 
-    it("words a challenge refused during a set as the check's own refusal", async () => {
-      deviceNow(DEVICE_AT);
-      const api = setApi(undefined, {
-        clockChallenge: vi
-          .fn()
-          .mockResolvedValueOnce({ challengeId: "ch-1", boxAt: BOX_AT })
-          .mockRejectedValue(REFUSED("same_machine")),
-      });
-      const el = await mountClock(api);
-      await open(el);
-      await useThisTime(el);
-      expect(api.clockSet).not.toHaveBeenCalled();
-      expect(footerMessage(el)).toBe(t("box_status.clock.admin.refused.same_machine"));
+    it.each([
+      ["same_machine", "box_status.clock.admin.refused.same_machine"],
+      ["not_stopped", "box_status.clock.admin.refused.not_stopped"],
+    ] as const)(
+      "words a challenge refused as %s during a set as the check's own refusal, leaving Close",
+      async (reason, key) => {
+        deviceNow(DEVICE_AT);
+        const api = setApi(undefined, {
+          clockChallenge: vi
+            .fn()
+            .mockResolvedValueOnce({ challengeId: "ch-1", boxAt: BOX_AT })
+            .mockRejectedValue(REFUSED(reason)),
+        });
+        const el = await mountClock(api);
+        await open(el);
+        await useThisTime(el);
+        expect(api.clockSet).not.toHaveBeenCalled();
+        expect(footerMessage(el)).toBe(t(key));
+        expect(buttons(el)).toEqual([["clock-check-close", "secondary", "Close"]]);
+      },
+    );
+
+    it("names the tax agency Hacienda in every Spanish clock sentence", () => {
+      const clockKeys = Object.keys(es).filter((key) => key.startsWith("box_status.clock"));
+      expect(clockKeys.length).toBeGreaterThan(0);
+      for (const key of clockKeys)
+        expect(es[key as keyof typeof es], key).not.toContain("Agencia Tributaria");
     });
 
     it("words the question and its button in Spanish from the words file", async () => {

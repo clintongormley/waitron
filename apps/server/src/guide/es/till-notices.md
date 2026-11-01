@@ -74,7 +74,7 @@ equivocada, dos cajas o terminales que coinciden con el equipo también reanudan
 que la parada dure desde que arrancó el equipo. Nunca ponen la hora.
 
 **Comprobar la hora** al final de una línea roja de la hora, en lugar de **Avisa al encargado**,
-significa que el equipo acaba de arrancar con su hora en duda y no ha podido obtener la hora de
+significa que el equipo arrancó con su hora en duda y no ha podido obtener la hora de
 Hacienda. Termina cualquiera de las dos líneas rojas de la hora de arriba. Un cobro rechazado dice
 entonces que uses **Comprobar la hora** arriba de la pantalla. Pulsa **Comprobar la hora** para
 abrir su diálogo; si se muestra primero otro aviso, abre la lista y púlsalo ahí. Puede usarlo
@@ -85,7 +85,7 @@ la hora de la propia caja, así que si la hora de la caja también está mal, co
 ajustes de la caja y vuelve a comprobarlo.
 
 - Cuando las dos horas están a más de un minuto, pregunta **¿Usar la hora de este dispositivo?**
-  Pulsa **Usar la hora de este dispositivo** para poner el reloj del equipo a la hora de la caja; se
+  Pulsa **Usar esta hora** para poner el reloj del equipo a la hora de la caja; se
   puede volver a cobrar. Pulsa **Ahora no** para dejarlo.
 - Cuando coinciden, te pide que confirmes que la hora del equipo es correcta. Pulsa **La hora es
   correcta** si lo es; se puede volver a cobrar con el reloj del equipo. Pulsa **Ahora no** para
