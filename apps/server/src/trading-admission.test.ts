@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -57,7 +56,7 @@ beforeEach(async () => {
       timeZone: "Europe/Madrid",
     })
     .returning();
-  scope = { nodeId: await seedNode(suite.db, locationId(row!.id)), locationId: row!.id };
+  scope = { nodeId: await seedNode(suite.db, locationId(row!.id)) };
 });
 describe("economic transaction admission", () => {
   it.each(["unchecked", "missing", "invalid", "restart_required"] as const)(
@@ -71,10 +70,7 @@ describe("economic transaction admission", () => {
         withTransaction(suite.db, async (tx) => {
           await requireEconomicWrite(tx, scope, admission);
           write();
-          await tx
-            .update(locations)
-            .set({ name: "Changed" })
-            .where(eq(locations.id, scope.locationId!));
+          await tx.update(locations).set({ name: "Changed" });
         }),
       ).rejects.toMatchObject({ code: "venue.time_zone_not_ready", params: { reason } });
       expect(write).not.toHaveBeenCalled();
@@ -87,7 +83,7 @@ describe("economic transaction admission", () => {
   ])("rechecks saved %j even after admission", async (timeZone, reason) => {
     const admission = new TradingAdmission();
     admission.admit();
-    await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, scope.locationId!));
+    await suite.db.update(locations).set({ timeZone });
     const write = vi.fn();
     await expect(
       withTransaction(suite.db, async (tx) => {
@@ -102,10 +98,7 @@ describe("economic transaction admission", () => {
     admission.admit();
     await withTransaction(suite.db, async (tx) => {
       await requireEconomicWrite(tx, scope, admission);
-      await tx
-        .update(locations)
-        .set({ name: "Changed" })
-        .where(eq(locations.id, scope.locationId!));
+      await tx.update(locations).set({ name: "Changed" });
     });
     expect((await suite.db.select().from(locations))[0]!.name).toBe("Changed");
   });

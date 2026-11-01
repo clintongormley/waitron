@@ -27,7 +27,7 @@ beforeEach(async () => {
       timeZone: "Europe/Madrid",
     })
     .returning();
-  scope = { nodeId: await seedNode(suite.db, locationId(row!.id)), locationId: row!.id };
+  scope = { nodeId: await seedNode(suite.db, locationId(row!.id)) };
 });
 afterEach(() => vi.restoreAllMocks());
 const source = (instant = new Date(AT)) =>
@@ -51,7 +51,7 @@ describe("writing location zone", () => {
   ])(
     "accepts supported saved %s independently of country creation policy",
     async (timeZone, expected) => {
-      await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, scope.locationId!));
+      await suite.db.update(locations).set({ timeZone });
       expect(await zone()).toBe(expected);
     },
   );
@@ -63,7 +63,7 @@ describe("writing location zone", () => {
     ["Europe/Madrid ", "invalid"],
     ["+02:00", "invalid"],
   ])("refuses saved %j before reading the source clock or writing", async (timeZone, reason) => {
-    await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, scope.locationId!));
+    await suite.db.update(locations).set({ timeZone });
     const clock = source();
     const now = vi.spyOn(clock, "now");
     const write = vi.fn();
@@ -76,34 +76,21 @@ describe("writing location zone", () => {
     expect(now).not.toHaveBeenCalled();
     expect(write).not.toHaveBeenCalled();
   });
-  it.each(["node", "mismatch"] as const)(
-    "refuses target %s independently of zone validity",
-    async (reason) => {
-      const target =
-        reason === "node"
-          ? { ...scope, nodeId: randomUUID() }
-          : { ...scope, locationId: randomUUID() };
-      await expect(zone(target)).rejects.toMatchObject({
-        code: "venue.time_zone_target_invalid",
-        params: { reason },
-      });
-    },
-  );
-  it("refuses a node with a missing location instead of choosing another location", async () => {
+  it.each(["node"] as const)("refuses target %s independently of zone validity", async (reason) => {
+    const target = { ...scope, nodeId: randomUUID() };
+    await expect(zone(target)).rejects.toMatchObject({
+      code: "venue.time_zone_target_invalid",
+      params: { reason },
+    });
+  });
+  it("reads the venue's zone whatever the node's location column holds", async () => {
     await suite.db.execute(sql`pragma foreign_keys = off`);
     try {
       await suite.db
         .update(nodes)
         .set({ locationId: randomUUID() })
         .where(eq(nodes.id, scope.nodeId));
-      await expect(zone()).rejects.toMatchObject({
-        code: "venue.time_zone_target_invalid",
-        params: { reason: "mismatch" },
-      });
-      await expect(zone({ nodeId: scope.nodeId })).rejects.toMatchObject({
-        code: "venue.time_zone_target_invalid",
-        params: { reason: "location" },
-      });
+      expect(await zone({ nodeId: scope.nodeId })).toBe("Europe/Madrid");
     } finally {
       await suite.db.execute(sql`pragma foreign_keys = on`);
     }
@@ -161,10 +148,7 @@ describe("prepared issue reading", () => {
   });
   it("reads a newly committed zone for the next preparation while retaining the old frozen reading", async () => {
     const first = await prepare();
-    await suite.db
-      .update(locations)
-      .set({ timeZone: "Atlantic/Canary" })
-      .where(eq(locations.id, scope.locationId!));
+    await suite.db.update(locations).set({ timeZone: "Atlantic/Canary" });
     expect((await prepare()).now().offsetMinutes).toBe(60);
     expect(first.now().offsetMinutes).toBe(120);
   });

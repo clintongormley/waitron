@@ -75,7 +75,7 @@ export async function seedDemoRestaurant(
 ): Promise<SeedDemoResult> {
   const { locationId } = venue;
   demoSeedEnvironment(process.env);
-  await withTransaction(db, (tx) => readIssueZone(tx, venue));
+  await withTransaction(db, (tx) => readIssueZone(tx, { nodeId: venue.nodeId }));
 
   const { products, invoiceLocale, passStationIds } = await withTransaction(db, async (tx) => {
     const { productsByImage, menuIds, stationIds } = await seedCatalogues(tx, {

@@ -108,11 +108,7 @@ export async function submitFiscalReadiness(args: {
     if (existing.rows[0]!.count === 0) {
       const now = (args.now ?? (() => new Date()))();
       await withIssuanceTransaction(db, async (tx) => {
-        const clock = await prepareIssueClock(
-          tx,
-          { nodeId: venue.nodeId, locationId: venue.locationId },
-          args.clock(),
-        );
+        const clock = await prepareIssueClock(tx, { nodeId: venue.nodeId }, args.clock());
         return recordSale(
           tx,
           args.contribution.makeBackend({ db, clock, environment: "preproduction" }),
