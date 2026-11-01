@@ -551,6 +551,10 @@ async function pickDish(screen: TillTableOrderScreen, id = "line-1") {
 }
 const movePicks = (screen: TillTableOrderScreen) =>
   screen.shadowRoot!.querySelector("till-portion-picker")!.picks;
+const pressedTo = (screen: TillTableOrderScreen) =>
+  [...screen.shadowRoot!.querySelectorAll<HTMLElement>("[data-move-dishes-to]")]
+    .filter((choice) => choice.getAttribute("aria-pressed") === "true")
+    .map((choice) => choice.dataset.moveDishesTo);
 const moveOpen = (screen: TillTableOrderScreen) =>
   screen.shadowRoot!.querySelector("[data-move-dishes]") !== null;
 async function escape(screen: TillTableOrderScreen) {
@@ -625,6 +629,25 @@ it("A803 move dishes unsaved: a destination alone is unsaved work, as Transfer's
   await click(screen, "[data-action-back]");
   expect((await question(app)).open).toBe(true);
 });
+it("A803 move dishes unsaved: a destination no longer offered is not unsaved work on its own", async () => {
+  const { app, screen } = await mount("move-dishes");
+  await click(screen, '[data-move-dishes-to="other"]');
+  expect(unload()).toBe(true);
+  screen.bills = bills.map((bill) =>
+    bill.workingOrderId === "other" ? { ...bill, hasPayments: true } : bill,
+  );
+  await screen.updateComplete;
+  expect(unload()).toBe(false);
+  screen.bills = bills;
+  await screen.updateComplete;
+  expect(unload()).toBe(true);
+  screen.bills = bills.filter((bill) => bill.workingOrderId !== "other");
+  await screen.updateComplete;
+  expect(unload()).toBe(false);
+  await click(screen, "[data-action-back]");
+  expect(moveOpen(screen)).toBe(false);
+  expect((await question(app)).open).toBe(false);
+});
 it("A803 move dishes unsaved: with nothing picked, Back and switching bill ask nothing", async () => {
   const { app, screen } = await mount("move-dishes");
   expect(unload()).toBe(false);
@@ -649,6 +672,57 @@ it("A803 move dishes unsaved: a refresh is not a change, and keeps a pick it doe
   await screen.updateComplete;
   expect(movePicks(screen)).toEqual(new Set(["line-1"]));
   expect(unload()).toBe(true);
+});
+it("A803 move dishes unsaved: a refresh that changes nothing leaves an open question open", async () => {
+  const { app, screen } = await mount("move-dishes");
+  await pickDish(screen);
+  const leave = app.leave.coordinator.request({
+    scopes: [screen],
+    reason: "navigation",
+    proceed() {},
+  });
+  expect((await question(app)).open).toBe(true);
+  screen.lines = lines.map((line) => ({ ...line }));
+  await screen.updateComplete;
+  await app.updateComplete;
+  await answer(app, "keep");
+  expect(await leave).toBe("kept");
+  expect(movePicks(screen)).toEqual(new Set(["line-1"]));
+});
+it("A803 move dishes unsaved: a refresh that drops the only pick closes the question and the protection", async () => {
+  const { app, screen } = await mount("move-dishes");
+  await pickDish(screen);
+  const leave = app.leave.coordinator.request({
+    scopes: [screen],
+    reason: "navigation",
+    proceed() {},
+  });
+  const q = await question(app);
+  expect(q.open).toBe(true);
+  screen.lines = lines.filter((line) => line.id !== "line-1").map((line) => ({ ...line }));
+  await screen.updateComplete;
+  await expect.poll(() => q.open).toBe(false);
+  expect(await leave).toBe("stale");
+  expect(movePicks(screen)).toEqual(new Set());
+  expect(unload()).toBe(false);
+});
+it("A803 move dishes unsaved: an ancestor leave puts the picks and the destination back only after Discard", async () => {
+  const { app, screen } = await mount("move-dishes");
+  await pickDish(screen);
+  await click(screen, '[data-move-dishes-to="other"]');
+  const leave = app.leave.coordinator.request({
+    scopes: [screen],
+    reason: "navigation",
+    proceed() {},
+  });
+  await answer(app, "discard");
+  expect(await leave).toBe("proceeded");
+  await screen.updateComplete;
+  expect(moveOpen(screen)).toBe(true);
+  expect(movePicks(screen)).toEqual(new Set());
+  expect(pressedTo(screen)).toEqual([]);
+  expect(app.commands).toEqual([]);
+  expect(unload()).toBe(false);
 });
 it("A803 move dishes unsaved: Move releases the protection before it sends", async () => {
   const { app, screen } = await mount("move-dishes");

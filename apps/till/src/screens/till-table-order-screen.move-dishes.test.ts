@@ -143,6 +143,29 @@ async function step(el: TillTableOrderScreen, which: "dec" | "inc", id: string) 
   await picker(el).updateComplete;
 }
 
+/** Counts reads of the screen's bill lines: drawing Move dishes…' rows reads them once, and once
+ * more per dish. */
+function countLineReads(el: TillTableOrderScreen): { count: number } {
+  let owner: object | null = Object.getPrototypeOf(el);
+  let accessor: PropertyDescriptor | undefined;
+  while (owner !== null && accessor === undefined) {
+    accessor = Object.getOwnPropertyDescriptor(owner, "lines");
+    owner = Object.getPrototypeOf(owner);
+  }
+  const reads = { count: 0 };
+  Object.defineProperty(el, "lines", {
+    configurable: true,
+    get() {
+      reads.count++;
+      return accessor!.get!.call(this);
+    },
+    set(value: TabLine[]) {
+      accessor!.set!.call(this, value);
+    },
+  });
+  return reads;
+}
+
 function capture(el: TillTableOrderScreen, type: string): unknown[] {
   const seen: unknown[] = [];
   el.addEventListener(type, (event) => seen.push((event as CustomEvent).detail));
@@ -511,6 +534,70 @@ describe("A803 move dishes refresh:", () => {
     await picker(el).updateComplete;
     expect(picker(el).picks).toEqual(new Set());
     expect(confirm(el).disabled).toBe(true);
+  });
+
+  it("an update that changes nothing the rows are drawn from draws them no more often with every dish picked than with none", async () => {
+    const el = await mountScreen();
+    await openMoveDishes(el);
+    const reads = countLineReads(el);
+    const update = async () => {
+      reads.count = 0;
+      el.requestUpdate();
+      await el.updateComplete;
+      return reads.count;
+    };
+    const nonePicked = await update();
+    await tick(el, "c1");
+    await tick(el, "h1");
+    expect(picker(el).picks).toEqual(new Set(["c1", "c2", "c3", "c4", "h1"]));
+    const oneDrawing = [...CANAS, HAM].length + 1;
+    expect(await update()).toBeLessThan(nonePicked + oneDrawing);
+  });
+
+  it("a re-read with every dish picked works each dish out no more than one drawing beyond a re-read with none", async () => {
+    const el = await mountScreen();
+    await openMoveDishes(el);
+    const reads = countLineReads(el);
+    const reread = async () => {
+      reads.count = 0;
+      el.lines = el.lines.map((dish) => ({ ...dish }));
+      await el.updateComplete;
+      return reads.count;
+    };
+    const nonePicked = await reread();
+    await tick(el, "c1");
+    await tick(el, "h1");
+    const oneDrawing = [...CANAS, HAM].length + 1;
+    expect(await reread()).toBeLessThanOrEqual(nonePicked + oneDrawing);
+    expect(picker(el).picks).toEqual(new Set(["c1", "c2", "c3", "c4", "h1"]));
+  });
+
+  it("with nothing picked, a re-read draws the rows no more often than an update that changes nothing", async () => {
+    const balance: BillBalance = {
+      workingOrderId: "wo-2",
+      status: "open",
+      total: "32.00",
+      received: "0.00",
+      reserved: "0.00",
+      outstanding: "32.00",
+      tips: "0.00",
+      payments: [],
+      paidLines: [],
+    };
+    const el = await mountScreen({ balance });
+    await openMoveDishes(el);
+    const reads = countLineReads(el);
+    el.requestUpdate();
+    await el.updateComplete;
+    reads.count = 0;
+    el.requestUpdate();
+    await el.updateComplete;
+    const unchanged = reads.count;
+    reads.count = 0;
+    el.billBalance = { ...balance };
+    await el.updateComplete;
+    expect(picker(el).picks).toEqual(new Set());
+    expect(reads.count).toBe(unchanged);
   });
 
   it("a picked Caña recalled into this person's draft leaves the row's count taken from the Cañas left", async () => {

@@ -289,11 +289,28 @@ interface DraftMoveOpening {
   selected: readonly OrderLine[];
 }
 
-/** The element `node` renders inside: its slot, its parent, or the host of its shadow root. */
 function samePicks(a: Picks, b: Picks): boolean {
   return a.size === b.size && [...a].every((id) => b.has(id));
 }
 
+/** What Move dishes… draws its rows from. */
+interface MoveDishesSources {
+  lines: readonly TabLine[];
+  balance: BillBalance | null;
+  allergy: PartyAllergyRead["snapshot"] | null;
+  recalled: ReadonlySet<string>;
+}
+
+function sameSources(a: MoveDishesSources, b: MoveDishesSources): boolean {
+  return (
+    a.lines === b.lines &&
+    a.balance === b.balance &&
+    a.allergy === b.allergy &&
+    samePicks(a.recalled, b.recalled)
+  );
+}
+
+/** The element `node` renders inside: its slot, its parent, or the host of its shadow root. */
 function composedParent(node: Element): Element | null {
   const root = node.getRootNode();
   return node.assignedSlot ?? node.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
@@ -1298,7 +1315,9 @@ export class TillTableOrderScreen extends LitElement {
    * chosen. */
   @state() private moveDishesTo: string | null | undefined = undefined;
   /** The rows Move dishes… last drew, which a re-read's picks are tidied from. */
-  #moveDishesDrawn?: readonly PickRow[];
+  #moveDishesDrawn?: MoveDishesSources & { rows: readonly PickRow[] };
+  /** {@link moveDishesTo} while it is offered, as unsaved work last counted it. */
+  #moveDishesCounted: string | null | undefined;
 
   readonly #actionId = {};
   #actionScope?: DraftScope<ActionDraft>;
@@ -1323,7 +1342,7 @@ export class TillTableOrderScreen extends LitElement {
       lines: new Set(this.transferLineNos),
       quantities: new Map(this.splitQuantities),
       picks: new Set(this.moveDishesPicks),
-      moveTo: this.moveDishesTo,
+      moveTo: this.#moveDishesChosen(),
     };
   }
 
@@ -1978,6 +1997,7 @@ export class TillTableOrderScreen extends LitElement {
     }
     this.#watchServe();
     this.#watchActions();
+    this.#countMoveDestination();
     if (changed.has("busy") && this.busy) this.#actionScope?.changed();
     this.#shownBill = this.bills.find((bill) => bill.workingOrderId === this.orderId);
     if (
@@ -4831,7 +4851,6 @@ export class TillTableOrderScreen extends LitElement {
     this.splitAttempted = false;
     this.moveDishesPicks = new Set();
     this.moveDishesTo = undefined;
-    this.#moveDishesDrawn = undefined;
   }
 
   #dispatch(type: string, detail: unknown): void {
@@ -5730,22 +5749,41 @@ export class TillTableOrderScreen extends LitElement {
     return members.length > 1 ? String(members.length) : this.#displayQty(members[0]!.quantity);
   }
 
-  #moveDishesRows(picks: Picks = this.moveDishesPicks): PickRow[] {
-    return pickRows(
-      this.lines,
-      (dish) => this.#fallbackPortionKey(dish),
-      this.#balanceShown(),
-      this.#recalledLineIds(),
-      picks,
-    );
+  #moveDishesSources(): MoveDishesSources {
+    return {
+      lines: this.lines,
+      balance: this.#balanceShown(),
+      allergy: this.#allergy()?.snapshot ?? null,
+      recalled: this.#recalledLineIds(),
+    };
   }
 
-  /** A re-read can pay, recall or regroup picked dishes; the picks follow what is drawn now. */
+  #moveDishesRows(
+    picks: Picks = this.moveDishesPicks,
+    sources: MoveDishesSources = this.#moveDishesSources(),
+    keyOf: (dish: TabLine) => string | null = (dish) => this.#fallbackPortionKey(dish),
+  ): PickRow[] {
+    return pickRows(sources.lines, keyOf, sources.balance, sources.recalled, picks);
+  }
+
+  /** A re-read can pay, recall or regroup picked dishes; the picks follow what is drawn now. A
+   * recall into this person's draft changes the draft store in place, so the recalled dishes are
+   * compared by id rather than by a changed property. */
   #tidyMovePicks(): void {
-    if (this.actionStep !== "move-dishes" || this.#moveDishesDrawn === undefined) return;
+    const drawn = this.#moveDishesDrawn;
+    if (this.actionStep !== "move-dishes" || drawn === undefined || this.moveDishesPicks.size === 0)
+      return;
+    const sources = this.#moveDishesSources();
+    if (sameSources(drawn, sources)) return;
+    // tidyPicks draws the rows again for each picked row; each dish's key costs a scan of the bill.
+    const keys = new Map<string, string | null>();
+    const keyOf = (dish: TabLine) => {
+      if (!keys.has(dish.id)) keys.set(dish.id, this.#fallbackPortionKey(dish));
+      return keys.get(dish.id)!;
+    };
     const next = tidyPicks(
-      this.#moveDishesDrawn,
-      (picks) => this.#moveDishesRows(picks),
+      drawn.rows,
+      (picks) => this.#moveDishesRows(picks, sources, keyOf),
       this.moveDishesPicks,
     );
     if (samePicks(next, this.moveDishesPicks)) return;
@@ -5757,13 +5795,22 @@ export class TillTableOrderScreen extends LitElement {
    * bills or give it a payment after it was chosen. */
   #moveDishesChosen(): string | null | undefined {
     const to = this.moveDishesTo;
-    if (to === null) return null;
+    if (to === null || to === undefined) return to;
     return this.#otherBills().some(({ bill }) => bill.workingOrderId === to) ? to : undefined;
   }
 
+  /** A re-read that stops or starts offering the chosen destination changes what is unsaved. */
+  #countMoveDestination(): void {
+    const chosen = this.#moveDishesChosen();
+    if (chosen === this.#moveDishesCounted) return;
+    this.#moveDishesCounted = chosen;
+    this.#actionScope?.changed();
+  }
+
   #moveDishesStep(): TemplateResult {
-    const rows = this.#moveDishesRows();
-    this.#moveDishesDrawn = rows;
+    const sources = this.#moveDishesSources();
+    const rows = this.#moveDishesRows(this.moveDishesPicks, sources);
+    this.#moveDishesDrawn = { ...sources, rows };
     const lineIds = pickedLineIds(rows, this.moveDishesPicks);
     const chosen = this.#moveDishesChosen();
     const canMove = lineIds.length > 0 && chosen !== undefined;
