@@ -12,6 +12,7 @@ import { nodes } from "../schema/nodes.js";
 import { locations } from "../schema/tenants.js";
 import { readTenant } from "../read-tenant.js";
 import { readVenue, venueLocationId } from "../venue.js";
+import { withTransaction } from "../tenancy.js";
 import {
   freshNif,
   seedDevice,
@@ -325,5 +326,19 @@ describe("seedWorkingOrder", () => {
     const node = await seedNode(db);
     const overridden = await seedWorkingOrder(db, { orderNumber: 7, nodeId: node });
     expect(overridden).toMatchObject({ orderNumber: 7, nodeId: node, locationId: venueId });
+  });
+});
+
+describe("the helpers inside a transaction", () => {
+  it("take the transaction handle withTransaction gives its body", async () => {
+    const order = await withTransaction(suite.db, async (tx) => {
+      await seedTenant(tx);
+      await seedVenue(tx, { name: "In a transaction" });
+      const node = await seedNode(tx);
+      await seedDevice(tx);
+      return seedWorkingOrder(tx, { nodeId: node });
+    });
+    expect((await readVenue(suite.db)).name).toBe("In a transaction");
+    expect(order.locationId).toBe(await venueLocationId(suite.db));
   });
 });
