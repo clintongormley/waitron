@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { join } from "node:path";
 import { inspect } from "node:util";
 import { constants } from "node:fs";
 import { clearTimeout, setTimeout } from "node:timers";
@@ -36,7 +36,7 @@ afterEach(async () => {
   for (const parent of parents.splice(0)) await fs.rm(parent, { recursive: true, force: true });
 });
 
-const mkfifo = (path) => execFileSync("mkfifo", ["-m", "600", path]);
+const mkfifo = (path) => execFileSync("mkfifo", ["-m", "600", path], { stdio: "ignore" });
 
 /**
  * Settles `promise`, or, if it has not settled within `ms`, reports it hung and keeps opening each
@@ -1218,11 +1218,18 @@ describe("store: bad input", () => {
 
 describe("key-leak sweep", () => {
   const decimal = (bytes, separator) => Array.from(bytes).join(separator);
+  const spacedHex = (bytes) =>
+    Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(" ");
   const windows = Array.from({ length: KEY.length - 7 }, (_, i) => KEY.subarray(i, i + 8));
+  // A window's 11th base64 character also holds bits of whatever byte follows it in a longer
+  // encoding, so only the first 10 are matched. A slice of 10 or more bytes, at any offset in the
+  // encoded data, holds a window on a 3-byte boundary and so is caught; 8 or 9 bytes only when
+  // aligned.
+  const base64Prefix = (window, encoding) => Buffer.from(window).toString(encoding).slice(0, 10);
   const FORMS = [
     ["hex", hex(KEY)],
     ["upper hex", hex(KEY).toUpperCase()],
-    ["spaced hex", Array.from(KEY, (byte) => byte.toString(16).padStart(2, "0")).join(" ")],
+    ["spaced hex", spacedHex(KEY)],
     ["base64", Buffer.from(KEY).toString("base64")],
     ["base64url", Buffer.from(KEY).toString("base64url")],
     ['decimal ", "', decimal(KEY, ", ")],
@@ -1231,9 +1238,18 @@ describe("key-leak sweep", () => {
     ...windows.flatMap((window, i) => [
       [`hex window ${i}`, hex(window)],
       [`upper hex window ${i}`, hex(window).toUpperCase()],
+      [`spaced hex window ${i}`, spacedHex(window)],
+      [`upper spaced hex window ${i}`, spacedHex(window).toUpperCase()],
+      [`base64 window ${i}`, base64Prefix(window, "base64")],
+      [`base64url window ${i}`, base64Prefix(window, "base64url")],
       [`decimal ", " window ${i}`, decimal(window, ", ")],
       [`decimal "," window ${i}`, decimal(window, ",")],
+      [`array-like JSON window ${i}`, JSON.stringify(window)],
     ]),
+  ];
+  const RAW_FORMS = [
+    ["raw key", Buffer.from(KEY)],
+    ...windows.map((window, i) => [`raw window ${i}`, Buffer.from(window)]),
   ];
   /** The names of every form `text` holds, whitespace runs collapsed so wrapped arrays still match. */
   const formsIn = (text) => {
@@ -1243,9 +1259,16 @@ describe("key-leak sweep", () => {
     );
   };
 
+  /** The stages whose injected failure the running scenario has thrown. */
+  let fired = [];
   /** Fails like a real file operation, but carries the key, so a pass-through would show it. */
-  const leakyFailure = (stage) =>
-    Object.assign(new Error(`fake ${stage} failure ${hex(KEY)}`), { code: "EIO", key: KEY });
+  const leakyFailure = (stage) => {
+    fired.push(stage);
+    return Object.assign(new Error(`fake ${stage} failure ${hex(KEY)}`), {
+      code: "EIO",
+      key: KEY,
+    });
+  };
   const failAt = (stage) => async () => {
     throw leakyFailure(stage);
   };
@@ -1278,8 +1301,9 @@ describe("key-leak sweep", () => {
 
   /** Each scenario: what to set up, then which store options to use (from the fixture). */
   const scenarios = {
-    "read: success": read(async () => {}),
+    "read: success": read(async () => {}, { expected: "fulfilled" }),
     "read: throwing consume": read(async () => {}, {
+      expected: "consumer failed",
       consume: async () => {
         throw new Error("consumer failed");
       },
@@ -1287,6 +1311,7 @@ describe("key-leak sweep", () => {
     "read: input-invalid (path)": read(async () => {}, { input: { diskUuid: "../x" } }),
     "read: input-invalid (missing)": read(async () => {}, { input: undefined }),
     "read: mount-unverified (seam throws)": read(async () => {}, {
+      fires: "inspectHostState",
       deps: () => ({ inspectHostState: failAt("inspectHostState") }),
     }),
     "read: mount-unverified (other hostRoot)": read(async () => {}, {
@@ -1319,8 +1344,13 @@ describe("key-leak sweep", () => {
       async (f) => fs.mkdir(join(f.folder, `${DISK_A}.json`)),
       { record: false },
     ),
-    "read: path-unsafe (second hard link)": read(async (f) =>
-      fs.link(join(f.folder, `${DISK_A}.json`), join(f.folder, `${DISK_B}.json`)),
+    "read: path-unsafe (record is a FIFO)": read(
+      async (f) => mkfifo(join(f.folder, `${DISK_A}.json`)),
+      { record: false },
+    ),
+    "read: path-unsafe (second hard link)": read(
+      async (f) => fs.link(join(f.folder, `${DISK_A}.json`), join(f.folder, `${DISK_B}.json`)),
+      { allow: [`${DISK_B}.json`] },
     ),
     "read: permissions-unsafe (record mode)": read(async (f) =>
       fs.chmod(join(f.folder, `${DISK_A}.json`), 0o644),
@@ -1344,21 +1374,45 @@ describe("key-leak sweep", () => {
     ),
     "read: record-mismatch": read(
       async (f) => f.writeRecord(`${DISK_B}.json`, recordText(DISK_A)),
-      { input: { diskUuid: DISK_B }, deps: answerWith((a) => ({ ...a, diskUuid: DISK_B })) },
+      {
+        input: { diskUuid: DISK_B },
+        deps: answerWith((a) => ({ ...a, diskUuid: DISK_B })),
+        allow: [`${DISK_B}.json`],
+      },
     ),
     "read: io-failed (lstat)": read(async () => {}, {
+      fires: "lstat",
       deps: () => ({ io: countingIo({ lstat: failAt("lstat") }).io }),
     }),
     "read: io-failed (open)": read(async () => {}, {
+      fires: "open",
       deps: () => ({ io: countingIo({ open: failAt("open") }).io }),
     }),
     "read: io-failed (readFile)": read(async () => {}, {
+      fires: "readFile",
       deps: () => ({
         io: countingIo({ open: openWith({ readFile: () => failAt("readFile") }) }).io,
       }),
     }),
+    "read: io-failed (handle stat)": read(async () => {}, {
+      fires: "stat",
+      deps: () => ({ io: countingIo({ open: openWith({ stat: () => failAt("stat") }) }).io }),
+    }),
+    "read: io-failed (handle close)": read(async () => {}, {
+      fires: "close",
+      deps: () => ({
+        io: countingIo({
+          open: openWith({
+            close: (handle) => async () => {
+              await handle.close();
+              throw leakyFailure("close");
+            },
+          }),
+        }).io,
+      }),
+    }),
 
-    "write: success": write(async () => {}),
+    "write: success": write(async () => {}, { expected: "fulfilled" }),
     "write: record-exists": write(async () => {}, { record: true }),
     "write: input-invalid (all-zero key)": write(async () => {}, {
       input: { diskUuid: DISK_A, key: new Uint8Array(32) },
@@ -1374,6 +1428,7 @@ describe("key-leak sweep", () => {
     }),
     "write: input-invalid (missing)": write(async () => {}, { input: undefined }),
     "write: mount-unverified": write(async () => {}, {
+      fires: "inspectHostState",
       deps: () => ({ inspectHostState: failAt("inspectHostState") }),
     }),
     "write: disk-mismatch": write(async () => {}, {
@@ -1389,6 +1444,7 @@ describe("key-leak sweep", () => {
     }),
     "write: permissions-unsafe": write(async (f) => fs.chmod(f.hostRoot, 0o755)),
     "write: io-failed (lstat of the folder)": write(async () => {}, {
+      fires: "lstat",
       deps: (f) => ({
         io: countingIo({
           lstat: lstatFailingAt(f.folder, () => {
@@ -1397,17 +1453,47 @@ describe("key-leak sweep", () => {
         }).io,
       }),
     }),
+    "write: io-failed (lstat of the new folder)": write(async () => {}, {
+      folder: false,
+      fires: "lstat",
+      deps: (f) => {
+        let seen = 0;
+        return {
+          io: countingIo({
+            lstat: async (target, options) => {
+              if (target === f.folder && ++seen === 2) throw leakyFailure("lstat");
+              return fs.lstat(target, options);
+            },
+          }).io,
+        };
+      },
+    }),
+    "write: io-failed (lstat of the record)": write(async () => {}, {
+      fires: "lstat",
+      deps: (f) => ({
+        io: countingIo({
+          lstat: async (target, options) => {
+            if (target === join(f.folder, `${DISK_A}.json`)) throw leakyFailure("lstat");
+            return fs.lstat(target, options);
+          },
+        }).io,
+      }),
+    }),
     "write: io-failed (mkdir)": write(async () => {}, {
+      fires: "mkdir",
       folder: false,
       deps: () => ({ io: countingIo({ mkdir: failAt("mkdir") }).io }),
     }),
     "write: io-failed (syncDirectory of hostRoot)": write(async () => {}, {
+      fires: "syncDirectory",
       deps: () => ({ io: countingIo({ syncDirectory: failAt("syncDirectory") }).io }),
     }),
     "write: io-failed (unlink)": write(async () => {}, {
+      fires: "unlink",
       deps: () => ({ io: countingIo({ unlink: failAt("unlink") }).io }),
     }),
     "write: io-failed (writeFile, half written)": write(async () => {}, {
+      fires: "writeFile",
       deps: () => ({
         io: countingIo({
           writeFile: async (path, data, options) => {
@@ -1418,12 +1504,15 @@ describe("key-leak sweep", () => {
       }),
     }),
     "write: io-failed (syncFile)": write(async () => {}, {
+      fires: "syncFile",
       deps: () => ({ io: countingIo({ syncFile: failAt("syncFile") }).io }),
     }),
     "write: io-failed (rename)": write(async () => {}, {
+      fires: "rename",
       deps: () => ({ io: countingIo({ rename: failAt("rename") }).io }),
     }),
     "write: publication-unverified (folder flush)": write(async () => {}, {
+      fires: "syncDirectory",
       deps: (f) => ({
         io: countingIo({
           syncDirectory: async (path) =>
@@ -1437,9 +1526,11 @@ describe("key-leak sweep", () => {
       }),
     }),
     "write: publication-unverified (read-back stat fails)": write(async () => {}, {
+      fires: "stat",
       deps: () => ({ io: afterRenameIo({ stat: () => failAt("stat") }) }),
     }),
     "write: publication-unverified (mount gone after rename)": write(async () => {}, {
+      fires: "inspectHostState",
       deps: (f) => {
         let renamed = false;
         return {
@@ -1467,15 +1558,16 @@ describe("key-leak sweep", () => {
     "publication-unverified",
     "io-failed",
   ];
-  const RECORD_NAME =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.json(\.next)?$/;
+
+  /** The outcome each scenario's label names: its refusal reason, or what its options say. */
+  const expectedOf = (label, scenario) => scenario.expected ?? /^\w+: ([a-z-]+)/.exec(label)[1];
 
   /** What a call returned or threw, as the texts a caller, a logger or a crash report could show. */
   async function outcomeOf(call) {
     try {
       const value = await call;
       const texts = [String(value), JSON.stringify(value) ?? "", inspect(value, { depth: 10 })];
-      return { reason: "fulfilled", texts };
+      return { reason: "fulfilled", value, texts };
     } catch (error) {
       const texts = [
         String(error?.message),
@@ -1487,45 +1579,66 @@ describe("key-leak sweep", () => {
     }
   }
 
-  /** Every file, link and name under the fixture; only a record or its staging file may hold the key. */
-  async function strayCopies(f, dir = f.parent) {
+  /**
+   * Every regular file's text and bytes, every symlink's target and every name under the fixture.
+   * FIFOs and sockets are named but not read. Only the scenario's own record and staging file
+   * (`<DISK_A>.json`, `<DISK_A>.json.next`, plus the names in `allow`) in the 0700 folder may hold
+   * the key.
+   */
+  async function strayCopies(f, allow, dir = f.parent) {
     const found = [];
     const folder = await fs.lstat(f.folder).catch(() => null);
     const recordFolder = folder?.isDirectory() && (folder.mode & 0o777) === 0o700;
+    const allowedNames = [`${DISK_A}.json`, `${DISK_A}.json.next`, ...allow];
     for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
       const path = join(dir, entry.name);
       for (const form of formsIn(entry.name)) found.push(`${path} (name): ${form}`);
       if (entry.isSymbolicLink()) {
         for (const form of formsIn(await fs.readlink(path))) found.push(`${path} (link): ${form}`);
       } else if (entry.isDirectory()) {
-        found.push(...(await strayCopies(f, path)));
+        found.push(...(await strayCopies(f, allow, path)));
       } else if (entry.isFile()) {
-        const allowed =
-          recordFolder && dirname(path) === f.folder && RECORD_NAME.test(basename(path));
-        if (!allowed)
-          for (const form of formsIn(await fs.readFile(path, "utf8")))
-            found.push(`${path}: ${form}`);
+        const allowed = recordFolder && dir === f.folder && allowedNames.includes(entry.name);
+        if (allowed) continue;
+        const bytes = await fs.readFile(path);
+        for (const form of formsIn(bytes.toString("utf8"))) found.push(`${path}: ${form}`);
+        for (const [name, raw] of RAW_FORMS)
+          if (bytes.indexOf(raw) !== -1) found.push(`${path}: ${name}`);
       }
     }
     return found;
   }
 
   it("no path puts the key in a returned value, an error, a console or stream write, or a stray file", async () => {
-    const spies = [
-      ...Object.keys(console)
-        .filter((name) => typeof console[name] === "function")
-        .map((name) => [`console.${name}`, vi.spyOn(console, name).mockImplementation(() => {})]),
-      ["process.stdout.write", vi.spyOn(process.stdout, "write").mockImplementation(() => true)],
-      ["process.stderr.write", vi.spyOn(process.stderr, "write").mockImplementation(() => true)],
-    ];
+    const spies = [];
     const leaks = [];
-    const reached = new Set();
+    const outcomes = [];
+    const expected = [];
     let writes;
     try {
-      const check = async (label, call) => {
-        const { reason, texts } = await outcomeOf(call);
-        reached.add(reason);
-        for (const text of texts) for (const form of formsIn(text)) leaks.push(`${label}: ${form}`);
+      for (const name of Object.keys(console).filter((key) => typeof console[key] === "function"))
+        spies.push([`console.${name}`, vi.spyOn(console, name).mockImplementation(() => {})]);
+      spies.push(
+        ["process.stdout.write", vi.spyOn(process.stdout, "write").mockImplementation(() => true)],
+        ["process.stderr.write", vi.spyOn(process.stderr, "write").mockImplementation(() => true)],
+      );
+      const check = async (label, call, reason, fires) => {
+        fired = [];
+        const outcome = await outcomeOf(call);
+        outcomes.push({
+          label,
+          reason: outcome.reason,
+          fired,
+          ...("value" in outcome ? { returned: outcome.value } : {}),
+        });
+        expected.push({
+          label,
+          reason,
+          fired: fires ? [fires] : [],
+          ...(reason === "fulfilled" ? { returned: undefined } : {}),
+        });
+        for (const text of outcome.texts)
+          for (const form of formsIn(text)) leaks.push(`${label}: ${form}`);
       };
       const fixtures = [];
       for (const [label, scenario] of Object.entries(scenarios)) {
@@ -1534,24 +1647,34 @@ describe("key-leak sweep", () => {
           folder: scenario.folder ?? true,
         });
         await scenario.setup(f);
-        fixtures.push([label, f]);
+        fixtures.push([label, f, scenario.allow ?? []]);
         const store = f.make(scenario.deps?.(f) ?? {});
-        if (scenario.side === "read") {
-          const input = "input" in scenario ? scenario.input : { diskUuid: DISK_A };
-          await check(label, store.withKey(input, scenario.consume ?? (async () => {})));
-        } else {
-          const input = "input" in scenario ? scenario.input : { diskUuid: DISK_A, key: KEY };
-          await check(label, store.store(input));
-        }
+        const call =
+          scenario.side === "read"
+            ? store.withKey(
+                "input" in scenario ? scenario.input : { diskUuid: DISK_A },
+                scenario.consume ?? (async () => {}),
+              )
+            : store.store("input" in scenario ? scenario.input : { diskUuid: DISK_A, key: KEY });
+        await check(label, call, expectedOf(label, scenario), scenario.fires);
       }
-      await check("fixed store", storeDiskRecovery({ diskUuid: DISK_A, key: KEY }));
-      await check("fixed store, array key", storeDiskRecovery({ diskUuid: DISK_A, key: [...KEY] }));
+      await check(
+        "fixed store",
+        storeDiskRecovery({ diskUuid: DISK_A, key: KEY }),
+        "mount-unverified",
+      );
+      await check(
+        "fixed store, array key",
+        storeDiskRecovery({ diskUuid: DISK_A, key: [...KEY] }),
+        "input-invalid",
+      );
       await check(
         "fixed withKey",
         withDiskRecovery({ diskUuid: DISK_A }, async () => {}),
+        "mount-unverified",
       );
-      for (const [label, f] of fixtures)
-        for (const stray of await strayCopies(f)) leaks.push(`${label}: ${stray}`);
+      for (const [label, f, allow] of fixtures)
+        for (const stray of await strayCopies(f, allow)) leaks.push(`${label}: ${stray}`);
     } finally {
       writes = spies
         .filter(([, spy]) => spy.mock.calls.length > 0)
@@ -1560,6 +1683,9 @@ describe("key-leak sweep", () => {
     }
     expect(leaks).toEqual([]);
     expect(writes).toEqual([]);
-    expect([...reached].sort()).toEqual([...REASONS, "fulfilled", "consumer failed"].sort());
+    expect(outcomes).toStrictEqual(expected);
+    expect([...new Set(outcomes.map(({ reason }) => reason))].sort()).toEqual(
+      [...REASONS, "fulfilled", "consumer failed"].sort(),
+    );
   });
 });
