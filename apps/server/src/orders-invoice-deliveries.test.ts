@@ -525,7 +525,7 @@ describe("the order detail's delivery status", () => {
     });
   });
 
-  it("offers every active printer at the sale's location, receipt printers first, by name, with the original's printer", async () => {
+  it("offers active receipt printers before venue A4 printers, by name, with the original's printer", async () => {
     const { billId, saleId } = await fullInvoice();
     await withExtraOffices(async ({ upstairs }) => {
       expect(

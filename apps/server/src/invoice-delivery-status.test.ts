@@ -280,7 +280,6 @@ type Offer = (sale: InvoiceDeliverySale) => Promise<OfferedPrinter[]>;
 
 const a4 = (id: string, name = "Back office"): OfferedPrinter => ({ id, name, kind: "a4" });
 
-/** Offers every active page printer at the sale's location, by name, as the Orders detail does. */
 const locationOffices: Offer = async (sale) =>
   (
     await suite.db

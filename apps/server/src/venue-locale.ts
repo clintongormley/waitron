@@ -104,6 +104,7 @@ async function venueLanguageIn(
 ): Promise<{ locale: string; invoiceLocales: string[]; area: string | null }> {
   const venue = await readVenue(tx);
   return {
+    // `locations_invoice_locales_len` requires at least one language.
     locale: venue.invoiceLocales[0]!,
     invoiceLocales: venue.invoiceLocales,
     area: venue.province,

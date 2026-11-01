@@ -714,9 +714,6 @@ async function readDeliveries(
   };
 }
 
-/**
- * Orders offer active receipt printers, then active A4 printers at the sale's location, each by name.
- */
 export function orderInvoicePrinters(tx: Transaction): PrinterOffer {
   return async (sale) => {
     const receipt = await tx
