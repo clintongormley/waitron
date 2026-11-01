@@ -3,10 +3,11 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { setSingletonRoleTx, stampDeployment, withTransaction } from "@waitron/db";
+import { stampDeployment, withNodeTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { AuthorityTimeSample } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { setSingletonRoleTx } from "@waitron/node-db";
 import type { ClockStartUp } from "./clock-start-up.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
@@ -137,7 +138,9 @@ async function tradingEnv(role: "primary" | "secondary") {
   const venue = await setupVenue(suite.db);
   if (role === "secondary") {
     await stampDeployment(suite.db, "preproduction");
-    await withTransaction(suite.db, (tx) => setSingletonRoleTx(tx, venue.cfg.nodeId, "secondary"));
+    await withNodeTransaction(suite.node, (tx) =>
+      setSingletonRoleTx(tx, venue.cfg.nodeId, "secondary"),
+    );
   }
   const [port] = await freePorts(1);
   const migrationsRoot = join(scratch, "migrations");
