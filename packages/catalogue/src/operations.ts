@@ -1386,12 +1386,10 @@ export async function readInvoiceLocales(tx: Transaction): Promise<string[]> {
 
 /**
  * The venue's receipt language — the FIRST of its saved `invoice_locales` — together with the
- * whole list. `_locationId` is never read; it stays until A1301 S2's callers stop passing it.
+ * whole list.
  */
 export async function readReceiptLanguage(
   tx: Transaction,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- see the doc comment
-  _locationId?: string,
 ): Promise<{ locale: string; invoiceLocales: string[] }> {
   const invoiceLocales = await readInvoiceLocales(tx);
   const locale = invoiceLocales[0];
@@ -1433,14 +1431,8 @@ export async function listAccessibleCatalogues(tx: Transaction): Promise<Accessi
     );
 }
 
-/**
- * The Active and Available products across the venue's whole menu list, grouped by menu.
- * `_locationId` is never read; it stays until A1301 S2's caller stops passing it.
- */
 export async function listAvailableProducts(
   tx: Transaction,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- see the doc comment
-  _locationId?: string,
 ): Promise<{ products: AvailableProduct[]; invoiceLocales: string[] }> {
   const { ids: accessible, invoiceLocales } = await resolveAccessibleCatalogueIds(tx);
   if (accessible.length === 0) return { products: [], invoiceLocales };
