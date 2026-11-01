@@ -1,7 +1,7 @@
 # A803 slice 3: one bill switcher, one ⋮ menu, no main bill — task plan
 
 **Goal.** At a table, the waiter always sees which bill is on screen and can change it from one
-drop-down, "Bill 1 · €38.50 ▾" with one bill and "Bill 2 of 3 · Clint · €54.00 ▾" with several, which
+drop-down, "Bill 1 · €38.50 ▾" with one bill and "Bill 2 of 3 · Clint · €54.00 ▾" with several (Owner 2026-10-31 (Q1): the several-bills label is 'Bill 4 · 2 bills' / «Cuenta 4 · 2 cuentas».), which
 also holds **+ New bill**. Everything that acts on that bill or on the whole table sits in one ⋮
 menu with two headed sections. The Tab button and its side panel go, the table screen has no Hold,
 and Pay is drawn quiet (still tappable, and explaining why) while this bill has unsent dishes. The
@@ -874,6 +874,7 @@ is written to `questions.md` at Task 0, before any file it names is edited.** Th
    with three bills reads «Cuenta 2 de 3 · Clint · 54,00 € ▾»; the ⋮ shows «Cuenta 2 · Clint» over
    its bill items and «Toda la mesa» over Guests… Finish table. Built behind the approval gate;
    landing waits for your yes. Changes Task 8d/9/10 strings and Task 14.
+   (Owner 2026-10-31 (Q1): the several-bills label is 'Bill 4 · 2 bills' / «Cuenta 4 · 2 cuentas».)
 2. **Full invoice for a bill already paid.** Default: the ⋮ shows no Full invoice for a paid or
    issued bill, and the guide says a full invoice for a paid bill is a correction Waitron does not
    offer yet (A802). Alternative: show it quiet, and on tap explain that correction is not built

@@ -225,6 +225,37 @@ describe("till-table-order-screen: the ways to pay part of a bill", () => {
     expect(el.shadowRoot!.querySelector("[data-invoice-choice]")).toBeNull();
   });
 
+  it("shows the saved full-invoice customer of the bill on screen only, following a bill switch and a fresh bills read", async () => {
+    const other: PartyBill = { ...chosen, workingOrderId: "wo-5", billNumber: 2 };
+    const el = await mountScreen({
+      bills: [partlyPaid, other],
+      billBalance: balance(),
+      fullInvoices: true,
+    });
+    expect(el.shadowRoot!.querySelector("[data-invoice-choice]")).toBeNull();
+
+    el.orderId = "wo-5";
+    await el.updateComplete;
+    expect(text(el.shadowRoot!.querySelector("[data-invoice-choice]"))).toBe(
+      "Cliente SL · B12345674",
+    );
+
+    el.bills = [partlyPaid, { ...other, invoiceType: "F2", recipient: null }];
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-invoice-choice]")).toBeNull();
+  });
+
+  it("shows no saved customer while full invoices are off, even with the receipt language offered", async () => {
+    const el = await mountScreen({
+      bills: [chosen],
+      billBalance: balance(),
+      receiptLanguages: ["es-ES", "ca-ES"],
+    });
+
+    expect(el.shadowRoot!.querySelector("[data-choose-bill-language]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-invoice-choice]")).toBeNull();
+  });
+
   it("opens a contribution of what a partly paid bill still owes from the sentence saying to take the rest", async () => {
     const el = await mountScreen({ bills: [partlyPaid], billBalance: balance() });
     const asked = capture<BillPayDetail>(el, "bill-pay");
