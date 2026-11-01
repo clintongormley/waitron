@@ -1,4 +1,4 @@
-import type { Database, NodeDatabase } from "@waitron/db";
+import type { VenueAndNodeHandles } from "@waitron/node-db";
 import { AppError } from "@waitron/shared";
 import {
   activateFirstSetup,
@@ -31,7 +31,7 @@ export interface FirstSetupCommandDeployment {
 
 export async function completeFirstSetupCommand(
   runtime: ReturnType<typeof createFirstSetupRuntime>,
-  { venue: db, node }: { readonly venue: Database; readonly node: NodeDatabase },
+  { venue: db, node }: VenueAndNodeHandles,
   owner: FirstSetupOwnerAttempt,
   deployment: FirstSetupCommandDeployment,
 ): Promise<VenueResult> {

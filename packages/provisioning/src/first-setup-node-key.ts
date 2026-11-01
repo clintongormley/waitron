@@ -10,10 +10,13 @@ import {
   readRecoveryPack,
   withNodeTransaction,
   withTransaction,
-  type Database,
-  type NodeDatabase,
 } from "@waitron/db";
-import { readRecoveryKeyName, readRecoveryKeyVerifier, setRecoveryKeyTx } from "@waitron/node-db";
+import {
+  readRecoveryKeyName,
+  readRecoveryKeyVerifier,
+  setRecoveryKeyTx,
+  type VenueAndNodeHandles,
+} from "@waitron/node-db";
 import { generatePassword } from "./identifiers.js";
 import { newBreakGlassKeyName } from "./server-key-name.js";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
@@ -158,7 +161,7 @@ export function createFirstSetupNodeKeys(options: Options) {
       });
     },
     installStagedNodeKey(
-      db: { readonly venue: Database; readonly node: NodeDatabase },
+      db: VenueAndNodeHandles,
       state: FirstSetupState,
       stage: StagedNodeKey,
       hold?: FirstSetupHold,
