@@ -4,7 +4,7 @@ import type { ServerType } from "@hono/node-server";
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { X509Certificate } from "node:crypto";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { hasCode, isAppError } from "@waitron/shared";
 import type { AdoptCredential } from "./adopt.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
@@ -12,8 +12,10 @@ import { fetchMirrorBundle, fetchPrimaryCertificate } from "./mirror-bundle-fetc
 import {
   mintBoxAuthority,
   startBoxServer,
+  startSilentServer,
   type BoxAuthority,
   type BoxServer,
+  type SilentServer,
 } from "./testing/box-authority.js";
 
 // The fetcher only JSON-round-trips it, so the content is immaterial.
@@ -458,6 +460,60 @@ describe("the spare checks the main box's certificate before it sends a password
     expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
   });
 
+  it("refuses an authority certificate padded past 64 KiB", async () => {
+    const server = await startBoxServer(x, () => ({
+      status: 200,
+      body: x.caPem + "\n".repeat(70_000),
+    }));
+    boxServers.push(server);
+
+    const error = await fetchPrimaryCertificate(server.url).catch((e: unknown) => e);
+    expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
+  });
+
+  it("refuses an authority certificate the box sends with a status other than 200", async () => {
+    const server = await startBoxServer(x, () => ({ status: 500, body: x.caPem }));
+    boxServers.push(server);
+
+    const error = await fetchPrimaryCertificate(server.url).catch((e: unknown) => e);
+    expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
+  });
+
+  it("checks the address itself, so an unsafe one reaches no box", async () => {
+    const server = await startBoxServer(x, () => ({ status: 200, body: x.caPem }));
+    boxServers.push(server);
+    const port = new URL(server.url).port;
+
+    // 0.0.0.0 is a refused address that this machine still answers, at the box above.
+    for (const unsafe of [`https://0.0.0.0:${port}`, "http://example.com:1"]) {
+      const error = await fetchPrimaryCertificate(unsafe).catch((e: unknown) => e);
+      expect(isAppError(error) && hasCode(error, "mirror.primary_url_invalid")).toBe(true);
+    }
+    expect(server.requests).toHaveLength(0);
+  });
+
+  it.each([
+    ["an empty certificate", () => ""],
+    ["two certificates, the wrong one first", () => y.caPem + x.caPem],
+    ["the box's leaf, which is no authority", () => y.certPem],
+    [
+      "a broken certificate",
+      () => "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n",
+    ],
+  ])(
+    "refuses mirror.primary_unconfirmed when what was confirmed is %s, sending nothing",
+    async (_label, confirmed) => {
+      const server = await serveBundle(y, y.caPem);
+
+      const error = await fetchMirrorBundle(server.url, CREDENTIAL, STANDBY, confirmed()).catch(
+        (e: unknown) => e,
+      );
+
+      expect(isAppError(error) && hasCode(error, "mirror.primary_unconfirmed")).toBe(true);
+      expect(server.requests).toHaveLength(0);
+    },
+  );
+
   it("refuses a bundle whose authority cannot be read as a certificate", async () => {
     const server = await serveBundle(x, "not a certificate");
 
@@ -479,5 +535,124 @@ describe("the spare checks the main box's certificate before it sends a password
     );
     expect(isAppError(error) && hasCode(error, "password.invalid")).toBe(true);
     expect(isAppError(error) && error.params).toEqual({});
+  });
+});
+
+describe("a main box that never answers is given up on, so setup is not held", () => {
+  const LIMIT_MS = 300;
+  // Far above LIMIT_MS: a call still waiting here has no limit at all.
+  const DEADLINE_MS = 5_000;
+  let x: BoxAuthority;
+  const silent: SilentServer[] = [];
+
+  beforeAll(async () => {
+    x = await mintBoxAuthority();
+  });
+
+  afterEach(async () => {
+    while (silent.length > 0) await silent.pop()!.close();
+  });
+
+  async function settleWithin(call: Promise<unknown>, ms: number): Promise<unknown> {
+    let timer: NodeJS.Timeout | undefined;
+    const waiting = new Promise((resolve) => {
+      timer = setTimeout(() => resolve("still waiting"), ms);
+    });
+    try {
+      return await Promise.race([call.catch((e: unknown) => e), waiting]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function silentBox(tls: boolean): Promise<SilentServer> {
+    const server = await startSilentServer(tls ? x : undefined);
+    silent.push(server);
+    return server;
+  }
+
+  const shapes = [
+    ["accepts the connection and sends nothing", false],
+    ["completes TLS and never answers the request", true],
+  ] as const;
+
+  it.each(shapes)(
+    "the certificate read refuses a box that %s within its limit",
+    async (_label, tls) => {
+      const { port } = await silentBox(tls);
+
+      const error = await settleWithin(
+        fetchPrimaryCertificate(`https://localhost:${port}`, { timeoutMs: LIMIT_MS }),
+        DEADLINE_MS,
+      );
+
+      expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
+    },
+  );
+
+  it.each(shapes)(
+    "the bundle request refuses a box that %s within its limit",
+    async (_label, tls) => {
+      const { port } = await silentBox(tls);
+
+      const error = await settleWithin(
+        fetchMirrorBundle(`https://localhost:${port}`, CREDENTIAL, STANDBY, x.caPem, {
+          timeoutMs: LIMIT_MS,
+        }),
+        DEADLINE_MS,
+      );
+
+      expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
+    },
+  );
+
+  it("the plain-http bundle request refuses a loopback box that never answers within its limit", async () => {
+    const { port } = await silentBox(false);
+
+    const error = await settleWithin(
+      fetchMirrorBundle(`http://127.0.0.1:${port}`, CREDENTIAL, STANDBY, undefined, {
+        timeoutMs: LIMIT_MS,
+      }),
+      DEADLINE_MS,
+    );
+
+    expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
+  });
+
+  describe("the limits a caller gets when it names none", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    async function pendingAfter(call: Promise<unknown>, ms: number): Promise<unknown> {
+      let settled: unknown = "still waiting";
+      void call.then(
+        (value) => (settled = value),
+        (error: unknown) => (settled = error),
+      );
+      await vi.advanceTimersByTimeAsync(ms);
+      for (let turn = 0; turn < 20; turn += 1) await new Promise((r) => setImmediate(r));
+      return settled;
+    }
+
+    it("the certificate read waits 10 seconds", async () => {
+      const { port } = await silentBox(true);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+      const call = fetchPrimaryCertificate(`https://localhost:${port}`);
+      expect(await pendingAfter(call, 9_999)).toBe("still waiting");
+      const error = await pendingAfter(call, 1);
+      expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
+    });
+
+    it("the bundle request waits 60 seconds", async () => {
+      const { port } = await silentBox(true);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+      const call = fetchMirrorBundle(`https://localhost:${port}`, CREDENTIAL, STANDBY, x.caPem);
+      expect(await pendingAfter(call, 59_999)).toBe("still waiting");
+      const error = await pendingAfter(call, 1);
+      expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
+    });
   });
 });

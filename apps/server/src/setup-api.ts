@@ -131,6 +131,8 @@ export interface SetupDeps {
     req: AdoptRequest,
     hooks: AdoptHooks,
   ) => Promise<{ breakGlassSecret: string; breakGlassKeyName?: string }>;
+  /** Reads the main box's authority certificate; `fetchPrimaryCertificate` when absent. */
+  readPrimaryCertificate?: (primaryUrl: string) => ReturnType<typeof fetchPrimaryCertificate>;
   /** Used to seal the fiscal regime's provisioning secret through its `provisioningSecret.seal`
    * seat. */
   db?: Database;
@@ -1003,7 +1005,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       const primaryUrl = asString(body.primaryUrl, "primaryUrl");
       // The same SSRF guard as the adopt route: this route is unauthenticated too.
       assertSafePrimaryUrl(primaryUrl);
-      return c.json(await fetchPrimaryCertificate(primaryUrl));
+      return c.json(await (deps.readPrimaryCertificate ?? fetchPrimaryCertificate)(primaryUrl));
     }),
   );
 

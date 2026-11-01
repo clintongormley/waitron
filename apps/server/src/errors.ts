@@ -1146,7 +1146,8 @@ declare module "@waitron/shared" {
     "mirror.vault_not_empty": Record<string, never>;
     /**
      * A spare was asked to join a main box over https before the person confirmed that box's
-     * authority certificate; nothing was sent.
+     * authority certificate, or with something other than one authority certificate as the
+     * confirmed one; nothing was sent.
      */
     "mirror.primary_unconfirmed": Record<string, never>;
     /**

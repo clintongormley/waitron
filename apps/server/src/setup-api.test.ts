@@ -8,7 +8,7 @@ import type { ServerType } from "@hono/node-server";
 import { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppError, SUPPORTED_LOCALE_CODES } from "@waitron/shared";
-import type { VenueResult } from "@waitron/provisioning";
+import { createFirstSetupCoordinator, type VenueResult } from "@waitron/provisioning";
 import { verifyPassword, verifyPin } from "@waitron/identity";
 import type { Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
@@ -16,11 +16,16 @@ import type { ProvisionRequest } from "./provision.js";
 import type { RestoreRequest } from "./restore-request.js";
 import type { AdoptCredential, AdoptHooks, AdoptRequest } from "./adopt.js";
 import type { Logger, LogLevel } from "./logger.js";
-import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
+import { fetchMirrorBundle, fetchPrimaryCertificate } from "./mirror-bundle-fetch.js";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
 import { makeAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { createSetupOperationStore } from "./setup-operation.js";
-import { mintBoxAuthority, startBoxServer, type BoxServer } from "./testing/box-authority.js";
+import {
+  mintBoxAuthority,
+  startBoxServer,
+  startSilentServer,
+  type BoxServer,
+} from "./testing/box-authority.js";
 import type { ConfigurationPreview } from "./configuration-import.js";
 
 const noopLog: Logger = () => {};
@@ -3002,6 +3007,43 @@ describe("POST /setup-api/primary-certificate — the main box's authority, read
       });
     } finally {
       await box.close();
+    }
+  });
+
+  it("serves the next setup request once a read from a box that never answers passes its limit", async () => {
+    const silent = await startSilentServer(await mintBoxAuthority());
+    try {
+      const app = new Hono();
+      const { deps } = makeAdoptDeps({
+        firstSetup: {
+          coordinator: createFirstSetupCoordinator(),
+          assertOtherAllowed: async () => {},
+        },
+        readPrimaryCertificate: (url) => fetchPrimaryCertificate(url, { timeoutMs: 300 }),
+      });
+      mountSetup(app, deps, noopLog);
+
+      const hung = postCertificate(app, { primaryUrl: `https://localhost:${silent.port}` });
+      const next = postCertificate(app, { primaryUrl: "http://127.0.0.1:1" });
+      let timer: NodeJS.Timeout | undefined;
+      const answered = await Promise.race([
+        next,
+        new Promise((resolve) => {
+          timer = setTimeout(() => resolve("still waiting"), 5_000);
+        }),
+      ]);
+      clearTimeout(timer);
+
+      expect(answered).toBeInstanceOf(Response);
+      expect((answered as Response).status).toBe(200);
+      expect(await (answered as Response).json()).toBeNull();
+      const refused = await hung;
+      expect(refused.status).toBe(502);
+      expect(await refused.json()).toEqual({
+        error: { code: "mirror.bundle_fetch_failed", params: {} },
+      });
+    } finally {
+      await silent.close();
     }
   });
 

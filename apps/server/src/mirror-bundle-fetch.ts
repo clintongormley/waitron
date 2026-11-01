@@ -90,11 +90,34 @@ async function refusalFrom(response: Response): Promise<AppError> {
 // A box's authority certificate is about 1–2 KiB; anything far larger is not one.
 const MAX_CERTIFICATE_BYTES = 64 * 1024;
 
+// One small file from a box on the venue's network: a box that has not sent it by then is not
+// answering, and the person should be told so rather than watch a frozen screen.
+const CERTIFICATE_READ_LIMIT_MS = 10_000;
+// Far above the time a bundle mint takes, and well under the five minutes Node's fetch waits for an
+// answer's headers by default.
+const BUNDLE_REQUEST_LIMIT_MS = 60_000;
+
+/** A request still unanswered after `timeoutMs` is destroyed and refused. */
+export interface RequestLimit {
+  timeoutMs?: number;
+}
+
+async function withinLimit<T>(timeoutMs: number, work: (signal: AbortSignal) => Promise<T>) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await work(controller.signal);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function httpsExchange(
   url: URL,
   options: {
     method: "GET" | "POST";
     trust: Pick<RequestOptions, "ca" | "rejectUnauthorized">;
+    signal: AbortSignal;
     body?: string;
   },
   maxBytes?: number,
@@ -131,6 +154,10 @@ function httpsExchange(
         res.on("error", reject);
       },
     );
+    options.signal.addEventListener("abort", () => {
+      reject(new Error("no answer in time"));
+      req.destroy();
+    });
     req.on("error", reject);
     req.end(options.body);
   });
@@ -143,6 +170,7 @@ function httpsExchange(
  */
 export async function fetchPrimaryCertificate(
   primaryUrl: string,
+  { timeoutMs = CERTIFICATE_READ_LIMIT_MS }: RequestLimit = {},
 ): Promise<{ pem: string; fingerprint256: string } | null> {
   const base = assertSafePrimaryUrl(primaryUrl);
   if (base.protocol === "http:") return null;
@@ -150,14 +178,14 @@ export async function fetchPrimaryCertificate(
 
   let answer: { status: number; text: string };
   try {
-    // The only request that does not verify the box: it carries no credential, body or cookie, and
-    // what it returns is a public certificate nothing trusts until the person has compared its
-    // fingerprint with the one the main box shows. The bundle request then trusts that one
-    // certificate and nothing else.
-    answer = await httpsExchange(
-      url,
-      { method: "GET", trust: { rejectUnauthorized: false } },
-      MAX_CERTIFICATE_BYTES,
+    // The only request that skips the certificate check: it carries no credential, body or cookie,
+    // and what it returns is public, and is trusted only once the person confirms it.
+    answer = await withinLimit(timeoutMs, (signal) =>
+      httpsExchange(
+        url,
+        { method: "GET", trust: { rejectUnauthorized: false }, signal },
+        MAX_CERTIFICATE_BYTES,
+      ),
     );
   } catch {
     throw new AppError("mirror.bundle_fetch_failed", {});
@@ -203,16 +231,17 @@ export async function fetchMirrorBundle(
   credential: AdoptCredential,
   standby: { nodeId: string; publicKey: string; contactUrl: string },
   confirmedCaPem?: string,
+  { timeoutMs = BUNDLE_REQUEST_LIMIT_MS }: RequestLimit = {},
 ): Promise<MirrorBundle> {
   // Re-checked here so no caller can make this fetch an unvalidated URL; the request is built from
   // the parsed `URL`, not the raw string.
   const base = assertSafePrimaryUrl(primaryUrl);
   const url = `${base.href.replace(/\/+$/, "")}/management-api/mirror-bundle`;
   // Plain http is allowed only to a loopback host, which only this machine can answer, so it needs
-  // no confirmation. Every https request, `localhost` included, is sent only to the authority the
-  // person confirmed, and before any connection is opened when there is none.
+  // no confirmation. Every https request, `localhost` included, is sent only to the one authority
+  // certificate the person confirmed, and is refused before any connection when there is none.
   const https = base.protocol === "https:";
-  if (https && confirmedCaPem === undefined) {
+  if (https && (confirmedCaPem === undefined || authorityCertificate(confirmedCaPem) === null)) {
     throw new AppError("mirror.primary_unconfirmed", {});
   }
   const body = JSON.stringify({
@@ -224,21 +253,25 @@ export async function fetchMirrorBundle(
 
   let response: Response;
   try {
-    if (https) {
-      // `ca` is the confirmed AUTHORITY: trusting the box's own leaf instead would refuse it.
-      const answer = await httpsExchange(new URL(url), {
-        method: "POST",
-        trust: { ca: confirmedCaPem },
-        body,
-      });
-      response = new Response(answer.text, { status: answer.status });
-    } else {
-      response = await fetch(url, {
+    const answer = await withinLimit(timeoutMs, async (signal) => {
+      if (https) {
+        // `ca` is the confirmed AUTHORITY: trusting the box's own leaf instead would refuse it.
+        return httpsExchange(new URL(url), {
+          method: "POST",
+          trust: { ca: confirmedCaPem },
+          signal,
+          body,
+        });
+      }
+      const plain = await fetch(url, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body,
+        signal,
       });
-    }
+      return { status: plain.status, text: await plain.text() };
+    });
+    response = new Response(answer.text, { status: answer.status });
   } catch {
     throw new AppError("mirror.bundle_fetch_failed", {});
   }

@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer, type Server } from "node:https";
 import type { IncomingHttpHeaders } from "node:http";
-import type { AddressInfo } from "node:net";
+import { createServer as createTcpServer, type AddressInfo, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureBoxSecrets } from "../box-secrets.js";
@@ -80,6 +80,48 @@ export async function startBoxServer(
     close: () =>
       new Promise<void>((resolve, reject) => {
         server.closeAllConnections();
+        server.close((err) => (err ? reject(err) : resolve()));
+      }),
+  };
+}
+
+export interface SilentServer {
+  port: number;
+  close: () => Promise<void>;
+}
+
+/**
+ * A server that accepts every connection and never answers. Given an authority it completes the
+ * TLS handshake under that authority's leaf and reads the request first; without one it never sends
+ * a byte, so a TLS client waits in the handshake.
+ */
+export async function startSilentServer(authority?: BoxAuthority): Promise<SilentServer> {
+  if (authority !== undefined) {
+    const server: Server = createServer(
+      { key: authority.keyPem, cert: authority.certPem },
+      () => {},
+    );
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    return {
+      port: (server.address() as AddressInfo).port,
+      close: () =>
+        new Promise<void>((resolve, reject) => {
+          server.closeAllConnections();
+          server.close((err) => (err ? reject(err) : resolve()));
+        }),
+    };
+  }
+  const sockets = new Set<Socket>();
+  const server = createTcpServer((socket) => {
+    sockets.add(socket);
+    socket.on("close", () => sockets.delete(socket));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return {
+    port: (server.address() as AddressInfo).port,
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        for (const socket of sockets) socket.destroy();
         server.close((err) => (err ? reject(err) : resolve()));
       }),
   };
