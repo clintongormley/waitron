@@ -856,6 +856,20 @@ decides; PR 1 reports the disk's state and the hardware state separately so eith
   erases; and a Waitron disk whose two partition tables were both wiped reads as blank. The Linux
   observation adapter decides how to look for an encryption header in that case.
 
+**Left open by PR 1's review (#2370):**
+
+- Another process running as the same user can create a recorded file or pid file path before the
+  step makes it (or any time before cleanup, if the step never makes it), and cleanup would then
+  delete it. Stated in `scripts/box/rig-contract.mjs` and the plan; the Linux rig decides whether a
+  separate user or folder closes it.
+- The Linux cleanup adapter must check that a VM's process is the one this run started, and that a
+  mount at a recorded target is one this run made, before stopping or unmounting it. The library
+  cannot check either.
+- Each VM boot needs its own pid file path: recording the same path twice is refused.
+- If the code holding the disk key calls the store again and that inner call is refused, the outer
+  call reports `consumer-failed`, not the inner reason (the store never passes a consumer's error
+  through, because it may hold the key).
+
 ## A1049. The updater honours a version Waitron Cloud marks held (2026-10-24).
 
 Cloud's

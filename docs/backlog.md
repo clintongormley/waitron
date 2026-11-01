@@ -4918,7 +4918,7 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   Waits for A1188 part 1, whose card facts the page prints, for people holding `node.promote`.
   [Detail](backlog/box.md#a1187-part-2-the-recovery-packs-emergency-start-page-owner-2026-10-29).
 
-- **A1187 part 3: the recovery pack's disk key page.** Waits for B3's retained disk key. A pack
+- **A1187 part 3: the recovery pack's disk key page.** Waits for B3's retained disk key: the store exists (`scripts/box/disk-key.mjs`, #2370) but nothing on a box makes or stores a key yet. A pack
   that cannot carry the disk key is then refused rather than drawn without it.
   [Design](superpowers/specs/2026-10-29-a1187-one-recovery-pack-design.md), [how part 1 leaves room](superpowers/plans/2026-10-29-a1187-recovery-pack-part-1.md#how-part-1-leaves-room-for-parts-2-and-3).
 
