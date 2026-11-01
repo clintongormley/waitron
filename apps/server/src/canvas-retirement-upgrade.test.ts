@@ -539,6 +539,8 @@ it("records the no-holder admission-rule loss and retains every other surviving 
     delete retained.kitchen_station_timing;
     delete retained.service_settings;
     delete retained.period_extensions;
+    delete retained.mirror_config;
+    delete retained.node_roles;
     retained.device_profiles = before!.device_profiles!.map((row) =>
       Object.fromEntries(
         Object.entries(row as Record<string, unknown>).filter(([key]) => key !== "canvas_id"),
