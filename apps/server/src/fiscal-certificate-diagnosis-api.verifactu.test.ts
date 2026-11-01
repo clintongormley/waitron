@@ -104,7 +104,6 @@ describe("real certificate diagnosis through HTTP and the isolated module child"
           ring: f.deps.ring,
           seat: FISCAL_SLOT.certificate!,
           nodeId: f.deps.nodeId,
-          locationId: f.deps.locationId,
           environment: "preproduction",
           filing: () => true,
           now: () => clock,

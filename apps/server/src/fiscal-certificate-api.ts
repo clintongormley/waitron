@@ -17,7 +17,6 @@ export interface FiscalCertificateApiDeps {
   seat: Pick<FiscalCertificateSeat, "read" | "install" | "diagnose" | "diagnoseInChild">;
   diagnosisRunner?: CertificateDiagnosisRunner;
   nodeId: string;
-  locationId: string;
   environment: DeploymentEnvironment;
   filing(): boolean;
   now(): Date;
@@ -57,7 +56,6 @@ export function mountFiscalCertificateApi(
         {
           db: deps.db,
           nodeId: deps.nodeId,
-          locationId: deps.locationId,
           authorize: async (tx) => {
             await authorizeManager(tx, { managementSessionId, permission: "fiscal.view" });
           },
@@ -83,7 +81,6 @@ export function mountFiscalCertificateApi(
             db: deps.db,
             ring: deps.ring,
             nodeId: deps.nodeId,
-            locationId: deps.locationId,
             environment: deps.environment,
             authorize: async (tx) => {
               const session = await authorizeManager(tx, {
@@ -163,7 +160,6 @@ export function mountFiscalCertificateApi(
                   db: deps.db,
                   ring: deps.ring,
                   nodeId: deps.nodeId,
-                  locationId: deps.locationId,
                   environment: deps.environment,
                   signal,
                   clock: deps.now,

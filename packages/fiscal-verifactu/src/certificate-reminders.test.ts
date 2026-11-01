@@ -51,9 +51,7 @@ function claimAt(
   recipients: readonly (typeof ANA | typeof BEA)[] = [ANA, BEA],
   nodeId: string = TENANT_A.nodeId,
 ) {
-  return withTransaction(suite.db, (tx) =>
-    claimReminder(tx, { nodeId, locationId: TENANT_A.locationId }, recipients, new Date(at)),
-  );
+  return withTransaction(suite.db, (tx) => claimReminder(tx, { nodeId }, recipients, new Date(at)));
 }
 
 function reportAt(

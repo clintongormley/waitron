@@ -265,7 +265,7 @@ async function insertLocationNodeSeries(
 }
 
 /**
- * Seeds location -> node -> invoice series and a till device, makes sure the one taxpayer row exists, and registers a
+ * Seeds a node, invoice series and till device at the venue, and registers a
  * LIVE Veri*Factu SIF identity (via `registerSif`) — everything `write-path.e2e.test.ts` needs for
  * `VerifactuBackend.recordSale`'s own `currentSif` lookup to succeed. `seedTenantNodeSif` above is
  * deliberately not reused for this: it seeds a ready-made SALE too (for `inmutabilidad.test.ts`'s

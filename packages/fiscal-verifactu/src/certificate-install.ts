@@ -1,6 +1,6 @@
 import { credentialRevision, putCredential, type KeyRing } from "@waitron/credentials";
 import {
-  locations,
+  readVenue,
   readTenant,
   withTransaction,
   type Database,
@@ -9,7 +9,6 @@ import {
 } from "@waitron/db";
 import type { FiscalDutyLog } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
-import { eq } from "drizzle-orm";
 import { aeatEndpointFor, isCertKind, mtlsFetch, type CertKind } from "./aeat-transport.js";
 import { checkWithAuthority, type CheckTransport } from "./certificate-check.js";
 import { localDate } from "./certificate-dates.js";
@@ -53,7 +52,6 @@ export interface InstallDeps {
   db: Database;
   ring: KeyRing;
   nodeId: string;
-  locationId: string;
   environment: DeploymentEnvironment;
   authorize(tx: Transaction): Promise<{ personId: string }>;
   log?: FiscalDutyLog;
@@ -87,16 +85,16 @@ function parseBody(raw: unknown): InstallBody {
   return { pfxBase64, passphrase, certKind, expectedRevision };
 }
 
-/** The location's IANA zone, or "UTC" when the location is missing or its zone is unknown. */
-export async function venueTimeZone(tx: Transaction, locationId: string): Promise<string> {
-  const [location] = await tx
-    .select({ timeZone: locations.timeZone })
-    .from(locations)
-    .where(eq(locations.id, locationId));
-  if (location === undefined) return "UTC";
+export async function venueTimeZone(tx: Transaction): Promise<string> {
+  let timeZone: string;
   try {
-    return new Intl.DateTimeFormat("en-GB", { timeZone: location.timeZone }).resolvedOptions()
-      .timeZone;
+    timeZone = (await readVenue(tx)).timeZone;
+  } catch (error) {
+    if (error instanceof AppError && error.code === "venue.not_found") return "UTC";
+    throw error;
+  }
+  try {
+    return new Intl.DateTimeFormat("en-GB", { timeZone }).resolvedOptions().timeZone;
   } catch {
     return "UTC";
   }
@@ -187,7 +185,7 @@ export async function installCertificate(
     if (tenant === null) {
       throw new Error("tenants is empty: there is no taxpayer to check a certificate against");
     }
-    const timeZone = await venueTimeZone(tx, deps.locationId);
+    const timeZone = await venueTimeZone(tx);
     const latest = await latestInstall(tx, deps.nodeId);
     return { tenant, timeZone, installedFingerprint: latest?.fingerprint ?? null };
   });

@@ -92,7 +92,7 @@ async function diagnoseBoundCertificate(
     const tenant = await readTenant(deps.db);
     if (tenant === null)
       throw new AppError("fiscal.certificate_request_invalid", { field: "body" });
-    const timeZone = await venueTimeZone(deps.db, deps.locationId);
+    const timeZone = await venueTimeZone(deps.db);
     const latest = await latestInstall(deps.db, deps.nodeId);
     let material = candidate;
     candidate = null;

@@ -369,7 +369,7 @@ export function awaitingCertAlertSource(holder: AwaitingCertStatus): AlertSource
 
 export function certificateAlertSource(
   seat: Pick<FiscalCertificateSeat, "alerts">,
-  deps: { nodeId: string; locationId: string },
+  deps: { nodeId: string },
 ): AlertSource {
   return {
     area: "fiscal",

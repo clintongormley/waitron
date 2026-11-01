@@ -61,7 +61,6 @@ export interface FiscalCertificateDiagnosisDeps {
   readonly db: Database;
   readonly ring: KeyRing;
   readonly nodeId: string;
-  readonly locationId: string;
   readonly environment: DeploymentEnvironment;
   readonly signal: AbortSignal;
   clock(): Date;
@@ -88,7 +87,6 @@ export interface FiscalCertificateSeat {
     deps: {
       db: Database;
       nodeId: string;
-      locationId: string;
       authorize(tx: Transaction): Promise<void>;
       nameOf(tx: Transaction, personId: string): Promise<string | null>;
     },
@@ -101,7 +99,6 @@ export interface FiscalCertificateSeat {
       db: Database;
       ring: KeyRing;
       nodeId: string;
-      locationId: string;
       environment: DeploymentEnvironment;
       authorize(tx: Transaction): Promise<{ personId: string }>;
       log?: FiscalDutyLog;
@@ -114,7 +111,7 @@ export interface FiscalCertificateSeat {
   /** The ongoing expiry alerts for the certificate `nodeId` installed last, read in `tx`. */
   alerts(
     tx: Transaction,
-    deps: { nodeId: string; locationId: string },
+    deps: { nodeId: string },
     now: Date,
   ): Promise<
     readonly {
@@ -131,7 +128,7 @@ export interface FiscalCertificateSeat {
     /** Claims the next email due, or `null`; the caller sends it, then reports how it ended. */
     claim(
       tx: Transaction,
-      deps: { nodeId: string; locationId: string },
+      deps: { nodeId: string },
       recipients: readonly { personId: string; email: string; language: "en" | "es" }[],
       now: Date,
     ): Promise<{ id: string; recipient: string; subject: string; text: string } | null>;

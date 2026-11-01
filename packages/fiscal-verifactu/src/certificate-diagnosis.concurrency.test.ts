@@ -62,7 +62,7 @@ async function heldServer() {
 
 describe("certificate diagnosis without a sale or install lock", () => {
   it("commits a real sale and its fiscal record, chain and invoice counter before the query answers", async () => {
-    const { locationId, nodeId, seriesId } = await seedTenantWithSif(suite.db, {
+    const { nodeId, seriesId } = await seedTenantWithSif(suite.db, {
       nif: "89890001K",
     });
     const held = await heldServer();
@@ -75,7 +75,6 @@ describe("certificate diagnosis without a sale or install lock", () => {
         db: suite.db,
         ring,
         nodeId,
-        locationId,
         environment: "preproduction",
         signal: new AbortController().signal,
         clock: () => NOW,

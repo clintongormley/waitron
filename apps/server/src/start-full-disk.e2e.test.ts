@@ -407,7 +407,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
             canFree: () => true,
           }),
         freeSpace: createSpaceFreer({ ...leftoverDeps, venueDir, space, disk: diskState }),
-        venue: { locationId: "location-1", language: "en" },
+        venue: { language: "en" },
         clockConfirm: {
           backend: new FakeFiscalBackend(db),
           witnesses: () => [],

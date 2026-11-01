@@ -111,7 +111,6 @@ describe("the certificate routes with the real Veri*Factu seat", () => {
         ring,
         seat,
         nodeId: result.nodeId,
-        locationId: result.locationId,
         environment: "preproduction",
         filing: () => true,
         now: () => new Date("2026-10-18T10:00:00Z"),

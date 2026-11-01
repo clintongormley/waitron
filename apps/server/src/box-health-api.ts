@@ -1,7 +1,6 @@
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { eq } from "drizzle-orm";
-import { locations, withTransaction, type Database, type Transaction } from "@waitron/db";
+import { readVenue, withTransaction, type Database, type Transaction } from "@waitron/db";
 import type {
   BootReading,
   ClockWitness,
@@ -39,8 +38,7 @@ export interface BoxHealthApiDeps {
   db: Database;
   readHealth: () => Promise<BoxHealth>;
   freeSpace: (personId: string) => Promise<FreedSpace>;
-  /** The wrongly dated sales download is in the venue's language and names its location. */
-  venue: { locationId: string; language: "en" | "es" };
+  venue: { language: "en" | "es" };
   /** A seat that cannot confirm a clock stop has no confirmation routes. */
   clockConfirm: {
     backend: FiscalBackend;
@@ -214,13 +212,10 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
             return null;
           }
           if (!detail.known) return null;
-          const [location] = await deps.db
-            .select({ name: locations.name })
-            .from(locations)
-            .where(eq(locations.id, deps.venue.locationId));
+          const venue = await readVenue(deps.db);
           const personId = detail.closing.personId;
           const confirmedByName = personId === null ? null : await displayNameOf(deps.db, personId);
-          return { episode, detail, venue: location!.name, confirmedByName };
+          return { episode, detail, venue: venue.name, confirmedByName };
         });
         if (found === null) throw new AppError("alert.not_found", { id });
         const { episode, detail } = found;

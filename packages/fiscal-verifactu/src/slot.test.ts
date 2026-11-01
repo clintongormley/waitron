@@ -342,7 +342,6 @@ describe("FISCAL_SLOT.certificate", () => {
       {
         db: suite.db,
         nodeId: TENANT_A.nodeId,
-        locationId: TENANT_A.locationId,
         authorize: async () => {},
         nameOf: async () => null,
       },
@@ -380,7 +379,6 @@ describe("FISCAL_SLOT.certificate", () => {
         db: suite.db,
         ring,
         nodeId: TENANT_A.nodeId,
-        locationId: TENANT_A.locationId,
         environment: "preproduction",
         authorize: async () => ({ personId: "p-1" }),
       },

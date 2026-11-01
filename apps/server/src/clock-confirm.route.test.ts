@@ -226,7 +226,7 @@ async function stoppedBox(
       db: venue.db,
       readHealth: () => health(),
       freeSpace: () => Promise.reject(new Error("not freed here")),
-      venue: { locationId: venue.cfg.locationId, language: options.language ?? "en" },
+      venue: { language: options.language ?? "en" },
       clockConfirm: {
         backend,
         witnesses: () => witnesses.witnesses(),
@@ -1276,7 +1276,7 @@ function boxApp(stop: Stop, db: Database, log: Logger = () => {}): Hono {
       db,
       readHealth: () => stop.health(db),
       freeSpace: () => Promise.reject(new Error("not freed here")),
-      venue: { locationId: venue.cfg.locationId, language: "en" },
+      venue: { language: "en" },
       clockConfirm: {
         backend: venue.backend,
         witnesses: () => stop.witnesses.witnesses(),

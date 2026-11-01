@@ -65,7 +65,6 @@ describe("diagnosis HTTP disconnect and admission", () => {
           ring: f.deps.ring,
           seat: FISCAL_SLOT.certificate!,
           nodeId: f.deps.nodeId,
-          locationId: f.deps.locationId,
           environment: "preproduction",
           now: () => NOW,
           filing: () => true,

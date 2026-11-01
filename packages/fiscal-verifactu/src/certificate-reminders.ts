@@ -56,13 +56,13 @@ function wording(
  * repeated; a `failed` one is, once its report is more than a day old. */
 export async function claimReminder(
   tx: Transaction,
-  deps: { nodeId: string; locationId: string },
+  deps: { nodeId: string },
   recipients: readonly Recipient[],
   now: Date,
 ): Promise<Reminder | null> {
   const install = await latestInstall(tx, deps.nodeId);
   if (install === null) return null;
-  const timeZone = await venueTimeZone(tx, deps.locationId);
+  const timeZone = await venueTimeZone(tx);
   const stage = certificateStage(install.kind, now, install.validUntil, timeZone);
   if (stage === null) return null;
   const existing = await tx

@@ -5,7 +5,7 @@ import {
   tryGetCredential,
   type KeyRing,
 } from "@waitron/credentials";
-import { captureError, withTransaction } from "@waitron/db";
+import { captureError, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
@@ -116,7 +116,6 @@ function depsFor(
     db: suite.db,
     ring: v.ring,
     nodeId: TENANT_A.nodeId,
-    locationId: TENANT_A.locationId,
     environment: "preproduction",
     authorize: async () => ({ personId: "p-1" }),
     transport: transportTo(server),
@@ -627,12 +626,20 @@ describe("installCertificate's log", () => {
 });
 
 describe("venueTimeZone", () => {
-  it("reads the location's zone, and UTC for a missing location or an unknown zone", async () => {
+  it("refuses a second venue row", async () => {
     await seedTenantNodeSif(suite.db);
-    const read = (id: string) => withTransaction(suite.db, (tx) => venueTimeZone(tx, id));
-    expect(await read(TENANT_A.locationId)).toBe("Europe/Madrid");
-    expect(await read("a0000000-0000-4000-8000-0000000000ff")).toBe("UTC");
+    await suite.db
+      .insert(locations)
+      .values({ name: "Second venue", invoiceLocales: ["en"], operationDescription: "Restaurant" });
+    const error = await captureError(() => withTransaction(suite.db, (tx) => venueTimeZone(tx)));
+    expect(error).toMatchObject({ code: "provisioning.second_venue" });
+  });
+  it("reads the venue's zone, and UTC with no venue row or an unknown zone", async () => {
+    const read = () => withTransaction(suite.db, (tx) => venueTimeZone(tx));
+    expect(await read()).toBe("UTC");
+    await seedTenantNodeSif(suite.db);
+    expect(await read()).toBe("Europe/Madrid");
     await suite.db.execute(sql`update locations set time_zone = 'Mars/Olympus'`);
-    expect(await read(TENANT_A.locationId)).toBe("UTC");
+    expect(await read()).toBe("UTC");
   });
 });

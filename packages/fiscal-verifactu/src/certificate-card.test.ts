@@ -46,7 +46,6 @@ function depsFor(
   return {
     db: suite.db,
     nodeId,
-    locationId: TENANT_A.locationId,
     authorize: async () => {},
     nameOf: async () => null,
     ...overrides,

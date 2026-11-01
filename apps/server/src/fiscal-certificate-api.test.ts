@@ -125,7 +125,6 @@ function fakeSeat(): FakeSeat {
         return {
           state: "card",
           nodeId: deps.nodeId,
-          locationId: deps.locationId,
           installedBy: await deps.nameOf(tx, first!.id),
           unknownName: await deps.nameOf(tx, "no-such-person"),
         };
@@ -159,7 +158,6 @@ function mount(seat: FakeSeat, options: { filing?: boolean; log?: Logger } = {})
       ring,
       seat,
       nodeId: "node-1",
-      locationId: "location-1",
       environment: "preproduction",
       filing: () => options.filing ?? true,
       now: () => new Date("2026-10-18T10:00:00Z"),
@@ -188,7 +186,6 @@ describe("GET /management-api/fiscal-certificate", () => {
       filing: true,
       state: "card",
       nodeId: "node-1",
-      locationId: "location-1",
       installedBy: expect.any(String),
       unknownName: null,
     });
