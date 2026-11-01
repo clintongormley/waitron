@@ -32,6 +32,7 @@ import {
   refreshKitchenAllergyClashes,
 } from "./kitchen-allergy.js";
 import { passWaitingStations, requestStamps } from "./kitchen-release.js";
+import { initiatedItem } from "./kitchen-phase.js";
 import {
   readLineCancellations,
   serviceQuantities,
@@ -2198,14 +2199,14 @@ export async function fireLines(
 
   const courseByLine = new Map(lines.map((line) => [line.id, line.courseId ?? null]));
 
-  // `anyFired` lets a later round join a course already cooking; `itemCount` includes prior rounds
+  // `anyFired` lets a later round join a course the waiter already initiated; `itemCount` includes prior rounds
   // when choosing the earliest course.
   const courseRows = await tx
     .select({
       id: kitchenCourses.id,
       displayOrder: kitchenCourses.displayOrder,
       // Arrives as the number 1 or 0, never a boolean: test its truthiness, never with `===`.
-      anyFired: sql<boolean>`max(${ticketItems.firedAt} is not null and not ${ticketItems.madeHere})`,
+      anyFired: sql<boolean>`max(${initiatedItem()} and not ${ticketItems.madeHere})`,
       itemCount: sql<number>`cast(count(${ticketItems.id}) as int)`,
     })
     .from(kitchenCourses)

@@ -2,9 +2,11 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+  captureError,
   deviceMadeHereStations,
   deviceProfiles,
   devices,
+  orderGroups,
   parties,
   printJobs,
   ticketItems,
@@ -21,12 +23,15 @@ import {
   useSplitExtrasDb,
 } from "./testing/split-extras-venue.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
-import { submitGroups } from "./testing/group-submit-fixture.js";
+import { placeGroupedRound, submitGroups } from "./testing/group-submit-fixture.js";
 import { addTabRound, recallLines } from "./testing/order-writer-fixture.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { OPERATOR } from "./testing/party-venue.js";
 import { kitchenPhase } from "./kitchen-phase.js";
+import { createCourse } from "./kitchen.js";
+import { bumpGroupReady } from "./order-groups.js";
+import { advanceTicket, advanceTicketItem } from "./working-order.js";
 import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
 
@@ -324,6 +329,93 @@ describe("A773 waiter request: send", () => {
         passControlled: false,
       });
       expect(kitchenPhase(recalled!)).toBe("held");
+    });
+  });
+
+  it("a later round joins a course the waiter has already asked for", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      await setStationsWaitForPass(tx, true, [venue.stations.grill]);
+      const starters = await createCourse(tx, venue.cfg, { name: "Starters", displayOrder: 0 });
+      const mains = await createCourse(tx, venue.cfg, { name: "Mains", displayOrder: 1 });
+      await addTabRound(tx, venue.cfg, venue.party.tabId, [
+        { ...burgerLine(venue), courseId: starters.id, release: true },
+        { ...burgerLine(venue), courseId: mains.id, release: true },
+      ]);
+      const first = await items(tx, venue.party.tabId);
+      expect(first.map(kitchenPhase)).toEqual(["requested", "requested"]);
+      await addTabRound(tx, venue.cfg, venue.party.tabId, [
+        { ...burgerLine(venue), courseId: mains.id },
+      ]);
+      const [later] = (await items(tx, venue.party.tabId)).filter(
+        (row) => !first.some((earlier) => earlier.id === row.id),
+      );
+      expect(later).toEqual({
+        ...later,
+        requestedAt: expect.any(String),
+        firedAt: null,
+        passControlled: true,
+      });
+    });
+  });
+
+  it("every advance refuses or skips a requested item", async () => {
+    const venue = await setupSplitExtrasVenue();
+    const { item, groupId } = await withTransaction(db, async (tx) => {
+      await submitGroups(tx, venue.cfg, venue.party.partyId, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: await partyRevision(tx, venue.party.partyId),
+        operatorId: OPERATOR,
+        groups: [{ lines: [burgerLine(venue)], release: "fire" }],
+      });
+      const [released] = await items(tx, venue.party.tabId);
+      await tx
+        .update(ticketItems)
+        .set({ requestedAt: released!.firedAt, firedAt: null, passControlled: true })
+        .where(eq(ticketItems.id, released!.id));
+      const [group] = await tx
+        .select({ id: orderGroups.id })
+        .from(orderGroups)
+        .where(eq(orderGroups.partyId, venue.party.partyId));
+      return { item: (await items(tx, venue.party.tabId))[0]!, groupId: group!.id };
+    });
+    expect(kitchenPhase(item)).toBe("requested");
+    const refused = await captureError(() =>
+      withTransaction(db, (tx) => advanceTicketItem(tx, venue.cfg, item.id, "preparing")),
+    );
+    expect(refused).toMatchObject({ code: "ticket.item_held" });
+    await withTransaction(db, async (tx) => {
+      await advanceTicket(tx, venue.cfg, venue.party.tabId, venue.stations.grill, "preparing");
+      expect(await items(tx, venue.party.tabId)).toEqual([item]);
+      await bumpGroupReady(tx, venue.cfg, venue.party.partyId, groupId, {
+        operatorId: OPERATOR,
+        submissionId: randomUUID(),
+        expectedPartyRevision: await partyRevision(tx, venue.party.partyId),
+      });
+      expect(await items(tx, venue.party.tabId)).toEqual([item]);
+    });
+  });
+
+  it("a source resend through existing lines requests the dish at a waiting station", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      await setStationsWaitForPass(tx, true, [venue.stations.grill]);
+      await placeGroupedRound(
+        tx,
+        venue.cfg,
+        venue.party,
+        { lines: [burgerLine(venue)], release: "fire" },
+        OPERATOR,
+      );
+      const rows = await items(tx, venue.party.tabId);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toEqual({
+        ...rows[0],
+        requestedAt: expect.any(String),
+        firedAt: null,
+        passControlled: true,
+      });
+      expect(await jobCounts(tx, venue)).toMatchObject({ grill: 0, pass: 0 });
     });
   });
 });
