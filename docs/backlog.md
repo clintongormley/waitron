@@ -5149,7 +5149,9 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   `WBK1` is restorable only by Waitron code. Scheduled local archives stream through protected
   files; reconsider using a standard encryption and archive format.
 
-- **B3. The bootable USB installer** — design approved with changes; [six-slice plan](superpowers/plans/2026-10-26-b3-usb-installer.md), no build.
+- **B3. The bootable USB installer** — design approved with changes; [six-slice plan](superpowers/plans/2026-10-26-b3-usb-installer.md).
+  The owner authorised the build on 2026-11-01; it is cut one pull request at a time. [PR 1](superpowers/plans/2026-11-01-b3-1-encrypted-disk.md) (#PR1) adds three host libraries under `scripts/box/`, none called yet: the installer's disk classification, the bench rig's ledger and cleanup rules, and the retained disk-key store.
+  Still waiting, all needing a Linux machine with KVM, OVMF and swtpm, or the hardware: the recipe and dracut files; the rig entry point and disk fixtures; the real observation, mount and cleanup adapters; the root-owned check run as root; real power cuts; seal experiments (a)–(i) and every slice-1 measurement. PR 2's preboot logic is next and can be built here.
   No setup codes: the owner closed W60's first-claim concern as not a concern; production-mode restrictions stay.
   Every sheet repeats the disk key. Owner ~13:45/~14:00 answers settle locked redirects and the minimal unencrypted normal Wi-Fi copy, with theft/password-change guidance and cable/local fallback; no recovery SSID/hotspot.
 Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure holds the affected trust design/release for requalification. Build/API and hardware gates remain. [Detail](backlog/box.md#b3-the-bootable-usb-installer)

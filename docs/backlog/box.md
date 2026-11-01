@@ -749,7 +749,8 @@ APPROVED WITH CHANGES, owner 2026-10-26 ~12:15:
 [Design](../superpowers/specs/2026-10-21-b3-usb-installer-design.md),
 [plan](../superpowers/plans/2026-10-26-b3-usb-installer.md),
 [pictures/status](../backlog/mockups/b3-usb-installer/). Planning slices 1, 2, 3, 5, 6 and 8 is
-authorised; no build. Q2 stays answered: Prepare on the SAME box, then an admin freshly
+authorised, and on 2026-11-01 the owner authorised the build, cut one pull request at a time
+(see "Built so far" below). Q2 stays answered: Prepare on the SAME box, then an admin freshly
 reauthenticates before destructive cutover, saves allowed configuration and starts fresh Live
 without USB, OS reinstall, disk/encryption reset or practice database promotion. The encrypted,
 host-owned durable handoff and audit survive outside the removed venue. Interruptions continue
@@ -813,7 +814,47 @@ Local Docker availability must be checked before qualification; mocks cannot rep
 remain the go-live minimum; no unqualified boot image is published. Time zone still comes from
 the setup area and venue details under its history limits, separate from the clock's time instant
 (§10, retaining A798's dated pointer). §17's remaining follow-ups stay open, including Debian 14,
-large release assets and the A940/A947/A798 coordination. Nothing built.
+large release assets and the A940/A947/A798 coordination.
+
+**Built so far (2026-11-01).** [PR 1](../superpowers/plans/2026-11-01-b3-1-encrypted-disk.md)
+(#PR1) adds three host libraries under `scripts/box/`, none called yet:
+
+- `disk-state.mjs`: `classifyDisk`, the installer's decision about which disk it may erase, from a
+  whole-machine observation. TPM and Secure Boot come back in a separate `hardware` field.
+- `rig-contract.mjs`: the bench rig's argument and run-folder rules, and a write-ahead ledger whose
+  cleanup removes only what the run recorded.
+- `disk-key.mjs`: the retained disk-key store under `/var/lib/waitron-host/disk-recovery/`,
+  checking the `@host-state` mount before any file call, storing once per disk UUID, never
+  replacing. A sweep checks that the key appears in no returned value, error, log line or other file.
+
+Still waiting, all needing a Linux machine with KVM, OVMF and swtpm, or the hardware: the recipe and
+dracut files; the rig entry point (`bench/box-installer/run.mjs`) and disk fixtures; the real
+observation, mount and cleanup adapters (until then the disk-key store's fixed entry points
+refuse); the root-owned
+check run as root; real power cuts; seal experiments (a)–(i) and every slice-1 measurement.
+PR 2, the preboot logic (unlock gate, locked-mode redirect, Wi-Fi record reader), can be built here.
+
+**For the owner: a box that already holds Waitron, with its TPM or Secure Boot switched off.**
+Should the stick start the installed box anyway, or stop and show the firmware message? Starting it
+keeps the venue selling; stopping it tells someone the box has lost the protection its disk
+encryption relies on. The spec does not settle it: §5 step 2 lists the checks, and guard 3 says the
+stick starts Waitron "without leaving a venue dark". Today's message, «…vuelve a empezar», is
+written for installing; a box that already holds Waitron would need its own wording. Slice 2
+decides; PR 1 reports the disk's state and the hardware state separately so either answer fits.
+
+**For later slices, from PR 1's re-map against main:**
+
+- `bench/` is measured by no test or coverage glob, so the rig's rules live in
+  `scripts/box/rig-contract.mjs` and `run.mjs` must stay a thin wrapper over them.
+- `classifyDisk` takes a whole-machine observation, not one disk; `kind` has no `refuse-hardware`
+  and gains `none`.
+- The store's fixed entry points take no path, and there is no replace operation.
+- The spec's `deploy/waitron.sh` line numbers have moved; the recipe pull request re-reads them.
+- Slice 8's recovery-document files are gone (A1187 part 1 replaced them with the recovery pack);
+  slice 8 re-maps onto `backup-recovery-pack-*.ts` and `recovery-pack-card.ts`.
+- A lone disk whose attachment is `unknown` counts as internal, so it can be the disk the installer
+  erases; and a Waitron disk whose two partition tables were both wiped reads as blank. The Linux
+  observation adapter decides how to look for an encryption header in that case.
 
 ## A1049. The updater honours a version Waitron Cloud marks held (2026-10-24).
 

@@ -1,3 +1,5 @@
+> 2026-11-01: the owner authorised the build; PR 1's plan and its re-map against main: [2026-11-01-b3-1-encrypted-disk.md](2026-11-01-b3-1-encrypted-disk.md).
+
 > 2026-10-29, A1206: the start-again note is retired, so a reinstall has no note to keep.
 
 # B3 USB Installer Implementation Plan

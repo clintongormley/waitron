@@ -693,7 +693,7 @@ That array is the only copy this pull request zeros. Strings parsed from the fil
   - the only files under the temporary root that contain any form are `<uuid>.json` and a leftover `<uuid>.json.next`, both in the `0700` folder. Scan every other file.
 - [ ] **Step 2: Run** `pnpm exec vitest run scripts/box/disk-key.test.mjs`. If the sweep fails on today's code, fix the leak in `disk-key.mjs` and say so in the commit.
 - [ ] **Step 3: Deletion controls (proving the sweep catches leaks).** For each one, make the change, see the sweep fail, then restore:
-  - add `err.input = input` where a refusal is built (caught through `JSON.stringify(error)`'s `{"0":3,…}` form, not through `util.inspect`);
+  - add `err.input = input` where a refusal is built (the 2026-11-01 run reported it in both `JSON.stringify(error)`'s `{"0":3,…}` form and `util.inspect`'s decimal form);
   - put the key's hex into a refusal's `reason`;
   - `console.log` the decoded key in `withKey`.
 - [ ] **Step 4: Run the coverage command** for `disk-key.mjs` again. It is unchanged unless a leak was fixed.
