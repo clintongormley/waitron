@@ -1497,8 +1497,10 @@ the transaction that wrote them deletes (`change_log`). Identity has no `local` 
 Task 1b reclassified its logins and sign-in ceremonies `state`, with a login's cookie token stored
 only as its hash (`packages/identity/src/classification.ts`; #554, and the owner's decision that a
 login survives a rebuild and a promotion). Pinned,
-each by deleting the node filter and watching a case fail: the `node_roles` and
-`mirror_config` readers (`packages/db/src/node-roles.test.ts`), and every node filter on
+each by deleting the node filter and watching a case fail: the `node_mode` and
+`node_mirror_link` readers in `node.db` (the "keeps each node's row apart" case in
+`packages/node-db/src/mode.test.ts` and the "reads a mirror link only for the node that was
+adopted" case in `packages/node-db/src/mirror-link.test.ts`), and every node filter on
 `join_requests` in `apps/server/src/join-requests.ts` but deny's delete, which runs only after a
 node-filtered read of the same id (the "belong to the node" cases in
 `apps/server/src/join-requests.test.ts`), and the `node_sealed_state` reader

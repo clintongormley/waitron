@@ -132,11 +132,6 @@ it("previews a backup with an older venue schema by migrating only its private s
     expect(preview.taxpayer).toEqual({ legalName: "Earlier venue", taxId: "89890001K" });
     expect(preview.locationName).toBe("Earlier location");
     expect(await readFile(source)).toEqual(sourceBytes);
-    expect(
-      suite.db
-        .all<{ name: string }>(sql`pragma table_info(node_roles)`)
-        .map((column) => column.name),
-    ).not.toContain("break_glass_key_name");
     expect(suite.node.all(sql`pragma table_info(node_recovery_key)`)).toEqual([]);
     expect(await readdir(scratch)).toEqual(["source.db"]);
   } finally {
@@ -252,11 +247,6 @@ it("binds a bucket copy with an older venue schema before private preview migrat
     expect(preview.activationSourceId).toBe(expected);
     expect(preview.nodeRecoveryKeyName).toBeNull();
     expect(await readFile(source)).toEqual(bytes);
-    expect(
-      suite.db
-        .all<{ name: string }>(sql`pragma table_info(node_roles)`)
-        .map((column) => column.name),
-    ).not.toContain("break_glass_key_name");
     expect(suite.node.all(sql`pragma table_info(node_recovery_key)`)).toEqual([]);
   } finally {
     await rm(scratch, { recursive: true, force: true });

@@ -133,7 +133,7 @@ describe("node.db's backup verification", () => {
     expect(owner.secrets).toEqual([]);
   });
 
-  it("is refused when the backup's manifest does not name it", () => {
+  it("declares itself unsupported when a manifest omits it", () => {
     expect(NODE_BACKUP_VERIFICATION.targetOnly).toBe("unsupported");
   });
 
