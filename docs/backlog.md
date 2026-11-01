@@ -5751,6 +5751,10 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   The scanner accepts a retry with `continue-on-error: ${{ true }}` while rejecting literal
   `true`. Add refusal cases and retain legitimate absent/false controls. [Detail](backlog/ci.md#a1251-reject-conditional-error-tolerance-in-artifact-download-guards).
 
+- **The deadline command can exit successfully without running its child through a directory symlink.**
+  Qualify its entrypoint check with symlink and physical-path controls, then make both run the
+  child. [Observed reproduction](backlog/ci.md#deadline-command-through-a-directory-symlink).
+
 - **A1242: qualify publishing after reused CI and the differing-tree fallback on real main pushes.**
   Retain real main run ids proving publication after reuse and the full suite after an unequal-tree
   merge.

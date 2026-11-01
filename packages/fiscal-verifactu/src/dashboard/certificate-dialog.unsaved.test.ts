@@ -7,6 +7,7 @@ import { VERIFACTU_DASHBOARD } from "./index.js";
 import type { CertificateCardView, InstallAnswerView } from "./client.js";
 import type { AeatCertificateCard } from "./certificate-card.js";
 import type { AeatCertificateDialog } from "./certificate-dialog.js";
+import { t } from "./strings.js";
 
 const card: CertificateCardView = {
   filing: true,
@@ -15,11 +16,11 @@ const card: CertificateCardView = {
   installed: null,
 };
 
-const install: () => Promise<InstallAnswerView> = async () => ({
+const install = vi.fn<() => Promise<InstallAnswerView>>(async () => ({
   outcome: "installed",
   reason: "installed",
   details: { checkedAt: "2026-10-18T11:05:00.000Z" },
-});
+}));
 
 class CertificateLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
@@ -42,6 +43,7 @@ customElements.define("aeat-certificate-leave-test", CertificateLeaveApp);
 let app: CertificateLeaveApp;
 let locale = "";
 beforeEach(() => {
+  install.mockClear();
   locale = currentLocale();
   setLocale("en");
 });
@@ -162,3 +164,49 @@ it("after a successful install nothing is asked", async () => {
   expect(proceed).toHaveBeenCalledOnce();
   expect((await question()).open).toBe(false);
 });
+
+it.each(["en", "es"])(
+  "%s: after a refused check, Keep retains the draft and Discard closes without another submission",
+  async (language) => {
+    setLocale(language);
+    install.mockResolvedValueOnce({ outcome: "refused", reason: "check_failed" });
+    const { card, dialog } = await open();
+    await choose(dialog);
+    const passphrase = dialog.shadowRoot!.querySelector("wt-input")!;
+    passphrase.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "secret" }, bubbles: true, composed: true }),
+    );
+    await dialog.updateComplete;
+    await userEvent.click(dialog.shadowRoot!.querySelector("[data-test=certificate-save]")!);
+    await vi.waitFor(() =>
+      expect(dialog.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(
+        t("aeat_certificate.refused.check_failed"),
+      ),
+    );
+    expect(install).toHaveBeenCalledTimes(1);
+    expect(unload()).toBe(true);
+
+    await cancel(dialog);
+    await vi.waitFor(async () => expect((await question()).open).toBe(true));
+    await userEvent.click((await question()).shadowRoot!.querySelector("[data-choice=keep]")!);
+    await vi.waitFor(async () => expect((await question()).open).toBe(false));
+    await card.updateComplete;
+    expect(card.shadowRoot!.querySelector("dashboard-aeat-certificate-dialog")).toBe(dialog);
+    expect(dialog.shadowRoot!.querySelector("wt-file-input")!.files[0]?.name).toBe(
+      "bar-lucia-2026.p12",
+    );
+    expect(passphrase.shadowRoot!.querySelector<HTMLInputElement>("input")!.value).toBe("secret");
+    expect(install).toHaveBeenCalledTimes(1);
+    expect(unload()).toBe(true);
+
+    const close = closed(dialog);
+    await cancel(dialog);
+    await vi.waitFor(async () => expect((await question()).open).toBe(true));
+    await userEvent.click((await question()).shadowRoot!.querySelector("[data-choice=discard]")!);
+    await close;
+    await card.updateComplete;
+    expect(card.shadowRoot!.querySelector("dashboard-aeat-certificate-dialog")).toBeNull();
+    expect(install).toHaveBeenCalledTimes(1);
+    expect(unload()).toBe(false);
+  },
+);

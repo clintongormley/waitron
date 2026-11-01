@@ -805,14 +805,11 @@ describe("certificate check self-service choices", () => {
           expect(sentence).toContain("Select Save to check again, or Cancel to stop.");
           expect(sentence).not.toMatch(/ask|administrator|support/i);
         } else {
-          expect(sentence).toContain("El certificado actual no cambia.");
-          expect(sentence).toContain(
-            "Comprueba la conexión a internet o elige otro archivo o tipo de certificado.",
+          expect(sentence).toBe(
+            refusal.reason === "aeat_http"
+              ? "La AEAT ha respondido con el error HTTP 403. El certificado actual no cambia. Comprueba la conexión a internet o elige otro archivo o tipo de certificado. Pulsa Guardar para repetir la comprobación o Cancelar para parar."
+              : "La comprobación con la AEAT ha fallado por un motivo inesperado. El certificado actual no cambia. Comprueba la conexión a internet o elige otro archivo o tipo de certificado. Pulsa Guardar para repetir la comprobación o Cancelar para parar.",
           );
-          expect(sentence).toContain(
-            "Pulsa Guardar para repetir la comprobación o Cancelar para parar.",
-          );
-          expect(sentence).not.toMatch(/pide|administrador|contacta|soporte/i);
         }
         expect(fileField(dialog).files[0]?.name).toBe("bar-lucia-2026.p12");
         expect(passField(dialog).value).toBe(" cert pass 9 ");
@@ -864,8 +861,9 @@ describe("certificate check self-service choices", () => {
       expect(actions(dialog).error).toContain(t("aeat_certificate.dialog.cancel"));
       if (language === "en") expect(actions(dialog).error).toContain("or Cancel to stop.");
       else {
-        expect(actions(dialog).error).toContain("Cancelar para parar.");
-        expect(actions(dialog).error).not.toMatch(/pide|administrador|contacta|soporte/i);
+        expect(actions(dialog).error).toBe(
+          "La comprobación con la AEAT ha fallado por un motivo inesperado. El certificado actual no cambia. Comprueba la conexión a internet o elige otro archivo o tipo de certificado. Pulsa Guardar para repetir la comprobación o Cancelar para parar.",
+        );
       }
       const close = closed(dialog);
       await userEvent.click(q(dialog, "[data-test=certificate-cancel]"));
