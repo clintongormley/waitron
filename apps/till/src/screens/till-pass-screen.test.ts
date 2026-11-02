@@ -1145,6 +1145,7 @@ describe("A773 pass screen", () => {
       });
       const el = await mount({ api });
       expect(words(el)).toEqual([t(key)]);
+      expect(boardOf(el)!.shadowRoot!.querySelector("[data-card]")).toBeNull();
     });
 
     it.each(["held", "toFire", "inProgress", "ready"] as const)(

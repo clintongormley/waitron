@@ -139,6 +139,9 @@ const boardOf = (el: TillPassScreen) =>
   el.shadowRoot!.querySelector<TillPassBoard>("till-pass-board");
 const inBoard = <T extends Element>(el: TillPassScreen, selector: string) =>
   boardOf(el)!.shadowRoot!.querySelector<T>(selector);
+/** One card's own Reprint for a bill; several cards can carry the same bill. */
+const reprintOn = (cardKey: string, orderId: string) =>
+  `[data-card="${cardKey}"] [data-reprint="${orderId}"]`;
 const tableChanged = (el: TillPassScreen) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-table-changed]");
 const leverError = (el: TillPassScreen) =>
@@ -327,8 +330,10 @@ describe("A773 pass screen: levers", () => {
   it("a till reprints each bill of a card", async () => {
     const api = fakeApi();
     const el = await mountTill(api);
-    expect(inBoard(el, '[data-reprint="order-7"]')).not.toBeNull();
-    await press(el, '[data-reprint="order-1"]');
+    expect(inBoard(el, reprintOn("group:g-2", "order-1"))).not.toBeNull();
+    expect(inBoard(el, reprintOn("group:g-1", "order-7"))).not.toBeNull();
+    expect(inBoard(el, reprintOn("bill:order-1", "order-1"))).not.toBeNull();
+    await press(el, reprintOn("bill:order-1", "order-1"));
     expect(api.reprintOrder).toHaveBeenCalledExactlyOnceWith("order-1");
     expect(el.shadowRoot!.querySelector("[data-reprint-error]")).toBeNull();
   });
@@ -341,9 +346,9 @@ describe("A773 pass screen: levers", () => {
         .mockResolvedValue(undefined),
     });
     const el = await mountTill(api);
-    await press(el, '[data-reprint="order-1"]');
+    await press(el, reprintOn("bill:order-1", "order-1"));
     expect(el.shadowRoot!.querySelector("[data-reprint-error]")).not.toBeNull();
-    await press(el, '[data-reprint="order-1"]');
+    await press(el, reprintOn("bill:order-1", "order-1"));
     expect(el.shadowRoot!.querySelector("[data-reprint-error]")).toBeNull();
   });
 
@@ -396,7 +401,7 @@ describe("A773 pass screen: levers", () => {
       reprintOrder: vi.fn().mockRejectedValue(refused("printer.not_found", 502)),
     });
     const el = await mountTill(api);
-    await press(el, '[data-reprint="order-1"]');
+    await press(el, reprintOn("bill:order-1", "order-1"));
     expect(text(el.shadowRoot!.querySelector("[data-reprint-error]"))).toBe(
       codeMessage("printer.not_found"),
     );
@@ -566,9 +571,11 @@ describe("A773 pass screen: levers on a till's All stations", () => {
   it("draws Reprint on each card's bill, and a press reprints that bill and reads nothing", async () => {
     const api = allApi(allBoard());
     const el = await mountTill(api);
-    expect(text(inBoard(el, '[data-reprint="order-1"]'))).toBe(t("expo.reprint"));
-    expect(inBoard(el, '[data-reprint="order-7"]')).not.toBeNull();
-    await press(el, '[data-reprint="order-1"]');
+    expect(text(inBoard(el, reprintOn("group:g-2", "order-1")))).toBe(t("expo.reprint"));
+    expect(text(inBoard(el, reprintOn("group:g-1", "order-7")))).toBe(t("expo.reprint"));
+    expect(text(inBoard(el, reprintOn("bill:order-1", "order-1")))).toBe(t("expo.reprint"));
+    expect(inBoard(el, '[data-card="held:h-1"] [data-reprint]')).toBeNull();
+    await press(el, reprintOn("group:g-2", "order-1"));
     expect(api.reprintOrder).toHaveBeenCalledExactlyOnceWith("order-1");
     expect(api.getExpoBoard).toHaveBeenCalledOnce();
   });
@@ -581,7 +588,7 @@ describe("A773 pass screen: levers on a till's All stations", () => {
     async (_, rejection, code) => {
       const api = allApi(allBoard(), { reprintOrder: vi.fn().mockRejectedValue(rejection) });
       const el = await mountTill(api);
-      await press(el, '[data-reprint="order-1"]');
+      await press(el, reprintOn("bill:order-1", "order-1"));
       const alert = el.shadowRoot!.querySelector('[role="alert"]');
       expect(alert!.hasAttribute("data-reprint-error")).toBe(true);
       expect(text(alert)).toBe(codeMessage(code));
