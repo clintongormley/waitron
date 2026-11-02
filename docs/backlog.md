@@ -5920,9 +5920,12 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 - **Observations are synthetic until service adapters exist.** Left open by the Cloud connection
   integration (2026-09-24; #638, #808).
 
-- **A951. The box's lasting tunnel and public-certificate client.** Build approved; isolated helper profile accepted.
-  [Host/custody amendment](superpowers/specs/2026-11-02-a951-host-custody-amendment.md) defines the proposed local boundary. G1 mapping is G's item after D462.
-  E's next execution step is **BLOCKED on G7 real-host evidence: Docker/bench, owner back 3 November 2026**. Admission CLOSED; other scoped gates remain.
+- **A951. The box's lasting tunnel and public-certificate client.** Build approved;
+  exact D560 G1 mapping accepted for isolated planning only.
+  Full appliance/host acceptance, approval/provisioning/PP consumers, signed corpus
+  and E's matching D136 routing record remain open. E's next execution step is
+  **BLOCKED on G7 real-host evidence: Docker/bench with the owner, 3 November 2026**.
+  Admission CLOSED; other scoped gates remain.
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)
 
 - **Waitron retains:** the implemented Cloud connection screen and manager adapter; box-side

@@ -360,6 +360,53 @@ abort signal so deliberate shutdown does not record a service outage.
 
 ## A951 build intake
 
+### G1 mapping acceptance: 2 November 2026 (D560)
+
+Lane E accepts the documented
+[G1 host/custody mapping](https://github.com/waitron-io/waitron-cloud/blob/b1a8d7cee1056a0aac14adba53e03f270ac4263c/docs/superpowers/specs/2026-11-02-a951-g1-host-custody-mapping.md),
+`cloud-a951-g1-host-custody-v1` / `proposal-2026-11-02.1`, solely for isolated
+engineering planning. Accepted mapping full-file SHA-256:
+`2f16bd7c01c12849897501fae3bccabb770f9db4006e917b9964573bf994a9cf`,
+including final LF.
+
+| Pinned provenance                                                                                                                                                                                                                             | Exact source words                                                                                                                              | Intake consequence                                                          |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| [Cloud D560, `b1a8d7cee1056a0aac14adba53e03f270ac4263c`](https://github.com/waitron-io/waitron-cloud/blob/b1a8d7cee1056a0aac14adba53e03f270ac4263c/docs/waitron-integration-contract.md#a951-g1-hostcustody-mapping-response-2026-11-02-d560) | “Cloud accepts this documented mapping for isolated engineering planning, conditional on E's matching acceptance at this exact edition/digest.” | This entry records matching E acceptance of those documentation bytes only. |
+
+Input Waitron pin: `bfb185b60bfe241b713fde536ddf87cbf4bb1ffc`.
+Exact helper digest:
+`da433f66a7dcb835e99eeb4a7e5c6f01f2bc9c69db369c44a5131247a4ab008f`.
+Exact host-amendment digest:
+`50001abafc7c3edea270821e0a8570f8c722969d62132070a46d9cd3729956d2`.
+These identify source inputs. Full appliance acceptance, host-amendment acceptance,
+both executable consumers and qualified runtime pair remain **NONE**.
+
+The [new dated plan amendment](../superpowers/plans/2026-10-22-a951-connection.md#g1-mapping-acceptance-amendment-2-november-2026-d560)
+incorporates the mapping's entire section 2 matrix by immutable reference and
+carries section 9's focused T1/T2/T3/T5/T14 tasks. It preserves shared admission
+heads separately from helper-owned replay and observation/custody progress,
+separate protected PP messages, four independent 64 KiB safety copies with
+256 lifetime history entries, and one aggregate 256 KiB journal containing its
+16,384-byte emergency reserve. Intact reboot, damaged-state recovery and local
+reconnect remain distinct authenticated paths.
+
+Missing prerequisites remain **AP-establish/recover/reconnect, authenticated
+AP-channel/one-use ledger, REG/POL/PEER/KEY, protected PP realization, actual G2,
+GUARD16, the full revised appliance edition and complete signed-byte corpus**.
+D132's remaining returns still gate affected integration. Existing permissions
+supply required checks for future AP consumers, not implemented A951 approvals.
+Cloud D136 routing acceptance stands; E's matching routing record remains required.
+
+G2–G6 and all remaining device/origin gates retain their path scope.
+**G7 execution remains BLOCKED on Docker/bench with the owner on 3 November 2026.**
+New mapping/host vectors remain **UNRUN**. Admission CLOSED, `.local` independent,
+original 83-byte production manifest without LF unchanged. No location concept,
+live permission, fiscal, production, provider or customer-product change follows.
+All five cuts already have owner build approval; no owner question is reopened.
+
+Preserve every dated intake body and digest below verbatim. This entry supersedes
+their pending-mapping wording only within the exact D560 documentation scope.
+
 ### Host/custody amendment: 2 November 2026
 
 Review artifact [host/custody amendment](../superpowers/specs/2026-11-02-a951-host-custody-amendment.md):
