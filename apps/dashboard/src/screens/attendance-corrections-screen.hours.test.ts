@@ -31,8 +31,8 @@ it("opens the configured pay period, counted automatic hours and retained worker
   expect(view.shadowRoot!.textContent).toContain("already counts");
   expect(view.shadowRoot!.textContent).toContain("Waiting for the worker’s acknowledgement.");
   expect(m.root.textContent).toContain("Old pending hours");
-  expect(m.reads.some((r) => r.path.includes("/hours?locationId=shop&kind=pay-period"))).toBe(true);
-  expect(m.reads.some((r) => r.path.includes("/queue?"))).toBe(false);
+  expect(m.reads.some((r) => r.path.includes("/hours?kind=pay-period"))).toBe(true);
+  expect(m.reads.some((r) => r.path.endsWith("/queue"))).toBe(false);
   expect(m.reads.every((r) => r.passive === "1")).toBe(true);
   await change(m.root, "attendancePerson", "retained");
   await expect.poll(() => view.view?.personId).toBe("retained");
@@ -49,9 +49,7 @@ it.each(["approve", "decline"])(
     await record(m.root);
     await click(m.root, "[data-detail]");
     await expect.poll(() => m.root.querySelector(`[data-${action}]`)).toBeTruthy();
-    expect(
-      m.reads.some((r) => r.path.includes("/day?personId=worker&locationId=shop&date=2026-01-05")),
-    ).toBe(true);
+    expect(m.reads.some((r) => r.path.includes("/day?personId=worker&date=2026-01-05"))).toBe(true);
     await click(m.root, `[data-${action}]`);
     await expect.poll(() => m.commands.length).toBe(1);
     expect(m.commands[0]).toEqual({
@@ -85,25 +83,6 @@ it("uses the returned period bounds for previous and next, and ignores an old pe
   expect(m.root.querySelector("dashboard-hours-record")?.view?.period.start).toBe("2026-02-01");
   await click(m.root, "[data-hours-next]");
   await expect.poll(() => m.reads.some((r) => r.path.endsWith("date=2026-03-01"))).toBe(true);
-});
-
-it("drops a held old location summary before displaying the new workplace", async () => {
-  const m = await mountManagerHours();
-  await record(m.root);
-  const late = deferred<ReturnType<typeof managerHours>>();
-  m.hold("locationId=shop", late.promise);
-  await click(m.root, "[data-hours-refresh]");
-  await expect
-    .poll(() => m.reads.filter((r) => r.path.includes("locationId=shop")).length)
-    .toBeGreaterThan(1);
-  m.release();
-  await change(m.root, "attendanceLocation", "bar");
-  await expect
-    .poll(() => m.root.querySelector("dashboard-hours-record")?.view?.locationId)
-    .toBe("bar");
-  late.resolve(managerHours());
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-  expect(m.root.querySelector("dashboard-hours-record")?.view?.locationId).toBe("bar");
 });
 
 it("a worker response refreshes counted and frozen changes without replacing a staged manager proposal", async () => {

@@ -196,9 +196,9 @@ async function mount(
         if (lookupFailure) throw new Error("lookup offline");
         return Response.json(data.lookups);
       }
-      if (path.includes("/queue?"))
+      if (path.endsWith("/queue"))
         return Response.json({
-          locationId: new URL(path, location.origin).searchParams.get("locationId"),
+          locationId: "shop",
           items: data.items.filter((row) =>
             ["waiting-manager", "waiting-worker", "disputed"].includes(row.status),
           ),
@@ -208,7 +208,7 @@ async function mount(
         return Response.json({
           ...data.day,
           personId: args.get("personId"),
-          locationId: args.get("locationId"),
+          locationId: "shop",
           date: args.get("date"),
           ...(args.get("personId") === "manager"
             ? { items: [], record: { ...data.day.record, entries: [] } }
@@ -341,7 +341,7 @@ describe("dashboard attendance corrections", () => {
       await expect
         .poll(() => m.root.textContent)
         .toContain(action === "approve" ? "Approved" : "Declined");
-      expect(m.reads.filter((read) => read.path.includes("/queue?")).length).toBeGreaterThan(1);
+      expect(m.reads.filter((read) => read.path.endsWith("/queue")).length).toBeGreaterThan(1);
     },
   );
   it("an admin can self-approve, a non-admin cannot, and nobody can self-decline", async () => {
@@ -410,7 +410,7 @@ describe("dashboard attendance corrections", () => {
     const message = m.root.querySelector("[data-action-error]")!.textContent;
     m.liveData!.invalidate([{ type: "time_entries" }]);
     await expect
-      .poll(() => m.reads.filter((r) => r.path.includes("/queue?")).length)
+      .poll(() => m.reads.filter((r) => r.path.endsWith("/queue")).length)
       .toBeGreaterThan(1);
     expect(m.root.querySelector("[data-action-error]")!.textContent).toBe(message);
   });
@@ -602,7 +602,7 @@ it("a worker's dispute delivered by the live feed updates the mounted manager de
   m.data.day = { ...m.data.day, items: m.data.items };
   m.liveData!.invalidate([{ type: "time_entries" }]);
   await expect
-    .poll(() => m.reads.filter((r) => r.path.includes("/queue?")).length)
+    .poll(() => m.reads.filter((r) => r.path.endsWith("/queue")).length)
     .toBeGreaterThan(1);
   await details(m.root);
   expect(m.root.querySelector("[data-approve]")).toBeNull();
@@ -715,15 +715,6 @@ it.each([
   expect(m.root.querySelector("[data-day]")!.textContent).toContain("Closed the shop late");
 });
 
-it("changing location replaces its queue and removes the prior day before another read", async () => {
-  const m = await mount();
-  await details(m.root);
-  await change(m.root, "attendanceLocation", "bar");
-  await expect
-    .poll(() => m.reads.some((read) => read.path.includes("queue?locationId=bar")))
-    .toBe(true);
-  expect(m.root.querySelector("[data-day]")).toBeNull();
-});
 it("a pending day's late answer stays hidden when the selection changes without opening another day", async () => {
   const m = await mount();
   const late = deferred<AttendanceDayView>();
@@ -941,7 +932,7 @@ it("proposes an explicit missing break pair as one command", async () => {
 it("a failed newly selected queue can be reread before choosing a date, and passive lookup refresh keeps the current day", async () => {
   const m = await mount({ live: true });
   m.failReads();
-  await change(m.root, "attendanceLocation", "bar");
+  m.liveData!.invalidate([{ type: "time_entries" }]);
   await expect.poll(() => m.root.querySelector("[data-read-error]")).not.toBeNull();
   m.allowReads();
   await click(m.root, "[data-retry-read]");

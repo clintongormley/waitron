@@ -120,13 +120,13 @@ export async function mountManagerHours(
         const args = new URL(path, location.origin).searchParams;
         return Response.json({
           ...data.hours,
-          locationId: args.get("locationId"),
+          locationId: "shop",
           people: data.hours.people.map((person) => ({
             ...person,
             hours: {
               ...person.hours,
               period: data.hours.period,
-              locationId: args.get("locationId")!,
+              locationId: "shop",
             },
           })),
           selection: {
@@ -135,7 +135,7 @@ export async function mountManagerHours(
           },
         });
       }
-      if (path.includes("/queue?")) return Response.json({ locationId: "shop", items: [] });
+      if (path.endsWith("/queue")) return Response.json({ locationId: "shop", items: [] });
       if (path.includes("/day?")) {
         const args = new URL(path, location.origin).searchParams;
         const hours = data.hours.people.find(
@@ -143,7 +143,7 @@ export async function mountManagerHours(
         )!.hours;
         return Response.json({
           personId: args.get("personId")!,
-          locationId: args.get("locationId")!,
+          locationId: "shop",
           date: args.get("date")!,
           revision,
           timeZone: "Europe/Madrid",

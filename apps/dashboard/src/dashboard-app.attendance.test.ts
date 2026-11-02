@@ -83,7 +83,7 @@ async function mount(modules: string[], permissions: string[], role = "superviso
           items: [],
         });
       if (path.includes("/attendance/hours?")) return Response.json(managerHours());
-      if (path.includes("/queue?")) return Response.json({ locationId: "shop", items: [] });
+      if (path.endsWith("/queue")) return Response.json({ locationId: "shop", items: [] });
       throw new Error(path);
     },
   });
@@ -106,7 +106,7 @@ it("a permitted supervisor opens the real workforce correction screen from Team"
   await userEvent.click(nav!);
   const screen = el.shadowRoot!.querySelector("dashboard-attendance-corrections-screen")!;
   await expect.poll(() => screen.shadowRoot?.textContent).toContain("Time corrections");
-  await expect.poll(() => requests.some((path) => path.includes("/attendance/queue?"))).toBe(true);
+  await expect.poll(() => requests.some((path) => path.endsWith("/attendance/queue"))).toBe(true);
 });
 it.each([
   [[], ["workforce.correct"]],
@@ -170,7 +170,7 @@ it("lets a supervisor open their own Hours without workforce.correct", async () 
     .poll(() => el.shadowRoot!.querySelector("dashboard-my-schedule-screen"))
     .not.toBeNull();
   await expect.poll(() => requests.some((p) => p.includes("/me/attendance/hours?"))).toBe(true);
-  expect(requests.every((p) => !p.includes("/attendance/queue?"))).toBe(true);
+  expect(requests.every((p) => !p.endsWith("/attendance/queue"))).toBe(true);
 });
 
 it("Back from Hours protects a dirty own request while retaining the hidden schedule forms", async () => {
@@ -240,7 +240,7 @@ it("opens contributed manager Hours directly while preserving the Time correctio
     .toBeTruthy();
   expect(location.pathname).toBe("/manage/hours");
   expect(requests.some((path) => path.includes("/attendance/hours?"))).toBe(true);
-  expect(requests.some((path) => path.includes("/attendance/queue?"))).toBe(false);
+  expect(requests.some((path) => path.endsWith("/attendance/queue"))).toBe(false);
   setLocale("es-ES");
   await el.updateComplete;
   expect(nav!.textContent).toContain("Horas");
@@ -250,7 +250,7 @@ it("opens contributed manager Hours directly while preserving the Time correctio
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-time-corrections]")!,
   );
   await expect.poll(() => location.pathname).toBe("/manage/time-corrections");
-  await expect.poll(() => requests.some((path) => path.includes("/attendance/queue?"))).toBe(true);
+  await expect.poll(() => requests.some((path) => path.endsWith("/attendance/queue"))).toBe(true);
   expect(el.shadowRoot!.querySelector("dashboard-attendance-corrections-screen")?.mode).toBe(
     "corrections",
   );

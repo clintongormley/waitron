@@ -269,7 +269,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
       this.queue = [];
       return;
     }
-    await this.#queries.watch("queue", this.#api!.queueQuery(this.locationId), (value) => {
+    await this.#queries.watch("queue", this.#api!.queueQuery(), (value) => {
       this.queue = value.items;
     });
   }
@@ -291,7 +291,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
     try {
       await this.#queries.watch(
         "hours",
-        this.#hoursApi!.managerQuery(locationId, {
+        this.#hoursApi!.managerQuery({
           kind: "pay-period",
           ...(date ? { date } : {}),
         }),
@@ -470,7 +470,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
     const [personId, locationId, date] = [this.personId, this.locationId, this.date];
     this.reading = true;
     try {
-      await this.#queries.watch("day", this.#api!.dayQuery(personId, locationId, date), (value) => {
+      await this.#queries.watch("day", this.#api!.dayQuery(personId, date), (value) => {
         if (value.personId !== personId || value.locationId !== locationId || value.date !== date)
           throw new TypeError("Attendance day does not match the selection");
         this.view = value;

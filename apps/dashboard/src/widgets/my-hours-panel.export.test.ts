@@ -40,10 +40,7 @@ async function mount(available = true, theme?: "light" | "dark") {
           items: [],
           prompts: [],
         });
-      const q = new URL(path, location.origin).searchParams;
-      return Response.json(
-        hoursView({ locationId: q.get("locationId")!, selection: { kind: "week" } }),
-      );
+      return Response.json(hoursView({ locationId: "venue", selection: { kind: "week" } }));
     },
   });
   const liveData = new LiveData();

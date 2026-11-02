@@ -263,7 +263,7 @@ export class MyHoursPanel extends LitElement {
     const location = this.locationId,
       person = this.personId,
       selection = { ...this.selection };
-    await this.#reads.hours.watch("hours", this.#hours.ownQuery(location, selection), (value) => {
+    await this.#reads.hours.watch("hours", this.#hours.ownQuery(selection), (value) => {
       if (
         value.personId !== person ||
         value.locationId !== location ||
@@ -344,7 +344,7 @@ export class MyHoursPanel extends LitElement {
     if (!this.#own) return false;
     this.day = null;
     try {
-      await this.#reads.day.watch("day", this.#own.dayQuery(location, date), (value) => {
+      await this.#reads.day.watch("day", this.#own.dayQuery(date), (value) => {
         if (value.personId !== person || value.locationId !== location || value.date !== date)
           throw new TypeError("Own day mismatch");
         this.day = value;

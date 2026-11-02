@@ -12,13 +12,10 @@ export class OwnAttendanceApi {
     private readonly request: DashboardRequest,
     readonly liveData?: LiveData,
   ) {}
-  day(locationId: string, date: string): Promise<AttendanceDayView> {
-    return this.request(
-      `${BASE}/day?${new URLSearchParams({ locationId, date })}`,
-      "GET",
-      undefined,
-      { passive: true },
-    );
+  day(date: string): Promise<AttendanceDayView> {
+    return this.request(`${BASE}/day?${new URLSearchParams({ date })}`, "GET", undefined, {
+      passive: true,
+    });
   }
   async command(commandId: string): Promise<AttendanceCommandResult | null> {
     const result = await this.request<AttendanceCommandResult | null>(
@@ -38,11 +35,11 @@ export class OwnAttendanceApi {
   #invalidate(): void {
     this.liveData?.invalidate(ATTENDANCE_QUERY_DEPENDENCIES.hours.map((type) => ({ type })));
   }
-  dayQuery(locationId: string, date: string): ResourceQuery<AttendanceDayView> {
+  dayQuery(date: string): ResourceQuery<AttendanceDayView> {
     return {
-      key: JSON.stringify(["attendance", "ownDay", locationId, date]),
+      key: JSON.stringify(["attendance", "ownDay", date]),
       dependencies: ATTENDANCE_QUERY_DEPENDENCIES.ownDay.map((type) => ({ type })),
-      read: () => this.day(locationId, date),
+      read: () => this.day(date),
     };
   }
 }

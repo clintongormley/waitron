@@ -28,7 +28,7 @@ describe.each(["light", "dark"] as const)("attendance queue in %s", (theme) => {
                   locations: [{ id: "shop", name: "Deli", timeZone: "Europe/Madrid" }],
                   people: [{ personId: "worker", displayName: "Ana Worker" }],
                 });
-              if (path.includes("/queue?")) return Response.json({ locationId: "shop", items: [] });
+              if (path.endsWith("/queue")) return Response.json({ locationId: "shop", items: [] });
               return Response.json({
                 personId: "worker",
                 locationId: "shop",
