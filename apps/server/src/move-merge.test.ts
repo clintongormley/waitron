@@ -565,7 +565,7 @@ async function stationWithPrinter(v: PartyVenue, name: string, dishes: string[])
   });
 }
 
-/** The id of the active station named `name` at the venue's location. */
+/** The id of the active station named `name`. */
 async function activeStationId(tx: Transaction, v: PartyVenue, name: string): Promise<string> {
   const [row] = await tx
     .select({ id: kitchenStations.id })

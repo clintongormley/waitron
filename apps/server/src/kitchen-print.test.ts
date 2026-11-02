@@ -120,7 +120,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The location scope the printing verbs run under. */
 function asApp<T>(cfg: OriginConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {

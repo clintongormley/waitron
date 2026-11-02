@@ -503,7 +503,7 @@ describe("the order detail's delivery status", () => {
     });
   });
 
-  it("offers the location's active receipt and A4 printers when nothing is active", async () => {
+  it("offers every active receipt and A4 printer when nothing is active", async () => {
     const { billId } = await fullInvoice();
     expect((await detailOf(venue.adminDashboard, billId)).json).toMatchObject({
       deliveries: {
@@ -938,7 +938,7 @@ async function receiptPrinted(saleId: string) {
 }
 
 describe("dashboard print on a receipt printer", () => {
-  it("lists the location's receipt printers before its A4 printers, and queues an original document job on the chosen one", async () => {
+  it("lists the receipt printers before the A4 printers, and queues an original document job on the chosen one", async () => {
     const { billId, saleId } = await fullInvoice();
     expect((await detailOf(venue.adminDashboard, billId)).json).toMatchObject({
       deliveries: {

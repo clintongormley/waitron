@@ -2493,22 +2493,6 @@ already holds a zone list and a starting zone (`device_profile_service_access`,
   List and the ⋮ menu sit on their own row above the pills; they move onto the pills' row.
 
 
-## Legacy bill moves do not check the source location
-
-2026-10-20: in an installed disposable checkout, restore all four production files changed by
-A669's HTTP/client continuation to `322b2e00bc7a4369fb3318a6a8f76f5eac2cf79f`. With the real-route
-fixture in `apps/server/src/till-api.allergy-move.test.ts`, create a counter bill and an answered
-destination party. Change only the source bill's `locationId` to a second location, then call
-`POST /api/bills/:id/move` without `submissionId` or `allergy`, retaining its editor observations
-and destination identity. A test expecting 409 received 200. The same-location control received
-200 as expected: `pnpm --filter @waitron/server exec vitest run src/till-api.allergy-move.test.ts
--t 'legacy location probe'` reported one failed, one passed and 45 unselected tests. The temporary
-probe body and log are retained in Lane G's `resume-20261020-062334-move-http` receipts.
-
-The paired allergy command and its preview now check the source location. Fixing the unpaired
-route is outside A669's allergy scope; retain its valid move and payment behavior when adding the
-check. No legacy move assertion was changed to hide this result.
-
 ## A773. Courses, groups and the pass
 
 **A773-2**, firing and the pass, has a [reviewed implementation plan](../superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)

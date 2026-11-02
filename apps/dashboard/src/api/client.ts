@@ -643,7 +643,7 @@ export interface ReceiptPreview {
   marks: Record<ReceiptMarkName, BlockRange | null>;
   /** The width drawn at. */
   paperWidth: PrintPaperWidth;
-  /** The widths of the location's active devices' receipt printers, narrowest first; empty when none. */
+  /** The widths of the active devices' receipt printers, narrowest first; empty when none. */
   paperWidths: PrintPaperWidth[];
 }
 
@@ -2430,7 +2430,7 @@ export interface OrderDeliveries {
   originalPrinterId: string | null;
   actions: {
     retryOriginal: { medium: OrderDeliveryAttempt["medium"] } | null;
-    /** Every active printer at the sale's location: receipt printers first, then A4 printers. */
+    /** Every active printer: receipt printers first, then A4 printers. */
     print: {
       printers: OfferedPrinter[];
       designation: OrderDeliveryAttempt["designation"];

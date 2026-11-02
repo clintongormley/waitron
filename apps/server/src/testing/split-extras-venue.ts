@@ -39,7 +39,7 @@ export interface Venue {
   catalogueId: string;
 }
 
-/** A fresh location, till, node and assigned catalogue, returning the till's config. */
+/** A fresh venue, till, node and assigned catalogue, returning the till's config. */
 export async function setupVenue(): Promise<Venue> {
   await seedLegacySellingUnits(db);
   await seedVenue(db, {

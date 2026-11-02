@@ -1890,11 +1890,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   server's check; "Madrid" passed both). The address search writes a comma-free province, but a
   provider's locality could still hold one. Left open by A1171 part 3.
 
-- **Legacy bill moves need a source-location check.** An unpaired `POST /api/bills/:id/move`
-  accepted a counter bill from another location into an answered party. The new allergy move
-  command checks the source location; the legacy request still needs its own fix and regression.
-  [Probe and scope](backlog/till.md#legacy-bill-moves-do-not-check-the-source-location).
-
 - **Remove the Filter's unused session-storage write.** Filter selections live in the active
   operator's app state and reset on sign-out. `till-app.ts` writes `waitron.dietFilter` but never
   reads it; the same write-only key exists at `1f88662fb`. Remove the redundant write without

@@ -339,8 +339,8 @@ the change (plan PR 8 Decision 1).
   zones keep their own order.
   Implementation choice, 2026-10-17: every station list uses the same Spanish alphabetical
   comparison, including accents and ñ, independently of the interface language.
-- A new station without an explicit colour takes the first colour unused by active stations at its
-  location, falling back to red when all colours are used. Explicit colours stay as chosen, including
+- A new station without an explicit colour takes the first colour unused by active stations,
+  falling back to red when all colours are used. Explicit colours stay as chosen, including
   duplicates. Server creation, provisioning, scripts and imports use this rule. Each station row
   shows its colour square.
 - Add and Edit use the shared `wt-colour-chooser`, showing other stations that use a colour.

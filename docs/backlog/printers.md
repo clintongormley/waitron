@@ -128,8 +128,8 @@ preserves all earlier proposals and static boards as history.
 
 It specifies proposed durable print
 and Invoice-setting request identities, local storage, retention, migration boundaries and
-independently checked tasks. Preserve sale-location/permission checks and the
-shared original/copy guard.
+independently checked tasks. Preserve permission checks and the shared original/copy
+guard.
 
 ## Show a failed automatic invoice copy to staff
 
