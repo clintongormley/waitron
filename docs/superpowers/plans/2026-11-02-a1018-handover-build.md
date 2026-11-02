@@ -945,7 +945,7 @@ Not fiscal. Adds `@waitron/handover` and `node.db`'s second migration. Nothing c
 **Interfaces — Produces:** `HandoverRole = "source" | "destination"`; `HandoverState` (the union of
 every state in the Formats table); `nextState(role, scenario, from: HandoverState | null, to: HandoverState): HandoverState`
 (throws `handover.step_out_of_order` with `{ from, to }`); `isOpen(state): boolean` (false only for
-`return_complete`, `return_abandoned`, `replaced` and `abandoned`).
+`return_complete`, `return_abandoned`, `replaced` and `abandoned`); `initialState(role, scenario): HandoverState` (the state a box records when it begins).
 
 - [ ] **Step 1: Write the failing tests.** One `it.each` over every allowed transition in the
   Formats table (passes); one over a set of forbidden ones, including "a controlled destination
@@ -990,7 +990,7 @@ Tables, using only `packages/db/src/schema/columns.ts` builders:
 **Interfaces — Produces:** `beginHandoverOperationTx(tx: NodeTransaction, row): Promise<"created" | "replayed">`
 (refuses `handover.operation_conflict` on the same id with another fingerprint, and
 `handover.operation_in_progress` with `{ operationId }` when another open operation exists);
-`advanceHandoverOperationTx(tx, nodeId, operationId, to: string, waitingReason: string | null): Promise<void>`;
+`advanceHandoverOperationTx(tx, nodeId, operationId, to: HandoverOperationState, waitingReason: string | null): Promise<void>`;
 `readHandoverOperation(node, nodeId, operationId)`, `readOpenHandoverOperation(node, nodeId)`;
 `appendHandoverEventTx(tx, row): Promise<void>`; `recordHandoverRestrictionTx(tx, row): Promise<void>`
 (a second write with the same values is a no-op; different values refuse
@@ -1026,7 +1026,7 @@ the same `to` twice is a no-op that returns); `waitHandover(deps, operationId, r
 `peerKeyOf(deps: { db: Database; node: NodeDatabase; ring: KeyRing; nodeId: string }): Promise<(nodeId: string) => string | undefined>`
 — a key this box trusts (`readStoredTrustSet`, `apps/server/src/membership-trust.ts:35-43`) or one
 the held chart's verified endorsements vouch for (`packages/membership/src/endorsement.ts`), and
-none for a node the held chart lists as evicted or revoked, even one this box trusts; the rule is
+none for a node a well-formed held chart lists as evicted or revoked, even one this box trusts; the rule is
 `endorsedKeyOf` in `@waitron/membership`;
 `currentBinding(deps, scenario, sourceNodeId, destinationNodeId, operationId): Promise<HandoverBinding>`
 (reads `tenants`, the stamp and the held chart).

@@ -925,7 +925,7 @@ Real code does write them, legitimately: the setup-mode provision route reaches 
 `nodes` and `deployment`; joining as a spare (`apps/server/src/adopt.ts`) reaches `deployment`,
 `node_mode`, `node_mirror_link`, `node_primary_key`, `node_recovery_key` and `node_signing_key`; promotion and its repair (`promote.ts`, `promoted-role.ts`) reach
 `node_mode`; first setup and replacing the recovery key reach `node_recovery_key`; first setup and
-`waitron-credentials rotate` reach `node_signing_key`; and the dashboard's legal-name change
+`waitron-credentials rotate` reach `node_signing_key`; a handover (`apps/server/src/handover-store.ts`) reaches `node_handover_operations` and `node_handover_events`, and nothing outside `packages/node-db` yet writes `node_handover_restriction`; and the dashboard's legal-name change
 (`PUT /management-api/venue-details/legal-name`, owner A494) reaches `tenants` through
 `packages/provisioning/src/taxpayer-name.ts`, which updates `legal_name` alone, and the
 dashboard's privacy contact (`PUT /management-api/venue-privacy`, A980 S1a) reaches it through

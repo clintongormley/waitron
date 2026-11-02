@@ -140,8 +140,8 @@ export function verifyMembershipDocument(
 
 /**
  * The key that speaks for a node under the receiver's own held chart: `trustSet`'s, or one the
- * chart's endorsements vouch for by `resolveSignerKey`'s rule — never one for a node the held chart
- * has removed (`fencedOutNodeIds`), a trust anchor included. Endorsements are read only from a
+ * chart's endorsements vouch for by `resolveSignerKey`'s rule — never one for a node a well-formed
+ * held chart has removed (`fencedOutNodeIds`), a trust anchor included. Endorsements are read only from a
  * well-formed held chart a key `trustSet` vouches for signed. That check skips the removal rule,
  * because a retirement chart is signed by the node it removes.
  */

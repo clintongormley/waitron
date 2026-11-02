@@ -1327,7 +1327,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Nothing was started, because this server is already in the middle of another handover. Finish that handover, or abandon it, and then start this one again.",
     es: "No se ha empezado nada, porque este servidor ya está en medio de otro cambio de servidor. Termina ese cambio de servidor, o abandónalo, y luego vuelve a empezar este.",
   },
-  // A fault in Waitron: a restriction is to be written only on a box that holds none, and nothing
+  // A fault in Waitron: a box records one restriction, a repeat carries the same values, and nothing
   // rewrites one.
   "handover.restriction_conflict": {
     en: "This server has already recorded that it handed over its work, with different details, so the record was not changed. This is a fault in Waitron.",

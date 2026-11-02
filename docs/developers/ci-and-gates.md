@@ -511,7 +511,7 @@ checks that it preserves the local mutation list and floor while disabling incre
 
 Nightly rather than Mondays only (owner, 2026-10-12). A run is a sharded matrix each for ui, db
 and ui-core, one aggregate job per matrix, and one unsharded job each for node-db and handover
-(`.github/workflows/mutation.yml`). The account never ran more than 20 jobs at once from 6 to 12
+(`.github/workflows/mutation.yml`). The figures below were measured on 6–12 October, when a run was 43 jobs: ui's 30 shards, db's 10, ui-core as one job, and two aggregates. The account never ran more than 20 jobs at once from 6 to 12
 October except for one instant that read 21 (every job that held a runner, from
 `gh api 'repos/clintongormley/waitron/actions/runs?created=<day>&per_page=100' --paginate` and
 `gh api repos/clintongormley/waitron/actions/runs/<id>/jobs?per_page=100&filter=all --paginate`, a
