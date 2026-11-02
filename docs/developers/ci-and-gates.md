@@ -509,9 +509,9 @@ checks that it preserves the local mutation list and floor while disabling incre
 
 ### Mutation testing runs nightly at 05:00 UTC
 
-Nightly rather than Mondays only (owner, 2026-10-12). A run is 47 jobs (ui's 30 shards, db's 10,
-ui-core's 4, and the three aggregates; 43 before ui-core was sharded on 2026-10-20, with ui-core one
-job and two aggregates), and the account never ran more than 20 jobs at once from 6 to 12
+Nightly rather than Mondays only (owner, 2026-10-12). A run is a sharded matrix each for ui, db
+and ui-core, one aggregate job per matrix, and one unsharded job each for node-db and handover
+(`.github/workflows/mutation.yml`). The account never ran more than 20 jobs at once from 6 to 12
 October except for one instant that read 21 (every job that held a runner, from
 `gh api 'repos/clintongormley/waitron/actions/runs?created=<day>&per_page=100' --paginate` and
 `gh api repos/clintongormley/waitron/actions/runs/<id>/jobs?per_page=100&filter=all --paginate`, a

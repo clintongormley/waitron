@@ -18,7 +18,7 @@
 >   the spare's `node.db` (Slice 7); the declaration's audit fields are the plan's "Emergency
 >   declaration" format. Step 3's "starts filing … the old main box's records that reached it" is
 >   unchanged and now explicitly sole: the old box never files again. The minute name is the next
->   free one, as §6.5 already says for a switch (the plan's Q2 default).
+>   free one, as §6.5 already says for a switch (the plan's Q2 default; 2026-11-02: the owner chose it).
 > - **§6.4 (the hand-over):** replaced by A1018's controlled handover: a stepdown that is saved and
 >   survives a reboot, a final copy compared against a signed indicator (a small signed summary of
 >   the old box's final state), the spare's saved acceptance, the old box's relinquishment, then

@@ -129,7 +129,8 @@ process on `venue.db`").
 **The node migration set is applied to `node.db`, and every other set to `venue.db`**
 (`packages/migrations/src/apply.ts`). `node.db` holds what this box must remember about itself:
 its mode and singleton role, its link to the main box, the main box's key it pinned when it joined,
-its recovery-key check and its sealed signing key (`packages/node-db`). So a spare holding a copy of
+its recovery-key check, its sealed signing key, and its records of the handovers it took part in
+(`packages/node-db`). So a spare holding a copy of
 the main box's `venue.db` still knows who it is. Only `venue.db` is streamed to a bucket; a backup
 file carries `node.db` whole as `node.dump`. Every other `local` table sits in `venue.db`
 ([conventions-data.md](../../docs/developers/conventions-data.md), "A `local` row belongs to one

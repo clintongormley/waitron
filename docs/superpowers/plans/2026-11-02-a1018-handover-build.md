@@ -1025,7 +1025,9 @@ the same `to` twice is a no-op that returns); `waitHandover(deps, operationId, r
 `readNodeIdentityKey`, `apps/server/src/node-identity.ts:25-43`);
 `peerKeyOf(deps: { db: Database; node: NodeDatabase; ring: KeyRing; nodeId: string }): Promise<(nodeId: string) => string | undefined>`
 — a key this box trusts (`readStoredTrustSet`, `apps/server/src/membership-trust.ts:35-43`) or one
-the held chart's verified endorsements vouch for (`packages/membership/src/endorsement.ts`);
+the held chart's verified endorsements vouch for (`packages/membership/src/endorsement.ts`), and
+none for a node the held chart lists as evicted or revoked, even one this box trusts; the rule is
+`endorsedKeyOf` in `@waitron/membership`;
 `currentBinding(deps, scenario, sourceNodeId, destinationNodeId, operationId): Promise<HandoverBinding>`
 (reads `tenants`, the stamp and the held chart).
 
@@ -3396,7 +3398,7 @@ The later A1188 parts do use this plan:
 | --- | --- | --- |
 | 0 (a copy under its own identity) | placing a copy without taking the old box's identity | Slice 14 (local); a Cloud copy's identity waits for the contract amendment A1188 §9 item 4 names |
 | 3 (the locked start) | a start that serves nothing that sells | Slice 2's restricted start is the pattern; the locked start is A1188's own |
-| 4 (declaration and activation) | the declaration format, its recording before activation, the activation | Slices 7 and 8 (the declaration's `provider` field stays null until the joint specification); A1188 §12's open wait is Q2 here |
+| 4 (declaration and activation) | the declaration format, its recording before activation, the activation | Slices 7 and 8 (the declaration's `provider` field stays null until the joint specification); A1188 §12's open wait is Q2 here, answered (a) on 2026-11-02: the next free minute |
 | 6 (the returning box) | the start check and the supersession | Slice 3; asking Cloud is A1188's own addition |
 
 Tell the watcher in the campaign's questions file when Slices 3, 7 and 14 land (the queue asks).

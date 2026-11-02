@@ -922,8 +922,8 @@ alone. Read its header for the full limits. The [2026-10-19 grants-record audit]
 records the removal of the old matrix and the restrictions still awaiting individual decisions.
 
 Real code does write them, legitimately: the setup-mode provision route reaches `tenants`,
-`nodes` and `deployment`; joining as a spare (`apps/server/src/adopt.ts`) reaches `deployment` and
-every non-handover `node.db` table; promotion and its repair (`promote.ts`, `promoted-role.ts`) reach
+`nodes` and `deployment`; joining as a spare (`apps/server/src/adopt.ts`) reaches `deployment`,
+`node_mode`, `node_mirror_link`, `node_primary_key`, `node_recovery_key` and `node_signing_key`; promotion and its repair (`promote.ts`, `promoted-role.ts`) reach
 `node_mode`; first setup and replacing the recovery key reach `node_recovery_key`; first setup and
 `waitron-credentials rotate` reach `node_signing_key`; and the dashboard's legal-name change
 (`PUT /management-api/venue-details/legal-name`, owner A494) reaches `tenants` through
@@ -1455,11 +1455,13 @@ without `applyMigrations` (`runMigrations` called directly) is invisible to it.
 
 ## A `local` row belongs to one node, so no foreign key may join a `local` table to a `ledger`/`state` one
 
-`venue.db` holds every table but five, and a primary streams it whole to the owner's bucket once
+`venue.db` holds every table but `node.db`'s, and a primary streams it whole to the owner's bucket once
 one is set up. `node.db`, beside it, holds what a box must remember about itself — its mode and
 singleton role (`node_mode`), its link to the main box (`node_mirror_link`), the main box's key it
-pinned when it joined (`node_primary_key`), its recovery-key check (`node_recovery_key`) and its
-sealed signing key (`node_signing_key`) — so a spare holding a copy of the main box's `venue.db`
+pinned when it joined (`node_primary_key`), its recovery-key check (`node_recovery_key`), its
+sealed signing key (`node_signing_key`), and its handover records: each handover operation it
+takes part in (`node_handover_operations`), what it decided and received during them
+(`node_handover_events`), and why it no longer acts as the main box (`node_handover_restriction`) — so a spare holding a copy of the main box's `venue.db`
 still knows who it is (A947 slice 3a). `node.db` is never streamed (`packages/stream/src/litestream.ts`
 names only `venue.db`); a backup file carries it whole as `node.dump`, and the bucket's sealed state
 carries a `node.dump` entry. Every other `local` table stays in `venue.db`. A `local` row means

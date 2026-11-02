@@ -5626,8 +5626,9 @@ Not in any track until the standalone primary is done.
 
 - **A1018. Simple controlled and emergency handover, with Cloud only a placement.** M2 handles all AEAT communication after either takeover; returning M1 transfers fiscal originals/outcomes only.
   The [build plan](superpowers/plans/2026-11-02-a1018-handover-build.md) cuts the work into slices.
-  Its two owner questions (returned invoices in modelo 303; the emergency minute wait) stay open,
-  built on their defaults, and gate only Slice 12b and Task 7.4b.
+  The owner answered (a) to both its questions (returned invoices in modelo 303; the emergency
+  minute wait) on 2026-11-02: Slice 12b waits on the venue's tax adviser, and Task 7.4b is not
+  built.
   [Detail](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
 
 - **A1185: a venue not yet connected sees no prices.** Left open by A1185.
