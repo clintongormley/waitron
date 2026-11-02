@@ -206,7 +206,7 @@ export async function host() {
     nodeId: node.nodeId,
     nodeRecoveryKeyName: key.name,
     taxpayer: { legalName: "Selected business", taxId: scope.taxpayerNif },
-    locationName: "Selected venue",
+    venueName: "Selected venue",
     fiscalSelection: {
       country: "ES",
       fiscalTerritory: "ES-common",

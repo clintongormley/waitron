@@ -230,7 +230,7 @@ export interface RecoveryBackupPreview {
   nodeId: string;
   nodeRecoveryKeyName: string | null;
   taxpayer: { legalName: string; taxId: string };
-  locationName: string;
+  venueName: string;
 }
 
 export interface ConfigurationPreview {

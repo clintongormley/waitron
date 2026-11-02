@@ -1,8 +1,7 @@
 import { dirname } from "node:path";
-import { eq } from "drizzle-orm";
-import { locations, openVenueDatabase, readTenant } from "@waitron/db";
+import { openVenueDatabase, readTenant, readVenue } from "@waitron/db";
 import { readRecoveryKeyName } from "@waitron/node-db";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets } from "@waitron/module";
 import {
@@ -34,7 +33,7 @@ export interface RecoveryBackupPreview {
   readonly nodeId: string;
   readonly nodeRecoveryKeyName: string | null;
   readonly taxpayer: { readonly legalName: string; readonly taxId: string };
-  readonly locationName: string;
+  readonly venueName: string;
 }
 
 export async function readRecoveryCopyPreview(
@@ -59,21 +58,24 @@ export async function readRecoveryCopyPreview(
   const store = await openVenueDatabase(directory);
   try {
     const tenant = await readTenant(store.venue);
-    const [location] = await store.venue
-      .select({
-        name: locations.name,
-        fiscalTerritory: locations.fiscalTerritory,
-        timeZone: locations.timeZone,
-      })
-      .from(locations)
-      .where(eq(locations.id, node.locationId));
-    if (tenant === null || location === undefined)
-      throw new AppError("restore.identity_unknown", { nodeId: node.nodeId });
+    if (tenant === null) throw new AppError("restore.identity_unknown", { nodeId: node.nodeId });
+    let venue;
+    try {
+      venue = await readVenue(store.venue);
+    } catch (error) {
+      if (
+        isAppError(error) &&
+        (error.code === "venue.not_found" || error.code === "provisioning.second_venue")
+      ) {
+        throw new AppError("restore.identity_unknown", { nodeId: node.nodeId });
+      }
+      throw error;
+    }
     const fiscalSelection = recoveryFiscalSelection(
       {
         country: tenant.country,
-        fiscalTerritory: location.fiscalTerritory,
-        timeZone: location.timeZone,
+        fiscalTerritory: venue.fiscalTerritory,
+        timeZone: venue.timeZone,
       },
       copy.manifest,
       copy.secretEntries,
@@ -91,7 +93,7 @@ export async function readRecoveryCopyPreview(
       nodeId: node.nodeId,
       nodeRecoveryKeyName: await readRecoveryKeyName(store.node, node.nodeId),
       taxpayer: { legalName: tenant.legalName, taxId: tenant.taxId },
-      locationName: location.name,
+      venueName: venue.name,
     };
   } finally {
     await store.close();

@@ -31,7 +31,7 @@ describe.each(["light", "dark"] as const)(
         "setup-restore-bucket-screen",
         {
           liveUnknown: true,
-          venue: { legalName: "Waitron SL", taxId: "89890001K", locationName: "Local" },
+          venue: { legalName: "Waitron SL", taxId: "89890001K", venueName: "Local" },
         },
         theme,
       );
@@ -53,7 +53,7 @@ describe.each(["light", "dark"] as const)(
     it("has no violations while asking the owner to confirm the venue", async () => {
       const { host } = await mountWidget<SetupRestoreBucketScreen>(
         "setup-restore-bucket-screen",
-        { venue: { legalName: "Waitron SL", taxId: "89890001K", locationName: "Local" } },
+        { venue: { legalName: "Waitron SL", taxId: "89890001K", venueName: "Local" } },
         theme,
       );
       await expectNoA11yViolations(host);
@@ -79,7 +79,7 @@ describe.each(["light", "dark"] as const)(
       const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
         "setup-restore-bucket-screen",
         {
-          venue: { legalName: "Waitron SL", taxId: "89890001K", locationName: "Local" },
+          venue: { legalName: "Waitron SL", taxId: "89890001K", venueName: "Local" },
           errorMessage: "Check the confirmation that this is your business.",
           invalidField: "venueConfirmed",
         },

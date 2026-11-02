@@ -2088,7 +2088,7 @@ describe("POST /setup-api/restore-bucket", () => {
         new AppError("restore.stream_venue_unconfirmed", {
           legalName: "L",
           taxId: "T",
-          locationName: "N",
+          venueName: "N",
         }),
         409,
       ],
@@ -2116,7 +2116,7 @@ describe("POST /setup-api/restore-bucket", () => {
   it("answers an unconfirmed venue with 409 and its names, and stages the retry that names its tax id", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-bucket-"));
     try {
-      const venue = { legalName: "Waitron SL", taxId: "89890001K", locationName: "Main bar" };
+      const venue = { legalName: "Waitron SL", taxId: "89890001K", venueName: "Main bar" };
       const stageBucketRestore = vi
         .fn()
         .mockRejectedValueOnce(new AppError("restore.stream_venue_unconfirmed", venue))

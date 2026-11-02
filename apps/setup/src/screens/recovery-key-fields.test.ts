@@ -13,7 +13,7 @@ async function mount() {
       nodeId: "node-1",
       nodeRecoveryKeyName: "Caja principal",
       taxpayer: { legalName: "Olivo Restauración SL", taxId: "B12345674" },
-      locationName: "Olivo Centro",
+      venueName: "Olivo Centro",
       fiscalSelection: {
         module: "fiscal-verifactu",
         country: "ES",

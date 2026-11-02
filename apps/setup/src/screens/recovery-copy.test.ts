@@ -13,7 +13,7 @@ const copy = {
   nodeId: "saved-node",
   nodeRecoveryKeyName: "Amber Hill",
   taxpayer: { legalName: "Saved venue", taxId: "89890001K" },
-  locationName: "Saved location",
+  venueName: "Saved location",
 };
 const stagedIds = [
   "5c1d6c43-4f61-4c4a-9e0b-0a8f2f8d9a11",

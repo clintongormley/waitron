@@ -506,7 +506,7 @@ async function runBucketRestore(
         : {}),
       confirmVenue: (venue) => {
         deps.out(
-          `the copy in the bucket is: ${venue.legalName}, tax id ${venue.taxId}, location ${venue.locationName}`,
+          `the copy in the bucket is: ${venue.legalName}, tax id ${venue.taxId}, venue ${venue.venueName}`,
         );
         return confirmsVenue(venue, confirmedTaxId);
       },

@@ -12,7 +12,7 @@ const preview: RecoveryBackupPreview = {
   nodeId: "saved-node",
   nodeRecoveryKeyName: "Saved key",
   taxpayer: { legalName: "Olivo SL", taxId: "89890001K" },
-  locationName: "Centro",
+  venueName: "Centro",
 };
 afterEach(cleanupWidgets);
 const copy = (el: SetupRestoreBucketScreen) =>

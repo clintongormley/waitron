@@ -87,7 +87,7 @@ it.each(["archive", "bucket"])(
       entries,
       nodeId: NODE,
       generation: "generation",
-      venue: { legalName: "Old venue", taxId: "89890001K", locationName: "Old location" },
+      venue: { legalName: "Old venue", taxId: "89890001K", venueName: "Old location" },
       discard: async () => {},
     });
     const operation = {

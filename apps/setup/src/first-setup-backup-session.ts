@@ -39,7 +39,7 @@ function valid(value: unknown): value is BackupRepairSession {
     text(preview.nodeRecoveryKeyName) &&
     text(preview.taxpayer.taxId) &&
     text(preview.taxpayer.legalName) &&
-    text(preview.locationName) &&
+    text(preview.venueName) &&
     text(preview.fiscalSelection.module) &&
     text(preview.fiscalSelection.country) &&
     text(preview.fiscalSelection.fiscalTerritory) &&

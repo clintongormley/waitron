@@ -122,7 +122,7 @@ const NOT_PERSONAL: ReadonlyMap<string, string> = new Map([
   ["product.offered_as_extra.name", "the name of an extras list"],
   ["product.on_live_menu.name", "the name of a product or a menu"],
   ["provisioning.key_generation_failed.byteLength", "a size in bytes"],
-  ["restore.stream_venue_unconfirmed.locationName", "the name of the venue's location"],
+  ["restore.stream_venue_unconfirmed.venueName", "the name of the venue"],
   ["restore.unexpected_entry.name", "the name of an entry in a backup archive"],
   ["restore.unsafe_entry_path.name", "the name of an entry in a backup archive"],
   ["route.dish_not_sent.orderLabel", "an order's label, the name of a thing"],

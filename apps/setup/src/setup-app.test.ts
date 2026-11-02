@@ -3508,7 +3508,7 @@ describe("restore, configuration and fiscal-test outcomes", () => {
 });
 
 describe("restore from my bucket", () => {
-  const VENUE = { legalName: "Waitron SL", taxId: "89890001K", locationName: "Local" };
+  const VENUE = { legalName: "Waitron SL", taxId: "89890001K", venueName: "Local" };
 
   async function refusedWith(error: unknown): Promise<SetupRestoreBucketScreen> {
     const el = await mountSetupApp(
@@ -5166,15 +5166,13 @@ it.each([
 it("routes an internal description refusal to the venue action message", async () => {
   const provision = vi.fn().mockRejectedValue({
     code: "setup.request_invalid",
-    params: { field: "location.operationDescription" },
+    params: { field: "operationDescription" },
   });
   const el = await mountSetupApp(stubApi({ provision }));
   provisionRequest(el);
   await flush(el);
   const venue = await screenHost(el, "venue");
-  expect((venue as unknown as { invalidField?: string }).invalidField).toBe(
-    "location.operationDescription",
-  );
+  expect((venue as unknown as { invalidField?: string }).invalidField).toBe("operationDescription");
   expect(venue.shadowRoot!.querySelector("[data-test=operationDescription]")).toBeNull();
   const actions = venue.shadowRoot!.querySelector<
     HTMLElement & { updateComplete: Promise<unknown> }

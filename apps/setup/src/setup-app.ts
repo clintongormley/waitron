@@ -490,10 +490,10 @@ function describeConfigurationRefusal(error: unknown): Message {
 
 /** The restored copy's names, when the refusal carries all three and a tax id to confirm. */
 function venueToConfirm(params: Record<string, unknown> | undefined): RestoredVenue | undefined {
-  const { legalName, taxId, locationName } = params ?? {};
+  const { legalName, taxId, venueName } = params ?? {};
   if (typeof legalName !== "string" || typeof taxId !== "string") return undefined;
-  if (typeof locationName !== "string" || taxId === "") return undefined;
-  return { legalName, taxId, locationName };
+  if (typeof venueName !== "string" || taxId === "") return undefined;
+  return { legalName, taxId, venueName };
 }
 
 /** Held as one value because the message and whether to offer a retry answer the same check. */

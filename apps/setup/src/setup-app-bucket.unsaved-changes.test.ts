@@ -108,7 +108,7 @@ describe("setup bucket restore unsaved changes", () => {
     const { el, form } = await mount();
     Object.assign(form, {
       liveUnknown: true,
-      venue: { legalName: "Example", taxId: "B12345678", locationName: "Main" },
+      venue: { legalName: "Example", taxId: "B12345678", venueName: "Main" },
     });
     await form.updateComplete;
     for (const name of ["acknowledge", "old-box-gone", "venue-confirmed"]) {

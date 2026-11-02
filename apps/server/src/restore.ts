@@ -1,4 +1,3 @@
-import { readNodeLocation } from "./node-config.js";
 import { assertVenueFirstSetupAllowed, isFirstSetupHostPath } from "@waitron/provisioning";
 import { lstatSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
@@ -33,6 +32,7 @@ import {
   readStandardSeriesIdTx,
   retireNodeSeriesTx,
   withTransaction,
+  venueLocationId,
   type Database,
   type NodeDatabase,
   type Transaction,
@@ -859,9 +859,9 @@ export async function resolveArtifactNode(
   entries: readonly ArchiveEntry[],
 ): Promise<ProvisionedNode> {
   const { node } = readArtifactIdentity(entries);
-  const locationId = await readNodeLocation(db, node.nodeId);
-  if (locationId === null) throw new AppError("restore.identity_unknown", { nodeId: node.nodeId });
-  return { ...node, locationId };
+  const [stored] = await db.select({ id: nodes.id }).from(nodes).where(eq(nodes.id, node.nodeId));
+  if (stored === undefined) throw new AppError("restore.identity_unknown", { nodeId: node.nodeId });
+  return { ...node, locationId: brandLocationId(await venueLocationId(db)) };
 }
 
 export async function readArtifactNode(

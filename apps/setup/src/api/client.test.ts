@@ -379,7 +379,7 @@ describe("SetupApi", () => {
   });
 
   it("rejects a refused bucket restore with the envelope's code, params and status", async () => {
-    const venue = { legalName: "Waitron SL", taxId: "89890001K", locationName: "Local" };
+    const venue = { legalName: "Waitron SL", taxId: "89890001K", venueName: "Local" };
     const fetchImpl = vi
       .fn()
       .mockResolvedValue(

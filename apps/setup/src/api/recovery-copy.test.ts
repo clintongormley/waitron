@@ -9,7 +9,7 @@ it("uploads the selected archive to preview without putting its key in the URL",
     nodeId: "saved-node",
     nodeRecoveryKeyName: "Amber Hill",
     taxpayer: { legalName: "Saved venue", taxId: "89890001K" },
-    locationName: "Saved location",
+    venueName: "Saved location",
   };
   const transport = vi.fn(async () => new Response(JSON.stringify(selected), { status: 200 }));
   const api = new SetupApi("", transport);

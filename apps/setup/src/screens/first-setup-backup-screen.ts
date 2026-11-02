@@ -667,7 +667,7 @@ export class FirstSetupBackupScreen extends LitElement {
                   <dt>${s.taxId}</dt>
                   <dd>${this.authenticated.preview.taxpayer.taxId}</dd>
                   <dd>${this.authenticated.preview.taxpayer.legalName}</dd>
-                  <dd>${this.authenticated.preview.locationName}</dd>
+                  <dd>${this.authenticated.preview.venueName}</dd>
                   <dt>${s.keyName}</dt>
                   <dd>${this.authenticated.preview.nodeRecoveryKeyName}</dd>
                   <dd>${this.authenticated.preview.createdAt}</dd>
