@@ -896,7 +896,7 @@ describe("saveSeasonWeeks", () => {
     expect(await stored(p)).toEqual(before);
   });
 
-  it("refuses a department or zone that is not this venue's with the writer's own code, writing nothing", async () => {
+  it("refuses an unknown department or zone with the writer's own code, writing nothing", async () => {
     const p = await painted();
     const before = await stored(p);
     const dinner = { periodId: p.dinner, startsAt: "20:00", endsAt: "23:00" };

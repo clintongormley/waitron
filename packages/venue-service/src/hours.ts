@@ -1,6 +1,5 @@
-import { and, eq } from "drizzle-orm";
-import { type Transaction } from "@waitron/db";
-import { readLocationClock, type LocationPlace } from "@waitron/reporting";
+import { eq } from "drizzle-orm";
+import { readVenueClock, type Transaction, type VenuePlace } from "@waitron/db";
 import type { BusinessDayClock } from "@waitron/shared";
 import { rangeDates } from "./hours-rules.js";
 import { type CalendarDay, type HolidayFact, type LocalDate } from "./hours-types.js";
@@ -25,7 +24,7 @@ export async function calendarDays(
   seasons?: readonly Season[],
   at?: Date,
 ): Promise<{ days: CalendarDay[]; seasonIdOn: ReadonlyMap<LocalDate, string | null> }> {
-  stored ??= await readLocationClock(tx, cfg.locationId);
+  stored ??= await readVenueClock(tx);
   // A business day's cutover never reads the zone (`cutoverAt`, @waitron/shared
   // business-day-clock.ts), so a venue whose zone cannot be read still has its days drawn.
   const clock = isReadableZone(stored.timeZone) ? stored : { ...stored, timeZone: "UTC" };
@@ -33,7 +32,7 @@ export async function calendarDays(
   const active = await tx
     .select({ id: departments.id })
     .from(departments)
-    .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)));
+    .where(eq(departments.active, true));
   const open = new Set<LocalDate>();
   const resolved = await resolveDepartmentsDays(
     tx,
@@ -78,7 +77,7 @@ export type HolidayReader = (
   cfg: VenueScope,
   from: LocalDate,
   to: LocalDate,
-  place?: LocationPlace,
+  place?: VenuePlace,
 ) => Promise<readonly HolidayFact[]>;
 
 async function readHolidays(

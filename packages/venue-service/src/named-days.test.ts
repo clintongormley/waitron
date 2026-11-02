@@ -155,14 +155,6 @@ describe("special-day occurrences in the Calendar", () => {
       { id: leap, date: "2028-02-29" },
     ]);
   });
-  it("ignores another venue's special days", async () => {
-    const f = await fixture();
-    const other = await fixture();
-    await special(other, "Christmas", [{ date: "2020-12-25", closedAllDay: true }], true);
-    expect(await read(f, "2027-12-25")).toMatchObject({
-      days: [{ date: "2027-12-25", specialDay: null, tone: "standard", closed: false }],
-    });
-  });
 });
 
 describe("departments and calendar follow special days", () => {

@@ -6,9 +6,15 @@ import {
   readBusinessDayScheduleStatus,
 } from "./business-day-schedule.js";
 import { and, asc, desc, eq, inArray, ne } from "drizzle-orm";
-import { catalogues, categories, floorZones, products, type Transaction } from "@waitron/db";
+import {
+  catalogues,
+  categories,
+  floorZones,
+  products,
+  readVenueClock,
+  type Transaction,
+} from "@waitron/db";
 import { categoryDetails, directIncludedMenus, loadSectionGraph } from "@waitron/catalogue";
-import { readLocationClock } from "@waitron/reporting";
 import { AppError, createLabelComparator, type BusinessDayClock } from "@waitron/shared";
 import { starterName, type StarterStaffLanguage } from "@waitron/country-packs";
 
@@ -112,7 +118,7 @@ export async function requirePeriod(tx: Transaction, cfg: VenueScope, periodId: 
     })
     .from(menuPeriods)
     .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
-    .where(and(eq(menuPeriods.id, periodId), eq(departments.locationId, cfg.locationId)));
+    .where(eq(menuPeriods.id, periodId));
   if (row === undefined) throw new AppError("menu_period.not_found", { periodId });
   await assertDepartment(tx, cfg, row.departmentId);
   return row;
@@ -147,13 +153,7 @@ export async function readDepartmentWeekReads(
   const activeRows = await tx
     .select({ id: departments.id })
     .from(departments)
-    .where(
-      and(
-        inArray(departments.id, ids),
-        eq(departments.locationId, cfg.locationId),
-        eq(departments.active, true),
-      ),
-    );
+    .where(and(inArray(departments.id, ids), eq(departments.active, true)));
   const periodRows = await tx
     .select({ id: menuPeriods.id, departmentId: menuPeriods.departmentId })
     .from(menuPeriods)
@@ -245,7 +245,7 @@ export async function resolveDepartmentService(
   prepared?: { clock: BusinessDayClock; plan?: DayPlan },
 ): Promise<DepartmentService> {
   await assertDepartment(tx, cfg, departmentId);
-  const clock = prepared?.clock ?? (await readLocationClock(tx, cfg.locationId));
+  const clock = prepared?.clock ?? (await readVenueClock(tx));
   const moment = serviceMomentAt(at, clock);
   const day = await departmentDay(tx, cfg, departmentId, moment, clock, prepared?.plan);
   const { periods, staff } = day;
@@ -474,7 +474,7 @@ export async function replaceMenuWeek(
   expectedClockRevision: number,
   options: { seasonId?: string } = {},
 ): Promise<void> {
-  const clock = await readLocationClock(tx, cfg.locationId);
+  const clock = await readVenueClock(tx);
   const inForce = inForceClock(clock, at);
   const staged = await stageMenuWeek(tx, cfg, departmentId, days, inForce, options.seasonId);
   await assertBusinessDayScheduleWrite(
@@ -590,7 +590,7 @@ function routingRowPlaces(folders: readonly Folder[]) {
  * zone (Every zone first); `periodId`'s alone when given. */
 export async function readRoutingUses(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   periodId?: string,
 ): Promise<Map<string, PeriodRoutingUse[]>> {
   const rows = await tx
@@ -608,12 +608,7 @@ export async function readRoutingUses(
     .innerJoin(routingCells, eq(routingCells.id, routingCellPeriods.cellId))
     .leftJoin(products, eq(products.id, routingCells.productId))
     .leftJoin(floorZones, eq(floorZones.id, routingCells.zoneId))
-    .where(
-      and(
-        eq(routingCells.locationId, cfg.locationId),
-        periodId === undefined ? undefined : eq(routingCellPeriods.periodId, periodId),
-      ),
-    );
+    .where(periodId === undefined ? undefined : eq(routingCellPeriods.periodId, periodId));
   if (rows.length === 0) return new Map();
   const folders = await tx
     .select({ id: categories.id, name: categories.name, parentId: categoryDetails.parentId })
@@ -671,16 +666,24 @@ export async function readRoutingUses(
 }
 
 /** The venue's active departments, the default first. */
-export async function readActiveDepartments(tx: Transaction, cfg: VenueScope) {
+export async function readActiveDepartments(
+  tx: Transaction,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
+  _cfg: VenueScope,
+) {
   return tx
     .select({ id: departments.id, name: departments.name, active: departments.active })
     .from(departments)
-    .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)))
+    .where(eq(departments.active, true))
     .orderBy(desc(departments.isDefault), asc(departments.name), asc(departments.id));
 }
 
 /** The menu periods of the venue's active departments. */
-export async function readActivePeriods(tx: Transaction, cfg: VenueScope) {
+export async function readActivePeriods(
+  tx: Transaction,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
+  _cfg: VenueScope,
+) {
   return tx
     .select({
       id: menuPeriods.id,
@@ -692,7 +695,7 @@ export async function readActivePeriods(tx: Transaction, cfg: VenueScope) {
     })
     .from(menuPeriods)
     .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
-    .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)))
+    .where(eq(departments.active, true))
     .orderBy(asc(menuPeriods.name), asc(menuPeriods.id));
 }
 
@@ -701,7 +704,7 @@ export async function readOpeningHoursModel(
   cfg: VenueScope,
   at: Date,
 ): Promise<OpeningHoursModel> {
-  const clock = await readLocationClock(tx, cfg.locationId);
+  const clock = await readVenueClock(tx);
   const moment = serviceMomentAt(at, clock);
   const status = await readBusinessDayScheduleStatus(tx, cfg, clock, at);
   const cutover =
@@ -712,7 +715,7 @@ export async function readOpeningHoursModel(
     .select({ periodId: menuPeriodStaffMenus.periodId, menuId: menuPeriodStaffMenus.menuId })
     .from(menuPeriodStaffMenus)
     .innerJoin(departments, eq(departments.id, menuPeriodStaffMenus.departmentId))
-    .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)))
+    .where(eq(departments.active, true))
     .orderBy(asc(menuPeriodStaffMenus.displayOrder), asc(menuPeriodStaffMenus.menuId));
   const seasonList = await readSeasons(tx, cfg);
   const currentSeasonId =

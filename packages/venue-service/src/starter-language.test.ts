@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CORE_MIGRATIONS, locations, withTransaction, type Database } from "@waitron/db";
@@ -74,16 +73,5 @@ describe("readStarterStaffLanguage", () => {
       .returning({ id: locations.id });
     const cfg = { locationId: brandLocationId(row!.id) };
     expect(await withTransaction(db, (tx) => readStarterStaffLanguage(tx, cfg))).toBe(expected);
-  });
-
-  it("answers en for a location that does not exist", async () => {
-    await seedTenant(db);
-    await db.insert(locations).values({
-      name: "Another venue",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Hospitality",
-    });
-    const cfg = { locationId: brandLocationId(randomUUID()) };
-    expect(await withTransaction(db, (tx) => readStarterStaffLanguage(tx, cfg))).toBe("en");
   });
 });

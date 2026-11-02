@@ -52,7 +52,7 @@ its import compares such a date with the others in its first year only (`validat
 ## Official dates follow your address; special days follow your venue
 
 `readAddress` and `readHolidays` in `packages/venue-service/src/holidays.ts` resolve the country
-from the taxpayer, the province from the pack's province list, and the city from the location.
+from the taxpayer, the province from the pack's province list, and the city from the venue.
 A missing or unknown province supplies no official facts. If the official calendar offers a
 territorial choice, choose it in the Year; until then, only facts certain for the whole province
 are shown. The 2026 territorial source notes remain in the archived sources README.

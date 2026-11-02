@@ -1,7 +1,11 @@
 import type { BusinessDayScheduleStatus } from "./service-day-context.js";
-import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
-import { floorZones, locationBusinessDaySettings, type Transaction } from "@waitron/db";
-import { readLocationClock } from "@waitron/reporting";
+import { asc, eq, isNotNull, sql } from "drizzle-orm";
+import {
+  floorZones,
+  locationBusinessDaySettings,
+  readVenueClock,
+  type Transaction,
+} from "@waitron/db";
 import {
   AppError,
   businessDayAt,
@@ -50,7 +54,7 @@ interface Placement {
 
 export async function businessDayClockConflicts(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   before: BusinessDayClock,
   candidate: BusinessDayClock,
   effectiveBusinessDay: string,
@@ -70,7 +74,7 @@ export async function businessDayClockConflicts(
     .innerJoin(departmentDays, eq(departmentDays.id, departmentDayRanges.dayId))
     .innerJoin(menuPeriods, eq(menuPeriods.id, departmentDayRanges.periodId))
     .innerJoin(departments, eq(departments.id, departmentDays.departmentId))
-    .where(and(eq(departments.locationId, cfg.locationId), isNotNull(departmentDays.seasonId)))
+    .where(isNotNull(departmentDays.seasonId))
     .orderBy(asc(departmentDayRanges.id));
   const seasonClosures = await tx
     .select({
@@ -88,7 +92,7 @@ export async function businessDayClockConflicts(
     .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneDays.zoneId))
     .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
     .innerJoin(floorZones, eq(floorZones.id, zoneDays.zoneId))
-    .where(and(eq(zoneServicePolicies.locationId, cfg.locationId), isNotNull(zoneDays.seasonId)))
+    .where(isNotNull(zoneDays.seasonId))
     .orderBy(asc(zoneDayRanges.id));
   const specialDayList = await tx
     .select({
@@ -100,7 +104,6 @@ export async function businessDayClockConflicts(
     })
     .from(specialDayDates)
     .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
-    .where(eq(specialDayDates.locationId, cfg.locationId))
     .orderBy(asc(specialDayDates.date), asc(specialDayDates.id));
   const specialPaint = await tx
     .select({
@@ -118,9 +121,7 @@ export async function businessDayClockConflicts(
     .innerJoin(departmentDays, eq(departmentDays.id, departmentDayRanges.dayId))
     .innerJoin(departments, eq(departments.id, departmentDays.departmentId))
     .leftJoin(menuPeriods, eq(menuPeriods.id, departmentDayRanges.periodId))
-    .where(
-      and(eq(departments.locationId, cfg.locationId), isNotNull(departmentDays.specialDayDateId)),
-    )
+    .where(isNotNull(departmentDays.specialDayDateId))
     .unionAll(
       tx
         .select({
@@ -139,12 +140,7 @@ export async function businessDayClockConflicts(
         .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneDays.zoneId))
         .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
         .innerJoin(floorZones, eq(floorZones.id, zoneDays.zoneId))
-        .where(
-          and(
-            eq(zoneServicePolicies.locationId, cfg.locationId),
-            isNotNull(zoneDays.specialDayDateId),
-          ),
-        ),
+        .where(isNotNull(zoneDays.specialDayDateId)),
     );
   const specialDayOf = new Map(specialDayList.map((day) => [day.dateId, day]));
   const specialPlacements: Placement[] = specialPaint.flatMap((row) => {
@@ -171,7 +167,6 @@ export async function businessDayClockConflicts(
   const seasonList = await tx
     .select({ id: seasons.id, name: seasons.name, startsOn: seasons.startsOn })
     .from(seasons)
-    .where(eq(seasons.locationId, cfg.locationId))
     .orderBy(asc(seasons.startsOn));
   const seasonById = new Map<string | null, { index: number; name: string }>(
     seasonList.map((season, index) => [season.id, { index, name: season.name }]),
@@ -286,7 +281,7 @@ export async function businessDayClockConflicts(
 /** A keep-open saved for the night before the change runs under the old changeover. */
 export async function keptOpenConflicts(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   before: BusinessDayClock,
   candidate: BusinessDayClock,
   effectiveBusinessDay: string,
@@ -304,12 +299,7 @@ export async function keptOpenConflicts(
     .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneExtensions.zoneId))
     .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
     .innerJoin(floorZones, eq(floorZones.id, zoneExtensions.zoneId))
-    .where(
-      and(
-        eq(zoneServicePolicies.locationId, cfg.locationId),
-        eq(zoneExtensions.businessDay, tonight),
-      ),
-    )
+    .where(eq(zoneExtensions.businessDay, tonight))
     .orderBy(asc(zoneExtensions.id));
   const oldCutover = cutoverForBusinessDay(before, tonight);
   const newEnd = serviceDayWallContext(candidate, tonight).endMinute;
@@ -361,7 +351,7 @@ export async function assertWaitingChangeFits(
   at: Date,
   acquiredClock?: BusinessDayClock,
 ): Promise<void> {
-  const clock = acquiredClock ?? (await readLocationClock(tx, cfg.locationId));
+  const clock = acquiredClock ?? (await readVenueClock(tx));
   let settled = settledClock(clock, at);
   const waiting = clock.cutoverChanges.filter((change) => !settled.cutoverChanges.includes(change));
   for (const change of waiting) {
@@ -402,12 +392,12 @@ export function sameScheduleRanges(
 
 export async function readBusinessDayScheduleRevision(
   tx: Transaction,
-  cfg: VenueScope,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
+  _cfg: VenueScope,
 ): Promise<number> {
   const [settings] = await tx
     .select({ revision: locationBusinessDaySettings.revision })
-    .from(locationBusinessDaySettings)
-    .where(eq(locationBusinessDaySettings.locationId, cfg.locationId));
+    .from(locationBusinessDaySettings);
   return settings?.revision ?? 0;
 }
 

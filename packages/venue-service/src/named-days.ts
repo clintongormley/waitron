@@ -1,7 +1,6 @@
 import { readBusinessDayScheduleStatus } from "./business-day-schedule.js";
 import { cutoverForBusinessDay } from "@waitron/shared";
-import type { Transaction } from "@waitron/db";
-import { readLocationClock } from "@waitron/reporting";
+import { readVenueClock, type Transaction } from "@waitron/db";
 import { venueLocalMoment } from "./hours-clock.js";
 import { readCalendarDays, type HolidayReader } from "./hours.js";
 import { readHolidays, readHolidayAreaModel } from "./holidays.js";
@@ -19,7 +18,7 @@ export async function readSpecialDaysModel(
   at: Date,
   holidays?: HolidayReader,
 ): Promise<SpecialDaysModel> {
-  const clock = await readLocationClock(tx, cfg.locationId);
+  const clock = await readVenueClock(tx);
   const civilDate = venueLocalMoment(at, clock)?.civilDate ?? null;
   const status = await readBusinessDayScheduleStatus(tx, cfg, clock, at);
   const read = await readHolidays(tx, cfg, from, to);

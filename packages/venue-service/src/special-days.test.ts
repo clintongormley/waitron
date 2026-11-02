@@ -16,6 +16,7 @@ import {
   withTransaction,
   type Database,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId as brandLocationId } from "@waitron/shared";
@@ -696,6 +697,27 @@ describe("saveSpecialDay", () => {
     expect(
       await db.select().from(specialDays).where(eq(specialDays.locationId, v.cfg.locationId)),
     ).toHaveLength(1);
+  });
+
+  // A1301: deleted with cfg in S18
+  it("stores a special day on the venue's row whatever location the scope names", async () => {
+    await venue();
+    const scope: VenueScope = { locationId: brandLocationId(randomUUID()) };
+    const saved = await scoped((tx) =>
+      saveSpecialDay(
+        tx,
+        scope,
+        null,
+        { name: "Scope-blind", repeatsYearly: false, dates: [] },
+        AT,
+        0,
+      ),
+    );
+    const [row] = await db
+      .select({ locationId: specialDays.locationId })
+      .from(specialDays)
+      .where(eq(specialDays.id, saved.id));
+    expect(row!.locationId).toBe(await scoped((tx) => venueLocationId(tx)));
   });
 
   it("refuses an id it does not hold", async () => {

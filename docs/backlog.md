@@ -1477,7 +1477,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   [Detail](backlog/service-periods.md#the-readiness-line-for-a-repeating-holiday-date-names-the-official-holiday)
 
 - **Once a stored holiday date's year has passed, each order's service-state read
-  (`readServiceDayPlan`) also reads the tenant, location and holiday area** to find that year's
+  (`readServiceDayPlan`) also reads the tenant, the venue and the holiday area** to find that year's
   holiday: about 100 µs of roughly 860 µs per call, measured over 2000 calls on a Madrid test venue.
   A cache that outlives the transaction is one way to remove it — left open by A506-5, #1603.
 
@@ -6537,12 +6537,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **A1301 S13 left an unread `locationId` in `readChoiceChangeableOrder`'s columns**
   (`apps/server/src/working-order.ts`): it selects `workingOrders.locationId`, and neither caller
   reads it. Delete it with S18's sweep of the `location_id` columns, or sooner.
-
-- **A1301 S8: reword the week routes' "another venue's" season refusal.**
-  `docs/developers/conventions-data.md` (the menu-week and closed-week routes paragraph) says an
-  unknown or another venue's season is refused `season.not_found`. The check still exists, in
-  `packages/venue-service/src/season-weeks.ts`, but S6 (#2394) deleted the tests that set up another
-  venue. When S8 removes that check, drop "or another venue's" from the sentence.
 
 - **The venue's menu routes are named unlike their neighbours.** S5 moved them to
   `/management-api/venue/…`, as the A1301 plan chose, while the other venue routes are one

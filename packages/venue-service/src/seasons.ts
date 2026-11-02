@@ -1,7 +1,6 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { starterName, type StarterStaffLanguage } from "@waitron/country-packs";
-import type { Transaction } from "@waitron/db";
-import { readLocationClock } from "@waitron/reporting";
+import { readVenueClock, venueLocationId, type Transaction } from "@waitron/db";
 import { AppError, CALENDAR_COLOURS, type CalendarColour, type ErrorParams } from "@waitron/shared";
 import {
   assertBusinessDayScheduleWrite,
@@ -36,12 +35,12 @@ const SEASON_COLUMNS = {
   colour: seasons.colour,
 };
 
-export async function readSeasons(tx: Transaction, cfg: VenueScope): Promise<Season[]> {
-  return tx
-    .select(SEASON_COLUMNS)
-    .from(seasons)
-    .where(eq(seasons.locationId, cfg.locationId))
-    .orderBy(asc(seasons.startsOn));
+export async function readSeasons(
+  tx: Transaction,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
+  _cfg: VenueScope,
+): Promise<Season[]> {
+  return tx.select(SEASON_COLUMNS).from(seasons).orderBy(asc(seasons.startsOn));
 }
 
 export async function ensureDefaultSeasons(
@@ -52,13 +51,14 @@ export async function ensureDefaultSeasons(
   const existing = await readSeasons(tx, cfg);
   if (existing.length > 0) return existing;
   const language = staffLanguage ?? (await readStarterStaffLanguage(tx, cfg));
+  const venueRowId = await venueLocationId(tx);
   const inserted = await tx
     .insert(seasons)
     .values(
       DEFAULT_SEASONS.map((season) => ({
         ...season,
         name: starterName(STARTER_SEASON_NAMES, season.name, language),
-        locationId: cfg.locationId,
+        locationId: venueRowId,
       })),
     )
     .returning(SEASON_COLUMNS);
@@ -148,7 +148,7 @@ export async function saveSeasons(
     changed.some((entry) => entry.startsOn !== stored.get(entry.id!)!.startsOn);
   await assertBusinessDayScheduleWrite(tx, cfg, timed ? "time" : "metadata", expectedClockRevision);
 
-  const clock = await readLocationClock(tx, cfg.locationId);
+  const clock = await readVenueClock(tx);
   const { dayCutover } = clock;
   const only = {
     seasonIds: [...new Set(added.map((entry) => entry.split))],
@@ -157,10 +157,7 @@ export async function saveSeasons(
   const departmentWeeks = await readDepartmentSeasonWeeks(tx, cfg, undefined, dayCutover, only);
   const zoneWeeks = await readZoneSeasonWeeks(tx, cfg, undefined, dayCutover, only);
 
-  if (deleted.size > 0)
-    await tx
-      .delete(seasons)
-      .where(and(eq(seasons.locationId, cfg.locationId), inArray(seasons.id, [...deleted])));
+  if (deleted.size > 0) await tx.delete(seasons).where(inArray(seasons.id, [...deleted]));
   // Two passes, so a swap of two names or two starts never meets a unique index mid-way. No
   // temporary name is trimmed and no temporary start passes `parseSeasonStart`; every writer stores
   // only values that are: this function, `ensureDefaultSeasons` (its starts and English names from
@@ -178,10 +175,12 @@ export async function saveSeasons(
       .where(eq(seasons.id, entry.id!));
   for (const { id, name, startsOn, colour } of changed)
     await tx.update(seasons).set({ name, startsOn, colour }).where(eq(seasons.id, id!));
+  let venueId: string | undefined;
+  const venueRowId = async () => (venueId ??= await venueLocationId(tx));
   for (const { name, startsOn, colour, split } of added) {
     const [row] = await tx
       .insert(seasons)
-      .values({ name, startsOn, colour, locationId: cfg.locationId })
+      .values({ name, startsOn, colour, locationId: await venueRowId() })
       .returning({ id: seasons.id });
     for (const [departmentId, weeks] of departmentWeeks) {
       const week = weeks.get(split);
@@ -209,7 +208,7 @@ export async function seasonDeleteImpact(
     .from(departmentDayRanges)
     .innerJoin(departmentDays, eq(departmentDays.id, departmentDayRanges.dayId))
     .innerJoin(departments, eq(departments.id, departmentDays.departmentId))
-    .where(and(eq(departmentDays.seasonId, id), eq(departments.locationId, cfg.locationId)))
+    .where(eq(departmentDays.seasonId, id))
     .orderBy(asc(departments.name), asc(departments.id));
   return { departments: painted };
 }

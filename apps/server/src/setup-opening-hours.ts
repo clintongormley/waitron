@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { Database } from "@waitron/db";
 import { locationId } from "@waitron/shared";
 import {
@@ -18,7 +18,7 @@ export async function readSetupOpeningHours(
   const [first] = await db
     .select({ id: departments.id })
     .from(departments)
-    .where(and(eq(departments.locationId, venue.locationId), eq(departments.isDefault, true)));
+    .where(eq(departments.isDefault, true));
   if (first === undefined) return undefined;
   const model = await readOpeningHoursModel(
     db,

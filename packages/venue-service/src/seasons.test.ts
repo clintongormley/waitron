@@ -75,7 +75,7 @@ const shape = (rows: { name: string; startsOn: string }[]) =>
   rows.map(({ name, startsOn }) => ({ name, startsOn }));
 
 describe("ensureDefaultSeasons", () => {
-  it("gives a location the four default seasons once, however often it runs", async () => {
+  it("gives the venue the four default seasons once, however often it runs", async () => {
     const locationId = await newLocation("Four seasons");
     const first = await withTransaction(db, (tx) => ensureDefaultSeasons(tx, { locationId }));
     const second = await withTransaction(db, (tx) => ensureDefaultSeasons(tx, { locationId }));
@@ -91,7 +91,7 @@ describe("ensureDefaultSeasons", () => {
     expect(stored).toEqual(first);
   });
 
-  it("gives a new location Spring green, Summer amber, Autumn orange and Winter blue", async () => {
+  it("gives a new venue Spring green, Summer amber, Autumn orange and Winter blue", async () => {
     const locationId = await newLocation("Coloured seasons");
     await withTransaction(db, (tx) => ensureDefaultSeasons(tx, { locationId }));
     const stored = await withTransaction(db, (tx) => readSeasons(tx, { locationId }));
@@ -103,7 +103,7 @@ describe("ensureDefaultSeasons", () => {
     ]);
   });
 
-  it("leaves a location that already has a season alone", async () => {
+  it("leaves a venue that already has a season alone", async () => {
     const locationId = await newLocation("One season");
     const [own] = await db
       .insert(seasons)
@@ -186,13 +186,22 @@ describe("ensureDefaultSeasons", () => {
     );
   });
 
-  it("reads only the asked location's seasons, ordered by start", async () => {
+  // A1301: deleted with cfg in S18
+  it("reads the venue's seasons whatever location the scope names", async () => {
+    const locationId = await newLocation("Scope-blind seasons");
+    const own = await withTransaction(db, (tx) => ensureDefaultSeasons(tx, { locationId }));
+    const read = await withTransaction(db, (tx) =>
+      readSeasons(tx, { locationId: brandLocationId(randomUUID()) }),
+    );
+    expect(own).toHaveLength(4);
+    expect(read).toEqual(own);
+  });
+
+  it("reads the venue's seasons, ordered by start", async () => {
     const mine = await newLocation("Mine");
-    const other = await newLocation("Other");
     await db.insert(seasons).values([
       { locationId: mine, name: "Late", startsOn: "10-01" },
       { locationId: mine, name: "Early", startsOn: "02-01" },
-      { locationId: other, name: "Theirs", startsOn: "05-01" },
     ]);
     const read = await withTransaction(db, (tx) => readSeasons(tx, { locationId: mine }));
     expect(shape(read)).toEqual([

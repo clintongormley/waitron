@@ -1,10 +1,10 @@
-import type { Transaction } from "@waitron/db";
-import type { BusinessDayClock } from "@waitron/shared";
 import {
-  readLocationClock,
-  readLocationClockAndPlace,
-  type LocationPlace,
-} from "@waitron/reporting";
+  readVenueClock,
+  readVenueClockAndPlace,
+  type Transaction,
+  type VenuePlace,
+} from "@waitron/db";
+import type { BusinessDayClock } from "@waitron/shared";
 import { readBusinessDayScheduleStatus } from "./business-day-schedule.js";
 import { calendarCutAnchor } from "./calendar-cut.js";
 import {
@@ -67,7 +67,7 @@ export async function readOpeningHoursYear(
 ): Promise<OpeningHoursYear> {
   const yearText = String(year).padStart(4, "0");
   const dates = rangeDates(`${yearText}-01-01`, `${yearText}-12-31`);
-  const clock = await readLocationClock(tx, cfg.locationId);
+  const clock = await readVenueClock(tx);
   const status = await readBusinessDayScheduleStatus(tx, cfg, clock, at);
   const { read: holidays, area, dates: holidayDates } = await readHolidayYear(tx, cfg, year);
   const seasons = await readSeasons(tx, cfg);
@@ -154,7 +154,7 @@ export interface CalendarMonthPlan {
   clock: BusinessDayClock;
   /** `clock`, with a zone this runtime cannot place read as UTC, as the days' changeovers are. */
   wallClock: BusinessDayClock;
-  place: LocationPlace;
+  place: VenuePlace;
   plan: DayPlan;
   /** The whole Monday-to-Sunday weeks that cover `month`. */
   days: readonly {
@@ -184,7 +184,7 @@ export async function readCalendarMonthPlan(
   const from = addDays(first, -((weekdayOf(first) + 6) % 7));
   const to = addDays(last, (7 - weekdayOf(last)) % 7);
   const dates = rangeDates(from, to);
-  const { clock: stored, place } = await readLocationClockAndPlace(tx, cfg.locationId);
+  const { clock: stored, place } = await readVenueClockAndPlace(tx);
   const clock = wallClock(stored);
   const seasons = await readSeasons(tx, cfg);
   const plan = await readDayPlan(tx, cfg, dates, seasons, place);
@@ -291,7 +291,7 @@ export async function readSeasonDays(
   dates: readonly LocalDate[],
 ): Promise<SeasonDays> {
   const days = [...new Set(dates)];
-  const clock = wallClock(await readLocationClock(tx, cfg.locationId));
+  const clock = wallClock(await readVenueClock(tx));
   const seasons = await readSeasons(tx, cfg);
   const plan: DayPlan = {
     seasonIdOn: new Map(days.map((day) => [day, seasonOn(seasons, day)?.id ?? null])),

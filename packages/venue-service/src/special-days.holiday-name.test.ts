@@ -515,13 +515,16 @@ describe("the readiness list warns when two special days come to share a date", 
     expect(await clashes(v, new Date("2028-06-01T10:00:00Z"))).toEqual([]);
   });
 
-  it("gives two holiday-following dates that meet to the earlier stored date", async () => {
+  it("gives two holiday-following dates that meet to the earlier stored date, the holiday's first", async () => {
     const v = await venue();
     const friday = await yearly(v, "Viernes Santo", "2026-04-03");
     const later = await rawDay(v, "Vigilia", "2026-04-04", true, "Viernes Santo");
     expect(await clashes(v, new Date("2026-06-01T10:00:00Z"))).toEqual([
       clash("2027-03-26", friday, "Viernes Santo", later, "Vigilia"),
     ]);
+  });
+
+  it("gives two holiday-following dates that meet to the earlier stored date, the other's first", async () => {
     const w = await venue();
     const first = await yearly(w, "Viernes Santo", "2026-04-03");
     const earlier = await rawDay(w, "Vigilia", "2026-04-02", true, "Viernes Santo");

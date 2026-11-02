@@ -1,7 +1,5 @@
-import { eq } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import { readVenueClock, type Transaction, type VenuePlace } from "@waitron/db";
 import type { PreparedServiceDay } from "@waitron/module";
-import { readLocationClock, type LocationPlace } from "@waitron/reporting";
 import { cutoverForBusinessDay, type BusinessDayClock } from "@waitron/shared";
 import { layerPaint, layerZonePaint } from "./day-paint.js";
 import { cutToOwnDay } from "./calendar-cut.js";
@@ -82,7 +80,7 @@ export async function readDayPlan(
   cfg: VenueScope,
   businessDays: readonly LocalDate[],
   venueSeasons?: readonly Season[],
-  place?: LocationPlace,
+  place?: VenuePlace,
 ): Promise<DayPlan> {
   const seasons = venueSeasons ?? (await readSeasons(tx, cfg));
   return {
@@ -92,7 +90,7 @@ export async function readDayPlan(
 }
 
 /** A special day's name, its dates, and the plan of its stored dates, each date standing for this
- *  special day alone, whatever another repeating one would put there; null when the location has
+ *  special day alone, whatever another repeating one would put there; null when the venue has
  *  no such special day. */
 export async function readSpecialDayPlan(
   tx: Transaction,
@@ -165,7 +163,7 @@ async function serviceDayAt(
   at: Date,
   firstDay: 0 | -1,
 ): Promise<ServiceDay> {
-  const clock = await readLocationClock(tx, cfg.locationId);
+  const clock = await readVenueClock(tx);
   const moment = serviceMomentAt(at, clock);
   if (moment === null) return { clock, at, moment };
   const days = firstDay === 0 ? [] : [addDays(moment.businessDay, firstDay)];
@@ -283,12 +281,9 @@ export async function resolveZoneClosedDays(
   if (zoneIds?.length === 0 || businessDays.length === 0) return resolved;
   const zones =
     zoneIds ??
-    (
-      await tx
-        .select({ zoneId: zoneServicePolicies.zoneId })
-        .from(zoneServicePolicies)
-        .where(eq(zoneServicePolicies.locationId, cfg.locationId))
-    ).map((row) => row.zoneId);
+    (await tx.select({ zoneId: zoneServicePolicies.zoneId }).from(zoneServicePolicies)).map(
+      (row) => row.zoneId,
+    );
   const plan = await planFor(tx, cfg, businessDays, given);
   const weeks = await readZoneSeasonWeeks(
     tx,

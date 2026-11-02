@@ -713,7 +713,7 @@ not check: the season-week, closed-week and special-day routes pass the check to
 
 ### Seasons and season weeks
 
-**2026-10-12, A506-1.** `seasons` holds a location's seasons, each a name and an `MM-DD` start;
+**2026-10-12, A506-1.** `seasons` holds the venue's seasons, each a name and an `MM-DD` start;
 `department_days` and `department_day_ranges` hold each department's week per season, and
 `zone_days` and `zone_day_ranges` each zone's closed times per season
 (`packages/venue-service/src/schema/seasons.ts`). A venue gets four seasons from
@@ -726,7 +726,7 @@ changes that season alone (`replaceMenuWeek` in `packages/venue-service/src/menu
 `replaceZoneClosedWeek` in `packages/venue-service/src/zone-closed-times.ts`). The two week routes
 (`PUT …/departments/:departmentId/menu-week`, `PUT …/zones/:zoneId/closed-week`,
 `packages/venue-service/src/routes.ts`) require `seasonId`: a missing or malformed one is refused
-`management.request_invalid`, an unknown or another venue's one `season.not_found` (404).
+`management.request_invalid`, an unknown one `season.not_found` (404).
 In-process callers that name no season, such as `placeOpenPeriod` (`menu-timetable.ts`), which gives a new
 department its first starter period (named "Open" in the staff language) at provisioning and
 whenever a department is created, and the demo
@@ -762,9 +762,9 @@ an add, a delete or a moved start is refused `hours.clock_changed` on a stale
 `expectedClockRevision` (`assertBusinessDayScheduleWrite`). Since 2026-10-18 (A788) such a call is
 not refused because a business-day start change is waiting: after writing, it checks the venue's
 hours as written against each waiting start and refuses `hours.clock_change_conflict` on a clash
-(`assertWaitingChangeFits`, `packages/venue-service/src/business-day-schedule.ts`); case "refuses
-adding a season while a stored range clashes, since the new season copies it, and adds one when
-none does" in `business-day-schedule.test.ts`. It is one transaction. Changed names and starts are written in two passes, first to temporary values no real season can
+(`assertWaitingChangeFits`, `packages/venue-service/src/business-day-schedule.ts`); cases "refuses
+adding a season while a stored range clashes, since the new season copies it" and "adds a season
+while a change waits when no stored range clashes" in `business-day-schedule.test.ts`. It is one transaction. Changed names and starts are written in two passes, first to temporary values no real season can
 hold, so a swap of two names or two starts never meets the unique indexes; ids are kept, so each
 season's weeks stay with it. A new season copies the weeks of the season that held its start
 before the call, read before any delete. It answers the venue's seasons by start.
