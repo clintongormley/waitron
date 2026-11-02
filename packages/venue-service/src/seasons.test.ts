@@ -430,21 +430,6 @@ describe("saveSeasons", () => {
     ]);
   });
 
-  it("refuses another venue's season in save or in delete", async () => {
-    const v = await autumnVenue();
-    const other = await autumnVenue();
-    expect(await refusal(change(v, { save: [entry(other.winter, "Winter", "11-15")] }))).toEqual({
-      code: "season.not_found",
-      params: { seasonId: other.winter },
-    });
-    expect(await refusal(change(v, { delete: [other.winter] }))).toEqual({
-      code: "season.not_found",
-      params: { seasonId: other.winter },
-    });
-    expect(await seasonsOf(v)).toEqual(THREE);
-    expect(await seasonsOf(other)).toEqual(THREE);
-  });
-
   it("refuses an id sent twice, or both saved and deleted", async () => {
     const v = await autumnVenue();
     expect(

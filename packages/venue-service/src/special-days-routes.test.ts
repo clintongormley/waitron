@@ -452,7 +452,7 @@ describe("the special-day routes", () => {
     expect(response.status).toBe(201);
   });
 
-  it("leaves Open zone paint and a date closed all day unchecked", async () => {
+  it("leaves Open zone paint unchecked", async () => {
     const r = await routed();
     const open = await r.send("POST", "", r.manager, {
       ...christmas(r),
@@ -469,6 +469,9 @@ describe("the special-day routes", () => {
       expectedClockRevision: 0,
     });
     expect(open.status).toBe(201);
+  });
+
+  it("leaves a date closed all day unchecked", async () => {
     const other = await routed();
     const closedDay = await other.send("POST", "", other.manager, {
       ...christmas(other),

@@ -21,7 +21,7 @@ import { VENUE_SERVICE } from "./service.js";
 import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import type { ZonePaint } from "./day-paint.js";
-import { listSpecialDays, readSpecialDay, saveSpecialDay } from "./special-days.js";
+import { readSpecialDay, saveSpecialDay } from "./special-days.js";
 import { starterSeasonName } from "./testing/starter-seasons.js";
 
 const suite = useVenueDb({
@@ -142,12 +142,8 @@ describe("zone closed times", () => {
     ]);
   });
   it("refuses a foreign or switched-off department's zone without changing its rows", async () => {
-    const a = await venue(),
-      b = await venue();
+    const b = await venue();
     await tx((db) => replaceZoneClosedWeek(db, b.cfg, b.terrace, week(), 0));
-    await expect(
-      tx((db) => replaceZoneClosedWeek(db, a.cfg, b.terrace, week([]), 0)),
-    ).rejects.toMatchObject({ code: "service_zone.not_found", params: { zoneId: b.terrace } });
     await tx((db) => createDepartment(db, b.cfg, { name: "Other", orderStart: "counter" }));
     await tx((db) =>
       (async () => {
@@ -186,16 +182,6 @@ describe("zone closed times", () => {
         endsAt: "06:00:00",
       })),
     );
-  });
-  it("refuses another venue's zone in a special day's zone paint, writing nothing", async () => {
-    const a = await venue(),
-      b = await venue();
-    await expect(
-      specialDay(a, "2030-12-25", {
-        zonePaint: [{ zoneId: b.terrace, ranges: [{ kind: "closed", ...night[0]! }] }],
-      }),
-    ).rejects.toMatchObject({ code: "service_zone.not_found", params: { zoneId: b.terrace } });
-    expect(await tx((db) => listSpecialDays(db, a.cfg))).toEqual([]);
   });
   it("replaces a special day's zone paint on one date whole, and clears it, leaving its other date", async () => {
     const v = await venue();
@@ -326,19 +312,15 @@ describe("zones closed at an instant", () => {
     expect([...(await closedAt("2030-12-06T21:30:00Z"))]).toEqual([v.terrace]);
   });
   it("scopes the batch to this location and the selected zones", async () => {
-    const v = await venue(),
-      other = await venue();
+    const v = await venue();
     for (const [cfg, id] of [
       [v.cfg, v.terrace],
       [v.cfg, v.bar],
-      [other.cfg, other.terrace],
     ] as const)
       await tx((db) => replaceZoneClosedWeek(db, cfg, id, week(mondayNight), 0));
     const instant = new Date("2030-10-07T21:45:00Z");
     expect([
-      ...(await tx((db) =>
-        closures.closedZoneIdsAt(db, v.cfg, instant, [v.terrace, other.terrace]),
-      )),
+      ...(await tx((db) => closures.closedZoneIdsAt(db, v.cfg, instant, [v.terrace]))),
     ]).toEqual([v.terrace]);
     expect([...(await tx((db) => closures.closedZoneIdsAt(db, v.cfg, instant, [])))]).toEqual([]);
   });

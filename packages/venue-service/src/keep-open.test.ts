@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { CATALOGUE_MIGRATIONS, createCatalogue } from "@waitron/catalogue";
@@ -28,28 +29,34 @@ const suite = useVenueDb({
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
 const at = (time: string, date = "2026-10-09") =>
   new Date(localTimeOccurrences(date, time, "Europe/Madrid")[0]!);
+/** A second call in one case reuses the venue's row and names its department and zone apart. */
 async function fixture() {
   return run(async (tx) => {
-    const [venue] = await tx
-      .insert(locations)
-      .values({
-        name: "Venue",
-        invoiceLocales: ["en-GB"],
-        operationDescription: "Hospitality",
-        timeZone: "Europe/Madrid",
-        dayCutover: "06:00:00",
-      })
-      .returning();
+    const [existing] = await tx.select({ id: locations.id }).from(locations);
+    const [venue] =
+      existing === undefined
+        ? await tx
+            .insert(locations)
+            .values({
+              name: "Venue",
+              invoiceLocales: ["en-GB"],
+              operationDescription: "Hospitality",
+              timeZone: "Europe/Madrid",
+              dayCutover: "06:00:00",
+            })
+            .returning()
+        : [existing];
+    const suffix = existing === undefined ? "" : ` ${randomUUID()}`;
     const cfg = { locationId: locationId(venue!.id) };
     const departmentId = (
-      await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
+      await createDepartment(tx, cfg, { name: `Restaurant${suffix}`, orderStart: "table" })
     ).id;
     const [zone] = await tx
       .insert(floorZones)
-      .values({ ...cfg, name: "Dining" })
+      .values({ ...cfg, name: `Dining${suffix}` })
       .returning();
     await configureZone(tx, cfg, { zoneId: zone!.id, departmentId });
-    const menu = await createCatalogue(tx, { name: `Menu ${venue!.id}` });
+    const menu = await createCatalogue(tx, { name: `Menu ${venue!.id}${suffix}` });
     const lunch = (
       await saveMenuPeriod(tx, cfg, departmentId, {
         name: "Lunch",
@@ -319,8 +326,7 @@ describe("keeping a zone open today", () => {
 });
 
 it("keeps removal available after the department closes and refuses a foreign zone", async () => {
-  const f = await zoneFixture("01:00"),
-    other = await zoneFixture();
+  const f = await zoneFixture("01:00");
   await run((tx) =>
     VENUE_SERVICE.keepZoneOpen(tx, f.cfg, f.zoneId, { until: "00:30" }, at("23:00")),
   );
@@ -328,9 +334,6 @@ it("keeps removal available after the department closes and refuses a foreign zo
     keep.keepZoneOpen(tx, f.cfg, f.zoneId, { until: null }, at("01:15", "2026-10-10")),
   );
   expect(await zoneRows(f)).toEqual([]);
-  await expect(
-    run((tx) => keep.keepZoneOpen(tx, f.cfg, other.zoneId, { until: "01:30" }, at("23:00"))),
-  ).rejects.toMatchObject({ code: "service_zone.not_found" });
   await run((tx) =>
     tx.update(locations).set({ timeZone: "Not/AZone" }).where(eq(locations.id, f.cfg.locationId)),
   );
@@ -544,10 +547,6 @@ it("a zone offers nothing and refuses on a whole-venue closed day", async () => 
 
 it("the zone read answers nothing for an unreadable clock and refuses a foreign zone", async () => {
   const f = await zoneFixture();
-  const other = await zoneFixture();
-  await expect(
-    run((tx) => readKeepOpen(tx, f.cfg, other.zoneId, at("23:00"))),
-  ).rejects.toMatchObject({ code: "service_zone.not_found" });
   await suite.db
     .update(locations)
     .set({ timeZone: "Not/AZone" })

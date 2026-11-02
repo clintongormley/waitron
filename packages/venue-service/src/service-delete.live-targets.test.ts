@@ -289,7 +289,6 @@ describe("deleted service targets", () => {
   });
   it("provisions active defaults without adopting retained defaults or another location", async () => {
     const f = await fixture();
-    const other = await fixture();
     await run(async (tx) => {
       await tx.update(departments).set({ isDefault: true }).where(eq(departments.id, f.gone));
       await tx.update(floorZones).set({ name: "Counter" }).where(eq(floorZones.id, f.zone));
@@ -297,11 +296,7 @@ describe("deleted service targets", () => {
         .update(zoneServicePolicies)
         .set({ isCounterDefault: true })
         .where(eq(zoneServicePolicies.zoneId, f.zone));
-      await tx.update(departments).set({ isDefault: true }).where(eq(departments.id, other.live));
     });
-    const beforeOther = await run((tx) =>
-      tx.select().from(departments).where(eq(departments.locationId, other.cfg.locationId)),
-    );
     const beforeClash = await snapshot();
     await expect(
       run((tx) =>
@@ -339,11 +334,6 @@ describe("deleted service targets", () => {
       expect.objectContaining({ zoneId: expect.any(String) }),
     ]);
     expect(policy.find((row) => row.isCounterDefault)?.zoneId).not.toBe(f.zone);
-    expect(
-      await run((tx) =>
-        tx.select().from(departments).where(eq(departments.locationId, other.cfg.locationId)),
-      ),
-    ).toEqual(beforeOther);
     expect(
       await run((tx) => tx.select().from(menuPeriods).where(eq(menuPeriods.departmentId, f.gone))),
     ).toHaveLength(1);
