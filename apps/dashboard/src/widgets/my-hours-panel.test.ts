@@ -93,7 +93,7 @@ async function openDay(el: MyHoursPanel) {
   await ready(el);
   el.shadowRoot!.querySelector("dashboard-hours-record")!.dispatchEvent(
     new CustomEvent("hours-day", {
-      detail: { date: "2026-01-05", locationId: "venue" },
+      detail: { date: "2026-01-05" },
       bubbles: true,
       composed: true,
     }),
@@ -300,9 +300,18 @@ it("makes one passive summary read on first entry rather than fetching it twice"
   await new Promise((r) => requestAnimationFrame(r));
   expect(paths.filter((p) => p.includes("/hours?"))).toHaveLength(1);
 });
+it("has no Location field and reads hours once the inbox arrives", async () => {
+  const { el, paths } = await mount();
+  await ready(el);
+  expect(el.shadowRoot!.querySelector('[name="hoursLocation"]')).toBeNull();
+  const inboxRead = paths.findIndex((p) => p.endsWith("/inbox"));
+  const hoursRead = paths.findIndex((p) => p.includes("/hours?"));
+  expect(inboxRead).toBeGreaterThanOrEqual(0);
+  expect(hoursRead).toBeGreaterThan(inboxRead);
+});
 it("month selections retire a held older summary", async () => {
   const held = deferred<unknown>();
-  const { el } = await mount({
+  const { el, paths } = await mount({
     fetch: async (url) => {
       if (url.endsWith("/inbox")) return inbox();
       const params = new URL(url, location.origin).searchParams;
@@ -321,6 +330,7 @@ it("month selections retire a held older summary", async () => {
     await el.updateComplete;
   };
   await change("hoursWindow", "month");
+  await vi.waitFor(() => expect(paths.some((p) => p.includes("kind=month"))).toBe(true));
   await change("hoursWindow", "week");
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("dashboard-hours-record")!.view?.selection.kind).toBe(

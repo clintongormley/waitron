@@ -69,7 +69,7 @@ async function mount(failedRefresh = false) {
   );
   panel.shadowRoot!.querySelector("dashboard-hours-record")!.dispatchEvent(
     new CustomEvent("hours-day", {
-      detail: { date: "2026-01-05", locationId: "venue" },
+      detail: { date: "2026-01-05" },
       bubbles: true,
       composed: true,
     }),

@@ -131,32 +131,24 @@ it("offers export again after Refresh recovers from a refused Hours read", async
   await expect.poll(() => m.root.querySelector("dashboard-hours-record")?.view).toBeTruthy();
   await expect.poll(() => m.root.querySelector("[data-export]")).toBeTruthy();
 });
-it.each(["inactive", "person", "location-removed", "disconnect"])(
-  "retires a held download after %s",
-  async (kind) => {
-    const m = await mount();
-    const dialog = await open(m.root);
-    const anchor = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-    const created = vi.spyOn(URL, "createObjectURL");
-    await click(dialog.shadowRoot!, "[data-test=export-download]");
-    await expect.poll(() => m.reads.some((r) => r.path.includes("/export?"))).toBe(true);
-    if (kind === "inactive") m.el.active = false;
-    else if (kind === "person") {
-      m.el.personId = "p2";
-      m.el.active = false;
-    } else if (kind === "disconnect") m.el.remove();
-    else {
-      m.data.locations = [];
-      m.liveData.invalidate([{ type: "time_entries" }]);
-      await expect.poll(() => m.root.querySelector("dashboard-hours-record")?.view).toBeFalsy();
-    }
-    await m.el.updateComplete;
-    m.file.resolve(new Blob(["retired record"]));
-    await new Promise(requestAnimationFrame);
-    expect(anchor).not.toHaveBeenCalled();
-    expect(created).not.toHaveBeenCalled();
-  },
-);
+it.each(["inactive", "person", "disconnect"])("retires a held download after %s", async (kind) => {
+  const m = await mount();
+  const dialog = await open(m.root);
+  const anchor = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  const created = vi.spyOn(URL, "createObjectURL");
+  await click(dialog.shadowRoot!, "[data-test=export-download]");
+  await expect.poll(() => m.reads.some((r) => r.path.includes("/export?"))).toBe(true);
+  if (kind === "inactive") m.el.active = false;
+  else if (kind === "person") {
+    m.el.personId = "p2";
+    m.el.active = false;
+  } else m.el.remove();
+  await m.el.updateComplete;
+  m.file.resolve(new Blob(["retired record"]));
+  await new Promise(requestAnimationFrame);
+  expect(anchor).not.toHaveBeenCalled();
+  expect(created).not.toHaveBeenCalled();
+});
 it.each(["light", "dark"] as const)(
   "own export attached to Hours has accessible controls in %s",
   async (theme) => {

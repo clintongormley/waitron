@@ -97,7 +97,7 @@ export class HoursRecord extends LitElement {
     if (this.blocked || !this.dayActionLabel || !this.view || !this.isConnected) return;
     this.dispatchEvent(
       new CustomEvent("hours-day", {
-        detail: { date, locationId: this.view.locationId },
+        detail: { date },
         bubbles: true,
         composed: true,
       }),
@@ -150,7 +150,7 @@ export class HoursRecord extends LitElement {
               ${view.pending.automaticEntryIds.map(() => html`<p>${t("attendance.automatic_counted")} ${t(this.manager ? "hours.awaiting_worker_acknowledgement" : "hours.awaiting_acknowledgement")}</p>`)}${view.pending.prompts.map(
                 (prompt) =>
                   html`<article>
-                    <h3>${prompt.locationName} · ${prompt.businessDay ?? ""}</h3>
+                    ${prompt.businessDay ? html`<h3>${prompt.businessDay}</h3>` : nothing}
                     <ul>
                       ${prompt.history.map(attendanceHistory)}
                     </ul>

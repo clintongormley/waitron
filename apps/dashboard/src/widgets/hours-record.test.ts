@@ -37,7 +37,7 @@ it("offers a calendar-day event only with a supplied action label", async () => 
   host.addEventListener("hours-day", (e) => seen.push(e as CustomEvent));
   await userEvent.click(el.shadowRoot!.querySelector('[data-fix="2026-01-06"]')!);
   expect(seen.map((e) => [e.detail, e.bubbles, e.composed])).toEqual([
-    [{ date: "2026-01-06", locationId: "venue" }, true, true],
+    [{ date: "2026-01-06" }, true, true],
   ]);
 });
 it("keeps pending outside the selected week and preserves480 until the server publishes540", async () => {
