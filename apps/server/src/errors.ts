@@ -156,6 +156,9 @@ declare module "@waitron/shared" {
      * read live.
      */
     "node.read_only": Record<string, never>;
+    /** The box is stepping down for a handover: it takes no new request beyond the few that
+     * report its state. */
+    "handover.stepping_down": Record<string, never>;
     /**
      * A node booting as primary found, by reconciling with its cloud peer, a higher-term membership
      * document that fences it, so it boots read-only rather than sell beside the promoted primary

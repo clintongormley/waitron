@@ -192,6 +192,7 @@ import {
 } from "./free-space-watch.js";
 import { mountNodeApi } from "./node-api.js";
 import { startRestricted } from "./restricted-start.js";
+import { createHandoverGate } from "./handover-gate.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import { deviceNoticeSources, devicePrinterNoticeSources } from "./box-staff-notices.js";
 import { clockStartUp, tillClockCheck } from "./clock-start-up.js";
@@ -1108,6 +1109,16 @@ async function bootServer(
   const build = applicationVersion(process.env);
   const health = createHealthState(now());
   const app = healthApp(health, now, { venueDir: config.venueDir });
+  // Ahead of every other middleware, so once a stepdown closes it nothing behind it runs. The two
+  // event streams stay open for as long as a screen is open, so counting them would hold every
+  // stepdown to its limit.
+  const handoverGate = createHandoverGate({
+    notCounted: (c) =>
+      c.req.method === "GET" &&
+      (c.req.path === "/management-api/events" ||
+        c.req.path === "/api/department-transfers/events"),
+  });
+  app.use("*", handoverGate.middleware);
   const normalSetupRequests = new Set<Promise<void>>();
   // Ahead of the gate below, so a running backup recovery is named rather than "not ready".
   let ownerWriteFence: MiddlewareHandler = (_c, next) => next();
