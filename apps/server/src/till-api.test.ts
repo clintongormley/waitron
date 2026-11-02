@@ -16,12 +16,19 @@ import {
   stationPrinters,
   tenantReceipts,
   ticketItems,
+  venueLocationId,
   withTransaction,
   writeNodeMembership,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import {
+  seedDevice,
+  seedKitchenStation,
+  seedNode,
+  seedTenant,
+  seedVenue,
+} from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   departments,
@@ -123,7 +130,7 @@ let ana: { id: string };
 // the value read back here, not a hardcoded one.
 let abel: { id: string };
 let venueTaxId: string;
-// The one product seeded into the counter location's DEFAULT catalogue.
+// The one product seeded into the venue's DEFAULT catalogue.
 let aguaProduct: { id: string; catalogueId: string };
 let eachUnit: {
   id: string;
@@ -138,7 +145,7 @@ let hiddenAguaOfferId: string;
 // An enrolled `till` device's cookie, which a happy-path place/sale call carries to reach the
 // route body.
 let tillDeviceCookie: string;
-// The device `openSession` opens Ana's shift on: at `cfg`'s location, allowed every capability.
+// The device `openSession` opens Ana's shift on: at the venue, allowed every capability.
 let sessionDeviceId: string;
 
 const suite = useVenueDb({
@@ -155,20 +162,22 @@ const suite = useVenueDb({
     );
     venueTaxId = tenant.rows[0]!.tax_id;
     // The products are authored under the BARE `es` key; `priceOrderLines` re-keys their
-    // descriptions to the location's `es-ES` before the working-order-line insert fires
+    // descriptions to the venue's `es-ES` before the working-order-line insert fires
     // `check_locales`, which demands the keys match EXACTLY.
-    const [loc] = await db
-      .insert(locations)
-      .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
-      .returning({ id: locations.id });
+    await seedVenue(db, {
+      name: "Counter",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Retail",
+    });
+    const venueId = await venueLocationId(db);
     // A default kitchen station so the place route's fire (placeOrder → fireLines) has a fallback.
     const defaultStationId = await seedKitchenStation(db, {
-      locationId: brandLocationId(loc!.id),
+      locationId: brandLocationId(venueId),
     });
     // A node the working-order routes need: `parkOrder`/`payWorkingOrder` write `working_orders.node_id`
     // (its FK `(node_id) → nodes(id)` requires a real row), and
     // `listHeldOrders` filters by it. `cfg.nodeId` names THIS row so every parked order is on-node.
-    const nodeId = await seedNode(db, brandLocationId(loc!.id));
+    const nodeId = await seedNode(db);
     // Ana's PIN is "5555"; anything else must not verify. Stored hashed via `hashPin`, never plain.
     const [person] = await db
       .insert(persons)
@@ -214,24 +223,24 @@ const suite = useVenueDb({
         const [department] = await tx
           .insert(departments)
           .values({
-            locationId: loc!.id,
+            locationId: venueId,
             name: "Restaurant",
             tradingName: "Restaurant",
           })
           .returning({ id: departments.id });
         const [zone] = await tx
           .insert(floorZones)
-          .values({ locationId: loc!.id, name: "Counter" })
+          .values({ locationId: venueId, name: "Counter" })
           .returning({ id: floorZones.id });
         await tx.execute(sql`
         insert into zone_service_policies
           (location_id, zone_id, department_id, is_counter_default)
-        values (${loc!.id}, ${zone!.id}, ${department!.id}, true)`);
+        values (${venueId}, ${zone!.id}, ${department!.id}, true)`);
         await tx.execute(sql`
         insert into department_sale_policies (department_id, order_start) values (${department!.id}, 'counter')`);
         await tx.execute(sql`
         insert into zone_sale_policies (zone_id, order_start) values (${zone!.id}, 'counter')`);
-        const venueScope = { locationId: brandLocationId(loc!.id) };
+        const venueScope = { locationId: brandLocationId(venueId) };
         await offerMenuThroughZone(tx, venueScope, zone!.id, cat.id, { makeDefault: true });
         const offer = await addProductToMenu(tx, {
           menuId: cat.id,
@@ -269,7 +278,7 @@ const suite = useVenueDb({
     counterZoneId = zoneId;
     aguaOfferId = offerId;
     hiddenAguaOfferId = hiddenOfferId;
-    cfg = makeCfg(loc!.id, nodeId);
+    cfg = makeCfg(venueId, nodeId);
     sessionDeviceId = await seedSessionDevice(db, cfg);
   },
 });
@@ -1145,10 +1154,7 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
   });
 
   it("an action the device's profile does not allow is still refused", async () => {
-    const { deviceId } = await seedDevice(suite.db, {
-      locationId: cfg.locationId,
-      capabilities: ["take-cash"],
-    });
+    const { deviceId } = await seedDevice(suite.db, { capabilities: ["take-cash"] });
     const token = await openSession(suite.db, deviceId);
     const db = stampRefused(new AppError("storage.disk_full", {}));
     const res = await guardApp(db, { action: "take-orders" }).request("/whoami", {
@@ -1352,7 +1358,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     expect(body).toEqual({
       locale: "es-ES",
       clockingAvailable: false,
-      // The RECEIPT locale — the location's first `invoice_locales` entry, DISTINCT from the UI `locale`
+      // The RECEIPT locale — the venue's first `invoice_locales` entry, DISTINCT from the UI `locale`
       // above (both es-ES for this ES venue, but sourced from different fields — the decoupling test below
       // drives them apart).
       invoiceLocale: "es-ES",
@@ -1361,7 +1367,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       onboardingIntent: "prepare",
       venueName: "Test SL",
       nif: venueTaxId,
-      // The venue's ACTIVE kitchen courses (KDS-2 §5b) — the seeded location has none, so `[]` reaches
+      // The venue's ACTIVE kitchen courses (KDS-2 §5b) — the seeded venue has none, so `[]` reaches
       // the wire (the tab course picker offers nothing then).
       courses: [],
       // Cookieless: no device → no reader to resolve → `none`; the venue has no readers configured.
@@ -1434,14 +1440,14 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     }
   });
 
-  it("GET /api/till DECOUPLES the UI locale (venueLocale) from the receipt invoiceLocale (the location's language)", async () => {
-    // Drive the location's saved receipt language, `cfg.locale` and `venueLocale` (display) APART to
+  it("GET /api/till DECOUPLES the UI locale (venueLocale) from the receipt invoiceLocale (the venue's receipt language)", async () => {
+    // Drive the venue's saved receipt language, `cfg.locale` and `venueLocale` (display) APART to
     // prove the route reads each from its own source: the wire `locale` (UI) must follow
     // `venueLocale`, and `invoiceLocale` (the printed legal receipt's language) must follow the
-    // location's first `invoice_locales` entry — NEVER the venue default.
+    // venue's first `invoice_locales` entry — NEVER the UI's venue default.
     // A supported `ca-ES` is dropped by the UI venue-default derivation to `es-ES`, so binding the
     // receipt to `venueLocale` would flip a Catalan receipt to Spanish. Restored in `finally`, as the
-    // location is shared.
+    // venue row is shared.
     await suite.db.execute(
       sql`update locations set invoice_locales = '["ca-ES"]' where id = ${cfg.locationId}`,
     );
@@ -1625,7 +1631,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
   it("GET /api/till echoes the venue's ACTIVE kitchen courses in display order (KDS-2 §5b)", async () => {
     // Seed two courses out of display order, plus a deactivated one, to prove the boot read
     // returns the ACTIVE ones sorted by `display_order` (the coursing sequence the tab picker
-    // offers) and drops the retired one. Cleaned up in `finally` so the shared-location default `[]`
+    // offers) and drops the retired one. Cleaned up in `finally` so the shared venue's default `[]`
     // case stays order-independent.
     await suite.db.insert(kitchenCourses).values([
       { locationId: cfg.locationId, name: "Postres", displayOrder: 2, active: true },
@@ -2160,7 +2166,7 @@ describe("zone-offer catalogue routes", () => {
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
   });
 
-  it("reads the location's accessible menus and product values", async () => {
+  it("reads the venue's accessible menus and product values", async () => {
     const catalogue = await withTransaction(suite.db, async (tx) => ({
       menus: await listAccessibleCatalogues(tx),
       products: (await listAvailableProducts(tx)).products,

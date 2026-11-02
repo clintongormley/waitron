@@ -90,7 +90,7 @@ describe("signed-in own till clock routes", () => {
   });
 
   it("lets break and out writes close a shift begun on another node", async () => {
-    const otherNode = await seedNode(suite.db, venue.cfg.locationId);
+    const otherNode = await seedNode(suite.db);
     const backend = new WorkforceBackend();
     await withTransaction(suite.db, (tx) =>
       backend.clockIn(tx, {

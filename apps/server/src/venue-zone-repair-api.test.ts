@@ -8,9 +8,9 @@ import { serve } from "@hono/node-server";
 import { once } from "node:events";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, locations, tenants, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, tenants, venueLocationId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import {
@@ -19,7 +19,6 @@ import {
   managementSessions,
   startManagementSession,
 } from "@waitron/identity";
-import { locationId } from "@waitron/shared";
 import * as requestKit from "@waitron/server-kit";
 import { mountVenueZoneRepairApi } from "./venue-zone-repair-api.js";
 import { TradingAdmission } from "./trading-admission.js";
@@ -46,19 +45,15 @@ let restart = vi.fn<() => void>();
 let outgoing: ServerResponse;
 let logs: unknown[];
 beforeEach(async () => {
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Counter",
-      province: "Madrid",
-      timeZone: RAW,
-      dayCutover: "06:00:00",
-      invoiceLocales: ["en-GB"],
-      operationDescription: "Restaurant service",
-    })
-    .returning();
-  scope = { locationId: location!.id, nodeId: await seedNode(suite.db, locationId(location!.id)) };
+  await seedVenue(suite.db, {
+    name: "Counter",
+    province: "Madrid",
+    timeZone: RAW,
+    dayCutover: "06:00:00",
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Restaurant service",
+  });
+  scope = { locationId: await venueLocationId(suite.db), nodeId: await seedNode(suite.db) };
   const [person] = await suite.db
     .insert(persons)
     .values({ displayName: "Manager", role: "manager" })

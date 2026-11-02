@@ -30,7 +30,6 @@ import {
   allocateInvoiceNumber,
   drawerOpens,
   invoiceSeries,
-  nodes,
   parties,
   printJobs,
   sales,
@@ -90,6 +89,7 @@ import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { seedNode } from "@waitron/db/testing/seed.js";
 import {
   seedSessionDevice,
   deviceRequestCfg,
@@ -244,15 +244,12 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
   };
 }
 
-async function anotherNodeSeries(cfg: DeviceRequestConfig): Promise<void> {
+async function anotherNodeSeries(): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
-    const [other] = await tx
-      .insert(nodes)
-      .values({ locationId: cfg.locationId, name: "Other box" })
-      .returning();
+    const other = await seedNode(tx);
     await tx
       .insert(invoiceSeries)
-      .values({ nodeId: other!.id, code: "OTHER-P999999", purpose: "standard", nextNumber: 99 });
+      .values({ nodeId: other, code: "OTHER-P999999", purpose: "standard", nextNumber: 99 });
   });
 }
 
@@ -920,15 +917,7 @@ describe("walk-up invoice preparation", () => {
     "refuses a %s full series during preparation and rolls back the basket",
     async (condition) => {
       const { cfg, cafe } = await setupVenue();
-      const other =
-        condition === "other-node"
-          ? (
-              await suite.db
-                .insert(nodes)
-                .values({ locationId: cfg.locationId, name: "Other node" })
-                .returning()
-            )[0]
-          : undefined;
+      const other = condition === "other-node" ? { id: await seedNode(suite.db) } : undefined;
       const full = and(eq(invoiceSeries.nodeId, cfg.nodeId), eq(invoiceSeries.purpose, "full"));
       if (condition === "missing") await suite.db.delete(invoiceSeries).where(full);
       else
@@ -1249,7 +1238,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
 
   it("reads the active series after a card capture that overlaps a series switch", async () => {
     const { cfg, cafe, seriesId } = await setupVenue();
-    await anotherNodeSeries(cfg);
+    await anotherNodeSeries();
     const { deps } = integratedDeps(cfg, suite.db);
     const provider = deps.provider;
     let activeId: string | undefined;
@@ -1299,7 +1288,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
 
   it("issues on a newly active series and replays that invoice after a later switch", async () => {
     const { cfg, cafe, seriesId } = await setupVenue();
-    await anotherNodeSeries(cfg);
+    await anotherNodeSeries();
     const id = randomUUID();
     const [fresh] = await withTransaction(suite.db, async (tx) => {
       await tx

@@ -3,9 +3,9 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { locations, nowIso, parties, partyTables, withTransaction } from "@waitron/db";
+import { nowIso, parties, partyTables, venueLocationId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashSessionToken, persons, sessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { locationId, nodeId } from "@waitron/shared";
@@ -27,19 +27,14 @@ let stepId: string;
 let dueAt: string;
 
 beforeEach(async () => {
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Dining room",
-      invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
-    })
-    .returning();
-  const locationKey = locationId(location!.id);
+  await seedVenue(suite.db, {
+    name: "Dining room",
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Hospitality",
+  });
   cfg = {
-    locationId: locationKey,
-    nodeId: nodeId(await seedNode(suite.db, locationKey)),
+    locationId: locationId(await venueLocationId(suite.db)),
+    nodeId: nodeId(await seedNode(suite.db)),
     locale: "en-GB",
     invoiceLocales: ["en-GB"],
     tipsEnabled: false,
@@ -50,10 +45,7 @@ beforeEach(async () => {
     .values({ displayName: "Ana", role: "staff" })
     .returning();
   personId = person!.id;
-  const { deviceId } = await seedDevice(suite.db, {
-    locationId: locationKey,
-    capabilities: ["take-orders"],
-  });
+  const { deviceId } = await seedDevice(suite.db, { capabilities: ["take-orders"] });
   token = randomUUID();
   await suite.db
     .insert(sessions)

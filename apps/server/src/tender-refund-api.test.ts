@@ -14,10 +14,10 @@ import {
   tenders,
   tenderRefunds,
   printJobs,
-  workingOrders,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { deviceProfileAdmissionPersons, persons, sessions } from "@waitron/identity";
 import { payments } from "@waitron/payments";
@@ -66,12 +66,11 @@ async function target(method: "cash" | "card" = "cash", manual = false) {
     tenderId = randomUUID(),
     orderId = randomUUID();
   await inTx(venue, async (tx) => {
-    await tx.insert(workingOrders).values({
+    await seedWorkingOrder(tx, {
       id: orderId,
       source: "device",
       deviceId: venue.deviceId,
       nodeId: venue.cfg.nodeId,
-      locationId: venue.cfg.locationId,
       orderNumber: ++sequence,
     });
     await tx.insert(sales).values({

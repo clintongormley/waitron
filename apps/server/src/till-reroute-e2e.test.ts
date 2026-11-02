@@ -12,7 +12,6 @@ import {
   openVenueDatabase,
   stampDeployment,
   tenants,
-  workingOrders,
   type Database,
   type VenueDatabase,
 } from "@waitron/db";
@@ -20,6 +19,7 @@ import { setNodeMode, setSingletonRole, writeMirrorLink } from "@waitron/node-db
 import { hashPin, hashSecret, persons } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { serverFixture } from "./testing/server-fixture.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
@@ -151,7 +151,7 @@ let migrationsRoot: string;
  * PIN 5555 and the till device, on one venue directory. The device's `token_hash` is
  * `hashSecret(DEVICE_TOKEN)`, so the `waitron_device=<id>.<token>` cookie built above authenticates
  * against this row on whichever node holds it. */
-async function seedVenue(db: Database): Promise<void> {
+async function seedVenueWithNodesAndTill(db: Database): Promise<void> {
   beforeServerStarts();
   // Every conflict target is the primary key: each row here is keyed by the id it supplies, and an
   // untargeted form absorbs EVERY unique conflict rather than the one the caller means.
@@ -271,8 +271,8 @@ beforeAll(async () => {
   a = storeA.venue;
   b = storeB.venue;
 
-  await seedVenue(a);
-  await seedVenue(b);
+  await seedVenueWithNodesAndTill(a);
+  await seedVenueWithNodesAndTill(b);
 
   // B is the mirror: stamp it, flip mode='mirror' (co-sets singleton_role='secondary'), and seed the
   // node.db `node_mirror_link` row a mirror boot requires. A gets no `node_mode` row, so it reads
@@ -292,18 +292,14 @@ beforeAll(async () => {
   });
 
   // The inherited tab: an open working order in B's database tagged with the DEAD node's id (A's).
-  await b
-    .insert(workingOrders)
-    .values({
-      id: TAB_ID,
-      source: "dashboard",
-      deviceId: null,
-      locationId: LOCATION,
-      nodeId: NODE_A,
-      orderNumber: 1,
-      status: "open",
-    })
-    .onConflictDoNothing({ target: workingOrders.id });
+  await seedWorkingOrder(b, {
+    id: TAB_ID,
+    source: "dashboard",
+    deviceId: null,
+    nodeId: NODE_A,
+    orderNumber: 1,
+    status: "open",
+  });
 }, 180_000);
 
 afterAll(async () => {

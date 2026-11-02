@@ -8,7 +8,6 @@ import { markIncidentHandled } from "@waitron/core";
 import {
   deviceMadeHereStations,
   deviceProfiles,
-  devices,
   kitchenStations,
   incidents,
   locations,
@@ -24,6 +23,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
@@ -917,16 +917,11 @@ describe("release", () => {
         .insert(deviceProfiles)
         .values({ name: `Bar till ${randomUUID()}`, formFactor: "till", capabilities: [] })
         .returning({ id: deviceProfiles.id });
-      const [device] = await tx
-        .insert(devices)
-        .values({
-          locationId: venue.cfg.locationId,
-          deviceProfileId: profile!.id,
-          label: `Bar till ${randomUUID()}`,
-          tokenHash: randomUUID(),
-        })
-        .returning({ id: devices.id });
-      await tx.insert(deviceMadeHereStations).values({ deviceId: device!.id, stationId: bar });
+      const { deviceId: tillId } = await seedDevice(tx, {
+        profileId: profile!.id,
+        label: `Bar till ${randomUUID()}`,
+      });
+      await tx.insert(deviceMadeHereStations).values({ deviceId: tillId, stationId: bar });
       await setStationToday(tx, venue.cfg, grill, null, new Date("2026-10-02T18:45:00.000Z"));
       const cell = await routeProduct(tx, venue.productId("Vino"), {
         kind: "station",
@@ -944,7 +939,7 @@ describe("release", () => {
           printerId: printer.id,
         });
       await setStationPrinting(tx, { printHeldWork: true });
-      return { deviceId: device!.id, cell, passPrinter: printer.id };
+      return { deviceId: tillId, cell, passPrinter: printer.id };
     });
     const tableId = await venue.table(`M-${randomUUID().slice(0, 8)}`);
     const { partyId, tabId } = await seat(venue, tableId);
@@ -2695,17 +2690,12 @@ describe("moveDishesToStation", () => {
           .insert(deviceProfiles)
           .values({ name: `Bar till ${randomUUID()}`, formFactor: "till", capabilities: [] })
           .returning({ id: deviceProfiles.id });
-        const [device] = await tx
-          .insert(devices)
-          .values({
-            locationId: venue.cfg.locationId,
-            deviceProfileId: profile!.id,
-            label: `Bar till ${randomUUID()}`,
-            tokenHash: randomUUID(),
-          })
-          .returning({ id: devices.id });
-        await tx.insert(deviceMadeHereStations).values({ deviceId: device!.id, stationId: bar });
-        return device!.id;
+        const { deviceId: tillId } = await seedDevice(tx, {
+          profileId: profile!.id,
+          label: `Bar till ${randomUUID()}`,
+        });
+        await tx.insert(deviceMadeHereStations).values({ deviceId: tillId, stationId: bar });
+        return tillId;
       });
       const tableId = await venue.table(`D-${randomUUID().slice(0, 8)}`);
       const { partyId, tabId } = await seat(venue, tableId);

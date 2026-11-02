@@ -1,9 +1,9 @@
 import { makeRuleset } from "@waitron/workforce/test/fixtures.js";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, venueLocationId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
 import {
   WORKFORCE_MIGRATIONS,
@@ -30,19 +30,15 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    await seedTenant(db);
     const seeded = await withTransaction(db, async (tx) => {
+      await seedVenue(tx, {
+        name: "Main",
+        timeZone: "Europe/Madrid",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Sale on premises",
+      });
       // Through the table definitions, not raw SQL: every `id` here is a NOT NULL `$defaultFn`
       // generator a raw insert never reaches.
-      const [loc] = await tx
-        .insert(locations)
-        .values({
-          name: "Main",
-          timeZone: "Europe/Madrid",
-          invoiceLocales: ["es-ES"],
-          operationDescription: "Sale on premises",
-        })
-        .returning({ id: locations.id });
       const [mgr] = await tx
         .insert(persons)
         .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
@@ -54,7 +50,7 @@ const suite = useVenueDb({
       const mSes = await startManagementSession(tx, { personId: mgr!.id });
       const sSes = await startManagementSession(tx, { personId: stf!.id });
       return {
-        locationId: loc!.id,
+        locationId: await venueLocationId(tx),
         personId: mgr!.id,
         mSid: mSes.token,
         sSid: sSes.token,

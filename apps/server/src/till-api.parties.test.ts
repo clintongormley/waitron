@@ -12,17 +12,17 @@ import { describe, expect, it } from "vitest";
 import {
   diningTables,
   invoiceSeries,
-  locations,
   sales,
   parties,
   serviceCommands,
+  venueLocationId,
   withTransaction,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
@@ -56,12 +56,12 @@ const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
-    await seedTenant(db);
-    const [loc] = await db
-      .insert(locations)
-      .values({ name: "Sala", invoiceLocales: ["es-ES"], operationDescription: "Restaurante" })
-      .returning({ id: locations.id });
-    const nodeId = await seedNode(db, brandLocationId(loc!.id));
+    await seedVenue(db, {
+      name: "Sala",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Restaurante",
+    });
+    const nodeId = await seedNode(db);
     const [person] = await db
       .insert(persons)
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
@@ -69,7 +69,7 @@ const suite = useVenueDb({
     ana = { id: person!.id };
     cfg = {
       nodeId: brandNodeId(nodeId),
-      locationId: brandLocationId(loc!.id),
+      locationId: brandLocationId(await venueLocationId(db)),
       locale: "es-ES",
       invoiceLocales: ["es-ES"],
       tipsEnabled: false,

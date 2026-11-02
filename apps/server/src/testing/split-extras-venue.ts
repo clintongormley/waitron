@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { locations, workingOrderLines, withTransaction } from "@waitron/db";
+import { venueLocationId, workingOrderLines, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -41,20 +41,14 @@ export interface Venue {
 
 /** A fresh location, till, node and assigned catalogue, returning the till's config. */
 export async function setupVenue(): Promise<Venue> {
-  await seedTenant(db);
   await seedLegacySellingUnits(db);
-  // Inserted through the table definitions, not as raw SQL: the ids and `created_at` come from
-  // `$defaultFn` generators, which a raw insert never reaches.
-  const [loc] = await db
-    .insert(locations)
-    .values({
-      name: "Main bar",
-      invoiceLocales: [LOCALE],
-      operationDescription: "Venta en establecimiento",
-    })
-    .returning({ id: locations.id });
-  const locationId = loc!.id;
-  const nodeId = await seedNode(db, brandLocationId(locationId));
+  await seedVenue(db, {
+    name: "Main bar",
+    invoiceLocales: [LOCALE],
+    operationDescription: "Venta en establecimiento",
+  });
+  const locationId = await venueLocationId(db);
+  const nodeId = await seedNode(db);
   const catalogueId = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: `Split extras menu ${locationId}` });
     await assignCatalogueToVenue(tx, cat.id);

@@ -18,13 +18,13 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   diningTables,
   tableInService,
-  locations,
   nowIso,
   printJobs,
   ticketItems,
   parties,
   withTransaction,
   workingOrderLines,
+  venueLocationId,
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -32,7 +32,12 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { departments, listStationNotices } from "@waitron/venue-service";
 import { setChangesAfterSending } from "./testing/changes-after-sending.js";
-import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import {
+  seedKitchenStation,
+  seedNode,
+  seedVenue,
+  seedWorkingOrder,
+} from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -48,7 +53,7 @@ import {
 } from "@waitron/catalogue";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceRequestConfig, OriginConfig, TradingContext } from "./trading-context.js";
-import { dashboardOrderAt, deviceRequestCfg } from "./testing/session-device.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -103,21 +108,15 @@ interface Seeded {
 }
 
 async function setupVenue(): Promise<Seeded> {
-  await seedTenant(db);
+  await seedVenue(db, {
+    name: "Barra",
+    invoiceLocales: [LOCALE],
+    operationDescription: "Venta en establecimiento",
+  });
   await seedLegacySellingUnits(db);
-  // Through the table definitions: `locations.id` is a `$defaultFn` generator,
-  // which a raw insert does not reach.
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: "Barra",
-      invoiceLocales: [LOCALE],
-      operationDescription: "Venta en establecimiento",
-    })
-    .returning({ id: locations.id });
-  const locationId = location!.id;
+  const locationId = await venueLocationId(db);
   await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
-  const nodeId = await seedNode(db, brandLocationId(locationId));
+  const nodeId = await seedNode(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),
     locationId: brandLocationId(locationId),
@@ -306,10 +305,10 @@ describe("openTab", () => {
 
 /** An open walk-up order of no party and no delivery table. */
 async function bareOpenOrder(cfg: OriginConfig, id: string): Promise<void> {
-  // Through the table definition: `working_orders.opened_at` is a `$defaultFn` generator.
-  await db.insert(workingOrders).values({
+  await seedWorkingOrder(db, {
     id,
-    ...dashboardOrderAt(cfg.locationId),
+    source: "dashboard",
+    deviceId: null,
     nodeId: cfg.nodeId,
     orderNumber: 999,
     status: "open",

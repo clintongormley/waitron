@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { locations, withTransaction, workingOrderLines } from "@waitron/db";
+import { venueLocationId, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -63,19 +63,14 @@ interface Seeded {
 }
 
 async function setupVenue(): Promise<Seeded> {
-  await seedTenant(db);
-  await seedLegacySellingUnits(db);
-  // Through the table definitions rather than raw SQL: `invoice_locales` is a JSON array in a text
-  // column on this engine (`labelList`, packages/db/src/schema/columns.ts), so there is no array
-  // constructor to write, and `id` is a `$defaultFn` a raw insert would never reach.
-  const locationId = randomUUID();
-  await db.insert(locations).values({
-    id: locationId,
+  await seedVenue(db, {
     name: "Barra",
     invoiceLocales: [LOCALE],
     operationDescription: "Venta en establecimiento",
   });
-  const nodeId = await seedNode(db, brandLocationId(locationId));
+  await seedLegacySellingUnits(db);
+  const locationId = await venueLocationId(db);
+  const nodeId = await seedNode(db);
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),

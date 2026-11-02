@@ -4,12 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { incidents, locations, type Database } from "@waitron/db";
+import { incidents, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { BACKUP_ROOM_START_DELETED_FILE } from "@waitron/provisioning";
-import { AppError, locationId as brandLocationId, type NodeId } from "@waitron/shared";
+import { AppError, type NodeId } from "@waitron/shared";
 import { createBackupRoomHooks } from "./backup-deletion-alert.js";
 import type { VenueDbIdentity } from "./backup-room-note.js";
 import type { Logger } from "./logger.js";
@@ -40,19 +40,15 @@ afterEach(() => rm(root, { recursive: true, force: true }));
 const recordPath = () => join(stateDir, BACKUP_ROOM_START_DELETED_FILE);
 const AT = "2026-10-29T03:00:00.000Z";
 
-async function seedVenue(): Promise<NodeId> {
-  await seedTenant(db);
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: "Sala",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
-      timeZone: "Europe/Madrid",
-      dayCutover: "06:00:00",
-    })
-    .returning({ id: locations.id });
-  return seedNode(db, brandLocationId(location!.id));
+async function seedVenueWithNode(): Promise<NodeId> {
+  await seedVenue(db, {
+    name: "Sala",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Venta en establecimiento",
+    timeZone: "Europe/Madrid",
+    dayCutover: "06:00:00",
+  });
+  return seedNode(db);
 }
 
 async function venueDbNow(): Promise<VenueDbIdentity> {
@@ -108,7 +104,7 @@ function harness(over: { record?: Parameters<typeof recordStartDeletions>[0]["re
 
 describe("recordStartDeletions", () => {
   it("raises one deletion alert with the oldest and newest taken days at the record's time, and deletes the record", async () => {
-    const nodeId = await seedVenue();
+    const nodeId = await seedVenueWithNode();
     await writeRecord();
     const { log, deps } = harness();
 
@@ -125,7 +121,7 @@ describe("recordStartDeletions", () => {
   });
 
   it("does nothing with no record", async () => {
-    const nodeId = await seedVenue();
+    const nodeId = await seedVenueWithNode();
     const { log, deps } = harness();
 
     await recordStartDeletions(deps(nodeId));
@@ -142,7 +138,7 @@ describe("recordStartDeletions", () => {
       () => writeRecord({ deleted: [entry("a", AT)].map((e) => ({ ...e, bytes: -1 })) }),
     ],
   ])("logs and deletes a record that is %s, with no alert", async (_label, spoil) => {
-    const nodeId = await seedVenue();
+    const nodeId = await seedVenueWithNode();
     await spoil();
     const { log, deps } = harness();
 
@@ -156,7 +152,7 @@ describe("recordStartDeletions", () => {
   });
 
   it("logs and deletes a record left for another venue.db, with no alert", async () => {
-    const nodeId = await seedVenue();
+    const nodeId = await seedVenueWithNode();
     // A restore or Start again put a new venue.db, with another file number, in this one's place.
     await writeRecord({ venueDb: { ...(await venueDbNow()), ino: "1" } });
     const { log, deps } = harness();
@@ -171,7 +167,7 @@ describe("recordStartDeletions", () => {
   });
 
   it("deletes a record that lists no deletions, with no alert and no log", async () => {
-    const nodeId = await seedVenue();
+    const nodeId = await seedVenueWithNode();
     await writeRecord({ deleted: [] });
     const { log, deps } = harness();
 
@@ -183,7 +179,7 @@ describe("recordStartDeletions", () => {
   });
 
   it("keeps the record and logs, without throwing, when the alert cannot be recorded", async () => {
-    const nodeId = await seedVenue();
+    const nodeId = await seedVenueWithNode();
     await writeRecord();
     const record = vi.fn(async () => {
       throw new AppError("storage.disk_full", {});
@@ -200,7 +196,7 @@ describe("recordStartDeletions", () => {
   });
 
   it("keeps the record and logs, with no alert, when venue.db cannot be read", async () => {
-    const nodeId = await seedVenue();
+    const nodeId = await seedVenueWithNode();
     await writeRecord();
     await rm(join(venueDir, "venue.db"));
     const { log, deps } = harness();
@@ -215,7 +211,7 @@ describe("recordStartDeletions", () => {
   });
 
   it("keeps a record it cannot read, and logs", async () => {
-    const nodeId = await seedVenue();
+    const nodeId = await seedVenueWithNode();
     await mkdir(recordPath());
     const { log, deps } = harness();
 
@@ -236,7 +232,7 @@ describe("recordStartDeletions", () => {
       [["warn", "backup.start_room_record_delete_failed", { errno: null }]],
     ],
   ])("after the alert, a record whose deletion is %s", async (_label, failure, logged) => {
-    const nodeId = await seedVenue();
+    const nodeId = await seedVenueWithNode();
     await writeRecord();
     const { log, deps } = harness();
 
@@ -247,7 +243,7 @@ describe("recordStartDeletions", () => {
   });
 
   it("logs a record it could not delete after the alert, and the next start's second recording leaves the one open alert as it was", async () => {
-    const nodeId = await seedVenue();
+    const nodeId = await seedVenueWithNode();
     await writeRecord();
     const { log, deps } = harness();
     const remove = vi.fn(async () => {

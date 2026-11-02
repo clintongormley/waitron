@@ -24,6 +24,7 @@ import { clearRoutingCell, setRoutingCell, setStationToday } from "@waitron/venu
 import { loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { createTable } from "./testing/live-table.js";
 import {
   inTx,
@@ -280,26 +281,22 @@ describe("GET /api/parties/:id/drafts", () => {
     );
     const secondId = "eeeeeeee-0000-4000-8000-000000000002";
     const emptyId = "dddddddd-0000-4000-8000-000000000003";
-    await inTx(venue, (tx) =>
-      tx.insert(workingOrders).values([
-        {
-          id: emptyId,
-          source: "dashboard",
-          locationId: venue.cfg.locationId,
-          partyId: party.partyId,
-          orderNumber: main!.orderNumber + 2,
-          openedAt: main!.openedAt,
-        },
-        {
-          id: secondId,
-          source: "dashboard",
-          locationId: venue.cfg.locationId,
-          partyId: party.partyId,
-          orderNumber: main!.orderNumber + 1,
-          openedAt: main!.openedAt,
-        },
-      ]),
-    );
+    await inTx(venue, async (tx) => {
+      await seedWorkingOrder(tx, {
+        id: emptyId,
+        source: "dashboard",
+        partyId: party.partyId,
+        orderNumber: main!.orderNumber + 2,
+        openedAt: main!.openedAt,
+      });
+      await seedWorkingOrder(tx, {
+        id: secondId,
+        source: "dashboard",
+        partyId: party.partyId,
+        orderNumber: main!.orderNumber + 1,
+        openedAt: main!.openedAt,
+      });
+    });
     const first = await newDraft(ana, party.partyId, [dish("Caña")]);
     const saved = await admin("PUT", `/api/parties/${party.partyId}/drafts`, {
       billId: secondId,

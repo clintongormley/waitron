@@ -1,9 +1,9 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { locations, nodes } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { nodes } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { nodeId as brandNodeId } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import { readFilingModule } from "./node-config.js";
 
@@ -16,27 +16,19 @@ let stamped: NodeId;
 let bare: NodeId;
 
 beforeAll(async () => {
-  await seedTenant(suite.db);
+  await seedVenue(suite.db, {
+    name: "Barra",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Venta en establecimiento",
+  });
   // `stamped` names both module columns and `bare` names neither, which is what the null case turns on.
-  const [loc] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Barra",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
-    })
-    .returning({ id: locations.id });
-  const locationId = loc!.id;
-  const [s] = await suite.db
-    .insert(nodes)
-    .values({ locationId, name: "stamped", filingModule: "verifactu", taxModule: "vat" })
-    .returning({ id: nodes.id });
-  const [b] = await suite.db
-    .insert(nodes)
-    .values({ locationId, name: "bare" })
-    .returning({ id: nodes.id });
-  stamped = brandNodeId(s!.id);
-  bare = brandNodeId(b!.id);
+  stamped = await seedNode(suite.db);
+  await suite.db
+    .update(nodes)
+    .set({ name: "stamped", filingModule: "verifactu", taxModule: "vat" })
+    .where(eq(nodes.id, stamped));
+  bare = await seedNode(suite.db);
+  await suite.db.update(nodes).set({ name: "bare" }).where(eq(nodes.id, bare));
 });
 
 describe("readFilingModule", () => {

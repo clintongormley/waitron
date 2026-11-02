@@ -4,7 +4,7 @@ import { devices, withTransaction, workingOrders, type Database } from "@waitron
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { hashSessionToken, loginWithPin, sessions } from "@waitron/identity";
 import { CAPABILITY_FLAGS, type ProfileAction } from "@waitron/layouts";
-import { deviceOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { deviceOrigin } from "@waitron/shared";
 import type { DeviceOrigin } from "@waitron/shared";
 import type { TradingContext } from "../trading-context.js";
 import { SESSION_COOKIE } from "../till-session.js";
@@ -20,16 +20,16 @@ export const BASIC_ACTIONS = [
 ] as const satisfies readonly ProfileAction[];
 
 /**
- * A till device at `cfg`'s location whose profile allows every capability: the device a fixture
+ * A till device at the venue whose profile allows every capability: the device a fixture
  * opens its shift session on when the test is about something other than the device.
  */
 export async function seedSessionDevice(
   db: Database,
-  cfg: { locationId: string },
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
+  _cfg: { locationId: string },
 ): Promise<string> {
   return (
     await seedDevice(db, {
-      locationId: brandLocationId(cfg.locationId),
       capabilities: [...CAPABILITY_FLAGS],
     })
   ).deviceId;
@@ -48,7 +48,7 @@ export async function openTillSession(
 }
 
 /**
- * The cookie of `personId`'s shift session on a device at `cfg`'s location that has since been
+ * The cookie of `personId`'s shift session on a device at the venue that has since been
  * revoked: the request every till route refuses `device.unauthorized`. Revoked out of band, because
  * the Disable route ends the device's sessions.
  */
@@ -64,7 +64,7 @@ export async function revokedDeviceSessionCookie(
   return `${SESSION_COOKIE}=${session.token}`;
 }
 
-/** `cfg` as a till-app request from a device seeded at its location, allowed every capability. */
+/** `cfg` as a till-app request from a device seeded at the venue, allowed every capability. */
 export async function deviceRequestCfg<C extends TradingContext>(
   db: Database,
   cfg: C,
@@ -72,7 +72,7 @@ export async function deviceRequestCfg<C extends TradingContext>(
   return { ...cfg, origin: deviceOrigin(await seedSessionDevice(db, cfg)) };
 }
 
-/** The origin of a device seeded at `workingOrderId`'s location, for a payment a fixture writes by hand. */
+/** The origin of a device seeded at the venue, for a payment a fixture writes by hand to `workingOrderId`. */
 export async function orderDeviceOrigin(
   db: Database,
   workingOrderId: string,

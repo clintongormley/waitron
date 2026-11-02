@@ -6,12 +6,12 @@ import { sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   installChangeFeed,
-  locations,
+  venueLocationId,
   stationPrinters,
   withTransaction,
   type Database,
 } from "@waitron/db";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
 import {
@@ -107,13 +107,13 @@ function snapshot(db: Database) {
 // Written in the predecessor's own columns: today's seating and period code names columns this
 // schema does not have yet.
 async function populate(db: Database) {
-  await seedTenant(db);
-  const [location] = await db
-    .insert(locations)
-    .values({ name: "Sala", invoiceLocales: ["es-ES"], operationDescription: "Restaurante" })
-    .returning({ id: locations.id });
-  const locationId = brandLocationId(location!.id);
-  const nodeId = await seedNode(db, locationId);
+  await seedVenue(db, {
+    name: "Sala",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Restaurante",
+  });
+  const locationId = brandLocationId(await venueLocationId(db));
+  const nodeId = await seedNode(db);
   await db.execute(sql`insert into kitchen_timing_defaults (location_id) values (${locationId})`);
   const cfg: TradingContext = {
     nodeId,

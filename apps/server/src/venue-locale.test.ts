@@ -4,9 +4,9 @@ import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, venueLocationId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { getCountryPack } from "@waitron/country-packs";
 import {
@@ -25,22 +25,17 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    // `seedTenant` sets country 'ES' (and legal_name 'Test SL', a generated tax_id).
-    await seedTenant(db);
+    // `seedVenue` writes the taxpayer row through `seedTenant`: country 'ES' (and legal_name
+    // 'Test SL', a generated tax_id).
     // Barcelona prefers Catalan in the Spain pack. This server build ships no Catalan UI catalogue,
     // so locale resolution falls through to the country default.
-    // Through the table definition: `locations.id` is a NOT NULL `$defaultFn` generator a raw insert
-    // never reaches.
-    const [loc] = await db
-      .insert(locations)
-      .values({
-        name: "Counter",
-        province: "Barcelona",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Retail",
-      })
-      .returning({ id: locations.id });
-    locationId = loc!.id;
+    await seedVenue(db, {
+      name: "Counter",
+      province: "Barcelona",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Retail",
+    });
+    locationId = await venueLocationId(db);
   },
 });
 

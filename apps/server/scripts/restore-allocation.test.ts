@@ -8,14 +8,15 @@ import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   invoiceSeries,
-  locations,
   nodes,
   openVenueDatabase,
   stampDeployment,
   tenants,
+  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { ALLOCATED_FISCAL_SEED, ALLOCATED_FISCAL_RESTORE } from "@waitron/fiscal-verifactu";
 import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
@@ -27,7 +28,7 @@ import {
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import type { WaitronModule } from "@waitron/module";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import { mintBreakGlassSecret } from "../src/break-glass.js";
 import { runRestore } from "../src/restore-command.js";
 import { restoreFromArtifactFile } from "../src/restore.js";
@@ -39,7 +40,6 @@ const modules = vi.hoisted(() => [] as WaitronModule[]);
 vi.mock("../src/modules.js", () => ({ ALL_MODULES: modules }));
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const NODE = nodeId("c0000000-0000-4000-8000-000000000001");
-const LOCATION = locationId("c0000000-0000-4000-8000-000000000002");
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
@@ -149,13 +149,14 @@ beforeEach(async () => {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "50000000R", legalName: "Restaurant" });
-  await suite.db.insert(locations).values({
-    id: LOCATION,
+  await seedVenue(suite.db, {
     name: "Restaurant",
     invoiceLocales: ["es"],
     operationDescription: "Venta",
   });
-  await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Reimaged" });
+  await suite.db
+    .insert(nodes)
+    .values({ id: NODE, locationId: await venueLocationId(suite.db), name: "Reimaged" });
   await suite.db
     .insert(invoiceSeries)
     .values(bases.map((base) => ({ ...base, nodeId: NODE, nextNumber: 23 })));

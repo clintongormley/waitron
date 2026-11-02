@@ -5,14 +5,13 @@ import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import {
   kitchenStations,
-  locations,
   nowIso,
   ticketItems,
+  venueLocationId,
   withTransaction,
   workingOrderLines,
-  workingOrders,
 } from "@waitron/db";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { loginWithPin, persons } from "@waitron/identity";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -26,7 +25,7 @@ import { SESSION_COOKIE } from "./till-session.js";
 import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
-import { dashboardOrderAt, seedSessionDevice } from "./testing/session-device.js";
+import { seedSessionDevice } from "./testing/session-device.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -37,27 +36,19 @@ const LOCALE = "es";
 describe("station queue rest of the order", () => {
   it("shows the rest of the order only for an enabled station, with an empty list when none is elsewhere", async () => {
     const db = suite.db;
-    await seedTenant(db);
-    const locationId = randomUUID();
-    await db.insert(locations).values({
-      id: locationId,
+    await seedVenue(db, {
       name: "Barra",
       invoiceLocales: [LOCALE],
       operationDescription: "Venta en establecimiento",
     });
-    const nodeId = await seedNode(db, brandLocationId(locationId));
+    const locationId = await venueLocationId(db);
+    const nodeId = await seedNode(db);
     const [{ id: stationId }] = await db
       .insert(kitchenStations)
       .values({ locationId, name: "Cocina", isDefault: true })
       .returning({ id: kitchenStations.id });
     const orderId = randomUUID();
-    await db.insert(workingOrders).values({
-      id: orderId,
-      ...dashboardOrderAt(locationId),
-      nodeId,
-      orderNumber: 1,
-      status: "open",
-    });
+    await seedWorkingOrder(db, { id: orderId, nodeId, orderNumber: 1, status: "open" });
     const ownLineId = randomUUID();
     await db.insert(workingOrderLines).values({
       id: ownLineId,
@@ -173,13 +164,7 @@ describe("station queue rest of the order", () => {
       ids.set(item.no, ticket!.id);
     }
     const ownOnlyOrderId = randomUUID();
-    await db.insert(workingOrders).values({
-      id: ownOnlyOrderId,
-      ...dashboardOrderAt(locationId),
-      nodeId,
-      orderNumber: 2,
-      status: "open",
-    });
+    await seedWorkingOrder(db, { id: ownOnlyOrderId, nodeId, orderNumber: 2, status: "open" });
     const ownOnlyLineId = randomUUID();
     await db.insert(workingOrderLines).values({
       id: ownOnlyLineId,
@@ -265,15 +250,13 @@ describe("station queue rest of the order", () => {
 describe("station queue bump mode", () => {
   it("each order in a station's queue carries that station's bump mode", async () => {
     const db = suite.db;
-    await seedTenant(db);
-    const locationId = randomUUID();
-    await db.insert(locations).values({
-      id: locationId,
+    await seedVenue(db, {
       name: "Bar",
       invoiceLocales: [LOCALE],
       operationDescription: "Dine-in sale",
     });
-    const nodeId = await seedNode(db, brandLocationId(locationId));
+    const locationId = await venueLocationId(db);
+    const nodeId = await seedNode(db);
     const cfg: TradingContext = {
       nodeId: brandNodeId(nodeId),
       locationId: brandLocationId(locationId),
@@ -292,13 +275,7 @@ describe("station queue bump mode", () => {
     const grillId = stations.find((row) => row.name === "Grill")!.id;
     const barId = stations.find((row) => row.name === "Bar")!.id;
     const orderId = randomUUID();
-    await db.insert(workingOrders).values({
-      id: orderId,
-      ...dashboardOrderAt(locationId),
-      nodeId,
-      orderNumber: 1,
-      status: "open",
-    });
+    await seedWorkingOrder(db, { id: orderId, nodeId, orderNumber: 1, status: "open" });
     for (const [lineNo, stationId] of [
       [1, grillId],
       [2, barId],

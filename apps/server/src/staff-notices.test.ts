@@ -1,19 +1,14 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { locations, withTransaction, type Database, type Transaction } from "@waitron/db";
+import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { listOpenIncidents, recordIncident } from "@waitron/core";
 import { enabledModules, parseModuleOverrides } from "@waitron/module";
 import type { StaffNotice, StaffNoticeReadContext, StaffNoticeSource } from "@waitron/module";
 import type { Logger } from "@waitron/server-kit";
-import {
-  AppError,
-  deviceOrigin,
-  locationId as brandLocationId,
-  type DeviceId,
-} from "@waitron/shared";
+import { AppError, deviceOrigin, type DeviceId } from "@waitron/shared";
 import { ALL_MODULES, enabledStaffNoticeSources } from "./modules.js";
 import {
   createStaffNoticeLog,
@@ -39,22 +34,13 @@ function n(key: string, severity: StaffNotice["severity"]): StaffNotice {
   return { key, code: "x.y", severity, params: {} };
 }
 
-async function seedVenue(): Promise<{ deviceId: DeviceId }> {
-  await seedTenant(db);
-  // Through the table definition: `locations.id` is a NOT NULL `$defaultFn` generator a raw insert
-  // never reaches.
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: "Main room",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Sale on premises",
-    })
-    .returning({ id: locations.id });
-  const { deviceId } = await seedDevice(db, {
-    locationId: brandLocationId(location!.id),
-    label: "Till 1",
+async function seedVenueWithTill(): Promise<{ deviceId: DeviceId }> {
+  await seedVenue(db, {
+    name: "Main room",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Sale on premises",
   });
+  const { deviceId } = await seedDevice(db, { label: "Till 1" });
   return { deviceId };
 }
 
@@ -137,7 +123,7 @@ describe("readStaffNotices", () => {
   });
 
   it("a source that writes and then fails keeps nothing; the caller's earlier write and a later source's write are kept", async () => {
-    const { deviceId } = await seedVenue();
+    const { deviceId } = await seedVenueWithTill();
     const log = vi.fn<Logger>();
     const inside = await withTransaction(db, async (tx) => {
       await record(tx, deviceId, "test.caller");
@@ -198,7 +184,7 @@ describe("readStaffNotices", () => {
   ])(
     "a source that writes and answers $shape keeps no notice and none of its writes; its neighbours keep theirs",
     async ({ bad, errorCode }) => {
-      const { deviceId } = await seedVenue();
+      const { deviceId } = await seedVenueWithTill();
       const log = vi.fn<Logger>();
       const inside = await withTransaction(db, async (tx) => {
         await record(tx, deviceId, "test.caller");
@@ -605,7 +591,7 @@ describe("readStaffNoticesInTurns", () => {
   });
 
   it("a source that changes a row fails, keeps nothing, and the rest are asked", async () => {
-    const { deviceId } = await seedVenue();
+    const { deviceId } = await seedVenueWithTill();
     const log = vi.fn<Logger>();
     const result = await readStaffNoticesInTurns(
       db,

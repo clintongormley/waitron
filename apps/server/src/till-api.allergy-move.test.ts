@@ -75,10 +75,7 @@ async function fixture(existing = false) {
     .select()
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, billId));
-  const { deviceId, profileId } = await seedDevice(v.db, {
-    locationId: v.cfg.locationId,
-    capabilities: ["take-orders"],
-  });
+  const { deviceId, profileId } = await seedDevice(v.db, { capabilities: ["take-orders"] });
   await v.db
     .update(devices)
     .set({ lastSeenAt: new Date().toISOString() })

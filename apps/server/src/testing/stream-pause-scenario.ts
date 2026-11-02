@@ -34,6 +34,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { hashSecret, persons } from "@waitron/identity";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
@@ -356,15 +357,14 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
         .select({ id: deviceProfiles.id })
         .from(deviceProfiles)
         .where(eq(deviceProfiles.formFactor, "till"));
-      const [device] = await seeding.venue
-        .insert(devices)
-        .values({
-          locationId: venue.locationId,
-          deviceProfileId: profile!.id,
-          label: "Caja 1",
-          tokenHash: hashSecret(DEVICE_TOKEN),
-        })
-        .returning({ id: devices.id });
+      const { deviceId } = await seedDevice(seeding.venue, {
+        profileId: profile!.id,
+        label: "Caja 1",
+      });
+      await seeding.venue
+        .update(devices)
+        .set({ tokenHash: hashSecret(DEVICE_TOKEN) })
+        .where(eq(devices.id, deviceId));
       const offer = await withTransaction(seeding.venue, async (tx) => {
         const catalogue = await createCatalogue(tx, { name: `Stream menu ${venue.locationId}` });
         const drinks = await createCategory(tx, { name: "Bebidas" });
@@ -388,7 +388,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
         locationId: venue.locationId,
         venueId: venue.locationId,
         adminId: admin!.id,
-        deviceId: device!.id,
+        deviceId,
         offer,
       };
     } finally {

@@ -28,6 +28,7 @@ import {
   printJobs,
   products,
   ticketItems,
+  venueLocationId,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -35,7 +36,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { AllergenMap, Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -155,7 +156,6 @@ interface SeededVenue {
  * first park — and the suite is order-independent (CLAUDE.md §4).
  */
 async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue> {
-  await seedTenant(db);
   const eachUnitId = randomUUID();
   const kgUnitId = randomUUID();
   await db.insert(units).values([
@@ -180,14 +180,13 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
       hardwareUnit: "kg",
     },
   ]);
-  const locationId = randomUUID();
-  await db.insert(locations).values({
-    id: locationId,
+  await seedVenue(db, {
     name: "Barra",
     invoiceLocales: [LOCALE],
     operationDescription: "Venta en establecimiento",
   });
-  const nodeId = await seedNode(db, brandLocationId(locationId));
+  const locationId = await venueLocationId(db);
+  const nodeId = await seedNode(db);
 
   const { cafeId, aguaId, catalogueId, zoneId, cafeOfferId, premiumCafeOfferId } =
     await withTransaction(db, async (tx) => {
@@ -1339,13 +1338,13 @@ async function setStatus(id: string, status: "settled" | "abandoned"): Promise<v
 }
 
 /**
- * Insert an open order on ANOTHER node at the same location. The row exists to prove reads are
+ * Insert an open order on ANOTHER node at the venue. The row exists to prove reads are
  * venue-wide (#259): a promoted node inherits the venue's open tabs even though they are
  * tagged with the dead node's id (swap spec §4.3). `node_id` is the foreign node's on purpose.
  */
 async function seedForeignNodeOrder(cfg: DeviceRequestConfig): Promise<string> {
   const id = randomUUID();
-  const otherNode = await seedNode(db, cfg.locationId);
+  const otherNode = await seedNode(db);
   await db.execute(sql`
     insert into working_orders (id, source, device_id, location_id, node_id, order_number, status, opened_at)
     values (${id}, 'device', ${cfg.origin.deviceId}, ${cfg.locationId}, ${otherNode}, 1, 'open', ${nowIso()})`);
@@ -3264,9 +3263,9 @@ describe("createOpenOrder's catalogue reads (perf)", () => {
     expect(locationRead).toHaveBeenCalledTimes(1);
   });
 
-  // The line's customer text is keyed by the LOCATION's invoice locales, read at pricing time —
+  // The line's customer text is keyed by the VENUE's invoice locales, read at pricing time —
   // not by the till's `cfg.invoiceLocales`, which this case leaves at one locale.
-  it("keys each stored line's customer text by the location's invoice locales", async () => {
+  it("keys each stored line's customer text by the venue's invoice locales", async () => {
     const { cfg, cafeId } = await setupVenue();
     const offers = await counterOffers(cfg);
     await db

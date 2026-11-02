@@ -4,12 +4,11 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import {
   CORE_MIGRATIONS,
   deviceProfiles,
-  locations,
-  nodes,
   openVenueDatabase,
   runMigrations,
   tenants,
 } from "@waitron/db";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { mkdtemp, rm } from "node:fs/promises";
 import { existsSync, readFileSync, rmSync } from "node:fs";
@@ -523,8 +522,7 @@ describe("resetVenueDir", () => {
 });
 
 describe("inspectVenues reads a migrated venue directory", () => {
-  const locationId = "11111111-2222-3333-4444-555555555555";
-  const nodeId = "22222222-2222-4222-8222-222222222222";
+  let nodeId: string;
   let migrated: string;
 
   beforeAll(async () => {
@@ -535,13 +533,12 @@ describe("inspectVenues reads a migrated venue directory", () => {
       await store.venue
         .insert(tenants)
         .values({ id: 1, country: "ES", taxId: "00000000T", legalName: "Inspection SL" });
-      await store.venue.insert(locations).values({
-        id: locationId,
+      await seedVenue(store.venue, {
         name: "Inspection",
         invoiceLocales: ["es-ES"],
         operationDescription: "Hospitality",
       });
-      await store.venue.insert(nodes).values({ id: nodeId, locationId, name: "Inspection box" });
+      nodeId = await seedNode(store.venue);
     } finally {
       await store.close();
     }

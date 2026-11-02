@@ -221,6 +221,14 @@ function workingOrder(id, status, extra = {}) {
   );
 }
 
+/** A device row at the venue `loc`, enrolled at `STAMP`. */
+function device(id, profileId, label, active) {
+  return (
+    `insert into devices (id, location_id, device_profile_id, label, token_hash, active, enrolled_at, created_at) ` +
+    `values ('${id}', 'loc', '${profileId}', '${label}', 'hash', ${active ? 1 : 0}, '${STAMP}', '${STAMP}')`
+  );
+}
+
 /** A working-order line. `descriptions` and `variant_descriptions` arrive as JSON text. */
 function line(id, orderId, descriptions, variantDescriptions = null) {
   const variant = variantDescriptions === null ? "null" : `'${variantDescriptions}'`;
@@ -350,12 +358,10 @@ function seed(connection) {
       `values ('dp-used', 'Counter', 'till', '${STAMP}', '${STAMP}')`,
     `insert into device_profiles (id, name, form_factor, created_at, updated_at) ` +
       `values ('dp-free', 'Spare', 'till', '${STAMP}', '${STAMP}')`,
-    `insert into devices (id, location_id, device_profile_id, label, token_hash, active, enrolled_at, created_at) ` +
-      `values ('dev-active', 'loc', 'dp-used', 'Counter 1', 'hash', 1, '${STAMP}', '${STAMP}')`,
+    device("dev-active", "dp-used", "Counter 1", true),
     `insert into device_profiles (id, name, form_factor, created_at, updated_at) ` +
       `values ('dp-drift', 'Caja que deriva', 'till', '${STAMP}', '${STAMP}')`,
-    `insert into devices (id, location_id, device_profile_id, label, token_hash, active, enrolled_at, created_at) ` +
-      `values ('dev-off', 'loc', 'dp-drift', 'Caja 4', 'hash', 0, '${STAMP}', '${STAMP}')`,
+    device("dev-off", "dp-drift", "Caja 4", false),
 
     // An order at a venue invoicing in Spanish alone, opened on `dev-active`, whose own venue `loc`
     // invoices in two: the locale triggers must read the order's location, not its device's.

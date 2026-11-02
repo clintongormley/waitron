@@ -6,16 +6,15 @@ import {
   billPaymentRefunds,
   billPayments,
   invoiceSeries,
-  locations,
   saleSettlements,
   sales,
   saleVoids,
   tenderRefunds,
   tenders,
+  venueLocationId,
   withTransaction,
-  workingOrders,
 } from "@waitron/db";
-import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { PAYMENTS_MIGRATIONS, payments } from "@waitron/payments";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
@@ -36,24 +35,21 @@ let orderId: string;
 let number: number;
 beforeEach(async () => {
   const db = store.db;
-  await seedTenant(db);
-  const [place] = await db
-    .insert(locations)
-    .values({ name: "Refund venue", invoiceLocales: ["en-GB"], operationDescription: "Meals" })
-    .returning();
-  const placeId = locationId(place!.id);
-  const nodeId = await seedNode(db, placeId);
-  ({ deviceId } = await seedDevice(db, { locationId: placeId }));
+  await seedVenue(db, {
+    name: "Refund venue",
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Meals",
+  });
+  const placeId = locationId(await venueLocationId(db));
+  const nodeId = await seedNode(db);
+  ({ deviceId } = await seedDevice(db));
   const [series] = await db
     .insert(invoiceSeries)
     .values({ nodeId, code: "TR", purpose: "standard" })
     .returning();
   seriesId = series!.id;
-  const [order] = await db
-    .insert(workingOrders)
-    .values({ source: "device", deviceId, nodeId, locationId: placeId, orderNumber: 1 })
-    .returning();
-  orderId = order!.id;
+  const order = await seedWorkingOrder(db, { source: "device", deviceId, nodeId, orderNumber: 1 });
+  orderId = order.id;
   cfg = {
     nodeId,
     locationId: placeId,
@@ -581,15 +577,14 @@ describe("cash refund balance without the optional payments module", () => {
   const core = useVenueDb({ migrations: [CORE_MIGRATIONS] });
   it("reads a cash-only balance when the optional payment tables are absent", async () => {
     const db = core.db;
-    await seedTenant(db);
-    await db.insert(locations).values({
-      id: cfg.locationId,
+    await seedVenue(db, {
       name: "Cash venue",
       invoiceLocales: ["en-GB"],
       operationDescription: "Meals",
     });
-    const nodeId = await seedNode(db, cfg.locationId);
-    const device = await seedDevice(db, { locationId: cfg.locationId });
+    cfg = { ...cfg, locationId: locationId(await venueLocationId(db)) };
+    const nodeId = await seedNode(db);
+    const device = await seedDevice(db);
     const [series] = await db
       .insert(invoiceSeries)
       .values({ nodeId, code: "CA", purpose: "standard" })

@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { billPayments, newId, workingOrders, withTransaction } from "@waitron/db";
+import { billPayments, newId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { persons, sessions } from "@waitron/identity";
 import {
@@ -131,9 +132,12 @@ describe("own clock reconciliation at the business-day boundary", () => {
       await open();
       await fact("2026-01-05T12:00:00Z");
       const orderId = newId();
-      await suite.db
-        .insert(workingOrders)
-        .values({ id: orderId, ...venue.cfg, source: "dashboard", orderNumber: 1 });
+      await seedWorkingOrder(suite.db, {
+        id: orderId,
+        nodeId: venue.cfg.nodeId,
+        source: "dashboard",
+        orderNumber: 1,
+      });
       if (kind === "whole") {
         await withTransaction(suite.db, (tx) =>
           beginIntegratedAttendance(

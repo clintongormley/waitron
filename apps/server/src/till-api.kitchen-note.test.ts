@@ -6,16 +6,16 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   devices,
   deviceProfiles,
-  locations,
   parties,
   partyTables,
   serviceCommands,
+  venueLocationId,
   withTransaction,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { hashSessionToken, persons, sessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { locationId, nodeId } from "@waitron/shared";
@@ -46,19 +46,14 @@ let partyId: string;
 let billId: string;
 
 beforeEach(async () => {
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Dining room",
-      invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
-    })
-    .returning();
-  const locationKey = locationId(location!.id);
+  await seedVenue(suite.db, {
+    name: "Dining room",
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Hospitality",
+  });
   cfg = {
-    locationId: locationKey,
-    nodeId: nodeId(await seedNode(suite.db, locationKey)),
+    locationId: locationId(await venueLocationId(suite.db)),
+    nodeId: nodeId(await seedNode(suite.db)),
     locale: "en-GB",
     invoiceLocales: ["en-GB"],
     tipsEnabled: false,
@@ -69,10 +64,7 @@ beforeEach(async () => {
     .values({ displayName: "Ana", role: "staff" })
     .returning();
   personId = person!.id;
-  ({ deviceId, profileId } = await seedDevice(suite.db, {
-    locationId: locationKey,
-    capabilities: ["take-orders"],
-  }));
+  ({ deviceId, profileId } = await seedDevice(suite.db, { capabilities: ["take-orders"] }));
   token = randomUUID();
   const [session] = await suite.db
     .insert(sessions)
@@ -85,15 +77,8 @@ beforeEach(async () => {
   tableZoneId = zone.id;
   const table = await createTable(suite.db, cfg, { label: "Table 1", zoneId: zone.id });
   await suite.db.insert(partyTables).values({ partyId, tableId: table.id });
-  const orders = await suite.db
-    .insert(workingOrders)
-    .values([
-      { source: "dashboard", deviceId: null, locationId: locationKey, orderNumber: 1 },
-      { source: "dashboard", deviceId: null, locationId: locationKey, orderNumber: 2, partyId },
-    ])
-    .returning();
-  orderId = orders[0]!.id;
-  billId = orders[1]!.id;
+  orderId = (await seedWorkingOrder(suite.db, { deviceId: null, orderNumber: 1 })).id;
+  billId = (await seedWorkingOrder(suite.db, { deviceId: null, orderNumber: 2, partyId })).id;
 });
 
 function app() {
@@ -568,7 +553,6 @@ describe("whole-order kitchen note routes", () => {
 
   it("accepts exactly 2000 characters from an admitted handheld", async () => {
     const handheld = await seedDevice(suite.db, {
-      locationId: cfg.locationId,
       formFactor: "phone-portrait",
       capabilities: ["take-orders"],
     });
