@@ -1021,18 +1021,6 @@ describe("DashboardApi — roster", () => {
       credentials: "include",
     });
   });
-
-  it("getLocations GETs the location list", async () => {
-    const locs = [{ id: "loc-1", name: "Main" }];
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(locs));
-    const api = new DashboardApi("", fetchImpl);
-    expect(await api.getLocations()).toEqual(locs);
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/locations", {
-      method: "GET",
-      credentials: "include",
-      signal: expect.any(AbortSignal),
-    });
-  });
 });
 
 describe("DashboardApi — approvals", () => {

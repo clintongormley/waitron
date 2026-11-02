@@ -321,7 +321,7 @@ export const QUERY_DEPENDENCIES = {
   getMenuStatus: MENU_PUBLICATION_READS,
   getMenuPreview: MENU_PUBLICATION_READS,
   getLiveMenu: ["menu_publications", "menu_scheduled_publications", "menu_versions"],
-  // The route converts each time with the location's zone.
+  // The route converts each time with the venue's zone.
   getMenuPublications: [
     "menu_scheduled_publications",
     "menu_publications",
@@ -489,7 +489,6 @@ export const QUERY_DEPENDENCIES = {
   listMyAbsences: ["absences"],
   listMyShifts: ["shifts", "roster_versions", "employments", "locations"],
   listMySwaps: ["shift_swaps", "shifts"],
-  getLocations: ["locations"],
   getPlannedVsActual: ["roster_versions", "locations", "shifts", "time_entries", "employments"],
   getRoster: ["shifts", "roster_versions", "employments", "absences"],
   listPrinterStations: ["station_printers"],

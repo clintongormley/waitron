@@ -647,7 +647,7 @@ export interface ReceiptPreview {
   paperWidths: PrintPaperWidth[];
 }
 
-/** The language this location's receipts print in by default, which the venue's region may fix. */
+/** The language the venue's receipts print in by default, which the venue's region may fix. */
 export interface ReceiptLanguage {
   /** As stored, even when it is not one of `choices`. */
   language: string;
@@ -1066,12 +1066,6 @@ export interface RosterBreach {
   kind: RosterBreachKind;
   personId: string;
   [detail: string]: unknown;
-}
-
-export interface LocationSummary {
-  id: string;
-  name: string;
-  timeZone: string;
 }
 
 export interface PendingSwap {
@@ -4177,10 +4171,6 @@ export class DashboardApi {
   }
 
   // ── Shift planning (roster authoring) ──────────────────────────────────────────────────────────
-
-  getLocations(): Promise<LocationSummary[]> {
-    return this.#request<LocationSummary[]>("/management-api/locations", "GET");
-  }
 
   getRoster(period: string): Promise<RosterSnapshot> {
     return this.#request<RosterSnapshot>(`/management-api/roster?period=${period}`, "GET");

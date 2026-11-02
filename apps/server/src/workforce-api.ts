@@ -4,7 +4,7 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { withTransaction, locations, type Database, type Transaction } from "@waitron/db";
+import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import {
   WorkforceBackend,
@@ -104,19 +104,6 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       await authorizeManager(tx, { managementSessionId: sessionId, permission });
       return fn(tx);
     });
-
-  // The tenant's centros de trabajo, for the roster screen's location picker.
-  app.get("/management-api/locations", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const rows = await gated(sessionId, SCHEDULE_PERMISSION, (tx) =>
-        tx
-          .select({ id: locations.id, name: locations.name, timeZone: locations.timeZone })
-          .from(locations),
-      );
-      return c.json(rows);
-    }),
-  );
 
   app.get("/management-api/roster", (c) =>
     run(c, log, async () => {
