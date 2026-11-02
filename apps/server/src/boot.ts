@@ -62,7 +62,12 @@ import {
   type Database,
   type SingletonRole,
 } from "@waitron/db";
-import { readMirrorLink, readNodeMode, setSingletonRole } from "@waitron/node-db";
+import {
+  readHandoverRestriction,
+  readMirrorLink,
+  readNodeMode,
+  setSingletonRole,
+} from "@waitron/node-db";
 import { finishPromotedRole } from "./promoted-role.js";
 import { credentialProvisioned, loadKeyRing, tenantCredentials } from "@waitron/credentials";
 import { registerModulePermissions, withPassiveManagementRead } from "@waitron/identity";
@@ -186,6 +191,7 @@ import {
   startFreeSpaceWatch,
 } from "./free-space-watch.js";
 import { mountNodeApi } from "./node-api.js";
+import { startRestricted } from "./restricted-start.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import { deviceNoticeSources, devicePrinterNoticeSources } from "./box-staff-notices.js";
 import { clockStartUp, tillClockCheck } from "./clock-start-up.js";
@@ -1594,6 +1600,42 @@ async function bootServer(
   // Not a self-promotion: it applies a promotion this box already committed and signed with its own
   // key, whose role write was lost. Before the peer reconciliation, which stays demote-only.
   await finishPromotedRole({ venue: db, node: store.node, ring, nodeId: config.node.nodeId, log });
+  // Before every worker, the first start, the stream host and the backup supervisor: a box that
+  // has handed over or been superseded must not sell, file or write beside its successor.
+  if ((await readHandoverRestriction(store.node, config.node.nodeId)) !== null) {
+    return startRestricted({
+      app,
+      nodeId: config.node.nodeId,
+      environment: config.environment,
+      readMembership: () => readNodeMembership(db),
+      routes: [],
+      log,
+      listen: (restrictedApp) => {
+        const server = startTradingListener(config, restrictedApp, now, log);
+        undoOnFailure.push(() => closeListener(server));
+        const mdns = startMdnsResponder({
+          hostname: BOX_HOSTNAME,
+          devMode: config.devMode,
+          httpHost: config.httpHost,
+          getAddresses: boxAddresses,
+          log,
+        });
+        undoOnFailure.push(() => mdns.stop());
+        return makeStartedServer(
+          server,
+          health,
+          log,
+          {
+            stopWork: () => Promise.resolve(),
+            settleRequests: () => Promise.resolve(),
+            closePools: () => store.close(),
+          },
+          mdns,
+          startLandingListener(config, log),
+        );
+      },
+    });
+  }
   // Both deployment axes from ONE read of the row, so the initial holder pair is never torn: two
   // separate reads could straddle a concurrent promotion and yield an impossible `(mirror, primary)`.
   const initialAxes = await readNodeMode(store.node, config.node.nodeId);
