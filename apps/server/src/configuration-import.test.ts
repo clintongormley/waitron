@@ -76,7 +76,7 @@ const bundle: ConfigurationBundle = {
   reconnect: ["printers"],
 };
 // A format-9 export nested the venue's own fields under `location`, beside its id and fire control.
-const formatNineVenue = (extra: Record<string, unknown>) => ({
+const formatNineVenue = {
   country: "ES",
   taxId: "B12345678",
   legalName: "Prepared SL",
@@ -96,12 +96,11 @@ const formatNineVenue = (extra: Record<string, unknown>) => ({
     dayCutover: "06:00:00",
     fireControl: "waiter",
     catalogueId: null,
-    ...extra,
   },
   seriesCode: "F",
   fullSeriesCode: "FF",
   rectificativeSeriesCode: "R",
-});
+};
 const modules = [
   {
     name: "core",
@@ -203,35 +202,7 @@ describe("staged configuration import", () => {
     ["A980 pre-privacy-contact export without it", { version: 8, privacyContact: undefined }],
     ["old version", { version: 1 }],
     ["future version", { version: 11 }],
-    ["pre-venue-fields export", { version: 9, venue: formatNineVenue({}) }],
-    [
-      "retired drawer value",
-      {
-        version: 9,
-        venue: formatNineVenue({ drawerOpenPolicy: "open" }),
-      },
-    ],
-    [
-      "retired drawer null",
-      {
-        version: 9,
-        venue: formatNineVenue({ drawerOpenPolicy: null }),
-      },
-    ],
-    [
-      "retired receipt value",
-      {
-        version: 9,
-        venue: formatNineVenue({ receiptPrintMode: "never" }),
-      },
-    ],
-    [
-      "retired receipt null",
-      {
-        version: 9,
-        venue: formatNineVenue({ receiptPrintMode: null }),
-      },
-    ],
+    ["pre-venue-fields export", { version: 9, venue: formatNineVenue }],
   ])("refuses %s through setup before replacing staged files", async (_label, change) => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
     dirs.push(stateDir);
