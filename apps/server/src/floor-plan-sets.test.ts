@@ -128,7 +128,7 @@ describe("layoutCounts", () => {
 });
 
 describe("the floor plan sets port", () => {
-  it("creates an empty set of the location", async () => {
+  it("creates an empty set", async () => {
     const setId = await inTx(v, (tx) => sets().create(tx));
     const rows = await inTx(v, (tx) =>
       tx.select().from(floorPlanSets).where(eq(floorPlanSets.id, setId)),
