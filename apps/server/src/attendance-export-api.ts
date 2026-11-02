@@ -1,7 +1,7 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { locations, withTransaction, type Database, type Transaction } from "@waitron/db";
+import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   authorizeManager,
   persons,
@@ -32,13 +32,6 @@ const run = createErrorBoundary(
   },
   "workforce.failed",
 );
-async function requireLocation(tx: Transaction, locationId: string) {
-  const [location] = await tx
-    .select({ id: locations.id })
-    .from(locations)
-    .where(eq(locations.id, locationId));
-  if (!location) throw new AppError("attendance.invalid", { reason: "record_scope_or_period" });
-}
 async function authorize(tx: Transaction, token: string, mode: "own" | "manager", touch: boolean) {
   return mode === "manager"
     ? (
@@ -56,8 +49,7 @@ export function mountAttendanceExportApi(app: Hono, deps: ExportDeps, log: Logge
       const token = requireManagementSession(c);
       const result = await withTransaction(deps.db, async (tx) => {
         const viewer = await resolveManagementSession(tx, token, { touch: false });
-        const locationId = parseAttendanceExportOptions(new URL(c.req.url).searchParams);
-        await requireLocation(tx, locationId);
+        parseAttendanceExportOptions(new URL(c.req.url).searchParams);
         const canExportAll = roleHasPermission(viewer.role, "report.export");
         return { available: deps.exporter !== undefined, canExportAll };
       });
@@ -77,7 +69,6 @@ export function mountAttendanceExportApi(app: Hono, deps: ExportDeps, log: Logge
             new URL(c.req.url).searchParams,
             mode,
           );
-          await requireLocation(tx, selection.locationId);
           if (personId !== undefined) {
             const [subject] = await tx
               .select({ id: persons.id })

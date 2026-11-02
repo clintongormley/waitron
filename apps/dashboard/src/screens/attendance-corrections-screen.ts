@@ -187,24 +187,21 @@ export class AttendanceCorrectionsScreen extends LitElement {
         changed.has("mode"))
     )
       void this.#start();
-    if (this.isConnected && changed.has("locationId")) void this.#loadExportOptions();
   }
   async #loadExportOptions(): Promise<void> {
     const read = ++this.#exportRead;
     const generation = this.#generation,
-      location = this.locationId,
       request = this.request;
     this.exportOpen = false;
     this.exportOptions = null;
     this.exportError = "";
-    if (this.mode !== "hours" || !location || !request) return;
+    if (this.mode !== "hours" || !request) return;
     try {
-      const options = await new AttendanceExportApi(request).options(location);
+      const options = await new AttendanceExportApi(request).options();
       if (
         this.isConnected &&
         read === this.#exportRead &&
         generation === this.#generation &&
-        location === this.locationId &&
         request === this.request &&
         this.mode === "hours"
       )
@@ -217,10 +214,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
   async #start(): Promise<void> {
     this.#initialized = true;
     this.#generation++;
-    this.#exportRead++;
-    this.exportOpen = false;
-    this.exportOptions = null;
-    this.exportError = "";
+    void this.#loadExportOptions();
     this.#actionWait?.abort();
     for (const slot of ["lookups", "queue", "day", "hours"]) this.#queries.release(slot);
     this.hours = null;
@@ -809,7 +803,6 @@ export class AttendanceCorrectionsScreen extends LitElement {
         .open=${this.exportOpen}
         .request=${this.request}
         .scopeKey=${`${this.#generation}`}
-        .locationId=${this.locationId}
         .period=${this.hours?.period ?? { start: "", end: "" }}
         .people=${this.hours?.people ?? this.lookups?.people ?? []}
         .personId=${this.personId || undefined}

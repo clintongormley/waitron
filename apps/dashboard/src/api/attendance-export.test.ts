@@ -3,7 +3,6 @@ import { createRequest, type FetchLike } from "@waitron/dashboard-kit";
 import type { AttendanceExportSelection } from "@waitron/dashboard-modules";
 const modules = import.meta.glob<typeof import("./attendance-export.js")>("./attendance-export.ts");
 const selection: AttendanceExportSelection = {
-  locationId: "place & one",
   from: "2020-01-01",
   before: "2026-02-01",
   audience: "representatives",
@@ -38,9 +37,9 @@ it("projects exact selections, sends cookies and keeps only options passive", as
   await api.manager(selection);
   await api.manager({ ...selection, personId: "worker & two" });
   expect(calls.map((c) => c.path)).toEqual([
-    "/box/management-api/me/attendance/export?locationId=place+%26+one&from=2020-01-01&before=2026-02-01&format=pdf&audience=representatives&locale=es",
-    "/box/management-api/attendance/export?locationId=place+%26+one&from=2020-01-01&before=2026-02-01&format=pdf&audience=representatives&locale=es",
-    "/box/management-api/attendance/export?locationId=place+%26+one&from=2020-01-01&before=2026-02-01&format=pdf&audience=representatives&locale=es&personId=worker+%26+two",
+    "/box/management-api/me/attendance/export?from=2020-01-01&before=2026-02-01&format=pdf&audience=representatives&locale=es",
+    "/box/management-api/attendance/export?from=2020-01-01&before=2026-02-01&format=pdf&audience=representatives&locale=es",
+    "/box/management-api/attendance/export?from=2020-01-01&before=2026-02-01&format=pdf&audience=representatives&locale=es&personId=worker+%26+two",
   ]);
   for (const { init } of calls) {
     expect(init.method).toBe("GET");
@@ -52,13 +51,11 @@ it("projects exact selections, sends cookies and keeps only options passive", as
   const options = await client(
     () => new Response(JSON.stringify({ available: true, canExportAll: false })),
   );
-  expect(await options.api.options("place & one")).toEqual({
+  expect(await options.api.options()).toEqual({
     available: true,
     canExportAll: false,
   });
-  expect(options.calls[0]!.path).toBe(
-    "/box/management-api/me/attendance/export-options?locationId=place+%26+one",
-  );
+  expect(options.calls[0]!.path).toBe("/box/management-api/me/attendance/export-options");
   expect(new Headers(options.calls[0]!.init.headers).get("x-waitron-live")).toBe("1");
   expect(options.active).toEqual([]);
 });

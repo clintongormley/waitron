@@ -18,10 +18,9 @@ export function parseAttendanceExportQuery(
 ): { selection: AttendanceExportSelection; personId?: string } {
   exactKeys(
     query,
-    ["locationId", "from", "before", "format", "audience", "locale"],
+    ["from", "before", "format", "audience", "locale"],
     mode === "manager" ? ["personId"] : [],
   );
-  const locationId = requireBodyUuid(query.get("locationId"), "locationId").toLowerCase();
   const from = requirePeriod(query.get("from"), "from"),
     before = requirePeriod(query.get("before"), "before");
   if (from >= before) invalid("range");
@@ -32,13 +31,12 @@ export function parseAttendanceExportQuery(
   const locale = query.get("locale");
   if (locale !== "en" && locale !== "es") invalid("locale");
   return {
-    selection: { locationId, from, before, format, audience, locale },
+    selection: { from, before, format, audience, locale },
     ...(query.has("personId")
       ? { personId: requireBodyUuid(query.get("personId"), "personId").toLowerCase() }
       : {}),
   };
 }
-export function parseAttendanceExportOptions(query: URLSearchParams): string {
-  exactKeys(query, ["locationId"]);
-  return requireBodyUuid(query.get("locationId"), "locationId").toLowerCase();
+export function parseAttendanceExportOptions(query: URLSearchParams): void {
+  exactKeys(query, []);
 }
