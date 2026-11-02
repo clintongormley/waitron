@@ -73,9 +73,10 @@ export async function establishReservedStandbyIdentity(
       );
       if (owner !== undefined && (reserved.series?.length ?? 0) !== 0)
         throw new AppError("module.operation_invalid", { module: owner.name });
+      const venueId = await venueLocationId(tx);
       await insertReservedNodeTx(tx, {
         id: standby.nodeId,
-        locationId: await venueLocationId(tx),
+        locationId: venueId,
         name: supplied.nodeName,
         filingModule: supplied.filingModule,
         taxModule: supplied.taxModule,
@@ -83,7 +84,7 @@ export async function establishReservedStandbyIdentity(
         endorsement: reserved.endorsement,
       });
       const standbyNode = {
-        locationId: brandLocationId(await venueLocationId(tx)),
+        locationId: brandLocationId(venueId),
         nodeId: brandNodeId(standby.nodeId),
       };
       for (const m of modules) {

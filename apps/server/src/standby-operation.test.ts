@@ -866,6 +866,51 @@ it("collects outside establishment evidence before sealing the spare's key", asy
   );
 });
 
+it("keeps a standby established during preparation when the venue row is subsequently absent", async () => {
+  const args = adoptionArgs();
+  const scope = { ...binding, action: "establish", targetNodeId: args.standby.nodeId };
+  const module = regime(
+    async () => ({ state: {} }),
+    async () => {
+      throw new Error("an existing standby must not be established again");
+    },
+  );
+  modules.push({
+    ...module,
+    operations: {
+      async prepare(operation, run) {
+        await suite.db.insert(nodes).values({
+          id: args.standby.nodeId,
+          locationId: LOCATION,
+          name: "Already established",
+          publicKey: args.standby.publicKey,
+        });
+        await suite.db.execute(sql`pragma foreign_keys = off`);
+        try {
+          await suite.db.execute(sql`delete from locations`);
+        } finally {
+          await suite.db.execute(sql`pragma foreign_keys = on`);
+        }
+        return run(operation);
+      },
+    },
+  });
+  await withOperationAuthority(scope, "admin", (authority) =>
+    establishReservedStandbyIdentity(
+      { ownerDb: suite.db },
+      { ...args, moduleOperations: operations(authority, scope) },
+    ),
+  );
+  expect(
+    await suite.db
+      .select({ name: nodes.name, publicKey: nodes.publicKey })
+      .from(nodes)
+      .where(eq(nodes.id, args.standby.nodeId)),
+  ).toEqual([{ name: "Already established", publicKey: args.standby.publicKey }]);
+  expect(await suite.db.select().from(locations)).toEqual([]);
+  expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
+});
+
 it("does not create a spare node or sealed key after outside collection refuses", async () => {
   const args = adoptionArgs();
   const scope = { ...binding, action: "establish", targetNodeId: args.standby.nodeId };
