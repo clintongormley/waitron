@@ -27,7 +27,7 @@ import {
   registrosFacturacion,
   VerifactuBackend,
 } from "@waitron/fiscal-verifactu";
-import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { seedVenueNodes, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { mintBreakGlassKey } from "../break-glass.js";
 import { ALL_MODULES } from "../modules.js";
 import { buildManifest } from "../backup-manifest.js";
@@ -80,7 +80,7 @@ export async function stagedHourCrash(
     await rm(root, { recursive: true, force: true });
   };
   try {
-    await seedTenants(db);
+    await seedVenueNodes(db);
     await stampDeployment(db, "preproduction");
     const key = await mintBreakGlassKey({ venue: db, node: nodeDb }, TENANT_A.nodeId);
     const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };

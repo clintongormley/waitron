@@ -311,7 +311,7 @@ export function mountReceiptPreviewApi(
           deps.validateOperationDescription,
           { touch: body.passive !== true, allowEmptyDescription: true },
         );
-        const languages = await departmentReceiptLanguages(tx, deps.cfg);
+        const languages = await departmentReceiptLanguages(tx);
         const locale =
           body.language === undefined
             ? languages.receiptLanguage
@@ -378,7 +378,7 @@ export function mountReceiptPreviewApi(
             printTradingName: checked.input.policy.printTradingName,
           },
           issuer: { venueName: taxpayer.legalName, nif: taxpayer.taxId },
-          address: await readReceiptAddress(tx, deps.cfg.locationId, {
+          address: await readReceiptAddress(tx, {
             printAddress: checked.input.receipt.printAddress === true,
           }),
           savedLogo,

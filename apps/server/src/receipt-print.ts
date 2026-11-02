@@ -211,7 +211,7 @@ async function buildReceiptBytes(
   const { venue, logo } = await resolvePrintedLogo(tx, department, printer.paperWidth, diagnostic);
   const authored = department?.receipt ?? null;
   const receipt = resolveReceiptTrim(authored, venue, language ?? ticket.locale, current.locale);
-  const venueAddress = await readReceiptAddress(tx, cfg.locationId, {
+  const venueAddress = await readReceiptAddress(tx, {
     printAddress: authored?.printAddress === true,
   });
   const receiptHeader = departmentId === null ? undefined : (header ?? undefined);

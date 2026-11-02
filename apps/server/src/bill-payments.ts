@@ -720,7 +720,7 @@ async function issueWhenFullyPaid(
   // Deferred, then settled with the bill's tenders in this transaction: the filed record is the one
   // an immediate sale files, and settlement is what writes each tender's bill payment.
   const selected = await selectOrderInvoice(tx, deps.backend, cfg, workingOrderId, priced.total);
-  const language = await saleLanguageFor(tx, cfg.locationId, selected.receiptLocale, {
+  const language = await saleLanguageFor(tx, selected.receiptLocale, {
     log: deps.log,
     workingOrderId,
   });

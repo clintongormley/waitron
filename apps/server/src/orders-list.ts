@@ -691,7 +691,7 @@ async function readDeliveries(
   emailTransport: boolean,
 ): Promise<OrderDeliveries | null> {
   const status = await readInvoiceDeliveries(tx, saleId, {
-    emailAvailable: (sale) => canEmailInvoice(tx, sale, emailTransport),
+    emailAvailable: (sale) => canEmailInvoice(tx, sale.id, emailTransport),
     printers: orderInvoicePrinters(tx),
   });
   if (status === null) return null;
@@ -714,16 +714,12 @@ async function readDeliveries(
   };
 }
 
-/**
- * Orders may print a full invoice on any active printer at the sale's location: receipt printers,
- * then A4 printers, each by name.
- */
 export function orderInvoicePrinters(tx: Transaction): PrinterOffer {
   return async (sale) => {
     const receipt = await tx
       .select({ id: printers.id, name: printers.name })
       .from(printers)
-      .where(and(eq(printers.locationId, sale.locationId), eq(printers.active, true)))
+      .where(eq(printers.active, true))
       .orderBy(asc(printers.name), asc(printers.id));
     const a4 = await tx
       .select({ id: pagePrinters.id, name: pagePrinters.name })

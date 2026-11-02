@@ -1,24 +1,13 @@
 import { eq } from "drizzle-orm";
-import { locations, nodes, type Transaction } from "@waitron/db";
+import { readVenue, nodes, type Transaction } from "@waitron/db";
 import { AppError, classifySavedTimeZone, timeZoneOffsetMinutes } from "@waitron/shared";
 import type { TrustedClock } from "./clock.js";
 
-export type IssueScope = { nodeId: string; locationId?: string };
+export type IssueScope = { nodeId: string };
 export async function readIssueZone(tx: Transaction, scope: IssueScope): Promise<string> {
-  const [node] = await tx
-    .select({ locationId: nodes.locationId })
-    .from(nodes)
-    .where(eq(nodes.id, scope.nodeId));
+  const [node] = await tx.select({ id: nodes.id }).from(nodes).where(eq(nodes.id, scope.nodeId));
   if (node === undefined) throw new AppError("venue.time_zone_target_invalid", { reason: "node" });
-  if (scope.locationId !== undefined && scope.locationId !== node.locationId)
-    throw new AppError("venue.time_zone_target_invalid", { reason: "mismatch" });
-  const [location] = await tx
-    .select({ timeZone: locations.timeZone })
-    .from(locations)
-    .where(eq(locations.id, node.locationId));
-  if (location === undefined)
-    throw new AppError("venue.time_zone_target_invalid", { reason: "location" });
-  const zone = classifySavedTimeZone(location.timeZone);
+  const zone = classifySavedTimeZone((await readVenue(tx)).timeZone);
   if (zone.kind !== "valid") throw new AppError("venue.time_zone_invalid", { reason: zone.kind });
   return zone.timeZone;
 }

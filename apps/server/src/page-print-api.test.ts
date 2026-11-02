@@ -880,7 +880,7 @@ describe("fetching a page job's document", () => {
 
     const direct = await queueA4(await fullInvoice(v, "Tea"), office, 60_000);
     const { job: unrecorded } = await withTransaction(suite.db, (tx) =>
-      claimInvoicePagePrint(tx, v.agentOne, { locationId: v.locationId }, at(60_000)),
+      claimInvoicePagePrint(tx, v.agentOne, {}, at(60_000)),
     );
     expect(unrecorded?.claim.deliveryId).toBe(direct);
     const { generation, token } = unrecorded!.claim;

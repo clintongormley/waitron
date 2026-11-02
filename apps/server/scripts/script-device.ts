@@ -1,16 +1,11 @@
 import { and, eq, isNull } from "drizzle-orm";
-import { deviceProfiles, devices } from "@waitron/db";
+import { deviceProfiles, devices, venueLocationId } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 
 /**
- * A device for a script's shift session to name, at `locationId`, under a till profile named `label`
- * (made on the first run). Revoked from the start, so no route accepts it as a device.
+ * Revoked from the start, so no route accepts it as a device.
  */
-export async function scriptSessionDevice(
-  tx: Transaction,
-  locationId: string,
-  label: string,
-): Promise<string> {
+export async function scriptSessionDevice(tx: Transaction, label: string): Promise<string> {
   const [existing] = await tx
     .select({ id: deviceProfiles.id })
     .from(deviceProfiles)
@@ -26,7 +21,7 @@ export async function scriptSessionDevice(
   const [device] = await tx
     .insert(devices)
     .values({
-      locationId,
+      locationId: await venueLocationId(tx),
       deviceProfileId: profileId,
       label,
       tokenHash: "unusable",

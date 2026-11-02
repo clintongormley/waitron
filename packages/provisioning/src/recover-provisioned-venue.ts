@@ -42,7 +42,7 @@ export async function recoverProvisionedVenue(
         and n.name = ${venue.location.name}`);
     if (found.rows.length !== 1) return refuse();
     const row = found.rows[0]!;
-    await readIssueZone(tx, { nodeId: row.nodeId, locationId: row.locationId });
+    await readIssueZone(tx, { nodeId: row.nodeId });
     if (initial !== undefined) {
       if (row.nodeId !== initial.nodeId) return refuse();
       const administrator = await tx.execute<{ id: string }>(sql`

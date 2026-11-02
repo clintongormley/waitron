@@ -79,10 +79,19 @@ const email = () => ({
 async function issue(full = true) {
   await seedTenant(suite.db);
   await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
-  const [location] = await suite.db
-    .insert(locations)
-    .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Sale on premises" })
-    .returning();
+  const [saved] = await suite.db.select().from(locations);
+  const location =
+    saved ??
+    (
+      await suite.db
+        .insert(locations)
+        .values({
+          name: "Bar",
+          invoiceLocales: ["es-ES"],
+          operationDescription: "Sale on premises",
+        })
+        .returning()
+    )[0];
   const nodeId = await seedNode(suite.db, locationId(location!.id));
   const [series] = await suite.db
     .insert(invoiceSeries)
@@ -179,43 +188,35 @@ describe("invoice delivery reservation", () => {
     expect(await suite.db.select().from(printJobs)).toEqual([]);
   });
 
-  it.each(["disabled", "other-location"])(
-    "refuses a %s A4 destination without queuing",
-    async (kind) => {
-      const sale = await issue();
-      const [node] = await suite.db.select().from(nodes);
-      const [other] = await suite.db
-        .insert(locations)
-        .values({ name: "Other", invoiceLocales: ["es-ES"], operationDescription: "Sale" })
-        .returning();
-      if (kind === "other-location") await seedNode(suite.db, locationId(other!.id));
-      const [printer] = await suite.db
-        .insert(pagePrinters)
-        .values({
-          locationId: kind === "other-location" ? other!.id : node!.locationId,
-          name: "Office",
-          host: "192.0.2.20",
-          port: 8631,
-          resourcePath: "/ipp/printer",
-          documentFormat: "image/urf",
-          supportedFormats: ["image/urf"],
-          media: "iso_a4_210x297mm",
-          resolutionDpi: 600,
-          active: kind !== "disabled",
-        })
-        .returning();
-      const request = {
-        requestKey: randomUUID(),
-        personId: "staff-one",
-        medium: "a4" as const,
-        pagePrinterId: printer!.id,
-      };
-      await expect(
-        withTransaction(suite.db, (tx) => reserveInvoiceDelivery(tx, sale.saleId, request)),
-      ).rejects.toMatchObject({ code: "invoice_delivery.printer_invalid" });
-      expect(await rows()).toEqual([]);
-    },
-  );
+  it.each(["disabled"])("refuses a %s A4 destination without queuing", async (kind) => {
+    const sale = await issue();
+    const [node] = await suite.db.select().from(nodes);
+    const [printer] = await suite.db
+      .insert(pagePrinters)
+      .values({
+        locationId: node!.locationId,
+        name: "Office",
+        host: "192.0.2.20",
+        port: 8631,
+        resourcePath: "/ipp/printer",
+        documentFormat: "image/urf",
+        supportedFormats: ["image/urf"],
+        media: "iso_a4_210x297mm",
+        resolutionDpi: 600,
+        active: kind !== "disabled",
+      })
+      .returning();
+    const request = {
+      requestKey: randomUUID(),
+      personId: "staff-one",
+      medium: "a4" as const,
+      pagePrinterId: printer!.id,
+    };
+    await expect(
+      withTransaction(suite.db, (tx) => reserveInvoiceDelivery(tx, sale.saleId, request)),
+    ).rejects.toMatchObject({ code: "invoice_delivery.printer_invalid" });
+    expect(await rows()).toEqual([]);
+  });
 
   it("records issuance's A4 original for a disabled printer as failed, and the next one is still an original", async () => {
     const sale = await issue();

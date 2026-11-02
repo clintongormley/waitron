@@ -1,5 +1,5 @@
-import type { Transaction } from "@waitron/db";
-import { AppError, locationId, type LocationId } from "@waitron/shared";
+import { venueLocationId, type Transaction } from "@waitron/db";
+import { AppError, locationId } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 
 export type InvoiceEmailContactSource =
@@ -7,9 +7,9 @@ export type InvoiceEmailContactSource =
 
 export async function resolveInvoiceEmailContact(
   tx: Transaction,
-  cfg: { locationId: LocationId },
   source: InvoiceEmailContactSource,
 ): Promise<{ email: string; phone?: string } | null> {
+  const cfg = { locationId: locationId(await venueLocationId(tx)) };
   const departmentId =
     source.kind === "sale"
       ? await VENUE_SERVICE.receiptDepartmentForSale(tx, cfg, source.saleId)
@@ -42,14 +42,10 @@ export async function resolveInvoiceEmailContact(
  */
 export async function canEmailInvoice(
   tx: Transaction,
-  sale: { id: string; locationId: string },
+  saleId: string,
   transport: boolean,
 ): Promise<boolean> {
   if (!transport) return false;
-  const contact = await resolveInvoiceEmailContact(
-    tx,
-    { locationId: locationId(sale.locationId) },
-    { kind: "sale", saleId: sale.id },
-  );
+  const contact = await resolveInvoiceEmailContact(tx, { kind: "sale", saleId });
   return contact !== null;
 }

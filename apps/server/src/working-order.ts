@@ -4465,7 +4465,6 @@ export async function setOrderInvoiceChoice(
     const invoiceDelivery = await checkedInvoiceChoiceDelivery(tx, {
       delivery: request.delivery,
       invoiceType: request.invoiceType,
-      locationId: order.locationId,
       source: { kind: "order", orderId },
       context: deliveryContext,
       invoicePrinter: async () =>
@@ -4510,10 +4509,7 @@ export async function setOrderReceiptLanguage(
   return withTransaction(db, async (tx) => {
     const order = await readChoiceChangeableOrder(db, tx, cfg, orderId, request.revision);
     await requireOrderBillEditor(tx, orderId, request);
-    if (
-      language !== null &&
-      !(await readOfferedReceiptLanguages(tx, { locationId: order.locationId })).includes(language)
-    ) {
+    if (language !== null && !(await readOfferedReceiptLanguages(tx)).includes(language)) {
       throw new AppError("management.request_invalid", { field: "language" });
     }
     const revision = order.revision + 1;
@@ -7139,7 +7135,7 @@ export async function issueUnpaidInvoice(
   const { id, priced, clock } = invoice;
   await backend.refuseNewIssuance(tx, cfg.nodeId);
   const selected = await selectOrderInvoice(tx, backend, cfg, id, priced.total);
-  const language = await saleLanguageFor(tx, cfg.locationId, selected.receiptLocale, {
+  const language = await saleLanguageFor(tx, selected.receiptLocale, {
     log,
     workingOrderId: id,
   });

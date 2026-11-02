@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { locations, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import * as venueAddress from "./venue-address.js";
 import { addressLines, readReceiptAddress } from "./venue-address.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 
@@ -52,7 +53,7 @@ describe("addressLines", () => {
     expect(addressLines({ ...none, province: "Madrid" })).toEqual(["Madrid"]);
   });
 
-  it("prints nothing for a location with no address", () => {
+  it("prints nothing for a venue with no address", () => {
     expect(addressLines(none)).toEqual([]);
   });
 
@@ -70,10 +71,31 @@ describe("readReceiptAddress", () => {
     timeoutMs: 60_000,
   });
 
-  it("reads the location's address, and none when the receipt switches it off", async () => {
+  it("reads the venue's address lines", async () => {
+    await setupVenue(suite.db);
+    expect(await withTransaction(suite.db, (tx) => venueAddress.readVenueAddress(tx))).toEqual([
+      "Calle Mayor 1",
+      "28013 Madrid",
+    ]);
+  });
+
+  it.each(["venue", "receipt on", "receipt off"])(
+    "refuses %s address reads when no venue is set up",
+    async (reader) => {
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          reader === "venue"
+            ? venueAddress.readVenueAddress(tx)
+            : readReceiptAddress(tx, { printAddress: reader === "receipt on" }),
+        ),
+      ).rejects.toMatchObject({ code: "venue.not_found" });
+    },
+  );
+
+  it("reads the venue's address, and none when the receipt switches it off", async () => {
     const venue = await setupVenue(suite.db);
-    const read = (receipt: { printAddress?: boolean }, locationId: string = venue.cfg.locationId) =>
-      withTransaction(suite.db, (tx) => readReceiptAddress(tx, locationId, receipt));
+    const read = (receipt: { printAddress?: boolean }) =>
+      withTransaction(suite.db, (tx) => readReceiptAddress(tx, receipt));
     expect(await read({})).toEqual(["Calle Mayor 1", "28013 Madrid"]);
     expect(await read({ printAddress: true })).toEqual(["Calle Mayor 1", "28013 Madrid"]);
     expect(await read({ printAddress: false })).toEqual([]);
@@ -82,6 +104,5 @@ describe("readReceiptAddress", () => {
       .set({ addressLine1: null, postalCode: null, city: null, province: null })
       .where(eq(locations.id, venue.cfg.locationId));
     expect(await read({})).toEqual([]);
-    expect(await read({}, "aa000000-0000-4000-8000-000000000001")).toEqual([]);
   });
 });

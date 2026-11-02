@@ -1,13 +1,6 @@
 import "./errors.js";
 import { and, eq, isNull } from "drizzle-orm";
-import {
-  invoiceDeliveries,
-  nodes,
-  printJobs,
-  printers,
-  sales,
-  type Transaction,
-} from "@waitron/db";
+import { invoiceDeliveries, printJobs, printers, sales, type Transaction } from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import {
@@ -128,14 +121,12 @@ export async function requestEmailDelivery(
   );
   if (replay !== undefined) return rowAttempt(replay);
   const [sale] = await tx
-    .select({ recipient: sales.counterpartyTaxId, locationId: nodes.locationId })
+    .select({ recipient: sales.counterpartyTaxId })
     .from(sales)
-    .innerJoin(nodes, eq(nodes.id, sales.nodeId))
     .where(eq(sales.id, saleId));
   if (sale === undefined) throw new AppError("invoice_delivery.not_found", {});
   if (sale.recipient === null) throw new AppError("invoice_delivery.full_invoice_required", {});
-  const located = { id: saleId, locationId: sale.locationId };
-  if (!(await canEmailInvoice(tx, located, request.transport))) {
+  if (!(await canEmailInvoice(tx, saleId, request.transport))) {
     throw new AppError("invoice_delivery.email_unavailable", {});
   }
   const row = await reserveInvoiceDelivery(tx, saleId, {
@@ -176,8 +167,7 @@ export async function retryEmailDelivery(
   if (status.current?.id !== deliveryId || status.actions.retryOriginal?.medium !== "email") {
     throw new AppError("invoice_delivery.active", {});
   }
-  const located = { id: saleId, locationId: state.locationId };
-  if (!(await canEmailInvoice(tx, located, request.transport))) {
+  if (!(await canEmailInvoice(tx, saleId, request.transport))) {
     throw new AppError("invoice_delivery.email_unavailable", {});
   }
   const row = await reserveInvoiceDelivery(tx, saleId, {

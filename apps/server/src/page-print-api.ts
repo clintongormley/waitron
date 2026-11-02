@@ -155,7 +155,7 @@ export function mountPagePrintApi(app: Hono, deps: PagePrintApiDeps, log: Logger
         const { job: invoice, busyPrinterIds } = await claimInvoicePagePrint(
           tx,
           agentId,
-          { locationId: deps.locationId, exceptPrinterIds: deps.testPages.printingOn() },
+          { exceptPrinterIds: deps.testPages.printingOn() },
           at,
         );
         if (invoice !== undefined || !deps.testPages.anyWaiting()) return invoice;

@@ -7,8 +7,10 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
+import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { getCountryPack } from "@waitron/country-packs";
 import {
+  saleLanguageFor,
   offeredReceiptLanguages,
   readOfferedReceiptLanguages,
   readVenueContentLanguageRules,
@@ -16,12 +18,11 @@ import {
   readVenueReceiptLanguageRules,
 } from "./venue-locale.js";
 
-// CORE_MIGRATIONS alone: both `tenants.country` and `locations.province` live in core.
 let locationId: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
     // `seedTenant` sets country 'ES' (and legal_name 'Test SL', a generated tax_id).
@@ -90,6 +91,14 @@ describe("readVenueLocale", () => {
 });
 
 it.each([
+  ["readOfferedReceiptLanguages", () => withTransaction(suite.db, readOfferedReceiptLanguages)],
+  [
+    "saleLanguageFor",
+    () =>
+      withTransaction(suite.db, (tx) =>
+        saleLanguageFor(tx, undefined, { log: undefined, workingOrderId: randomUUID() }),
+      ),
+  ],
   ["readVenueLocale", () => readVenueLocale(suite.db, {})],
   ["readVenueContentLanguageRules", () => readVenueContentLanguageRules(suite.db)],
   ["readVenueReceiptLanguageRules", () => withTransaction(suite.db, readVenueReceiptLanguageRules)],
@@ -209,12 +218,16 @@ describe("offeredReceiptLanguages", () => {
 });
 
 describe("readOfferedReceiptLanguages", () => {
-  it("refuses a location that does not exist", async () => {
-    const missing = randomUUID();
+  it("offers the venue's receipt languages without being told a location", async () => {
+    expect(await withTransaction(suite.db, readOfferedReceiptLanguages)).toEqual(["es-ES"]);
+  });
 
-    await expect(
-      withTransaction(suite.db, (tx) => readOfferedReceiptLanguages(tx, { locationId: missing })),
-    ).rejects.toThrow(`no location ${missing}`);
+  it("files a sale in the venue's first language", async () => {
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        saleLanguageFor(tx, undefined, { log: undefined, workingOrderId: randomUUID() }),
+      ),
+    ).toEqual({ locale: "es-ES", invoiceLocales: ["es-ES"] });
   });
 });
 

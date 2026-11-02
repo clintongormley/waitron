@@ -7,12 +7,12 @@ import {
 } from "./testing/order-writer-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { locations, newId, withTransaction, workingOrderLines, workingOrders } from "@waitron/db";
+import { newId, withTransaction, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { persons } from "@waitron/identity";
 import { createExtraList, createOptionList, writeProductModifiers } from "@waitron/catalogue";
-import { AppError, locationId as brandLocationId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { readAttendanceFacts } from "./attendance-facts.js";
@@ -355,30 +355,7 @@ describe("accepted order attendance", () => {
     expect((await line(id)).note).toBe("No salt");
     expect(await operations()).toEqual([]);
   });
-  it("an edit keeps the order's recorded location when configuration points elsewhere", async () => {
-    const id = await parked();
-    const [other] = await suite.db
-      .insert(locations)
-      .values({
-        name: "Elsewhere",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Other restaurant",
-      })
-      .returning({ id: locations.id });
-    await run((tx) =>
-      updateOrderLine(
-        tx,
-        { ...v.cfg, locationId: brandLocationId(other!.id) },
-        id,
-        1,
-        { note: "No salt" },
-        0,
-        worker,
-        capture(),
-      ),
-    );
-    await expectActivity(id, 1, "line");
-  });
+
   it("discarded unpaid edits remain readable as last activity", async () => {
     const id = await parked();
     await act("line", id);

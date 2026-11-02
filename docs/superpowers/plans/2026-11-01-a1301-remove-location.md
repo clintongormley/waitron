@@ -268,6 +268,15 @@ assertion names the design decision that changes it (§8 risk 7). Nothing else i
 
 ### A database with a second venue row
 
+**Amendment 2026-11-01 (watcher, 21:50).** When a slice's single-venue read makes another
+slice's cross-location test fail on its own second venue row, carry that test's cross-location
+half into the current slice and delete it. Remove the matching production check only if the
+remaining test halves require it, following the owning slice's instructions. Reuse one venue in
+shared fixtures for non-cross cases, with their assertions unchanged. Name each carried item and
+its owning slice in the PR and post an FYI to the lane's questions file. This replaces the stop
+instruction below for this case; a change to a non-cross assertion, an error code, fiscal bytes or
+a migration still needs a watcher decision.
+
 Once a function reads through the accessor, a test database holding two `locations` rows makes it
 throw `provisioning.second_venue`, and one holding none makes it throw `venue.not_found`. **Whichever
 slice first routes a reader that a suite exercises through the accessor, whatever slice that is,
@@ -1154,6 +1163,19 @@ operation-description fallback (sent to AEAT as `DescripcionOperacion` on the pa
 a full invoice's operation date read the venue. The printed and emailed invoice stops reading the
 sale's node's location. Until S23 "the venue" is the single `locations` row, so every value read is
 the same value read today; Task S2-1 proves that for the hashed one.
+
+**Amendment 2026-11-01 (watcher, 21:20).** S2-3 also owns the receipt-printer location
+predicate in `orderInvoicePrinters` (`apps/server/src/orders-list.ts`) and only the foreign-location
+half of “refuses a receipt printer switched off, deleted or at another location, writing nothing”
+in `orders-invoice-deliveries.test.ts`. These move from S11a. The switched-off and deleted-printer
+refusals and their assertions stay; the separate A4 location predicate remains S11a's.
+
+**Amendment 2026-11-01 (watcher, 21:50).** S2-5 carries S6's other-location row of
+`department-receipt-draft.db.test.ts` and the two “a department not in this location” thermal-logo
+rows in `receipt-print.test.ts`. Shared non-cross logo fixtures in `receipt-print.test.ts` and
+`receipt-presentation.test.ts` reuse one venue. Keep the inactive-department, malformed-data,
+throwing-read and other logo assertions; change a production department check only if those
+retained cases require it. These are carried from S6 under the watcher's standing rule above.
 
 | | |
 | --- | --- |
@@ -2360,6 +2382,10 @@ Docs (Task S6b), the entries the change makes stale:
 
 ### Task S6a: departments, zones, sale policy, order contexts, receipts, transfers, provisioning
 
+**Amendment 2026-11-01 (watcher, 21:50).** The department-draft other-location test row and
+two thermal-logo foreign-department rows moved to S2-5, together with the shared non-cross logo
+fixture cleanup, as recorded in S2's amendment. The remaining department checks stay in this task.
+
 - [ ] **Step 1: Failing tests** (scope-blind, `// A1301: deleted with cfg in S18`):
   - `packages/venue-service/src/operations.test.ts`: add `it("lists the venue's departments whatever location the scope names", …)`.
     It creates a department through `createDepartment(tx, cfg, …)`, then expects
@@ -3063,6 +3089,10 @@ comes back (`tender-refund-api.ts:65-76`, `tender-refund-authorization.ts:98-109
 `DeviceBinding.locationId` in S12a, which the design names for "admission". S11 leaves them.
 
 ### Task S11a: orders and bills
+
+**Amendment 2026-11-01 (watcher, 21:20).** The receipt-printer location predicate in
+`orderInvoicePrinters` and its mixed test's foreign-location half moved to S2-3, as recorded in
+S2's amendment above. This task still removes that reader's A4 location predicate.
 
 **Files (16):** `working-order.ts` (except the lines above), `order-drafts.ts`, `order-groups.ts`,
 `order-kitchen-note.ts`, `order-places.ts`, `orders-api.ts`, `orders-list.ts`, `move-bill.ts`,

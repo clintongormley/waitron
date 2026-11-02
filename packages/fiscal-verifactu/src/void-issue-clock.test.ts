@@ -16,6 +16,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { recordSale } from "@waitron/core";
 import { prepareIssueClock, type TrustedClock } from "@waitron/fiscal";
+import { computeHuella } from "@waitron/verifactu";
 import { decimal, locationId, nodeId, seriesId, saleId, type SaleId } from "@waitron/shared";
 import * as fiscal from "./index.js";
 import { withOperationAuthority } from "@waitron/module";
@@ -77,6 +78,49 @@ function records(id: string) {
     .map((r) => fiscal.fromRegistroRow(decodeRegistroRow(r)));
 }
 
+describe("the venue's zone across a daylight-saving change", () => {
+  it("keeps both repeated local times and the annulment in the saved Canary zone", async () => {
+    await suite.db.execute(sql`update locations set time_zone = 'Atlantic/Canary'`);
+    const sourceAt = (instant: string): TrustedClock => ({
+      ...source,
+      now: () => ({ ...source.now(), instant: new Date(instant) }),
+    });
+    const issue = (instant: string) =>
+      withTransaction(suite.db, async (tx) => {
+        const clock = await prepareIssueClock(tx, { nodeId: seededNode.nodeId }, sourceAt(instant));
+        return recordSale(
+          tx,
+          backend(clock),
+          saleInput({ ...seededNode, clock, settlement: { kind: "deferred" } }),
+        );
+      });
+    const firstSale = await issue("2026-10-25T00:30:00.000Z");
+    const secondSale = await issue("2026-10-25T01:30:00.000Z");
+    await withTransaction(suite.db, async (tx) => {
+      const clock = await prepare(tx, firstSale.saleId, sourceAt("2026-10-25T01:30:00.000Z"));
+      await backend(clock).recordVoid(tx, firstSale.saleId, "Operator error");
+    });
+    const [first, annulment] = records(firstSale.saleId);
+    const [second] = records(secondSale.saleId);
+    const offsets = suite.db
+      .all<{ issued_offset_minutes: number }>(
+        sql`select issued_offset_minutes from sales order by rowid`,
+      )
+      .map((row) => row.issued_offset_minutes);
+    expect(first!.FechaHoraHusoGenRegistro).toBe("2026-10-25T01:30:00+01:00");
+    expect(second!.FechaHoraHusoGenRegistro).toBe("2026-10-25T01:30:00+00:00");
+    expect(offsets).toEqual([60, 0]);
+    expect(annulment!.FechaHoraHusoGenRegistro).toBe("2026-10-25T01:30:00+00:00");
+    expect(annulment!.IDFactura).toMatchObject({ FechaExpedicionFacturaAnulada: "25-10-2026" });
+    const storedRows = suite.db.all<fiscal.RegistroRow>(
+      sql`select * from registros_facturacion order by secuencia`,
+    );
+    expect(storedRows).toHaveLength(3);
+    for (const raw of storedRows)
+      expect(computeHuella(fiscal.fromRegistroRow(decodeRegistroRow(raw)))).toBe(raw.huella);
+  });
+});
+
 describe("the void caller's original writing location", () => {
   it("keeps the offset-zero original day and prepares the new annulment from Madrid", async () => {
     const old = await original();
@@ -91,30 +135,6 @@ describe("the void caller's original writing location", () => {
       Encadenamiento: { RegistroAnterior: { Huella: before!.Huella } },
     });
     expect(await suite.db.select().from(invoiceSeries)).toEqual(numbers);
-  });
-  it("resolves the original node rather than another location or the first node", async () => {
-    await suite.db.insert(locations).values({
-      name: "Unrelated",
-      invoiceLocales: ["en-GB"],
-      operationDescription: "Other service",
-      timeZone: "Pacific/Honolulu",
-    });
-    const second = await seedTenantWithSif(suite.db);
-    await suite.db
-      .update(locations)
-      .set({ timeZone: "Atlantic/Canary" })
-      .where(eq(locations.id, second.locationId));
-    const old = await withTransaction(suite.db, (tx) =>
-      recordSale(
-        tx,
-        backend(),
-        saleInput({ ...second, clock: source, settlement: { kind: "deferred" } }),
-      ),
-    );
-    expect((await annul(old.saleId)).offsetMinutes).toBe(60);
-    expect(records(old.saleId)[1]).toMatchObject({
-      FechaHoraHusoGenRegistro: "2026-10-15T00:30:00+01:00",
-    });
   });
   it.each(["", "  ", "Invalid/Zone", "+02:00"])(
     "refuses unusable original zone %j without appending or allocating",
@@ -191,24 +211,6 @@ describe("the void caller's original writing location", () => {
       params: { reason: "mismatch" },
     });
     expect(snapshot()).toEqual(before);
-  });
-  it("validates the saved original node's location even without a server admission holder", async () => {
-    const old = await original();
-    await suite.db.execute(sql`pragma foreign_keys = off`);
-    try {
-      await suite.db
-        .update(nodes)
-        .set({ locationId: randomUUID() })
-        .where(eq(nodes.id, seededNode.nodeId));
-      const before = snapshot();
-      await expect(annul(old.saleId)).rejects.toMatchObject({
-        code: "venue.time_zone_target_invalid",
-        params: { reason: "location" },
-      });
-      expect(snapshot()).toEqual(before);
-    } finally {
-      await suite.db.execute(sql`pragma foreign_keys = on`);
-    }
   });
 });
 

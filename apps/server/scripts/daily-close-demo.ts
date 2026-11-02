@@ -73,7 +73,6 @@ function fixedClock(): TrustedClock {
 }
 
 interface Venue {
-  locationId: string;
   nodeId: NodeId;
   seriesId: SeriesId;
   rectificativeSeriesId: SeriesId;
@@ -125,7 +124,7 @@ export async function seedVenue(db: Database, timeZone: string = "Europe/Madrid"
     })
     .returning({ id: persons.id });
   const authorizerId = person!.id;
-  return { locationId, nodeId, seriesId, rectificativeSeriesId, authorizerId };
+  return { nodeId, seriesId, rectificativeSeriesId, authorizerId };
 }
 
 async function main(): Promise<void> {
@@ -216,7 +215,7 @@ async function main(): Promise<void> {
 
     const authorizerSession = await withTransaction(db, async (tx) => {
       return loginWithPin(tx, {
-        deviceId: await scriptSessionDevice(tx, venue.locationId, "Daily close demo"),
+        deviceId: await scriptSessionDevice(tx, "Daily close demo"),
         personId: venue.authorizerId,
         pin: "1234",
       });

@@ -1,9 +1,10 @@
+import { randomUUID } from "node:crypto";
 import { NoneBackend } from "@waitron/fiscal-none";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   AppError,
-  locationId as brandLocationId,
+  nodeId as brandNodeId,
   seriesId as brandSeriesId,
   workingOrderId as brandWorkingOrderId,
   decimal,
@@ -37,7 +38,6 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice } from "@waitron/db/testing/seed.js";
 import { formatInvoiceNumber, recordSale } from "./record-sale.js";
 import type { RecordSaleInput, RecordSaleTender } from "./record-sale.js";
 import { settleSale } from "./settle-sale.js";
@@ -224,21 +224,25 @@ describe("recordSale — the sale's origin", () => {
     },
   );
 
-  it("describes the operation from the location of the device the sale was rung on", async () => {
-    const [terrace] = await suite.db
-      .insert(locations)
-      .values({
-        name: "Terraza",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Terrace service",
-      })
-      .returning({ id: locations.id });
-    const terraceDevice = await seedDevice(suite.db, { locationId: brandLocationId(terrace!.id) });
-    const seen = await descriptionsFiled({ origin: deviceOrigin(terraceDevice.deviceId) });
-    expect(seen).toEqual(["Terrace service"]);
+  it("describes a device sale from the venue whatever the device's location column holds", async () => {
+    await suite.db
+      .update(locations)
+      .set({ operationDescription: "Counter service" })
+      .where(eq(locations.id, locationId));
+    await suite.db.execute(sql`pragma foreign_keys = off`);
+    try {
+      await suite.db.execute(
+        sql`update devices set location_id = ${randomUUID()} where id = ${deviceId}`,
+      );
+      expect(await descriptionsFiled({ origin: deviceOrigin(deviceId) })).toEqual([
+        "Counter service",
+      ]);
+    } finally {
+      await suite.db.execute(sql`pragma foreign_keys = on`);
+    }
   });
 
-  it("describes a sale with no device from its node's location", async () => {
+  it("describes a sale with no device from the venue", async () => {
     const [node] = await suite.db
       .select({ locationId: nodes.locationId })
       .from(nodes)
@@ -709,7 +713,18 @@ describe("recordSale — settlement modes", () => {
     });
 
     // Path B — a second node: deferred record, then a SEPARATE settleSale.
-    const other = await seedTenant(suite.db);
+    const [otherNode] = await suite.db
+      .insert(nodes)
+      .values({ locationId, name: "Second node" })
+      .returning({ id: nodes.id });
+    const [otherSeries] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId: otherNode!.id, code: "A" })
+      .returning({ id: invoiceSeries.id });
+    const other = {
+      nodeId: brandNodeId(otherNode!.id),
+      seriesId: brandSeriesId(otherSeries!.id),
+    };
     const b = await withTransaction(suite.db, async (tx) => {
       await backend.registerNode(tx, other.nodeId);
       return recordSale(
@@ -2059,6 +2074,46 @@ describe("recordSale — saved full-invoice service date", () => {
       .where(eq(locations.id, locationId));
     const [retained] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
     expect(retained).toEqual(saved);
+  });
+
+  it("dates a full invoice's bill in the venue's zone whatever the order's location column holds", async () => {
+    await suite.db
+      .update(locations)
+      .set({ timeZone: "Europe/Madrid" })
+      .where(eq(locations.id, locationId));
+    const [bill] = await suite.db
+      .insert(workingOrders)
+      .values({
+        source: "device",
+        deviceId,
+        locationId,
+        nodeId,
+        orderNumber: 1,
+        openedAt: "2026-02-28T22:50:00Z",
+      })
+      .returning({ id: workingOrders.id });
+    const [full] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId, code: "FF", purpose: "full" })
+      .returning({ id: invoiceSeries.id });
+    await suite.db.update(tenants).set({ taxpayerDomicile: "8 Fiscal Street" });
+    await suite.db.execute(sql`pragma foreign_keys = off`);
+    try {
+      await suite.db
+        .update(workingOrders)
+        .set({ locationId: randomUUID() })
+        .where(eq(workingOrders.id, bill!.id));
+      const { saleId } = await run(new FakeFiscalBackend(suite.db), {
+        seriesId: brandSeriesId(full!.id),
+        workingOrderId: brandWorkingOrderId(bill!.id),
+        counterparty: { taxId: "12345678Z", legalName: "Test Customer", countryCode: "ES" },
+        recipientAddress: "2 Main Street, 28013 Madrid, Spain",
+      });
+      const [saved] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
+      expect(saved).toMatchObject({ operationDate: "2026-02-28" });
+    } finally {
+      await suite.db.execute(sql`pragma foreign_keys = on`);
+    }
   });
 
   it("uses the issuance calendar date for a full invoice with no bill", async () => {

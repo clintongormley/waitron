@@ -219,7 +219,7 @@ export function mountTenderRefundApi(
         if (
           language !== undefined &&
           language !== sale!.locale &&
-          !(await readOfferedReceiptLanguages(tx, cfg)).includes(language)
+          !(await readOfferedReceiptLanguages(tx)).includes(language)
         )
           throw new AppError("management.request_invalid", { field: "language" });
         const printer = await resolveReceiptPrinter(tx, cfg.origin);

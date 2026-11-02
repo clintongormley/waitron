@@ -7,6 +7,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { CORE_MIGRATIONS, devices, incidents, nowIso, sales, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 import {
   addIncidentNote,
   currentIncidentsOf,
@@ -385,7 +386,7 @@ describe("openIncidents", () => {
   });
 
   it("scopes incidents to one device", async () => {
-    const other = await seedTenant(suite.db);
+    const other = await seedDevice(suite.db);
     await sell(failingChain());
     const rows = await withTransaction(suite.db, async (tx) => {
       return openIncidents(tx, deviceOrigin(other.deviceId));

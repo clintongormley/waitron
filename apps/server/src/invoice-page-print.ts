@@ -34,14 +34,14 @@ export type PagePrintJob = {
 };
 
 /**
- * Claims the oldest due A4 delivery whose printer is active, in the server's location and records
+ * Claims the oldest due A4 delivery whose printer is active and records
  * this agent, skipping a printer with an A4 delivery out (returned as `busyPrinterIds`) or listed in
  * `exceptPrinterIds`. A due delivery whose printer is disabled is failed instead of handed out.
  */
 export async function claimInvoicePagePrint(
   tx: Transaction,
   agentId: string,
-  ctx: { locationId: string; exceptPrinterIds?: readonly string[] },
+  ctx: { exceptPrinterIds?: readonly string[] },
   now = new Date(),
 ): Promise<{ job: PagePrintJob | undefined; busyPrinterIds: string[] }> {
   // After the expiry, so a lapsed claim frees its printer on this same call.
@@ -51,13 +51,7 @@ export async function claimInvoicePagePrint(
       .selectDistinct({ id: pagePrinters.id })
       .from(invoiceDeliveries)
       .innerJoin(pagePrinters, eq(pagePrinters.id, invoiceDeliveries.pagePrinterId))
-      .where(
-        and(
-          eq(invoiceDeliveries.medium, "a4"),
-          eq(invoiceDeliveries.status, "sending"),
-          eq(pagePrinters.locationId, ctx.locationId),
-        ),
-      )
+      .where(and(eq(invoiceDeliveries.medium, "a4"), eq(invoiceDeliveries.status, "sending")))
   ).map(({ id }) => id);
   const skipped = [...busyPrinterIds, ...(ctx.exceptPrinterIds ?? [])];
   const due = and(eq(invoiceDeliveries.status, "queued"), deliveryDue(now));
@@ -72,9 +66,7 @@ export async function claimInvoicePagePrint(
           tx
             .select({ id: pagePrinters.id })
             .from(pagePrinters)
-            .where(
-              and(eq(pagePrinters.locationId, ctx.locationId), eq(pagePrinters.active, false)),
-            ),
+            .where(eq(pagePrinters.active, false)),
         ),
       ),
     );
@@ -85,7 +77,6 @@ export async function claimInvoicePagePrint(
     .where(
       and(
         due,
-        eq(pagePrinters.locationId, ctx.locationId),
         eq(pagePrinters.agentId, agentId),
         eq(pagePrinters.active, true),
         skipped.length === 0 ? undefined : notInArray(pagePrinters.id, skipped),

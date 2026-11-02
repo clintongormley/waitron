@@ -75,7 +75,7 @@ export async function seedDemoRestaurant(
 ): Promise<SeedDemoResult> {
   const { locationId } = venue;
   demoSeedEnvironment(process.env);
-  await withTransaction(db, (tx) => readIssueZone(tx, venue));
+  await withTransaction(db, (tx) => readIssueZone(tx, { nodeId: venue.nodeId }));
 
   const { products, invoiceLocale, passStationIds } = await withTransaction(db, async (tx) => {
     const { productsByImage, menuIds, stationIds } = await seedCatalogues(tx, {
@@ -108,8 +108,8 @@ export async function seedDemoRestaurant(
       await publishMenu(tx, menuId, menuDocumentHash(document), "demo-seed");
     }
     return {
-      products: (await listAvailableProducts(tx, locationId)).products,
-      invoiceLocale: (await readReceiptLanguage(tx, locationId)).locale,
+      products: (await listAvailableProducts(tx)).products,
+      invoiceLocale: (await readReceiptLanguage(tx)).locale,
       passStationIds: { kitchen: stationIds.kitchen, deli: stationIds.deli },
     };
   });
