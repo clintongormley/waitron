@@ -2530,9 +2530,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   leaves PRs B–D: Requested, scoped pass release, station
   settings and coverage warnings, ticket presentation and physical schema/configuration retirement.
   PR B is cut into B1–B4 by the [slice plan](superpowers/plans/2026-11-01-a773-2b-requested-release.md).
-  No station can be set to wait for the pass until PR C. Next: B2 (a Requested dish through every service action), B3 (the pass board and the pass's
-  Fire), B4 (the screens, the display setting, Columns); the slice plan outlines each and lists
-  what B1's reviews left for them.
+  No station can be set to wait for the pass until PR C. Next: B3 (the pass board and the pass's
+  Fire), then B4 (the screens, the display setting, Columns). The slice plan outlines each and
+  lists, under "Left for B3 and B4", what B1's reviews and B2's plan left for them.
   Recheck other lanes' reservations before each slice. A797's revised design, pictures
   and FYI landed on 2026-10-21; A803's pass/station tail follows this build.
   What A797 leaves for the pass (slices 9 and 9b): `apps/till/src/state/kitchen-columns.ts` is the

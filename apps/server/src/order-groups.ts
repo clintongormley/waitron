@@ -2526,7 +2526,8 @@ export async function groupArrivingDishes(
   }
   const routing = immediate.length === 0 ? undefined : routingOnce(tx, cfg, new Date());
   const firing = [
-    // A copy added when a waiting dish was raised keeps its parent's sent time, not its request.
+    // A copy added when a waiting dish was raised carries its parent's sent time, so its request
+    // time dates it.
     ...released.map((line) => ({
       id: line.id,
       firedAt: line.ticketFiredAt ?? line.ticketRequestedAt ?? line.sentAt,

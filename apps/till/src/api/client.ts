@@ -573,7 +573,8 @@ export interface OrderGroup {
   state: "held" | "fired";
   firedAt: string | null;
   remindAt: string | null;
-  /** Present only when a person recorded every fired kitchen item of the group ready. */
+  /** Present only when a person recorded ready every kitchen item of the group that the waiter has
+   *  asked for. */
   ready?: true;
   lineIds: string[];
   courseIds: string[];
@@ -4252,8 +4253,8 @@ export class TillApi {
   }
 
   /**
-   * Move ONE not-yet-fired line into another course → `PATCH
-   * /api/working-orders/:orderId/lines/:lineNo/course`. `null` CLEARS the line's course and is sent as an
+   * Move ONE held line (one the waiter has not fired, and not waiting for the pass) into another
+   * course → `PATCH /api/working-orders/:orderId/lines/:lineNo/course`. `null` CLEARS the line's course and is sent as an
    * explicit null, not an absent field. NON-FISCAL. Rejects `tab.not_open`, `course.not_found`,
    * `tab.line_not_found`, or `ticket.already_fired`.
    */

@@ -679,8 +679,6 @@ function saveBillDraft(
   );
 }
 
-// The rules the kitchen states mirror: `isReleased` in working-order.ts and `heldExtras` and
-// `readyAt` in order-groups.ts.
 describe("readOrderStateCounts on a party's bill", () => {
   it("counts a held group's dishes as held, extras adding nothing, as readHeldCounts does", async () => {
     const { partyId, billId } = await seatParty();

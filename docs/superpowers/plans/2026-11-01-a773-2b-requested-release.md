@@ -256,7 +256,8 @@ groups and the pass") to say B1 landed and B2–B4 remain, with this plan linked
   line by its sent time, so that water reads as released — to `ordersWithUnfiredDish` and
   `adjustments-apply.ts` as well — while its course's dishes are Requested. Today it reads so only
   once its course is released. The gate code is unchanged, as the master requires; B2.1's
-  requested fixture pins the water's reading.
+  requested fixture pins the water's reading. (2026-11-02: B2's D41 stops counting a Requested
+  dish served whole; see the B2 plan.)
 
 - **D4 One release step.** New `requestHeldItems(tx, orderId, scope, at)` in
   `apps/server/src/kitchen-release.ts` replaces the three updates of finding 1. It runs two

@@ -480,7 +480,8 @@ declare module "@waitron/shared" {
     /**
      * Record unpaid departure found a bill it would invoice — open, or presented with no invoice
      * yet — holding a dish the kitchen is not making: never sent, held in its group or by its
-     * kitchen item, or recalled from the kitchen. Staff cancel it first.
+     * kitchen item, recalled from the kitchen, or waiting for the pass and not served whole. Staff
+     * cancel it first.
      */
     "unpaid_departure.unfired_dishes": { workingOrderId: string };
     /**
@@ -762,8 +763,9 @@ declare module "@waitron/shared" {
      */
     "tab.transfer_modifier_line": { tabId: string; lineNo: number };
     /**
-     * A split onto a new bill named a line whose kitchen ticket is unfired and whose group is not
-     * held (a recalled dish, or a held round with no group). `lineNo` is the offending source line.
+     * A split onto a new bill named a line whose kitchen ticket is held (neither fired nor
+     * requested) and whose group is not held (a recalled dish, or a held round with no group).
+     * `lineNo` is the offending source line.
      */
     "tab.split_held_line": { tabId: string; lineNo: number };
     /**

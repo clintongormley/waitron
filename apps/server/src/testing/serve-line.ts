@@ -58,8 +58,8 @@ export async function splitPartyBill(
   });
 }
 
-/** Fire every line of the bill, as `tables.test.ts` fires `openTab`'s lines: only released work can be
- * served. */
+/** Fire every line of the bill, as `tables.test.ts` fires `openTab`'s lines: only work the waiter
+ * has asked for can be served. */
 export async function fireAll(
   tx: Transaction,
   cfg: TradingContext,

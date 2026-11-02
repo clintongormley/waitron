@@ -578,7 +578,7 @@ describe("markServed / unmarkServed", () => {
       }),
     );
 
-    // Only released work can be served.
+    // Only work the waiter has asked for can be served.
     await asApp(cfg, (tx) => fireAll(tx, cfg, tabId));
     await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
     let served = await servedAtByLine(tabId);

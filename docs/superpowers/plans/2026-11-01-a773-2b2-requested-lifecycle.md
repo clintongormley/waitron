@@ -18,7 +18,7 @@ change cannot break it unnoticed; every pin here has a mutation that turns it re
 
 **Implements.** The [slice plan](2026-11-01-a773-2b-requested-release.md)'s "## B2 (outline)" and
 its "Left for B2 and B3 by B1's per-task reviews", under that plan's "Owner decisions this plan
-applies" and Decisions D1–D20, which bind here unchanged; the [master plan](2026-10-19-a773-2-firing-and-pass.md)'s
+applies" and Decisions D1–D20, which bind here except where D41 changes D3; the [master plan](2026-10-19-a773-2-firing-and-pass.md)'s
 Task 8 and Task 9's floor, reminder and output-alert readers, Contracts 1–2, and its "Shared
 verification contract". Where this plan departs from either, "Departures" says so and why.
 
@@ -485,6 +485,7 @@ D1–D20 are the slice plan's and bind unchanged. These are B2's, dated 2026-11-
 | Master T8 "Move requested … its destination pass releases it once" | B2.5a pins the move; "releases it once" is B3.5's | needs the release |
 | Master T8 "suppress later fire jobs for already served components" | B2.1 pins that a served Requested dish stays Requested and is never swept by a later waiter's fire; the release's exclusion of served quantity is B3.4's | needs the release |
 | "B2 or B3" made-here extras mapping | kept; B2 pins serving; placement and HOLD paper B3 | D36 |
+| Master: keep `ordersWithUnfiredDish` unchanged; slice plan D3 | A Requested dish served whole no longer blocks an unpaid departure | D41: nothing ever gives it a fire time, so the departure would be refused for ever |
 
 ## Owner questions
 
