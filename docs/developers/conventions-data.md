@@ -5723,3 +5723,139 @@ unknown. An ordinary cancellation already set aside by the drainer can be correc
 released afterwards. The refusal and that later accepting path run together in
 `apps/server/src/fiscal-remedy.staff-refund.test.ts`, including preservation of the actual cash
 refund. Those cases cover this action's admission boundary, not every future queue dependency.
+
+## Root receipts moved on 2026-11-02
+
+These excerpts retain the root instruction receipts from `CLAUDE.md` at
+`1d03a7c42142478f6ecabc834f08ffd58bd04d07`. They are not new measurements.
+
+### Optional request field defaults
+
+- **Default optional request fields only when absent, and check enum types before comparing values.**
+  Explicit null and coerced arrays passed modifier validation. A field whose null is itself a value
+  is deliberately outside the rule — an extras list's `maxPicks`, an extras item's `maxQuantity`,
+  the seat-a-table route's `guestCount` and the setup request's `taxpayerDomicile` among them.
+
+### Personal log field naming rule
+
+- **A detail or log field holding a person's name, email or tax number uses a name on
+  `PERSONAL_LOG_KEYS` or a path on `PERSONAL_LOG_PATHS` (`apps/server/src/log-personal-data.ts`),
+  which the server's logger masks in every line it writes; the answer keeps it. Name it for whose
+  it is (`guestName`, `customerTaxId`), never a bare `name` or `taxId` (the listed bare `taxId` is
+  the venue's own): the list is flat across every code.** Cost: staff names and emails reached the
+  sign-in-free recovery page. Guard: `scripts/personal-log-params.test.ts`, weaker than its name:
+  reads text. [Limits](conventions-data.md#root-receipts-moved-on-2026-10-31).
+
+### English-only code and its exceptions
+
+- **General code is English only** (owner, 2026-09-07 and 2026-10-19), including literals, comments,
+  identifiers, file names, seeds, starter content and tests. Exceptions: `packages/fiscal-verifactu`,
+  AEAT wire names, translation files/guides and Spain-specific packages (`country-es`, `workforce-es`,
+  reporting's modelo 303) for official Spain-only text/terms (owner, 2026-10-20, A913).
+  Country packs also provide English and own demo data; Spain receipts use the venue's receipt language,
+  never English. Starter content (module seeds, core setup) is English in code and translated at
+  setup; its words in other languages go in the writing package's `src/starter-content.ts`, which
+  the guard skips by exact path (owner, 2026-10-20, A918); non-English screen tests read expected
+  strings. Domain terms have one declaring module vocabulary; fiscal terms
+  never enter the base.
+  Guard: `scripts/english-only.test.ts`, weaker than its name: listed words and packages only, no apps;
+  review greps the diff. Standing gaps and details: [conventions-data.md](conventions-data.md).
+
+### Configuration bundle keys outside venue
+
+- **A configuration bundle value that is not a setup field stays out of `venue`'s own keys** (the
+  default menu travels as the top-level `defaultCatalogueId`); the setup app copies the preview's
+  `venue` by `country`, `TAXPAYER_FIELDS` and `CLAIM_VENUE_FIELDS`. Cost: from #1752 to A980 S1a2
+  no production box could be set up from an export. Guards:
+  `apps/server/src/first-fiscal-setup.e2e.test.ts` and `apps/setup/src/setup-app-first-fiscal.test.ts`,
+  weaker than the rule: one export shape.
+  [Limits](conventions-data.md#root-receipts-moved-on-2026-10-31).
+
+### SQL built by string concatenation
+
+- **Never build SQL by string concatenation — except where the engine takes no bound value**: an
+  identifier, and the body of a generated trigger. For those, either escape
+  (`quoteIdent`/`quoteLiteral`) or validate and throw.
+  Neither is not acceptable; "the callers only pass safe values" is the §1 defect class.
+
+### Write-path tables guard
+
+- **The tables `scripts/write-path-tables.json` lists request code may read and never write, and
+  the database does not refuse the write.** A write of one of them lives only in the files that
+  JSON names. Guard: `scripts/write-path-tables.test.ts` is
+  the whole of the enforcement, and weaker than its name — it reads TEXT and judges a FILE, not a
+  call chain. Receipt:
+  [conventions-data.md](conventions-data.md#the-tables-scriptswrite-path-tablesjson-lists-are-read-only-to-the-application-and-one-guard-is-the-whole-of-the-enforcement).
+
+### Two-database lock and save order
+
+- **Across `venue.db` and `node.db`, take `node.db`'s write lock outside `venue.db`'s; save
+  `venue.db` first and `node.db` after, so a re-run repairs `node.db` (a signing key is the stated
+  exception); write `node.db` through `withNodeTransaction`, since `withTransaction` refuses the node
+  handle at compile time.** The two files have independent write queues. Nothing guards the first
+  two. [Rules and sites](conventions-data.md#a-local-row-belongs-to-one-node-so-no-foreign-key-may-join-a-local-table-to-a-ledgerstate-one).
+
+### Refused statements and full-disk transactions
+
+- **A refused statement normally backs out itself, not its transaction; full-disk and explicit
+  ROLLBACK/FAIL variants are exceptions.** Catch full-disk refusals outside the whole `withTransaction`
+  in tests. After `storage.disk_full` ends a transaction, later statements in its body must remain
+  refused inside the write queue; an intervening outside transaction defeats that protection.
+  Guards: `packages/store/src/disk-full.test.ts` and `write-queue.test.ts`, weaker than their names:
+  page limits, not a real disk; at-commit cases are stand-ins. No guard enforces the test catch rule.
+
+### Spare file deletion and release
+
+- **Within the server, only the start (on a nearly full disk, before first-setup resolution), its
+  emptying of a discarded recovery and the repair page's Start-again flow delete
+  `<state>/spare-space` (`waitron.sh reset` deletes it too); a release writes
+  `spare-space.released` (exceptions in the topic file), which holds the till stop, across restarts,
+  until a start with room, the free-space watch or Box status's Free button has written the spare
+  back whole. It is never venue data, and a recovery's originals walk leaves both out.**
+  Guard: `scripts/spare-space.test.ts`, weaker than its name: reads text.
+  [Cost and detail](conventions-data.md#the-boxs-spare-file).
+
+### Backup staging turn
+
+- **Anything that writes or deletes in `<state>/backup-staging` does it inside the staging turn**
+  (`apps/server/src/backup-staging-turn.ts`), **except the start's clean-up (`freeSpaceAtStart`),
+  which runs while no backup supervisor is running in this process**. Guard:
+  `scripts/backup-staging-touchers.test.ts`, weaker than its name — it reads text and never checks
+  that a file takes the turn; the turn is in-process only. Receipt:
+  [conventions-data.md](conventions-data.md#backup-staging-is-touched-only-inside-the-staging-turn).
+
+### Money column conversion
+
+- **Money columns hold whole cents; convert at the row with `decimalToCents`, `centsToDecimal`,
+  or `rawCentsToDecimal` for raw SQL (`cast(x as text)`).** Above it use exact `Decimal`; sum JSON
+  amounts in JavaScript at money scale. Nothing guards this boundary or makes mistakes loud.
+  Narrower guards: `packages/db/src/schema/columns.test.ts`, `packages/shared/src/conventions.test.ts`.
+
+### Table classification and append-only marking
+
+- **Classify new tables `ledger`, `state` or `local` in their module; use `appendOnly()` for
+  uncorrectable tables and `migrationOptionsFor(...)` when migrating.** Classification alone is not
+  the trigger set; triggers cannot prevent `DROP TABLE`. Marking an existing table append-only must
+  be disclosed in the PR because first start can raise `append_only.triggers_restored`.
+  Guards: `scripts/classification-complete.test.ts`, `scripts/append-only-triggers.test.ts`,
+  `scripts/apply-migrations-callers.test.ts`; the last is weaker than its name: call shape, not sets.
+
+### Live logins stored as hashes
+
+- **Store anything that works as a live login as a hash.** Guards: database-copy cases in
+  `apps/server/src/me-api.test.ts`, `apps/server/src/till-api.test.ts` and the stored-hash case in
+  `packages/identity/src/management-session.test.ts`, weaker than the rule: limited credentials,
+  only the dashboard hash tried as a token; new login tables unguarded.
+
+### Rebuild rehearsal on node:sqlite
+
+- **Rehearse a drizzle table rebuild on `node:sqlite`, never the `sqlite3` command line**: macOS's
+  `sqlite3` 3.51.0 refuses the rename the app's SQLite 3.54.0 runs (`no such column: __new_…`), so
+  the rehearsal fails a sound migration. Nothing guards it.
+  [Receipt](conventions-data.md#a-drizzle-table-rebuild-is-rehearsed-on-nodesqlite-never-the-sqlite3-cli).
+
+### Full-disk error code classification
+
+- **A full disk is not one error code; code 14 also names a missing folder.**
+  `fullDiskFailure` in `apps/server/src/boot-failure.ts` classifies 13 always, 14/4874/`ENOSPC` only
+  under 16 MiB free. Guard: its test suite, weaker than the rule: stubbed errors, no real `ENOSPC` case.
