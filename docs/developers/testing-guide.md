@@ -3468,3 +3468,69 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   `apps/server/src/hour-recovery-placement-1.test.ts`, `apps/server/src/hour-recovery-placement-2.test.ts`
   and `apps/server/src/hour-promotion.test.ts`, weaker than the rule: those children only. Receipt:
   [testing-guide.md](testing-guide.md#a-child-process-that-freezes-date-freezes-performancenow-with-it).
+
+## Root receipts moved on 2026-11-02
+
+These excerpts retain the root instruction receipts from `CLAUDE.md` at
+`1d03a7c42142478f6ecabc834f08ffd58bd04d07`. They are not new measurements.
+
+### Pinned Litestream and versitygw for the stream tests
+
+- **Install pinned Litestream and versitygw before stream loop/pause tests:**
+  `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`. S3 rehearsal/send-gate/
+  interrupt suites need versitygw alone. Missing binaries skip locally and fail CI. Guard:
+  `scripts/ci-workflow.test.mjs`, weaker than its name: text reads accept commented or disabled setup.
+
+### Full-disk test filesystems and attached macOS images
+
+- **Full-disk tests use a small real filesystem:** macOS makes one with `hdiutil`; Linux
+  needs `WAITRON_FULL_DISK_DIR`, otherwise skips locally and fails CI. Interrupted macOS images
+  can remain attached; `pnpm reap` does not detach them. Guard: `scripts/ci-workflow.test.mjs`,
+  weaker than its name: reads workflow text. [Separate filesystems and variables](testing-guide.md#root-receipts-moved-on-2026-10-31).
+
+### Where a project's browser reads connectTimeout
+
+- **On Vitest 4.1.12 a browser configured inside a project reads `connectTimeout` only from the
+  OUTER config's `test.browser` block**; the command-line flag and that project's own `browser`
+  block are ignored without a word. Nothing guards it. Receipt:
+  [testing-guide.md](testing-guide.md#vitest-reads-a-browsers-connecttimeout-from-the-outer-config-only).
+
+### The browser diagnostic pause and its page.viewport hang
+
+- **A diagnostic pauses a browser test page only after its file has been silent for 60 seconds
+  beyond its running cases' time limits and the project's hook time limit, and cancels a pause left
+  waiting**: a `page.viewport` call hung until its 30-second hook timeout from the instant of a
+  pause, and repeated pauses reproduced the hang locally (A1307). Guard:
+  `scripts/vitest-file-progress.test.mjs`, weaker than its name: this reporter only, fake pages, not
+  Chromium. Receipt: [ci-and-gates.md](ci-and-gates.md#a-browser-file-silent-past-its-time-limits-gets-a-stack-sample).
+
+### Passkey tests and already-loaded modules
+
+- **Browser passkey tests stub `navigator.credentials`, keeping the WebAuthn library real.** A
+  module mock cannot replace an already-loaded browser ES module.
+
+### Source scanners and screenshot directories
+
+- **Source scanners select files, not just paths ending in `.ts`.** A failing browser test creates a
+  screenshot DIRECTORY named `*.test.ts`; `sourceFilesIn` checks `isFile()`.
+
+### Whole-tree guards and the root-guards job
+
+- **A guard that reads the whole tree belongs in the ROOT Vitest project**, which the
+  `root-guards` job runs unless main reuses verified equal-tree PR CI; the hook runs it on every
+  non-docs push. The root project does
+  not typecheck, and a module tested only from there must be in the root `coverage.include` to be
+  measured at all, and excluded from its own package's.
+
+### Vitest 4's missing default coverage excludes
+
+- **Vitest 4 ships no default coverage excludes at all.** What scopes a package's report now is its
+  own `coverage.include`. `include`/`exclude` still replace rather than merge, and a config
+  measuring nothing still exits 0 with the thresholds intact, so read the per-file table rather than
+  the exit code.
+
+### Checks inside every database test's hooks
+
+- **Code every database test runs — `useVenueDb`'s hooks — never checks something already
+  guaranteed**: that check's mutants change nothing, so each runs every test that reaches it, up to every database
+  test, and on CI's runners some ran to Stryker's per-mutant timeout. Nothing guards it. [Receipt](ci-and-gates.md#dbs-mutation-shards-are-packed-by-estimated-cost).

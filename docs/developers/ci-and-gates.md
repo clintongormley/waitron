@@ -4244,3 +4244,47 @@ reads `ci.yml` as text and never reads the steps' test files. Receipts:
 [testing-guide.md](testing-guide.md), "In CI their temporary files are in memory",
 and
 [ci-and-gates.md](ci-and-gates.md#the-venue-service-shards-keep-their-test-databases-in-memory).
+
+## Root receipts moved on 2026-11-02
+
+These excerpts retain the root instruction receipts from `CLAUDE.md` at
+`1d03a7c42142478f6ecabc834f08ffd58bd04d07`. They are not new measurements.
+
+### A mutation floor of 90 in every mutation-tested package
+
+- **A mutation floor of 90 breaks the run in every mutation-tested package — `ui`, `ui-core`,
+  `shared`, `fiscal`, `db` and `node-db`** (the owner's 90-everywhere decision of 2026-09-19). WHERE it bites
+  differs — on a pull request, only in the nightly run, or only locally — and neither `fiscal`'s nor
+  `db`'s floor is package-wide. Guard: `scripts/mutation-break-thresholds.test.mjs`, weaker than its
+  name — it reads the workflow as TEXT for the sharded packages' bars (db, ui and ui-core). Which
+  package bites where: [ci-and-gates.md](ci-and-gates.md).
+
+### Root entry: CI's test jobs measure coverage, never plain test
+
+- **CI's test jobs measure coverage, never plain `test`**: `test:coverage`, or `test:shard` with
+  the package's `-merge` job enforcing the bar. Verify that package’s coverage or merge job on the
+  current head; run `pnpm --filter <pkg> test:coverage` locally when investigating a failure.
+  Vitest `--shard` splits by FILE COUNT (`apps/server` excepted: its shards are packed by duration),
+  so `N` must never exceed a package's test-file count.
+  Guard: the "run no more shards than the package has test files" case in
+  `scripts/ci-workflow.test.mjs`, weaker than its name — it counts files named `*.test.ts` under the
+  package, not what the package's Vitest config includes.
+
+### Root entry: CI does not run every check on every push
+
+- **CI does not run every check on every push.** Read the `changes` job's `code`, `scope` and
+  `packages` outputs before treating a green PR as evidence about the workspace. A main push
+  reuses a same-repository PR's successful CI only after API verification of equal trees and
+  complete successful job evidence, plus a full-green main run for the pushed commit's parent.
+  Main retains image smoke before publishing; its summary names both evidence runs. Otherwise normal CI runs.
+  [Details and limits](ci-and-gates.md#main-can-reuse-an-identical-pull-request-tree).
+
+### uutils timeout on ubuntu-26.04 runners
+
+- **On GitHub's ubuntu-26.04 runners `timeout` is uutils', not GNU's, and its `-k` forced kill
+  reaches the command alone, never its children; a script that relies on `-k` to stop a process tree
+  looks for `gnutimeout` first.** Cost: root-guards failed on 26.04 runners when the ignored-stop
+  case hit its 30 s limit, main's own CI among them. Guards: the "prefers gnutimeout" and "kills an
+  attempt that ignores the polite stop" cases in `scripts/ci-setup-pnpm.test.mjs`, weaker than the
+  rule: that script only; `scripts/ci-diff-paths.sh` never looks for `gnutimeout` (backlog).
+  [Receipt](ci-and-gates.md#every-pnpm-setup-is-bounded).

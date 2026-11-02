@@ -5723,3 +5723,77 @@ unknown. An ordinary cancellation already set aside by the drainer can be correc
 released afterwards. The refusal and that later accepting path run together in
 `apps/server/src/fiscal-remedy.staff-refund.test.ts`, including preservation of the actual cash
 refund. Those cases cover this action's admission boundary, not every future queue dependency.
+
+## Root receipts moved on 2026-11-02
+
+These excerpts retain the root instruction receipts from `CLAUDE.md` at
+`1d03a7c42142478f6ecabc834f08ffd58bd04d07`. They are not new measurements.
+
+### English-only code and its exceptions
+
+- **General code is English only** (owner, 2026-09-07 and 2026-10-19), including literals, comments,
+  identifiers, file names, seeds, starter content and tests. Exceptions: `packages/fiscal-verifactu`,
+  AEAT wire names, translation files/guides and Spain-specific packages (`country-es`, `workforce-es`,
+  reporting's modelo 303) for official Spain-only text/terms (owner, 2026-10-20, A913).
+  Country packs also provide English and own demo data; Spain receipts use the venue's receipt language,
+  never English. Starter content (module seeds, core setup) is English in code and translated at
+  setup; its words in other languages go in the writing package's `src/starter-content.ts`, which
+  the guard skips by exact path (owner, 2026-10-20, A918); non-English screen tests read expected
+  strings. Domain terms have one declaring module vocabulary; fiscal terms
+  never enter the base.
+  Guard: `scripts/english-only.test.ts`, weaker than its name: listed words and packages only, no apps;
+  review greps the diff. Standing gaps and details: [conventions-data.md](conventions-data.md).
+
+### Configuration bundle keys outside venue
+
+- **A configuration bundle value that is not a setup field stays out of `venue`'s own keys** (the
+  default menu travels as the top-level `defaultCatalogueId`); the setup app copies the preview's
+  `venue` by `country`, `TAXPAYER_FIELDS` and `CLAIM_VENUE_FIELDS`. Cost: from #1752 to A980 S1a2
+  no production box could be set up from an export. Guards:
+  `apps/server/src/first-fiscal-setup.e2e.test.ts` and `apps/setup/src/setup-app-first-fiscal.test.ts`,
+  weaker than the rule: one export shape.
+  [Limits](conventions-data.md#root-receipts-moved-on-2026-10-31).
+
+### SQL built by string concatenation
+
+- **Never build SQL by string concatenation — except where the engine takes no bound value**: an
+  identifier, and the body of a generated trigger. For those, either escape
+  (`quoteIdent`/`quoteLiteral`) or validate and throw.
+  Neither is not acceptable; "the callers only pass safe values" is the §1 defect class.
+
+### Two-database lock and save order
+
+- **Across `venue.db` and `node.db`, take `node.db`'s write lock outside `venue.db`'s; save
+  `venue.db` first and `node.db` after, so a re-run repairs `node.db` (a signing key is the stated
+  exception); write `node.db` through `withNodeTransaction`, since `withTransaction` refuses the node
+  handle at compile time.** The two files have independent write queues. Nothing guards the first
+  two. [Rules and sites](conventions-data.md#a-local-row-belongs-to-one-node-so-no-foreign-key-may-join-a-local-table-to-a-ledgerstate-one).
+
+### Spare file deletion and release
+
+- **Within the server, only the start (on a nearly full disk, before first-setup resolution), its
+  emptying of a discarded recovery and the repair page's Start-again flow delete
+  `<state>/spare-space` (`waitron.sh reset` deletes it too); a release writes
+  `spare-space.released` (exceptions in the topic file), which holds the till stop, across restarts,
+  until a start with room, the free-space watch or Box status's Free button has written the spare
+  back whole. It is never venue data, and a recovery's originals walk leaves both out.**
+  Guard: `scripts/spare-space.test.ts`, weaker than its name: reads text.
+  [Cost and detail](conventions-data.md#the-boxs-spare-file).
+
+### Rebuild rehearsal on node:sqlite
+
+- **Rehearse a drizzle table rebuild on `node:sqlite`, never the `sqlite3` command line**: macOS's
+  `sqlite3` 3.51.0 refuses the rename the app's SQLite 3.54.0 runs (`no such column: __new_…`), so
+  the rehearsal fails a sound migration. Nothing guards it.
+  [Receipt](conventions-data.md#a-drizzle-table-rebuild-is-rehearsed-on-nodesqlite-never-the-sqlite3-cli).
+
+### No external dependency on the sale path, and the planned failover
+
+- **Nothing EXTERNAL may block a sale — and a till needs the venue's PRIMARY.** AEAT, the card network
+  and the internet are never on the sale path of whichever node is primary: records chain locally and
+  the outbox drains later; a card falls back to 4G, a standalone terminal or cash. The till follows
+  the primary and never chooses; only the primary sells. Fiscal submission is an outbox, never
+  inline. TODAY a venue has ONE node and no failover at all; the intended failover is in
+  `docs/backlog.md` → _Replication, membership & failover — residuals_. Detail:
+  [conventions-data.md](conventions-data.md).
+

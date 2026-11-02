@@ -591,3 +591,31 @@ with Spanish receipts. Screens remain English or Spanish.
 Changing `WAITRON_DEMO_REGION` keeps an existing venue's stored geography and data.
 To replace a throwaway venue you own, run
 `WAITRON_DEMO_REGION=catalonia wa-wt reset demo <worktree-name>`.
+
+## Root receipts moved on 2026-11-02
+
+These excerpts retain the root instruction receipts from `CLAUDE.md` at
+`1d03a7c42142478f6ecabc834f08ffd58bd04d07`. They are not new measurements.
+
+### Mock-ups and screenshots are never committed (root entry)
+
+- **Mock-ups and screenshots are never committed, and not copied to Drive** (owner, 2026-11-02):
+  they stay in the working folder of whoever made them and are shown to the owner directly. Cost:
+  184 MiB of them in the tree when removed; A1306 rewrites the history. Guard:
+  `scripts/no-mockups-in-docs.test.ts`, weaker than its name: reads tracked file names, not
+  content. [Limits](workflow-guide.md#mock-ups-and-screenshots-are-never-committed).
+
+### Docs: the backlog, specs, plans and handoffs
+
+- **Docs.** `docs/backlog.md` answers "what should I work on?" — read it before starting anything
+  unprompted, and **update it in the same change that makes it stale** (the moment it goes stale most
+  reliably is a MERGE). A change that finishes an entry DELETES it rather than marking it done, and
+  each point it leaves open becomes its own short entry in the same area; an entry's long detail goes
+  in its area's file under `docs/backlog/`. A decision a comment or doc cites moves to its area's
+  `## Decisions and deliberate limits` instead of being deleted, and entries there are never deleted
+  for being finished. How: `docs/backlog.md` → _How to keep this file honest_.
+  Specs live in `docs/superpowers/specs/`, plans in `docs/superpowers/plans/`,
+  both committed deliberately because a plan doubles as an operator's runbook. Session handoffs in
+  `docs/handoffs/` are gitignored — never open a PR for one. Historical docs record what was true when
+  written: add a dated pointer rather than rewriting them. The legal track is separate, in
+  `docs/compliance/action-plan.md`.

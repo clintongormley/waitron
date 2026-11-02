@@ -2200,3 +2200,43 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   under `apps/*/src` only, finds forms by the literals `"addressLine1"`/`"streetAddress"`, and checks
   that the tag is present, not where or with a provider. Limits:
   [design-system.md](design-system.md).
+
+## Root receipts moved on 2026-11-02
+
+These excerpts retain the root instruction receipts from `CLAUDE.md` at
+`1d03a7c42142478f6ecabc834f08ffd58bd04d07`. They are not new measurements.
+
+### A screen change updates its guide
+
+- **A screen change updates its guide in English and, where a twin exists, Spanish.**
+  Every section heading carries a shared `{#id}`; dashboard/till links use each app's `help-guide.ts`. Guides live in
+  `apps/server/src/guide/<language>/`, served at `/help/<language>/<page>`.
+  Guards: `apps/server/src/guide-content.test.ts` and `scripts/guide-links.test.ts`, weaker than their
+  names: render/link/id checks and scoped text scans, not accuracy or proof the guide was updated.
+
+### Every staff-notice code is worded by the till
+
+- **Every staff-notice code a source sends is worded by the till's `staffNoticeText`**
+  (`apps/till/src/i18n/staff-notices.ts`, from `staff_notice.<code>` in English and Spanish); a
+  code it does not name is drawn as "The box needs attention". Guard:
+  `scripts/staff-notice-codes.test.ts`, weaker than its name — it reads `code: "…"` literals as
+  text, in source files it lists by hand. See [conventions-ui.md](conventions-ui.md).
+
+### A module adds a Calendar view through calendarViews
+
+- **A module adds a Calendar view through `calendarViews` on its `DashboardContribution`, never by
+  venue-service importing it, and never names its address words in `apps/dashboard/src/navigation.ts`**,
+  whose `keepUnlisted` already keeps them. Nothing guards the second half. See
+  [conventions-ui.md](conventions-ui.md).
+
+### The dashboard banner
+
+- **The dashboard banner is persistent identity chrome** — top of the page, full width, the tenant's
+  legal name (not a location). The account menu (a person-icon `wt-row-actions` popover holding
+  Account settings, Theme, Language and Log out) sits at the trailing edge only when a session exists.
+
+### The hardware transport seam
+
+- **The hardware transport seam is `@waitron/print-agent`, and it is database-free.** It imports no
+  other package in this repo, and `@waitron/printing` depends on IT, never the reverse. The guard is
+  the `import-x/no-restricted-paths` zone in `eslint.config.js`, not the empty `dependencies` block.
