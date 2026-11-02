@@ -1311,6 +1311,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The list of servers was being changed at the same moment. Try again.",
     es: "La lista de servidores se estaba cambiando en ese mismo momento. Vuelve a intentarlo.",
   },
+  "handover.request_invalid": {
+    en: "The request to hand the work over to another server was not valid, so nothing was changed. Start the handover again.",
+    es: "La solicitud para pasar el trabajo a otro servidor no era válida, así que no se ha cambiado nada. Vuelve a empezar el cambio de servidor.",
+  },
   "alert.not_found": {
     en: "This alert no longer exists. Refresh the list.",
     es: "Este aviso ya no existe. Actualiza la lista.",

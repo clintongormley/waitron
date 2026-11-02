@@ -1,3 +1,8 @@
-// The package's `handover.*` codes are declared here on `@waitron/shared`'s `ErrorParams`. The
-// envelope throws none of its own, so there are none yet.
-export {};
+import "@waitron/shared";
+
+declare module "@waitron/shared" {
+  interface ErrorParams {
+    /** `field` is the dotted path of the first field refused, or `binding` for the whole value. */
+    "handover.request_invalid": { field: string };
+  }
+}

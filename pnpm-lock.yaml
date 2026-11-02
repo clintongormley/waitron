@@ -1288,6 +1288,9 @@ importers:
       '@waitron/membership':
         specifier: workspace:*
         version: link:../membership
+      '@waitron/shared':
+        specifier: workspace:*
+        version: link:../shared
     devDependencies:
       '@stryker-mutator/core':
         specifier: ^10.1.1

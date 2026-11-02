@@ -13,7 +13,8 @@
     "mutation": "stryker run"
   },
   "dependencies": {
-    "@waitron/membership": "workspace:*"
+    "@waitron/membership": "workspace:*",
+    "@waitron/shared": "workspace:*"
   },
   "devDependencies": {
     "@stryker-mutator/core": "^10.1.1",
