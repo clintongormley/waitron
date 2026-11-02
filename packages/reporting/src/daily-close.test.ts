@@ -9,7 +9,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedSale, seedTender, seedVenue } from "../test/fixtures.js";
+import { seedSale, seedTender, seedVenueWithSeries } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { seedRefundableSale, seedTenderRefund } from "../test/tender-refund-fixtures.js";
 import { computeDailyClose } from "./daily-close.js";
@@ -18,7 +18,7 @@ import type { DailyCloseInput } from "./types.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 let venue: SeededVenue;
 beforeEach(async () => {
-  venue = await seedVenue(suite.db);
+  venue = await seedVenueWithSeries(suite.db);
 });
 function input(overrides: Partial<DailyCloseInput> = {}): DailyCloseInput {
   return {

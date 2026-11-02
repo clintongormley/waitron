@@ -6,7 +6,7 @@ import {
   seedBillRefund,
   seedNodeAndSeries,
   seedOpenOrder,
-  seedVenue,
+  seedVenueWithSeries,
   seedVenueDevice,
 } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
@@ -19,7 +19,7 @@ const DAY1 = "2026-08-04T10:00:00.000Z";
 const DAY2 = "2026-08-05T10:00:00.000Z";
 let venue: SeededVenue;
 beforeEach(async () => {
-  venue = await seedVenue(suite.db);
+  venue = await seedVenueWithSeries(suite.db);
 });
 
 function run(input: Partial<DailyCloseInput> = {}) {

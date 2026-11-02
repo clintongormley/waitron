@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNodeAndSeries, seedSale, seedVenue, seedVoid } from "../test/fixtures.js";
+import { seedNodeAndSeries, seedSale, seedVenueWithSeries, seedVoid } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { computeVatSummaryForPeriod } from "./vat-summary.js";
 import type { PeriodVatInput, VatSummary } from "./types.js";
@@ -18,7 +18,7 @@ const TO = "2026-08-05";
 const noon = (day: string): string => new Date(`${day}T10:00:00Z`).toISOString();
 
 beforeEach(async () => {
-  venue = await seedVenue(suite.db);
+  venue = await seedVenueWithSeries(suite.db);
 });
 
 function run(overrides: Partial<PeriodVatInput> = {}): Promise<VatSummary> {

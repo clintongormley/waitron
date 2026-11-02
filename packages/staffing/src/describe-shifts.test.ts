@@ -6,7 +6,7 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { WORKFORCE_MIGRATIONS, shifts } from "@waitron/workforce";
-import { seedVenue } from "../test/seed.js";
+import { seedVenueWithStaff } from "../test/seed.js";
 import { STAFFING_MIGRATIONS } from "./migrations.js";
 import { shiftAssignments, staffRoles } from "./schema/staffing.js";
 import * as staffing from "./index.js";
@@ -23,7 +23,7 @@ const suite = useVenueDb({
 });
 describe("describeShifts", () => {
   it("labels only the requested assigned shifts with their area and staff role, including inactive retained areas", async () => {
-    const venue = await seedVenue(suite.db);
+    const venue = await seedVenueWithStaff(suite.db);
     const ids = await withTransaction(suite.db, async (tx) => {
       const [staffRole] = await tx
         .insert(staffRoles)

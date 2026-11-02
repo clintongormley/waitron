@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, dailyCloseChain, dailyCloses, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "../test/fixtures.js";
+import { seedVenueWithSeries } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { recordDailyClose } from "./record-daily-close.js";
 import { verifyDailyCloseChain } from "./verify-daily-close-chain.js";
@@ -22,7 +22,7 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 let venue: SeededVenue;
 beforeEach(async () => {
-  venue = await seedVenue(suite.db);
+  venue = await seedVenueWithSeries(suite.db);
 });
 
 function record(businessDay: string, cashCounts: CashCountInput[]): Promise<DailyCloseRecord> {

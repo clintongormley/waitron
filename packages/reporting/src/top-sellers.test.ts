@@ -5,7 +5,7 @@ import {
   seedNodeAndSeries,
   seedSale,
   seedSubstitution,
-  seedVenue,
+  seedVenueWithSeries,
   seedVoid,
 } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
@@ -35,7 +35,7 @@ const singleName = "Single";
 const singleText = { es: "Sencillo" };
 
 beforeEach(async () => {
-  venue = await seedVenue(suite.db);
+  venue = await seedVenueWithSeries(suite.db);
 });
 
 function run(overrides: Partial<TopSellersInput> = {}): Promise<TopSeller[]> {

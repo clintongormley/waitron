@@ -32,7 +32,7 @@ function seat(): ThrowawayAllocation {
   return FISCAL_PROVISIONING.throwawayAllocation!;
 }
 
-async function seedVenue(stamp: "preproduction" | "production") {
+async function seedStampedVenue(stamp: "preproduction" | "production") {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: TAXPAYER, legalName: "Real Restaurant S.L." });
@@ -89,7 +89,7 @@ function signFor(administratorId: string) {
 
 describe("the throwaway allocation seat", () => {
   describe("on a preproduction-stamped venue", () => {
-    beforeEach(() => seedVenue("preproduction"));
+    beforeEach(() => seedStampedVenue("preproduction"));
 
     it("activates a preproduction hour allocation for any taxpayer", async () => {
       const administratorId = randomUUID();
@@ -280,7 +280,7 @@ describe("the throwaway allocation seat", () => {
     });
 
     it("a production-stamped database refuses what it signs", async () => {
-      await seedVenue("production");
+      await seedStampedVenue("production");
       const administratorId = randomUUID();
       await expect(activate(signFor(administratorId), administratorId)).rejects.toMatchObject({
         code: "sif.allocation_invalid",

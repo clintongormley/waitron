@@ -9,7 +9,7 @@ import {
   seedNodeAndSeries,
   seedSale,
   seedSubstitution,
-  seedVenue,
+  seedVenueWithSeries,
   seedVoid,
 } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
@@ -23,7 +23,7 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 let venue: SeededVenue;
 
 beforeEach(async () => {
-  venue = await seedVenue(suite.db);
+  venue = await seedVenueWithSeries(suite.db);
 });
 
 const DRINKS: [string, string] = ["cat-drinks", "Drinks"];

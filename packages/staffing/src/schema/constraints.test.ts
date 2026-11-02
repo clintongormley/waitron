@@ -1,9 +1,9 @@
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { CORE_MIGRATIONS, kitchenStations, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, kitchenStations, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
 import {
   VENUE_SERVICE_MIGRATIONS,
@@ -31,11 +31,12 @@ const suite = useVenueDb({
 async function venue() {
   await seedTenant(suite.db);
   return withTransaction(suite.db, async (tx) => {
-    const [location] = await tx
-      .insert(locations)
-      .values({ name: "Main", invoiceLocales: ["en"], operationDescription: "Restaurant" })
-      .returning({ id: locations.id });
-    const locationId = location!.id;
+    await seedVenue(tx, {
+      name: "Main",
+      invoiceLocales: ["en"],
+      operationDescription: "Restaurant",
+    });
+    const locationId = await venueLocationId(tx);
     const [department] = await tx
       .insert(departments)
       .values({ locationId, name: "Dining room", tradingName: "Dining room" })

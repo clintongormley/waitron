@@ -35,7 +35,7 @@ import {
 } from "@waitron/venue-service";
 import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import { AppError, locationId } from "@waitron/shared";
-import { seedVenue } from "../test/seed.js";
+import { seedVenueWithStaff } from "../test/seed.js";
 import { STAFFING_MIGRATIONS } from "./migrations.js";
 import {
   listStaffingAreas,
@@ -75,7 +75,7 @@ async function refusal(work: Promise<unknown>): Promise<{ code: string; params: 
 
 /** The seeded venue, with two staff roles, a second station and a special day of two dates. */
 async function venue() {
-  const v = await seedVenue(suite.db);
+  const v = await seedVenueWithStaff(suite.db);
   return inTx(async (tx) => {
     const [waiter] = await tx
       .insert(staffRoles)

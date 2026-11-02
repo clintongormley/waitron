@@ -12,7 +12,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, dailyCloses, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { isAppError } from "@waitron/shared";
-import { seedVenue } from "../test/fixtures.js";
+import { seedVenueWithSeries } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { recordDailyClose } from "./record-daily-close.js";
 import type { CashCountInput, DailyCloseRecord } from "./close-types.js";
@@ -24,7 +24,7 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 let venue: SeededVenue;
 beforeEach(async () => {
-  venue = await seedVenue(suite.db);
+  venue = await seedVenueWithSeries(suite.db);
 });
 
 /** Runs `recordDailyClose` inside `withTransaction` — the exact shape the running POS uses, and

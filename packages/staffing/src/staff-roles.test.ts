@@ -9,7 +9,7 @@ import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { WORKFORCE_MIGRATIONS, shifts } from "@waitron/workforce";
 import { persons } from "@waitron/identity";
 import { createLabelComparator } from "@waitron/shared";
-import { seedVenue } from "../test/seed.js";
+import { seedVenueWithStaff } from "../test/seed.js";
 import { STAFFING_MIGRATIONS } from "./migrations.js";
 import {
   personStaffRoles,
@@ -43,7 +43,7 @@ const suite = useVenueDb({
 
 const inTx = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);
 
-type Venue = Awaited<ReturnType<typeof seedVenue>>;
+type Venue = Awaited<ReturnType<typeof seedVenueWithStaff>>;
 
 /** One painted block for `staffRoleId` on the venue's department, on `weekday` of its season. */
 async function paintBlock(v: Venue, staffRoleId: string, weekday = 1) {
@@ -84,7 +84,7 @@ async function assignShift(v: Venue, personId: string, staffRoleId: string) {
 
 describe("staff roles", () => {
   it("creates and lists in position order with each role's holders", async () => {
-    const v = await seedVenue(suite.db);
+    const v = await seedVenueWithStaff(suite.db);
     const chef = await inTx((tx) => createStaffRole(tx, { name: "Head chef", colour: "purple" }));
     const sous = await inTx((tx) => createStaffRole(tx, { name: "  Sous chef ", colour: "green" }));
     expect(chef).toEqual({
@@ -103,7 +103,7 @@ describe("staff roles", () => {
   });
 
   it("counts only the role's own painted blocks and shifts in a delete's impact", async () => {
-    const v = await seedVenue(suite.db);
+    const v = await seedVenueWithStaff(suite.db);
     const chef = await inTx((tx) => createStaffRole(tx, { name: "Head chef", colour: "purple" }));
     const sous = await inTx((tx) => createStaffRole(tx, { name: "Sous chef", colour: "green" }));
     await paintBlock(v, chef.id, 1);
@@ -119,13 +119,13 @@ describe("staff roles", () => {
   });
 
   it("lists the venue's roles", async () => {
-    await seedVenue(suite.db);
+    await seedVenueWithStaff(suite.db);
     const waiter = await inTx((tx) => createStaffRole(tx, { name: "Waiter", colour: "blue" }));
     expect(await inTx((tx) => listStaffRoles(tx))).toEqual([waiter]);
   });
 
   it("refuses a duplicate name as staff_role.name_taken", async () => {
-    await seedVenue(suite.db);
+    await seedVenueWithStaff(suite.db);
     await inTx((tx) => createStaffRole(tx, { name: "Waiter", colour: "blue" }));
     await expect(
       inTx((tx) => createStaffRole(tx, { name: " Waiter ", colour: "red" })),
@@ -133,7 +133,7 @@ describe("staff roles", () => {
   });
 
   it("plans the name check on the location and name index, not a scan", async () => {
-    await seedVenue(suite.db);
+    await seedVenueWithStaff(suite.db);
     for (const except of [null, randomUUID()]) {
       const plan = await inTx(async (tx) => {
         const emitted = staffRolesNamed(tx, await venueLocationId(tx), "Waiter", except).toSQL();
@@ -154,7 +154,7 @@ describe("staff roles", () => {
   });
 
   it("refuses a blank name and an unknown colour as staffing.invalid", async () => {
-    await seedVenue(suite.db);
+    await seedVenueWithStaff(suite.db);
     await expect(
       inTx((tx) => createStaffRole(tx, { name: "   ", colour: "blue" })),
     ).rejects.toMatchObject({ code: "staffing.invalid", params: { field: "name" } });
@@ -168,7 +168,7 @@ describe("staff roles", () => {
   });
 
   it("saves a role in a newer calendar colour and reads it back", async () => {
-    await seedVenue(suite.db);
+    await seedVenueWithStaff(suite.db);
     const created = await inTx((tx) => createStaffRole(tx, { name: "Waiter", colour: "teal" }));
     expect(created.colour).toBe("teal");
     expect(
@@ -185,7 +185,7 @@ describe("staff roles", () => {
   });
 
   it("updates a role's name and colour, keeping its own name free to itself", async () => {
-    const v = await seedVenue(suite.db);
+    const v = await seedVenueWithStaff(suite.db);
     const waiter = await inTx((tx) => createStaffRole(tx, { name: "Waiter", colour: "blue" }));
     await inTx((tx) => createStaffRole(tx, { name: "Runner", colour: "red" }));
     await inTx((tx) => setStaffRoleHolders(tx, waiter.id, [v.ana]));
@@ -208,7 +208,7 @@ describe("staff roles", () => {
   });
 
   it("answers staff_role.not_found for an unknown id", async () => {
-    const v = await seedVenue(suite.db);
+    const v = await seedVenueWithStaff(suite.db);
     await inTx((tx) => createStaffRole(tx, { name: "Waiter", colour: "blue" }));
     for (const staffRoleId of [randomUUID()]) {
       const notFound = { code: "staff_role.not_found", params: { staffRoleId } };
@@ -224,7 +224,7 @@ describe("staff roles", () => {
   });
 
   it("replaces the holder set, de-duplicating repeated ids", async () => {
-    const v = await seedVenue(suite.db);
+    const v = await seedVenueWithStaff(suite.db);
     const staffRole = await inTx((tx) => createStaffRole(tx, { name: "Waiter", colour: "blue" }));
     await inTx((tx) => setStaffRoleHolders(tx, staffRole.id, [v.ana, v.marc]));
     const replaced = await inTx((tx) => setStaffRoleHolders(tx, staffRole.id, [v.marc, v.marc]));
@@ -234,7 +234,7 @@ describe("staff roles", () => {
   });
 
   it("refuses holders that are not persons as staffing.invalid {field: personIds}", async () => {
-    const v = await seedVenue(suite.db);
+    const v = await seedVenueWithStaff(suite.db);
     const staffRole = await inTx((tx) => createStaffRole(tx, { name: "Waiter", colour: "blue" }));
     await inTx((tx) => setStaffRoleHolders(tx, staffRole.id, [v.ana]));
     await expect(
@@ -245,7 +245,7 @@ describe("staff roles", () => {
   });
 
   it("deleting a staff role deletes its blocks and holders", async () => {
-    const v = await seedVenue(suite.db);
+    const v = await seedVenueWithStaff(suite.db);
     const staffRole = await inTx((tx) => createStaffRole(tx, { name: "Waiter", colour: "blue" }));
     const kept = await inTx((tx) => createStaffRole(tx, { name: "Cook", colour: "red" }));
     await inTx((tx) => setStaffRoleHolders(tx, staffRole.id, [v.ana]));
@@ -273,7 +273,7 @@ describe("staff roles", () => {
   });
 
   it("refuses to delete a staff role a shift uses as staff_role.in_use with the shift count", async () => {
-    const v = await seedVenue(suite.db);
+    const v = await seedVenueWithStaff(suite.db);
     const staffRole = await inTx((tx) => createStaffRole(tx, { name: "Waiter", colour: "blue" }));
     await assignShift(v, v.ana, staffRole.id);
     await assignShift(v, v.marc, staffRole.id);
@@ -290,7 +290,7 @@ describe("staff roles", () => {
   });
 
   it("reads what deleting a staff role would remove: its painted blocks and who holds it", async () => {
-    const v = await seedVenue(suite.db);
+    const v = await seedVenueWithStaff(suite.db);
     const staffRole = await inTx((tx) => createStaffRole(tx, { name: "Waiter", colour: "blue" }));
     expect(await inTx((tx) => readStaffRoleDeleteImpact(tx, staffRole.id))).toEqual({
       target: { id: staffRole.id, name: "Waiter" },
@@ -322,7 +322,7 @@ describe("staff roles", () => {
   });
 
   it("reads a staff role that shifts use as refused, with the shift count", async () => {
-    const v = await seedVenue(suite.db);
+    const v = await seedVenueWithStaff(suite.db);
     const staffRole = await inTx((tx) => createStaffRole(tx, { name: "Waiter", colour: "blue" }));
     await assignShift(v, v.ana, staffRole.id);
     await assignShift(v, v.marc, staffRole.id);
@@ -337,7 +337,7 @@ describe("staff roles", () => {
   });
 
   it("reads no delete impact for an unknown id", async () => {
-    await seedVenue(suite.db);
+    await seedVenueWithStaff(suite.db);
     for (const staffRoleId of [randomUUID()])
       await expect(inTx((tx) => readStaffRoleDeleteImpact(tx, staffRoleId))).rejects.toMatchObject({
         code: "staff_role.not_found",
@@ -346,7 +346,7 @@ describe("staff roles", () => {
   });
 
   it("reorders by the given ids and refuses a list that is not exactly the venue's roles", async () => {
-    await seedVenue(suite.db);
+    await seedVenueWithStaff(suite.db);
     const make = (name: string) => inTx((tx) => createStaffRole(tx, { name, colour: "grey" }));
     const a = await make("A");
     const b = await make("B");
@@ -379,7 +379,7 @@ describe("staff roles", () => {
   });
 
   it("names every holder of each role in label order", async () => {
-    await seedVenue(suite.db);
+    await seedVenueWithStaff(suite.db);
     const person = (
       displayName: string,
       status: "active" | "pending" | "suspended" = "active",

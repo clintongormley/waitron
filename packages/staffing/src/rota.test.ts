@@ -30,7 +30,7 @@ import {
   shiftSwaps,
   listShiftsForPerson,
 } from "@waitron/workforce";
-import { seedVenue } from "../test/seed.js";
+import { seedVenueWithStaff } from "../test/seed.js";
 import * as staffing from "./index.js";
 import { STAFFING_MIGRATIONS } from "./migrations.js";
 import { saveSeasonStaffing } from "./paint.js";
@@ -76,7 +76,7 @@ const api = staffing as unknown as {
   removeRotaShift(t: Transaction, c: Cfg, id: string): Promise<void>;
 };
 async function venue() {
-  const v = await seedVenue(suite.db);
+  const v = await seedVenueWithStaff(suite.db);
   const area: AreaRef = { kind: "department", id: v.departmentId };
   const staffRoleId = await tx(async (t) => {
     const [r] = await t
@@ -355,7 +355,7 @@ describe("the rota week", () => {
     expect((await read(v)).days.map((d) => d.hasHours)).toEqual(Array(7).fill(false));
   });
   it("a location with no season names none", async () => {
-    const v = await seedVenue(suite.db);
+    const v = await seedVenueWithStaff(suite.db);
     await tx((t) => t.delete(seasons).where(eq(seasons.id, v.seasonId)));
     const r = await read(v);
     expect(r.days.map((d) => d.seasonId)).toEqual(Array(7).fill(null));

@@ -1,22 +1,33 @@
 import { randomUUID } from "node:crypto";
-import { kitchenStations, locations, withTransaction, type Database } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import {
+  kitchenStations,
+  locations,
+  venueLocationId,
+  withTransaction,
+  type Database,
+} from "@waitron/db";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { persons } from "@waitron/identity";
 import { departments, seasons } from "@waitron/venue-service";
 
-/** A location with two staff, a department, a prep station and a season, each inserted directly. */
-export async function seedVenue(db: Database) {
-  await seedTenant(db);
+/** The venue with two staff, a department, a prep station and a season. A second call writes a
+ * second location, for the cross-location cases A1301's code slices delete. */
+export async function seedVenueWithStaff(db: Database) {
   return withTransaction(db, async (tx) => {
-    const [location] = await tx
-      .insert(locations)
-      .values({
-        name: `Casa ${randomUUID()}`,
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Restaurant",
-      })
-      .returning({ id: locations.id });
-    const locationId = location!.id;
+    const venue = {
+      name: `Casa ${randomUUID()}`,
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Restaurant",
+    };
+    const [existing] = await tx.select({ id: locations.id }).from(locations).limit(1);
+    let locationId: string;
+    if (existing === undefined) {
+      await seedVenue(tx, venue);
+      locationId = await venueLocationId(tx);
+    } else {
+      const [location] = await tx.insert(locations).values(venue).returning({ id: locations.id });
+      locationId = location!.id;
+    }
     const person = async (displayName: string) => {
       const [row] = await tx
         .insert(persons)

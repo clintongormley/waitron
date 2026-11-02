@@ -33,9 +33,10 @@ import {
   ticketItems,
   workingOrderLines,
   workingOrders,
+  venueLocationId,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { seedKitchenStation, seedNode, seedTenant, seedDevice } from "@waitron/db/testing/seed.js";
+import { seedKitchenStation, seedNode, seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import type { TenderMethod } from "../src/types.js";
 
 /**
@@ -51,18 +52,24 @@ export interface SeededVenue {
   seriesId: SeriesId;
 }
 
-export async function seedVenue(db: Database): Promise<SeededVenue> {
-  await seedTenant(db);
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: "Main",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Test op",
-      dayCutover: "05:00:00",
-    })
-    .returning({ id: locations.id });
-  const locationId = location!.id;
+/** Seeds the venue (a second call writes a second location, for the cross-location cases A1301's
+ * code slices delete), a till device and a node with invoice series "A" there. */
+export async function seedVenueWithSeries(db: Database): Promise<SeededVenue> {
+  const venue = {
+    name: "Main",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Test op",
+    dayCutover: "05:00:00",
+  };
+  const [existing] = await db.select({ id: locations.id }).from(locations).limit(1);
+  let locationId: string;
+  if (existing === undefined) {
+    await seedVenue(db, venue);
+    locationId = await venueLocationId(db);
+  } else {
+    const [location] = await db.insert(locations).values(venue).returning({ id: locations.id });
+    locationId = location!.id;
+  }
   const { deviceId } = await seedDevice(db, { locationId });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const [series] = await db

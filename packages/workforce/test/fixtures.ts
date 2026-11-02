@@ -1,4 +1,4 @@
-import { locations } from "@waitron/db";
+import { locations, venueLocationId } from "@waitron/db";
 import { jobOrigin } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import { hashPin, persons } from "@waitron/identity";
@@ -14,6 +14,7 @@ import { shiftSwaps } from "../src/schema/shift-swaps.js";
 import type { ShiftSwapStatus } from "../src/schema/shift-swaps.js";
 import { shiftTemplates } from "../src/schema/shift-templates.js";
 import { shifts } from "../src/schema/shifts.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 
 /**
  * A `WorkTimeRuleset` at what a default `convenio_config` row resolves to
@@ -43,13 +44,17 @@ export function makeRuleset(overrides: Partial<WorkTimeRuleset> = {}): WorkTimeR
   };
 }
 
-/** Through the table definition, not raw SQL: `id` is a `$defaultFn` generator that only the
- * insert builder runs. */
+/** Seeds the venue and returns its id. A second call writes a second location, for the
+ * cross-location cases A1301's code slices delete; through the table definition, not raw SQL,
+ * because `id` is a `$defaultFn` generator that only the insert builder runs. */
 export async function seedLocation(db: Database): Promise<string> {
-  const [row] = await db
-    .insert(locations)
-    .values({ name: "Main", invoiceLocales: ["en"], operationDescription: "Sale on premises" })
-    .returning({ id: locations.id });
+  const venue = { name: "Main", invoiceLocales: ["en"], operationDescription: "Sale on premises" };
+  const [existing] = await db.select({ id: locations.id }).from(locations).limit(1);
+  if (existing === undefined) {
+    await seedVenue(db, venue);
+    return venueLocationId(db);
+  }
+  const [row] = await db.insert(locations).values(venue).returning({ id: locations.id });
   return row!.id;
 }
 

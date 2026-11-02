@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedSale, seedVenue } from "./fixtures.js";
+import { seedSale, seedVenueWithSeries } from "./fixtures.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
 describe("fixtures", () => {
-  it("seedVenue + seedSale insert a sale with its lines", async () => {
-    const venue = await seedVenue(suite.db);
+  it("seedVenueWithSeries + seedSale insert a sale with its lines", async () => {
+    const venue = await seedVenueWithSeries(suite.db);
     const saleId = await seedSale(suite.db, venue, {
       invoiceNumber: 1,
       issuedAt: new Date("2026-08-04T10:00:00Z").toISOString(),
