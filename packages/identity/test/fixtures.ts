@@ -1,7 +1,7 @@
 import { captureError, locations, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { seedDevice } from "@waitron/db/testing/seed.js";
-import { isAppError, locationId } from "@waitron/shared";
+import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
+import { isAppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { loginWithPin } from "../src/login.js";
 import { persons } from "../src/schema/persons.js";
@@ -13,13 +13,18 @@ import type { TotpKeyRing } from "../src/mfa.js";
 
 export const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
 
-/** Pairs a device at a new location and returns its id: the device a shift session is opened on. */
+/** Pairs a new device at the venue (seeding the venue on first use) and returns its id: the device
+ * a shift session is opened on. */
 export async function seedSessionDevice(db: Database): Promise<string> {
-  const [location] = await db
-    .insert(locations)
-    .values({ name: "Main", invoiceLocales: ["en"], operationDescription: "Sale on premises" })
-    .returning({ id: locations.id });
-  const { deviceId } = await seedDevice(db, { locationId: locationId(location!.id) });
+  const [existing] = await db.select({ id: locations.id }).from(locations).limit(1);
+  if (existing === undefined) {
+    await seedVenue(db, {
+      name: "Main",
+      invoiceLocales: ["en"],
+      operationDescription: "Sale on premises",
+    });
+  }
+  const { deviceId } = await seedDevice(db);
   return deviceId;
 }
 

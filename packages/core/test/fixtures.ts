@@ -1,14 +1,13 @@
 import {
   locationId as brandLocationId,
-  nodeId as brandNodeId,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
   stringToCents,
 } from "@waitron/shared";
 import type { DeviceId, LocationId, NodeId, SaleId, SeriesId } from "@waitron/shared";
-import { invoiceSeries, locations, nodes, sales, tenants } from "@waitron/db";
+import { invoiceSeries, locations, sales, tenants, venueLocationId } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 
 export interface SeededTenant {
   locationId: LocationId;
@@ -36,23 +35,18 @@ export async function seedTenant(db: Database): Promise<SeededTenant> {
     .values({ id: 1, country: "ES", taxId: freshNif(), legalName: "Waitron SL" })
     .onConflictDoNothing({ target: tenants.id });
 
-  const [location] = await db
-    .insert(locations)
-    .values({
+  const [existing] = await db.select({ id: locations.id }).from(locations).limit(1);
+  if (existing === undefined) {
+    await seedVenue(db, {
       name: "Sala principal",
       invoiceLocales: ["es-ES", "ca-ES"],
       operationDescription: "Venta en establecimiento",
-    })
-    .returning({ id: locations.id });
-  const locationId = location!.id;
+    });
+  }
+  const locationId = await venueLocationId(db);
 
-  const { deviceId } = await seedDevice(db, { locationId });
-
-  const [node] = await db
-    .insert(nodes)
-    .values({ locationId, name: "Nodo 1" })
-    .returning({ id: nodes.id });
-  const nodeId = brandNodeId(node!.id);
+  const { deviceId } = await seedDevice(db);
+  const nodeId = await seedNode(db);
 
   const [series] = await db
     .insert(invoiceSeries)

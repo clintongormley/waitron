@@ -21,7 +21,7 @@ import { readOfferedExtraItemIds, readOfferedModifiers } from "./offered-modifie
 import * as extraProjection from "./extra-projection.js";
 import * as productModifiers from "./product-modifiers.js";
 import * as optionsModule from "./options.js";
-import { seedVenue } from "../test/fixtures.js";
+import { seedVenueWithSeries } from "../test/fixtures.js";
 import { EACH_UNIT } from "./units.js";
 import type { OfferedExtraItem } from "./menu-types.js";
 
@@ -94,7 +94,7 @@ let catalogueId = "";
 let offerId = "";
 
 beforeEach(async () => {
-  await seedVenue(fx.db);
+  await seedVenueWithSeries(fx.db);
   await run(async (tx) => {
     const menu = await createCatalogue(tx, { name: "Deli" });
     catalogueId = menu.id;

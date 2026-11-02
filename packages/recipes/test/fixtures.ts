@@ -1,8 +1,8 @@
 import { beforeEach } from "vitest";
-import { CORE_MIGRATIONS, ingredients, locations, recipeLines } from "@waitron/db";
+import { CORE_MIGRATIONS, ingredients, recipeLines, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { Database, Transaction } from "@waitron/db";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { withTransaction } from "@waitron/db";
 import {
   CATALOGUE_MIGRATIONS,
@@ -10,25 +10,16 @@ import {
   createProduct,
   createUnit,
 } from "@waitron/catalogue";
-import { locationId as brandLocationId } from "@waitron/shared";
 
 export interface SeededVenue {
   locationId: string;
 }
 
-/**
- * Seed tenant, location and node. The location goes in through the drizzle table because `id` is a
- * `$defaultFn`, not a SQL default, and `invoice_locales` is a JSON array in a text column.
- */
-export async function seedVenue(db: Database): Promise<SeededVenue> {
-  await seedTenant(db);
-  const [loc] = await db
-    .insert(locations)
-    .values({ name: "Main", invoiceLocales: ["en-GB"], operationDescription: "Test op" })
-    .returning({ id: locations.id });
-  const locationId = loc!.id;
-  await seedNode(db, brandLocationId(locationId));
-  return { locationId };
+/** Seeds the taxpayer, the venue and a node. */
+export async function seedVenueWithNode(db: Database): Promise<SeededVenue> {
+  await seedVenue(db, { name: "Main", invoiceLocales: ["en-GB"], operationDescription: "Test op" });
+  await seedNode(db);
+  return { locationId: await venueLocationId(db) };
 }
 
 /** Seed a catalogue + one product; returns the product id, for recipe tests. */

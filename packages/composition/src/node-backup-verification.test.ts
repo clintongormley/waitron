@@ -34,7 +34,7 @@ const after = useVenueDb({ migrations: [] });
 /** Its node handle stands for the source box's node.db; node.dump is a copy of it. */
 const source = useVenueDb({ migrations: [NODE_MIGRATIONS] });
 
-function seedVenue(key: string | null) {
+function seedSourceNode(key: string | null) {
   for (const suite of [before, after])
     suite.db.run(
       sql`insert into nodes (id, public_key, endorsement) values (${SOURCE}, ${key}, null)`,
@@ -141,12 +141,12 @@ describe("node.db's backup verification", () => {
     ["missing", null],
     ["not a database", Buffer.from("this is not a database file, only some words")],
   ])("marks invalid a node.dump that is %s", async (_name, nodeDump) => {
-    seedVenue(null);
+    seedSourceNode(null);
     await expect(run(nodeDump)).resolves.toEqual(result("invalid", "invalid"));
   });
 
   it("passes a key-less source whose node copy holds nothing for it", async () => {
-    seedVenue(null);
+    seedSourceNode(null);
     await expect(run()).resolves.toEqual(result("passed", "passed"));
   });
 
@@ -156,19 +156,19 @@ describe("node.db's backup verification", () => {
       ["restored", table, after] as const,
     ]),
   )("marks invalid a %s venue copy that holds %s", async (_name, table, suite) => {
-    seedVenue(null);
+    seedSourceNode(null);
     suite.db.run(sql.raw(`create table ${table} (node_id text primary key)`));
     await expect(run()).resolves.toEqual(result("invalid", "passed"));
   });
 
   it("passes a backup whose node copy's key pairs with the venue's public key", async () => {
-    seedVenue(publicKey);
+    seedSourceNode(publicKey);
     await sealKey(SOURCE, privateKey);
     await expect(run()).resolves.toEqual(result("passed", "passed"));
   });
 
   it("marks invalid a backup whose node copy holds another key", async () => {
-    seedVenue(publicKey);
+    seedSourceNode(publicKey);
     await sealKey(
       SOURCE,
       generateKeyPairSync("ed25519")
@@ -179,25 +179,25 @@ describe("node.db's backup verification", () => {
   });
 
   it("marks invalid a node copy's key when the venue records no public key", async () => {
-    seedVenue(null);
+    seedSourceNode(null);
     await sealKey(SOURCE, privateKey);
     await expect(run()).resolves.toEqual(result("passed", "invalid"));
   });
 
   it("marks invalid a keyed source whose node copy holds no key for it", async () => {
-    seedVenue(publicKey);
+    seedSourceNode(publicKey);
     await sealKey(OTHER, privateKey);
     await expect(run()).resolves.toEqual(result("passed", "invalid"));
   });
 
   it("reads only the source's own key row", async () => {
-    seedVenue(null);
+    seedSourceNode(null);
     await sealKey(OTHER, privateKey);
     await expect(run()).resolves.toEqual(result("passed", "passed"));
   });
 
   it("marks invalid a key-less source whose node copy still holds its recovery key", async () => {
-    seedVenue(null);
+    seedSourceNode(null);
     source.node.run(
       sql`insert into node_recovery_key (node_id, verifier, key_name, updated_at) values (${SOURCE}, 'verifier', 'Key 1', '2026-10-31T08:00:00Z')`,
     );
@@ -205,7 +205,7 @@ describe("node.db's backup verification", () => {
   });
 
   it("marks invalid a key-less source whose node copy still holds its role", async () => {
-    seedVenue(null);
+    seedSourceNode(null);
     source.node.run(
       sql`insert into node_mode (node_id, mode, singleton_role, updated_at) values (${SOURCE}, 'primary', 'primary', '2026-10-31T08:00:00Z')`,
     );
@@ -213,7 +213,7 @@ describe("node.db's backup verification", () => {
   });
 
   it("passes a key-less source when only another node's role is in the node copy", async () => {
-    seedVenue(null);
+    seedSourceNode(null);
     source.node.run(
       sql`insert into node_mode (node_id, mode, singleton_role, updated_at) values (${OTHER}, 'primary', 'primary', '2026-10-31T08:00:00Z')`,
     );
@@ -224,7 +224,7 @@ describe("node.db's backup verification", () => {
   });
 
   it("marks invalid an opened key row whose contents are not a key payload", async () => {
-    seedVenue(publicKey);
+    seedSourceNode(publicKey);
     await sealKey(SOURCE, privateKey);
     const cipher = createCipheriv("aes-256-gcm", Buffer.alloc(32, 2), Buffer.alloc(12, 3));
     cipher.setAAD(Buffer.from(`membership.node_key/${SOURCE}`));
@@ -238,7 +238,7 @@ describe("node.db's backup verification", () => {
   it.each(["ciphertext", "iv", "auth_tag", "key_version"])(
     "marks invalid a key row whose %s is not shaped as a sealed row's",
     async (column) => {
-      seedVenue(publicKey);
+      seedSourceNode(publicKey);
       const copy = new DatabaseSync(":memory:");
       try {
         copy.exec(
@@ -256,7 +256,7 @@ describe("node.db's backup verification", () => {
   );
 
   it("does not swallow a failed read of the node copy's key row as a missing key", async () => {
-    seedVenue(null);
+    seedSourceNode(null);
     const copy = new DatabaseSync(":memory:");
     try {
       copy.exec("create table node_signing_key (node_id text primary key, iv blob)");
@@ -267,7 +267,7 @@ describe("node.db's backup verification", () => {
   });
 
   it("passes a key-less source whose node copy has none of node.db's tables", async () => {
-    seedVenue(null);
+    seedSourceNode(null);
     const copy = new DatabaseSync(":memory:");
     try {
       copy.exec("create table unrelated (id text)");
@@ -286,7 +286,7 @@ describe("node.db's backup verification", () => {
     ],
     ["no ring at all", "", 1],
   ])("cannot decide when the key row meets %s", async (_name, env, version) => {
-    seedVenue(publicKey);
+    seedSourceNode(publicKey);
     await sealKey(SOURCE, privateKey);
     source.node.run(sql`update node_signing_key set key_version=${version}`);
     const attempt = run(undefined, { ...secretEntries, "secrets/secrets.env": Buffer.from(env) });
@@ -297,7 +297,7 @@ describe("node.db's backup verification", () => {
   it.each(["secrets/secrets.env", "secrets/trading.env"])(
     "cannot decide without %s",
     async (name) => {
-      seedVenue(publicKey);
+      seedSourceNode(publicKey);
       await sealKey(SOURCE, privateKey);
       await expect(run(undefined, { ...secretEntries, [name]: null })).rejects.toMatchObject({
         reason: "secret_unavailable",
@@ -308,7 +308,7 @@ describe("node.db's backup verification", () => {
   it.each(["secrets/secrets.env", "secrets/trading.env"])(
     "a key-less source cannot decide without %s",
     async (name) => {
-      seedVenue(null);
+      seedSourceNode(null);
       await expect(run(undefined, { ...secretEntries, [name]: null })).rejects.toMatchObject({
         reason: "secret_unavailable",
       });

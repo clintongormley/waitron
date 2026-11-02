@@ -4,7 +4,6 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   AppError,
-  nodeId as brandNodeId,
   seriesId as brandSeriesId,
   workingOrderId as brandWorkingOrderId,
   decimal,
@@ -38,6 +37,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedNode, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { formatInvoiceNumber, recordSale } from "./record-sale.js";
 import type { RecordSaleInput, RecordSaleTender } from "./record-sale.js";
 import { settleSale } from "./settle-sale.js";
@@ -713,16 +713,13 @@ describe("recordSale — settlement modes", () => {
     });
 
     // Path B — a second node: deferred record, then a SEPARATE settleSale.
-    const [otherNode] = await suite.db
-      .insert(nodes)
-      .values({ locationId, name: "Second node" })
-      .returning({ id: nodes.id });
+    const otherNodeId = await seedNode(suite.db);
     const [otherSeries] = await suite.db
       .insert(invoiceSeries)
-      .values({ nodeId: otherNode!.id, code: "A" })
+      .values({ nodeId: otherNodeId, code: "A" })
       .returning({ id: invoiceSeries.id });
     const other = {
-      nodeId: brandNodeId(otherNode!.id),
+      nodeId: otherNodeId,
       seriesId: brandSeriesId(otherSeries!.id),
     };
     const b = await withTransaction(suite.db, async (tx) => {
@@ -899,11 +896,8 @@ describe("recordSale — numbering", () => {
   it("passes another unique refusal on the sale's insert through untranslated", async () => {
     // A second sale filed from the same working order collides on `working_order_id`, not on its
     // number, which is fresh.
-    const [order] = await suite.db
-      .insert(workingOrders)
-      .values({ source: "device", deviceId, locationId, orderNumber: 1 })
-      .returning({ id: workingOrders.id });
-    const workingOrderId = brandWorkingOrderId(order!.id);
+    const order = await seedWorkingOrder(suite.db, { source: "device", deviceId, orderNumber: 1 });
+    const workingOrderId = brandWorkingOrderId(order.id);
     await run(new FakeFiscalBackend(suite.db), { workingOrderId });
 
     const error = await captureError(() =>
@@ -967,11 +961,8 @@ describe("recordSale — working order linkage", () => {
   // store turns `foreign_keys` on (`packages/store/src/index.ts`), so the supplied case needs a
   // real row.
   async function seedOpenWorkingOrder(): Promise<WorkingOrderId> {
-    const [row] = await suite.db
-      .insert(workingOrders)
-      .values({ source: "device", deviceId, locationId, orderNumber: 1 })
-      .returning({ id: workingOrders.id });
-    return brandWorkingOrderId(row!.id);
+    const row = await seedWorkingOrder(suite.db, { source: "device", deviceId, orderNumber: 1 });
+    return brandWorkingOrderId(row.id);
   }
 
   it("writes working_order_id onto the sale when supplied", async () => {
@@ -2031,17 +2022,13 @@ describe("recordSale — saved full-invoice service date", () => {
     ["2026-02-28T23:10:00Z", "Atlantic/Canary", "2026-02-28"],
   ])("saves the bill opening date %s in %s", async (openedAt, timeZone, expected) => {
     await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, locationId));
-    const [bill] = await suite.db
-      .insert(workingOrders)
-      .values({
-        source: "device",
-        deviceId,
-        locationId,
-        nodeId,
-        orderNumber: 1,
-        openedAt,
-      })
-      .returning({ id: workingOrders.id });
+    const bill = await seedWorkingOrder(suite.db, {
+      source: "device",
+      deviceId,
+      nodeId,
+      orderNumber: 1,
+      openedAt,
+    });
     const [full] = await suite.db
       .insert(invoiceSeries)
       .values({
@@ -2061,7 +2048,7 @@ describe("recordSale — saved full-invoice service date", () => {
     });
     const { saleId } = await run(backend, {
       seriesId: brandSeriesId(full!.id),
-      workingOrderId: brandWorkingOrderId(bill!.id),
+      workingOrderId: brandWorkingOrderId(bill.id),
       counterparty: { taxId: "12345678Z", legalName: "Ana García", countryCode: "ES" },
       recipientAddress: "Calle Mayor 2, 28013 Madrid, España",
     });
@@ -2081,17 +2068,13 @@ describe("recordSale — saved full-invoice service date", () => {
       .update(locations)
       .set({ timeZone: "Europe/Madrid" })
       .where(eq(locations.id, locationId));
-    const [bill] = await suite.db
-      .insert(workingOrders)
-      .values({
-        source: "device",
-        deviceId,
-        locationId,
-        nodeId,
-        orderNumber: 1,
-        openedAt: "2026-02-28T22:50:00Z",
-      })
-      .returning({ id: workingOrders.id });
+    const bill = await seedWorkingOrder(suite.db, {
+      source: "device",
+      deviceId,
+      nodeId,
+      orderNumber: 1,
+      openedAt: "2026-02-28T22:50:00Z",
+    });
     const [full] = await suite.db
       .insert(invoiceSeries)
       .values({ nodeId, code: "FF", purpose: "full" })
@@ -2102,10 +2085,10 @@ describe("recordSale — saved full-invoice service date", () => {
       await suite.db
         .update(workingOrders)
         .set({ locationId: randomUUID() })
-        .where(eq(workingOrders.id, bill!.id));
+        .where(eq(workingOrders.id, bill.id));
       const { saleId } = await run(new FakeFiscalBackend(suite.db), {
         seriesId: brandSeriesId(full!.id),
-        workingOrderId: brandWorkingOrderId(bill!.id),
+        workingOrderId: brandWorkingOrderId(bill.id),
         counterparty: { taxId: "12345678Z", legalName: "Test Customer", countryCode: "ES" },
         recipientAddress: "2 Main Street, 28013 Madrid, Spain",
       });

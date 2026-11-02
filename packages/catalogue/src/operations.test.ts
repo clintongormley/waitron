@@ -64,7 +64,7 @@ import { createUnit, EACH_UNIT } from "./units.js";
 import {
   seedCatalogueFixture,
   seedLegacySellingUnits,
-  seedVenue,
+  seedVenueWithSeries,
   storedUnitId,
   useCatalogueDb,
 } from "../test/fixtures.js";
@@ -187,7 +187,7 @@ describe("catalogue operations", () => {
   let kgUnitId: string;
 
   beforeEach(async () => {
-    const venue = await seedVenue(fx.db);
+    const venue = await seedVenueWithSeries(fx.db);
     locationId = venue.locationId;
     await withTransaction(fx.db, async (tx) => {
       eachUnitId = (
@@ -1754,7 +1754,7 @@ describe("menu offers nest a product's variants", () => {
   });
 
   beforeEach(async () => {
-    await seedVenue(fx.db);
+    await seedVenueWithSeries(fx.db);
     f = await run(async (tx) => {
       const menu = await createCatalogue(tx, { name: "Bar" });
       const parent = await createProduct(tx, {
@@ -2004,7 +2004,7 @@ describe("a variant's published allergens and diet", () => {
   });
 
   beforeEach(async () => {
-    await seedVenue(fx.db);
+    await seedVenueWithSeries(fx.db);
     ({ parentId, variantId, bareVariantId } = await run(async (tx) => {
       const menu = await createCatalogue(tx, { name: "Bar" });
       const parent = await createProduct(tx, {

@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { createUnit } from "./units.js";
 import {
@@ -48,9 +48,9 @@ it.each(["products", "available", "offers"] as const)(
         unitPrice: "1.00",
         vatClass: "general",
       });
-      await tx.insert(locations).values({
+      await seedVenue(tx, {
         name: "Room",
-        catalogueId: menu.id,
+        defaultCatalogueId: menu.id,
         invoiceLocales: ["en-GB"],
         operationDescription: "Hospitality",
       });

@@ -33,7 +33,7 @@ import {
   parentJoin,
   parentProducts,
 } from "./variant-fallback.js";
-import { plantStoredUnit, seedVenue } from "../test/fixtures.js";
+import { plantStoredUnit, seedVenueWithSeries } from "../test/fixtures.js";
 
 /**
  * A variant row is a `products` row with a `parent_id`, and a null in any inherited field reads as
@@ -78,7 +78,7 @@ interface Fixture {
 let f: Fixture;
 
 beforeEach(async () => {
-  const venue = await seedVenue(fx.db);
+  const venue = await seedVenueWithSeries(fx.db);
   f = await run(async (tx) => {
     const catalogue = await createCatalogue(tx, { name: "Bar" });
     const other = await createCatalogue(tx, { name: "Terrace" });

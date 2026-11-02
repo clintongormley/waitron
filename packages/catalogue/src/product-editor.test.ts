@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { kitchenCourses, locations, products, withTransaction } from "@waitron/db";
+import { kitchenCourses, products, withTransaction, venueLocationId } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   applyRecipeDerivation,
   createCatalogue,
@@ -636,13 +636,15 @@ describe("a variant's own page", () => {
   let routing: { courseId: string };
   beforeEach(async () => {
     const setup = await withTransaction(fx.db, async (tx) => {
-      const [location] = await tx
-        .insert(locations)
-        .values({ name: "Main", invoiceLocales: ["en-GB"], operationDescription: "Test op" })
-        .returning({ id: locations.id });
+      await seedVenue(tx, {
+        name: "Main",
+        invoiceLocales: ["en-GB"],
+        operationDescription: "Test op",
+      });
+      const venueId = await venueLocationId(tx);
       const [course] = await tx
         .insert(kitchenCourses)
-        .values({ locationId: location!.id, name: "Drinks" })
+        .values({ locationId: venueId, name: "Drinks" })
         .returning({ id: kitchenCourses.id });
       const parentCategory = await createCategory(tx, { name: "Coffee" });
       const ownCategory = await createCategory(tx, { name: "Espresso" });

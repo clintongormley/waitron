@@ -15,10 +15,10 @@ import {
   tenders,
   triggerRaised,
   withTransaction,
-  workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { AppError, saleId as brandSaleId, stringToCents } from "@waitron/shared";
 import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
@@ -192,22 +192,18 @@ describe("settleSale — a bill paid in parts", () => {
   it("writes each tender's bill payment, and leaves it null where none is named", async () => {
     const seed = await seedTenant(suite.db);
     const saleId = await seedSale(suite.db, seed, { total: "65.00" });
-    const [order] = await suite.db
-      .insert(workingOrders)
-      .values({
-        source: "device",
-        deviceId: seed.deviceId,
-        locationId: seed.locationId,
-        nodeId: seed.nodeId,
-        orderNumber: 1,
-        status: "open",
-        openedAt: SETTLED_AT.toISOString(),
-      })
-      .returning({ id: workingOrders.id });
+    const order = await seedWorkingOrder(suite.db, {
+      source: "device",
+      deviceId: seed.deviceId,
+      nodeId: seed.nodeId,
+      orderNumber: 1,
+      status: "open",
+      openedAt: SETTLED_AT.toISOString(),
+    });
     const [payment] = await suite.db
       .insert(billPayments)
       .values({
-        workingOrderId: order!.id,
+        workingOrderId: order.id,
         submissionId: "s-1",
         fingerprint: "f",
         kind: "contribution",

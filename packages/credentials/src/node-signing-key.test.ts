@@ -11,8 +11,7 @@ import {
 import { NODE_MIGRATIONS, nodeSigningKey } from "@waitron/node-db";
 import { hasCode } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId } from "@waitron/shared";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { aadFor, seal } from "./cipher.js";
 import { loadKeyRing } from "./keyring.js";
 import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
@@ -168,16 +167,15 @@ describe("establishing the box's signing key", () => {
   });
 
   async function freshNode() {
-    await seedTenant(suite.db);
-    const [loc] = await suite.db
-      .insert(locations)
-      .values({
+    const [existing] = await suite.db.select({ id: locations.id }).from(locations).limit(1);
+    if (existing === undefined) {
+      await seedVenue(suite.db, {
         name: "Bar",
         invoiceLocales: ["es-ES"],
         operationDescription: "Sales on the premises",
-      })
-      .returning({ id: locations.id });
-    return seedNode(suite.db, brandLocationId(loc!.id));
+      });
+    }
+    return seedNode(suite.db);
   }
 
   it("makes and seals a key, then stamps its public half on the node's row", async () => {
