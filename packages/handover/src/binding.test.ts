@@ -176,6 +176,25 @@ describe("parseBinding", () => {
     delete (noTerm.membership as Record<string, unknown>).term;
     expect(refusal(noTerm)).toEqual(invalid("membership.term"));
   });
+  it("names a missing field before an extra one", () => {
+    const raw = json(binding);
+    delete raw.venue;
+    expect(refusal({ ...raw, extra: 1 })).toEqual(invalid("venue"));
+    const noDigest = json(binding.membership);
+    delete noDigest.digest;
+    expect(refusal({ ...binding, membership: { ...noDigest, extra: 1 } })).toEqual(
+      invalid("membership.digest"),
+    );
+  });
+
+  it("refuses an id or a digest wrapped in a list, even though its text would match", () => {
+    expect(refusal({ ...binding, operationId: [binding.operationId] })).toEqual(
+      invalid("operationId"),
+    );
+    expect(
+      refusal({ ...binding, membership: { ...binding.membership, digest: ["a".repeat(64)] } }),
+    ).toEqual(invalid("membership.digest"));
+  });
 });
 
 describe("bindingFingerprint", () => {

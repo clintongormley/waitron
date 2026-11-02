@@ -72,9 +72,7 @@ export function parseBinding(raw: unknown): HandoverBinding {
 
   const membership = objectWith(top.membership, "membership", ["term", "digest"]);
   const term = membership.term;
-  if (typeof term !== "number" || !Number.isSafeInteger(term) || term < 1) {
-    refuse("membership.term");
-  }
+  if (!Number.isSafeInteger(term) || (term as number) < 1) refuse("membership.term");
   const digest = matching(membership.digest, SHA256_HEX, "membership.digest");
 
   return {
@@ -83,7 +81,7 @@ export function parseBinding(raw: unknown): HandoverBinding {
     venue: { country, taxId, environment },
     sourceNodeId,
     destinationNodeId,
-    membership: { term, digest },
+    membership: { term: term as number, digest },
   };
 }
 

@@ -72,8 +72,9 @@ export function nextState(
   from: HandoverState | null,
   to: HandoverState,
 ): HandoverState {
-  const allowed = STEPS[role][scenario][from ?? "start"] ?? [];
-  if (!allowed.includes(to)) throw new AppError("handover.step_out_of_order", { from, to });
+  const allowed = STEPS[role][scenario][from ?? "start"];
+  if (allowed?.includes(to) !== true)
+    throw new AppError("handover.step_out_of_order", { from, to });
   return to;
 }
 
