@@ -31,8 +31,6 @@ import "./errors.js";
 
 export type Rerouted = ReadonlyMap<string, { stationId: string; stationName: string }>;
 
-/** For an item at a closed station: nothing kept it there — not the closing's "leave", a hand
- *  move, or the line's make-at. A station with no state (switched off) keeps nothing. */
 export function unchosenAtClosedStation(
   row: {
     stationChosenAt: string | null;

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   orderGroups,
@@ -18,16 +18,17 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { OPERATOR } from "./testing/party-venue.js";
 import { readPassBoard, readPassRows } from "./working-order.js";
-import { readScopedPassBoard, type PassScope } from "./pass-board.js";
+import { readPassCardRows, readScopedPassBoard, type PassScope } from "./pass-board.js";
 import type { PassBoard, PassCard } from "./pass-card.js";
 import { fireNewOrder } from "./testing/split-extras-venue.js";
 import { moveDishes } from "./testing/bill-action-fixture.js";
-import { createStation } from "./kitchen.js";
+import { createCourse, createStation } from "./kitchen.js";
 import { routeProductTo } from "./testing/zone-offers.js";
-import { fireGroup } from "./order-groups.js";
+import { fireGroup, moveGroupsToParty } from "./order-groups.js";
 import { withStationDishes } from "./station-closing.js";
 import { createTable } from "./testing/live-table.js";
 import { seatTable } from "./parties.js";
+import { addTabRound, sendLines } from "./testing/order-writer-fixture.js";
 import "./errors.js";
 
 const suite = useVenueDb({
@@ -234,6 +235,68 @@ describe("A773 pass board: reads", () => {
         .from(orderGroups)
         .where(eq(orderGroups.id, first.groupId));
       expect(rows[0]!.group!.partyFirstCreatedAt).toBe(stored!.createdAt);
+    });
+  });
+
+  it("reads a later group's kind, two portions, a ready time, a course and the group's own party", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      const first = await burgerAndWater(tx, venue);
+      const later = (
+        await placeGroups(tx, venue.cfg, venue.party.partyId, {
+          operatorId: OPERATOR,
+          groups: [{ lines: [dish(venue, "burger")], release: "fire" }],
+        })
+      ).groups[0]!;
+      const laterItem = await ticketItemOf(tx, later.lineIds[0]!);
+      const course = await createCourse(tx, venue.cfg, { name: "Mains", displayOrder: 3 });
+      await tx
+        .update(ticketItems)
+        .set({ courseId: course.id })
+        .where(eq(ticketItems.id, laterItem));
+      const readyAt = new Date(Date.parse(AT) + 5 * 60_000).toISOString();
+      await tx
+        .update(ticketItems)
+        .set({ state: "ready", readyAt })
+        .where(eq(ticketItems.id, first.waterItem));
+      const other = await seatAnotherParty(tx, venue, "Merged into");
+      // As a merge does: the groups move, this bill stays on its own party.
+      await moveGroupsToParty(tx, venue.party.partyId, other);
+      await addTabRound(tx, venue.cfg, venue.party.tabId, [
+        { ...dish(venue, "burger"), quantity: "2" },
+      ]);
+      const [two] = await tx
+        .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
+        .from(workingOrderLines)
+        .where(
+          and(
+            eq(workingOrderLines.workingOrderId, venue.party.tabId),
+            isNull(workingOrderLines.groupId),
+          ),
+        );
+      await sendLines(tx, venue.cfg, venue.party.tabId, [two!.lineNo]);
+      const twoItem = await ticketItemOf(tx, two!.id);
+      const [kind] = await tx
+        .select({ requestKind: orderGroups.requestKind })
+        .from(orderGroups)
+        .where(eq(orderGroups.id, later.id));
+      expect(kind!.requestKind).not.toBe("new_order");
+
+      const rows = await readPassRows(
+        tx,
+        venue.cfg.locationId,
+        onOrder(venue.party.tabId),
+        Date.now(),
+      );
+      const byItem = new Map(rows.map((row) => [row.item.id, row]));
+      expect(byItem.get(laterItem)).toMatchObject({
+        partyId: venue.party.partyId,
+        group: { id: later.id, partyId: other, requestKind: kind!.requestKind },
+        course: { id: course.id, name: "Mains", displayOrder: 3 },
+      });
+      expect(byItem.get(twoItem)!.remaining).toBe(2000);
+      expect(byItem.get(first.waterItem)!.readyAt).toBe(readyAt);
     });
   });
 
@@ -464,6 +527,87 @@ describe("A773 pass board: scoped", () => {
       });
       expect(cards(grill)).toHaveLength(1);
       expect(grill.toFire[0]!.releaseTicketItemIds).toEqual([placed.burgerItem]);
+    });
+  });
+
+  it("lists a card only on a pass on its zone", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      const placed = await burgerAndWater(tx, venue);
+      const counter = await readScopedPassBoard(tx, venue.cfg, {
+        stationIds: null,
+        zoneIds: [venue.counter.zoneId],
+      });
+      expect(cards(counter)).toEqual([]);
+      const tables = await readScopedPassBoard(tx, venue.cfg, {
+        stationIds: null,
+        zoneIds: [venue.party.zoneId],
+      });
+      expect(cards(tables)).toHaveLength(1);
+      expect(tables.toFire[0]!.releaseTicketItemIds).toEqual([placed.burgerItem]);
+    });
+  });
+
+  it("gives a party bill's dish outside any group its own card, and reads each card back alone", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      const placed = await burgerAndWater(tx, venue);
+      await addTabRound(tx, venue.cfg, venue.party.tabId, [dish(venue, "burger")]);
+      const [loose] = await tx
+        .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
+        .from(workingOrderLines)
+        .where(
+          and(
+            eq(workingOrderLines.workingOrderId, venue.party.tabId),
+            isNull(workingOrderLines.groupId),
+          ),
+        );
+      await sendLines(tx, venue.cfg, venue.party.tabId, [loose!.lineNo]);
+      const looseItem = await ticketItemOf(tx, loose!.id);
+
+      const board = await readScopedPassBoard(tx, venue.cfg, EVERY);
+      const groupCard = cards(board).find((card) => card.target.kind === "group")!;
+      const billCard = cards(board).find((card) => card.target.kind === "bill")!;
+      expect(cards(board)).toHaveLength(2);
+      expect(billCard.target).toEqual({ kind: "bill", workingOrderId: venue.party.tabId });
+      expect(billCard.items.map((item) => item.id)).toEqual([looseItem]);
+      expect(groupCard.items.map((item) => item.id).sort()).toEqual(
+        [placed.burgerItem, placed.waterItem].sort(),
+      );
+
+      const idsOf = async (card: PassCard) =>
+        (await readPassCardRows(tx, venue.cfg, card.target)).map((row) => row.item.id).sort();
+      expect(await idsOf(groupCard)).toEqual(groupCard.items.map((item) => item.id).sort());
+      expect(await idsOf(billCard)).toEqual([looseItem]);
+      expect(
+        await readPassCardRows(tx, venue.cfg, {
+          kind: "group",
+          partyId: randomUUID(),
+          groupId: placed.groupId,
+        }),
+      ).toEqual([]);
+    });
+  });
+
+  it("marks no held dish closed at a closed station", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      await setStationsWaitForPass(tx, true, [venue.stations.grill]);
+      const placed = await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ lines: [dish(venue, "burger")], release: "hold" }],
+      });
+      const burgerItem = await ticketItemOf(tx, placed.groups[0]!.lineIds[0]!);
+      await setStationToday(tx, venue.cfg, venue.stations.grill, "closed", new Date(AT));
+      const { held } = await readScopedPassBoard(tx, venue.cfg, EVERY);
+      expect(held).toHaveLength(1);
+      expect(held[0]!.items.find((item) => item.id === burgerItem)).toMatchObject({
+        phase: "held",
+        stationClosed: false,
+      });
     });
   });
 
