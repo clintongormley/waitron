@@ -93,7 +93,7 @@ describe("listTablesWithState — floor-annotator merge", () => {
     // The REAL enabled-set annotators (bookings among them) — the exact assembly boot passes.
     const annotators = enabledFloorAnnotators(ALL_MODULES);
     const row = (
-      await asApp(cfg, (tx) => listTablesWithState(tx, cfg, annotators, undefined, MADRID_NOON))
+      await asApp(cfg, (tx) => listTablesWithState(tx, cfg, annotators, MADRID_NOON))
     ).find((t) => t.id === tableId)!;
     expect(row.nextReservation).toEqual({ time: "14:00" });
   });
@@ -115,7 +115,7 @@ describe("listTablesWithState — floor-annotator merge", () => {
     expect(annotators).toHaveLength(0);
 
     const row = (
-      await asApp(cfg, (tx) => listTablesWithState(tx, cfg, annotators, undefined, MADRID_NOON))
+      await asApp(cfg, (tx) => listTablesWithState(tx, cfg, annotators, MADRID_NOON))
     ).find((t) => t.id === tableId)!;
     expect(row.nextReservation).toBeNull();
   });

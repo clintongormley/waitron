@@ -322,7 +322,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     await move(b2, { tableId: m7 });
 
     const made = (await groupsOf(luis.partyId)).at(-1)!.id;
-    const board = await inTx(v, (tx) => listExpoQueue(tx, v.cfg));
+    const board = await inTx(v, (tx) => listExpoQueue(tx));
     const entry = board.find((o) => o.orderId === b2);
     expect(entry?.groups.map((g) => g.groupId)).toEqual([made]);
     const ready = await command(luis.partyId);
@@ -600,7 +600,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     expect(group).toMatchObject({ state: "fired", position: 1 });
     expect((await billRow(v, id)).status).toBe("placed");
     expect(await lineRows(id)).toEqual(before.map((l) => ({ ...l, groupId: group!.id })));
-    const entry = (await inTx(v, (tx) => listExpoQueue(tx, v.cfg))).find((o) => o.orderId === id);
+    const entry = (await inTx(v, (tx) => listExpoQueue(tx))).find((o) => o.orderId === id);
     expect(entry?.groups.map((g) => g.groupId)).toEqual([group!.id]);
   });
 

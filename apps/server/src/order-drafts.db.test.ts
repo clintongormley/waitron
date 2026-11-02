@@ -1909,24 +1909,6 @@ describe("a refused save writes nothing", () => {
     expect(await draftRow(draft.id)).toMatchObject({ revision: 0 });
   });
 
-  it("refuses a course of another location with course.not_found", async () => {
-    const v = await setupVenue();
-    const { partyId } = await seated(v);
-    const draft = await save(v, partyId, ALEX, null, 0, [item(v, "fish")]);
-    const [elsewhere] = await db
-      .insert(locations)
-      .values({ name: "Terraza", invoiceLocales: [LOCALE], operationDescription: "Restaurante" })
-      .returning({ id: locations.id });
-    const { id: courseId } = await inTx((tx) =>
-      createCourse(tx, { ...v.cfg, locationId: brandLocationId(elsewhere!.id) }, { name: "Mains" }),
-    );
-
-    await refusedWritingNothing(
-      () => save(v, partyId, ALEX, draft.id, 0, [item(v, "beer", { courseId })]),
-      { code: "course.not_found", params: { courseId } },
-    );
-  });
-
   it.each([true, false])(
     "retains a deleted draft course's held setting (%s) for placement after reload",
     async (heldUntilFired) => {
@@ -5240,7 +5222,7 @@ describe("source-backed draft foundations", () => {
     let calls = 0;
     const probe = vi.spyOn(orderWrites, "fireLines").mockImplementation(async (...args) => {
       const result = await fire(...args);
-      if (++calls === 2) throw new AppError("station.no_default", { locationId: v.cfg.locationId });
+      if (++calls === 2) throw new AppError("station.no_default", {});
       return result;
     });
     try {
@@ -5250,7 +5232,7 @@ describe("source-backed draft foundations", () => {
             { lineIds: [id], release: "hold" },
             { lineIds: lineIds(draft), release: "fire" },
           ]),
-        { code: "station.no_default", params: { locationId: v.cfg.locationId } },
+        { code: "station.no_default", params: {} },
       );
       expect(calls).toBe(2);
     } finally {

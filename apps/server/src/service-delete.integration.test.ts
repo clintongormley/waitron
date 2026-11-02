@@ -1272,13 +1272,7 @@ it.each(["zone", "department"] as const)(
       await run(async (tx) => {
         const nextDay = new Date("2026-10-12T12:00:00Z");
         await ensureToday(tx, venue.cfg, removals, nextDay);
-        return listTablesWithState(
-          tx,
-          venue.cfg,
-          enabledFloorAnnotators(ALL_MODULES),
-          undefined,
-          nextDay,
-        );
+        return listTablesWithState(tx, venue.cfg, enabledFloorAnnotators(ALL_MODULES), nextDay);
       }),
     ).toEqual([]);
     expect(await run(completeSnapshot)).toEqual(after);

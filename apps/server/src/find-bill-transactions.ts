@@ -1,6 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
-import { readLocationClock } from "@waitron/reporting";
+import { readVenueClock, type Transaction } from "@waitron/db";
 import { AppError, rawCentsToDecimal } from "@waitron/shared";
 import { findBillsRelation } from "./find-bill-bills.js";
 import { resolveFindBillDates } from "./find-bill-dates.js";
@@ -14,10 +13,9 @@ import type { TradingContext } from "./trading-context.js";
 import type { OrderZoneCondition } from "./zone-access.js";
 import "./errors.js";
 
-function scopeRelation(cfg: TradingContext, saleId?: string): SQL {
+function scopeRelation(saleId?: string): SQL {
   return sql`with recursive invoice_scope(sale_id, source_sale_id) as (
-    select s.id, s.id from sales s join nodes n on n.id = s.node_id
-      where n.location_id = ${cfg.locationId} ${saleId === undefined ? sql`` : sql`and s.id = ${saleId}`}
+    select s.id, s.id from sales s ${saleId === undefined ? sql`` : sql`where s.id = ${saleId}`}
     union
     select g.sale_id, s.corrects_sale_id from invoice_scope g join sales s on s.id = g.source_sale_id
       where s.corrects_sale_id is not null
@@ -30,15 +28,14 @@ function scopeRelation(cfg: TradingContext, saleId?: string): SQL {
   )`;
 }
 
-function scopeCondition(cfg: TradingContext, inZones?: OrderZoneCondition): SQL {
+function scopeCondition(inZones?: OrderZoneCondition): SQL {
   // Every source matters: allowing one order must not reveal another order's invoice facts.
-  return sql`not exists(select 1 from scope_orders so join working_orders wo on wo.id = so.order_id
-    where so.sale_id = s.id and (wo.location_id <> ${cfg.locationId}
-      or not (${inZones?.(sql`so.order_id`) ?? sql`1`})))`;
+  return sql`not exists(select 1 from scope_orders so
+    where so.sale_id = s.id and not (${inZones?.(sql`so.order_id`) ?? sql`1`}))`;
 }
 
-export function findTransactionsRelation(cfg: TradingContext, inZones?: OrderZoneCondition): SQL {
-  return sql`${scopeRelation(cfg)}, tender_methods as (
+export function findTransactionsRelation(inZones?: OrderZoneCondition): SQL {
+  return sql`${scopeRelation()}, tender_methods as (
     select distinct t.sale_id, t.method, case when t.method = 'card' then p.card_last4 else null end as last4
     from tenders t left join payments p on t.method = 'card'
       and p.state in ('captured','settled','accepted_offline','refunded','partially_refunded')
@@ -70,9 +67,9 @@ export function findTransactionsRelation(cfg: TradingContext, inZones?: OrderZon
       (select group_concat(m.method || coalesce(m.last4,''), ' ') from
         (select method,last4 from tender_methods where sale_id = s.id order by method,last4) m) as method_key,
       (select group_concat(m.last4,' ') from tender_methods m where m.sale_id = s.id) as card_search
-    from sales s join nodes n on n.id = s.node_id join invoice_series sr on sr.id = s.series_id
+    from sales s join invoice_series sr on sr.id = s.series_id
     left join persons person on person.id = s.operator_id
-    where n.location_id = ${cfg.locationId} and ${scopeCondition(cfg, inZones)}
+    where ${scopeCondition(inZones)}
       and not exists(select 1 from sale_voids v where v.sale_id = s.id)
       and (s.corrects_sale_id is not null or s.counterparty_tax_id is not null
         or exists(select 1 from sale_settlements ss where ss.sale_id = s.id))
@@ -138,12 +135,8 @@ export async function readFindTransactions(
   query: TransactionsQuery,
   inZones?: OrderZoneCondition,
 ): Promise<TransactionsPage> {
-  const dates = resolveFindBillDates(
-    await readLocationClock(tx, cfg.locationId),
-    query.dates,
-    new Date(),
-  );
-  const ranked = sql`${findTransactionsRelation(cfg, inZones)}, ranked as materialized (
+  const dates = resolveFindBillDates(await readVenueClock(tx), query.dates, new Date());
+  const ranked = sql`${findTransactionsRelation(inZones)}, ranked as materialized (
     select r.*, ${query.q === "" ? sql`0` : sql`waitron_search_rank(${query.q},r.invoice_number,r.customer_name,r.order_search,r.card_search)`} as search_rank from transactions r
   )`;
   const where = filtered(query, dates);
@@ -187,20 +180,14 @@ export async function readFindTransactions(
 
 export async function resolveTransactionScope(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   saleId: string,
-): Promise<{ workingOrderIds: string[]; locationId: string }> {
-  const { rows } = await tx.execute<{
-    location_id: string;
-    order_ids: string;
-  }>(sql`${scopeRelation(cfg, saleId)}
-    select n.location_id,(select json_group_array(o.order_id) from
+): Promise<{ workingOrderIds: string[] }> {
+  const { rows } = await tx.execute<{ order_ids: string }>(sql`${scopeRelation(saleId)}
+    select (select json_group_array(o.order_id) from
       (select order_id from scope_orders where sale_id=s.id order by order_id) o) as order_ids
-    from sales s join nodes n on n.id=s.node_id
-    where s.id=${saleId} and n.location_id=${cfg.locationId} and ${scopeCondition(cfg)}`);
+    from sales s
+    where s.id=${saleId} and ${scopeCondition()}`);
   if (rows.length === 0) throw new AppError("sale.not_found", { saleId });
-  return {
-    locationId: rows[0]!.location_id,
-    workingOrderIds: JSON.parse(rows[0]!.order_ids) as string[],
-  };
+  return { workingOrderIds: JSON.parse(rows[0]!.order_ids) as string[] };
 }

@@ -2319,7 +2319,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const queue = await withTransaction(deps.db, async (tx) => {
-        return listExpoQueue(tx, deps.cfg);
+        return listExpoQueue(tx);
       });
       return c.json(queue);
     }),
@@ -2817,14 +2817,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         await catchUpFloor(tx);
         const scope = await readZoneScope(tx, deps.cfg, device.deviceProfileId);
         return (
-          await listTablesWithState(
-            tx,
-            deps.cfg,
-            deps.floorAnnotators ?? [],
-            undefined,
-            undefined,
-            log,
-          )
+          await listTablesWithState(tx, deps.cfg, deps.floorAnnotators ?? [], undefined, log)
         ).filter((table) => inScope(scope, table.zoneId));
       });
       return c.json(state);

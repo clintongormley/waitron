@@ -889,7 +889,7 @@ describe("MOVED notices for a paid bill left on a party combined away", () => {
     expect(noticesOn([ana.tabId])).toEqual([
       { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "PagoM 7" },
     ]);
-    const onPass = (await act((tx) => listExpoQueue(tx, v.cfg))).find(
+    const onPass = (await act((tx) => listExpoQueue(tx))).find(
       (entry) => entry.orderId === ana.tabId,
     );
     expect(onPass?.tableLabel).toBe("PagoM 7");

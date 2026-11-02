@@ -68,7 +68,7 @@ describe.each(["table", "counter"] as const)("A773 no dispatch projection: %s", 
       try {
         const read = () =>
           inTx(v, async (tx) => {
-            if (reader === "expo") return listExpoQueue(tx, v.cfg);
+            if (reader === "expo") return listExpoQueue(tx);
             if (reader === "pass") {
               return (await listPassScreen(tx, v.cfg, v.cfg.origin.deviceId, EVERY)).orders;
             }
@@ -167,7 +167,7 @@ describe("A773 lifetime", () => {
         .where(eq(ticketItems.id, item.id));
     });
     expect(await boards(v)).toEqual({ screen: expected, monitor: expected });
-    expect(counts(await inTx(v, (tx) => listExpoQueue(tx, v.cfg)))).toEqual(expected);
+    expect(counts(await inTx(v, (tx) => listExpoQueue(tx)))).toEqual(expected);
   });
 
   it("shows only the remaining quantity, restores it on Undo and keeps the original ready time", async () => {
@@ -204,7 +204,7 @@ describe("A773 lifetime", () => {
     expect(ticketBefore.readyAt).not.toBeNull();
     await serve("2");
     expect(await boards(v)).toEqual({ screen: [], monitor: [] });
-    expect(counts(await inTx(v, (tx) => listExpoQueue(tx, v.cfg)))).toEqual([]);
+    expect(counts(await inTx(v, (tx) => listExpoQueue(tx)))).toEqual([]);
   });
 
   it("removes unserved ready food when the paid party finishes", async () => {
@@ -220,7 +220,7 @@ describe("A773 lifetime", () => {
       await inTx(v, (tx) => tx.select().from(ticketItems).where(eq(ticketItems.id, item.id))),
     ).toHaveLength(1);
     expect(await boards(v)).toEqual({ screen: [], monitor: [] });
-    expect(counts(await inTx(v, (tx) => listExpoQueue(tx, v.cfg)))).toEqual([]);
+    expect(counts(await inTx(v, (tx) => listExpoQueue(tx)))).toEqual([]);
   });
 
   it("keeps a paid merged family's dish until its surviving party finishes, through two merges", async () => {

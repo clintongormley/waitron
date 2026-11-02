@@ -61,9 +61,9 @@ export function mountOrderKitchenNoteApi(
               if (device.locationId !== deps.cfg.locationId)
                 throw new AppError("device.unauthorized", {});
               assertProfileAction(device, "take-orders");
-              if (!party) await requireKitchenNoteOrder(tx, deps.cfg, id);
+              if (!party) await requireKitchenNoteOrder(tx, id);
               const snapshot = party
-                ? await readPartyKitchenNote(tx, deps.cfg, id)
+                ? await readPartyKitchenNote(tx, id)
                 : (await readOrderKitchenNotes(tx, [id])).get(id)!;
               await checkZones(tx, deps.cfg, { device }, [
                 "partyId" in snapshot.scope ? { partyId: snapshot.scope.partyId } : { orderId: id },

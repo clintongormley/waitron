@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import {
   diningTables,
   parties,
@@ -112,7 +112,6 @@ export async function readOrderKitchenNotes(
 
 export async function readPartyKitchenNote(
   tx: Transaction,
-  cfg: TradingContext,
   partyId: string,
 ): Promise<KitchenNoteSnapshot> {
   const [party] = await tx.select().from(parties).where(eq(parties.id, partyId));
@@ -121,13 +120,13 @@ export async function readPartyKitchenNote(
     .select({ id: diningTables.id })
     .from(partyTables)
     .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
-    .where(and(eq(partyTables.partyId, partyId), eq(diningTables.locationId, cfg.locationId)))
+    .where(eq(partyTables.partyId, partyId))
     .limit(1);
   if (table === undefined) {
     const [bill] = await tx
       .select({ id: workingOrders.id })
       .from(workingOrders)
-      .where(and(eq(workingOrders.partyId, partyId), eq(workingOrders.locationId, cfg.locationId)))
+      .where(eq(workingOrders.partyId, partyId))
       .limit(1);
     if (bill === undefined) throw new AppError("party.not_found", { partyId });
   }
@@ -140,11 +139,8 @@ export async function readPartyKitchenNote(
   };
 }
 
-export async function requireKitchenNoteOrder(tx: Transaction, cfg: TradingContext, id: string) {
-  const [order] = await tx
-    .select()
-    .from(workingOrders)
-    .where(and(eq(workingOrders.id, id), eq(workingOrders.locationId, cfg.locationId)));
+export async function requireKitchenNoteOrder(tx: Transaction, id: string) {
+  const [order] = await tx.select().from(workingOrders).where(eq(workingOrders.id, id));
   if (order === undefined) throw new AppError("working_order.not_found", { workingOrderId: id });
   return order;
 }
@@ -179,7 +175,7 @@ export async function setOrderKitchenNote(
       let current: KitchenNoteSnapshot;
       let orderIds: string[];
       if ("partyId" in scope) {
-        current = await readPartyKitchenNote(tx, cfg, scope.partyId);
+        current = await readPartyKitchenNote(tx, scope.partyId);
         const [party] = await tx
           .select({ state: parties.state })
           .from(parties)
@@ -193,7 +189,7 @@ export async function setOrderKitchenNote(
           });
         orderIds = await kitchenNoteOrders(tx, scope);
       } else {
-        const order = await requireKitchenNoteOrder(tx, cfg, scope.workingOrderId);
+        const order = await requireKitchenNoteOrder(tx, scope.workingOrderId);
         if (order.partyId !== null || order.revision !== args.expectedOwnerRevision)
           throw new AppError("working_order.out_of_date", {
             workingOrderId: order.id,

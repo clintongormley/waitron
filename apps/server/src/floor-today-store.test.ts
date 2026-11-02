@@ -1084,7 +1084,7 @@ describe("a deleted zone", () => {
     expect(await inService(hidden)).toBe(false);
     expect(await inService(never)).toBe(false);
     await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
-    const floor = await inTx(v, (tx) => listTablesWithState(tx, v.cfg, [], undefined, NOW));
+    const floor = await inTx(v, (tx) => listTablesWithState(tx, v.cfg, [], NOW));
     expect(floor.map((t) => t.id)).not.toContain(planned);
   });
 });

@@ -178,7 +178,7 @@ async function cancelLine(billId: string, name: string) {
 }
 
 async function expoOrder(billId: string) {
-  return (await inTx(v, (tx) => listExpoQueue(tx, v.cfg))).find((o) => o.orderId === billId);
+  return (await inTx(v, (tx) => listExpoQueue(tx))).find((o) => o.orderId === billId);
 }
 
 async function stationGroup(station: keyof typeof stations, billId: string) {

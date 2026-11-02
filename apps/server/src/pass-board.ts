@@ -67,7 +67,6 @@ export async function listPassScreen(
   const ids = new Set(kept.map((item) => item.id));
   const orders = await readPassBoard(
     tx,
-    cfg.locationId,
     inArray(workingOrders.id, [...new Set(kept.map((item) => item.orderId))]),
   );
   const section = <T extends ExpoCourse | ExpoGroup>(
@@ -101,7 +100,6 @@ export async function listPassMonitor(
   const ids = new Set(kept.map((item) => item.id));
   const orders = await readPassBoard(
     tx,
-    cfg.locationId,
     inArray(workingOrders.id, [...new Set(kept.map((item) => item.orderId))]),
   );
   const section = <T extends ExpoCourse | ExpoGroup>(part: T): T | null => {
@@ -162,7 +160,7 @@ async function readCardRows(
   cards: SQL,
   nowMs: number,
 ): Promise<PassRow[]> {
-  const read = await readPassRows(tx, cfg.locationId, and(liveKitchenDishAt(cfg), cards)!, nowMs);
+  const read = await readPassRows(tx, and(liveKitchenDishAt(cfg), cards)!, nowMs);
   if (read.length === 0) return [];
   const zones = await rowsWatchZones(tx, cfg, read);
   const phase = (row: Pick<PassRow, "requestedAt" | "firedAt" | "item">) =>

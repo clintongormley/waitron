@@ -76,7 +76,7 @@ export async function moveGuests(
   options: TableActionOptions,
 ): Promise<TableActionResult> {
   await checkAndBumpParty(tx, partyId, options.expectedPartyRevision, "open");
-  const table = await readTargetTable(tx, cfg, toTableId, partyId, options);
+  const table = await readTargetTable(tx, toTableId, partyId, options);
   const zoneBefore = await partyZone(tx, cfg, partyId);
   if (table.zoneId !== zoneBefore)
     await VENUE_SERVICE.assertZoneTakesNewOrders(tx, cfg, table.zoneId, new Date());
@@ -139,7 +139,7 @@ export async function joinTables(
   options: TableActionOptions,
 ): Promise<TableActionResult> {
   await checkAndBumpParty(tx, partyId, options.expectedPartyRevision, "open");
-  const table = await readTargetTable(tx, cfg, tableId, partyId, options);
+  const table = await readTargetTable(tx, tableId, partyId, options);
   if (table.holding === partyId) throw new AppError("table.already_in_party", { tableId });
   const zoneId = await partyZone(tx, cfg, partyId);
   if (zoneId !== null && zoneId !== table.zoneId) {

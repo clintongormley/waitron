@@ -79,7 +79,7 @@ function place(x: number, y: number, extra: { width?: number; rotation?: number 
 }
 
 async function read(): Promise<Map<string, TableState>> {
-  const states = await inTx(v, (tx) => listTablesWithState(tx, v.cfg, [], undefined, NOW));
+  const states = await inTx(v, (tx) => listTablesWithState(tx, v.cfg, [], NOW));
   return new Map(states.map((s) => [s.id, s]));
 }
 
@@ -407,9 +407,9 @@ describe("the till's table-state answer carries the room's revision", () => {
     await onNextDay(async () => {
       await inTx(v, (tx) => ensureToday(tx, v.cfg, REMOVALS, NEXT_DAY));
       const two = await LONG_TABLE(NEXT_DAY);
-      const next = await inTx(v, (tx) =>
-        listTablesWithState(tx, v.cfg, [], undefined, NEXT_DAY),
-      ).then((states) => new Map(states.map((s) => [s.id, s])));
+      const next = await inTx(v, (tx) => listTablesWithState(tx, v.cfg, [], NEXT_DAY)).then(
+        (states) => new Map(states.map((s) => [s.id, s])),
+      );
       expect(revisionsOf(next, one.table)).toEqual([2, 2, 2, 2, 2]);
       expect(revisionsOf(next, two.table)).toEqual([1, 1, 1, 1, 1]);
       expect(next.get(unplanned)!.today.zoneRevision).toBe(0);

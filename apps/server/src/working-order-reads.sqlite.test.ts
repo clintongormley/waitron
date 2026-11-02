@@ -176,7 +176,7 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
 
   it("lists the expo queue with the order's open age in whole minutes", async () => {
     const orders = await withTransaction(db, async (tx) => {
-      return listExpoQueue(tx, cfg);
+      return listExpoQueue(tx);
     });
     expect(orders).toHaveLength(1);
     // Opened in this suite's own setup, so the floored minute count is 0.
@@ -216,7 +216,7 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
       async (tx) =>
         [
           await listStationQueue(tx, stationId),
-          await listExpoQueue(tx, cfg),
+          await listExpoQueue(tx),
           await listTablesWithState(tx, cfg),
         ] as const,
     );
@@ -231,7 +231,7 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
       .update(ticketItems)
       .set({ state: "ready", awayAt: nowIso() })
       .where(eq(ticketItems.id, burger!.id));
-    const afterLegacyAway = await withTransaction(db, (tx) => listExpoQueue(tx, cfg));
+    const afterLegacyAway = await withTransaction(db, (tx) => listExpoQueue(tx));
     expect(afterLegacyAway.map((order) => order.orderId)).toContain(order!.id);
   });
 
@@ -267,7 +267,7 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
       queuedAt: nowIso(),
       firedAt: nowIso(),
     });
-    const orders = await withTransaction(db, (tx) => listExpoQueue(tx, cfg));
+    const orders = await withTransaction(db, (tx) => listExpoQueue(tx));
     expect(orders.map((order) => order.orderId)).not.toContain(orderId);
     const [table] = await withTransaction(db, (tx) => listTablesWithState(tx, cfg));
     expect(table).toMatchObject({ pendingDeliveries: 0 });

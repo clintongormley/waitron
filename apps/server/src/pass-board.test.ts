@@ -236,7 +236,7 @@ describe("pass screen", () => {
         ),
     );
     const read = (device: string) => inTx(v, (tx) => listPassScreen(tx, v.cfg, device, EVERY));
-    const expoBefore = await inTx(v, (tx) => listExpoQueue(tx, v.cfg));
+    const expoBefore = await inTx(v, (tx) => listExpoQueue(tx));
     const at = new Date("2026-10-01T12:00:00.000Z");
     await inTx(v, (tx) =>
       tx.insert(passItemMarks).values({
@@ -248,7 +248,7 @@ describe("pass screen", () => {
     );
     expect(ids(await read(a!))).toContain(burger!.id);
     expect(ids(await read(b!))).toContain(burger!.id);
-    expect(await inTx(v, (tx) => listExpoQueue(tx, v.cfg))).toEqual(expoBefore);
+    expect(await inTx(v, (tx) => listExpoQueue(tx))).toEqual(expoBefore);
     const person = randomUUID();
     await inTx(v, (tx) =>
       tx.insert(passItemMarks).values({
@@ -448,7 +448,7 @@ describe("pass monitor", () => {
         .set({ awayAt: new Date().toISOString() })
         .where(eq(ticketItems.id, burger!.id)),
     );
-    expect((await inTx(v, (tx) => listExpoQueue(tx, v.cfg))).map((o) => o.orderId)).toContain(
+    expect((await inTx(v, (tx) => listExpoQueue(tx))).map((o) => o.orderId)).toContain(
       outside.tabId,
     );
     expect((await read(grillOnly)).orders.map((o) => o.orderId).sort()).toEqual(

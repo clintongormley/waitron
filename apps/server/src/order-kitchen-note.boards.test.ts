@@ -36,7 +36,7 @@ describe("canonical kitchen instructions on preparation boards", () => {
     const read = () =>
       inTx(v, async (tx) => ({
         station: [...(await listStationQueues(tx, stationIds)).values()].flat(),
-        pass: await readPassBoard(tx, v.cfg.locationId, sql`1=1`),
+        pass: await readPassBoard(tx, sql`1=1`),
       }));
     const first = await read();
     for (const board of [first.station, first.pass]) {

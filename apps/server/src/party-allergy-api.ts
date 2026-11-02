@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { Hono } from "hono";
 import { diningTables, partyTables, withTransaction } from "@waitron/db";
 import { canUseDeviceProfile } from "@waitron/identity";
@@ -116,12 +116,7 @@ export function mountPartyAllergyApi(app: Hono, deps: TillApiDeps, log: Logger, 
               .select({ id: diningTables.id })
               .from(partyTables)
               .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
-              .where(
-                and(
-                  eq(partyTables.partyId, partyId),
-                  eq(diningTables.locationId, deps.cfg.locationId),
-                ),
-              )
+              .where(eq(partyTables.partyId, partyId))
               .limit(1);
             if (table === undefined)
               throw new AppError("party.not_found", { partyId: requestedId });

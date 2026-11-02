@@ -72,7 +72,7 @@ export async function readPartyNames(
  * Each order's places, keyed by order; an id that names no order has no entry. A party bill is at
  * the tables {@link billParties} gives its party, named as it names them, else by the order's own
  * label; an order of no party is at the table it is delivered to, named by that table's shown name,
- * else at the counter. No reading filters by location.
+ * else at the counter.
  */
 export async function readPlacedOrders(
   tx: Transaction,

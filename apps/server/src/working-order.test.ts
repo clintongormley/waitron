@@ -548,7 +548,7 @@ describe("a sold variant line carries its product and relative variant names", (
       return {
         tabLines: await readTabLines(tx, cfg, orderId),
         stationItems: (await listStationQueue(tx, cocina.id))[0]!.items,
-        expoItems: (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items,
+        expoItems: (await listExpoQueue(tx))[0]!.courses[0]!.items,
       };
     });
     // `getHeldOrder` opens its own transaction, so it runs outside the block above.
@@ -3489,14 +3489,12 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         .update(kitchenStations)
         .set({ active: false })
         .where(eq(kitchenStations.id, kitchen.id));
-      await expect(fireLines(tx, cfg, id, [line!])).rejects.toMatchObject({
-        code: "station.no_default",
-        params: { locationId: cfg.locationId },
-      });
-      await expect(fireLines(tx, cfg, id, [line!], { unroutable: "skip" })).rejects.toMatchObject({
-        code: "station.no_default",
-        params: { locationId: cfg.locationId },
-      });
+      await expect(fireLines(tx, cfg, id, [line!])).rejects.toEqual(
+        expect.objectContaining({ code: "station.no_default", params: {} }),
+      );
+      await expect(fireLines(tx, cfg, id, [line!], { unroutable: "skip" })).rejects.toEqual(
+        expect.objectContaining({ code: "station.no_default", params: {} }),
+      );
     });
   });
 
@@ -3645,14 +3643,13 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
     });
   });
 
-  it("refuses to fire when the location has no default station (station.no_default)", async () => {
+  it("refuses to fire when the venue has no default station (station.no_default)", async () => {
     const { cfg, catalogueId } = await setupVenue(); // no default station created
     await withTransaction(db, async (tx) => {
       const uncategorised = await makeProduct(tx, cfg, catalogueId, {}); // no product/category route
-      await expect(fireContextless(tx, cfg, [uncategorised])).rejects.toMatchObject({
-        code: "station.no_default",
-        params: { locationId: cfg.locationId },
-      });
+      const refusal = await fireContextless(tx, cfg, [uncategorised]).catch((e: unknown) => e);
+      expect(refusal).toMatchObject({ code: "station.no_default" });
+      expect((refusal as { params: unknown }).params).toEqual({});
     });
   });
 
@@ -3665,10 +3662,9 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         .set({ active: false })
         .where(eq(kitchenStations.id, cocina.id));
       const uncategorised = await makeProduct(tx, cfg, catalogueId, {}); // no product/category route
-      await expect(fireContextless(tx, cfg, [uncategorised])).rejects.toMatchObject({
-        code: "station.no_default",
-        params: { locationId: cfg.locationId },
-      });
+      await expect(fireContextless(tx, cfg, [uncategorised])).rejects.toEqual(
+        expect.objectContaining({ code: "station.no_default", params: {} }),
+      );
     });
   });
 
@@ -4812,7 +4808,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         },
       ]);
 
-      const expo = await listExpoQueue(tx, cfg);
+      const expo = await listExpoQueue(tx);
       const expoItem = expo[0]!.courses[0]!.items[0]!;
       expect(expoItem.modifiers).toEqual([
         { descriptions: { [LOCALE]: "ES large" }, perDish: 1, addAllergens: null, suitableFor: [] },
@@ -4842,7 +4838,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       expect(group!.items).toHaveLength(1);
       expect(group!.items[0]!.note).toBe("sin cebolla");
 
-      const expo = await listExpoQueue(tx, cfg);
+      const expo = await listExpoQueue(tx);
       const expoItem = expo[0]!.courses[0]!.items[0]!;
       expect(expoItem.note).toBe("sin cebolla");
 
@@ -4875,7 +4871,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
 
       const [group] = await listStationQueue(tx, cocina.id);
       expect(group!.items[0]!.note).toBeNull();
-      const expo = await listExpoQueue(tx, cfg);
+      const expo = await listExpoQueue(tx);
       expect(expo[0]!.courses[0]!.items[0]!.note).toBeNull();
     });
   });
@@ -4925,7 +4921,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       expect(item.asServed.allergens).toEqual({ gluten: { kinds: ["wheat" as const] } });
       expect(item.asServed.pending).toBe(false);
 
-      const expoItem = (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items[0]!;
+      const expoItem = (await listExpoQueue(tx))[0]!.courses[0]!.items[0]!;
       expect(expoItem.asServed.allergens).toEqual({ gluten: { kinds: ["wheat" as const] } });
       expect(expoItem.asServed.pending).toBe(false);
     });
@@ -4966,7 +4962,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       expect(item.modifiers).toEqual([]);
       expect(item.asServed.pending).toBe(true);
       expect(item.asServed.allergens).toEqual({});
-      const expoItem = (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items[0]!;
+      const expoItem = (await listExpoQueue(tx))[0]!.courses[0]!.items[0]!;
       expect(expoItem.modifiers).toEqual([]);
       expect(expoItem.asServed.pending).toBe(true);
       expect(expoItem.asServed.allergens).toEqual({});
@@ -5046,7 +5042,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         .find((i) => i.workingOrderLineId === parentLineId)!;
       expect(item.asServedDiet).toEqual({ vegan: "yes", vegetarian: "yes", contains: [] });
 
-      const expoItem = (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items[0]!;
+      const expoItem = (await listExpoQueue(tx))[0]!.courses[0]!.items[0]!;
       expect(expoItem.asServedDiet!.vegan).toBe("yes");
       expect(expoItem.asServedDiet).toEqual({ vegan: "yes", vegetarian: "yes", contains: [] });
     });
@@ -5091,7 +5087,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         addAllergens: { milk: {} },
         suitableFor: ["halal"],
       });
-      const expoItem = (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items[0]!;
+      const expoItem = (await listExpoQueue(tx))[0]!.courses[0]!.items[0]!;
       expect(expoItem.asServedDiet).toEqual({
         vegan: "yes",
         vegetarian: "yes",
@@ -5114,7 +5110,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       const item = (await listStationQueue(tx, cocina.id))[0]!.items[0]!;
       expect(item.asServedDiet).toEqual({ vegan: "unknown", vegetarian: "unknown", contains: [] });
 
-      const expoItem = (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items[0]!;
+      const expoItem = (await listExpoQueue(tx))[0]!.courses[0]!.items[0]!;
       expect(expoItem.asServedDiet).toEqual({
         vegan: "unknown",
         vegetarian: "unknown",
@@ -6160,7 +6156,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
 
       const { id: orderId } = await placeOrderWith(tx, cfg, [line(soup), line(olives)]);
 
-      const expo = await listExpoQueue(tx, cfg);
+      const expo = await listExpoQueue(tx);
       expect(expo).toHaveLength(1);
       const order = expo[0]!;
       expect(order.orderId).toBe(orderId);
@@ -6197,7 +6193,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
         .set({ status: "abandoned" })
         .where(eq(workingOrders.id, abandoned));
 
-      expect((await listExpoQueue(tx, cfg)).map((o) => o.orderId)).toEqual([orderId]);
+      expect((await listExpoQueue(tx)).map((o) => o.orderId)).toEqual([orderId]);
     });
   });
 
@@ -6214,7 +6210,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
 
       const { id: orderId } = await placeOrderWith(tx, cfg, [line(starter), line(main)]);
 
-      const order = (await listExpoQueue(tx, cfg))[0]!;
+      const order = (await listExpoQueue(tx))[0]!;
       expect(order.courses.map((c) => c.courseName)).toEqual(["Entrantes", "Principales"]);
       const [c0, c1] = order.courses;
       expect(c0!.fired).toBe(true); // earliest course auto-fired
@@ -6227,7 +6223,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       const entItem = items.find((i) => i.courseId === ent.id)!;
       await tx.update(ticketItems).set({ awayAt: nowIso() }).where(eq(ticketItems.id, entItem.id));
 
-      const after = await listExpoQueue(tx, cfg);
+      const after = await listExpoQueue(tx);
       expect(after).toHaveLength(1);
       const c0b = after[0]!.courses.find((c) => c.courseId === ent.id)!;
       const c1b = after[0]!.courses.find((c) => c.courseId === pri.id)!;
@@ -6255,13 +6251,13 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
         .update(ticketItems)
         .set({ awayAt: nowIso() })
         .where(eq(ticketItems.id, items[0]!.id));
-      expect((await listExpoQueue(tx, cfg)).map((o) => o.orderId)).toEqual([orderId]);
+      expect((await listExpoQueue(tx)).map((o) => o.orderId)).toEqual([orderId]);
 
       await tx
         .update(ticketItems)
         .set({ awayAt: nowIso() })
         .where(eq(ticketItems.id, items[1]!.id));
-      const board = await listExpoQueue(tx, cfg);
+      const board = await listExpoQueue(tx);
       expect(board.map((order) => order.orderId)).toEqual([orderId]);
       expect(
         board[0]!.courses.flatMap((course) => course.items.map((item) => item.id)).sort(),
@@ -6289,7 +6285,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       // A WALK-UP counter order, no table → tableLabel omitted.
       const { id: walkup } = await placeOrderWith(tx, cfg, [line(cafe)]);
 
-      const expo = await listExpoQueue(tx, cfg);
+      const expo = await listExpoQueue(tx);
       const tab = expo.find((o) => o.orderId === tabId)!;
       expect(tab.tableLabel).toBe("Mesa 5");
       expect(tab.openedMinutes).toBeGreaterThanOrEqual(0);
@@ -6314,7 +6310,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
         .set({ deliveryTableId: rows[0]!.id, label: "Luis" })
         .where(eq(workingOrders.id, id));
 
-      const order = (await listExpoQueue(tx, cfg)).find((o) => o.orderId === id)!;
+      const order = (await listExpoQueue(tx)).find((o) => o.orderId === id)!;
       expect(order.tableLabel).toBe("Terraza 8");
     });
   });
@@ -6328,7 +6324,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
     const checkId = await split(v, partyId, tabId, [2]);
     await join(v, partyId, mesa5);
 
-    const board = await inTx(v, (tx) => listExpoQueue(tx, v.cfg));
+    const board = await inTx(v, (tx) => listExpoQueue(tx));
 
     expect(Object.fromEntries(board.map((order) => [order.orderId, order.tableLabel]))).toEqual({
       [tabId]: "Mesa 4, 5",
@@ -6363,7 +6359,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
         sql`update ticket_items set queued_at = ${minutesAgo(5)} where id = ${oliveItem.id}`,
       );
 
-      const order = (await listExpoQueue(tx, cfg)).find((o) => o.orderId === orderId)!;
+      const order = (await listExpoQueue(tx)).find((o) => o.orderId === orderId)!;
       const outItems = order.courses.flatMap((c) => c.items);
       const soupOut = outItems.find((i) => i.id === soupItem.id)!;
       const oliveOut = outItems.find((i) => i.id === oliveItem.id)!;
@@ -6404,13 +6400,13 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
         sql`update ticket_items set queued_at = ${minutesAgo(12)} where id = ${rows[0]!.id}`,
       );
 
-      let order = (await listExpoQueue(tx, cfg)).find((o) => o.orderId === tabId)!;
+      let order = (await listExpoQueue(tx)).find((o) => o.orderId === tabId)!;
       expect(order.worstBand).toBe("overdue");
 
       // Serve the overdue line — it drops off the clock. Line 2 is still unserved but fresh, so the
       // order's worst band clears.
       await serveLine(tx, cfg, tabId, rows[0]!.lineNo);
-      order = (await listExpoQueue(tx, cfg)).find((o) => o.orderId === tabId)!;
+      order = (await listExpoQueue(tx)).find((o) => o.orderId === tabId)!;
       expect(order.worstBand).toBe("fresh");
     });
   });
@@ -7476,7 +7472,7 @@ it("shows the dish's own allergens and diet beside a frozen options answer", asy
     expect(queue[0]!.items[0]!.asServed).toEqual(own);
     expect(queue[0]!.items[0]!.optionSnapshots).toEqual(optionSnapshots);
     expect(queue[0]!.items[0]!.asServedDiet).toEqual(ownDiet);
-    const expo = await listExpoQueue(tx, cfg);
+    const expo = await listExpoQueue(tx);
     expect(expo[0]!.courses[0]!.items[0]!.asServed).toEqual(own);
     expect(expo[0]!.courses[0]!.items[0]!.optionSnapshots).toEqual(optionSnapshots);
     expect(expo[0]!.courses[0]!.items[0]!.asServedDiet).toEqual(ownDiet);
@@ -9649,9 +9645,7 @@ describe("a variant is sold as the product it is", () => {
         tab: (await readTabLines(tx, twoLocales, orderId)).map((l) => l.name),
         tabUnitPrecision: (await readTabLines(tx, twoLocales, orderId)).map((l) => l.unitPrecision),
         station: (await listStationQueue(tx, barra.id))[0]!.items.map((i) => i.name),
-        expo: (await listExpoQueue(tx, twoLocales))[0]!.courses.flatMap((c) =>
-          c.items.map((i) => i.name),
-        ),
+        expo: (await listExpoQueue(tx))[0]!.courses.flatMap((c) => c.items.map((i) => i.name)),
         receipt: await readStoredOrder(tx, orderId).then(({ gross, identities }) =>
           ticketLinesFrom(gross, identities).map((l) => l.descriptions),
         ),

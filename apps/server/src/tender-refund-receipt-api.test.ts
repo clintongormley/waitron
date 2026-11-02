@@ -7,8 +7,6 @@ import {
   deviceProfiles,
   drawerOpens,
   invoiceDeliveries,
-  locations,
-  nodes,
   saleSubstitutions,
   printJobs,
   receiptReprints,
@@ -380,40 +378,6 @@ it("rolls the document job back when its audit cannot commit", async () => {
   }
 });
 
-it("does not reveal or print an orderless invoice from another location", async () => {
-  const original = await billlessSale(venue);
-  const [sale] = await store.db.select().from(sales).where(eq(sales.id, original));
-  const id = randomUUID();
-  await inTx(venue, async (tx) => {
-    const [current] = await tx
-      .select()
-      .from(locations)
-      .where(eq(locations.id, venue.cfg.locationId));
-    const [other] = await tx
-      .insert(locations)
-      .values({ ...current!, id: randomUUID(), name: "Other venue room" })
-      .returning();
-    const [node] = await tx
-      .insert(nodes)
-      .values({ name: "Other", locationId: other!.id })
-      .returning();
-    await tx.insert(sales).values({
-      ...sale!,
-      id,
-      nodeId: node!.id,
-      invoiceNumber: 900001,
-      fiscalState: "not_applicable",
-    });
-    await tx
-      .insert(tenders)
-      .values({ saleId: id, method: "cash", amount: 1210, settledAt: "2026-10-15T11:00:00.000Z" });
-  });
-  const row = await target({}, id),
-    before = await printed();
-  expect(await get(row.id)).toMatchObject({ status: 404, json: { code: "sale.not_found" } });
-  expect(await print(row.id)).toMatchObject({ status: 404, json: { code: "sale.not_found" } });
-  expect(await printed()).toEqual(before);
-});
 it("requires every substituted original order's zone before exposing an acknowledgment", async () => {
   const first = await placedIssuedBill(venue, "Caña");
   expect((await collect(venue, first, "3.00")).status).toBe(200);

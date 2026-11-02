@@ -1564,7 +1564,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
       asApp(cfg, async (tx) => ({
         station: (await listStationQueue(tx, stationId!))[0]!.items[0]!.quantity,
         // A party's round is in no group, so the pass shows it in the no-group section.
-        expo: (await listExpoQueue(tx, cfg))[0]!.groups[0]!.items[0]!.qty,
+        expo: (await listExpoQueue(tx))[0]!.groups[0]!.items[0]!.qty,
       }));
 
     expect(await queued()).toEqual({ station: "2.000", expo: "2.000" });
@@ -3279,7 +3279,7 @@ describe("the kitchen screen and the expo board are told which lines were sold i
   it("marks each expo board item the same way", async () => {
     const { cfg } = await fiveDishesOnATab();
 
-    const orders = await asApp(cfg, (tx) => listExpoQueue(tx, cfg));
+    const orders = await asApp(cfg, (tx) => listExpoQueue(tx));
 
     const items = orders
       .flatMap((order) => [...order.courses, ...order.groups])

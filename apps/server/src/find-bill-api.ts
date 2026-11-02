@@ -1,9 +1,8 @@
 import type { Hono } from "hono";
 import { sql, type SQL } from "drizzle-orm";
-import { withTransaction, type Transaction } from "@waitron/db";
+import { readVenueClock, withTransaction, type Transaction } from "@waitron/db";
 import { AppError, isUuid } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
-import { readLocationClock } from "@waitron/reporting";
 import { findBillsRelation, readFindBill, readFindBills } from "./find-bill-bills.js";
 import { findTransactionsRelation, readFindTransactions } from "./find-bill-transactions.js";
 import { parseBillsQuery, parseTransactionsQuery } from "./find-bill-query.js";
@@ -34,11 +33,11 @@ export async function readFindBillOptions(
     where l.credited_to is not null order by name,id`,
   );
   const transactionStaff = await choices(
-    findTransactionsRelation(cfg, inZones),
+    findTransactionsRelation(inZones),
     sql`select distinct operator_id as id,coalesce(staff_name,operator_id) as name
     from transactions where operator_id is not null order by name,id`,
   );
-  const { timeZone } = await readLocationClock(tx, cfg.locationId);
+  const { timeZone } = await readVenueClock(tx);
   return { timeZone, zones, billStaff, transactionStaff };
 }
 

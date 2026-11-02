@@ -396,7 +396,6 @@ export async function appendRecalledLine(
     joinGroupId === null
       ? await recalledPlace(
           tx,
-          cfg,
           partyId,
           sourceLineId,
           held.map((row) => row.line),
@@ -408,7 +407,6 @@ export async function appendRecalledLine(
 
 async function recalledPlace(
   tx: Transaction,
-  cfg: TradingContext,
   partyId: string,
   sourceLineId: string,
   own: readonly DraftLine[],
@@ -419,10 +417,7 @@ async function recalledPlace(
     .from(workingOrderLines)
     .where(eq(workingOrderLines.id, sourceLineId));
   if (source!.courseId === null) return fire;
-  const courses = await tx
-    .select()
-    .from(kitchenCourses)
-    .where(eq(kitchenCourses.locationId, cfg.locationId));
+  const courses = await tx.select().from(kitchenCourses);
   const course = courses.find((candidate) => candidate.id === source!.courseId);
   if (course?.heldUntilFired === false) return fire;
   const groups = (await listOrderGroups(tx, partyId)).groups.filter(

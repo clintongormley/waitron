@@ -66,7 +66,7 @@ describe("split extra queues", () => {
       expect(fryer[0]!.items[0]!.crossRefs).toEqual([
         { kind: "for", name: "BURG", stationName: "Grill" },
       ]);
-      const expo = await listExpoQueue(tx, venue.cfg);
+      const expo = await listExpoQueue(tx);
       const items = expo.flatMap((order) =>
         order.courses
           .flatMap((course) => course.items)

@@ -2624,8 +2624,8 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", ()
       OPERATOR,
     );
 
-    const expoA = await asTenant(nodeA, (tx) => listExpoQueue(tx, nodeA));
-    const expoB = await asTenant(nodeB, (tx) => listExpoQueue(tx, nodeB));
+    const expoA = await asTenant(nodeA, (tx) => listExpoQueue(tx));
+    const expoB = await asTenant(nodeB, (tx) => listExpoQueue(tx));
 
     // Same tenant + location on both sides, each expo board holding BOTH orders (oldest-first: A
     // fired before B) — the reads do not separate by node.
