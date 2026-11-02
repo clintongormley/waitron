@@ -385,8 +385,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   held-record actions keep disputed production remedies disabled pending Q35/Q37/Q38/Q40 or a
   case-specific owner decision. A held cancellation from another issuing chain has no qualified
   release here.
-  The reconciliation library defers live filing claims and records whose delivery snapshot changed
-  during its lookup; its background caller remains to be wired.
+  The reconciliation library can restrict a lookup to one node, taxpayer and environment. Its
+  sweep tracks daily and retry times separately for each stored month, leaving incomplete lookups
+  and live or changed filing claims unknown. The production caller and device evidence remain to
+  be wired.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment

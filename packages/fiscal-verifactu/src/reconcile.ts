@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
-import type { Database, Transaction } from "@waitron/db";
+import type { Database, DeploymentEnvironment, Transaction } from "@waitron/db";
 import { recordIncident, recordIncidentOnce } from "@waitron/core";
 import type { IncidentSeverity } from "@waitron/core";
 import { AppError, jobOrigin } from "@waitron/shared";
@@ -18,6 +18,8 @@ import { toAeatDate } from "./registro-row.js";
 
 export interface ReconcileDeps {
   db: Database;
+  /** Runtime sweeps name the identity they may observe and correct. */
+  scope?: ReconcileScope;
   /**
    * A function, not a resolved client: the real resolver decrypts a certificate, and `reconcile`
    * calls it only once it knows the period holds at least one row, so a period with nothing to
@@ -25,6 +27,12 @@ export interface ReconcileDeps {
    */
   resolveClient: () => Promise<VerifactuClient>;
   clock: TrustedClock;
+}
+
+export interface ReconcileScope {
+  readonly nodeId: string;
+  readonly taxpayerId: string;
+  readonly environment: DeploymentEnvironment;
 }
 
 /**
@@ -137,7 +145,9 @@ export async function reconcile(
   };
 
   // T1
-  const rows = await withTransaction(deps.db, (tx) => rowsForPeriod(tx, normalizedPeriod));
+  const rows = await withTransaction(deps.db, (tx) =>
+    rowsForPeriod(tx, normalizedPeriod, deps.scope),
+  );
   result.checked = rows.length;
   // Nothing to reconcile: no consulta, and no certificate resolved.
   if (rows.length === 0) return result;
@@ -152,7 +162,7 @@ export async function reconcile(
   const detectedAt = deps.clock.now().instant;
   await withTransaction(deps.db, async (tx) => {
     const current = new Map(
-      (await rowsForPeriod(tx, normalizedPeriod)).map((row) => [row.id, row]),
+      (await rowsForPeriod(tx, normalizedPeriod, deps.scope)).map((row) => [row.id, row]),
     );
     for (const row of rows) {
       const latest = current.get(row.id);
@@ -244,7 +254,16 @@ export async function reconcile(
 async function rowsForPeriod(
   tx: Transaction,
   period: { year: string; month: string },
+  scope?: ReconcileScope,
 ): Promise<PeriodRow[]> {
+  const scoped =
+    scope === undefined
+      ? sql``
+      : sql`
+    and r.node_id = ${scope.nodeId}
+    and r.id_emisor_factura = ${scope.taxpayerId}
+    and r.entorno = ${scope.environment}
+  `;
   const { rows } = await tx.execute<PeriodRow>(sql`
     select
       r.id, r.sale_id,
@@ -263,6 +282,7 @@ async function rowsForPeriod(
         select 1 from registros_facturacion replacement
         where replacement.corrects_registro_id = r.id
       )
+    ${scoped}
   `);
   return rows.map((row) => ({
     ...row,
