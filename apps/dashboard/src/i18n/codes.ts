@@ -963,8 +963,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Revisa las horas del turno",
   },
   "convenio.not_found": {
-    en: "Configure this location's working-time rules first",
-    es: "Configura primero las reglas de jornada de este local",
+    en: "Configure the venue's working-time rules first",
+    es: "Configura primero las reglas de jornada del local",
   },
   "swap.not_found": {
     en: "That swap could not be found",

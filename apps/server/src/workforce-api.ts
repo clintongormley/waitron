@@ -136,7 +136,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       const locationId = requireUuidParam(c.req.query("locationId") ?? "", "LocationId");
       const period = requirePeriod(c.req.query("period"), "period");
       const result = await gated(sessionId, SCHEDULE_PERMISSION, async (tx) => {
-        const ruleset = await resolveWorkTimeRuleset(tx, { locationId });
+        const ruleset = await resolveWorkTimeRuleset(tx);
         const date = new Date(`${period}T00:00:00Z`);
         date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
         const dayAt = (days: number) =>
@@ -301,9 +301,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
         const version = await backend.getRosterVersion(tx, {
           versionId,
         });
-        const ruleset = await resolveWorkTimeRuleset(tx, {
-          locationId: version.locationId,
-        }).catch((error: unknown) => {
+        const ruleset = await resolveWorkTimeRuleset(tx).catch((error: unknown) => {
           if (error instanceof AppError && error.code === "convenio.not_found") return undefined;
           throw error;
         });

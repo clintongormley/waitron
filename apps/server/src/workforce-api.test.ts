@@ -1,6 +1,6 @@
 import { makeRuleset } from "@waitron/workforce/test/fixtures.js";
 import { Hono } from "hono";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -500,33 +500,29 @@ describe("mountWorkforceApi — publish", () => {
     );
   });
 
-  it("publishes without labour warnings when the location has no convenio_config (A585-7)", async () => {
+  it("publishes without labour warnings when the venue has no convenio_config (A585-7)", async () => {
     const app = mountApp();
-    // A DIFFERENT location with no convenio row.
-    const otherLoc = await withTransaction(suite.db, async (tx) => {
-      const [r] = await tx
-        .insert(locations)
-        .values({
-          name: "Annex",
-          invoiceLocales: ["es-ES"],
-          operationDescription: "Sale on premises",
-        })
-        .returning({ id: locations.id });
-      return r!.id;
-    });
-    const create = await send(app, "POST", "/management-api/roster", {
-      body: { locationId: otherLoc, period: "2026-05-18" },
-    });
-    const { versionId } = (await create.json()) as { versionId: string };
-    const res = await send(app, "POST", `/management-api/roster/${versionId}/publish`);
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ breaches: [] });
-    const roster = await send(
-      app,
-      "GET",
-      `/management-api/roster?locationId=${otherLoc}&period=2026-05-18`,
-    );
-    expect(await roster.json()).toMatchObject({ version: { id: versionId, status: "published" } });
+    // The suite shares its database: the venue's rules come back after the case.
+    const removed = await suite.db.delete(convenioConfig).returning();
+    try {
+      const create = await send(app, "POST", "/management-api/roster", {
+        body: { locationId, period: "2026-05-18" },
+      });
+      const { versionId } = (await create.json()) as { versionId: string };
+      const res = await send(app, "POST", `/management-api/roster/${versionId}/publish`);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ breaches: [] });
+      const roster = await send(
+        app,
+        "GET",
+        `/management-api/roster?locationId=${locationId}&period=2026-05-18`,
+      );
+      expect(await roster.json()).toMatchObject({
+        version: { id: versionId, status: "published" },
+      });
+    } finally {
+      if (removed.length > 0) await suite.db.insert(convenioConfig).values(removed);
+    }
   });
 
   it("leaves the roster draft when resolving its labour rules fails unexpectedly", async () => {
@@ -767,19 +763,16 @@ describe("mountWorkforceApi — planned-vs-actual", () => {
 });
 
 describe("roster warnings while planning", () => {
+  // The suite shares one database and one venue: each case starts with no roster and no rules.
+  beforeEach(async () => {
+    await suite.db.delete(shiftSwaps);
+    await suite.db.delete(shifts);
+    await suite.db.delete(rosterVersions);
+    await suite.db.delete(convenioConfig);
+  });
   async function warningLocation(withRules = true, overrides = {}) {
-    const [location] = await suite.db
-      .insert(locations)
-      .values({
-        name: "Warnings",
-        timeZone: "Europe/Madrid",
-        invoiceLocales: ["es"],
-        operationDescription: "Restaurant",
-      })
-      .returning();
-    if (withRules)
-      await suite.db.insert(convenioConfig).values({ locationId: location!.id, ...overrides });
-    return location!.id;
+    if (withRules) await suite.db.insert(convenioConfig).values({ locationId, ...overrides });
+    return locationId;
   }
   async function version(
     locationId: string,
@@ -967,11 +960,7 @@ describe("roster warnings while planning", () => {
 
   it("returns convenio.not_found when no labour rules row exists", async () => {
     const loc = await warningLocation(false);
-    expect(await refusal(await read(loc))).toEqual([
-      409,
-      "convenio.not_found",
-      { locationId: loc },
-    ]);
+    expect(await refusal(await read(loc))).toEqual([409, "convenio.not_found", {}]);
   });
   it("refuses staff and unauthenticated reads", async () => {
     const loc = await warningLocation();

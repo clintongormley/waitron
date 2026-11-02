@@ -4,10 +4,7 @@ import "@waitron/shared";
 
 declare module "@waitron/shared" {
   interface ErrorParams {
-    /**
-     * No `convenio_config` row for this location — not configured. The overtime rule
-     * and guardrails a work-time summary needs cannot be resolved without one.
-     */
-    "convenio.not_found": { locationId: string };
+    /** No `convenio_config` row: the venue has not configured its working-time rules. */
+    "convenio.not_found": Record<string, never>;
   }
 }
