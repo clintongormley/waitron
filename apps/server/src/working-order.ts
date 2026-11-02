@@ -32,7 +32,13 @@ import {
   refreshKitchenAllergyClashes,
 } from "./kitchen-allergy.js";
 import { passWaitingStations, requestHeldItems, requestStamps } from "./kitchen-release.js";
-import { heldItem, initiatedAt, initiatedItem } from "./kitchen-phase.js";
+import {
+  heldItem,
+  initiatedAt,
+  initiatedItem,
+  kitchenPhase,
+  type KitchenPhase,
+} from "./kitchen-phase.js";
 import {
   readLineCancellations,
   serviceQuantities,
@@ -7839,8 +7845,14 @@ export interface StationQueueItem {
   group?: QueueGroup;
   /** The period this dish was confirmed sent after; absent when it was not. */
   afterPeriod?: string;
+  phase: KitchenPhase;
+  /** `null` while the item is held. */
+  requestedAt: string | null;
   /** `null` while the item is held or Requested (waiting for the pass). */
   firedAt: string | null;
+  readyAt: string | null;
+  /** Whether the item waited for the pass when it was requested. */
+  passControlled: boolean;
   /** Snapshotted at fire, so a later draft edit never changes what the kitchen already sees. */
   note: string | null;
   queuedAt: string;
@@ -8203,6 +8215,9 @@ export async function listStationQueues(
       courseName: kitchenCourses.name,
       courseDisplayOrder: kitchenCourses.displayOrder,
       firedAt: ticketItems.firedAt,
+      requestedAt: ticketItems.requestedAt,
+      readyAt: ticketItems.readyAt,
+      passControlled: ticketItems.passControlled,
       // The fire-time snapshot, not the live line.
       note: ticketItems.note,
       orderId: workingOrders.id,
@@ -8368,7 +8383,11 @@ export async function listStationQueues(
           ? null
           : { id: row.courseId, name: row.courseName!, displayOrder: row.courseDisplayOrder! },
       ...optional("group", queueGroup(row, numberLabels)),
+      phase: kitchenPhase(row),
+      requestedAt: row.requestedAt,
       firedAt: row.firedAt,
+      readyAt: row.readyAt,
+      passControlled: row.passControlled,
       note: row.note,
       queuedAt: row.queuedAt,
       // Rounded to the whole minute first: what the bands were tuned against.

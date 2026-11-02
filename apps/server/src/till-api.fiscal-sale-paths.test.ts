@@ -1916,7 +1916,11 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
       soldInEach: true,
       // No course, so the item fires immediately: a null course is treated as earliest.
       course: null,
+      phase: "waiting",
+      requestedAt: expect.any(String),
       firedAt: expect.any(String),
+      readyAt: null,
+      passControlled: false,
       note: null,
       // No extras picked on this line → an empty modifier sub-item list, and no options list
       // answered → an empty frozen-answer list.

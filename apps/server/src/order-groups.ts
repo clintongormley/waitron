@@ -58,7 +58,7 @@ import {
   printerMappings,
 } from "./kitchen-print.js";
 import type { FiredItem, HoldCorrection, TicketState } from "./kitchen-print.js";
-import { initiatedAt, initiatedItem } from "./kitchen-phase.js";
+import { initiatedAt, initiatedItem, kitchenPhase, type KitchenPhase } from "./kitchen-phase.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { trimQuantityForDisplay } from "./receipt-lines.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
@@ -1757,7 +1757,10 @@ export interface CurrentOrderKitchen {
   state: TicketState;
   stationId: string;
   movable: boolean;
+  phase: KitchenPhase;
   /** Null while the item is held, or since it was recalled. */
+  requestedAt: string | null;
+  /** Null while the item is held or Requested, or since it was recalled. */
   firedAt: string | null;
 }
 
@@ -1781,6 +1784,9 @@ export interface CurrentOrderRow {
   netAmount: string;
   /** All kitchen components must be ready; no kitchen work leaves this null. */
   readyAt: string | null;
+  /** The earliest initiation of its kitchen components once every one is initiated, else null;
+   *  `firedAt` for a dish with no kitchen work. */
+  requestedAt: string | null;
   firedAt: string | null;
   nutrition?: LineNutrition;
   lineId: string;
@@ -2010,6 +2016,16 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     const firedTimes = kitchenItems.flatMap((component) =>
       component.ticketFiredAt === null ? [] : [component.ticketFiredAt],
     );
+    const firedAt = allFired && isReleased(line) ? (firedTimes.sort()[0] ?? line.sentAt) : null;
+    const initiatedTimes = kitchenItems.map((component) =>
+      initiatedAt({ requestedAt: component.ticketRequestedAt, firedAt: component.ticketFiredAt }),
+    );
+    const requestedAt =
+      kitchenItems.length === 0
+        ? firedAt
+        : initiatedTimes.every((time) => time !== null)
+          ? initiatedTimes.sort()[0]!
+          : null;
     const readyTimes = kitchenItems.flatMap((component) =>
       component.ticketState === "ready" && component.ticketReadyAt !== null
         ? [component.ticketReadyAt]
@@ -2021,7 +2037,8 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
         sumDecimals(familyLines.map((component) => centsToDecimal(component.lineTotal))),
         MONEY_SCALE,
       ),
-      firedAt: allFired && isReleased(line) ? (firedTimes.sort()[0] ?? line.sentAt) : null,
+      firedAt,
+      requestedAt,
       readyAt:
         kitchenItems.length > 0 && allFired && readyTimes.length === kitchenItems.length
           ? readyTimes.sort().at(-1)!
@@ -2048,6 +2065,12 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
           ? null
           : {
               state: line.ticketState,
+              phase: kitchenPhase({
+                requestedAt: line.ticketRequestedAt,
+                firedAt: line.ticketFiredAt,
+                state: line.ticketState,
+              }),
+              requestedAt: line.ticketRequestedAt,
               firedAt: line.ticketFiredAt,
               stationId: line.stationId!,
               movable: stillMovable(
