@@ -6514,8 +6514,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   carry one filled from the venue, until S15; the attendance recorder keeps an unread optional
   `locationId` for S18. S14 landed (#2404): the working-time export names the venue from the
   venue row and its input carries no location; its metadata column key is `venueName` (the CSV
-  header says so), and the export routes still parse and check a `locationId` until S15b. S15 and
-  S12d remain; S15-1 can start. S18 waits for S2–S17, and the schema
+  header says so), and the export routes still parse and check a `locationId` until S15b. S15-1
+  landed (#2407): planned versus actual reads the venue's week with no location picker, its route
+  takes only the period, and the shared location-picker widget is gone; `getLocations` stays for
+  S12d. S15-2 (Task S15b), S15-3 (S15c–S15k) and S12d remain; S15-2 and S12d can start. S18 waits for S2–S17, and the schema
   slices S20–S28 get a plan of their own, which first settles what the venue id sent to Cloud and
   naming the backup folder becomes. S4 landed (#2388): standby establishment
   refuses with `mirror.venue_not_copied` before a node write when no venue row exists, including
