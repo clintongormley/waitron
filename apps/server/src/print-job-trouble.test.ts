@@ -90,8 +90,8 @@ async function seedStation(t: {
 
 const exhausted = { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS } as const;
 
-async function read(options?: { locationId?: string }) {
-  return withTransaction(suite.db, (tx) => printersInTrouble(tx, NOW, options));
+async function read() {
+  return withTransaction(suite.db, (tx) => printersInTrouble(tx, NOW));
 }
 
 describe("printersInTrouble", () => {
@@ -175,18 +175,5 @@ describe("printersInTrouble", () => {
     await seedJob({ locationId, printerId: id, createdAt: minsAgo(10) });
 
     expect(await read()).toMatchObject([{ id, kitchen: false }]);
-  });
-
-  it("given a location, names only that location's printers", async () => {
-    await seedTenant(suite.db);
-    const first = await seedLocation("Counter");
-    const second = await seedLocation("Terrace");
-    const bar = await seedPrinter({ locationId: first, name: "Bar" });
-    const kitchen = await seedPrinter({ locationId: second, name: "Kitchen" });
-    await seedJob({ locationId: first, printerId: bar, createdAt: minsAgo(10) });
-    await seedJob({ locationId: second, printerId: kitchen, createdAt: minsAgo(10) });
-
-    expect((await read({ locationId: first })).map((p) => p.id)).toEqual([bar]);
-    expect((await read()).map((p) => p.id).sort()).toEqual([bar, kitchen].sort());
   });
 });

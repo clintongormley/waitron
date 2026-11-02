@@ -192,8 +192,7 @@ describe("A773 requested lifecycle: alerts and slips", () => {
       stationIds: [venue.stations.grill],
       zoneIds: null,
     });
-    const read = () =>
-      withTransaction(db, (tx) => stationScreensDark(tx, venue.cfg.locationId, minutesAfterAt(5)));
+    const read = () => withTransaction(db, (tx) => stationScreensDark(tx, minutesAfterAt(5)));
     expect(await read()).toEqual([]);
     // Control: the same dish released makes the same dark screen an alert.
     await db.execute(

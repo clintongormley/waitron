@@ -227,7 +227,6 @@ describe("printer notices", () => {
     const trouble = vi.fn(() => Promise.resolve([row({ id: "k" })]));
     const sources = devicePrinterNoticeSources({
       now: () => now,
-      locationId: "loc",
       trouble,
       documentPrinters: async () => new Set(),
     });
@@ -237,7 +236,7 @@ describe("printer notices", () => {
     await one[0]!.source.read(CTX);
     await two[0]!.source.read(CTX);
     expect(trouble).toHaveBeenCalledTimes(1);
-    expect(trouble).toHaveBeenCalledWith(CTX.tx, AT, { locationId: "loc" });
+    expect(trouble).toHaveBeenCalledWith(CTX.tx, AT);
     now = new Date(AT.getTime() + 9_999);
     await two[0]!.source.read(CTX);
     expect(trouble).toHaveBeenCalledTimes(1);

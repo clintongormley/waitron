@@ -2144,11 +2144,7 @@ async function bootServer(
       invoiceEmailController.abort();
       await invoiceEmailLoop;
     });
-    const demoPrinter = await configureDemoPrinter(
-      db,
-      tradingContext.locationId,
-      tradingContext.practiceMode === true,
-    );
+    const demoPrinter = await configureDemoPrinter(db, tradingContext.practiceMode === true);
     if (demoPrinter !== null) {
       demoPrinterLoop = startDemoPrinterLoop(db, demoPrinter, 500, (error) =>
         log("error", "demo_printer.delivery_failed", { errorCode: codeOf(error) }),
@@ -2183,7 +2179,7 @@ async function bootServer(
             },
             setsToMigrate,
           ),
-          deviceSources: devicePrinterNoticeSources({ now, locationId: tradingContext.locationId }),
+          deviceSources: devicePrinterNoticeSources({ now }),
           clock: tillClock,
           filing: () => ({ enabled: filesRecords() }),
         },

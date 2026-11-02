@@ -1,6 +1,12 @@
 import "./errors.js";
 import { and, asc, eq, sql } from "drizzle-orm";
-import { invoiceDeliveries, pagePrinters, printAgents, type Transaction } from "@waitron/db";
+import {
+  invoiceDeliveries,
+  pagePrinters,
+  printAgents,
+  type Transaction,
+  venueLocationId,
+} from "@waitron/db";
 import type { OfficePrinterReport } from "@waitron/print-agent";
 import { AppError } from "@waitron/shared";
 import { isListed } from "./discovery-listing.js";
@@ -22,15 +28,11 @@ export interface DiscoveryWindow {
 
 export type PagePrinterRow = typeof pagePrinters.$inferSelect & { agentName: string | null };
 
-export async function listPagePrinters(
-  tx: Transaction,
-  locationId: string,
-): Promise<PagePrinterRow[]> {
+export async function listPagePrinters(tx: Transaction): Promise<PagePrinterRow[]> {
   const rows = await tx
     .select({ printer: pagePrinters, agentName: printAgents.name })
     .from(pagePrinters)
     .leftJoin(printAgents, eq(printAgents.id, pagePrinters.agentId))
-    .where(eq(pagePrinters.locationId, locationId))
     .orderBy(asc(pagePrinters.name), asc(pagePrinters.id));
   return rows.map((row) => ({ ...row.printer, agentName: row.agentName }));
 }
@@ -42,7 +44,6 @@ export async function listPagePrinters(
  */
 export async function registerPagePrinter(
   tx: Transaction,
-  locationId: string,
   input: { name: string; entry: PagePrinterDiscovery | undefined },
   window: DiscoveryWindow,
 ): Promise<{ id: string; outcome: "created" | "enabled" | "repointed" }> {
@@ -54,13 +55,7 @@ export async function registerPagePrinter(
   const [agent] = await tx
     .select({ id: printAgents.id })
     .from(printAgents)
-    .where(
-      and(
-        eq(printAgents.id, entry.agentId),
-        eq(printAgents.locationId, locationId),
-        eq(printAgents.active, true),
-      ),
-    );
+    .where(and(eq(printAgents.id, entry.agentId), eq(printAgents.active, true)));
   if (agent === undefined) throw new AppError("page_printer.not_found", {});
   const report = entry.office;
   if (report?.printable !== true) throw new AppError("page_printer.not_printable", {});
@@ -76,7 +71,6 @@ export async function registerPagePrinter(
     .from(pagePrinters)
     .where(
       and(
-        eq(pagePrinters.locationId, locationId),
         sql`lower(${pagePrinters.host}) = lower(${entry.host})`,
         eq(pagePrinters.port, report.port),
         eq(pagePrinters.resourcePath, report.resourcePath),
@@ -92,7 +86,7 @@ export async function registerPagePrinter(
   const [created] = await tx
     .insert(pagePrinters)
     .values({
-      locationId,
+      locationId: await venueLocationId(tx),
       name: input.name,
       host: entry.host,
       port: report.port,
@@ -103,20 +97,11 @@ export async function registerPagePrinter(
   return { id: created!.id, outcome: "created" };
 }
 
-function inLocation(locationId: string, id: string) {
-  return and(eq(pagePrinters.id, id), eq(pagePrinters.locationId, locationId));
-}
-
-export async function renamePagePrinter(
-  tx: Transaction,
-  locationId: string,
-  id: string,
-  name: string,
-): Promise<void> {
+export async function renamePagePrinter(tx: Transaction, id: string, name: string): Promise<void> {
   const renamed = await tx
     .update(pagePrinters)
     .set({ name })
-    .where(inLocation(locationId, id))
+    .where(eq(pagePrinters.id, id))
     .returning({ id: pagePrinters.id });
   if (renamed.length === 0) throw new AppError("page_printer.not_found", {});
 }
@@ -128,14 +113,13 @@ export async function renamePagePrinter(
  */
 export async function disablePagePrinter(
   tx: Transaction,
-  locationId: string,
   id: string,
   now = new Date(),
 ): Promise<void> {
   const disabled = await tx
     .update(pagePrinters)
     .set({ active: false })
-    .where(inLocation(locationId, id))
+    .where(eq(pagePrinters.id, id))
     .returning({ id: pagePrinters.id });
   if (disabled.length === 0) throw new AppError("page_printer.not_found", {});
   const ofThisPrinter = eq(invoiceDeliveries.pagePrinterId, id);

@@ -176,8 +176,8 @@ describe("station output status", () => {
   it("uses the printer pull and recent waiting-dish indexes in its SQL plans", async () => {
     const f = await setup();
     const plans = await withTransaction(suite.db, async (tx) => {
-      const printer = stationPrintersDownQuery(tx, f.venue.cfg.locationId, at, [f.grill]);
-      const waiting = waitingDishesQuery(tx, f.venue.cfg.locationId, at, [f.grill]);
+      const printer = stationPrintersDownQuery(tx, at, [f.grill]);
+      const waiting = waitingDishesQuery(tx, at, [f.grill]);
       expect(printer.toSQL().sql).toContain("print_jobs");
       expect(waiting.toSQL().sql).toContain("ticket_items");
       const p = await tx.execute<{ detail: string }>(sql`explain query plan ${printer.getSQL()}`);
@@ -204,9 +204,7 @@ describe("station output status", () => {
       status: "done",
       createdAt: "2026-10-02T18:05:00.000Z",
     });
-    const down = await withTransaction(suite.db, (tx) =>
-      stationPrintersDown(tx, f.venue.cfg.locationId, at),
-    );
+    const down = await withTransaction(suite.db, (tx) => stationPrintersDown(tx, at));
     expect(down).toEqual([
       {
         stationId: f.grill,
@@ -217,9 +215,7 @@ describe("station output status", () => {
       },
     ]);
     await job(f.venue.cfg.locationId, p, { status: "done", createdAt: "2026-10-02T18:05:01.000Z" });
-    expect(
-      await withTransaction(suite.db, (tx) => stationPrintersDown(tx, f.venue.cfg.locationId, at)),
-    ).toEqual([]);
+    expect(await withTransaction(suite.db, (tx) => stationPrintersDown(tx, at))).toEqual([]);
   });
 
   it("scopes printer trouble to the requested station and excludes Unpair", async () => {
@@ -229,19 +225,15 @@ describe("station output status", () => {
     await job(f.venue.cfg.locationId, one);
     await job(f.venue.cfg.locationId, two);
     expect(
-      await withTransaction(suite.db, (tx) =>
-        stationPrintersDown(tx, f.venue.cfg.locationId, at, [f.grill]),
-      ),
+      await withTransaction(suite.db, (tx) => stationPrintersDown(tx, at, [f.grill])),
     ).toMatchObject([{ printerId: one }]);
     await suite.db
       .update(printJobs)
       .set({ lastError: PRINTER_UNPAIRED })
       .where(eq(printJobs.printerId, one));
-    expect(
-      await withTransaction(suite.db, (tx) =>
-        stationPrintersDown(tx, f.venue.cfg.locationId, at, [f.grill]),
-      ),
-    ).toEqual([]);
+    expect(await withTransaction(suite.db, (tx) => stationPrintersDown(tx, at, [f.grill]))).toEqual(
+      [],
+    );
   });
 
   it("keeps a given-up ticket down overnight and ignores a young queued ticket", async () => {
@@ -252,19 +244,17 @@ describe("station output status", () => {
       attempts: 0,
       createdAt: "2026-10-02T18:05:00.000Z",
     });
-    expect(
-      await withTransaction(suite.db, (tx) => stationPrintersDown(tx, f.venue.cfg.locationId, at)),
-    ).toEqual([]);
+    expect(await withTransaction(suite.db, (tx) => stationPrintersDown(tx, at))).toEqual([]);
     await job(f.venue.cfg.locationId, p);
     expect(
       await withTransaction(suite.db, (tx) =>
-        stationPrintersDown(tx, f.venue.cfg.locationId, new Date("2026-10-03T04:00:00Z")),
+        stationPrintersDown(tx, new Date("2026-10-03T04:00:00Z")),
       ),
     ).toHaveLength(1);
     await suite.db.update(printers).set({ active: false }).where(eq(printers.id, p));
     expect(
       await withTransaction(suite.db, (tx) =>
-        stationPrintersDown(tx, f.venue.cfg.locationId, new Date("2026-10-03T04:00:00Z")),
+        stationPrintersDown(tx, new Date("2026-10-03T04:00:00Z")),
       ),
     ).toEqual([]);
   });
@@ -286,7 +276,7 @@ describe("station output status", () => {
     const orderId = await waitingItem(f.venue, f.bar, "2026-10-02T17:50:00.000Z");
     expect(
       await withTransaction(suite.db, (tx) =>
-        stationScreensDark(tx, f.venue.cfg.locationId, new Date("2026-10-02T18:02:00Z")),
+        stationScreensDark(tx, new Date("2026-10-02T18:02:00Z")),
       ),
     ).toEqual([]);
     await suite.db.insert(stationDayStates).values({
@@ -299,29 +289,25 @@ describe("station output status", () => {
         await withTransaction(suite.db, (tx) => VENUE_SERVICE.stationStates(tx, f.venue.cfg, at))
       ).get(f.bar)?.open,
     ).toBe(false);
-    expect(
-      await withTransaction(suite.db, (tx) => stationScreensDark(tx, f.venue.cfg.locationId, at)),
-    ).toEqual([{ stationId: f.bar, stationName: "Bar", lastSeenAt: "2026-10-02T18:00:00.000Z" }]);
+    expect(await withTransaction(suite.db, (tx) => stationScreensDark(tx, at))).toEqual([
+      { stationId: f.bar, stationName: "Bar", lastSeenAt: "2026-10-02T18:00:00.000Z" },
+    ]);
     expect([
       ...(await withTransaction(suite.db, (tx) =>
-        stationsWithWaitingDishes(tx, f.venue.cfg.locationId, at, [f.bar, f.grill]),
+        stationsWithWaitingDishes(tx, at, [f.bar, f.grill]),
       )),
     ]).toEqual([f.bar]);
     await suite.db
       .update(ticketItems)
       .set({ state: "ready" })
       .where(eq(ticketItems.workingOrderId, orderId));
-    expect(
-      await withTransaction(suite.db, (tx) => stationScreensDark(tx, f.venue.cfg.locationId, at)),
-    ).toEqual([]);
+    expect(await withTransaction(suite.db, (tx) => stationScreensDark(tx, at))).toEqual([]);
   });
 
   it("does not call a station with no screen dark, and a second live screen clears a dark one", async () => {
     const f = await setup();
     await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
-    expect(
-      await withTransaction(suite.db, (tx) => stationScreensDark(tx, f.venue.cfg.locationId, at)),
-    ).toEqual([]);
+    expect(await withTransaction(suite.db, (tx) => stationScreensDark(tx, at))).toEqual([]);
     const [profile] = await suite.db
       .insert(deviceProfiles)
       .values({ name: "KDS test", formFactor: "kds", capabilities: [] })
@@ -333,9 +319,9 @@ describe("station output status", () => {
       label: "Never seen",
       tokenHash: "hash",
     });
-    expect(
-      await withTransaction(suite.db, (tx) => stationScreensDark(tx, f.venue.cfg.locationId, at)),
-    ).toEqual([{ stationId: f.grill, stationName: "Cocina", lastSeenAt: null }]);
+    expect(await withTransaction(suite.db, (tx) => stationScreensDark(tx, at))).toEqual([
+      { stationId: f.grill, stationName: "Cocina", lastSeenAt: null },
+    ]);
     await stationScreenDevice({
       locationId: f.venue.cfg.locationId,
       stationId: f.grill,
@@ -344,9 +330,7 @@ describe("station output status", () => {
       tokenHash: "hash",
       lastSeenAt: "2026-10-02T18:05:00.000Z",
     });
-    expect(
-      await withTransaction(suite.db, (tx) => stationScreensDark(tx, f.venue.cfg.locationId, at)),
-    ).toEqual([]);
+    expect(await withTransaction(suite.db, (tx) => stationScreensDark(tx, at))).toEqual([]);
   });
 
   it("does not count a pass screen on Grill as Grill's own screen", async () => {
@@ -366,9 +350,7 @@ describe("station output status", () => {
       },
       { kind: "pass", stationIds: [f.grill], zoneIds: null },
     );
-    expect(
-      await withTransaction(suite.db, (tx) => stationScreensDark(tx, f.venue.cfg.locationId, at)),
-    ).toEqual([]);
+    expect(await withTransaction(suite.db, (tx) => stationScreensDark(tx, at))).toEqual([]);
     await stationScreenDevice({
       locationId: f.venue.cfg.locationId,
       stationId: f.grill,
@@ -381,9 +363,7 @@ describe("station output status", () => {
       .update(devices)
       .set({ lastSeenAt: "2026-10-02T18:05:00.000Z" })
       .where(eq(devices.id, pass));
-    expect(
-      await withTransaction(suite.db, (tx) => stationScreensDark(tx, f.venue.cfg.locationId, at)),
-    ).toEqual([
+    expect(await withTransaction(suite.db, (tx) => stationScreensDark(tx, at))).toEqual([
       { stationId: f.grill, stationName: "Cocina", lastSeenAt: "2026-10-02T17:55:00.000Z" },
     ]);
   });
@@ -404,14 +384,10 @@ describe("station output status", () => {
       active: false,
       lastSeenAt: "2026-10-02T18:00:00.000Z",
     });
-    expect(
-      await withTransaction(suite.db, (tx) =>
-        stationsWithWaitingDishes(tx, f.venue.cfg.locationId, at),
-      ),
-    ).toEqual(new Set());
-    expect(
-      await withTransaction(suite.db, (tx) => stationScreensDark(tx, f.venue.cfg.locationId, at)),
-    ).toEqual([]);
+    expect(await withTransaction(suite.db, (tx) => stationsWithWaitingDishes(tx, at))).toEqual(
+      new Set(),
+    );
+    expect(await withTransaction(suite.db, (tx) => stationScreensDark(tx, at))).toEqual([]);
   });
 
   it("alerts a closed station with waiting dishes about both its printer and dark screens", async () => {
@@ -507,9 +483,7 @@ describe("station output status", () => {
       const f = await setup();
       await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
       await waitingItem(f.venue, f.bar, "2026-10-02T17:50:00.000Z");
-      expect(
-        await withTransaction(suite.db, (tx) => stationScreensDark(tx, f.venue.cfg.locationId, at)),
-      ).toEqual([]);
+      expect(await withTransaction(suite.db, (tx) => stationScreensDark(tx, at))).toEqual([]);
       expect(await darkScreenAlertKeys(f)).toEqual([]);
     });
 
@@ -527,9 +501,7 @@ describe("station output status", () => {
           { kind, stationIds: null, zoneIds: null },
         );
       }
-      expect(
-        await withTransaction(suite.db, (tx) => stationScreensDark(tx, f.venue.cfg.locationId, at)),
-      ).toEqual([]);
+      expect(await withTransaction(suite.db, (tx) => stationScreensDark(tx, at))).toEqual([]);
       expect(await darkScreenAlertKeys(f)).toEqual([]);
     });
 
@@ -546,9 +518,7 @@ describe("station output status", () => {
         },
         { kind: "station", stationIds: [f.grill], zoneIds: null },
       );
-      expect(
-        await withTransaction(suite.db, (tx) => stationScreensDark(tx, f.venue.cfg.locationId, at)),
-      ).toEqual([]);
+      expect(await withTransaction(suite.db, (tx) => stationScreensDark(tx, at))).toEqual([]);
       expect(await darkScreenAlertKeys(f)).toEqual([]);
     });
   });
@@ -839,9 +809,10 @@ it("A725 down printers and dark station screens use station and printer names", 
   const k = await f.printer(f.grill, "Kitchen printer");
   for (const id of [z, a, k]) await job(f.venue.cfg.locationId, id);
   expect(
-    (await stationPrintersDown(suite.db, f.venue.cfg.locationId, at)).map(
-      ({ stationName, printerName }) => [stationName, printerName],
-    ),
+    (await stationPrintersDown(suite.db, at)).map(({ stationName, printerName }) => [
+      stationName,
+      printerName,
+    ]),
   ).toEqual([
     ["Ásador", "Alpha printer"],
     ["Ásador", "Zulu printer"],
@@ -859,9 +830,8 @@ it("A725 down printers and dark station screens use station and printer names", 
       lastSeenAt: null,
     });
   }
-  expect(
-    (await stationScreensDark(suite.db, f.venue.cfg.locationId, at)).map(
-      ({ stationName }) => stationName,
-    ),
-  ).toEqual(["Ásador", "Cocina"]);
+  expect((await stationScreensDark(suite.db, at)).map(({ stationName }) => stationName)).toEqual([
+    "Ásador",
+    "Cocina",
+  ]);
 });

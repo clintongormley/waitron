@@ -2227,7 +2227,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const queue = await withTransaction(deps.db, async (tx) => ({
         items: await listStationQueue(tx, id),
         notices: await VENUE_SERVICE.listStationNotices(tx, deps.cfg, id),
-        printersDown: (await stationPrintersDown(tx, deps.cfg.locationId, new Date(), [id])).map(
+        printersDown: (await stationPrintersDown(tx, new Date(), [id])).map(
           ({ printerId, printerName, since }) => ({ printerId, printerName, since }),
         ),
       }));

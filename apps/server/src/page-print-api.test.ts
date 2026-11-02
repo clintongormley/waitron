@@ -925,7 +925,6 @@ describe("fetching a page job's document", () => {
     const repointed = await withTransaction(suite.db, (tx) =>
       registerPagePrinter(
         tx,
-        v.locationId,
         {
           name: "Back office",
           entry: {

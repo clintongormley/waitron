@@ -90,7 +90,7 @@ export async function seedDemoRestaurant(
       localKey: DEMO_PRINTER_KEY,
       hasCashDrawer: true,
     });
-    await routeToDemoPrinter(tx, locationId, demoPrinter.id);
+    await routeToDemoPrinter(tx, demoPrinter.id);
     await seedOptionLists(tx, { productsByImage, locale, dataSet, languages });
     await seedExtraLists(tx, { productsByImage, locale, dataSet, languages });
     await seedFloor(tx, { locationId, locale, departmentTradingNames, dataSet, menuIds });

@@ -115,7 +115,7 @@ type TrackedCommand = Omit<BluetoothCommandStatus, "state" | "expiresInMs"> & {
   listedUnpaired?: true;
 };
 
-/** What an office printer's discovery row offers, judged against the location's page printers. */
+/** What an office printer's discovery row offers, judged against the venue's page printers. */
 type OfficeRow =
   | { kind: "add" | "enable"; entry: PagePrinterEntry }
   | { kind: "repoint"; entry: PagePrinterEntry; agentGone: boolean }
@@ -1350,7 +1350,7 @@ export class PrintersScreen extends LitElement {
   }
 
   /**
-   * An office printer's row, matched against the location's page printers by its IPP queue and the
+   * An office printer's row, matched against the venue's page printers by its IPP queue and the
    * agent reporting it — never by the receipt printers' marks. Undefined for any other device, and
    * for a disabled receipt registration, which stays re-addable as one.
    */

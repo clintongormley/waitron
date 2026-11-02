@@ -101,7 +101,7 @@ function profileLists(profileId: string) {
 describe("the Demo printer", () => {
   it("delivers its receipt and drawer jobs without claiming an unrelated printer's job", async () => {
     const { locationId, deviceId, profileId } = await venue();
-    const demo = await configureDemoPrinter(suite.db, locationId, true);
+    const demo = await configureDemoPrinter(suite.db, true);
     expect(demo).not.toBeNull();
     const otherId = await withTransaction(suite.db, async (tx) => {
       const [other] = await tx
@@ -141,7 +141,7 @@ describe("the Demo printer", () => {
       .insert(kitchenStations)
       .values({ locationId, name: "Grill" })
       .returning({ id: kitchenStations.id });
-    const demo = await configureDemoPrinter(suite.db, locationId, true);
+    const demo = await configureDemoPrinter(suite.db, true);
     await withTransaction(suite.db, (tx) =>
       enqueuePrintJob(
         tx,
@@ -150,7 +150,7 @@ describe("the Demo printer", () => {
       ),
     );
 
-    expect(await configureDemoPrinter(suite.db, locationId, false)).toBeNull();
+    expect(await configureDemoPrinter(suite.db, false)).toBeNull();
     expect(await deliverDemoPrinterJobs(suite.db, demo!)).toBe(0);
     const [printer] = await suite.db
       .select({ active: printers.active })
@@ -180,15 +180,15 @@ describe("the Demo printer", () => {
   });
 
   it("after its printer is deleted, a Demo boot adds a new one rather than bringing it back", async () => {
-    const { locationId, deviceId, profileId } = await venue();
-    const first = await configureDemoPrinter(suite.db, locationId, true);
+    const { deviceId, profileId } = await venue();
+    const first = await configureDemoPrinter(suite.db, true);
     await withTransaction(suite.db, (tx) => deletePrinter(tx, first!.printerId));
     const deletedRow = await suite.db
       .select()
       .from(printers)
       .where(eq(printers.id, first!.printerId));
 
-    const second = await configureDemoPrinter(suite.db, locationId, true);
+    const second = await configureDemoPrinter(suite.db, true);
 
     expect(second!.printerId).not.toBe(first!.printerId);
     expect(second!.agentId).toBe(first!.agentId);
@@ -213,7 +213,7 @@ describe("the Demo printer", () => {
     await withTransaction(suite.db, (tx) => deletePrinter(tx, gone));
 
     await expect(
-      withTransaction(suite.db, (tx) => routeToDemoPrinter(tx, locationId, gone)),
+      withTransaction(suite.db, (tx) => routeToDemoPrinter(tx, gone)),
     ).rejects.toMatchObject({ code: "printer.not_found" });
   });
 
@@ -225,7 +225,7 @@ describe("the Demo printer", () => {
     const lists = await profileLists(profileId);
 
     await expect(
-      withTransaction(suite.db, (tx) => routeToDemoPrinter(tx, locationId, gone)),
+      withTransaction(suite.db, (tx) => routeToDemoPrinter(tx, gone)),
     ).rejects.toMatchObject({ code: "printer.not_found" });
 
     expect(await profileLists(profileId)).toEqual(lists);
@@ -235,12 +235,12 @@ describe("the Demo printer", () => {
   });
 
   it("a Live boot after its printer is deleted leaves the deleted row as it is", async () => {
-    const { locationId } = await venue();
-    const first = await configureDemoPrinter(suite.db, locationId, true);
+    await venue();
+    const first = await configureDemoPrinter(suite.db, true);
     await withTransaction(suite.db, (tx) => deletePrinter(tx, first!.printerId));
     const before = await suite.db.select().from(printers);
 
-    expect(await configureDemoPrinter(suite.db, locationId, false)).toBeNull();
+    expect(await configureDemoPrinter(suite.db, false)).toBeNull();
 
     expect(await suite.db.select().from(printers)).toEqual(before);
   });
@@ -262,9 +262,9 @@ describe("the Demo printer", () => {
     const { deviceId: revokedId } = await seedDevice(suite.db, { locationId, profileId });
     await suite.db.update(devices).set({ active: false }).where(eq(devices.id, revokedId));
 
-    await configureDemoPrinter(suite.db, locationId, true);
+    await configureDemoPrinter(suite.db, true);
     // Every boot in Demo runs it again.
-    const demo = await configureDemoPrinter(suite.db, locationId, true);
+    const demo = await configureDemoPrinter(suite.db, true);
 
     expect(await devicePrinters(deviceId)).toEqual({ receipt: bar, paymentSlip: bar });
     expect(await devicePrinters(revokedId)).toEqual({ receipt: null, paymentSlip: null });
@@ -291,7 +291,7 @@ describe("the Demo printer", () => {
       .set({ retiredAt: new Date().toISOString() })
       .where(eq(deviceProfiles.id, retiredId));
 
-    const demo = await configureDemoPrinter(suite.db, locationId, true);
+    const demo = await configureDemoPrinter(suite.db, true);
 
     expect(await profileLists(retiredId)).toEqual({
       ...emptyPrinterLists(),
@@ -302,9 +302,9 @@ describe("the Demo printer", () => {
   });
 
   it("becomes each role's default where the profile had none, and devices on Use default resolve to it", async () => {
-    const { locationId, deviceId, profileId } = await venue();
+    const { deviceId, profileId } = await venue();
 
-    const demo = await configureDemoPrinter(suite.db, locationId, true);
+    const demo = await configureDemoPrinter(suite.db, true);
 
     expect(await profileLists(profileId)).toEqual(demoEverywhere(demo!.printerId));
     for (const role of ["receipt", "payment_slip", "cash_drawer"] as const) {
@@ -331,7 +331,7 @@ describe("the Demo printer", () => {
       }),
     );
 
-    const demo = await configureDemoPrinter(suite.db, locationId, true);
+    const demo = await configureDemoPrinter(suite.db, true);
 
     expect(await profileLists(profileId)).toEqual({
       receiptPrinterIds: [bar, demo!.printerId],
@@ -356,13 +356,13 @@ describe("the Demo printer", () => {
         paymentSlipPrinterIds: [bar],
       }),
     );
-    const demo = await configureDemoPrinter(suite.db, locationId, true);
+    const demo = await configureDemoPrinter(suite.db, true);
     await suite.db
       .update(devices)
       .set({ receiptPrinterId: demo!.printerId, paymentSlipPrinterId: demo!.printerId })
       .where(eq(devices.id, deviceId));
 
-    await configureDemoPrinter(suite.db, locationId, false);
+    await configureDemoPrinter(suite.db, false);
 
     expect(await devicePrinters(deviceId)).toEqual({ receipt: null, paymentSlip: null });
     expect(await profileLists(profileId)).toEqual({
@@ -373,14 +373,14 @@ describe("the Demo printer", () => {
   });
 
   it("starts again with its drawer switched off, staying off the drawer list and default", async () => {
-    const { locationId, profileId } = await venue();
-    const demo = await configureDemoPrinter(suite.db, locationId, true);
+    const { profileId } = await venue();
+    const demo = await configureDemoPrinter(suite.db, true);
     await withTransaction(suite.db, (tx) =>
       updatePrinter(tx, demo!.printerId, { hasCashDrawer: false }),
     );
-    await configureDemoPrinter(suite.db, locationId, false);
+    await configureDemoPrinter(suite.db, false);
 
-    expect(await configureDemoPrinter(suite.db, locationId, true)).toEqual(demo);
+    expect(await configureDemoPrinter(suite.db, true)).toEqual(demo);
 
     const [printer] = await suite.db
       .select({ hasCashDrawer: printers.hasCashDrawer })
@@ -395,13 +395,13 @@ describe("the Demo printer", () => {
   });
 
   it("runs again in practice after its drawer was switched off, keeping the lists it already had", async () => {
-    const { locationId, profileId } = await venue();
-    const demo = await configureDemoPrinter(suite.db, locationId, true);
+    const { profileId } = await venue();
+    const demo = await configureDemoPrinter(suite.db, true);
     await withTransaction(suite.db, (tx) =>
       updatePrinter(tx, demo!.printerId, { hasCashDrawer: false }),
     );
 
-    expect(await configureDemoPrinter(suite.db, locationId, true)).toEqual(demo);
+    expect(await configureDemoPrinter(suite.db, true)).toEqual(demo);
 
     expect(await profileLists(profileId)).toEqual(demoEverywhere(demo!.printerId));
   });
@@ -417,7 +417,7 @@ describe("the Demo printer", () => {
       }),
     );
 
-    const demo = await configureDemoPrinter(suite.db, locationId, true);
+    const demo = await configureDemoPrinter(suite.db, true);
 
     expect(await profileLists(profileId)).toEqual({
       ...demoEverywhere(demo!.printerId),
@@ -437,7 +437,7 @@ describe("the Demo printer", () => {
       }),
     );
 
-    const demo = await configureDemoPrinter(suite.db, locationId, true);
+    const demo = await configureDemoPrinter(suite.db, true);
 
     expect((await profileLists(profileId)).invoicePrinterIds).toEqual([demo!.printerId]);
     expect((await profileLists(profileId)).invoicePrinterDefaultId).toBe(demo!.printerId);
@@ -454,10 +454,10 @@ describe("the Demo printer", () => {
         invoicePrinterIds: [office],
       }),
     );
-    const demo = await configureDemoPrinter(suite.db, locationId, true);
+    const demo = await configureDemoPrinter(suite.db, true);
     expect((await profileLists(profileId)).invoicePrinterDefaultId).toBe(demo!.printerId);
 
-    await configureDemoPrinter(suite.db, locationId, false);
+    await configureDemoPrinter(suite.db, false);
 
     expect(await profileLists(profileId)).toEqual({
       ...emptyPrinterLists(),
@@ -471,7 +471,7 @@ describe("the Demo printer", () => {
       .insert(printAgents)
       .values({ locationId, name: "Demo printer", tokenHash: "real-agent-hash" })
       .returning({ id: printAgents.id });
-    const demo = await configureDemoPrinter(suite.db, locationId, true);
+    const demo = await configureDemoPrinter(suite.db, true);
     expect(demo?.agentId).not.toBe(realAgent!.id);
     const [agent] = await suite.db
       .select({ active: printAgents.active })
@@ -481,8 +481,8 @@ describe("the Demo printer", () => {
   });
 
   it("waits for an in-flight delivery when stopping", async () => {
-    const { locationId } = await venue();
-    const demo = await configureDemoPrinter(suite.db, locationId, true);
+    await venue();
+    const demo = await configureDemoPrinter(suite.db, true);
     const job = await withTransaction(suite.db, (tx) =>
       enqueuePrintJob(tx, demo!.printerId, esc().kick().bytes(), "drawer"),
     );
@@ -496,8 +496,8 @@ describe("the Demo printer", () => {
   });
 
   it("delivers after the sale enqueues, and stops before closing the store", async () => {
-    const { locationId } = await venue();
-    const demo = await configureDemoPrinter(suite.db, locationId, true);
+    await venue();
+    const demo = await configureDemoPrinter(suite.db, true);
     const loop = startDemoPrinterLoop(suite.db, demo!, 10);
     try {
       const first = await withTransaction(suite.db, (tx) =>

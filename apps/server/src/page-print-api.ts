@@ -50,7 +50,6 @@ export type RenderInvoicePage = (
 
 export interface PagePrintApiDeps {
   db: Database;
-  locationId: string;
   readInvoiceDocument: (tx: Transaction, saleId: string) => Promise<ReceiptDocumentInput>;
   /** Tests hold a render here; production renders with {@link renderInvoicePage}. */
   render?: RenderInvoicePage;
@@ -159,10 +158,7 @@ export function mountPagePrintApi(app: Hono, deps: PagePrintApiDeps, log: Logger
           at,
         );
         if (invoice !== undefined || !deps.testPages.anyWaiting()) return invoice;
-        const printers = await tx
-          .select()
-          .from(pagePrinters)
-          .where(eq(pagePrinters.locationId, deps.locationId));
+        const printers = await tx.select().from(pagePrinters);
         const page = deps.testPages.claim(agentId, printers, busyPrinterIds);
         if (page === undefined) return undefined;
         return { page, printer: printers.find(({ id }) => id === page.pagePrinterId)! };

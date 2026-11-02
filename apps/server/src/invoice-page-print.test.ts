@@ -700,7 +700,6 @@ describe("reporting an A4 delivery", () => {
     const repointed = await withTransaction(suite.db, (tx) =>
       registerPagePrinter(
         tx,
-        v.locationId,
         {
           name: "Back office",
           entry: {

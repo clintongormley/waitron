@@ -2637,7 +2637,7 @@ describe("mountPrintApi — management: recent jobs", () => {
     await withTransaction(suite.db, (tx) =>
       enqueuePrintJob(tx, printerId, esc().kick().bytes(), "drawer"),
     );
-    const demo = await configureDemoPrinter(suite.db, locationId, true);
+    const demo = await configureDemoPrinter(suite.db, true);
     await deliverDemoPrinterJobs(suite.db, demo!);
 
     const path = "/management-api/demo-printer/jobs";
@@ -4984,7 +4984,7 @@ describe("a deleted printer's alerts", () => {
           .map((alert) => alert.key)
           .filter((key) => key.endsWith(deleted) || key.endsWith(live))
           .sort(),
-        down: (await stationPrintersDown(tx, locationId, later, [station.id]))
+        down: (await stationPrintersDown(tx, later, [station.id]))
           .map((row) => row.printerName)
           .sort(),
       }));

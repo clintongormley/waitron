@@ -143,7 +143,7 @@ async function fixture(environment: "preproduction" | "production" = "preproduct
       recipientAddress: "Saved customer address",
     }),
   );
-  const identity = (await configureDemoPrinter(suite.db, location!.id, true))!;
+  const identity = (await configureDemoPrinter(suite.db, true))!;
   const { jobId } = await withTransaction(suite.db, (tx) =>
     enqueuePrintJob(tx, identity.printerId, esc().init().bytes(), "document", {
       saleId: sale.saleId,

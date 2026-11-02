@@ -1604,7 +1604,6 @@ describe("GET /api/device/equipment's notices", () => {
       noticeApp([], {
         deviceSources: devicePrinterNoticeSources({
           now: () => READING.instant,
-          locationId: venue.cfg.locationId,
           cacheMs: 0,
         }),
       });

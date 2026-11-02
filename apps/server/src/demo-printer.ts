@@ -12,6 +12,7 @@ import {
   withTransaction,
   type Database,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { readProfilePrinterLists, setProfilePrinterLists } from "@waitron/layouts";
 import { PULL_BATCH_LIMIT } from "@waitron/printing";
@@ -27,20 +28,13 @@ export interface DemoPrinterIdentity {
 
 export async function configureDemoPrinter(
   db: Database,
-  locationId: string,
   practiceMode: boolean,
 ): Promise<DemoPrinterIdentity | null> {
   return withTransaction(db, async (tx) => {
     const [existing] = await tx
       .select({ id: printers.id })
       .from(printers)
-      .where(
-        and(
-          eq(printers.locationId, locationId),
-          eq(printers.localKey, DEMO_PRINTER_KEY),
-          isNull(printers.deletedAt),
-        ),
-      );
+      .where(and(eq(printers.localKey, DEMO_PRINTER_KEY), isNull(printers.deletedAt)));
     if (!practiceMode) {
       if (existing !== undefined) {
         await unlistDemoPrinter(tx, existing.id);
@@ -55,7 +49,7 @@ export async function configureDemoPrinter(
         await tx
           .insert(printers)
           .values({
-            locationId,
+            locationId: await venueLocationId(tx),
             name: "Demo printer",
             transport: "usb",
             localKey: DEMO_PRINTER_KEY,
@@ -69,19 +63,14 @@ export async function configureDemoPrinter(
     const [agent] = await tx
       .select({ id: printAgents.id })
       .from(printAgents)
-      .where(
-        and(
-          eq(printAgents.locationId, locationId),
-          eq(printAgents.tokenHash, DEMO_AGENT_TOKEN_HASH),
-        ),
-      );
+      .where(eq(printAgents.tokenHash, DEMO_AGENT_TOKEN_HASH));
     const agentId =
       agent?.id ??
       (
         await tx
           .insert(printAgents)
           .values({
-            locationId,
+            locationId: await venueLocationId(tx),
             name: "Demo printer",
             tokenHash: DEMO_AGENT_TOKEN_HASH,
             active: false,
@@ -89,7 +78,7 @@ export async function configureDemoPrinter(
           .returning({ id: printAgents.id })
       )[0]!.id;
 
-    await routeToDemoPrinter(tx, locationId, printerId);
+    await routeToDemoPrinter(tx, printerId);
     return { printerId, agentId };
   });
 }
@@ -126,11 +115,7 @@ async function unlistDemoPrinter(tx: Transaction, printerId: string): Promise<vo
  * preparation station there. A device's own choice, a profile's own default and a listing the
  * profile already has stay. Safe to repeat.
  */
-export async function routeToDemoPrinter(
-  tx: Transaction,
-  locationId: string,
-  printerId: string,
-): Promise<void> {
+export async function routeToDemoPrinter(tx: Transaction, printerId: string): Promise<void> {
   const [printer] = await tx
     .select({ hasCashDrawer: printers.hasCashDrawer })
     .from(printers)
@@ -172,10 +157,7 @@ export async function routeToDemoPrinter(
         lists.cashDrawerPrinterDefaultId ?? (opensDrawer ? printerId : null),
     });
   }
-  const stations = await tx
-    .select({ id: kitchenStations.id })
-    .from(kitchenStations)
-    .where(eq(kitchenStations.locationId, locationId));
+  const stations = await tx.select({ id: kitchenStations.id }).from(kitchenStations);
   for (const station of stations) {
     await tx
       .insert(stationPrinters)

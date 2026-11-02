@@ -323,30 +323,11 @@ describe("requesting a test page", () => {
     expect(await outcome(v, office)).toEqual({ id: page.id, status: "waiting" });
   });
 
-  it("refuses a printer that is disabled, unknown or in another location", async () => {
+  it("refuses a printer that is disabled or unknown", async () => {
     const v = await venue();
     const disabled = await printer(v, v.agentOne, { active: false });
-    const [elsewhere] = await suite.db
-      .insert(locations)
-      .values({ name: "Terrace", invoiceLocales: ["es-ES"], operationDescription: "Sale" })
-      .returning({ id: locations.id });
-    const [foreign] = await suite.db
-      .insert(pagePrinters)
-      .values({
-        locationId: elsewhere!.id,
-        name: "Elsewhere",
-        host: "192.0.2.250",
-        port: 631,
-        resourcePath: "/ipp/print",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 300,
-        agentId: v.agentOne,
-      })
-      .returning({ id: pagePrinters.id });
 
-    for (const id of [disabled, foreign!.id, randomUUID()]) {
+    for (const id of [disabled, randomUUID()]) {
       const res = await requestPage(v, id);
       expect(res.status).toBe(404);
       expect(await res.json()).toMatchObject({ error: { code: "page_printer.not_found" } });
@@ -354,21 +335,10 @@ describe("requesting a test page", () => {
     expect(await claim(v)).toBeUndefined();
   });
 
-  it("refuses reading a test page once its printer belongs to another location, or for an unknown printer", async () => {
+  it("refuses reading a test page for an unknown printer", async () => {
     const v = await venue();
-    const office = await printer(v, v.agentOne);
-    const page = await requested(v, office);
-    expect(await outcome(v, office)).toEqual({ id: page.id, status: "waiting" });
-    const [elsewhere] = await suite.db
-      .insert(locations)
-      .values({ name: "Terrace", invoiceLocales: ["es-ES"], operationDescription: "Sale" })
-      .returning({ id: locations.id });
-    await suite.db
-      .update(pagePrinters)
-      .set({ locationId: elsewhere!.id })
-      .where(eq(pagePrinters.id, office));
 
-    for (const id of [office, randomUUID()]) {
+    for (const id of [randomUUID()]) {
       const res = await call(v, "GET", `/management-api/page-printers/${id}/test-page`, {
         cookie: v.cookies.manager,
       });
@@ -773,7 +743,7 @@ describe("an agent asking for work", () => {
     let printerReads = 0;
     const spy = vi.spyOn(session, "prepareQuery").mockImplementation((...args) => {
       const { sql } = args[0] as { sql: string };
-      if (/from "page_printers" where "page_printers"\."location_id" = \?$/.test(sql)) {
+      if (/^select .* from "page_printers"$/.test(sql)) {
         printerReads++;
       }
       return prepare(...args);
