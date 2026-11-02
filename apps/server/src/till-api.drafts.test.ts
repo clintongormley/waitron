@@ -52,7 +52,7 @@ useVenueDb({
     const session = await withTransaction(db, (tx) =>
       loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.adminId, pin: "1234" }),
     );
-    adminCookie = `${SESSION_COOKIE}=${session.token}`;
+    adminCookie = `${SESSION_COOKIE}=${session.token}; ${venue.cookie.split("; ").slice(1).join("; ")}`;
   },
 });
 

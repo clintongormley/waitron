@@ -798,7 +798,7 @@ describe("mixed New order persistence through authenticated requests", () => {
       const login = await inTx(venue, (tx) =>
         loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.adminId, pin: "1234" }),
       );
-      const cookie = `${SESSION_COOKIE}=${login.token}`;
+      const cookie = `${SESSION_COOKIE}=${login.token}; ${venue.cookie.split("; ").slice(1).join("; ")}`;
       const freshApp = venue.appAt(venue.clock);
       const readAgain = await rawGroupSend(freshApp, cookie, "GET", path);
       expect(readAgain.status).toBe(200);
