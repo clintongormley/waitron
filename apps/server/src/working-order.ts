@@ -271,7 +271,6 @@ import {
   recordJoiningStations,
   onShownBill,
   holdPaperFor,
-  printedHeldGroups,
   printHoldTickets,
   readReleaseReminders,
   readGroupNumberLabels,
@@ -1963,6 +1962,7 @@ export async function insertSplitExtras(
   {
     workingOrderLineId: string;
     stationId: string;
+    requestedAt: string | null;
     firedAt: string | null;
     quantity: number;
   }[]
@@ -2069,6 +2069,7 @@ export async function insertSplitExtras(
       .map((row) => ({
         workingOrderLineId: row.workingOrderLineId,
         stationId: row.stationId,
+        requestedAt: row.requestedAt,
         firedAt: row.firedAt,
         quantity: row.quantity!,
       }));
@@ -5605,6 +5606,10 @@ interface EditableOrder {
  * item was released when it was stamped sent, waits in its held group when it has one, and is
  * otherwise a line nothing has sent.
  */
+function isRequested(ticket: EditableLine["ticket"]): boolean {
+  return ticket !== null && ticket.firedAt === null && ticket.requestedAt !== null;
+}
+
 function kitchenStateOf(line: EditableLine): EditableOrder["newWork"] {
   if (line.ticket !== null) return initiatedAt(line.ticket) === null ? "hold" : "fire";
   if (line.sentAt !== null) return "fire";
@@ -6570,7 +6575,7 @@ async function applyLineEdits(
         });
       }
       nextOrdinal.set(cohortId, ordinal);
-      if (kitchen === "hold" && parent.groupId !== null)
+      if ((kitchen === "hold" || isRequested(parent.ticket)) && parent.groupId !== null)
         joinedHeld.push({ groupId: parent.groupId, lineIds: copyIds });
     }
   }
@@ -6586,7 +6591,11 @@ async function applyLineEdits(
       group = { rows: out.rows, contexts: out.lineContexts };
     }
     const groupId = as.joins === undefined ? (newGroups.get(as.kitchen) ?? null) : as.joins.groupId;
-    if (as.joins !== undefined && groupId !== null && as.kitchen === "hold") {
+    if (
+      as.joins !== undefined &&
+      groupId !== null &&
+      (as.kitchen === "hold" || isRequested(as.joins.ticket))
+    ) {
       joinedHeld.push({
         groupId,
         lineIds: group.rows.flatMap((row) => (row.parentLineId === null ? [row.id!] : [])),
@@ -6675,7 +6684,7 @@ async function applyLineEdits(
     orderId,
     insertedExtras.filter((item) => item.firedAt !== null),
   );
-  const printedAdded = await printedHeldGroups(
+  const holdPaper = await holdPaperFor(
     tx,
     addedToExisting.flatMap(({ parent }) => (parent.groupId === null ? [] : [parent.groupId])),
   );
@@ -6688,8 +6697,8 @@ async function applyLineEdits(
         ),
     )?.parent;
     const groupId = parent?.groupId ?? null;
-    const group = groupId === null ? undefined : printedAdded.get(groupId);
-    return item.firedAt === null && groupId !== null && group !== undefined
+    const group = groupId === null ? undefined : holdPaper(groupId, item);
+    return groupId !== null && group !== undefined
       ? [
           {
             workingOrderId: orderId,

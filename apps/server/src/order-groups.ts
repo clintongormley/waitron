@@ -2348,14 +2348,15 @@ export async function correctJoin(
   groupId: string,
   lineIds: readonly string[],
 ): Promise<void> {
-  const group = (await printedHeldGroups(tx, [groupId])).get(groupId);
-  if (group === undefined) return;
+  const held = (await printedHeldGroups(tx, [groupId])).get(groupId);
+  const holdPaper = await holdPaperFor(tx, [groupId]);
   const joined = await tx
     .select({
       workingOrderId: ticketItems.workingOrderId,
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
       quantity: firedQuantity,
+      requestedAt: ticketItems.requestedAt,
       firedAt: ticketItems.firedAt,
       madeHere: ticketItems.madeHere,
     })
@@ -2363,7 +2364,13 @@ export async function correctJoin(
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .where(onDishesOrTheirExtras(tx, lineIds))
     .orderBy(asc(workingOrderLines.lineNo));
-  const changes = joined.map((item) => ({ ...item, groupId, group }));
+  // A held group's printed paper takes every joined item, made-here ones included; a fired
+  // group's takes only the Requested items holdPaperFor accepts.
+  const changes = joined.flatMap(({ requestedAt, ...item }) => {
+    const group = held ?? holdPaper(groupId, { ...item, requestedAt });
+    return group === undefined ? [] : [{ ...item, groupId, group }];
+  });
+  if (changes.length === 0) return;
   // Made-here work is fired at once and gets no slip, so it never puts a station on paper.
   await recordJoiningStations(
     tx,

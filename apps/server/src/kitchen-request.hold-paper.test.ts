@@ -14,6 +14,8 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { adjustmentReasons, createAdjustmentReason } from "@waitron/adjustments";
+import { persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { kitchenNotices, listStationNotices } from "@waitron/venue-service";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
@@ -31,11 +33,12 @@ import {
   type AdjustmentVenue,
 } from "./testing/adjustment-venue.js";
 import { readBillEditState } from "./bill-editing.js";
+import { applyAdjustment } from "./adjustments-apply.js";
 import { recallToDraft } from "./draft-recall.js";
 import { fireGroup } from "./order-groups.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { cancelItem } from "./line-cancel.js";
-import { cancelLine } from "./testing/cancel-line.js";
+import { cancelLine, GIVE_AWAY_REASON } from "./testing/cancel-line.js";
 import {
   moveDishesToStation,
   updateHeldOrder,
@@ -684,6 +687,215 @@ describe("A773 hold paper: edits", () => {
           .from(workingOrderLines)
           .where(eq(workingOrderLines.id, removedId)),
       ).toEqual([]);
+    });
+  });
+});
+
+describe("A773 hold paper: added work", () => {
+  const suite = useVenueDb({
+    migrations: migrationOptionsFor(manifestSets(), null),
+    timeoutMs: 60_000,
+  });
+  let db: Database;
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function fresh(): Promise<Venue> {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    db = suite.db;
+    useSplitExtrasDb(db);
+    return setupSplitExtrasVenue();
+  }
+
+  const edit = async (
+    tx: Transaction,
+    venue: Venue,
+    lineNo: number,
+    patch: Parameters<typeof updateOrderLine>[4],
+  ) => {
+    const [order] = await tx
+      .select({ revision: workingOrders.revision })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, venue.party.tabId));
+    return updateOrderLine(
+      tx,
+      venue.cfg,
+      venue.party.tabId,
+      lineNo,
+      patch,
+      order!.revision,
+      OPERATOR,
+    );
+  };
+
+  const changed = (station: string, ...lines: string[]) => [
+    "*** HOLD CHANGED ***",
+    station,
+    "Split extras",
+    "1",
+    "13:05",
+    "GROUP 1",
+    ...lines,
+    "",
+  ];
+
+  const addedBurger = changed("Grill", "+1.000 x BURG");
+
+  it("adding onion rings to a Requested burger tells Grill and Fryer on their HOLD paper", async () => {
+    const venue = await fresh();
+    await withTransaction(db, async (tx) => {
+      await setStationPrinting(tx, { printHeldWork: true }, [
+        venue.stations.grill,
+        venue.stations.fryer,
+      ]);
+      const placed = await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ lines: [burger(venue, true)], release: "hold" }],
+      });
+      const hold = await slips(tx, venue);
+      for (const name of ["grill", "fryer", "pass"])
+        expect(hold[name]!.map((slip) => slip[0])).toContain("*** HOLD ***");
+      await setStationsWaitForPass(tx, true, [venue.stations.grill, venue.stations.fryer]);
+      await fireGroup(
+        tx,
+        venue.cfg,
+        venue.party.partyId,
+        placed.groups[0]!.id,
+        await partyArgs(tx, venue),
+      );
+      const before = await slips(tx, venue);
+      vi.setSystemTime(new Date(LATER));
+
+      await edit(tx, venue, 1, {
+        extras: [
+          {
+            listId: venue.lists.burger,
+            picks: [
+              { productId: venue.products.chips, quantity: 1 },
+              { productId: venue.products.onionRings, quantity: 1 },
+            ],
+          },
+        ],
+      });
+
+      const after = await slips(tx, venue);
+      const added = (name: string) => after[name]!.slice(before[name]!.length);
+      const grill = [
+        changed("Grill", "-1.000 x BURG", "  > with CHIPS from Fryer"),
+        changed("Grill", "+1.000 x BURG", "  > with CHIPS from Fryer", "  > with RINGS from Fryer"),
+      ];
+      const fryer = [
+        changed("Fryer", "-1.000 x CHIPS", "  > for BURG at Grill"),
+        changed("Fryer", "+1.000 x CHIPS", "  > for BURG at Grill"),
+        changed("Fryer", "+1.000 x RINGS", "  > for BURG at Grill"),
+      ];
+      expect(added("grill")).toEqual(grill);
+      expect(added("fryer")).toEqual(fryer);
+      expect(added("pass")).toEqual([grill[0], fryer[0], grill[1], fryer[1], fryer[2]]);
+      for (const name of ["kitchen", "bar"]) expect(added(name)).toEqual([]);
+    });
+  });
+
+  it("raising a Requested burger's line by a portion tells Grill on its HOLD paper", async () => {
+    const venue = await fresh();
+    await withTransaction(db, async (tx) => {
+      const line = await firedFromHold(tx, venue, false);
+      const before = await slips(tx, venue);
+      vi.setSystemTime(new Date(LATER));
+
+      await edit(tx, venue, line.lineNo, { quantity: "2" });
+
+      const burgers = await tx
+        .select({
+          groupId: workingOrderLines.groupId,
+          requestedAt: ticketItems.requestedAt,
+          firedAt: ticketItems.firedAt,
+        })
+        .from(workingOrderLines)
+        .innerJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+        .where(
+          and(
+            eq(workingOrderLines.workingOrderId, venue.party.tabId),
+            eq(workingOrderLines.productId, venue.products.burger),
+          ),
+        )
+        .orderBy(workingOrderLines.lineNo);
+      expect(burgers).toEqual([
+        { groupId: line.groupId, requestedAt: AT, firedAt: null },
+        { groupId: line.groupId, requestedAt: LATER, firedAt: null },
+      ]);
+      const after = await slips(tx, venue);
+      const added = (name: string) => after[name]!.slice(before[name]!.length);
+      expect(added("grill")).toEqual([addedBurger]);
+      expect(added("pass")).toEqual([addedBurger]);
+      for (const name of ["fryer", "kitchen", "bar"]) expect(added(name)).toEqual([]);
+    });
+  });
+
+  it("raising a comped Requested burger adds a burger apart from it and tells Grill on its HOLD paper", async () => {
+    const venue = await fresh();
+    await withTransaction(db, async (tx) => {
+      const line = await firedFromHold(tx, venue, false);
+      await tx
+        .insert(persons)
+        .values({ id: OPERATOR, displayName: "Operator", role: "supervisor" })
+        .onConflictDoNothing({ target: persons.id });
+      const [reason] = await tx
+        .select({ id: adjustmentReasons.id })
+        .from(adjustmentReasons)
+        .where(eq(adjustmentReasons.name, GIVE_AWAY_REASON.name));
+      const [order] = await tx
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, venue.party.tabId));
+      await applyAdjustment(
+        tx,
+        venue.cfg,
+        {
+          admission: testTradingAdmission(),
+          orderId: venue.party.tabId,
+          expectedEdit: await readBillEditState(tx, venue.party.tabId),
+          submissionId: randomUUID(),
+          expectedRevision: order!.revision,
+          lineId: line.id,
+          reasonId: reason?.id ?? (await createAdjustmentReason(tx, GIVE_AWAY_REASON)).id,
+          action: "comp",
+          note: null,
+          operatorId: OPERATOR,
+        },
+        venue.cfg.locale,
+      );
+      const before = await slips(tx, venue);
+      vi.setSystemTime(new Date(LATER));
+
+      await edit(tx, venue, line.lineNo, { quantity: "2" });
+
+      const burgers = await tx
+        .select({
+          quantity: workingOrderLines.quantity,
+          groupId: workingOrderLines.groupId,
+          requestedAt: ticketItems.requestedAt,
+          firedAt: ticketItems.firedAt,
+        })
+        .from(workingOrderLines)
+        .innerJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+        .where(
+          and(
+            eq(workingOrderLines.workingOrderId, venue.party.tabId),
+            eq(workingOrderLines.productId, venue.products.burger),
+          ),
+        )
+        .orderBy(workingOrderLines.lineNo);
+      expect(burgers).toEqual([
+        { quantity: 1000, groupId: line.groupId, requestedAt: AT, firedAt: null },
+        { quantity: 1000, groupId: line.groupId, requestedAt: LATER, firedAt: null },
+      ]);
+      const after = await slips(tx, venue);
+      const added = (name: string) => after[name]!.slice(before[name]!.length);
+      expect(added("grill")).toEqual([addedBurger]);
+      expect(added("pass")).toEqual([addedBurger]);
+      for (const name of ["fryer", "kitchen", "bar"]) expect(added(name)).toEqual([]);
     });
   });
 });
