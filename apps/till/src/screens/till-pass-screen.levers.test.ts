@@ -266,6 +266,64 @@ describe("A773 pass screen: levers", () => {
     expect(el.shadowRoot!.querySelector("[data-reprint-error]")).toBeNull();
   });
 
+  it("the next Reprint press clears a failed reprint's error", async () => {
+    const api = fakeApi({
+      reprintOrder: vi
+        .fn()
+        .mockRejectedValueOnce(refused("printer.not_found", 502))
+        .mockResolvedValue(undefined),
+    });
+    const el = await mountTill(api);
+    await press(el, '[data-reprint="order-1"]');
+    expect(el.shadowRoot!.querySelector("[data-reprint-error]")).not.toBeNull();
+    await press(el, '[data-reprint="order-1"]');
+    expect(el.shadowRoot!.querySelector("[data-reprint-error]")).toBeNull();
+  });
+
+  it("a group Ready press clears the refresh sentence, the one still waiting for a read, and a refusal", async () => {
+    const api = fakeApi({
+      bumpDeviceCourseReady: vi.fn().mockRejectedValue(refused("order.payment_in_flight", 404)),
+      bumpDeviceGroupReady: vi
+        .fn()
+        .mockRejectedValueOnce(refused("party.out_of_date"))
+        .mockRejectedValueOnce(refused("party.out_of_date"))
+        .mockResolvedValue({ revision: 8 }),
+    });
+    const el = await mountDisplay(api);
+    await press(el, '[data-ready="course-mains"]');
+    expect(leverError(el)).not.toBeNull();
+    await press(el, '[data-group-ready="g-1"]');
+    expect(leverError(el)).toBeNull();
+    expect(tableChanged(el)).not.toBeNull();
+
+    api.getDevicePassBoard.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    await press(el, '[data-group-ready="g-1"]');
+    expect(tableChanged(el)).toBeNull();
+
+    await press(el, '[data-group-ready="g-1"]');
+    expect(tableChanged(el)).toBeNull();
+  });
+
+  it("a course Ready press clears a refusal and leaves the refresh sentence", async () => {
+    const api = fakeApi({
+      bumpDeviceGroupReady: vi.fn().mockRejectedValue(refused("party.out_of_date")),
+      bumpDeviceCourseReady: vi
+        .fn()
+        .mockRejectedValueOnce(refused("order.payment_in_flight", 404))
+        .mockResolvedValue(undefined),
+    });
+    const el = await mountDisplay(api);
+    await press(el, '[data-group-ready="g-1"]');
+    expect(tableChanged(el)).not.toBeNull();
+
+    api.getDevicePassBoard.mockRejectedValue(new TypeError("Failed to fetch"));
+    await press(el, '[data-ready="course-mains"]');
+    expect(leverError(el)).not.toBeNull();
+    await press(el, '[data-ready="course-mains"]');
+    expect(leverError(el)).toBeNull();
+    expect(tableChanged(el)).not.toBeNull();
+  });
+
   it("a failed reprint shows its error", async () => {
     const api = fakeApi({
       reprintOrder: vi.fn().mockRejectedValue(refused("printer.not_found", 502)),
@@ -306,6 +364,21 @@ describe("A773 pass screen: levers", () => {
     const columns = badgeFor(el, t("station.columns"))!;
     expect(columns.textContent).toBe(helpText("help.kitchen.columns"));
     expect(columns.parentElement!.querySelector(":scope > [data-columns-open]")).not.toBeNull();
+    expect(columns.getAttribute("guide-href")).toBe("/help/en/kitchen-service#kitchen-screen");
+  });
+
+  it("with help on, the Ready badge is still drawn after the board is read again", async () => {
+    const api = fakeApi();
+    api.getDevicePassBoard.mockImplementation(async () => deviceBoard());
+    const el = await mountDisplay(api);
+    setHelpMode(true);
+    await flush(el);
+    const before = boardOf(el)!.board;
+    await press(el, '[data-ready="course-mains"]');
+    expect(boardOf(el)!.board).not.toBe(before);
+    const ready = badges(el).filter((badge) => badge.textContent === helpText("help.pass.ready"));
+    expect(ready).toHaveLength(1);
+    expect(ready[0]!.parentElement!.querySelector(":scope > .lever")).not.toBeNull();
   });
 
   it.each([
@@ -326,5 +399,17 @@ describe("A773 pass screen: levers", () => {
     expect(helpEs["help.more.pass"]).toContain(es["pass.column.ready"].toLowerCase());
     expect(helpEs["help.more.pass"]).not.toContain("curso");
     expect(helpEn["help.more.pass"]).toContain(en["pass.column.held"].toLowerCase());
+  });
+
+  it("the pass's new help texts read the owner-approved words, in both languages", () => {
+    expect(helpEn["help.pass.card"]).toBe(
+      "One card for each group a table sends, across its bills, or for each counter order. Its minutes count from when the waiter sent it, or on a Ready card from when its last dish was ready. The left edge takes the brand colour, then turns red, as its dishes wait, by their stations' late flags; a dish that waits too long says Forgotten. Dimmed dishes are shown for information only: dishes this pass does not cover and, once a station it covers waits for the pass, dishes of the stations that do not and dishes sent before their station began waiting.",
+    );
+    expect(helpEs["help.pass.card"]).toBe(
+      "Una tarjeta por cada grupo que envía una mesa, en todas sus cuentas, o por cada pedido de mostrador. Sus minutos cuentan desde que el camarero lo envió o, en una tarjeta lista, desde que su último plato estuvo listo. El borde izquierdo toma el color de marca y luego pasa a rojo mientras sus platos esperan, según los avisos de demora de sus estaciones; un plato que espera demasiado dice Olvidado. Los platos atenuados se muestran solo como información: los que este pase no cubre y, cuando una estación que cubre espera al pase, los de las estaciones que no esperan y los enviados antes de que su estación empezara a esperar.",
+    );
+    expect(helpEs["help.more.pass"]).toBe(
+      "Abre el pase: una tarjeta por cada grupo que envía una mesa, o por cada pedido de mostrador, en columnas de en espera a listo.",
+    );
   });
 });

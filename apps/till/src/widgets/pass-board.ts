@@ -595,7 +595,8 @@ export class TillPassBoard extends LitElement {
     );
   }
 
-  /** The first lever drawn sits in a wrapper that holds its badge beside it, never inside it. */
+  /** While help is on, the first lever drawn sits in a wrapper that holds its badge beside it, never
+   * inside it. */
   #withLeverBadge(label: string, lever: TemplateResult): TemplateResult {
     if (!this.#help.on || this.#leverBadgeDrawn) return lever;
     this.#leverBadgeDrawn = true;
