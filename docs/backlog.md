@@ -384,45 +384,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   behavioral assertions and protected-file scope intact.
   [Detail](backlog/fiscal.md#protected-write-path-test-policy-quotation).
 
-- **W41s. Fiscal prevention and offline recovery** — corrective-record resolution, filing
-  investigation, outside evidence and fencing for the remaining tasks, and the complete
-  old-backup/new-hardware exercise remain queued. Task 8 must preserve complete new correction
-  payloads and prove two successive corrections of one invoice against AEAT preproduction;
-  its storage upgrade now has a populated-predecessor row-preservation check. Receipt replay
-  explicitly selects the original issued record after later corrections.
-  Stored remedy markers now survive row conversion and XML assembly; the chain writer accepts
-  successive same-invoice correction links and refuses a competing replacement with a domain code.
-  Cancellation admission and consultation reconciliation now select the unreplaced version;
-  reconciliation rechecks after its network wait. Credit-note and substitution admission use the
-  current corrected invoice type; voids keep the issued sale's origin. The row converter refuses
-  optional library fields it cannot retain, including a caller-supplied submission reference.
-  The synthetic administrator operation appends one correction and a case-resolution event in one
-  transaction, and retries return that saved result. The public remedy route refuses all disputed
-  actions, including client-claimed enablement. The synthetic HTTP adapter accepts partial corrections
-  to stored descriptions, issuer names, invoice types, recipients, tax breakdowns, amounts and
-  invoice references. Invoice identity and generation facts remain server-owned; retries compare
-  the complete decision and return the saved result after clock or delivery changes. Explicit
-  accepted-with-errors decisions require the matching stored case and delivery and retain S/N
-  markers. The separately gated synthetic absent-original operation appends a cancellation with
-  `SinRegistroPrevio=S` only for a matching definitive rejection, with no existing cancellation or
-  later correction. It preserves the issued origin and accounting rows; retries return the saved
-  result. The synthetic corrective-invoice transaction now uses the existing accounting writer
-  under management-session authorisation, appends its own numbered R5 and saves the case decision.
-  Its retries preserve the saved invoice without a second payment or refund. The synthetic corrective
-  HTTP adapter now validates signed line facts, rejects client-supplied host identity and uses the
-  existing accounting writer with a server-owned operator origin. A separate synthetic release
-  now submits the existing held ordinary cancellation after the explicitly selected current
-  invoice version is accepted. It records the case decision and clears the held acknowledgement
-  without another fiscal record. The separately gated manual brake action now makes only the
-  first eligible held record due immediately and records a note on its holding case. Later
-  held records still wait for that answer to break the refusal run. The staff integration now
-  refunds cash through the till route, records the void, corrects the rejected original and files
-  the same held cancellation. Concurrent release and replay preserve the completed refund and
-  drawer jobs. Unknown or conflicting originals and an unsuitable existing cancellation refuse
-  record-producing remedies; release using another issuing chain also refuses. Whole-item review,
-  rebasing and CI remain before publication.
-  The 2 November AEAT TEST run accepted an original and two successive S/N description corrections as `Correcto`; consultation matched
-  the second correction's fingerprint. This one-identity probe does not enable production remedies.
+- **W41s. Fiscal prevention and offline recovery** — filing investigation, outside evidence and
+  fencing, and the complete old-backup/new-hardware exercise remain queued. Task 8's synthetic
+  correction and held-record actions keep disputed production remedies disabled pending
+  Q35/Q37/Q38/Q40 or a case-specific owner decision. A held cancellation from another issuing
+  chain has no qualified release here.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment

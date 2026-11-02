@@ -530,3 +530,38 @@ it.each([null, 1, [], {}, true])("refuses non-text accepted-version input %j", a
   expect(await response.json()).toMatchObject({ error: { code: "fiscal.remedy_request_invalid" } });
   expect(await snapshot()).toEqual(before);
 });
+
+it("refuses an absent-original cancellation even with a matching accepted invoice and synthetic held case", async () => {
+  const otherSale = await seedSale(suite.db, node, 2);
+  await withTransaction(suite.db, async (tx) => {
+    const accepted = await appendToChain(
+      tx,
+      node.nodeId,
+      altaFor(node, otherSale, 2, 5, "preproduction"),
+    );
+    await tx.insert(envios).values({ registroId: accepted.id, estado: "aceptado" });
+    const pending = anulacionFor(node, otherSale, 2, 6, "preproduction");
+    const cancellation = await appendToChain(tx, node.nodeId, {
+      ...pending,
+      input: { ...pending.input, SinRegistroPrevio: "S" },
+    });
+    await tx.insert(envios).values({ registroId: cancellation.id, estado: "retenido" });
+    const filingCase = await openFilingCase(tx, {
+      registroId: cancellation.id,
+      cause: "fiscal.anulacion_retenida",
+      evidence: { codigo: null, mensaje: null, csv: null },
+      now: NOW,
+    });
+    body = {
+      ...body,
+      registroId: cancellation.id,
+      caseId: filingCase.id,
+      acceptedRegistroId: accepted.id,
+    };
+  });
+  const before = await snapshot();
+  const response = await send();
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ error: { code: "fiscal.remedy_invalid" } });
+  expect(await snapshot()).toEqual(before);
+});

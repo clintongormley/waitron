@@ -1,5 +1,5 @@
 import "./errors.js";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { recordIncident } from "@waitron/core";
 import type { Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
@@ -128,11 +128,31 @@ export async function applyRecordCorrection(
     .select()
     .from(envios)
     .where(eq(envios.registroId, request.registroId));
+  const [cancellation] = await tx
+    .select({ sinRegistroPrevio: registrosFacturacion.sinRegistroPrevio, estado: envios.estado })
+    .from(registrosFacturacion)
+    .leftJoin(envios, eq(envios.registroId, registrosFacturacion.id))
+    .where(
+      and(
+        eq(registrosFacturacion.tipoRegistro, "anulacion"),
+        eq(registrosFacturacion.idEmisorFactura, target.idEmisorFactura),
+        eq(registrosFacturacion.numSerieFactura, target.numSerieFactura),
+        eq(registrosFacturacion.fechaExpedicionFactura, target.fechaExpedicionFactura),
+      ),
+    );
   if (
     filingCase.registroId !== request.registroId ||
     (filingCase.cause !== "fiscal.registro_rechazado" &&
       filingCase.cause !== "fiscal.aceptado_con_errores") ||
     (delivery?.estado !== "rechazado" && delivery?.estado !== "aceptado_con_errores") ||
+    delivery.codigoError === "3000" ||
+    (delivery.estado === "rechazado" &&
+      (delivery.codigoError === null ||
+        filingCase.evidence.codigo === null ||
+        String(filingCase.evidence.codigo) !== delivery.codigoError)) ||
+    // A waiting cancellation would wait for this correction while blocking it in the queue.
+    (cancellation !== undefined &&
+      (cancellation.estado !== "retenido" || cancellation.sinRegistroPrevio === "S")) ||
     (input.correctionDecision !== undefined &&
       (input.correctionDecision.priorOutcome === "rejected"
         ? delivery?.estado !== "rechazado" || filingCase.cause !== "fiscal.registro_rechazado"

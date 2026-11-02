@@ -25,7 +25,7 @@ import { readChainHead } from "@waitron/fiscal-verifactu/src/chain.js";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "@waitron/fiscal-verifactu/src/drain.js";
 import { listFilingCases, openFilingCase } from "@waitron/fiscal-verifactu/src/filing-cases.js";
 import { mountRecordRemedies } from "@waitron/fiscal-verifactu/src/record-remedy-routes.js";
-import type { RemedyKind } from "@waitron/fiscal-verifactu/src/record-remedy.js";
+import { REMEDY_KINDS, type RemedyKind } from "@waitron/fiscal-verifactu/src/record-remedy.js";
 import { envios } from "@waitron/fiscal-verifactu/src/schema/envios.js";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu/src/schema/registros.js";
 import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
@@ -82,7 +82,11 @@ beforeEach(async () => {
 
 afterEach(() => vi.useRealTimers());
 
-function remedy(body: Record<string, unknown>, enabled: RemedyKind[]) {
+function remedy(
+  body: Record<string, unknown>,
+  enabled?: RemedyKind[],
+  environment: "production" | "preproduction" = "preproduction",
+) {
   const app = new Hono();
   mountRecordRemedies(
     app,
@@ -90,13 +94,13 @@ function remedy(body: Record<string, unknown>, enabled: RemedyKind[]) {
       db: store.db,
       recordGeneration: {
         nodeId: venue.cfg.nodeId,
-        environment: "preproduction",
+        environment,
         clock: venue.clock,
         requireWritable: () => {},
       },
     },
     () => {},
-    new Set(enabled),
+    enabled === undefined ? undefined : new Set(enabled),
   );
   return send(app, venue.adminDashboard, "POST", "/management-api/fiscal-records/remedy", body);
 }
@@ -161,16 +165,16 @@ async function cancelAndRefund() {
   return { cancellationId: cancelled.fiscal.recordId, refundBody, refunded, facts };
 }
 
-async function rejectOriginal() {
+async function rejectOriginal(code = 1161) {
   await store.db
     .update(envios)
-    .set({ estado: "rechazado", codigoError: "1161" })
+    .set({ estado: "rechazado", codigoError: String(code) })
     .where(eq(envios.registroId, originalId));
   return withTransaction(store.db, (tx) =>
     openFilingCase(tx, {
       registroId: originalId,
       cause: "fiscal.registro_rechazado",
-      evidence: { codigo: 1161, mensaje: null, csv: null },
+      evidence: { codigo: code, mensaje: null, csv: null },
       now: NOW,
     }),
   );
@@ -440,3 +444,121 @@ it("refuses to release the old chain's cancellation using an accepted correction
   const after = await accounting();
   expect(after).toEqual(facts);
 });
+
+it.each(["pendiente", "enviando", "aceptado", "aceptado_con_errores", "rechazado", "detenido"])(
+  "refuses a record correction while its existing ordinary cancellation is %s",
+  async (estado) => {
+    const originalCase = await rejectOriginal();
+    const { cancellationId, facts } = await cancelAndRefund();
+    await store.db.update(envios).set({ estado }).where(eq(envios.registroId, cancellationId));
+    const before = await fiscalFacts();
+    const response = await remedy(
+      {
+        kind: "record-correction",
+        caseId: originalCase.id,
+        registroId: originalId,
+        actionKey: "cancellation-not-held",
+        reason: "Do not create a filing dependency cycle",
+        facts: { description: "Corrected restaurant service" },
+      },
+      ["record-correction"],
+    );
+    expect(response).toMatchObject({ status: 400, json: { code: "fiscal.remedy_invalid" } });
+    expect(await fiscalFacts()).toEqual(before);
+    expect(await accounting()).toEqual(facts);
+  },
+);
+
+it("allows the same correction decision after the filing queue has actually held the waiting cancellation", async () => {
+  const originalCase = await rejectOriginal();
+  const { cancellationId, facts } = await cancelAndRefund();
+  const request = {
+    kind: "record-correction",
+    caseId: originalCase.id,
+    registroId: originalId,
+    actionKey: "wait-for-real-hold",
+    reason: "Explicit correction of the rejected invoice",
+    facts: { description: "Corrected restaurant service" },
+  };
+  const refused = await remedy(request, ["record-correction"]);
+  expect(refused).toMatchObject({ status: 400, json: { code: "fiscal.remedy_invalid" } });
+  const aeat = createFakeAeat({ serverNow: NOW });
+  const deps = {
+    db: store.db,
+    environment: "preproduction" as const,
+    skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+    resolveClient: () => Promise.resolve(aeat.client()),
+  };
+  expect((await drain(deps, NOW)).recordsAccepted).toBe(0);
+  const heldCase = (await fiscalFacts()).cases.find((row) => row.registroId === cancellationId)!;
+  expect(heldCase).toMatchObject({ cause: "fiscal.anulacion_retenida", status: "open" });
+  const accepted = await remedy(request, ["record-correction"]);
+  expect(accepted).toMatchObject({ status: 200 });
+  expect((await drain(deps, NOW)).recordsAccepted).toBe(1);
+  expect(
+    await remedy(
+      {
+        kind: "release-held-cancellation",
+        registroId: cancellationId,
+        caseId: heldCase.id,
+        acceptedRegistroId: accepted.json.registroId,
+        actionKey: "release-after-real-hold",
+        reason: "Accepted current original",
+      },
+      ["release-held-cancellation"],
+    ),
+  ).toMatchObject({ status: 200 });
+  expect((await drain(deps, new Date(NOW.getTime() + 60_000))).recordsAccepted).toBe(1);
+  expect(await accounting()).toEqual(facts);
+});
+
+it.each([3000, 1100, null])(
+  "refuses synthetic duplicate or mismatched correction evidence %s",
+  async (code) => {
+    const originalCase = await rejectOriginal(code === 3000 ? 3000 : 1161);
+    await store.db
+      .update(envios)
+      .set({ codigoError: code === null ? null : String(code) })
+      .where(eq(envios.registroId, originalId));
+    const before = await fiscalFacts();
+    const response = await remedy(
+      {
+        kind: "record-correction",
+        caseId: originalCase.id,
+        registroId: originalId,
+        actionKey: "unproven-rejection",
+        reason: "Do not infer an absent original from a duplicate or stale case",
+        facts: { description: "Unproven correction" },
+      },
+      ["record-correction"],
+    );
+    expect(response).toMatchObject({ status: 400, json: { code: "fiscal.remedy_invalid" } });
+    expect(await fiscalFacts()).toEqual(before);
+  },
+);
+
+it.each(["production", "preproduction"] as const)(
+  "keeps every built-in remedy disabled with a complete %s host context",
+  async (environment) => {
+    const before = await fiscalFacts();
+    for (const kind of REMEDY_KINDS) {
+      const response = await remedy(
+        {
+          kind,
+          registroId: originalId,
+          caseId: "unneeded",
+          actionKey: "closed-policy",
+          reason: "A request cannot grant authority",
+          enabledRemedies: [kind],
+        },
+        undefined,
+        environment,
+      );
+      expect(response).toMatchObject({
+        status: 409,
+        json: { code: "fiscal.remedy_disabled", params: { kind } },
+      });
+    }
+    expect(await fiscalFacts()).toEqual(before);
+  },
+);

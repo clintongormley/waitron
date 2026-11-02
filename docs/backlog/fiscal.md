@@ -424,8 +424,49 @@ file's edit scope is authorised. The live procedure is documented in
 
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
-Corrective-record resolution, filing investigation, outside evidence and fencing for the other
-tasks, and the complete old-backup/new-hardware operational exercise remain queued.
+Filing investigation, outside evidence and fencing for the other tasks, and the complete
+old-backup/new-hardware operational exercise remain queued. The latest Task 8 qualification is
+below; earlier dated implementation checkpoints retain their historical scope.
+
+### Task 8 staff refund and held-cancellation qualification, 2 November 2026
+
+`apps/server/src/fiscal-remedy.staff-refund.test.ts` uses a real provisioned venue and the
+core sale and void writers. It returns 12.10 in cash through the till's refund route before
+voiding the invoice; the refund route deliberately refuses an already voided invoice. The
+filing queue sets the ordinary cancellation aside after the original's definitive rejection.
+An explicitly enabled synthetic correction is accepted by the real client and fake tax service;
+the administrator then releases the same cancellation. Concurrent release and reordered retries
+return the saved decision. A refund retry returns the original completed refund. The checks compare
+all sale, line, tender, settlement, void, refund, drawer, print-job and series rows, plus the
+immutable fiscal rows and chain head after release and filing.
+
+The other cases retain those accounting effects while refusing record-producing remedies for
+unknown outcomes, conflicting invoice identities and an already generated ordinary cancellation.
+An accepted correction from another issuing chain does not release the old chain's cancellation.
+That boundary remains a refusal, not a qualified cross-chain remedy. The original rejection in
+these cases is synthetic stored evidence; they do not send a real refund or establish a legal
+remedy. The public permitted-remedy set stays empty. The completed implementation still needs the
+owner's fiscal review before landing and separate legal authority before production enablement.
+
+The whole-branch review reproduced a dependency cycle when a correction was appended behind an
+ordinary cancellation still waiting to be sent: the cancellation waited for that correction's
+answer, while the correction waited behind the cancellation. The action now refuses unless any
+existing ordinary cancellation is already held for resolution. It also refuses completed,
+failed or unknown cancellation states and a synthetic held absent-original cancellation. Once
+the queue has actually held the ordinary cancellation, the same decision can be submitted again,
+accepted and followed by its explicit release. No queue-order rule was weakened.
+
+For a definitively rejected delivery, the correction action requires a matching non-null rejection
+code on the case and delivery; it refuses code 3000 in either admissible outcome. This aligns the
+rejected-record boundary with the sibling remedies. The duplicate-code probe used synthetic
+stored evidence: the pinned library's reducer returned duplicate outcomes for the tested 3000
+reply variants, not a plain rejection. No claim that normal filing generated that inconsistent
+state is made. Accepted-with-errors acknowledgement preservation retains its existing behavior.
+
+The staff suite also exercises the built-in empty policy for all five actions in both deployment
+modes. The policy is a permitted-action set shared by those modes; a future enablement decision
+must account for that scope. The two Claude reviews' findings and deliberate refusal choice are
+recorded in the pull request; a passing synthetic tax-service response supplies no legal authority.
 
 **1 November 2026, Task 8 storage decision (owner).** A correction keeps the invoice's issuer,
 number and issue date. Its nullable `corrects_registro_id` names the version it replaces;
@@ -1320,24 +1361,3 @@ installation code a UTC minute but kept the `packages/fiscal-verifactu/src/hour-
 their identifiers, the `source: "hour"` label the allocations carry, and test titles that still
 say "hour" for what is now a minute (for example "same-hour code", "burns the entire hour"). Before go-live it needs
 no compatibility code: until then any installation may be reset (CLAUDE.md §3).
-
-
-### Task 8 staff refund and held-cancellation qualification, 2 November 2026
-
-`apps/server/src/fiscal-remedy.staff-refund.test.ts` uses a real provisioned venue and the
-core sale and void writers. It returns 12.10 in cash through the till's refund route before
-voiding the invoice; the refund route deliberately refuses an already voided invoice. The
-filing queue sets the ordinary cancellation aside after the original's definitive rejection.
-An explicitly enabled synthetic correction is accepted by the real client and fake tax service;
-the administrator then releases the same cancellation. Concurrent release and reordered retries
-return the saved decision. A refund retry returns the original completed refund. The checks compare
-all sale, line, tender, settlement, void, refund, drawer, print-job and series rows, plus the
-immutable fiscal rows and chain head after release and filing.
-
-The other cases retain those accounting effects while refusing record-producing remedies for
-unknown outcomes, conflicting invoice identities and an already generated ordinary cancellation.
-An accepted correction from another issuing chain does not release the old chain's cancellation.
-That boundary remains a refusal, not a qualified cross-chain remedy. The original rejection in
-these cases is synthetic stored evidence; they do not send a real refund or establish a legal
-remedy. The public permitted-remedy set stays empty. Whole-item rebasing, the two required Claude
-reviews, the normal push hook and current-head CI remain before publication for owner review.

@@ -17,7 +17,7 @@ import { envios } from "./schema/envios.js";
 import { filingCaseEvents } from "./schema/filing-cases.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { cadenas } from "./schema/cadenas.js";
-import { altaFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
+import { altaFor, anulacionFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const NOW = new Date("2026-07-20T19:20:35+02:00");
@@ -403,4 +403,32 @@ it("resolves successive version cases without rewriting the earlier case, events
     status: "resolved",
     events: [{ id: second.eventId, remedyRegistroId: second.registroId }],
   });
+});
+
+it("refuses a replacement pointer to a later version even when node, sale and invoice identity all match", async () => {
+  const later = await withTransaction(suite.db, (tx) =>
+    appendToChain(tx, node.nodeId, request.pending),
+  );
+  const before = await snapshot();
+  await expect(
+    apply(true, {
+      ...request,
+      pending: { ...request.pending, correctsRegistroId: later.id },
+    }),
+  ).rejects.toMatchObject({ code: "fiscal.remedy_invalid" });
+  expect(await snapshot()).toEqual(before);
+});
+
+it("refuses a synthetic held absent-original cancellation rather than treating it as an ordinary held cancellation", async () => {
+  await withTransaction(suite.db, async (tx) => {
+    const pending = anulacionFor(node, request.pending.saleId, 1, 2, "preproduction");
+    const appended = await appendToChain(tx, node.nodeId, {
+      ...pending,
+      input: { ...pending.input, SinRegistroPrevio: "S" },
+    });
+    await tx.insert(envios).values({ registroId: appended.id, estado: "retenido" });
+  });
+  const before = await snapshot();
+  await expect(apply()).rejects.toMatchObject({ code: "fiscal.remedy_invalid" });
+  expect(await snapshot()).toEqual(before);
 });
