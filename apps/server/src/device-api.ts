@@ -33,6 +33,7 @@ import {
   parseDeviceCookie,
   readDeviceCookie,
   requireDevice,
+  requireDeviceProof,
   setDeviceCookie,
   sightingDue,
   type DeviceBinding,
@@ -78,7 +79,9 @@ import {
   type StationQueueGroup,
   type TicketState,
 } from "./working-order.js";
-import { isUuid, requireSession, signedInPersonOn } from "./till-session.js";
+import { assertStillSignedIn, isUuid, requireSession, signedInPersonOn } from "./till-session.js";
+import { releasePassItems, type PassActor } from "./pass-release.js";
+import type { AttendanceRecorder } from "./attendance-capture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { KitchenScreenKind, ResolvedKitchenScreen, ScreenSlot } from "@waitron/module";
 import { stationPrintersDown } from "./station-outputs-down.js";
@@ -144,6 +147,9 @@ export interface DeviceApiDeps {
   clock?: { wall: () => number; monotonic: () => number };
   /** Whether a request came from the box itself, whose clock is no witness to its own. */
   requestFromBox?: (c: Context) => boolean;
+  /** Records a till pass's person's kitchen work, with `attendanceClock`; absent, none is recorded. */
+  attendance?: AttendanceRecorder;
+  attendanceClock?: TrustedClock;
 }
 
 const DEVICE_MANAGE_PERMISSION: Permission = "device.manage";
@@ -200,6 +206,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "ticket.invalid_transition": 409,
   "ticket.item_held": 409,
   "kitchen_notice.not_found": 404,
+  "ticket.pass_context_changed": 409,
 };
 
 /**
@@ -535,6 +542,32 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
           return { orders, stations: screen.stations, zones: screen.zones };
         }),
       );
+    }),
+  );
+
+  app.post("/api/device/pass-screen/release", (c) =>
+    leverRun(c, log, async () => {
+      const proof = await requireDeviceProof({ db: deps.db, devMode: deps.devMode }, c);
+      const { deviceId } = proof.device;
+      const session =
+        proof.device.formFactor === "kds" ? null : await requireSession({ db: deps.db }, c);
+      if (session !== null && session.deviceId !== deviceId)
+        throw new AppError("device.unauthorized", {});
+      const by: PassActor =
+        session === null
+          ? { deviceId, personId: null }
+          : { deviceId, personId: session.personId, sessionId: session.sessionId };
+      const body = await readJsonBody<unknown>(c);
+      const attendance =
+        deps.attendance === undefined || deps.attendanceClock === undefined
+          ? undefined
+          : { recorder: deps.attendance, clock: deps.attendanceClock };
+      const answer = await withTransaction(deps.db, async (tx) => {
+        await assertDeviceStillProven(tx, proof);
+        if (by.personId !== null) await assertStillSignedIn(tx, by);
+        return releasePassItems(tx, requestCfg(deps.cfg, proof.device), by, body, attendance);
+      });
+      return c.json(answer);
     }),
   );
 

@@ -8,6 +8,7 @@ import {
   kitchenStations,
   locations,
   passItemMarks,
+  printJobs,
   ticketItems,
   workingOrderLines,
   workingOrders,
@@ -31,8 +32,14 @@ import { SESSION_COOKIE } from "./till-session.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { createStation } from "./kitchen.js";
-import { createOpenOrder, fireableLineColumns, fireLines } from "./working-order.js";
-import { inTx, orderForParty, seat, setupPartyVenue } from "./testing/party-venue.js";
+import { createOpenOrder, fireableLineColumns, fireLines, markServed } from "./working-order.js";
+import { commandFor, inTx, orderForParty, seat, setupPartyVenue } from "./testing/party-venue.js";
+import { createPrinter } from "@waitron/printing";
+import { attendanceOperationFacts } from "@waitron/workforce";
+import { attachPrinterToStation } from "./station-printers.js";
+import { recordAttendanceFact } from "./attendance-capture.js";
+import { mountManagementApi } from "./management-api.js";
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -638,5 +645,284 @@ describe("A773 pass board: routes", () => {
       expect(await anonymous.json()).toMatchObject({ error: { code: "session.required" } });
       expect((await cards(f.app, await signIn(f, till), path)).board.toFire).toHaveLength(1);
     }
+  });
+});
+
+describe("A773 pass release: route", () => {
+  type CardBoard = { board: PassBoard };
+  const FULL = ["act-as-kds", "prepare-orders", "run-the-pass"];
+
+  /** Grill waits and prints to its own printer; a manager's session on the management API. */
+  async function releaseFixture(deps: { attendance?: boolean } = {}) {
+    const f = await fixture();
+    const printerId = await inTx(f.v, async (tx) => {
+      await routeProductTo(tx, f.v.cfg, f.v.productId("Burger"), f.grill);
+      await setStationsWaitForPass(tx, true, [f.grill]);
+      const printer = await createPrinter(tx, {
+        name: "Grill paper",
+        transport: "cloud_poll",
+        pollId: randomUUID(),
+      });
+      await attachPrinterToStation(tx, {
+        locationId: f.v.cfg.locationId,
+        stationId: f.grill,
+        printerId: printer.id,
+      });
+      return printer.id;
+    });
+    const app = new Hono();
+    mountDeviceApi(
+      app,
+      {
+        db: suite.db,
+        cfg: f.v.cfg,
+        secureCookies: false,
+        pairingMode: createPairingMode(),
+        ...(deps.attendance === true
+          ? { attendance: recordAttendanceFact, attendanceClock: f.v.clock }
+          : {}),
+      },
+      log,
+    );
+    const management = new Hono();
+    mountManagementApi(
+      management,
+      {
+        db: suite.db,
+        cfg: { nodeId: f.v.cfg.nodeId },
+        venueCfg: f.v.cfg,
+        secureCookies: false,
+        rpId: "localhost",
+        origin: "http://localhost",
+        credentialKeyRing: TOTP_KEY_RING,
+      },
+      log,
+    );
+    const signedIn = await management.request("/management-api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "owner@example.test", password: "dashPass123" }),
+    });
+    expect(signedIn.status).toBe(200);
+    const manager = signedIn.headers.get("set-cookie")!.split(";")[0]!;
+    /** A kitchen-display profile saved through the management route. */
+    const savedProfile = async (capabilities: string[]) => {
+      const created = await management.request("/management-api/device-profiles", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: manager },
+        body: JSON.stringify({ name: `Pass ${randomUUID()}`, formFactor: "kds", capabilities }),
+      });
+      expect(created.status).toBe(201);
+      return ((await created.json()) as { id: string }).id;
+    };
+    const jobs = async () =>
+      (
+        await inTx(f.v, (tx) =>
+          tx.select({ id: printJobs.id }).from(printJobs).where(eq(printJobs.printerId, printerId)),
+        )
+      ).length;
+    return { ...f, app, printerId, savedProfile, jobs };
+  }
+
+  type ReleaseFixture = Awaited<ReturnType<typeof releaseFixture>>;
+
+  /** A fresh party's Requested burgers, sent as one Fire now group. */
+  async function requested(f: ReleaseFixture, burgers = 1) {
+    const seated = await seat(f.v, await f.v.table(`Inside ${randomUUID()}`));
+    await orderForParty(f.v, seated.partyId, Array<string>(burgers).fill("Burger"), seated.tabId);
+    return seated;
+  }
+
+  async function card(app: Hono, cookie: string) {
+    const response = await app.request("/api/device/pass-board", { headers: { cookie } });
+    expect(response.status).toBe(200);
+    return ((await response.json()) as CardBoard).board.toFire;
+  }
+
+  const askOf = (toFire: PassBoard["toFire"][number]) => ({
+    submissionId: randomUUID(),
+    target: toFire.target,
+    ticketItemIds: toFire.releaseTicketItemIds,
+    expectedContext: toFire.releaseContext,
+  });
+
+  const release = (app: Hono, cookie: string, body: unknown) =>
+    app.request("/api/device/pass-screen/release", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  async function refused(
+    f: ReleaseFixture,
+    send: () => Response | Promise<Response>,
+    status: number,
+    error: Record<string, unknown>,
+  ) {
+    const before = await inTx(f.v, (tx) => tx.select().from(ticketItems));
+    const jobs = await f.jobs();
+    const answer = await send();
+    expect({ status: answer.status, body: await answer.json() }).toMatchObject({
+      status,
+      body: { error },
+    });
+    expect(await inTx(f.v, (tx) => tx.select().from(ticketItems))).toEqual(before);
+    expect(await f.jobs()).toBe(jobs);
+  }
+
+  const kdsOn = async (f: ReleaseFixture, profileId: string, name = "Pass display") =>
+    f.device(name, profileId, { kitchenScreen: EVERY_PASS });
+
+  it("releases a card's burger from a kitchen display whose profile the management route saved", async () => {
+    const f = await releaseFixture();
+    const display = await kdsOn(f, await f.savedProfile(FULL));
+    await requested(f);
+    const [toFire] = await card(f.app, display.cookie);
+    const answer = await release(f.app, display.cookie, askOf(toFire!));
+    expect(answer.status).toBe(200);
+    expect(await answer.json()).toEqual({ releasedTicketItemIds: toFire!.releaseTicketItemIds });
+    expect(await f.jobs()).toBe(1);
+  });
+
+  it("refuses a profile without prepare-orders or run-the-pass, and a device with no pass screen", async () => {
+    const f = await releaseFixture();
+    await requested(f);
+    const full = await kdsOn(f, await f.savedProfile(FULL), "Full pass");
+    const ask = askOf((await card(f.app, full.cookie))[0]!);
+    for (const [capabilities, action] of [
+      [["act-as-kds", "run-the-pass"], "prepare-orders"],
+      [["act-as-kds", "prepare-orders"], "run-the-pass"],
+    ] as const) {
+      const display = await kdsOn(f, await f.savedProfile([...capabilities]), `No ${action}`);
+      await refused(f, () => release(f.app, display.cookie, ask), 403, {
+        code: "device.forbidden_action",
+        params: { action },
+      });
+    }
+    const station = await f.device("Grill screen", await f.savedProfile(FULL), {
+      stationId: f.grill,
+    });
+    await refused(f, () => release(f.app, station.cookie, ask), 401, {
+      code: "device.unauthorized",
+    });
+  });
+
+  it("releases from a till pass only for the person signed in on it, recording their kitchen work", async () => {
+    const f = await releaseFixture({ attendance: true });
+    const [profile] = await inTx(f.v, (tx) =>
+      tx
+        .insert(deviceProfiles)
+        .values({ name: "Till pass profile", formFactor: "till", capabilities: FULL })
+        .returning({ id: deviceProfiles.id }),
+    );
+    const till = await f.device("Till pass", profile!.id, { kitchenScreen: EVERY_PASS });
+    const other = await f.device("Other till", profile!.id, { kitchenScreen: EVERY_PASS });
+    const [person] = await inTx(f.v, (tx) => tx.select({ id: persons.id }).from(persons).limit(1));
+    const tokenOn = async (deviceId: string) =>
+      (await inTx(f.v, (tx) => loginWithPin(tx, { deviceId, personId: person!.id, pin: "1234" })))
+        .token;
+    const signedIn = `${till.cookie}; ${SESSION_COOKIE}=${await tokenOn(till.id)}`;
+    const seated = await requested(f);
+    const ask = askOf((await card(f.app, signedIn))[0]!);
+
+    await refused(f, () => release(f.app, till.cookie, ask), 401, { code: "session.required" });
+    const elsewhere = `${till.cookie}; ${SESSION_COOKIE}=${await tokenOn(other.id)}`;
+    await refused(f, () => release(f.app, elsewhere, ask), 401, { code: "device.unauthorized" });
+
+    const answer = await release(f.app, signedIn, ask);
+    expect(answer.status).toBe(200);
+    const facts = (await inTx(f.v, (tx) => tx.select().from(attendanceOperationFacts))).filter(
+      (fact) => fact.key.endsWith(`:${ask.submissionId}`),
+    );
+    expect(facts.map((fact) => [fact.key, fact.personId, fact.kind, fact.outcome])).toEqual([
+      [`service:${seated.tabId}:${ask.submissionId}`, person!.id, "order", "qualifying"],
+    ]);
+  });
+
+  it("answers a retry with its first result, even after the burger is served, and refuses a changed one", async () => {
+    const f = await releaseFixture();
+    const profileId = await f.savedProfile(FULL);
+    const display = await kdsOn(f, profileId);
+    const seated = await requested(f);
+    await orderForParty(f.v, seated.partyId, ["Burger"], seated.tabId);
+    const [first, second] = await card(f.app, display.cookie);
+    const ask = askOf(first!);
+    const answers = [];
+    for (let i = 0; i < 2; i++) {
+      const answer = await release(f.app, display.cookie, ask);
+      answers.push({ status: answer.status, body: await answer.json() });
+    }
+    const released = { status: 200, body: { releasedTicketItemIds: ask.ticketItemIds } };
+    expect(answers).toEqual([released, released]);
+    expect(await f.jobs()).toBe(1);
+
+    const [line] = await inTx(f.v, (tx) =>
+      tx
+        .select({ lineId: ticketItems.workingOrderLineId })
+        .from(ticketItems)
+        .where(eq(ticketItems.id, ask.ticketItemIds[0]!)),
+    );
+    const command = await commandFor(f.v, seated.partyId);
+    await inTx(f.v, (tx) =>
+      markServed(tx, f.v.cfg, seated.partyId, [{ lineId: line!.lineId, quantity: "1" }], {
+        ...command,
+        submissionId: randomUUID(),
+      }),
+    );
+    const again = await release(f.app, display.cookie, ask);
+    expect({ status: again.status, body: await again.json() }).toEqual(released);
+    expect(await f.jobs()).toBe(1);
+
+    const otherDisplay = await kdsOn(f, profileId, "Another pass");
+    for (const [cookie, body] of [
+      [display.cookie, { ...ask, ticketItemIds: second!.releaseTicketItemIds }],
+      [display.cookie, { ...ask, target: second!.target }],
+      [display.cookie, { ...ask, expectedContext: "1".repeat(64) }],
+      [otherDisplay.cookie, ask],
+    ] as const)
+      await refused(f, () => release(f.app, cookie, body), 409, {
+        code: "submission.id_reused",
+        params: { submissionId: ask.submissionId },
+      });
+  });
+
+  it("refuses a card read before a partial serve as changed", async () => {
+    const f = await releaseFixture();
+    const display = await kdsOn(f, await f.savedProfile(FULL));
+    const seated = await requested(f, 2);
+    const [toFire] = await card(f.app, display.cookie);
+    const ask = askOf(toFire!);
+    const [line] = await inTx(f.v, (tx) =>
+      tx
+        .select({ lineId: ticketItems.workingOrderLineId })
+        .from(ticketItems)
+        .where(eq(ticketItems.id, ask.ticketItemIds[0]!)),
+    );
+    const command = await commandFor(f.v, seated.partyId);
+    await inTx(f.v, (tx) =>
+      markServed(tx, f.v.cfg, seated.partyId, [{ lineId: line!.lineId, quantity: "1" }], {
+        ...command,
+        submissionId: randomUUID(),
+      }),
+    );
+    await refused(f, () => release(f.app, display.cookie, ask), 409, {
+      code: "ticket.pass_context_changed",
+    });
+  });
+
+  it("refuses an empty id list as a malformed request", async () => {
+    const f = await releaseFixture();
+    const display = await kdsOn(f, await f.savedProfile(FULL));
+    await requested(f);
+    const [toFire] = await card(f.app, display.cookie);
+    await refused(
+      f,
+      () => release(f.app, display.cookie, { ...askOf(toFire!), ticketItemIds: [] }),
+      400,
+      {
+        code: "management.request_invalid",
+        params: { field: "ticketItemIds" },
+      },
+    );
   });
 });

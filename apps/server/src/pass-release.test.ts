@@ -474,7 +474,11 @@ describe("A773 pass release: set and stamps", () => {
     });
     expect(fresh).toEqual({ ticketItemIds: [], context: null });
 
-    await refusedWhole(release(f.venue, f.hot, ask), "ticket.pass_context_changed", [f.burger]);
+    await refusedWhole(
+      release(f.venue, f.hot, { ...ask, submissionId: randomUUID() }),
+      "ticket.pass_context_changed",
+      [f.burger],
+    );
     expect(await rows([f.burger])).toEqual(released);
 
     await withTransaction(db, (tx) =>

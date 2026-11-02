@@ -8,13 +8,14 @@ import { captureKitchenActivity } from "./attendance-capture.js";
 import { deviceBindingColumns, deviceProfileJoin, toDeviceBinding } from "./device-session.js";
 import { requestedItem } from "./kitchen-phase.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { passScopeOf, readPassCardRows } from "./pass-board.js";
+import { passScopeOf, readPassCardRows, type PassScope } from "./pass-board.js";
 import { passCardRelease, type PassRow, type PassTarget } from "./pass-card.js";
 import { enqueueKitchenTickets, type FiredItem } from "./kitchen-print.js";
 import { notifyKitchenAllergyDestination } from "./kitchen-allergy.js";
 import { heldPaperStations } from "./order-groups.js";
 import type { TradingContext } from "./trading-context.js";
 import { assertSubjectZones } from "./zone-access.js";
+import { runServiceCommand, type CommandScope } from "./parties.js";
 import type { OrderAttendance } from "./working-order.js";
 
 export type PassActor =
@@ -33,7 +34,7 @@ export interface PassReleaseResult {
 
 const stale = () => new AppError("ticket.pass_context_changed", {});
 
-/** D48: authority, then `passReleaseAsk(body)`, then zones, replay (B3.5a1) and staleness. */
+/** D48: authority, then `passReleaseAsk(body)`, then zones, replay and staleness. */
 export async function releasePassItems(
   tx: Transaction,
   cfg: TradingContext,
@@ -66,9 +67,39 @@ export async function releasePassItems(
       : { orderId: ask.target.workingOrderId },
   ]);
 
-  const cardRows = await readPassCardRows(tx, cfg, ask.target);
-  const offered = passCardRelease(ask.target, cardRows, passScopeOf(screen));
   const asked = [...ask.ticketItemIds].sort();
+  const scope: CommandScope =
+    ask.target.kind === "group"
+      ? { kind: "party", partyId: ask.target.partyId }
+      : { kind: "bill", workingOrderId: ask.target.workingOrderId };
+  return runServiceCommand(
+    tx,
+    scope,
+    ask.submissionId,
+    "pass.release",
+    {
+      target: ask.target,
+      ticketItemIds: asked,
+      expectedContext: ask.expectedContext,
+      deviceId: by.deviceId,
+      personId: by.personId,
+    },
+    () => release(tx, cfg, by, passScopeOf(screen), ask, asked, attendance),
+  );
+}
+
+/** D47, D49 to D52: the staleness checks, the write, the paper and the person's kitchen work. */
+async function release(
+  tx: Transaction,
+  cfg: TradingContext,
+  by: PassActor,
+  passScope: PassScope,
+  ask: PassReleaseAsk,
+  asked: readonly string[],
+  attendance: OrderAttendance | undefined,
+): Promise<PassReleaseResult> {
+  const cardRows = await readPassCardRows(tx, cfg, ask.target);
+  const offered = passCardRelease(ask.target, cardRows, passScope);
   if (
     offered.context === null ||
     offered.context !== ask.expectedContext ||
