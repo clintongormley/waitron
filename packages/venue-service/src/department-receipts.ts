@@ -83,8 +83,8 @@ function trimProjection(cfg: DepartmentReceiptScope) {
   };
 }
 
-function rowQuery(cfg: VenueScope, departmentId: string) {
-  return and(eq(departments.id, departmentId), eq(departments.locationId, cfg.locationId));
+function rowQuery(departmentId: string) {
+  return eq(departments.id, departmentId);
 }
 
 function parseMap(text: string): Record<string, string> | undefined {
@@ -171,7 +171,7 @@ export async function listDepartmentReceiptReadiness(tx: Transaction, cfg: Venue
     .select({ ...trimProjection({ ...cfg, receiptLanguages: [] }), name: departments.name })
     .from(departments)
     .leftJoin(departmentReceipts, eq(departmentReceipts.departmentId, departments.id))
-    .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)));
+    .where(eq(departments.active, true));
   return rows.flatMap((row) =>
     parseReceipt(row).operationDescription === undefined
       ? [
@@ -194,7 +194,7 @@ export async function readDepartmentReceipt(
     .select(trimProjection(cfg))
     .from(departments)
     .leftJoin(departmentReceipts, eq(departmentReceipts.departmentId, departments.id))
-    .where(and(rowQuery(cfg, departmentId), eq(departments.active, true)));
+    .where(and(rowQuery(departmentId), eq(departments.active, true)));
   if (!row) throw new AppError("department.not_found", { departmentId });
   return parseReceipt(row);
 }
@@ -208,7 +208,7 @@ export async function readRetainedDepartmentReceipt(
     .select(trimProjection(cfg))
     .from(departments)
     .leftJoin(departmentReceipts, eq(departmentReceipts.departmentId, departments.id))
-    .where(rowQuery(cfg, departmentId));
+    .where(rowQuery(departmentId));
   if (!row) throw new AppError("department.not_found", { departmentId });
   return parseReceipt(row);
 }
@@ -233,7 +233,7 @@ export async function readPrintedDepartmentReceipt(
       })
       .from(departments)
       .leftJoin(departmentReceipts, eq(departmentReceipts.departmentId, departments.id))
-      .where(rowQuery(cfg, departmentId));
+      .where(rowQuery(departmentId));
     if (!row) return { receipt: {}, logo: null, unreadable: true };
     if (row.receiptRow !== null && row.top !== "object")
       return { receipt: {}, logo: null, unreadable: true };
@@ -256,7 +256,7 @@ export async function readPrintedDepartmentReceipt(
 
 export async function readDepartmentLogoRasters(
   tx: Transaction,
-  cfg: DepartmentReceiptScope,
+  _cfg: DepartmentReceiptScope,
   departmentId: string,
 ): Promise<ReceiptLogoRasters | null> {
   const [row] = await tx
@@ -268,7 +268,7 @@ export async function readDepartmentLogoRasters(
     })
     .from(departments)
     .leftJoin(departmentReceipts, eq(departmentReceipts.departmentId, departments.id))
-    .where(and(rowQuery(cfg, departmentId), eq(departments.active, true)));
+    .where(and(rowQuery(departmentId), eq(departments.active, true)));
   if (!row) throw new AppError("department.not_found", { departmentId });
   if (!row.logo || !MEDIA_FILENAME.test(row.logo) || row.narrow === null || row.wide === null)
     return null;
@@ -278,7 +278,7 @@ export async function readDepartmentLogoRasters(
 
 export async function writeDepartmentReceipt(
   tx: Transaction,
-  cfg: DepartmentReceiptScope,
+  _cfg: DepartmentReceiptScope,
   departmentId: string,
   receipt: DepartmentReceiptConfig,
   rasters?: ReceiptLogoRasters,
@@ -286,7 +286,7 @@ export async function writeDepartmentReceipt(
   const [row] = await tx
     .select({ id: departments.id })
     .from(departments)
-    .where(and(rowQuery(cfg, departmentId), eq(departments.active, true)));
+    .where(and(rowQuery(departmentId), eq(departments.active, true)));
   if (!row) throw new AppError("department.not_found", { departmentId });
   if (
     receipt.logo &&
@@ -302,52 +302,42 @@ export async function writeDepartmentReceipt(
 
 export async function receiptDepartmentForSale(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   saleId: string,
 ): Promise<string | null> {
   const [row] = await tx
     .select({ id: departments.id })
     .from(saleReceiptHeaders)
     .innerJoin(departments, eq(departments.id, saleReceiptHeaders.departmentId))
-    .where(and(eq(saleReceiptHeaders.saleId, saleId), eq(departments.locationId, cfg.locationId)));
+    .where(eq(saleReceiptHeaders.saleId, saleId));
   return row?.id ?? null;
 }
 export async function receiptDepartmentForOrder(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   orderId: string,
 ): Promise<string | null> {
   const [row] = await tx
     .select({ id: orderServiceContexts.departmentId })
     .from(orderServiceContexts)
-    .where(
-      and(
-        eq(orderServiceContexts.workingOrderId, orderId),
-        eq(orderServiceContexts.locationId, cfg.locationId),
-      ),
-    );
+    .where(eq(orderServiceContexts.workingOrderId, orderId));
   return row?.id ?? null;
 }
 export async function receiptDefaultDepartment(
   tx: Transaction,
-  cfg: VenueScope,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
+  _cfg: VenueScope,
 ): Promise<string | null> {
   const [row] = await tx
     .select({ id: departments.id })
     .from(departments)
-    .where(
-      and(
-        eq(departments.locationId, cfg.locationId),
-        eq(departments.isDefault, true),
-        eq(departments.active, true),
-      ),
-    );
+    .where(and(eq(departments.isDefault, true), eq(departments.active, true)));
   return row?.id ?? null;
 }
 
 export async function readDepartmentReceiptPolicy(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   departmentId: string,
 ): Promise<DepartmentReceiptPolicy> {
   const [row] = await tx
@@ -357,7 +347,7 @@ export async function readDepartmentReceiptPolicy(
     })
     .from(departments)
     .leftJoin(departmentSalePolicies, eq(departmentSalePolicies.departmentId, departments.id))
-    .where(and(rowQuery(cfg, departmentId), eq(departments.active, true)));
+    .where(and(rowQuery(departmentId), eq(departments.active, true)));
   if (!row) throw new AppError("department.not_found", { departmentId });
   return {
     receiptPrintMode: row.receiptPrintMode ?? "auto",

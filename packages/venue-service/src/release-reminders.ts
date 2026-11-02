@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import type { VenueScope } from "./operations.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
@@ -21,11 +21,12 @@ export async function readReleaseReminderMinutesByZone(
 
 export async function listDepartmentReminderMinutes(
   tx: Transaction,
-  cfg: VenueScope,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
+  _cfg: VenueScope,
 ): Promise<Record<string, number | null>> {
   const rows = await tx
     .select({ id: departments.id, minutes: departments.releaseReminderMinutes })
     .from(departments)
-    .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)));
+    .where(eq(departments.active, true));
   return Object.fromEntries(rows.map((row) => [row.id, row.minutes]));
 }

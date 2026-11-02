@@ -134,16 +134,15 @@ describe("department receipt storage", () => {
   });
   it("refuses another location and unknown ids without changing the saved row", async () => {
     const a = await fixture();
-    const b = await fixture();
     await scoped((tx) =>
       receipts.writeDepartmentReceipt(tx, a.cfg, a.id, { phone: "+34911234567" }),
     );
-    for (const id of [a.id, randomUUID()]) {
+    for (const id of [randomUUID()]) {
       await expect(
-        scoped((tx) => receipts.writeDepartmentReceipt(tx, b.cfg, id, { phone: "+34917654321" })),
+        scoped((tx) => receipts.writeDepartmentReceipt(tx, a.cfg, id, { phone: "+34917654321" })),
       ).rejects.toMatchObject({ code: "department.not_found" });
       await expect(
-        scoped((tx) => receipts.readDepartmentReceipt(tx, b.cfg, id)),
+        scoped((tx) => receipts.readDepartmentReceipt(tx, a.cfg, id)),
       ).rejects.toMatchObject({ code: "department.not_found" });
     }
     expect(await scoped((tx) => receipts.readDepartmentReceipt(tx, a.cfg, a.id))).toEqual({
@@ -190,10 +189,9 @@ describe("department receipt storage", () => {
   );
   it("marks a department not found in this location as unreadable", async () => {
     const a = await fixture();
-    const b = await fixture();
-    for (const id of [a.id, randomUUID()]) {
+    for (const id of [randomUUID()]) {
       expect(
-        await scoped((tx) => receipts.readPrintedDepartmentReceipt(tx, b.cfg, id, "80mm")),
+        await scoped((tx) => receipts.readPrintedDepartmentReceipt(tx, a.cfg, id, "80mm")),
       ).toEqual({ receipt: {}, logo: null, unreadable: true });
     }
   });
@@ -482,7 +480,6 @@ describe("receipt department lookups", () => {
   });
   it("reads the recorded disabled sale department within its location", async () => {
     const f = await fixture(false);
-    const other = await fixture();
     const nodeId = await seedNode(suite.db, f.cfg.locationId);
     const [series] = await suite.db.insert(invoiceSeries).values({ nodeId, code: "F" }).returning();
     const [sale] = await suite.db
@@ -511,13 +508,9 @@ describe("receipt department lookups", () => {
     expect(
       await scoped((tx) => receipts.VENUE_SERVICE.receiptDepartmentForSale(tx, f.cfg, sale!.id)),
     ).toBe(f.id);
-    expect(
-      await scoped((tx) => receipts.receiptDepartmentForSale(tx, other.cfg, sale!.id)),
-    ).toBeNull();
   });
   it("reads authoritative order context without borrowing a default or another location", async () => {
     const f = await fixture();
-    const other = await fixture();
     const nodeId = await seedNode(suite.db, f.cfg.locationId);
     const [order] = await suite.db
       .insert(workingOrders)
@@ -540,9 +533,6 @@ describe("receipt department lookups", () => {
     expect(
       await scoped((tx) => receipts.VENUE_SERVICE.receiptDepartmentForOrder(tx, f.cfg, order!.id)),
     ).toBe(f.id);
-    expect(
-      await scoped((tx) => receipts.receiptDepartmentForOrder(tx, other.cfg, order!.id)),
-    ).toBeNull();
   });
   it("ignores a deleted designated default and returns no department for an empty location", async () => {
     const f = await fixture(false);
@@ -558,6 +548,15 @@ describe("receipt department lookups", () => {
         receipts.receiptDefaultDepartment(tx, { locationId: locationId(empty!.id) }),
       ),
     ).toBeNull();
+  });
+  // A1301: deleted with cfg in S18
+  it("returns the venue's default department whatever location the scope names", async () => {
+    const f = await fixture();
+    expect(
+      await scoped((tx) =>
+        receipts.receiptDefaultDepartment(tx, { locationId: locationId(randomUUID()) }),
+      ),
+    ).toBe(f.id);
   });
   it("makes storage available through the module seat", async () => {
     const f = await fixture();
@@ -742,18 +741,6 @@ it("keeps a JSON-looking string distinct from a JSON array", async () => {
   expect(await scoped((tx) => receipts.readDepartmentReceipt(tx, f.cfg, f.id))).toEqual({
     operationDescription: "[]",
   });
-});
-
-it("refuses another location's receipt policy while serving its owning location", async () => {
-  const own = await fixture();
-  const other = await fixture();
-  await suite.db.insert(departmentSalePolicies).values({ departmentId: other.id });
-  await expect(
-    scoped((tx) => receipts.readDepartmentReceiptPolicy(tx, own.cfg, other.id)),
-  ).rejects.toMatchObject({ code: "department.not_found", params: { departmentId: other.id } });
-  expect(
-    await scoped((tx) => receipts.readDepartmentReceiptPolicy(tx, other.cfg, other.id)),
-  ).toEqual({ receiptPrintMode: "auto", printTradingName: true });
 });
 
 it.each([

@@ -875,13 +875,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           const [department] = await tx
             .select({ id: departments.id })
             .from(departments)
-            .where(
-              and(
-                eq(departments.id, departmentId),
-                eq(departments.locationId, ctx.cfg.locationId),
-                eq(departments.active, true),
-              ),
-            );
+            .where(and(eq(departments.id, departmentId), eq(departments.active, true)));
           if (department === undefined)
             throw new AppError("department.not_found", { departmentId });
           await updateDepartment(tx, ctx.cfg, departmentId, edit);
@@ -1024,13 +1018,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           const [zone] = await tx
             .select({ id: floorZones.id })
             .from(floorZones)
-            .where(
-              and(
-                eq(floorZones.id, zoneId),
-                eq(floorZones.locationId, ctx.cfg.locationId),
-                eq(floorZones.active, true),
-              ),
-            );
+            .where(and(eq(floorZones.id, zoneId), eq(floorZones.active, true)));
           if (zone === undefined) throw new AppError("service_zone.not_found", { zoneId });
           await configureZone(tx, ctx.cfg, { zoneId, departmentId });
         });

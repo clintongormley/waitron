@@ -54,28 +54,15 @@ describe("readLateSendNeedsManager", () => {
     await switchOn(id);
     expect(await scoped((tx) => readLateSendNeedsManager(tx, cfg, id))).toBe(true);
   });
-
-  it("refuses another venue's department with department.not_found", async () => {
-    const own = { locationId: await seedLocation("Late send own") };
-    const other = { locationId: await seedLocation("Late send other") };
-    const id = await department(other, "Elsewhere");
-    await switchOn(id);
-    await expect(scoped((tx) => readLateSendNeedsManager(tx, own, id))).rejects.toMatchObject({
-      code: "department.not_found",
-      params: { departmentId: id },
-    });
-  });
 });
 
 describe("listLateSendManagerDepartmentIds", () => {
   it("lists this venue's active departments with the setting on", async () => {
     const cfg = { locationId: await seedLocation("Late send list") };
-    const other = { locationId: await seedLocation("Late send list other") };
     const a = await department(cfg, "A");
     await department(cfg, "B");
     const c = await department(cfg, "C");
-    const elsewhere = await department(other, "D");
-    for (const id of [a, c, elsewhere]) await switchOn(id);
+    for (const id of [a, c]) await switchOn(id);
     await db.update(departments).set({ active: false }).where(eq(departments.id, c));
     expect(await scoped((tx) => listLateSendManagerDepartmentIds(tx, cfg))).toEqual([a]);
   });

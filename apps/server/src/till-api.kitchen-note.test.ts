@@ -420,42 +420,6 @@ describe("whole-order kitchen note routes", () => {
     expect(device!.at).toBe(seenAt);
   });
 
-  it.each([false, true])("hides a %s scope belonging to another location", async (party) => {
-    const [location] = await suite.db
-      .insert(locations)
-      .values({
-        name: "Other venue",
-        invoiceLocales: ["en-GB"],
-        operationDescription: "Restaurant",
-      })
-      .returning();
-    const otherCfg = { ...cfg, locationId: locationId(location!.id) };
-    const otherZone = await createZone(suite.db, otherCfg, { name: "Other zone" });
-    const otherTable = await createTable(suite.db, otherCfg, {
-      label: "Other table",
-      zoneId: otherZone.id,
-    });
-    const [otherParty] = await suite.db.insert(parties).values({ openedBy: personId }).returning();
-    await suite.db.insert(partyTables).values({ partyId: otherParty!.id, tableId: otherTable.id });
-    const [otherOrder] = await suite.db
-      .insert(workingOrders)
-      .values({ source: "dashboard", locationId: location!.id, orderNumber: 3 })
-      .returning();
-    const url = party
-      ? `/api/parties/${otherParty!.id}/kitchen-note`
-      : `/api/working-orders/${otherOrder!.id}/kitchen-note`;
-    await expectError(
-      await request("GET", url),
-      404,
-      party ? "party.not_found" : "working_order.not_found",
-    );
-    await expectError(
-      await request("PUT", url, command(party)),
-      404,
-      party ? "party.not_found" : "working_order.not_found",
-    );
-  });
-
   it.each(["abandoned", "collected", "payment"])("refuses %s counter writes", async (state) => {
     await suite.db
       .update(workingOrders)

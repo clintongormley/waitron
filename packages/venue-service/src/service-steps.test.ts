@@ -149,12 +149,10 @@ describe("a new department's starter steps", () => {
 describe("service steps", () => {
   it("lists each active department's steps in order, and none of a deleted department", async () => {
     const cfg = await seedVenue("Listing steps");
-    const other = await seedVenue("Another venue");
-    const { dining, bar, gone, elsewhere } = await scoped(async (tx) => ({
+    const { dining, bar, gone } = await scoped(async (tx) => ({
       dining: await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
       bar: await createDepartment(tx, cfg, { name: "Bar", orderStart: "counter" }),
       gone: await createDepartment(tx, cfg, { name: "Gone", orderStart: "table" }),
-      elsewhere: await createDepartment(tx, other, { name: "Dining", orderStart: "table" }),
     }));
     await scoped(async (tx) => {
       await saveServiceSteps(tx, cfg, dining.id, [
@@ -166,9 +164,6 @@ describe("service steps", () => {
       ]);
       await saveServiceSteps(tx, cfg, gone.id, [
         { name: "Gone step", start: "seated", courseId: null, minutes: 0 },
-      ]);
-      await saveServiceSteps(tx, other, elsewhere.id, [
-        { name: "Elsewhere", start: "seated", courseId: null, minutes: 0 },
       ]);
       await tx.update(departments).set({ active: false }).where(eq(departments.id, gone.id));
     });
@@ -196,11 +191,9 @@ describe("service steps", () => {
 
   it("lists the venue's live courses in firing order", async () => {
     const cfg = await seedVenue("Listing courses");
-    const other = await seedVenue("Other courses");
     const mains = await seedCourse(cfg, "Mains", 2);
     const starters = await seedCourse(cfg, "Starters", 1);
     await seedCourse(cfg, "Retired", 0, false);
-    await seedCourse(other, "Elsewhere", 0);
     expect(await scoped((tx) => listStepCourses(tx, cfg))).toEqual([
       { id: starters, name: "Starters" },
       { id: mains, name: "Mains" },
@@ -275,17 +268,12 @@ describe("service steps", () => {
     expect(await departmentRows(bar.id)).toEqual([barStep]);
   });
 
-  it.each(["inactive", "of no venue", "of another venue"] as const)(
+  it.each(["inactive", "of no venue"] as const)(
     "refuses a course that is %s, naming it, and writes nothing",
     async (kind) => {
       const cfg = await seedVenue(`Bad course ${kind}`);
-      const other = await seedVenue(`Other venue ${kind}`);
       const courseId =
-        kind === "inactive"
-          ? await seedCourse(cfg, "Retired", 0, false)
-          : kind === "of another venue"
-            ? await seedCourse(other, "Mains", 0)
-            : randomUUID();
+        kind === "inactive" ? await seedCourse(cfg, "Retired", 0, false) : randomUUID();
       const department = await scoped((tx) =>
         createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
       );

@@ -26,7 +26,11 @@ export interface ServiceStepInput {
   minutes: number;
 }
 
-export async function listServiceSteps(tx: Transaction, cfg: VenueScope): Promise<ServiceStep[]> {
+export async function listServiceSteps(
+  tx: Transaction,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
+  _cfg: VenueScope,
+): Promise<ServiceStep[]> {
   return tx
     .select({
       id: serviceSteps.id,
@@ -38,25 +42,26 @@ export async function listServiceSteps(tx: Transaction, cfg: VenueScope): Promis
     })
     .from(serviceSteps)
     .innerJoin(departments, eq(departments.id, serviceSteps.departmentId))
-    .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)))
+    .where(eq(departments.active, true))
     .orderBy(asc(serviceSteps.departmentId), asc(serviceSteps.position), asc(serviceSteps.id));
 }
 
 export async function listStepCourses(
   tx: Transaction,
-  cfg: VenueScope,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
+  _cfg: VenueScope,
 ): Promise<{ id: string; name: string }[]> {
   return tx
     .select({ id: kitchenCourses.id, name: kitchenCourses.name })
     .from(kitchenCourses)
-    .where(and(eq(kitchenCourses.locationId, cfg.locationId), eq(kitchenCourses.active, true)))
+    .where(eq(kitchenCourses.active, true))
     .orderBy(asc(kitchenCourses.displayOrder), asc(kitchenCourses.name));
 }
 
 /** Rows not sent are deleted and sent ids are updated in place, so a kept step keeps its id. */
 export async function saveServiceSteps(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   departmentId: string,
   steps: readonly ServiceStepInput[],
 ): Promise<void> {
@@ -81,13 +86,7 @@ export async function saveServiceSteps(
           await tx
             .select({ id: kitchenCourses.id })
             .from(kitchenCourses)
-            .where(
-              and(
-                inArray(kitchenCourses.id, courseIds),
-                eq(kitchenCourses.locationId, cfg.locationId),
-                eq(kitchenCourses.active, true),
-              ),
-            )
+            .where(and(inArray(kitchenCourses.id, courseIds), eq(kitchenCourses.active, true)))
         ).map((row) => row.id),
   );
   const missing = courseIds.find((id) => !live.has(id));

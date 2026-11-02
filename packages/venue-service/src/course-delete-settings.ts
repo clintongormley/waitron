@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import type { DeleteImpactItem } from "@waitron/shared";
 import type { VenueScope } from "./operations.js";
@@ -9,14 +9,14 @@ export type CourseDeleteSettings = { readonly named: string[]; readonly seated: 
 
 export async function readCourseDeleteSettings(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   courseId: string,
 ): Promise<CourseDeleteSettings> {
   const named = await tx
     .select({ id: serviceSteps.id, departmentId: serviceSteps.departmentId })
     .from(serviceSteps)
     .innerJoin(departments, eq(departments.id, serviceSteps.departmentId))
-    .where(and(eq(serviceSteps.courseId, courseId), eq(departments.locationId, cfg.locationId)));
+    .where(eq(serviceSteps.courseId, courseId));
   const touched = [...new Set(named.map((row) => row.departmentId))];
   const removed = new Set(named.map((row) => row.id));
   const remaining =

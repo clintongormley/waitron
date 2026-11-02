@@ -136,16 +136,6 @@ describe("listDepartmentReminderMinutes", () => {
       [b.departmentId]: null,
     });
   });
-
-  it("leaves out another location's department", async () => {
-    const cfg = { locationId: await seedLocation("Reminder here") };
-    const other = { locationId: await seedLocation("Reminder elsewhere") };
-    const a = await departmentWithZone(cfg, "A");
-    await departmentWithZone(other, "B");
-    expect(await scoped((tx) => listDepartmentReminderMinutes(tx, cfg))).toEqual({
-      [a.departmentId]: 10,
-    });
-  });
 });
 
 describe("updateDepartment", () => {

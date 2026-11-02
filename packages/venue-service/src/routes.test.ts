@@ -468,20 +468,10 @@ describe("whole service settings saves", () => {
     },
   );
 
-  it.each(["foreign", "disabled"])("refuses a %s department without writes", async (kind) => {
+  it.each(["disabled"])("refuses a %s department without writes", async (kind) => {
     const fx = await settingsFixture();
-    let path = fx.departmentPath;
-    if (kind === "foreign") {
-      const foreign = await fixture();
-      const department = await withTransaction(db, (tx) =>
-        createDepartment(tx, foreign, { name: "Foreign", orderStart: "counter" }),
-      );
-      path = `/management-api/venue-service/departments/${department.id}/settings`;
-    } else
-      await db
-        .update(departments)
-        .set({ active: false })
-        .where(eq(departments.id, fx.departmentId));
+    const path = fx.departmentPath;
+    await db.update(departments).set({ active: false }).where(eq(departments.id, fx.departmentId));
     const before = await rawSettingsSnapshot();
     const response = await send(fx.app, "PUT", path, fx.managerCookie, departmentSettings);
     expect(response.status).toBe(404);
@@ -1713,7 +1703,6 @@ describe("venue service management routes", () => {
 
   it("refuses invalid policy values, unauthorized writes and another venue's department", async () => {
     const fx = await fixture();
-    const other = await fixture();
     const created = await send(
       fx.app,
       "POST",
@@ -1744,11 +1733,6 @@ describe("venue service management routes", () => {
     expect(
       (await send(fx.app, "PATCH", path, fx.staffCookie, { value: "ticket_then_pay" })).status,
     ).toBe(403);
-    const foreign = await send(other.app, "PATCH", path, other.managerCookie, {
-      value: "ticket_then_pay",
-    });
-    expect(foreign.status).toBe(404);
-    expect(await foreign.json()).toMatchObject({ error: { code: "department.not_found" } });
   });
 
   it("writes order start through both policy routes and refuses unknown values", async () => {
@@ -2157,39 +2141,6 @@ describe("venue service management routes", () => {
       );
     });
 
-    it("answers department.not_found for another venue's deleted department and leaves it deleted", async () => {
-      const fx = await fixture();
-      const other = await fixture();
-      const [otherRestaurant] = await twoDepartments(other);
-      expect(
-        (
-          await send(
-            other.app,
-            "DELETE",
-            `/management-api/venue-service/departments/${otherRestaurant}`,
-            other.managerCookie,
-          )
-        ).status,
-      ).toBe(200);
-      const refused = await send(
-        fx.app,
-        "PATCH",
-        `/management-api/venue-service/departments/${otherRestaurant}`,
-        fx.managerCookie,
-        { name: "Changed" },
-      );
-      expect(refused.status).toBe(404);
-      expect(await refused.json()).toMatchObject({
-        error: { code: "department.not_found", params: { departmentId: otherRestaurant } },
-      });
-      expect(
-        await db
-          .select({ active: departments.active, name: departments.name })
-          .from(departments)
-          .where(eq(departments.id, otherRestaurant)),
-      ).toEqual([{ active: false, name: "Restaurant" }]);
-    });
-
     it("refuses a rename from a staff session", async () => {
       const fx = await fixture();
       const [restaurant] = await twoDepartments(fx);
@@ -2238,8 +2189,7 @@ describe("venue service management routes", () => {
 
   it("lists only the venue's live departments and zones for a manager", async () => {
     const fx = await fixture();
-    const other = await fixture();
-    for (const venue of [fx, other]) {
+    for (const venue of [fx]) {
       const scope = { locationId: venue.locationId };
       const department = await withTransaction(db, (tx) =>
         createDepartment(tx, scope, { name: "Restaurant", orderStart: "table" }),
@@ -2263,7 +2213,6 @@ describe("venue service management routes", () => {
     expect(body.departments).toEqual(whole.departments);
     expect(body.zones).toEqual(whole.zones);
     expect(body.zones).not.toContainEqual(expect.objectContaining({ id: fx.zoneId }));
-    expect(body.zones).not.toContainEqual(expect.objectContaining({ id: other.zoneId }));
   });
 
   it("marks every listed zone active, which the device profile form filters on", async () => {
@@ -2287,39 +2236,6 @@ describe("venue service management routes", () => {
       );
       for (const zone of zones) expect(zone, path).toMatchObject({ active: true });
     }
-  });
-
-  it("scopes edited departments to their venue", async () => {
-    // A manager cannot edit a department in another location sharing the same database.
-    const fx = await fixture();
-    const other = await fixture();
-    const department = (await (
-      await send(
-        other.app,
-        "POST",
-        "/management-api/venue-service/departments",
-        other.managerCookie,
-        { name: "Other" },
-      )
-    ).json()) as { id: string };
-    expect(
-      (
-        await send(
-          fx.app,
-          "PATCH",
-          `/management-api/venue-service/departments/${department.id}`,
-          fx.managerCookie,
-          { name: "Wrong", tradingName: "Wrong" },
-        )
-      ).status,
-    ).toBe(404);
-    expect(
-      await (
-        await send(other.app, "GET", "/management-api/venue-service", other.managerCookie)
-      ).json(),
-    ).toMatchObject({
-      departments: [{ id: department.id, name: "Other" }],
-    });
   });
 
   it("configures a department and its menus", async () => {
@@ -2705,10 +2621,8 @@ describe("routing cell route", () => {
   });
 
   it("refuses a malformed address, an unknown subject (route.subject_not_found) and a foreign or inactive zone/station (route.station_inactive, the zone code)", async () => {
-    const fx = await fixture(),
-      other = await fixture();
+    const fx = await fixture();
     await servedZone(fx);
-    await servedZone(other);
     const category = { kind: "category", categoryId: fx.categoryId };
     for (const address of [
       undefined,
@@ -2762,13 +2676,6 @@ describe("routing cell route", () => {
         noPrep,
         404,
         { code: "route.subject_not_found", params: { subject: "product" } },
-      ],
-      [categoryCell(fx.categoryId, other.zoneId), noPrep, 404, { code: "service_zone.not_found" }],
-      [
-        categoryCell(fx.categoryId),
-        { kind: "station", stationId: other.stationId },
-        409,
-        { code: "route.station_inactive" },
       ],
       [
         categoryCell(fx.categoryId),
@@ -3754,17 +3661,13 @@ describe("atomic zone editor save", () => {
     expect(await rawSettingsSnapshot()).toEqual(before);
   });
 
-  it.each(["deleted", "other location", "unassigned", "unknown"])(
+  it.each(["deleted", "unassigned", "unknown"])(
     "refuses a %s zone without writes",
     async (kind) => {
       const fx = await settingsFixture();
       let id = fx.zoneId;
       if (kind === "deleted")
         await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, id));
-      if (kind === "other location") {
-        const other = await settingsFixture();
-        id = other.zoneId;
-      }
       if (kind === "unassigned") {
         const [zone] = await db
           .insert(floorZones)
@@ -3968,14 +3871,6 @@ describe("department description setup in the live model", () => {
       expect(await read()).not.toContainEqual(
         expect.objectContaining({ code: "department.operation_description_required" }),
       );
-      const other = await fixture(true);
-      expect(
-        (
-          await (
-            await send(other.app, "GET", "/management-api/venue-service", other.managerCookie)
-          ).json()
-        ).readiness,
-      ).not.toContainEqual(expect.objectContaining({ departmentId: department.id }));
     },
   );
   it.each([

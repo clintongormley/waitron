@@ -264,12 +264,7 @@ export function mountDepartmentTransferApi(
             deliveryTableId: workingOrders.deliveryTableId,
           })
           .from(workingOrders)
-          .where(
-            and(
-              eq(workingOrders.id, request.tabId),
-              eq(workingOrders.locationId, deps.cfg.locationId),
-            ),
-          );
+          .where(eq(workingOrders.id, request.tabId));
         if (tab === undefined || (tab.status !== "open" && tab.status !== "placed"))
           throw new AppError("department_transfer.tab_unavailable", { tabId: request.tabId });
         const storedLines = await tx

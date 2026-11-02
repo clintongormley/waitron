@@ -21,18 +21,13 @@ export async function readTablesNeedingClearing(
 
 export async function listNeedsClearingDepartmentIds(
   tx: Transaction,
-  cfg: VenueScope,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
+  _cfg: VenueScope,
 ): Promise<string[]> {
   const rows = await tx
     .select({ id: departments.id })
     .from(departments)
-    .where(
-      and(
-        eq(departments.locationId, cfg.locationId),
-        eq(departments.active, true),
-        eq(departments.needsClearing, true),
-      ),
-    )
+    .where(and(eq(departments.active, true), eq(departments.needsClearing, true)))
     .orderBy(asc(departments.id));
   return rows.map((row) => row.id);
 }

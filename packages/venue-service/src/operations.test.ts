@@ -42,6 +42,7 @@ import {
   locationBusinessDaySettings,
   locationDayCutoverChanges,
   sales,
+  venueLocationId,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -296,7 +297,7 @@ describe("new department service periods", () => {
     expect(periods.rows).toEqual([{ name: STARTER_PERIOD_NAMES.Open.es, menu_id: menu.id }]);
   });
 
-  it("places the location's menu in Open on weekdays, and leaves a menu-less location without periods", async () => {
+  it("places the location's menu in Open on weekdays", async () => {
     const menu = await scoped((tx) => createCatalogue(tx, { name: `Menu ${randomUUID()}` }));
     const id = brandLocationId(await seedLocation(`New ${randomUUID()}`));
     await db.update(locations).set({ catalogueId: menu.id }).where(eq(locations.id, id));
@@ -313,6 +314,9 @@ describe("new department service periods", () => {
     expect(slots.rows).toEqual(
       [1, 2, 3, 4, 5].map((weekday) => ({ weekday, starts_at: "09:00:00", ends_at: "17:00:00" })),
     );
+  });
+
+  it("leaves a menu-less location without periods", async () => {
     const emptyId = brandLocationId(await seedLocation(`Empty ${randomUUID()}`));
     const empty = await scoped((tx) =>
       createDepartment(tx, { locationId: emptyId }, { name: "Restaurant", orderStart: "counter" }),
@@ -1162,7 +1166,6 @@ describe("venue service routing", () => {
 async function seedRoutingVenue() {
   await seedUnitTenant();
   const location = await seedLocation("Venue");
-  const otherLocation = await seedLocation("Second venue");
   const locationId = brandLocationId(location);
   const zone = await seedZone(locationId, "Dining room");
   const otherZone = await seedZone(locationId, "Terrace");
@@ -1177,7 +1180,6 @@ async function seedRoutingVenue() {
   });
   return {
     cfg,
-    otherLocationId: otherLocation,
     zoneId: zone,
     otherZoneId: otherZone,
   };
@@ -1393,6 +1395,32 @@ describe("service zone name refusals", () => {
 });
 
 describe("departments", () => {
+  // A1301: deleted with cfg in S18
+  it("lists the venue's departments whatever location the scope names", async () => {
+    const cfg = { locationId: brandLocationId(await seedLocation("Scope-blind list")) };
+    const department = await scoped((tx) =>
+      createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
+    );
+    const listed = await scoped((tx) =>
+      listDepartments(tx, { locationId: brandLocationId(randomUUID()) }),
+    );
+    expect(listed.map((row) => row.id)).toContain(department.id);
+  });
+
+  // A1301: deleted with cfg in S18
+  it("creates a department on the venue's row whatever location the scope names", async () => {
+    const venue = await seedLocation("Scope-blind create");
+    const department = await scoped((tx) =>
+      createDepartment(tx, { locationId: brandLocationId(randomUUID()) }, { name: "Bar" }),
+    );
+    const [stored] = await db
+      .select({ locationId: departments.locationId })
+      .from(departments)
+      .where(eq(departments.id, department.id));
+    expect(stored!.locationId).toBe(await scoped((tx) => venueLocationId(tx)));
+    expect(stored!.locationId).toBe(venue);
+  });
+
   it("repairs a missing zone sale policy when configuring its existing assignment", async () => {
     const cfg = { locationId: brandLocationId(await seedLocation("Repair zone policy")) };
     await scoped(async (tx) => {
@@ -1731,18 +1759,13 @@ describe("departments", () => {
 
   it("refuses department deactivation outside this venue and keeps the foreign department active", async () => {
     const here = { locationId: brandLocationId(await seedLocation("Venue")) };
-    const there = { locationId: brandLocationId(await seedLocation("Second venue")) };
-    const elsewhere = await scoped(async (tx) => {
+    await scoped(async (tx) => {
       await createDepartment(tx, here, {
         name: "Restaurant",
         orderStart: "table",
       });
-      return createDepartment(tx, there, {
-        name: "Elsewhere",
-        orderStart: "table",
-      });
     });
-    for (const departmentId of [elsewhere.id, UNKNOWN_ID]) {
+    for (const departmentId of [UNKNOWN_ID]) {
       await expect(
         rejection(
           scoped((tx) =>
@@ -1764,9 +1787,6 @@ describe("departments", () => {
         params: { departmentId },
       });
     }
-    await expect(scoped((tx) => listDepartments(tx, there))).resolves.toEqual([
-      expect.objectContaining({ id: elsewhere.id, active: true }),
-    ]);
   });
 
   it("refuses to remove the venue's last active department", async () => {
@@ -2835,26 +2855,6 @@ describe("zone offers from the published menus", () => {
     });
   });
 
-  it("returns no menu state for a zone outside the requested location", async () => {
-    const venue = await seedTwoMenuVenue();
-    const otherLocation = brandLocationId(await seedLocation("Other location"));
-    await expect(
-      scoped((tx) => menuState(tx, { locationId: otherLocation }, venue.diningZone)),
-    ).resolves.toEqual({
-      service: {
-        open: false,
-        zoneOpen: true,
-        zoneKeepOpen: null,
-        periodName: null,
-        periodOccurrenceKey: null,
-        keepOpen: null,
-      },
-      menus: [],
-      unavailable: { products: [], optionLabels: [] },
-      liveFields: NO_LIVE_FIELDS,
-    });
-  });
-
   it("menuState and listZoneOffers name the same live fields, and both move when a dish changes course", async () => {
     const venue = await seedTwoMenuVenue();
     await scoped(async (tx) => {
@@ -3322,16 +3322,6 @@ describe("findOrderServiceModes", () => {
       expect(prepared).not.toHaveBeenCalled();
     });
   });
-
-  it("does not read another location's orders", async () => {
-    const venue = await seedSellingVenue();
-    const elsewhere = { locationId: brandLocationId(await seedLocation("Elsewhere")) };
-    await scoped(async (tx) => {
-      const order = await openOrder(tx, venue, 1);
-      await recordOrderServiceContext(tx, venue.cfg, order, venue.diningZone);
-      await expect(findOrderServiceModes(tx, elsewhere, [order])).resolves.toEqual(new Map());
-    });
-  });
 });
 
 describe("findOrderServiceZones", () => {
@@ -3358,7 +3348,6 @@ describe("findOrderServiceZones", () => {
 
   it("reads nothing for an empty list or another location", async () => {
     const venue = await seedSellingVenue();
-    const elsewhere = { locationId: brandLocationId(await seedLocation("Elsewhere zones")) };
     await scoped(async (tx) => {
       const order = await openOrder(tx, venue, 1);
       await recordOrderServiceContext(tx, venue.cfg, order, venue.diningZone);
@@ -3366,7 +3355,6 @@ describe("findOrderServiceZones", () => {
       prepared.mockClear();
       expect(await findOrderServiceZones(tx, venue.cfg, [])).toEqual(new Map());
       expect(prepared).not.toHaveBeenCalled();
-      expect(await findOrderServiceZones(tx, elsewhere, [order])).toEqual(new Map());
     });
   });
 });
@@ -3374,9 +3362,6 @@ describe("findOrderServiceZones", () => {
 describe("orderZoneIdSql", () => {
   it("reads distinct recorded zones with orders as a base and a join", async () => {
     const venue = await seedSellingVenue();
-    const elsewhere = {
-      locationId: brandLocationId(await seedLocation("Elsewhere zone expression")),
-    };
     await scoped(async (tx) => {
       const dining = await openOrder(tx, venue, 1);
       const bar = await openOrder(tx, venue, 2);
@@ -3390,7 +3375,6 @@ describe("orderZoneIdSql", () => {
         .from(workingOrders)
         .where(inArray(workingOrders.id, ids));
       expect(query.toSQL().sql).toContain('osc.working_order_id = "working_orders"."id"');
-      expect(query.toSQL().params).toContain(venue.cfg.locationId);
       const expected = [
         { id: dining, zoneId: venue.diningZone },
         { id: bar, zoneId: venue.barZone },
@@ -3403,14 +3387,6 @@ describe("orderZoneIdSql", () => {
         .innerJoin(workingOrders, eq(workingOrders.locationId, locations.id))
         .where(inArray(workingOrders.id, ids));
       expect(joined.sort((a, b) => a.id.localeCompare(b.id))).toEqual(expected);
-      expect(
-        await tx
-          .select({
-            zoneId: settingsOperations.orderZoneIdSql(elsewhere, sql`"working_orders"."id"`),
-          })
-          .from(workingOrders)
-          .where(eq(workingOrders.id, dining)),
-      ).toEqual([{ zoneId: null }]);
     });
   });
 });
@@ -3418,7 +3394,6 @@ describe("orderZoneIdSql", () => {
 describe("orderInZones", () => {
   it("keeps orders in the named zones and orders with no zone, and leaves out the rest", async () => {
     const venue = await seedSellingVenue();
-    const elsewhere = { locationId: brandLocationId(await seedLocation("Elsewhere in zones")) };
     await scoped(async (tx) => {
       const dining = await openOrder(tx, venue, 1);
       const bar = await openOrder(tx, venue, 2);
@@ -3444,8 +3419,6 @@ describe("orderInZones", () => {
         [dining, bar, none].sort(),
       );
       expect(await shown(venue.cfg, [])).toEqual([none]);
-      // A context recorded at another location is no zone of this one.
-      expect(await shown(elsewhere, [])).toEqual([dining, bar, none].sort());
     });
   });
 });
@@ -3520,11 +3493,6 @@ describe("reserved venue names", () => {
           orderStart: "counter",
         }),
       );
-      const other = { locationId: brandLocationId(await seedLocation("Other names")) };
-      expect(
-        (await scoped((tx) => createDepartment(tx, other, { name: "Deli", orderStart: "counter" })))
-          .name,
-      ).toBe("Deli");
     },
   );
 

@@ -1,6 +1,6 @@
 import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
 import { starterName } from "@waitron/country-packs";
-import { deviceProfiles, floorZones, locations } from "@waitron/db";
+import { deviceProfiles, floorZones, readVenue, venueLocationId } from "@waitron/db";
 import type { ModuleProvisioning } from "@waitron/module";
 import { setProfileServiceScope } from "./profile-access.js";
 import {
@@ -24,34 +24,25 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
       "Create the default department with its starter service steps, counter zone and four seasons, and give each profile that takes orders that department",
     async run(tx, node) {
       const staffLanguage = await readStarterStaffLanguage(tx, node);
-      const location = await tx
-        .select({ name: locations.name, catalogueId: locations.catalogueId })
-        .from(locations)
-        .where(eq(locations.id, node.locationId));
+      const venue = await readVenue(tx);
       // Through the insert builder: `id` and `created_at` are `$defaultFn` generators, which only
       // the builder runs. Read-then-insert is safe because a seed runs inside `withTransaction`,
       // which holds the file's write lock for its whole body.
       const existingDepartment = await tx
         .select({ id: departments.id })
         .from(departments)
-        .where(
-          and(
-            eq(departments.locationId, node.locationId),
-            eq(departments.isDefault, true),
-            eq(departments.active, true),
-          ),
-        )
+        .where(and(eq(departments.isDefault, true), eq(departments.active, true)))
         .limit(1);
       let departmentId = existingDepartment[0]?.id;
       if (departmentId === undefined) {
         await tx
           .update(departments)
           .set({ isDefault: false })
-          .where(and(eq(departments.locationId, node.locationId), eq(departments.isDefault, true)));
+          .where(eq(departments.isDefault, true));
         const [replacement] = await tx
           .select({ id: departments.id })
           .from(departments)
-          .where(and(eq(departments.locationId, node.locationId), eq(departments.active, true)))
+          .where(eq(departments.active, true))
           .orderBy(asc(departments.name), asc(departments.id))
           .limit(1);
         if (replacement !== undefined) departmentId = replacement.id;
@@ -59,9 +50,9 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
           const [inserted] = await tx
             .insert(departments)
             .values({
-              locationId: node.locationId,
-              name: location[0]!.name,
-              tradingName: location[0]!.name,
+              locationId: await venueLocationId(tx),
+              name: venue.name,
+              tradingName: venue.name,
               isDefault: true,
             })
             .returning({ id: departments.id });
@@ -85,12 +76,9 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
         .where(
           and(
-            eq(zoneServicePolicies.locationId, node.locationId),
             eq(zoneServicePolicies.isCounterDefault, true),
             eq(floorZones.active, true),
             eq(departments.active, true),
-            eq(floorZones.locationId, node.locationId),
-            eq(departments.locationId, node.locationId),
           ),
         )
         .limit(1);
@@ -98,18 +86,13 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         await tx
           .update(zoneServicePolicies)
           .set({ isCounterDefault: false })
-          .where(
-            and(
-              eq(zoneServicePolicies.locationId, node.locationId),
-              eq(zoneServicePolicies.isCounterDefault, true),
-            ),
-          );
+          .where(eq(zoneServicePolicies.isCounterDefault, true));
         // The conflict clause updates the name to the value it already holds: the point is not the
         // update but the `returning`, which a plain `do nothing` would leave empty on a re-run.
         const zone = await tx
           .insert(floorZones)
           .values({
-            locationId: node.locationId,
+            locationId: await venueLocationId(tx),
             name: starterName(STARTER_ZONE_NAMES, COUNTER_ZONE_NAME, staffLanguage),
             displayOrder: 0,
             active: true,
@@ -123,7 +106,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         await tx
           .insert(zoneServicePolicies)
           .values({
-            locationId: node.locationId,
+            locationId: await venueLocationId(tx),
             zoneId: zone[0]!.id,
             departmentId,
             isCounterDefault: true,
@@ -143,12 +126,9 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
         .where(
           and(
-            eq(zoneServicePolicies.locationId, node.locationId),
             eq(zoneServicePolicies.isCounterDefault, true),
             eq(floorZones.active, true),
             eq(departments.active, true),
-            eq(floorZones.locationId, node.locationId),
-            eq(departments.locationId, node.locationId),
           ),
         )
         .limit(1);
@@ -158,7 +138,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         .values({ zoneId })
         .onConflictDoNothing({ target: zoneSalePolicies.zoneId });
       await ensureDefaultSeasons(tx, node, staffLanguage);
-      const menuId = location[0]!.catalogueId;
+      const menuId = venue.defaultCatalogueId;
       if (menuId !== null) {
         const counterDepartmentId = policy[0]!.departmentId;
         await placeOpenPeriod(tx, node, counterDepartmentId, menuId, staffLanguage);
