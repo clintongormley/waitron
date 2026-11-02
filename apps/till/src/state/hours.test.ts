@@ -59,7 +59,7 @@ it("reads only on entry, selection or explicit refresh and supplies an abort sig
   await f.controller.refresh();
   expect(f.getHours).toHaveBeenCalledTimes(2);
 });
-it("an old selection cannot replace a newer location/date or clear its reading state", async () => {
+it("an old selection cannot replace a newer date or clear its reading state", async () => {
   const f = await fixture();
   await f.controller.start("ana", selection);
   const a = deferred<PersonHours>(),

@@ -287,6 +287,26 @@ it("a known absent response can be retried from Hours with the same command iden
   expect(f.el.shadowRoot!.querySelector("till-attendance-questions")).toBeNull();
 });
 
+it("Hours reads the week after a failed initial clock read", async () => {
+  const f = await clockApp({ state: clockState("working", "in") });
+  f.api.getClockState.mockRejectedValueOnce(new TypeError("initial clock offline"));
+  await signIn(f.el);
+  await vi.waitFor(() =>
+    expect(f.el.shadowRoot!.querySelector("till-attendance-questions")).not.toBeNull(),
+  );
+  const questions = f.el.shadowRoot!.querySelector("till-attendance-questions")!;
+  await questions.updateComplete;
+  await userEvent.click(questions.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!);
+  await working(f.el);
+  await open(f.el);
+  await vi.waitFor(() => expect(screen(f.el)!.view?.workedMinutes).toBe(480));
+  expect(f.api.getHours).toHaveBeenCalledWith(
+    { kind: "week" },
+    { signal: expect.any(AbortSignal) },
+  );
+  expect(f.api.clockIn).not.toHaveBeenCalled();
+});
+
 it("Hours shows a failed clock read's message", async () => {
   const f = await clockApp({ state: clockState("working", "in") });
   f.api.getClockState
