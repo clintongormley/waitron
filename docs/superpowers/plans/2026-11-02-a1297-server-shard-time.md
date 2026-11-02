@@ -100,8 +100,7 @@ never hits. Give the helpers a way to build the same file with a salt chosen onc
   through the existing cache), beside `encryptArtifact`; the IV stays random, so two files built with
   the same salt still differ byte for byte. `apps/server/src/artifact-cipher.ts` re-exports a fixed
   list and needs the new name added if the helpers import through it.
-- Keep
-  with product callers unchanged and still drawing a random salt; add a test in `packages/provisioning`
+- Keep product callers unchanged and still drawing a random salt; add a test in `packages/provisioning`
   that the framing with a given salt produces a file the existing decrypt path opens, and that the
   product entry point still draws a different salt each call. Coverage for `packages/provisioning`
   stays at its bar.
